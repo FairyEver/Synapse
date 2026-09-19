@@ -21,6 +21,12 @@ struct RecentPhoto: Equatable {
 /// 时机性的提议，不是一条常设入口。
 let recentPhotoFreshness: TimeInterval = 5 * 60
 
+/// 它露一次脸多久。
+///
+/// 气泡是一个提议，不是输入栏上的一格：看过一眼就够了。没有关闭按钮也不是缺省 ——
+/// 没有人需要为一条五分钟前就不再成立的说法专门去点一下叉，它自己走掉才是对的。
+let recentPhotoDisplayDuration: TimeInterval = 5
+
 /// 这一张该不该被摆出来。
 ///
 /// 两端都是闭区间，而且**未来时间不算新鲜**。相册的拍摄时间和这台设备的时钟对不
@@ -45,18 +51,19 @@ func recentPhotoIsFresh(
 /// 说明的地方（见 `Info.plist`）。
 @MainActor
 enum TerminalRecentPhotoLibrary {
-    /// 已经交出去过的照片：气泡发走的，以及用户自己从相册里挑过的。
+    /// 已经露过面的照片：气泡发走的、用户自己从相册里挑过的、以及已经浮出来过一次的。
     ///
-    /// 记它是为了不让同一张图第二次飘出来。气泡刚把一张图送走，下一次切回前台它又
-    /// 浮在那里，用户会以为上一次没发出去；刚从相册里手动选过的那张同理，它可能正
-    /// 好就是最新的一张。
+    /// 三种情形记的是同一件事 —— 这一张不用再被提议了。发走的那张再浮回来，用户会
+    /// 以为上一次没发出去；刚从相册里手动选过的那张可能正好就是最新的一张；而已经
+    /// 浮过一次的那张，用户在那五秒里已经看过了，再浮一次不是「检测到变化」，只是
+    /// 重复打扰。
     ///
     /// 只在这一次运行里记着。窗口只有五分钟，为它落一份盘不值得，而重启之后把五分钟
     /// 内那张再摆一次也不算什么错。
-    private static var delivered: Set<String> = []
+    private static var shown: Set<String> = []
 
-    static func markDelivered(_ id: String) {
-        delivered.insert(id)
+    static func markShown(_ id: String) {
+        shown.insert(id)
     }
 
     static var status: PHAuthorizationStatus {
@@ -100,7 +107,7 @@ enum TerminalRecentPhotoLibrary {
         guard let asset = PHAsset.fetchAssets(with: options).firstObject else { return nil }
         guard let createdAt = asset.creationDate else { return nil }
         guard recentPhotoIsFresh(createdAt: createdAt, now: now) else { return nil }
-        guard !delivered.contains(asset.localIdentifier) else { return nil }
+        guard !shown.contains(asset.localIdentifier) else { return nil }
         guard let thumbnail = await thumbnail(for: asset) else { return nil }
 
         return RecentPhoto(id: asset.localIdentifier, thumbnail: thumbnail, createdAt: createdAt)
@@ -182,5 +189,37 @@ enum TerminalRecentPhotoLibrary {
         return resources.first { $0.type == .photo }
             ?? resources.first { $0.type == .fullSizePhoto }
             ?? resources.first
+    }
+}
+
+/// 相册里的变化，一发生就报。
+///
+/// 截图入库、别的 App 存下一张、iCloud 同步下来一张，都从这里进来。
+///
+/// 这条路上原先没有它，靠的是「截屏通知 + 等一秒再查」—— 实测那一秒猜错了：截第二张
+/// 时第一次查还在写，查到的是上一张，而那一发没有第二次机会，于是气泡里一直停着旧的
+/// 那张。等久一点只是把猜错的时间推后，问题在猜本身：入库是异步的，只有相册自己知道
+/// 它什么时候完成。
+@MainActor
+final class TerminalRecentPhotoWatcher: NSObject, PHPhotoLibraryChangeObserver {
+    private let onChange: () -> Void
+
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+        super.init()
+    }
+
+    func start() {
+        PHPhotoLibrary.shared().register(self)
+    }
+
+    /// 不收回来它会一直活着：注册是强引用，而持有它的那个界面早就走了。
+    func stop() {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
+    }
+
+    /// 回调落在哪个线程上没有承诺，所以只借它敲一下门，判定留在主线程上做。
+    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
+        Task { @MainActor in onChange() }
     }
 }

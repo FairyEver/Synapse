@@ -33,13 +33,15 @@ struct TerminalScreen: View {
     /// is used: the pasteboard changes while the app is not looking, there is no
     /// notification for that, and the menu that asks is built before it opens.
     @State private var pasteboardHoldsImage = false
-    /// 相册里最新的一张图，够新的那一小段时间里摆在输入栏上方（判定见
-    /// `TerminalRecentPhotoLibrary`）。nil 表示这次没有可提议的 —— 没授权、太旧、
-    /// 或者已经发过，三种情况在屏幕上都是同一件事：什么都不摆。
+    /// 相册里最新的一张图，摆在输入栏上方（判定见 `TerminalRecentPhotoLibrary`）。
+    /// nil 表示这一刻没有可提议的 —— 没授权、太旧、已经露过面，几种情况在屏幕上都是
+    /// 同一件事：什么都不摆。
     @State private var recentPhoto: RecentPhoto?
-    /// 到点把它收走的那班岗。没有它，一张五分钟后就不再成立的提议会一直挂在那里，
-    /// 直到用户碰巧做点什么让这个界面重算。
+    /// 到点把它收走的那班岗。没有它，这一格会一直挂着，而它是一句只在当下成立的提议。
     @State private var recentPhotoExpiry: Task<Void, Never>?
+    /// 相册里的变化，一发生就把上面那一格重算一遍。建在这一页上而不是建在 App 上：
+    /// 只有终端屏幕上有东西要看，而为它常驻一个监听等于每个页面都在读相册。
+    @State private var recentPhotoWatcher: TerminalRecentPhotoWatcher?
     /// Files picked but not yet sent, while the user is being asked whether a
     /// terminal that is waiting for input should really receive them.
     @State private var pendingFiles: [PickedFile] = []
@@ -542,6 +544,13 @@ struct TerminalScreen: View {
             // 就没有"相对于什么"可言。
             DiagnosticLog.record(.terminalEnter, terminalEnterFields())
             refreshPasteboardImage()
+            // 相册往后每变一次都回来重算。截图就在这台屏幕上截下来的时候，它是唯一
+            // 能接住那一下的东西 —— 入库是相册自己的事，什么时候完成只有它知道。
+            if recentPhotoWatcher == nil {
+                let watcher = TerminalRecentPhotoWatcher { Task { await refreshRecentPhoto() } }
+                watcher.start()
+                recentPhotoWatcher = watcher
+            }
             Task { await refreshRecentPhoto() }
             // 摆在前两件之后、也不等任何异步：它只读已经给着的权限和当下的连接，
             // 所以进来那一帧就已经是语音态，不会先画一下键盘态再翻过去。
@@ -556,23 +565,16 @@ struct TerminalScreen: View {
                 Task { await refreshRecentPhoto() }
             }
         }
-        // 在这块屏幕上截的图：截完就走开去别的 App 的那条路由 `scenePhase` 覆盖，
-        // 但这台手机屏幕上最常见的一种截图，是用户正看着终端时截下来要发给它的。
-        // 通知本身不带图，它只是「相册里刚刚多了一张」的提示；等一拍是因为截图的
-        // 入库在那一下之后才完成。
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(1))
-                await refreshRecentPhoto()
-            }
-        }
         .onDisappear {
             // Leaving the screen ends the recording with it: a microphone left open
             // behind a pushed-back list is the kind of thing that only gets noticed
             // from the status bar.
             voice.cancel()
-            // 这一页走了，那班收气泡的岗就没有要收的东西了。
+            // 这一页走了，那班收气泡的岗就没有要收的东西了；相册那个监听也一样，
+            // 注册是强引用，留着它就是一个再也没人看的页面一直在读相册。
             recentPhotoExpiry?.cancel()
+            recentPhotoWatcher?.stop()
+            recentPhotoWatcher = nil
             model.closeTerminal(sessionId)
         }
         // 终端没了，这个页面跟着走。停止、删除、在电脑上关掉、进程自己退出，最后都
@@ -1288,8 +1290,8 @@ struct TerminalScreen: View {
     /// 都是用户在读的行。
     ///
     /// 一圈边框而不是投影：这个 App 的层级靠线，不靠叠阴影（见 `SurfaceCard`）。这一
-    /// 圈在这里还多担一件事 —— 一张白底截图浮在浅色输入栏之上时，没有它就是一张边界
-    /// 不明的图。
+    /// 圈在这里担的是最重的那件事 —— 它压在终端画布上，而画布是固定的近黑，没有它
+    /// 一张截图就是一块边界不明的方块（颜色为什么是固定值，见 `Theme.canvasRing`）。
     private func recentPhotoBubble(_ photo: RecentPhoto) -> some View {
         Button {
             sendRecentPhoto(photo)
@@ -1301,7 +1303,7 @@ struct TerminalScreen: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color(uiColor: .separator), lineWidth: 1)
+                        .strokeBorder(Theme.canvasRing, lineWidth: Self.recentPhotoBubbleRing)
                 }
                 .contentShape(Rectangle())
         }
@@ -1311,27 +1313,33 @@ struct TerminalScreen: View {
     }
 
     private static let recentPhotoBubbleSide: CGFloat = 64
+    private static let recentPhotoBubbleRing: CGFloat = 2
 
     /// 重算这张提议。
     ///
-    /// 几个时机的判定都收在这里，而不是各自算一遍：够不够新、是不是已经发过、有没有
+    /// 几个时机的判定都收在这里，而不是各自算一遍：够不够新、是不是已经露过面、有没有
     /// 授权，三件事一起决定它出不出来，分开写必然会有一处漂开。
     private func refreshRecentPhoto() async {
-        let photo = await TerminalRecentPhotoLibrary.latestOfferable()
-        recentPhoto = photo
+        showRecentPhoto(await TerminalRecentPhotoLibrary.latestOfferable())
+    }
 
+    /// 摆出来，并且只摆 `recentPhotoDisplayDuration` 那么久。
+    ///
+    /// 摆过就记一笔，所以同一张图只会浮一次。这既是为了不重复打扰，也是「实时检测
+    /// 变化」这句话成立的前提 —— 只有新的一张才叫变化，看过的那张再浮上来只是噪声。
+    private func showRecentPhoto(_ photo: RecentPhoto?) {
         recentPhotoExpiry?.cancel()
         recentPhotoExpiry = nil
-        guard let photo else { return }
 
-        // 它自己到点消失，而不是等下一次重算：五分钟之后没有任何事情会发生，而一个
-        // 不会再成立的说法留在屏幕上，比不摆它更糟。
-        let remaining = photo.createdAt
-            .addingTimeInterval(recentPhotoFreshness)
-            .timeIntervalSinceNow
-        guard remaining > 0 else { return }
+        guard let photo else {
+            recentPhoto = nil
+            return
+        }
+
+        TerminalRecentPhotoLibrary.markShown(photo.id)
+        recentPhoto = photo
         recentPhotoExpiry = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(remaining))
+            try? await Task.sleep(for: .seconds(recentPhotoDisplayDuration))
             guard !Task.isCancelled else { return }
             recentPhoto = nil
         }
@@ -1342,7 +1350,7 @@ struct TerminalScreen: View {
         // 点下去就算这一张用掉了，无论它最后有没有发出去：读文件失败、或者终端在等
         // 回答时用户否掉了那个确认框，都会让同一张图再飘回来 —— 而让人对着一张自己
         // 刚点过的图再点一次，比少一次提议更糟（第二次点是会真的发出去的）。
-        TerminalRecentPhotoLibrary.markDelivered(photo.id)
+        TerminalRecentPhotoLibrary.markShown(photo.id)
         recentPhoto = nil
         recentPhotoExpiry?.cancel()
         recentPhotoExpiry = nil
@@ -1381,7 +1389,7 @@ struct TerminalScreen: View {
             // 相册自己对这一张的称呼（有的话）。从「文件」里挑的、或者别的 App 导
             // 出来的没有这个名字，那些本来也不会飘上来。
             if let assetId = result.assetIdentifier {
-                TerminalRecentPhotoLibrary.markDelivered(assetId)
+                TerminalRecentPhotoLibrary.markShown(assetId)
             }
             if let file = await TerminalFileIntake.prepare(provider: result.itemProvider) {
                 files.append(file)

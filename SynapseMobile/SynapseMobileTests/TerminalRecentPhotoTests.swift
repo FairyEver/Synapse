@@ -35,6 +35,12 @@ struct TerminalRecentPhotoFreshnessTests {
         #expect(recentPhotoFreshness == 300)
     }
 
+    @Test func itStaysOnScreenForFiveSeconds() {
+        // 同上一条：气泡自己走掉是它「不用人工关闭」的全部实现，而五秒是产品负责人
+        // 定的那个数。改大改小都该是一次有意识的改动，不是顺手调一下。
+        #expect(recentPhotoDisplayDuration == 5)
+    }
+
     @Test func aClockFromTheFutureIsNotFreshness() {
         // 相册的时间比这台设备快（从备份恢复、跨设备同步、时区移动）时，一个未来的
         // 拍摄时间会算出一个负的年龄 —— 按大小看它"最年轻"，按意思它是"说不清"。

@@ -62,6 +62,14 @@ enum Theme {
 
     static let terminalBackground = Color(red: 0.063, green: 0.063, blue: 0.071)
 
+    /// 浮在终端画布之上那张图的边。
+    ///
+    /// 固定值，理由和 `terminalBackground` 是同一条：它压在画布上，而画布在两种外观
+    /// 下都是那块近黑，所以这圈边不能跟着外观走。`separator` 正是这么栽的 —— 深色下
+    /// 它是 29% 的白，压在画布边缘上实测看不清，用户的原话是「在黑色背景下就看不出来
+    /// 边框了」。这里要的是在近黑上真正立得住的一圈：对画布约 6.9:1。
+    static let canvasRing = Color(white: 0.55)
+
     /// One colour, two appearances.
     ///
     /// `UIColor`'s own dynamic provider rather than SwiftUI's `Color(light:dark:)`,
