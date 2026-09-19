@@ -60,8 +60,24 @@ const TOOLBAR_ENVELOPE_ALLOWANCE_BYTES = 1_024
 /** The same slack, on the same terms, for the 快捷输入 payload. */
 const QUICK_PHRASES_ENVELOPE_ALLOWANCE_BYTES = 1_024
 
-/** Tail lines read to answer "what is this terminal doing right now". */
-const SUMMARY_TAIL_LINES = 4
+/**
+ * Lines read per step when hunting for the line a session row shows.
+ *
+ * The bottom of a full-screen program is furniture: Claude Code spends its last
+ * rows on the input box and the hint under it, so a tail of a few lines can be
+ * nothing but borders.
+ */
+const SUMMARY_LAST_LINE_STEP_LINES = 24
+
+/**
+ * How far up that hunt may go before it gives up.
+ *
+ * Past a few screens a line is history rather than "now", and the row claims to
+ * say what the terminal is doing right now. It is also what bounds the work: a
+ * program that prints nothing but rules must not make every summary tick walk the
+ * whole 5,000-line scrollback.
+ */
+const SUMMARY_LAST_LINE_SCAN_LIMIT_LINES = 240
 
 /**
  * Styled lines read per flush. This is the replayable window a phone can scroll
@@ -955,22 +971,51 @@ export class MobileGatewayService {
     if (known !== undefined && !this.lastLineDirty.has(sessionId)) return known
     this.lastLineDirty.delete(sessionId)
     try {
-      const window = await this.terminal.readLineWindow({
-        sessionId,
-        maxLines: SUMMARY_TAIL_LINES,
-      })
-      for (let index = window.lines.length - 1; index >= 0; index -= 1) {
-        const text = window.lines[index].text.trim()
-        if (text && isMeaningfulLine(text)) {
-          this.lastLineCache.set(sessionId, text)
-          return text
-        }
-      }
-      this.lastLineCache.set(sessionId, "")
-      return ""
+      const text = await this.scanForLastLine(sessionId)
+      this.lastLineCache.set(sessionId, text)
+      return text
     } catch {
       return known ?? ""
     }
+  }
+
+  /**
+   * Walks up the screen for the nearest line that says something, and returns it.
+   *
+   * Skipping decoration is not enough on its own if the walk stops before it
+   * reaches any text. A row left empty because the tail happens to be a box is
+   * indistinguishable, on the phone, from a terminal that has gone quiet — and it
+   * is not quiet, its text is three rows further up. So the walk keeps going
+   * until it finds words, runs out of buffer, or passes
+   * `SUMMARY_LAST_LINE_SCAN_LIMIT_LINES`, whichever comes first.
+   *
+   * An empty answer therefore means the whole scanned screen is blank or
+   * furniture. That is a real thing to report, and no longer a claim about a
+   * terminal that was busy all along.
+   */
+  private async scanForLastLine(sessionId: string): Promise<string> {
+    const tail = await this.terminal.readLineWindow({
+      sessionId,
+      maxLines: SUMMARY_LAST_LINE_STEP_LINES,
+    })
+    const last = lastMeaningfulLine(tail.lines)
+    if (last) return last
+
+    let above = tail.startIndex
+    let scanned = tail.lines.length
+    while (above > 0 && scanned < SUMMARY_LAST_LINE_SCAN_LIMIT_LINES) {
+      const step = Math.min(SUMMARY_LAST_LINE_STEP_LINES, SUMMARY_LAST_LINE_SCAN_LIMIT_LINES - scanned)
+      const window = await this.terminal.readLineRange({ sessionId, from: above - step, maxLines: step })
+      const found = lastMeaningfulLine(window.lines)
+      if (found) return found
+      // A read that comes back empty, or that reports a start no higher than the one
+      // already reached, has nothing above it to walk into. Stopping is the only exit
+      // from this loop that cannot spin.
+      if (window.lines.length === 0 || window.startIndex >= above) break
+      above = window.startIndex
+      scanned += window.lines.length
+    }
+    return ""
   }
 
   /* ------------------------------------------------------------------ *
@@ -1276,4 +1321,13 @@ const DECORATION_PATTERN = /^[\s─-╿▀-▟■-◿‐-―_=~\-—–]+$/u
 
 export function isMeaningfulLine(text: string): boolean {
   return !DECORATION_PATTERN.test(text)
+}
+
+/** The lowest line of a window with words in it, or `""` when none of them has any. */
+function lastMeaningfulLine(lines: readonly TerminalStyledLine[]): string {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const text = lines[index].text.trim()
+    if (text && isMeaningfulLine(text)) return text
+  }
+  return ""
 }

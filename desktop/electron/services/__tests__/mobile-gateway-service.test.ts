@@ -2030,6 +2030,59 @@ describe("MobileGatewayService", () => {
     })).toBe(true)
   })
 
+  /*
+   * The row's third line is what answers "what is this terminal doing right now"
+   * without the reader opening it — which is the whole point of the phone, since the
+   * common visit ends on this list. A full-screen program spends its last rows on a
+   * box: Claude Code's input prompt is a border, a blank, and another border. Reading
+   * only the tail and stopping there drew a blank row on a terminal that had text a
+   * few rows further up, and on the phone that is indistinguishable from a terminal
+   * that has gone quiet.
+   */
+  it("carries a line from above a tail that is nothing but a box", async () => {
+    const harness = createHarness()
+    harness.terminal.lines.set("sess-1", [
+      ...Array.from({ length: 9 }, (_, index) => ({ text: `output-${index}` })),
+      { text: "npm run dev" },
+      ...Array.from({ length: 30 }, () => ({ text: "╰──────────────────────────╯" })),
+    ])
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions[0].lastLine).toBe("npm run dev")
+  })
+
+  it("reports an empty line only when the whole screen is furniture", async () => {
+    const harness = createHarness()
+    harness.terminal.lines.set("sess-1", [
+      ...Array.from({ length: 20 }, () => ({ text: "────────────────────────────" })),
+      { text: "   " },
+    ])
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions[0].lastLine).toBe("")
+  })
+
+  it("stops walking once the line it would find is history rather than now", async () => {
+    // The bound is a design decision rather than a performance accident: a line far
+    // enough up the scrollback is not what the terminal is doing now, and the row
+    // claims to say exactly that. It is also what keeps a screen of nothing but rules
+    // from walking the whole 5,000-line scrollback on every summary tick.
+    const harness = createHarness()
+    harness.terminal.lines.set("sess-1", [
+      { text: "a line from long ago" },
+      ...Array.from({ length: 279 }, () => ({ text: "────────────────────────" })),
+    ])
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions[0].lastLine).toBe("")
+  })
+
   it("carries the computer's group order to the phone unchanged", async () => {
     const harness = createHarness()
     // Deliberately neither alphabetical nor creation-ordered: the phone's 新建 panel is
