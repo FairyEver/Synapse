@@ -35,6 +35,23 @@ export function getTerminalClipboardShortcut(
   return null
 }
 
+/**
+ * 打开面板内查找。
+ *
+ * 用各平台自己的主修饰键，和别处一致：macOS 上 `⌘F`，其它平台 `Ctrl+F`。不带 Shift、
+ * 不带 Alt——那些组合留给编辑器自己的按键，终端不替它们做主。
+ */
+export function getTerminalSearchShortcut(
+  event: TerminalKeyboardEvent,
+  platform: string | undefined,
+): "find" | null {
+  if (event.isComposing || event.altKey || event.shiftKey) return null
+  if (event.key.toLowerCase() !== "f") return null
+  return platform === "darwin"
+    ? event.metaKey && !event.ctrlKey ? "find" : null
+    : event.ctrlKey && !event.metaKey ? "find" : null
+}
+
 export function isTerminalShiftEnterEvent(event: TerminalKeyboardEvent): boolean {
   return event.key === "Enter"
     && event.shiftKey
