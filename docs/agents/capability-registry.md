@@ -58,7 +58,7 @@
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
 - Terminal 的 49 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
-- Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 44。
+- Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 49。
 - Terminal 不注册任何 Deep Link：会话不跨重启（ADR 0215），带会话的链接在下一次启动时必然失效，所以没有可交付的链接形态。会话定位由 `app.terminal.session.open` 承担，只接受不可变 `sessionId` 并复用既有 System App 打开请求定位 workspace/pane；界面里的「复制引用」只产出纯文本的 `workspace_id` / `session_ref` / `session_id` 三行，不注册协议路由、不读取输出，也不新增应用页、Dock、Workflow 或 Automation 表面。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
 - 手机端可通过 mobile gateway 新增的 `createAgentConversation` 意图，让电脑在自己的某个项目目录里启动内置 Claude Code，并把它作为普通终端会话回给手机；供应商凭据仍只在主进程读取与使用，手机不接触任何密钥。`mobile.summary` 随之多出两个可选区块——项目目录与供应商摘要（只含 id、名称、是否电脑默认、档位与四个档位解析后的模型名，不含 `baseUrl` 或任何凭据字段）——它们复用 `app.agent.group.list` 背后的同一份项目列表，不新增选项目录。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
