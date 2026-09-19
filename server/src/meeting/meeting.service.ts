@@ -37,6 +37,8 @@ import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage
  * - 分片必须按顺序到达，跳号直接拒绝——客户端在后台补传，乱序只会掩盖丢片；
  * - 「取消」和「删除」是两回事：取消要中止这次分块上传（丢弃分片），删除删的是已经
  *   合并好的对象。
+ * - 「删除录音」和「删除整条」也是两回事：前者只把音频对象去掉、留下文字（历史数据
+ *   里还有这种状态），后者连逐字稿、发言人和纪要一起删，两条清理路径都要覆盖。
  */
 
 /** 5 小时 64 kbps 大约 144 MB，留出余量挡住异常客户端。 */
@@ -462,6 +464,63 @@ export class MeetingService {
         data: { status: "deleted", deletedAt: new Date(), deletePending: true, peaks: null },
       })
     }
+  }
+
+  /**
+   * 删除整条录音：音频对象、逐字稿、发言人和纪要一起删掉。
+   *
+   * 两条清理路径都要覆盖，只做一条会留下一样东西：录音还没传完的走**中止分块上传**
+   * （删对象删不掉桶里的碎片，那些碎片会一直按量计费），已经传完的走**删对象**。只
+   * 抄 `cancelRecording` 那条会漏掉后一半，在桶里留一个没人认领的孤儿对象。
+   *
+   * 清理失败不让这次删除失败：对用户来说删了就是删了，不能卡在一条删不掉的记录上。
+   * 失败只记警告（含对象键，便于人工兜底）——这一行随后就没了，没有地方留重试标记。
+   *
+   * 腾讯云侧不用管：ASR 没有删除任务的接口，任务记录靠 `expiresAt` 自然过期。
+   *
+   * 幂等：不存在、或者不是自己的，一律当作已经删掉，返回成功。
+   */
+  async deleteMeeting(userId: string, meetingId: string): Promise<void> {
+    const meeting = await this.prisma.meeting.findFirst({ where: { id: meetingId, userId } })
+    if (!meeting) return
+    const [recording, job] = await Promise.all([
+      this.prisma.meetingRecording.findUnique({ where: { meetingId } }),
+      this.prisma.meetingTranscriptionJob.findUnique({ where: { meetingId } }),
+    ])
+
+    if (recording && job?.uploadId) {
+      try {
+        await this.storage.abortMultipartUpload({ key: recording.storageKey, uploadId: job.uploadId })
+      } catch (error) {
+        this.logger.warn(
+          {
+            meetingId,
+            storageKey: recording.storageKey,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          },
+          "Meeting multipart abort failed during deletion",
+        )
+      }
+    }
+
+    // 已经删过一次、而且上次删成功了的不用再删；上次没删掉的（deletePending）要补一次，
+    // 否则这一行随会议一起消失之后，那条重试记录也没了。
+    if (recording && (recording.status !== "deleted" || recording.deletePending)) {
+      try {
+        await this.storage.deleteObject(recording.storageKey)
+      } catch (error) {
+        this.logger.warn(
+          {
+            meetingId,
+            storageKey: recording.storageKey,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          },
+          "Meeting recording object deletion failed during deletion",
+        )
+      }
+    }
+
+    await this.prisma.meeting.delete({ where: { id: meetingId } })
   }
 
   /** 重试转写不需要重新上传：音频一直在，换一个任务号重新提交。 */

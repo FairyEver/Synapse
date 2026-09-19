@@ -183,11 +183,18 @@ export class MeetingController {
     await this.meetings.nameSpeaker(request.user!.id, meetingId, Number(speakerId), parsed.name)
   }
 
-  /** 删除录音本身，逐字稿和纪要保留。 */
+  /** 删除录音本身，逐字稿和纪要保留。历史数据的 `deleted` 状态还要靠它继续显示。 */
   @Delete("/:meetingId/recording")
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteRecording(@Req() request: AuthenticatedUserRequest, @Param("meetingId") meetingId: string) {
     await this.meetings.deleteRecording(request.user!.id, meetingId)
+  }
+
+  /** 删除整条录音：音频、逐字稿、发言人、纪要一起删。不存在也返回 204。 */
+  @Delete("/:meetingId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteMeeting(@Req() request: AuthenticatedUserRequest, @Param("meetingId") meetingId: string) {
+    await this.meetings.deleteMeeting(request.user!.id, meetingId)
   }
 
   @Post("/:meetingId/transcription/retry")

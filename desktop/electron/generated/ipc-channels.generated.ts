@@ -419,6 +419,7 @@ export const IPC_CHANNELS = {
     "rename": "synapse:app:meeting:entry:rename",
     "nameSpeaker": "synapse:app:meeting:speaker:name",
     "deleteRecording": "synapse:app:meeting:recording:delete",
+    "deleteMeeting": "synapse:app:meeting:entry:remove",
     "retryTranscription": "synapse:app:meeting:transcription:retry",
     "saveMinutes": "synapse:app:meeting:minutes:save",
     "getPlaybackUrl": "synapse:app:meeting:playback_url:get",

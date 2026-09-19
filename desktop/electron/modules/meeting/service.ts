@@ -192,6 +192,15 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     )
   }
 
+  /** 删除整条录音：录音和文字一起删，服务端级联清掉逐字稿、发言人和纪要。 */
+  async function deleteMeeting(meetingId: string): Promise<void> {
+    await deps.fetchAuthenticated(
+      `/meetings/${encodeURIComponent(meetingId)}`,
+      { method: "DELETE" },
+      "删除录音失败。",
+    )
+  }
+
   async function retryTranscription(meetingId: string): Promise<void> {
     await deps.fetchAuthenticated(
       `/meetings/${encodeURIComponent(meetingId)}/transcription/retry`,
@@ -259,6 +268,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     renameMeeting,
     nameSpeaker,
     deleteRecording,
+    deleteMeeting,
     retryTranscription,
     saveMinutes,
     getPlaybackUrl,

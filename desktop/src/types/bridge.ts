@@ -1185,6 +1185,7 @@ export type SynapseBridge = {
       list: () => Promise<SynapseMeetingSummary[]>
       get: (input: { meetingId: string }) => Promise<SynapseMeetingDetail>
       rename: (input: { meetingId: string; title: string }) => Promise<void>
+      remove: (input: { meetingId: string }) => Promise<void>
       speakerName: (input: { meetingId: string; speakerId: number; name: string | null }) => Promise<void>
       retryTranscription: (input: { meetingId: string }) => Promise<void>
       saveMinutes: (input: { meetingId: string; minutes: SynapseMeetingMinutes }) => Promise<void>

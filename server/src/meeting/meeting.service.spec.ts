@@ -312,6 +312,97 @@ describe("删除录音", () => {
   })
 })
 
+describe("删除整条录音", () => {
+  beforeEach(() => {
+    prisma.meeting.findFirst.mockResolvedValue({ id: "meeting-1", userId: "user-1" })
+  })
+
+  it("已经传完的录音删的是对象，不是分块上传", async () => {
+    // 取消录音那条路在 uploadId 已经置空之后不删对象，会留一个孤儿 COS 对象。
+    // 这条断言就是「整条删除必须覆盖已完成的音频」这个要求本身。
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "ready" }))
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({ uploadId: null }))
+    await service.deleteMeeting("user-1", "meeting-1")
+    expect(storage.deleteObject).toHaveBeenCalledWith("meeting-recordings/rec-1")
+    expect(storage.abortMultipartUpload).not.toHaveBeenCalled()
+  })
+
+  it("还没传完的录音中止分块上传，碎片不会一直计费", async () => {
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "uploading" }))
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
+    await service.deleteMeeting("user-1", "meeting-1")
+    expect(storage.abortMultipartUpload).toHaveBeenCalledWith({
+      key: "meeting-recordings/rec-1",
+      uploadId: "upload-abc",
+    })
+  })
+
+  it("两条清理路径都覆盖，不是二选一", async () => {
+    // uploadId 还在，但对象是在上一次完成里已经合并好的——两个都要清。
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "ready" }))
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
+    await service.deleteMeeting("user-1", "meeting-1")
+    expect(storage.abortMultipartUpload).toHaveBeenCalled()
+    expect(storage.deleteObject).toHaveBeenCalled()
+  })
+
+  it("删的是会议这一行，逐字稿和发言人靠级联一起清掉", async () => {
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "ready" }))
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({ uploadId: null }))
+    await service.deleteMeeting("user-1", "meeting-1")
+    expect(prisma.meeting.delete).toHaveBeenCalledWith({ where: { id: "meeting-1" } })
+  })
+
+  it("上次没删成的对象这一次补删，不留一条永远清不掉的重试", async () => {
+    prisma.meetingRecording.findUnique.mockResolvedValue(
+      recordingRow({ status: "deleted", deletePending: true }),
+    )
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({ uploadId: null }))
+    await service.deleteMeeting("user-1", "meeting-1")
+    expect(storage.deleteObject).toHaveBeenCalledWith("meeting-recordings/rec-1")
+  })
+
+  it("已经删干净的历史记录不重复请求对象存储", async () => {
+    prisma.meetingRecording.findUnique.mockResolvedValue(
+      recordingRow({ status: "deleted", deletePending: false }),
+    )
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({ uploadId: null }))
+    await service.deleteMeeting("user-1", "meeting-1")
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+    expect(prisma.meeting.delete).toHaveBeenCalled()
+  })
+
+  it("删除成功一次之后再做一次仍然返回成功，不会 500", async () => {
+    prisma.meeting.findFirst.mockResolvedValue(null)
+    await expect(service.deleteMeeting("user-1", "meeting-1")).resolves.toBeUndefined()
+    expect(prisma.meeting.delete).not.toHaveBeenCalled()
+  })
+
+  it("别人的录音删不掉，也不动任何数据", async () => {
+    prisma.meeting.findFirst.mockResolvedValue(null)
+    await service.deleteMeeting("user-2", "meeting-1")
+    expect(prisma.meeting.findFirst).toHaveBeenCalledWith({ where: { id: "meeting-1", userId: "user-2" } })
+    expect(prisma.meeting.delete).not.toHaveBeenCalled()
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it("对象删不掉也照样把记录删掉，用户不会卡在一条删不掉的录音上", async () => {
+    storage.deleteObject.mockRejectedValue(new Error("桶超时"))
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "ready" }))
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({ uploadId: null }))
+    await expect(service.deleteMeeting("user-1", "meeting-1")).resolves.toBeUndefined()
+    expect(prisma.meeting.delete).toHaveBeenCalledWith({ where: { id: "meeting-1" } })
+  })
+
+  it("中止分块上传失败也照样把记录删掉", async () => {
+    storage.abortMultipartUpload.mockRejectedValue(new Error("桶连不上"))
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "uploading" }))
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
+    await expect(service.deleteMeeting("user-1", "meeting-1")).resolves.toBeUndefined()
+    expect(prisma.meeting.delete).toHaveBeenCalledWith({ where: { id: "meeting-1" } })
+  })
+})
+
 describe("转写失败后的重试", () => {
   it("不需要重新上传，只换一个任务号重新提交", async () => {
     prisma.meeting.findFirst.mockResolvedValue({ id: "meeting-1", userId: "user-1" })

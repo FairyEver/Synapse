@@ -165,6 +165,15 @@ export const meetingIpcModule: IpcModule = {
         await service(ctx).deleteRecording(request.meetingId)
       },
     },
+    deleteMeeting: {
+      operationId: "app.meeting.entry.remove",
+      kind: "invoke",
+      request: meetingIdInputSchema,
+      response: z.void(),
+      handler: async (ctx, request: z.infer<typeof meetingIdInputSchema>) => {
+        await service(ctx).deleteMeeting(request.meetingId)
+      },
+    },
     retryTranscription: {
       operationId: "app.meeting.transcription.retry",
       kind: "invoke",

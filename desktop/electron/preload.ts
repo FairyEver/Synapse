@@ -527,6 +527,7 @@ const synapseBridge: SynapseBridge = {
       list: () => invoke(IPC_CHANNELS.meeting.list)(),
       get: (input) => invoke(IPC_CHANNELS.meeting.get)(input),
       rename: (input) => invoke(IPC_CHANNELS.meeting.rename)(input),
+      remove: (input) => invoke(IPC_CHANNELS.meeting.deleteMeeting)(input),
       speakerName: (input) => invoke(IPC_CHANNELS.meeting.nameSpeaker)(input),
       retryTranscription: (input) => invoke(IPC_CHANNELS.meeting.retryTranscription)(input),
       saveMinutes: (input) => invoke(IPC_CHANNELS.meeting.saveMinutes)(input),
