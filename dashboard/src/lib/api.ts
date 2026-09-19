@@ -241,6 +241,33 @@ export type AdminUserRow = {
   status: 'active' | 'disabled'
   createdAt: string
   updatedAt: string
+  teams: AdminTeamRef[]
+}
+
+export type AdminTeamRef = {
+  id: string
+  name: string
+}
+
+export type AdminTeamRow = AdminTeamRef & {
+  createdAt: string
+  updatedAt: string
+  memberCount: number
+}
+
+export type AdminTeamMemberRow = {
+  userId: string
+  email: string
+  handle: string
+  status: 'active' | 'disabled'
+  joinedAt: string
+}
+
+export type AdminTeamCandidateRow = {
+  id: string
+  email: string
+  handle: string
+  status: 'active' | 'disabled'
 }
 
 export type LiveClientRow = {
@@ -339,6 +366,14 @@ export type AdminSkillRepositoryRow = {
 
 export type AdminSkillRepositoryListQuery = PaginationOptions & {
   status?: SkillRepositoryStatus
+  query?: string
+}
+
+export type AdminTeamListQuery = PaginationOptions & {
+  sortBy?: 'createdAt' | 'updatedAt' | 'name' | 'memberCount'
+}
+
+export type AdminTeamCandidateListQuery = PaginationOptions & {
   query?: string
 }
 
@@ -659,6 +694,25 @@ function adminSkillRepositoryQuerySuffix(options: AdminSkillRepositoryListQuery 
     sortBy: options.sortBy,
     sortOrder: options.sortOrder,
     status: options.status,
+    query: options.query,
+  })
+}
+
+const adminTeamBasePath = `${adminApiBasePath}/teams`
+
+function adminTeamQuerySuffix(options: AdminTeamListQuery = {}) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
+    sortBy: options.sortBy,
+    sortOrder: options.sortOrder,
+  })
+}
+
+function adminTeamCandidateQuerySuffix(options: AdminTeamCandidateListQuery = {}) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
     query: options.query,
   })
 }
@@ -1435,6 +1489,47 @@ export const adminApi = {
   listUsers: (options: AdminUserListOptions = {}) =>
     request<PaginatedResponse<AdminUserRow>>(
       `${adminApiBasePath}/users${adminUserListQuerySuffix(options)}`
+    ),
+  listTeams: (options: AdminTeamListQuery = {}) =>
+    request<PaginatedResponse<AdminTeamRow>>(
+      `${adminTeamBasePath}${adminTeamQuerySuffix(options)}`
+    ),
+  getTeam: (id: string) =>
+    request<AdminTeamRow>(`${adminTeamBasePath}/${encodeURIComponent(id)}`),
+  createTeam: (name: string) =>
+    request<AdminTeamRow>(adminTeamBasePath, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  renameTeam: (id: string, name: string) =>
+    request<AdminTeamRow>(`${adminTeamBasePath}/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+  deleteTeam: (id: string) =>
+    request<{ ok: true }>(`${adminTeamBasePath}/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  listTeamMembers: (id: string, options: PaginationOptions = {}) =>
+    request<PaginatedResponse<AdminTeamMemberRow>>(
+      `${adminTeamBasePath}/${encodeURIComponent(id)}/members${paginationSuffix(options)}`
+    ),
+  listTeamMemberCandidates: (
+    id: string,
+    options: AdminTeamCandidateListQuery = {}
+  ) =>
+    request<PaginatedResponse<AdminTeamCandidateRow>>(
+      `${adminTeamBasePath}/${encodeURIComponent(id)}/member-candidates${adminTeamCandidateQuerySuffix(options)}`
+    ),
+  addTeamMembers: (id: string, userIds: string[]) =>
+    request<{ added: number }>(
+      `${adminTeamBasePath}/${encodeURIComponent(id)}/members`,
+      { method: 'POST', body: JSON.stringify({ userIds }) }
+    ),
+  removeTeamMember: (id: string, userId: string) =>
+    request<{ ok: true }>(
+      `${adminTeamBasePath}/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
+      { method: 'DELETE' }
     ),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${adminApiBasePath}/live-clients`),

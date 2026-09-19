@@ -65,6 +65,7 @@ describe('UsersPage status confirmation', () => {
         status: 'active',
         createdAt: '2026-06-14T00:00:00.000Z',
         updatedAt: '2026-06-14T00:00:00.000Z',
+        teams: [],
       }],
       total: 1,
     })
@@ -111,6 +112,7 @@ describe('UsersPage status confirmation', () => {
         status: 'active',
         createdAt: '2026-06-14T00:00:00.000Z',
         updatedAt: '2026-06-14T00:00:00.000Z',
+        teams: [],
       }],
       total: 1,
     })
@@ -168,6 +170,7 @@ describe('UsersPage status confirmation', () => {
         status: 'active',
         createdAt: '2026-06-14T00:00:00.000Z',
         updatedAt: '2026-06-14T00:00:00.000Z',
+        teams: [],
       }],
       total: 1,
     })
@@ -205,6 +208,47 @@ describe('UsersPage status confirmation', () => {
     expect(writeText).toHaveBeenCalledWith(
       'https://app.example.com/console/reset-password?token=reset-token'
     )
+  })
+  it('lists the teams each user belongs to', async () => {
+    mockedAdminApi.listUsers.mockResolvedValue({
+      data: [
+        {
+          id: 'user-1',
+          email: 'ada@example.com',
+          handle: 'ada',
+          adminNote: null,
+          status: 'active',
+          createdAt: '2026-06-14T00:00:00.000Z',
+          updatedAt: '2026-06-14T00:00:00.000Z',
+          teams: [
+            { id: 'team-1', name: '产品组' },
+            { id: 'team-2', name: '研发组' },
+          ],
+        },
+        {
+          id: 'user-2',
+          email: 'bob@example.com',
+          handle: 'bob',
+          adminNote: null,
+          status: 'active',
+          createdAt: '2026-06-15T00:00:00.000Z',
+          updatedAt: '2026-06-15T00:00:00.000Z',
+          teams: [],
+        },
+      ],
+      total: 2,
+    })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('产品组')
+    })
+    expect(cellByHeader('ada@example.com', '团队').textContent).toContain('产品组')
+    expect(cellByHeader('ada@example.com', '团队').textContent).toContain('研发组')
+    expect(cellByHeader('bob@example.com', '团队').textContent).toBe('-')
   })
 })
 
@@ -279,6 +323,22 @@ function dialogButtonByText(text: string): HTMLButtonElement {
     .find((item) => item.textContent === text && !item.closest('table'))
   if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} dialog button not found`)
   return button
+}
+
+function rowByEmail(email: string): HTMLTableRowElement {
+  const row = Array.from(document.querySelectorAll('tbody tr'))
+    .find((element) => element.textContent?.includes(email))
+  if (!(row instanceof HTMLTableRowElement)) throw new Error(`${email} row not found`)
+  return row
+}
+
+function cellByHeader(email: string, header: string): HTMLTableCellElement {
+  const headers = Array.from(document.querySelectorAll('thead th'))
+  const index = headers.findIndex((element) => element.textContent?.trim() === header)
+  if (index < 0) throw new Error(`${header} column not found`)
+  const cell = rowByEmail(email).querySelectorAll('td')[index]
+  if (!(cell instanceof HTMLTableCellElement)) throw new Error(`${header} cell not found`)
+  return cell
 }
 
 function buttonByText(text: string): HTMLButtonElement {

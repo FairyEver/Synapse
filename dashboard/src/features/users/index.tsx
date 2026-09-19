@@ -255,6 +255,28 @@ export default function UsersPage() {
       meta: { className: 'w-24' },
     },
     {
+      id: 'teams',
+      header: '团队',
+      cell: ({ row }) => {
+        const teams = row.original.teams
+        if (teams.length === 0) {
+          return <span className='text-muted-foreground'>-</span>
+        }
+
+        return (
+          <div className='flex flex-wrap items-center gap-2'>
+            {teams.map((team) => (
+              <Badge key={team.id} variant='secondary'>
+                {team.name}
+              </Badge>
+            ))}
+          </div>
+        )
+      },
+      enableSorting: false,
+      meta: { className: 'max-w-0 w-1/4' },
+    },
+    {
       accessorKey: 'createdAt',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />

@@ -15,6 +15,8 @@ import LogsPage from '@/features/logs'
 import ProblemFeedbackPage from '@/features/problem-feedback'
 import { SkillRepositoryAdminPage } from '@/features/skill-repository'
 import SystemPage from '@/features/system'
+import TeamsPage from '@/features/teams'
+import TeamDetailPage from '@/features/teams/team-detail'
 import TelemetryPage from '@/features/telemetry'
 import UsersPage from '@/features/users'
 import WebhookDeliveriesPage from '@/features/webhook-deliveries'
@@ -94,11 +96,18 @@ const webhookDeliveriesRoute = createRoute({
   component: () => <WebhookDeliveriesPage mode='admin' search={webhookDeliveriesRoute.useSearch()} />,
 })
 
+const teamDetailRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: 'teams/$teamId',
+  component: TeamDetailPage,
+})
+
 export const adminRouteTree = rootRoute.addChildren([
   indexRoute,
   accessRoute,
   authenticatedRoute.addChildren([
     adminPage('system', SystemPage), adminPage('users', UsersPage), adminPage('devices', DevicesPage),
+    adminPage('teams', TeamsPage), teamDetailRoute,
     adminPage('telemetry', TelemetryPage),
     skillRepositoriesRoute, webhookDeliveriesRoute, adminPage('audit-logs', AuditLogsPage),
     adminPage('problem-feedback', ProblemFeedbackPage),
