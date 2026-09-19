@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, FileText, Folder, FolderOpen, Link2Off, MailOpen, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, FileText, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
@@ -171,13 +171,6 @@ export function TerminalModule({
   const [descriptionTarget, setDescriptionTarget] = useState<SynapseTerminalWorkspace | null>(null)
   const [descriptionDraft, setDescriptionDraft] = useState("")
   const [descriptionSaving, setDescriptionSaving] = useState(false)
-  /**
-   * 「有新消息」：某个终端在我没看它的时候输出了新内容。
-   *
-   * 只活在这一个渲染进程里，不落盘也不上报——它是「自上次查看以来」的状态，会话本身不跨重启
-   * （ADR 0215），写下来也没有下一次能对上的时候。
-   */
-  const [unreadWorkspaceIds, setUnreadWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
   const [sessionRenameTarget, setSessionRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [sessionRenameTitle, setSessionRenameTitle] = useState("")
   const [sessionRenameSaving, setSessionRenameSaving] = useState(false)
@@ -440,20 +433,6 @@ export function TerminalModule({
       cancelled = true
     }
   }, [onOpenRequestConsumed, openRequest, terminalBridge])
-
-  // 输出事件对所有会话广播，后台 workspace 的终端也在推数据，所以「有新消息」不必等到看得见才成立。
-  const workspaceIdBySessionIdRef = useRef<ReadonlyMap<string, string>>(new Map())
-  const activeWorkspaceIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    const bySessionId = new Map<string, string>()
-    for (const workspace of workspaces) {
-      for (const pane of collectTerminalPaneLeaves(workspace.layout)) bySessionId.set(pane.sessionId, workspace.id)
-    }
-    workspaceIdBySessionIdRef.current = bySessionId
-  }, [workspaces])
-  useEffect(() => {
-    activeWorkspaceIdRef.current = activeWorkspaceId
-  }, [activeWorkspaceId])
 
   const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {
@@ -1402,31 +1381,6 @@ export function TerminalModule({
     setActiveWorkspaceId(workspaceId)
   }, [])
 
-  const setWorkspaceUnread = useCallback((workspaceId: string, unread: boolean) => {
-    setUnreadWorkspaceIds((current) => {
-      if (current.has(workspaceId) === unread) return current
-      const next = new Set(current)
-      if (unread) next.add(workspaceId)
-      else next.delete(workspaceId)
-      return next
-    })
-  }, [])
-
-  const markWorkspaceRead = useCallback((workspaceId: string) => {
-    setWorkspaceUnread(workspaceId, false)
-  }, [setWorkspaceUnread])
-
-  // 切到哪个 workspace 就算看过哪个；「标记未读」是用户自己钉的，下一次切回来仍然会清掉。
-  useEffect(() => {
-    if (activeWorkspaceId) markWorkspaceRead(activeWorkspaceId)
-  }, [activeWorkspaceId, markWorkspaceRead])
-
-  useEffect(() => terminalBridge.operation.onData((event) => {
-    const workspaceId = workspaceIdBySessionIdRef.current.get(event.sessionId)
-    if (!workspaceId || workspaceId === activeWorkspaceIdRef.current) return
-    setWorkspaceUnread(workspaceId, true)
-  }), [setWorkspaceUnread, terminalBridge])
-
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((current) => {
       const next = !current
@@ -1531,7 +1485,6 @@ export function TerminalModule({
         pinned={workspace.pinned}
         status={workspaceStatus(workspace, sessions)}
         title={workspace.title}
-        unread={unreadWorkspaceIds.has(workspace.id)}
         waiting={workspaceWaitingForInput(workspace, sessions)}
         workspaceId={workspace.id}
         onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
@@ -1542,7 +1495,6 @@ export function TerminalModule({
         onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
         onSelect={() => selectWorkspace(workspace.id)}
         onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
-        onToggleUnread={() => setWorkspaceUnread(workspace.id, !unreadWorkspaceIds.has(workspace.id))}
       />
     ))
   )
@@ -1644,14 +1596,12 @@ export function TerminalModule({
                 description={workspace.description}
                 pinned={workspace.pinned}
                 title={workspace.title}
-                unread={unreadWorkspaceIds.has(workspace.id)}
                 onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
                 onCopyReference={() => { void copySessionReference(workspace, session) }}
                 onEditDescription={(returnFocus) => openDescriptionDialog(workspace, returnFocus)}
                 onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
                 onSelect={() => selectWorkspace(workspace.id)}
                 onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
-                onToggleUnread={() => setWorkspaceUnread(workspace.id, !unreadWorkspaceIds.has(workspace.id))}
                 waiting={workspaceWaitingForInput(workspace, sessions)}
               />
             )
@@ -2393,10 +2343,8 @@ function TerminalHeaderSessionTab({
   onRename,
   onSelect,
   onTogglePin,
-  onToggleUnread,
   pinned,
   title,
-  unread,
   waiting,
 }: {
   readonly active: boolean
@@ -2408,10 +2356,8 @@ function TerminalHeaderSessionTab({
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
   readonly onTogglePin: () => void
-  readonly onToggleUnread: () => void
   readonly pinned: boolean
   readonly title: string
-  readonly unread: boolean
   readonly waiting: boolean
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
@@ -2431,7 +2377,6 @@ function TerminalHeaderSessionTab({
           {waiting ? <TerminalAttentionIndicator /> : null}
           {pinned ? <TerminalPinnedIndicator /> : null}
           <span className="max-w-32 truncate">{title}</span>
-          {unread ? <TerminalUnreadIndicator /> : null}
         </SystemAppTopBarActionButton>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -2451,10 +2396,6 @@ function TerminalHeaderSessionTab({
         }}>
           <FileText />
           编辑描述
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onToggleUnread}>
-          <MailOpen />
-          {unread ? "标记已读" : "标记未读"}
         </ContextMenuItem>
         <ContextMenuItem onSelect={onCopyReference}>
           <Copy />
@@ -2482,11 +2423,9 @@ function TerminalSidebarWorkspaceRow({
   onRename,
   onSelect,
   onTogglePin,
-  onToggleUnread,
   pinned,
   status,
   title,
-  unread,
   waiting,
   workspaceId,
 }: {
@@ -2502,11 +2441,9 @@ function TerminalSidebarWorkspaceRow({
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
   readonly onTogglePin: () => void
-  readonly onToggleUnread: () => void
   readonly pinned: boolean
   readonly status: SynapseTerminalSession["status"]
   readonly title: string
-  readonly unread: boolean
   readonly waiting: boolean
   readonly workspaceId: string
 }) {
@@ -2528,7 +2465,6 @@ function TerminalSidebarWorkspaceRow({
             title={description}
             trailing={(
               <>
-                {unread ? <TerminalUnreadIndicator /> : null}
                 <TerminalWorkspaceLifecycleButton
                   canForce={canForce}
                   closing={closing}
@@ -2564,10 +2500,6 @@ function TerminalSidebarWorkspaceRow({
         }}>
           <FileText />
           编辑描述
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onToggleUnread}>
-          <MailOpen />
-          {unread ? "标记已读" : "标记未读"}
         </ContextMenuItem>
         <ContextMenuItem onSelect={onCopyReference}>
           <Copy />
@@ -2653,23 +2585,6 @@ function TerminalAttentionIndicator() {
     >
       <CircleHelp className="size-3.5" aria-hidden="true" />
       <span className="sr-only">等待输入</span>
-    </span>
-  )
-}
-
-/**
- * 「有新消息」与「等待输入」必须一眼分得开：后者是 agent 卡在等人批准（琥珀色问号），
- * 前者只是没看过的新输出（中性色圆点，读完就消失）。
- */
-function TerminalUnreadIndicator() {
-  return (
-    <span
-      data-terminal-unread
-      title="有新消息"
-      className="inline-flex size-3.5 shrink-0 items-center justify-center"
-    >
-      <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
-      <span className="sr-only">有新消息</span>
     </span>
   )
 }

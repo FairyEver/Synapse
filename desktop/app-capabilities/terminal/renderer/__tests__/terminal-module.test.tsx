@@ -1098,11 +1098,10 @@ describe("TerminalModule", () => {
       "重命名",
       "置顶",
       "编辑描述",
-      "标记未读",
       "复制引用",
       "关闭",
     ])
-    expect(menuItems[5]?.dataset.variant).toBe("destructive")
+    expect(menuItems[4]?.dataset.variant).toBe("destructive")
 
     const navigation = document.querySelector('[aria-label="活动终端会话"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
@@ -1159,7 +1158,6 @@ describe("TerminalModule", () => {
       "重命名",
       "置顶",
       "编辑描述",
-      "标记未读",
       "复制引用",
       "关闭",
     ])
@@ -1252,32 +1250,28 @@ describe("TerminalModule", () => {
     expect(sidebarSessionRow("开发终端")?.title).toBe("")
   })
 
-  it("marks a background workspace unread when its terminal produces output and clears it on select", async () => {
+  it("does not mark a background workspace that produces output", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
     createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
 
     await renderEmbeddedModule()
     expect(terminalBridge.onData).toHaveBeenCalled()
-    const unreadListener = terminalBridge.onData.mock.calls[0]?.[0]
+    const outputListener = terminalBridge.onData.mock.calls[0]?.[0]
 
     await act(async () => {
-      unreadListener?.({
+      outputListener?.({
         sessionId: "session-2",
         chunk: createChunk({ sessionId: "session-2", seq: 1, data: "按需构建完成\r\n" }),
       })
       await Promise.resolve()
     })
 
-    expect(sidebarSessionRow("日志终端")?.querySelector("[data-terminal-unread]")).not.toBeNull()
-    expect(sidebarSessionRow("开发终端")?.querySelector("[data-terminal-unread]")).toBeNull()
-
-    await clickSession("日志终端")
-
     expect(sidebarSessionRow("日志终端")?.querySelector("[data-terminal-unread]")).toBeNull()
+    expect(sidebarSessionRow("日志终端")?.textContent).not.toContain("有新消息")
   })
 
-  it("keeps the unread mark and the waiting-for-input mark apart", async () => {
+  it("marks the waiting-for-input session", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
     createSession({
@@ -1298,36 +1292,10 @@ describe("TerminalModule", () => {
     })
 
     await renderEmbeddedModule()
-    const unreadListener = terminalBridge.onData.mock.calls[0]?.[0]
-    await act(async () => {
-      unreadListener?.({
-        sessionId: "session-2",
-        chunk: createChunk({ sessionId: "session-2", seq: 1, data: "等一个批准\r\n" }),
-      })
-      await Promise.resolve()
-    })
 
     const row = sidebarSessionRow("Claude 会话")
-    expect(row?.querySelector("[data-terminal-unread]")).not.toBeNull()
     expect(row?.querySelector('[title="等待输入"]')).not.toBeNull()
     expect(row?.textContent).toContain("等待输入")
-    expect(row?.textContent).toContain("有新消息")
-  })
-
-  it("marks a workspace unread by hand and clears the mark by hand", async () => {
-    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
-    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
-
-    await renderEmbeddedModule()
-    await openSidebarSessionMenu("开发终端")
-    await clickContextMenuItem("标记未读")
-
-    expect(sidebarSessionRow("开发终端")?.querySelector("[data-terminal-unread]")).not.toBeNull()
-
-    await openSidebarSessionMenu("开发终端")
-    await clickContextMenuItem("标记已读")
-
-    expect(sidebarSessionRow("开发终端")?.querySelector("[data-terminal-unread]")).toBeNull()
   })
 
   it("renames a workspace from its sidebar session row context menu", async () => {

@@ -69,7 +69,7 @@
 - 手机端终端快捷栏是上述同一批按钮的**只读投影**：主进程用终端服务自己的 `listMobileToolbarButtons()` 把内置注册表（在 `desktop/app-capabilities/terminal/shared/toolbar-actions.ts`）与用户的快捷输入投影成 `mobile.toolbar` 下行消息，手机不新增、不修改、不删除任何按钮，也不回写桌面配置。投影源是主进程内部方法而非 IPC 或 capability；手机按键一律走既有 `keys` / `command` 意图，不新增 intent。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
 - Terminal Agent 原生通知的设置、活动 session 上报与点击后的精确会话定位仅属于现有 System App 的 UI 私有 IPC；通知 Hook 入口是会话级 loopback 内部端口，不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。同一 Hook 事件还把"是否等待用户输入"写入会话既有 `attention`（`waiting` + `approval` / `agent_question` 等 kind，恢复时回到 `not_waiting`），仅在 Terminal 侧栏与顶部会话标签显示标记，并随既有 `state.get` / `observe` 暴露给 MCP 调用方；不新增状态字段、capability、tool 或审计对象。
 - Terminal 分组拖拽排序仅属于现有 System App 的 UI 私有 IPC：顺序写入分组既有 `sortOrder` 字段，不注册 MCP capability、tool、Workflow Node 或 Deep Link，不新增 Terminal MCP 工具。
-- Terminal 会话（workspace）的置顶与描述仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，置顶只改变同分组内排序，描述是用户备注；两者都随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。「有新消息」的未读标记是渲染层状态，不落盘、不上报、不进任何注册表面。
+- Terminal 会话（workspace）的置顶与描述仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，置顶只改变同分组内排序，描述是用户备注；两者都随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。
 - Agent 侧栏项目分组顺序存放在全局配置 `global.agentProjectOrder`，只影响侧栏展示顺序，不重排 `config.global.projects`，不注册 MCP capability、tool 或 Deep Link，Agent Conversation 工具数量不变。
 
 ## 普通业务模块 System App
