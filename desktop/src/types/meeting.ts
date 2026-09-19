@@ -27,3 +27,20 @@ export type SynapseMeetingTranscriptionCompletedEvent = {
   readonly title: string
   readonly status: "done" | "failed"
 }
+
+/**
+ * 音频落到本机时推过来的一条应用内事件。
+ *
+ * 缓存自己不吭声（界面上不出现任何缓存的痕迹），这条事件只在主进程和渲染进程之间传：
+ * 下载完成时把播放地址换成刚落地的那份本机文件。
+ */
+export type SynapseMeetingAudioReadyEvent = {
+  readonly meetingId: string
+  readonly url: string
+}
+
+/** `app.meeting.audio.ensure` 的返回。 */
+export type SynapseMeetingAudioEnsureResult =
+  | { readonly state: "ready"; readonly url: string }
+  | { readonly state: "downloading" }
+  | { readonly state: "unavailable" }

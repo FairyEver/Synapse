@@ -134,6 +134,14 @@ export const meetingIpcModule: IpcModule = {
       response: z.any(),
       handler: (ctx, request: z.infer<typeof meetingIdInputSchema>) => service(ctx).getPeaks(request.meetingId),
     },
+    ensureAudio: {
+      operationId: "app.meeting.audio.ensure",
+      kind: "invoke",
+      request: meetingIdInputSchema,
+      response: z.any(),
+      handler: (ctx, request: z.infer<typeof meetingIdInputSchema>) =>
+        service(ctx).ensureAudio(request.meetingId),
+    },
   },
   events: {},
 }

@@ -419,6 +419,7 @@ export const IPC_CHANNELS = {
     "retryTranscription": "synapse:app:meeting:transcription:retry",
     "getPlaybackUrl": "synapse:app:meeting:playback_url:get",
     "getPeaks": "synapse:app:meeting:peaks:get",
+    "ensureAudio": "synapse:app:meeting:audio:ensure",
   },
   "systemNotifier": {
     "getSettings": "synapse:app:system_notifier:settings:get",

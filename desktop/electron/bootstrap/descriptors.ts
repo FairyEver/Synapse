@@ -114,6 +114,7 @@ import {
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
 import { createVoiceService, type VoiceService } from "../../app-capabilities/voice/main/service"
+import { meetingAudioCacheRoot } from "../modules/meeting/audio-cache"
 import { createMeetingService, type MeetingService } from "../modules/meeting/service"
 import {
   SCRIPT_RUNTIME_SERVICE_ID,
@@ -686,6 +687,10 @@ export const coreMeetingDescriptor: ServiceDescriptor<MeetingService> = {
     return createMeetingService({
       fetchAuthenticated: (path, init, errorMessage) =>
         accountService.fetchAuthenticated(path, init, errorMessage),
+      // 回放地址是对象存储的签名直链，不带访问令牌——见 `MeetingPublicFetch` 的说明。
+      fetchPublic: (url) => accountService.fetchPublic(url),
+      audioCacheRoot: meetingAudioCacheRoot(app.getPath("userData")),
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
       logger: ctx.logger.child("meeting"),
     })
   },

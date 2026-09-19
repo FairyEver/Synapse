@@ -60,6 +60,7 @@ const mocks = vi.hoisted(() => {
       dispose: vi.fn(async () => undefined),
     },
     registerAgentArtifactProtocol: vi.fn(),
+    registerMeetingAudioProtocol: vi.fn(),
     registry,
     synapseSkillService,
     windowManager,
@@ -105,6 +106,10 @@ vi.mock("../account-external-opener", () => ({
 
 vi.mock("../agent-artifact-protocol", () => ({
   registerAgentArtifactProtocol: mocks.registerAgentArtifactProtocol,
+}))
+
+vi.mock("../meeting-audio-protocol", () => ({
+  registerMeetingAudioProtocol: mocks.registerMeetingAudioProtocol,
 }))
 
 vi.mock("../app-events", () => ({

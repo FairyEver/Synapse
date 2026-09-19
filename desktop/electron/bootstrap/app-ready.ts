@@ -18,6 +18,7 @@ import { AGENT_RUNTIME_SERVICE_ID, type AgentRuntimeService } from "../services/
 import type { KnowledgeBaseStorageMigrationService } from "../services/knowledge-base/storage-migration-service"
 import { createAccountExternalUrlOpener } from "./account-external-opener"
 import { registerAgentArtifactProtocol } from "./agent-artifact-protocol"
+import { registerMeetingAudioProtocol } from "./meeting-audio-protocol"
 import { attachActivateHandler } from "./app-events"
 import { attachBeforeQuitHandler } from "./before-quit"
 import { createIpcRegistry } from "./ipc-registry"
@@ -59,6 +60,7 @@ type InitializeReadyAppDeps = {
 async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
   logger.info("Electron app is ready. Initializing IPC registry.")
   registerAgentArtifactProtocol()
+  registerMeetingAudioProtocol()
   const registry = buildServiceRegistry({ trayShowOrCreate: deps.focusOrCreateMainWindow })
   deps.setProcessLevelCleanup?.(async () => {
     try {

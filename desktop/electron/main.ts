@@ -19,6 +19,7 @@ import {
   isSynapseProtocolUrl,
   registerAgentArtifactProtocolScheme,
   registerAuthProtocol,
+  registerMeetingAudioProtocolScheme,
   shouldFocusMainForSecondInstance,
   showOrCreateMainWindow,
 } from "./bootstrap"
@@ -90,6 +91,7 @@ function startSynapse(): void {
   })
   configureWindowsAppIdentity()
   registerAgentArtifactProtocolScheme()
+  registerMeetingAudioProtocolScheme()
   registerAuthProtocol()
 
   let gotSingleInstanceLock = app.requestSingleInstanceLock()

@@ -1,10 +1,19 @@
-import { mkdir, stat } from "node:fs/promises"
+import { createWriteStream } from "node:fs"
+import { mkdir, rename, rm, stat } from "node:fs/promises"
+import { Readable } from "node:stream"
+import { pipeline } from "node:stream/promises"
 import type {
   MeetingDetailDto,
   MeetingFinalizeInput,
   MeetingSummaryDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
+import type { EventBus } from "../../runtime/event-bus"
+import {
+  createMeetingAudioCache,
+  meetingAudioUrlForId,
+  type MeetingAudioCache,
+} from "./audio-cache"
 import { createMeetingSpool, sweepStaleMeetingSpools, type MeetingSpool } from "./spool"
 
 /**
@@ -24,13 +33,38 @@ export type MeetingAuthenticatedFetch = (
   errorMessage?: string,
 ) => Promise<Response>
 
+/**
+ * 不带令牌地取一个外部地址。
+ *
+ * 回放地址是服务端签好的对象存储直链，**不能把访问令牌也带上**：那是一台我们不控制的
+ * 存储主机，令牌只该发给自己的服务端。所以这条路径走 `fetchPublic` 而不是
+ * `fetchAuthenticated`。
+ */
+export type MeetingPublicFetch = (url: string) => Promise<Response>
+
 export type MeetingServiceDeps = {
   readonly fetchAuthenticated: MeetingAuthenticatedFetch
+  readonly fetchPublic: MeetingPublicFetch
+  /** 音频缓存的落盘位置。由 `descriptors.ts` 从 userData 推出来传进来。 */
+  readonly audioCacheRoot: string
+  readonly eventBus?: Pick<EventBus, "emit">
   readonly spoolRoot?: string
   readonly logger?: {
     warn(message: string, meta?: Record<string, unknown>): void
   }
 }
+
+/**
+ * `app.meeting.audio.ensure` 的返回。
+ *
+ * `unavailable` 是契约之外补的一个分支，只为兜住「详情还停在旧状态、服务端已经说这条没
+ * 了」这个竞态：那种情况下没有音频可给，也不能假装在下载（那会一直转下去）。渲染进程
+ * 拿到它就什么都不做，等下一次详情刷新把那一屏换成「录音已删除」。
+ */
+export type MeetingAudioEnsureResult =
+  | { readonly state: "ready"; readonly url: string }
+  | { readonly state: "downloading" }
+  | { readonly state: "unavailable" }
 
 export type StartRecordingResult = {
   readonly meetingId: string
@@ -57,8 +91,28 @@ type ServerRecordingStart = {
   readonly title?: unknown
 }
 
+/**
+ * 服务端列表一次给的条数上限（`server/src/meeting/meeting.service.ts` 的 `take: 200`）。
+ *
+ * 拿它判断「这次列表是不是给全了」：返回条数**少于**它才说明所有录音都在里面，本机那些
+ * 不在列表里的才是真的被删了。刚好等于上限时还有更早的没返回，照这个规则会误删。
+ */
+const MEETING_LIST_LIMIT = 200
+
+/** 一次 `ensure` 最多在后台试几轮。退避到 30 秒封顶，约四五分钟。 */
+const AUDIO_DOWNLOAD_MAX_ATTEMPTS = 12
+const AUDIO_DOWNLOAD_BACKOFF_CEILING_MS = 30_000
+
 export function createMeetingService(deps: MeetingServiceDeps) {
   const spools = new Map<string, MeetingSpool>()
+  const audioCache = createMeetingAudioCache({ root: deps.audioCacheRoot, logger: deps.logger })
+  /**
+   * 正在下载的音频，按 meetingId。
+   *
+   * 这就是 `ensure` 幂等的全部实现：同一个 meetingId 重复调用（重渲染、用户点重试）看到
+   * 已经有在跑的了就原样返回，不起第二个下载。
+   */
+  const audioDownloads = new Map<string, Promise<void>>()
   /** 收尾只跑一次：启动流程和别处同时叫它也只会走一趟。 */
   let finalizeInFlight: Promise<void> | null = null
 
@@ -152,7 +206,11 @@ export function createMeetingService(deps: MeetingServiceDeps) {
   async function listMeetings(): Promise<readonly MeetingSummaryDto[]> {
     const response = await deps.fetchAuthenticated("/meetings", {}, "读取录音列表失败。")
     const body = (await response.json()) as { items?: unknown }
-    return Array.isArray(body.items) ? (body.items as MeetingSummaryDto[]) : []
+    const items = Array.isArray(body.items) ? (body.items as MeetingSummaryDto[]) : []
+    // 列表刷新是「别的设备把这条删了」唯一能被本机看见的时机：本机缓存里那些不在列表里
+    // 的条目就是已经被删掉的，顺手清掉，不然那台电脑上还留着一份能播的副本。
+    await audioCache.pruneMissing(items.map((item) => item.id), items.length < MEETING_LIST_LIMIT)
+    return items
   }
 
   async function getMeeting(meetingId: string): Promise<MeetingDetailDto> {
@@ -250,6 +308,119 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     }
   }
 
+  /**
+   * 这条录音的音频在本机能不能直接用。
+   *
+   * 返回 `ready` 时渲染进程拿到的是一个本机协议地址，播放、拖动、±15 秒全走本机文件，
+   * 一次网络请求都不发。
+   *
+   * 三件套判据在 `audio-cache.lookup` 里，这里只负责补上服务端那一半：**列表和详情本来
+   * 就要拉，所以这一趟详情请求是顺带的**——拿不到（没网）不算失败，退化成「文件在、大小
+   * 对得上」就当命中，否则离线就听不了听过的录音了。
+   */
+  async function ensureAudio(meetingId: string): Promise<MeetingAudioEnsureResult> {
+    const inFlight = audioDownloads.get(meetingId)
+    if (inFlight) return { state: "downloading" }
+
+    let detail: MeetingDetailDto | null = null
+    try {
+      detail = await getMeeting(meetingId)
+    } catch {
+      // 离线、服务端慢、这条刚被删——都走「按本机索引判命中」这条路。
+    }
+    // 服务端说这条录音没了：不下载、不缓存。界面上那屏由详情自己渲染成「录音已删除」。
+    if (detail && detail.recording.status === "deleted") return { state: "unavailable" }
+
+    const serverSize = detail?.recording.size ?? 0
+    const cached = await audioCache.lookup(meetingId, serverSize)
+    if (cached) {
+      await audioCache.touch(meetingId, new Date().toISOString())
+      return { state: "ready", url: meetingAudioUrlForId(meetingId) }
+    }
+
+    startAudioDownload(meetingId, serverSize)
+    return { state: "downloading" }
+  }
+
+  function startAudioDownload(meetingId: string, serverSize: number): void {
+    if (audioDownloads.has(meetingId)) return
+    const task = runAudioDownload(meetingId, serverSize)
+      .catch(() => undefined)
+      .finally(() => audioDownloads.delete(meetingId))
+    audioDownloads.set(meetingId, task)
+  }
+
+  /**
+   * 下载失败不推失败事件、也不告诉渲染进程——设计上它就不是失败（网一回来自己会下完）。
+   * 这里按退避继续重试，渲染进程那边由「转满 10 秒给一个重试」兜住；那个重试只是再叫
+   * 一次 `ensure` 催一下，不取代这里的自动恢复。
+   */
+  async function runAudioDownload(meetingId: string, serverSize: number): Promise<void> {
+    for (let attempt = 0; attempt < AUDIO_DOWNLOAD_MAX_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(2 ** attempt * 500, AUDIO_DOWNLOAD_BACKOFF_CEILING_MS)))
+      }
+      try {
+        await downloadAudioOnce(meetingId, serverSize)
+        return
+      } catch (error) {
+        deps.logger?.warn("Meeting audio download attempt failed.", {
+          attempt: attempt + 1,
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      }
+    }
+    deps.logger?.warn("Meeting audio download gave up after retries.", {
+      attempts: AUDIO_DOWNLOAD_MAX_ATTEMPTS,
+    })
+  }
+
+  async function downloadAudioOnce(meetingId: string, serverSize: number): Promise<void> {
+    const { url } = await getPlaybackUrl(meetingId)
+    if (!url) throw new Error("这条录音没有可用的音频。")
+
+    const target = audioCache.audioPath(meetingId)
+    const temporary = `${target}.tmp`
+    await mkdir(deps.audioCacheRoot, { recursive: true })
+    try {
+      const response = await deps.fetchPublic(url)
+      if (!response.body) throw new Error("音频响应为空。")
+      const source = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0])
+      // 先写临时文件再改名：中途断了不会在缓存目录里留下一个尺寸不对的 m4a——那种文件
+      // 会被下一次的命中判据当成「大小对不上」重新下载，但留着本身就是个坑。
+      await pipeline(source, createWriteStream(temporary, { flags: "w" }))
+      const size = (await stat(temporary)).size
+      // 服务端记的字节数与实际下到的对不上，说明这份音频是残的。当作失败，退避后再来。
+      if (serverSize > 0 && size !== serverSize) throw new Error("音频大小与服务端记录不一致。")
+      await rename(temporary, target)
+      const peaks = await readPeaksFromServer(meetingId)
+      await audioCache.save({ meetingId, size, peaks, lastPlayedAt: new Date().toISOString() })
+      await audioCache.enforceLimit()
+      deps.eventBus?.emit({
+        domain: "meeting",
+        type: "meeting.audioReady",
+        payload: { meetingId, url: meetingAudioUrlForId(meetingId) },
+        timestamp: new Date().toISOString(),
+      })
+    } finally {
+      await rm(temporary, { force: true }).catch((error: unknown) => {
+        deps.logger?.warn("Meeting audio temp file cleanup failed.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      })
+    }
+  }
+
+  /** 波形取不到就存空串：下次打开详情时 `getPeaks` 会照常去服务端补。 */
+  async function readPeaksFromServer(meetingId: string): Promise<string> {
+    try {
+      const { peaks } = await getPeaks(meetingId)
+      return peaks ?? ""
+    } catch {
+      return ""
+    }
+  }
+
   async function renameMeeting(meetingId: string, title: string): Promise<void> {
     await deps.fetchAuthenticated(
       `/meetings/${encodeURIComponent(meetingId)}`,
@@ -265,6 +436,8 @@ export function createMeetingService(deps: MeetingServiceDeps) {
       { method: "DELETE" },
       "删除录音失败。",
     )
+    // 删干净包括本机这一份：服务器上没了、这台机器上还能播，是同一个「删除」的两套答案。
+    await audioCache.remove(meetingId)
   }
 
   async function retryTranscription(meetingId: string): Promise<void> {
@@ -286,6 +459,9 @@ export function createMeetingService(deps: MeetingServiceDeps) {
   }
 
   async function getPeaks(meetingId: string): Promise<{ readonly peaks: string | null }> {
+    // 缓存里记着波形就直接用：波形是跟音频一起存下来的，离线时不该因为拉不到它画一条平线。
+    const cached = await audioCache.peaksFor(meetingId)
+    if (cached) return { peaks: cached }
     const response = await deps.fetchAuthenticated(
       `/meetings/${encodeURIComponent(meetingId)}/peaks`,
       {},
@@ -310,6 +486,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     retryTranscription,
     getPlaybackUrl,
     getPeaks,
+    ensureAudio,
     async sweepStaleSpools() {
       try {
         const removed = await sweepStaleMeetingSpools(deps.spoolRoot)

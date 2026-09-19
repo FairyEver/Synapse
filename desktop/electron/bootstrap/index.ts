@@ -54,6 +54,11 @@ export {
   registerAgentArtifactProtocolScheme,
 } from "./agent-artifact-protocol"
 
+export {
+  registerMeetingAudioProtocol,
+  registerMeetingAudioProtocolScheme,
+} from "./meeting-audio-protocol"
+
 export { attachBeforeQuitHandler } from "./before-quit"
 export type { BeforeQuitDeps } from "./before-quit"
 

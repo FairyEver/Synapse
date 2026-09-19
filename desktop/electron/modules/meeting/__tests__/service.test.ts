@@ -1,8 +1,9 @@
-import { mkdtemp, rm, stat } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { createMeetingAudioCache, meetingAudioUrlForId } from "../audio-cache"
 import { createMeetingSpool } from "../spool"
 import { createMeetingService, type MeetingAuthenticatedFetch } from "../service"
 import { meetingIpcModule } from "../ipc"
@@ -22,6 +23,19 @@ afterEach(async () => {
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+}
+
+/**
+ * 音频缓存那两件依赖。
+ *
+ * 这一组用例管的是分片、收尾和取消，不碰缓存；给一个落在同一个临时目录里的位置即可，
+ * 免得每个用例都要为它多写两行。
+ */
+function audioDeps(root: string) {
+  return {
+    audioCacheRoot: path.join(root, "audio-cache"),
+    fetchPublic: async () => jsonResponse({}),
+  }
 }
 
 /** 本机是不是录了这一条。判据是暂存目录在不在，与产品代码同一套。 */
@@ -89,6 +103,7 @@ describe("分片的落盘顺序", () => {
         return jsonResponse({})
       },
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await service.uploadPart("rec-1", 1, new Uint8Array([1, 2, 3]))
     expect(order).toEqual(["send", "staged"])
@@ -102,6 +117,7 @@ describe("分片的落盘顺序", () => {
         throw new Error("网络断了")
       },
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await expect(service.uploadPart("rec-2", 1, new Uint8Array([9, 9]))).rejects.toThrow("网络断了")
     const pending = await createMeetingSpool("rec-2", root).pending()
@@ -110,7 +126,7 @@ describe("分片的落盘顺序", () => {
   })
 
   it("完成之后本机暂存清空", async () => {
-    const service = createMeetingService({ fetchAuthenticated, spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated, spoolRoot: root, ...audioDeps(root) })
     await service.uploadPart("rec-3", 1, new Uint8Array([1]))
     await service.completeRecording("rec-3", { durationMs: 1000, peaks: "" })
     expect(await createMeetingSpool("rec-3", root).pending()).toEqual([])
@@ -124,6 +140,7 @@ describe("分片的落盘顺序", () => {
         return jsonResponse({})
       },
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await service.uploadPart("rec-4", 1, new Uint8Array([1]))
     await service.cancelRecording("rec-4")
@@ -138,6 +155,7 @@ describe("分片的落盘顺序", () => {
         return jsonResponse({})
       },
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await service.uploadPart("rec-5", 1, new Uint8Array([1]))
     await expect(service.cancelRecording("rec-5")).rejects.toThrow("服务端不可达")
@@ -179,7 +197,7 @@ describe("异常退出的静默收尾", () => {
 
   it("补上本机残留的那一片，再按正常录音收尾", async () => {
     const calls: { path: string; body: unknown }[] = []
-    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root, ...audioDeps(root) })
     // 进程被杀时最后一片还躺在暂存里。
     await createMeetingSpool("r-1", root).stage(3, new Uint8Array([1, 2, 3]))
 
@@ -205,6 +223,7 @@ describe("异常退出的静默收尾", () => {
         return jsonResponse({ items: [] })
       }) as unknown as MeetingAuthenticatedFetch,
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await service.finalizePendingRecording()
     expect(calls.map((call) => call.path)).toEqual(["/meetings/recordings/pending?all=1"])
@@ -215,7 +234,7 @@ describe("异常退出的静默收尾", () => {
     // 暂存目录——残片只在本机，本机既没有字节也没有波形，抢过来收尾只会用一个估算的
     // 时长和一条平线把人家正在录的东西毁掉。
     const calls: { path: string; body: unknown }[] = []
-    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root, ...audioDeps(root) })
 
     await service.finalizePendingRecording()
 
@@ -227,7 +246,7 @@ describe("异常退出的静默收尾", () => {
     // 分片是服务端确认一片就删一片，所以进程被杀时暂存往往是空的。拿「有没有分片」当
     // 判据，会把本机自己录的那条判成别人的——那条从此永远停在「转写中」。
     const calls: { path: string; body: unknown }[] = []
-    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root, ...audioDeps(root) })
     await ownThisRecording("r-1", root)
 
     await service.finalizePendingRecording()
@@ -245,6 +264,7 @@ describe("异常退出的静默收尾", () => {
       fetchAuthenticated: async () =>
         jsonResponse({ meetingId: "m-1", recordingId: "r-9", uploadId: "u-1", title: "新录音" }),
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await service.startRecording({})
     expect(await ownsSpoolDirectory("r-9", root)).toBe(true)
@@ -257,6 +277,7 @@ describe("异常退出的静默收尾", () => {
         throw new Error("网络断了")
       }) as unknown as MeetingAuthenticatedFetch,
       spoolRoot: root,
+      ...audioDeps(root),
       logger: { warn: (message) => warnings.push(message) },
     })
     await expect(service.finalizePendingRecording()).resolves.toBeUndefined()
@@ -265,7 +286,7 @@ describe("异常退出的静默收尾", () => {
 
   it("同时叫两次也只收尾一次", async () => {
     const calls: { path: string; body: unknown }[] = []
-    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root, ...audioDeps(root) })
     await ownThisRecording("r-1", root)
     await Promise.all([service.finalizePendingRecording(), service.finalizePendingRecording()])
     expect(calls.filter((call) => call.path === "/meetings/recordings/r-1/complete")).toHaveLength(1)
@@ -293,6 +314,7 @@ describe("接口调用", () => {
       fetchAuthenticated: async () =>
         jsonResponse({ meetingId: "m-1", recordingId: "r-1", uploadId: "u-1", title: "Q3 评审" }),
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await expect(service.startRecording({ title: "Q3 评审" })).resolves.toMatchObject({
       meetingId: "m-1",
@@ -306,17 +328,18 @@ describe("接口调用", () => {
     const service = createMeetingService({
       fetchAuthenticated: async () => jsonResponse({ meetingId: "m-1" }),
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await expect(service.startRecording({})).rejects.toThrow("不完整")
   })
 
   it("列表拿不到 items 时返回空数组，而不是 undefined 让界面炸掉", async () => {
-    const service = createMeetingService({ fetchAuthenticated: async () => jsonResponse({}), spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated: async () => jsonResponse({}), spoolRoot: root, ...audioDeps(root) })
     await expect(service.listMeetings()).resolves.toEqual([])
   })
 
   it("回放地址缺失时返回 null", async () => {
-    const service = createMeetingService({ fetchAuthenticated: async () => jsonResponse({}), spoolRoot: root })
+    const service = createMeetingService({ fetchAuthenticated: async () => jsonResponse({}), spoolRoot: root, ...audioDeps(root) })
     await expect(service.getPlaybackUrl("m-1")).resolves.toEqual({ url: null })
   })
 
@@ -328,8 +351,242 @@ describe("接口调用", () => {
         return jsonResponse({})
       },
       spoolRoot: root,
+      ...audioDeps(root),
     })
     await service.getMeeting("a/../b")
     expect(paths[0]).toBe("/meetings/a%2F..%2Fb")
+  })
+})
+
+describe("音频缓存跟着服务端走", () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await temporaryRoot()
+  })
+
+  /** 本机缓存里造一条，模拟「这条听过」。 */
+  async function seedCached(meetingId: string): Promise<ReturnType<typeof createMeetingAudioCache>> {
+    const cacheRoot = path.join(root, "audio-cache")
+    await mkdir(cacheRoot, { recursive: true })
+    const cache = createMeetingAudioCache({ root: cacheRoot })
+    await writeFile(cache.audioPath(meetingId), Buffer.alloc(16, 1))
+    await cache.save({ meetingId, size: 16, peaks: "", lastPlayedAt: "2026-01-01T00:00:00.000Z" })
+    return cache
+  }
+
+  function listResponse(count: number, firstId: string): Response {
+    return jsonResponse({ items: Array.from({ length: count }, (_, index) => ({ id: `${firstId}-${index}` })) })
+  }
+
+  it("列表条数少于上限时，本机有、列表里没有的那条被清掉", async () => {
+    const cache = await seedCached("m-gone")
+    const service = createMeetingService({
+      fetchAuthenticated: async () => listResponse(199, "m-kept"),
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await service.listMeetings()
+    expect(await cache.lookup("m-gone", 16)).toBeNull()
+  })
+
+  it("列表条数刚好等于上限时，一条都不清", async () => {
+    // 200 是服务端一次给的上限；等于上限说明还有更早的没返回，那些不在列表里的只是没
+    // 返回、不是被删了。这一条判错就会把用户的缓存整片误删。
+    const cache = await seedCached("m-gone")
+    const service = createMeetingService({
+      fetchAuthenticated: async () => listResponse(200, "m-kept"),
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await service.listMeetings()
+    expect(await cache.lookup("m-gone", 16)).not.toBeNull()
+  })
+
+  it("列表里还有的那条不会被清", async () => {
+    const cache = await seedCached("m-kept")
+    const service = createMeetingService({
+      fetchAuthenticated: async () => jsonResponse({ items: [{ id: "m-kept" }] }),
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await service.listMeetings()
+    expect(await cache.lookup("m-kept", 16)).not.toBeNull()
+  })
+
+  it("在本机删掉一条：缓存文件同时没", async () => {
+    const cache = await seedCached("m-1")
+    const service = createMeetingService({
+      fetchAuthenticated: async () => jsonResponse({}),
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await service.deleteMeeting("m-1")
+    expect(await cache.lookup("m-1", 16)).toBeNull()
+    await expect(stat(cache.audioPath("m-1"))).rejects.toThrow()
+  })
+
+  it("删失败时不连累本机缓存——服务端还留着这条，本机那份也还该能用", async () => {
+    const cache = await seedCached("m-1")
+    const service = createMeetingService({
+      fetchAuthenticated: async () => {
+        throw new Error("服务端不可达")
+      },
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await expect(service.deleteMeeting("m-1")).rejects.toThrow("服务端不可达")
+    expect(await cache.lookup("m-1", 16)).not.toBeNull()
+  })
+
+  it("波形在缓存里就直接给，不再打服务端", async () => {
+    const paths: string[] = []
+    const cacheRoot = path.join(root, "audio-cache")
+    await mkdir(cacheRoot, { recursive: true })
+    const cache = createMeetingAudioCache({ root: cacheRoot })
+    await writeFile(cache.audioPath("m-1"), Buffer.alloc(16, 1))
+    await cache.save({ meetingId: "m-1", size: 16, peaks: "peaks-cached", lastPlayedAt: "2026-01-01T00:00:00.000Z" })
+    const service = createMeetingService({
+      fetchAuthenticated: async (requestPath) => {
+        paths.push(requestPath)
+        return jsonResponse({ peaks: "peaks-from-server" })
+      },
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await expect(service.getPeaks("m-1")).resolves.toEqual({ peaks: "peaks-cached" })
+    expect(paths).toEqual([])
+  })
+
+  it("缓存里没有波形时照旧去服务端取", async () => {
+    const service = createMeetingService({
+      fetchAuthenticated: async () => jsonResponse({ peaks: "peaks-from-server" }),
+      spoolRoot: root,
+      ...audioDeps(root),
+    })
+    await expect(service.getPeaks("m-1")).resolves.toEqual({ peaks: "peaks-from-server" })
+  })
+})
+
+describe("ensure 音频", () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await temporaryRoot()
+  })
+
+  const AUDIO_BYTES = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+
+  /** 只回应 ensure 会用到的三个接口。 */
+  function audioServer(calls: string[], detail: unknown = { id: "m-1", recording: { status: "ready", size: 8 } }) {
+    return (async (requestPath: string) => {
+      calls.push(requestPath)
+      if (requestPath === "/meetings/m-1") return jsonResponse(detail)
+      if (requestPath === "/meetings/m-1/audio-url") return jsonResponse({ url: "https://storage.example/signed" })
+      if (requestPath === "/meetings/m-1/peaks") return jsonResponse({ peaks: "peaks-data" })
+      return jsonResponse({})
+    }) as unknown as MeetingAuthenticatedFetch
+  }
+
+  function buildService(overrides: Partial<Parameters<typeof createMeetingService>[0]> = {}) {
+    return createMeetingService({
+      fetchAuthenticated: audioServer([]),
+      spoolRoot: root,
+      ...audioDeps(root),
+      fetchPublic: async () => new Response(AUDIO_BYTES, { status: 200 }),
+      ...overrides,
+    })
+  }
+
+  /** 把下载挂在半路，好观察「还没下完」的那段时间。 */
+  function gateOnDownload() {
+    const gate: { release?: () => void } = {}
+    return {
+      gate,
+      fetchPublic: async () =>
+        new Promise<Response>((resolve) => {
+          gate.release = () => resolve(new Response(AUDIO_BYTES, { status: 200 }))
+        }),
+    }
+  }
+
+  it("第一次是下载中，下完推一条事件，再问就是就绪", async () => {
+    const events: { type: string; payload: unknown }[] = []
+    const { gate, fetchPublic } = gateOnDownload()
+    const service = buildService({
+      fetchPublic,
+      eventBus: { emit: (event) => events.push({ type: event.type, payload: event.payload }) },
+    })
+
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
+    await vi.waitFor(() => expect(gate.release).toBeDefined())
+    gate.release?.()
+    await vi.waitFor(async () => {
+      await expect(service.ensureAudio("m-1")).resolves.toEqual({
+        state: "ready",
+        url: meetingAudioUrlForId("m-1"),
+      })
+    })
+    expect(events.map((event) => event.type)).toEqual(["meeting.audioReady"])
+    expect(events[0].payload).toMatchObject({ meetingId: "m-1", url: meetingAudioUrlForId("m-1") })
+  })
+
+  it("同一个 meetingId 反复叫不会起第二个下载", async () => {
+    let downloads = 0
+    const { gate } = gateOnDownload()
+    const service = buildService({
+      fetchPublic: async () => {
+        downloads += 1
+        return new Promise<Response>((resolve) => {
+          gate.release = () => resolve(new Response(AUDIO_BYTES, { status: 200 }))
+        })
+      },
+    })
+
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
+    await vi.waitFor(() => expect(downloads).toBe(1))
+    // 下载正卡在半路时再叫两次：都该原样返回，不能各起一个。
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
+    expect(downloads).toBe(1)
+
+    gate.release?.()
+    await vi.waitFor(async () => {
+      await expect(service.ensureAudio("m-1")).resolves.toMatchObject({ state: "ready" })
+    })
+    // 下完之后再叫也不该重新下——这次是缓存命中的那条路。
+    expect(downloads).toBe(1)
+  })
+
+  it("命中缓存时直接给本机地址，一个字节都不下", async () => {
+    let downloads = 0
+    const service = buildService({ fetchPublic: async () => { downloads += 1; return new Response(AUDIO_BYTES) } })
+    await service.ensureAudio("m-1")
+    await vi.waitFor(async () => {
+      await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "ready", url: meetingAudioUrlForId("m-1") })
+    })
+    const before = downloads
+    await service.ensureAudio("m-1")
+    expect(downloads).toBe(before)
+  })
+
+  it("服务端说这条录音没了：不给下载，也不假装在下载", async () => {
+    const calls: string[] = []
+    const service = buildService({
+      fetchAuthenticated: audioServer(calls, { id: "m-1", recording: { status: "deleted", size: 0 } }),
+    })
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "unavailable" })
+    expect(calls).not.toContain("/meetings/m-1/audio-url")
+  })
+
+  it("下到的字节数与服务端记的对不上：不当成缓存，退避后再来", async () => {
+    const service = buildService({
+      fetchPublic: async () => new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+      fetchAuthenticated: audioServer([], { id: "m-1", recording: { status: "ready", size: 8 } }),
+    })
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
+    // 第一轮失败，退避 1 秒后第二轮。等一会儿之后仍然不该变成 ready。
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
   })
 })
