@@ -89,6 +89,60 @@ struct AsrRenewalTests {
         #expect(AsrRenewal.merge(seam: settled, live: live).finalText == "…一起过一遍。主要是想确认")
     }
 
+    // MARK: - 接缝怎么攒
+
+    /// 一次两分多钟的录音会换两三次连接。接棒换的是**连接**，不是用户已经说过的话：
+    /// 每一段换下来的文本都要留下来。
+    ///
+    /// 这是线上真实踩到的坑 —— 说了两分钟多，交出去的只有最后一段。根因是定稿被当成
+    /// 了整段接缝：引擎收完 `end` 只会重写它自己听过的那一段，更早那些连接说过的话它
+    /// 从来没听过，那次改写一个字都动不到。
+    @Test func everyHandOverKeepsTheSegmentsBeforeIt() {
+        var seams = AsrSeamAccumulator()
+
+        seams.freeze("第一段")            // 0:46 第一次接棒
+        seams.settle(to: "第一段。")       // 旧连接收尾，引擎把半截句补完
+        seams.freeze("第二段")            // 1:32 第二次接棒
+        seams.settle(to: "第二段。")
+        seams.freeze("第三段")            // 2:18 第三次接棒
+
+        let submitted = AsrRenewal.merge(
+            seam: seams.seam,
+            live: AsrTranscript(stable: "第四段", unstable: "")
+        ).finalText
+
+        #expect(submitted == "第一段。第二段。第三段第四段")
+    }
+
+    /// 定稿换掉的只有尾部那一段，前缀原样留着。
+    @Test func settlingReplacesTheTailAndLeavesThePrefixAlone() {
+        var seams = AsrSeamAccumulator()
+        seams.freeze("前面那段话。")
+        seams.settle(to: "前面那段话。")
+        seams.freeze("…一起过")
+
+        #expect(seams.seam?.text == "前面那段话。…一起过")
+        #expect(seams.seam?.provisional == true)
+
+        seams.settle(to: "…一起过一遍。")
+
+        #expect(seams.seam?.text == "前面那段话。…一起过一遍。")
+        #expect(seams.seam?.provisional == false)
+    }
+
+    /// 没换过连接就没有接缝；清空之后也一样 —— 下一次录音不该看见上一次的字。
+    @Test func aFreshAccumulatorHasNoSeam() {
+        var seams = AsrSeamAccumulator()
+        #expect(seams.seam == nil)
+
+        seams.freeze("上一段")
+        seams.settle(to: "上一段。")
+        #expect(seams.seam != nil)
+
+        seams.reset()
+        #expect(seams.seam == nil)
+    }
+
     // MARK: - 什么时候换
 
     @Test func warmingStartsAtThePlanPointAndNotBefore() {

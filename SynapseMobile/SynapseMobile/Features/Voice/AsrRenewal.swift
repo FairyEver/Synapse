@@ -10,6 +10,49 @@ struct AsrSeam: Equatable {
     let provisional: Bool
 }
 
+/// 接缝的累积：历次接棒冻结下来的那些文本。
+///
+/// 一次两分多钟的录音会换两三次连接，每一段都要留下来 —— 接棒换的是**连接**，不是
+/// 用户已经说过的话。所以接缝分成两截：换下去的那些连接留下的 `frozen`，和最近一条
+/// 还没定稿的 `tail`。
+///
+/// 分开存是为了定稿：引擎收完 `end` 只会重写**它自己听过的那一段**。前缀它从来没听过，
+/// 那次改写一个字都动不到 —— 把定稿当成整段前缀，第二次接棒之后用户拿到的就只剩最后
+/// 那 46 秒。
+struct AsrSeamAccumulator {
+    /// 已经换下去的那些连接留下的文本。只增不改。
+    private var frozen = ""
+    /// 最近一条换下去的连接冻结的文本。定稿之前引擎还会改写它。
+    private var tail: AsrSeam?
+
+    /// 交给 `AsrRenewal.merge` 的那一条接缝。没换过连接时是 nil。
+    var seam: AsrSeam? {
+        guard let tail else {
+            return frozen.isEmpty ? nil : AsrSeam(text: frozen, provisional: false)
+        }
+        return AsrSeam(text: frozen + tail.text, provisional: tail.provisional)
+    }
+
+    /// 接棒：把手上的连接已经认下的文本冻结下来，交给它自己收尾。
+    mutating func freeze(_ text: String) {
+        // 上一条要是还没定稿，这次就等不着它了，随这次接棒一并并入前缀。实测换连接隔
+        // 46 秒、收尾宽限 2 秒，走不到这里；真走到了也只是把半截词留在原地，不丢字。
+        frozen += tail?.text ?? ""
+        tail = AsrSeam(text: text, provisional: true)
+    }
+
+    /// 定稿：拿引擎改写后的那一份换掉尾部，`frozen` 原样不动。
+    mutating func settle(to text: String) {
+        guard let current = tail else { return }
+        tail = AsrRenewal.settle(current, to: text)
+    }
+
+    mutating func reset() {
+        frozen = ""
+        tail = nil
+    }
+}
+
 /// 一条识别连接能用多久，以及接缝处两段文字怎么接。
 ///
 /// 现用的 `Hy-ASR-3.0-preview` 是混元内测版，**不接受 `needvad`**（服务端签名一直带着

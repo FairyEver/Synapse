@@ -92,8 +92,8 @@ final class VoiceInputController {
 
     // MARK: - 轮换
 
-    /// 换连接之前冻结的那一段。它在活连接的前面，位置一旦定下就不再动。
-    private var seam: AsrSeam?
+    /// 历次接棒冻结下来的文本，累积着。它在活连接的前面，位置一旦定下就不再动。
+    private var seams = AsrSeamAccumulator()
     /// 正在收尾的旧连接：`end` 已经发出去了，等它把最后一句定稿回来。
     private var drain: AsrSession?
     private var drainTimer: Task<Void, Never>?
@@ -319,11 +319,11 @@ final class VoiceInputController {
         }
     }
 
-    /// 只有活连接在写转写。换下去的那一条还在往回吐定稿，但它那一段已经冻结在
-    /// `seam` 里了，再让它写一次就是跟接缝打架。
+    /// 只有活连接在写转写。换下去的那一条还在往回吐定稿，但它那一段已经冻结在接缝
+    /// 里了，再让它写一次就是跟接缝打架。
     private func handleTranscript(_ text: AsrTranscript, token: Int) {
         guard token == liveToken else { return }
-        publish(AsrRenewal.merge(seam: seam, live: text))
+        publish(AsrRenewal.merge(seam: seams.seam, live: text))
     }
 
     private func handleFinished(token: Int) {
@@ -386,9 +386,10 @@ final class VoiceInputController {
         let retiring = session
         drain = retiring
         drainToken = liveToken
-        // 前缀就是旧连接此刻的文本。它还没定稿（引擎收完 `end` 才会重写最后一句），
-        // 所以只能算暂定 —— 但位置从这一刻起就定死了。
-        seam = AsrSeam(text: retiring?.transcript.finalText ?? "", provisional: true)
+        // 旧连接此刻的文本接在已有接缝后面。它还没定稿（引擎收完 `end` 才会重写最后
+        // 一句），所以只能算暂定 —— 但位置从这一刻起就定死了。
+        let retiringText = retiring?.transcript.finalText ?? ""
+        seams.freeze(retiringText)
 
         retiring?.finish()
         // 等定稿用的是自己的定时器。`finalizeWaiter` 是单槽的，拿它等接缝，用户这时
@@ -413,14 +414,13 @@ final class VoiceInputController {
 
         // 先按接缝发布一次。屏幕上那一段原来就在未定稿那一半（引擎要跑满一分钟才吐
         // 第一个定稿），所以这一步换的是连接，不是画面。
-        publish(AsrRenewal.merge(seam: seam, live: next.transcript))
+        publish(AsrRenewal.merge(seam: seams.seam, live: next.transcript))
         next.send(chunk)
 
         // 年龄贴着 46~47 秒是撞上停顿换的，靠近 50 秒是一直没停、到硬顶才换的 ——
         // 线上判断接缝干不干净就看这个数。
-        let frozen = seam?.text.count ?? 0
         AppLog.voice.info(
-            "asr handover frozen=\(frozen, privacy: .public) chars age=\(age, privacy: .public)"
+            "asr handover frozen=\(retiringText.count, privacy: .public) chars age=\(age, privacy: .public)"
         )
     }
 
@@ -429,15 +429,17 @@ final class VoiceInputController {
     /// `final: 1` 先到就用它；超时或者连接先断，就是手上有什么算什么 —— 到点了还
     /// 挂着不定稿，屏幕上那段字会一直是灰的。
     private func settleSeam() {
-        guard let current = seam, current.provisional, let retiring = drain else { return }
+        guard let current = seams.seam, current.provisional, let retiring = drain else { return }
         drainToken = 0
         drain = nil
         drainTimer?.cancel()
         drainTimer = nil
         retiring.close()
 
-        seam = AsrRenewal.settle(current, to: retiring.transcript.finalText)
-        if let session { publish(AsrRenewal.merge(seam: seam, live: session.transcript)) }
+        // 这次改写只覆盖刚换下去的那一条连接，前面几段原样留着 —— 那是更早的连接说
+        // 过的话，引擎从来没听过。
+        seams.settle(to: retiring.transcript.finalText)
+        if let session { publish(AsrRenewal.merge(seam: seams.seam, live: session.transcript)) }
     }
 
     // MARK: - 收尾与失败
@@ -522,7 +524,7 @@ final class VoiceInputController {
         clearWarm()
         warmBackoff = 1
         warmRetryAfter = .distantPast
-        seam = nil
+        seams.reset()
         liveReady = false
         capture?.stop()
         capture = nil
