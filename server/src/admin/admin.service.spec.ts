@@ -22,6 +22,8 @@ function createPrismaMock(counts: {
   readonly activeUsers?: number
   readonly disabledUsers?: number
   readonly dailyTrendCounts?: DailyTrendCountMock[]
+  /** 列表型 $transaction 的返回值；不传时按系统概览的计数数组返回。 */
+  readonly transactionResult?: unknown[]
 } = {}) {
   const emptyDailyTrendCounts: DailyTrendCountMock[] = Array.from({ length: 7 }, () => ({}))
   const dailyTrendCounts = (counts.dailyTrendCounts ?? emptyDailyTrendCounts)
@@ -32,6 +34,7 @@ function createPrismaMock(counts: {
   const prisma = {
     $transaction: vi.fn((input: unknown) => {
       if (typeof input === "function") return input(prisma)
+      if (counts.transactionResult) return Promise.resolve(counts.transactionResult)
       return Promise.resolve([
         counts.auditLogs ?? 0,
         counts.users ?? 0,
@@ -45,7 +48,7 @@ function createPrismaMock(counts: {
       count: vi.fn(),
       findUnique: vi.fn().mockResolvedValue({ status: "active" }),
       findMany: vi.fn(),
-      update: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({ teams: [] }),
     },
     userPasswordResetToken: {
       create: vi.fn().mockResolvedValue({ id: "reset-1" }),
@@ -132,7 +135,7 @@ describe("AdminService", () => {
   })
 
   it("loads users without exposing password hashes", async () => {
-    const prisma = createPrismaMock()
+    const prisma = createPrismaMock({ transactionResult: [[], 0] })
     const service = new AdminService(prisma as unknown as PrismaService)
 
     await service.listUsers()
@@ -152,8 +155,41 @@ describe("AdminService", () => {
     expect(prisma.user.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("modulePermissions")
   })
 
+  it("includes each user's teams as a flat list ordered by join time", async () => {
+    const prisma = createPrismaMock({
+      transactionResult: [[{
+        id: "user-1",
+        email: "liyang@example.com",
+        handle: "liyang",
+        adminNote: null,
+        status: "active",
+        createdAt: new Date("2026-09-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+        teams: [
+          { team: { id: "team-1", name: "产品组" } },
+          { team: { id: "team-2", name: "研发组" } },
+        ],
+      }], 1],
+    })
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    const result = await service.listUsers()
+
+    expect(result.data).toEqual([expect.objectContaining({
+      id: "user-1",
+      teams: [
+        { id: "team-1", name: "产品组" },
+        { id: "team-2", name: "研发组" },
+      ],
+    })])
+    expect(prisma.user.findMany.mock.calls[0]?.[0].select).toHaveProperty("teams", {
+      select: { team: { select: { id: true, name: true } } },
+      orderBy: { createdAt: "asc" },
+    })
+  })
+
   it("searches users by id, email, or handle", async () => {
-    const prisma = createPrismaMock()
+    const prisma = createPrismaMock({ transactionResult: [[], 0] })
     const service = new AdminService(prisma as unknown as PrismaService)
 
     await service.listUsers(undefined, "alice")
@@ -205,6 +241,7 @@ describe("AdminService", () => {
       status: "active",
       createdAt: new Date("2026-06-01T00:00:00.000Z"),
       updatedAt: new Date("2026-06-01T00:00:00.000Z"),
+      teams: [],
     })
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
@@ -491,13 +528,13 @@ describe("AdminService", () => {
 
   it("returns the updated user when status update audit writes fail", async () => {
     const prisma = createPrismaMock()
-    prisma.user.update.mockResolvedValue({ id: "user-1", status: "disabled" })
+    prisma.user.update.mockResolvedValue({ id: "user-1", status: "disabled", teams: [] })
     const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
     const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
 
     await expect(service.updateUserStatus("user-1", { status: "disabled" }, "admin@example.com", "203.0.113.40"))
       .resolves
-      .toEqual({ id: "user-1", status: "disabled" })
+      .toEqual({ id: "user-1", status: "disabled", teams: [] })
     expect(prisma.user.update).toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",

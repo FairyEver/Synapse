@@ -22,7 +22,19 @@ const adminUserSelect = {
   status: true,
   createdAt: true,
   updatedAt: true,
+  teams: {
+    select: { team: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "asc" },
+  },
 } as const
+
+/** Prisma 回来的是 { team: {...} }[]，接口外面只该看到拍平后的 { id, name }[]。 */
+function toAdminUserRow<T extends { readonly teams: readonly { readonly team: { readonly id: string; readonly name: string } }[] }>(
+  user: T,
+): Omit<T, "teams"> & { readonly teams: { readonly id: string; readonly name: string }[] } {
+  const { teams, ...rest } = user
+  return { ...rest, teams: teams.map((membership) => membership.team) }
+}
 
 const adminSkillRepositorySelect = {
   id: true,
@@ -146,7 +158,7 @@ export class AdminService {
       }),
       this.prisma.user.count({ where }),
     ])
-    return { data, total, page: page.page, pageSize: page.pageSize }
+    return { data: data.map(toAdminUserRow), total, page: page.page, pageSize: page.pageSize }
   }
 
   async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system", ipAddress = "system") {
@@ -175,7 +187,7 @@ export class AdminService {
       detail: { status: input.status },
       ipAddress,
     })
-    return user
+    return toAdminUserRow(user)
   }
 
   async updateUserAdminNote(
@@ -204,7 +216,7 @@ export class AdminService {
       },
       ipAddress,
     })
-    return user
+    return toAdminUserRow(user)
   }
 
   async createUserPasswordResetLink(id: string, publicAppUrl: string) {
