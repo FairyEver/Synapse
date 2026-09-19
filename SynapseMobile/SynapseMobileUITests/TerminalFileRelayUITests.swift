@@ -38,7 +38,12 @@ final class TerminalFileRelayUITests: XCTestCase {
 
     func testSendsAPhotoAndGetsItsPathTypedIntoTheTerminal() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        // 时长顶到一小时：三条栏闲置三秒会自己收起来，而 `attach` / `toolbar-enter`
+        // 都在这些用例里，中间隔着最长达 90 秒的上传等待。机制不改，只改时钟。
+        app.launchArguments = [
+            "-SynapseAPIBaseURL", baseURL,
+            "-SynapseChromeIdleSeconds", "3600",
+        ]
         app.launch()
 
         signIn(app)
@@ -112,7 +117,12 @@ final class TerminalFileRelayUITests: XCTestCase {
     /// right kind of session to point `SYNAPSE_TEST_SESSION_TITLE` at.
     func testSubmittingTakesTheDeliveredChipOffTheStrip() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        // 时长顶到一小时：三条栏闲置三秒会自己收起来，而 `attach` / `toolbar-enter`
+        // 都在这些用例里，中间隔着最长达 90 秒的上传等待。机制不改，只改时钟。
+        app.launchArguments = [
+            "-SynapseAPIBaseURL", baseURL,
+            "-SynapseChromeIdleSeconds", "3600",
+        ]
         app.launch()
 
         signIn(app)

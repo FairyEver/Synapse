@@ -23,6 +23,11 @@ struct TerminalTextView: UIViewRepresentable {
 
     let onRequestHistory: () -> Void
     let onTap: () -> Void
+    /// 手指开始在画布上拖了 —— 读历史也是"操作"。
+    ///
+    /// 单独报一条，是因为它是这一页上唯一一种**不产生触摸结束事件也算数**的操作：
+    /// 拖到一半停住读两行，屏幕上看不出任何动静，而三秒的闲置计时照样在走。
+    let onUserScroll: () -> Void
 
     func makeUIView(context: Context) -> TerminalCollectionView {
         let view = TerminalCollectionView()
@@ -34,6 +39,7 @@ struct TerminalTextView: UIViewRepresentable {
         }
         view.onRequestHistory = onRequestHistory
         view.onTap = onTap
+        view.onUserScroll = onUserScroll
         view.applyLayout(displayMode: displayMode, desktopGrid: desktopGrid, fontSize: fontSize)
         return view
     }
@@ -123,6 +129,8 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     var onRequestHistory: (() -> Void)?
     /// Tapping the terminal is how the keyboard is put away.
     var onTap: (() -> Void)?
+    /// 手指压上来开始拖了。拖动期间没有别的信号能说明"人还在看"。
+    var onUserScroll: (() -> Void)?
     private var reportedColumns = 0
     private var reportedRows = 0
     private var lastLayoutHeight: CGFloat = 0
@@ -1191,6 +1199,9 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         dragStartOffsetY = scrollView.contentOffset.y
+        // 报在**开始拖**这一下，而不是每次位移：调用方要的是"人在动"这个事实，
+        // 而它在这段拖动的每一帧里都成立。逐帧报等于让上层按 120Hz 重算一遍状态。
+        onUserScroll?()
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {

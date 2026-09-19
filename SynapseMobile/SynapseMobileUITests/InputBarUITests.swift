@@ -352,7 +352,13 @@ final class InputBarUITests: XCTestCase {
     /// 是同一条约定 —— 记着的那个值是 App 自己的，用例自己把起手态摆好。
     private func openTerminal() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        // 时长顶到一小时：终端那三条栏闲置三秒会自己收起来，而这些用例一路要点
+        // `voice-mode-toggle` / `voice-hold`，中间隔着十几秒的等待。机制一个字不改，
+        // 变的只有时钟；真正的三秒由 `ChromeAutoHideUITests` 用一秒的时长覆盖。
+        app.launchArguments = [
+            "-SynapseAPIBaseURL", baseURL,
+            "-SynapseChromeIdleSeconds", "3600",
+        ]
         app.launch()
         enterTerminal(app)
         setKeyboardMode(app)

@@ -285,6 +285,10 @@ extension View {
 struct TerminalKeyboardPanel: View {
     /// Nil while the terminal is not running, which greys out every key.
     let isEnabled: Bool
+    /// How tall the panel is. Portrait hands it `KeyboardPanelMetrics.height` and the
+    /// panel is the size it has always been; landscape hands it something shorter
+    /// (see `KeyboardPanelMetrics.height(fitting:)`) and the board scrolls inside.
+    let height: CGFloat
     let onActions: ([MobileKeyAction]) -> Void
 
     @State private var selectedCategoryId = keyboardPanelCategories[0].id
@@ -310,6 +314,29 @@ struct TerminalKeyboardPanel: View {
     private var effectiveModifier: KeyboardPanelModifier? { lockedModifier ?? latchedModifier }
 
     var body: some View {
+        // 面板在横屏里放不下整块键盘（可用高度只有竖屏的一半，而键盘本身没变矮），
+        // 所以内容进一个滚动容器：**装得下的时候它不滚，装不下的时候它滚**。
+        // `.basedOnSize` 是这里的关键 —— 竖屏内容正好等于面板高度，没有它就会多出
+        // 一段橡皮筋，而面板从来没有滚过。
+        ScrollView(.vertical) {
+            content
+                // 导航页那块靠 `Spacer(minLength: 0)` 把键压在上方、空出下半块。
+                // 滚动容器给子视图的是理想高度，Spacer 在那里展开为零 —— 少了这一句，
+                // 那一页的键会缩到顶部而下面的空白跟着消失。
+                .frame(minHeight: height, alignment: .top)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        // It sits in the layout at the height it is given rather than sizing itself the
+        // way a sheet did. It is a keyboard now: what is above it is the terminal being
+        // watched, and what is below it is the bottom of the screen.
+        .frame(height: height)
+        // Its own surface, the same one the two bars above it wear — the panel, the
+        // toolbar and the input bar are the light half of this screen together, and
+        // the dark canvas is what they are all sitting on.
+        .background(Color(uiColor: .systemBackground))
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             Picker("按键分类", selection: $selectedCategoryId) {
                 ForEach(keyboardPanelCategories) { category in
@@ -335,14 +362,7 @@ struct TerminalKeyboardPanel: View {
         }
         .padding(.top, 8)
         .padding(.bottom, 14)
-        // It sits in the layout at the height it is given rather than sizing itself the
-        // way a sheet did. It is a keyboard now: what is above it is the terminal being
-        // watched, and what is below it is the bottom of the screen.
-        .frame(height: KeyboardPanelMetrics.height)
-        // Its own surface, the same one the two bars above it wear — the panel, the
-        // toolbar and the input bar are the light half of this screen together, and
-        // the dark canvas is what they are all sitting on.
-        .background(Color(uiColor: .systemBackground))
+        // 高度与底色在 `body` 上：它们说的是面板的边框，而这一个说的是面板里有什么。
         .onChange(of: selectedCategoryId) { _, _ in
             // Changing page is changing what the keys mean, so a latched modifier is
             // dropped rather than carried into a board it does not belong to.
@@ -805,4 +825,25 @@ enum KeyboardPanelMetrics {
     /// A narrower phone gets a shorter board than this and simply keeps the difference as
     /// blank space at the bottom, so nothing is ever cut off.
     static let height: CGFloat = 351
+
+    /// What the panel actually takes, given how much room the screen has.
+    ///
+    /// The one height above is a **portrait** height: 351 is a bit over a third of a
+    /// phone held upright, and the same 351 is most of a phone held sideways, where
+    /// the screen is only about 372 points tall with the safe areas taken out. Left
+    /// alone there, the panel plus the two bars above it come to about 455 — the
+    /// toolbar is pushed off the top of the screen and the terminal gets nothing.
+    ///
+    /// So in a short screen the panel takes a share of what there is and the board
+    /// scrolls inside it (`TerminalKeyboardPanel`). The share is a bit over half
+    /// because a keyboard the reader cannot reach the bottom of is closer to useless
+    /// than one that leaves the terminal four lines.
+    ///
+    /// `available <= 0` is "not measured yet", which happens on the first layout pass
+    /// only: it takes the full height rather than a fraction of nothing, so the panel
+    /// is never drawn collapsed for a frame.
+    static func height(fitting available: CGFloat) -> CGFloat {
+        guard available > 0 else { return height }
+        return min(height, available * 0.55)
+    }
 }

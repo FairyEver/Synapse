@@ -28,7 +28,16 @@ final class TerminalFlowUITests: XCTestCase {
     ///
     /// 用启动参数钉住，而不是让每个用例自己去把栏摆回来：参数进的是 `UserDefaults`
     /// 的参数域，优先级高于存下来的值，而且**不改写**它 —— 钉住的只是这一次启动。
-    private let keyboardBarAtLaunch = ["-terminal.inputBar.voiceMode", "NO"]
+    /// 起手态，以及一个跑不完的"闲置"时长。
+    ///
+    /// 终端那三条栏闲置三秒会自己收起来（`AppConfiguration.terminalChromeIdleSeconds`），
+    /// 而这些用例里有大量 15–90 秒的等待，等完之后 `toolbar-*` 早就不在屏幕上了 ——
+    /// 失败会读成"工具栏不见了"，而不是"计时器"。这里把时长顶到一小时，机制一个字不改，
+    /// 变的只有时钟。真正的三秒由 `ChromeAutoHideUITests` 用一秒的时长单独覆盖。
+    private let barLaunchArguments = [
+        "-terminal.inputBar.voiceMode", "NO",
+        "-SynapseChromeIdleSeconds", "3600",
+    ]
 
     override func setUpWithError() throws {
         try XCTSkipIf(email.isEmpty || password.isEmpty, "SYNAPSE_TEST_EMAIL and SYNAPSE_TEST_PASSWORD are required")
@@ -37,7 +46,7 @@ final class TerminalFlowUITests: XCTestCase {
 
     func testSignInBrowseSessionsAndOpenTerminal() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
 
         signIn(app)
@@ -126,7 +135,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// the terminal with no way to put it away short of leaving the screen.
     func testKeyboardKeepsNewestOutputVisibleAndDismissesOnTap() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -170,7 +179,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// the page and not just the code behind it.
     func testSettingsListsOnlyAccountDesktopsAndSignOut() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -201,7 +210,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -230,7 +239,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// already finished with by the time this one runs.
     func testSwipeActionsRenameAndDelete() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -307,7 +316,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// had actually come back, rather than being assumed to.
     func testTerminalCanBeLeftByEdgeSwipe() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -349,7 +358,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// behind — the back button is the fallback for a gesture that was abandoned.
     func testCancelledEdgeSwipeLeavesTheScreenUsable() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -381,7 +390,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// assertion here covers, so this test is meaningful in both runs.
     func testSplitTabGroupsItsTerminals() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -428,7 +437,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// what show whether the transition is there.
     func testLeavingTheTerminalShowsTheListImmediately() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -457,7 +466,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// arrive. Nothing in this test answers a prompt or sends a second time.
     func testSendSurvivesAPreemptedLeaseWithoutASecondTap() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -497,7 +506,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// when the ten fixed keys stopped being drawn here.
     func testToolbarMirrorsTheComputerAndTheKeyboardPanelSendsKeys() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -724,7 +733,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// this screen has two keyboards and only one of them may be up.
     func testThePanelAnswersTheKeyboardGestures() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -796,7 +805,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// 就等于把它从那些用例手里拿走。
     func testStoppingTheTerminalReturnsToTheList() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -848,7 +857,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// 都发不出去，栏得说出这件事。
     func testTheBarGreysOutWhenTheComputerGoesAway() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -906,7 +915,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -948,7 +957,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// a deleted command forever, which is the failure this pins down.
     func testToolbarFollowsTheComputerWhenItsCommandsChange() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
 
@@ -1087,7 +1096,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// works is that the keys' own frames do not move, not merely that they still exist.
     func testTheTwoFixedKeysStayPutWhileTheCommandsScroll() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1149,7 +1158,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// on their computer showing forever on the phone.
     func testPhraseEditsOnTheComputerReachThePhone() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1195,7 +1204,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// an empty state, because the empty state says why it is empty.
     func testThePanelRemembersWhichSegmentWasLastOpen() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1258,7 +1267,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// show, and saying that in place beats an empty card with no explanation.
     func testThePanelSaysWhenThereAreNoCustomCommands() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1297,7 +1306,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// The panel's command section: the whole list at once, and it sends like the bar.
     func testTheCommandPanelShowsEveryCommandAndStillSendsOne() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1368,7 +1377,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// Getting that wrong would send, unread, a message the user had not looked at yet.
     func testThePhraseSegmentFillsTheFieldWithoutSending() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1429,7 +1438,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1458,7 +1467,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// the field by someone who only wanted to read the end of it is the failure.
     func testTheEyeShowsTheWholeSentenceWithoutUsingIt() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)
@@ -1519,7 +1528,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// against a mock started that way.
     func testAComputerWithNoPhrasesShowsAnEmptyState() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
         openClaudeCodeTerminal(app)

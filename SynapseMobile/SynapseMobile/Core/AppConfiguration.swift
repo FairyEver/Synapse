@@ -85,6 +85,22 @@ enum AppConfiguration {
     /// turning the phone, and a full-screen program redraws for every one.
     static let terminalGridDebounce: TimeInterval = 0.3
 
+    /// How long the terminal screen sits idle before its three bars take themselves
+    /// away and leave the canvas the whole screen.
+    ///
+    /// A property rather than a constant, and the only one of these that reads an
+    /// override: the UI tests spend fifteen to ninety seconds waiting for a terminal
+    /// to fill in before they touch a button on one of those bars. At three seconds
+    /// the buttons are gone by the time they arrive, and the failure would read as a
+    /// missing toolbar rather than as a timer. What they pass instead is a duration
+    /// they will never reach — the mechanism itself is unchanged, only the clock is.
+    /// The real three seconds is covered by `ChromeAutoHideUITests`, which passes a
+    /// short one.
+    static var terminalChromeIdleSeconds: TimeInterval {
+        let override = UserDefaults.standard.double(forKey: "SynapseChromeIdleSeconds")
+        return override > 0 ? override : 3
+    }
+
     // MARK: - File hand-off
 
     /// Mirrors `MOBILE_FRAME_LIMITS.maxRelayedFileBytes` in

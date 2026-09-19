@@ -41,6 +41,10 @@ final class DisplayModeUITests: XCTestCase {
         // made its live socket fail with a bad URL while the same app launched by
         // hand connected — so the argument is the thing to take out of the picture
         // rather than something to work around.
+        //
+        // 时长顶到一小时是另一回事：三条栏闲置三秒会自己收起来，而这个用例一路
+        // `settle(2)` / `settle(5)` 之后才去点 ⋯ —— 那些 `settle` 正是"闲置"。
+        app.launchArguments = ["-SynapseChromeIdleSeconds", "3600"]
         app.launch()
 
         signIn(app)
