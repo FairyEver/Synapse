@@ -6,6 +6,7 @@ import {
   createTerminalAgentSession,
   reduceTerminalAgentEvent,
   terminalAgentProcessExitUpdate,
+  terminalAgentStateView,
   nextTerminalAgentVersion,
   type TerminalAgentEvent,
   type TerminalAgentSession,
@@ -192,5 +193,59 @@ describe("TerminalAgentSession state machine", () => {
     for (const forbidden of ["prompt", "content", "output", "answer", "toolInput", "toolInputArgs"]) {
       expect(terminalAgentSessionRecordSchema.safeParse({ ...record, [forbidden]: "secret" }).success).toBe(false)
     }
+  })
+})
+
+describe("terminalAgentStateView", () => {
+  /** 一份「什么都有」的档案：投影必须只挑走白名单里的那几项。 */
+  function full(): TerminalAgentSession {
+    return {
+      ...base(),
+      state: "needs_input",
+      version: 7,
+      agentKind: "claude",
+      agentSessionId: "agent-session-1",
+      pid: 4242,
+      transcriptPath: "/Users/someone/.claude/projects/p/session.jsonl",
+      lastActivityAt: "2026-09-19T10:00:05.000Z",
+      stateChangedAt: "2026-09-19T10:00:03.000Z",
+    }
+  }
+
+  it("projects exactly the white list and nothing else", () => {
+    // 用整体相等而不是逐个字段包含：以后谁往档案里加字段并顺手展开，这一条立刻红。
+    expect(terminalAgentStateView(full())).toEqual({
+      state: "needs_input",
+      agentKind: "claude",
+      version: 7,
+      lastActivityAt: "2026-09-19T10:00:05.000Z",
+      stateChangedAt: "2026-09-19T10:00:03.000Z",
+    })
+    expect(Object.keys(terminalAgentStateView(full())!).sort()).toEqual([
+      "agentKind", "lastActivityAt", "state", "stateChangedAt", "version",
+    ])
+  })
+
+  it("keeps the transcript path, pid, and agent session id inside the process", () => {
+    const serialized = JSON.stringify(terminalAgentStateView(full()))
+    expect(serialized).not.toContain(".jsonl")
+    expect(serialized).not.toContain("4242")
+    expect(serialized).not.toContain("agent-session-1")
+  })
+
+  it("treats a session no agent ever touched as having nothing to read", () => {
+    // 缺席（从来没有 agent）与 ended（跑过、已退出）是两件事，不能合并成同一个答案。
+    expect(terminalAgentStateView(base())).toBeNull()
+  })
+
+  it("passes the ended state through instead of hiding it", () => {
+    const ended = reduceTerminalAgentEvent({
+      current: full(),
+      sessionId: SESSION,
+      event: { source: "claude", event: "SessionEnd", at: "2026-09-19T10:00:09.000Z" },
+    })!
+    const view = terminalAgentStateView(applyTerminalAgentUpdate(full(), ended).session)!
+    expect(view.state).toBe("ended")
+    expect(view.version).toBe(8)
   })
 })

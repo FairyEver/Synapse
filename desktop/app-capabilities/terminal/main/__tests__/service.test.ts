@@ -1769,10 +1769,11 @@ function controllableStore() {
   return holder
 }
 
-function fakePty() {
+function fakePty(options: { readonly ptsName?: string } = {}) {
   let dataListener: ((data: string) => void) | undefined
   let exitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined
   const instance = {
+    ...(options.ptsName ? { ptsName: options.ptsName } : {}),
     onData: vi.fn((listener: (data: string) => void) => { dataListener = listener; return { dispose: vi.fn() } }),
     onExit: vi.fn((listener: (event: { exitCode: number; signal?: number }) => void) => { exitListener = listener; return { dispose: vi.fn() } }),
     write: vi.fn((_data: string | Buffer) => undefined),
@@ -1783,3 +1784,66 @@ function fakePty() {
   }
   return instance as typeof instance & PtyLike
 }
+
+describe("TerminalService session state: tty and agent block", () => {
+  /** 一个只要被问就回答的 agent 通知依赖；档案本体不在这里，只有投影。 */
+  function agentDeps(view: { state: string; version: number; agentKind?: string; lastActivityAt: string; stateChangedAt: string } | null) {
+    return {
+      prepareSession: () => null,
+      renameSession: () => undefined,
+      handleUserInput: () => undefined,
+      unregisterSession: () => undefined,
+      handleOscNotification: () => undefined,
+      getAgentStateView: () => view,
+    } as unknown as Parameters<typeof createTerminalService>[0]["agentNotifications"]
+  }
+
+  async function harnessWith(pty: PtyLike, view: Parameters<typeof agentDeps>[0]) {
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => pty,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+      agentNotifications: agentDeps(view),
+    })
+    await service.start()
+    return service
+  }
+
+  it("reports the PTY device so a caller can find the process running inside it", async () => {
+    const service = await harnessWith(fakePty({ ptsName: "/dev/ttys036" }), null)
+    const session = await service.createSession({})
+    // 这条是外部「拿着引用去认领会话」的接点：值是 PTY 设备名，调用方据此 `ps -t`。
+    expect(service.getSessionState(session.id).tty).toBe("/dev/ttys036")
+  })
+
+  it("omits the device entirely when the platform has none", async () => {
+    const service = await harnessWith(fakePty(), null)
+    const session = await service.createSession({})
+    expect(service.getSessionState(session.id)).not.toHaveProperty("tty")
+  })
+
+  it("carries the projected agent state and nothing from the archive behind it", async () => {
+    const view = {
+      state: "working",
+      agentKind: "claude",
+      version: 3,
+      lastActivityAt: "2026-09-19T10:00:05.000Z",
+      stateChangedAt: "2026-09-19T10:00:03.000Z",
+    }
+    const service = await harnessWith(fakePty(), view)
+    const session = await service.createSession({})
+    const state = service.getSessionState(session.id)
+    expect(state.agent).toEqual(view)
+    expect(Object.keys(state.agent!).sort()).toEqual([
+      "agentKind", "lastActivityAt", "state", "stateChangedAt", "version",
+    ])
+  })
+
+  it("leaves the agent block absent rather than null when there is no archive", async () => {
+    const service = await harnessWith(fakePty(), null)
+    const session = await service.createSession({})
+    // 缺席是有语义的（这里从来没有 agent），写成 null 会让调用方把两件事混为一谈。
+    expect(service.getSessionState(session.id)).not.toHaveProperty("agent")
+  })
+})

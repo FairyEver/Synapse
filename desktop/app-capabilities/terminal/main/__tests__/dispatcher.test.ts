@@ -472,3 +472,47 @@ describe("Terminal capability dispatcher", () => {
     })
   })
 })
+
+describe("Terminal state tools carry the tty and agent block", () => {
+  const sessionId = "11111111-1111-4111-8111-111111111111"
+  const groupId = "33333333-3333-4333-8333-333333333333"
+  const state = {
+    sessionId,
+    lifecycle: "running",
+    attention: { state: "unknown" },
+    tty: "/dev/ttys036",
+    agent: {
+      state: "working",
+      agentKind: "claude",
+      version: 2,
+      lastActivityAt: "2026-09-19T10:00:05.000Z",
+      stateChangedAt: "2026-09-19T10:00:03.000Z",
+    },
+    lease: { occupied: false, leaseRevision: 0 },
+  }
+
+  function stub() {
+    return serviceStub({
+      listSessions: vi.fn(() => [
+        { id: sessionId, groupId, title: "Peer", createdAt: "2026-09-22T00:00:00.000Z", status: "running", creationSource: "ui" },
+      ]),
+      getSessionState: vi.fn(() => state),
+    })
+  }
+
+  it("passes them through on the single-session tool", async () => {
+    // 有人以后在 dispatcher 里改写这个响应时，这两条会立刻红。
+    const dispatcher = createTerminalCapabilityDispatcher({ service: stub(), ...allowingSecurity() })
+    const result = await dispatcher.dispatch("app.terminal.session_state.get", { sessionId }, localMcpContext)
+    expect(result).toMatchObject({ ok: true, data: { tty: "/dev/ttys036", agent: { state: "working" } } })
+  })
+
+  it("passes them through on every item of the batch tool", async () => {
+    const dispatcher = createTerminalCapabilityDispatcher({ service: stub(), ...allowingSecurity() })
+    const result = await dispatcher.dispatch("app.terminal.session_state.list", {}, localMcpContext)
+    if (!result.ok) throw new Error("Expected a successful state list response")
+    const items = (result.data as { items: Array<Record<string, unknown>> }).items
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ tty: "/dev/ttys036", agent: { state: "working", agentKind: "claude" } })
+  })
+})

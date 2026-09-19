@@ -32,7 +32,9 @@ import {
   reduceTerminalAgentEvent,
   terminalAgentProcessExitUpdate,
   terminalAgentStalledUpdate,
+  terminalAgentStateView,
   type TerminalAgentEvent,
+  type TerminalAgentStateView,
   type TerminalAgentSession,
   type TerminalAgentUpdate,
 } from "./agent-session"
@@ -171,6 +173,17 @@ export class TerminalAgentNotificationService {
    */
   listAgentSessions(): TerminalAgentSession[] {
     return [...this.agentSessions.values()].filter((session) => !isTerminalAgentSessionUnstarted(session))
+  }
+
+  /**
+   * 档案的对外形状。
+   *
+   * 投影在服务内部完成，原始 `TerminalAgentSession` 不越过这个边界——「不许泄露」由
+   * `TerminalAgentStateView` 的类型保证，而不是靠每个调用方记得删字段。
+   */
+  getAgentStateView(sessionId: string): TerminalAgentStateView | null {
+    const session = this.agentSessions.get(sessionId)
+    return session ? terminalAgentStateView(session) : null
   }
 
   /**

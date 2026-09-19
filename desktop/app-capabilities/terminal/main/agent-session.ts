@@ -241,6 +241,41 @@ export function isTerminalAgentSessionUnstarted(session: TerminalAgentSession): 
   return session.state === "launching"
 }
 
+/**
+ * 档案里唯一允许离开这个进程的那部分。
+ *
+ * 写成白名单而不是「挑几个删掉」，是为了让泄露在类型层面写不出来：`transcriptPath` 指向
+ * 用户整段对话（提示词、回答、工具调用与被读进上下文的文件内容），把它交出去等于把对话
+ * 内容外包一次查询；`pid` 与 agent 自己的会话 id 是宿主进程细节，外部不需要。
+ *
+ * 调用方要判断「变了没有」看 {@link TerminalAgentStateView.version}，它是单调的。
+ */
+export type TerminalAgentStateView = {
+  readonly state: TerminalAgentState
+  /** `launching` 阶段不知道，其余阶段由 shim 上报。 */
+  readonly agentKind?: TerminalAgentKind
+  readonly version: number
+  readonly lastActivityAt: string
+  readonly stateChangedAt: string
+}
+
+/**
+ * 读出去之前把档案投影成白名单。
+ *
+ * 没跑过 agent 的会话没有可读的东西，返回 `null` —— 调用方据此知道「这里从来没有 agent」，
+ * 这与「agent 跑过、现在已经结束」（`state = "ended"`）是两件不同的事，不得合并。
+ */
+export function terminalAgentStateView(session: TerminalAgentSession): TerminalAgentStateView | null {
+  if (isTerminalAgentSessionUnstarted(session)) return null
+  return {
+    state: session.state,
+    version: session.version,
+    lastActivityAt: session.lastActivityAt,
+    stateChangedAt: session.stateChangedAt,
+    ...(session.agentKind ? { agentKind: session.agentKind } : {}),
+  }
+}
+
 function toTerminalAgentSession(update: TerminalAgentUpdate): TerminalAgentSession {
   return {
     id: update.id,

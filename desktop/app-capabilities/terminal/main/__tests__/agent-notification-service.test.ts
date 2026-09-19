@@ -517,3 +517,63 @@ class TestNotification extends EventEmitter implements TerminalAgentNotification
     return super.on(event, listener)
   }
 }
+
+describe("getAgentStateView", () => {
+  const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+
+  it("projects the archive and leaves the transcript path and process details behind", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "peer",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+    await postEvent(launch.env, {
+      source: "claude",
+      event: "SessionStart",
+      agentSessionId: "agent-session-1",
+      transcriptPath: "/Users/someone/.claude/projects/p/session.jsonl",
+      agentPid: 4242,
+    })
+
+    // 档案里此刻什么都有；投影只带走白名单那几项。
+    expect(fixture.service.getAgentSession(sessionId)).toMatchObject({
+      transcriptPath: "/Users/someone/.claude/projects/p/session.jsonl",
+      pid: 4242,
+    })
+    const view = fixture.service.getAgentStateView(sessionId)!
+    expect(view).toEqual({
+      state: "idle",
+      agentKind: "claude",
+      version: expect.any(Number),
+      lastActivityAt: expect.any(String),
+      stateChangedAt: expect.any(String),
+    })
+    expect(Object.keys(view).sort()).toEqual([
+      "agentKind", "lastActivityAt", "state", "stateChangedAt", "version",
+    ])
+    const serialized = JSON.stringify(view)
+    expect(serialized).not.toContain(".jsonl")
+    expect(serialized).not.toContain("agent-session-1")
+    expect(serialized).not.toContain("4242")
+  })
+
+  it("answers null for a session no agent ever touched", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    fixture.service.prepareSession({
+      sessionId,
+      title: "empty",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })
+    // 从来没人进来过：这里没有可读的东西，而不是「已结束」。
+    expect(fixture.service.getAgentStateView(sessionId)).toBeNull()
+  })
+})

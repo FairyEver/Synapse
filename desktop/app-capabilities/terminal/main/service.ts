@@ -112,6 +112,14 @@ import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState } fr
 export type PtyDisposable = { dispose(): void }
 export type PtyLike = {
   readonly pid?: number
+  /**
+   * 这个 PTY 的设备名（node-pty 的 `ptsName`，如 `/dev/ttys036`）。
+   *
+   * 它是「终端会话 → 跑在里面的进程」唯一由内核担保的接点：设备名在 PTY 生命周期里不变，
+   * 而进程的控制终端是活的内核事实，所以外部可以 `ps -t <设备名>` 反查到真正跑在里面的
+   * agent 进程。Windows 没有这个设备，缺省即不写。
+   */
+  readonly ptsName?: string
   onData(listener: (data: string) => void): PtyDisposable
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): PtyDisposable
   write(data: string | Buffer): void
@@ -328,7 +336,8 @@ export function createTerminalService(deps: {
   readonly spawnPty?: (input: SpawnPtyInput) => PtyLike
   readonly logger?: TerminalServiceLogger
   readonly agentNotifications?: Pick<TerminalAgentNotificationService,
-    "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession" | "handleOscNotification">
+    "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession" | "handleOscNotification"
+    | "getAgentStateView">
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
@@ -2975,10 +2984,24 @@ export function createTerminalService(deps: {
     clearExpiredLease(sessionId)
     const session = getSessionOrThrow(sessionId)
     const lease = leases.get(sessionId)
+    /*
+     * 只读、且只描述这个 PTY 本身：调用方拿它去 `ps -t` 就能把会话与跑在里面的进程对上，
+     * 这正是「拿着一段引用去认领另一个会话」需要的那一步。它不依赖 Agent 原生通知，
+     * 对普通 shell 与任何 agent 一样成立；进程结束后 PTY 没了，字段随之缺席。
+     */
+    const tty = runtimes.get(sessionId)?.pty.ptsName
+    /*
+     * agent 块缺席与 `state: "ended"` 是两件不同的事：缺席代表「这个会话里从来没有 agent
+     * 进来过，或者 Agent 原生通知没开」，`ended` 代表「跑过、已经退出」。调用方据此决定是
+     * 该让用户去启动一个，还是该让用户去 resume。合起来只会得到一个错的结论。
+     */
+    const agent = deps.agentNotifications?.getAgentStateView(sessionId)
     return {
       sessionId,
       lifecycle: session.status,
       attention: session.attention,
+      ...(tty ? { tty } : {}),
+      ...(agent ? { agent } : {}),
       lease: !lease
         ? { occupied: false, leaseRevision: leaseRevisions.get(sessionId) ?? 0 }
         : sameOwner(lease, controller)
