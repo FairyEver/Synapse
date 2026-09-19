@@ -128,6 +128,11 @@ final class MeetingPlayback {
             async let address = client.meetingAudioURL(meetingId)
             // 波形先到就先画：下载那几秒里那条真实形状已经能看了，只是压暗着。
             let encoded = await encodedPeaks
+            // 挂在两次 await 上的时候，用户完全可能已经换到另一条录音去了。换过之后
+            // 这一趟就不再属于这一屏：接着往下走会把上一条的波形和音频装到当前这条上，
+            // 而 `isLoading = false` 还会替它把「正在下载」收掉。
+            // `scheduleRetry` 那条路一直是这么防的（`:160`），只有这条正在飞的没防。
+            guard loadedMeetingId == meetingId else { return }
             peaks = MeetingPeaks.decode(encoded)
             guard let url = try await address, let remote = URL(string: url) else {
                 // 地址是 nil 代表录音已经不在服务端了。这不是错误，是一个要说明的状态。
@@ -137,6 +142,9 @@ final class MeetingPlayback {
             }
             let destination = cache.audioURL(meetingId: meetingId)
             try await client.downloadMeetingAudio(from: remote, to: destination)
+            // 下载是这一趟里最长的一段，回来时再确认一次。缓存那一步照旧做（文件已经
+            // 在本机了，留着下回直接播），只是不能再往这一屏上装。
+            guard loadedMeetingId == meetingId else { return }
             cache.store(meetingId: meetingId, size: byteCount(destination), peaks: encoded ?? "")
             attachPlayer(destination)
             isLoading = false

@@ -37,13 +37,13 @@ enum TerminalFileIntake {
     /// A document the user chose. `asCopy: true` means the URL already points at a
     /// copy inside this app's container, so it can be read without a security scope.
     static func prepare(documentURL url: URL) async -> PickedFile? {
-        copyFile(at: url, name: url.lastPathComponent)
+        await copyFile(at: url, name: url.lastPathComponent)
     }
 
     /// A picture taken with the camera.
     static func prepare(cameraImage image: UIImage) async -> PickedFile? {
         let name = generatedFileName(prefix: "照片", extension: "jpg")
-        return write(image: image, name: name, type: .jpeg)
+        return await write(image: image, name: name, type: .jpeg)
     }
 
     /// A video recorded with the camera.
@@ -53,7 +53,7 @@ enum TerminalFileIntake {
     /// the one a shot photo gets, so a clip arrives looking like something they
     /// took rather than like a scratch file.
     static func prepare(cameraVideo url: URL) async -> PickedFile? {
-        copyFile(at: url, name: generatedFileName(prefix: "视频", extension: "mov"))
+        await copyFile(at: url, name: generatedFileName(prefix: "视频", extension: "mov"))
     }
 
     /// A picture from the pasteboard.
@@ -62,7 +62,7 @@ enum TerminalFileIntake {
     /// its own — there is nothing to preserve.
     static func prepare(pastedImage image: UIImage) async -> PickedFile? {
         let name = generatedFileName(prefix: "粘贴图片", extension: "png")
-        return write(image: image, name: name, type: .png)
+        return await write(image: image, name: name, type: .png)
     }
 
     // MARK: - Internals
@@ -99,7 +99,11 @@ enum TerminalFileIntake {
 
     /// Copies a file this app can already read into the temporary directory, under
     /// the name the computer will see.
-    private static func copyFile(at url: URL, name: String) -> PickedFile? {
+    /// `nonisolated` 且 `async` —— 两样缺一不可。这个工程默认每个类型都归主 actor 管，
+    /// 所以一个 `async` 函数**不等于**不占主线程；只有 `nonisolated` 的 `async` 函数才
+    /// 会跑到主 actor 之外（SE-0338）。而这里拷的可能是 100 MB 的视频，在主线程上就是
+    /// 整屏冻住那一下。
+    nonisolated private static func copyFile(at url: URL, name: String) async -> PickedFile? {
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("relay-\(UUID().uuidString)-\(name)")
         do {
@@ -117,7 +121,16 @@ enum TerminalFileIntake {
     /// cannot read it, so the file that reaches the computer has to be JPEG — with
     /// the extension to match, because the extension is what those tools believe.
     /// A video has no such problem, and takes the pass-through branch below.
-    private static func normalizeLibraryFile(at url: URL, name: String) async -> PickedFile? {
+    /// 解码、重编码、落盘，整段都在主线程之外。
+    ///
+    /// 这是最容易冻住界面的那一条：从相册一次选九张 HEIC，`TerminalScreen.intake` 会
+    /// 顺序 await 九次，而每一张全分辨率解码在内存里就是一份上百兆的位图，`jpegData`
+    /// 再来第二份 —— 全在主线程上背靠背地跑，界面完全冻住、选择器里的转圈也不动，
+    /// 大图还能摸到 watchdog 的窗口。
+    ///
+    /// 只接 URL 与 String（都是 Sendable），位图本身一步都不跨 actor，所以这条路上没有
+    /// 任何跨隔离传递。
+    nonisolated private static func normalizeLibraryFile(at url: URL, name: String) async -> PickedFile? {
         guard isHeic(name) else {
             let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil
             return PreparedFile.standardized(url, name: name, size: size ?? 0)
@@ -126,14 +139,12 @@ enum TerminalFileIntake {
         let jpegName = (name as NSString).deletingPathExtension + ".jpg"
         // The HEIC copy was only ever a staging file.
         try? FileManager.default.removeItem(at: url)
-        return write(image: image, name: jpegName, type: .jpeg)
+        guard let data = image.jpegData(compressionQuality: 0.9) else { return nil }
+        return await store(data: data, name: jpegName, type: .jpeg)
     }
 
-    private static func write(image: UIImage, name: String, type: UTType) -> PickedFile? {
-        let data = type == .jpeg
-            ? image.jpegData(compressionQuality: 0.9)
-            : image.pngData()
-        guard let data else { return nil }
+    /// 已经把字节拿在手上的那条路：写盘 + 命名。
+    nonisolated private static func store(data: Data, name: String, type: UTType) async -> PickedFile? {
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("relay-\(UUID().uuidString)-\(name)")
         do {
@@ -151,13 +162,27 @@ enum TerminalFileIntake {
         )
     }
 
-    private static func isHeic(_ name: String) -> Bool {
+    /// 相机与剪贴板那条路：字节在主 actor 上拿到（那里本来就有一张 `UIImage`，而它
+    /// 不是 Sendable，跨出去只会换来一条警告而不是一次真正的搬家）。
+    private static func write(image: UIImage, name: String, type: UTType) async -> PickedFile? {
+        let data = type == .jpeg
+            ? image.jpegData(compressionQuality: 0.9)
+            : image.pngData()
+        guard let data else { return nil }
+        return await store(data: data, name: name, type: type)
+    }
+
+    /// `nonisolated`：判断一个扩展名，没有任何一件和主 actor 有关，而它的调用方
+    /// （`normalizeLibraryFile`）在主线程之外跑。
+    nonisolated private static func isHeic(_ name: String) -> Bool {
         let ext = (name as NSString).pathExtension.lowercased()
         return ext == "heic" || ext == "heif"
     }
 }
 
-private enum PreparedFile {
+/// `nonisolated`：命名与 mimeType 的推导是纯字符串处理，而拷贝与转码都在主线程之外，
+/// 这两处都要用它。
+nonisolated private enum PreparedFile {
     /// Applies the relay naming rules to a file that is already on disk under
     /// `name`.
     static func standardized(_ url: URL, name: String, size: Int64) -> PickedFile? {

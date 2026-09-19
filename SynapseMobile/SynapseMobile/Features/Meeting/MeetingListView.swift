@@ -125,6 +125,13 @@ struct MeetingListView: View {
             await model.reloadMeetings()
             startPolling()
         }
+        .onDisappear {
+            // `pollTask` 是在 `.task` 的闭包里就地起的，不是它的子任务 —— SwiftUI
+            // 在视图消失时的自动取消够不着它。不显式收掉，用户切走之后它还会每 5 秒
+            // 发一次请求，而这条任务已经没人拿得住、也没人能再取消它了。
+            pollTask?.cancel()
+            pollTask = nil
+        }
     }
 
     /// 正在转写的那几场要自己变成结果，用户不用下拉。没有在转的就退出循环，免得在后台

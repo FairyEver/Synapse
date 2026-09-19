@@ -415,7 +415,11 @@ final class MeetingRecordingSession {
         }
         // 本机那份音频是完整的，波形可以从它重算——这正是手机端比电脑端强的地方
         // （设计文档 6.4）。
-        let peaks = MeetingAudioFilePeaks.compute(from: fileURL)
+        //
+        // 逐窗解码整个文件，所以它在主线程之外跑：这一步在**启动路径**上（异常退出后
+        // 的收尾），5 小时的录音有六百多万个采样窗，占着主 actor 就是几十秒白屏，还
+        // 可能被 watchdog 直接打死。
+        let peaks = await MeetingAudioFilePeaks.compute(from: fileURL)
         let durationMs = MeetingDurationEstimate.fromBytes(byteCount(fileURL))
 
         let uploader = MeetingUploader(
@@ -457,15 +461,46 @@ final class MeetingRecordingSession {
     }
 
     /// 把本机文件里还没传过的那一段交给上传器。
+    ///
+    /// 两件事一起改：
+    ///
+    /// - **读盘不在主线程上。** 原来这个循环里一个 await 都没有，而整个类型是主 actor
+    ///   隔离的 —— 于是剩余的整个文件会先被一口气读进内存，上传泵才有机会跑。这段发生
+    ///   在启动路径上（异常退出后的收尾），5 小时的录音是一百多兆常驻，主线程还被一串
+    ///   同步读占着，用户看到的是几十秒白屏。
+    /// - **读得比传得快就停下来等。** 背压看的是上传器手上还没发出去的字节数；没有
+    ///   这一条，文件只是换了个地方堆在内存里而已。
     private func uploadFromFile(_ url: URL, skipping parts: Int, into uploader: MeetingUploader) async {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return }
-        defer { try? handle.close() }
-        let offset = UInt64(max(0, parts)) * UInt64(MeetingAudio.partBytes)
-        try? handle.seek(toOffset: offset)
-        while let data = try? handle.read(upToCount: MeetingAudio.partBytes), !data.isEmpty {
+        var offset = UInt64(max(0, parts)) * UInt64(MeetingAudio.partBytes)
+        while !Task.isCancelled {
+            guard let data = await Self.readPart(url, at: offset), !data.isEmpty else { return }
             uploader.enqueue(data)
+            offset += UInt64(data.count)
+            // 上传器发不出去（网断了、重试也用完了）就不再等它了：它的泵已经停了，等下去
+            // 是等一件不会发生的事。剩下的字节留在盘上，下一次收尾接着传。
+            while uploader.bufferedBytes > Self.uploadBacklogBytes,
+                  !uploader.hasFailed,
+                  !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            if uploader.hasFailed || Task.isCancelled { return }
         }
     }
+
+    /// 读一片。`nonisolated` + `async` 才会离开主 actor（SE-0338）。
+    ///
+    /// 每一片重新开一次文件：一次 `open` 换掉一整片（1 MB）的读，代价可以忽略，换来的是
+    /// 一个不用跨 actor 保管的文件句柄。
+    nonisolated private static func readPart(_ url: URL, at offset: UInt64) async -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard (try? handle.seek(toOffset: offset)) != nil else { return nil }
+        return try? handle.read(upToCount: MeetingAudio.partBytes)
+    }
+
+    /// 上传器最多可以先攒着多少字节。八片 —— 够填满一条慢链路，又不至于把整个录音
+    /// 留在内存里。
+    private static let uploadBacklogBytes = MeetingAudio.partBytes * 8
 
     private func byteCount(_ url: URL) -> Int {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
@@ -477,7 +512,10 @@ final class MeetingRecordingSession {
 /// 只用在异常退出那条路上：正常收尾时振幅是一路记在内存里的。手机端比电脑端强的地方
 /// 就在这里——音频落了盘，波形就永远算得回来，不必接受一条平线。
 enum MeetingAudioFilePeaks {
-    static func compute(from url: URL) -> [Double] {
+    /// `nonisolated` 且 `async`：这个工程默认每个类型都归主 actor 管，只写 `async`
+    /// 不会离开主线程，只有 `nonisolated` 的 `async` 才会（SE-0338）。它只碰 URL 和
+    /// 自己造的局部量，跨出去没有任何东西要传。
+    nonisolated static func compute(from url: URL) async -> [Double] {
         guard let file = try? AVAudioFile(forReading: url) else { return [] }
         let format = file.processingFormat
         guard format.sampleRate > 0, format.channelCount > 0 else { return [] }

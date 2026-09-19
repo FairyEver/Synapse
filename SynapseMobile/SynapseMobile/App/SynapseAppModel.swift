@@ -455,6 +455,9 @@ final class SynapseAppModel {
         // 别名的坐标系是"这个人、这一份日志"。换个人接着数 `s3`，会让下一个人
         // 以为那两份日志之间有什么关系。
         DiagnosticLog.resetAliases()
+        // 还停着没被消费的通知去向同理：它指的那个终端是上一个账号的，留着会让下一个
+        // 人一登录就被带到别人的会话上。
+        NotificationRouter.shared.discard()
         // Those are another account's computers' sentences, and nothing here persists.
         quickPhrases.reset()
         // 录音是另一个账号的东西，换人之后不该还留在内存里。
@@ -1019,13 +1022,17 @@ final class SynapseAppModel {
     /// closed on the computer every time this app reconnected, for the rest of the
     /// app's life, and each of those attaches came back as a refusal to show someone.
     private func pruneTerminalStores(keeping live: Set<String>) {
-        for key in terminalStores.keys where !live.contains(key) {
+        // 先收集再删。原来的写法是在 `.keys` 视图上迭代着删 —— 视图持着字典的缓冲区，
+        // 删掉第一个键就会因为非唯一引用把整份字典拷贝一遍（`openSessions` 那个 Set
+        // 同理）。这条每次摘要到达都会跑。
+        for key in terminalStores.keys.filter({ !live.contains($0) }) {
             terminalStores.removeValue(forKey: key)
             preemptedSessions.remove(key)
         }
-        for sessionId in openSessions where !live.contains(sessionId) {
-            openSessions.remove(sessionId)
-        }
+        openSessions.formIntersection(live)
+        // 会话级的显示模式只对签发它的那台电脑成立，而它每次改动都会整份写回
+        // `UserDefaults`。不清理的话，用户开过的每一个终端都会在这里留一条，永久。
+        display.prune(keeping: live)
         stopKeepAliveIfIdle()
     }
 

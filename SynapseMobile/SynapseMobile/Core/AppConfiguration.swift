@@ -73,6 +73,19 @@ enum AppConfiguration {
     static let heartbeatInterval: TimeInterval = 20
     static let requestTimeout: TimeInterval = 20
 
+    /// How long the live socket may hear nothing before the app treats it as gone.
+    ///
+    /// Sending pings is not enough to know the link is up. A half-open connection —
+    /// a Wi-Fi/cellular handoff, a NAT entry that expired — does not raise an error
+    /// in `receive()`: the close frame the server sends cannot reach a phone whose
+    /// path is gone, so nothing surfaces and the app sits in `.connected` while the
+    /// terminal freezes, with the screen still saying 已连接.
+    ///
+    /// The server answers every ping, so silence this long means three answers in a
+    /// row did not arrive. Generous on purpose: a false positive costs a reconnect
+    /// and a fresh `sync`, and this only has to beat "never".
+    static let connectionSilenceTimeout: TimeInterval = 60
+
     /// How long a terminal view stays open without the user touching it before the
     /// app tells the desktop to let go of the write lease.
     static let terminalKeepAliveInterval: TimeInterval = 25

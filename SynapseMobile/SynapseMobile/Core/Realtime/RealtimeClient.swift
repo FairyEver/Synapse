@@ -134,6 +134,12 @@ final class RealtimeClient {
     private var reconnectAttempt = 0
     private var shouldStayConnected = false
     private var generation = 0
+    /// 最近一次收到任何服务端流量的时刻。
+    ///
+    /// 心跳只发不收，而半开连接上 `receive()` 不会报错 —— 对面发的 close 帧到一个
+    /// 网络路径已经没了的手机上，什么都不会发生。判据只能是「最近有没有收到东西」，
+    /// 见 `AppConfiguration.connectionSilenceTimeout`。
+    private var lastServerTrafficAt = Date.distantPast
 
     init(
         clientInstanceId: String,
@@ -232,6 +238,9 @@ final class RealtimeClient {
 
         let socket = session.webSocketTask(with: request)
         task = socket
+        // 静默从这一刻算起。不清的话，上一次连接留下的旧时间戳会让刚建好的这条
+        // socket 在第一次心跳时就被判成静默，然后无限重连下去。
+        lastServerTrafficAt = Date()
         socket.resume()
 
         sendHello(on: socket)
@@ -260,6 +269,17 @@ final class RealtimeClient {
                 try? await Task.sleep(nanoseconds: UInt64(AppConfiguration.heartbeatInterval * 1_000_000_000))
                 if Task.isCancelled { return }
                 guard let self, self.generation == current else { return }
+                // 对面还在不在，只有「最近有没有收到东西」说得清。半开连接上
+                // `receive()` 永远不报错，光靠它，这条 socket 会一直挂着「已连接」
+                // 而终端内容是冻住的 —— 用户没有任何线索，只能杀进程重开。
+                let silence = Date().timeIntervalSince(self.lastServerTrafficAt)
+                if silence > AppConfiguration.connectionSilenceTimeout {
+                    AppLog.realtime.warning(
+                        "live socket went quiet for \(Int(silence), privacy: .public)s, reconnecting."
+                    )
+                    self.scheduleReconnect()
+                    return
+                }
                 guard let text = LiveWire.text(
                     LiveMessageType.ping,
                     PingPayload(sentAt: ISO8601DateFormatter.wire.string(from: Date()))
@@ -274,6 +294,9 @@ final class RealtimeClient {
             do {
                 let message = try await socket.receive()
                 guard generation == current else { return }
+                // 收到了东西就是活着 —— 哪怕下面解不出来。这是那条静默看门狗唯一的
+                // 输入，放在解码之前，免得协议漂移被读成断线。
+                lastServerTrafficAt = Date()
                 handle(message)
             } catch {
                 guard generation == current else { return }

@@ -4,7 +4,10 @@ import Foundation
 /// 攒、波形怎么编码、文件放哪。
 ///
 /// 单独一个文件是为了能单测：它不认识界面，也不认识 `AVFoundation`。
-enum MeetingAudio {
+///
+/// `nonisolated`：这里全是常量，没有任何一件和主 actor 有关，而它们要被重算波形那条
+/// 路（在主线程之外跑）读到。不标就等于给每个读者都加一道没有意义的隔离要求。
+nonisolated enum MeetingAudio {
     /// AAC / m4a 单声道 64 kbps。
     ///
     /// **48 kHz 不是随手选的。** iOS 的 AAC 编码器在 16 kHz 单声道下直接拒绝 64 kbps
@@ -116,7 +119,9 @@ struct MeetingPartBuffer {
 ///
 /// 存的是**平滑之后**的值，和电脑端一样：包络下降比上升慢，波形看起来才像人声。
 /// 它就是随 `complete` 上报的那份 `peaks`。
-struct MeetingPeakStore {
+///
+/// `nonisolated`：纯值类型，重算波形那条路（主线程之外）要能就地用它。
+nonisolated struct MeetingPeakStore {
     private(set) var values: [Double] = []
     private var previous: Double = 0
     /// 这一次录音里有没有出现过像样的声音。提示行靠它决定要不要说「没有听到声音」。

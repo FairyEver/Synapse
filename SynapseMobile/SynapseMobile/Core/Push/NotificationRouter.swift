@@ -34,4 +34,13 @@ final class NotificationRouter {
         defer { pending = nil }
         return pending
     }
+
+    /// 丢掉一条还没被消费的去向。
+    ///
+    /// 退出登录要用：这条通知可能是上一个账号还在时收到、点开、停在那里的，它指的
+    /// 终端或录音都不属于下一个人。留着它，下一个人登录进去会被直接带到别人的会话上，
+    /// 而那里只会说「这个终端打不开」——一句话都说明不了。
+    func discard() {
+        pending = nil
+    }
 }

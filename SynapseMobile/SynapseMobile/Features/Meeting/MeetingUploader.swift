@@ -57,6 +57,12 @@ final class MeetingUploader {
     /// 已经确认丢掉的分片之后，不再需要重传的起点。
     var hasFailed: Bool { lastError != nil }
 
+    /// 手上还攥着、还没发出去的字节数。
+    ///
+    /// 给「喂字节的那一头」用来做背压：读得比传得快的话，整个文件会先堆进内存里，
+    /// 而一条 5 小时的录音有一百多兆。
+    var bufferedBytes: Int { buffer.pendingBytes }
+
     /// 交字节进来。攒满一片就自己发出去，界面不需要知道。
     func enqueue(_ bytes: Data) {
         guard !isCancelled, bytes.count > 0 else { return }

@@ -50,7 +50,8 @@ struct TerminalTextView: UIViewRepresentable {
             rows: store.rows,
             atHistoryFloor: store.reachedHistoryFloor,
             cursor: store.cursorPosition,
-            resetRevision: store.resetRevision
+            resetRevision: store.resetRevision,
+            renderRevision: store.renderRevision
         )
         view.setRequestsInFlight(store.isLoadingHistory)
     }
@@ -116,6 +117,25 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// The store revision this view last applied. `nil` until the first apply, so
     /// the view's own first paint is not mistaken for a buffer replacement.
     private var appliedResetRevision: Int?
+    /// 上一次真正做过活时的那组「便宜令牌」。
+    ///
+    /// store 任何一次变更都会推进 `renderRevision`，所以这四样都没变就说明缓冲区、
+    /// 光标、渲染尺寸一个都没动过 —— 而 `identities(...)` 要为每一行拼一个字符串
+    /// （上限 6000，每行还要过一次选区）。`nil` 表示还没做过第一次。
+    private var appliedRenderRevision: Int?
+    private var appliedFontSize: CGFloat?
+    /// 上一次真正作废过布局时的那组输入。
+    ///
+    /// `updateUIView` 每次都会调 `applyLayout`，而它在常态下（布局输入一个都没变）也会
+    /// 走一遍 `invalidateLayout()` —— flow layout 一作废就要为**每一个** item 重求
+    /// attributes，6000 行就是 6000 次 delegate 回调 + 6000 个 attributes，每帧一次。
+    private struct LayoutInputs: Equatable {
+        let mode: TerminalDisplayMode
+        let grid: DesktopGrid?
+        let base: CGFloat
+        let size: CGSize
+    }
+    private var lastLayoutInputs: LayoutInputs?
     private var atHistoryFloor = false
     private var requestsInFlight = false
     /// Reports how many monospace columns fit, so the wrap matches the phone.
@@ -182,11 +202,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             pendingLandingScroll = true
         }
 
+        let inputs = LayoutInputs(mode: mode, grid: grid, base: base, size: bounds.size)
         let target = renderedFontSize(base: base)
         if target != fontSize {
             fontSize = target
+            lastLayoutInputs = inputs
             remeasureRows()
-        } else {
+        } else if inputs != lastLayoutInputs {
+            // 只有布局输入真的变了才作废。这一条在此之前是**无条件**执行的，而
+            // `updateUIView` 每次都调 `applyLayout` —— 于是每一帧都要让 flow layout
+            // 为每一个 item 重求一次 attributes（上限 6000 行）。
+            lastLayoutInputs = inputs
             applyCanvasLayout()
             collectionView.collectionViewLayout.invalidateLayout()
         }
@@ -438,13 +464,38 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         rows: [DisplayRow],
         atHistoryFloor: Bool,
         cursor: TerminalStore.CursorPosition?,
-        resetRevision: Int = 0
+        resetRevision: Int = 0,
+        renderRevision: Int? = nil
     ) {
+        // 什么都没动过就直接出去 —— 这一条必须排在 `identities(...)` **前面**：那个
+        // 函数要为每一行拼一个字符串（上限 6000，每行还要过一次选区），而它原来排在
+        // 最前面，只有 `keys != appliedKeys` 那个更便宜的判断在它后面。
+        //
+        // 而这个视图在**每一次祖先重渲染**时都会被走到：表示层那几个闭包每次 `body`
+        // 都新建、不可比较，SwiftUI 没法把这一层当成没变。「什么都没变」因此是常态，
+        // 不是例外。
+        //
+        // store 的任何一次变更都会推进 `renderRevision`，所以它加上光标、渲染尺寸、
+        // 替换与地面标记足以判定「没变」。
+        //
+        // **传 `nil` 就永远不跳过。** 没有修订号可用的调用方（测试直接驱动这个视图时
+        // 就是这样）不能因为一个它根本不掌握的号码而被挡在门外 —— 那会把「该做的事」
+        // 跳掉，而不是省下它。
+        let revisionSaysNothingChanged = renderRevision.map { $0 == appliedRenderRevision } ?? false
+        guard !(revisionSaysNothingChanged
+                && cursor == appliedCursor
+                && atHistoryFloor == self.atHistoryFloor
+                && resetRevision == appliedResetRevision
+                && fontSize == appliedFontSize)
+        else { return }
+
         // Nil until this view has applied something, so its very first paint is
         // never read as a replacement — it lands on the newest line by the same
         // rule every other first paint uses.
         let bufferReplaced = appliedResetRevision.map { $0 != resetRevision } ?? false
         appliedResetRevision = resetRevision
+        appliedRenderRevision = renderRevision
+        appliedFontSize = fontSize
 
         let keys = identities(for: rows, cursor: cursor)
         let floorChanged = atHistoryFloor != self.atHistoryFloor
@@ -570,25 +621,47 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         fontSize: CGFloat? = nil
     ) -> [String] {
         rows.enumerated().map { index, row in
-            var key = row.id
-            // The size a row is drawn at is part of its identity, for the same
-            // reason the cursor is. A row identifier carries the text, and the text
-            // does not change when the size does — so without this the diff sees no
-            // change, leaves the rows already on screen drawn at the old size, and
-            // the reader gets a band of differently-sized text that only corrects
-            // itself once those rows scroll away and come back.
-            if let fontSize { key += "#size:\(fontSize)" }
-            if cursorVisible, let cursor, cursor.rowIndex == index {
-                key += "#cursor:\(cursor.column)"
-            }
-            // Woven in the same way the cursor is: a row that is partly selected
-            // looks different, and the diff has to be able to see that without
-            // comparing text.
-            if let columns = selection?.columns(onRow: index) {
-                key += "#sel:\(columns.lowerBound)-\(columns.upperBound)"
-            }
-            return key
+            identity(
+                for: row,
+                at: index,
+                cursor: cursor,
+                cursorVisible: cursorVisible,
+                selection: selection,
+                fontSize: fontSize
+            )
         }
+    }
+
+    /// 一行的标识符。整套方案只在这一处，好让「只换一行」那条快路和整份重建算出来
+    /// 的东西逐字一致。
+    ///
+    /// 方案本身没动：尺寸、光标相位、选区都织在这里，行的内容由 `row.id` 自带。
+    static func identity(
+        for row: DisplayRow,
+        at index: Int,
+        cursor: TerminalStore.CursorPosition?,
+        cursorVisible: Bool,
+        selection: TerminalSelection? = nil,
+        fontSize: CGFloat? = nil
+    ) -> String {
+        var key = row.id
+        // The size a row is drawn at is part of its identity, for the same
+        // reason the cursor is. A row identifier carries the text, and the text
+        // does not change when the size does — so without this the diff sees no
+        // change, leaves the rows already on screen drawn at the old size, and
+        // the reader gets a band of differently-sized text that only corrects
+        // itself once those rows scroll away and come back.
+        if let fontSize { key += "#size:\(fontSize)" }
+        if cursorVisible, let cursor, cursor.rowIndex == index {
+            key += "#cursor:\(cursor.column)"
+        }
+        // Woven in the same way the cursor is: a row that is partly selected
+        // looks different, and the diff has to be able to see that without
+        // comparing text.
+        if let columns = selection?.columns(onRow: index) {
+            key += "#sel:\(columns.lowerBound)-\(columns.upperBound)"
+        }
+        return key
     }
 
     func setRequestsInFlight(_ inFlight: Bool) {
@@ -637,9 +710,45 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             return
         }
         cursorPhaseOn.toggle()
+        // 光标那一行已经滚出屏幕时什么都不做。它看不见，而下面那一次改动在缓冲区长的
+        // 终端上（上限 6000 行）每 0.5 秒都要重来一遍。
+        guard isOnScreen(cursor.rowIndex) else { return }
         // The row's identity carries the phase, so this is an ordinary diff of the
         // rows already on screen — no reload, and no new rows to lay out.
-        push(rows: appliedRows, keys: identities(for: appliedRows, cursor: cursor))
+        pushOneRow(at: cursor.rowIndex, row: appliedRows[cursor.rowIndex])
+    }
+
+    /// 这一行现在在可视区里吗。
+    private func isOnScreen(_ index: Int) -> Bool {
+        guard index >= 0, index < appliedKeys.count else { return false }
+        return collectionView.indexPathsForVisibleItems.contains(IndexPath(item: index, section: 0))
+    }
+
+    /// 只换一行的标识符。
+    ///
+    /// 用于光标闪的那一下 —— 变的只有光标所在的那一行。`push` 那条路要重建整份
+    /// `rowsByKey`（上限 6000 个长字符串做 key，每个都得哈希一遍），在闪这件事上纯属
+    /// 白做。标识符本身仍由 `Self.identity` 算，所以快路和整份重建算出来的逐字一致。
+    private func pushOneRow(at index: Int, row: DisplayRow) {
+        guard index >= 0, index < appliedKeys.count, index < appliedRows.count else { return }
+        let key = Self.identity(
+            for: row,
+            at: index,
+            cursor: appliedCursor,
+            cursorVisible: cursorPhaseOn,
+            selection: selection,
+            fontSize: fontSize
+        )
+        let previous = appliedKeys[index]
+        guard previous != key else { return }
+        appliedKeys[index] = key
+        rowsByKey.removeValue(forKey: previous)
+        rowsByKey[key] = row
+
+        var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(appliedKeys, toSection: 0)
+        dataSource.apply(snapshot, animatingDifferences: false)
     }
 
     /// The column the cursor occupies on a given row, or nil when it is elsewhere
