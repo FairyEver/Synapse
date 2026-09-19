@@ -1,10 +1,13 @@
 import { decodeMeetingPeaks, formatMeetingClock, meetingPlaybackProgress } from "@synapse/shared"
 import { Pause, Play, RotateCcw, RotateCw } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
+import type { SynapseMeetingAudioEnsureResult } from "@/types/meeting"
+import { useMeetingAudioReadySubscription } from "./hooks/use-meetings"
 import { drawPlaybackWaveform, normalizePeaks, playbackPositionFromClick } from "./waveform"
 
 /**
@@ -15,10 +18,22 @@ import { drawPlaybackWaveform, normalizePeaks, playbackPositionFromClick } from 
  * 「当前这句」。
  *
  * 这条波形是**整段铺满宽度**的，与录音页那条滚动窗口在行为上刻意不同。
+ *
+ * 音频优先走本机那一份：听过一次之后，第二次点开连一次网络请求都不发。**界面上看不出
+ * 这件事**——没有「已缓存」之类的字样，只有「还没到本机」时那行「正在下载」。
  */
 
 /** 一次快退/快进多少。 */
 const SKIP_MS = 15_000
+
+/**
+ * 载入态转满多久补一个「重试」。
+ *
+ * 真的一点网都没有时它会一直转下去——因为网一回来确实会自己接着下完，所以**不该说成
+ * 失败**。但它也不能永远只转不说话，所以给一个出口。那个按钮只是催一下，不取代后台的
+ * 自动重试。
+ */
+const LOAD_TIMEOUT_MS = 10_000
 
 type MeetingPlaybackProps = {
   readonly meetingId: string
@@ -34,26 +49,60 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
   /** 绘制用的是 0-1 的振幅；服务端存的是 0-255 的字节，取值时就还原。 */
   const peaksRef = useRef<readonly number[]>([])
   const [url, setUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [timedOut, setTimedOut] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [positionMs, setPositionMs] = useState(0)
-  const [ready, setReady] = useState(false)
+  const [peaksLoaded, setPeaksLoaded] = useState(false)
+
+  const applyAudioState = useCallback((result: SynapseMeetingAudioEnsureResult) => {
+    // 「下载中」保持载入态；「不可用」什么都不做——那一屏由详情自己渲染成「录音已删除」，
+    // 这里再画一个状态只会跟它抢。
+    if (result.state !== "ready") return
+    setUrl(result.url)
+    setLoading(false)
+  }, [])
+
+  // 本机有没有这份音频：有就直接用它，没有就起一次后台下载（幂等，重复叫不会起第二个）。
+  useEffect(() => {
+    let disposed = false
+    setUrl(null)
+    setLoading(true)
+    setTimedOut(false)
+    void requireSynapseBridge()
+      .meeting.audio
+      .ensure({ meetingId })
+      .then((result) => {
+        if (!disposed) applyAudioState(result)
+      })
+      .catch(() => {
+        // 连主进程都没问到，是极少见的内部故障。停在载入态：转满 10 秒用户能催一次，
+        // 而主进程那边的自动重试照旧跑，网回来会推事件过来。这里**不写成失败**。
+      })
+    return () => {
+      disposed = true
+    }
+  }, [meetingId, applyAudioState])
+
+  // 音频落到本机就换地址。用户不点「重试」也能等到这一步。
+  useMeetingAudioReadySubscription(meetingId, (event) => {
+    applyAudioState({ state: "ready", url: event.url })
+  })
 
   useEffect(() => {
     let disposed = false
-    void Promise.all([
-      requireSynapseBridge().meeting.entry.playbackUrl({ meetingId }),
-      requireSynapseBridge().meeting.entry.peaks({ meetingId }),
-    ])
-      .then(([audio, peaks]) => {
+    void requireSynapseBridge()
+      .meeting.entry.peaks({ meetingId })
+      .then((peaks) => {
         if (disposed) return
-        setUrl(audio.url)
         peaksRef.current = normalizePeaks(decodeMeetingPeaks(peaks.peaks))
-        setReady(true)
+        setPeaksLoaded(true)
       })
       .catch(() => {
+        // 波形拿不到就画一条平线，播放本身不受影响。
         if (disposed) return
-        setUrl(null)
-        setReady(true)
+        peaksRef.current = []
+        setPeaksLoaded(true)
       })
     return () => {
       disposed = true
@@ -66,17 +115,25 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
     setPlaying(false)
   }, [meetingId])
 
+  // 转满 10 秒就把「重试」露出来。**只多给一个按钮**，不取消后台下载、不改任何状态。
+  // 用户按下它不会让计时重来，所以那行字不会闪回去。
+  useEffect(() => {
+    if (!loading) return
+    const timer = window.setTimeout(() => setTimedOut(true), LOAD_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [loading, meetingId])
+
   const progress = meetingPlaybackProgress(positionMs, durationMs)
 
   useEffect(() => {
     const canvas = canvasRef.current
     // 藏起来的时候画布宽高是 0，画不出东西；切回来时 visible 变化会再走一遍这里。
     if (!canvas || !props.visible) return
-    const redraw = () => drawPlaybackWaveform(canvas, peaksRef.current, { progress })
+    const redraw = () => drawPlaybackWaveform(canvas, peaksRef.current, { progress, dimmed: loading })
     redraw()
     window.addEventListener("resize", redraw)
     return () => window.removeEventListener("resize", redraw)
-  }, [ready, url, progress, props.visible])
+  }, [peaksLoaded, loading, url, progress, props.visible])
 
   function toggle(): void {
     const audio = audioRef.current
@@ -94,6 +151,17 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
     const clamped = Math.max(0, Math.min(durationMs, target))
     audio.currentTime = clamped / 1000
     setPositionMs(clamped)
+  }
+
+  /** 催一下。主进程那边是幂等的：已经在下的不会被起第二个。 */
+  function retryDownload(): void {
+    void requireSynapseBridge()
+      .meeting.audio
+      .ensure({ meetingId })
+      .then(applyAudioState)
+      .catch(() => {
+        // 同上：问不到就继续等，界面照旧停在「正在下载」。
+      })
   }
 
   function seekFromClick(event: React.MouseEvent<HTMLCanvasElement>): void {
@@ -116,7 +184,7 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
             className="h-32 w-full cursor-pointer"
             aria-label="录音波形，可点击定位"
           />
-          {peaksRef.current.length > 0 ? (
+          {peaksRef.current.length > 0 && !loading ? (
             <span
               className="pointer-events-none absolute inset-y-0 w-px bg-foreground"
               style={{ left: `${progress * 100}%` }}
@@ -157,6 +225,20 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
           <span className="text-muted-foreground"> / {formatMeetingClock(durationMs)}</span>
         </span>
       </div>
+
+      {loading ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Spinner className="size-3.5" />
+            <span>正在下载</span>
+          </div>
+          {timedOut ? (
+            <Button variant="ghost" size="sm" className="h-7 px-2" onClick={retryDownload}>
+              重试
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {url ? (
         <audio

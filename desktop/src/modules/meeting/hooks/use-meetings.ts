@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseMeetingDetail, SynapseMeetingSummary, SynapseMeetingTranscriptionCompletedEvent } from "@/types/meeting"
+import type {
+  SynapseMeetingAudioReadyEvent,
+  SynapseMeetingDetail,
+  SynapseMeetingSummary,
+  SynapseMeetingTranscriptionCompletedEvent,
+} from "@/types/meeting"
 
 /**
  * 录音的数据入口。
@@ -144,4 +149,26 @@ export function useTranscriptionCompletionSubscription(onCompleted: (event: Syna
     })
     return unsubscribe
   }, [])
+}
+
+/**
+ * 音频落到本机时换地址。
+ *
+ * 下载在主进程后台跑，跑完推一条；播放器据此从载入态切到本机文件。**用户不动手也能好**
+ * ——那个「重试」只是催一下，这条才是自动恢复本身。只认当前这条录音的事件。
+ */
+export function useMeetingAudioReadySubscription(
+  meetingId: string,
+  onReady: (event: SynapseMeetingAudioReadyEvent) => void,
+): void {
+  const callback = useRef(onReady)
+  callback.current = onReady
+
+  useEffect(() => {
+    const unsubscribe = requireSynapseBridge().meeting.audio.onReady((event) => {
+      if (event.meetingId !== meetingId) return
+      callback.current(event)
+    })
+    return unsubscribe
+  }, [meetingId])
 }
