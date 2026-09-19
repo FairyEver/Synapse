@@ -226,6 +226,7 @@ teams: { id, name }[]
 | `admin.team.member_add` | `team` | `{ count }` |
 | `admin.team.member_remove` | `team` | `{ userId }` |
 | `admin.teams.list` | `team` | 分页参数（读操作，沿用 `recordAdminRead`） |
+| `admin.teams.view` | `team` | 单个团队（读操作，与 `AdminController` 里其它详情读一致） |
 
 审计写入失败**不能**让业务操作失败，沿用 `recordServiceManagedAuditSafely` 的吞错处理。
 

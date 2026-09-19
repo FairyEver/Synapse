@@ -62,12 +62,18 @@ describe("TeamController", () => {
     expect(listTeams).not.toHaveBeenCalled()
   })
 
-  it("returns a single team for the detail page", async () => {
+  it("returns a single team for the detail page and audits the read", async () => {
     const getTeam = vi.fn().mockResolvedValue({ id: "team-1", name: "产品组", memberCount: 3 })
-    const controller = createController({ getTeam }, {})
+    const auditLog = createAuditLog()
+    const controller = createController({ getTeam }, { record: auditLog.record })
 
-    await expect(controller.getTeam("team-1")).resolves.toMatchObject({ memberCount: 3 })
+    await expect(controller.getTeam("team-1", adminRequest())).resolves.toMatchObject({ memberCount: 3 })
     expect(getTeam).toHaveBeenCalledWith("team-1")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.teams.view",
+      targetType: "team",
+      targetId: "team-1",
+    }))
   })
 
   it("creates a team with the admin actor", async () => {

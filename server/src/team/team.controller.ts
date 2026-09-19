@@ -46,8 +46,14 @@ export class TeamController {
   }
 
   @Get("/:id")
-  getTeam(@Param("id") id: string) {
-    return this.teams.getTeam(id)
+  async getTeam(@Param("id") id: string, @Req() request?: AdminRequest) {
+    const team = await this.teams.getTeam(id)
+    await this.recordAdminRead(request, {
+      action: "admin.teams.view",
+      targetType: "team",
+      targetId: id,
+    })
+    return team
   }
 
   @Post()
