@@ -35,7 +35,6 @@ import {
   terminalResizeInputSchema,
   terminalSemanticInputSchema,
   terminalSessionListInputSchema,
-  terminalSessionOpenInputSchema,
   terminalSessionRenameInputSchema,
   terminalSessionStateListInputSchema,
   terminalSessionTargetSchema,
@@ -44,7 +43,7 @@ import {
 } from "./contract-schema"
 
 const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
-  "app.terminal.session.open": terminalSessionOpenInputSchema,
+  "app.terminal.session.open": terminalSessionTargetSchema,
   "app.terminal.capabilities.get": terminalRequestBaseSchema,
   "app.terminal.diagnostics.get": terminalRequestBaseSchema,
   "app.terminal.global_launch.get": terminalGlobalLaunchGetInputSchema,
@@ -93,7 +92,7 @@ const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
 }
 
 const toolNotes: Readonly<Record<string, string>> = {
-  "app.terminal.session.open": "Pass the complete deepLink unchanged when the user supplies a link; otherwise pass an immutable sessionId already returned by another Terminal tool. This tool returns no terminal output.",
+  "app.terminal.session.open": "Pass an immutable sessionId already returned by another Terminal tool. This tool returns no terminal output.",
 }
 
 export function buildTerminalMcpTools(): McpToolDefinition[] {

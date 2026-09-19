@@ -276,25 +276,25 @@ describe("createProtocolUrlRouter", () => {
     )
   })
 
-  it("dispatches the canonical Terminal session route through the existing open capability", async () => {
+  it("ignores the retired Terminal session route instead of dispatching an open", async () => {
     const deepLink = "synapse://terminals/m0D4NOW0yDeagclYK2CiUQ.xrs"
-    const dispatchAppAction = vi.fn(async () => ({ ok: true as const, data: { opened: true } }))
+    const dispatchAppAction = vi.fn()
+    const logger = createLogger()
+    const focusMainWindow = vi.fn()
     const router = createProtocolUrlRouter({
       ...createUnusedUpdateRouterDeps(),
-      focusMainWindow: vi.fn(),
+      focusMainWindow,
       handleAuthCallback: vi.fn(async () => undefined),
-      logger: createLogger(),
+      logger,
       openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
       dispatchAppAction,
     }, [deepLink])
 
-    expect(router.shouldCreateMainWindowBeforeStart()).toBe(false)
     await router.start()
 
-    expect(dispatchAppAction).toHaveBeenCalledWith(
-      "app.terminal.session.open",
-      { deepLink },
-    )
+    expect(dispatchAppAction).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith("Ignored unknown synapse protocol URL.")
+    expect(focusMainWindow).toHaveBeenCalled()
   })
 
   it("reports one sanitized native error for an invalid app deep link without focusing", async () => {

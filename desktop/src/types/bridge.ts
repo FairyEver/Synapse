@@ -151,6 +151,7 @@ import type {
   SynapseTerminalReorderGroupsInput,
   SynapseTerminalRenameSessionInput,
   SynapseTerminalRenameWorkspaceInput,
+  SynapseTerminalUpdateWorkspaceInput,
   SynapseTerminalReleaseSizeOwnershipInput,
   SynapseTerminalResizeSessionInput,
   SynapseTerminalResizedEvent,
@@ -1266,6 +1267,7 @@ export type SynapseBridge = {
       get: (input: { workspaceId: string }) => Promise<SynapseTerminalWorkspace>
       getForSession: (input: { sessionId: string }) => Promise<SynapseTerminalWorkspace>
       rename: (input: SynapseTerminalRenameWorkspaceInput) => Promise<SynapseTerminalWorkspace>
+      update: (input: SynapseTerminalUpdateWorkspaceInput) => Promise<SynapseTerminalWorkspace>
       close: (input: SynapseTerminalCloseWorkspaceInput) => Promise<SynapseTerminalCloseWorkspaceResult>
     }
     pane: {

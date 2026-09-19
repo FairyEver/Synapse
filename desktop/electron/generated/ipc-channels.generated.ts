@@ -458,6 +458,7 @@ export const IPC_CHANNELS = {
     "getWorkspace": "synapse:app:terminal:workspace:get",
     "getWorkspaceForSession": "synapse:app:terminal:workspace:for_session",
     "renameWorkspace": "synapse:app:terminal:workspace:rename",
+    "updateWorkspace": "synapse:app:terminal:workspace:update",
     "splitPane": "synapse:app:terminal:pane:split",
     "movePane": "synapse:app:terminal:pane:move",
     "equalizePane": "synapse:app:terminal:pane:equalize",

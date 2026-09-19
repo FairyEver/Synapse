@@ -227,6 +227,8 @@ type ModuleSidebarRowProps = {
   readonly onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void
   readonly onSelect: () => void
   readonly rowRef?: Ref<HTMLDivElement>
+  /** 行的悬停提示，例如终端会话的用户备注；不传就没有提示。 */
+  readonly title?: string
   readonly trailing?: ReactNode
   readonly trackValue: string
 }
@@ -240,6 +242,7 @@ function ModuleSidebarRow({
   onDoubleClick,
   onSelect,
   rowRef,
+  title,
   trailing,
   trackValue,
 }: ModuleSidebarRowProps) {
@@ -266,6 +269,7 @@ function ModuleSidebarRow({
       tabIndex={0}
       data-track={dataTrack}
       data-track-native="true"
+      title={title}
       aria-current={active ? "page" : undefined}
       onClick={handleSelect}
       onDoubleClick={handleDoubleClick}

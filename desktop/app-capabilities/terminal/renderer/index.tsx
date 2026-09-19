@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, FileText, Folder, FolderOpen, Link2Off, MailOpen, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
@@ -90,8 +90,8 @@ import type {
   SynapseTerminalUpdateCustomToolbarActionInput,
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
-import { collectTerminalPaneLeaves } from "../shared/schema"
-import { buildTerminalSessionDeepLink } from "../shared/deep-link"
+import { TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH, collectTerminalPaneLeaves } from "../shared/schema"
+import { buildTerminalSessionReferenceText } from "../shared/session-reference"
 import {
   buildTerminalCommandWrites,
   TERMINAL_COMMAND_ENTER_DELAY_MS,
@@ -168,6 +168,16 @@ export function TerminalModule({
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalWorkspace | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
+  const [descriptionTarget, setDescriptionTarget] = useState<SynapseTerminalWorkspace | null>(null)
+  const [descriptionDraft, setDescriptionDraft] = useState("")
+  const [descriptionSaving, setDescriptionSaving] = useState(false)
+  /**
+   * 「有新消息」：某个终端在我没看它的时候输出了新内容。
+   *
+   * 只活在这一个渲染进程里，不落盘也不上报——它是「自上次查看以来」的状态，会话本身不跨重启
+   * （ADR 0215），写下来也没有下一次能对上的时候。
+   */
+  const [unreadWorkspaceIds, setUnreadWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
   const [sessionRenameTarget, setSessionRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [sessionRenameTitle, setSessionRenameTitle] = useState("")
   const [sessionRenameSaving, setSessionRenameSaving] = useState(false)
@@ -201,6 +211,7 @@ export function TerminalModule({
   const [mountedWorkspaceIds, setMountedWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
   const workspaceViewRefs = useRef(new Map<string, TerminalWorkspaceViewHandle>())
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
+  const descriptionReturnFocusRef = useRef<HTMLElement | null>(null)
   const sessionRenameReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
@@ -429,6 +440,20 @@ export function TerminalModule({
       cancelled = true
     }
   }, [onOpenRequestConsumed, openRequest, terminalBridge])
+
+  // 输出事件对所有会话广播，后台 workspace 的终端也在推数据，所以「有新消息」不必等到看得见才成立。
+  const workspaceIdBySessionIdRef = useRef<ReadonlyMap<string, string>>(new Map())
+  const activeWorkspaceIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const bySessionId = new Map<string, string>()
+    for (const workspace of workspaces) {
+      for (const pane of collectTerminalPaneLeaves(workspace.layout)) bySessionId.set(pane.sessionId, workspace.id)
+    }
+    workspaceIdBySessionIdRef.current = bySessionId
+  }, [workspaces])
+  useEffect(() => {
+    activeWorkspaceIdRef.current = activeWorkspaceId
+  }, [activeWorkspaceId])
 
   const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {
@@ -661,6 +686,68 @@ export function TerminalModule({
       setRenameSaving(false)
     }
   }, [closeRenameDialog, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, renameTarget, renameTitle, terminalBridge])
+
+  const applyWorkspaceMetadata = useCallback(async (
+    target: SynapseTerminalWorkspace,
+    patch: { readonly pinned?: boolean; readonly description?: string },
+    failureMessage: string,
+  ) => {
+    try {
+      const workspace = await enqueueWorkspaceMutation(target.id, async () => {
+        const current = await getCurrentWorkspace(target.id)
+        if (!current) throw new Error("Terminal workspace not found")
+        return runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.workspace.update" },
+          () => terminalBridge.workspace.update({
+            workspaceId: current.id,
+            expectedLayoutRevision: current.layoutRevision,
+            ...patch,
+          }),
+        )
+      })
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
+      return workspace
+    } catch (error) {
+      logger.error("Failed to update terminal workspace metadata.", error)
+      await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after updating a workspace.")
+      toast.error(failureMessage)
+      return null
+    }
+  }, [enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
+
+  const toggleWorkspacePinned = useCallback(async (workspace: SynapseTerminalWorkspace) => {
+    await applyWorkspaceMetadata(
+      workspace,
+      { pinned: !workspace.pinned },
+      workspace.pinned ? "取消置顶失败" : "置顶失败",
+    )
+  }, [applyWorkspaceMetadata])
+
+  const openDescriptionDialog = useCallback((workspace: SynapseTerminalWorkspace, returnFocus: HTMLElement) => {
+    descriptionReturnFocusRef.current = returnFocus
+    setDescriptionTarget(workspace)
+    setDescriptionDraft(workspace.description ?? "")
+  }, [])
+
+  const closeDescriptionDialog = useCallback(() => {
+    setDescriptionTarget(null)
+    setDescriptionDraft("")
+  }, [])
+
+  const saveWorkspaceDescription = useCallback(async () => {
+    if (!descriptionTarget) return
+    setDescriptionSaving(true)
+    try {
+      const updated = await applyWorkspaceMetadata(
+        descriptionTarget,
+        { description: descriptionDraft },
+        "保存描述失败",
+      )
+      if (updated) closeDescriptionDialog()
+    } finally {
+      setDescriptionSaving(false)
+    }
+  }, [applyWorkspaceMetadata, closeDescriptionDialog, descriptionDraft, descriptionTarget])
 
   const renameSession = useCallback(async () => {
     if (!sessionRenameTarget) return
@@ -1289,14 +1376,21 @@ export function TerminalModule({
     )))
   }, [])
 
-  const copySessionDeepLink = useCallback(async (session: SynapseTerminalSession | null) => {
+  const copySessionReference = useCallback(async (
+    workspace: SynapseTerminalWorkspace,
+    session: SynapseTerminalSession | null,
+  ) => {
     try {
       if (!session?.sessionRef) throw new Error("Terminal session reference is unavailable")
-      await navigator.clipboard.writeText(buildTerminalSessionDeepLink({ sessionRef: session.sessionRef }))
-      toast("深度链接已复制")
+      await navigator.clipboard.writeText(buildTerminalSessionReferenceText({
+        workspaceId: workspace.id,
+        sessionRef: session.sessionRef,
+        sessionId: session.id,
+      }))
+      toast("引用已复制，仅本次运行有效")
     } catch (rawError) {
-      logger.warn("Terminal session deep link copy failed.", {
-        boundary: "renderer.terminal.copy-deep-link",
+      logger.warn("Terminal session reference copy failed.", {
+        boundary: "renderer.terminal.copy-reference",
         sessionId: session?.id ?? null,
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
       })
@@ -1307,6 +1401,31 @@ export function TerminalModule({
   const selectWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId)
   }, [])
+
+  const setWorkspaceUnread = useCallback((workspaceId: string, unread: boolean) => {
+    setUnreadWorkspaceIds((current) => {
+      if (current.has(workspaceId) === unread) return current
+      const next = new Set(current)
+      if (unread) next.add(workspaceId)
+      else next.delete(workspaceId)
+      return next
+    })
+  }, [])
+
+  const markWorkspaceRead = useCallback((workspaceId: string) => {
+    setWorkspaceUnread(workspaceId, false)
+  }, [setWorkspaceUnread])
+
+  // 切到哪个 workspace 就算看过哪个；「标记未读」是用户自己钉的，下一次切回来仍然会清掉。
+  useEffect(() => {
+    if (activeWorkspaceId) markWorkspaceRead(activeWorkspaceId)
+  }, [activeWorkspaceId, markWorkspaceRead])
+
+  useEffect(() => terminalBridge.operation.onData((event) => {
+    const workspaceId = workspaceIdBySessionIdRef.current.get(event.sessionId)
+    if (!workspaceId || workspaceId === activeWorkspaceIdRef.current) return
+    setWorkspaceUnread(workspaceId, true)
+  }), [setWorkspaceUnread, terminalBridge])
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((current) => {
@@ -1407,15 +1526,23 @@ export function TerminalModule({
         canForce={rendererPlatform === "darwin"}
         closeDisabled={Boolean(workspace.closing) || closingWorkspaceId === workspace.id}
         closing={Boolean(workspace.closing)}
+        description={workspace.description}
         lifecycleDisabled={closingWorkspaceId === workspace.id}
+        pinned={workspace.pinned}
         status={workspaceStatus(workspace, sessions)}
         title={workspace.title}
+        unread={unreadWorkspaceIds.has(workspace.id)}
         waiting={workspaceWaitingForInput(workspace, sessions)}
         workspaceId={workspace.id}
         onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-        onCopyDeepLink={() => { void copySessionDeepLink(workspaceActiveSession(workspace, activePaneIds, sessions)) }}
+        onCopyReference={() => {
+          void copySessionReference(workspace, workspaceActiveSession(workspace, activePaneIds, sessions))
+        }}
+        onEditDescription={(returnFocus) => openDescriptionDialog(workspace, returnFocus)}
         onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
         onSelect={() => selectWorkspace(workspace.id)}
+        onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
+        onToggleUnread={() => setWorkspaceUnread(workspace.id, !unreadWorkspaceIds.has(workspace.id))}
       />
     ))
   )
@@ -1514,11 +1641,17 @@ export function TerminalModule({
                 key={workspace.id}
                 active={workspace.id === activeWorkspace?.id}
                 closeDisabled={workspace.closing || closingWorkspaceId === workspace.id}
+                description={workspace.description}
+                pinned={workspace.pinned}
                 title={workspace.title}
+                unread={unreadWorkspaceIds.has(workspace.id)}
                 onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-                onCopyDeepLink={() => { void copySessionDeepLink(session) }}
+                onCopyReference={() => { void copySessionReference(workspace, session) }}
+                onEditDescription={(returnFocus) => openDescriptionDialog(workspace, returnFocus)}
                 onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
                 onSelect={() => selectWorkspace(workspace.id)}
+                onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
+                onToggleUnread={() => setWorkspaceUnread(workspace.id, !unreadWorkspaceIds.has(workspace.id))}
                 waiting={workspaceWaitingForInput(workspace, sessions)}
               />
             )
@@ -2160,6 +2293,45 @@ export function TerminalModule({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={descriptionTarget !== null} onOpenChange={(open) => {
+        if (!open) closeDescriptionDialog()
+      }}>
+        <DialogContent onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          descriptionReturnFocusRef.current?.focus()
+        }}>
+          <DialogHeader>
+            <DialogTitle>会话描述</DialogTitle>
+            <DialogDescription className="sr-only">
+              输入这段会话的备注，留空表示不写。
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            aria-label="会话描述"
+            maxLength={TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH}
+            value={descriptionDraft}
+            onChange={(event) => setDescriptionDraft(event.target.value)}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={descriptionSaving}
+              onClick={closeDescriptionDialog}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={descriptionSaving}
+              onClick={() => { void saveWorkspaceDescription() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
         if (!open && !deleteGroupSaving) closeDeleteGroupDialog()
       }}>
@@ -2214,20 +2386,32 @@ export function TerminalModule({
 function TerminalHeaderSessionTab({
   active,
   closeDisabled,
+  description,
   onClose,
-  onCopyDeepLink,
+  onCopyReference,
+  onEditDescription,
   onRename,
   onSelect,
+  onTogglePin,
+  onToggleUnread,
+  pinned,
   title,
+  unread,
   waiting,
 }: {
   readonly active: boolean
   readonly closeDisabled: boolean
+  readonly description?: string
   readonly onClose: () => void
-  readonly onCopyDeepLink: () => void
+  readonly onCopyReference: () => void
+  readonly onEditDescription: (returnFocus: HTMLElement) => void
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
+  readonly onTogglePin: () => void
+  readonly onToggleUnread: () => void
+  readonly pinned: boolean
   readonly title: string
+  readonly unread: boolean
   readonly waiting: boolean
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
@@ -2241,10 +2425,13 @@ function TerminalHeaderSessionTab({
           aria-label={`切换到会话：${title}`}
           className={active ? "bg-muted text-foreground" : undefined}
           data-track="terminal-header-session-select"
+          tooltip={description}
           onClick={onSelect}
         >
           {waiting ? <TerminalAttentionIndicator /> : null}
+          {pinned ? <TerminalPinnedIndicator /> : null}
           <span className="max-w-32 truncate">{title}</span>
+          {unread ? <TerminalUnreadIndicator /> : null}
         </SystemAppTopBarActionButton>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -2254,9 +2441,24 @@ function TerminalHeaderSessionTab({
           <Pencil />
           重命名
         </ContextMenuItem>
-        <ContextMenuItem onSelect={onCopyDeepLink}>
+        <ContextMenuItem onSelect={onTogglePin}>
+          <Pin />
+          {pinned ? "取消置顶" : "置顶"}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => {
+          const button = buttonRef.current
+          if (button) onEditDescription(button)
+        }}>
+          <FileText />
+          编辑描述
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onToggleUnread}>
+          <MailOpen />
+          {unread ? "标记已读" : "标记未读"}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onCopyReference}>
           <Copy />
-          复制深度链接
+          复制引用
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
           <X />
@@ -2272,13 +2474,19 @@ function TerminalSidebarWorkspaceRow({
   canForce,
   closeDisabled,
   closing,
+  description,
   lifecycleDisabled,
   onClose,
-  onCopyDeepLink,
+  onCopyReference,
+  onEditDescription,
   onRename,
   onSelect,
+  onTogglePin,
+  onToggleUnread,
+  pinned,
   status,
   title,
+  unread,
   waiting,
   workspaceId,
 }: {
@@ -2286,13 +2494,19 @@ function TerminalSidebarWorkspaceRow({
   readonly canForce: boolean
   readonly closeDisabled: boolean
   readonly closing: boolean
+  readonly description?: string
   readonly lifecycleDisabled: boolean
   readonly onClose: () => void
-  readonly onCopyDeepLink: () => void
+  readonly onCopyReference: () => void
+  readonly onEditDescription: (returnFocus: HTMLElement) => void
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
+  readonly onTogglePin: () => void
+  readonly onToggleUnread: () => void
+  readonly pinned: boolean
   readonly status: SynapseTerminalSession["status"]
   readonly title: string
+  readonly unread: boolean
   readonly waiting: boolean
   readonly workspaceId: string
 }) {
@@ -2304,17 +2518,26 @@ function TerminalSidebarWorkspaceRow({
           <ModuleSidebarRow
             active={active}
             data-track="terminal-session-select"
-            icon={waiting ? <TerminalAttentionIndicator /> : <TerminalSessionStatusIcon status={status} />}
+            icon={(
+              <>
+                {pinned ? <TerminalPinnedIndicator /> : null}
+                {waiting ? <TerminalAttentionIndicator /> : <TerminalSessionStatusIcon status={status} />}
+              </>
+            )}
             rowRef={rowRef}
-            trailing={
-              <TerminalWorkspaceLifecycleButton
-                canForce={canForce}
-                closing={closing}
-                disabled={lifecycleDisabled}
-                title={title}
-                onClose={onClose}
-              />
-            }
+            title={description}
+            trailing={(
+              <>
+                {unread ? <TerminalUnreadIndicator /> : null}
+                <TerminalWorkspaceLifecycleButton
+                  canForce={canForce}
+                  closing={closing}
+                  disabled={lifecycleDisabled}
+                  title={title}
+                  onClose={onClose}
+                />
+              </>
+            )}
             trackValue={workspaceId}
             onSelect={onSelect}
             onDoubleClick={(event) => onRename(event.currentTarget)}
@@ -2331,9 +2554,24 @@ function TerminalSidebarWorkspaceRow({
           <Pencil />
           重命名
         </ContextMenuItem>
-        <ContextMenuItem onSelect={onCopyDeepLink}>
+        <ContextMenuItem onSelect={onTogglePin}>
+          <Pin />
+          {pinned ? "取消置顶" : "置顶"}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => {
+          const row = rowRef.current
+          if (row) onEditDescription(row)
+        }}>
+          <FileText />
+          编辑描述
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onToggleUnread}>
+          <MailOpen />
+          {unread ? "标记已读" : "标记未读"}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onCopyReference}>
           <Copy />
-          复制深度链接
+          复制引用
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
           <X />
@@ -2419,6 +2657,36 @@ function TerminalAttentionIndicator() {
   )
 }
 
+/**
+ * 「有新消息」与「等待输入」必须一眼分得开：后者是 agent 卡在等人批准（琥珀色问号），
+ * 前者只是没看过的新输出（中性色圆点，读完就消失）。
+ */
+function TerminalUnreadIndicator() {
+  return (
+    <span
+      data-terminal-unread
+      title="有新消息"
+      className="inline-flex size-3.5 shrink-0 items-center justify-center"
+    >
+      <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+      <span className="sr-only">有新消息</span>
+    </span>
+  )
+}
+
+function TerminalPinnedIndicator() {
+  return (
+    <span
+      data-terminal-pinned
+      title="已置顶"
+      className="inline-flex size-3.5 shrink-0 items-center justify-center text-muted-foreground"
+    >
+      <Pin className="size-3.5" aria-hidden="true" />
+      <span className="sr-only">已置顶</span>
+    </span>
+  )
+}
+
 function groupWorkspaces(
   groups: readonly SynapseTerminalGroupSummary[],
   workspaces: readonly SynapseTerminalWorkspace[],
@@ -2426,10 +2694,10 @@ function groupWorkspaces(
   const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
   const grouped = sortedGroups.map((group) => ({
     ...group,
-    workspaces: workspaces.filter((workspace) => workspace.groupId === group.id),
+    workspaces: pinFirst(workspaces.filter((workspace) => workspace.groupId === group.id)),
   }))
   const groupedWorkspaceIds = new Set(grouped.flatMap((group) => group.workspaces.map((workspace) => workspace.id)))
-  const ungrouped = workspaces.filter((workspace) => !groupedWorkspaceIds.has(workspace.id))
+  const ungrouped = pinFirst(workspaces.filter((workspace) => !groupedWorkspaceIds.has(workspace.id)))
 
   if (ungrouped.length === 0) return grouped
   return [
@@ -2447,6 +2715,15 @@ function groupWorkspaces(
       workspaces: ungrouped,
     },
   ]
+}
+
+/**
+ * 置顶的排前面，其余保持服务端给的顺序（创建时间倒序）。
+ *
+ * 服务端已经这样排过一次；这里再排是因为置顶切换后只回一个 workspace，列表本身没有重新拉取。
+ */
+function pinFirst(workspaces: readonly SynapseTerminalWorkspace[]): SynapseTerminalWorkspace[] {
+  return [...workspaces].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)))
 }
 
 function workspaceStatus(

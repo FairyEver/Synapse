@@ -90,6 +90,7 @@ import {
   type TerminalSetSplitRatioInput,
   type TerminalSplitPaneInput,
   type TerminalSplitPaneResult,
+  type TerminalUpdateWorkspaceInput,
   type TerminalWorkspace,
 } from "../shared/workspace"
 import {
@@ -736,6 +737,7 @@ export function createTerminalService(deps: {
       id: randomUUID(),
       groupId: session.groupId,
       title,
+      pinned: false,
       layout: { type: "leaf", paneId: randomUUID(), sessionId: session.id },
       layoutRevision: 1,
       closingPaneIds: [],
@@ -1338,8 +1340,16 @@ export function createTerminalService(deps: {
     return [...sessions.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
   }
 
+  /**
+   * 置顶的 workspace 排在同分组其他 workspace 前面，其余仍按创建时间倒序。
+   * 排序在这里而不是渲染层，UI、手机和 MCP 读到的是同一个顺序。
+   */
   function listWorkspaces(): TerminalWorkspace[] {
-    return [...workspaces.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+    return [...workspaces.values()].sort((a, b) => (
+      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
+      || b.createdAt.localeCompare(a.createdAt)
+      || b.id.localeCompare(a.id)
+    ))
   }
 
   function getWorkspace(input: { workspaceId: string }): TerminalWorkspace {
@@ -1361,6 +1371,34 @@ export function createTerminalService(deps: {
     }
     workspaces.set(updated.id, updated)
     bumpDomain("workspace.renamed", updated.id, updated.layoutRevision)
+    return updated
+  }
+
+  async function updateWorkspace(input: TerminalUpdateWorkspaceInput): Promise<TerminalWorkspace> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    // 空描述等于没有描述：清掉字段而不是留下一行空字符串。
+    const description = input.description === undefined
+      ? workspace.description
+      : input.description.trim() || undefined
+    const pinned = input.pinned ?? workspace.pinned
+    if (description === workspace.description && pinned === workspace.pinned) return workspace
+    const updated: TerminalWorkspace = {
+      id: workspace.id,
+      groupId: workspace.groupId,
+      title: workspace.title,
+      ...(description === undefined ? {} : { description }),
+      pinned,
+      layout: workspace.layout,
+      layoutRevision: workspace.layoutRevision + 1,
+      closingPaneIds: workspace.closingPaneIds,
+      closing: workspace.closing,
+      createdAt: workspace.createdAt,
+      updatedAt: now(),
+    }
+    workspaces.set(updated.id, updated)
+    bumpDomain("workspace.updated", updated.id, updated.layoutRevision)
+    await flushPersist()
     return updated
   }
 
@@ -3222,6 +3260,7 @@ export function createTerminalService(deps: {
     getWorkspace,
     getWorkspaceForSession,
     renameWorkspace,
+    updateWorkspace,
     splitPane,
     movePane,
     equalizePane,

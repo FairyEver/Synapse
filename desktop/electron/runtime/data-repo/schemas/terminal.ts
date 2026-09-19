@@ -187,7 +187,7 @@ export const terminalSessionsSchema: NamespaceSchema<TerminalSessionRecord> = {
 export const terminalWorkspacesSchema: NamespaceSchema<TerminalWorkspaceRecord> = {
   name: "app.terminal.workspaces",
   backend: "sqlite",
-  currentVersion: 1,
+  currentVersion: 2,
   migrations: noMigrations,
   validate: (value): value is TerminalWorkspaceRecord => terminalWorkspaceRecordSchema.safeParse(value).success,
 }

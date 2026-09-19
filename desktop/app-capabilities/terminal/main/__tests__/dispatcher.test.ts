@@ -7,10 +7,8 @@ import {
   type PermissionGuard,
 } from "../../../../electron/runtime/security"
 import { TERMINAL_CAPABILITY_CATALOG } from "../../shared/capability"
-import { buildTerminalSessionDeepLink } from "../../shared/deep-link"
 import { createTerminalCapabilityDispatcher } from "../dispatcher"
 import { TerminalLaunchValidationError } from "../environment"
-import { terminalSessionReference } from "../session-reference"
 import type { TerminalService } from "../service"
 
 const localMcpContext = {
@@ -412,24 +410,6 @@ describe("Terminal capability dispatcher", () => {
   describe("session open", () => {
     const sessionId = "11111111-1111-4111-8111-111111111111"
     const otherSessionId = "33333333-3333-4333-8333-333333333333"
-    const deepLink = buildTerminalSessionDeepLink({ sessionRef: terminalSessionReference(sessionId) })
-    const deepLinkContext = {
-      source: "app.deep_link" as const,
-      actor: { kind: "user" as const, id: "app-deep-link" },
-    }
-
-    it("focuses the uniquely resolved session for a deep link without transport identity", async () => {
-      const openSession = vi.fn(async () => undefined)
-      const dispatcher = createTerminalCapabilityDispatcher({
-        service: serviceStub({ listSessions: vi.fn(() => [{ id: sessionId }, { id: otherSessionId }]) }),
-        openSession,
-      })
-
-      const result = await dispatcher.dispatch("app.terminal.session.open", { deepLink }, deepLinkContext)
-
-      expect(openSession).toHaveBeenCalledWith(sessionId)
-      expect(result).toEqual({ ok: true, data: { sessionId }, affected: 1 })
-    })
 
     it("opens one visible session by immutable id for MCP callers", async () => {
       const openSession = vi.fn(async () => undefined)
@@ -453,30 +433,30 @@ describe("Terminal capability dispatcher", () => {
       const openWithoutTarget = createTerminalCapabilityDispatcher({
         service: serviceStub({ listSessions: vi.fn(() => [session]) }),
       })
-      await expect(openWithoutTarget.dispatch("app.terminal.session.open", { deepLink }, deepLinkContext))
+      await expect(openWithoutTarget.dispatch("app.terminal.session.open", { sessionId }, localMcpContext))
         .resolves.toEqual({ ok: false, code: "operation_failed", error: "无法打开终端会话" })
 
-      const openUnknownReference = createTerminalCapabilityDispatcher({
+      const openUnknownSession = createTerminalCapabilityDispatcher({
         service: serviceStub({ listSessions: vi.fn(() => [session]) }),
         openSession: vi.fn(),
       })
-      await expect(openUnknownReference.dispatch(
+      await expect(openUnknownSession.dispatch(
         "app.terminal.session.open",
-        { deepLink: buildTerminalSessionDeepLink({ sessionRef: terminalSessionReference(otherSessionId) }) },
-        deepLinkContext,
+        { sessionId: otherSessionId },
+        localMcpContext,
       )).resolves.toEqual({ ok: false, code: "not_found", error: "终端会话不存在" })
 
-      await expect(openUnknownReference.dispatch(
+      await expect(openUnknownSession.dispatch(
         "app.terminal.session.open",
-        { deepLink: "synapse://threads/abcdefghijklmnopqrstuv.abc" },
-        deepLinkContext,
-      )).resolves.toEqual({ ok: false, code: "validation_error", error: "终端会话链接无效" })
+        { sessionId: "synapse://threads/abcdefghijklmnopqrstuv.abc" },
+        localMcpContext,
+      )).resolves.toEqual({ ok: false, code: "validation_error", error: "终端会话无效" })
 
-      await expect(openUnknownReference.dispatch(
+      await expect(openUnknownSession.dispatch(
         "app.terminal.session.open",
-        { deepLink, sessionId },
-        deepLinkContext,
-      )).resolves.toEqual({ ok: false, code: "validation_error", error: "终端会话链接无效" })
+        { sessionId, extra: true },
+        localMcpContext,
+      )).resolves.toEqual({ ok: false, code: "validation_error", error: "终端会话无效" })
     })
 
     it("reports a readable failure when the window channel rejects the request", async () => {
@@ -487,7 +467,7 @@ describe("Terminal capability dispatcher", () => {
         }),
       })
 
-      await expect(dispatcher.dispatch("app.terminal.session.open", { deepLink }, deepLinkContext))
+      await expect(dispatcher.dispatch("app.terminal.session.open", { sessionId }, localMcpContext))
         .resolves.toEqual({ ok: false, code: "operation_failed", error: "无法打开终端会话" })
     })
   })

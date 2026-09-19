@@ -47,6 +47,7 @@ import type {
   TerminalUpdateGroupSettingsInput,
   TerminalUpdateGlobalLaunchSettingsInput,
   TerminalUpdateAgentNotificationSettingsInput,
+  TerminalUpdateWorkspaceInput,
   TerminalWriteSessionInput,
   TerminalWorkspace,
   TerminalLayoutNode,
@@ -89,6 +90,7 @@ export type SynapseTerminalAttachSessionInput = TerminalAttachSessionInput
 export type SynapseTerminalAttachSessionResult = TerminalAttachSessionResult
 export type SynapseTerminalRenameSessionInput = TerminalRenameSessionInput
 export type SynapseTerminalRenameWorkspaceInput = TerminalRenameWorkspaceInput
+export type SynapseTerminalUpdateWorkspaceInput = TerminalUpdateWorkspaceInput
 export type SynapseTerminalDeleteSessionInput = TerminalDeleteSessionInput
 export type SynapseTerminalReadSessionInput = TerminalReadSessionInput
 export type SynapseTerminalReadSessionResult = TerminalReadSessionResult

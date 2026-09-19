@@ -1427,6 +1427,86 @@ describe("TerminalService core", () => {
     expect(renamedSessions).toEqual(["After"])
   })
 
+  it("pins a conversation and lists it before the unpinned ones in its group", async () => {
+    const { service } = await startedHarness()
+    await service.createSession({ title: "First" })
+    await service.createSession({ title: "Second" })
+    // 排最后的那一个来置顶：两个会话可能落在同一毫秒，谁在前由 id 决定，所以不假设创建顺序。
+    const pinned = service.listWorkspaces().at(-1)!
+    const other = service.listWorkspaces().find((workspace) => workspace.id !== pinned.id)!
+    expect(pinned.pinned).toBe(false)
+
+    const updated = await service.updateWorkspace({
+      workspaceId: pinned.id,
+      expectedLayoutRevision: pinned.layoutRevision,
+      pinned: true,
+    })
+
+    expect(updated.pinned).toBe(true)
+    expect(service.listWorkspaces()[0]?.id).toBe(pinned.id)
+    expect(service.listWorkspaces().filter((workspace) => workspace.pinned).map((workspace) => workspace.id))
+      .toEqual([pinned.id])
+    expect(service.getWorkspace({ workspaceId: other.id }).pinned).toBe(false)
+    expect(service.listWorkspaces().map((workspace) => workspace.id)).toEqual([pinned.id, other.id])
+  })
+
+  it("stores a trimmed description and clears it when saved empty", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({ title: "Conversation" })
+    const workspace = service.getWorkspaceForSession({ sessionId: session.id })
+
+    const described = await service.updateWorkspace({
+      workspaceId: workspace.id,
+      expectedLayoutRevision: workspace.layoutRevision,
+      description: "  部署用的窗口  ",
+    })
+    expect(described.description).toBe("部署用的窗口")
+
+    const cleared = await service.updateWorkspace({
+      workspaceId: workspace.id,
+      expectedLayoutRevision: described.layoutRevision,
+      description: "   ",
+    })
+    expect(cleared.description).toBeUndefined()
+    expect(Object.hasOwn(cleared, "description")).toBe(false)
+  })
+
+  it("rejects a workspace metadata update written against a stale revision", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({ title: "Conversation" })
+    const workspace = service.getWorkspaceForSession({ sessionId: session.id })
+
+    await service.updateWorkspace({
+      workspaceId: workspace.id,
+      expectedLayoutRevision: workspace.layoutRevision,
+      pinned: true,
+    })
+
+    await expect(service.updateWorkspace({
+      workspaceId: workspace.id,
+      expectedLayoutRevision: workspace.layoutRevision,
+      pinned: false,
+    })).rejects.toThrow("revision_conflict")
+  })
+
+  it("announces a workspace metadata update so the sidebar repaints", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({ title: "Conversation" })
+    const workspace = service.getWorkspaceForSession({ sessionId: session.id })
+    const updated: string[] = []
+    service.events.on("domainChanged", (event: { eventType: string; objectId: string }) => {
+      if (event.eventType === "workspace.updated") updated.push(event.objectId)
+    })
+
+    await service.updateWorkspace({
+      workspaceId: workspace.id,
+      expectedLayoutRevision: workspace.layoutRevision,
+      pinned: true,
+    })
+
+    expect(updated).toEqual([workspace.id])
+  })
+
   it("keeps a split conversation's name and its terminals' names apart", async () => {
     const { service } = await startedHarness()
     const left = await service.createSession({ title: "Conversation" })

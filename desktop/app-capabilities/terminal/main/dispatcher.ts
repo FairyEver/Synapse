@@ -19,7 +19,6 @@ import {
   type TerminalCapabilityMetadata,
   type TerminalPermissionFamily,
 } from "../shared/capability"
-import { parseTerminalSessionDeepLink } from "../shared/deep-link"
 import {
   terminalAcquireControlInputSchema,
   terminalCommandInputSchema,
@@ -53,13 +52,11 @@ import {
   terminalResizeInputSchema,
   terminalSemanticInputSchema,
   terminalSessionListInputSchema,
-  terminalSessionOpenInputSchema,
   terminalSessionRenameInputSchema,
   terminalSessionStateListInputSchema,
   terminalSessionTargetSchema,
   terminalStopInputSchema,
   terminalViewInputSchema,
-  type TerminalSessionOpenInput,
 } from "../shared/contract-schema"
 import {
   TerminalContractError,
@@ -70,7 +67,6 @@ import {
 import { terminalInputSchemaForCapability } from "../shared/mcp-tools"
 import type { TerminalLaunchLayer } from "../shared/schema"
 import { TerminalLaunchValidationError } from "./environment"
-import { resolveTerminalSessionReference } from "./session-reference"
 import type { TerminalControllerContext, TerminalService } from "./service"
 
 const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, PermissionAction>> = {
@@ -172,37 +168,24 @@ export function createTerminalCapabilityDispatcher(
 }
 
 /**
- * Terminal 会话深链/打开是纯导航：不要求 clientId、不进限流、不写审计，失败时返回字符串型 DispatchResult，
- * 这样协议路由的 `dialog.showErrorBox` 能显示可读原因（终端通用错误信封的 error 是对象）。
+ * Terminal 会话打开是纯导航：不要求 clientId、不进限流、不写审计，失败时返回字符串型 DispatchResult，
+ * 这样调用方（协议路由的 `dialog.showErrorBox` 或 MCP）能显示可读原因（终端通用错误信封的 error 是对象）。
  */
 async function dispatchSessionOpen(
   deps: TerminalCapabilityDispatcherDeps,
   params: Record<string, unknown>,
 ): Promise<DispatchResult> {
-  let request: TerminalSessionOpenInput
+  let request: { readonly sessionId: string }
   try {
-    request = terminalSessionOpenInputSchema.parse(params)
+    request = terminalSessionTargetSchema.parse(params)
   } catch {
-    return { ok: false, code: "validation_error", error: "终端会话链接无效" }
+    return { ok: false, code: "validation_error", error: "终端会话无效" }
   }
   if (!deps.openSession) {
     return { ok: false, code: "operation_failed", error: "无法打开终端会话" }
   }
   const sessions = deps.service.listSessions()
-  let sessionId: string | null = null
-  if (request.deepLink !== undefined) {
-    try {
-      const target = resolveTerminalSessionReference(
-        sessions,
-        parseTerminalSessionDeepLink(request.deepLink).sessionRef,
-      )
-      sessionId = target?.id ?? null
-    } catch {
-      return { ok: false, code: "validation_error", error: "终端会话链接无效" }
-    }
-  } else if (request.sessionId !== undefined) {
-    sessionId = sessions.find((session) => session.id === request.sessionId)?.id ?? null
-  }
+  const sessionId = sessions.find((session) => session.id === request.sessionId)?.id ?? null
   if (sessionId === null) {
     return { ok: false, code: "not_found", error: "终端会话不存在" }
   }

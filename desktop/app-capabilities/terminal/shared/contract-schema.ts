@@ -1,6 +1,5 @@
 import { z } from "zod"
-import { terminalSessionDeepLinkSchema } from "./deep-link"
-import { terminalLayoutNodeSchema } from "./workspace"
+import { TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH, terminalLayoutNodeSchema } from "./workspace"
 
 export const terminalLifecycleSchema = z.enum(["running", "stopping", "ended", "failed", "lost"])
 export const terminalAttentionStateSchema = z.enum(["waiting", "not_waiting", "unknown"])
@@ -130,11 +129,13 @@ export const terminalSessionRecordSchema = z.object({
 }).strict()
 
 export const terminalWorkspaceRecordSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   id: z.string().uuid(),
   workspaceId: z.string().uuid(),
   groupId: z.string().uuid(),
   title: z.string().min(1).max(120),
+  description: z.string().trim().max(TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH).optional(),
+  pinned: z.boolean(),
   layout: terminalLayoutNodeSchema,
   layoutRevision: z.number().int().positive(),
   closingPaneIds: z.array(z.string().min(1)),
@@ -280,19 +281,6 @@ export const terminalSessionTargetSchema = z.object({
   sessionId: z.string().uuid(),
 }).strict()
 
-export const terminalSessionOpenInputSchema = z.object({
-  deepLink: terminalSessionDeepLinkSchema.optional(),
-  sessionId: z.string().uuid().optional(),
-}).strict().superRefine((value, ctx) => {
-  const provided = Number(value.deepLink !== undefined) + Number(value.sessionId !== undefined)
-  if (provided !== 1) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["deepLink"],
-      message: "provide deepLink or sessionId",
-    })
-  }
-})
 
 export const terminalGroupTargetSchema = z.object({
   groupId: z.string().uuid(),
@@ -609,7 +597,6 @@ export type TerminalIdempotencyRecord = z.infer<typeof terminalIdempotencyRecord
 export type TerminalDomainState = z.infer<typeof terminalDomainStateSchema>
 export type TerminalSemanticAction = z.infer<typeof terminalSemanticActionSchema>
 export type TerminalCreateSessionInput = z.infer<typeof terminalCreateSessionInputSchema>
-export type TerminalSessionOpenInput = z.infer<typeof terminalSessionOpenInputSchema>
 export type TerminalCreateSessionOverrideInput = z.infer<typeof terminalCreateSessionOverrideInputSchema>
 export type TerminalAcquireControlInput = z.infer<typeof terminalAcquireControlInputSchema>
 export type TerminalRenewControlInput = z.infer<typeof terminalRenewControlInputSchema>

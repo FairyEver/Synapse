@@ -67,6 +67,7 @@ import {
   terminalUpdateGlobalLaunchSettingsInputSchema,
   terminalUpdateAgentNotificationSettingsInputSchema,
   terminalUpdateGroupSettingsInputSchema,
+  terminalUpdateWorkspaceInputSchema,
   terminalWriteSessionInputSchema,
   terminalWorkspaceIdInputSchema,
   terminalWorkspaceSchema,
@@ -407,6 +408,14 @@ export const terminalIpcModule: IpcModule = {
       response: terminalWorkspaceSchema,
       handler: (ctx, request: z.infer<typeof terminalRenameWorkspaceInputSchema>) =>
         resolveTerminalService(ctx).renameWorkspace(request),
+    },
+    updateWorkspace: {
+      operationId: "app.terminal.workspace.update",
+      kind: "invoke",
+      request: terminalUpdateWorkspaceInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalUpdateWorkspaceInputSchema>) =>
+        resolveTerminalService(ctx).updateWorkspace(request),
     },
     splitPane: {
       operationId: "app.terminal.pane.split",

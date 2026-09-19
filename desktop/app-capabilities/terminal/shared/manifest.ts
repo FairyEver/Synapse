@@ -3,18 +3,14 @@ import {
   TERMINAL_APP_ID,
   TERMINAL_CAPABILITY_CATALOG,
   TERMINAL_CAPABILITY_IDS,
-  TERMINAL_SESSION_OPEN_CAPABILITY_ID,
 } from "./capability"
-import {
-  TERMINAL_SESSION_DEEP_LINK_HOSTNAME,
-  terminalSessionProtocolRouteParamsSchema,
-} from "./deep-link"
 
 /**
- * Terminal 能力包只注册一个 Deep Link 短路由：`synapse://terminals/<payload>.<checksum>`。
+ * Terminal 能力包不注册任何 Deep Link 路由。
  *
- * 该路由把完整链接交给 `app.terminal.session.open`，由主进程反查唯一 session 并复用既有 System App
- * 打开请求聚焦，不注册应用页、Dock 项、Workflow/Automation 节点或通用命令入口。
+ * 终端会话不跨重启（ADR 0215），任何带会话的链接在下一次启动时必然失效，因此没有可交付的链接形态；
+ * 会话定位留给 `app.terminal.session.open` 的不可变 `sessionId`。这里也不注册应用页、Dock 项、
+ * Workflow/Automation 节点或通用命令入口。
  */
 export const terminalCapabilityManifest = {
   id: TERMINAL_APP_ID,
@@ -23,12 +19,7 @@ export const terminalCapabilityManifest = {
   mcpTools: TERMINAL_CAPABILITY_CATALOG.map((item) => item.toolName),
   workflowNodes: [],
   deepLinks: [],
-  protocolRoutes: [{
-    hostname: TERMINAL_SESSION_DEEP_LINK_HOSTNAME,
-    action: "open",
-    capabilityId: TERMINAL_SESSION_OPEN_CAPABILITY_ID,
-    paramsSchema: terminalSessionProtocolRouteParamsSchema,
-  }],
+  protocolRoutes: [],
 } as const satisfies {
   readonly id: string
   readonly app: null

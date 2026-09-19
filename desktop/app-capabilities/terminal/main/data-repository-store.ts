@@ -776,6 +776,8 @@ function toServiceWorkspace(record: TerminalWorkspaceRecord): TerminalWorkspace 
     id: record.workspaceId,
     groupId: record.groupId,
     title: record.title,
+    ...(record.description === undefined ? {} : { description: record.description }),
+    pinned: record.pinned,
     layout: record.layout,
     layoutRevision: record.layoutRevision,
     closingPaneIds: record.closingPaneIds,
@@ -787,11 +789,13 @@ function toServiceWorkspace(record: TerminalWorkspaceRecord): TerminalWorkspace 
 
 function toWorkspaceRecord(workspace: TerminalWorkspace): TerminalWorkspaceRecord {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: workspace.id,
     workspaceId: workspace.id,
     groupId: workspace.groupId,
     title: workspace.title,
+    ...(workspace.description === undefined ? {} : { description: workspace.description }),
+    pinned: workspace.pinned,
     layout: workspace.layout,
     layoutRevision: workspace.layoutRevision,
     closingPaneIds: workspace.closingPaneIds,

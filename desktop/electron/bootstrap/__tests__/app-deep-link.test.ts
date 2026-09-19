@@ -23,14 +23,9 @@ describe("parseDeclaredAppDeepLink", () => {
     })
   })
 
-  it("resolves the canonical Terminal session route to the existing open capability", () => {
-    const deepLink = "synapse://terminals/m0D4NOW0yDeagclYK2CiUQ.xrs"
-    expect(parseDeclaredAppDeepLink(deepLink)).toEqual({
-      appId: "terminal",
-      action: "open",
-      capabilityId: "app.terminal.session.open",
-      params: { deepLink },
-    })
+  it("rejects the retired Terminal session route", () => {
+    expect(() => parseDeclaredAppDeepLink("synapse://terminals/m0D4NOW0yDeagclYK2CiUQ.xrs"))
+      .toThrow("不支持该应用操作")
   })
 
   it.each([

@@ -618,6 +618,7 @@ const synapseBridge: SynapseBridge = {
       get: (input) => invoke(IPC_CHANNELS.terminal.getWorkspace)(input),
       getForSession: (input) => invoke(IPC_CHANNELS.terminal.getWorkspaceForSession)(input),
       rename: (input) => invoke(IPC_CHANNELS.terminal.renameWorkspace)(input),
+      update: (input) => invoke(IPC_CHANNELS.terminal.updateWorkspace)(input),
       close: (input) => invoke(IPC_CHANNELS.terminal.closeWorkspace)(input),
     },
     pane: {

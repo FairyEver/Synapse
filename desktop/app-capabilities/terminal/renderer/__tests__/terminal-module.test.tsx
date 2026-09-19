@@ -287,6 +287,24 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
     return workspace
   }),
+  updateWorkspace: vi.fn(async ({
+    workspaceId,
+    pinned,
+    description,
+  }: { workspaceId: string; pinned?: boolean; description?: string }) => {
+    const current = getWorkspace(workspaceId)
+    const nextDescription = description === undefined ? current.description : description.trim() || undefined
+    const workspace = {
+      ...current,
+      ...(nextDescription === undefined ? {} : { description: nextDescription }),
+      pinned: pinned ?? current.pinned,
+      layoutRevision: current.layoutRevision + 1,
+      updatedAt: "2026-06-24T00:02:00.000Z",
+    }
+    if (nextDescription === undefined) delete workspace.description
+    bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
+    return workspace
+  }),
   closeWorkspace: vi.fn(async ({ workspaceId }: { workspaceId: string }) => {
     const workspace = getWorkspace(workspaceId)
     const sessionIds = workspace.layout.type === "leaf" ? [workspace.layout.sessionId] : []
@@ -589,6 +607,7 @@ vi.mock("@/lib/electron-bridge", () => ({
         get: terminalBridge.getWorkspace,
         getForSession: terminalBridge.getWorkspaceForSession,
         rename: terminalBridge.renameWorkspace,
+        update: terminalBridge.updateWorkspace,
         close: terminalBridge.closeWorkspace,
       },
       pane: {
@@ -859,6 +878,7 @@ beforeEach(() => {
   terminalBridge.getWorkspace.mockClear()
   terminalBridge.getWorkspaceForSession.mockClear()
   terminalBridge.renameWorkspace.mockClear()
+  terminalBridge.updateWorkspace.mockClear()
   terminalBridge.closeWorkspace.mockClear()
   terminalBridge.splitPane.mockClear()
   terminalBridge.movePane.mockClear()
@@ -1074,15 +1094,22 @@ describe("TerminalModule", () => {
     await openHeaderSessionMenu("日志终端")
 
     const menuItems = headerSessionMenuItems()
-    expect(menuItems.map((item) => item.textContent)).toEqual(["重命名", "复制深度链接", "关闭"])
-    expect(menuItems[2]?.dataset.variant).toBe("destructive")
+    expect(menuItems.map((item) => item.textContent)).toEqual([
+      "重命名",
+      "置顶",
+      "编辑描述",
+      "标记未读",
+      "复制引用",
+      "关闭",
+    ])
+    expect(menuItems[5]?.dataset.variant).toBe("destructive")
 
     const navigation = document.querySelector('[aria-label="活动终端会话"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
   })
 
-  it("copies the session deep link from its header session tab context menu", async () => {
+  it("copies the session reference from its header session tab context menu", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
     createSession({
@@ -1099,14 +1126,18 @@ describe("TerminalModule", () => {
 
     await renderEmbeddedModule()
     await openHeaderSessionMenu("日志终端")
-    await clickContextMenuItem("复制深度链接")
+    await clickContextMenuItem("复制引用")
 
-    expect(writeText).toHaveBeenCalledWith("synapse://terminals/zyxwvutsrqponmlkjihgfe%2Ezyx")
+    expect(writeText).toHaveBeenCalledWith([
+      "workspace_id=workspace-session-2",
+      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
+      "session_id=session-2",
+    ].join("\n"))
     const navigation = document.querySelector('[aria-label="活动终端会话"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
   })
 
-  it("copies the session deep link from its sidebar session row context menu", async () => {
+  it("copies the session reference from its sidebar session row context menu", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
     createSession({
@@ -1126,14 +1157,177 @@ describe("TerminalModule", () => {
 
     expect(headerSessionMenuItems().map((item) => item.textContent)).toEqual([
       "重命名",
-      "复制深度链接",
+      "置顶",
+      "编辑描述",
+      "标记未读",
+      "复制引用",
       "关闭",
     ])
 
-    await clickContextMenuItem("复制深度链接")
+    await clickContextMenuItem("复制引用")
 
-    expect(writeText).toHaveBeenCalledWith("synapse://terminals/zyxwvutsrqponmlkjihgfe%2Ezyx")
+    expect(writeText).toHaveBeenCalledWith([
+      "workspace_id=workspace-session-2",
+      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
+      "session_id=session-2",
+    ].join("\n"))
     expect(document.activeElement).not.toBe(headerSessionTab("日志终端"))
+  })
+
+  it("pins a workspace from its context menu and moves it above the unpinned ones", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
+
+    await renderEmbeddedModule()
+    expect(sidebarSessionTitles()).toEqual(["开发终端", "日志终端"])
+
+    await openSidebarSessionMenu("日志终端")
+    await clickContextMenuItem("置顶")
+
+    expect(terminalBridge.updateWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-2",
+      expectedLayoutRevision: 1,
+      pinned: true,
+    })
+    expect(sidebarSessionTitles()).toEqual(["日志终端", "开发终端"])
+    expect(sidebarSessionRow("日志终端")?.querySelector("[data-terminal-pinned]")).not.toBeNull()
+  })
+
+  it("unpins a workspace from its header tab context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    bridgeState.workspaces = bridgeState.workspaces.map((workspace) => ({ ...workspace, pinned: true }))
+
+    await renderEmbeddedModule()
+    await openHeaderSessionMenu("开发终端")
+
+    expect(headerSessionMenuItems().map((item) => item.textContent)).toContain("取消置顶")
+    await clickContextMenuItem("取消置顶")
+
+    expect(terminalBridge.updateWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      expectedLayoutRevision: 1,
+      pinned: false,
+    })
+    expect(headerSessionTab("开发终端")?.querySelector("[data-terminal-pinned]")).toBeNull()
+  })
+
+  it("saves a workspace description and shows it as the row tooltip", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+    await openSidebarSessionMenu("开发终端")
+    await clickContextMenuItem("编辑描述")
+
+    await changeTextarea("会话描述", "  部署用的窗口  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.updateWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      expectedLayoutRevision: 1,
+      description: "  部署用的窗口  ",
+    })
+    expect(sidebarSessionRow("开发终端")?.title).toBe("部署用的窗口")
+  })
+
+  it("clears a workspace description by saving it empty", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    bridgeState.workspaces = bridgeState.workspaces.map((workspace) => ({
+      ...workspace,
+      description: "旧备注",
+    }))
+
+    await renderEmbeddedModule()
+    await openSidebarSessionMenu("开发终端")
+    await clickContextMenuItem("编辑描述")
+
+    expect(document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="会话描述"]')?.value).toBe("旧备注")
+
+    await changeTextarea("会话描述", "")
+    await clickButton("保存")
+
+    expect(sidebarSessionRow("开发终端")?.title).toBe("")
+  })
+
+  it("marks a background workspace unread when its terminal produces output and clears it on select", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
+
+    await renderEmbeddedModule()
+    expect(terminalBridge.onData).toHaveBeenCalled()
+    const unreadListener = terminalBridge.onData.mock.calls[0]?.[0]
+
+    await act(async () => {
+      unreadListener?.({
+        sessionId: "session-2",
+        chunk: createChunk({ sessionId: "session-2", seq: 1, data: "按需构建完成\r\n" }),
+      })
+      await Promise.resolve()
+    })
+
+    expect(sidebarSessionRow("日志终端")?.querySelector("[data-terminal-unread]")).not.toBeNull()
+    expect(sidebarSessionRow("开发终端")?.querySelector("[data-terminal-unread]")).toBeNull()
+
+    await clickSession("日志终端")
+
+    expect(sidebarSessionRow("日志终端")?.querySelector("[data-terminal-unread]")).toBeNull()
+  })
+
+  it("keeps the unread mark and the waiting-for-input mark apart", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({
+      id: "session-2",
+      groupId: "group-1",
+      title: "Claude 会话",
+      attention: {
+        state: "waiting",
+        kind: "approval",
+        reason: "agent_waiting",
+        confidence: 1,
+        detectedAt: "2026-06-24T00:01:00.000Z",
+        throughOutputSeq: 0,
+        sizeRevision: 1,
+        detectorId: "hook",
+        detectorVersion: "1.0.0",
+      },
+    })
+
+    await renderEmbeddedModule()
+    const unreadListener = terminalBridge.onData.mock.calls[0]?.[0]
+    await act(async () => {
+      unreadListener?.({
+        sessionId: "session-2",
+        chunk: createChunk({ sessionId: "session-2", seq: 1, data: "等一个批准\r\n" }),
+      })
+      await Promise.resolve()
+    })
+
+    const row = sidebarSessionRow("Claude 会话")
+    expect(row?.querySelector("[data-terminal-unread]")).not.toBeNull()
+    expect(row?.querySelector('[title="等待输入"]')).not.toBeNull()
+    expect(row?.textContent).toContain("等待输入")
+    expect(row?.textContent).toContain("有新消息")
+  })
+
+  it("marks a workspace unread by hand and clears the mark by hand", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+    await openSidebarSessionMenu("开发终端")
+    await clickContextMenuItem("标记未读")
+
+    expect(sidebarSessionRow("开发终端")?.querySelector("[data-terminal-unread]")).not.toBeNull()
+
+    await openSidebarSessionMenu("开发终端")
+    await clickContextMenuItem("标记已读")
+
+    expect(sidebarSessionRow("开发终端")?.querySelector("[data-terminal-unread]")).toBeNull()
   })
 
   it("renames a workspace from its sidebar session row context menu", async () => {
@@ -1193,7 +1387,7 @@ describe("TerminalModule", () => {
     }
   })
 
-  it("copies the focused pane session deep link from a split workspace row", async () => {
+  it("copies the focused pane session reference from a split workspace row", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({
       id: "session-1",
@@ -1217,9 +1411,13 @@ describe("TerminalModule", () => {
     expect(document.querySelectorAll('[data-track="terminal-session-select"]')).toHaveLength(1)
 
     await openSidebarSessionMenu("开发终端")
-    await clickContextMenuItem("复制深度链接")
+    await clickContextMenuItem("复制引用")
 
-    expect(writeText).toHaveBeenCalledWith("synapse://terminals/abcdefghijklmnopqrstuv%2Eabc")
+    expect(writeText).toHaveBeenCalledWith([
+      "workspace_id=workspace-session-1",
+      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
+      "session_id=session-2",
+    ].join("\n"))
   })
 
   it("marks a session that waits for user input in the sidebar and header", async () => {
@@ -4142,6 +4340,12 @@ function sidebarSessionRow(title: string): HTMLElement | null {
     .find((element) => element.textContent?.includes(title)) ?? null
 }
 
+/** 侧边栏终端行的标题，按它们实际渲染的顺序。 */
+function sidebarSessionTitles(): string[] {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[role="button"][data-track="terminal-session-select"]'))
+    .map((element) => element.querySelector("span.block")?.textContent ?? "")
+}
+
 function paneTitle(title: string): HTMLElement | null {
   return Array.from(document.body.querySelectorAll<HTMLElement>('[data-track="terminal-pane-title"]'))
     .find((element) => element.textContent === title) ?? null
@@ -4435,6 +4639,7 @@ function createWorkspace(session: SynapseTerminalSession): SynapseTerminalWorksp
     id: `workspace-${session.id}`,
     groupId: session.groupId,
     title: session.title,
+    pinned: false,
     layout: { type: "leaf", paneId: `pane-${session.id}`, sessionId: session.id },
     layoutRevision: 1,
     closingPaneIds: [],
