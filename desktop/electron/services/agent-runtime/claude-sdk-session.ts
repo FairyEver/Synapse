@@ -1269,6 +1269,19 @@ function withConfiguredWorkspaceRoot(
   }
   if (typeof systemPrompt === "string") return `${systemPrompt}\n\n${workspaceBoundary}`
   if (Array.isArray(systemPrompt)) return [...systemPrompt, workspaceBoundary]
+  /*
+   * 对象形态有两种，追加的位置不一样：`preset` 用 `append` 接在默认提示词后面，
+   * `custom` 没有 `append`——它整段提示词就是 `prompt`，边界要并进那里面。写成
+   * 「不管哪种都加 append」会同时被类型和运行时否掉。
+   */
+  if (systemPrompt.type === "custom") {
+    return {
+      ...systemPrompt,
+      prompt: Array.isArray(systemPrompt.prompt)
+        ? [...systemPrompt.prompt, workspaceBoundary]
+        : `${systemPrompt.prompt}\n\n${workspaceBoundary}`,
+    }
+  }
   return {
     ...systemPrompt,
     append: [systemPrompt.append, workspaceBoundary].filter(Boolean).join("\n\n"),

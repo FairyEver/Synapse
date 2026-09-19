@@ -656,6 +656,31 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("appends the workspace root into a custom text prompt", () => {
+    // `custom` 没有 `append` 字段：边界要并进 `prompt` 本身。写在对象上会被类型挡下，
+    // 这条断言挡的是「类型过了但位置写错」。
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { systemPrompt: { type: "custom", prompt: "You are a release bot." } })
+
+    expect(getOptions().systemPrompt).toEqual({
+      type: "custom",
+      prompt: 'You are a release bot.\n\nSynapse configured the exact workspace root for this session as "/tmp/project". '
+        + "Treat that exact directory as the project root. Resolve relative file paths and project commands from it. "
+        + "Do not substitute an ancestor repository root.",
+    })
+  })
+
+  it("appends the workspace root as the last block of a custom block prompt", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { systemPrompt: { type: "custom", prompt: ["You are a release bot.", "Be terse."] } })
+
+    const resolved = getOptions().systemPrompt as { type: string; prompt: string[] }
+    expect(resolved.type).toBe("custom")
+    expect(resolved.prompt.slice(0, 2)).toEqual(["You are a release bot.", "Be terse."])
+    expect(resolved.prompt).toHaveLength(3)
+    expect(resolved.prompt.at(-1)).toContain("Do not substitute an ancestor repository root.")
+  })
+
   it.each([
     ["Write", "file_path"],
     ["Edit", "file_path"],
