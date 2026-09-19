@@ -485,6 +485,14 @@ export const terminalResizedEventSchema = z.object({
 export type TerminalProjectGroupSource = {
   readonly projectId: string
   readonly name: string
+  /**
+   * The folder the project works in, which its group starts terminals in.
+   *
+   * The caller resolves it and leaves it out when it is not a directory that exists:
+   * a group whose working directory cannot be opened is worse than one that inherits
+   * whatever the user set globally.
+   */
+  readonly path?: string
 }
 
 /**

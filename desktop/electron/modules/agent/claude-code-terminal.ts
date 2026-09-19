@@ -140,7 +140,7 @@ export async function createClaudeCodeTerminalSession(
       // The project is where this conversation belongs as much as where it runs, so the
       // terminal puts it in that project's group rather than wherever the list happens
       // to start.
-      project: { projectId: project.uuid, name: project.name },
+      project: { projectId: project.uuid, name: project.name, path: project.localPath },
       cwd: project.localPath,
       shell: executablePath,
       args: [

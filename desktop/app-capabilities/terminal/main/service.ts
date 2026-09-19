@@ -723,16 +723,34 @@ export function createTerminalService(deps: {
    * Both ends of the same fact call this — the reconciliation that follows the project
    * list, and a launch that names a project — so a project group is never created twice
    * and never named by two different rules. In memory only; the caller flushes.
+   *
+   * The project's folder comes with it: a group that belongs to a project opens its
+   * terminals in that project unless the user has said otherwise. Only an empty slot is
+   * filled — a working directory somebody chose is theirs, and renaming a project is
+   * not a reason to move it.
    */
   function upsertProjectGroup(source: TerminalProjectGroupSource): TerminalGroup {
     const name = `${TERMINAL_PROJECT_GROUP_NAME_PREFIX}${source.name}`.slice(0, TERMINAL_GROUP_NAME_MAX_LENGTH)
     const existing = findProjectGroup(source.projectId)
+    const projectCwd = source.path ? path.resolve(source.path) : undefined
+    const settings = existing?.settings?.defaultCwd === undefined && projectCwd
+      ? { ...existing?.settings, defaultCwd: projectCwd }
+      : existing?.settings
     if (existing) {
-      if (existing.name === name) return existing
-      const renamed = { ...existing, name, updatedAt: now(), groupRevision: existing.groupRevision + 1 }
-      groups.set(renamed.id, renamed)
-      bumpDomain("group.renamed", renamed.id, renamed.groupRevision)
-      return renamed
+      const renamed = existing.name !== name
+      const adopted = settings !== existing.settings
+      if (!renamed && !adopted) return existing
+      const updated = {
+        ...existing,
+        name,
+        ...(settings ? { settings } : {}),
+        updatedAt: now(),
+        groupRevision: existing.groupRevision + 1,
+        launchRevision: existing.launchRevision + (adopted ? 1 : 0),
+      }
+      groups.set(updated.id, updated)
+      bumpDomain(renamed ? "group.renamed" : "group.updated", updated.id, updated.groupRevision)
+      return updated
     }
     const timestamp = now()
     const group: TerminalGroup = {
@@ -742,6 +760,7 @@ export function createTerminalService(deps: {
       createdAt: timestamp,
       updatedAt: timestamp,
       sortOrder: nextGroupSortOrder(),
+      ...(projectCwd ? { settings: { defaultCwd: projectCwd } } : {}),
       groupRevision: 1,
       launchRevision: 1,
       membershipRevision: 1,

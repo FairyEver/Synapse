@@ -619,6 +619,9 @@ function summarizeGroup(group: ReturnType<TerminalService["getGroup"]>) {
   return {
     id: group.id,
     name: group.name,
+    // The renderer reads this to tell a project's group from one the user made — its
+    // name and its fate are the project's, so the row offers neither rename nor delete.
+    ...(group.projectId ? { projectId: group.projectId } : {}),
     createdAt: group.createdAt,
     updatedAt: group.updatedAt,
     sortOrder: group.sortOrder,
@@ -639,6 +642,7 @@ function launchDetailsGroup(group: ReturnType<TerminalService["getGroup"]>) {
   return {
     id: group.id,
     name: group.name,
+    ...(group.projectId ? { projectId: group.projectId } : {}),
     createdAt: group.createdAt,
     updatedAt: group.updatedAt,
     sortOrder: group.sortOrder,

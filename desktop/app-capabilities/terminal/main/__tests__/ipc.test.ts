@@ -481,6 +481,38 @@ describe("terminalIpcModule", () => {
     expect(electronClipboardMock.writeText).toHaveBeenCalledWith("group-secret")
   })
 
+  /**
+   * The renderer decides whether a group row offers rename and delete from this field
+   * alone, so a summary that drops it hands the user a menu the service then refuses —
+   * the group looks editable and the save comes back as an error.
+   */
+  it("tells the renderer which groups belong to a project", async () => {
+    const group = {
+      id: "group-1",
+      name: "项目:Synapse",
+      projectId: "project-synapse",
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+      sortOrder: 0,
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+    }
+    const service = {
+      ...createService(),
+      listGroups: vi.fn(() => [group]),
+      getGroup: vi.fn(() => group),
+    } as Partial<TerminalService>
+    const ctx = createContext(service)
+
+    const listed = await terminalIpcModule.methods.listGroups.handler(ctx, undefined)
+    const details = await terminalIpcModule.methods.getGroup.handler(ctx, { groupId: "group-1" })
+
+    expect(listed[0]?.projectId).toBe("project-synapse")
+    expect(details.projectId).toBe("project-synapse")
+  })
+
   it("validates event payloads", () => {
     expect(terminalIpcModule.events.data.payload.safeParse({
       sessionId: "session-1",
