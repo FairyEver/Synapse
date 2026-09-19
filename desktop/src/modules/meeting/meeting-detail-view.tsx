@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SynapseMeetingDetail } from "@/types/meeting"
+import { MeetingNotice } from "./meeting-notice"
 import { MeetingPlayback } from "./meeting-playback"
 import { formatStartedAt } from "./started-at"
 import { joinTranscriptParagraphs } from "./transcript-paragraphs"
@@ -48,7 +49,7 @@ export function MeetingDetailView(props: MeetingDetailViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-start gap-2.5 px-4 pt-4">
+      <div className="flex items-start gap-2.5 px-5 pt-5">
         <div className="min-w-0 flex-1">
           <MeetingTitle
             title={meeting.title}
@@ -76,7 +77,7 @@ export function MeetingDetailView(props: MeetingDetailViewProps) {
         </DropdownMenu>
       </div>
 
-      <div className="px-4 pt-3.5">
+      <div className="px-5 pt-4">
         <Tabs value={props.mode} onValueChange={(next) => props.onModeChange(next as MeetingDetailMode)}>
           <TabsList>
             <TabsTrigger value="voice">语音</TabsTrigger>
@@ -86,7 +87,7 @@ export function MeetingDetailView(props: MeetingDetailViewProps) {
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-4 pt-3.5 pb-7">
+        <div className="px-5 pt-4 pb-8">
           {/* 两个视图都挂着，只藏起不看的那一个：切到「文字」时播放要继续，切回「语音」
               时播放头还得在原来的位置上。卸载播放器会把音频连位置一起丢掉。 */}
           <div className={props.mode === "voice" ? undefined : "hidden"}>
@@ -186,12 +187,7 @@ function VoiceView(props: {
   readonly visible: boolean
 }) {
   if (props.recordingDeleted) {
-    return (
-      <div className="rounded-lg border px-3 py-8 text-center">
-        <p className="text-sm font-medium">录音已删除</p>
-        <p className="mt-1 text-xs text-muted-foreground">文字仍保留，切到「文字」查看。</p>
-      </div>
-    )
+    return <MeetingNotice title="录音已删除" description="文字仍保留，切到「文字」查看。" />
   }
   return (
     <MeetingPlayback
@@ -208,13 +204,16 @@ function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRe
 
   if (meeting.status === "failed") {
     return (
-      <div className="rounded-lg border border-destructive/40 px-3 py-8 text-center">
-        <p className="text-sm font-medium">转写失败</p>
-        <p className="mt-1 text-xs text-destructive">{meeting.failureReason ?? "未知原因。"}</p>
-        <Button variant="outline" size="sm" className="mt-3" onClick={() => void props.onRetry()}>
-          重试
-        </Button>
-      </div>
+      <MeetingNotice
+        tone="destructive"
+        title="转写失败"
+        description={meeting.failureReason ?? "未知原因。"}
+        action={(
+          <Button variant="outline" size="sm" onClick={() => void props.onRetry()}>
+            重试
+          </Button>
+        )}
+      />
     )
   }
 
@@ -231,14 +230,11 @@ function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRe
       ) : null}
 
       {paragraphs.length === 0 ? (
-        <div className="rounded-lg border px-3 py-8 text-center">
-          <p className="text-sm font-medium">还没有文字</p>
-          <p className="mt-1 text-xs text-muted-foreground">这段录音里没有识别到语音。</p>
-        </div>
+        <MeetingNotice title="还没有文字" description="这段录音里没有识别到语音。" />
       ) : (
-        <div className="max-w-[700px] space-y-2.5">
+        <div className="max-w-[700px] space-y-3">
           {paragraphs.map((paragraph, index) => (
-            <p key={index} className="text-sm leading-relaxed">
+            <p key={index} className="text-sm leading-relaxed text-pretty">
               {paragraph}
             </p>
           ))}

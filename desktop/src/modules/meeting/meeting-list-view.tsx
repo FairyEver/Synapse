@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -54,10 +54,15 @@ export function MeetingListView(props: MeetingListViewProps) {
 
   if (props.error) {
     return (
-      <div className="p-6">
-        <p className="text-sm font-medium">读不到录音</p>
-        <p className="mt-1 text-xs text-muted-foreground">{props.error}</p>
-      </div>
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Mic />
+          </EmptyMedia>
+          <EmptyTitle>读不到录音</EmptyTitle>
+          <EmptyDescription>{props.error}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -122,6 +127,7 @@ function MeetingRow(props: MeetingRowProps) {
       }}
       className={cn(
         "group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 outline-none",
+        "transition-[background-color] duration-150 ease-out",
         "focus-visible:ring-2 focus-visible:ring-ring",
         props.selected ? "bg-selected" : "hover:bg-muted",
       )}
@@ -167,7 +173,14 @@ function MeetingRowMenu(props: {
           size="icon"
           aria-label="更多操作"
           onClick={(event) => event.stopPropagation()}
-          className="pointer-events-none size-6 shrink-0 text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-aria-selected:pointer-events-auto group-aria-selected:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100"
+          className={cn(
+            "relative size-6 shrink-0 text-muted-foreground opacity-0",
+            "transition-[opacity] duration-150 ease-out",
+            // 视觉尺寸保持 24px，命中区用伪元素撑到 36px。隐藏时按钮是
+            // pointer-events-none，伪元素跟着一起失效，不会挡到整行的点击。
+            "after:absolute after:top-1/2 after:left-1/2 after:size-9 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
+            "pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-aria-selected:pointer-events-auto group-aria-selected:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100",
+          )}
         >
           <MoreHorizontal />
         </Button>

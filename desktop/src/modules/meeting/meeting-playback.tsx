@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { cn } from "@/lib/utils"
 import { drawPlaybackWaveform, playbackPositionFromClick } from "./waveform"
 
 /**
@@ -103,22 +104,25 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
 
   return (
     <div className="space-y-2.5">
-      <div className="relative overflow-hidden rounded-lg border bg-card">
-        <canvas
-          ref={canvasRef}
-          onClick={seekFromClick}
-          data-track="meeting.playback.seek"
-          data-track-native="true"
-          className="h-32 w-full cursor-pointer"
-          aria-label="录音波形，可点击定位"
-        />
-        {peaksRef.current.length > 0 ? (
-          <span
-            className="pointer-events-none absolute inset-y-0 w-px bg-foreground"
-            style={{ left: `${progress * 100}%` }}
-            aria-hidden
+      <div className="overflow-hidden rounded-lg border bg-card px-2.5">
+        {/* 播放头按这个容器算比例，所以它必须紧包着画布，不能把外框的内边距算进去。 */}
+        <div className="relative">
+          <canvas
+            ref={canvasRef}
+            onClick={seekFromClick}
+            data-track="meeting.playback.seek"
+            data-track-native="true"
+            className="h-32 w-full cursor-pointer"
+            aria-label="录音波形，可点击定位"
           />
-        ) : null}
+          {peaksRef.current.length > 0 ? (
+            <span
+              className="pointer-events-none absolute inset-y-0 w-px bg-foreground"
+              style={{ left: `${progress * 100}%` }}
+              aria-hidden
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -129,11 +133,12 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
           disabled={!url}
           aria-label="后退 15 秒"
           title="后退 15 秒"
+          className="pl-2 pr-2.5"
         >
           <RotateCcw />15
         </Button>
         <Button variant="ghost" size="icon" onClick={toggle} disabled={!url} aria-label={playing ? "暂停" : "播放"}>
-          {playing ? <Pause /> : <Play />}
+          <PlayToggleIcon playing={playing} />
         </Button>
         <Button
           variant="ghost"
@@ -142,11 +147,13 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
           disabled={!url}
           aria-label="前进 15 秒"
           title="前进 15 秒"
+          className="pl-2.5 pr-2"
         >
           15<RotateCw />
         </Button>
-        <span className="ml-1 text-xs tabular-nums text-muted-foreground">
-          {formatMeetingClock(positionMs)} / {formatMeetingClock(durationMs)}
+        <span className="ml-1 text-xs tabular-nums">
+          <span className="text-foreground">{formatMeetingClock(positionMs)}</span>
+          <span className="text-muted-foreground"> / {formatMeetingClock(durationMs)}</span>
         </span>
       </div>
 
@@ -163,5 +170,28 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
         />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * 播放 / 暂停。
+ *
+ * 两个图标都留在 DOM 里交叉淡入，而不是换一个渲染一个——直接切换会硬跳一下。项目没有
+ * motion 依赖，这就是那套数值的 CSS 版本。
+ *
+ * 播放三角是几何居中的，视觉上偏左，所以它整体右移 2px。
+ */
+function PlayToggleIcon(props: { readonly playing: boolean }) {
+  const fade = "absolute inset-0 transition-[opacity,filter,scale] duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
+  // 用 `blur-[0px]` 而不是 `blur-0`：v4 的 blur 只有 xs–3xl 和 none，`blur-0` 不是有效
+  // 类，会被静默丢掉，淡入时就没有一个明确的结束值可插值。
+  const shown = "scale-100 opacity-100 blur-[0px]"
+  const hidden = "scale-[0.25] opacity-0 blur-[4px]"
+
+  return (
+    <span className="relative block size-4">
+      <Play className={cn(fade, "translate-x-0.5", props.playing ? hidden : shown)} />
+      <Pause className={cn(fade, props.playing ? shown : hidden)} />
+    </span>
   )
 }

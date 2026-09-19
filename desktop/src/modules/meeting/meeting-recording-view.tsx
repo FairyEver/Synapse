@@ -159,19 +159,23 @@ export function MeetingRecordingView(props: MeetingRecordingViewProps) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 py-10">
+    <div className="flex flex-col items-center gap-6 py-14">
       <div className="flex flex-col items-center gap-1">
         <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-3xl tabular-nums">{formatMeetingClock(elapsedMs)}</p>
+        <p className="text-4xl font-medium tabular-nums">{formatMeetingClock(elapsedMs)}</p>
       </div>
 
-      <div className="w-full max-w-xl">
+      {/* 波形有自己的承载面，左侧还没长到的空位才读得出是「在长」而不是没画出来。 */}
+      <div className="w-full max-w-xl rounded-lg border bg-card px-3">
         <canvas ref={canvasRef} className="h-16 w-full" aria-label="录音波形" />
       </div>
 
-      <p className="h-5 text-xs text-muted-foreground">{hint}</p>
-      <p className="text-xs text-muted-foreground">录音会保存，用于转写</p>
-      {failure ? <p className="text-xs text-destructive">{failure}</p> : null}
+      <div className="flex flex-col items-center gap-1.5">
+        {/* 高度固定：录音中途冒出「没有听到声音」时，下面的按钮不该跟着跳一下。 */}
+        <p className="h-5 text-xs font-medium text-foreground">{hint}</p>
+        <p className="text-xs text-muted-foreground">录音会保存，用于转写</p>
+        {failure ? <p className="text-xs text-destructive">{failure}</p> : null}
+      </div>
 
       <div className="flex items-center gap-3">
         <Button variant="outline" onClick={() => void cancel()} disabled={busy}>

@@ -215,6 +215,9 @@
 
   html {
     @apply font-sans;
+    /* macOS 默认把字渲染得更重。非 macOS 平台会忽略这两条。 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   #root {

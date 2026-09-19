@@ -4,9 +4,11 @@ import { MEETING_LIVE_WINDOW_MS, MEETING_PEAK_MS } from "@synapse/shared"
 
 import {
   computeLiveWaveLayout,
+  computePlaybackWaveLayout,
   playbackPositionFromClick,
   resamplePlaybackPeaks,
   WAVE_BAR_GAP,
+  WAVE_BAR_MAX_WIDTH,
   WAVE_BAR_WIDTH,
 } from "../waveform"
 
@@ -79,6 +81,57 @@ describe("回放的波形", () => {
 
   it("空数据返回空", () => {
     expect(resamplePlaybackPeaks([], 100)).toEqual([])
+  })
+})
+
+describe("回放波形的布局要铺满整条画布", () => {
+  const WIDTH = 900
+  /**
+   * 柱子是不是按时间比例铺满整宽：第 i 根落在第 i 个等分槽的中心。
+   *
+   * 这正是「视觉和命中区一致」的判据——命中测试按 `offsetX / 宽度` 换算时间，所以柱子
+   * 的横坐标必须等于同一个比例。1px 容差留给长录音那档的取整。
+   */
+  function spansWidth(bars: readonly { x: number }[], width: number): boolean {
+    return bars.every((bar, index) => Math.abs(bar.x - ((index + 0.5) / bars.length) * width) <= 1)
+  }
+
+  it("采样数少于列数时把槽位拉宽铺满，而不是挤在左边", () => {
+    const layout = computePlaybackWaveLayout(new Array(100).fill(0.4), WIDTH)
+    expect(layout.bars).toHaveLength(100)
+    expect(spansWidth(layout.bars, WIDTH)).toBe(true)
+    // 挤在左边的旧实现里最后一根落在 258 附近，这里直接卡死它不能再回来。
+    expect(layout.bars.at(-1)!.x).toBeGreaterThan(WIDTH * 0.9)
+  })
+
+  it("采样数不够时柱子一根都不合并，槽位只是被拉宽", () => {
+    const layout = computePlaybackWaveLayout(new Array(100).fill(0.4), WIDTH)
+    expect(layout.bars.map((bar) => bar.amplitude)).toEqual(new Array(100).fill(0.4))
+  })
+
+  it("采样数多于列数时仍是固定密度，长录音的观感与改动前一致", () => {
+    const layout = computePlaybackWaveLayout(new Array(10_000).fill(0.3), WIDTH)
+    expect(layout.bars).toHaveLength(Math.floor(WIDTH / COLUMN))
+    expect(layout.bars[1].x - layout.bars[0].x).toBeCloseTo(COLUMN, 6)
+    expect(layout.barWidth).toBeCloseTo(WAVE_BAR_WIDTH, 1)
+    expect(spansWidth(layout.bars, WIDTH)).toBe(true)
+  })
+
+  it("极短的录音柱子会长胖，但有个上限，不会变成一排稀疏的梳齿", () => {
+    const layout = computePlaybackWaveLayout(new Array(5).fill(0.5), WIDTH)
+    expect(layout.bars).toHaveLength(5)
+    expect(layout.barWidth).toBe(WAVE_BAR_MAX_WIDTH)
+    expect(spansWidth(layout.bars, WIDTH)).toBe(true)
+  })
+
+  it("播放进度按柱子数换算，供已播 / 未播分色", () => {
+    const layout = computePlaybackWaveLayout(new Array(100).fill(0.4), WIDTH, { progress: 0.25 })
+    expect(layout.splitIndex).toBeCloseTo(25, 6)
+  })
+
+  it("没有采样或画布宽度为 0 时不画任何柱子", () => {
+    expect(computePlaybackWaveLayout([], WIDTH).bars).toEqual([])
+    expect(computePlaybackWaveLayout([0.5], 0).bars).toEqual([])
   })
 })
 

@@ -21,6 +21,11 @@ export const WAVE_BAR_WIDTH = 1.5
 export const WAVE_BAR_GAP = 1.1
 /** 柱子的最大半高相对画布中线的比例，留出上下边距。 */
 export const WAVE_AMPLITUDE_SCALE = 0.9
+/** 回放波形柱宽的上限。采样远少于列数时槽位会被拉得很宽，超过这个值柱子就不再长胖。 */
+export const WAVE_BAR_MAX_WIDTH = 6
+
+/** 柱宽占槽位的比例。取 0.58 是为了让 `WAVE_BAR_WIDTH / (WAVE_BAR_WIDTH + WAVE_BAR_GAP)` 这一档不变。 */
+const PLAYBACK_BAR_RATIO = 0.58
 
 export type WaveBar = {
   /** 柱子中心的横坐标。 */
@@ -109,6 +114,56 @@ export function resamplePlaybackPeaks(peaks: ArrayLike<number>, columns: number)
   return result
 }
 
+export type PlaybackWaveLayout = {
+  /** 当前可见的柱子，从左往右铺满整条画布。 */
+  readonly bars: readonly WaveBar[]
+  /** 已播到第几根柱子，可能是小数；绘制时用它分出「已播 / 未播」两色。 */
+  readonly splitIndex: number
+  /** 这一条实际用的柱宽，随槽位变化。 */
+  readonly barWidth: number
+}
+
+/**
+ * 回放波形的布局。
+ *
+ * 与录音中那条不同，这条**一定要铺满整条画布**：命中测试 `playbackPositionFromClick`
+ * 是按 `offsetX / canvasWidth` 的比例换算时间的，柱子若只占左边一段，右边那片空白点下
+ * 去照样会跳时间——视觉和命中区就对不上了。
+ *
+ * 所以槽位不固定：采样数够多时用固定密度（与录音中那条一样的 1.5 / 2.6，长录音的观感
+ * 与改动前完全一致），采样数不够时把槽位拉宽到 `宽度 / 柱子数` 铺满。
+ */
+export function computePlaybackWaveLayout(
+  peaks: ArrayLike<number>,
+  canvasWidth: number,
+  options: {
+    readonly barWidth?: number
+    readonly gap?: number
+    readonly progress?: number
+  } = {},
+): PlaybackWaveLayout {
+  const fallback = WAVE_BAR_WIDTH
+  const width = Math.max(0, canvasWidth)
+  if (width <= 0) return { bars: [], splitIndex: 0, barWidth: fallback }
+
+  const column = columnWidth(options.barWidth ?? WAVE_BAR_WIDTH, options.gap ?? WAVE_BAR_GAP)
+  const columns = Math.max(1, Math.floor(width / column))
+  const resampled = resamplePlaybackPeaks(peaks, columns)
+  const count = resampled.length
+  if (count === 0) return { bars: [], splitIndex: 0, barWidth: fallback }
+
+  const slot = count >= columns ? column : width / count
+  const barWidth = Math.min(Math.max(slot * PLAYBACK_BAR_RATIO, fallback), WAVE_BAR_MAX_WIDTH)
+
+  const bars: WaveBar[] = []
+  for (let index = 0; index < count; index += 1) {
+    bars.push({ x: index * slot + slot / 2, amplitude: resampled[index] ?? 0 })
+  }
+
+  const progress = Math.max(0, Math.min(1, options.progress ?? 1))
+  return { bars, splitIndex: progress * count, barWidth }
+}
+
 /** 从当前主题取前景色。深浅色切换时重画一次就能跟着变，不引入自定义颜色。 */
 export function resolveWaveColor(element: HTMLElement): string {
   const value = getComputedStyle(element).getPropertyValue("--foreground").trim()
@@ -137,12 +192,12 @@ function prepareCanvas(canvas: CanvasLike): { readonly context: CanvasRenderingC
   return { context, width, height }
 }
 
+/** 柱宽由调用方的 `context.lineWidth` 决定，这里只负责画这一根。 */
 function strokeBar(
   context: CanvasRenderingContext2D,
   x: number,
   amplitude: number,
   mid: number,
-  barWidth: number,
 ): void {
   const half = Math.max(1, amplitude * mid * WAVE_AMPLITUDE_SCALE)
   context.beginPath()
@@ -164,7 +219,7 @@ export function drawLiveWaveform(canvas: CanvasLike, peaks: ArrayLike<number>): 
   context.strokeStyle = resolveWaveColor(canvas)
   context.lineCap = "round"
   context.lineWidth = WAVE_BAR_WIDTH
-  for (const bar of layout.bars) strokeBar(context, bar.x, bar.amplitude, height / 2, WAVE_BAR_WIDTH)
+  for (const bar of layout.bars) strokeBar(context, bar.x, bar.amplitude, height / 2)
 }
 
 /**
@@ -186,22 +241,22 @@ export function drawPlaybackWaveform(
   const prepared = prepareCanvas(canvas)
   if (!prepared) return
   const { context, width, height } = prepared
-  const barWidth = options.barWidth ?? WAVE_BAR_WIDTH
-  const gap = options.gap ?? WAVE_BAR_GAP
-  const column = columnWidth(barWidth, gap)
-  const columns = Math.max(1, Math.floor(width / column))
-  const resampled = resamplePlaybackPeaks(peaks, columns)
-  if (resampled.length === 0) return
+  const layout = computePlaybackWaveLayout(peaks, width, {
+    barWidth: options.barWidth,
+    gap: options.gap,
+    progress: options.progress,
+  })
+  if (layout.bars.length === 0) return
   const played = resolveWaveColor(canvas)
   const remaining = resolveWaveMutedColor(canvas)
-  const split = Math.max(0, Math.min(1, options.progress ?? 1)) * resampled.length
   context.globalAlpha = options.dimmed ? 0.4 : 1
   context.lineCap = "round"
-  context.lineWidth = barWidth
+  context.lineWidth = layout.barWidth
   const mid = height / 2
-  for (let index = 0; index < resampled.length; index += 1) {
-    context.strokeStyle = index < split ? played : remaining
-    strokeBar(context, index * column + column / 2, resampled[index], mid, barWidth)
+  for (let index = 0; index < layout.bars.length; index += 1) {
+    const bar = layout.bars[index]
+    context.strokeStyle = index < layout.splitIndex ? played : remaining
+    strokeBar(context, bar.x, bar.amplitude, mid)
   }
   context.globalAlpha = 1
 }
