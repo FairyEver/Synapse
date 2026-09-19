@@ -45,6 +45,11 @@ export class TeamController {
     return result
   }
 
+  @Get("/:id")
+  getTeam(@Param("id") id: string) {
+    return this.teams.getTeam(id)
+  }
+
   @Post()
   async createTeam(@Body() body: unknown, @Req() request?: AdminRequest) {
     const input = parseBody(teamNameSchema, body, "团队名称无效。")

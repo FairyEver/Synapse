@@ -114,6 +114,13 @@ export class TeamService {
     }
   }
 
+  /** 详情页要在冷启动（直接打开深链）时拿到团队本身，列表是分页的，不能靠它反查。 */
+  async getTeam(id: string): Promise<TeamRow> {
+    const team = await this.prisma.team.findUnique({ where: { id }, select: teamSelect })
+    if (!team) throw new NotFoundException("团队不存在。")
+    return toTeamRow(team as TeamRecord)
+  }
+
   async createTeam(
     input: { readonly name: string },
     actorEmail = "system",

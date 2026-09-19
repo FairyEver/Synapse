@@ -62,6 +62,14 @@ describe("TeamController", () => {
     expect(listTeams).not.toHaveBeenCalled()
   })
 
+  it("returns a single team for the detail page", async () => {
+    const getTeam = vi.fn().mockResolvedValue({ id: "team-1", name: "产品组", memberCount: 3 })
+    const controller = createController({ getTeam }, {})
+
+    await expect(controller.getTeam("team-1")).resolves.toMatchObject({ memberCount: 3 })
+    expect(getTeam).toHaveBeenCalledWith("team-1")
+  })
+
   it("creates a team with the admin actor", async () => {
     const createTeam = vi.fn().mockResolvedValue({ id: "team-1", name: "产品组" })
     const auditLog = createAuditLog()

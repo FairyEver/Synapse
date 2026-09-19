@@ -111,6 +111,22 @@ describe("TeamService", () => {
     })
   })
 
+  describe("getTeam", () => {
+    it("returns the team row including the member count", async () => {
+      prisma.team.findUnique.mockResolvedValue(createTeamRecord({ memberCount: 2 }))
+      const { service } = createService(prisma)
+
+      await expect(service.getTeam("team-1")).resolves.toMatchObject({ id: "team-1", memberCount: 2 })
+    })
+
+    it("rejects an unknown team", async () => {
+      prisma.team.findUnique.mockResolvedValue(null)
+      const { service } = createService(prisma)
+
+      await expect(service.getTeam("team-404")).rejects.toThrow("团队不存在。")
+    })
+  })
+
   describe("createTeam", () => {
     it("creates a team and records an audit entry", async () => {
       prisma.team.create.mockResolvedValue(createTeamRecord({ name: "产品组" }))
