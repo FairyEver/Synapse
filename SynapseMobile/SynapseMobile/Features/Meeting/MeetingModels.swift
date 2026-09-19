@@ -149,8 +149,7 @@ enum MeetingText {
 
     /// 服务端给的是 ISO8601，这里翻成「今天 14:00」这种一眼能读的形式。
     static func relativeTime(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter.withFractionalSeconds.date(from: iso)
-            ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+        guard let date = ISO8601DateFormatter.parseWireTimestamp(iso) else { return "" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         let calendar = Calendar.current
@@ -163,12 +162,4 @@ enum MeetingText {
         }
         return formatter.string(from: date)
     }
-}
-
-private extension ISO8601DateFormatter {
-    static let withFractionalSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }

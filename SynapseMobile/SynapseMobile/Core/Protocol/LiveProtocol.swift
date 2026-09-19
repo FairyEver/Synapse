@@ -166,7 +166,12 @@ struct MobileSummarySession: Decodable, Identifiable, Hashable {
     let gridOwnerId: String?
 
     var isRunning: Bool { status == "running" }
-    var startedAtDate: Date? { ISO8601DateFormatter().date(from: startedAt) }
+    /// 这个终端是什么时候开的，用来算「运行了多久」。
+    ///
+    /// 读法必须是 `parseWireTimestamp`：桌面端那一头是 `new Date().toISOString()`，
+    /// 带毫秒，而默认的 `ISO8601DateFormatter` 读不了它 —— 这里以前就是这么写的，
+    /// 于是会话行右侧那一格永远是空的（见 `WireTimestamp.swift`）。
+    var startedAtDate: Date? { ISO8601DateFormatter.parseWireTimestamp(startedAt) }
 }
 
 /// The four model tiers a Provider can name, in the order the desktop shows them.
