@@ -1,7 +1,8 @@
 import { formatMeetingDuration } from "@synapse/shared"
-import { MoreHorizontal } from "lucide-react"
+import { Copy, MoreHorizontal } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
+import { useAppNotifications } from "@/app-shell/notifications"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,9 +24,9 @@ import { joinTranscriptParagraphs } from "./transcript-paragraphs"
 /**
  * 右栏详情。
  *
- * 头一行是标题、时间和时长，右边一个「⋯」。下面是「语音」和「文字」两个**平级**视图：
- * 语音是一个播放器，文字就是腾讯云转出来的那一段。没有纪要、没有发言人、没有时间戳、
- * 没有搜索——腾讯云返回什么就显示什么。
+ * 头一行是标题、时间和时长，右边一个「复制全文」和一个「⋯」。下面是「语音」和「文字」
+ * 两个**平级**视图：语音是一个播放器，文字就是腾讯云转出来的那一段，各自装在自己的卡片
+ * 里。没有纪要、没有发言人、没有时间戳、没有搜索——腾讯云返回什么就显示什么。
  */
 
 /** 右栏的两个视图。切换是粘性的，切到另一条录音也还是原来那个视图。 */
@@ -44,8 +45,22 @@ type MeetingDetailViewProps = {
 
 export function MeetingDetailView(props: MeetingDetailViewProps) {
   const { meeting } = props
+  const notifications = useAppNotifications()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const recordingDeleted = meeting.recording.status === "deleted"
+  // 转写文字在这里算一次：头部那个「复制全文」要知道有没有东西可复制，文字视图也要用。
+  const paragraphs = joinTranscriptParagraphs(meeting.segments)
+
+  /** 复制的是整段转写原文，自然段之间空一行。 */
+  async function copyTranscript(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(paragraphs.join("\n\n"))
+      notifications.success("已复制全文")
+    } catch {
+      // 剪贴板失败抛的是浏览器的 DOMException，原文对用户没有意义，换成一句能看懂的。
+      notifications.error("复制失败。")
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -62,6 +77,17 @@ export function MeetingDetailView(props: MeetingDetailViewProps) {
             {meeting.durationMs > 0 ? ` · ${formatMeetingDuration(meeting.durationMs)}` : ""}
           </p>
         </div>
+        {/* 放在头部而不是文字卡片里：文字可能很长，卡片里的按钮往下翻就找不到了。 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="复制全文"
+          title="复制全文"
+          disabled={paragraphs.length === 0}
+          onClick={() => void copyTranscript()}
+        >
+          <Copy />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="更多操作">
@@ -98,7 +124,7 @@ export function MeetingDetailView(props: MeetingDetailViewProps) {
             />
           </div>
           <div className={props.mode === "text" ? undefined : "hidden"}>
-            <TextView meeting={meeting} onRetry={props.onRetryTranscription} />
+            <TextView meeting={meeting} paragraphs={paragraphs} onRetry={props.onRetryTranscription} />
           </div>
         </div>
       </ScrollArea>
@@ -198,9 +224,18 @@ function VoiceView(props: {
   )
 }
 
-/** 文字：腾讯云返回什么就显示什么，按自然段排开。 */
-function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRetry: () => Promise<void> }) {
-  const { meeting } = props
+/**
+ * 文字：腾讯云返回什么就显示什么，按自然段排开。
+ *
+ * 这段文字有自己的卡片，不直接铺在页面底色上——语音那边的波形框已经有这层卡片，两边
+ * 保持一致，切「语音 / 文字」时内容宽度也不会跳。
+ */
+function TextView(props: {
+  readonly meeting: SynapseMeetingDetail
+  readonly paragraphs: readonly string[]
+  readonly onRetry: () => Promise<void>
+}) {
+  const { meeting, paragraphs } = props
 
   if (meeting.status === "failed") {
     return (
@@ -217,11 +252,16 @@ function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRe
     )
   }
 
-  const paragraphs = joinTranscriptParagraphs(meeting.segments)
+  const transcribing = meeting.status === "transcribing"
+
+  // 没有文字时不套卡片：提示块自己就是一张卡片，套起来就是卡片套卡片。
+  if (paragraphs.length === 0 && !transcribing) {
+    return <MeetingNotice title="还没有文字" description="这段录音里没有识别到语音。" />
+  }
 
   return (
-    <div className="space-y-3">
-      {meeting.status === "transcribing" ? (
+    <div className="space-y-3 rounded-lg border bg-card p-4">
+      {transcribing ? (
         <div className="space-y-2">
           {/* 腾讯云不给百分比，所以这里只能是一条「在跑」的条，不编一个假的数值。 */}
           <Progress value={null} className="animate-pulse" />
@@ -229,9 +269,7 @@ function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRe
         </div>
       ) : null}
 
-      {paragraphs.length === 0 ? (
-        <MeetingNotice title="还没有文字" description="这段录音里没有识别到语音。" />
-      ) : (
+      {paragraphs.length > 0 ? (
         <div className="max-w-[700px] space-y-3">
           {paragraphs.map((paragraph, index) => (
             <p key={index} className="text-sm leading-relaxed text-pretty">
@@ -239,7 +277,7 @@ function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRe
             </p>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

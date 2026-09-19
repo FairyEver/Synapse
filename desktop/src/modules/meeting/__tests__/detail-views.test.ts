@@ -71,6 +71,13 @@ describe("右栏只剩语音和文字两个视图", () => {
     expect(source).toContain("normalizePeaks(decodeMeetingPeaks(")
   })
 
+  it("头部有「复制全文」，没有文字时点不动", async () => {
+    const source = await moduleSource("meeting-detail-view.tsx")
+    expect(source).toContain('aria-label="复制全文"')
+    // 空态、失败态都没有东西可复制，按钮要灰着而不是复制出一片空白。
+    expect(source).toContain("disabled={paragraphs.length === 0}")
+  })
+
   it("左栏就是一个列表：没有标题、搜索、按钮和提示条", async () => {
     const source = await moduleSource("meeting-list-view.tsx")
     for (const symbol of ["pendingNotice", "onResumePending", "onDiscardPending", "speakerCount", "Search", "Input"]) {
