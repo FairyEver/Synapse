@@ -18,6 +18,16 @@ import {
 
 const temporaryDirectories: string[] = []
 
+// wrapper 拿这两个变量当递归护栏：环境里只要有它们，wrapper 就认定自己已经在包装层内，
+// 于是原样透传、不注入钩子。开发机在 Synapse 自己的终端里跑测试时，环境里正带着它们，
+// 一旦漏进子进程，下面两条就会假红。起子进程前必须剔除。
+function childEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
+  const environment = { ...process.env, ...extra }
+  delete environment.SYNAPSE_TERMINAL_AGENT_WRAPPER_ACTIVE
+  delete environment.SYNAPSE_AGENT_NOTIFICATIONS_DISABLED
+  return environment
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) =>
     rm(directory, { recursive: true, force: true })))
@@ -148,7 +158,7 @@ describe("TerminalAgentNotificationService", () => {
     })!
 
     const result = spawnSync("/bin/zsh", ["-i", "-c", "CX; printf :; CC"], {
-      env: { ...process.env, ...launch.env, HOME: home },
+      env: childEnvironment({ ...launch.env, HOME: home }),
       encoding: "utf8",
     })
     expect(result.status).toBe(0)
@@ -186,7 +196,7 @@ describe("TerminalAgentNotificationService", () => {
       "--settings",
       userSettingsPath,
     ], {
-      env: { ...process.env, ...launch.env, HOME: home },
+      env: childEnvironment({ ...launch.env, HOME: home }),
       encoding: "utf8",
     })
     expect(result.status).toBe(0)
