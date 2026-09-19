@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH, terminalLayoutNodeSchema } from "./workspace"
+import { terminalLayoutNodeSchema } from "./workspace"
 
 export const terminalLifecycleSchema = z.enum(["running", "stopping", "ended", "failed", "lost"])
 export const terminalAttentionStateSchema = z.enum(["waiting", "not_waiting", "unknown"])
@@ -134,7 +134,6 @@ export const terminalWorkspaceRecordSchema = z.object({
   workspaceId: z.string().uuid(),
   groupId: z.string().uuid(),
   title: z.string().min(1).max(120),
-  description: z.string().trim().max(TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH).optional(),
   pinned: z.boolean(),
   layout: terminalLayoutNodeSchema,
   layoutRevision: z.number().int().positive(),

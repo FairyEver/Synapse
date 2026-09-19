@@ -1129,11 +1129,10 @@ describe("TerminalModule", () => {
     expect(menuItems.map((item) => item.textContent)).toEqual([
       "重命名",
       "置顶",
-      "编辑描述",
       "复制引用",
       "关闭",
     ])
-    expect(menuItems[4]?.dataset.variant).toBe("destructive")
+    expect(menuItems[3]?.dataset.variant).toBe("destructive")
 
     const navigation = document.querySelector('[aria-label="活动终端会话"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
@@ -1191,7 +1190,6 @@ describe("TerminalModule", () => {
     expect(headerSessionMenuItems().map((item) => item.textContent)).toEqual([
       "重命名",
       "置顶",
-      "编辑描述",
       "关闭",
     ])
   })
@@ -1302,45 +1300,6 @@ describe("TerminalModule", () => {
       pinned: false,
     })
     expect(headerSessionTab("开发终端")?.querySelector("[data-terminal-pinned]")).toBeNull()
-  })
-
-  it("saves a workspace description and shows it as the row tooltip", async () => {
-    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
-    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
-
-    await renderEmbeddedModule()
-    await openSidebarSessionMenu("开发终端")
-    await clickContextMenuItem("编辑描述")
-
-    await changeTextarea("会话描述", "  部署用的窗口  ")
-    await clickButton("保存")
-
-    expect(terminalBridge.updateWorkspace).toHaveBeenCalledWith({
-      workspaceId: "workspace-session-1",
-      expectedLayoutRevision: 1,
-      description: "  部署用的窗口  ",
-    })
-    expect(sidebarSessionRow("开发终端")?.title).toBe("部署用的窗口")
-  })
-
-  it("clears a workspace description by saving it empty", async () => {
-    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
-    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
-    bridgeState.workspaces = bridgeState.workspaces.map((workspace) => ({
-      ...workspace,
-      description: "旧备注",
-    }))
-
-    await renderEmbeddedModule()
-    await openSidebarSessionMenu("开发终端")
-    await clickContextMenuItem("编辑描述")
-
-    expect(document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="会话描述"]')?.value).toBe("旧备注")
-
-    await changeTextarea("会话描述", "")
-    await clickButton("保存")
-
-    expect(sidebarSessionRow("开发终端")?.title).toBe("")
   })
 
   it("does not mark a background workspace that produces output", async () => {

@@ -1450,27 +1450,6 @@ describe("TerminalService core", () => {
     expect(service.listWorkspaces().map((workspace) => workspace.id)).toEqual([pinned.id, other.id])
   })
 
-  it("stores a trimmed description and clears it when saved empty", async () => {
-    const { service } = await startedHarness()
-    const session = await service.createSession({ title: "Conversation" })
-    const workspace = service.getWorkspaceForSession({ sessionId: session.id })
-
-    const described = await service.updateWorkspace({
-      workspaceId: workspace.id,
-      expectedLayoutRevision: workspace.layoutRevision,
-      description: "  部署用的窗口  ",
-    })
-    expect(described.description).toBe("部署用的窗口")
-
-    const cleared = await service.updateWorkspace({
-      workspaceId: workspace.id,
-      expectedLayoutRevision: described.layoutRevision,
-      description: "   ",
-    })
-    expect(cleared.description).toBeUndefined()
-    expect(Object.hasOwn(cleared, "description")).toBe(false)
-  })
-
   it("rejects a workspace metadata update written against a stale revision", async () => {
     const { service } = await startedHarness()
     const session = await service.createSession({ title: "Conversation" })

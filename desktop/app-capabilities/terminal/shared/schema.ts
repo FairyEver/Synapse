@@ -2,7 +2,6 @@ import { z } from "zod"
 import { terminalLaunchFactsSchema } from "./contract-schema"
 
 export {
-  TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH,
   TERMINAL_WORKSPACE_PANE_LIMIT,
   collectTerminalPaneLeaves,
   equalizeTerminalPaneGroup,

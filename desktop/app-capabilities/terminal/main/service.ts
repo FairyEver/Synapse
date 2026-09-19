@@ -1402,17 +1402,12 @@ export function createTerminalService(deps: {
   async function updateWorkspace(input: TerminalUpdateWorkspaceInput): Promise<TerminalWorkspace> {
     const workspace = getWorkspaceOrThrow(input.workspaceId)
     assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
-    // 空描述等于没有描述：清掉字段而不是留下一行空字符串。
-    const description = input.description === undefined
-      ? workspace.description
-      : input.description.trim() || undefined
     const pinned = input.pinned ?? workspace.pinned
-    if (description === workspace.description && pinned === workspace.pinned) return workspace
+    if (pinned === workspace.pinned) return workspace
     const updated: TerminalWorkspace = {
       id: workspace.id,
       groupId: workspace.groupId,
       title: workspace.title,
-      ...(description === undefined ? {} : { description }),
       pinned,
       layout: workspace.layout,
       layoutRevision: workspace.layoutRevision + 1,

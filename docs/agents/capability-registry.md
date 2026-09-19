@@ -70,7 +70,7 @@
 - Terminal Agent 原生通知的设置、活动 session 上报与点击后的精确会话定位仅属于现有 System App 的 UI 私有 IPC；通知 Hook 入口是会话级 loopback 内部端口，不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。同一 Hook 事件还把"是否等待用户输入"写入会话既有 `attention`（`waiting` + `approval` / `agent_question` 等 kind，恢复时回到 `not_waiting`），仅在 Terminal 侧栏与顶部会话标签显示标记，并随既有 `state.get` / `observe` 暴露给 MCP 调用方；不新增存储字段、capability、tool 或审计对象。
 - Terminal 会话状态响应（`session_state.get` / `.list` / `session.observe` / `session_output.observe`）另外带两样只读内容：会话自己的 PTY 设备名 `tty`（调用方据此 `ps -t` 认领跑在里面的进程，是「粘贴一段引用去找到对家 Claude Code」那一步的接点，不依赖 Agent 原生通知，Windows 无此设备时缺席），以及 `app.terminal.agent-sessions` 五态档案的投影块 `agent`（只含 `state` / `agentKind` / `version` / `lastActivityAt` / `stateChangedAt`；`transcriptPath` 指向用户整段对话、`pid` 与 agent 自己的会话 id 是宿主进程细节，一律不出进程，投影在通知服务内部完成，原始档案类型不越过服务边界）。`agent` 缺席（这里从来没有 agent，或 Agent 原生通知未开启）与 `state: "ended"`（跑过、已退出）是两件不同的事，不得合并。该投影不新增 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量保持 44。
 - Terminal 分组拖拽排序仅属于现有 System App 的 UI 私有 IPC：顺序写入分组既有 `sortOrder` 字段，不注册 MCP capability、tool、Workflow Node 或 Deep Link，不新增 Terminal MCP 工具。
-- Terminal 会话（workspace）的置顶与描述仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，置顶只改变同分组内排序，描述是用户备注；两者都随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal 会话（workspace）的置顶仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，只改变同分组内排序；它随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。
 - Agent 侧栏项目分组顺序存放在全局配置 `global.agentProjectOrder`，只影响侧栏展示顺序，不重排 `config.global.projects`，不注册 MCP capability、tool 或 Deep Link，Agent Conversation 工具数量不变。
 
 ## 普通业务模块 System App

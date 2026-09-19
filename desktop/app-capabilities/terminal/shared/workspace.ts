@@ -43,18 +43,15 @@ export const terminalLayoutNodeSchema: z.ZodType<TerminalLayoutNode> = z.lazy(()
 ]))
 
 /**
- * 侧边栏终端元数据：`pinned` 让 workspace 排到同分组前面，`description` 是用户自己的备注。
+ * 侧边栏终端元数据：`pinned` 让 workspace 排到同分组前面。
  *
- * 两者都只在本机本次运行内有效——会话与 workspace 不跨重启（ADR 0215），所以刷新后的 workspace
+ * 它只在本机本次运行内有效——会话与 workspace 不跨重启（ADR 0215），所以刷新后的 workspace
  * 是一张新面孔，不承接上一次运行留下的标记。
  */
-export const TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH = 200
-
 export const terminalWorkspaceSchema = z.object({
   id: z.string().min(1),
   groupId: z.string().min(1),
   title: z.string().trim().min(1).max(120),
-  description: z.string().trim().max(TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH).optional(),
   pinned: z.boolean().default(false),
   layout: terminalLayoutNodeSchema,
   layoutRevision: z.number().int().positive(),
@@ -78,10 +75,9 @@ export const terminalUpdateWorkspaceInputSchema = z.object({
   workspaceId: z.string().min(1),
   expectedLayoutRevision: z.number().int().positive(),
   pinned: z.boolean().optional(),
-  description: z.string().max(TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH).optional(),
 }).strict().refine(
-  (value) => value.pinned !== undefined || value.description !== undefined,
-  { message: "provide pinned or description" },
+  (value) => value.pinned !== undefined,
+  { message: "provide pinned" },
 )
 
 export const terminalSplitPaneInputSchema = z.object({

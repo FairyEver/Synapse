@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, FileText, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
@@ -90,7 +90,7 @@ import type {
   SynapseTerminalUpdateCustomToolbarActionInput,
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
-import { TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH, collectTerminalPaneLeaves } from "../shared/schema"
+import { collectTerminalPaneLeaves } from "../shared/schema"
 import { buildTerminalSessionReferenceText } from "../shared/session-reference"
 import {
   buildTerminalCommandWrites,
@@ -168,9 +168,6 @@ export function TerminalModule({
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalWorkspace | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
-  const [descriptionTarget, setDescriptionTarget] = useState<SynapseTerminalWorkspace | null>(null)
-  const [descriptionDraft, setDescriptionDraft] = useState("")
-  const [descriptionSaving, setDescriptionSaving] = useState(false)
   const [sessionRenameTarget, setSessionRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [sessionRenameTitle, setSessionRenameTitle] = useState("")
   const [sessionRenameSaving, setSessionRenameSaving] = useState(false)
@@ -204,7 +201,6 @@ export function TerminalModule({
   const [mountedWorkspaceIds, setMountedWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
   const workspaceViewRefs = useRef(new Map<string, TerminalWorkspaceViewHandle>())
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
-  const descriptionReturnFocusRef = useRef<HTMLElement | null>(null)
   const sessionRenameReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
@@ -668,7 +664,7 @@ export function TerminalModule({
 
   const applyWorkspaceMetadata = useCallback(async (
     target: SynapseTerminalWorkspace,
-    patch: { readonly pinned?: boolean; readonly description?: string },
+    patch: { readonly pinned?: boolean },
     failureMessage: string,
   ) => {
     try {
@@ -701,32 +697,6 @@ export function TerminalModule({
       workspace.pinned ? "取消置顶失败" : "置顶失败",
     )
   }, [applyWorkspaceMetadata])
-
-  const openDescriptionDialog = useCallback((workspace: SynapseTerminalWorkspace, returnFocus: HTMLElement) => {
-    descriptionReturnFocusRef.current = returnFocus
-    setDescriptionTarget(workspace)
-    setDescriptionDraft(workspace.description ?? "")
-  }, [])
-
-  const closeDescriptionDialog = useCallback(() => {
-    setDescriptionTarget(null)
-    setDescriptionDraft("")
-  }, [])
-
-  const saveWorkspaceDescription = useCallback(async () => {
-    if (!descriptionTarget) return
-    setDescriptionSaving(true)
-    try {
-      const updated = await applyWorkspaceMetadata(
-        descriptionTarget,
-        { description: descriptionDraft },
-        "保存描述失败",
-      )
-      if (updated) closeDescriptionDialog()
-    } finally {
-      setDescriptionSaving(false)
-    }
-  }, [applyWorkspaceMetadata, closeDescriptionDialog, descriptionDraft, descriptionTarget])
 
   const renameSession = useCallback(async () => {
     if (!sessionRenameTarget) return
@@ -1493,7 +1463,6 @@ export function TerminalModule({
         canForce={rendererPlatform === "darwin"}
         closeDisabled={Boolean(workspace.closing) || closingWorkspaceId === workspace.id}
         closing={Boolean(workspace.closing)}
-        description={workspace.description}
         lifecycleDisabled={closingWorkspaceId === workspace.id}
         pinned={workspace.pinned}
         status={workspaceStatus(workspace, sessions)}
@@ -1501,7 +1470,6 @@ export function TerminalModule({
         waiting={workspaceWaitingForInput(workspace, sessions)}
         workspaceId={workspace.id}
         onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-        onEditDescription={(returnFocus) => openDescriptionDialog(workspace, returnFocus)}
         onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
         onSelect={() => selectWorkspace(workspace.id)}
         onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
@@ -1603,12 +1571,10 @@ export function TerminalModule({
                 key={workspace.id}
                 active={workspace.id === activeWorkspace?.id}
                 closeDisabled={workspace.closing || closingWorkspaceId === workspace.id}
-                description={workspace.description}
                 pinned={workspace.pinned}
                 title={workspace.title}
                 onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
                 onCopyReference={() => { void copySessionReference(workspace, session) }}
-                onEditDescription={(returnFocus) => openDescriptionDialog(workspace, returnFocus)}
                 onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
                 onSelect={() => selectWorkspace(workspace.id)}
                 onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
@@ -2254,45 +2220,6 @@ export function TerminalModule({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={descriptionTarget !== null} onOpenChange={(open) => {
-        if (!open) closeDescriptionDialog()
-      }}>
-        <DialogContent onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          descriptionReturnFocusRef.current?.focus()
-        }}>
-          <DialogHeader>
-            <DialogTitle>会话描述</DialogTitle>
-            <DialogDescription className="sr-only">
-              输入这段会话的备注，留空表示不写。
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            aria-label="会话描述"
-            maxLength={TERMINAL_WORKSPACE_DESCRIPTION_MAX_LENGTH}
-            value={descriptionDraft}
-            onChange={(event) => setDescriptionDraft(event.target.value)}
-            autoFocus
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={descriptionSaving}
-              onClick={closeDescriptionDialog}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              disabled={descriptionSaving}
-              onClick={() => { void saveWorkspaceDescription() }}
-            >
-              保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
         if (!open && !deleteGroupSaving) closeDeleteGroupDialog()
       }}>
@@ -2347,10 +2274,8 @@ export function TerminalModule({
 function TerminalHeaderSessionTab({
   active,
   closeDisabled,
-  description,
   onClose,
   onCopyReference,
-  onEditDescription,
   onRename,
   onSelect,
   onTogglePin,
@@ -2360,10 +2285,8 @@ function TerminalHeaderSessionTab({
 }: {
   readonly active: boolean
   readonly closeDisabled: boolean
-  readonly description?: string
   readonly onClose: () => void
   readonly onCopyReference: () => void
-  readonly onEditDescription: (returnFocus: HTMLElement) => void
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
   readonly onTogglePin: () => void
@@ -2382,7 +2305,6 @@ function TerminalHeaderSessionTab({
           aria-label={`切换到会话：${title}`}
           className={active ? "bg-muted text-foreground" : undefined}
           data-track="terminal-header-session-select"
-          tooltip={description}
           onClick={onSelect}
         >
           {waiting ? <TerminalAttentionIndicator /> : null}
@@ -2400,13 +2322,6 @@ function TerminalHeaderSessionTab({
         <ContextMenuItem onSelect={onTogglePin}>
           <Pin />
           {pinned ? "取消置顶" : "置顶"}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => {
-          const button = buttonRef.current
-          if (button) onEditDescription(button)
-        }}>
-          <FileText />
-          编辑描述
         </ContextMenuItem>
         <ContextMenuItem onSelect={onCopyReference}>
           <Copy />
@@ -2426,10 +2341,8 @@ function TerminalSidebarWorkspaceRow({
   canForce,
   closeDisabled,
   closing,
-  description,
   lifecycleDisabled,
   onClose,
-  onEditDescription,
   onRename,
   onSelect,
   onTogglePin,
@@ -2443,10 +2356,8 @@ function TerminalSidebarWorkspaceRow({
   readonly canForce: boolean
   readonly closeDisabled: boolean
   readonly closing: boolean
-  readonly description?: string
   readonly lifecycleDisabled: boolean
   readonly onClose: () => void
-  readonly onEditDescription: (returnFocus: HTMLElement) => void
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
   readonly onTogglePin: () => void
@@ -2471,7 +2382,6 @@ function TerminalSidebarWorkspaceRow({
               </>
             )}
             rowRef={rowRef}
-            title={description}
             trailing={(
               <>
                 <TerminalWorkspaceLifecycleButton
@@ -2502,13 +2412,6 @@ function TerminalSidebarWorkspaceRow({
         <ContextMenuItem onSelect={onTogglePin}>
           <Pin />
           {pinned ? "取消置顶" : "置顶"}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => {
-          const row = rowRef.current
-          if (row) onEditDescription(row)
-        }}>
-          <FileText />
-          编辑描述
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
           <X />

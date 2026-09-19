@@ -63,7 +63,6 @@ describe("Terminal DataRepository store", () => {
         id: workspaceId,
         groupId,
         title: "Shell workspace",
-        description: "部署用的窗口",
         pinned: true,
         layout: { type: "leaf", paneId, sessionId },
         layoutRevision: 1,
@@ -113,7 +112,6 @@ describe("Terminal DataRepository store", () => {
     })
     expect(loaded.workspaces).toEqual([expect.objectContaining({
       id: workspaceId,
-      description: "部署用的窗口",
       pinned: true,
       layout: { type: "leaf", paneId, sessionId },
     })])
