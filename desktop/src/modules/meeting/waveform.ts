@@ -114,6 +114,21 @@ export function resamplePlaybackPeaks(peaks: ArrayLike<number>, columns: number)
   return result
 }
 
+/**
+ * 把服务端存下来的 0-255 字节还原成绘制要用的 0-1 振幅。
+ *
+ * **少这一步不会报任何错，只会把整条波形画成一个实心方块。** `strokeBar` 里
+ * `half = amplitude * mid * 0.9`，`mid` 是画布半高：字节只要 ≥ 2，算出来的半高就已经
+ * 超过 `mid`，每根柱子都被裁到满高；只有字节 0 / 1 会画成一个小点。表现是「一排均匀
+ * 的竖条」，看着像坏了但没有任何日志。
+ *
+ * `@synapse/shared` 的 `compactMeetingPeaks` 在服务端已经踩过同一个坑，那边的注释写的
+ * 就是「一片削顶的柱子」；这里当时漏了。
+ */
+export function normalizePeaks(bytes: ArrayLike<number>): number[] {
+  return Array.from(bytes, (byte) => byte / 255)
+}
+
 export type PlaybackWaveLayout = {
   /** 当前可见的柱子，从左往右铺满整条画布。 */
   readonly bars: readonly WaveBar[]

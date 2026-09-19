@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
-import { drawPlaybackWaveform, playbackPositionFromClick } from "./waveform"
+import { drawPlaybackWaveform, normalizePeaks, playbackPositionFromClick } from "./waveform"
 
 /**
  * 回放。
@@ -31,7 +31,8 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
   const { meetingId, durationMs } = props
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const peaksRef = useRef<Uint8Array>(new Uint8Array(0))
+  /** 绘制用的是 0-1 的振幅；服务端存的是 0-255 的字节，取值时就还原。 */
+  const peaksRef = useRef<readonly number[]>([])
   const [url, setUrl] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [positionMs, setPositionMs] = useState(0)
@@ -46,7 +47,7 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
       .then(([audio, peaks]) => {
         if (disposed) return
         setUrl(audio.url)
-        peaksRef.current = decodeMeetingPeaks(peaks.peaks)
+        peaksRef.current = normalizePeaks(decodeMeetingPeaks(peaks.peaks))
         setReady(true)
       })
       .catch(() => {

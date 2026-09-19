@@ -64,6 +64,13 @@ describe("右栏只剩语音和文字两个视图", () => {
     expect(source.match(/<TabsTrigger/g)).toHaveLength(2)
   })
 
+  it("回放波形取值时就还原成 0-1，不把服务端存的字节直接当振幅画", async () => {
+    const source = await moduleSource("meeting-playback.tsx")
+    // 少了这一步不会报任何错，只会让每个采样都被裁到满高，整条波形成了一个实心方块。
+    // 失败形态与成因见 waveform.test.ts 里「存下来的字节要先还原成 0-1 的振幅」。
+    expect(source).toContain("normalizePeaks(decodeMeetingPeaks(")
+  })
+
   it("左栏就是一个列表：没有标题、搜索、按钮和提示条", async () => {
     const source = await moduleSource("meeting-list-view.tsx")
     for (const symbol of ["pendingNotice", "onResumePending", "onDiscardPending", "speakerCount", "Search", "Input"]) {

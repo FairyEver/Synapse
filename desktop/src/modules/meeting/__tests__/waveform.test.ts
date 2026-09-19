@@ -5,8 +5,10 @@ import { MEETING_LIVE_WINDOW_MS, MEETING_PEAK_MS } from "@synapse/shared"
 import {
   computeLiveWaveLayout,
   computePlaybackWaveLayout,
+  normalizePeaks,
   playbackPositionFromClick,
   resamplePlaybackPeaks,
+  WAVE_AMPLITUDE_SCALE,
   WAVE_BAR_GAP,
   WAVE_BAR_MAX_WIDTH,
   WAVE_BAR_WIDTH,
@@ -132,6 +134,37 @@ describe("回放波形的布局要铺满整条画布", () => {
   it("没有采样或画布宽度为 0 时不画任何柱子", () => {
     expect(computePlaybackWaveLayout([], WIDTH).bars).toEqual([])
     expect(computePlaybackWaveLayout([0.5], 0).bars).toEqual([])
+  })
+})
+
+describe("存下来的字节要先还原成 0-1 的振幅", () => {
+  /** 画布 h-32 的半高，与 prepareCanvas 里 `height / 2` 一致。 */
+  const MID = 64
+  /** 和 strokeBar 里一样：半高 = max(1, 振幅 * 半高 * 缩放)。 */
+  const halfFor = (amplitude: number) => Math.max(1, amplitude * MID * WAVE_AMPLITUDE_SCALE)
+
+  it("除以 255，落在 0-1 上", () => {
+    expect(normalizePeaks([0, 128, 255])).toEqual([0, 128 / 255, 1])
+  })
+
+  it("不还原的话，字节 2 就已经把柱子顶出画布——整条波形变成一个实心方块", () => {
+    // 这就是线上那条「均匀竖条」波形的成因：字节 2 的半高已经超过半高上限，每个采样都
+    // 被裁到满高，只剩字节 0 / 1 画得出来。这个用例把失败形态钉住。
+    const recorded = [2, 8, 64, 128, 255]
+    expect(recorded.every((byte) => halfFor(byte) > MID)).toBe(true)
+
+    // 还原之后同样这些采样是有高有低的，而且都不超出画布。
+    const halves = normalizePeaks(recorded).map(halfFor)
+    expect(new Set(halves.map((h) => h.toFixed(3))).size).toBe(recorded.length)
+    expect(Math.max(...halves)).toBeLessThanOrEqual(MID)
+  })
+
+  it("真实量级的字节还原后不是一片满高", () => {
+    const layout = computePlaybackWaveLayout(normalizePeaks([10, 20, 40, 80, 160, 200]), 900)
+    const heights = layout.bars.map((bar) => bar.amplitude)
+    expect(Math.max(...heights)).toBeLessThanOrEqual(1)
+    // 满高（1.0）的柱子不该出现——真录音里不该有全削顶的段。
+    expect(heights.every((amplitude) => amplitude < 1)).toBe(true)
   })
 })
 
