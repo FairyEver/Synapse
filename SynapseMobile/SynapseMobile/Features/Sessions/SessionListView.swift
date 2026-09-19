@@ -101,7 +101,7 @@ struct SessionListView: View {
                 model.rename(session.id, to: newName)
             }
         }
-        .alert("删除这个终端？", isPresented: isDeleting, presenting: deleteTarget) { session in
+        .alert("删除这个会话？", isPresented: isDeleting, presenting: deleteTarget) { session in
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) {
                 // The row it belonged to is behind the dialog, so nothing on screen
@@ -110,7 +110,7 @@ struct SessionListView: View {
                 model.delete(session.id)
             }
         } message: { _ in
-            Text("会先停止终端，未完成的任务会中断。")
+            Text("会先停止会话，未完成的任务会中断。")
         }
     }
 
@@ -310,7 +310,7 @@ struct SessionListView: View {
     /// may have just ended" is not something the reader can act on.
     private var emptySection: some View {
         Section {
-            Text("没有正在运行的终端")
+            Text("没有正在运行的会话")
                 .font(.subheadline.weight(.semibold))
         }
     }

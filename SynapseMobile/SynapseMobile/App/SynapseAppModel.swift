@@ -1268,7 +1268,7 @@ final class SynapseAppModel {
         }
         await reclaimControl(write.sessionId)
         guard !preemptedSessions.contains(write.sessionId) else {
-            raiseTerminalMessage("电脑正在使用这个终端，命令没有发送。", sessionId: write.sessionId)
+            raiseTerminalMessage("电脑正在使用这个会话，命令没有发送。", sessionId: write.sessionId)
             return
         }
         // The gateway answers a repeated intentId from its cache, which would hand

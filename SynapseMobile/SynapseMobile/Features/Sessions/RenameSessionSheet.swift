@@ -63,7 +63,7 @@ struct RenameSessionSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("重命名终端")
+            .navigationTitle("重命名会话")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

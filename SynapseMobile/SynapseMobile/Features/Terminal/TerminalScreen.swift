@@ -774,7 +774,7 @@ struct TerminalScreen: View {
                 model.rename(sessionId, to: newName)
             }
         }
-        .alert("停止这个终端？", isPresented: $showingStopConfirm) {
+        .alert("停止这个会话？", isPresented: $showingStopConfirm) {
             Button("取消", role: .cancel) {}
             Button("停止", role: .destructive) {
                 // A dialog button gets no feedback from the system, and this is the
@@ -783,9 +783,9 @@ struct TerminalScreen: View {
                 model.stop(sessionId)
             }
         } message: {
-            Text("终端将被停止，未保存的进程状态会丢失。")
+            Text("该会话将被停止，未保存的进程状态会丢失。")
         }
-        .alert("这个终端正在等待操作", isPresented: $showingBusyConfirm) {
+        .alert("这个会话正在等待操作", isPresented: $showingBusyConfirm) {
             Button("取消", role: .cancel) { pendingFiles = [] }
             Button("仍然插入") {
                 // Proceeding past a caution, so it is felt rather than merely done.
@@ -950,7 +950,7 @@ struct TerminalScreen: View {
 
     private var titleBlock: some View {
         VStack(spacing: 1) {
-                Text(session?.title ?? "终端")
+                Text(session?.title ?? "会话")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 5) {
@@ -986,7 +986,7 @@ struct TerminalScreen: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 6, height: 6)
-            Text(session?.title ?? "终端")
+            Text(session?.title ?? "会话")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
             Text("· \(statusLabel)")
@@ -1047,7 +1047,7 @@ struct TerminalScreen: View {
                 // The one message on this screen that is not a problem. It carries
                 // its own id so copying twice restarts one second rather than
                 // queueing a second confirmation.
-                model.notice("已复制终端输出。", tone: .success, id: "terminal.copied")
+                model.notice("已复制会话输出。", tone: .success, id: "terminal.copied")
             } label: {
                 Text("复制全部输出")
             }
@@ -1056,7 +1056,7 @@ struct TerminalScreen: View {
                     noteChromeActivity()
                     showingStopConfirm = true
                 } label: {
-                    Text("停止终端")
+                    Text("停止会话")
                 }
             }
         } label: {
