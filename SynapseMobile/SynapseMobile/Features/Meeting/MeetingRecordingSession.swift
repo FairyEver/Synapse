@@ -52,8 +52,6 @@ final class MeetingRecordingSession {
     private var client: APIClient?
     private var ticker: Task<Void, Never>?
     private var persistedParts = 0
-    /// 没拿到麦克风权限。**不阻断录音**，只是波形不作数，提示行要说明这一点。
-    private var microphoneDenied = false
     /// 正在起一条新的。
     ///
     /// `phase` 要等服务端回来才变成 `.recording`，而进录音页的入口不止一个（列表的加号
@@ -88,7 +86,18 @@ final class MeetingRecordingSession {
         elapsedMs = 0
         peakStore = MeetingPeakStore()
         hint = .none
-        microphoneDenied = false
+
+        // **先问权限，再建录音。** 反过来做的话，没有权限时会先在服务端建出一条永远不
+        // 会有音频的记录，而用户这边连个解释都看不到。
+        if MeetingPermission.microphone != .granted {
+            let granted = await MeetingPermission.requestMicrophone()
+            guard granted else {
+                // **不阻断**：录音页照常留着，只是明说这一条波形不作数。iOS 在没有权限
+                // 时一点音频都不给，画一条平线并把原因写出来，比拿假波形冒充真的诚实。
+                hint = .microphoneDenied
+                return
+            }
+        }
 
         do {
             let started = try await client.startMeetingRecording(title: nil, startedAt: Date())
@@ -125,14 +134,6 @@ final class MeetingRecordingSession {
 
             phase = .recording
             startTicker()
-
-            // 权限是问过之后才知道的，而它只影响波形作不作数，不影响能不能录，所以
-            // 问在这个位置：录音已经在跑了，弹框不会挡住任何东西。
-            if MeetingPermission.microphone != .granted {
-                let granted = await MeetingPermission.requestMicrophone()
-                microphoneDenied = !granted
-                if microphoneDenied { updateHint() }
-            }
         } catch let error as APIError {
             hint = .uploadFailed(error.message)
             abandonFailedStart()
@@ -158,8 +159,7 @@ final class MeetingRecordingSession {
         phase = .idle
     }
 
-    /// 麦克风权限是**问过之后才知道**的，而它影响的是波形作不作数，不影响能不能录，
-    /// 所以问它的时机在录音已经开始之后。
+    /// 造采集器并起录。走到这里的时候权限已经拿到手了（见 `start`）。
     private func makeRecorder(recordingId: String) throws -> MeetingRecorder {
         let recorder = MeetingRecorder()
         recorder.onLevel = { [weak self] amplitude in self?.handleLevel(amplitude) }
@@ -341,10 +341,6 @@ final class MeetingRecordingSession {
         }
         if phase == .paused {
             hint = .interrupted
-            return
-        }
-        if microphoneDenied {
-            hint = .microphoneDenied
             return
         }
         // 听到过一次就永不再提：开会中途不打扰。
