@@ -73,7 +73,7 @@ export type SynapseToolCatalogEntry = {
 }
 
 type SynapseToolSearchInput = {
-  readonly query: string
+  readonly query?: string
   readonly domain?: string
   readonly limit?: number
 }
@@ -83,8 +83,49 @@ type SynapseToolInvokeInput = {
   readonly arguments?: Record<string, unknown>
 }
 
+/**
+ * 两种模式返回两种形状，用 `mode` 区分：搜索给完整 schema，索引给一行一条。
+ * 判别字段让调用方（和测试）能窄化，而不是对着联合类型猜。
+ */
+export type SynapseToolSearchMatchResult = {
+  readonly mode: "search"
+  readonly tools: ReadonlyArray<{
+    readonly name: string
+    readonly domain: string
+    readonly description: string
+    readonly inputSchema: McpToolDefinition["inputSchema"]
+  }>
+  readonly domains: readonly string[]
+  readonly guidance?: string
+}
+
+export type SynapseToolSearchIndexResult = {
+  readonly mode: "index"
+  readonly tools: ReadonlyArray<{
+    readonly name: string
+    readonly domain: string
+    readonly summary: string
+  }>
+  readonly total: number
+  readonly domains: readonly string[]
+  readonly guidance: string
+}
+
+export type SynapseToolSearchResult = SynapseToolSearchMatchResult | SynapseToolSearchIndexResult
+
 const SEARCH_TOOL_DESCRIPTION =
-  "Search the available Synapse MCP tools. Returns original tool names and complete input schemas."
+  "Look up the available Synapse MCP tools. With `query`: matching tools and their complete input schemas, at most 5 per call. "
+  + "Without `query`: a compact index of a `domain` (or of every domain), one line per tool and no schemas, up to `limit` entries plus `total` — "
+  + "read this before searching word by word, and narrow by `domain` or raise `limit` to see more."
+
+// Full schemas are large, so the searched mode stays capped at a handful; the index
+// is one line per tool, which is what makes a broad read affordable.
+const SEARCH_MODE_LIMIT_MAX = 5
+const INDEX_MODE_LIMIT_DEFAULT = 100
+const INDEX_MODE_LIMIT_MAX = 200
+// Long enough for the first sentence of most descriptions, short enough that a
+// whole domain still fits in one response.
+const INDEX_SUMMARY_MAX = 150
 
 const INVOKE_TOOL_DESCRIPTION =
   "Invoke one Synapse MCP tool by the exact original name returned by search."
@@ -98,9 +139,9 @@ const PAGE_SIZE_GUIDANCE =
 // zod shapes directly; the HTTP path derives its JSON Schema from the same shapes,
 // so the two surfaces cannot drift apart.
 const SEARCH_TOOL_INPUT_SHAPE = {
-  query: z.string().trim().min(1),
+  query: z.string().trim().min(1).optional(),
   domain: z.string().trim().min(1).optional(),
-  limit: z.number().int().min(1).max(5).default(5),
+  limit: z.number().int().min(1).max(INDEX_MODE_LIMIT_MAX).optional(),
 }
 
 const INVOKE_TOOL_INPUT_SHAPE = {
@@ -148,7 +189,7 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "",
   "1. `search` - call it first with the user's intent in natural language (Chinese or English)",
   "   or with an exact `app_*` tool name. It returns matching tools with their full",
-  "   `inputSchema`. Optional `domain` narrows the search; `limit` is 1-5.",
+  "   `inputSchema`. Optional `domain` narrows it; `limit` is 1-5 per search.",
   "2. `invoke` - call it with `toolName` set to the exact `app_*` name that `search` returned,",
   "   and `arguments` matching that tool's returned `inputSchema`.",
   "",
@@ -157,8 +198,8 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "",
   "Rules:",
   "- Never call an `app_*` name that `search` did not return, and never guess arguments.",
-  "- If `search` returns no reliable match, search again with different words or with `domain`;",
-  "  do not invent a tool name. `domains` are top-level namespaces: Terminal's tools are `app_*`.",
+  "- Calling `search` with no `query` returns a one-line index of a `domain`; read it before",
+  "  searching word by word. `domains` are top-level namespaces: Terminal's tools are `app_*`.",
   "- Prefer a small `limit` (for example 20) and continue with the returned `nextOffset` or",
   "  `nextCursor` rather than asking for one large page; big results are slow and costly.",
   "- Retired `database_*`, `drive_*`, `workflow_*`, `content_*`, `automation_*`,",
@@ -265,14 +306,15 @@ export function buildSynapseToolCatalog(): readonly SynapseToolCatalogEntry[] {
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export async function searchSynapseTools(input: SynapseToolSearchInput) {
-  const query = input.query.trim()
-  if (!query) throw new Error("query must not be empty")
-  const limit = normalizeLimit(input.limit)
+export async function searchSynapseTools(input: SynapseToolSearchInput): Promise<SynapseToolSearchResult> {
+  const query = (input.query ?? "").trim()
   const domain = input.domain?.trim()
   if (domain && !availableDomains.includes(domain)) {
-    return { tools: [], domains: availableDomains }
+    return { mode: "search", tools: [], domains: availableDomains }
   }
+  // No query is not a mistake: it is the caller saying "I do not know the names yet".
+  if (!query) return toolIndex(domain, normalizeIndexLimit(input.limit))
+  const limit = normalizeLimit(input.limit)
 
   const exact = catalogByName.get(query)
   const aliasTokens = queryAliasTokens(query)
@@ -315,6 +357,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput) {
   ))
 
   return {
+    mode: "search",
     tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({
       name,
       domain: entryDomain,
@@ -324,6 +367,44 @@ export async function searchSynapseTools(input: SynapseToolSearchInput) {
     domains: availableDomains,
     ...(paginated ? { guidance: PAGE_SIZE_GUIDANCE } : {}),
   }
+}
+
+const INDEX_GUIDANCE =
+  "This is an index, not the schemas. Search again with a `query` naming the tools you want to get their complete input schemas. "
+  + "Narrow by `domain` or raise `limit` to see more of it."
+
+/**
+ * 一个域（或全部域）的工具索引：名字 + 一句话，不带 input schema。
+ *
+ * 这是为「我还不知道有哪些工具」这个阶段准备的。缺了它，调用方只能一次猜一个词去搜，
+ * 每次拿回几个工具的完整 schema——真机上一次「在终端里打开 codex」为此连搜七次才开始动手。
+ */
+function toolIndex(domain: string | undefined, limit: number): SynapseToolSearchIndexResult {
+  const entries = catalog.filter((entry) => !domain || entry.domain === domain)
+  return {
+    mode: "index",
+    tools: entries.slice(0, limit).map((entry) => ({
+      name: entry.name,
+      domain: entry.domain,
+      summary: indexSummary(entry.description),
+    })),
+    total: entries.length,
+    domains: availableDomains,
+    guidance: INDEX_GUIDANCE,
+  }
+}
+
+/**
+ * 索引里一句话就够判断要不要看它。描述的后半截是自动附加的 `Permissions:` / `risk:` 尾巴，
+ * 在索引里是噪声，去掉。
+ */
+function indexSummary(description: string): string {
+  const head = description.split(" Permissions: ")[0] ?? description
+  const firstSentence = head.split(". ")[0] ?? head
+  const sentence = firstSentence.endsWith(".") ? firstSentence : `${firstSentence}.`
+  return sentence.length <= INDEX_SUMMARY_MAX
+    ? sentence
+    : `${sentence.slice(0, INDEX_SUMMARY_MAX - 1).trimEnd()}…`
 }
 
 function queryAliasTokens(query: string): string[] {
@@ -525,9 +606,17 @@ function minimumCoveringWindow(tokens: readonly string[], queryTokens: readonly 
 }
 
 function normalizeLimit(value: number | undefined): number {
-  if (value === undefined) return 5
-  if (!Number.isInteger(value) || value < 1 || value > 5) {
-    throw new Error("limit must be an integer from 1 to 5")
+  if (value === undefined) return SEARCH_MODE_LIMIT_MAX
+  if (!Number.isInteger(value) || value < 1 || value > SEARCH_MODE_LIMIT_MAX) {
+    throw new Error(`limit must be an integer from 1 to ${SEARCH_MODE_LIMIT_MAX}`)
+  }
+  return value
+}
+
+function normalizeIndexLimit(value: number | undefined): number {
+  if (value === undefined) return INDEX_MODE_LIMIT_DEFAULT
+  if (!Number.isInteger(value) || value < 1 || value > INDEX_MODE_LIMIT_MAX) {
+    throw new Error(`limit must be an integer from 1 to ${INDEX_MODE_LIMIT_MAX} when reading the index`)
   }
   return value
 }

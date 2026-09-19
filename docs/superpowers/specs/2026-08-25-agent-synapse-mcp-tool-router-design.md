@@ -25,7 +25,7 @@
 
 ## 内部协议
 
-`search({ query, domain?, limit? })` 使用现有 Fuse.js 搜索完整注册表。索引覆盖工具名、action ID、capability title、domain、描述、schema 字段及中英文 domain 别名。query 必填，limit 为 1–5；精确名称优先，自然语言查询先按词命中覆盖、规范 action 精确度和语义词距离重排，再以 Fuse score 与名称稳定排序。中文常用的云盘、文件和列表词汇映射到规范索引词，不为单个模型维护别名。结果返回原始工具名、domain、描述和完整 `inputSchema`。
+`search({ query, domain?, limit? })` 使用现有 Fuse.js 搜索完整注册表。索引覆盖工具名、action ID、capability title、domain、描述、schema 字段及中英文 domain 别名。`query` 可选：给了就搜索，不给就返回该 domain（或全部域）的一行式索引，此时 limit 上限 200、并回报 total；搜索模式 limit 仍为 1–5；精确名称优先，自然语言查询先按词命中覆盖、规范 action 精确度和语义词距离重排，再以 Fuse score 与名称稳定排序。中文常用的云盘、文件和列表词汇映射到规范索引词，不为单个模型维护别名。结果返回原始工具名、domain、描述和完整 `inputSchema`。
 
 `invoke({ toolName, arguments? })` 只接受注册表中的规范 `app_*` 工具名。执行直接进入现有 action router，不使用 HTTP 回环；结果复用公共 `/mcp` 归一化，并继续经过 `PermissionGuard`、`AuditSink` 与取消信号。结构化日志仅包含工具名、domain、状态和耗时。
 

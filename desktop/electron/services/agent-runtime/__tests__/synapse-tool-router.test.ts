@@ -11,8 +11,25 @@ import {
   searchSynapseTools,
   SYNAPSE_TOOL_ROUTER_INSTRUCTIONS,
   SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS,
+  type SynapseToolSearchIndexResult,
+  type SynapseToolSearchMatchResult,
+  type SynapseToolSearchResult,
 } from "../synapse-tool-router"
 import { buildAllMcpTools } from "../../../../synapse-capabilities/shared/registry"
+
+/**
+ * 搜索与索引现在返回两种形状，用 `mode` 区分。这些用例测的是搜索模式，就走判别字段窄化，
+ * 而不是拿类型断言把联合类型蒙过去。
+ */
+function searchMatches(result: SynapseToolSearchResult): SynapseToolSearchMatchResult {
+  if (result.mode !== "search") throw new Error(`expected search results, got ${result.mode}`)
+  return result
+}
+
+function indexOf(result: SynapseToolSearchResult): SynapseToolSearchIndexResult {
+  if (result.mode !== "index") throw new Error(`expected an index, got ${result.mode}`)
+  return result
+}
 
 describe("Synapse tool router catalog", () => {
   it("indexes every public Synapse MCP tool with action, domain, description, and schema", () => {
@@ -41,8 +58,8 @@ describe("Synapse tool router catalog", () => {
   })
 
   it("searches Chinese domain aliases and schema fields with stable limits", async () => {
-    const chinese = await searchSynapseTools({ query: "数据库表", domain: "database", limit: 3 })
-    const schema = await searchSynapseTools({ query: "tableName", domain: "database", limit: 5 })
+    const chinese = searchMatches(await searchSynapseTools({ query: "数据库表", domain: "database", limit: 3 }))
+    const schema = searchMatches(await searchSynapseTools({ query: "tableName", domain: "database", limit: 5 }))
 
     expect(chinese.tools).toHaveLength(3)
     expect(chinese.tools.every((tool) => tool.domain === "database")).toBe(true)
@@ -75,8 +92,8 @@ describe("Synapse tool router catalog", () => {
   })
 
   it("hints at a small page size only when a match accepts a limit", async () => {
-    const paginated = await searchSynapseTools({ query: "list drive files", limit: 3 })
-    const noMatch = await searchSynapseTools({ query: "zzzz-no-synapse-tool-匹配-999999" })
+    const paginated = searchMatches(await searchSynapseTools({ query: "list drive files", limit: 3 }))
+    const noMatch = searchMatches(await searchSynapseTools({ query: "zzzz-no-synapse-tool-匹配-999999" }))
 
     expect(paginated.tools.length).toBeGreaterThan(0)
     expect(paginated.guidance).toContain("limit")
@@ -98,9 +115,47 @@ describe("Synapse tool router catalog", () => {
     expect(itemList?.description).not.toContain("organizing")
   })
 
-  it("validates query and limit", async () => {
-    await expect(searchSynapseTools({ query: " " })).rejects.toThrow("query must not be empty")
+  it("validates limit against the mode it is used in", async () => {
+    // 搜索模式下每次拿回的是完整 schema，所以卡得很紧；索引模式一行一条，可以放开。
     await expect(searchSynapseTools({ query: "table", limit: 6 })).rejects.toThrow("limit must be an integer from 1 to 5")
+    await expect(searchSynapseTools({ limit: 201 })).rejects.toThrow("limit must be an integer from 1 to 200 when reading the index")
+  })
+
+  /*
+   * 没有 query 不是调用方出错，而是它在说「我还不知道有哪些工具」。真机上少走这一步的代价是
+   * 连着七次猜词搜索，每次只拿回几个工具的完整 schema。
+   */
+  it("lists a domain as a one-line index when no query is given", async () => {
+    const index = indexOf(await searchSynapseTools({ domain: "app" }))
+
+    expect(index.tools.length).toBeGreaterThan(0)
+    expect(index.total).toBe(index.tools.length)
+    for (const entry of index.tools) {
+      expect(entry.domain).toBe("app")
+      expect(entry).not.toHaveProperty("inputSchema")
+      expect(entry.summary.length).toBeLessThanOrEqual(150)
+      // 自动附加的页脚在索引里是噪声。
+      expect(entry.summary).not.toContain("Permissions:")
+      expect(entry.summary).not.toContain("risk:")
+    }
+    expect(index.tools.map((entry) => entry.name)).toContain("app_terminal_session_input_command")
+  })
+
+  it("covers every tool of the domain, and says so when a page is cut short", async () => {
+    const full = indexOf(await searchSynapseTools({ domain: "drive", limit: 200 }))
+    expect(full.tools.length).toBe(full.total)
+
+    const page = indexOf(await searchSynapseTools({ domain: "drive", limit: 3 }))
+    expect(page.tools.length).toBe(3)
+    // total 报的是整个域有多少，不是这一页有多少——否则调用方看不出被截断了。
+    expect(page.total).toBe(full.total)
+  })
+
+  it("keeps the index and the search scoped to the same domain", async () => {
+    const index = indexOf(await searchSynapseTools({ domain: "database" }))
+    const names = index.tools.map((entry) => entry.name)
+    expect(names.length).toBeGreaterThan(0)
+    expect(names.every((name) => name.startsWith("app_database_"))).toBe(true)
   })
 
   it("reduces the initial Synapse tool definition payload by at least 90 percent", async () => {
