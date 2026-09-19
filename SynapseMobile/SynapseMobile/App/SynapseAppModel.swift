@@ -329,6 +329,12 @@ final class SynapseAppModel {
     /// 既有的「电脑的远程视图」定位不同，所以它不挂在 terminalStores 那一套里。
     let meetings = MeetingStore()
 
+    /// 正在录的那一条。
+    ///
+    /// 挂在模型上而不是录音页上，因为它比那一屏活得久：录音页收起之后它还要继续录，
+    /// 顶部那枚胶囊、锁屏上的实时活动、控制中心的「完成」摸到的都得是同一个它。
+    let recording = MeetingRecordingSession()
+
     /// Which terminals this phone is sizing, as the summaries have last said.
     private var gridClaims = GridClaimLedger()
 
@@ -370,6 +376,20 @@ final class SynapseAppModel {
             // keeps saying it until the connection is back, which a five-second
             // sentence cannot do.
         }
+        await resolvePendingRecordings()
+    }
+
+    /// 上次没收完的录音，现在收干净。
+    ///
+    /// 放在启动路径上，是因为用户不该知道发生过异常退出：没有「发现一段未完成的录音」，
+    /// 没有丢弃 / 完成两个按钮，那条录音下次出现时就是一条普通录音。
+    ///
+    /// **只收本机还留着音频的那些**（决策七）。手机和电脑现在录的是同一批数据，而残片
+    /// 只在本机——不加这一条，在电脑上打开 Synapse 就会把手机上正在录的那条强行收尾，
+    /// 用一个估算的时长和一条平线。
+    func resolvePendingRecordings() async {
+        guard authState == .signedIn else { return }
+        await recording.resolvePendingRecordings(using: apiClient)
     }
 
     /// Returns the message to show beside the form, or nil once the account is in.
@@ -418,6 +438,9 @@ final class SynapseAppModel {
         quickPhrases.reset()
         // 录音是另一个账号的东西，换人之后不该还留在内存里。
         meetings.clear()
+        // 正在录的那条也是。录着的时候退出登录，本机那份音频留在盘上等下次启动收尾——
+        // 但那个账号已经登不上了，收尾会失败，文件也就一直躺着。
+        if recording.isRecording { recording.cancel() }
         await apiClient.logout()
         authState = .signedOut
     }
@@ -432,6 +455,28 @@ final class SynapseAppModel {
 
     func loadMeetingDetail(_ meetingId: String) async {
         _ = await meetings.loadDetail(meetingId, using: apiClient)
+    }
+
+    func renameMeeting(_ meetingId: String, to title: String) async {
+        await meetings.rename(meetingId, to: title, using: apiClient)
+    }
+
+    func deleteMeeting(_ meetingId: String) async {
+        await meetings.delete(meetingId, using: apiClient)
+    }
+
+    func retryMeetingTranscription(_ meetingId: String) async {
+        await meetings.retryTranscription(meetingId, using: apiClient)
+    }
+
+    /// 复制全文要的那一段文字。没有文字时返回 nil。
+    func meetingTranscript(_ meetingId: String) async -> String? {
+        await meetings.transcript(meetingId, using: apiClient)
+    }
+
+    /// 开始一段新录音。加号、控制中心、主屏快捷操作、Siri 都落到这里。
+    func startRecording() async {
+        await recording.start(using: apiClient)
     }
 
     func handleScenePhase(_ isActive: Bool) {

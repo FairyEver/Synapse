@@ -95,9 +95,17 @@ final class MeetingRecorder {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    /// 收尾时把文件末尾还没交出去的那些字节交出来。
-    func drainRemainingBytes() {
-        readNewBytes()
+    /// 停录之后剩下的那些字节。
+    ///
+    /// 编码器直到 `stop()` 才把最后的头部和尾帧写完，所以这一段只有在停下来之后才
+    /// 读得到，而要读它就得另开一个句柄——`stop()` 已经把原来那个关掉了。
+    func remainingBytesAfterStop() -> Data? {
+        guard let fileURL, let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+        guard (try? handle.seek(toOffset: readOffset)) != nil else { return nil }
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return nil }
+        readOffset += UInt64(data.count)
+        return data
     }
 
     // MARK: - 中断

@@ -39,7 +39,11 @@ final class MeetingUploader {
 
     private var isFinishing = false
 
+    /// - Parameter startAtPart: 本机已经传上去的分片数。异常退出之后从这里接着传：
+    ///   分片是按字节流上 1 MB 的整数倍切的，所以第 N 片之后的内容从 `N × 1 MB` 开始，
+    ///   接着传的字节和当初会切出来的完全一致。
     init(
+        startAtPart: Int = 0,
         send: @escaping MeetingPartSender,
         abort: @escaping MeetingUploadAborter,
         retries: Int = 3
@@ -47,6 +51,7 @@ final class MeetingUploader {
         self.send = send
         self.abort = abort
         self.retries = retries
+        self.uploadedParts = max(0, startAtPart)
     }
 
     /// 已经确认丢掉的分片之后，不再需要重传的起点。

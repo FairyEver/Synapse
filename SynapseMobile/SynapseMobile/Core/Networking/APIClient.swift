@@ -382,6 +382,42 @@ actor APIClient {
         )
     }
 
+    func renameMeeting(_ meetingId: String, to title: String) async throws {
+        struct Body: Encodable { let title: String }
+        let _: EmptyResponse = try await send(
+            path: "/meetings/\(escaped(meetingId))",
+            method: "PATCH",
+            body: Body(title: title)
+        )
+    }
+
+    /// 删掉整条：音频和文字一起，行从列表里消失，不可恢复。
+    func deleteMeeting(_ meetingId: String) async throws {
+        let _: EmptyResponse = try await send(path: "/meetings/\(escaped(meetingId))", method: "DELETE")
+    }
+
+    /// 转写失败之后重来一次。**不需要重新上传音频**：音频已经在服务端了。
+    func retryMeetingTranscription(_ meetingId: String) async throws {
+        let _: EmptyResponse = try await send(
+            path: "/meetings/\(escaped(meetingId))/transcription/retry",
+            method: "POST"
+        )
+    }
+
+    /// 音频的回放地址。录音还在才有；删掉之后是 nil，界面据此显示「录音已删除」。
+    func meetingAudioURL(_ meetingId: String) async throws -> String? {
+        struct Response: Decodable { let url: String? }
+        let response: Response = try await send(path: "/meetings/\(escaped(meetingId))/audio-url", method: "GET")
+        return response.url
+    }
+
+    /// 回放波形的振幅。服务端给的是 0–255 字节的 base64，**画之前要除以 255**。
+    func meetingPeaks(_ meetingId: String) async throws -> String? {
+        struct Response: Decodable { let peaks: String? }
+        let response: Response = try await send(path: "/meetings/\(escaped(meetingId))/peaks", method: "GET")
+        return response.peaks
+    }
+
     /// Sends an intent over HTTP instead of the socket.
     ///
     /// Notification actions run without a live connection, so the request has to

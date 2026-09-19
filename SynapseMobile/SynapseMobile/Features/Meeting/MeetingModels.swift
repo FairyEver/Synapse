@@ -92,6 +92,19 @@ enum MeetingText {
         }
     }
 
+    /// 录音页那口钟。**不是** `duration`——那个说的是「这条录音有多长」（48 分），
+    /// 这个说的是「正在录了多久」，要一秒一秒地读出来。
+    static func clock(_ milliseconds: Int) -> String {
+        let total = max(0, milliseconds) / 1000
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
     /// 时长：不到一分钟显示秒，否则显示分。
     static func duration(_ milliseconds: Int) -> String {
         let seconds = max(0, milliseconds) / 1000

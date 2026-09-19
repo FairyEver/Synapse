@@ -56,6 +56,65 @@ final class MeetingStore {
         }
     }
 
+    /// 改名。列表和详情一起变，不用等下一次轮询。
+    func rename(_ meetingId: String, to title: String, using client: APIClient) async {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await client.renameMeeting(meetingId, to: trimmed)
+            await load(using: client)
+            _ = await loadDetail(meetingId, using: client)
+        } catch let error as APIError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = "改名失败。"
+        }
+    }
+
+    /// 删掉整条。音频和文字一起删，行消失，不可恢复。
+    func delete(_ meetingId: String, using client: APIClient) async {
+        do {
+            try await client.deleteMeeting(meetingId)
+            // 本地先抹掉再拉一遍：等下一次请求回来才消失的话，删掉的那一行会在原地多
+            // 待半秒，看着像没删掉。
+            meetings.removeAll { $0.id == meetingId }
+            details[meetingId] = nil
+            await load(using: client)
+        } catch let error as APIError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = "删除失败。"
+        }
+    }
+
+    /// 复制全文要的那一段文字。详情还没拉过就先拉一次。
+    ///
+    /// 没有文字时返回 nil——按钮据此置灰，而不是消失（旁边的「⋯」跟着跳位更难看）。
+    func transcript(_ meetingId: String, using client: APIClient) async -> String? {
+        let detail: MeetingDetail?
+        if let cached = details[meetingId] {
+            detail = cached
+        } else {
+            detail = await loadDetail(meetingId, using: client)
+        }
+        guard let detail else { return nil }
+        let text = MeetingText.paragraphs(detail.segments).joined(separator: "\n\n")
+        return text.isEmpty ? nil : text
+    }
+
+    /// 转写失败之后的「重试」。**不需要重新上传音频**：音频已经在服务端了。
+    func retryTranscription(_ meetingId: String, using client: APIClient) async {
+        do {
+            try await client.retryMeetingTranscription(meetingId)
+            _ = await loadDetail(meetingId, using: client)
+            await load(using: client)
+        } catch let error as APIError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = "重试失败。"
+        }
+    }
+
     /// 退出登录时清干净：下一个账号不该看到上一个账号的录音。
     func clear() {
         meetings = []

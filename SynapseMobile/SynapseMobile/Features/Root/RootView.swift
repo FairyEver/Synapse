@@ -28,6 +28,16 @@ struct RootView: View {
                 LoginView()
             case .signedIn:
                 tabs
+                    // 录音页收起之后，录音还在继续。这枚胶囊是「还在录、而且随时能停」
+                    // 唯一的落点——没有它，用户收起那一屏就再也找不到自己在录的那条了。
+                    .overlay(alignment: .top) {
+                        if model.recording.phase != .idle {
+                            RecordingCapsule()
+                                .padding(.top, 4)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .animation(.snappy, value: model.recording.phase)
             }
         }
         .task {
