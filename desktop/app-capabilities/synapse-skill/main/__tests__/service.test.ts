@@ -556,6 +556,13 @@ describe("SynapseSkillService", () => {
     // 「我自己这个终端」必须被点名，否则 agent 只能去新建一个会话。
     expect(terminalIndex).toContain("SYNAPSE_SESSION_ID")
     expect(terminalIndex).toContain("SYNAPSE_WORKSPACE_ID")
+    /*
+     * Agent 通知开启时环境里还有第二套同名同义的变量（SYNAPSE_TERMINAL_*），一次真机运行里
+     * agent 就是先看到它、再去做比对。指南必须说清两套各归谁，否则每次都要多绕一圈。
+     */
+    expect(terminalIndex).toContain("SYNAPSE_TERMINAL_SESSION_ID")
+    // 粘贴的引用与「这个终端」可能指向不同的终端，必须写明谁优先。
+    expect(terminalIndex).toContain("outranks the phrase")
 
     // 三个入口都要把「没有 terminal 域」这个误判堵住。
     for (const text of [skillText, terminalIndex, appIndex]) {

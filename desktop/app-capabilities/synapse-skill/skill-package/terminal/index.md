@@ -15,6 +15,12 @@ When this process runs inside a Synapse terminal, that terminal is an object you
 
 A request such as "open codex in this terminal", "run this here", or "close this tab" is about those two ids. When neither variable is present, this process is not inside a Synapse terminal, so do not assume one.
 
+A second, differently named set may also be present: `SYNAPSE_TERMINAL_SESSION_ID` and the `SYNAPSE_TERMINAL_AGENT_*` values. Those belong to the agent-hook runtime, are injected only when Agent notifications are enabled, and carry the same session id under another name. Address the terminal with `SYNAPSE_SESSION_ID`; never echo an agent token. Seeing two session ids in the environment is expected, not a conflict to resolve.
+
+A pasted reference is the explicit target and outranks the phrase "this terminal". The two can disagree — a user may paste a reference to a tab other than the one they are typing in, and this process cannot see the tab they are looking at. When they disagree, act on the pasted `session_id`/`workspace_id` and say plainly which terminal you acted on. One case is not disagreement but impossibility: asking this process to start a program *in its own session* cannot work while it is itself the foreground program there — offer to open a pane beside it instead of typing into yourself.
+
+Waiting on another agent's answer is a wait, not a poll loop. `app_terminal_session_observe` takes a `maxWaitMs` capped at 30000, so pass that cap rather than re-reading every second, and do not substitute a shell `sleep` for it. Work that outlasts the cap means calling again — one call per 30 seconds, not one per second.
+
 Terminal capabilities are registered under the **`app`** domain. The catalog's `domains` list holds top-level namespaces only and has no `terminal` entry, so its absence there is not evidence that Terminal tools are missing — search by intent or by the exact `app_terminal_*` name.
 
 ## Interpret the request
