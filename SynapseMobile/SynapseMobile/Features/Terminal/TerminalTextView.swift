@@ -154,8 +154,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var reportedColumns = 0
     private var reportedRows = 0
     private var lastLayoutHeight: CGFloat = 0
-    /// The pane size the fit was last computed against, so `layoutSubviews` can tell
-    /// a real resize from the canvas being sized to the pane it already has.
+    /// 拟合所依据的那块地方。
+    ///
+    /// 多数时候就是这块画布，但它**不跟着画布一起变小**（见 `noteFitPane`）。
+    private var fitPaneSize: CGSize = .zero
+    /// The size the fit was last computed against, so `layoutSubviews` can tell a
+    /// real change from the canvas being sized to the pane it already has.
     private var lastLaidOutPaneSize: CGSize = .zero
     private var appliedCursor: TerminalStore.CursorPosition?
     private var blinkTimer: Timer?
@@ -263,7 +267,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         let reference = TerminalDensity.normal.fontSize
         let scale = terminalGridFitScale(
             grid: grid,
-            paneSize: bounds.size,
+            paneSize: fitPaneSize,
             contentInset: TerminalCellMetrics.contentInset,
             cellSize: CGSize(
                 width: TerminalCellMetrics.advance(forFontSize: reference),
@@ -277,6 +281,31 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // edge. Truncated rather than rounded so the grid can only ever come out
         // narrower, never wider than the space it was fitted into.
         return max(1, (reference * scale * 10).rounded(.down) / 10)
+    }
+
+    /// 记下这块地方有多大，供拟合使用。
+    ///
+    /// 记的是**它最大时**有多大，不是它现在有多大，因为压低它的几样东西没有一样是
+    /// 终端自己的尺寸：手机键盘升起来（系统键盘与我们那块面板都算），三条栏收放，
+    /// 附件条与消息条挂上来。照压低之后的高度重算，读者看到的是整幅画面换了个比例 ——
+    /// 点一下输入框，满屏的字小了一半，收起键盘又长回去。那不是"少看几行"，是同一屏
+    /// 东西被缩放了，而读者什么都没选。`TerminalScreen` 为同一个理由拒绝把键盘占掉的
+    /// 高度报给电脑（见 `reportGridToDesktop`）：键盘是这一页自己的家具，不是终端的
+    /// 尺寸。
+    ///
+    /// 键盘**收起**那一下也一并被这里挡住：收起时 `bounds` 是一帧一帧长回去的，途中每
+    /// 一个高度都小于记着的那个，于是既不会重排，也不会出现"先缩回去再长回来"。给出去
+    /// 的高度可以被收回去，收回去不改已经定下的比例。
+    ///
+    /// 宽不一样就重新量：转屏和分屏之后，那块高度与现在这块没有可比性。
+    ///
+    /// 代价写在明处：读者主动把栏收起来换来高度、再让栏回来时，画面保持收起时的比例
+    /// 而不再缩小 —— 那一屏东西照旧完整，只是下沿有几行要滚一下。这笔账是划算的：
+    /// 换来的是画面不再随键盘和栏浮沉。
+    private func noteFitPane(_ live: CGSize) {
+        guard live.width > 0, live.height > 0 else { return }
+        guard live.width != fitPaneSize.width || live.height > fitPaneSize.height else { return }
+        fitPaneSize = live
     }
 
     /// Magnifies the canvas, or puts it back.
@@ -359,14 +388,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // A resize changes how much of the desktop's grid fits, so the fitted size
         // is recomputed before anything lays out with the old one.
         //
-        // Only when the pane's own size actually changed. Re-measuring the rows is
-        // itself a layout-affecting change, so doing this on every pass makes the
-        // two call each other: a continuous redraw, which the reader sees as the
-        // text flickering while they are trying to read it.
+        // Only when the size the fit is measured against changed — which is not the
+        // pane's own size, and stops changing while a phone keyboard is up (see
+        // `noteFitPane`). Re-measuring the rows is itself a layout-affecting change,
+        // so doing this on every pass makes the two call each other: a continuous
+        // redraw, which the reader sees as the text flickering while they are trying
+        // to read it.
         sizeCanvas(to: bounds.size)
-        let paneSize = bounds.size
-        if displayMode == .desktopDriven, desktopGrid != nil, paneSize != lastLaidOutPaneSize {
-            lastLaidOutPaneSize = paneSize
+        noteFitPane(bounds.size)
+        if displayMode == .desktopDriven, desktopGrid != nil,
+           fitPaneSize != lastLaidOutPaneSize {
+            lastLaidOutPaneSize = fitPaneSize
             let target = renderedFontSize(base: baseFontSize)
             if target != fontSize {
                 fontSize = target

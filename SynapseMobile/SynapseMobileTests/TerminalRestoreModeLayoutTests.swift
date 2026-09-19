@@ -227,6 +227,92 @@ struct TerminalRestoreModeLayoutTests {
         }
     }
 
+    /// 把这块地方换成另一个大小，并按 UIKit 的样子重新布局一次。
+    private func resize(_ view: TerminalCollectionView, _ list: UICollectionView, to size: CGSize) {
+        view.frame = CGRect(origin: .zero, size: size)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        list.layoutIfNeeded()
+    }
+
+    /// 键盘吃掉的那一块不算进拟合：升起来那一下画面不许换比例。
+    ///
+    /// 这就是读者报上来的那一幕。手机键盘升起来时，SwiftUI 交给这个视图的是一块上沿
+    /// 不动、下沿被吃掉的画布；照它重算，同一屏东西就按小了一半的比例画出来 ——
+    /// 一台五十三列三十八行的终端上，正好是一半：12pt 的字变成 5.7pt，10.5px 一格变成
+    /// 21.6px 一格。那不是"少看几行"（矮了本来就该少看几行），是整幅画面被缩放了，
+    /// 而读者什么都没选。
+    @Test func aPaneEatenIntoByAKeyboardKeepsItsFit() {
+        let (view, list) = terminal(columns: 53, rows: 38)
+        view.apply(rows: lines(50), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let before = cellHeight(in: list)
+        #expect(before > 0)
+
+        resize(view, list, to: CGSize(width: pane.width, height: 300))
+
+        #expect(cellHeight(in: list) == before)
+    }
+
+    /// 长回去的那一次也一样：键盘收起是一帧一帧长回去的，途中每个高度都不是读者选过的。
+    ///
+    /// 少了这一条，上面那条会被"收起键盘时先缩回去、再长回来"满足 —— 那是同一记跳，
+    /// 只是换了个方向。
+    @Test func aPaneGrowingBackFromAKeyboardKeepsItsFit() {
+        let (view, list) = terminal(columns: 53, rows: 38)
+        view.apply(rows: lines(50), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let full = cellHeight(in: list)
+
+        // 收起来，再按收起的动画走上几帧。
+        for height in [500.0, 420.0, 360.0, 300.0] {
+            resize(view, list, to: CGSize(width: pane.width, height: height))
+            #expect(cellHeight(in: list) == full)
+        }
+        // 长回去，途中每一帧也照旧。
+        for height in [300.0, 380.0, 460.0, 540.0] {
+            resize(view, list, to: CGSize(width: pane.width, height: height))
+            #expect(cellHeight(in: list) == full)
+        }
+        // 落定，还是同一个 —— 收起与放下本身就不该动它。
+        resize(view, list, to: CGSize(width: pane.width, height: pane.height))
+        #expect(cellHeight(in: list) == full)
+    }
+
+    /// 地方变大是要跟的：上面两条说的是"变小不算数"，不是"拟合不动了"。
+    ///
+    /// 少了这一条，一个干脆不再理会自己尺寸的视图也能让上面两条全绿 —— 而那是另一个
+    /// 更糟的毛病：读者收起三条栏换来的那几行，本该按比例分给格子。
+    ///
+    /// 故意用一块窄终端：宽的那一台在这个宽度下是宽这条边在卡着，高再给它多少都到不了
+    /// 字上 —— 那不叫没跟，那是宽说了算。窄的这台才是高说了算的那一种。
+    @Test func aTallerPaneIsFittedAgain() {
+        let (view, list) = terminal(columns: 30, rows: 38)
+        view.apply(rows: lines(50), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let before = cellHeight(in: list)
+
+        resize(view, list, to: CGSize(width: pane.width, height: 900))
+
+        #expect(cellHeight(in: list) > before)
+    }
+
+    /// 转屏是另一块地方，重新量。
+    ///
+    /// 宽不一样的时候，记着的那块高度与现在这块没有可比性：拿竖屏的高度去拟合横屏的
+    /// 画布，读者会得到一屏他装不下的字。
+    @Test func aRotationIsFittedAgain() {
+        let (view, list) = terminal(columns: 53, rows: 38)
+        view.apply(rows: lines(50), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let before = cellHeight(in: list)
+
+        // 横屏：画布又宽又矮，电脑那么多列在这个高下装不进去。
+        resize(view, list, to: CGSize(width: 800, height: 300))
+
+        #expect(cellHeight(in: list) != before)
+    }
+
     /// A buffer that was replaced lands on the newest line, whatever this view held.
     ///
     /// The phone keeps a session's rows across visits, so entering one paints what
