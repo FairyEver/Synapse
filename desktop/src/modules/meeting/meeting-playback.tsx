@@ -35,6 +35,16 @@ const SKIP_MS = 15_000
  */
 const LOAD_TIMEOUT_MS = 10_000
 
+/**
+ * 语音视图这一屏处在哪个阶段。
+ *
+ * `unknown` 是「还没问出本机有没有这份音频」，**必须和载入中分开**。React 的 effect 在
+ * 第一次绘制之后才跑，所以进这一屏时至少要画一帧；把初始值写成载入中，缓存命中的那条也
+ * 会先闪一下「正在下载」——而「第二次点开不出现正在下载」正是这次要的结果。这一帧什么都不
+ * 说：播放器该有的样子都在，只是播放键还没到能按的时候。
+ */
+type AudioPhase = "unknown" | "loading" | "ready"
+
 type MeetingPlaybackProps = {
   readonly meetingId: string
   readonly durationMs: number
@@ -49,25 +59,31 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
   /** 绘制用的是 0-1 的振幅；服务端存的是 0-255 的字节，取值时就还原。 */
   const peaksRef = useRef<readonly number[]>([])
   const [url, setUrl] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [phase, setPhase] = useState<AudioPhase>("unknown")
   const [timedOut, setTimedOut] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [positionMs, setPositionMs] = useState(0)
   const [peaksLoaded, setPeaksLoaded] = useState(false)
+  const loading = phase === "loading"
 
   const applyAudioState = useCallback((result: SynapseMeetingAudioEnsureResult) => {
-    // 「下载中」保持载入态；「不可用」什么都不做——那一屏由详情自己渲染成「录音已删除」，
-    // 这里再画一个状态只会跟它抢。
-    if (result.state !== "ready") return
-    setUrl(result.url)
-    setLoading(false)
+    if (result.state === "ready") {
+      setUrl(result.url)
+      setPhase("ready")
+      return
+    }
+    if (result.state === "downloading") {
+      setPhase("loading")
+      // 「不可用」什么都不做——那一屏由详情自己渲染成「录音已删除」，这里再画一个状态
+      // 只会跟它抢。
+    }
   }, [])
 
   // 本机有没有这份音频：有就直接用它，没有就起一次后台下载（幂等，重复叫不会起第二个）。
   useEffect(() => {
     let disposed = false
     setUrl(null)
-    setLoading(true)
+    setPhase("unknown")
     setTimedOut(false)
     void requireSynapseBridge()
       .meeting.audio
@@ -76,8 +92,9 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
         if (!disposed) applyAudioState(result)
       })
       .catch(() => {
-        // 连主进程都没问到，是极少见的内部故障。停在载入态：转满 10 秒用户能催一次，
-        // 而主进程那边的自动重试照旧跑，网回来会推事件过来。这里**不写成失败**。
+        // 连主进程都没问到，是极少见的内部故障。进载入态：转满 10 秒用户能催一次，而主
+        // 进程那边的自动重试照旧跑，网回来会推事件过来。这里**不写成失败**。
+        if (!disposed) setPhase("loading")
       })
     return () => {
       disposed = true
