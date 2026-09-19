@@ -29,32 +29,48 @@ enum MeetingAudio {
     /// 对象存储对分片数的上限。
     static let maxUploadParts = 10_000
 
-    /// 时域振幅换成包络用的三个数，与电脑端同一套。
-    ///
-    /// 乘 6 是把正常说话的音量顶到看得见的高度；下降比上升慢，看起来才像人声而不是
-    /// 一根抖动的刺；静音留一个极小的底，否则柱子会缩成一条看不见的线。
-    static let amplitudeGain = 6.0
+    /// 包络用的三个数：下降比上升慢，看起来才像人声而不是一根抖动的刺；静音留一个极小
+    /// 的底，否则柱子会缩成一条看不见的线。
     static let amplitudeDecay = 0.82
     static let amplitudeFloor = 0.02
-    /// 超过它就算「听到过声音」。
+
+    /// 超过它就算「听到过声音」。在这个刻度上是约 -43 dBFS，也就是比房间底噪高一点就
+    /// 算——只有真的没听到东西时才会提示「没有听到声音」。
     static let loudAmplitude = 0.1
+
+    /// 这条波形铺开的动态范围。0 dBFS 是满刻度，留到真顶满才用得上；-48 以下是静音。
+    ///
+    /// 两端都是 dBFS 而不是线性振幅，是这个刻度唯一要紧的地方：见
+    /// `amplitude(fromDecibels:)`。
+    static let meterFloorDecibels = -48.0
+    static let meterCeilingDecibels = 0.0
 
     /// 录音页那条滚动波形的柱宽与间距，与电脑端同一组数。
     static let barWidth = 1.5
     static let barGap = 1.1
 
-    /// 录音器报的电平 → 包络上的振幅。
+    /// 电平 → 包络上的振幅。**在对数域上摊开，不是换回线性再乘一个增益。**
     ///
-    /// `averagePower` 是 dBFS，先换回线性（也就是 RMS），**再乘增益**。乘这一步不能省：
-    /// 正常说话在 -30 dBFS 上下，换出来只有 0.03，不乘的话波形几乎贴平，而「有没有听到
-    /// 声音」那条阈值（`loudAmplitude`）也永远跨不过去——一场会录完，提示行会一直挂着
-    /// 「没有听到声音」。电脑端在源头乘的就是同一个数。
+    /// 比值刻度上只有很窄的一段能用：`linear × 6` 意味着 -15.6 dBFS 就把柱子顶满，而正常
+    /// 说话本身就有 30 dB 以上的起伏。于是稍微开口波形就贴顶，说到多大声都一样高——波形
+    /// 上区分不出音量，那它就没有用了。这里把 -48…0 dBFS 均匀铺到 0…1，说多大声就多高。
     ///
-    /// 异常退出之后从本机音频重算波形走的是另一条路（`MeetingAudioFilePeaks`），那边也
-    /// 乘同一个增益，两条路画出来的高度才一致。
-    static func amplitude(fromAveragePower decibels: Double) -> Double {
+    /// 两条路必须都走这里，否则同一条录音在录音页和异常退出重算出来不一样高。
+    static func amplitude(fromDecibels decibels: Double) -> Double {
         guard decibels.isFinite else { return 0 }
-        return pow(10, decibels / 20) * amplitudeGain
+        let clamped = min(meterCeilingDecibels, max(meterFloorDecibels, decibels))
+        return (clamped - meterFloorDecibels) / (meterCeilingDecibels - meterFloorDecibels)
+    }
+
+    /// 录音器报的电平 → 包络上的振幅。`averagePower` 就是 dBFS。
+    static func amplitude(fromAveragePower decibels: Double) -> Double {
+        amplitude(fromDecibels: decibels)
+    }
+
+    /// 从采样算出来的 RMS → 包络上的振幅。异常退出之后重算波形走的是这一条。
+    static func amplitude(fromRMS rms: Double) -> Double {
+        guard rms > 0 else { return 0 }
+        return amplitude(fromDecibels: 20 * log10(rms))
     }
 }
 

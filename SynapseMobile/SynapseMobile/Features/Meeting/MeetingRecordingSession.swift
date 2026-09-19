@@ -460,7 +460,7 @@ enum MeetingAudioFilePeaks {
                 sum += value * value
             }
             let rms = (sum / Double(frames)).squareRoot()
-            store.push(rms * MeetingAudio.amplitudeGain)
+            store.push(MeetingAudio.amplitude(fromRMS: rms))
             if file.framePosition >= file.length { break }
         }
         return store.values

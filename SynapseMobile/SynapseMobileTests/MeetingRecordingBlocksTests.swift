@@ -141,14 +141,28 @@ struct MeetingRecordingBlocksTests {
 
     // MARK: - 电平换算
 
-    @Test func levelMappingAppliesTheGainTheDesktopUses() {
-        // 正常说话在 -30 dBFS 上下。换算之后必须越过「听到了声音」的阈值——不乘那个增
-        // 益的话这里只有 0.03，一场会录完提示行会一直挂着「没有听到声音」，而且波形
-        // 只有应有高度的六分之一。
+    @Test func levelMappingSpreadsSpeakingVolumeInsteadOfPinningIt() {
+        // 这条刻度是为「说得响和说得轻看得出区别」而存在的：一开口就贴顶的刻度等于没有
+        // 刻度。线性那一版 -15.6 dBFS 就顶满，正常说话的整个范围都压在顶上。
+        let soft = MeetingAudio.amplitude(fromAveragePower: -30)
+        let normal = MeetingAudio.amplitude(fromAveragePower: -20)
+        let loud = MeetingAudio.amplitude(fromAveragePower: -10)
+        #expect(soft < normal)
+        #expect(normal < loud)
+        #expect(soft < 0.5)
+        // 只有真顶到满刻度才占满一根柱子。
+        #expect(loud < 1)
+        #expect(MeetingAudio.amplitude(fromAveragePower: -6) < 1)
+        #expect(MeetingAudio.amplitude(fromAveragePower: 0) == 1)
+    }
+
+    @Test func levelMappingCountsAudibleSpeechAsSound() {
+        // 门槛落在约 -43 dBFS：正常说话、小声说话都要越过去，不然一场会录完提示行会一直
+        // 挂着「没有听到声音」，而它本该「听到过一次就永不再提」。
         #expect(MeetingAudio.amplitude(fromAveragePower: -30) > MeetingAudio.loudAmplitude)
-        #expect(MeetingAudio.amplitude(fromAveragePower: -20) > MeetingAudio.loudAmplitude)
-        // 和电脑端同一条线：RMS 大于约 -35 dBFS 才算听到。
-        #expect(MeetingAudio.amplitude(fromAveragePower: -40) < MeetingAudio.loudAmplitude)
+        #expect(MeetingAudio.amplitude(fromAveragePower: -40) > MeetingAudio.loudAmplitude)
+        // 房间底噪不算「听到了声音」。
+        #expect(MeetingAudio.amplitude(fromAveragePower: -47) < MeetingAudio.loudAmplitude)
     }
 
     @Test func levelMappingClampsTheSilenceFloor() {
@@ -160,14 +174,14 @@ struct MeetingRecordingBlocksTests {
     }
 
     @Test func liveAndRecoveredWaveformsUseTheSameScale() {
-        // 实时那条路和异常退出重算那条路必须画成一样高。重算那条乘了增益，所以实时这条
-        // 也要乘，而且是同一个数。
+        // 实时那条路收的是录音器报的 dBFS，重算那条路收的是采样的 RMS；同一个电平必须
+        // 画成一样高，否则同一条录音在录音页和异常退出重算出来不一样高。
         var store = MeetingPeakStore()
         let live = store.push(MeetingAudio.amplitude(fromAveragePower: -30))
 
         var recovered = MeetingPeakStore()
         let rms = pow(10.0, -30.0 / 20)
-        let fromFile = recovered.push(rms * MeetingAudio.amplitudeGain)
+        let fromFile = recovered.push(MeetingAudio.amplitude(fromRMS: rms))
 
         #expect(abs(live - fromFile) < 1e-9)
     }
