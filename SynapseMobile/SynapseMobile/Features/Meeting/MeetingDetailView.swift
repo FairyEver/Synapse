@@ -273,55 +273,57 @@ private struct MeetingAudioPane: View {
             .accessibilityIdentifier("playback-waveform")
     }
 
+    /// 三个控件自己占一行居中（播放按钮正落在屏幕中线上），计时挪到下一行。
     private var controls: some View {
-        HStack(spacing: 20) {
-            Button {
-                Haptics.select()
-                model.playback.skip(by: -MeetingPlayback.skipSeconds)
-            } label: {
-                Image(systemName: "gobackward.15")
-                    .font(.title2)
-                    // 载入中一起置灰：这会儿点它什么都不会发生。电脑端也是三个一起禁用的。
-                    .opacity(model.playback.isLoading ? 0.35 : 1)
-            }
-            .buttonStyle(.plain)
-            .disabled(model.playback.isLoading)
-            .accessibilityLabel("后退 15 秒")
+        VStack(spacing: 12) {
+            HStack(spacing: 20) {
+                Button {
+                    Haptics.select()
+                    model.playback.skip(by: -MeetingPlayback.skipSeconds)
+                } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.title2)
+                        // 载入中一起置灰：这会儿点它什么都不会发生。电脑端也是三个一起禁用的。
+                        .opacity(model.playback.isLoading ? 0.35 : 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.playback.isLoading)
+                .accessibilityLabel("后退 15 秒")
 
-            Button {
-                Haptics.commit()
-                model.playback.togglePlay()
-            } label: {
-                Image(systemName: model.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Theme.ink)
-                    // 载入中置灰：这会儿点它什么都不会发生。
-                    .opacity(model.playback.isLoading ? 0.35 : 1)
-            }
-            .buttonStyle(.plain)
-            .disabled(model.playback.isLoading)
-            .accessibilityLabel(model.playback.isPlaying ? "暂停" : "播放")
+                Button {
+                    Haptics.commit()
+                    model.playback.togglePlay()
+                } label: {
+                    Image(systemName: model.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(Theme.ink)
+                        // 载入中置灰：这会儿点它什么都不会发生。
+                        .opacity(model.playback.isLoading ? 0.35 : 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.playback.isLoading)
+                .accessibilityLabel(model.playback.isPlaying ? "暂停" : "播放")
 
-            Button {
-                Haptics.select()
-                model.playback.skip(by: MeetingPlayback.skipSeconds)
-            } label: {
-                Image(systemName: "goforward.15")
-                    .font(.title2)
-                    // 同后退：载入中三个一起置灰，与电脑端一致。
-                    .opacity(model.playback.isLoading ? 0.35 : 1)
+                Button {
+                    Haptics.select()
+                    model.playback.skip(by: MeetingPlayback.skipSeconds)
+                } label: {
+                    Image(systemName: "goforward.15")
+                        .font(.title2)
+                        // 同后退：载入中三个一起置灰，与电脑端一致。
+                        .opacity(model.playback.isLoading ? 0.35 : 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.playback.isLoading)
+                .accessibilityLabel("前进 15 秒")
             }
-            .buttonStyle(.plain)
-            .disabled(model.playback.isLoading)
-            .accessibilityLabel("前进 15 秒")
-
-            Spacer(minLength: 8)
 
             Text("\(MeetingText.clock(Int(model.playback.currentSeconds * 1000))) / \(MeetingText.clock(Int(model.playback.durationSeconds * 1000)))")
                 .font(.footnote)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
