@@ -106,6 +106,7 @@ describe("Claude Code terminal IPC", () => {
         ANTHROPIC_DEFAULT_SONNET_MODEL: "sonnet-model",
         ANTHROPIC_MODEL: "sonnet-model",
         DISABLE_AUTOUPDATER: "1",
+        CLAUDE_CODE_HARBOR_KITE: "1",
       },
     })
     // The user's own settings outrank the process env, so the provider is pinned as flag settings.
@@ -123,6 +124,7 @@ describe("Claude Code terminal IPC", () => {
         ANTHROPIC_DEFAULT_SONNET_MODEL: "sonnet-model",
         ANTHROPIC_MODEL: "sonnet-model",
         DISABLE_AUTOUPDATER: "1",
+        CLAUDE_CODE_HARBOR_KITE: "1",
       },
       model: "sonnet-model",
     }))

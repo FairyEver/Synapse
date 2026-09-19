@@ -113,6 +113,13 @@ export async function createClaudeCodeTerminalSession(
     ...providerEnv,
     ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
     DISABLE_AUTOUPDATER: "1",
+    /*
+     * 跨会话消息（用户在自己装的 Claude Code 里说一句话，就能让这里跑的那个收到）。
+     *
+     * 这个功能的门控默认值随版本漂移：同一个开关在旧版内置 runtime 里默认关、在新版里
+     * 默认开，靠版本默认值等于让行为随升级忽明忽暗。显式写死，行为就与版本无关。
+     */
+    CLAUDE_CODE_HARBOR_KITE: "1",
   }
   // The user's own ~/.claude/settings.json env outranks the process env, so the selected
   // Provider and model must be pinned through the higher-priority flag settings layer.
