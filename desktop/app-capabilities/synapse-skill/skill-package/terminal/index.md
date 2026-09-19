@@ -19,6 +19,10 @@ A second, differently named set may also be present: `SYNAPSE_TERMINAL_SESSION_I
 
 A pasted reference is the explicit target and outranks the phrase "this terminal". The two can disagree — a user may paste a reference to a tab other than the one they are typing in, and this process cannot see the tab they are looking at. When they disagree, act on the pasted `session_id`/`workspace_id` and say plainly which terminal you acted on. One case is not disagreement but impossibility: asking this process to start a program *in its own session* cannot work while it is itself the foreground program there — offer to open a pane beside it instead of typing into yourself.
 
+The target session's shell is not yours. Your own shell starts from your own environment; the session you are driving runs the user's interactive shell, with their aliases, functions, `PATH`, and working directory. So never conclude from your own environment that a command the user named does not exist, and never go hunting for it on disk — an alias or function lives in that session's own startup files, not in something you can enumerate, and a recursive search of a home directory answers the question far more expensively than it is worth.
+
+Send what the user named and read the screen. The target session is the authority on whether the command exists, and it answers immediately: a shell whose alias is missing says so in the very output you are already reading. Prefer that over any check of your own.
+
 Waiting on another agent's answer is a wait, not a poll loop. `app_terminal_session_observe` takes a `maxWaitMs` capped at 30000, so pass that cap rather than re-reading every second, and do not substitute a shell `sleep` for it. Work that outlasts the cap means calling again — one call per 30 seconds, not one per second.
 
 Terminal capabilities are registered under the **`app`** domain. The catalog's `domains` list holds top-level namespaces only and has no `terminal` entry, so its absence there is not evidence that Terminal tools are missing — search by intent or by the exact `app_terminal_*` name.

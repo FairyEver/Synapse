@@ -563,6 +563,11 @@ describe("SynapseSkillService", () => {
     expect(terminalIndex).toContain("SYNAPSE_TERMINAL_SESSION_ID")
     // 粘贴的引用与「这个终端」可能指向不同的终端，必须写明谁优先。
     expect(terminalIndex).toContain("outranks the phrase")
+    /*
+     * 实测里 agent 为了确认用户说的别名存在，先翻自己的环境、再递归 grep 整个 home 目录（跑了
+     * 一分半还在跑）。目标会话的 shell 与它自己的不是同一个，这条必须写出来。
+     */
+    expect(terminalIndex).toContain("The target session's shell is not yours")
 
     // 三个入口都要把「没有 terminal 域」这个误判堵住。
     for (const text of [skillText, terminalIndex, appIndex]) {
