@@ -561,8 +561,17 @@ describe("SynapseSkillService", () => {
      * agent 就是先看到它、再去做比对。指南必须说清两套各归谁，否则每次都要多绕一圈。
      */
     expect(terminalIndex).toContain("SYNAPSE_TERMINAL_SESSION_ID")
-    // 粘贴的引用与「这个终端」可能指向不同的终端，必须写明谁优先。
-    expect(terminalIndex).toContain("outranks the phrase")
+    /*
+     * 实测里规矩失效的原因是把规则钉在了一个字面短语上：指南写的是 outranks the phrase
+     * "this terminal"，而用户说的是「这个对话」，于是粘贴的引用被整个忽略，agent 拿自己
+     * 环境里的 id 当成了目标。优先规则必须覆盖任何指示词，不是某一个说法。
+     */
+    expect(terminalIndex).toContain("outranks anything deictic")
+    /*
+     * 同一次实测里更重的一条：agent 读到自己就是那个会话的前台程序后，未经询问就给用户
+     * 右侧开了一格分屏，把 Codex 起在了那里。绕过限制的动作必须由用户先提出来。
+     */
+    expect(terminalIndex).toContain("on your own initiative")
     /*
      * 三次真机失败是同一类毛病：agent 不知道自己处在什么位置。实测里它为确认一个别名，先翻自己的
      * 环境、再递归 grep 整个 home（跑了一分半）。钉住的是那条能生成这些具体规则的原则，而不是
