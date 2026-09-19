@@ -47,6 +47,9 @@ export type PendingRecording = {
   readonly startedAt: string
 } | null
 
+/// 列表里的那一条。`null` 那个分支是单条接口「什么都没有」的写法，列出来的时候不存在。
+export type PendingRecordingEntry = NonNullable<PendingRecording>
+
 type ServerRecordingStart = {
   readonly meetingId?: unknown
   readonly recordingId?: unknown
@@ -196,7 +199,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     )
     const body = (await response.json()) as { items?: unknown }
     if (!Array.isArray(body.items)) return null
-    for (const item of body.items as PendingRecording[]) {
+    for (const item of body.items as PendingRecordingEntry[]) {
       if (await ownsSpool(item.recordingId)) return item
     }
     // 服务端说有几条没收尾，但一条都不是本机录的。**不是本机的就不要碰**：别的设备录的
