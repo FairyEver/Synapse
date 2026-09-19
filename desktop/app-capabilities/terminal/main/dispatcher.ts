@@ -66,6 +66,7 @@ import {
 } from "../shared/errors"
 import { terminalInputSchemaForCapability } from "../shared/mcp-tools"
 import type { TerminalLaunchLayer } from "../shared/schema"
+import { collectTerminalPaneLeaves } from "../shared/workspace"
 import { TerminalLaunchValidationError } from "./environment"
 import type { TerminalControllerContext, TerminalService } from "./service"
 
@@ -489,11 +490,16 @@ async function dispatchAuthorizedCore(
     const visible = await filterAuthorizedResources(
       deps, context, service.listSessions(), (session) => `terminal:session:${session.id}`, ["discover"], action,
     )
-    return paginate(filterSessions(visible, input).map(sessionSummary), input.limit, input.cursor, input, service.terminalDomainRevision)
+    const workspaceIds = workspaceIdBySessionId(service)
+    return paginate(
+      filterSessions(visible, input).map((session) => sessionSummary(session, workspaceIds.get(session.id))),
+      input.limit, input.cursor, input, service.terminalDomainRevision,
+    )
   }
   if (action === "app.terminal.session_summary.get") {
     const input = terminalSessionTargetSchema.parse(params)
-    return sessionSummary(service.getSession(input))
+    const session = service.getSession(input)
+    return sessionSummary(session, workspaceIdBySessionId(service).get(session.id))
   }
   if (action === "app.terminal.session_state.list") {
     const input = terminalSessionStateListInputSchema.parse(params)
@@ -501,14 +507,21 @@ async function dispatchAuthorizedCore(
     const visible = await filterAuthorizedResources(
       deps, context, service.listSessions(), (session) => `terminal:session:${session.id}`, ["discover", "state.read"], action,
     )
+    const workspaceIds = workspaceIdBySessionId(service)
     const items = filterSessions(visible, input)
       .filter((session) => !input.lifecycle || session.status === input.lifecycle)
-      .map((session) => service.getSessionState(session.id, controller))
+      .map((session) => ({
+        ...service.getSessionState(session.id, controller),
+        workspaceId: workspaceIds.get(session.id) ?? null,
+      }))
     return paginate(items, input.limit, input.cursor, input, service.terminalDomainRevision)
   }
   if (action === "app.terminal.session_state.get") {
     const input = terminalSessionTargetSchema.parse(params)
-    return service.getSessionState(input.sessionId, controllerFor(context))
+    return {
+      ...service.getSessionState(input.sessionId, controllerFor(context)),
+      workspaceId: workspaceIdBySessionId(service).get(input.sessionId) ?? null,
+    }
   }
   if (action === "app.terminal.session_metadata.get") {
     const input = terminalSessionTargetSchema.parse(params)
@@ -542,7 +555,10 @@ async function dispatchAuthorizedCore(
     const session = service.getSession(input)
     requireRevision(session.metadataRevision, input.expectedMetadataRevision, "metadataRevision")
     const updated = await service.renameSession(input)
-    return mutationResult(sessionSummary(updated), session.metadataRevision, updated.metadataRevision, updated !== session)
+    return mutationResult(
+      sessionSummary(updated, workspaceIdBySessionId(service).get(updated.id)),
+      session.metadataRevision, updated.metadataRevision, updated !== session,
+    )
   }
   if (action === "app.terminal.session.observe") {
     return service.observe(terminalObserveInputSchema.parse(params), false, context.clientId)
@@ -782,8 +798,32 @@ function groupSummary(
   }
 }
 
-function sessionSummary(session: ReturnType<TerminalService["listSessions"]>[number]) {
-  return { sessionId: session.id, title: session.title, groupId: session.groupId, createdAt: session.createdAt, source: session.creationSource }
+/**
+ * sessionId → 它所在终端标签（workspace）的 id。
+ *
+ * 标签与分屏原本只活在 Renderer 的聚合层里，调用方拿不到，于是「这个标签下有哪几个会话」
+ * 没法回答。这里只把归属读出来：不返回布局树，也不让调用方改动它。
+ *
+ * map 每次现建而不是缓存：workspace 只活到本次运行结束（ADR 0215），缓存它就得为
+ * 「什么时候失效」再定一套规则，而每次调用重建的成本只是走一遍布局树。
+ */
+function workspaceIdBySessionId(service: TerminalService): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const workspace of service.listWorkspaces()) {
+    for (const pane of collectTerminalPaneLeaves(workspace.layout)) map.set(pane.sessionId, workspace.id)
+  }
+  return map
+}
+
+function sessionSummary(
+  session: ReturnType<TerminalService["listSessions"]>[number],
+  workspaceId: string | undefined,
+) {
+  return {
+    sessionId: session.id, title: session.title, groupId: session.groupId,
+    workspaceId: workspaceId ?? null,
+    createdAt: session.createdAt, source: session.creationSource,
+  }
 }
 
 function commandSummary(groupId: string, command: ReturnType<typeof requireCommand>) {

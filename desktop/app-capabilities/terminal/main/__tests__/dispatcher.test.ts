@@ -24,6 +24,7 @@ function serviceStub(overrides: Record<string, unknown> = {}): TerminalService {
     lastPersistError: undefined,
     listGroups: vi.fn(() => []),
     listSessions: vi.fn(() => []),
+    listWorkspaces: vi.fn(() => []),
     getSessionState: vi.fn(() => ({
       sessionId: "11111111-1111-4111-8111-111111111111",
       lifecycle: "running",
@@ -365,6 +366,62 @@ describe("Terminal capability dispatcher", () => {
     const stateList = result.data as { items: Array<{ sessionId: string }> }
     expect(stateList.items.map((item) => item.sessionId)).toEqual([allowedId])
     expect(service.getSessionState).not.toHaveBeenCalledWith(deniedId, expect.anything())
+  })
+
+  /*
+   * 标签与分屏只活在 Renderer 的聚合层里，调用方原本看不出「这几个会话是不是在同一个标签
+   * 下分屏出来的」。这一条把归属钉住：同一标签的两个 pane 报同一个 id，不在任何标签里的报 null。
+   */
+  it("reports the terminal tab each session sits in", async () => {
+    const firstId = "11111111-1111-4111-8111-111111111111"
+    const secondId = "22222222-2222-4222-8222-222222222222"
+    const loneId = "33333333-3333-4333-8333-333333333333"
+    const groupId = "55555555-5555-4555-8555-555555555555"
+    const workspaceId = "44444444-4444-4444-8444-444444444444"
+    const service = serviceStub({
+      listSessions: vi.fn(() => [
+        { id: firstId, groupId, title: "One", createdAt: "2026-07-22T00:00:00.000Z", status: "running", creationSource: "ui" },
+        { id: secondId, groupId, title: "Two", createdAt: "2026-07-22T00:00:01.000Z", status: "running", creationSource: "ui" },
+        { id: loneId, groupId, title: "Lone", createdAt: "2026-07-22T00:00:02.000Z", status: "running", creationSource: "ui" },
+      ]),
+      listWorkspaces: vi.fn(() => [{
+        id: workspaceId,
+        layout: {
+          type: "split" as const, splitId: "split-1", direction: "horizontal" as const, ratio: 0.5,
+          first: { type: "leaf" as const, paneId: "pane-1", sessionId: firstId },
+          second: { type: "leaf" as const, paneId: "pane-2", sessionId: secondId },
+        },
+      }]),
+    })
+    const security = allowingSecurity()
+    const dispatcher = createTerminalCapabilityDispatcher({ service, ...security })
+
+    const result = await dispatcher.dispatch("app.terminal.session.list", {}, localMcpContext)
+    expect(result).toMatchObject({ ok: true })
+    if (!result.ok) throw new Error("Expected a successful session list response")
+    const list = result.data as { items: Array<{ sessionId: string; workspaceId: string | null }> }
+    expect(list.items.map((item) => [item.sessionId, item.workspaceId])).toEqual([
+      [firstId, workspaceId],
+      [secondId, workspaceId],
+      [loneId, null],
+    ])
+  })
+
+  it("carries the terminal tab on a single session's state", async () => {
+    const sessionId = "11111111-1111-4111-8111-111111111111"
+    const workspaceId = "44444444-4444-4444-8444-444444444444"
+    const service = serviceStub({
+      getSessionState: vi.fn(() => ({ sessionId, lifecycle: "running", attention: { state: "unknown" } })),
+      listWorkspaces: vi.fn(() => [{
+        id: workspaceId,
+        layout: { type: "leaf" as const, paneId: "pane-1", sessionId },
+      }]),
+    })
+    const security = allowingSecurity()
+    const dispatcher = createTerminalCapabilityDispatcher({ service, ...security })
+
+    const result = await dispatcher.dispatch("app.terminal.session_state.get", { sessionId }, localMcpContext)
+    expect(result).toMatchObject({ ok: true, data: { sessionId, workspaceId } })
   })
 
   it("binds semantic input to the trusted controller context, not a tool parameter", async () => {

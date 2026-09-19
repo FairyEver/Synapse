@@ -48,7 +48,7 @@
 - UI 中一个侧边栏标签对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行；拖动 pane 顶栏只能投放到另一 pane 的四个边缘并重组布局树，不合并 session、也不在 pane 内新增标签层。关闭侧边栏标签必须删除整个 workspace、全部叶子 session 及其数据；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
 - session 进入 `ended`、`failed` 或 `lost` 后必须立即移除对应 pane，并删除会话标识、输出、检查点、操作和短期幂等数据；最后一个 pane 移除后 workspace 不得继续出现在侧边栏。终止态仅可用于唤醒已在等待的观察请求，之后按原 `sessionId` 查询必须返回 `not_found`。
 - Synapse 退出时必须终止并销毁所有 Terminal session，只保留全局设置、分组、快捷命令和工具栏操作。启动时必须清理任何旧版或异常遗留的 session/workspace 及关联数据，不恢复 PTY，不将旧记录转成 `lost`，不重放生命周期操作。
-- workspace 与 pane 是 UI/IPC 聚合，不新增 MCP 工具；MCP 继续按不可变 `sessionId` 管理底层会话，不能假定或修改 Renderer 布局。
+- workspace 与 pane 是 UI/IPC 聚合；MCP 按不可变 `sessionId` 管理底层会话，并额外把「这个会话属于哪个标签」作为只读投影暴露（`session.list` / `session_summary.get` / `session_state.get` / `.list` 的 `workspaceId`）。该投影只报归属，不返回布局树、不暴露 pane id，也不新增工具；不得据此推断或修改 Renderer 布局。
 - pane 顶栏最大化只属于 Renderer 临时视图状态：沿目标 pane 的布局祖先路径将每个兄弟分支固定为 100px，进入前记录当前实时布局；切换到其它 pane、切换 workspace 或修改布局时必须还原。最大化状态和临时比例不得持久化，也不得新增 IPC/MCP 能力。
 - pane 顶栏平分操作以目标 pane 的直接父级方向为准，向上合并连续同方向 split，并将该组中的并列区段等宽或等高分配；正交方向子树视为一个区段且保持内部比例。平分结果必须作为一次原子 workspace 布局修订持久化；最大化期间触发时先退出最大化。该操作只属于 UI IPC，不新增 MCP 工具。
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane。
