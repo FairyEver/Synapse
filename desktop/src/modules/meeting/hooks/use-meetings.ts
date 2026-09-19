@@ -4,7 +4,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseMeetingDetail, SynapseMeetingSummary, SynapseMeetingTranscriptionCompletedEvent } from "@/types/meeting"
 
 /**
- * 会议记录的数据入口。
+ * 录音的数据入口。
  *
  * 渲染进程不直接连服务端，一律经 preload bridge。所有异步读取都带一个请求序号，
  * 迟到的响应直接丢掉——列表在转写期间会反复刷新，没有这道闸就会出现「新数据被旧
@@ -36,7 +36,7 @@ export function useMeetingList(refreshKey: number): MeetingLoadState<readonly Sy
       })
       .catch((error: unknown) => {
         if (requestId.current !== current) return
-        setState({ data: [], loading: false, error: error instanceof Error ? error.message : "读取会议列表失败。" })
+        setState({ data: [], loading: false, error: error instanceof Error ? error.message : "读取录音列表失败。" })
       })
   }, [refreshKey])
 
@@ -53,14 +53,20 @@ export function useMeetingDetail(
     error: null,
   })
   const requestId = useRef(0)
+  const loadedId = useRef<string | null>(null)
 
   useEffect(() => {
     if (!meetingId) {
+      loadedId.current = null
       setState({ data: null, loading: false, error: null })
       return
     }
+    // 换了另一条录音时先把上一条的内容清掉：留着会让右栏短暂显示别人的标题和文字。
+    // 同一条录音的定时刷新不能清，否则转写期间右栏每 5 秒闪一次空。
+    const switched = loadedId.current !== meetingId
+    loadedId.current = meetingId
     const current = ++requestId.current
-    setState((previous) => ({ ...previous, loading: true }))
+    setState((previous) => (switched ? { data: null, loading: true, error: null } : { ...previous, loading: true }))
     void requireSynapseBridge()
       .meeting.entry.get({ meetingId })
       .then((detail) => {
@@ -69,7 +75,7 @@ export function useMeetingDetail(
       })
       .catch((error: unknown) => {
         if (requestId.current !== current) return
-        setState({ data: null, loading: false, error: error instanceof Error ? error.message : "读取会议失败。" })
+        setState({ data: null, loading: false, error: error instanceof Error ? error.message : "读取录音失败。" })
       })
   }, [meetingId, refreshKey])
 

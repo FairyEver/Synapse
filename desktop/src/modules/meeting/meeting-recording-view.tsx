@@ -12,7 +12,7 @@ import { drawLiveWaveform } from "./waveform"
  * 录音页。
  *
  * 这一屏只回答两个问题：**是不是在录**、**麦克风到底听没听见**。所以只有一个小波形、
- * 一个计时、取消和完成两个按钮。没有暂停——会议中途要暂停的需求远少于误触成本。
+ * 一个计时、取消和完成两个按钮。没有暂停——录音中途要暂停的需求远少于误触成本。
  *
  * 界面上**不出现任何上传相关的东西**：不显示进度、不显示分片、不显示状态。上传在后台，
  * 用户不需要知道它存在。
@@ -21,7 +21,6 @@ import { drawLiveWaveform } from "./waveform"
 export type MeetingRecordingFinalize = {
   readonly durationMs: number
   readonly peaks: string
-  readonly speakerCount: number
 }
 
 type MeetingRecordingViewProps = {
@@ -137,7 +136,7 @@ export function MeetingRecordingView(props: MeetingRecordingViewProps) {
       const uploader = uploaderRef.current
       await uploader?.finish()
       const durationMs = Math.max(0, Math.round(performance.now() - startedAtRef.current))
-      await onFinalize({ durationMs, peaks: storeRef.current.encode(), speakerCount: 0 })
+      await onFinalize({ durationMs, peaks: storeRef.current.encode() })
     } catch (error) {
       setFailure(error instanceof Error ? error.message : "保存录音失败。")
       setBusy(false)

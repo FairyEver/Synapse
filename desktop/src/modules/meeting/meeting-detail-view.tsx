@@ -1,144 +1,232 @@
-import {
-  formatMeetingClock,
-  formatMeetingDuration,
-  meetingStatusLabel,
-  type MeetingSpeakerDto,
-} from "@synapse/shared"
-import { Search } from "lucide-react"
-import { useMemo, useState } from "react"
+import { formatMeetingDuration } from "@synapse/shared"
+import { MoreHorizontal } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
-import { Badge } from "@/components/ui/badge"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SynapseMeetingDetail } from "@/types/meeting"
 import { MeetingPlayback } from "./meeting-playback"
+import { formatStartedAt } from "./started-at"
+import { joinTranscriptParagraphs } from "./transcript-paragraphs"
 
 /**
- * 会议详情。
+ * 右栏详情。
  *
- * 顶部是回放，主体是逐字稿。转写失败时把原因写出来并给一个「重试」——重试不需要
- * 重新上传，音频一直在。
+ * 头一行是标题、时间和时长，右边一个「⋯」。下面是「语音」和「文字」两个**平级**视图：
+ * 语音是一个播放器，文字就是腾讯云转出来的那一段。没有纪要、没有发言人、没有时间戳、
+ * 没有搜索——腾讯云返回什么就显示什么。
  */
 
-/** 发言人用主题里的分类色区分，深浅模式各有一套，不引入自定义颜色。 */
-const SPEAKER_BAR_CLASSES = [
-  "bg-chart-1",
-  "bg-chart-2",
-  "bg-chart-3",
-  "bg-chart-4",
-  "bg-chart-5",
-] as const
-
-function speakerBarClass(speakerId: number): string {
-  return SPEAKER_BAR_CLASSES[speakerId % SPEAKER_BAR_CLASSES.length]
-}
-
-function speakerLabel(speakers: readonly MeetingSpeakerDto[], speakerId: number): string {
-  const named = speakers.find((speaker) => speaker.speakerId === speakerId)?.name
-  return named && named.trim() ? named : `发言人 ${speakerId + 1}`
-}
+/** 右栏的两个视图。切换是粘性的，切到另一条录音也还是原来那个视图。 */
+export type MeetingDetailMode = "voice" | "text"
 
 type MeetingDetailViewProps = {
   readonly meeting: SynapseMeetingDetail
+  readonly mode: MeetingDetailMode
+  readonly onModeChange: (mode: MeetingDetailMode) => void
+  readonly titleEditing: boolean
+  readonly onTitleEditingChange: (editing: boolean) => void
+  readonly onRename: (title: string) => Promise<void>
+  readonly onDelete: () => Promise<void>
   readonly onRetryTranscription: () => Promise<void>
 }
 
 export function MeetingDetailView(props: MeetingDetailViewProps) {
   const { meeting } = props
-  const [query, setQuery] = useState("")
-  const [seekToMs, setSeekToMs] = useState<number | null>(null)
-
-  const filteredSegments = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    if (!keyword) return meeting.segments
-    return meeting.segments.filter((segment) => segment.text.toLowerCase().includes(keyword))
-  }, [meeting.segments, query])
-
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const recordingDeleted = meeting.recording.status === "deleted"
-  const transcriptEmpty = meeting.segments.length === 0
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-start gap-2.5 px-4 pt-4">
+        <div className="min-w-0 flex-1">
+          <MeetingTitle
+            title={meeting.title}
+            editing={props.titleEditing}
+            onEditingChange={props.onTitleEditingChange}
+            onRename={props.onRename}
+          />
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {formatStartedAt(meeting.startedAt)}
+            {meeting.durationMs > 0 ? ` · ${formatMeetingDuration(meeting.durationMs)}` : ""}
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="更多操作">
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => props.onTitleEditingChange(true)}>重命名</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={() => setConfirmingDelete(true)}>
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="px-4 pt-3.5">
+        <Tabs value={props.mode} onValueChange={(next) => props.onModeChange(next as MeetingDetailMode)}>
+          <TabsList>
+            <TabsTrigger value="voice">语音</TabsTrigger>
+            <TabsTrigger value="text">文字</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-4 pt-3.5 pb-7">
+          {props.mode === "voice" ? (
+            <VoiceView meeting={meeting} recordingDeleted={recordingDeleted} />
+          ) : (
+            <TextView meeting={meeting} onRetry={props.onRetryTranscription} />
+          )}
+        </div>
+      </ScrollArea>
+
+      <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除这条录音？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{meeting.title}」的录音和文字会一起删除，无法恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void props.onDelete()
+              }}
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+/** 标题点了就地改：回车提交，Esc 取消。 */
+function MeetingTitle(props: {
+  readonly title: string
+  readonly editing: boolean
+  readonly onEditingChange: (editing: boolean) => void
+  readonly onRename: (title: string) => Promise<void>
+}) {
+  const [draft, setDraft] = useState(props.title)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!props.editing) {
+      setDraft(props.title)
+      return
+    }
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [props.editing, props.title])
+
+  if (!props.editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => props.onEditingChange(true)}
+        className="block max-w-full truncate rounded-md text-left text-base font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        {props.title}
+      </button>
+    )
+  }
+
+  function commit(save: boolean): void {
+    const next = draft.trim()
+    props.onEditingChange(false)
+    if (save && next && next !== props.title) void props.onRename(next)
+  }
+
+  return (
+    <Input
+      ref={inputRef}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit(true)
+        if (event.key === "Escape") commit(false)
+      }}
+      onBlur={() => commit(true)}
+      className="text-base font-medium"
+    />
+  )
+}
+
+/** 语音：一整段铺满宽度的波形 + 播放键 + ±15 秒 + 当前时间 / 总时长。 */
+function VoiceView(props: { readonly meeting: SynapseMeetingDetail; readonly recordingDeleted: boolean }) {
+  if (props.recordingDeleted) {
+    return (
+      <div className="rounded-lg border px-3 py-8 text-center">
+        <p className="text-sm font-medium">录音已删除</p>
+        <p className="mt-1 text-xs text-muted-foreground">文字仍保留，切到「文字」查看。</p>
+      </div>
+    )
+  }
+  return <MeetingPlayback meetingId={props.meeting.id} durationMs={props.meeting.durationMs} />
+}
+
+/** 文字：腾讯云返回什么就显示什么，按自然段排开。 */
+function TextView(props: { readonly meeting: SynapseMeetingDetail; readonly onRetry: () => Promise<void> }) {
+  const { meeting } = props
+
+  if (meeting.status === "failed") {
+    return (
+      <div className="rounded-lg border border-destructive/40 px-3 py-8 text-center">
+        <p className="text-sm font-medium">转写失败</p>
+        <p className="mt-1 text-xs text-destructive">{meeting.failureReason ?? "未知原因。"}</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => void props.onRetry()}>
+          重试
+        </Button>
+      </div>
+    )
+  }
+
+  const paragraphs = joinTranscriptParagraphs(meeting.segments)
 
   return (
     <div className="space-y-3">
-      <div className="space-y-3 rounded-lg border bg-background px-3 py-2.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm">{meeting.title}</p>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {formatMeetingDuration(meeting.durationMs)}
-              {meeting.speakerCount > 0 ? ` · ${meeting.speakerCount} 位发言人` : ""}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge variant={meeting.status === "failed" ? "destructive" : meeting.status === "done" ? "outline" : "secondary"}>
-              {meetingStatusLabel(meeting.status)}
-            </Badge>
-          </div>
-        </div>
-
-        <MeetingPlayback
-          meetingId={meeting.id}
-          durationMs={meeting.durationMs}
-          recordingDeleted={recordingDeleted}
-          seekToMs={seekToMs}
-          onSeekHandled={() => setSeekToMs(null)}
-        />
-      </div>
-
-      {meeting.status === "failed" ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-background px-3 py-2.5">
-          <p className="min-w-0 truncate text-xs text-destructive">{meeting.failureReason ?? "转写失败"}</p>
-          <Button variant="outline" size="sm" onClick={() => void props.onRetryTranscription()}>
-            重试
-          </Button>
+      {meeting.status === "transcribing" ? (
+        <div className="space-y-2">
+          {/* 腾讯云不给百分比，所以这里只能是一条「在跑」的条，不编一个假的数值。 */}
+          <Progress value={null} className="animate-pulse" />
+          <p className="text-xs text-muted-foreground">转写还在进行，完成后文字会自动补全。</p>
         </div>
       ) : null}
 
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索逐字稿"
-              className="pl-7"
-            />
-          </div>
+      {paragraphs.length === 0 ? (
+        <div className="rounded-lg border px-3 py-8 text-center">
+          <p className="text-sm font-medium">还没有文字</p>
+          <p className="mt-1 text-xs text-muted-foreground">这段录音里没有识别到语音。</p>
         </div>
-
-        {transcriptEmpty ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>这段录音里没有识别到语音</EmptyTitle>
-              <EmptyDescription>
-                {meeting.status === "transcribing" ? "转写还在进行，完成后逐字稿会出现在这里。" : ""}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <div className="space-y-2">
-            {filteredSegments.map((segment) => (
-              <div key={segment.id} className="flex gap-2.5">
-                <span className={`mt-1 w-0.5 shrink-0 self-stretch rounded-full ${speakerBarClass(segment.speakerId)}`} aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs font-medium">{speakerLabel(meeting.speakers, segment.speakerId)}</span>
-                    <button
-                      type="button"
-                      onClick={() => setSeekToMs(segment.startMs)}
-                      className="text-xs tabular-nums text-muted-foreground hover:text-foreground"
-                    >
-                      {formatMeetingClock(segment.startMs)}
-                    </button>
-                  </div>
-                  <p className="mt-0.5 text-sm">{segment.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className="max-w-[700px] space-y-2.5">
+          {paragraphs.map((paragraph, index) => (
+            <p key={index} className="text-sm leading-relaxed">
+              {paragraph}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

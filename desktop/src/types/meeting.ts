@@ -5,7 +5,7 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
 /**
- * preload bridge 上会议记录这一域的返回形状。
+ * preload bridge 上录音这一域的返回形状。
  *
  * 服务端返回的 DTO 直接复用 `@synapse/shared` 里的定义：三端读同一份，字段改名时
  * 编译期就会报出来，不用等运行时。

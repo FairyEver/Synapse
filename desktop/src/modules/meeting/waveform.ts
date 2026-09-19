@@ -13,7 +13,7 @@ import { MEETING_LIVE_WINDOW_MS, MEETING_PEAK_MS } from "@synapse/shared"
  * 两条波形是**故意不一样**的：
  * - 录音中的那条**密度固定**：一个采样永远占同样宽的槽位，贴右边缘、从右往左长，
  *   装满之后旧的从左边滚出去。按画布宽度拉伸铺满的话，录得越久就是把整段越压越扁。
- * - 回放的那条反过来，**整段铺满宽度**，作用是一眼看完整个会议。
+ * - 回放的那条反过来，**整段铺满宽度**，作用是一眼看完整段录音。
  * 这是有意的差异，不要顺手统一。
  */
 
@@ -115,6 +115,12 @@ export function resolveWaveColor(element: HTMLElement): string {
   return value || "currentColor"
 }
 
+/** 尚未播到的那一段用次要文字色，让「播到哪儿了」一眼可见。 */
+export function resolveWaveMutedColor(element: HTMLElement): string {
+  const value = getComputedStyle(element).getPropertyValue("--muted-foreground").trim()
+  return value || "currentColor"
+}
+
 type CanvasLike = HTMLCanvasElement
 
 function prepareCanvas(canvas: CanvasLike): { readonly context: CanvasRenderingContext2D; readonly width: number; readonly height: number } | null {
@@ -161,11 +167,21 @@ export function drawLiveWaveform(canvas: CanvasLike, peaks: ArrayLike<number>): 
   for (const bar of layout.bars) strokeBar(context, bar.x, bar.amplitude, height / 2, WAVE_BAR_WIDTH)
 }
 
-/** 回放的那条：整段铺满宽度。 */
+/**
+ * 回放的那条：整段铺满宽度。
+ *
+ * 给了 `progress` 时把已播和没播分成两个颜色，播放头那根竖线因此有了意义；不给就是
+ * 一整条前景色。
+ */
 export function drawPlaybackWaveform(
   canvas: CanvasLike,
   peaks: ArrayLike<number>,
-  options: { readonly barWidth?: number; readonly gap?: number; readonly dimmed?: boolean } = {},
+  options: {
+    readonly barWidth?: number
+    readonly gap?: number
+    readonly dimmed?: boolean
+    readonly progress?: number
+  } = {},
 ): void {
   const prepared = prepareCanvas(canvas)
   if (!prepared) return
@@ -176,12 +192,15 @@ export function drawPlaybackWaveform(
   const columns = Math.max(1, Math.floor(width / column))
   const resampled = resamplePlaybackPeaks(peaks, columns)
   if (resampled.length === 0) return
-  context.strokeStyle = resolveWaveColor(canvas)
+  const played = resolveWaveColor(canvas)
+  const remaining = resolveWaveMutedColor(canvas)
+  const split = Math.max(0, Math.min(1, options.progress ?? 1)) * resampled.length
   context.globalAlpha = options.dimmed ? 0.4 : 1
   context.lineCap = "round"
   context.lineWidth = barWidth
   const mid = height / 2
   for (let index = 0; index < resampled.length; index += 1) {
+    context.strokeStyle = index < split ? played : remaining
     strokeBar(context, index * column + column / 2, resampled[index], mid, barWidth)
   }
   context.globalAlpha = 1

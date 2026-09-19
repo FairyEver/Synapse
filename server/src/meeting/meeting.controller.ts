@@ -44,7 +44,8 @@ const finalizeSchema = z
   .object({
     durationMs: z.number().int().min(0).max(24 * 60 * 60 * 1000),
     peaks: z.string().max(4 * 1024 * 1024),
-    speakerCount: z.number().int().min(0).max(1000),
+    // 客户端已经不上报了，字段留着兼容还在上报的旧版本桌面端。
+    speakerCount: z.number().int().min(0).max(1000).optional(),
   })
   .strict()
 

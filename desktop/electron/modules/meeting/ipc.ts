@@ -4,7 +4,7 @@ import type { IpcModule } from "../../runtime/ipc/types"
 import type { MeetingService } from "./service"
 
 /**
- * 会议记录的 IPC。
+ * 录音的 IPC。
  *
  * 分片是**裸字节**：渲染进程直接把 `ArrayBuffer` 交过来，这一层不解析、不封装，原样
  * 转交给服务端代理。用 JSON 包一层会把 1 MB 的音频变成一个巨大的 base64 字符串。
@@ -28,7 +28,6 @@ const finalizeInputSchema = z
     recordingId: recordingIdSchema,
     durationMs: z.number().int().min(0),
     peaks: z.string(),
-    speakerCount: z.number().int().min(0),
   })
   .strict()
 
@@ -68,7 +67,6 @@ export const meetingIpcModule: IpcModule = {
         await service(ctx).completeRecording(request.recordingId, {
           durationMs: request.durationMs,
           peaks: request.peaks,
-          speakerCount: request.speakerCount,
         })
       },
     },

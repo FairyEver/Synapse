@@ -24,7 +24,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 }
 
-describe("会议 IPC 通道", () => {
+describe("录音 IPC 通道", () => {
   it("operation id 与派生的 channel 一致", () => {
     expect(meetingIpcModule.methods.startRecording.operationId).toBe("app.meeting.recording.start")
     expect(meetingIpcModule.methods.uploadPart.operationId).toBe("app.meeting.recording.part.upload")
@@ -102,7 +102,7 @@ describe("分片的落盘顺序", () => {
   it("完成之后本机暂存清空", async () => {
     const service = createMeetingService({ fetchAuthenticated, spoolRoot: root })
     await service.uploadPart("rec-3", 1, new Uint8Array([1]))
-    await service.completeRecording("rec-3", { durationMs: 1000, peaks: "", speakerCount: 0 })
+    await service.completeRecording("rec-3", { durationMs: 1000, peaks: "" })
     expect(await createMeetingSpool("rec-3", root).pending()).toEqual([])
   })
 
@@ -176,7 +176,7 @@ describe("异常退出的静默收尾", () => {
     ])
     // 时长只能用已传字节数估：8000 字节 ÷ 8 KB/s = 1 秒。波形只在内存里，跟着进程
     // 一起没了，所以 peaks 只能交空。
-    expect(calls[2].body).toEqual({ durationMs: 1000, peaks: "", speakerCount: 0 })
+    expect(calls[2].body).toEqual({ durationMs: 1000, peaks: "" })
     // 收尾之后本机不留东西。
     expect(await createMeetingSpool("r-1", root).pending()).toEqual([])
   })
@@ -263,7 +263,7 @@ describe("接口调用", () => {
     await expect(service.getPlaybackUrl("m-1")).resolves.toEqual({ url: null })
   })
 
-  it("会议 id 会被转义，不会被当成路径片段", async () => {
+  it("录音 id 会被转义，不会被当成路径片段", async () => {
     const paths: string[] = []
     const service = createMeetingService({
       fetchAuthenticated: async (requestPath) => {

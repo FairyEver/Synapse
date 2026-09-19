@@ -424,6 +424,43 @@ describe("转写失败后的重试", () => {
   })
 })
 
+describe("详情仍然带着两端界面不再渲染的字段", () => {
+  it("speakers / minutes / segments 照常返回", async () => {
+    // 手机端 MeetingDetail 的 speakers / segments 是非可选数组。服务端一旦停止返回，
+    // 还没升级到新版本的 App 打开详情页会直接解码失败——用户手机上装的是 TestFlight
+    // 版本，升级不是同步发生的。这条断言就是那份兼容性本身。
+    prisma.meeting.findFirst.mockResolvedValue({
+      id: "meeting-1",
+      userId: "user-1",
+      title: "Q3 评审",
+      startedAt: new Date("2026-09-19T02:00:00.000Z"),
+      durationMs: 1000,
+      status: "done",
+      speakerCount: 2,
+      failureReason: null,
+      minutesStatus: "ready",
+      minutesJson: { topics: ["路线图"], conclusions: [], todos: [] },
+      minutesFailureReason: null,
+      minutesEditedAt: null,
+      createdAt: new Date("2026-09-19T02:00:00.000Z"),
+    })
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "ready" }))
+    prisma.meetingSpeaker.findMany.mockResolvedValue([{ speakerId: 0, name: "李杨" }])
+    prisma.meetingTranscriptSegment.findMany.mockResolvedValue([
+      { id: "seg-1", speakerId: 0, startMs: 420, endMs: 900, text: "先说排序。", words: [] },
+    ])
+
+    const detail = await service.get("user-1", "meeting-1")
+
+    expect(detail.speakers).toEqual([{ speakerId: 0, name: "李杨" }])
+    expect(detail.segments).toEqual([
+      { id: "seg-1", speakerId: 0, startMs: 420, endMs: 900, text: "先说排序。", words: [] },
+    ])
+    expect(detail.minutes).toMatchObject({ topics: ["路线图"] })
+    expect(detail.speakerCount).toBe(2)
+  })
+})
+
 describe("越权", () => {
   it("不是自己的会议一律当作不存在", async () => {
     prisma.meeting.findFirst.mockResolvedValue(null)

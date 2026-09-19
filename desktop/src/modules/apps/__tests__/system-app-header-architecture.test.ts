@@ -23,7 +23,8 @@ const appEntrypoints = {
   "usage-monitor": { path: "../../usage-analysis/index.tsx", header: "window-shell" },
   "model-price": { path: "../../model-price/index.tsx", header: "window-shell" },
   connectors: { path: "../../../../app-capabilities/connectors/renderer/index.tsx", header: "window-shell" },
-  meeting: { path: "../../meeting/index.tsx", header: "module-page" },
+  // 录音页是列表 + 详情的两栏布局，内容区自己管滚动，所以顶栏直接由壳层声明。
+  meeting: { path: "../../meeting/index.tsx", header: "window-shell" },
 } as const satisfies Record<SynapseSystemAppId, { readonly path: string; readonly header: HeaderMode }>
 
 describe("system app header architecture", () => {

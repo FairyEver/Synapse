@@ -7,7 +7,7 @@ import type {
 import { createMeetingSpool, sweepStaleMeetingSpools, type MeetingSpool } from "./spool"
 
 /**
- * 会议记录的桌面侧。
+ * 录音的桌面侧。
  *
  * 渲染进程**不能直接连服务端**，这是全仓一致的约定（令牌、刷新、重试都在主进程）。
  * 所以音频分片必须经这里转一手：分片先落到本机暂存，服务端确认之后再删掉——进程中途
@@ -142,7 +142,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
   }
 
   async function listMeetings(): Promise<readonly MeetingSummaryDto[]> {
-    const response = await deps.fetchAuthenticated("/meetings", {}, "读取会议列表失败。")
+    const response = await deps.fetchAuthenticated("/meetings", {}, "读取录音列表失败。")
     const body = (await response.json()) as { items?: unknown }
     return Array.isArray(body.items) ? (body.items as MeetingSummaryDto[]) : []
   }
@@ -151,7 +151,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     const response = await deps.fetchAuthenticated(
       `/meetings/${encodeURIComponent(meetingId)}`,
       {},
-      "读取会议详情失败。",
+      "读取录音详情失败。",
     )
     return (await response.json()) as MeetingDetailDto
   }
@@ -195,7 +195,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
       }
       // 64 kbps 单声道：字节数换算成时长的近似值，只用来显示。
       const durationMs = Math.round((pending.receivedBytes / (64_000 / 8)) * 1000)
-      await completeRecording(pending.recordingId, { durationMs, peaks: "", speakerCount: 0 })
+      await completeRecording(pending.recordingId, { durationMs, peaks: "" })
     } catch (error) {
       // 收尾失败只记日志：应用照常起来，用户那边这段录音停在「转写中」，不需要被打扰。
       deps.logger?.warn("Meeting pending recording finalize failed.", {

@@ -385,7 +385,7 @@ export class MeetingService {
       }),
       this.prisma.meeting.update({
         where: { id: recording.meetingId },
-        data: { durationMs, speakerCount: Math.max(0, Math.round(input.speakerCount)), status: "transcribing", failureReason: null },
+        data: { durationMs, speakerCount: Math.max(0, Math.round(input.speakerCount ?? 0)), status: "transcribing", failureReason: null },
       }),
       this.prisma.meetingTranscriptionJob.update({
         where: { id: job.id },

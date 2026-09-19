@@ -150,11 +150,16 @@ export type MeetingDetailDto = MeetingSummaryDto & {
   readonly minutesFailureReason: string | null
 }
 
-/** 录音结束、交给服务端合并时带上来的本机信息。 */
+/**
+ * 录音结束、交给服务端合并时带上来的本机信息。
+ *
+ * 不再上报发言人数：它是为了列表里那句「N 位发言人」才有的，那句话已经去掉。服务端
+ * 的 `speakerCount` 字段保留，历史数据仍按原样返回。
+ */
 export type MeetingFinalizeInput = {
   readonly durationMs: number
   readonly peaks: string
-  readonly speakerCount: number
+  readonly speakerCount?: number
 }
 
 /** 分片上传时服务端返回的进度，仅用于续传判断，不展示。 */
