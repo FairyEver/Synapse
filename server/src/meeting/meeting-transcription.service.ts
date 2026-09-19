@@ -343,7 +343,9 @@ export class MeetingTranscriptionService {
     try {
       await this.mobilePush.sendMeetingTranscription(meeting.userId, {
         title: meeting.title,
-        body: status === "done" ? "转写已完成，逐字稿可以看了。" : "转写失败，可以重新试一次。",
+        // 「逐字稿」是这次重构的文案表里明确不出现的词——界面都改成「文字」了，只剩这
+        // 一条推送漏在外面。
+        body: status === "done" ? "转写完成，文字可以看了。" : "转写失败，可以重新试一次。",
         meetingId,
         detail: meeting.title,
       })
