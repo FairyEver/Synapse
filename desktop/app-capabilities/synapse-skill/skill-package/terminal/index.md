@@ -6,26 +6,22 @@ Use Terminal tools to operate Synapse-managed interactive PTY sessions. Terminal
 
 Read `api-reference.md` before constructing requests. Read `examples.md` when translating a user goal into a multi-step Terminal workflow.
 
-## The terminal you are running inside
+## Two worlds: this process, and the session you drive
 
-When this process runs inside a Synapse terminal, that terminal is an object you can address like any other — it is not something you have to find first, and it is not a reason to create a session. Its own ids are already in the environment:
+You are a process with an environment of your own — a shell, a working directory, a `PATH`, aliases and functions, a foreground program. The session you drive has each of those too, and they are not yours. Every fact you observe belongs to exactly one of the two, and **a fact about your world is never evidence about theirs**: your shell not having a command says nothing about whether theirs does, and a relative path names one file in your shell and a different one in theirs.
 
-- `SYNAPSE_SESSION_ID` — the session this process is running in. Send input to it with `app_terminal_session_input_command`, acquiring control first exactly as for any other session.
-- `SYNAPSE_WORKSPACE_ID` — the tab holding it. Read it with `app_terminal_workspace_get`, list its members with that tool's `sessionIds`, or change it with the `workspace_*` tools.
+When the request is about the target, the target is the authority — it answers in the output you are already reading. Holding a shell of your own makes doing the work yourself a real option, but that happens in *your* world; when the request was about the target, send it there instead.
 
-A request such as "open codex in this terminal", "run this here", or "close this tab" is about those two ids. When neither variable is present, this process is not inside a Synapse terminal, so do not assume one.
+Finding the target:
 
-A second, differently named set may also be present: `SYNAPSE_TERMINAL_SESSION_ID` and the `SYNAPSE_TERMINAL_AGENT_*` values. Those belong to the agent-hook runtime, are injected only when Agent notifications are enabled, and carry the same session id under another name. Address the terminal with `SYNAPSE_SESSION_ID`; never echo an agent token. Seeing two session ids in the environment is expected, not a conflict to resolve.
+- `SYNAPSE_SESSION_ID` and `SYNAPSE_WORKSPACE_ID` are this process's own session and its tab, present in every terminal session. A request such as "open codex in this terminal", "run this here", or "close this tab" is about those two ids. With neither variable present, this process is not inside a Synapse terminal, so do not assume one.
+- A pasted reference names a target explicitly and outranks the phrase "this terminal". The two can disagree — you cannot see the tab the user is looking at — so act on the pasted `session_id`/`workspace_id` and say which terminal you acted on.
+- `SYNAPSE_TERMINAL_SESSION_ID` and the `SYNAPSE_TERMINAL_AGENT_*` values are a second set carrying the same session id, belonging to the agent-hook runtime and present only when Agent notifications are on. Address with `SYNAPSE_SESSION_ID`, and never echo an agent token: two session ids in the environment is expected, not a conflict to resolve.
+- Starting a program *in your own session* cannot work while you are the foreground program there. That is not a target to disambiguate but an impossibility — offer to open a pane beside it.
 
-A pasted reference is the explicit target and outranks the phrase "this terminal". The two can disagree — a user may paste a reference to a tab other than the one they are typing in, and this process cannot see the tab they are looking at. When they disagree, act on the pasted `session_id`/`workspace_id` and say plainly which terminal you acted on. One case is not disagreement but impossibility: asking this process to start a program *in its own session* cannot work while it is itself the foreground program there — offer to open a pane beside it instead of typing into yourself.
+Do not establish that the user's own command exists before sending it. An alias or function lives in the target shell's startup files, so looking for it in your own world is both unanswerable and, if you go to disk, expensive; sending the command settles it in one round trip.
 
-The target session's shell is not yours. Your own shell starts from your own environment; the session you are driving runs the user's interactive shell, with their aliases, functions, `PATH`, and working directory. So never conclude from your own environment that a command the user named does not exist, and never go hunting for it on disk — an alias or function lives in that session's own startup files, not in something you can enumerate, and a recursive search of a home directory answers the question far more expensively than it is worth.
-
-Send what the user named and read the screen. The target session is the authority on whether the command exists, and it answers immediately: a shell whose alias is missing says so in the very output you are already reading. Prefer that over any check of your own.
-
-Waiting on another agent's answer is a wait, not a poll loop. `app_terminal_session_observe` takes a `maxWaitMs` capped at 30000, so pass that cap rather than re-reading every second, and do not substitute a shell `sleep` for it. Work that outlasts the cap means calling again — one call per 30 seconds, not one per second.
-
-Terminal capabilities are registered under the **`app`** domain. The catalog's `domains` list holds top-level namespaces only and has no `terminal` entry, so its absence there is not evidence that Terminal tools are missing — search by intent or by the exact `app_terminal_*` name.
+Terminal capabilities are `app_terminal_*` under the **`app`** domain. The catalog's `domains` list holds top-level namespaces only, so the absence of a `terminal` entry there is not evidence that Terminal tools are missing.
 
 ## Interpret the request
 
@@ -64,6 +60,7 @@ Terminal capabilities are registered under the **`app`** domain. The catalog's `
 - Idempotency keys are request identifiers, not secrets. Construct a stable descriptive literal in the request itself, such as a task or session label plus the action and sequence. Do not run helper code, invoke another tool, or depend on a host-language random/crypto global solely to generate the key. Reuse a key only for the exact same canonical request when recovering from an uncertain result.
 - After input, start with one `app_terminal_session_output_observe` from the pre-input watermarks. If it already contains decisive evidence, do not add a redundant view read. Use `app_terminal_session_view_get` only when raw output is ambiguous or rendered cursor state matters.
 - An observe wakes on the first qualifying change, which may be only shell echo or a partial frame. For one expected transition, make at most two consecutive observe calls. If both are inconclusive, use one rendered view or stop for user judgment instead of building an unbounded observe loop.
+- Waiting on other work is one wait, not a poll loop. When an agent you drove is thinking, pass `app_terminal_session_observe` the full `maxWaitMs` — capped at 30000 — rather than re-reading every second, and do not put a shell `sleep` in its place. Work that outlasts the cap means calling again: one call per 30 seconds, not one per second.
 - For Codex and other interactive Agents, do not report that an instruction was submitted or work started until fresh evidence shows the prompt cleared, a working state, or new execution output. If a bounded view instead shows the complete instruction still present in the input area after an accepted command, acquire or renew control as needed, send exactly one Enter key, and observe again. Do not resend the instruction text.
 - Treat every control key as a state transition: send one justified action, observe, then decide. For a program's explicit short-lived confirmation prompt, perform the observe-and-confirm branch inside one orchestration call so the evidence remains fresh; do not replace it with a blind double-key batch. Never spray Escape, Ctrl+C, or Ctrl+D variants until one appears to work.
 - For Claude Code, use Escape at most once to interrupt an active response or retry. Once its input prompt is visible, Ctrl+C is not the normal exit path: repeated Ctrl+C confirmation states can redraw or preserve stale input and tempt the caller into a loop. Clear any visibly retained input with the exact required Backspace actions, verify the prompt is empty, then submit `/exit` with `app_terminal_session_input_command`.

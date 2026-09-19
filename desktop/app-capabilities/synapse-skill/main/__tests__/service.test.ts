@@ -564,10 +564,11 @@ describe("SynapseSkillService", () => {
     // 粘贴的引用与「这个终端」可能指向不同的终端，必须写明谁优先。
     expect(terminalIndex).toContain("outranks the phrase")
     /*
-     * 实测里 agent 为了确认用户说的别名存在，先翻自己的环境、再递归 grep 整个 home 目录（跑了
-     * 一分半还在跑）。目标会话的 shell 与它自己的不是同一个，这条必须写出来。
+     * 三次真机失败是同一类毛病：agent 不知道自己处在什么位置。实测里它为确认一个别名，先翻自己的
+     * 环境、再递归 grep 整个 home（跑了一分半）。钉住的是那条能生成这些具体规则的原则，而不是
+     * 某一处补丁的措辞——具体案例会继续冒出来，原则不必跟着改。
      */
-    expect(terminalIndex).toContain("The target session's shell is not yours")
+    expect(terminalIndex).toContain("never evidence about theirs")
 
     // 三个入口都要把「没有 terminal 域」这个误判堵住。
     for (const text of [skillText, terminalIndex, appIndex]) {
