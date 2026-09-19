@@ -145,7 +145,9 @@ exports.MOBILE_TRUECOLOR_BASE = 0x1000000
  *   "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z",
  *   "Ctrl+B", "Ctrl+F", "Ctrl+G", "Ctrl+H", "Ctrl+J", "Ctrl+N", "Ctrl+O",
  *   "Ctrl+P", "Ctrl+Q", "Ctrl+S", "Ctrl+T", "Ctrl+V", "Ctrl+X", "Ctrl+Y",
- *   "Shift+Tab"
+ *   "Shift+Tab",
+ *   "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+ *   "Insert"
  * ]}
  */
 exports.MOBILE_KEYS = [
@@ -187,4 +189,17 @@ exports.MOBILE_KEYS = [
   "Ctrl+X",
   "Ctrl+Y",
   "Shift+Tab",
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
+  "F8",
+  "F9",
+  "F10",
+  "F11",
+  "F12",
+  "Insert",
 ]

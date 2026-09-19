@@ -299,6 +299,22 @@ export const KEY_BYTES: Readonly<Record<string, string>> = {
   // Back-tab. Claude Code cycles its permission mode on it, which is why it earns a
   // key of its own rather than being composed from Shift and Tab on the phone.
   "Shift+Tab": "\x1b[Z",
+  // F1–F4 keep the SS3 form the terminal's own function keys send; F5 upward use CSI,
+  // which is where the numbered codes start. `Insert` is CSI 2, the counterpart to
+  // `Delete`'s CSI 3, and it is a different key from anything in the table above.
+  F1: "\x1bOP",
+  F2: "\x1bOQ",
+  F3: "\x1bOR",
+  F4: "\x1bOS",
+  F5: "\x1b[15~",
+  F6: "\x1b[17~",
+  F7: "\x1b[18~",
+  F8: "\x1b[19~",
+  F9: "\x1b[20~",
+  F10: "\x1b[21~",
+  F11: "\x1b[23~",
+  F12: "\x1b[24~",
+  Insert: "\x1b[2~",
 }
 
 export function createTerminalService(deps: {

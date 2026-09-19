@@ -414,6 +414,21 @@ enum MobileKey: String, Codable, CaseIterable {
     /// Back-tab. Claude Code cycles its permission mode on it, and the panel keeps it
     /// as a key of its own because Shift and Tab live on different pages.
     case shiftTab = "Shift+Tab"
+    /// The function keys and `Insert`. Same rule as above: the name is the identifier,
+    /// so the order here is the computer's `MOBILE_KEYS` and nothing else.
+    case f1 = "F1"
+    case f2 = "F2"
+    case f3 = "F3"
+    case f4 = "F4"
+    case f5 = "F5"
+    case f6 = "F6"
+    case f7 = "F7"
+    case f8 = "F8"
+    case f9 = "F9"
+    case f10 = "F10"
+    case f11 = "F11"
+    case f12 = "F12"
+    case insert = "Insert"
 }
 
 enum MobileKeyAction: Encodable, Equatable {

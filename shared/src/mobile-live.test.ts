@@ -194,13 +194,14 @@ describe("mobile live protocol", () => {
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "delete" })).toBe(false)
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "command", sessionId: "s1" })).toBe(false)
     // A key the terminal service has no bytes for. `Ctrl+I` rather than a name like
-    // `F5`, because it is one a client could plausibly send — it is the chord the
+    // `F13`, because it is one a client could plausibly send — it is the chord the
     // full-keyboard page draws — and it is refused precisely so that `Tab` stays the
     // only name for `\x09`. `MOBILE_KEYS` is where the boundary is written down;
-    // this checks that the boundary is enforced at all.
+    // this checks that the boundary is enforced at all. `F13` is the other shape of
+    // the same thing: a name a newer panel could draw that no desktop has bytes for.
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "Ctrl+I" }] }))
       .toBe(false)
-    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "F5" }] }))
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "F13" }] }))
       .toBe(false)
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "close", sessionId: "s1" })).toBe(false)
     // A raw control byte must never be expressible as a key.
@@ -722,7 +723,7 @@ describe("mobile live protocol", () => {
       { ...button, label: "" },
       { ...button, id: "" },
       // A key outside the vocabulary the terminal service can encode.
-      { ...button, action: { type: "key", key: "F5" } },
+      { ...button, action: { type: "key", key: "F13" } },
       { ...button, action: { type: "key", key: "Ctrl+I" } },
       { ...button, action: { type: "key", key: "Ctrl+M" } },
       { ...button, action: { type: "key" } },
@@ -745,7 +746,7 @@ describe("mobile live protocol", () => {
     // Every key the panel can draw has to be one the desktop's `KEY_BYTES` can turn
     // into bytes; a name that is only in this list would be accepted by the cloud and
     // then rejected by the computer, which reads to a user as a key that does nothing.
-    expect(MOBILE_KEYS).toHaveLength(38)
+    expect(MOBILE_KEYS).toHaveLength(51)
     expect(MOBILE_KEYS).toEqual([
       // The original twenty-three, in the order they were first released in.
       "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
@@ -757,6 +758,9 @@ describe("mobile live protocol", () => {
       "Ctrl+B", "Ctrl+F", "Ctrl+G", "Ctrl+H", "Ctrl+J", "Ctrl+N", "Ctrl+O",
       "Ctrl+P", "Ctrl+Q", "Ctrl+S", "Ctrl+T", "Ctrl+V", "Ctrl+X", "Ctrl+Y",
       "Shift+Tab",
+      // The function keys and `Insert`, appended for the same reason.
+      "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+      "Insert",
     ])
     expect(new Set<string>(MOBILE_KEYS).size).toBe(MOBILE_KEYS.length)
     // `Ctrl+I` and `Ctrl+M` are the two letters of the alphabet missing from the

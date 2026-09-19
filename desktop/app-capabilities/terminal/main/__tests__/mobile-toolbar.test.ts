@@ -59,6 +59,19 @@ const EXPECTED_KEY_BYTES: Readonly<Record<string, string>> = {
   "Ctrl+X": "\x18",
   "Ctrl+Y": "\x19",
   "Shift+Tab": "\x1b[Z",
+  F1: "\x1bOP",
+  F2: "\x1bOQ",
+  F3: "\x1bOR",
+  F4: "\x1bOS",
+  F5: "\x1b[15~",
+  F6: "\x1b[17~",
+  F7: "\x1b[18~",
+  F8: "\x1b[19~",
+  F9: "\x1b[20~",
+  F10: "\x1b[21~",
+  F11: "\x1b[23~",
+  F12: "\x1b[24~",
+  Insert: "\x1b[2~",
 }
 
 const BUILT_IN = TERMINAL_TOOLBAR_ACTIONS
@@ -219,12 +232,12 @@ describe("mobile toolbar projection", () => {
     const buttons = projectMobileToolbarButtons({
       custom: [],
       platform: "darwin",
-      keyBytes: { ...DESKTOP_KEY_BYTES, F5: "\x1b[15~" },
+      keyBytes: { ...DESKTOP_KEY_BYTES, F13: "\x1b[25~" },
     })
     expect(buttons.some((button) => button.id === "enter")).toBe(true)
     // The table's own extra entry is not a key name the phone has, so nothing in the
     // projection may name it.
-    expect(JSON.stringify(buttons)).not.toContain("F5")
+    expect(JSON.stringify(buttons)).not.toContain("F13")
   })
 
   it("produces a payload the wire's own validator accepts", () => {
@@ -280,12 +293,12 @@ describe("mobile toolbar projection", () => {
   it("gains no toolbar buttons from the keys the panel added", () => {
     // The projection reads the byte table backwards, so a built-in that happened to
     // write one of the new sequences would become a new button on the phone. None
-    // does: the fifteen new keys belong to the keyboard panel alone, and the
+    // does: the twenty-eight new keys belong to the keyboard panel alone, and the
     // mirrored bar has to stay exactly what the computer's own toolbar is.
     // The list is append-only, so everything past the first twenty-three is this
-    // round's addition — no separate copy of the fifteen to drift.
+    // round's addition — no separate copy of the twenty-eight to drift.
     const addedKeys: readonly string[] = MOBILE_KEYS.slice(23)
-    expect(addedKeys).toHaveLength(15)
+    expect(addedKeys).toHaveLength(28)
 
     const named = project()
       .flatMap((button) => (button.action.type === "key" ? [button.action.key as string] : []))

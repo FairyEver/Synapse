@@ -245,6 +245,11 @@ export const MOBILE_TRUECOLOR_BASE = 0x100_0000
  * `Shift+Tab` is here rather than being composed on the phone: Shift lives on the
  * full-keyboard page and Tab on the common one, and switching pages drops a latched
  * modifier, so the two could never meet.
+ *
+ * The function keys and `Insert` are the same kind of entry: a phone key the terminal
+ * cannot be asked for by name. `F1`–`F4` are the SS3 forms the terminal itself sends;
+ * `F5` upward switch to CSI, because that is where the numerical codes run out of
+ * SS3's single final byte. The panel does not compose either form.
  */
 export const MOBILE_KEYS = [
   "Enter",
@@ -285,6 +290,19 @@ export const MOBILE_KEYS = [
   "Ctrl+X",
   "Ctrl+Y",
   "Shift+Tab",
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F7",
+  "F8",
+  "F9",
+  "F10",
+  "F11",
+  "F12",
+  "Insert",
 ] as const
 
 export const MOBILE_MESSAGE_TYPES = {

@@ -46,7 +46,7 @@ struct TerminalToolbarTests {
     @Test func decodesEveryKeyThePanelCanSend() throws {
         // The panel draws its keys from `MobileKey`, and the computer sends names. A
         // name this build does not know is a button it cannot press, so the two lists
-        // have to be the same length — and `MOBILE_KEYS` is 38.
+        // have to be the same length — and `MOBILE_KEYS` is 51.
         let names = [
             "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
             "Backspace", "Ctrl+C", "Ctrl+D",
@@ -55,6 +55,8 @@ struct TerminalToolbarTests {
             "Ctrl+B", "Ctrl+F", "Ctrl+G", "Ctrl+H", "Ctrl+J", "Ctrl+N", "Ctrl+O",
             "Ctrl+P", "Ctrl+Q", "Ctrl+S", "Ctrl+T", "Ctrl+V", "Ctrl+X", "Ctrl+Y",
             "Shift+Tab",
+            "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+            "Insert",
         ]
         let buttons = names.map {
             """
@@ -65,7 +67,7 @@ struct TerminalToolbarTests {
         {"desktopClientInstanceId": "d", "revision": 1, "buttons": [\(buttons)]}
         """))
 
-        #expect(payload.buttons.count == 38)
+        #expect(payload.buttons.count == 51)
         for name in names {
             #expect(MobileKey(rawValue: name) != nil, "\(name) is not a key this build knows")
         }
@@ -75,7 +77,7 @@ struct TerminalToolbarTests {
         #expect(MobileKey(rawValue: "Ctrl+M") == nil)
         // Every case is one of the names above: a case the panel can draw but the
         // computer has never heard of would be a key that is rejected on press.
-        #expect(MobileKey.allCases.count == 38)
+        #expect(MobileKey.allCases.count == 51)
         #expect(Set(MobileKey.allCases.map(\.rawValue)) == Set(names))
     }
 
@@ -116,7 +118,7 @@ struct TerminalToolbarTests {
           "desktopClientInstanceId": "d",
           "revision": 1,
           "buttons": [
-            {"id": "a", "label": "A", "group": "key", "action": {"type": "key", "key": "F5"}},
+            {"id": "a", "label": "A", "group": "key", "action": {"type": "key", "key": "F13"}},
             {"id": "b", "label": "B", "group": "key", "action": {"type": "key", "key": "Enter"}},
             {"id": "c", "label": "C", "group": "custom", "action": {"type": "script", "text": "rm -rf /"}},
             {"id": "d", "label": "D", "group": "nowhere", "action": {"type": "key", "key": "Tab"}},
