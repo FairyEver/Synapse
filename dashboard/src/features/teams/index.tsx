@@ -198,12 +198,12 @@ export default function TeamsPage() {
             </div>
           }
           toolbar={
-            <div className='flex items-center'>
+            (teamsQuery.data?.total ?? 0) > 0 ? (
               <Button size='sm' onClick={() => setCreateOpen(true)}>
                 <Plus />
                 新建团队
               </Button>
-            </div>
+            ) : null
           }
         />
         <TeamNameDialog

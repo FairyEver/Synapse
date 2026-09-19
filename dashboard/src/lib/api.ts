@@ -369,9 +369,9 @@ export type AdminSkillRepositoryListQuery = PaginationOptions & {
   query?: string
 }
 
-export type AdminTeamListQuery = PaginationOptions & {
-  sortBy?: 'createdAt' | 'updatedAt' | 'name' | 'memberCount'
-}
+// 排序字段白名单由服务端把关（team.controller.ts 的 teamSortFields，越界报「排序字段无效。」），
+// 这里不收窄类型：收窄会和服务端共用的 getServerTableSortQuery（返回 string）打架。
+export type AdminTeamListQuery = PaginationOptions
 
 export type AdminTeamCandidateListQuery = PaginationOptions & {
   query?: string

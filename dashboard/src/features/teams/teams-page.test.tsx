@@ -105,7 +105,8 @@ describe('TeamsPage', () => {
     mockedAdminApi.createTeam.mockRejectedValue(new Error('已存在同名团队。'))
 
     render(<TeamsPage />)
-    await waitFor(() => document.querySelector('#team-name'))
+    // 列表为空时只有空态里的那个「新建团队」，要等列表加载完它才出现
+    await waitFor(() => buttonByText('新建团队'))
     await click(buttonByText('新建团队'))
     await typeInto(textInput('#team-name'), '产品组')
     await click(dialogButtonByText('创建'))
