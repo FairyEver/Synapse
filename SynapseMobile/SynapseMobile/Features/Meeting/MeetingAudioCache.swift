@@ -109,12 +109,16 @@ struct MeetingAudioCache {
     /// 命中判据三件套：**文件在、文件大小等于索引里记的 `size`、服务端这次的 `size`
     /// 与它一致**。任一不符都算未命中。
     ///
+    /// `serverSize` 为 0 表示**这次拿不到服务端的大小**（详情还没回来、服务端没报），这时
+    /// 退化成「文件在、大小对得上」就当命中。少这一条，拿不到大小的时候会把本机这份判成
+    /// 坏的删掉——那正好是「没网也想听听过的那条」最需要它的时候。电脑端同一条件同样处理。
+    ///
     /// 不符时顺手把本机这份收拾掉（删文件、删索引条目）：坏的那份留着没有用，下一次判还是
     /// 未命中——「重下前先删掉坏文件」说的就是这里。清不掉也不报错，下一次再试。
     func cachedAudio(meetingId: String, serverSize: Int) -> URL? {
         let entries = loadIndex()
         guard let entry = entries.first(where: { $0.meetingId == meetingId }) else { return nil }
-        guard entry.size == serverSize else {
+        guard serverSize <= 0 || entry.size == serverSize else {
             // 服务端那份的大小变了（重新上传过），本机这份已经不作数。
             remove(meetingId: meetingId)
             return nil

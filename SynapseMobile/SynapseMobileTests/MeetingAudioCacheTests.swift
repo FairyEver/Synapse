@@ -88,6 +88,18 @@ struct MeetingAudioCacheTests {
         #expect(cache.entry("m-1") == nil)
     }
 
+    @Test func anUnknownServerSizeFallsBackToTheLocalIndex() throws {
+        // 拿不到服务端大小（详情还没回来、服务端没报）时退化成「文件在、大小对得上」就当
+        // 命中。少了这一条，这种时候会把本机这份判成坏的删掉——而那正好是「没网也想听
+        // 听过的那条」最需要它的时候。电脑端同一条件同样处理，两端规则要一致。
+        let cache = try makeCache()
+        let url = try put(cache, meetingId: "m-1", bytes: 128)
+
+        #expect(cache.cachedAudio(meetingId: "m-1", serverSize: 0) == url)
+        #expect(exists(url))
+        #expect(cache.entry("m-1") != nil)
+    }
+
     // MARK: - 播放时间与 LRU
 
     @Test func playingSomethingMovesItToTheBackOfTheLine() throws {
