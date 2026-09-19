@@ -79,12 +79,23 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
     }
   }, [])
 
-  // 本机有没有这份音频：有就直接用它，没有就起一次后台下载（幂等，重复叫不会起第二个）。
+  // 换一条录音就从零开始。**只跟 meetingId 走**：切「语音 / 文字」不能走这里，播放要连着
+  // 不断（两个视图都挂着就是为了这个），所以两件事得分开成两个 effect。
   useEffect(() => {
-    let disposed = false
     setUrl(null)
     setPhase("unknown")
     setTimedOut(false)
+  }, [meetingId])
+
+  // 本机有没有这份音频：有就直接用它，没有就起一次后台下载（幂等，重复叫不会起第二个）。
+  //
+  // **只在语音视图真的在眼前时才问。** 视图切换是粘性的，而播放器为了不打断播放一直挂
+  // 着——不看这一屏也照样问一次，就等于给「只用文字」的人偷偷下一份音频，正好是产品口径
+  // 里「不做后台预取」要挡的事。`phase !== "unknown"` 是这道闸的另一半：切回语音时重跑
+  // 到这里，已经就绪的那条什么都不做，播放不受影响。
+  useEffect(() => {
+    if (!props.visible || phase !== "unknown") return
+    let disposed = false
     void requireSynapseBridge()
       .meeting.audio
       .ensure({ meetingId })
@@ -99,7 +110,7 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
     return () => {
       disposed = true
     }
-  }, [meetingId, applyAudioState])
+  }, [meetingId, props.visible, phase, applyAudioState])
 
   // 音频落到本机就换地址。用户不点「重试」也能等到这一步。
   useMeetingAudioReadySubscription(meetingId, (event) => {
