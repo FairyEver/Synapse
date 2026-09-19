@@ -1249,7 +1249,7 @@ describe("TerminalModule", () => {
 
     await renderEmbeddedModule()
 
-    await openPaneTitleMenu("开发终端")
+    await openPaneHeaderMenu("开发终端")
     expect(headerSessionMenuItems().map((item) => item.textContent)).toEqual([
       "重命名",
       "复制引用",
@@ -1261,6 +1261,51 @@ describe("TerminalModule", () => {
       "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
       "session_id=session-1",
     ].join("\n"))
+  })
+
+  it("copies the session reference from the pane header button", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderEmbeddedModule()
+
+    const button = paneHeaderButton("开发终端", "复制引用")
+    expect(button).toBeTruthy()
+    await act(async () => {
+      button?.click()
+      await Promise.resolve()
+    })
+
+    expect(writeText).toHaveBeenCalledWith([
+      "workspace_id=workspace-session-1",
+      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
+      "session_id=session-1",
+    ].join("\n"))
+  })
+
+  /*
+   * The title is the strip a hand grabs to drag a pane, so the menu is deliberately kept off it.
+   * Double-click stays, because that is the direct gesture for renaming the thing the title names.
+   */
+  it("keeps the pane title's own right-click silent while double-click still renames", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+
+    await act(async () => {
+      paneTitle("开发终端")?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+      await Promise.resolve()
+    })
+    expect(headerSessionMenuItems()).toEqual([])
+
+    await doubleClickPaneTitle("开发终端")
+    expect(document.body.textContent).toContain("重命名会话")
   })
 
   it("pins a workspace from its context menu and moves it above the unpinned ones", async () => {
@@ -1433,12 +1478,8 @@ describe("TerminalModule", () => {
     // 分屏之后每个 pane 有自己的头部。这里故意从**不是**活动 pane 的那个复制（分屏后
     // 活动的是新开的 session-2），拿到 session-1 才说明复制认的是这个 pane 自己，
     // 而不是 workspace 的活动会话。
-    const titles = Array.from(document.querySelectorAll<HTMLElement>('[data-track="terminal-pane-title"]'))
-    expect(titles).toHaveLength(2)
-    await act(async () => {
-      titles[0]!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
-      await Promise.resolve()
-    })
+    expect(document.querySelectorAll('[data-track="terminal-pane-title"]')).toHaveLength(2)
+    await openPaneHeaderMenu("开发终端")
     await clickContextMenuItem("复制引用")
 
     expect(writeText).toHaveBeenCalledWith([
@@ -1516,7 +1557,7 @@ describe("TerminalModule", () => {
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
 
     await renderEmbeddedModule()
-    await openPaneTitleMenu("开发终端")
+    await openPaneHeaderMenu("开发终端")
     await clickContextMenuItem("重命名")
 
     expect(document.body.textContent).toContain("重命名会话")
@@ -2814,6 +2855,32 @@ describe("TerminalModule", () => {
     })
     expect(document.querySelectorAll('[data-track="terminal-session-select"]')).toHaveLength(1)
     expect(xtermState.instances.filter((instance) => instance.dispose.mock.calls.length === 0)).toHaveLength(2)
+  })
+
+  it("renames the focused session with Cmd+R", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "r", metaKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("重命名会话")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="会话名称"]')?.value)
+      .toBe("开发终端")
+  })
+
+  it("still types a plain r into the terminal", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "r" }))).toBe(true)
   })
 
   it("renders a title bar and close button for every terminal pane", async () => {
@@ -4379,8 +4446,21 @@ function paneTitle(title: string): HTMLElement | null {
     .find((element) => element.textContent === title) ?? null
 }
 
-async function openPaneTitleMenu(title: string): Promise<void> {
-  const element = paneTitle(title)
+/** 顶栏右侧按钮组里的某一颗。Button 会把 `data-track` 吃掉做埋点，所以这里按 aria-label 找。 */
+function paneHeaderButton(title: string, label: string): HTMLElement | null {
+  return paneHeader(title)?.querySelector<HTMLElement>(`[aria-label="${label}：${title}"]`) ?? null
+}
+
+/** 某个会话所在 pane 的整条顶栏。 */
+function paneHeader(title: string): HTMLElement | null {
+  const pane = Array.from(document.body.querySelectorAll<HTMLElement>('[role="region"]'))
+    .find((element) => element.getAttribute("aria-label") === `终端会话：${title}`)
+  return pane?.querySelector<HTMLElement>("[data-terminal-pane-header]") ?? null
+}
+
+/** 在顶栏上右键。菜单挂的是整条顶栏，所以这里刻意不挑标题那块。 */
+async function openPaneHeaderMenu(title: string): Promise<void> {
+  const element = paneHeader(title)
   await act(async () => {
     element?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
     await Promise.resolve()

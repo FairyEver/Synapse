@@ -9,6 +9,7 @@ export type TerminalPaneShortcut =
   | "focus-left"
   | "focus-right"
   | "focus-up"
+  | "rename-session"
   | "split-down"
   | "split-right"
 
@@ -74,6 +75,14 @@ export function getTerminalPaneShortcut(
     if (event.metaKey && !event.altKey && !event.ctrlKey && event.key.toLowerCase() === "d") {
       return event.shiftKey ? "split-down" : "split-right"
     }
+    /*
+     * `⌘R` is not the shell's key, so the terminal can take it. It used to belong to Electron's
+     * default View → Reload; the application menu no longer carries a reload item, which is what
+     * frees this combination (see the main-process menu template).
+     */
+    if (event.metaKey && !event.altKey && !event.ctrlKey && event.key.toLowerCase() === "r") {
+      return event.shiftKey ? null : "rename-session"
+    }
     if (event.metaKey && event.altKey && !event.ctrlKey && !event.shiftKey) {
       return arrowFocusShortcut(event.key)
     }
@@ -83,6 +92,10 @@ export function getTerminalPaneShortcut(
   if (platform === "win32") {
     if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === "w") {
       return "close-pane"
+    }
+    // Shift is required here because plain `Ctrl+R` is the shell's own reverse history search.
+    if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === "r") {
+      return "rename-session"
     }
     if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey) {
       if (event.key === "+" || event.key === "=") return "split-right"

@@ -41,10 +41,12 @@ describe("terminal pane shortcuts", () => {
     ["Cmd+Shift+D", "darwin", { metaKey: true, shiftKey: true, key: "D" }, "split-down"],
     ["Option+Cmd+Left", "darwin", { altKey: true, metaKey: true, shiftKey: false, key: "ArrowLeft" }, "focus-left"],
     ["Cmd+W", "darwin", { metaKey: true, shiftKey: false, key: "w" }, "close-pane"],
+    ["Cmd+R", "darwin", { metaKey: true, shiftKey: false, key: "r" }, "rename-session"],
     ["Alt+Shift++", "win32", { altKey: true, shiftKey: true, key: "+" }, "split-right"],
     ["Alt+Shift+-", "win32", { altKey: true, shiftKey: true, key: "-" }, "split-down"],
     ["Alt+Down", "win32", { altKey: true, shiftKey: false, key: "ArrowDown" }, "focus-down"],
     ["Ctrl+Shift+W", "win32", { ctrlKey: true, shiftKey: true, key: "W" }, "close-pane"],
+    ["Ctrl+Shift+R", "win32", { ctrlKey: true, shiftKey: true, key: "R" }, "rename-session"],
   ])("maps %s", (_name, platform, overrides, expected) => {
     expect(getTerminalPaneShortcut({
       ...SHIFT_ENTER_EVENT,
@@ -52,6 +54,18 @@ describe("terminal pane shortcuts", () => {
       shiftKey: false,
       ...overrides,
     }, platform)).toBe(expected)
+  })
+
+  it.each([
+    ["Ctrl+R, which the shell reads as reverse history search", "win32", { ctrlKey: true, shiftKey: false, key: "r" }],
+    ["Cmd+Shift+R, which stays with the terminal", "darwin", { metaKey: true, shiftKey: true, key: "R" }],
+  ])("leaves %s unclaimed", (_name, platform, overrides) => {
+    expect(getTerminalPaneShortcut({
+      ...SHIFT_ENTER_EVENT,
+      key: "",
+      shiftKey: false,
+      ...overrides,
+    }, platform)).toBeNull()
   })
 
   it("does not reserve shortcuts on Linux", () => {

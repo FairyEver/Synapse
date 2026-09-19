@@ -20,7 +20,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Columns3, Copy, Folder, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
+import { Columns3, Copy, Folder, Link2, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
@@ -382,7 +382,7 @@ export function TerminalWorkspaceView({
     paneControlsRef.current.get(nextPaneId)?.focus()
   }, [activatePane])
 
-  const handleShortcut = useCallback((paneId: string, shortcut: TerminalPaneShortcut) => {
+  const handleShortcut = useCallback((paneId: string, sessionId: string, shortcut: TerminalPaneShortcut) => {
     if (shortcut === "split-right") {
       restoreMaximizedPane()
       return onSplitPane(paneId, "right")
@@ -395,8 +395,19 @@ export function TerminalWorkspaceView({
       restoreMaximizedPane()
       return onClosePane(paneId)
     }
+    if (shortcut === "rename-session") {
+      /*
+       * A shortcut is pressed with the hand already in the terminal, so focus has to land back in
+       * it once the dialog closes. Returning the element that is focused right now — the terminal's
+       * own input — does that; the mouse entry points hand back the pane itself.
+       */
+      return onRenameSession(
+        sessionId,
+        document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      )
+    }
     focusPane(paneId, shortcut.slice("focus-".length) as FocusDirection)
-  }, [focusPane, onClosePane, onSplitPane, restoreMaximizedPane])
+  }, [focusPane, onClosePane, onRenameSession, onSplitPane, restoreMaximizedPane])
 
   const handlePaneDragStart = useCallback((sourcePaneId: string) => {
     restoreMaximizedPane()
@@ -494,7 +505,7 @@ export function TerminalWorkspaceView({
             onRenameSession={onRenameSession}
             onSessionChanged={onSessionChanged}
             onSessionDeleted={onSessionDeleted}
-            onShortcut={(shortcut) => handleShortcut(pane.paneId, shortcut)}
+            onShortcut={(shortcut) => handleShortcut(pane.paneId, pane.sessionId, shortcut)}
             onToggleFileTree={() => handleToggleFileTree(pane.paneId)}
             onToggleMaximize={() => togglePaneMaximize(pane.paneId)}
             paneId={pane.paneId}
@@ -719,8 +730,12 @@ function terminalTranscriptText(xterm: Terminal): string {
 
 /**
  * The conversation name in a pane header. Renaming is offered through the same gestures as the
- * sidebar tab row: double-click, or the context menu. The header doubles as the pane drag handle,
- * so both gestures stay on the title and the drag keeps working on the rest of the header.
+ * sidebar tab row: double-click, or the context menu — which the header now carries, so the menu
+ * is reachable from anywhere along it rather than from the title alone.
+ *
+ * The title keeps its own right-click silent. The header doubles as the pane drag handle, and the
+ * title is the strip a hand reaches for to move a pane; a menu opening there would fire on the
+ * grab. Swallowing the event on the title is what draws that line.
  *
  * The title stays unfocusable on purpose: a focusable label would pull focus away from the
  * terminal on every click on the header.
@@ -728,18 +743,15 @@ function terminalTranscriptText(xterm: Terminal): string {
 function TerminalPaneTitle({
   disabled,
   onActive,
-  onCopyReference,
   onRename,
   title,
 }: {
   readonly disabled: boolean
   readonly onActive: () => void
-  /** Copies this pane's own session reference — not the workspace's active one. */
-  readonly onCopyReference: () => void
   readonly onRename: () => void
   readonly title: string
 }) {
-  const label = (
+  return (
     <span
       className="truncate text-xs font-medium text-foreground/75"
       data-track="terminal-pane-title"
@@ -752,6 +764,7 @@ function TerminalPaneTitle({
         })
         onActive()
       }}
+      onContextMenu={(event) => event.stopPropagation()}
       onDoubleClick={disabled ? undefined : () => {
         track({
           component: "terminal",
@@ -764,24 +777,6 @@ function TerminalPaneTitle({
     >
       {title}
     </span>
-  )
-  // While a phone decides this terminal's grid the title is a label and nothing
-  // more: renaming it is a local edit to a session someone else is driving.
-  if (disabled) return label
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{label}</ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={onRename}>
-          <Pencil />
-          重命名
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onCopyReference}>
-          <Copy />
-          复制引用
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
   )
 }
 
@@ -1620,127 +1615,167 @@ function TerminalPane({
         dimmed && "opacity-50",
       )}
     >
-      <div
-        data-terminal-pane-header
-        data-track="terminal.pane.drag"
-        data-track-native="true"
-        draggable={!remoteSized}
-        onDragEnd={onPaneDragEnd}
-        onDragStart={handlePaneDragStart}
-        className={cn(
-          "flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
-          remoteSized ? "cursor-default" : "cursor-grab",
-          dragged && "cursor-grabbing",
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            data-terminal-pane-header
+            data-track="terminal.pane.drag"
+            data-track-native="true"
+            draggable={!remoteSized}
+            onDragEnd={onPaneDragEnd}
+            onDragStart={handlePaneDragStart}
+            className={cn(
+              "flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
+              remoteSized ? "cursor-default" : "cursor-grab",
+              dragged && "cursor-grabbing",
+            )}
+          >
+            <div className="flex min-w-0 items-center gap-0.5">
+              <TerminalPaneTitle
+                disabled={remoteSized}
+                onActive={onActive}
+                onRename={() => onRenameSession(session.id, paneRootRef.current)}
+                title={session.title}
+              />
+              {workspaceTreeBridge ? <Button
+                ref={fileTreeTriggerRef}
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                disabled={remoteSized}
+                aria-label={fileTreeOpen ? `关闭文件树：${session.title}` : `打开文件树：${session.title}`}
+                title={fileTreeOpen ? "关闭文件树" : "打开文件树"}
+                aria-pressed={fileTreeOpen}
+                data-track="terminal-pane-file-tree-toggle"
+                className="shrink-0 text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onActive()
+                  onToggleFileTree()
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <Folder className="size-3.5" />
+              </Button> : null}
+            </div>
+            <div className="flex shrink-0 items-center">
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`${equalizeActionLabel}：${session.title}`}
+                title={equalizeActionLabel}
+                data-track="terminal-pane-equalize"
+                className="text-muted-foreground"
+                disabled={equalizeDisabled || remoteSized}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onActive()
+                  onEqualize()
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                {equalizeDirection === "vertical"
+                  ? <Rows3 className="size-3.5" />
+                  : <Columns3 className="size-3.5" />}
+              </Button>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`${maximized ? "还原分屏" : "最大化分屏"}：${session.title}`}
+                title={maximized ? "还原分屏" : "最大化分屏"}
+                aria-pressed={maximized}
+                data-track="terminal-pane-maximize"
+                className="text-muted-foreground"
+                disabled={maximizeDisabled || remoteSized}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onActive()
+                  onToggleMaximize()
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                {maximized
+                  ? <Minimize2 className="size-3.5" />
+                  : <Maximize2 className="size-3.5" />}
+              </Button>
+              {/*
+                Reads, not writes: copying the reference stays available while a phone holds the
+                grid, exactly like copying the transcript next to it.
+              */}
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`复制引用：${session.title}`}
+                title="复制引用"
+                data-track="terminal-pane-copy-reference"
+                className="text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onActive()
+                  onCopySessionReference(session.id)
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <Link2 className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`复制全文：${session.title}`}
+                title="复制全文"
+                data-track="terminal-pane-copy-transcript"
+                className="text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onActive()
+                  void copyTranscript()
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <Copy className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={`${closeActionLabel}：${session.title}`}
+                title={closeActionLabel}
+                className="text-muted-foreground hover:text-destructive"
+                disabled={closePending || (closing && platform !== "darwin") || remoteSized}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onShortcut("close-pane")
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                {closePending
+                  ? <Spinner className="size-3.5" aria-hidden="true" />
+                  : closing ? <Square className="size-3.5" /> : <X className="size-3.5" />}
+              </Button>
+            </div>
+          </div>
+        </ContextMenuTrigger>
+        {/*
+          While a phone decides this terminal's grid the header stays uncovered but inert
+          (ADR 0219), so the menu is withheld along with the rest of the pane's own actions.
+        */}
+        {remoteSized ? null : (
+          <ContextMenuContent>
+            <ContextMenuItem onSelect={() => onRenameSession(session.id, paneRootRef.current)}>
+              <Pencil />
+              重命名
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => onCopySessionReference(session.id)}>
+              <Link2 />
+              复制引用
+            </ContextMenuItem>
+          </ContextMenuContent>
         )}
-      >
-        <div className="flex min-w-0 items-center gap-0.5">
-          <TerminalPaneTitle
-            disabled={remoteSized}
-            onActive={onActive}
-            onCopyReference={() => onCopySessionReference(session.id)}
-            onRename={() => onRenameSession(session.id, paneRootRef.current)}
-            title={session.title}
-          />
-          {workspaceTreeBridge ? <Button
-            ref={fileTreeTriggerRef}
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            disabled={remoteSized}
-            aria-label={fileTreeOpen ? `关闭文件树：${session.title}` : `打开文件树：${session.title}`}
-            title={fileTreeOpen ? "关闭文件树" : "打开文件树"}
-            aria-pressed={fileTreeOpen}
-            data-track="terminal-pane-file-tree-toggle"
-            className="shrink-0 text-muted-foreground"
-            onClick={(event) => {
-              event.stopPropagation()
-              onActive()
-              onToggleFileTree()
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <Folder className="size-3.5" />
-          </Button> : null}
-        </div>
-        <div className="flex shrink-0 items-center">
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label={`${equalizeActionLabel}：${session.title}`}
-            title={equalizeActionLabel}
-            data-track="terminal-pane-equalize"
-            className="text-muted-foreground"
-            disabled={equalizeDisabled || remoteSized}
-            onClick={(event) => {
-              event.stopPropagation()
-              onActive()
-              onEqualize()
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {equalizeDirection === "vertical"
-              ? <Rows3 className="size-3.5" />
-              : <Columns3 className="size-3.5" />}
-          </Button>
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label={`${maximized ? "还原分屏" : "最大化分屏"}：${session.title}`}
-            title={maximized ? "还原分屏" : "最大化分屏"}
-            aria-pressed={maximized}
-            data-track="terminal-pane-maximize"
-            className="text-muted-foreground"
-            disabled={maximizeDisabled || remoteSized}
-            onClick={(event) => {
-              event.stopPropagation()
-              onActive()
-              onToggleMaximize()
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {maximized
-              ? <Minimize2 className="size-3.5" />
-              : <Maximize2 className="size-3.5" />}
-          </Button>
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label={`复制全文：${session.title}`}
-            title="复制全文"
-            data-track="terminal-pane-copy-transcript"
-            className="text-muted-foreground"
-            onClick={(event) => {
-              event.stopPropagation()
-              onActive()
-              void copyTranscript()
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <Copy className="size-3.5" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label={`${closeActionLabel}：${session.title}`}
-            title={closeActionLabel}
-            className="text-muted-foreground hover:text-destructive"
-            disabled={closePending || (closing && platform !== "darwin") || remoteSized}
-            onClick={(event) => {
-              event.stopPropagation()
-              onShortcut("close-pane")
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {closePending
-              ? <Spinner className="size-3.5" aria-hidden="true" />
-              : closing ? <Square className="size-3.5" /> : <X className="size-3.5" />}
-          </Button>
-        </div>
-      </div>
+      </ContextMenu>
       {dropEdge ? (
         <div
           aria-hidden="true"

@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => {
     dialog: {
       showMessageBox: vi.fn(),
     },
+    installApplicationMenu: vi.fn(),
     installStatusCacheService: {
       buildCache: vi.fn(async () => undefined),
     },
@@ -116,6 +117,10 @@ vi.mock("../app-events", () => ({
   attachActivateHandler: mocks.attachActivateHandler,
 }))
 
+vi.mock("../application-menu", () => ({
+  installApplicationMenu: mocks.installApplicationMenu,
+}))
+
 vi.mock("../before-quit", () => ({
   attachBeforeQuitHandler: mocks.attachBeforeQuitHandler,
 }))
@@ -158,6 +163,7 @@ describe("initializeReadyApp", () => {
       onRendererResponsive: expect.any(Function),
     })
     expect(mocks.editorInstallService.addPreparedSourceProvider).toHaveBeenCalledOnce()
+    expect(mocks.installApplicationMenu).toHaveBeenCalledOnce()
     expect(mocks.registry.get).toHaveBeenCalledWith("core.synapse-skill")
     expect(mocks.registry.startBackground).toHaveBeenCalledOnce()
   })

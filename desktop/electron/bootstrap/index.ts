@@ -88,3 +88,5 @@ export type {
 } from "./extensions"
 
 export { initializeReadyApp } from "./app-ready"
+
+export { buildApplicationMenuTemplate, installApplicationMenu } from "./application-menu"

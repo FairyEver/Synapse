@@ -20,6 +20,7 @@ import { createAccountExternalUrlOpener } from "./account-external-opener"
 import { registerAgentArtifactProtocol } from "./agent-artifact-protocol"
 import { registerMeetingAudioProtocol } from "./meeting-audio-protocol"
 import { attachActivateHandler } from "./app-events"
+import { installApplicationMenu } from "./application-menu"
 import { attachBeforeQuitHandler } from "./before-quit"
 import { createIpcRegistry } from "./ipc-registry"
 import { createMainWindow, type MainWindowState } from "./main-window"
@@ -59,6 +60,8 @@ type InitializeReadyAppDeps = {
 
 async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
   logger.info("Electron app is ready. Initializing IPC registry.")
+  // Before any window opens, so the menu bar never shows the default menu's reload items.
+  installApplicationMenu()
   registerAgentArtifactProtocol()
   registerMeetingAudioProtocol()
   const registry = buildServiceRegistry({ trayShowOrCreate: deps.focusOrCreateMainWindow })
