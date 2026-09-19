@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synapse 录音 · 列表 / 详情 两栏重构原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --background:oklch(1 0 0);
+  --foreground:oklch(0.145 0 0);
+  --card:oklch(1 0 0);
+  --primary:oklch(0.205 0 0);
+  --primary-foreground:oklch(0.985 0 0);
+  --secondary:oklch(0.97 0 0);
+  --muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);
+  --accent:oklch(0.97 0 0);
+  --destructive:oklch(0.577 0.245 27.325);
+  --border:oklch(0.922 0 0);
+  --input:oklch(0.922 0 0);
+  --ring:oklch(0.708 0 0);
+  --sidebar:oklch(0.985 0 0);
+  --surface:oklch(0.965 0 0);
+  --chart-1:oklch(0.58 0.13 248);
+  --chart-2:oklch(0.64 0.1 198);
+  --chart-3:oklch(0.66 0.1 154);
+  --chart-4:oklch(0.7 0.11 78);
+  --chart-5:oklch(0.61 0.11 304);
+  --radius:0.625rem;
+  /* 列表项选中态：当前主题里 hover 与选中都是 --muted，区分不开。原型先给一个语义值。 */
+  --selected:oklch(0.945 0 0);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --background:oklch(0.145 0 0);
+    --foreground:oklch(0.985 0 0);
+    --card:oklch(0.205 0 0);
+    --primary:oklch(0.922 0 0);
+    --primary-foreground:oklch(0.205 0 0);
+    --secondary:oklch(0.269 0 0);
+    --muted:oklch(0.269 0 0);
+    --muted-foreground:oklch(0.708 0 0);
+    --accent:oklch(0.269 0 0);
+    --destructive:oklch(0.704 0.191 22.216);
+    --border:oklch(1 0 0 / 10%);
+    --input:oklch(1 0 0 / 15%);
+    --ring:oklch(0.556 0 0);
+    --sidebar:oklch(0.205 0 0);
+    --surface:oklch(0.175 0 0);
+    --chart-1:oklch(0.74 0.12 248);
+    --chart-2:oklch(0.77 0.1 198);
+    --chart-3:oklch(0.78 0.1 154);
+    --chart-4:oklch(0.82 0.11 78);
+    --chart-5:oklch(0.76 0.11 304);
+    --selected:oklch(0.3 0 0);
+  }
+}
+[data-theme="dark"]{
+  --background:oklch(0.145 0 0);
+  --foreground:oklch(0.985 0 0);
+  --card:oklch(0.205 0 0);
+  --primary:oklch(0.922 0 0);
+  --primary-foreground:oklch(0.205 0 0);
+  --secondary:oklch(0.269 0 0);
+  --muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);
+  --accent:oklch(0.269 0 0);
+  --destructive:oklch(0.704 0.191 22.216);
+  --border:oklch(1 0 0 / 10%);
+  --input:oklch(1 0 0 / 15%);
+  --ring:oklch(0.556 0 0);
+  --sidebar:oklch(0.205 0 0);
+  --surface:oklch(0.175 0 0);
+  --chart-1:oklch(0.74 0.12 248);
+  --chart-2:oklch(0.77 0.1 198);
+  --chart-3:oklch(0.78 0.1 154);
+  --chart-4:oklch(0.82 0.11 78);
+  --chart-5:oklch(0.76 0.11 304);
+  --selected:oklch(0.3 0 0);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--surface);color:var(--foreground);
+  font-family:"Geist","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit}
+.hide{display:none !important}
+
+.page{max-width:1180px;margin:0 auto;padding:22px 24px 40px}
+
+/* ---------- 页头 / 说明 ---------- */
+.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.head h1{font-size:15px;font-weight:500;margin:0}
+.head .sub{font-size:12.5px;color:var(--muted-foreground)}
+.spacer{margin-left:auto}
+
+.notes{border:1px solid var(--border);background:var(--background);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
+.notes h2{font-size:12.5px;font-weight:500;margin:0 0 8px;color:var(--muted-foreground)}
+.notes ol{margin:0;padding-left:18px;display:grid;gap:5px;font-size:12.5px;color:var(--muted-foreground)}
+.notes ol b{color:var(--foreground);font-weight:500}
+.tag{display:inline-block;margin-left:6px;padding:0 6px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted-foreground)}
+
+/* ---------- 按钮 ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:calc(var(--radius) * .8);
+  border:1px solid transparent;background:transparent;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--muted)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:var(--primary-foreground)}
+.btn-primary:hover{background:var(--primary);opacity:.9}
+.btn-outline{border-color:var(--border)}
+.btn-outline:hover{background:var(--muted)}
+.btn-sm{height:28px;padding:0 10px;font-size:12.5px}
+.btn-destructive{color:var(--destructive)}
+.btn-destructive:hover{background:var(--muted)}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;
+  border:1px solid transparent;background:transparent;cursor:pointer}
+.icon-btn:hover{background:var(--muted)}
+.ic{width:16px;height:16px;flex:none}
+
+/* ---------- 应用外框 ---------- */
+.frame{height:min(80vh,780px);display:flex;flex-direction:column;background:var(--background);
+  border:1px solid var(--border);border-radius:calc(var(--radius) * 1.4);overflow:hidden;
+  box-shadow:0 1px 2px oklch(0 0 0 / 5%),0 8px 24px oklch(0 0 0 / 4%)}
+.topbar{height:46px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--border)}
+.topbar .title{font-size:13.5px;font-weight:500}
+.split{flex:1;display:flex;min-height:0}
+
+/* ---------- 左：列表 ---------- */
+.list-pane{width:286px;flex:none;border-right:1px solid var(--border);background:var(--sidebar);
+  display:flex;flex-direction:column;min-height:0}
+.list-scroll{flex:1;overflow-y:auto;padding:6px}
+.list-scroll::-webkit-scrollbar{width:10px}
+.list-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:999px;border:3px solid transparent;background-clip:content-box}
+.row{position:relative;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;user-select:none}
+.row:hover{background:var(--muted)}
+.row[aria-selected="true"]{background:var(--selected)}
+.row[aria-selected="true"] .row-title{font-weight:500}
+.row-main{min-width:0;flex:1}
+.row-title{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{margin-top:1px;font-size:11.5px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub .warn{color:var(--destructive)}
+.row-dur{font-size:11.5px;color:var(--muted-foreground);font-variant-numeric:tabular-nums;flex:none}
+.row-more{width:22px;height:22px;flex:none;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:0;cursor:pointer;color:var(--muted-foreground);opacity:0;pointer-events:none}
+.row:hover .row-more,.row[aria-selected="true"] .row-more{opacity:1;pointer-events:auto}
+.row-more:hover{color:var(--foreground);background:var(--background)}
+
+/* ---------- 右：详情 ---------- */
+.detail-pane{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+.detail-head{padding:18px 22px 0;display:flex;align-items:flex-start;gap:10px}
+.detail-title{font-size:16px;font-weight:500;line-height:1.35}
+.detail-title-input{font:inherit;font-size:16px;font-weight:500;color:var(--foreground);background:var(--background);
+  border:1px solid var(--border);border-radius:6px;padding:2px 6px;width:min(420px,100%);outline:none}
+.detail-meta{margin-top:3px;font-size:12.5px;color:var(--muted-foreground)}
+.detail-actions{margin-left:auto;display:flex;align-items:center;gap:2px;flex:none}
+
+.seg{display:inline-flex;gap:2px;padding:2px;background:var(--muted);border-radius:9px}
+.seg button{height:28px;padding:0 14px;border:0;border-radius:7px;background:transparent;cursor:pointer;font-size:13px;color:var(--muted-foreground)}
+.seg button[aria-selected="true"]{background:var(--background);color:var(--foreground);box-shadow:0 1px 2px oklch(0 0 0 / 6%)}
+.view-switch{display:flex;align-items:center;gap:8px;padding:14px 22px 0}
+.detail-body{padding:14px 22px 28px}
+
+/* ---------- 播放器 ---------- */
+.player{padding:0}
+.wave-wrap{position:relative;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:hidden}
+.wave-wrap canvas{display:block;width:100%;height:132px;cursor:pointer}
+.playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--foreground);pointer-events:none}
+.playhead::before{content:"";position:absolute;left:-3px;top:-1px;width:7px;height:7px;border-radius:999px;background:var(--foreground)}
+.transport{display:flex;align-items:center;gap:6px;padding:10px 2px 0}
+.transport .time{font-size:12.5px;color:var(--muted-foreground);font-variant-numeric:tabular-nums;margin-left:4px}
+.round-btn{width:34px;height:34px;border-radius:999px;border:1px solid var(--border);background:var(--background);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted-foreground)}
+.round-btn:hover{background:var(--muted);color:var(--foreground)}
+.play-btn{width:44px;height:44px;border-radius:999px;border:1px solid var(--border);background:var(--background);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.play-btn:hover{background:var(--muted)}
+.play-btn .ic{width:18px;height:18px}
+.bar{height:4px;border-radius:999px;background:var(--muted);overflow:hidden;margin-top:10px}
+.bar>i{display:block;height:100%;background:var(--foreground);transition:width .2s}
+
+/* ---------- 转写文字 ---------- */
+.transcript{display:grid;gap:11px;max-width:700px}
+.transcript p{margin:0;font-size:14px;line-height:1.85}
+
+/* ---------- 空态 ---------- */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;
+  padding:56px 24px;border:1px dashed var(--border);border-radius:var(--radius)}
+.empty .ic{width:22px;height:22px;color:var(--muted-foreground)}
+.empty .t{font-size:13.5px;font-weight:500}
+.empty .d{font-size:12.5px;color:var(--muted-foreground);max-width:340px}
+.empty-inline{padding:34px 20px}
+
+/* ---------- 菜单 ---------- */
+.menu{position:fixed;z-index:60;min-width:180px;padding:4px;border:1px solid var(--border);border-radius:9px;
+  background:var(--card);box-shadow:0 8px 24px oklch(0 0 0 / 12%)}
+.menu button{display:flex;width:100%;align-items:center;gap:8px;height:30px;padding:0 8px;border:0;border-radius:6px;
+  background:transparent;cursor:pointer;font-size:13px;text-align:left}
+.menu button:hover{background:var(--muted)}
+.menu button.danger{color:var(--destructive)}
+.menu .sep{height:1px;background:var(--border);margin:4px 0}
+
+/* ---------- 对话框 ---------- */
+.overlay{position:fixed;inset:0;z-index:80;background:oklch(0 0 0 / 35%);display:flex;align-items:center;justify-content:center;padding:24px}
+.dialog{width:100%;max-width:400px;border:1px solid var(--border);border-radius:calc(var(--radius) * 1.2);
+  background:var(--card);padding:18px 18px 14px;box-shadow:0 16px 48px oklch(0 0 0 / 18%)}
+.dialog .t{font-size:14.5px;font-weight:500}
+.dialog .d{margin-top:6px;font-size:13px;color:var(--muted-foreground)}
+.dialog .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+/* ---------- 录音中 ---------- */
+.rec{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px}
+.rec .timer{font-size:44px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.rec .canvas-wrap{width:100%;max-width:520px;height:120px}
+.rec canvas{display:block;width:100%;height:100%}
+.rec .hint{font-size:12.5px;color:var(--muted-foreground)}
+.rec .acts{display:flex;gap:10px}
+.dot-live{display:inline-block;width:7px;height:7px;border-radius:999px;background:var(--destructive);margin-right:6px;
+  animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="head">
+    <h1>录音 · 两栏重构</h1>
+    <span class="sub">Synapse › 录音</span>
+    <span class="spacer"></span>
+    <button class="btn btn-outline btn-sm" onclick="toggleNotes()">设计说明</button>
+    <button class="icon-btn" onclick="toggleTheme()" title="切换深浅色">◐</button>
+  </div>
+
+  <div class="notes" id="notes">
+    <h2>这一版改了什么</h2>
+    <ol>
+      <li><b>左栏只剩列表。</b>点击切换右栏内容，没有别的入口、提示和按钮。</li>
+      <li><b>右栏两个视图：语音、文字。</b>语音就是正常的播放器——波形、播放键、±15 秒、时间。</li>
+      <li><b>文字就是一段转写。</b>腾讯云返回什么就显示什么，按自然段排开。没有纪要，没有逐字稿分栏，没有发言人、时间戳、搜索和命名。</li>
+      <li><b>录音没有录完就退出（杀进程、强退、更新重启），已经录到的部分按正常录音保留</b>，直接进列表、照常转写，界面上不出现任何询问。</li>
+      <li><b>删除只有一个动作</b>：录音和文字一起删掉，行从列表消失。放在列表行内的「⋯」里。</li>
+      <li><b>转写中 / 转写失败</b>在右栏就地显示，不退回列表。</li>
+      <li><b>这个名字不再是「会议」。</b>它什么都能录，叫会议就把场景绑死了。全站只有一个词——<b>录音</b>：手机 Tab、桌面启动台、窗口标题、页面标题、空状态和错误提示都用它。</li>
+    </ol>
+  </div>
+
+  <div class="frame">
+    <div class="topbar">
+      <button class="icon-btn" title="返回"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg></button>
+      <span class="title">录音</span>
+      <span class="spacer"></span>
+      <button class="btn" onclick="startRecording()" id="topRecord">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+        开始录音
+      </button>
+      <button class="icon-btn" title="在独立窗口打开"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button>
+    </div>
+
+    <div class="split">
+      <aside class="list-pane">
+        <div class="list-scroll" id="list"></div>
+      </aside>
+      <main class="detail-pane" id="detail"></main>
+    </div>
+  </div>
+
+  <p style="font-size:12px;color:var(--muted-foreground);margin-top:12px">
+    原型数据是假的：波形、播放进度、转写中的进度都会动，用来判断交互是否顺手，不要据此判断真实性能。
+  </p>
+</div>
+
+<script>
+/* =========================================================================
+   数据
+   ========================================================================= */
+function fmt(ms){
+  const total = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const mm = h > 0 ? String(m).padStart(2,'0') : String(m)
+  return (h > 0 ? h + ':' : '') + mm + ':' + String(s).padStart(2,'0')
+}
+function fmtLong(ms){
+  const total = Math.max(0, Math.round(ms/1000))
+  const h = Math.floor(total/3600), m = Math.floor(total%3600/60), s = total%60
+  if (h > 0) return h + ' 小时 ' + m + ' 分'
+  if (m > 0) return m + ' 分 ' + s + ' 秒'
+  return s + ' 秒'
+}
+
+/* 生成像人说话的波形包络：成段的说话与停顿 */
+function makePeaks(seed, n){
+  let a = seed >>> 0
+  const rnd = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+  const out = []
+  let env = 0.1
+  let left = 0
+  for (let i = 0; i < n; i++){
+    if (left <= 0){ const talking = rnd() > 0.34; left = Math.round((talking ? 6 : 2) + rnd() * 26); env = talking ? 0.42 + rnd() * 0.5 : 0.03 + rnd() * 0.05 }
+    left--
+    const target = env
+    const v = Math.max(0.015, Math.min(1, target * (0.55 + rnd() * 0.75)))
+    out.push(v)
+  }
+  return out
+}
+
+const MEETINGS = [
+  {
+    id:'m1', title:'Q3 产品路线图评审', date:'今天 10:24',
+    durationMs: 1164000, status:'done', recording:'available',
+    peaks: makePeaks(11, 600),
+    segments:[
+      {at:0,      text:'今天主要过三件事：路线图排序、移动端和桌面端的能力对齐，还有下个版本的发版节奏。'},
+      {at:42000,  text:'先看排序。现在候选里有导出与分享、批量操作、第三方集成三个方向。'},
+      {at:65000,  text:'我建议优先做导出与分享，最近用户反馈里这个词出现得最多。'},
+      {at:98000,  text:'导出的格式呢？Markdown、PDF、Excel 都得覆盖吗？'},
+      {at:112000, text:'先做 Markdown 和 PDF，Excel 放后面。前两个覆盖了绝大多数场景。'},
+      {at:200000, text:'批量操作可以和导出一起做，选中多条之后直接导出，路径是通的。'},
+      {at:245000, text:'那就把批量导出作为导出的第二个阶段。'},
+      {at:390000, text:'移动端这边，现在只能看结果，不能发起录音。这季度要不要补上？'},
+      {at:422000, text:'发起录音会牵出后台权限和中断处理一整条链路，我倾向于放到下一季度。'},
+      {at:495000, text:'同意推迟。这季度先保证桌面端的稳定性。'},
+      {at:940000, text:'发版节奏还是两周一个小版本，遇到阻塞就顺延一周，不硬赶。'},
+      {at:1085000,text:'好，那今天就到这里，我把待办整理一下发到群里。'}
+    ]
+  },
+  {
+    id:'m2', title:'客户对接 · 恒远科技', date:'今天 09:05',
+    durationMs: 1112000, status:'transcribing', recording:'available',
+    peaks: makePeaks(23, 600),
+    segments:[
+      {at:0,     text:'王经理，今天主要对一下交付节奏，还有接口联调的时间点。'},
+      {at:18000, text:'好，我们这边后端这周能出测试环境，下周一开始联调。'},
+      {at:62000, text:'测试环境需要固定 IP 吗？我们这边白名单是按 IP 配的。'},
+      {at:80000, text:'需要，我下午把地址发你。'}
+    ]
+  },
+  {
+    id:'m3', title:'新录音 12', date:'昨天 21:10',
+    durationMs: 7000, status:'done', recording:'available',
+    peaks: makePeaks(37, 200),
+    segments:[
+      {at:0, text:'测一下能不能录上。'}
+    ]
+  },
+  {
+    id:'m4', title:'周会 · 工程组', date:'9 月 17 日 16:30',
+    durationMs: 3302000, status:'done', recording:'available',
+    peaks: makePeaks(53, 900),
+    segments:[
+      {at:0,       text:'先各自说一下这周的进度和卡点。'},
+      {at:96000,   text:'我把打包这条链路重写了一遍，体积降了大概百分之十二。'},
+      {at:420000,  text:'更新这块还有一个偶发问题：安装记录写了但 ShipIt 没起来，应用会卡住不退出。'},
+      {at:498000,  text:'这个我这周在跟，判断条件已经改成看 launchd 里的状态了，还差一轮真机验证。'},
+      {at:1020000, text:'这个优先级最高，用户感知太明显了。下周必须收掉。'},
+      {at:1860000, text:'另外目录监控在文件特别多的时候会抖，我打算加一个合并窗口。'},
+      {at:2450000, text:'合并窗口要考虑一下首次全量扫描的场景，别让用户等太久。'},
+      {at:3120000, text:'好，这两个都记一下，下周同一时间继续。'}
+    ]
+  },
+  {
+    id:'m5', title:'关于首页改版的想法', date:'9 月 15 日 14:12',
+    durationMs: 766000, status:'failed', recording:'available',
+    failureReason:'音频下载超时，转写任务被终止。',
+    peaks: makePeaks(71, 500),
+    segments:[]
+  },
+  {
+    id:'m6', title:'英语课 · 第 12 讲', date:'9 月 11 日 17:40',
+    durationMs: 500000, status:'done', recording:'available',
+    peaks: makePeaks(97, 420),
+    segments:[
+      {at:0,      text:'下周三之前把三个模块的验收标准写出来。'},
+      {at:41000,  text:'我这边周四周五各排半天做回归。'},
+      {at:118000, text:'终端那块我还欠一个快捷键白名单的表，周二给。'},
+      {at:296000, text:'行，那就这样。'}
+    ]
+  }
+]
+
+const state = {
+  selectedId: 'm1',
+  view: 'voice',              // voice | text
+  posMs: 0,
+  playing: false,
+  recording: null             // { startedAt }
+}
+
+let rafTimer = null
+let liveTimer = null
+
+/* =========================================================================
+   工具
+   ========================================================================= */
+function el(html){ const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
+function selected(){ return MEETINGS.find(m => m.id === state.selectedId) || null }
+
+function statusText(m){
+  if (m.status === 'transcribing') return '转写中'
+  if (m.status === 'failed') return '转写失败'
+  if (m.recording === 'deleted') return '录音已删除'
+  return ''
+}
+function subText(m){
+  const parts = [m.date]
+  if (m.durationMs > 0) parts.push(fmt(m.durationMs))
+  const s = statusText(m)
+  return { base: parts.join(' · '), status: s }
+}
+
+/* =========================================================================
+   左栏
+   ========================================================================= */
+function renderList(){
+  const host = document.getElementById('list')
+  host.innerHTML = ''
+
+  if (MEETINGS.length === 0){
+    host.appendChild(el(`<div class="empty empty-inline">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+      <div class="t">还没有录音</div>
+      <button class="btn btn-primary btn-sm" onclick="startRecording()">开始录音</button>
+    </div>`))
+    return
+  }
+
+  for (const m of MEETINGS){
+    const sub = subText(m)
+    const row = el(`<div class="row" role="button" tabindex="0" aria-selected="${m.id === state.selectedId}">
+      <div class="row-main">
+        <div class="row-title">${esc(m.title)}</div>
+        <div class="row-sub">${esc(sub.base)}${sub.status ? ' · <span class="' + (m.status === 'failed' ? 'warn' : '') + '">' + esc(sub.status) + '</span>' : ''}</div>
+      </div>
+      <span class="row-dur">${m.durationMs > 0 ? fmt(m.durationMs) : '—'}</span>
+      <button class="row-more" title="更多操作">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+      </button>
+    </div>`)
+    row.onclick = () => selectMeeting(m.id)
+    row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); selectMeeting(m.id) } }
+    row.querySelector('.row-more').onclick = (e) => { e.stopPropagation(); openRowMenu(e.currentTarget, m.id) }
+    host.appendChild(row)
+  }
+}
+
+function selectMeeting(id){
+  if (state.selectedId === id) return
+  const m = MEETINGS.find(x => x.id === id)
+  state.selectedId = id
+  state.posMs = 0
+  state.playing = false
+  // 「语音 / 文字」跟着用户选：切录音不重置。例外是转写失败的记录——它缺的是文字，
+  // 默认落在语音会让用户看不到原因和重试。
+  if (m && m.status === 'failed') state.view = 'text'
+  stopTicker()
+  renderList(); renderDetail()
+}
+
+/* =========================================================================
+   右栏
+   ========================================================================= */
+function renderDetail(){
+  const host = document.getElementById('detail')
+  host.innerHTML = ''
+  document.getElementById('topRecord').classList.toggle('hide', !!state.recording)
+
+  if (state.recording){ host.appendChild(renderRecorder()); return }
+
+  const m = selected()
+  if (!m){
+    host.appendChild(el(`<div class="empty" style="margin:auto;border:0">
+      <div class="t">没有可显示的录音</div>
+      <div class="d">在左边选一条，或者开始一段新录音。</div>
+    </div>`))
+    return
+  }
+
+  host.appendChild(renderHead(m))
+  host.appendChild(renderSwitch(m))
+  const body = el('<div class="detail-body"></div>')
+  body.appendChild(state.view === 'voice' ? renderVoice(m) : renderText(m))
+  host.appendChild(body)
+  if (state.view === 'voice') drawPlayerWave(m)
+}
+
+function renderHead(m){
+  const head = el(`<div class="detail-head">
+    <div style="min-width:0">
+      <div id="titleSlot"><div class="detail-title">${esc(m.title)}</div></div>
+      <div class="detail-meta">${esc(m.date)}${m.durationMs > 0 ? ' · ' + fmtLong(m.durationMs) : ''}</div>
+    </div>
+    <div class="detail-actions">
+      <button class="icon-btn" id="headMore" title="更多操作">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+      </button>
+    </div>
+  </div>`)
+  head.querySelector('#headMore').onclick = (e) => openRowMenu(e.currentTarget, m.id, true)
+  return head
+}
+
+function renderSwitch(m){
+  const box = el(`<div class="view-switch">
+    <div class="seg" role="tablist">
+      <button role="tab" data-v="voice" aria-selected="${state.view === 'voice'}">语音</button>
+      <button role="tab" data-v="text" aria-selected="${state.view === 'text'}">文字</button>
+    </div>
+  </div>`)
+  box.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+    if (state.view === b.dataset.v) return
+    state.view = b.dataset.v
+    renderDetail()
+  })
+  return box
+}
+
+/* ---------- 语音 ---------- */
+function renderVoice(m){
+  const wrap = el('<div></div>')
+
+  if (m.recording === 'deleted'){
+    wrap.appendChild(el(`<div class="empty">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="m10 11 4 4"/><path d="m14 11-4 4"/></svg>
+      <div class="t">录音已删除</div>
+      <div class="d">文字仍保留，切到「文字」查看。</div>
+    </div>`))
+    return wrap
+  }
+
+  const player = el(`<div class="player">
+    <div class="wave-wrap">
+      <canvas id="pw"></canvas>
+      <div class="playhead" id="ph" style="left:0"></div>
+    </div>
+    <div class="transport">
+      <button class="round-btn" id="bBack" title="后退 15 秒">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 12a8.4 8.4 0 1 0 2.5-6"/><path d="M3 3.6V9h5.4"/><text x="12.2" y="15.4" text-anchor="middle" font-size="7.5" fill="currentColor" stroke="none" font-family="Geist, sans-serif">15</text></svg>
+      </button>
+      <button class="play-btn" id="bPlay" title="播放">
+        <svg class="ic" id="playIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.2v13.6L19 12 8 5.2Z"/></svg>
+      </button>
+      <button class="round-btn" id="bFwd" title="前进 15 秒">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M21 3.6V9h-5.4"/><text x="11.8" y="15.4" text-anchor="middle" font-size="7.5" fill="currentColor" stroke="none" font-family="Geist, sans-serif">15</text></svg>
+      </button>
+      <span class="time" id="tmNow">0:00</span>
+      <span class="time" style="margin-left:-2px">/ ${fmt(m.durationMs)}</span>
+    </div>
+  </div>`)
+
+  player.querySelector('#bPlay').onclick = () => togglePlay(m)
+  player.querySelector('#bBack').onclick = () => seek(m, state.posMs - 15000)
+  player.querySelector('#bFwd').onclick = () => seek(m, state.posMs + 15000)
+  player.querySelector('#pw').onclick = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    seek(m, ((e.clientX - r.left) / r.width) * m.durationMs)
+  }
+  wrap.appendChild(player)
+  requestAnimationFrame(() => updateTransport(m))
+  return wrap
+}
+
+function drawPlayerWave(m){
+  const c = document.getElementById('pw')
+  if (!c) return
+  const dpr = window.devicePixelRatio || 1
+  const w = c.clientWidth, h = c.clientHeight
+  c.width = w * dpr; c.height = h * dpr
+  const ctx = c.getContext('2d')
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, w, h)
+
+  const css = getComputedStyle(document.documentElement)
+  const fg = css.getPropertyValue('--foreground').trim() || '#000'
+  const muted = css.getPropertyValue('--muted-foreground').trim() || '#888'
+  const progress = m.durationMs > 0 ? state.posMs / m.durationMs : 0
+
+  const bar = 2, gap = 1, step = bar + gap
+  const bars = Math.max(1, Math.floor(w / step))
+  const mid = h / 2
+  for (let i = 0; i < bars; i++){
+    const from = Math.floor((i / bars) * m.peaks.length)
+    const to = Math.max(from + 1, Math.floor(((i + 1) / bars) * m.peaks.length))
+    let peak = 0
+    for (let k = from; k < to; k++) peak = Math.max(peak, m.peaks[k] || 0)
+    const bh = Math.max(2, peak * (h - 22))
+    const x = i * step
+    ctx.fillStyle = (i / bars) <= progress ? fg : muted
+    const r = Math.min(1, bar / 2)
+    ctx.beginPath()
+    ctx.roundRect(x, mid - bh / 2, bar, bh, r)
+    ctx.fill()
+  }
+}
+
+function togglePlay(m){
+  state.playing = !state.playing
+  if (state.playing){ startTicker(m) } else { stopTicker() }
+  updateTransport(m)
+}
+function seek(m, ms){
+  state.posMs = Math.max(0, Math.min(m.durationMs, ms))
+  updateTransport(m)
+}
+function startTicker(m){
+  stopTicker()
+  let last = performance.now()
+  rafTimer = setInterval(() => {
+    const now = performance.now()
+    state.posMs += (now - last)
+    last = now
+    if (state.posMs >= m.durationMs){ state.posMs = m.durationMs; state.playing = false; stopTicker() }
+    // 切到「文字」时波形不在页面上，但播放继续：切回来时播放头要对得上。
+    if (document.getElementById('pw')) drawPlayerWave(m)
+    updateTransport(m)
+  }, 80)
+}
+function stopTicker(){ if (rafTimer){ clearInterval(rafTimer); rafTimer = null } }
+
+function updateTransport(m){
+  const ph = document.getElementById('ph')
+  const tm = document.getElementById('tmNow')
+  const icon = document.getElementById('playIcon')
+  if (ph) ph.style.left = (m.durationMs > 0 ? (state.posMs / m.durationMs) * 100 : 0) + '%'
+  if (tm) tm.textContent = fmt(state.posMs)
+  if (icon) icon.innerHTML = state.playing
+    ? '<path d="M8 5h3v14H8zM13 5h3v14h-3z"/>'
+    : '<path d="M8 5.2v13.6L19 12 8 5.2Z"/>'
+}
+
+/* ---------- 文字 ---------- */
+function renderText(m){
+  const wrap = el('<div></div>')
+
+  if (m.status === 'failed'){
+    wrap.appendChild(el(`<div class="empty">
+      <div class="t">转写失败</div>
+      <div class="d">${esc(m.failureReason || '未知原因。')}</div>
+      <button class="btn btn-outline btn-sm" onclick="retryTranscription()">重试</button>
+    </div>`))
+    return wrap
+  }
+
+  if (m.status === 'transcribing'){
+    wrap.appendChild(el('<div class="bar"><i style="width:62%"></i></div>'))
+    wrap.appendChild(el('<p style="font-size:12.5px;color:var(--muted-foreground);margin:8px 0 0">转写还在进行，完成后文字会自动补全。</p>'))
+  }
+
+  if (m.segments.length === 0){
+    wrap.appendChild(el(`<div class="empty empty-inline" style="margin-top:12px">
+      <div class="t">还没有文字</div>
+      <div class="d">这段录音里没有识别到语音。</div>
+    </div>`))
+    return wrap
+  }
+
+  // 腾讯云按句返回，这里把句子并成自然段，读起来才像一段文字而不是流水账。
+  const paras = []
+  let cur = ''
+  for (const s of m.segments){
+    cur += s.text
+    if (cur.length >= 110){ paras.push(cur); cur = '' }
+  }
+  if (cur) paras.push(cur)
+
+  wrap.appendChild(el(`<div class="transcript" style="margin-top:12px">
+    ${paras.map(p => '<p>' + esc(p) + '</p>').join('')}
+  </div>`))
+  return wrap
+}
+
+/* ---------- 录音中 ---------- */
+function renderRecorder(){
+  const box = el(`<div class="rec">
+    <div class="timer" id="recTimer">00:00</div>
+    <div class="canvas-wrap"><canvas id="recCanvas"></canvas></div>
+    <div class="hint"><span class="dot-live"></span>正在录音</div>
+    <div class="acts">
+      <button class="btn btn-outline" id="recCancel">取消</button>
+      <button class="btn btn-primary" id="recDone">完成</button>
+    </div>
+  </div>`)
+  box.querySelector('#recCancel').onclick = () => { stopLive(); state.recording = null; renderDetail() }
+  box.querySelector('#recDone').onclick = () => {
+    stopLive()
+    const dur = Date.now() - state.recording.startedAt
+    state.recording = null
+    MEETINGS.unshift({
+      id:'m-rec', title:'新录音', date:'刚刚', durationMs: Math.max(1000, dur), status:'transcribing',
+      recording:'available', peaks: makePeaks(Date.now() & 0xffff, 300), segments:[]
+    })
+    state.selectedId = 'm-rec'
+    state.posMs = 0
+    renderList(); renderDetail()
+  }
+  requestAnimationFrame(startLive)
+  return box
+}
+
+/* 录音中的波形：一个采样固定宽度，贴右边缘从右往左长，窗口 5 秒。 */
+function startLive(){
+  const c = document.getElementById('recCanvas')
+  if (!c) return
+  const dpr = window.devicePixelRatio || 1
+  const w = c.clientWidth, h = c.clientHeight
+  c.width = w * dpr; c.height = h * dpr
+  const ctx = c.getContext('2d')
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const css = getComputedStyle(document.documentElement)
+  const fg = css.getPropertyValue('--foreground').trim()
+  const seconds = 5, perSec = 20
+  // 一个采样占固定宽度：窗口固定 5 秒，宽度由画布反推出每采样占多少像素。
+  const step = w / (seconds * perSec)
+  const bar = Math.max(1, step - 1)
+  let arr = []
+  liveTimer = setInterval(() => {
+    arr.push(0.05 + Math.random() * (Math.random() > 0.35 ? 0.85 : 0.12))
+    if (arr.length > seconds * perSec) arr = arr.slice(arr.length - seconds * perSec)
+    ctx.clearRect(0, 0, w, h)
+    const mid = h / 2
+    for (let i = 0; i < arr.length; i++){
+      const x = w - (arr.length - i) * step   // 贴右边缘，从右往左长
+      const bh = Math.max(2, arr[i] * (h - 12))
+      ctx.fillStyle = fg
+      ctx.beginPath(); ctx.roundRect(x, mid - bh / 2, bar, bh, 1); ctx.fill()
+    }
+    const t = document.getElementById('recTimer')
+    if (t) t.textContent = fmt(Date.now() - state.recording.startedAt)
+  }, 1000 / perSec)
+}
+function stopLive(){
+  if (liveTimer){ clearInterval(liveTimer); liveTimer = null }
+}
+
+/* =========================================================================
+   操作
+   ========================================================================= */
+function startRecording(){
+  state.recording = { startedAt: Date.now() }
+  stopTicker()
+  state.playing = false
+  renderDetail()
+}
+
+function openRowMenu(anchor, id, fromHead){
+  closeMenu()
+  const m = MEETINGS.find(x => x.id === id)
+  const items = [
+    { label:'重命名', act:() => renameMeeting(id) },
+    { sep:true },
+    { label:'删除', danger:true, act:() => confirmDelete(id) }
+  ]
+  const menu = el(`<div class="menu">${items.map((it, i) =>
+    it.sep ? '<div class="sep"></div>' : `<button data-i="${i}" class="${it.danger ? 'danger' : ''}">${esc(it.label)}</button>`
+  ).join('')}</div>`)
+  document.body.appendChild(menu)
+  const r = anchor.getBoundingClientRect()
+  const mw = menu.offsetWidth, mh = menu.offsetHeight
+  menu.style.left = Math.min(window.innerWidth - mw - 8, Math.max(8, r.right - mw)) + 'px'
+  menu.style.top = Math.min(window.innerHeight - mh - 8, r.bottom + 6) + 'px'
+  menu.querySelectorAll('button').forEach(b => b.onclick = () => { closeMenu(); items[Number(b.dataset.i)].act() })
+}
+function closeMenu(){ document.querySelectorAll('.menu').forEach(n => n.remove()) }
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu') && !e.target.closest('.row-more') && !e.target.closest('#headMore')) closeMenu() })
+window.addEventListener('resize', closeMenu)
+
+function renameMeeting(id){
+  const m = MEETINGS.find(x => x.id === id)
+  if (state.selectedId !== id || state.recording){ selectMeeting(id) }
+  requestAnimationFrame(() => {
+    const slot = document.getElementById('titleSlot')
+    if (!slot) return
+    slot.innerHTML = `<input class="detail-title-input" value="${esc(m.title)}">`
+    const input = slot.querySelector('input')
+    input.focus(); input.select()
+    const commit = (ok) => {
+      if (ok && input.value.trim()) m.title = input.value.trim()
+      renderList(); renderDetail()
+    }
+    input.onkeydown = (e) => { if (e.key === 'Enter') commit(true); if (e.key === 'Escape') commit(false) }
+    input.onblur = () => commit(true)
+  })
+}
+
+function confirmDelete(id){
+  const m = MEETINGS.find(x => x.id === id)
+  dialog({
+    title:'删除这条录音？',
+    desc:`「${m.title}」的录音和文字会一起删除，无法恢复。`,
+    confirm:'删除',
+    onConfirm:() => {
+      const i = MEETINGS.findIndex(x => x.id === id)
+      MEETINGS.splice(i, 1)
+      stopTicker(); state.playing = false
+      state.selectedId = MEETINGS.length ? MEETINGS[0].id : null
+      state.posMs = 0
+      renderList(); renderDetail()
+      toast('已删除')
+    }
+  })
+}
+
+function retryTranscription(){
+  const m = selected()
+  if (!m) return
+  m.status = 'transcribing'
+  renderList(); renderDetail()
+  setTimeout(() => {
+    m.status = 'done'
+    m.segments = [
+      {sp:0, at:0,     text:'王经理，今天主要对一下交付节奏，还有接口联调的时间点。'},
+      {sp:1, at:18000, text:'好，我们这边后端这周能出测试环境，下周一开始联调。'}
+    ]
+    m.failureReason = null
+    renderList(); renderDetail()
+  }, 2600)
+}
+
+/* ---------- 对话框 / 轻提示 ---------- */
+function dialog(opts){
+  const box = el(`<div class="overlay">
+    <div class="dialog">
+      <div class="t">${esc(opts.title)}</div>
+      <div class="d">${esc(opts.desc)}</div>
+      <div class="acts">
+        <button class="btn btn-outline btn-sm" data-act="cancel">取消</button>
+        <button class="btn btn-primary btn-sm" data-act="ok">${esc(opts.confirm)}</button>
+      </div>
+    </div>
+  </div>`)
+  const close = () => box.remove()
+  box.querySelector('[data-act="cancel"]').onclick = close
+  box.querySelector('[data-act="ok"]').onclick = () => { close(); opts.onConfirm() }
+  box.onclick = (e) => { if (e.target === box) close() }
+  document.body.appendChild(box)
+}
+function toast(text){
+  const t = el(`<div style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:90;
+    padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);font-size:12.5px;
+    box-shadow:0 8px 24px oklch(0 0 0 / 12%)">${esc(text)}</div>`)
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 1800)
+}
+
+/* ---------- 主题 / 说明 ---------- */
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme')
+  const dark = cur ? cur === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark')
+  const m = selected(); if (m && state.view === 'voice') drawPlayerWave(m)
+}
+function toggleNotes(){ document.getElementById('notes').classList.toggle('hide') }
+
+/* ---------- 启动 ---------- */
+renderList()
+renderDetail()
+// 转写中的那条过一会儿自己完成，用来看清「转写中 → 已完成」在界面上的差别
+setTimeout(() => {
+  const m = MEETINGS.find(x => x.id === 'm2')
+  if (!m || m.status !== 'transcribing') return
+  m.status = 'done'
+  m.segments.push(
+    {sp:0, at:96000, text:'好，地址发我之后我们这边当天配上白名单。'},
+    {sp:1, at:118000, text:'联调那两天我安排个人盯着，有问题随时拉群。'}
+  )
+  renderList()
+  if (state.selectedId === 'm2') renderDetail()
+}, 9000)
+</script>
+</body>
+</html>
