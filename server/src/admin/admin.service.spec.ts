@@ -48,7 +48,7 @@ function createPrismaMock(counts: {
       count: vi.fn(),
       findUnique: vi.fn().mockResolvedValue({ status: "active" }),
       findMany: vi.fn(),
-      update: vi.fn().mockResolvedValue({ teams: [] }),
+      update: vi.fn().mockResolvedValue({ teamMemberships: [] }),
     },
     userPasswordResetToken: {
       create: vi.fn().mockResolvedValue({ id: "reset-1" }),
@@ -165,7 +165,7 @@ describe("AdminService", () => {
         status: "active",
         createdAt: new Date("2026-09-01T00:00:00.000Z"),
         updatedAt: new Date("2026-09-01T00:00:00.000Z"),
-        teams: [
+        teamMemberships: [
           { team: { id: "team-1", name: "产品组" } },
           { team: { id: "team-2", name: "研发组" } },
         ],
@@ -182,7 +182,9 @@ describe("AdminService", () => {
         { id: "team-2", name: "研发组" },
       ],
     })])
-    expect(prisma.user.findMany.mock.calls[0]?.[0].select).toHaveProperty("teams", {
+    // 关系字段在 User 上叫 teamMemberships，接口字段叫 teams——写错只会在运行期炸，
+    // 所以这里同时钉住 Prisma 侧的字段名和接口侧的拍平结果。
+    expect(prisma.user.findMany.mock.calls[0]?.[0].select).toHaveProperty("teamMemberships", {
       select: { team: { select: { id: true, name: true } } },
       orderBy: { createdAt: "asc" },
     })
@@ -241,7 +243,7 @@ describe("AdminService", () => {
       status: "active",
       createdAt: new Date("2026-06-01T00:00:00.000Z"),
       updatedAt: new Date("2026-06-01T00:00:00.000Z"),
-      teams: [],
+      teamMemberships: [],
     })
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
@@ -528,7 +530,7 @@ describe("AdminService", () => {
 
   it("returns the updated user when status update audit writes fail", async () => {
     const prisma = createPrismaMock()
-    prisma.user.update.mockResolvedValue({ id: "user-1", status: "disabled", teams: [] })
+    prisma.user.update.mockResolvedValue({ id: "user-1", status: "disabled", teamMemberships: [] })
     const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
     const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
 

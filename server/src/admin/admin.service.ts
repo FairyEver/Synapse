@@ -14,6 +14,8 @@ type SkillRepositoryAdminListFilters = {
   readonly status?: "active" | "removed"
   readonly query?: string
 }
+// `satisfies` 是必须的：select 写成变量时 TS 不做多余属性检查，把关系字段名写错
+// （例如 teams 而不是 User 上的 teamMemberships）要等到运行期才会炸。
 const adminUserSelect = {
   id: true,
   email: true,
@@ -22,18 +24,18 @@ const adminUserSelect = {
   status: true,
   createdAt: true,
   updatedAt: true,
-  teams: {
+  teamMemberships: {
     select: { team: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },
   },
-} as const
+} as const satisfies Prisma.UserSelect
 
 /** Prisma 回来的是 { team: {...} }[]，接口外面只该看到拍平后的 { id, name }[]。 */
-function toAdminUserRow<T extends { readonly teams: readonly { readonly team: { readonly id: string; readonly name: string } }[] }>(
-  user: T,
-): Omit<T, "teams"> & { readonly teams: { readonly id: string; readonly name: string }[] } {
-  const { teams, ...rest } = user
-  return { ...rest, teams: teams.map((membership) => membership.team) }
+function toAdminUserRow<
+  T extends { readonly teamMemberships: readonly { readonly team: { readonly id: string; readonly name: string } }[] },
+>(user: T): Omit<T, "teamMemberships"> & { readonly teams: { readonly id: string; readonly name: string }[] } {
+  const { teamMemberships, ...rest } = user
+  return { ...rest, teams: teamMemberships.map((membership) => membership.team) }
 }
 
 const adminSkillRepositorySelect = {

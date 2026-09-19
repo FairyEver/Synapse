@@ -51,6 +51,8 @@ function createPrismaMock() {
     user: {
       count: vi.fn().mockResolvedValue(0),
       findMany: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
   }
   return prisma
@@ -219,6 +221,8 @@ describe("TeamService", () => {
       expect(prisma.team.delete).toHaveBeenCalledWith({ where: { id: "team-1" } })
       // 删除只碰团队表；用户账号与其他团队的成员关系都不在删除范围内。
       expect(prisma.user.count).not.toHaveBeenCalled()
+      expect(prisma.user.deleteMany).not.toHaveBeenCalled()
+      expect(prisma.user.updateMany).not.toHaveBeenCalled()
       expect(prisma.teamMembership.deleteMany).not.toHaveBeenCalled()
       expect(record).toHaveBeenCalledWith(expect.objectContaining({
         action: "admin.team.delete",
