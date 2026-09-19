@@ -34,31 +34,6 @@ const finalizeInputSchema = z
 
 const renameInputSchema = z.object({ meetingId: meetingIdSchema, title: z.string().trim().min(1).max(255) }).strict()
 
-const speakerInputSchema = z
-  .object({ meetingId: meetingIdSchema, speakerId: z.number().int().min(0), name: z.string().trim().max(64).nullable() })
-  .strict()
-
-const minutesTodoSchema = z
-  .object({
-    id: z.string().min(1).max(64),
-    text: z.string().min(1).max(2000),
-    owner: z.string().max(64).nullable(),
-    due: z.string().max(64).nullable(),
-    done: z.boolean(),
-  })
-  .strict()
-
-const minutesSchema = z
-  .object({
-    topics: z.array(z.string().max(2000)).max(200),
-    conclusions: z.array(z.string().max(2000)).max(200),
-    todos: z.array(minutesTodoSchema).max(200),
-    editedAt: z.string().nullable(),
-  })
-  .strict()
-
-const saveMinutesInputSchema = z.object({ meetingId: meetingIdSchema, minutes: minutesSchema }).strict()
-
 const meetingIdInputSchema = z.object({ meetingId: meetingIdSchema }).strict()
 
 function service(ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]): MeetingService {
@@ -147,24 +122,6 @@ export const meetingIpcModule: IpcModule = {
         await service(ctx).renameMeeting(request.meetingId, request.title)
       },
     },
-    nameSpeaker: {
-      operationId: "app.meeting.speaker.name",
-      kind: "invoke",
-      request: speakerInputSchema,
-      response: z.void(),
-      handler: async (ctx, request: z.infer<typeof speakerInputSchema>) => {
-        await service(ctx).nameSpeaker(request.meetingId, request.speakerId, request.name)
-      },
-    },
-    deleteRecording: {
-      operationId: "app.meeting.recording.delete",
-      kind: "invoke",
-      request: meetingIdInputSchema,
-      response: z.void(),
-      handler: async (ctx, request: z.infer<typeof meetingIdInputSchema>) => {
-        await service(ctx).deleteRecording(request.meetingId)
-      },
-    },
     deleteMeeting: {
       operationId: "app.meeting.entry.remove",
       kind: "invoke",
@@ -183,28 +140,12 @@ export const meetingIpcModule: IpcModule = {
         await service(ctx).retryTranscription(request.meetingId)
       },
     },
-    saveMinutes: {
-      operationId: "app.meeting.minutes.save",
-      kind: "invoke",
-      request: saveMinutesInputSchema,
-      response: z.void(),
-      handler: async (ctx, request: z.infer<typeof saveMinutesInputSchema>) => {
-        await service(ctx).saveMinutes(request.meetingId, request.minutes)
-      },
-    },
     getPlaybackUrl: {
       operationId: "app.meeting.playback_url.get",
       kind: "invoke",
       request: meetingIdInputSchema,
       response: z.any(),
       handler: (ctx, request: z.infer<typeof meetingIdInputSchema>) => service(ctx).getPlaybackUrl(request.meetingId),
-    },
-    generateMinutes: {
-      operationId: "app.meeting.minutes.generate",
-      kind: "invoke",
-      request: meetingIdInputSchema,
-      response: z.any(),
-      handler: (ctx, request: z.infer<typeof meetingIdInputSchema>) => service(ctx).generateMinutes(request.meetingId),
     },
     getPeaks: {
       operationId: "app.meeting.peaks.get",

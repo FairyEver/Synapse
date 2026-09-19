@@ -16,7 +16,6 @@ import {
   UseGuards,
 } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
-import type { MeetingMinutesDto } from "@synapse/shared"
 import type { Response } from "express"
 import { z } from "zod"
 
@@ -50,27 +49,6 @@ const finalizeSchema = z
   .strict()
 
 const renameSchema = z.object({ title: z.string().trim().min(1).max(255) }).strict()
-
-const speakerSchema = z.object({ name: z.string().trim().max(64).nullable() }).strict()
-
-const todoSchema = z
-  .object({
-    id: z.string().min(1).max(64),
-    text: z.string().trim().min(1).max(2000),
-    owner: z.string().trim().max(64).nullable(),
-    due: z.string().trim().max(64).nullable(),
-    done: z.boolean(),
-  })
-  .strict()
-
-const minutesSchema = z
-  .object({
-    topics: z.array(z.string().trim().min(1).max(2000)).max(200),
-    conclusions: z.array(z.string().trim().min(1).max(2000)).max(200),
-    todos: z.array(todoSchema).max(200),
-    editedAt: z.string().nullable(),
-  })
-  .strict()
 
 function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: string): z.infer<T> {
   const result = schema.safeParse(body)
@@ -171,18 +149,6 @@ export class MeetingController {
     await this.meetings.rename(request.user!.id, meetingId, parseBody(renameSchema, body, "名称无效。").title)
   }
 
-  @Put("/:meetingId/speakers/:speakerId")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async nameSpeaker(
-    @Req() request: AuthenticatedUserRequest,
-    @Param("meetingId") meetingId: string,
-    @Param("speakerId") speakerId: string,
-    @Body() body: unknown,
-  ) {
-    const parsed = parseBody(speakerSchema, body, "发言人名称无效。")
-    await this.meetings.nameSpeaker(request.user!.id, meetingId, Number(speakerId), parsed.name)
-  }
-
   /** 删除录音本身，逐字稿和纪要保留。历史数据的 `deleted` 状态还要靠它继续显示。 */
   @Delete("/:meetingId/recording")
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -201,17 +167,6 @@ export class MeetingController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async retryTranscription(@Req() request: AuthenticatedUserRequest, @Param("meetingId") meetingId: string) {
     await this.meetings.retryTranscription(request.user!.id, meetingId)
-  }
-
-  @Put("/:meetingId/minutes")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async saveMinutes(
-    @Req() request: AuthenticatedUserRequest,
-    @Param("meetingId") meetingId: string,
-    @Body() body: unknown,
-  ) {
-    const parsed = parseBody(minutesSchema, body, "纪要内容无效。") as MeetingMinutesDto
-    await this.meetings.saveMinutes(request.user!.id, meetingId, parsed)
   }
 
   @Get("/:meetingId/audio-url")

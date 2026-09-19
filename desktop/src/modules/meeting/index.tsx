@@ -36,7 +36,6 @@ export function MeetingModule() {
   const [view, setView] = useState<MeetingView>({ kind: "list" })
   const [listRefreshKey, setListRefreshKey] = useState(0)
   const [detailRefreshKey, setDetailRefreshKey] = useState(0)
-  const [minutesBusy, setMinutesBusy] = useState(false)
 
   const meetings = useMeetingList(listRefreshKey)
   const detail = useMeetingDetail(view.kind === "detail" ? view.meetingId : null, detailRefreshKey)
@@ -143,19 +142,6 @@ export function MeetingModule() {
     }
   }
 
-  async function generateMinutes(): Promise<void> {
-    if (view.kind !== "detail") return
-    setMinutesBusy(true)
-    try {
-      await requireSynapseBridge().meeting.entry.generateMinutes({ meetingId: view.meetingId })
-      setDetailRefreshKey((key) => key + 1)
-    } catch (error) {
-      notifications.error(error instanceof Error ? error.message : "生成纪要失败。")
-    } finally {
-      setMinutesBusy(false)
-    }
-  }
-
   if (view.kind === "recording") {
     return (
       <ModulePage title="新录音">
@@ -182,24 +168,10 @@ export function MeetingModule() {
         {detail.data ? (
           <MeetingDetailView
             meeting={detail.data}
-            minutesBusy={minutesBusy}
-            onDeleteRecording={async () => {
-              await actions.removeRecording(view.meetingId)
-              setDetailRefreshKey((key) => key + 1)
-            }}
             onRetryTranscription={async () => {
               await actions.retryTranscription(view.meetingId)
               setDetailRefreshKey((key) => key + 1)
             }}
-            onNameSpeaker={async (speakerId, name) => {
-              await actions.nameSpeaker(view.meetingId, speakerId, name)
-              setDetailRefreshKey((key) => key + 1)
-            }}
-            onSaveMinutes={async (minutes) => {
-              await requireSynapseBridge().meeting.entry.saveMinutes({ meetingId: view.meetingId, minutes })
-              setDetailRefreshKey((key) => key + 1)
-            }}
-            onGenerateMinutes={generateMinutes}
           />
         ) : null}
       </ModulePage>

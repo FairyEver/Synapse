@@ -89,7 +89,6 @@ import type {
   SynapseMeetingDetail,
   SynapseMeetingTranscriptionCompletedEvent,
   SynapseMeetingFinalizeInput,
-  SynapseMeetingMinutes,
   SynapseMeetingPendingRecording,
   SynapseMeetingRecordingStart,
   SynapseMeetingSpooledPart,
@@ -1179,19 +1178,15 @@ export type SynapseBridge = {
       cancel: (input: { recordingId: string }) => Promise<void>
       pending: () => Promise<SynapseMeetingPendingRecording | null>
       spooledParts: (input: { recordingId: string }) => Promise<SynapseMeetingSpooledPart[]>
-      remove: (input: { meetingId: string }) => Promise<void>
     }
     entry: {
       list: () => Promise<SynapseMeetingSummary[]>
       get: (input: { meetingId: string }) => Promise<SynapseMeetingDetail>
       rename: (input: { meetingId: string; title: string }) => Promise<void>
       remove: (input: { meetingId: string }) => Promise<void>
-      speakerName: (input: { meetingId: string; speakerId: number; name: string | null }) => Promise<void>
       retryTranscription: (input: { meetingId: string }) => Promise<void>
-      saveMinutes: (input: { meetingId: string; minutes: SynapseMeetingMinutes }) => Promise<void>
       playbackUrl: (input: { meetingId: string }) => Promise<{ url: string | null }>
       peaks: (input: { meetingId: string }) => Promise<{ peaks: string | null }>
-      generateMinutes: (input: { meetingId: string }) => Promise<SynapseMeetingMinutes>
       onTranscriptionCompleted: (listener: (event: SynapseMeetingTranscriptionCompletedEvent) => void) => () => void
     }
   }

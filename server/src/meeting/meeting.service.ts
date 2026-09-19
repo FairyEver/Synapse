@@ -428,17 +428,6 @@ export class MeetingService {
     await this.prisma.meeting.update({ where: { id: meetingId }, data: { title: trimmed.slice(0, 255) } })
   }
 
-  /** 用户填一次真名，全篇套用。 */
-  async nameSpeaker(userId: string, meetingId: string, speakerId: number, name: string | null): Promise<void> {
-    await this.requireMeeting(userId, meetingId)
-    const trimmed = name?.trim() ?? ""
-    await this.prisma.meetingSpeaker.upsert({
-      where: { meetingId_speakerId: { meetingId, speakerId } },
-      create: { meetingId, speakerId, name: trimmed ? trimmed.slice(0, 64) : null },
-      update: { name: trimmed ? trimmed.slice(0, 64) : null },
-    })
-  }
-
   /**
    * 删除录音。对象真的删掉，逐字稿和纪要留着——用户看得见「已删除」确实生效，但
    * 文字成果不会跟着一起消失。
@@ -568,23 +557,6 @@ export class MeetingService {
     const recording = await this.prisma.meetingRecording.findUnique({ where: { meetingId } })
     if (!recording || recording.status !== UPLOAD_STATUS_READY) return { peaks: null }
     return { peaks: recording.peaks ?? null }
-  }
-
-  async saveMinutes(userId: string, meetingId: string, minutes: MeetingMinutesDto): Promise<void> {
-    await this.requireMeeting(userId, meetingId)
-    await this.prisma.meeting.update({
-      where: { id: meetingId },
-      data: {
-        minutesJson: {
-          topics: [...minutes.topics],
-          conclusions: [...minutes.conclusions],
-          todos: minutes.todos.map((todo) => ({ ...todo })),
-        },
-        minutesStatus: "ready",
-        minutesEditedAt: new Date(),
-        minutesFailureReason: null,
-      },
-    })
   }
 
   private async requireMeeting(userId: string, meetingId: string) {

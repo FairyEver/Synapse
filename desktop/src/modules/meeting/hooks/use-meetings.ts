@@ -98,19 +98,15 @@ export function useMeetingActions() {
     await requireSynapseBridge().meeting.entry.rename({ meetingId, title })
   }, [])
 
-  const nameSpeaker = useCallback(async (meetingId: string, speakerId: number, name: string | null) => {
-    await requireSynapseBridge().meeting.entry.speakerName({ meetingId, speakerId, name })
-  }, [])
-
-  const removeRecording = useCallback(async (meetingId: string) => {
-    await requireSynapseBridge().meeting.recording.remove({ meetingId })
+  const removeMeeting = useCallback(async (meetingId: string) => {
+    await requireSynapseBridge().meeting.entry.remove({ meetingId })
   }, [])
 
   const retryTranscription = useCallback(async (meetingId: string) => {
     await requireSynapseBridge().meeting.entry.retryTranscription({ meetingId })
   }, [])
 
-  return { rename, nameSpeaker, removeRecording, retryTranscription }
+  return { rename, removeMeeting, retryTranscription }
 }
 
 /**

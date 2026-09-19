@@ -32,7 +32,15 @@ describe("会议 IPC 通道", () => {
     expect(meetingIpcModule.methods.cancelRecording.operationId).toBe("app.meeting.recording.cancel")
     expect(meetingIpcModule.methods.list.operationId).toBe("app.meeting.entry.list")
     expect(meetingIpcModule.methods.get.operationId).toBe("app.meeting.entry.get")
-    expect(meetingIpcModule.methods.deleteRecording.operationId).toBe("app.meeting.recording.delete")
+    expect(meetingIpcModule.methods.deleteMeeting.operationId).toBe("app.meeting.entry.remove")
+  })
+
+  it("没有调用方的写入接口不再注册", () => {
+    // 纪要和发言人两端的界面都不再渲染，留着就是永远没人调的通道。删掉的方法名会
+    // 直接让这一行取不到值，红了说明有东西又长回来了。
+    for (const name of ["nameSpeaker", "saveMinutes", "generateMinutes", "deleteRecording"]) {
+      expect(meetingIpcModule.methods[name as keyof typeof meetingIpcModule.methods]).toBeUndefined()
+    }
   })
 
   it("分片请求接受裸字节", () => {

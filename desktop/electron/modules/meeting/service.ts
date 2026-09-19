@@ -1,11 +1,9 @@
 import type {
   MeetingDetailDto,
   MeetingFinalizeInput,
-  MeetingMinutesDto,
   MeetingSummaryDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
-import type { MeetingMinutesGenerator } from "./minutes"
 import { createMeetingSpool, sweepStaleMeetingSpools, type MeetingSpool } from "./spool"
 
 /**
@@ -31,8 +29,6 @@ export type MeetingServiceDeps = {
   readonly logger?: {
     warn(message: string, meta?: Record<string, unknown>): void
   }
-  /** 纪要由 Agent 生成；没有可用运行时就不暴露这个入口。 */
-  readonly minutesGenerator?: MeetingMinutesGenerator
 }
 
 export type StartRecordingResult = {
@@ -176,22 +172,6 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     )
   }
 
-  async function nameSpeaker(meetingId: string, speakerId: number, name: string | null): Promise<void> {
-    await deps.fetchAuthenticated(
-      `/meetings/${encodeURIComponent(meetingId)}/speakers/${speakerId}`,
-      { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) },
-      "保存发言人名称失败。",
-    )
-  }
-
-  async function deleteRecording(meetingId: string): Promise<void> {
-    await deps.fetchAuthenticated(
-      `/meetings/${encodeURIComponent(meetingId)}/recording`,
-      { method: "DELETE" },
-      "删除录音失败。",
-    )
-  }
-
   /** 删除整条录音：录音和文字一起删，服务端级联清掉逐字稿、发言人和纪要。 */
   async function deleteMeeting(meetingId: string): Promise<void> {
     await deps.fetchAuthenticated(
@@ -206,14 +186,6 @@ export function createMeetingService(deps: MeetingServiceDeps) {
       `/meetings/${encodeURIComponent(meetingId)}/transcription/retry`,
       { method: "POST" },
       "重新转写失败。",
-    )
-  }
-
-  async function saveMinutes(meetingId: string, minutes: MeetingMinutesDto): Promise<void> {
-    await deps.fetchAuthenticated(
-      `/meetings/${encodeURIComponent(meetingId)}/minutes`,
-      { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(minutes) },
-      "保存纪要失败。",
     )
   }
 
@@ -237,26 +209,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     return { peaks: typeof body.peaks === "string" ? body.peaks : null }
   }
 
-  /**
-   * 一键生成纪要：拿逐字稿交给 Agent，整理成议题/结论/待办之后存下来。
-   *
-   * 生成结果直接落库而不是只回给界面——用户可能点完就切走，回来后纪要应该在那里。
-   */
-  async function generateMinutes(meetingId: string): Promise<MeetingMinutesDto> {
-    const generator = deps.minutesGenerator
-    if (!generator) throw new Error("纪要生成暂不可用。")
-    const detail = await getMeeting(meetingId)
-    const minutes = await generator.generate({
-      title: detail.title,
-      speakers: detail.speakers,
-      segments: detail.segments,
-    })
-    await saveMinutes(meetingId, minutes)
-    return minutes
-  }
-
   return {
-    generateMinutes,
     startRecording,
     uploadPart,
     completeRecording,
@@ -266,11 +219,8 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     findPendingRecording,
     readSpooledParts,
     renameMeeting,
-    nameSpeaker,
-    deleteRecording,
     deleteMeeting,
     retryTranscription,
-    saveMinutes,
     getPlaybackUrl,
     getPeaks,
     async sweepStaleSpools() {

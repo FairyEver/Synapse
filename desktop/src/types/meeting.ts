@@ -1,7 +1,6 @@
 import type {
   MeetingDetailDto,
   MeetingFinalizeInput,
-  MeetingMinutesDto,
   MeetingSummaryDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
@@ -13,7 +12,6 @@ import type {
  */
 export type SynapseMeetingSummary = MeetingSummaryDto
 export type SynapseMeetingDetail = MeetingDetailDto
-export type SynapseMeetingMinutes = MeetingMinutesDto
 export type SynapseMeetingFinalizeInput = MeetingFinalizeInput
 
 export type SynapseMeetingRecordingStart = {
