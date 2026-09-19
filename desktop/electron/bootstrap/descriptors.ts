@@ -691,6 +691,9 @@ export const coreMeetingDescriptor: ServiceDescriptor<MeetingService> = {
   async start(instance) {
     // 上一次运行留下的暂存到这个点早已过了可续的窗口，启动时收一次。
     await instance.sweepStaleSpools()
+    // 异常退出留下的那半段录音在后台收尾，**不 await**：它要连服务端、传字节，任何一次
+    // 卡住都不该把主窗口的创建拖住，收尾本身失败也只记日志。
+    void instance.finalizePendingRecording()
   },
 }
 

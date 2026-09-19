@@ -135,6 +135,95 @@ describe("分片的落盘顺序", () => {
   })
 })
 
+describe("异常退出的静默收尾", () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await temporaryRoot()
+  })
+
+  /** 服务端说上一段没录完，本机还留着最后一片。 */
+  function stubServer(calls: { path: string; body: unknown }[]) {
+    return vi.fn(async (requestPath: string, init?: RequestInit) => {
+      // 分片是裸字节，只有 JSON 请求才解析 body。
+      const isJson = String(init?.headers && (init.headers as Record<string, string>)["content-type"]).includes("json")
+      calls.push({ path: requestPath, body: isJson && init?.body ? JSON.parse(String(init.body)) : null })
+      if (requestPath === "/meetings/recordings/pending") {
+        return jsonResponse({
+          meetingId: "m-1",
+          recordingId: "r-1",
+          title: "Q3 评审",
+          receivedBytes: 8000,
+          startedAt: "2026-09-19T02:00:00.000Z",
+        })
+      }
+      return jsonResponse({})
+    }) as unknown as MeetingAuthenticatedFetch
+  }
+
+  it("补上本机残留的那一片，再按正常录音收尾", async () => {
+    const calls: { path: string; body: unknown }[] = []
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    // 进程被杀时最后一片还躺在暂存里。
+    await createMeetingSpool("r-1", root).stage(3, new Uint8Array([1, 2, 3]))
+
+    await service.finalizePendingRecording()
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/meetings/recordings/pending",
+      "/meetings/recordings/r-1/parts/3",
+      "/meetings/recordings/r-1/complete",
+    ])
+    // 时长只能用已传字节数估：8000 字节 ÷ 8 KB/s = 1 秒。波形只在内存里，跟着进程
+    // 一起没了，所以 peaks 只能交空。
+    expect(calls[2].body).toEqual({ durationMs: 1000, peaks: "", speakerCount: 0 })
+    // 收尾之后本机不留东西。
+    expect(await createMeetingSpool("r-1", root).pending()).toEqual([])
+  })
+
+  it("没有待收尾的录音时什么都不做", async () => {
+    const calls: { path: string; body: unknown }[] = []
+    const service = createMeetingService({
+      fetchAuthenticated: vi.fn(async (requestPath: string) => {
+        calls.push({ path: requestPath, body: null })
+        return jsonResponse(null)
+      }) as unknown as MeetingAuthenticatedFetch,
+      spoolRoot: root,
+    })
+    await service.finalizePendingRecording()
+    expect(calls.map((call) => call.path)).toEqual(["/meetings/recordings/pending"])
+  })
+
+  it("收尾失败不让调用方看见错误，应用照常起来", async () => {
+    const warnings: string[] = []
+    const service = createMeetingService({
+      fetchAuthenticated: (async () => {
+        throw new Error("网络断了")
+      }) as unknown as MeetingAuthenticatedFetch,
+      spoolRoot: root,
+      logger: { warn: (message) => warnings.push(message) },
+    })
+    await expect(service.finalizePendingRecording()).resolves.toBeUndefined()
+    expect(warnings).toEqual(["Meeting pending recording finalize failed."])
+  })
+
+  it("同时叫两次也只收尾一次", async () => {
+    const calls: { path: string; body: unknown }[] = []
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    await Promise.all([service.finalizePendingRecording(), service.finalizePendingRecording()])
+    expect(calls.filter((call) => call.path === "/meetings/recordings/r-1/complete")).toHaveLength(1)
+  })
+
+  it("渲染进程没有任何询问未完成录音的入口", () => {
+    // 「发现一段未完成的录音，丢弃还是完成？」那个弹窗的整条链路都拆了：收尾改在主进程
+    // 后台做，界面彻底不知道这件事存在。下面这些方法名一旦重新出现，就说明询问又长回
+    // 来了——这条断言就是「界面上不出现任何询问」这个要求本身。
+    for (const name of ["findPendingRecording", "readSpooledParts"]) {
+      expect(meetingIpcModule.methods[name as keyof typeof meetingIpcModule.methods]).toBeUndefined()
+    }
+  })
+})
+
 describe("接口调用", () => {
   let root: string
 

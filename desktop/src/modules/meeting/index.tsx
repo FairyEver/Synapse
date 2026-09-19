@@ -4,7 +4,6 @@ import { ModulePage } from "@/components/module-page"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseMeetingPendingRecording } from "@/types/meeting"
 import { MeetingDetailView } from "./meeting-detail-view"
 import { MeetingListView } from "./meeting-list-view"
 import { MeetingRecordingView, type MeetingRecordingFinalize } from "./meeting-recording-view"
@@ -41,8 +40,6 @@ export function MeetingModule() {
   const detail = useMeetingDetail(view.kind === "detail" ? view.meetingId : null, detailRefreshKey)
   const actions = useMeetingActions()
 
-  const [pending, setPending] = useState<SynapseMeetingPendingRecording>(null)
-
   // 列表里有任何一场在转写就轮询：转完了徽标要自己变成「已完成」，不用用户手动刷新。
   const hasTranscribing = meetings.data.some((meeting) => meeting.status === "transcribing")
   useTranscriptionPolling(view.kind === "list" && hasTranscribing, () => setListRefreshKey((key) => key + 1))
@@ -59,19 +56,6 @@ export function MeetingModule() {
     if (event.status === "done") notifications.success(`${event.title} 转写已完成`)
     else notifications.error(`${event.title} 转写失败`)
   })
-
-  // 「发现一段未完成的录音」只在列表页查一次：那段录音可能来自上一次进程被杀。
-  const loadPending = useCallback(async () => {
-    try {
-      setPending(await requireSynapseBridge().meeting.recording.pending())
-    } catch {
-      setPending(null)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadPending()
-  }, [loadPending])
 
   async function startRecording(): Promise<void> {
     try {
@@ -96,50 +80,6 @@ export function MeetingModule() {
     notifications.success("录音已取消")
     setView({ kind: "list" })
     refreshList()
-  }
-
-  async function discardPending(): Promise<void> {
-    if (!pending) return
-    try {
-      await requireSynapseBridge().meeting.recording.cancel({ recordingId: pending.recordingId })
-    } finally {
-      setPending(null)
-      refreshList()
-    }
-  }
-
-  /**
-   * 续上一段没完成的录音。
-   *
-   * 上次进程消失时最后一片可能还留在本机，先把它补上去再收尾；时间与波形这两样只在
-   * 内存里，跟着进程一起没了，所以只能用已传字节数估算时长。
-   */
-  async function resumePending(): Promise<void> {
-    if (!pending) return
-    try {
-      const parts = await requireSynapseBridge().meeting.recording.spooledParts({ recordingId: pending.recordingId })
-      for (const part of parts) {
-        await requireSynapseBridge().meeting.recording.uploadPart({
-          recordingId: pending.recordingId,
-          partNumber: part.partNumber,
-          bytes: part.bytes,
-        })
-      }
-      // 64 kbps 单声道：字节数换算成时长的近似值，只用来显示。
-      const durationMs = Math.round((pending.receivedBytes / (64_000 / 8)) * 1000)
-      await requireSynapseBridge().meeting.recording.complete({
-        recordingId: pending.recordingId,
-        durationMs,
-        peaks: "",
-        speakerCount: 0,
-      })
-      notifications.success("录音已保存")
-    } catch (error) {
-      notifications.error(error instanceof Error ? error.message : "保存录音失败。")
-    } finally {
-      setPending(null)
-      refreshList()
-    }
   }
 
   if (view.kind === "recording") {
@@ -191,11 +131,8 @@ export function MeetingModule() {
         meetings={meetings.data}
         loading={meetings.loading}
         error={meetings.error}
-        pendingNotice={pending ? { title: pending.title } : null}
         onStartRecording={() => void startRecording()}
         onOpenMeeting={(meetingId) => setView({ kind: "detail", meetingId })}
-        onResumePending={() => void resumePending()}
-        onDiscardPending={() => void discardPending()}
       />
     </ModulePage>
   )

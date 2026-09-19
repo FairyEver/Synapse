@@ -412,8 +412,6 @@ export const IPC_CHANNELS = {
     "uploadPart": "synapse:app:meeting:recording:part:upload",
     "completeRecording": "synapse:app:meeting:recording:complete",
     "cancelRecording": "synapse:app:meeting:recording:cancel",
-    "findPendingRecording": "synapse:app:meeting:recording:pending:get",
-    "readSpooledParts": "synapse:app:meeting:recording:spooled_parts:get",
     "list": "synapse:app:meeting:entry:list",
     "get": "synapse:app:meeting:entry:get",
     "rename": "synapse:app:meeting:entry:rename",

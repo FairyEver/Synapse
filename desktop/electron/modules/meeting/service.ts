@@ -55,6 +55,8 @@ type ServerRecordingStart = {
 
 export function createMeetingService(deps: MeetingServiceDeps) {
   const spools = new Map<string, MeetingSpool>()
+  /** 收尾只跑一次：启动流程和别处同时叫它也只会走一趟。 */
+  let finalizeInFlight: Promise<void> | null = null
 
   function spoolFor(recordingId: string): MeetingSpool {
     const existing = spools.get(recordingId)
@@ -159,9 +161,47 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     return (await response.json()) as PendingRecording
   }
 
-  /** 上次没收尾的录音还留在本机的那几片，交给渲染进程接着传。 */
+  /** 上次没收尾的录音还留在本机的那几片。 */
   async function readSpooledParts(recordingId: string) {
     return spoolFor(recordingId).pending()
+  }
+
+  /**
+   * 把上一次异常退出留下的那段录音收尾。
+   *
+   * 进程被杀、强退、更新重启时，最后一片可能还留在本机，这里补传它，再把这段录音按正常
+   * 录音收掉——**界面上不出现任何询问**，用户不需要知道发生过异常退出。这是全仓唯一一
+   * 处「用户没点完成也照样收尾」的地方，所以它只跑一次、失败只记日志。
+   *
+   * 两个已经认下的代价：这段录音会照常送去转写（费用照算）；波形只存在内存里，跟着进程
+   * 一起没了，只能用已传字节数估一个时长，那条录音的语音视图会是一条平的线。
+   */
+  async function finalizePendingRecording(): Promise<void> {
+    if (finalizeInFlight) return finalizeInFlight
+    finalizeInFlight = runFinalize()
+    try {
+      await finalizeInFlight
+    } finally {
+      finalizeInFlight = null
+    }
+  }
+
+  async function runFinalize(): Promise<void> {
+    try {
+      const pending = await findPendingRecording()
+      if (!pending) return
+      for (const part of await readSpooledParts(pending.recordingId)) {
+        await uploadPart(pending.recordingId, part.partNumber, part.bytes)
+      }
+      // 64 kbps 单声道：字节数换算成时长的近似值，只用来显示。
+      const durationMs = Math.round((pending.receivedBytes / (64_000 / 8)) * 1000)
+      await completeRecording(pending.recordingId, { durationMs, peaks: "", speakerCount: 0 })
+    } catch (error) {
+      // 收尾失败只记日志：应用照常起来，用户那边这段录音停在「转写中」，不需要被打扰。
+      deps.logger?.warn("Meeting pending recording finalize failed.", {
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    }
   }
 
   async function renameMeeting(meetingId: string, title: string): Promise<void> {
@@ -218,6 +258,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     getMeeting,
     findPendingRecording,
     readSpooledParts,
+    finalizePendingRecording,
     renameMeeting,
     deleteMeeting,
     retryTranscription,

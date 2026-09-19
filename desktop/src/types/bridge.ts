@@ -89,9 +89,7 @@ import type {
   SynapseMeetingDetail,
   SynapseMeetingTranscriptionCompletedEvent,
   SynapseMeetingFinalizeInput,
-  SynapseMeetingPendingRecording,
   SynapseMeetingRecordingStart,
-  SynapseMeetingSpooledPart,
   SynapseMeetingSummary,
 } from "./meeting"
 import type {
@@ -1176,8 +1174,6 @@ export type SynapseBridge = {
       uploadPart: (input: { recordingId: string; partNumber: number; bytes: Uint8Array }) => Promise<void>
       complete: (input: SynapseMeetingFinalizeInput & { recordingId: string }) => Promise<void>
       cancel: (input: { recordingId: string }) => Promise<void>
-      pending: () => Promise<SynapseMeetingPendingRecording | null>
-      spooledParts: (input: { recordingId: string }) => Promise<SynapseMeetingSpooledPart[]>
     }
     entry: {
       list: () => Promise<SynapseMeetingSummary[]>

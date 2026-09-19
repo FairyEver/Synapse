@@ -81,24 +81,6 @@ export const meetingIpcModule: IpcModule = {
         await service(ctx).cancelRecording(request.recordingId)
       },
     },
-    findPendingRecording: {
-      operationId: "app.meeting.recording.pending.get",
-      kind: "invoke",
-      request: z.void(),
-      response: z.any(),
-      handler: (ctx) => service(ctx).findPendingRecording(),
-    },
-    readSpooledParts: {
-      operationId: "app.meeting.recording.spooled_parts.get",
-      kind: "invoke",
-      request: z.object({ recordingId: recordingIdSchema }).strict(),
-      response: z.any(),
-      handler: async (ctx, request: { recordingId: string }) => {
-        const parts = await service(ctx).readSpooledParts(request.recordingId)
-        // 只回编号和字节；渲染进程接着按顺序补传。
-        return parts.map((part) => ({ partNumber: part.partNumber, bytes: part.bytes }))
-      },
-    },
     list: {
       operationId: "app.meeting.entry.list",
       kind: "invoke",

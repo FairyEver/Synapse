@@ -21,19 +21,6 @@ export type SynapseMeetingRecordingStart = {
   readonly title: string
 }
 
-export type SynapseMeetingPendingRecording = {
-  readonly meetingId: string
-  readonly recordingId: string
-  readonly title: string
-  readonly receivedBytes: number
-  readonly startedAt: string
-} | null
-
-export type SynapseMeetingSpooledPart = {
-  readonly partNumber: number
-  readonly bytes: Uint8Array
-}
-
 /** 转写收尾时从主进程推过来的一条应用内事件。 */
 export type SynapseMeetingTranscriptionCompletedEvent = {
   readonly meetingId: string

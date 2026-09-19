@@ -519,8 +519,6 @@ const synapseBridge: SynapseBridge = {
       uploadPart: (input) => invoke(IPC_CHANNELS.meeting.uploadPart)(input),
       complete: (input) => invoke(IPC_CHANNELS.meeting.completeRecording)(input),
       cancel: (input) => invoke(IPC_CHANNELS.meeting.cancelRecording)(input),
-      pending: () => invoke(IPC_CHANNELS.meeting.findPendingRecording)(),
-      spooledParts: (input) => invoke(IPC_CHANNELS.meeting.readSpooledParts)(input),
     },
     entry: {
       list: () => invoke(IPC_CHANNELS.meeting.list)(),
