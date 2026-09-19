@@ -63,7 +63,10 @@ function isKnowledgeBaseProject(project: SynapseProjectConfig): boolean {
   return project.capabilities?.knowledgeBase?.managed === true
 }
 
-function formatDeleteProjectDescription(target: { project: SynapseProjectConfig; sessionCount: number | null } | null): string {
+function formatDeleteProjectDescription(target: {
+  project: SynapseProjectConfig
+  sessionCount: number | null
+} | null): string {
   if (!target) return ""
   if (target.sessionCount === null) {
     return `无法确认「${target.project.name}」下的 Agent 对话。删除项目后，相关对话将移入「已归档」分组，不会被删除。`
@@ -72,6 +75,61 @@ function formatDeleteProjectDescription(target: { project: SynapseProjectConfig;
     return `确认删除「${target.project.name}」？`
   }
   return `「${target.project.name}」下有 ${target.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。`
+}
+
+/**
+ * What happens to the terminal side of a project, which is not a move like the
+ * conversations are.
+ *
+ * The project's group in the terminal is the project's, so it goes when the project
+ * goes, and the terminals in it are closed rather than kept anywhere. Saying the count
+ * is the point: a running terminal is work in progress, and this is the sentence that
+ * lets the reader notice before agreeing.
+ */
+function formatDeleteProjectTerminals(target: {
+  terminalCount: number | null
+  runningTerminalCount: number
+} | null): string | null {
+  if (!target) return null
+  if (target.terminalCount === null) {
+    return "终端侧栏里对应的分组会一起删除。"
+  }
+  if (target.terminalCount === 0) return null
+  return target.runningTerminalCount > 0
+    ? `终端侧栏里的分组会一起删除，其中 ${target.runningTerminalCount} 个终端正在运行，会被关闭。`
+    : `终端侧栏里的分组会一起删除，其中的 ${target.terminalCount} 个终端记录会一并删除。`
+}
+
+/**
+ * How many terminals this project would take with it, and how many are still running.
+ *
+ * Read from the terminal itself rather than counted here: the group that belongs to a
+ * project is the terminal's to know, and this screen only has to say what it found.
+ * Null means it could not be read, which the caller words differently from zero.
+ */
+async function readProjectTerminalFacts(projectId: string): Promise<{
+  readonly terminalCount: number
+  readonly runningTerminalCount: number
+} | null> {
+  const terminal = window.synapse?.terminal
+  if (!terminal) return null
+
+  try {
+    const [groups, sessions] = await Promise.all([
+      terminal.group.list(),
+      terminal.session.list(),
+    ])
+    const group = groups.find((item) => item.projectId === projectId)
+    if (!group) return { terminalCount: 0, runningTerminalCount: 0 }
+    const members = sessions.filter((session) => session.groupId === group.id)
+    return {
+      terminalCount: members.length,
+      runningTerminalCount: members.filter((session) => session.status === "running").length,
+    }
+  } catch (error) {
+    logger.error("Failed to read project terminal group facts.", { projectId, error })
+    return null
+  }
 }
 
 function formatKnowledgeBaseCreateError(error: unknown): string {
@@ -97,7 +155,13 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
   const [editPath, setEditPath] = useState("")
   const [editError, setEditError] = useState<string | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number | null } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    project: SynapseProjectConfig
+    sessionCount: number | null
+    /** Terminals in this project's terminal group. Null when that could not be read. */
+    terminalCount: number | null
+    runningTerminalCount: number
+  } | null>(null)
   const [isKnowledgeBaseDialogOpen, setIsKnowledgeBaseDialogOpen] = useState(false)
   const [isKnowledgeBaseImportDialogOpen, setIsKnowledgeBaseImportDialogOpen] = useState(false)
   const [knowledgeBaseName, setKnowledgeBaseName] = useState("")
@@ -185,6 +249,42 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
       isKnowledgeBaseCreateInFlightRef.current = false
       setIsCreatingKnowledgeBase(false)
     }
+  }
+
+  /**
+   * Decides between asking and just doing it, and collects what the question needs.
+   *
+   * A project with nothing in it goes straight out: the dialog earns its place by
+   * naming what will be lost, and there is nothing to name.
+   */
+  const openDeleteDialog = async (project: SynapseProjectConfig) => {
+    const terminals = await readProjectTerminalFacts(project.id)
+    const terminalCount = terminals?.terminalCount ?? null
+    let sessionCount: number | null = null
+    const bridge = window.synapse?.agent
+    if (bridge) {
+      try {
+        sessionCount = (await bridge.listSessions(project.id)).length
+      } catch (error) {
+        logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error })
+      }
+    }
+
+    // Only a project known to be empty goes without asking. Unknown counts ask too:
+    // the sentence the dialog adds is about what is lost, and not knowing is not the
+    // same as there being nothing to say.
+    const knownEmpty = sessionCount === 0 && terminalCount === 0
+    if (knownEmpty && !isKnowledgeBaseProject(project)) {
+      await handleRemoveProject(project)
+      return
+    }
+
+    setDeleteTarget({
+      project,
+      sessionCount,
+      terminalCount,
+      runningTerminalCount: terminals?.runningTerminalCount ?? 0,
+    })
   }
 
   const handleRemoveProject = async (project: SynapseProjectConfig) => {
@@ -486,21 +586,7 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
                           size="sm"
                           onClick={(event) => {
                             deleteTriggerRef.current = event.currentTarget
-                            const bridge = window.synapse?.agent
-                            if (!bridge) {
-                              setDeleteTarget({ project, sessionCount: null })
-                              return
-                            }
-                            void bridge.listSessions(project.id).then((sessions) => {
-                              if (sessions.length > 0 || isKnowledgeBaseProject(project)) {
-                                setDeleteTarget({ project, sessionCount: sessions.length })
-                              } else {
-                                void handleRemoveProject(project)
-                              }
-                            }).catch((err) => {
-                              logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error: err })
-                              setDeleteTarget({ project, sessionCount: null })
-                            })
+                            void openDeleteDialog(project)
                           }}
                         >
                           删除
@@ -632,6 +718,9 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>{formatDeleteProjectDescription(deleteTarget)}</p>
+                {formatDeleteProjectTerminals(deleteTarget) ? (
+                  <p>{formatDeleteProjectTerminals(deleteTarget)}</p>
+                ) : null}
                 {deleteTarget && isKnowledgeBaseProject(deleteTarget.project) ? (
                   <p>会同时删除该知识库的托管数据。</p>
                 ) : null}

@@ -156,6 +156,12 @@ export const terminalGroupRecordSchema = z.object({
   id: z.string().uuid(),
   groupId: z.string().uuid(),
   name: z.string().min(1).max(80),
+  /**
+   * Set on the groups that belong to an Agent project. Optional and unversioned on
+   * purpose: a record written before projects had groups is still a valid record, and
+   * is still an ordinary group.
+   */
+  projectId: z.string().min(1).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   sortOrder: z.number().int(),

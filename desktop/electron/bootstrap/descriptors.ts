@@ -173,6 +173,7 @@ import { dispatchDatabaseAction } from "../database/dispatcher"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import { sanitizeUrl } from "../../src/lib/url-sanitize"
 import { repositoryStore } from "../services/repository-store"
+import { syncTerminalProjectGroupsSafely } from "../services/terminal-project-group-sync"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { repositoryLockManager } from "../services/repository-lock-manager"
 import { pendingPushesService } from "../services/pending-pushes-service"
@@ -504,6 +505,13 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   },
   async start(instance) {
     await instance.start()
+    /*
+     * Once, on the way up: the project groups are made to match the projects that exist
+     * now. This is also what gives the projects a user already had their groups — the
+     * terminal has never seen them before — and it is deliberately not fatal, because a
+     * terminal that could not follow the project list is still a working terminal.
+     */
+    await syncTerminalProjectGroupsSafely(() => instance, "terminal.start")
   },
   async stop(instance) {
     await instance.stop()

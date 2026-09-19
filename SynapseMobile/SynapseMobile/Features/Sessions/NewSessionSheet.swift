@@ -6,6 +6,9 @@ import SwiftUI
 /// conversation lands in the terminal list beside everything else. The two segments
 /// offer different things because that is what they are: a conversation has defaults
 /// worth not deciding, and a terminal group has none worth inventing.
+///
+/// The labels name where each one puts what it makes: a conversation goes into a
+/// project, a terminal goes into a terminal group.
 private enum NewSessionSegment: String, CaseIterable, Identifiable {
     case conversation
     case terminal
@@ -14,8 +17,8 @@ private enum NewSessionSegment: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .conversation: return "对话"
-        case .terminal: return "终端"
+        case .conversation: return "项目"
+        case .terminal: return "终端分组"
         }
     }
 }

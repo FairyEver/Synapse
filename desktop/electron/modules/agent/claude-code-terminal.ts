@@ -137,6 +137,10 @@ export async function createClaudeCodeTerminalSession(
       : CLAUDE_CODE_TERMINAL_TITLE
     return await resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
       title,
+      // The project is where this conversation belongs as much as where it runs, so the
+      // terminal puts it in that project's group rather than wherever the list happens
+      // to start.
+      project: { projectId: project.uuid, name: project.name },
       cwd: project.localPath,
       shell: executablePath,
       args: [

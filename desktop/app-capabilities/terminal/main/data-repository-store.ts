@@ -105,6 +105,7 @@ export function createTerminalDataRepositoryStore(options: {
       return {
         id: group.groupId,
         name: group.name,
+        ...(group.projectId ? { projectId: group.projectId } : {}),
         createdAt: group.createdAt,
         updatedAt: group.updatedAt,
         sortOrder: group.sortOrder,
@@ -391,6 +392,7 @@ export function createTerminalDataRepositoryStore(options: {
         id: group.id,
         groupId: group.id,
         name: group.name,
+        ...(group.projectId ? { projectId: group.projectId } : {}),
         createdAt: group.createdAt,
         updatedAt: group.updatedAt,
         sortOrder: group.sortOrder,

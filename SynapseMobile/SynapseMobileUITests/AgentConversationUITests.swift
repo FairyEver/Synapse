@@ -49,8 +49,8 @@ final class AgentConversationUITests: XCTestCase {
         // 终端 tab of its own — and addressed by label rather than by an identifier,
         // since a `Picker` in this style is a container of buttons and the container is
         // not what a tap lands on.
-        XCTAssertTrue(segments(in: app)["对话"].exists, "the segmented control is missing")
-        XCTAssertTrue(segments(in: app)["对话"].isSelected, "the panel did not open on 对话")
+        XCTAssertTrue(segments(in: app)["项目"].exists, "the segmented control is missing")
+        XCTAssertTrue(segments(in: app)["项目"].isSelected, "the panel did not open on 项目")
         // The Provider and model rows are already resolved by the computer, so the only
         // thing standing between the reader and the button is the project.
         XCTAssertTrue(app.buttons["new-session-provider"].exists, "供应商 row missing")
@@ -123,9 +123,9 @@ final class AgentConversationUITests: XCTestCase {
         let app = launch()
 
         app.buttons["new-session"].tap()
-        XCTAssertTrue(segments(in: app)["对话"].waitForExistence(timeout: 10), "the panel never appeared")
+        XCTAssertTrue(segments(in: app)["项目"].waitForExistence(timeout: 10), "the panel never appeared")
 
-        segments(in: app)["终端"].tap()
+        segments(in: app)["终端分组"].tap()
         // The group list, and no primary button: a terminal group has no default worth
         // guessing, so a confirm step here would be friction with nothing behind it.
         XCTAssertFalse(

@@ -55,7 +55,10 @@ describe("useAgentProjectTerminalActions", () => {
   it("creates a terminal in the project directory and opens that session", async () => {
     await clickOpenTerminal()
 
-    expect(mocks.createSession).toHaveBeenCalledWith({ cwd: "/work/project-one" })
+    expect(mocks.createSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      cwd: "/work/project-one",
+    })
     expect(mocks.openSystemApp).toHaveBeenCalledWith("terminal", {
       terminalOpenRequest: {
         requestId: expect.any(String),

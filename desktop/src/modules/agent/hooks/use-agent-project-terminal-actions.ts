@@ -27,7 +27,10 @@ function useAgentProjectTerminalActions() {
     const bridge = requireSynapseBridge()
     let sessionId: string
     try {
-      const session = await bridge.terminal.session.create({ cwd: project.path })
+      const session = await bridge.terminal.session.create({
+        projectId: project.id,
+        cwd: project.path,
+      })
       sessionId = session.id
     } catch (rawError) {
       logger.warn("Agent project terminal creation failed.", {

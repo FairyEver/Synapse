@@ -165,6 +165,14 @@ export const terminalGroupSettingsSchema = terminalLaunchLayerSchema.extend({
 export const terminalGroupSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  /**
+   * The Agent project this group belongs to, when it is one of the project groups.
+   *
+   * A project group is an ordinary group in every other respect — same row, same menu,
+   * same kind of members — and this field is what says its name and its existence are
+   * the project's to decide rather than the user's.
+   */
+  projectId: z.string().min(1).optional(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   sortOrder: z.number().int(),
@@ -349,6 +357,13 @@ export const terminalEmptyInputSchema = z.object({}).strict()
 
 export const terminalCreateSessionInputSchema = z.object({
   groupId: z.string().min(1).optional(),
+  /**
+   * Open the session in the group that belongs to this Agent project.
+   *
+   * Ignored when `groupId` is given: naming a group is already naming the place, and a
+   * caller that did that is not asking for the project's group.
+   */
+  projectId: z.string().min(1).optional(),
   title: z.string().min(1).max(120).optional(),
   cwd: z.string().min(1).optional(),
   cols: z.number().int().positive().max(500).optional(),
@@ -460,6 +475,33 @@ export const terminalResizedEventSchema = z.object({
   sizeRevision: z.number().int().positive(),
   throughOutputSeq: z.number().int().nonnegative(),
 }).strict()
+
+/**
+ * What an Agent project looks like to the terminal, which is only ever a name and an id.
+ *
+ * The terminal has no project list of its own and does not want one: the caller that
+ * owns the projects hands over the current set, and the groups are made to match.
+ */
+export type TerminalProjectGroupSource = {
+  readonly projectId: string
+  readonly name: string
+}
+
+/**
+ * What a project group is called: the project's own name, marked as a project.
+ *
+ * The mark is the whole of how a project group is told apart from a group the user
+ * made — there is no icon, no section and no second list, because the sidebar is the
+ * same list of the same kind of rows either way.
+ */
+export const TERMINAL_PROJECT_GROUP_NAME_PREFIX = "项目 "
+
+/**
+ * The longest a group name may be, and the number the persisted group record enforces
+ * (`terminalGroupRecordSchema`). A generated name — a project group's — has to fit it
+ * too, since a name the record rejects is a group that cannot be saved.
+ */
+export const TERMINAL_GROUP_NAME_MAX_LENGTH = 80
 
 export type TerminalGroup = z.infer<typeof terminalGroupSchema>
 export type TerminalGroupListItem = z.infer<typeof terminalGroupListItemSchema>

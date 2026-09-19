@@ -2526,6 +2526,21 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).not.toContain("启动命令")
   })
 
+  it("shows a project group's name as the project's, not something to type over", async () => {
+    bridgeState.groups = [
+      createGroup({ id: "group-project", name: "项目 Synapse", projectId: "project-synapse" }),
+    ]
+
+    await renderModule()
+    await clickGroupMenu("项目 Synapse")
+    await clickMenuItem("设置")
+
+    const nameInput = document.body.querySelector<HTMLInputElement>('input[aria-label="分组名称"]')
+    expect(nameInput?.value).toBe("项目 Synapse")
+    expect(nameInput?.disabled).toBe(true)
+    expect(document.body.textContent).toContain("名称跟随项目")
+  })
+
   it("adds edits and deletes commands from command management", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "前端项目" })]
 
@@ -2639,6 +2654,32 @@ describe("TerminalModule", () => {
     expect(terminalBridge.deleteGroup).toHaveBeenCalledWith({ groupId: "group-build" })
     expect(document.body.textContent).not.toContain("构建终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
+  })
+
+  it("offers a project group everything but renaming and deleting it", async () => {
+    bridgeState.groups = [
+      createGroup({ id: "group-project", name: "项目 Synapse", projectId: "project-synapse", sortOrder: 0 }),
+      createGroup({ id: "group-mine", name: "部署", sortOrder: 1 }),
+    ]
+    bridgeState.sessions = []
+
+    await renderModule()
+    await clickGroupMenu("项目 Synapse")
+    const projectItems = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .map((item) => item.textContent?.trim())
+
+    expect(projectItems).toContain("设置")
+    expect(projectItems).toContain("命令")
+    expect(projectItems).toContain("上移")
+    expect(projectItems).toContain("下移")
+    expect(projectItems).not.toContain("重命名")
+    expect(projectItems).not.toContain("删除")
+
+    await clickGroupMenu("部署")
+    const ownItems = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+      .map((item) => item.textContent?.trim())
+    expect(ownItems).toContain("重命名")
+    expect(ownItems).toContain("删除")
   })
 
   it("closes a terminal workspace and selects the next workspace", async () => {

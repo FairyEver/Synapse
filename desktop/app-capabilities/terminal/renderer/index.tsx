@@ -1428,10 +1428,16 @@ export function TerminalModule({
             <Code2 />
             命令
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
-            <Pencil />
-            重命名
-          </DropdownMenuItem>
+          {/*
+            项目分组是项目的影子：名字跟着项目走、项目删了它也没了。在这里改名会被下一次
+            同步改回去，删掉也会被下一次同步重新建出来——两个都做不到的事不如不摆在菜单里。
+          */}
+          {group.projectId ? null : (
+            <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
+              <Pencil />
+              重命名
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             disabled={groupReordering || index === 0}
             onClick={() => moveGroup(group.id, "up")}
@@ -1446,10 +1452,12 @@ export function TerminalModule({
             <ArrowDown />
             下移
           </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onClick={(event) => startDeleteGroup(group, event)}>
-            <Trash2 />
-            删除
-          </DropdownMenuItem>
+          {group.projectId ? null : (
+            <DropdownMenuItem variant="destructive" onClick={(event) => startDeleteGroup(group, event)}>
+              <Trash2 />
+              删除
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </>
@@ -1931,9 +1939,13 @@ export function TerminalModule({
               <Input
                 aria-label="分组名称"
                 value={groupSettingsName}
+                disabled={groupSettingsTarget?.projectId !== undefined}
                 onChange={(event) => setGroupSettingsName(event.target.value)}
-                autoFocus
+                autoFocus={groupSettingsTarget?.projectId === undefined}
               />
+              {groupSettingsTarget?.projectId !== undefined ? (
+                <span className="text-xs text-muted-foreground">名称跟随项目，改项目名即可。</span>
+              ) : null}
             </label>
             <TerminalLaunchSettingsForm
               value={groupSettingsLaunch}

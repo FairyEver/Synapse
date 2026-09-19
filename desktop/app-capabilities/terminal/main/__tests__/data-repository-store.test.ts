@@ -44,7 +44,8 @@ describe("Terminal DataRepository store", () => {
         actionRevision: 1,
       }],
       groups: [{
-        id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
+        id: groupId, name: "Main", projectId: "project-alpha",
+        createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
         groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
         settings: {
           environment: { GROUP_SECRET: "group-private", GROUP_UNSET: null },

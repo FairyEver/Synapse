@@ -56,6 +56,7 @@ import type {
   TerminalReadSessionResult,
   TerminalRenameGroupInput,
   TerminalReorderGroupsInput,
+  TerminalProjectGroupSource,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
   TerminalRunStartupCommandInput,
@@ -71,6 +72,8 @@ import {
   TERMINAL_CUSTOM_TOOLBAR_ACTION_CONTENT_MAX_LENGTH,
   TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH,
   TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT,
+  TERMINAL_GROUP_NAME_MAX_LENGTH,
+  TERMINAL_PROJECT_GROUP_NAME_PREFIX,
 } from "../shared/schema"
 import {
   TERMINAL_WORKSPACE_PANE_LIMIT,
@@ -675,8 +678,21 @@ export function createTerminalService(deps: {
       : unknownAttention(session, reason)
   }
 
+  function nextGroupSortOrder(): number {
+    return [...groups.values()].reduce((highest, group) => Math.max(highest, group.sortOrder + 1), 0)
+  }
+
+  /**
+   * Where a terminal goes when its creator named no place for it.
+   *
+   * Skips the project groups deliberately: since every project has a group, taking the
+   * first group in the sidebar would put an anonymous terminal inside somebody's
+   * project, which is the whole thing these groups exist to stop.
+   */
   function ensureDefaultGroup(): TerminalGroup {
-    const existing = [...groups.values()].sort((a, b) => a.sortOrder - b.sortOrder)[0]
+    const existing = [...groups.values()]
+      .filter((group) => group.projectId === undefined)
+      .sort((a, b) => a.sortOrder - b.sortOrder)[0]
     if (existing) return existing
     const timestamp = now()
     const group: TerminalGroup = {
@@ -684,7 +700,7 @@ export function createTerminalService(deps: {
       name: "默认",
       createdAt: timestamp,
       updatedAt: timestamp,
-      sortOrder: 0,
+      sortOrder: nextGroupSortOrder(),
       groupRevision: 1,
       launchRevision: 1,
       membershipRevision: 1,
@@ -695,10 +711,104 @@ export function createTerminalService(deps: {
     return group
   }
 
+  function findProjectGroup(projectId: string): TerminalGroup | undefined {
+    return [...groups.values()]
+      .filter((group) => group.projectId === projectId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)[0]
+  }
+
+  /**
+   * Makes the group an Agent project is shown as, or brings its name up to date.
+   *
+   * Both ends of the same fact call this — the reconciliation that follows the project
+   * list, and a launch that names a project — so a project group is never created twice
+   * and never named by two different rules. In memory only; the caller flushes.
+   */
+  function upsertProjectGroup(source: TerminalProjectGroupSource): TerminalGroup {
+    const name = `${TERMINAL_PROJECT_GROUP_NAME_PREFIX}${source.name}`.slice(0, TERMINAL_GROUP_NAME_MAX_LENGTH)
+    const existing = findProjectGroup(source.projectId)
+    if (existing) {
+      if (existing.name === name) return existing
+      const renamed = { ...existing, name, updatedAt: now(), groupRevision: existing.groupRevision + 1 }
+      groups.set(renamed.id, renamed)
+      bumpDomain("group.renamed", renamed.id, renamed.groupRevision)
+      return renamed
+    }
+    const timestamp = now()
+    const group: TerminalGroup = {
+      id: randomUUID(),
+      name,
+      projectId: source.projectId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      sortOrder: nextGroupSortOrder(),
+      groupRevision: 1,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+    }
+    groups.set(group.id, group)
+    bumpDomain("group.created", group.id, group.groupRevision)
+    return group
+  }
+
+  /** Removes a group and everything in it, the way the user's own delete does. */
+  function removeGroupWithMembers(groupId: string): string[] {
+    const deletedSessionIds: string[] = []
+    for (const session of [...sessions.values()]) {
+      if (session.groupId !== groupId) continue
+      removeSessionResources(session.id)
+      deletedSessionIds.push(session.id)
+    }
+    for (const workspace of [...workspaces.values()]) {
+      if (workspace.groupId === groupId) workspaces.delete(workspace.id)
+    }
+    const group = groups.get(groupId)
+    groups.delete(groupId)
+    conversationSequences.delete(groupId)
+    if (group) bumpDomain("group.deleted", groupId, group.groupRevision)
+    return deletedSessionIds
+  }
+
+  /**
+   * Makes the project groups match the project list the caller owns.
+   *
+   * One direction only, and one pass: a project without a group gets one named after it,
+   * a group whose project is gone goes with it, and nothing else about either is
+   * touched — a group the user renamed is a project group that follows the project, not
+   * a copy of it.
+   */
+  async function syncProjectGroups(sources: readonly TerminalProjectGroupSource[]): Promise<void> {
+    const wantedIds = new Set(sources.map((source) => source.projectId))
+    for (const source of sources) upsertProjectGroup(source)
+    const orphanedGroupIds = [...groups.values()]
+      .filter((group) => group.projectId !== undefined && !wantedIds.has(group.projectId))
+      .map((group) => group.id)
+    const deletedSessionIds = orphanedGroupIds.flatMap((groupId) => removeGroupWithMembers(groupId))
+    await flushPersist()
+    if (!lastPersistError) {
+      for (const sessionId of deletedSessionIds) events.emit("sessionDeleted", { sessionId })
+    }
+  }
+
   function getGroupOrThrow(groupId: string): TerminalGroup {
     const group = groups.get(groupId)
     if (!group) throw terminalContractError("not_found", "not_found")
     return group
+  }
+
+  /**
+   * Refuses the two things a project group cannot do, wherever the request came from.
+   *
+   * The sidebar does not offer them either — this is the same rule held one layer down,
+   * so a caller that is not the sidebar (an MCP tool, a phone) gets the same answer
+   * instead of a change the next reconciliation would silently undo.
+   */
+  function assertGroupNameIsLocal(group: TerminalGroup): void {
+    if (group.projectId === undefined) return
+    throw terminalContractError("invalid_argument", "validation", {
+      details: { reason: "project_group_is_managed", projectId: group.projectId },
+    })
   }
 
   function getSessionOrThrow(sessionId: string): TerminalSession {
@@ -1040,7 +1150,9 @@ export function createTerminalService(deps: {
     createWorkspaceTitle?: string,
   ): Promise<TerminalSession> {
     assertCreateQuota()
-    const group = input.groupId ? getGroupOrThrow(input.groupId) : ensureDefaultGroup()
+    const group = input.groupId
+      ? getGroupOrThrow(input.groupId)
+      : (input.projectId ? findProjectGroup(input.projectId) : undefined) ?? ensureDefaultGroup()
     const explicitTitle = input.title?.trim()
     const sessionTitle = explicitTitle || nextConversationTitle(group)
     /*
@@ -1793,6 +1905,7 @@ export function createTerminalService(deps: {
     const group = getGroupOrThrow(input.groupId)
     const name = input.name.trim()
     if (name === group.name) return group
+    assertGroupNameIsLocal(group)
     const updated = { ...group, name, updatedAt: now(), groupRevision: group.groupRevision + 1 }
     groups.set(group.id, updated)
     bumpDomain("group.renamed", group.id, updated.groupRevision)
@@ -1837,6 +1950,8 @@ export function createTerminalService(deps: {
 
   async function updateGroupSettings(input: TerminalUpdateGroupSettingsInput): Promise<TerminalGroup> {
     const group = getGroupOrThrow(input.groupId)
+    // Launch settings are the user's to set on any group; the name is not, on this one.
+    if (input.name.trim() !== group.name) assertGroupNameIsLocal(group)
     if (input.expectedLaunchRevision !== undefined && input.expectedLaunchRevision !== group.launchRevision) {
       throw terminalContractError("revision_conflict", "revision", { details: { currentRevision: group.launchRevision } })
     }
@@ -2007,6 +2122,7 @@ export function createTerminalService(deps: {
 
   async function deleteGroup(input: TerminalDeleteGroupInput): Promise<void> {
     const group = getGroupOrThrow(input.groupId)
+    assertGroupNameIsLocal(group)
     if ([...sessions.values()].some((session) => session.groupId === group.id)) {
       throw terminalContractError("lifecycle_conflict", "conflict", { details: { code: "group_not_empty" } })
     }
@@ -2137,6 +2253,14 @@ export function createTerminalService(deps: {
     readonly cwd: string
     readonly shell: string
     readonly args?: readonly string[]
+    /**
+     * The Agent project this launch belongs to, when it belongs to one.
+     *
+     * Carries the name as well as the id, unlike the UI's own create: this path is how
+     * a conversation is started in a project, and it is the one caller that can have a
+     * project in hand before the reconciliation has made its group.
+     */
+    readonly project?: TerminalProjectGroupSource
     readonly environment: Record<string, string>
     /**
      * The grid the CLI is born into. Omitted, the session takes the default shape.
@@ -2159,6 +2283,7 @@ export function createTerminalService(deps: {
     readonly onEnded?: () => void
   }): Promise<TerminalSession> {
     const session = await createSessionRecord({
+      ...(input.project ? { groupId: upsertProjectGroup(input.project).id } : {}),
       title: input.title,
       cwd: input.cwd,
       cols: input.cols,
@@ -3290,6 +3415,7 @@ export function createTerminalService(deps: {
     deleteCustomToolbarAction,
     updateGlobalLaunchSettings,
     listGroups,
+    syncProjectGroups,
     listWorkspaces,
     getWorkspace,
     getWorkspaceForSession,

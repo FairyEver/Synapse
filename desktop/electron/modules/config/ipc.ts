@@ -9,6 +9,7 @@ import { z } from "zod"
 import { app, BrowserWindow } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
+import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
@@ -19,6 +20,7 @@ import { configBackupService } from "../../services/config-backup-service"
 import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
+import { syncTerminalProjectGroupsSafely } from "../../services/terminal-project-group-sync"
 import { shutdownDatabase } from "../../database"
 
 const logger = createMainLogger("ipc.config")
@@ -117,6 +119,14 @@ export const configIpcModule: IpcModule = {
           const config = await configStore.update(patch)
           if (patch.repositories !== undefined) {
             repositoryStore.reconcileRepositories(config.repositories)
+          }
+          // The terminal's groups are the projects' to decide, so a saved project list
+          // is followed here rather than left to the terminal to notice.
+          if (patch.global?.projects !== undefined) {
+            await syncTerminalProjectGroupsSafely(
+              () => ctx.resolve<TerminalService>("core.terminal"),
+              "config.update",
+            )
           }
 
           recordVariableAudits(ctx, variableAudits, "allowed")
@@ -276,6 +286,12 @@ export const configIpcModule: IpcModule = {
 
           try {
             const result = await configBackupService.commitImport(importPlan)
+            // A backup replaces the project list wholesale, which is a change to it in
+            // every way that matters to the terminal.
+            await syncTerminalProjectGroupsSafely(
+              () => ctx.resolve<TerminalService>("core.terminal"),
+              "config.importBackup",
+            )
             recordVariableAudits(ctx, variableAudits, "allowed")
             auditSink.record({
               action: "fs.write",

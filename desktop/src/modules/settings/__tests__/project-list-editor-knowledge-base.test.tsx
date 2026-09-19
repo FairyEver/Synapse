@@ -151,6 +151,14 @@ function createSynapseBridgeMocks() {
     agent: {
       listSessions: vi.fn<(projectId: string) => Promise<unknown[]>>().mockResolvedValue([]),
     },
+    terminal: {
+      group: {
+        list: vi.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+      },
+      session: {
+        list: vi.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+      },
+    },
   }
 }
 
@@ -875,5 +883,49 @@ describe("ProjectListEditor knowledge base actions", () => {
       })
       await pendingCreate.promise
     })
+  })
+})
+
+describe("ProjectListEditor project deletion", () => {
+  it("names the terminals a project takes with it before deleting it", async () => {
+    const { onSave } = renderEditor([standardProject])
+    bridgeMocks.terminal.group.list.mockResolvedValue([
+      { id: "group-project", name: "项目 Synapse", projectId: "project-standard" },
+    ])
+    bridgeMocks.terminal.session.list.mockResolvedValue([
+      { id: "session-1", groupId: "group-project", status: "running" },
+      { id: "session-2", groupId: "group-project", status: "ended" },
+      { id: "session-3", groupId: "other-group", status: "running" },
+    ])
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("终端侧栏里的分组会一起删除")
+    })
+    expect(document.body.textContent).toContain("1 个终端正在运行")
+    expect(onSave).not.toHaveBeenCalled()
+
+    await act(async () => {
+      buttonByText("删除项目").click()
+      await Promise.resolve()
+    })
+
+    expect(onSave).toHaveBeenCalledWith([])
+  })
+
+  it("removes a project with nothing in it without asking", async () => {
+    const { onSave } = renderEditor([standardProject])
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).not.toContain("终端侧栏里的分组会一起删除")
+    expect(onSave).toHaveBeenCalledWith([])
   })
 })
