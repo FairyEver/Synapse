@@ -321,7 +321,7 @@ final class SynapseAppModel {
     /// both what was asked and what came back.
     let conversationDefaults = AgentConversationPreferences()
 
-    /// 会议记录。
+    /// 录音。
     ///
     /// 直连服务端，不经过任何一台电脑——转写发生在云端，结果也在服务端，这和手机端
     /// 既有的「电脑的远程视图」定位不同，所以它不挂在 terminalStores 那一套里。
@@ -410,7 +410,7 @@ final class SynapseAppModel {
         DiagnosticLog.resetAliases()
         // Those are another account's computers' sentences, and nothing here persists.
         quickPhrases.reset()
-        // 会议是另一个账号的东西，换人之后不该还留在内存里。
+        // 录音是另一个账号的东西，换人之后不该还留在内存里。
         meetings.clear()
         await apiClient.logout()
         authState = .signedOut
@@ -419,7 +419,7 @@ final class SynapseAppModel {
     /// Called by the scene phase. iOS suspends the process in the background and
     /// drops the socket regardless, so the app closes it deliberately and
     /// reconnects with a fresh snapshot on the way back.
-    /// 会议列表。转写进行中时会自己刷新到出结果为止，由调用它的视图按需重复调用。
+    /// 录音列表。转写进行中时会自己刷新到出结果为止，由调用它的视图按需重复调用。
     func reloadMeetings() async {
         await meetings.load(using: apiClient)
     }

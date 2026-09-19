@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synapse 管理后台 · 团队管理 原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --background:oklch(1 0 0);
+  --foreground:oklch(0.145 0 0);
+  --card:oklch(1 0 0);
+  --primary:oklch(0.205 0 0);
+  --primary-foreground:oklch(0.985 0 0);
+  --secondary:oklch(0.97 0 0);
+  --muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);
+  --accent:oklch(0.97 0 0);
+  --destructive:oklch(0.577 0.245 27.325);
+  --border:oklch(0.922 0 0);
+  --input:oklch(0.922 0 0);
+  --ring:oklch(0.708 0 0);
+  --sidebar:oklch(0.985 0 0);
+  --surface:oklch(0.965 0 0);
+  --selected:oklch(0.945 0 0);
+  --radius:0.625rem;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --background:oklch(0.145 0 0);
+    --foreground:oklch(0.985 0 0);
+    --card:oklch(0.205 0 0);
+    --primary:oklch(0.922 0 0);
+    --primary-foreground:oklch(0.205 0 0);
+    --secondary:oklch(0.269 0 0);
+    --muted:oklch(0.269 0 0);
+    --muted-foreground:oklch(0.708 0 0);
+    --accent:oklch(0.269 0 0);
+    --destructive:oklch(0.704 0.191 22.216);
+    --border:oklch(1 0 0 / 10%);
+    --input:oklch(1 0 0 / 15%);
+    --ring:oklch(0.556 0 0);
+    --sidebar:oklch(0.205 0 0);
+    --surface:oklch(0.175 0 0);
+    --selected:oklch(0.3 0 0);
+  }
+}
+[data-theme="dark"]{
+  --background:oklch(0.145 0 0);
+  --foreground:oklch(0.985 0 0);
+  --card:oklch(0.205 0 0);
+  --primary:oklch(0.922 0 0);
+  --primary-foreground:oklch(0.205 0 0);
+  --secondary:oklch(0.269 0 0);
+  --muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);
+  --accent:oklch(0.269 0 0);
+  --destructive:oklch(0.704 0.191 22.216);
+  --border:oklch(1 0 0 / 10%);
+  --input:oklch(1 0 0 / 15%);
+  --ring:oklch(0.556 0 0);
+  --sidebar:oklch(0.205 0 0);
+  --surface:oklch(0.175 0 0);
+  --selected:oklch(0.3 0 0);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--surface);color:var(--foreground);
+  font-family:"Geist","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit}
+.hide{display:none !important}
+.ic{width:16px;height:16px;flex:none}
+
+.page{max-width:1180px;margin:0 auto;padding:22px 24px 40px}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.head h1{font-size:15px;font-weight:500;margin:0}
+.head .sub{font-size:12.5px;color:var(--muted-foreground)}
+.spacer{margin-left:auto}
+
+.notes{border:1px solid var(--border);background:var(--background);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+.notes h2{font-size:12.5px;font-weight:500;margin:0 0 8px;color:var(--muted-foreground)}
+.notes ol{margin:0;padding-left:18px;display:grid;gap:5px;font-size:12.5px;color:var(--muted-foreground)}
+.notes ol b{color:var(--foreground);font-weight:500}
+.controls{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.controls .lbl{font-size:12.5px;color:var(--muted-foreground)}
+.seg{display:inline-flex;gap:2px;padding:2px;background:var(--muted);border-radius:9px}
+.seg button{height:28px;padding:0 12px;border:0;border-radius:7px;background:transparent;cursor:pointer;font-size:12.5px;color:var(--muted-foreground)}
+.seg button[aria-selected="true"]{background:var(--background);color:var(--foreground);box-shadow:0 1px 2px oklch(0 0 0 / 6%)}
+
+/* ---------- 按钮 ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:calc(var(--radius) * .8);
+  border:1px solid transparent;background:transparent;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--muted)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:var(--primary-foreground)}
+.btn-primary:hover{background:var(--primary);opacity:.9}
+.btn-outline{border-color:var(--border)}
+.btn-outline:hover{background:var(--muted)}
+.btn-sm{height:28px;padding:0 10px;font-size:12.5px}
+.btn-ghost-destructive{color:var(--destructive)}
+.btn-ghost-destructive:hover{background:var(--muted)}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;
+  border:1px solid transparent;background:transparent;cursor:pointer}
+.icon-btn:hover{background:var(--muted)}
+
+/* ---------- 应用外框 ---------- */
+.frame{height:min(80vh,760px);display:flex;flex-direction:column;background:var(--background);
+  border:1px solid var(--border);border-radius:calc(var(--radius) * 1.4);overflow:hidden;
+  box-shadow:0 1px 2px oklch(0 0 0 / 5%),0 8px 24px oklch(0 0 0 / 4%)}
+.shell{flex:1;display:flex;min-height:0}
+
+/* ---------- 侧边导航 ---------- */
+.nav{width:196px;flex:none;background:var(--sidebar);border-right:1px solid var(--border);
+  padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nav .brand{display:flex;align-items:center;gap:8px;padding:4px 8px 12px}
+.nav .brand .mark{width:20px;height:20px;border-radius:6px;background:var(--primary);flex:none}
+.nav .brand .t{font-size:13.5px;font-weight:500}
+.nav-group{font-size:11px;color:var(--muted-foreground);padding:6px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;
+  font-size:13px;color:var(--muted-foreground);border:0;background:transparent;cursor:default;text-align:left;width:100%}
+.nav-item .ic{color:currentColor;opacity:.8}
+.nav-item[aria-current="page"]{background:var(--selected);color:var(--foreground);font-weight:500}
+.nav-item[data-live="1"]{cursor:pointer}
+.nav-item[data-live="1"]:hover{background:var(--muted)}
+
+/* ---------- 主区 ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.main-top{height:46px;flex:none;display:flex;align-items:center;gap:8px;padding:0 18px;border-bottom:1px solid var(--border)}
+.main-top .crumb{font-size:13px;color:var(--muted-foreground)}
+.main-top .crumb b{color:var(--foreground);font-weight:500}
+.content{flex:1;overflow-y:auto;padding:18px 18px 26px}
+
+.page-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.page-head h2{font-size:15px;font-weight:500;margin:0}
+.page-head .sub{font-size:12.5px;color:var(--muted-foreground)}
+
+/* ---------- 表格 ---------- */
+.tbl-wrap{border:1px solid var(--border);border-radius:var(--radius);background:var(--card);overflow:hidden}
+table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+table.tbl th{height:38px;padding:0 14px;text-align:left;font-weight:500;font-size:12.5px;color:var(--muted-foreground);
+  border-bottom:1px solid var(--border);white-space:nowrap;background:var(--card)}
+table.tbl td{height:46px;padding:0 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.tbl tr:last-child td{border-bottom:0}
+table.tbl tbody tr[data-click="1"]{cursor:pointer}
+table.tbl tbody tr[data-click="1"]:hover{background:var(--muted)}
+.cell-name{font-weight:500}
+.cell-dim{color:var(--muted-foreground)}
+.num{font-variant-numeric:tabular-nums}
+.right{text-align:right}
+
+.badge{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;
+  border:1px solid transparent;background:var(--primary);color:var(--primary-foreground);font-size:11.5px}
+.badge-muted{background:var(--secondary);color:var(--muted-foreground)}
+.badge-outline{background:transparent;border-color:var(--border);color:var(--muted-foreground)}
+
+/* ---------- 成员头部条 ---------- */
+.detail-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.back-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;
+  border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--muted-foreground)}
+.back-btn:hover{background:var(--muted);color:var(--foreground)}
+.detail-head h2{font-size:15px;font-weight:500;margin:0}
+.detail-head .sub{font-size:12.5px;color:var(--muted-foreground)}
+.section{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.section h3{font-size:13.5px;font-weight:500;margin:0}
+.section .sub{font-size:12.5px;color:var(--muted-foreground)}
+
+/* ---------- 表单 ---------- */
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12.5px;font-weight:500}
+.input{height:32px;padding:0 10px;border:1px solid var(--input);border-radius:calc(var(--radius) * .8);
+  background:var(--background);color:var(--foreground);font:inherit;font-size:13px;outline:none;width:100%}
+.input:focus{border-color:var(--ring);box-shadow:0 0 0 3px oklch(0.708 0 0 / 25%)}
+.input[aria-invalid="true"]{border-color:var(--destructive)}
+.hint{font-size:12px;color:var(--muted-foreground)}
+.hint.err{color:var(--destructive)}
+
+/* ---------- 成员选择器 ---------- */
+.picker{margin-top:12px;border:1px solid var(--border);border-radius:calc(var(--radius) * .9);overflow:hidden}
+.picker-search{padding:8px;border-bottom:1px solid var(--border)}
+.picker-list{max-height:232px;overflow-y:auto;padding:4px}
+.pick{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;border:0;background:transparent;width:100%;text-align:left}
+.pick:hover{background:var(--muted)}
+.pick .box{width:16px;height:16px;flex:none;border:1px solid var(--input);border-radius:4px;
+  display:inline-flex;align-items:center;justify-content:center;background:var(--background)}
+.pick[aria-checked="true"] .box{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.pick[aria-checked="true"] .box svg{opacity:1}
+.pick .box svg{width:11px;height:11px;opacity:0}
+.pick-main{min-width:0;flex:1}
+.pick-mail{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-sub{font-size:11.5px;color:var(--muted-foreground);margin-top:1px}
+.picker-empty{padding:26px 16px;text-align:center;font-size:12.5px;color:var(--muted-foreground)}
+.picker-foot{display:flex;align-items:center;gap:8px;padding:8px;border-top:1px solid var(--border);background:var(--card)}
+.picker-foot .n{font-size:12.5px;color:var(--muted-foreground)}
+
+/* ---------- 空态 ---------- */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;
+  padding:56px 24px;border:1px dashed var(--border);border-radius:var(--radius)}
+.empty .ic{width:22px;height:22px;color:var(--muted-foreground)}
+.empty .t{font-size:13.5px;font-weight:500}
+.empty .d{font-size:12.5px;color:var(--muted-foreground);max-width:360px}
+
+/* ---------- 菜单 ---------- */
+.menu{position:fixed;z-index:60;min-width:180px;padding:4px;border:1px solid var(--border);border-radius:9px;
+  background:var(--card);box-shadow:0 8px 24px oklch(0 0 0 / 12%)}
+.menu button{display:flex;width:100%;align-items:center;gap:8px;height:30px;padding:0 8px;border:0;border-radius:6px;
+  background:transparent;cursor:pointer;font-size:13px;text-align:left}
+.menu button:hover{background:var(--muted)}
+.menu button.danger{color:var(--destructive)}
+.menu .sep{height:1px;background:var(--border);margin:4px 0}
+
+/* ---------- 对话框 ---------- */
+.overlay{position:fixed;inset:0;z-index:80;background:oklch(0 0 0 / 35%);display:flex;align-items:center;justify-content:center;padding:24px}
+.dialog{width:100%;max-width:400px;border:1px solid var(--border);border-radius:calc(var(--radius) * 1.2);
+  background:var(--card);padding:18px 18px 14px;box-shadow:0 16px 48px oklch(0 0 0 / 18%)}
+.dialog .t{font-size:14.5px;font-weight:500}
+.dialog .d{margin-top:6px;font-size:13px;color:var(--muted-foreground)}
+.dialog .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dialog-wide{max-width:480px}
+
+/* ---------- Toast ---------- */
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:90;
+  display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:calc(var(--radius) * 1.1);
+  background:var(--card);box-shadow:0 12px 32px oklch(0 0 0 / 16%);font-size:13px}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <h1>Synapse 管理后台 · 团队管理</h1>
+    <span class="sub">交互原型 · 2026-09-19</span>
+    <span class="spacer"></span>
+    <button class="btn btn-outline btn-sm" id="themeBtn">深色</button>
+  </div>
+
+  <div class="notes">
+    <h2>这个原型确定的边界</h2>
+    <ol>
+      <li><b>只有管理员能用</b>，放在现有 <b>/admin</b> 管理后台里，普通用户和客户端看不到入口。</li>
+      <li><b>管理员全权</b>：建团队、改团队名、删团队、设成员，全部由管理员操作；没有「申请加入」「团队管理员」这类角色。</li>
+      <li><b>一个用户可以属于多个团队</b>（多对多）。<span>所以团队列表里成员数不是互斥的，用户管理页也不显示「所属团队」。</span></li>
+      <li><b>团队成员没有角色</b>，只有一份名单。</li>
+      <li><b>不做任何实际团队能力</b>：不共享资源、不带权限、不影响云盘/内容/会话的任何可见行为。这一步只把关系先立起来，供后续功能挂靠。</li>
+      <li>删除团队<b>只删团队和成员关系，不删用户账号</b>；用户被禁用也不影响其成员关系。</li>
+    </ol>
+  </div>
+
+  <div class="controls">
+    <span class="lbl">演示状态</span>
+    <div class="seg" id="stateSeg">
+      <button data-state="normal" aria-selected="true">有团队</button>
+      <button data-state="empty-teams">一个团队都没有</button>
+      <button data-state="empty-members">团队没有成员</button>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="shell">
+      <nav class="nav" id="nav"></nav>
+      <div class="main">
+        <div class="main-top" id="topbar"></div>
+        <div class="content" id="content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="layer"></div>
+
+<script>
+/* ============ 图标 ============ */
+const I = {
+  layout:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+  chart:'<path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 4-6"/>',
+  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>',
+  team:'<path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 11h-6"/><path d="M19 8v6"/>',
+  device:'<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>',
+  folder:'<path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-7l-2-2H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1z"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  warn:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  backup:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+  disk:'<path d="M22 12H2"/><path d="M5.5 12 8 5h8l2.5 7"/><path d="M2 12v5a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5"/><path d="M6 16h.01M10 16h.01"/>',
+  scroll:'<path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-3"/><path d="M8 3v4h8V3"/><path d="M8 13h8M8 17h5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  back:'<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  trash:'<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  minus:'<path d="M5 12h14"/>'
+}
+const svg = (d, cls) => `<svg class="ic ${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`
+
+/* ============ 数据 ============ */
+const ALL_USERS = [
+  { id:'u1', email:'liyang@synapse.d2.pub', handle:'liyang', status:'active' },
+  { id:'u2', email:'zhangyihao@example.com', handle:'zhangyihao', status:'active' },
+  { id:'u3', email:'wangfang@example.com', handle:'wangfang', status:'active' },
+  { id:'u4', email:'chenmo@example.com', handle:'chenmo', status:'active' },
+  { id:'u5', email:'liuyan@example.com', handle:'liuyan', status:'disabled' },
+  { id:'u6', email:'zhaolei@example.com', handle:'zhaolei', status:'active' },
+  { id:'u7', email:'sunqi@example.com', handle:'sunqi', status:'active' },
+]
+
+const STATE = {
+  view:'list',
+  teamId:null,
+  dialog:null,
+  query:'',
+  picked:new Set(),
+  demo:'normal',
+  teams:[
+    { id:'t1', name:'产品组', createdAt:'2026-09-10 14:22', members:[
+      { userId:'u1', joinedAt:'2026-09-10 14:22' },
+      { userId:'u2', joinedAt:'2026-09-11 09:40' },
+      { userId:'u3', joinedAt:'2026-09-12 16:08' },
+    ]},
+    { id:'t2', name:'研发组', createdAt:'2026-09-12 09:05', members:[
+      { userId:'u4', joinedAt:'2026-09-12 09:05' },
+      { userId:'u6', joinedAt:'2026-09-15 11:30' },
+    ]},
+    { id:'t3', name:'设计组', createdAt:'2026-09-15 17:41', members:[] },
+  ],
+}
+const teamById = id => STATE.teams.find(t => t.id === id)
+const userById = id => ALL_USERS.find(u => u.id === id)
+const visibleTeams = () => STATE.demo === 'empty-teams' ? [] : STATE.teams
+function visibleMembers(team){
+  if (STATE.demo === 'empty-members') return []
+  return team.members
+}
+
+/* ============ 渲染 ============ */
+const NAV = [
+  { title:'系统概览', url:'/system', icon:I.layout },
+  { title:'埋点统计', url:'/telemetry', icon:I.chart },
+  { title:'用户管理', url:'/users', icon:I.users },
+  { title:'团队', url:'/teams', icon:I.team },
+  { title:'设备', url:'/devices', icon:I.device },
+  { title:'Skill 仓库', url:'/skill-repositories', icon:I.folder },
+  { title:'Webhook 历史', url:'/webhook-deliveries', icon:I.history },
+  { title:'审计日志', url:'/audit-logs', icon:I.file },
+  { title:'问题反馈', url:'/problem-feedback', icon:I.warn },
+  { title:'备份', url:'/backup', icon:I.backup },
+  { title:'云盘管理', url:'/drive', icon:I.disk },
+  { title:'系统日志', url:'/logs', icon:I.scroll },
+]
+
+function renderNav(){
+  document.getElementById('nav').innerHTML =
+    `<div class="brand"><span class="mark"></span><span class="t">Synapse</span></div>
+     <div class="nav-group">管理</div>` +
+    NAV.map(item => {
+      const current = item.url === '/teams'
+      return `<button class="nav-item" ${current?'aria-current="page"':''}>
+        ${svg(item.icon)}<span>${item.title}</span></button>`
+    }).join('')
+}
+
+function renderTopbar(){
+  const team = STATE.view === 'detail' ? teamById(STATE.teamId) : null
+  document.getElementById('topbar').innerHTML = team
+    ? `<span class="crumb">团队 / <b>${esc(team.name)}</b></span>`
+    : `<span class="crumb"><b>团队</b></span>`
+}
+
+function renderContent(){
+  const box = document.getElementById('content')
+  box.innerHTML = STATE.view === 'detail' ? detailView() : listView()
+  bindContent()
+}
+
+function listView(){
+  const teams = visibleTeams()
+  if (teams.length === 0) {
+    return `<div class="page-head"><h2>团队</h2></div>
+      <div class="empty">
+        ${svg(I.team)}
+        <div class="t">还没有团队</div>
+        <div class="d">创建一个团队，然后把用户加进来。</div>
+        <button class="btn btn-primary btn-sm" data-act="open-create">${svg(I.plus)}新建团队</button>
+      </div>`
+  }
+  const rows = teams.map(t => {
+    const n = t.members.length
+    return `<tr data-click="1" data-act="open" data-id="${t.id}">
+      <td class="cell-name">${esc(t.name)}</td>
+      <td class="cell-dim num">${n} 人</td>
+      <td class="cell-dim">${t.createdAt}</td>
+      <td class="right"><button class="icon-btn" data-act="menu" data-id="${t.id}" aria-label="更多">${svg(I.more)}</button></td>
+    </tr>`
+  }).join('')
+  return `<div class="page-head">
+      <h2>团队</h2>
+      <span class="sub">共 ${teams.length} 个</span>
+      <span class="spacer"></span>
+      <button class="btn btn-primary btn-sm" data-act="open-create">${svg(I.plus)}新建团队</button>
+    </div>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>团队名称</th><th style="width:120px">成员</th><th style="width:180px">创建时间</th><th style="width:60px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`
+}
+
+function detailView(){
+  const team = teamById(STATE.teamId)
+  if (!team) return `<div class="empty"><div class="t">团队不存在</div></div>`
+  const members = visibleMembers(team)
+  const body = members.length === 0
+    ? `<div class="empty">
+        ${svg(I.users)}
+        <div class="t">这个团队还没有成员</div>
+        <div class="d">添加成员后，他们会出现在这里。</div>
+        <button class="btn btn-primary btn-sm" data-act="open-add">${svg(I.plus)}添加成员</button>
+      </div>`
+    : `<div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>邮箱</th><th style="width:150px">用户名</th><th style="width:100px">状态</th><th style="width:180px">加入时间</th><th style="width:100px"></th></tr></thead>
+        <tbody>${members.map(m => {
+          const u = userById(m.userId)
+          const disabled = u.status === 'disabled'
+          return `<tr>
+            <td>${esc(u.email)}</td>
+            <td class="cell-dim">${esc(u.handle)}</td>
+            <td>${disabled ? '<span class="badge badge-outline">已禁用</span>' : '<span class="badge badge-muted">正常</span>'}</td>
+            <td class="cell-dim">${m.joinedAt}</td>
+            <td class="right"><button class="btn btn-sm btn-ghost-destructive" data-act="ask-remove" data-id="${u.id}">移除</button></td>
+          </tr>`
+        }).join('')}</tbody>
+      </table></div>`
+
+  return `<div class="detail-head">
+      <button class="back-btn" data-act="back" aria-label="返回">${svg(I.back)}</button>
+      <h2>${esc(team.name)}</h2>
+      <span class="sub">${team.members.length} 名成员 · 创建于 ${team.createdAt}</span>
+      <span class="spacer"></span>
+      <button class="icon-btn" data-act="menu" data-id="${team.id}" aria-label="更多">${svg(I.more)}</button>
+    </div>
+    <div class="section"><h3>成员</h3><span class="sub"></span><span class="spacer"></span>
+      <button class="btn btn-outline btn-sm" data-act="open-add">${svg(I.plus)}添加成员</button>
+    </div>
+    ${body}`
+}
+
+/* ============ 对话框 ============ */
+function dialogHTML(){
+  if (!STATE.dialog) return ''
+  if (STATE.dialog === 'create') {
+    const v = STATE._name ?? ''
+    return `<div class="overlay" data-act="overlay">
+      <div class="dialog" role="dialog">
+        <div class="t">新建团队</div>
+        <div class="field" style="margin-top:14px">
+          <label class="label" for="nameInput">团队名称</label>
+          <input class="input" id="nameInput" value="${esc(v)}" placeholder="例如：产品组" autocomplete="off">
+          <div class="hint ${STATE._nameErr?'err':''}" id="nameHint">${STATE._nameErr || '1–30 个字符，不能与已有团队重名。'}</div>
+        </div>
+        <div class="acts">
+          <button class="btn btn-outline" data-act="close">取消</button>
+          <button class="btn btn-primary" data-act="create" ${v.trim()?'':'disabled'}>创建</button>
+        </div>
+      </div></div>`
+  }
+  if (STATE.dialog === 'rename') {
+    const team = teamById(STATE.teamId)
+    const v = STATE._name ?? team.name
+    return `<div class="overlay" data-act="overlay">
+      <div class="dialog" role="dialog">
+        <div class="t">重命名团队</div>
+        <div class="field" style="margin-top:14px">
+          <label class="label" for="nameInput">团队名称</label>
+          <input class="input" id="nameInput" value="${esc(v)}" autocomplete="off">
+          <div class="hint ${STATE._nameErr?'err':''}" id="nameHint">${STATE._nameErr || ''}</div>
+        </div>
+        <div class="acts">
+          <button class="btn btn-outline" data-act="close">取消</button>
+          <button class="btn btn-primary" data-act="rename" ${v.trim()?'':'disabled'}>保存</button>
+        </div>
+      </div></div>`
+  }
+  if (STATE.dialog === 'delete') {
+    const team = teamById(STATE.teamId)
+    const n = team.members.length
+    return `<div class="overlay" data-act="overlay">
+      <div class="dialog" role="dialog">
+        <div class="t">删除团队「${esc(team.name)}」？</div>
+        <div class="d">${n > 0 ? `${n} 名成员不会因此被删除，只是不再属于这个团队。` : '这个团队还没有成员。'}此操作无法撤销。</div>
+        <div class="acts">
+          <button class="btn btn-outline" data-act="close">取消</button>
+          <button class="btn btn-primary" data-act="delete">删除</button>
+        </div>
+      </div></div>`
+  }
+  if (STATE.dialog === 'remove') {
+    const u = userById(STATE._target)
+    return `<div class="overlay" data-act="overlay">
+      <div class="dialog" role="dialog">
+        <div class="t">把 ${esc(u.email)} 移出团队？</div>
+        <div class="d">${u.handle} 的账号不受影响，其他团队的成员关系也不变。</div>
+        <div class="acts">
+          <button class="btn btn-outline" data-act="close">取消</button>
+          <button class="btn btn-primary" data-act="remove">移除</button>
+        </div>
+      </div></div>`
+  }
+  if (STATE.dialog === 'add') {
+    const team = teamById(STATE.teamId)
+    const has = new Set(team.members.map(m => m.userId))
+    const q = STATE.query.trim().toLowerCase()
+    const cands = ALL_USERS
+      .filter(u => !has.has(u.id))
+      .filter(u => !q || u.email.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q))
+    const list = cands.length
+      ? cands.map(u => {
+          const on = STATE.picked.has(u.id)
+          return `<button class="pick" data-act="toggle" data-id="${u.id}" aria-checked="${on}">
+            <span class="box">${svg(I.check)}</span>
+            <span class="pick-main">
+              <span class="pick-mail">${esc(u.email)}</span>
+              <span class="pick-sub">${esc(u.handle)}${u.status==='disabled'?' · 已禁用':''}</span>
+            </span>
+          </button>`
+        }).join('')
+      : `<div class="picker-empty">没有可以添加的用户</div>`
+    const n = STATE.picked.size
+    return `<div class="overlay" data-act="overlay">
+      <div class="dialog dialog-wide" role="dialog">
+        <div class="t">添加成员</div>
+        <div class="d">已在本团队的用户不会出现在列表里。</div>
+        <div class="picker">
+          <div class="picker-search">
+            <input class="input" id="pickSearch" value="${esc(STATE.query)}" placeholder="搜索邮箱或用户名" autocomplete="off">
+          </div>
+          <div class="picker-list" id="pickList">${list}</div>
+          <div class="picker-foot">
+            <span class="n" id="pickCount">已选 ${n} 人</span>
+            <span class="spacer"></span>
+            <button class="btn btn-outline btn-sm" data-act="close">取消</button>
+            <button class="btn btn-primary btn-sm" data-act="confirm-add" ${n?'':'disabled'}>添加</button>
+          </div>
+        </div>
+      </div></div>`
+  }
+  return ''
+}
+
+function renderLayer(){
+  document.getElementById('layer').innerHTML = dialogHTML()
+  const input = document.getElementById('nameInput')
+  if (input) {
+    input.focus()
+    input.setSelectionRange(input.value.length, input.value.length)
+    // 只更新受影响的部分：整层重渲染会让光标跳回末尾。
+    input.oninput = e => {
+      STATE._name = e.target.value
+      STATE._nameErr = ''
+      const hint = document.getElementById('nameHint')
+      if (hint) { hint.textContent = STATE.dialog === 'create' ? '1–30 个字符，不能与已有团队重名。' : ''; hint.classList.remove('err') }
+      const ok = document.querySelector('[data-act="create"],[data-act="rename"]')
+      if (ok) ok.disabled = !STATE._name.trim()
+    }
+    input.onkeydown = e => { if (e.key === 'Enter') submitName() }
+  }
+  const search = document.getElementById('pickSearch')
+  if (search) {
+    search.focus()
+    search.oninput = e => { STATE.query = e.target.value; refreshPicker() }
+  }
+}
+
+function refreshPicker(){
+  const team = teamById(STATE.teamId)
+  const has = new Set(team.members.map(m => m.userId))
+  const q = STATE.query.trim().toLowerCase()
+  const cands = ALL_USERS
+    .filter(u => !has.has(u.id))
+    .filter(u => !q || u.email.toLowerCase().includes(q) || u.handle.toLowerCase().includes(q))
+  document.getElementById('pickList').innerHTML = cands.length
+    ? cands.map(u => {
+        const on = STATE.picked.has(u.id)
+        return `<button class="pick" data-act="toggle" data-id="${u.id}" aria-checked="${on}">
+          <span class="box">${svg(I.check)}</span>
+          <span class="pick-main">
+            <span class="pick-mail">${esc(u.email)}</span>
+            <span class="pick-sub">${esc(u.handle)}${u.status==='disabled'?' · 已禁用':''}</span>
+          </span>
+        </button>`
+      }).join('')
+    : `<div class="picker-empty">没有可以添加的用户</div>`
+  document.getElementById('pickCount').textContent = `已选 ${STATE.picked.size} 人`
+  const ok = document.querySelector('[data-act="confirm-add"]')
+  if (ok) ok.disabled = STATE.picked.size === 0
+}
+
+function renderAll(){ renderNav(); renderTopbar(); renderContent(); renderLayer() }
+
+/* ============ 行为 ============ */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
+function toast(msg){
+  const el = document.createElement('div')
+  el.className = 'toast'; el.textContent = msg
+  document.body.appendChild(el)
+  setTimeout(() => el.remove(), 1900)
+}
+
+function submitName(){
+  const v = (STATE._name ?? '').trim()
+  if (!v) return
+  if (v.length > 30) { STATE._nameErr = '团队名称不能超过 30 个字符。'; renderLayer(); return }
+  const dup = STATE.teams.some(t => t.name === v && (STATE.dialog === 'create' || t.id !== STATE.teamId))
+  if (dup) { STATE._nameErr = '已存在同名团队。'; renderLayer(); return }
+  if (STATE.dialog === 'create') {
+    const id = 't' + (STATE.teams.length + 1) + Date.now().toString(36).slice(-3)
+    STATE.teams.push({ id, name:v, createdAt:'2026-09-19 10:30', members:[] })
+    STATE.dialog = null; STATE._name = ''
+    toast('已创建团队')
+  } else {
+    teamById(STATE.teamId).name = v
+    STATE.dialog = null; STATE._name = ''
+    toast('已保存')
+  }
+  renderAll()
+}
+
+function openMenu(anchor, id){
+  closeMenu()
+  const menu = document.createElement('div')
+  menu.className = 'menu'
+  menu.innerHTML = `<button data-m="rename">${svg(I.pencil)}重命名</button><div class="sep"></div><button class="danger" data-m="delete">${svg(I.trash)}删除团队</button>`
+  document.body.appendChild(menu)
+  const r = anchor.getBoundingClientRect()
+  menu.style.left = Math.min(r.right - 180, window.innerWidth - 190) + 'px'
+  menu.style.top = (r.bottom + 6) + 'px'
+  menu.onclick = e => {
+    const m = e.target.closest('[data-m]')?.dataset.m
+    if (!m) return
+    closeMenu()
+    if (m === 'rename') { STATE.teamId = id; STATE.dialog='rename'; STATE._name = null; STATE._nameErr=''; renderAll() }
+    if (m === 'delete') { STATE.teamId = id; STATE.dialog='delete'; renderAll() }
+  }
+  setTimeout(() => document.addEventListener('click', closeMenu, { once:true }), 0)
+}
+function closeMenu(){ document.querySelectorAll('.menu').forEach(m => m.remove()) }
+
+function bindContent(){
+  document.getElementById('content').onclick = e => {
+    const el = e.target.closest('[data-act]')
+    if (!el) return
+    const act = el.dataset.act
+    const id = el.dataset.id
+    if (act === 'open') { STATE.view='detail'; STATE.teamId=id; renderAll(); return }
+    if (act === 'back') { STATE.view='list'; STATE.teamId=null; renderAll(); return }
+    if (act === 'menu') { e.stopPropagation(); openMenu(el, id); return }
+    if (act === 'open-create') { STATE.dialog='create'; STATE._name=''; STATE._nameErr=''; renderAll(); return }
+    if (act === 'open-add') { STATE.dialog='add'; STATE.query=''; STATE.picked=new Set(); renderAll(); return }
+    if (act === 'ask-remove') { STATE.dialog='remove'; STATE._target=id; renderAll(); return }
+  }
+}
+
+document.getElementById('layer').onclick = e => {
+  const el = e.target.closest('[data-act]')
+  const act = el ? el.dataset.act : (e.target.id === 'layer' ? 'overlay' : null)
+  if (!act) return
+  if (act === 'overlay') { STATE.dialog=null; STATE.picked=new Set(); renderAll(); return }
+  if (act === 'close') { STATE.dialog=null; STATE.picked=new Set(); renderAll(); return }
+  if (act === 'create' || act === 'rename') { submitName(); return }
+  if (act === 'delete') {
+    const id = STATE.teamId
+    STATE.teams = STATE.teams.filter(t => t.id !== id)
+    STATE.dialog=null; STATE.view='list'; STATE.teamId=null
+    toast('已删除团队'); renderAll(); return
+  }
+  if (act === 'toggle') {
+    const id = el.dataset.id
+    STATE.picked.has(id) ? STATE.picked.delete(id) : STATE.picked.add(id)
+    el.setAttribute('aria-checked', String(STATE.picked.has(id)))
+    refreshPicker(); return
+  }
+  if (act === 'confirm-add') {
+    const team = teamById(STATE.teamId)
+    STATE.picked.forEach(uid => team.members.push({ userId:uid, joinedAt:'2026-09-19 10:30' }))
+    STATE.dialog=null; STATE.picked=new Set()
+    toast('已添加成员'); renderAll(); return
+  }
+  if (act === 'remove') {
+    const team = teamById(STATE.teamId)
+    team.members = team.members.filter(m => m.userId !== STATE._target)
+    STATE.dialog=null
+    toast('已移出团队'); renderAll(); return
+  }
+}
+
+document.getElementById('stateSeg').onclick = e => {
+  const s = e.target.closest('[data-state]')?.dataset.state
+  if (!s) return
+  STATE.demo = s
+  STATE.view = 'list'; STATE.teamId = null; STATE.dialog = null
+  ;[...e.currentTarget.children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.state === s)))
+  if (s === 'empty-members') { STATE.view='detail'; STATE.teamId='t3' }
+  renderAll()
+}
+
+document.getElementById('themeBtn').onclick = e => {
+  const dark = document.documentElement.dataset.theme === 'dark'
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark'
+  e.currentTarget.textContent = dark ? '深色' : '浅色'
+}
+
+renderAll()
+</script>
+</body>
+</html>
