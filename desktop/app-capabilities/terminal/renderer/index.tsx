@@ -1333,8 +1333,10 @@ export function TerminalModule({
       if (!session?.sessionRef) throw new Error("Terminal session reference is unavailable")
       await navigator.clipboard.writeText(buildTerminalSessionReferenceText({
         workspaceId: workspace.id,
-        sessionRef: session.sessionRef,
+        workspaceTitle: workspace.title,
         sessionId: session.id,
+        sessionTitle: session.title,
+        sessionRef: session.sessionRef,
       }))
       toast("引用已复制，仅本次运行有效")
     } catch (rawError) {

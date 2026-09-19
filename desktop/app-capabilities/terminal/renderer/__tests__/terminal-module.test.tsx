@@ -1160,8 +1160,10 @@ describe("TerminalModule", () => {
 
     expect(writeText).toHaveBeenCalledWith([
       "workspace_id=workspace-session-2",
-      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
+      "workspace_title=日志终端",
       "session_id=session-2",
+      "session_title=日志终端",
+      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
     ].join("\n"))
     const navigation = document.querySelector('[aria-label="活动终端标签"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
@@ -1258,8 +1260,10 @@ describe("TerminalModule", () => {
 
     expect(writeText).toHaveBeenCalledWith([
       "workspace_id=workspace-session-1",
-      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
+      "workspace_title=开发终端",
       "session_id=session-1",
+      "session_title=开发终端",
+      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
     ].join("\n"))
   })
 
@@ -1283,8 +1287,10 @@ describe("TerminalModule", () => {
 
     expect(writeText).toHaveBeenCalledWith([
       "workspace_id=workspace-session-1",
-      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
+      "workspace_title=开发终端",
       "session_id=session-1",
+      "session_title=开发终端",
+      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
     ].join("\n"))
   })
 
@@ -1484,8 +1490,10 @@ describe("TerminalModule", () => {
 
     expect(writeText).toHaveBeenCalledWith([
       "workspace_id=workspace-session-1",
-      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
+      "workspace_title=开发终端",
       "session_id=session-1",
+      "session_title=开发终端",
+      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
     ].join("\n"))
   })
 

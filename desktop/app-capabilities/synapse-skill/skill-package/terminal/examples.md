@@ -71,7 +71,7 @@ Example request: "Check the Codex terminal, show me recent history, and tell me 
 
 Example request: "I opened another Claude Code in that terminal — go find it and supervise it", followed by a pasted Terminal reference.
 
-1. Take the `session_id` line from the pasted text; ask for the full three lines when it is incomplete. `session_id` addresses the session and `workspace_id` addresses the tab holding it; `session_ref` is for people and cannot be reversed into an id.
+1. Take the `session_id` line from the pasted text; ask for the full reference when it is incomplete. `session_id` addresses the session and `workspace_id` addresses the tab holding it; the `_title` lines name both for a person, so use them when you report back which terminal you acted on; `session_ref` is decorative and cannot be reversed into an id.
 2. Call `app_terminal_session_state_get` with that id and read `tty` and `agent` along with lifecycle.
 3. Resolve which Claude Code session occupies that terminal: `ps -t <tty>` for the pid, then that pid's own session registry entry (`~/.claude/sessions/<pid>.json`) for its session name. Refuse to guess — if the device matches more than one process or the registry has no entry, report that instead of picking the closest-looking name.
 4. Talk to it the way its own tooling expects (its peer-message tool, addressed by the name you resolved) rather than polling its screen.

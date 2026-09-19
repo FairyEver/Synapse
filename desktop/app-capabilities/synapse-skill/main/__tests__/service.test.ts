@@ -562,16 +562,25 @@ describe("SynapseSkillService", () => {
      */
     expect(terminalIndex).toContain("SYNAPSE_TERMINAL_SESSION_ID")
     /*
-     * 实测里规矩失效的原因是把规则钉在了一个字面短语上：指南写的是 outranks the phrase
-     * "this terminal"，而用户说的是「这个对话」，于是粘贴的引用被整个忽略，agent 拿自己
-     * 环境里的 id 当成了目标。优先规则必须覆盖任何指示词，不是某一个说法。
+     * 两次实测里引用被整个忽略，都是因为指南先给了结论而不是先给事实：它先说「『这个终端』
+     * 就是你自己的 id」，又写了一条钉在字面短语上的优先规则（用户说「这个对话」就不触发）。
+     * 现在这里只陈述事实——引用是消息里唯一点名了终端的东西，指示词什么也没点名——把
+     * 「所以该用哪个」留给它自己去查。
      */
-    expect(terminalIndex).toContain("outranks anything deictic")
+    expect(terminalIndex).toContain("is the one thing in the message that names a terminal")
+    expect(terminalIndex).toContain("names nothing you can see")
     /*
-     * 同一次实测里更重的一条：agent 读到自己就是那个会话的前台程序后，未经询问就给用户
-     * 右侧开了一格分屏，把 Codex 起在了那里。绕过限制的动作必须由用户先提出来。
+     * 同一次实测里更重的一条：agent 认定目标就是自己之后，径直给自己那格旁边开了一个 pane。
+     * 现在只陈述「那个 agent 就是你」，不再给补救动作——给补救动作就是给分支，而它会在前提
+     * 为假时照样执行那个分支。
      */
-    expect(terminalIndex).toContain("on your own initiative")
+    expect(terminalIndex).toContain("the agent in it is you")
+    /*
+     * 引用从三行变五行，多了两个给人认的标题。指南不跟着说，那两行在 agent 眼里就是没有来历的
+     * 噪声；说了，它才可能拿标题回报「我动的是哪一个」。
+     */
+    expect(terminalIndex).toContain("workspace_title")
+    expect(terminalIndex).toContain("session_title")
     /*
      * 三次真机失败是同一类毛病：agent 不知道自己处在什么位置。实测里它为确认一个别名，先翻自己的
      * 环境、再递归 grep 整个 home（跑了一分半）。钉住的是那条能生成这些具体规则的原则，而不是
