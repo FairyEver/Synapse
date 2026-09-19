@@ -13,6 +13,11 @@ import {
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
 import { PrismaService } from "../prisma/prisma.service"
+import {
+  inspectMeetingAudioContainer,
+  MEETING_AUDIO_PROBE_BYTES,
+  type MeetingAudioInspection,
+} from "./meeting-audio-container"
 import { meetingConfigToken, type MeetingConfig } from "./meeting.config"
 import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage.service"
 import { parseTencentTranscript } from "./meeting-transcript-parser"
@@ -77,6 +82,25 @@ export class MeetingTranscriptionService {
     const recording = job.meeting.recording
     if (!recording || recording.status !== "ready") {
       await this.failJob(job.id, meetingId, "这段录音已经没有了，无法转写。")
+      return
+    }
+
+    // 提交之前先看一眼容器写完了没有。放在这里而不是各端的收尾里：手动重试、定时重投
+    // 也都会经过这一处，而且这是最后一次能在花钱调引擎之前拦住坏文件的地方。
+    let inspection: MeetingAudioInspection
+    try {
+      inspection = await this.inspectContainer(recording.storageKey, Number(recording.size))
+    } catch (error) {
+      // 读对象失败属于暂时性问题，和网络抖动同类：记一次，下一轮再来。
+      await this.recordAttemptFailure(job.id, meetingId, error)
+      return
+    }
+    if (!inspection.ok) {
+      // 结构上就不完整的音频，引擎同样读不出来——这不是「晚一点开始」，是永远不会成功。
+      // 当场判失败：不浪费一次引擎调用，用户拿到的是中文原因，而不是等一轮轮询之后一句
+      // 英文的 `Invalid audio file!`。
+      this.logger.warn({ meetingId, reason: inspection.reason }, "Meeting recording container is not usable")
+      await this.failJob(job.id, meetingId, inspection.reason)
       return
     }
 
@@ -246,6 +270,27 @@ export class MeetingTranscriptionService {
         )
       }
     }
+  }
+
+  /**
+   * 拉对象头尾两段，看容器写完没有。
+   *
+   * 只看得见头尾：非分片的 m4a 把 `moov` 放在最后，分片的 fMP4 把它放在最前，两端各看
+   * 一段就够，不必把整条录音（一场五小时的是 140 MB）拉下来。判定逻辑是纯的，在
+   * `meeting-audio-container.ts` 里，有它自己的单测。
+   */
+  private async inspectContainer(storageKey: string, totalBytes: number): Promise<MeetingAudioInspection> {
+    const probe = MEETING_AUDIO_PROBE_BYTES
+    // 对象比两个窗口加起来还小的时候两次读会重叠，直接整段读一次更简单。
+    if (totalBytes <= probe * 2) {
+      const whole = await this.storage.readObjectRange(storageKey, 0, Math.max(0, totalBytes - 1))
+      return inspectMeetingAudioContainer({ head: whole, tail: null, totalBytes })
+    }
+    const [head, tail] = await Promise.all([
+      this.storage.readObjectRange(storageKey, 0, probe - 1),
+      this.storage.readObjectRange(storageKey, totalBytes - probe, totalBytes - 1),
+    ])
+    return inspectMeetingAudioContainer({ head, tail, totalBytes })
   }
 
   private credentials(): TencentAsrCredentials | null {

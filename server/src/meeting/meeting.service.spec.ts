@@ -106,6 +106,7 @@ beforeEach(() => {
     headObject: vi.fn(async () => null),
     createDownloadUrl: vi.fn(async () => "https://example.invalid/a"),
     getObjectStream: vi.fn(),
+    readObjectRange: vi.fn(),
     deleteObject: vi.fn(async () => undefined),
     listStaleMultipartUploads: vi.fn(async () => []),
   }

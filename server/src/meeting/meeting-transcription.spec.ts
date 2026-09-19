@@ -69,8 +69,29 @@ const config: MeetingConfig = {
 }
 
 let prisma: PrismaMock
-let storage: { createDownloadUrl: MockFn; deleteObject: MockFn; listStaleMultipartUploads: MockFn }
+let storage: {
+  createDownloadUrl: MockFn
+  deleteObject: MockFn
+  listStaleMultipartUploads: MockFn
+  readObjectRange: MockFn
+}
 let service: MeetingTranscriptionService
+
+/**
+ * 一个结构完整的分片 m4a 开头：`ftyp` 之后紧跟 `moov`。
+ *
+ * 提交之前那道容器校验默认要能过，否则每一条用例都会撞在「音频不完整」上，测不到它本来
+ * 要测的东西。要测拦截的那几条自己把桩换成坏字节。
+ */
+function validContainerHead(): Buffer {
+  const ftyp = Buffer.alloc(28)
+  ftyp.writeUInt32BE(28, 0)
+  ftyp.write("ftyp", 4, "latin1")
+  const moov = Buffer.alloc(16)
+  moov.writeUInt32BE(16, 0)
+  moov.write("moov", 4, "latin1")
+  return Buffer.concat([ftyp, moov])
+}
 
 function jobRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -81,7 +102,9 @@ function jobRow(overrides: Record<string, unknown> = {}) {
     attempts: 0,
     taskId: null,
     expiresAt: null,
-    meeting: { recording: { status: "ready", storageKey: "meeting-recordings/rec-1" } },
+    meeting: {
+      recording: { status: "ready", storageKey: "meeting-recordings/rec-1", size: BigInt(5 * 1024 * 1024) },
+    },
     ...overrides,
   }
 }
@@ -93,6 +116,7 @@ beforeEach(() => {
     createDownloadUrl: vi.fn(async () => "https://example.invalid/signed-audio"),
     deleteObject: vi.fn(async () => undefined),
     listStaleMultipartUploads: vi.fn(async () => []),
+    readObjectRange: vi.fn(async () => validContainerHead()),
   }
   service = new MeetingTranscriptionService(
     prisma as unknown as PrismaService,
@@ -168,6 +192,44 @@ describe("提交转写任务", () => {
     await service.submit("meeting-1")
     const update = prisma.meetingTranscriptionJob.update.mock.calls[0][0]
     expect(update.data).not.toHaveProperty("attempts")
+  })
+
+  /**
+   * 手机上那种「停止录音之前就把字节传完」的文件，容器结构就没写完。引擎一样读不出来，
+   * 差别只在于：提交上去要等一轮轮询、拿回一句英文的 `Invalid audio file!`，而在这里挡
+   * 下来是当场给中文原因，还省下一次引擎调用。
+   */
+  it("容器没写完就当场判失败，不提交给引擎", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
+    const ftyp = Buffer.alloc(28)
+    ftyp.writeUInt32BE(28, 0)
+    ftyp.write("ftyp", 4, "latin1")
+    // 线上那次真实故障的形状：合法的 ftyp 之后跟着一大段零占位，通篇没有 moov。
+    storage.readObjectRange.mockResolvedValue(Buffer.concat([ftyp, Buffer.alloc(8192)]))
+
+    await service.submit("meeting-1")
+
+    expect(createRecTaskMock).not.toHaveBeenCalled()
+    expect(prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "failed" })
+    const meetingUpdate = prisma.meeting.update.mock.calls.at(-1)?.[0].data
+    expect(meetingUpdate).toMatchObject({ status: "failed" })
+    // 给用户的原因必须是中文的、说得出所以然的，不是引擎那一句。
+    expect(meetingUpdate.failureReason).toContain("不完整")
+  })
+
+  /** 读对象失败是暂时性问题，和网络抖动同一类：记一次等下一轮，不能据此把这条判死。 */
+  it("读对象失败当抖动处理，退回队列等下一轮", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
+    storage.readObjectRange.mockRejectedValue(new Error("socket 挂了"))
+
+    await service.submit("meeting-1")
+
+    expect(createRecTaskMock).not.toHaveBeenCalled()
+    expect(prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data).toMatchObject({
+      status: "pending",
+      taskId: null,
+    })
+    expect(prisma.meeting.update).not.toHaveBeenCalled()
   })
 
   it("录音已经删掉时不提交，并写明原因", async () => {

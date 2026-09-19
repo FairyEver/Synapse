@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common"
 import COS from "cos-nodejs-sdk-v5"
 import { createReadStream } from "node:fs"
-import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import { randomUUID } from "node:crypto"
 import os from "node:os"
@@ -82,6 +82,13 @@ export interface MeetingStoragePort {
   headObject(key: string): Promise<MeetingStorageObjectInfo | null>
   createDownloadUrl(key: string, ttlSeconds: number): Promise<string>
   getObjectStream(key: string): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint }>
+  /**
+   * 读对象的一段字节，两端都含在内。
+   *
+   * 收尾时校验容器只看得见头尾两段，为此把整个对象拉下来（一场五小时的会是 140 MB）
+   * 不可接受。
+   */
+  readObjectRange(key: string, start: number, end: number): Promise<Buffer>
   deleteObject(key: string): Promise<void>
   /**
    * 清掉超过 `olderThanMs` 还没完成的分块上传。
@@ -224,6 +231,16 @@ export class CosMeetingStorage implements MeetingStoragePort {
     // `getObjectStream` 是同步返回 Stream 的，不走回调也不返回 Promise。
     const stream = cos.getObjectStream({ Bucket: bucket, Region: region, Key: key }) as unknown as NodeJS.ReadableStream
     return { stream, size: info.size }
+  }
+
+  async readObjectRange(key: string, start: number, end: number): Promise<Buffer> {
+    const { cos, bucket, region } = this.getClient()
+    return new Promise<Buffer>((resolve, reject) => {
+      cos.getObject(
+        { Bucket: bucket, Region: region, Key: key, Range: `bytes=${start}-${end}` },
+        (error, data) => (error ? reject(error) : resolve(data.Body as Buffer)),
+      )
+    })
   }
 
   async deleteObject(key: string): Promise<void> {
@@ -422,6 +439,19 @@ export class LocalMeetingStorage implements MeetingStoragePort {
     const info = await this.headObject(key)
     if (!info) throw Object.assign(new Error("Meeting recording not found."), { statusCode: 404 })
     return { stream: createReadStream(this.objectPath(key)), size: info.size }
+  }
+
+  async readObjectRange(key: string, start: number, end: number): Promise<Buffer> {
+    const target = this.objectPath(key)
+    const handle = await open(target, "r")
+    try {
+      const length = Math.max(0, end - start + 1)
+      const buffer = Buffer.alloc(length)
+      const { bytesRead } = await handle.read(buffer, 0, length, start)
+      return buffer.subarray(0, bytesRead)
+    } finally {
+      await handle.close()
+    }
   }
 
   async deleteObject(key: string): Promise<void> {
