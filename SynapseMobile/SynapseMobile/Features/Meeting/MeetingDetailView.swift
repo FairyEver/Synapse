@@ -351,12 +351,19 @@ private struct MeetingTextPane: View {
     }
 
     private var emptyState: some View {
-        Text(detail.status == "transcribing" ? "文字会随转写进度补上来。" : "这段录音里没有识别到语音。")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .surfaceCard()
+        VStack(alignment: .leading, spacing: 4) {
+            Text("还没有文字")
+                .font(.subheadline)
+            // 转写还没跑完的时候不说「没有识别到语音」——那是一个结论，现在还不知道。
+            if detail.status != "transcribing" {
+                Text("这段录音里没有识别到语音。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .surfaceCard()
     }
 
     /// 复制全文。**没有文字时置灰，不是隐藏**——旁边的东西跟着跳位比一个灰色的按钮更糟。

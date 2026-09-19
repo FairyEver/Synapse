@@ -54,8 +54,19 @@ final class MeetingRecordingSession {
     private var persistedParts = 0
     /// 没拿到麦克风权限。**不阻断录音**，只是波形不作数，提示行要说明这一点。
     private var microphoneDenied = false
+    /// 正在起一条新的。
+    ///
+    /// `phase` 要等服务端回来才变成 `.recording`，而进录音页的入口不止一个（列表的加号
+    /// 和意图那两条路径会在同一瞬间各叫一次）。只看 `phase` 的话，两边都会在 await 窗口
+    /// 里看到「没在录」，于是各发一次 `POST /meetings/recordings`——服务端多一条孤儿记录，
+    /// 本机多一个采集器。
+    private var isStarting = false
 
     var isRecording: Bool { phase == .recording || phase == .paused }
+
+    /// 到了 5 小时上限被自动收尾了。列表据此说一声——那条录音会照常产生转写费用，用户
+    /// 该知道它为什么自己停了。
+    private(set) var didHitDurationLimit = false
 
     /// 同时最多回看的振幅个数。5 秒 ÷ 28 毫秒，和电脑端同一个窗口。
     private var windowSlots: Int {
@@ -66,7 +77,12 @@ final class MeetingRecordingSession {
 
     /// 点加号就直接进这一条：**不先起名字**，名字事后在详情页改。
     func start(using client: APIClient) async {
-        guard phase == .idle else { return }
+        // 收尾（`.saving`）期间也允许开新的一条：两条各自抓着自己那套采集器和上传器，
+        // 互不干扰。拦住的话，用户点完「完成」马上再点加号会什么也没发生。
+        guard !isRecording, !isStarting else { return }
+        isStarting = true
+        didHitDurationLimit = false
+        defer { isStarting = false }
         self.client = client
         levels = []
         elapsedMs = 0
@@ -119,11 +135,27 @@ final class MeetingRecordingSession {
             }
         } catch let error as APIError {
             hint = .uploadFailed(error.message)
-            phase = .idle
+            abandonFailedStart()
         } catch {
             hint = .uploadFailed("录音没能开始，请稍后再试。")
-            phase = .idle
+            abandonFailedStart()
         }
+    }
+
+    /// 起不来的那一次留下的痕迹收拾干净。
+    ///
+    /// 重点是本机那条待收尾记录：它建在 `makeRecorder` 之前，而采集器起不来时本机连音
+    /// 频都没有——留着它，下次启动会去收一条没有音频的录音。
+    private func abandonFailedStart() {
+        if let record = pending {
+            PendingMeetingRecordingStore.remove(recordingId: record.recordingId)
+        }
+        pending = nil
+        recorder = nil
+        uploader = nil
+        ticker?.cancel()
+        ticker = nil
+        phase = .idle
     }
 
     /// 麦克风权限是**问过之后才知道**的，而它影响的是波形作不作数，不影响能不能录，
@@ -154,20 +186,39 @@ final class MeetingRecordingSession {
     /// 上了，这里只补最后那一片。
     func finish() {
         guard phase == .recording || phase == .paused else { return }
+        // **把这一条的东西就地抓下来**，不是收尾时再去读实例属性：收尾要跑一会儿，而
+        // 用户完全可以在这段时间里再点一次加号。再读 self 的话，收的是新那条的尾、走
+        // 的却是旧那条的单。
+        let recorder = self.recorder
+        let uploader = self.uploader
+        let record = pending
         let durationMs = recorder?.durationMs ?? 0
         let peaks = peakStore.encode()
-        let record = pending
         stopCapture()
         phase = .saving
+        self.recorder = nil
+        self.uploader = nil
 
         Task { [weak self] in
-            await self?.complete(record: record, durationMs: durationMs, peaks: peaks)
+            await self?.complete(
+                record: record,
+                recorder: recorder,
+                uploader: uploader,
+                durationMs: durationMs,
+                peaks: peaks
+            )
         }
     }
 
-    private func complete(record: PendingMeetingRecording?, durationMs: Int, peaks: String) async {
+    private func complete(
+        record: PendingMeetingRecording?,
+        recorder: MeetingRecorder?,
+        uploader: MeetingUploader?,
+        durationMs: Int,
+        peaks: String
+    ) async {
         guard let record, let client else {
-            phase = .idle
+            finishSaving(recordingId: record?.recordingId)
             return
         }
         // 编码器是停下来之后才写最后那几个字节的，这一批就是「结束只补尾片」里的
@@ -193,24 +244,42 @@ final class MeetingRecordingSession {
                 "recording complete failed, leaving it for the next launch: \(error.localizedDescription, privacy: .public)"
             )
         }
-        reset()
+        finishSaving(recordingId: record.recordingId)
     }
 
     /// 取消：服务端中止分块上传并丢弃已传分片，本机这一份也删掉。
     func cancel() {
         guard phase == .recording || phase == .paused else { return }
         let record = pending
+        let uploader = self.uploader
         stopCapture()
         phase = .saving
+        self.recorder = nil
+        self.uploader = nil
 
         Task { [weak self] in
             guard let self else { return }
-            await self.uploader?.cancel()
+            await uploader?.cancel()
             if let record {
                 self.discardLocalFiles(record.recordingId)
             }
-            self.reset()
+            self.finishSaving(recordingId: record?.recordingId)
         }
+    }
+
+    /// 收尾跑完了，把这一条留下来的状态清掉。
+    ///
+    /// **只在还是这一条的时候清**：收尾期间用户可能已经开了新的录音，那时候 `pending`
+    /// 指向的是新那条，把界面状态清掉等于把刚开始的录音抹了。
+    private func finishSaving(recordingId: String?) {
+        guard pending?.recordingId == recordingId else { return }
+        pending = nil
+        phase = .idle
+        hint = .none
+        levels = []
+        elapsedMs = 0
+        title = ""
+        meetingId = nil
     }
 
     private func stopCapture() {
@@ -224,18 +293,6 @@ final class MeetingRecordingSession {
         if let url = try? MeetingRecordingFiles.audioURL(recordingId: recordingId) {
             try? FileManager.default.removeItem(at: url)
         }
-    }
-
-    private func reset() {
-        recorder = nil
-        uploader = nil
-        pending = nil
-        phase = .idle
-        hint = .none
-        levels = []
-        elapsedMs = 0
-        title = ""
-        meetingId = nil
     }
 
     // MARK: - 采样
@@ -266,8 +323,9 @@ final class MeetingRecordingSession {
 
         updateHint()
 
-        // 到上限自动收尾，不无限录下去。
-        if elapsedMs >= MeetingAudio.maxDurationMs {
+        // 到上限自动收尾，不无限录下去。这是一次用户没按的结束，列表要替它说一声。
+        if elapsedMs >= MeetingAudio.maxDurationMs, isRecording {
+            didHitDurationLimit = true
             finish()
         }
     }

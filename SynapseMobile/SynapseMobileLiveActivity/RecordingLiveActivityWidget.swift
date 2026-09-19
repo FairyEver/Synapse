@@ -30,10 +30,8 @@ struct RecordingLiveActivityWidget: Widget {
                     Image(systemName: "waveform")
                         .foregroundStyle(.tint)
                 }
+                // 计时只放一处。上排左边那个位置留给录音这件事本身（波形），右边是计时。
                 DynamicIslandExpandedRegion(.trailing) {
-                    RecordingTimer(state: context.state)
-                }
-                DynamicIslandExpandedRegion(.center) {
                     RecordingTimer(state: context.state)
                 }
                 DynamicIslandExpandedRegion(.bottom) {

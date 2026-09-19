@@ -139,6 +139,39 @@ struct MeetingRecordingBlocksTests {
         for _ in 0..<10 { #expect(store.push(50) <= 1) }
     }
 
+    // MARK: - 电平换算
+
+    @Test func levelMappingAppliesTheGainTheDesktopUses() {
+        // 正常说话在 -30 dBFS 上下。换算之后必须越过「听到了声音」的阈值——不乘那个增
+        // 益的话这里只有 0.03，一场会录完提示行会一直挂着「没有听到声音」，而且波形
+        // 只有应有高度的六分之一。
+        #expect(MeetingAudio.amplitude(fromAveragePower: -30) > MeetingAudio.loudAmplitude)
+        #expect(MeetingAudio.amplitude(fromAveragePower: -20) > MeetingAudio.loudAmplitude)
+        // 和电脑端同一条线：RMS 大于约 -35 dBFS 才算听到。
+        #expect(MeetingAudio.amplitude(fromAveragePower: -40) < MeetingAudio.loudAmplitude)
+    }
+
+    @Test func levelMappingClampsTheSilenceFloor() {
+        // -160 dBFS 是录音器报的下限。它要落到地板以下，由 push 抬到地板。
+        #expect(MeetingAudio.amplitude(fromAveragePower: -160) < MeetingAudio.amplitudeFloor)
+        // 不是有限数（没有输入设备时会得到 -inf 或 nan）按没有声音处理，不是崩。
+        #expect(MeetingAudio.amplitude(fromAveragePower: -.infinity) == 0)
+        #expect(MeetingAudio.amplitude(fromAveragePower: .nan) == 0)
+    }
+
+    @Test func liveAndRecoveredWaveformsUseTheSameScale() {
+        // 实时那条路和异常退出重算那条路必须画成一样高。重算那条乘了增益，所以实时这条
+        // 也要乘，而且是同一个数。
+        var store = MeetingPeakStore()
+        let live = store.push(MeetingAudio.amplitude(fromAveragePower: -30))
+
+        var recovered = MeetingPeakStore()
+        let rms = pow(10.0, -30.0 / 20)
+        let fromFile = recovered.push(rms * MeetingAudio.amplitudeGain)
+
+        #expect(abs(live - fromFile) < 1e-9)
+    }
+
     // MARK: - 滚动波形
 
     @Test func waveSlotWidthIsFixedNoMatterHowLongTheRecordingIs() {

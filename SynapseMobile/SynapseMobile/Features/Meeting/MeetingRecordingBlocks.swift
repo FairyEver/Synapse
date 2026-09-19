@@ -42,6 +42,20 @@ enum MeetingAudio {
     /// 录音页那条滚动波形的柱宽与间距，与电脑端同一组数。
     static let barWidth = 1.5
     static let barGap = 1.1
+
+    /// 录音器报的电平 → 包络上的振幅。
+    ///
+    /// `averagePower` 是 dBFS，先换回线性（也就是 RMS），**再乘增益**。乘这一步不能省：
+    /// 正常说话在 -30 dBFS 上下，换出来只有 0.03，不乘的话波形几乎贴平，而「有没有听到
+    /// 声音」那条阈值（`loudAmplitude`）也永远跨不过去——一场会录完，提示行会一直挂着
+    /// 「没有听到声音」。电脑端在源头乘的就是同一个数。
+    ///
+    /// 异常退出之后从本机音频重算波形走的是另一条路（`MeetingAudioFilePeaks`），那边也
+    /// 乘同一个增益，两条路画出来的高度才一致。
+    static func amplitude(fromAveragePower decibels: Double) -> Double {
+        guard decibels.isFinite else { return 0 }
+        return pow(10, decibels / 20) * amplitudeGain
+    }
 }
 
 /// 攒够一片就切出去。

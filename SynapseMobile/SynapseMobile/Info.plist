@@ -79,10 +79,6 @@
 	  every alert as `apns-push-type: alert`, and the app delegate has no
 	  `didReceiveRemoteNotification:fetchCompletionHandler:`. It just no longer
 	  describes what the app does.
-
-	  Narrow transport exception, not a blanket one: it permits cleartext only to
-	  hosts on the local network, which is what the simulator and a LAN development
-	  server need. Everything remote still requires TLS.
 	-->
 	<key>UIBackgroundModes</key>
 	<array>
@@ -95,6 +91,11 @@
 	-->
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<!--
+	  Narrow transport exception, not a blanket one: it permits cleartext only to
+	  hosts on the local network, which is what the simulator and a LAN development
+	  server need. Everything remote still requires TLS.
+	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

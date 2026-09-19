@@ -485,7 +485,9 @@ final class SynapseAppModel {
     }
 
     func deleteMeeting(_ meetingId: String) async {
-        await meetings.delete(meetingId, using: apiClient)
+        let deleted = await meetings.delete(meetingId, using: apiClient)
+        // 删除不可恢复，做完了要说一声。
+        if deleted { notice("已删除") }
     }
 
     func retryMeetingTranscription(_ meetingId: String) async {
@@ -513,8 +515,10 @@ final class SynapseAppModel {
         switch action {
         case .start:
             guard !recording.isRecording else { return }
-            isRecordingPresented = true
-            Task { await startRecording() }
+            // 走 `NotificationRouter` 而不是直接置标志：录音页是挂在录音 Tab 的列表上的，
+            // 用户此刻可能在别的 Tab，那个视图根本没建——直接把标志置上，控制中心和
+            // Siri 按下去会什么都没发生。主屏长按那条走的是同一条路。
+            NotificationRouter.shared.route(to: .newRecording)
         case .finish:
             recording.finish()
         case .cancel:

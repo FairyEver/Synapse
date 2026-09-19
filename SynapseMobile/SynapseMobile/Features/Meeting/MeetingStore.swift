@@ -1,12 +1,13 @@
 import Foundation
 import Observation
 
-/// 录音列表与详情的读取。
+/// 录音列表与详情的读写。
 ///
-/// 手机端**直连服务端**，不经过电脑：转写发生在云端，结果也在服务端，和电脑在不在
-/// 线没有关系。这是这个功能和手机端既有「电脑的远程视图」定位最大的不同。
+/// 手机端**直连服务端**，不经过电脑：转写发生在服务端，结果也在那里，和电脑在不在线
+/// 没有关系。这是这个功能和手机端既有「电脑的远程视图」定位最大的不同。
 ///
-/// 只读。本轮手机端不做录音、不做编辑。
+/// 读的是列表和详情；写的是改名、删除、重试转写。采集那一头在 `MeetingRecordingSession`，
+/// 不在这里——它的生命周期比任何一屏都长。
 @MainActor
 @Observable
 final class MeetingStore {
@@ -92,7 +93,11 @@ final class MeetingStore {
     }
 
     /// 删掉整条。音频和文字一起删，行消失，不可恢复。
-    func delete(_ meetingId: String, using client: APIClient) async {
+    ///
+    /// 返回删掉了没有——调用方据此说一声「已删除」。删除是个不可逆的动作，做完了却什么
+    /// 都不说，用户会不确定它到底删没删。
+    @discardableResult
+    func delete(_ meetingId: String, using client: APIClient) async -> Bool {
         do {
             try await client.deleteMeeting(meetingId)
             // 本地先抹掉再拉一遍：等下一次请求回来才消失的话，删掉的那一行会在原地多
@@ -100,10 +105,13 @@ final class MeetingStore {
             meetings.removeAll { $0.id == meetingId }
             details[meetingId] = nil
             await load(using: client)
+            return true
         } catch let error as APIError {
             errorMessage = error.message
+            return false
         } catch {
             errorMessage = "删除失败。"
+            return false
         }
     }
 

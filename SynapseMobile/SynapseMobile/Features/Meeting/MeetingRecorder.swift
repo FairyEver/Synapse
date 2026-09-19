@@ -164,10 +164,9 @@ final class MeetingRecorder {
     private func tick() {
         guard let recorder, isRecording, !isPaused else { return }
         recorder.updateMeters()
-        // `averagePower` 是 dBFS 的平均功率（也就是 RMS）。换算回线性振幅之后，乘的
-        // 那个增益和电脑端是同一个数，两端画出来的波形高度才一致。
-        let db = Double(recorder.averagePower(forChannel: 0))
-        onLevel?(db.isFinite ? pow(10, db / 20) : 0)
+        // `averagePower` 是 dBFS 的平均功率（也就是 RMS），换算和增益都在
+        // `MeetingAudio.amplitude(fromAveragePower:)` 里，与电脑端同一套。
+        onLevel?(MeetingAudio.amplitude(fromAveragePower: Double(recorder.averagePower(forChannel: 0))))
 
         // 文件不必每 28 毫秒看一次：编码器 2 秒才吐一批，1 秒看一次足够，省下的是每秒
         // 三十几次 stat。

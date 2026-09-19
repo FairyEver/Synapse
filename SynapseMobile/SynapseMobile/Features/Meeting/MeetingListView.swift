@@ -8,6 +8,9 @@ struct MeetingListView: View {
     @Environment(SynapseAppModel.self) private var model
     @State private var renameTarget: MeetingSummary?
     @State private var deleteTarget: MeetingSummary?
+    /// 转写轮询。收尾完成时要重新起一轮，所以它是个能取消、能重起的任务，不是一条
+    /// 一次性的循环。
+    @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
         @Bindable var model = model
@@ -80,7 +83,24 @@ struct MeetingListView: View {
         .sheet(isPresented: $model.isRecordingPresented) {
             MeetingRecordingView()
         }
-        .onChange(of: model.isRecordingPresented) { _, _ in startIfRequested() }
+        .onChange(of: model.isRecordingPresented) { _, presented in
+            startIfRequested()
+            // 录音页收起（点完成或取消）之后立刻把列表捞回来：那条录音在服务端从按下加号
+            // 那一刻就存在了，不收尾也要看得见它，否则用户点完「完成」回到列表是一片没变
+            // 的样子，会以为没录上。
+            if !presented { Task { await model.reloadMeetings() } }
+        }
+        .onChange(of: model.recording.phase) { _, phase in
+            // 收尾跑完就是这条录音变成「转写中」的时候，轮询要从这里重新起一轮——进屏时
+            // 若一条都不在转写，它早就退出了。
+            if phase == .idle {
+                Task { await model.reloadMeetings() }
+                startPolling()
+            }
+            if model.recording.didHitDurationLimit {
+                model.notice("录音已到 5 小时上限，已自动保存。")
+            }
+        }
         .sheet(item: $renameTarget) { meeting in
             RenameRecordingSheet(title: meeting.title) { newTitle in
                 Task { await model.renameMeeting(meeting.id, to: newTitle) }
@@ -103,8 +123,19 @@ struct MeetingListView: View {
             // 还没存在，`.onChange` 不会为一个它没见过的初值触发。
             startIfRequested()
             await model.reloadMeetings()
-            // 正在转写的那几场要自己变成结果，用户不用下拉。没有在转的就不轮询，
-            // 免得在后台白跑一路请求。
+            startPolling()
+        }
+    }
+
+    /// 正在转写的那几场要自己变成结果，用户不用下拉。没有在转的就退出循环，免得在后台
+    /// 白跑一路请求。
+    ///
+    /// **这件事得能被重新点着。** 写成一条 `while hasTranscribing` 的自走循环的话，进屏
+    /// 那一刻一条都不在转就再也不会自动刷新了——而刚录完的那条恰恰是在那之后才变成
+    /// 「转写中」的。所以它是个可以再叫一次的入口，收尾完成时叫它。
+    private func startPolling() {
+        pollTask?.cancel()
+        pollTask = Task {
             while !Task.isCancelled, model.meetings.hasTranscribing {
                 try? await Task.sleep(for: .seconds(5))
                 if Task.isCancelled { return }
