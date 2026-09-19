@@ -158,6 +158,7 @@ table.tbl tbody tr[data-click="1"]:hover{background:var(--muted)}
   border:1px solid transparent;background:var(--primary);color:var(--primary-foreground);font-size:11.5px}
 .badge-muted{background:var(--secondary);color:var(--muted-foreground)}
 .badge-outline{background:transparent;border-color:var(--border);color:var(--muted-foreground)}
+.badges{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 
 /* ---------- 成员头部条 ---------- */
 .detail-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
@@ -243,10 +244,11 @@ table.tbl tbody tr[data-click="1"]:hover{background:var(--muted)}
     <ol>
       <li><b>只有管理员能用</b>，放在现有 <b>/admin</b> 管理后台里，普通用户和客户端看不到入口。</li>
       <li><b>管理员全权</b>：建团队、改团队名、删团队、设成员，全部由管理员操作；没有「申请加入」「团队管理员」这类角色。</li>
-      <li><b>一个用户可以属于多个团队</b>（多对多）。<span>所以团队列表里成员数不是互斥的，用户管理页也不显示「所属团队」。</span></li>
+      <li><b>一个用户可以属于多个团队</b>（多对多）。团队列表里的成员数因此不是互斥的；<b>用户管理页新增一列「团队」</b>，显示每个人所在的团队。</li>
       <li><b>团队成员没有角色</b>，只有一份名单。</li>
       <li><b>不做任何实际团队能力</b>：不共享资源、不带权限、不影响云盘/内容/会话的任何可见行为。这一步只把关系先立起来，供后续功能挂靠。</li>
-      <li>删除团队<b>只删团队和成员关系，不删用户账号</b>；用户被禁用也不影响其成员关系。</li>
+      <li>删除团队<b>只删团队和成员关系，不删用户账号</b>；用户被禁用也不影响其成员关系，禁用用户可以正常加入团队。</li>
+      <li>团队列表<b>不做搜索</b>（团队数量少）。用户管理页只画到「团队」这一列为止，<b>备注和客户端两列在本原型里省略</b>，只是为了宽度好看，实际不改动它们。</li>
     </ol>
   </div>
 
@@ -322,6 +324,7 @@ const STATE = {
       { userId:'u3', joinedAt:'2026-09-12 16:08' },
     ]},
     { id:'t2', name:'研发组', createdAt:'2026-09-12 09:05', members:[
+      { userId:'u3', joinedAt:'2026-09-16 10:02' },
       { userId:'u4', joinedAt:'2026-09-12 09:05' },
       { userId:'u6', joinedAt:'2026-09-15 11:30' },
     ]},
@@ -352,18 +355,33 @@ const NAV = [
   { title:'系统日志', url:'/logs', icon:I.scroll },
 ]
 
+const isUsersView = () => STATE.view === 'users'
+
 function renderNav(){
+  const current = isUsersView() ? '/users' : '/teams'
   document.getElementById('nav').innerHTML =
     `<div class="brand"><span class="mark"></span><span class="t">Synapse</span></div>
      <div class="nav-group">管理</div>` +
     NAV.map(item => {
-      const current = item.url === '/teams'
-      return `<button class="nav-item" ${current?'aria-current="page"':''}>
+      const live = item.url === '/teams' || item.url === '/users'
+      const on = item.url === current
+      return `<button class="nav-item" ${on?'aria-current="page"':''} ${live?'data-live="1"':''} ${live?`data-act="goto" data-url="${item.url}"`:''}>
         ${svg(item.icon)}<span>${item.title}</span></button>`
     }).join('')
+  document.getElementById('nav').onclick = e => {
+    const url = e.target.closest('[data-act="goto"]')?.dataset.url
+    if (!url) return
+    STATE.view = url === '/users' ? 'users' : 'list'
+    STATE.teamId = null; STATE.dialog = null
+    renderAll()
+  }
 }
 
 function renderTopbar(){
+  if (isUsersView()) {
+    document.getElementById('topbar').innerHTML = `<span class="crumb"><b>用户管理</b></span>`
+    return
+  }
   const team = STATE.view === 'detail' ? teamById(STATE.teamId) : null
   document.getElementById('topbar').innerHTML = team
     ? `<span class="crumb">团队 / <b>${esc(team.name)}</b></span>`
@@ -372,8 +390,37 @@ function renderTopbar(){
 
 function renderContent(){
   const box = document.getElementById('content')
-  box.innerHTML = STATE.view === 'detail' ? detailView() : listView()
+  box.innerHTML = isUsersView() ? usersView()
+    : STATE.view === 'detail' ? detailView()
+    : listView()
   bindContent()
+}
+
+/* 用户管理：与团队对应的反向视角。团队徽标直接由 STATE.teams 推导，
+   所以在团队页加人/删团队后切过来会立刻反映出来。 */
+function usersView(){
+  const rows = ALL_USERS.map((u, i) => {
+    const mine = STATE.teams.filter(t => t.members.some(m => m.userId === u.id))
+    const teams = mine.length
+      ? `<div class="badges">${mine.map(t => `<span class="badge badge-muted">${esc(t.name)}</span>`).join('')}</div>`
+      : `<span class="cell-dim">-</span>`
+    return `<tr>
+      <td>${esc(u.email)}</td>
+      <td class="cell-dim">${esc(u.handle)}</td>
+      <td>${u.status === 'disabled' ? '<span class="badge badge-outline">已禁用</span>' : '<span class="badge badge-muted">正常</span>'}</td>
+      <td>${teams}</td>
+      <td class="cell-dim">2026-0${(i % 9) + 1}-1${i % 9} 10:12</td>
+      <td class="right"><button class="icon-btn" aria-label="更多">${svg(I.more)}</button></td>
+    </tr>`
+  }).join('')
+  return `<div class="page-head">
+      <h2>用户管理</h2>
+      <span class="sub">共 ${ALL_USERS.length} 人</span>
+    </div>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>邮箱</th><th style="width:130px">用户名</th><th style="width:90px">状态</th><th style="width:220px">团队</th><th style="width:150px">创建时间</th><th style="width:56px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`
 }
 
 function listView(){
