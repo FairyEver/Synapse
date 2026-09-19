@@ -9,13 +9,14 @@ type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 export const teamMemberAddLimit = 100
 
+// `satisfies` 让 select 里的字段名写错在编译期就报出来（写成变量时 TS 不做多余属性检查）。
 const teamSelect = {
   id: true,
   name: true,
   createdAt: true,
   updatedAt: true,
   _count: { select: { members: true } },
-} as const
+} as const satisfies Prisma.TeamSelect
 
 type TeamRecord = Prisma.TeamGetPayload<{ select: typeof teamSelect }>
 
