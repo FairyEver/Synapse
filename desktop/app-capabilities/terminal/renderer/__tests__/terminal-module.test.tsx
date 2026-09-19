@@ -542,6 +542,14 @@ const xtermState = vi.hoisted(() => ({
     options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number }
     emitInput: (data: string) => void
     emitKeyEvent: (event: KeyboardEvent) => boolean | undefined
+    bufferLines: string[]
+    setBufferLines: (lines: readonly string[]) => void
+    buffer: {
+      readonly active: {
+        readonly length: number
+        readonly getLine: (index: number) => { translateToString: (trimRight?: boolean) => string } | undefined
+      }
+    }
     inputDispose: ReturnType<typeof vi.fn>
     inputListener: ((data: string) => void) | null
     keyEventHandler: ((event: KeyboardEvent) => boolean) | null
@@ -713,6 +721,30 @@ vi.mock("@xterm/xterm", () => ({
       options,
       emitInput: (data: string) => instance.inputListener?.(data),
       emitKeyEvent: (event: KeyboardEvent) => instance.keyEventHandler?.(event),
+      /**
+       * 终端缓冲区的替身：只实现「复制全文」读到的那一小块。
+       *
+       * `translateToString(true)` 在这里真的去掉行尾空白，好让「复制出来的文本没有行尾空格」
+       * 这件事是被测出来的，而不是靠 mock 恰好返回了干净字符串。
+       */
+      bufferLines: [] as string[],
+      setBufferLines(lines: readonly string[]) {
+        instance.bufferLines = [...lines]
+      },
+      get buffer() {
+        return {
+          active: {
+            get length() {
+              return instance.bufferLines.length
+            },
+            getLine: (index: number) => instance.bufferLines[index] === undefined ? undefined : {
+              translateToString: (trimRight?: boolean) => trimRight
+                ? instance.bufferLines[index]!.replace(/[ \t]+$/, "")
+                : instance.bufferLines[index]!,
+            },
+          },
+        }
+      },
       inputDispose: vi.fn(),
       inputListener: null as ((data: string) => void) | null,
       keyEventHandler: null as ((event: KeyboardEvent) => boolean) | null,
@@ -1162,6 +1194,50 @@ describe("TerminalModule", () => {
       "编辑描述",
       "关闭",
     ])
+  })
+
+  it("copies the pane's whole transcript as plain text from the pane header", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderEmbeddedModule()
+    // 缓冲区里带行尾空格和光标下面那几行空白，复制出来都该是干净的。
+    xtermState.instances[0]!.setBufferLines([
+      "$ git status",
+      "On branch main   ",
+      "",
+      "",
+      "",
+    ])
+
+    await clickButtonByTitle("复制全文")
+
+    expect(writeText).toHaveBeenCalledWith([
+      "$ git status",
+      "On branch main",
+    ].join("\n"))
+  })
+
+  it("leaves the clipboard alone when the terminal has written nothing", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderEmbeddedModule()
+    xtermState.instances[0]!.setBufferLines(["", "", ""])
+
+    await clickButtonByTitle("复制全文")
+
+    expect(writeText).not.toHaveBeenCalled()
   })
 
   it("offers the reference copy on the pane header, next to rename", async () => {

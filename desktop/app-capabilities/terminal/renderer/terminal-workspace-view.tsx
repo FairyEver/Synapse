@@ -697,6 +697,27 @@ function captureTerminalSplitLayouts(
 }
 
 /**
+ * Everything this pane's terminal still holds, as plain text.
+ *
+ * Read from the pane's own xterm buffer rather than from the main process: that buffer is already
+ * the resolved text (no escape sequences, no redraws), and it is exactly what the user sees in
+ * this pane. Both Claude Code and the shell write to the normal buffer — neither switches to the
+ * alternate screen — so the scrolling history is part of it, up to the configured scrollback.
+ *
+ * Trailing blank lines are dropped: without that every copy ends with the empty rows between the
+ * last output and the cursor.
+ */
+function terminalTranscriptText(xterm: Terminal): string {
+  const buffer = xterm.buffer.active
+  const lines: string[] = []
+  for (let index = 0; index < buffer.length; index += 1) {
+    lines.push(buffer.getLine(index)?.translateToString(true) ?? "")
+  }
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop()
+  return lines.join("\n")
+}
+
+/**
  * The conversation name in a pane header. Renaming is offered through the same gestures as the
  * sidebar tab row: double-click, or the context menu. The header doubles as the pane drag handle,
  * so both gestures stay on the title and the drag keeps working on the rest of the header.
@@ -860,6 +881,25 @@ function TerminalPane({
   const fileTreeOverlayRef = useRef<HTMLDivElement | null>(null)
   const fileTreeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
+  /** Copies this pane's whole retained conversation as plain text. Reached from the pane header. */
+  const copyTranscript = useCallback(async () => {
+    const xterm = xtermRef.current
+    if (!xterm) return
+    const text = terminalTranscriptText(xterm)
+    // 还没输出过任何东西：没有可复制的内容，也不该给一个「复制失败」。
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      toast("已复制全文")
+    } catch (rawError) {
+      logger.warn("Terminal transcript copy failed.", {
+        boundary: "renderer.terminal.copy-transcript",
+        sessionId: sessionRef.current.id,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+      })
+      toast.error("复制失败")
+    }
+  }, [])
   const syncTerminalGeometryRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
   /** Hands the grid back to this machine. Reached from the pane header button. */
   const releaseGridOwnershipRef = useRef<((announceFailure?: boolean) => void) | null>(null)
@@ -1663,6 +1703,23 @@ function TerminalPane({
             {maximized
               ? <Minimize2 className="size-3.5" />
               : <Maximize2 className="size-3.5" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`复制全文：${session.title}`}
+            title="复制全文"
+            data-track="terminal-pane-copy-transcript"
+            className="text-muted-foreground"
+            onClick={(event) => {
+              event.stopPropagation()
+              onActive()
+              void copyTranscript()
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <Copy className="size-3.5" />
           </Button>
           <Button
             type="button"
