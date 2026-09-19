@@ -908,6 +908,80 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertFalse(escapeKey.exists, "叫起系统键盘的时候面板也跟着起来了")
     }
 
+    /// 「组合键」那颗开关只管锁存，不动版面。
+    ///
+    /// 两句都要量，因为它们是同一句话的两半。关掉之后四颗修饰键**还在原处** —— 一整行
+    /// 随开关出现和消失，等于同一块键盘在两种状态下是两张图，刚找到 Ctrl 的人得在拨一下
+    /// 开关之后再找一次。而关掉之后按 Ctrl 再按字母，电脑端收到的是**那一个字母**：这一半
+    /// 同时钉住了「关掉 = 组合不成立」和「关掉之后板子照旧发得出去」—— 后者才是这条改动
+    /// 真正有后果的地方。
+    func testTheCombinationSwitchChangesTheLatchAndNothingElse() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        app.staticTexts["claude-code"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "Claude Code v2.1.0", in: app, timeout: 15),
+            "the terminal never rendered the desktop's output"
+        )
+
+        let keyboardButton = app.buttons["toolbar-keyboard"]
+        XCTAssertTrue(waitForHittable(keyboardButton, timeout: 10), "no way into the panel")
+        keyboardButton.tap()
+
+        // 四颗按顺序取一遍：`⌘` 的标识符里带的是那个字符本身，和它键帽上印的一样。
+        let modifiers = KeyboardPanelModifierProbe.all
+        let before = modifiers.map { key -> CGRect in
+            let element = app.buttons[key.id]
+            XCTAssertTrue(element.waitForExistence(timeout: 10), "面板上少了 \(key.name)")
+            return element.frame
+        }
+        XCTAssertTrue(app.switches["panelkey-combination"].exists, "面板上没有「组合键」那颗开关")
+
+        // 关掉。四颗的框一个点都不该动。
+        app.switches["panelkey-combination"].tap()
+        Thread.sleep(forTimeInterval: 0.5)
+        for (index, key) in modifiers.enumerated() {
+            XCTAssertTrue(app.buttons[key.id].exists, "关掉组合键之后 \(key.name) 不见了")
+            XCTAssertEqual(app.buttons[key.id].frame, before[index],
+                           "关掉组合键之后 \(key.name) 挪了位置")
+        }
+
+        // 按得动，但没有下一步：发出去的是字母本身。
+        app.buttons["panelkey-modifier-Ctrl"].tap()
+        app.buttons["panelkey-letter-a"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:a", in: app, timeout: 20),
+            "组合键关着的时候，Ctrl 还是把下一个字母变成了组合"
+        )
+
+        // 打开，同一串动作变成组合。两半都问，才不是只钉住一边。
+        app.switches["panelkey-combination"].tap()
+        app.buttons["panelkey-modifier-Ctrl"].tap()
+        app.buttons["panelkey-letter-a"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Ctrl+A", in: app, timeout: 20),
+            "组合键开着的时候，Ctrl 不再锁存"
+        )
+    }
+
+    /// 修饰键那四颗的标识符与名字。写在用例里而不是读面板的模型：读过来的话，键被删掉
+    /// 一颗这里就跟着少一颗，而「少了一颗」正是这条用例要发现的事。
+    private enum KeyboardPanelModifierProbe: String, CaseIterable {
+        case control = "Ctrl"
+        case shift = "Shift"
+        case alt = "Alt"
+        case command = "⌘"
+
+        var name: String { rawValue }
+        var id: String { "panelkey-modifier-\(rawValue)" }
+        static var all: [KeyboardPanelModifierProbe] { allCases }
+    }
+
     /// 在终端页上把它停掉，这一页就该自己回到列表上。
     ///
     /// 停止之后电脑那边就没有这个会话了：进程退出，下一份列表里不再有它。留下来的

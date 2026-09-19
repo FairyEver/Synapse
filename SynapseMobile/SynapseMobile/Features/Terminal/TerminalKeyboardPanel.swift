@@ -340,8 +340,13 @@ struct TerminalKeyboardPanel: View {
     let onActions: ([MobileKeyAction]) -> Void
 
     @State private var page: Int = 0
-    /// Whether the modifier row is live. Off, the row goes away and the board is a plain
-    /// character keyboard — which is what "组合键模式" means literally.
+    /// Whether a tapped modifier stays down for the key after it.
+    ///
+    /// **That is the whole of it.** The switch governs the latch and nothing else: the
+    /// four keys are on the row in both states and the board is the same board, so the
+    /// only thing that changes is whether a chord can be spelled. Off, the four are still
+    /// pressable and still answer with the key tap — they simply have no next step, which
+    /// is the plain reading of 「组合键」: press it, and that was the whole press.
     @State private var combinationMode = true
 
     /// The modifier that will combine with the next key, if any.
@@ -422,32 +427,37 @@ struct TerminalKeyboardPanel: View {
 
     /// The switch, its label, and the four modifiers it governs.
     ///
+    /// **The row does not move.** Both states draw the same four keys in the same place:
+    /// a control that changes what the board looks like is a second board, and a reader
+    /// who has just found Ctrl would have to find it again after flipping a switch about
+    /// chords. What the switch changes is what a tap on one of them does — see
+    /// `tapModifier`.
+    ///
     /// The four share whatever room the label leaves, which puts Control under the left
     /// thumb and ⌘ under the right, the way the board they stand in for does.
     private var modifierRow: some View {
         HStack(spacing: 8) {
             HStack(spacing: 7) {
-                Toggle("组合键模式", isOn: $combinationMode)
+                Toggle("组合键", isOn: $combinationMode)
                     .labelsHidden()
+                    .accessibilityIdentifier("panelkey-combination")
                     // 应用根的 tint 是 `Theme.ink`，深色下是白色，和开关的圆点撞成一块
                     // 没有圆点的白方块。见 `Theme.switchOn`。
                     .tint(Theme.switchOn)
                     .onChange(of: combinationMode) { _, isOn in
-                        // Turning the row off while a modifier is held would leave the
-                        // state on with nothing on screen showing it.
+                        // 关掉时清掉锁存：不清的话，下次再打开，上一次按下的那颗还锁着
+                        // ——而中间隔着的那段时间里，屏幕上没有任何东西说过这件事。
                         if !isOn { clearModifier() }
                     }
-                Text("组合键模式")
+                Text("组合键")
                     .font(.system(size: 12.5))
                     .lineLimit(1)
             }
             .fixedSize(horizontal: true, vertical: false)
 
-            if combinationMode {
-                HStack(spacing: 6) {
-                    ForEach(KeyboardPanelModifier.allCases) { modifier in
-                        modifierKey(modifier)
-                    }
+            HStack(spacing: 6) {
+                ForEach(KeyboardPanelModifier.allCases) { modifier in
+                    modifierKey(modifier)
                 }
             }
         }
@@ -787,7 +797,12 @@ struct TerminalKeyboardPanel: View {
     /// Tapping a modifier latches it; tapping it twice in quick succession locks it,
     /// which is how a chord gets pressed several times in a row. iOS spells the same
     /// two states on its own shift key, so neither has to be taught.
+    ///
+    /// 组合键关着的时候，这一下就是全部：键按得动、有一次选中触觉，但没有下一步。
+    /// 不给它留状态，是因为留着的那点状态要等到下一次打开开关才会露出来 —— 中间隔着
+    /// 的那段时间里屏幕上没有任何东西说过它还在。
     private func tapModifier(_ modifier: KeyboardPanelModifier) {
+        guard combinationMode else { return }
         let now = Date()
         let isDoubleTap = lastModifierTap?.modifier == modifier
             && now.timeIntervalSince(lastModifierTap?.at ?? .distantPast) < 0.35
