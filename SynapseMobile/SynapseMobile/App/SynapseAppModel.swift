@@ -339,6 +339,16 @@ final class SynapseAppModel {
     /// 来回点列表都不打断正在播的那一段。
     let playback = MeetingPlayback()
 
+    /// 正在录的那一条在系统里的那一份：锁屏实时活动、灵动岛。
+    let liveActivity = MeetingLiveActivityController()
+
+    /// 录音页要不要浮出来。
+    ///
+    /// 放在模型上而不是列表视图里，因为进这一屏的入口不止一个：列表右上角的加号、
+    /// 控制中心的控件、主屏长按图标的快捷操作、以及实时活动上按「开始」。后三个都不
+    /// 经过列表，它们只能把这件事挂在这里等列表去接。
+    var isRecordingPresented = false
+
     /// Which terminals this phone is sizing, as the summaries have last said.
     private var gridClaims = GridClaimLedger()
 
@@ -355,6 +365,13 @@ final class SynapseAppModel {
             }
         )
         wireRealtime()
+
+        // 实时活动、控制中心控件、主屏快捷操作、Siri 那四个入口的意图都落到这里。
+        // 挂在这里而不是某个视图上：锁屏上的「完成」可能把 App 从后台唤起，那一刻
+        // 还没有任何界面，但模型已经在了。
+        RecordingIntentRouter.handler = { [weak self] action in
+            self?.handleRecordingIntent(action)
+        }
     }
 
     // MARK: - Lifecycle
@@ -483,6 +500,26 @@ final class SynapseAppModel {
     /// 开始一段新录音。加号、控制中心、主屏快捷操作、Siri 都落到这里。
     func startRecording() async {
         await recording.start(using: apiClient)
+        // 录音真起来了才跟：起都没起来就挂一条实时活动，锁屏上会留一条按了没反应的东西。
+        guard recording.isRecording else { return }
+        liveActivity.follow(recording)
+    }
+
+    /// 实时活动、控制中心、快捷操作上那几个意图的落点。
+    ///
+    /// 那四个入口共用同一份意图，而意图的定义必须同时编进 App 和扩展（锁屏上那个按钮
+    /// 是扩展画的）。扩展里没有录音机，所以意图只把动作送到这里，由模型决定怎么做。
+    func handleRecordingIntent(_ action: RecordingIntentAction) {
+        switch action {
+        case .start:
+            guard !recording.isRecording else { return }
+            isRecordingPresented = true
+            Task { await startRecording() }
+        case .finish:
+            recording.finish()
+        case .cancel:
+            recording.cancel()
+        }
     }
 
     /// 语音视图要的那两样：音频地址和波形。都是按需取的，不进列表的载荷。

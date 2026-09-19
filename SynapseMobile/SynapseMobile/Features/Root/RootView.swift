@@ -135,6 +135,12 @@ struct RootView: View {
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
             selectedTab = .meetings
             meetingPath = [.meeting(meetingId)]
+        case .newRecording:
+            // 主屏长按图标那一条。先把人带到录音 Tab，再让录音页自己浮出来——否则
+            // 用户看到的是一片别的界面盖着一张录音页，退出之后不知道自己回到了哪。
+            selectedTab = .meetings
+            meetingPath = []
+            model.isRecordingPresented = true
         }
     }
 }

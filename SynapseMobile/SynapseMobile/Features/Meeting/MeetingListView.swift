@@ -6,12 +6,12 @@ import SwiftUI
 /// 流水账，看得见就够，和电脑端的左栏一致。
 struct MeetingListView: View {
     @Environment(SynapseAppModel.self) private var model
-    @State private var showingRecording = false
     @State private var renameTarget: MeetingSummary?
     @State private var deleteTarget: MeetingSummary?
 
     var body: some View {
-        List {
+        @Bindable var model = model
+        return List {
             if model.meetings.meetings.isEmpty {
                 emptySection
             } else {
@@ -64,8 +64,7 @@ struct MeetingListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Haptics.record()
-                    showingRecording = true
+                    model.isRecordingPresented = true
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -76,9 +75,12 @@ struct MeetingListView: View {
             }
         }
         .refreshable { await model.reloadMeetings() }
-        .sheet(isPresented: $showingRecording) {
+        // 录音页挂在这个标志上而不是本地的 @State 上：控制中心那枚控件、主屏长按图标
+        // 的快捷操作都不经过这个视图，它们只能把「要录音了」挂在这里等它来接。
+        .sheet(isPresented: $model.isRecordingPresented) {
             MeetingRecordingView()
         }
+        .onChange(of: model.isRecordingPresented) { _, _ in startIfRequested() }
         .sheet(item: $renameTarget) { meeting in
             RenameRecordingSheet(title: meeting.title) { newTitle in
                 Task { await model.renameMeeting(meeting.id, to: newTitle) }
@@ -97,6 +99,9 @@ struct MeetingListView: View {
             Text("「\(meeting.title)」的录音和文字会一起删除，无法恢复。")
         }
         .task {
+            // 也可能是带着「要录音」进来的：主屏快捷操作或控制中心唤起 App 时，这一屏
+            // 还没存在，`.onChange` 不会为一个它没见过的初值触发。
+            startIfRequested()
             await model.reloadMeetings()
             // 正在转写的那几场要自己变成结果，用户不用下拉。没有在转的就不轮询，
             // 免得在后台白跑一路请求。
@@ -108,6 +113,13 @@ struct MeetingListView: View {
         }
     }
 
+    /// 进录音页的四个入口共用这一条：露出录音页的同时开始录，没有「先起名字」这一步。
+    private func startIfRequested() {
+        guard model.isRecordingPresented, !model.recording.isRecording else { return }
+        Haptics.record()
+        Task { await model.startRecording() }
+    }
+
     private var emptySection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
@@ -116,8 +128,7 @@ struct MeetingListView: View {
                     .foregroundStyle(.secondary)
                 if !model.meetings.isLoading {
                     Button("开始录音") {
-                        Haptics.record()
-                        showingRecording = true
+                        model.isRecordingPresented = true
                     }
                     .font(.subheadline)
                 }

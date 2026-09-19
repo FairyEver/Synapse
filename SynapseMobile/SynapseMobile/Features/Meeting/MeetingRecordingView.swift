@@ -8,6 +8,7 @@ import SwiftUI
 /// 它可以下滑收起，收起之后录音继续（决策四）。一场四十分钟的会里不该把人锁在这一屏。
 struct MeetingRecordingView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 20) {
@@ -63,15 +64,19 @@ struct MeetingRecordingView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {
+                // 两个按钮都**立刻回列表**，不等任何网络往返：点「完成」之后要发生的事
+                // （补尾片、提交、清理本机文件）全在后台跑，界面不显示等待。
                 action("取消", isPrimary: false) {
                     Haptics.warning()
                     model.recording.cancel()
+                    dismiss()
                 }
                 .accessibilityIdentifier("recording-cancel")
 
                 action("完成", isPrimary: true) {
                     Haptics.commit()
                     model.recording.finish()
+                    dismiss()
                 }
                 .accessibilityIdentifier("recording-finish")
             }

@@ -15,8 +15,40 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // 主屏长按 App 图标：「开始录音」排第一。
+        //
+        // 这一条不依赖任何一台电脑，也不依赖这个账号在线——录音采在手机上。所以它排在
+        // 所有和电脑有关的入口前面，是「掏出手机想立刻记点什么」最短的那条路。
+        application.shortcutItems = [
+            UIApplicationShortcutItem(
+                type: Self.startRecordingShortcutType,
+                localizedTitle: "开始录音",
+                localizedSubtitle: nil,
+                icon: UIApplicationShortcutIcon(systemImageName: "waveform"),
+                userInfo: nil
+            )
+        ]
         return true
     }
+
+    /// 主屏快捷操作被我按下的那一次。
+    ///
+    /// 走 `NotificationRouter` 而不是直接开录音：这条路径可能在任何界面之前跑完，而
+    /// 「把用户带到录音页」是界面的事。和通知点击同一条路，也就和它同一套顺序保证。
+    func application(
+        _ application: UIApplication,
+        performActionFor shortcutItem: UIApplicationShortcutItem,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        guard shortcutItem.type == Self.startRecordingShortcutType else {
+            completionHandler(false)
+            return
+        }
+        NotificationRouter.shared.route(to: .newRecording)
+        completionHandler(true)
+    }
+
+    private static let startRecordingShortcutType = "com.liy.SynapseMobile.startRecording"
 
     func application(
         _ application: UIApplication,
