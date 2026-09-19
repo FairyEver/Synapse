@@ -154,6 +154,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var reportedColumns = 0
     private var reportedRows = 0
     private var lastLayoutHeight: CGFloat = 0
+    /// 上一次滚动回调时画布与 inset 的样子，用来把「布局把视口挪了」与「读者把视口挪了」
+    /// 分开（见 `scrollViewDidScroll`）。nil 表示还没有过一次回调。
+    private var lastScrollPaneHeight: CGFloat?
+    private var lastScrollInsetTop: CGFloat?
     /// 拟合所依据的那块地方。
     ///
     /// 多数时候就是这块画布，但它**不跟着画布一起变小**（见 `noteFitPane`）。
@@ -1297,7 +1301,29 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         // scrolled up to read something, leave them where they are.
         let distanceFromBottom = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.height
         let wasPinned = isPinnedToBottom
-        isPinnedToBottom = distanceFromBottom < 40
+        // 只有读者的手，或者读者自己的另一种滚动，能解开跟随。
+        //
+        // 这里原来无条件按「离底不到 40 点」重算。而画布变矮 —— 系统键盘升起、键盘面板
+        // 升起、三条栏放下来 —— 时 UIKit 会把 offset 钳回新的合法区间，那一下离底的距离
+        // 同样很远，和读者往上翻**长得一模一样**。于是跟随被误判成「他翻上去看东西了，
+        // 别打扰」，从此不再回头：键盘或面板开着的时候，新输出全部落在可视区外面，画布上
+        // 停着的还是他按下去之前那一屏。这是一条单向棘轮 —— 一旦翻成假，就没有任何东西
+        // 会把它翻回来，因为重新贴底那两处（`updateBottomInset` 与 `layoutSubviews` 的
+        // 高度守卫）都以它为真为前提。
+        //
+        // 把布局引起的那次回调认出来：画布高度或内容 inset 刚变过、而且不是拖拽或惯性，
+        // 那这一格说的是布局，不是读者的手 —— 只允许它重新贴上底，不允许它解除跟随。
+        // 其余情况照旧重算，所以「往下拖回底部」和「点状态栏回顶部」都还是原来那个结果。
+        let paneChanged = lastScrollPaneHeight.map { abs($0 - scrollView.bounds.height) > 0.5 } ?? false
+        let insetChanged = lastScrollInsetTop.map { abs($0 - scrollView.contentInset.top) > 0.5 } ?? false
+        lastScrollPaneHeight = scrollView.bounds.height
+        lastScrollInsetTop = scrollView.contentInset.top
+        let isReaderScrolling = scrollView.isDragging || scrollView.isDecelerating
+        if isReaderScrolling || !(paneChanged || insetChanged) {
+            isPinnedToBottom = distanceFromBottom < 40
+        } else if distanceFromBottom < 40 {
+            isPinnedToBottom = true
+        }
 
         // 这条是滚动问题的底噪：它同时回答"手指在动而 offset 没动"（手势被吞）、
         // "offset 在动但离底一直不到 40 点"（跟随一直没解除）这两个问题。
