@@ -2528,15 +2528,15 @@ describe("TerminalModule", () => {
 
   it("shows a project group's name as the project's, not something to type over", async () => {
     bridgeState.groups = [
-      createGroup({ id: "group-project", name: "项目 Synapse", projectId: "project-synapse" }),
+      createGroup({ id: "group-project", name: "项目:Synapse", projectId: "project-synapse" }),
     ]
 
     await renderModule()
-    await clickGroupMenu("项目 Synapse")
+    await clickGroupMenu("项目:Synapse")
     await clickMenuItem("设置")
 
     const nameInput = document.body.querySelector<HTMLInputElement>('input[aria-label="分组名称"]')
-    expect(nameInput?.value).toBe("项目 Synapse")
+    expect(nameInput?.value).toBe("项目:Synapse")
     expect(nameInput?.disabled).toBe(true)
     expect(document.body.textContent).toContain("名称跟随项目")
   })
@@ -2658,13 +2658,13 @@ describe("TerminalModule", () => {
 
   it("offers a project group everything but renaming and deleting it", async () => {
     bridgeState.groups = [
-      createGroup({ id: "group-project", name: "项目 Synapse", projectId: "project-synapse", sortOrder: 0 }),
+      createGroup({ id: "group-project", name: "项目:Synapse", projectId: "project-synapse", sortOrder: 0 }),
       createGroup({ id: "group-mine", name: "部署", sortOrder: 1 }),
     ]
     bridgeState.sessions = []
 
     await renderModule()
-    await clickGroupMenu("项目 Synapse")
+    await clickGroupMenu("项目:Synapse")
     const projectItems = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
       .map((item) => item.textContent?.trim())
 

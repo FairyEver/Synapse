@@ -17,8 +17,8 @@ describe("terminal project groups", () => {
     await harness.service.syncProjectGroups([PROJECT_ALPHA, PROJECT_BETA])
 
     expect(projectGroups(harness.service)).toEqual([
-      ["项目 Alpha", "project-alpha"],
-      ["项目 Beta", "project-beta"],
+      ["项目:Alpha", "project-alpha"],
+      ["项目:Beta", "project-beta"],
     ])
 
     // Second pass: the same projects, the same groups — and no second copy of either.
@@ -36,7 +36,7 @@ describe("terminal project groups", () => {
 
     const renamed = projectGroupFor(harness.service, "project-alpha")
     expect(renamed?.id).toBe(original?.id)
-    expect(renamed?.name).toBe("项目 Alpha 2")
+    expect(renamed?.name).toBe("项目:Alpha 2")
   })
 
   it("takes the group and its terminals away with the project", async () => {
@@ -51,7 +51,7 @@ describe("terminal project groups", () => {
 
     await harness.service.syncProjectGroups([PROJECT_BETA])
 
-    expect(projectGroups(harness.service)).toEqual([["项目 Beta", "project-beta"]])
+    expect(projectGroups(harness.service)).toEqual([["项目:Beta", "project-beta"]])
     expect(harness.service.listSessions().map((session) => session.id)).toEqual([kept.id])
     expect(harness.service.listWorkspaces().every((workspace) => workspace.groupId === kept.groupId)).toBe(true)
     expect(deleted).toEqual([doomed.id])
@@ -79,7 +79,7 @@ describe("terminal project groups", () => {
     })
 
     const group = projectGroupFor(harness.service, "project-alpha")
-    expect(group).toMatchObject({ name: "项目 Alpha", projectId: "project-alpha" })
+    expect(group).toMatchObject({ name: "项目:Alpha", projectId: "project-alpha" })
     expect(session.groupId).toBe(group?.id)
   })
 
@@ -116,7 +116,7 @@ describe("terminal project groups", () => {
     await expect(harness.service.deleteGroup({ groupId: group.id })).rejects.toMatchObject({
       payload: { code: "invalid_argument", details: { reason: "project_group_is_managed" } },
     })
-    expect(harness.service.getGroup(group.id).name).toBe("项目 Alpha")
+    expect(harness.service.getGroup(group.id).name).toBe("项目:Alpha")
   })
 
   it("still lets a project group carry its own launch settings", async () => {

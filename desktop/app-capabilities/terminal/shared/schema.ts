@@ -494,7 +494,7 @@ export type TerminalProjectGroupSource = {
  * made — there is no icon, no section and no second list, because the sidebar is the
  * same list of the same kind of rows either way.
  */
-export const TERMINAL_PROJECT_GROUP_NAME_PREFIX = "项目 "
+export const TERMINAL_PROJECT_GROUP_NAME_PREFIX = "项目:"
 
 /**
  * The longest a group name may be, and the number the persisted group record enforces
