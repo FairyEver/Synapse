@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>终端键盘面板照 ToDesk 重做 · 理解原型</title>
+<style>
+  :root {
+    --zinc-50:#fafafa; --zinc-100:#f4f4f5; --zinc-200:#e4e4e7; --zinc-300:#d4d4d8;
+    --zinc-400:#a1a1aa; --zinc-500:#71717a; --zinc-600:#52525b; --zinc-700:#3f3f46;
+    --zinc-800:#27272a; --zinc-900:#18181b; --zinc-950:#09090b;
+    --term-bg:#141413; --term-fg:#d8d4cc; --term-dim:#8a857c;
+    --orange:#d97757; --pink:#e08fa8;
+    --blue:#0a84ff; --blue-dim:#0a84ff33;
+    --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px 22px 70px; background:var(--zinc-100); color:var(--zinc-900);
+    font-family:var(--ui); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .head { max-width:1240px; margin:0 auto 22px; }
+  .head h1 { font-size:20px; font-weight:600; margin:0 0 6px; letter-spacing:-.01em; }
+  .head p { margin:0 0 4px; color:var(--zinc-500); font-size:13px; max-width:900px; }
+
+  .layout { max-width:1240px; margin:0 auto; display:grid;
+    grid-template-columns:390px minmax(0,1fr); gap:40px; align-items:start; }
+  @media (max-width:1020px){ .layout{ grid-template-columns:minmax(0,1fr); } }
+  .phone-col { position:sticky; top:20px; }
+
+  .phone { width:390px; height:844px; background:var(--zinc-950); border-radius:46px; padding:10px;
+    box-shadow:0 0 0 1px var(--zinc-800), 0 24px 48px -12px rgba(0,0,0,.35); margin:0 auto; }
+  .screen { position:relative; height:100%; background:var(--zinc-950); border-radius:37px;
+    overflow:hidden; display:flex; flex-direction:column; }
+
+  .nav { flex:none; height:50px; display:flex; align-items:center; gap:10px; padding:0 14px;
+    border-bottom:1px solid var(--zinc-800); }
+  .nav .back { color:var(--zinc-300); font-size:19px; }
+  .nav .title { flex:1; min-width:0; text-align:center; }
+  .nav .title .n { font-size:14px; font-weight:600; color:var(--zinc-100); }
+  .nav .dot { width:6px; height:6px; border-radius:50%; background:#34d399; display:inline-block;
+    margin-right:4px; vertical-align:1px; }
+
+  .canvas { flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column;
+    background:var(--term-bg); }
+  .term { font-family:var(--mono); font-size:10.5px; line-height:1.5; color:var(--term-fg);
+    padding:8px 10px; white-space:pre-wrap; word-break:break-all; }
+  .term .dim { color:var(--term-dim); }
+  .term .pk { color:var(--pink); }
+  .term .sent { color:#7dd3a0; }
+
+  .accessory { flex:none; display:flex; align-items:center; gap:8px; padding:7px 12px;
+    background:var(--zinc-50); border-top:1px solid var(--zinc-200); overflow:hidden; }
+  .pill { flex:none; font-family:var(--mono); font-size:12px; padding:6px 10px; border-radius:10px;
+    background:var(--zinc-200); color:var(--zinc-800); white-space:nowrap; }
+  .pill.icon { display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer; }
+  .pill.icon.active { background:var(--zinc-900); color:#fff; }
+  .pill.scroll { background:transparent; padding:6px 0; color:var(--zinc-700); }
+
+  .inputbar { flex:none; display:flex; align-items:center; gap:10px; padding:8px 12px;
+    background:var(--zinc-50); border-top:1px solid var(--zinc-200); }
+  .inputbar .plus { font-size:20px; color:var(--zinc-700); }
+  .inputbar .field { flex:1; color:var(--zinc-400); font-size:15px; }
+  .inputbar .mic { font-size:17px; color:var(--zinc-700); }
+
+  .syskb { flex:none; background:#d1d3d9; padding:8px 4px 10px; }
+  .syskb .row { display:flex; gap:6px; margin-bottom:8px; padding:0 3px; }
+  .syskb .k { flex:1; height:42px; border-radius:6px; background:#fff; display:flex;
+    align-items:center; justify-content:center; font-size:16px; color:#111;
+    box-shadow:0 1px 0 rgba(0,0,0,.28); }
+  .syskb .k.mod { background:#adb3bd; font-size:14px; }
+  .syskb .k.space { flex:4.4; }
+  .syskb .k.ret { flex:1.8; background:#adb3bd; font-size:14px; }
+  .syskb .hint { text-align:center; font-size:10.5px; color:#5b5f68; padding-top:2px; }
+
+  /* ---------------- 面板（键盘槽位） ---------------- */
+  .panel { flex:none; height:351px; background:var(--zinc-900);
+    border-top:1px solid var(--zinc-800); display:flex; flex-direction:column;
+    padding:8px 12px 12px; }
+  .panel.hidden { display:none; }
+
+  .segmented { flex:none; display:flex; gap:2px; background:var(--zinc-800);
+    border-radius:9px; padding:2px; margin-bottom:10px; }
+  .seg { flex:1; text-align:center; font-size:12.5px; line-height:18px; padding:5px 0;
+    border-radius:7px; color:var(--zinc-300); cursor:pointer; user-select:none; }
+  .seg.on { background:var(--zinc-600); color:#fff; font-weight:500; }
+
+  .readout { flex:none; display:flex; align-items:center; gap:6px; height:26px; margin-bottom:8px;
+    padding:0 9px; border-radius:8px; background:var(--zinc-950); border:1px solid var(--zinc-800);
+    font-family:var(--mono); font-size:11px; color:var(--zinc-100); white-space:nowrap; overflow:hidden; }
+  .readout .l { flex:none; }
+  .readout .ph { color:var(--zinc-600); }
+  .readout .r { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    color:var(--zinc-400); text-align:right; }
+  .readout.warn { border-color:#7c5a1e; background:#241a09; }
+  .readout.warn .l, .readout.warn .r { color:#e0b25e; }
+
+  /* 组合键模式开关 + 修饰键行 */
+  .modrow { flex:none; display:flex; align-items:center; gap:8px; height:30px; margin-bottom:10px; }
+  .switch { flex:none; display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none;
+    padding-right:2px; }
+  .switch .track { width:38px; height:22px; border-radius:11px; background:var(--zinc-600);
+    position:relative; transition:background .16s; flex:none; }
+  .switch .track::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;
+    border-radius:50%; background:#fff; transition:transform .16s; }
+  .switch.on .track { background:var(--blue); }
+  .switch.on .track::after { transform:translateX(16px); }
+  .switch .cap { font-size:12px; color:var(--zinc-300); white-space:nowrap; }
+
+  .mods { flex:1; min-width:0; display:flex; gap:6px; transition:opacity .16s; }
+  .mods.hidden { opacity:0; pointer-events:none; }
+  .mod { flex:1; min-width:0; height:30px; border-radius:7px; border:1.5px solid var(--blue);
+    color:var(--blue); display:flex; align-items:center; justify-content:center;
+    font-size:12.5px; cursor:pointer; user-select:none; position:relative;
+    background:transparent; transition:background .1s, color .1s; }
+  .mod.latched { background:var(--blue); color:#fff; }
+  .mod.locked::after { content:""; position:absolute; top:3px; right:4px; width:4px; height:4px;
+    border-radius:50%; background:#fff; }
+  .mod.dead { border-color:var(--zinc-700); color:var(--zinc-600); }
+  .mod.dead.latched { background:var(--zinc-700); color:var(--zinc-500); }
+
+  /* 键盘页 */
+  .pages { flex:1; min-height:0; overflow:hidden; position:relative; }
+  .strip { display:flex; width:200%; height:100%; transition:transform .22s cubic-bezier(.32,.72,0,1); }
+  .strip.p0 { transform:translateX(0); }
+  .strip.p1 { transform:translateX(-50%); }
+  .page { width:50%; flex:none; }
+
+  .krow { display:flex; gap:4px; margin-bottom:4px; }
+  .krow:last-child { margin-bottom:0; }
+  .key { flex:1; min-width:0; height:29px; display:flex; align-items:center; justify-content:center;
+    border-radius:7px; background:var(--zinc-700); color:var(--zinc-100);
+    font-family:var(--mono); font-size:13px; user-select:none; cursor:pointer; position:relative;
+    transition:background .08s; }
+  .key:active { background:var(--zinc-600); }
+  .key.wide { font-size:11px; }
+  .key.dual { font-size:12px; letter-spacing:.5px; }
+  .key.dual .up { color:var(--zinc-300); margin-right:3px; }
+  .key.dual .lo { color:var(--zinc-100); }
+  .key.space { flex:1.5; }
+  .key.enter { flex:1.5; }
+  .key.dead { background:var(--zinc-800); color:var(--zinc-600); }
+  .key.dead:active { background:var(--zinc-800); }
+  .key.hole { background:transparent; pointer-events:none; }
+  .key.caps-on { background:var(--blue); color:#fff; }
+  .key.shake { animation:shake .3s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)}
+    75%{transform:translateX(3px)} }
+
+  .dots { flex:none; display:flex; justify-content:center; align-items:center; gap:7px;
+    height:14px; margin-top:6px; }
+  .dots i { width:7px; height:7px; border-radius:50%; background:var(--zinc-700); cursor:pointer;
+    display:block; transition:background .16s; }
+  .dots i.on { background:var(--blue); }
+
+  /* ---------------- 右侧说明 ---------------- */
+  .notes h2 { font-size:15px; font-weight:600; margin:26px 0 8px; letter-spacing:-.01em; }
+  .notes h2:first-child { margin-top:0; }
+  .notes p { margin:0 0 8px; font-size:13px; color:var(--zinc-600); }
+  .notes ul { margin:0 0 10px; padding-left:18px; font-size:13px; color:var(--zinc-600); }
+  .notes li { margin-bottom:4px; }
+  .notes code { font-family:var(--mono); font-size:12px; background:var(--zinc-200);
+    padding:1px 4px; border-radius:4px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; margin:0 0 14px; }
+  th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--zinc-200);
+    vertical-align:top; }
+  th { font-weight:600; color:var(--zinc-700); background:var(--zinc-100); }
+  td.mono { font-family:var(--mono); font-size:11.5px; }
+  .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:5px; white-space:nowrap; }
+  .tag.ok { background:#dcfce7; color:#15803d; }
+  .tag.new { background:#dbeafe; color:#1d4ed8; }
+  .tag.proto { background:#fef3c7; color:#a16207; }
+  .tag.dead { background:#fee2e2; color:#b91c1c; }
+  .callout { border-left:3px solid var(--blue); background:#eff6ff; padding:10px 12px;
+    border-radius:0 6px 6px 0; font-size:13px; color:#1e3a5f; margin:0 0 14px; }
+  .callout.warn { border-color:#d97706; background:#fffbeb; color:#78350f; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>终端键盘面板照 ToDesk 重做</h1>
+  <p>左机可点：切 <b>电脑键盘 / 手机键盘</b>、翻两页、开关「组合键模式」、按修饰键锁存。<br>
+     每按一颗键，终端里会回显一行 <code>[mock] …</code>，说明这一下真的发出去了什么。</p>
+</div>
+
+<div class="layout">
+  <div class="phone-col">
+    <div class="phone"><div class="screen">
+
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="title"><div class="n"><span class="dot"></span>Claude Code</div></div>
+        <div class="back" style="opacity:0">›</div>
+      </div>
+
+      <div class="canvas">
+        <div class="term" id="term"><span class="dim">✻ Welcome to Claude Code</span>
+<span class="pk">›</span> 帮我改一下登录的超时<span class="dim">▊</span>
+</div>
+      </div>
+
+      <div class="accessory">
+        <div class="pill icon active" id="toolbarKeyboard">⌘</div>
+        <div class="pill">回车</div>
+        <div class="pill">Ctrl+C</div>
+        <div class="pill">/exit</div>
+        <div class="pill scroll">…</div>
+      </div>
+
+      <div class="inputbar">
+        <div class="plus">＋</div>
+        <div class="field">输入指令…</div>
+        <div class="mic">🎤</div>
+      </div>
+
+      <div class="panel" id="panel">
+        <div class="segmented">
+          <div class="seg on" data-tab="pc">电脑键盘</div>
+          <div class="seg" data-tab="phone">手机键盘</div>
+        </div>
+
+        <div class="readout" id="readout">
+          <span class="l ph" id="readoutL">未锁修饰键</span>
+          <span class="r" id="readoutR">按字母就是直接输入</span>
+        </div>
+
+        <div class="modrow">
+          <div class="switch on" id="comboSwitch">
+            <div class="track"></div>
+            <div class="cap">组合键模式</div>
+          </div>
+          <div class="mods" id="mods">
+            <div class="mod" data-mod="Ctrl">Control</div>
+            <div class="mod" data-mod="Shift">Shift</div>
+            <div class="mod" data-mod="Option">Option</div>
+            <div class="mod dead" data-mod="Command">⌘</div>
+          </div>
+        </div>
+
+        <div class="pages">
+          <div class="strip p0" id="strip">
+            <!-- 第 1 页：数字 + 三行字母 -->
+            <div class="page" id="page0"></div>
+            <!-- 第 2 页：符号 + Esc/Tab 行 + F 键与导航簇 -->
+            <div class="page" id="page1"></div>
+          </div>
+        </div>
+
+        <div class="dots">
+          <i class="on" data-page="0"></i><i data-page="1"></i>
+        </div>
+      </div>
+
+      <div class="syskb" id="syskb" style="display:none">
+        <div class="row"><span class="k">Q</span><span class="k">W</span><span class="k">E</span><span class="k">R</span><span class="k">T</span><span class="k">Y</span><span class="k">U</span><span class="k">I</span><span class="k">O</span><span class="k">P</span></div>
+        <div class="row" style="padding:0 18px"><span class="k">A</span><span class="k">S</span><span class="k">D</span><span class="k">F</span><span class="k">G</span><span class="k">H</span><span class="k">J</span><span class="k">K</span><span class="k">L</span></div>
+        <div class="row"><span class="k mod">⇧</span><span class="k">Z</span><span class="k">X</span><span class="k">C</span><span class="k">V</span><span class="k">B</span><span class="k">N</span><span class="k">M</span><span class="k mod">⌫</span></div>
+        <div class="row"><span class="k mod">123</span><span class="k mod">🌐</span><span class="k space">空格</span><span class="k ret">换行</span></div>
+        <div class="hint">系统键盘（示意）</div>
+      </div>
+
+    </div></div>
+  </div>
+
+  <div class="notes">
+    <h2>这一版把面板换成了什么</h2>
+    <p>旧的 <b>键盘 / 导航</b> 两个分类没了，换成 ToDesk 那套：一个 <b>电脑键盘</b> tab（两页 + 修饰键行 +「组合键模式」开关），加一个 <b>手机键盘</b> tab。游戏键盘按你说的不做。</p>
+
+    <h2>每一颗键实际会发什么</h2>
+    <table>
+      <tr><th>键</th><th>发出去什么</th><th>状态</th></tr>
+      <tr><td class="mono">1–0　Q–M　Space　Enter　⌫</td><td>文本 / 已有按键</td><td><span class="tag ok">已有</span></td></tr>
+      <tr><td class="mono">Control　Shift　Option</td><td>修饰键锁存（今天的行为，一字不改）</td><td><span class="tag ok">已有</span></td></tr>
+      <tr><td class="mono">{[　}]　|\　:;　"'　&lt;,　&gt;.　?/　`~　=　±</td><td>纯文本（锁 Shift 发上半截，不锁发下半截）</td><td><span class="tag new">新做·不用改协议</span></td></tr>
+      <tr><td class="mono">Caps</td><td>客户端大写锁存（等于按住 Shift，只发大写文本）</td><td><span class="tag new">新做·不用改协议</span></td></tr>
+      <tr><td class="mono">Esc　Tab　Home　End　PgUp　PgDn　Del　↑←↓→</td><td>已有按键字节</td><td><span class="tag ok">已有</span></td></tr>
+      <tr><td class="mono">F1–F12　Ins</td><td><code>\x1bOP</code>…<code>\x1b[24~</code>、<code>\x1b[2~</code></td><td><span class="tag proto">要改协议</span></td></tr>
+      <tr><td class="mono">PrtScr　ScrLK　Pause　⌘</td><td>没有字节可发</td><td><span class="tag dead">死键</span></td></tr>
+    </table>
+
+    <div class="callout warn">
+      <b>你选了「严格照抄」，所以这四颗死键照画。</b>它们画在 ToDesk 的同一个位置、同一个尺寸，但会压暗，
+      按下去出一次警告触觉 + 读数条写明原因——不是「按了完全没反应」。理由：<code>PrtScr</code>/<code>ScrLK</code>/<code>Pause</code>
+      在终端里没有对应字节（ToDesk 是往远端 PC 发扫描码，我们是往 PTY 发字节，两回事）；
+      <code>⌘</code> 在 macOS 终端里被终端 App 自己吃掉（⌘C 复制、⌘V 粘贴），没有字节能到 PTY。
+    </div>
+
+    <h2>要改协议的那 13 颗，代价是什么</h2>
+    <p>F1–F12 和 Ins 逃不掉协议——它们的字节里带 <code>\x1b</code>，而手机端的文本通道<b>明确拒绝控制字符</b>，只能走按键白名单。所以：</p>
+    <ul>
+      <li>白名单 <code>MOBILE_KEYS</code> 从 <b>38 项扩到 51 项</b>，要同时改 <b>5 处</b>（ESM 真相源、CJS 镜像、JSDoc 类型、桌面端 <code>KEY_BYTES</code>、zod 枚举副本），漏一处是运行时才炸的错。</li>
+      <li>发版必须 <b>服务端 → 桌面端 → 手机端</b>。服务端代码一行不用改，但要先部署——旧云端遇到不认识的新键名会<b>直接切断整条连接</b>，用户看到的是「设备莫名离线」。</li>
+      <li>如果不想承担这个顺序，F1–F12 / Ins 就得砍掉，那第二页只剩符号行 + 导航键，仍是一整页，只是左边三列空着。</li>
+    </ul>
+
+    <h2>两处和 ToDesk 对不齐，原因写在这</h2>
+    <p><b>1. 手机键盘 tab 不能像截图那样「面板还在、系统键盘从下面升起来」。</b>
+       iOS 不许我们自己的视图压在系统键盘上方——那需要 <code>inputAccessoryView</code>，而输入栏已经占了那个位置。
+       所以这一版是：点「手机键盘」→ 面板收起 → 输入框聚焦、系统键盘升起；要回到电脑键盘，点工具栏那颗 ⌘。</p>
+    <p><b>2. 分类切换器用系统分段控件，不是 ToDesk 那个下划线 tab。</b>
+       两段之间切换在 iOS 上就是分段控件的语义；下划线 tab 要手搓一套，且和现有面板、和 App 里其它面板会长得不一样。</p>
+
+    <h2>需要你拍板的一条</h2>
+    <div class="callout">
+      面板里那条 <b>读数条</b>（<code>Ctrl + _ → 0x03 · 中断当前进程</code>）<b>ToDesk 没有</b>，是我们上一轮自己加的。
+      它是「不会有一颗按了没反应的键」这条承诺的兑现方式，而这版一下多了四颗死键。
+      我建议留着——你点一下 ⌘ 或 PrtScr 看它怎么说话，再决定要不要去掉。
+    </div>
+
+    <h2>面板高度没变</h2>
+    <p>还是 <b>351pt</b> 的固定槽位，不占系统键盘以外的地方。第二页放得下 6 行，第一页只有 4 行，
+       底下会空一块——这条是上一轮就明确接受的代价（切页时手底下的终端、工具栏、输入框一动不动）。</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict'
+
+  // ---------------------------------------------------------------- 键位定义
+  // unshifted / shifted 是「不锁 Shift / 锁 Shift 各发什么文本」。
+  var DIGITS = [['1','!'],['2','@'],['3','#'],['4','$'],['5','%'],
+                ['6','^'],['7','&'],['8','*'],['9','('],['0',')']]
+  var SYMBOLS = [['=','='],['±','±'],['[','{'],[']','}'],['\\','|'],
+                 [';',':'],["'",'"'],[',','<'],['.','>' ],['/','?']]
+
+  // 修饰键 + 字母 → 键名。与手机端现有的 keyboardPanelControlChords 同一张表。
+  var CTRL_CHORDS = {
+    a:'Ctrl+A', b:'Ctrl+B', c:'Ctrl+C', d:'Ctrl+D', e:'Ctrl+E', f:'Ctrl+F',
+    g:'Ctrl+G', h:'Ctrl+H', i:'Tab',    j:'Enter',  k:'Ctrl+K', l:'Ctrl+L',
+    m:'Enter', n:'Ctrl+N', o:'Ctrl+O', p:'Ctrl+P', q:'Ctrl+Q', r:'Ctrl+R',
+    s:'Ctrl+S', t:'Ctrl+T', u:'Ctrl+U', v:'Ctrl+V', w:'Ctrl+W', x:'Ctrl+X', y:'Ctrl+Y', z:'Ctrl+Z'
+  }
+  // 组合键的中文含义，只给读数条用
+  var CHORD_NOTE = {
+    'Ctrl+A':'行首','Ctrl+B':'tmux 前缀','Ctrl+C':'中断当前进程','Ctrl+D':'结束输入',
+    'Ctrl+E':'行尾','Ctrl+F':'前进一个词','Ctrl+G':'取消','Ctrl+H':'退格','Ctrl+K':'删到行尾',
+    'Ctrl+L':'清屏','Ctrl+N':'下一条历史','Ctrl+O':'执行并取下一行','Ctrl+P':'上一条历史',
+    'Ctrl+Q':'恢复输出','Ctrl+R':'反向搜索历史','Ctrl+S':'暂停输出','Ctrl+T':'交换两字符',
+    'Ctrl+U':'删到行首','Ctrl+V':'字面量插入','Ctrl+W':'删前一个词','Ctrl+X':'readline 前缀',
+    'Ctrl+Y':'粘回','Ctrl+Z':'挂起','Tab':'Tab','Enter':'回车'
+  }
+
+  // 第 2 页：没有字节、只能画出来的四颗
+  var DEAD_REASON = {
+    'PrtScr':'终端里没有这颗键的字节',
+    'ScrLK':'终端里没有这颗键的字节',
+    'Pause':'终端里没有这颗键的字节',
+    'Command':'⌘ 被 macOS 终端 App 自己吃掉，到不了终端'
+  }
+
+  var caps = false        // Caps 大写锁存（客户端状态，不发协议）
+
+  // ---------------------------------------------------------------- 渲染键
+  function el (tag, cls, text) {
+    var n = document.createElement(tag)
+    if (cls) n.className = cls
+    if (text != null) n.textContent = text
+    return n
+  }
+
+  function letterKey (lo, hi) {
+    var k = el('div', 'key', (caps ? lo.toUpperCase() : lo))
+    k.dataset.kind = 'text'
+    k.dataset.lo = lo
+    k.dataset.hi = hi
+    return k
+  }
+
+  function plainKey (label, cls) {
+    return el('div', 'key' + (cls ? ' ' + cls : ''), label)
+  }
+
+  function dualKey (lo, hi) {
+    var k = el('div', 'key dual')
+    k.dataset.kind = 'text'
+    k.dataset.lo = lo
+    k.dataset.hi = hi
+    k.appendChild(el('span', 'up', hi))
+    k.appendChild(el('span', 'lo', lo))
+    return k
+  }
+
+  function buildPage0 (root) {
+    root.appendChild(row(DIGITS.map(function (d) { return dualKey(d[0], d[1]) })))
+    root.appendChild(row('qwertyuiop'.split('').map(function (c) { return letterKey(c, c.toUpperCase()) })))
+    var r3 = 'asdfghjkl'.split('').map(function (c) { return letterKey(c, c.toUpperCase()) })
+    var bs = plainKey('⌫'); bs.dataset.kind = 'key'; bs.dataset.key = 'Backspace'
+    r3.push(bs); root.appendChild(row(r3))
+    var r4 = 'zxcvbnm'.split('').map(function (c) { return letterKey(c, c.toUpperCase()) })
+    var sp = plainKey('Space', 'space'); sp.dataset.kind = 'text'; sp.dataset.lo = ' '; sp.dataset.hi = ' '
+    var en = plainKey('Enter', 'enter'); en.dataset.kind = 'key'; en.dataset.key = 'Enter'
+    r4.push(sp, en); root.appendChild(row(r4))
+  }
+
+  function row (cells) {
+    var r = el('div', 'krow')
+    cells.forEach(function (c) { r.appendChild(c) })
+    return r
+  }
+
+  // 第 2 页：符号行一整行十格，下面四行都是「F 键左三列 + 导航右三列」。
+  function buildPage1 (root) {
+    function fnKey (name) {
+      var k = plainKey(name, 'wide'); k.dataset.kind = 'key'; k.dataset.key = name; return k
+    }
+    function navKey (label, key) {
+      var k = plainKey(label, 'wide')
+      if (key) { k.dataset.kind = 'key'; k.dataset.key = key }
+      else { k.classList.add('hole') }
+      return k
+    }
+    function deadKey (name) {
+      var k = plainKey(name, 'wide dead'); k.dataset.kind = 'dead'; k.dataset.dead = name; return k
+    }
+
+    var esc = fnKey('Escape'); esc.textContent = 'Esc'
+    var tab = fnKey('Tab')
+    var tilde = dualKey('`', '~'); tilde.classList.add('wide')
+    var ins = fnKey('Insert'); ins.textContent = 'Ins'
+    var caps = plainKey('Caps', 'wide'); caps.dataset.kind = 'caps'
+
+    root.appendChild(row(SYMBOLS.map(function (s) { return dualKey(s[0], s[1]) })))
+    root.appendChild(row([esc, tab, tilde, deadKey('PrtScr'), deadKey('ScrLK'), deadKey('Pause')]))
+    root.appendChild(row([fnKey('F1'), fnKey('F2'), fnKey('F3'), ins,
+                          navKey('Home', 'Home'), navKey('PgUp', 'PageUp')]))
+    root.appendChild(row([fnKey('F4'), fnKey('F5'), fnKey('F6'),
+                          navKey('Del', 'Delete'), navKey('End', 'End'), navKey('PgDn', 'PageDown')]))
+    root.appendChild(row([fnKey('F7'), fnKey('F8'), fnKey('F9'), caps,
+                          navKey('↑', 'ArrowUp'), navKey('', null)]))
+    root.appendChild(row([fnKey('F10'), fnKey('F11'), fnKey('F12'),
+                          navKey('←', 'ArrowLeft'), navKey('↓', 'ArrowDown'), navKey('→', 'ArrowRight')]))
+  }
+
+  // ---------------------------------------------------------------- 状态
+  var latched = null, locked = null, lastTap = 0
+  var panel = document.getElementById('panel')
+  var strip = document.getElementById('strip')
+  var term = document.getElementById('term')
+  var readout = document.getElementById('readout')
+  var readoutL = document.getElementById('readoutL')
+  var readoutR = document.getElementById('readoutR')
+  var syskb = document.getElementById('syskb')
+  var comboOn = true
+  var page = 0
+  var readoutWarnTimer = null
+
+  var page0 = document.getElementById('page0')
+  var page1 = document.getElementById('page1')
+  buildPage0(page0)
+  buildPage1(page1)
+
+  function effectiveModifier () { return locked || latched }
+
+  function isShifted () { return caps || effectiveModifier() === 'Shift' }
+
+  // ---------------------------------------------------------------- 读数条
+  function setReadout (warning, right) {
+    readout.classList.toggle('warn', !!warning)
+    if (warning) {
+      readoutL.textContent = right.title
+      readoutL.className = 'l'
+      readoutR.textContent = right.detail
+      clearTimeout(readoutWarnTimer)
+      readoutWarnTimer = setTimeout(renderReadout, 2200)
+    }
+  }
+
+  function renderReadout () {
+    readout.classList.remove('warn')
+    var m = effectiveModifier()
+    if (!m) {
+      readoutL.textContent = '未锁修饰键'
+      readoutL.className = 'l ph'
+      readoutR.textContent = caps ? 'Caps 锁着 · 字母发大写' : '按字母就是直接输入'
+      return
+    }
+    readoutL.textContent = (m === 'Option' ? 'Alt' : m) + (locked ? ' 已锁定 + _' : ' + _')
+    readoutL.className = 'l'
+    if (m === 'Shift') readoutR.textContent = '下一个字母发大写'
+    else if (m === 'Option') readoutR.textContent = '下一个字母发 Esc 前缀组合'
+    else if (m === 'Command') readoutR.textContent = '⌘ 到不了终端'
+    else readoutR.textContent = '下一个字母发 Ctrl 组合'
+  }
+
+  // ---------------------------------------------------------------- 发送
+  function echo (line) {
+    var d = el('div', 'sent', line)
+    term.appendChild(d)
+    term.scrollTop = term.scrollHeight
+    var canvas = term.parentElement
+    canvas.scrollTop = canvas.scrollHeight
+  }
+
+  function sendText (t) { echo('[mock] keys text:' + (t === ' ' ? '␠' : t)) }
+
+  function sendKey (k) { echo('[mock] keys key:' + k) }
+
+  function afterSend () {
+    if (latched && !locked) { latched = null }
+    renderModifiers()
+    renderReadout()
+    repaintLetters()
+  }
+
+  function repaintLetters () {
+    ;[page0, page1].forEach(function (p) {
+      p.querySelectorAll('.key[data-lo]').forEach(function (k) {
+        var lo = k.dataset.lo
+        if (!/^[a-z]$/.test(lo)) return
+        var txt = isShifted() ? lo.toUpperCase() : lo
+        if (k.classList.contains('dual')) return
+        k.textContent = txt
+      })
+    })
+  }
+
+  function pressKey (k) {
+    if (k.dataset.kind === 'dead') {
+      var name = k.dataset.dead
+      shake(k)
+      setReadout(true, { title: name + ' 发不出去', detail: DEAD_REASON[name] })
+      return
+    }
+    if (k.dataset.kind === 'caps') {
+      caps = !caps
+      k.classList.toggle('caps-on', caps)
+      renderReadout(); repaintLetters(); return
+    }
+    if (k.dataset.kind === 'key') { sendKey(k.dataset.key); afterSend(); return }
+
+    // 文本键
+    var m = effectiveModifier()
+    var lo = k.dataset.lo, hi = k.dataset.hi
+    if (m === 'Ctrl') {
+      var mapped = CTRL_CHORDS[lo]
+      if (mapped) { sendKey(mapped); afterSend(); return }
+    }
+    if (m === 'Option') {
+      sendKey('Escape'); sendText(lo); afterSend(); return
+    }
+    var ch = (m === 'Shift' || caps) ? hi : lo
+    sendText(ch)
+    afterSend()
+  }
+
+  function shake (k) {
+    k.classList.remove('shake')
+    void k.offsetWidth
+    k.classList.add('shake')
+  }
+
+  // ---------------------------------------------------------------- 修饰键
+  function renderModifiers () {
+    document.querySelectorAll('.mod').forEach(function (m) {
+      var name = m.dataset.mod
+      var on = effectiveModifier() === name
+      m.classList.toggle('latched', on)
+      m.classList.toggle('locked', locked === name)
+    })
+  }
+
+  function tapModifier (name, node) {
+    if (node.classList.contains('dead')) {
+      shake(node)
+      setReadout(true, { title: '⌘ 发不出去', detail: DEAD_REASON.Command })
+      return
+    }
+    var now = Date.now()
+    if (locked === name) { locked = null; latched = null }
+    else if (latched === name && now - lastTap < 350) { locked = name; latched = name }
+    else { locked = null; latched = name }
+    lastTap = now
+    renderModifiers(); renderReadout(); repaintLetters()
+  }
+
+  // ---------------------------------------------------------------- 事件
+  panel.addEventListener('click', function (e) {
+    var seg = e.target.closest('.seg')
+    if (seg) { switchTab(seg.dataset.tab); return }
+    var mod = e.target.closest('.mod')
+    if (mod) { tapModifier(mod.dataset.mod, mod); return }
+    var dot = e.target.closest('.dots i')
+    if (dot) { goPage(Number(dot.dataset.page)); return }
+    var sw = e.target.closest('#comboSwitch')
+    if (sw) { comboOn = !comboOn; sw.classList.toggle('on', comboOn);
+              document.getElementById('mods').classList.toggle('hidden', !comboOn)
+              return }
+    var key = e.target.closest('.key')
+    if (key) { pressKey(key) }
+  })
+
+  document.getElementById('toolbarKeyboard').addEventListener('click', function () {
+    var shown = panel.style.display !== 'none'
+    panel.style.display = shown ? 'none' : ''
+    syskb.style.display = 'none'
+    this.classList.toggle('active', !shown)
+    document.querySelectorAll('.seg').forEach(function (s) {
+      s.classList.toggle('on', s.dataset.tab === 'pc')
+    })
+  })
+
+  function switchTab (tab) {
+    document.querySelectorAll('.seg').forEach(function (s) {
+      s.classList.toggle('on', s.dataset.tab === tab)
+    })
+    if (tab === 'phone') {
+      // iOS 不许我们自己的视图压在系统键盘之上，所以这里是真的把面板收掉。
+      panel.style.display = 'none'
+      syskb.style.display = ''
+      document.getElementById('toolbarKeyboard').classList.remove('active')
+      echo('[mock] 面板收起 · 系统键盘升起')
+    } else {
+      syskb.style.display = 'none'
+      panel.style.display = ''
+      document.getElementById('toolbarKeyboard').classList.add('active')
+    }
+  }
+
+  function goPage (n) {
+    page = n
+    strip.classList.toggle('p0', n === 0)
+    strip.classList.toggle('p1', n === 1)
+    document.querySelectorAll('.dots i').forEach(function (d) {
+      d.classList.toggle('on', Number(d.dataset.page) === n)
+    })
+  }
+
+  // 横向拖动翻页
+  var dragX = null
+  strip.parentElement.addEventListener('pointerdown', function (e) {
+    if (e.target.closest('.key')) return
+    dragX = e.clientX
+  })
+  strip.parentElement.addEventListener('pointerup', function (e) {
+    if (dragX === null) return
+    var d = e.clientX - dragX
+    dragX = null
+    if (d < -30 && page === 0) goPage(1)
+    else if (d > 30 && page === 1) goPage(0)
+  })
+
+  renderModifiers()
+  renderReadout()
+  repaintLetters()
+})()
+</script>
+</body>
+</html>
