@@ -179,6 +179,44 @@ struct MeetingRecordingBlocksTests {
         #expect(layout.slots > 0)
     }
 
+    // MARK: - 回放波形
+
+    @Test func playbackResamplingTakesThePeakOfEachBucket() {
+        // 取最大值而不是平均：平均会把一段话里最响的那个音节抹平，回放出来比实际安静，
+        // 而这条波形唯一的作用就是让人认出「刚才那句在哪儿」。
+        let peaks: [Double] = [0.1, 0.9, 0.2, 0.3, 0.8, 0.05]
+        let columns = resamplePlaybackPeaks(peaks, columns: 3)
+        #expect(columns.count == 3)
+        #expect(abs(columns[0] - 0.9) < 0.0001)
+        #expect(abs(columns[1] - 0.3) < 0.0001)
+        #expect(abs(columns[2] - 0.8) < 0.0001)
+    }
+
+    @Test func playbackResamplingKeepsEverySampleWhenThereIsRoom() {
+        // 采样比列数少的时候不该被抹掉，否则短录音的波形会变得没有细节。
+        let peaks: [Double] = [0.1, 0.5, 0.9]
+        #expect(resamplePlaybackPeaks(peaks, columns: 10) == peaks)
+    }
+
+    @Test func playbackResamplingHandlesNothing() {
+        #expect(resamplePlaybackPeaks([], columns: 10).isEmpty)
+        #expect(resamplePlaybackPeaks([0.5], columns: 0).isEmpty)
+    }
+
+    @Test func playbackLayoutFillsTheWidth() {
+        // 回放那条是**整段铺满宽度**的，与录音页那条滚动窗口不同——这是有意的。
+        let layout = meetingPlaybackWaveLayout(peakCount: 10_000, canvasWidth: 390)
+        #expect(layout.columns > 100)
+        #expect(layout.barWidth > 0)
+        // 柱子再胖也有上限：一排胖方块读不出「哪一段更响」。
+        #expect(layout.barWidth <= 6)
+    }
+
+    @Test func playbackLayoutDoesNotFatBarsWhenSamplesAreFew() {
+        let few = meetingPlaybackWaveLayout(peakCount: 4, canvasWidth: 390)
+        #expect(few.barWidth <= 6)
+    }
+
     // MARK: - 时长估算
 
     @Test func durationEstimateFollowsTheBitRate() {

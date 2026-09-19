@@ -170,6 +170,43 @@ func meetingLiveWaveLayout(
     return MeetingLiveWaveLayout(slots: slots, visibleCount: visible, startSlot: slots - visible)
 }
 
+/// 回放那条波形的排布：**整段铺满宽度**。
+///
+/// 与录音页那条滚动窗口不同，这是有意的：它的作用是一眼看完整个录音，而不是盯着最近
+/// 几秒。所以它按画布宽度分桶，每条柱子代表一段时间里的最大振幅。
+struct MeetingPlaybackWaveLayout: Equatable {
+    /// 画布上分几段。
+    let columns: Int
+    /// 每根柱子的宽度。采样远少于列数时槽位会被拉得很宽，所以有一个上限。
+    let barWidth: Double
+}
+
+/// 把整段振幅按列数重新分桶，每桶取**最大值**。
+///
+/// 取最大值而不是平均：平均会把一段话中间那个最响的音节抹平，回放出来的波形看着比
+/// 实际安静，而波形在这里唯一的作用就是让人认出「刚才那句在哪儿」。
+func resamplePlaybackPeaks(_ peaks: [Double], columns: Int) -> [Double] {
+    guard columns > 0, !peaks.isEmpty else { return [] }
+    guard peaks.count > columns else { return peaks }
+    let step = Double(peaks.count) / Double(columns)
+    return (0..<columns).map { column in
+        let start = Int(Double(column) * step)
+        let end = min(peaks.count, max(start + 1, Int(Double(column + 1) * step)))
+        return peaks[start..<end].max() ?? 0
+    }
+}
+
+func meetingPlaybackWaveLayout(peakCount: Int, canvasWidth: Double) -> MeetingPlaybackWaveLayout {
+    let column = MeetingAudio.barWidth + MeetingAudio.barGap
+    let columns = max(1, Int(floor(canvasWidth / column)))
+    // 采样比列数还少时槽位会被拉得很宽，超过这个值柱子就不再长胖——一排胖方块读不出
+    // 「哪一段更响」。
+    let slack = max(1, peakCount)
+    let slot = min(column, canvasWidth / Double(slack))
+    let barWidth = min(max(slot * 0.58, MeetingAudio.barWidth), 6)
+    return MeetingPlaybackWaveLayout(columns: columns, barWidth: barWidth)
+}
+
 /// 收尾之前只知道收到了多少字节，按码率折算一个时长出来。
 ///
 /// 只用在异常退出那条路上：正常收尾用的是一路记下来的真实时长。

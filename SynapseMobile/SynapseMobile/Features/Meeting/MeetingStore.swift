@@ -14,6 +14,26 @@ final class MeetingStore {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
+    /// 详情里那两栏。
+    enum ViewMode: String {
+        case audio
+        case text
+    }
+
+    /// 用户在语音 / 文字之间选的那一个。
+    ///
+    /// 存在 store 上而不是视图上，是因为它**粘**：切到别的录音仍保持当前视图。视图上
+    /// 的 `@State` 随着详情页重建就没了，用户每点一条都要重新选一次。
+    private(set) var viewMode: ViewMode = .audio
+    /// 用户这一次进 App 有没有自己选过。转写失败要默认落在文字视图，但那不该覆盖用户
+    /// 明确选过的偏好。
+    private(set) var hasChosenView = false
+
+    func select(viewMode: ViewMode) {
+        self.viewMode = viewMode
+        hasChosenView = true
+    }
+
     /// 详情按 id 缓存，来回点列表不会每次都重新拉一遍。
     private var details: [String: MeetingDetail] = [:]
 

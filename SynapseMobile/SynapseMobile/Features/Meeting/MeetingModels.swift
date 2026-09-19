@@ -140,6 +140,13 @@ enum MeetingText {
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    /// 详情头部那一条：时间 · 时长。没有发言人数——两端都不再渲染它。
+    static func secondaryLine(_ detail: MeetingDetail) -> String {
+        var parts = [relativeTime(detail.startedAt)]
+        if detail.durationMs > 0 { parts.append(duration(detail.durationMs)) }
+        return parts.joined(separator: " · ")
+    }
+
     /// 服务端给的是 ISO8601，这里翻成「今天 14:00」这种一眼能读的形式。
     static func relativeTime(_ iso: String) -> String {
         guard let date = ISO8601DateFormatter.withFractionalSeconds.date(from: iso)

@@ -335,6 +335,10 @@ final class SynapseAppModel {
     /// 顶部那枚胶囊、锁屏上的实时活动、控制中心的「完成」摸到的都得是同一个它。
     let recording = MeetingRecordingSession()
 
+    /// 详情页语音视图里那个播放器。挂在模型上是为了让它比详情页活得久一点点：切视图、
+    /// 来回点列表都不打断正在播的那一段。
+    let playback = MeetingPlayback()
+
     /// Which terminals this phone is sizing, as the summaries have last said.
     private var gridClaims = GridClaimLedger()
 
@@ -441,6 +445,8 @@ final class SynapseAppModel {
         // 正在录的那条也是。录着的时候退出登录，本机那份音频留在盘上等下次启动收尾——
         // 但那个账号已经登不上了，收尾会失败，文件也就一直躺着。
         if recording.isRecording { recording.cancel() }
+        // 正在播的那一段也是。它会连着一条已经不属于这个账号的 URL 继续放。
+        playback.stop()
         await apiClient.logout()
         authState = .signedOut
     }
@@ -477,6 +483,11 @@ final class SynapseAppModel {
     /// 开始一段新录音。加号、控制中心、主屏快捷操作、Siri 都落到这里。
     func startRecording() async {
         await recording.start(using: apiClient)
+    }
+
+    /// 语音视图要的那两样：音频地址和波形。都是按需取的，不进列表的载荷。
+    func loadMeetingAudio(_ meetingId: String) async {
+        await playback.load(meetingId: meetingId, using: apiClient)
     }
 
     func handleScenePhase(_ isActive: Bool) {
