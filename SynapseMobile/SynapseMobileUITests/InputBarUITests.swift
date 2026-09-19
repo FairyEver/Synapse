@@ -269,19 +269,28 @@ final class InputBarUITests: XCTestCase {
     /// 会立刻掉出去，而落在中间的数还能容忍几十点的出入。
     private static let upToThePanel: CGFloat = 170
 
-    /// §8 第 5 条：进语音态要顺手把键盘收走 —— 系统的与自绘的都收。
-    func testEnteringVoiceModePutsTheKeyboardsAway() throws {
+    /// §8 第 5 条：进语音态要顺手把键盘收走。
+    ///
+    /// 自绘面板那一半现在**从界面上够不着**：面板开着时工具栏与输入栏整条让位，切换键
+    /// 就在那条输入栏上，所以「面板开着的时候进语音态」构造不出来。能构造的是另一半 ——
+    /// 系统键盘——而它仍然由 `enterVoiceMode` 里那次 `dismissKeyboards()` 收掉；这一条
+    /// 验的就是那一下。
+    func testEnteringVoiceModePutsTheKeyboardAway() throws {
         let app = openTerminal()
 
-        // 先把自绘键盘面板叫起来。
-        let keyboardButton = app.buttons["toolbar-keyboard"]
-        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10), "工具栏上没有键盘键")
-        keyboardButton.tap()
-        XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "键盘面板没有打开")
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "输入栏上没有输入框")
+        field.tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: 10),
+            "点了输入框，系统键盘没起来"
+        )
 
         enterVoiceMode(app)
-        // 面板里的键在语音态下不该还留在屏幕上。
-        XCTAssertFalse(app.staticTexts["esc"].exists || app.buttons["esc"].exists, "进语音态没有收起键盘面板")
+        XCTAssertFalse(
+            app.keyboards.firstMatch.exists,
+            "进语音态没有收起系统键盘"
+        )
         shot(app, "40-voice-mode-without-panel")
     }
 

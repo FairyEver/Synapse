@@ -103,23 +103,40 @@ final class ChromeAutoHideUITests: XCTestCase {
         XCTAssertEqual(hold.label, "完成", "录着的时候那一格不该变")
     }
 
-    /// 自绘键盘面板开着的时候不收 —— 它自己就坐在输入栏底下，收栏等于把键盘一起收走。
-    func testTheKeyboardPanelKeepsTheBars() throws {
+    /// 自绘键盘面板开着的时候，工具栏与输入栏整条让位 —— 它是一座完整的电脑键盘，
+    /// 键盘上面不该压着别的行。
+    ///
+    /// 两件事一起验，因为它们是同一条设计的两面：栏让位，所以面板不会被收栏那套计时器
+    /// 带走（栏早就不在了，而 `isKeyboardPanelUp` 那条禁制仍然立着，收的是 `chromeHidden`
+    /// 那个标志）；而收面板的路只剩点画布一条 —— 点画布既收键盘，也把栏叫回来。
+    func testTheKeyboardPanelTakesTheBarsPlace() throws {
         let app = openTerminal()
         revealBars(app)
 
         let keyboardKey = app.buttons["toolbar-keyboard"]
+        let probe = app.buttons["panelkey-modifier-Ctrl"]
+        let toggle = app.buttons["voice-mode-toggle"]
         XCTAssertTrue(keyboardKey.waitForExistence(timeout: 6), "工具栏上没有 ⌘")
         keyboardKey.tap()
 
-        XCTAssertTrue(
-            app.buttons["toolbar-all"].waitForExistence(timeout: 6),
-            "点了 ⌘ 没打开面板"
-        )
-        settle(seconds: Self.waitForHide)
+        XCTAssertTrue(probe.waitForExistence(timeout: 10), "点了 ⌘ 没打开面板")
+        // 栏是滑走的，等它落定再断言。
+        settle(seconds: 1)
 
-        XCTAssertTrue(keyboardKey.exists, "面板开着，栏却被收走了")
-        XCTAssertTrue(app.buttons["voice-mode-toggle"].exists, "面板开着，输入栏却被收走了")
+        XCTAssertFalse(keyboardKey.exists, "面板开着，工具栏还压在键盘上面")
+        XCTAssertFalse(toggle.exists, "面板开着，输入栏还压在键盘上面")
+
+        // 闲置到点也不会把面板带走 —— 面板自己不在了的话，这一段就什么都不剩了。
+        settle(seconds: Self.waitForHide)
+        XCTAssertTrue(probe.exists, "闲置到点了，键盘面板被一起收走了")
+
+        // 点键盘外侧那块画布：面板收掉，两条栏回来。
+        let canvas = app.descendants(matching: .any)["terminal.text"]
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+
+        XCTAssertTrue(probe.waitForNonExistence(timeout: 10), "点了画布，面板没有收掉")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 6), "收了面板，输入栏没有回来")
+        XCTAssertTrue(keyboardKey.exists, "收了面板，工具栏没有回来")
     }
 
     /// 横屏把顶栏并进了工具栏：返回键与 ⌘ 落在同一行上。

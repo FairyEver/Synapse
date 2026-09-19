@@ -40,7 +40,7 @@ struct TerminalScreen: View {
     /// 连续收放会留下两个睡着的任务，各自清标志、各自补报一次。
     @State private var chromeSettleTask: Task<Void, Never>?
     /// 这一页去掉安全区之后有多高。横屏时键盘面板按它限高（见
-    /// `KeyboardPanelMetrics.height(rows:fitting:)`），别的什么都不用它。
+    /// `KeyboardPanelMetrics.height(fitting:)`），别的什么都不用它。
     @State private var availableHeight: CGFloat = 0
     /// Whether the command panel is open. The bar's right-hand key owns this, and the
     /// panel that reads it is presented as a sheet at the end of the screen.
@@ -257,6 +257,20 @@ struct TerminalScreen: View {
     /// 屏幕是矮的那一种。竖屏 iPhone 与 iPad 都是 `.regular`，所以这一条只对横屏成立。
     private var isCompactHeight: Bool { verticalSizeClass == .compact }
 
+    /// 键盘面板把工具栏和输入栏顶掉了。
+    ///
+    /// 面板是一座完整的电脑键盘，它上面不该压着别的行 —— 留着那两条，键盘就只是屏幕
+    /// 下方的一截，而不是「屏幕的下半部分就是键盘」。所以它一上来，两条栏整条让位，
+    /// 上面只剩终端；收面板的路也只剩点键盘外侧那块画布一条（横屏时工具栏并进了顶栏，
+    /// 那颗 ⌘ 还在，两条路都通）。
+    ///
+    /// **录着音的时候不让。** 录音浮层挂在输入栏那一组上，而手指很可能还压在「按住说话」
+    /// 那一格里；把整条栏从手底下抽走，那一次录音就没有收尾的地方了。这种时候面板照旧
+    /// 开在两条栏下面，退化成改造前那副样子 —— 难看，但不会丢一段录音。
+    private var barsStandDown: Bool {
+        keyboardPanelPresented && !voicePresentation.panelVisible
+    }
+
     /// 这一刻三条栏可不可以收（判定本身在 `TerminalChromeConditions` 里，单测逐条走完）。
     ///
     /// 算成纯值而不是就地问某个 `@State`，是因为**它同时是计时的重启信号**：
@@ -328,12 +342,12 @@ struct TerminalScreen: View {
         }
     }
 
-    /// The keyboard button is a switch between the two keyboards, not a way in.
+    /// 放下那块自绘的键盘面板。
     ///
-    /// It did not have a second press to answer while the panel was a sheet, because a
-    /// sheet covered the button that had raised it. Sitting in the layout, the button
-    /// stays where it was and is reachable again — which is how a keyboard button
-    /// behaves everywhere else on the system.
+    /// 面板开着的时候它自己那颗 ⌘ 是看不见的 —— 工具栏整条让位给了键盘
+    /// （`barsStandDown`），所以在竖屏里这一条只剩「点画布」一条路走得到。横屏不一样：
+    /// 那一行把顶栏并了进去，⌘ 就长在上面那条栏里，面板开着时它还在原处，再点一次就
+    /// 把键盘收掉 —— 和系统键盘上那颗 ⌘ 一个脾气。
     private func toggleKeyboardPanel() {
         guard !keyboardPanelPresented else {
             dismissKeyboards()
@@ -567,7 +581,7 @@ struct TerminalScreen: View {
             // 工具栏与输入栏合成一组，语音浮层就挂在这一组上：它浮在**整条输入区之上**，
             // 也就是终端画面上。挂在这一组而不是挂输入栏，是因为按住说话时工具栏要保持
             // 可用 —— 浮层压住那一排按钮，正是产品负责人指出过的问题。
-            if !chromeHidden {
+            if !chromeHidden && !barsStandDown {
                 VStack(spacing: 0) {
                     // 横屏时工具栏已经并进上面那一行了，这里只剩输入栏。
                     if !isCompactHeight { accessoryBar }
@@ -642,8 +656,9 @@ struct TerminalScreen: View {
             // Last, so that everything above it keeps its place and the terminal is
             // what gives up the room — the same bargain the system keyboard makes.
             //
-            // 它在收放的判断之外，因为它根本不可能和"栏收着"同时成立：`keyboardPanelPresented`
-            // 是 `isKeyboardPanelUp`，只要它真，上面那两条 `if` 就是假。
+            // 它在收放的判断之外，因为它根本不可能和"栏收着"同时成立：闲置计时器收不走
+            // 面板开着时的栏（`isKeyboardPanelUp` 那条禁制），所以 `chromeHidden` 在
+            // `keyboardPanelPresented` 为真时一定是假。
             keyboardPanel
         }
         // The bottom safe area is the input bar's surface, not the canvas's: it is
@@ -1212,9 +1227,9 @@ struct TerminalScreen: View {
         if keyboardPanelPresented {
             TerminalKeyboardPanel(
                 isEnabled: isRunning,
-                // 面板自己按**当前这一页**有几行定高（第一页 306、第二页 390），这里
-                // 只给上限：竖屏给满，横屏压下来。横屏那两档加上两条栏都会超出屏幕，
-                // 顶栏会被挤出画面 —— 而两页封在同一个上限上，横屏翻页仍然不动。
+                // 面板自己定高（346），这里只给上限：竖屏给满，横屏压下来。横屏那一档
+                // 加上顶栏会超出屏幕，顶栏会被挤出画面 —— 而面板本身两页同高，
+                // 横屏翻页也仍然不动。
                 maxHeight: availableHeight
             ) { actions in
                 model.sendKeys(sessionId, actions)
@@ -1224,12 +1239,6 @@ struct TerminalScreen: View {
                 // the ordinary way to use it, and a panel that closed after each one
                 // would have to be reopened for each one.
                 if actions.contains(.key(.enter)) { model.commitDeliveredAttachments(for: sessionId) }
-            } onRequestSystemKeyboard: {
-                // 面板里的「手机键盘」不是另一页板子，是这块板子让位给系统键盘：
-                // iOS 不许我们自己的视图压在系统键盘之上，所以这里做的是键盘之间该做
-                // 的事 —— 收掉这一个，叫起那一个。先收再聚焦，两块键盘才不在路上撞见。
-                setKeyboardPanel(false)
-                inputFocused = true
             }
         }
     }

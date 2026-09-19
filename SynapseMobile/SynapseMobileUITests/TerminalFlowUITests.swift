@@ -766,36 +766,34 @@ final class TerminalFlowUITests: XCTestCase {
             "Caps stayed on after being switched off"
         )
 
-        // 「手机键盘」不是这块板子的另一页 —— iOS 不许我们自己的视图压在系统键盘之上
-        // —— 所以它做的是键盘之间该做的事：把这块收掉、把那块叫起来。收掉之后工具栏
-        // 那颗键还在原处，再点一次就回到电脑键盘。
-        app.buttons["手机键盘"].tap()
+        // 收起这块面板的路只剩一条：点键盘外侧那块画布。面板一上来，工具栏和输入栏
+        // 整条让位 —— 那颗 ⌘ 也跟着走了，所以屏幕下半部分就是一块电脑键盘，它上面压着的
+        // 东西只剩终端本身。
+        //
+        // 「手机键盘」那一栏因此没有了：系统键盘走的是它本来就该走的那条路，点输入框。
+        // 而输入栏在面板收起来之后才回到屏幕上，两块键盘撞不到一起。
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
         XCTAssertTrue(
-            app.buttons["panelkey-caps"].waitForNonExistence(timeout: 10),
-            "choosing the phone keyboard left the computer keyboard up"
+            app.buttons["panelkey-modifier-Ctrl"].waitForNonExistence(timeout: 10),
+            "点画布没有收起电脑键盘"
         )
         XCTAssertTrue(
-            app.keyboards.firstMatch.waitForExistence(timeout: 10),
-            "the system keyboard never came up"
+            app.buttons["toolbar-keyboard"].waitForExistence(timeout: 10),
+            "收了面板，工具栏没有回来"
         )
-        capture(app, name: "18-phone-keyboard")
-        app.buttons["toolbar-keyboard"].tap()
-        // 用修饰键那一行当「面板回来了」的标记：两页都在，而面板每次都是从零构建的
-        // （`TerminalScreen` 里是 `if keyboardPanelPresented`），所以它回来时一定落在
-        // 第 0 页 —— 拿第 1 页的键（Caps、F1）当标记，测的是另一件事。
         XCTAssertTrue(
-            app.buttons["panelkey-modifier-Ctrl"].waitForExistence(timeout: 10),
-            "the panel did not come back after switching to the phone keyboard"
+            app.buttons["voice-mode-toggle"].exists,
+            "收了面板，输入栏没有回来"
         )
+        capture(app, name: "18-panel-dismissed-by-canvas")
     }
 
-    /// The panel is a keyboard, so it answers what a keyboard answers.
+    /// The panel is a keyboard, so it answers what a keyboard answers: it holds still
+    /// while it is up, and the one gesture outside it puts it away.
     ///
-    /// None of this was reachable while the panel was a sheet. A sheet covers the
-    /// button that raised it, the input bar and the terminal underneath, so there was
-    /// nothing left on screen to press — the button could only ever go one way. In the
-    /// layout those three are all still there, and the rule they now serve is that
-    /// this screen has two keyboards and only one of them may be up.
+    /// 「面板开着的时候上面还剩什么」是这一条量得出来的另一半：工具栏与输入栏整条让位，
+    /// 键盘上面只剩终端。收它的路也只剩一条 —— 点画布（竖屏；横屏那颗 ⌘ 并进了顶栏，
+    /// 所以两条路都通）。
     func testThePanelAnswersTheKeyboardGestures() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
@@ -814,15 +812,21 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let keyboardButton = app.buttons["toolbar-keyboard"]
+        let toolbar = app.buttons["toolbar-all"]
+        let toggle = app.buttons["voice-mode-toggle"]
         // 用修饰键那一行当「面板开没开」的探针：它两页都在，而 `esc` 现在住在第二页，
         // 面板是先落在第一页上的。
         let escapeKey = app.buttons["panelkey-modifier-Ctrl"]
         XCTAssertTrue(waitForHittable(keyboardButton, timeout: 10), "no way into the panel")
 
-        // Up, and showing that what is above it keeps its place: the toolbar and the
-        // input bar are not covered, and the terminal is what gave up the room.
+        // Up, and the two bars go with it: the keyboard is the whole of the bottom of the
+        // screen, and the terminal is what gives up the room. 栏是滑走的，所以先等它落定
+        // 再断言「不在了」—— 只断言一边的检查，标识符写错了也会绿。
         keyboardButton.tap()
         XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never opened")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(toolbar.exists, "面板开着，工具栏还压在键盘上面")
+        XCTAssertFalse(toggle.exists, "面板开着，输入栏还压在键盘上面")
         capture(app, name: "17-panel-in-the-keyboard-slot")
         let withPanel = terminal.frame.height
 
@@ -852,7 +856,8 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertEqual((a.minY - q.minY) - 36, columnPitch - keyWidth, accuracy: 1,
                        "纵向的缝和横向的缝不一样宽，板子就不是一个网格")
 
-        // 面板高度随页走：第一页四行、第二页六行，翻页时多出来的那两行还给终端。
+        // 面板只有一个高度：第二页六行是它的高度，第一页四行也用同一个 —— 翻页时
+        // 终端一动不动。第一页底下多出来的那两行空白是有意的，代价换来的就是这一条。
         app.buttons["panelkey-page-1"].tap()
         XCTAssertTrue(
             waitForHittable(app.buttons["panelkey-key-F1"], timeout: 10),
@@ -860,49 +865,47 @@ final class TerminalFlowUITests: XCTestCase {
         )
         capture(app, name: "17b-panel-second-page")
         XCTAssertEqual(
-            withPanel - terminal.frame.height, 84, accuracy: 2,
-            "翻页没有把两行（2 × 42）的高度还给终端"
+            terminal.frame.height, withPanel, accuracy: 2,
+            "翻到第二页动了终端的高度"
+        )
+        // 板子也没跟着长：第二页的底行不靠滚动就够得着（板子和面板一样高）。
+        XCTAssertTrue(
+            app.buttons["panelkey-key-F12"].isHittable,
+            "第二页的底行要滚才够得着"
         )
         app.buttons["panelkey-page-0"].tap()
         XCTAssertTrue(
             waitForHittable(app.buttons["panelkey-letter-q"], timeout: 10),
             "the first page never came back"
         )
-
-        // Down again from the same button. A keyboard button that cannot put its
-        // keyboard away is the one thing a sheet could not offer.
-        keyboardButton.tap()
-        XCTAssertTrue(
-            escapeKey.waitForNonExistence(timeout: 10),
-            "a second press did not put the panel away"
-        )
-        XCTAssertGreaterThan(
-            terminal.frame.height, withPanel,
-            "the terminal did not get its height back when the panel closed"
+        XCTAssertEqual(
+            terminal.frame.height, withPanel, accuracy: 2,
+            "翻回第一页动了终端的高度"
         )
 
-        // The input is the other keyboard. Asking for it is asking for this one to go,
-        // and never both at once.
-        keyboardButton.tap()
-        XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never came back")
-        app.textFields.firstMatch.tap()
-        XCTAssertTrue(
-            escapeKey.waitForNonExistence(timeout: 10),
-            "tapping the input left the panel up underneath the system keyboard"
-        )
-
-        // The canvas puts away whichever one is up — the same gesture that has always
-        // dismissed the system keyboard here, so it is the same entry point.
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
-        keyboardButton.tap()
-        XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never came back")
-        capture(app, name: "18-panel-before-canvas-tap")
+        // 收面板：点键盘外侧那块画布。竖屏里这是唯一的一条路 —— 那颗 ⌘ 随着工具栏
+        // 一起让位了，看不见就点不到。两条栏随之回来。
         terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
         XCTAssertTrue(
             escapeKey.waitForNonExistence(timeout: 10),
             "tapping the canvas did not put the panel away"
         )
         capture(app, name: "19-panel-dismissed-by-canvas")
+        XCTAssertTrue(waitForHittable(toolbar, timeout: 10), "收了面板，工具栏没有回来")
+        XCTAssertTrue(waitForHittable(toggle, timeout: 10), "收了面板，输入栏没有回来")
+        XCTAssertGreaterThan(
+            terminal.frame.height, withPanel,
+            "the terminal did not get its height back when the panel closed"
+        )
+
+        // 打字是另一个键盘，走的是它本来就该走的那条路：点输入框把系统键盘叫起来。
+        // 面板这时候是收着的，两块键盘撞不到一起 —— 没有那条「手机键盘」的岔路了。
+        app.textFields.firstMatch.tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: 10),
+            "点了输入框，系统键盘没有起来"
+        )
+        XCTAssertFalse(escapeKey.exists, "叫起系统键盘的时候面板也跟着起来了")
     }
 
     /// 在终端页上把它停掉，这一页就该自己回到列表上。

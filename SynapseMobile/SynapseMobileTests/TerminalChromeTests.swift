@@ -22,7 +22,12 @@ struct TerminalChromeTests {
         #expect(conditions.mayAutoHide == false)
     }
 
-    /// 自绘的键盘面板开着 —— 它自己就是一条栏的延伸，收栏等于把键盘收走。
+    /// 自绘的键盘面板开着。
+    ///
+    /// 面板一上来，工具栏与输入栏就整条让位（`TerminalScreen.barsStandDown`），所以这条
+    /// 禁制管的不再是"别把栏收走"——它们本来就不在屏幕上了。管的是**收栏那个标志**：
+    /// 闲置计时器若在面板开着时把 `chromeHidden` 翻真，收掉面板之后人面对的会是一块
+    /// 没有栏的屏幕，还得再点一下才知道栏去哪了。
     @Test func theKeyboardPanelHoldsTheBars() {
         var conditions = idle
         conditions.isKeyboardPanelUp = true
