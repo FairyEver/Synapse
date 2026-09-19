@@ -34,8 +34,29 @@ enum LiveMessageType {
 /// The socket is to the cloud, not to a computer, so a desktop signing in or
 /// dropping out is invisible here without this. It carries the whole list rather
 /// than a delta, so replacing what we hold is always correct.
+///
+/// Ids only, deliberately: this is fanned out to every phone of the account, and a
+/// phone that is not looking at the picker has no use for the names. The names come
+/// from `APIClient.onlineDesktops()` — see `ReachableDesktop`.
 struct MobilePresencePayload: Decodable {
     let desktopClientInstanceIds: [String]
+}
+
+/// One computer this account can reach right now, as the picker offers it.
+///
+/// The name is optional because it arrives on a field a server that predates it
+/// does not send. An absent name is a computer this phone can still reach and
+/// still switch to — it is a worse label, not a different machine — so the list
+/// keeps it either way rather than hiding a computer it cannot name.
+struct ReachableDesktop: Identifiable, Equatable {
+    let clientInstanceId: String
+    let deviceName: String?
+
+    var id: String { clientInstanceId }
+
+    /// What to draw for it. Falls back to the id, which is at least unique and lets
+    /// someone who knows their client ids tell the two apart.
+    var label: String { deviceName ?? clientInstanceId }
 }
 
 struct LiveEnvelope: Decodable {

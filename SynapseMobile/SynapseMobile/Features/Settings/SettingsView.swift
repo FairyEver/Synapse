@@ -36,33 +36,46 @@ struct SettingsView: View {
                 Text("终端")
             }
 
+            // 点一行就换电脑，和「终端」那一屏的设备行是同一件事的两个入口：
+            // 那边是收起来的菜单，这边本来就是一列，直接把行变成按钮。
+            //
+            // 名字一律走 `model.desktopName(_:)`。它有三个来源——那台电脑正在发的
+            // summary、设备列表接口带回来的名字、上一回见过的名字——哪一台该用哪一个
+            // 由那一个函数说了算，不在这两处各推一遍。别的电脑的名字以前确实拿不到
+            // （`mobile.presence` 只带 id），现在由 `/api/mobile/desktops` 带回来。
             Section("已连接的电脑") {
                 if model.onlineDesktops.isEmpty {
                     Text("没有在线的电脑")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(model.onlineDesktops, id: \.self) { desktop in
-                        HStack {
-                            Circle()
-                                .fill(Theme.running)
-                                .frame(width: 7, height: 7)
-                            // 正在看的这台显示它的名字，与「终端」那一屏的设备行同一套
-                            // 写法。名字只有一个来源：这台电脑自己发来的 summary ——
-                            // `mobile.presence` 只带 id，所以**别的**电脑叫什么，手机
-                            // 无从得知，只能显示 id。这不是这一处能修的，要改协议。
-                            Text(desktop == model.selectedDesktopClientInstanceId
-                                 ? (model.summary?.desktopName ?? desktop)
-                                 : desktop)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                            Spacer()
-                            if desktop == model.selectedDesktopClientInstanceId {
-                                Text("当前")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                    ForEach(model.onlineDesktops) { desktop in
+                        Button {
+                            guard desktop.clientInstanceId != model.selectedDesktopClientInstanceId else { return }
+                            Haptics.select()
+                            model.selectDesktop(desktop.clientInstanceId)
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(desktop.clientInstanceId == model.selectedDesktopClientInstanceId
+                                          ? Theme.running
+                                          : Color.secondary)
+                                    .frame(width: 7, height: 7)
+                                Text(model.desktopName(desktop.clientInstanceId))
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                                if desktop.clientInstanceId == model.selectedDesktopClientInstanceId {
+                                    Text("当前")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .disabled(desktop.clientInstanceId == model.selectedDesktopClientInstanceId)
+                        .accessibilityIdentifier("settings-desktop-\(desktop.clientInstanceId)")
                     }
                 }
             }

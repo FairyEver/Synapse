@@ -22,7 +22,7 @@ import { LiveClientRegistry } from "./live-client-registry"
 import { LiveDeviceService } from "./live-device.service"
 import { toPublicDto } from "./live-query.service"
 import { LiveStreamService } from "./live-stream.service"
-import type { LiveClientDisconnectReason, LiveClientInstance } from "./live.types"
+import type { LiveClientDisconnectReason, LiveClientInstance, LiveReachableDesktop } from "./live.types"
 
 interface LiveDesktopGatewayClock {
   readonly randomId: () => string
@@ -193,6 +193,20 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
   /** The devices this user can currently reach, for resolving a phone's target. */
   listOnlineClientInstanceIds(userId: string): string[] {
     return this.registry.listOnlineByUser(userId).map((entry) => entry.clientInstanceId)
+  }
+
+  /**
+   * The same computers, with the names their users gave them.
+   *
+   * A separate method rather than a richer `listOnlineClientInstanceIds`: that one
+   * also feeds the presence fingerprint below, which must stay ids-only so that a
+   * computer renaming itself does not read as one dropping out.
+   */
+  listOnlineDesktops(userId: string): LiveReachableDesktop[] {
+    return this.registry.listOnlineByUser(userId).map((entry) => ({
+      clientInstanceId: entry.clientInstanceId,
+      deviceName: entry.deviceName,
+    }))
   }
 
   /**

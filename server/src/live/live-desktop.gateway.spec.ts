@@ -1142,3 +1142,41 @@ describe("LiveDesktopGateway", () => {
     }))
   })
 })
+
+describe("LiveDesktopGateway online desktop list", () => {
+  /*
+   * The picker's data. A phone that can only see ids has nothing to offer a user
+   * with two computers — two UUIDs are not a choice — so the name has to survive
+   * this projection, and it has to be the registry's own field rather than
+   * anything this method invents.
+   */
+  it("carries each reachable computer's name", () => {
+    const gateway = createGateway({
+      registry: {
+        listOnlineByUser: vi.fn().mockReturnValue([
+          createClient({ clientInstanceId: "client-a", deviceName: "MacBook Pro" }),
+          createClient({ clientInstanceId: "client-b", deviceName: "iMac" }),
+        ]),
+      },
+    })
+
+    expect(gateway.listOnlineDesktops("user-1")).toEqual([
+      { clientInstanceId: "client-a", deviceName: "MacBook Pro" },
+      { clientInstanceId: "client-b", deviceName: "iMac" },
+    ])
+  })
+
+  it("keeps the id-only projection free of names", () => {
+    // It feeds the presence fingerprint, which drops an unchanged list. If names
+    // leaked in here, a computer renaming itself would read as one dropping out.
+    const gateway = createGateway({
+      registry: {
+        listOnlineByUser: vi.fn().mockReturnValue([
+          createClient({ clientInstanceId: "client-a", deviceName: "MacBook Pro" }),
+        ]),
+      },
+    })
+
+    expect(gateway.listOnlineClientInstanceIds("user-1")).toEqual(["client-a"])
+  })
+})

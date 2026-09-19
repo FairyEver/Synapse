@@ -24,7 +24,9 @@ struct SessionListView: View {
             if !model.onlineDesktops.isEmpty {
                 deviceSection
             }
-            if model.onlineDesktops.isEmpty {
+            if model.connectivity == .viewedComputerOffline {
+                unavailableSection
+            } else if model.onlineDesktops.isEmpty {
                 offlineSection
             } else if model.sessions.isEmpty {
                 emptySection
@@ -67,7 +69,10 @@ struct SessionListView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .disabled(model.selectedDesktopClientInstanceId == nil)
+                // Not on a computer that is not there: the sheet would open onto the
+                // groups of a list that is gone, and whatever it built would be
+                // refused by a computer that never heard of it.
+                .disabled(model.selectedDesktopClientInstanceId == nil || model.viewedDesktopIsOffline)
                 .accessibilityIdentifier("new-session")
             }
         }
@@ -208,20 +213,76 @@ struct SessionListView: View {
         return model.sessions.filter { !known.contains($0.groupId) }
     }
 
+    /// The computer being viewed — and, when there is anywhere to go, the switch.
+    ///
+    /// A `Menu` rather than a screen: the app's `Route` has one case on purpose, for
+    /// cross-tab deep links, and choosing between two or three computers does not
+    /// deserve a navigation stack. It is only a control when there is something to
+    /// switch to, so the chevron and the tap target appear exactly when they mean
+    /// something — including the case they exist for, a phone left on a computer that
+    /// has gone away, where the one other computer is the only way out.
     private var deviceSection: some View {
         Section {
-            HStack(spacing: 8) {
-                Circle()
-                    // Green only when a computer is actually reachable. A list that is
-                    // empty because it could not be fetched is not a computer that is
-                    // online, and the dot must not claim otherwise.
-                    .fill(model.connectivity == .online ? Theme.running : Color.secondary)
-                    .frame(width: 7, height: 7)
-                Text(model.summary?.desktopName ?? model.selectedDesktopClientInstanceId ?? "未连接电脑")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Text(model.connectivity.label)
-                    .font(.caption)
+            if model.desktopSwitchTargets.isEmpty {
+                deviceRow
+            } else {
+                Menu {
+                    ForEach(model.desktopSwitchTargets) { desktop in
+                        Button {
+                            Haptics.select()
+                            model.selectDesktop(desktop.clientInstanceId)
+                        } label: {
+                            Text(model.desktopName(desktop.clientInstanceId))
+                        }
+                        .accessibilityIdentifier("switch-computer-option-\(desktop.clientInstanceId)")
+                    }
+                } label: {
+                    deviceRow
+                }
+                .tint(.primary)
+                .accessibilityIdentifier("switch-computer")
+                .accessibilityHint("切换到其它电脑")
+            }
+        }
+    }
+
+    private var deviceRow: some View {
+        HStack(spacing: 8) {
+            Circle()
+                // Green only when a computer is actually reachable. A list that is
+                // empty because it could not be fetched is not a computer that is
+                // online, and the dot must not claim otherwise.
+                .fill(model.connectivity == .online ? Theme.running : Color.secondary)
+                .frame(width: 7, height: 7)
+            // The name comes from the model rather than from `summary` alone: a
+            // computer that has gone away no longer sends the list its name rode on,
+            // and that is exactly when the reader most needs to know which one it was.
+            Text(model.selectedDesktopClientInstanceId.map(model.desktopName) ?? "未连接电脑")
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            if !model.desktopSwitchTargets.isEmpty {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Text(model.connectivity.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+    }
+
+    /// The computer being viewed is not reachable and at least one other is.
+    ///
+    /// Only the next step, with no headline: the device row directly above already
+    /// says "这台电脑不在线", and saying it twice on one screen is the defect this file
+    /// already warns about below.
+    private var unavailableSection: some View {
+        Section {
+            if let guidance = model.connectivity.guidance {
+                Text(guidance)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }

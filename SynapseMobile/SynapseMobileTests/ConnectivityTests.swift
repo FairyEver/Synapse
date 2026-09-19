@@ -64,5 +64,15 @@ struct ConnectivityTests {
     @Test func everyProblemWithAnEmptyStateHasASecondLine() {
         #expect(Connectivity.noServer("等待网络").guidance != nil)
         #expect(Connectivity.noComputer.guidance != nil)
+        #expect(Connectivity.viewedComputerOffline.guidance != nil)
+    }
+
+    /// Being left on a computer that has gone away is not the same problem as having no
+    /// computer at all, and the two send the reader to different places: one to the
+    /// switch that is already on screen, the other to a machine that is switched off.
+    /// Collapsing them back into one sentence is the original defect.
+    @Test func aComputerThatWentAwayIsNotTheSameAsNoComputer() {
+        #expect(Connectivity.viewedComputerOffline.label != Connectivity.noComputer.label)
+        #expect(Connectivity.viewedComputerOffline.guidance != Connectivity.noComputer.guidance)
     }
 }

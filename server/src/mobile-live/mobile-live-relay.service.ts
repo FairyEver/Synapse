@@ -15,6 +15,7 @@ import {
 } from "@synapse/shared"
 import { LiveClientRegistry } from "../live/live-client-registry"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
+import type { LiveReachableDesktop } from "../live/live.types"
 import { MOBILE_CLIENT_REGISTRY, type MobileLiveFanout } from "./mobile-live.types"
 import { MobilePushService } from "./mobile-push.service"
 
@@ -284,9 +285,17 @@ export class MobileLiveRelayService implements OnModuleInit {
     return this.summaries.get(summaryKey(userId, desktopClientInstanceId)) ?? null
   }
 
-  /** Desktops this user could target, so a phone can tell "no computer" from "wrong id". */
-  onlineDesktops(userId: string): string[] {
-    return this.desktopGateway.listOnlineClientInstanceIds(userId)
+  /**
+   * Desktops this user could target right now, with the names to offer them by.
+   *
+   * This is what the phone's computer picker draws. It deliberately does not feed
+   * the `desktop_offline` answer a phone gets back for an intent: that answer says
+   * "the computer you named is not reachable", and it reads the same whether the id
+   * was never online or does not exist. A phone that wants to tell those apart has
+   * this list — pushing presence already told it which computers exist.
+   */
+  onlineDesktops(userId: string): LiveReachableDesktop[] {
+    return this.desktopGateway.listOnlineDesktops(userId)
   }
 
   /**
@@ -295,10 +304,10 @@ export class MobileLiveRelayService implements OnModuleInit {
    * leases to release.
    */
   handleMobileDisconnect(userId: string, mobileClientInstanceId: string, reason: string): void {
-    for (const clientInstanceId of this.onlineDesktops(userId)) {
+    for (const desktop of this.onlineDesktops(userId)) {
       this.desktopGateway.sendToClientInstance({
         userId,
-        clientInstanceId,
+        clientInstanceId: desktop.clientInstanceId,
         message: createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileDetached, {
           mobileClientInstanceId,
           reason,

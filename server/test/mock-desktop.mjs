@@ -8,6 +8,7 @@
  *
  * Usage: node test/mock-desktop.mjs <email> <password> [baseUrl]
  *          [--contend <title>] [--control-port <port>] [--control-host <host>]
+ *          [--name <device name>] [--instance-id <client instance id>]
  *          [--splits] [--no-toolbar]
  *
  * What this double stands in for, and what it does not.
@@ -85,9 +86,37 @@ const contendFlag = rawArgs.indexOf("--contend")
 const contendTitles = contendFlag >= 0 && rawArgs[contendFlag + 1]
   ? [rawArgs[contendFlag + 1]]
   : ["build"]
+/**
+ * The name this double calls itself, for the phone's computer picker.
+ *
+ * Two doubles on one account are otherwise indistinguishable there: the client id is
+ * random per process and the default name is a constant, so a test that switches
+ * between them would be switching between two identical rows.
+ */
+const nameFlag = rawArgs.indexOf("--name")
+const desktopName = nameFlag >= 0 && rawArgs[nameFlag + 1]
+  ? rawArgs[nameFlag + 1]
+  : "Mock MacBook Pro"
+/**
+ * This double's client id, stable across restarts unless one is given.
+ *
+ * A real desktop persists its id (`clientIdStore.getOrCreate`), and the phone's memory
+ * of which computer it is on is keyed by it. A double that invented a new id every time
+ * it started was not standing in for that: a phone that had been on it would come back
+ * to an id no computer would ever claim again, and sit there saying it was offline. That
+ * is a phone-side test failure caused entirely by the double being unfaithful.
+ *
+ * Defaulted from the name rather than left random, so two doubles with different names
+ * are two computers that each keep their identity between runs. Two with the *same*
+ * name are now the same computer, which is what a second copy of one machine is.
+ */
+const instanceIdFlag = rawArgs.indexOf("--instance-id")
+const desktopClientInstanceId = instanceIdFlag >= 0 && rawArgs[instanceIdFlag + 1]
+  ? rawArgs[instanceIdFlag + 1]
+  : `mock-desktop-${desktopName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`
 /** Drops each `--flag value` pair so only the positional arguments remain. */
 const flagIndexes = new Set()
-for (const flag of [contendFlag, controlPortFlag, controlHostFlag]) {
+for (const flag of [contendFlag, controlPortFlag, controlHostFlag, nameFlag, instanceIdFlag]) {
   if (flag < 0) continue
   flagIndexes.add(flag)
   flagIndexes.add(flag + 1)
@@ -97,12 +126,12 @@ const [email, password, baseUrl = "http://127.0.0.1:3001"] = positional
 if (!email || !password) {
   console.error(
     "usage: node test/mock-desktop.mjs <email> <password> [baseUrl] [--contend <title>]"
-    + " [--control-port <port>] [--control-host <host>] [--splits] [--no-toolbar]",
+    + " [--control-port <port>] [--control-host <host>] [--name <device name>]"
+    + " [--instance-id <client instance id>] [--splits] [--no-toolbar]",
   )
   process.exit(1)
 }
 const wsUrl = baseUrl.replace(/^http/, "ws")
-const desktopClientInstanceId = `mock-desktop-${randomUUID().slice(0, 8)}`
 const groupId = randomUUID()
 const claudeSessionId = randomUUID()
 const buildSessionId = randomUUID()
@@ -209,7 +238,11 @@ const attached = new Set()
 function buildSummary() {
   return {
     desktopClientInstanceId,
-    desktopName: "Mock MacBook Pro",
+    // The same name this double greets the relay with. Hardcoding one here while the
+    // hello used `--name` made two doubles on one account contradict themselves: the
+    // phone believed the summary, filed the name under the wrong computer, and the
+    // picker offered two rows with the same word in them.
+    desktopName,
     revision: summaryRevision,
     groups: [{ id: groupId, name: "前端开发" }],
     // Absent unless the split fixture is on, which is exactly how a desktop with
@@ -926,7 +959,7 @@ function connect() {
       clientInstanceId: desktopClientInstanceId,
       appVersion: "0.0.0-mock",
       platform: "darwin-arm64",
-      deviceName: "Mock MacBook Pro",
+      deviceName: desktopName,
     })))
   })
   socket.on("message", (raw) => {

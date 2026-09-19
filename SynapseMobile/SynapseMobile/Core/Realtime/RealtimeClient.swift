@@ -46,6 +46,16 @@ enum Connectivity: Equatable {
     case noServer(String)
     /// The socket is up and no computer is online.
     case noComputer
+    /// The socket is up, this phone is on a computer, that computer is not among the
+    /// ones online — and at least one other computer is.
+    ///
+    /// Its own answer rather than a shade of `noComputer`, for the reason those three
+    /// are separate at all: the next step differs. `noComputer` tells the reader to go
+    /// and turn a computer on; this one tells them the computer they are looking at is
+    /// not there, and that the way on is the switch on the row they are already
+    /// reading. A computer that is remembered but offline while *nothing* is online
+    /// stays `noComputer`: there the reader is being sent to a machine either way.
+    case viewedComputerOffline
 
     /// The one line to show beside the computer's name, and under the terminal's title
     /// when no terminal is open.
@@ -59,6 +69,7 @@ enum Connectivity: Equatable {
         case .online: return "已连接"
         case .noServer(let reason): return reason
         case .noComputer: return "电脑不在线"
+        case .viewedComputerOffline: return "这台电脑不在线"
         }
     }
 
@@ -69,6 +80,7 @@ enum Connectivity: Equatable {
         case .online: return nil
         case .noServer: return "请检查这台手机的网络。"
         case .noComputer: return "请在电脑上打开 Synapse 并登录。"
+        case .viewedComputerOffline: return "点上面那台电脑的名字，可以换到其它电脑。"
         }
     }
 }

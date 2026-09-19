@@ -242,12 +242,28 @@ actor APIClient {
     }
 
     struct DesktopList: Decodable {
+        struct Entry: Decodable {
+            let clientInstanceId: String
+            let deviceName: String?
+        }
+
         let clientInstanceIds: [String]
+        /// Optional because the field is newer than the list itself. Absent means the
+        /// server cannot name these computers, not that there are none — the ids still
+        /// are, and a computer the phone cannot name is still one it can switch to.
+        let desktops: [Entry]?
     }
 
-    func onlineDesktops() async throws -> [String] {
+    func onlineDesktops() async throws -> [ReachableDesktop] {
         let response: DesktopList = try await send(path: "/mobile/desktops", method: "GET")
-        return response.clientInstanceIds
+        guard let desktops = response.desktops else {
+            return response.clientInstanceIds.map {
+                ReachableDesktop(clientInstanceId: $0, deviceName: nil)
+            }
+        }
+        return desktops.map {
+            ReachableDesktop(clientInstanceId: $0.clientInstanceId, deviceName: $0.deviceName)
+        }
     }
 
     /// The last session list the desktop published. Used on cold start so the app

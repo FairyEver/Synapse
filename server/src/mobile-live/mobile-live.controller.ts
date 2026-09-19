@@ -5,6 +5,7 @@ import { z } from "zod"
 import { isMobileIntent, type MobileIntent, type MobileIntentResult } from "@synapse/shared"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { badRequestFromZodError } from "../common/zod-validation"
+import type { LiveReachableDesktop } from "../live/live.types"
 import { MobileDeviceService } from "./mobile-device.service"
 import { MobileLiveRelayService } from "./mobile-live-relay.service"
 
@@ -79,10 +80,22 @@ export class MobileLiveController {
     return { removed: await this.devices.unregisterPush(request.user.id, clientInstanceId) }
   }
 
-  /** Computers this account can currently reach, for the device picker. */
+  /**
+   * Computers this account can currently reach, for the device picker.
+   *
+   * Both shapes are returned on purpose. `clientInstanceIds` is what every shipped
+   * build reads, and dropping it would leave those phones unable to see a single
+   * computer — they would say "电脑不在线" while one is running right in front of
+   * the user. `desktops` adds the names that make the picker usable, and is ignored
+   * by any build that predates it.
+   */
   @Get("/desktops")
-  async listDesktops(@Req() request: AuthedRequest): Promise<{ readonly clientInstanceIds: string[] }> {
-    return { clientInstanceIds: this.relay.onlineDesktops(request.user.id) }
+  async listDesktops(@Req() request: AuthedRequest): Promise<{
+    readonly clientInstanceIds: string[]
+    readonly desktops: readonly LiveReachableDesktop[]
+  }> {
+    const desktops = this.relay.onlineDesktops(request.user.id)
+    return { clientInstanceIds: desktops.map((desktop) => desktop.clientInstanceId), desktops }
   }
 
   /**

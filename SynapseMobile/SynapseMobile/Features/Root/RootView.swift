@@ -110,9 +110,17 @@ struct RootView: View {
         guard let destination else { return }
         switch destination {
         case .terminal(let sessionId, let desktopClientInstanceId):
+            // Naming a computer is the reader saying which one they mean, so this is
+            // honoured even when that computer is not reachable — landing them on
+            // another one instead is the behaviour the switch exists to remove.
             model.selectDesktop(desktopClientInstanceId)
             selectedTab = .terminals
-            terminalPath = [.terminal(sessionId)]
+            // Only when that computer can actually open it. Pushing the terminal anyway
+            // would show a screen with nothing in it and nothing to say; the list, whose
+            // device row is now the way to switch, says what happened and what to do.
+            if !model.viewedDesktopIsOffline {
+                terminalPath = [.terminal(sessionId)]
+            }
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
             selectedTab = .meetings

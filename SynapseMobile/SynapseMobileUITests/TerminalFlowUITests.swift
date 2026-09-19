@@ -53,8 +53,13 @@ final class TerminalFlowUITests: XCTestCase {
 
         // The inbox is where a locked-out Agent surfaces. Tabs are addressed by
         // index because a badge rewrites the accessibility label of the tab it sits on.
+        //
+        // The order is 终端 / 录音 / 需要我 / 我的 — `RootView`'s `TabView`, in that
+        // order. 录音 was inserted at 1 by the recording feature and left this index
+        // pointing at the wrong tab, which is why the number is spelled out here rather
+        // than left to be inferred: the next tab moves every number below it.
         let tabs = app.tabBars.firstMatch
-        tabs.buttons.element(boundBy: 1).tap()
+        tabs.buttons.element(boundBy: 2).tap()
         capture(app, name: "02-inbox")
         XCTAssertTrue(
             app.staticTexts["claude-code"].waitForExistence(timeout: 8),
@@ -171,7 +176,8 @@ final class TerminalFlowUITests: XCTestCase {
 
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 25), "no tab bar")
-        tabs.buttons.element(boundBy: 2).tap()
+        // 我的 — index 3 since 录音 took 1. See the note on the inbox tab above.
+        tabs.buttons.element(boundBy: 3).tap()
 
         XCTAssertTrue(app.staticTexts["账号"].waitForExistence(timeout: 10), "settings never opened")
         XCTAssertTrue(app.staticTexts["已连接的电脑"].exists, "the desktops section is missing")

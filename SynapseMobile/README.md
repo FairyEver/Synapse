@@ -25,6 +25,12 @@ iPhone ──wss──▶ Synapse 云 ──wss──▶ 桌面端网关 ──�
   `docs/adr/0216-coordinate-terminal-size-ownership-separately-from-leases.md` 和
   `docs/adr/0218-take-the-terminal-grid-back-only-on-an-explicit-release.md`。
 - **默认「优先还原」**：PTY 尺寸不动，手机把电脑整屏缩放显示，布局与电脑逐格一致。
+- **手机停在你选的那台电脑上，不会自己换台。** 一个账号可以同时登录多台电脑，手机端同一时刻
+  只看其中一台：socket 是账号级的，每条指令的 payload 里带 `desktopClientInstanceId` 指名道姓，
+  服务端只按 id 转发。看哪一台由你在终端列表页顶部的设备行上选（设置页的「已连接的电脑」是同一
+  件事的另一个入口），选过就记住。正在看的那台掉线时手机停住并说清它不在线，而不是悄悄换到另
+  一台；那台重新上线后自动接回去。电脑的名字走 `GET /api/mobile/desktops`——`mobile.presence`
+  刻意只带 id（它是广播给账号下所有手机的，payload 有字节预算）。
 
 ## 开发
 
@@ -65,6 +71,12 @@ xcrun simctl launch booted com.liy.SynapseMobile \
 # 一个测试账号
 node server/test/mock-desktop.mjs <email> <password> http://127.0.0.1:3001
 
+# 验多台电脑的切换：再起一个。两个必须不同名，否则选择器里是两行一样的字。
+# 名字同时决定这个替身的 client id（`--instance-id` 可覆盖），所以它重启之后还是同一台
+# 电脑——手机记住的是这个 id，换一个就等于把手机丢在一台再也不会回来的电脑上。
+node server/test/mock-desktop.mjs <email> <password> http://127.0.0.1:3001 \
+  --name "Mock iMac" --control-port 3012
+
 # 另一个终端里（凭据通过 xctestrun 注入，见下）
 xcodebuild test-without-building -xctestrun <…>.xctestrun \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
@@ -98,8 +110,12 @@ node server/test/mobile-relay-smoke.mjs   # 桌面与手机双向路由、离线
    APNS_USE_SANDBOX=false
    ```
 
-   `APNS_USE_SANDBOX` 取决于安装方式：**直接用数据线从 Xcode 装到手机的版本走 sandbox 网关，
-   必须设为 `true`**；TestFlight 和 App Store 版本走生产网关，设为 `false`。
+   `APNS_USE_SANDBOX` **固定 `false`，不要动**。device token 分环境而服务端只有这一个开关，
+   翻成 sandbox 会让**所有** TestFlight 用户的推送静默失效：苹果回 `BadDeviceToken`，服务端把
+   这个 token 当死号永久删除且不重试，日志里只留一句 `Mobile push token rejected`。
+   代价是数据线装的开发包收不到推送——这是接受的，不要为它切网关。调试完装回 TestFlight 并
+   **重开一次 App** 就能恢复（旧 token 已被删除，不会自己回来）。
+   理由与排查见 `.claude/skills/ios-release/SKILL.md`。
    `.p8` 需要挂载进容器（见 `server/compose.yml` 的 volumes）。
 4. 重新部署后，App 启动时会自动注册设备令牌并写入 `UserDevice.pushToken`。
 

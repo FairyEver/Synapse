@@ -81,6 +81,13 @@ struct TerminalAttachment: Identifiable, Equatable {
     /// truth and this is only a prediction until then.
     var name: String
     let sessionId: String
+    /// The computer this file is for.
+    ///
+    /// `sessionId` alone does not say — it is the computer's own id, and a phone that
+    /// has switched computers is holding one that means nothing to the computer it is
+    /// on now. An upload resolved against the *current* selection would be handed to a
+    /// machine that never heard of that terminal and refused for it.
+    let desktopClientInstanceId: String
     /// Reused for every resend of an *undelivered* transfer, because the desktop
     /// dedupes by it and a resend after a lost reply must carry the same one or the
     /// file is delivered twice.

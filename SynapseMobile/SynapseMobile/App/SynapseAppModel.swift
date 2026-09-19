@@ -18,7 +18,9 @@ final class SynapseAppModel {
 
     private(set) var authState: AuthState = .restoring
     private(set) var email: String?
-    private(set) var onlineDesktops: [String] = []
+    private(set) var onlineDesktops: [ReachableDesktop] = []
+    /// The computer being viewed. Never changes without the reader asking — see
+    /// `ViewedDesktopPreference`.
     private(set) var selectedDesktopClientInstanceId: String?
     private(set) var summary: MobileSummaryPayload?
     private(set) var terminalStores: [String: TerminalStore] = [:]
@@ -402,6 +404,10 @@ final class SynapseAppModel {
         summary = nil
         gridClaims = GridClaimLedger()
         selectedDesktopClientInstanceId = nil
+        // The remembered computer is account-scoped like everything else here: a
+        // client id belongs to one account's machine, so carrying it into the next
+        // sign-in would start the next user on a computer that is not theirs.
+        viewedDesktops.forget()
         // These are another account's computers' commands, and nothing here is
         // persisted, so the next sign-in starts from the fallback as it should.
         toolbar.reset()
@@ -462,9 +468,19 @@ final class SynapseAppModel {
     private func wireRealtime() {
         realtime.onSummary = { [weak self] payload in
             guard let self else { return }
-            // A summary is per desktop; only adopt the one being viewed.
+            // Every computer's name, not just the one being viewed: the switch has to
+            // be able to name the others, and a computer that has never been viewed
+            // has no other way to have introduced itself.
+            self.viewedDesktops.remember(
+                name: payload.desktopName,
+                for: payload.desktopClientInstanceId
+            )
+            // A summary is per desktop; only adopt the one being viewed. Nothing has
+            // been chosen on a phone that has not resolved the list yet, and the first
+            // computer to say something is as good an answer as that list would give.
             if self.selectedDesktopClientInstanceId == nil {
                 self.selectedDesktopClientInstanceId = payload.desktopClientInstanceId
+                self.viewedDesktops.view(payload.desktopClientInstanceId)
             }
             guard payload.desktopClientInstanceId == self.selectedDesktopClientInstanceId else { return }
             self.summary = payload
@@ -587,6 +603,13 @@ final class SynapseAppModel {
                 Task { await self.refreshDesktops() }
                 return
             }
+            // Everything below is addressed to the computer being viewed, and it may
+            // be one that is not there: the phone deliberately stays on a computer
+            // that has gone away rather than moving itself. An `attach` sent into
+            // that is not a quiet intent — it would come back as a refusal shown to
+            // someone who did nothing. The list refresh above is what brings it back,
+            // and presence pushes the same news.
+            guard self.onlineDesktopIds.contains(desktop) else { return }
             self.requestSync(on: desktop)
             // Re-attach everything the user still has open. Without this a terminal
             // entered from a notification stays blank until it is opened by hand.
@@ -602,33 +625,99 @@ final class SynapseAppModel {
 
     // MARK: - Desktops
 
+    /// Which computer this phone is on, remembered across launches.
+    private let viewedDesktops = ViewedDesktopPreference()
+
+    var onlineDesktopIds: [String] { onlineDesktops.map(\.clientInstanceId) }
+
+    /// The computer being viewed is one this phone cannot reach right now.
+    ///
+    /// Says nothing about whether there is anywhere else to go — the screen is the
+    /// only thing that knows that, and it says so through `Connectivity`.
+    var viewedDesktopIsOffline: Bool {
+        guard let viewed = selectedDesktopClientInstanceId else { return false }
+        return !onlineDesktopIds.contains(viewed)
+    }
+
+    /// What the switch offers: every reachable computer except the one being viewed.
+    ///
+    /// Empty means the row is not a control. Deliberately *not* "more than one is
+    /// online": a phone left on a computer that has gone offline has to be able to
+    /// reach the one other computer, and when there is exactly one other that row is
+    /// the only way out.
+    var desktopSwitchTargets: [ReachableDesktop] {
+        let targets = Set(ViewedDesktopPreference.switchTargets(
+            online: onlineDesktopIds,
+            viewing: selectedDesktopClientInstanceId
+        ))
+        return onlineDesktops.filter { targets.contains($0.clientInstanceId) }
+    }
+
+    /// What to call a computer.
+    ///
+    /// Four sources in order of authority: the name the computer is announcing right
+    /// now, the name the last fetch carried, the last name it ever gave, and finally
+    /// its id — which is a poor label but a true one, and better than hiding a
+    /// computer the phone simply cannot name.
+    func desktopName(_ clientInstanceId: String) -> String {
+        if clientInstanceId == selectedDesktopClientInstanceId, let live = summary?.desktopName {
+            return live
+        }
+        if let listed = onlineDesktops.first(where: { $0.clientInstanceId == clientInstanceId }),
+           let name = listed.deviceName {
+            return name
+        }
+        return viewedDesktops.name(for: clientInstanceId) ?? clientInstanceId
+    }
+
     /// Adopts the pushed list of reachable computers.
     ///
-    /// The list is the whole truth, so a computer that dropped out disappears
-    /// here rather than lingering until something else triggers a refresh. The
-    /// server only sends this when the list actually changes, so there is no
-    /// further filtering to do.
+    /// The list is the whole truth about which computers are *reachable*, so one that
+    /// dropped out disappears here rather than lingering until something else triggers
+    /// a refresh. It is not the truth about which computer the reader is on: that only
+    /// changes because they asked, so a computer going away leaves the phone where it
+    /// is and the screen says why.
     private func applyPresence(_ clientInstanceIds: [String]) {
-        onlineDesktops = clientInstanceIds
+        let knownNames = onlineDesktops.reduce(into: [String: String]()) { names, desktop in
+            if let name = desktop.deviceName { names[desktop.clientInstanceId] = name }
+        }
+        onlineDesktops = clientInstanceIds.map {
+            ReachableDesktop(clientInstanceId: $0, deviceName: knownNames[$0])
+        }
+        // This payload carries ids only — it is broadcast to every phone of the
+        // account and its shape is byte-budgeted. The names come from the list the
+        // picker draws, which is worth one request per change of the set.
+        Task { await refreshDesktopNames() }
         // A computer appearing is exactly the event the cloud refuses to wait for,
         // so it is the moment to hand over anything that was left waiting.
         retryWaitingAttachments()
-        let selectedIsReachable = selectedDesktopClientInstanceId
-            .map(clientInstanceIds.contains) ?? false
-        if selectedIsReachable { return }
 
-        // Either nothing was selected because nothing was online yet — the phone
-        // was opened before the computer was — or the computer being viewed just
-        // went away. Both are answered the same way: resolve again from scratch.
+        guard let viewing = selectedDesktopClientInstanceId else {
+            // Nothing has been chosen yet: the phone was opened before any computer
+            // was. Adopting one takes nothing away from anybody, and from here on it
+            // is the reader's choice like any other.
+            guard let adopted = viewedDesktops.resolve(online: clientInstanceIds) else { return }
+            selectedDesktopClientInstanceId = adopted
+            Task { await refreshDesktops() }
+            return
+        }
+
+        if clientInstanceIds.contains(viewing) {
+            // Reachable, and it may have just come back: `summary` is nil exactly
+            // while it was away.
+            if summary == nil { Task { await refreshDesktops() } }
+            return
+        }
+
+        // The computer being viewed went away. The list it sent describes a machine
+        // that is not there, so it goes; the reader does not.
         summary = nil
-        selectedDesktopClientInstanceId = nil
         // A file the computer had begun fetching is not being fetched any more: it
         // died, or lost the network, partway through. It goes back to waiting rather
         // than staying in a state that claims progress that has stopped, and the
         // next time the computer is reachable the ordinary resend picks it up — from
         // the top, which is exactly the restart that case needs.
         releaseReceivingAttachments()
-        Task { await refreshDesktops() }
     }
 
     /// Puts anything mid-receive back to waiting.
@@ -641,27 +730,63 @@ final class SynapseAppModel {
         }
     }
 
+    /// Names for the computers presence only gave ids for.
+    ///
+    /// Deliberately not the whole of `refreshDesktops`: that one also syncs and hands
+    /// over waiting files, and a computer signing in is not news about the computer
+    /// being viewed.
+    private func refreshDesktopNames() async {
+        guard !onlineDesktopIds.isEmpty else { return }
+        guard let listed = try? await apiClient.onlineDesktops() else {
+            // The ids from presence are still right; only the labels are missing, and
+            // `desktopName` falls back to the id rather than to nothing.
+            return
+        }
+        let names = listed.reduce(into: [String: String]()) { names, desktop in
+            if let name = desktop.deviceName { names[desktop.clientInstanceId] = name }
+        }
+        // Fills in what this list can name and leaves the rest of the pushed list
+        // alone. Not a replacement for it: presence is the authority on which
+        // computers are reachable, and a fetch that is a moment behind it must not
+        // be able to take one off the picker.
+        onlineDesktops = onlineDesktops.map { desktop in
+            guard desktop.deviceName == nil, let name = names[desktop.clientInstanceId] else {
+                return desktop
+            }
+            return ReachableDesktop(clientInstanceId: desktop.clientInstanceId, deviceName: name)
+        }
+        for (clientInstanceId, name) in names {
+            viewedDesktops.remember(name: name, for: clientInstanceId)
+        }
+    }
+
     func refreshDesktops() async {
         do {
             onlineDesktops = try await apiClient.onlineDesktops()
-            if selectedDesktopClientInstanceId == nil
-                || !(selectedDesktopClientInstanceId.map(onlineDesktops.contains) ?? false) {
-                selectedDesktopClientInstanceId = onlineDesktops.first
+            for desktop in onlineDesktops {
+                guard let name = desktop.deviceName else { continue }
+                viewedDesktops.remember(name: name, for: desktop.clientInstanceId)
             }
-            if let desktop = selectedDesktopClientInstanceId {
-                // Show the last known list immediately rather than an empty screen.
-                if summary == nil {
-                    summary = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
+            guard let desktop = viewedDesktops.resolve(online: onlineDesktopIds) else { return }
+            selectedDesktopClientInstanceId = desktop
+
+            // Show the last known list immediately rather than an empty screen. Only
+            // when the computer is there to open those terminals: a stale list whose
+            // every row leads to a terminal that cannot attach is worse than none.
+            if summary == nil, onlineDesktopIds.contains(desktop) {
+                summary = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
+                if let name = summary?.desktopName {
+                    viewedDesktops.remember(name: name, for: desktop)
                 }
-                requestSync(on: desktop)
-                // Resolving a computer here is the third way one can come back —
-                // the other two being the socket reconnecting and presence pushing a
-                // new list — and it is the only one that happens when a computer
-                // returns while this phone never lost its connection. Without this,
-                // a file that went back to waiting when that computer dropped would
-                // sit there until something unrelated made the phone re-resolve.
-                retryWaitingAttachments()
             }
+            guard onlineDesktopIds.contains(desktop) else { return }
+            requestSync(on: desktop)
+            // A computer coming back is the third way one can — the others being the
+            // socket reconnecting and presence pushing a new list — and it is the only
+            // one that happens when a computer returns while this phone never lost its
+            // connection. Without this, a file that went back to waiting when that
+            // computer dropped would sit there until something unrelated re-resolved.
+            retryWaitingAttachments()
         } catch {
             // Nothing to say that the screen is not already saying: the device row
             // carries the socket's own words, and a list that has never been fetched
@@ -671,13 +796,64 @@ final class SynapseAppModel {
         }
     }
 
+    /// The reader picked a computer: the switch menu, or a notification.
+    ///
+    /// Honoured even when the computer is not reachable — a notification naming one is
+    /// the reader saying which they mean, and landing them somewhere else instead is
+    /// the behaviour this replaces.
     func selectDesktop(_ clientInstanceId: String) {
         guard clientInstanceId != selectedDesktopClientInstanceId else { return }
+        let outgoing = selectedDesktopClientInstanceId
+        if let outgoing, realtime.state.isConnected {
+            // The terminals being left are the outgoing computer's, and it holds a write
+            // lease on each of them for as long as it thinks this phone is watching.
+            // Detaching is what hands those back.
+            for sessionId in openSessions {
+                detachQuietly(sessionId, from: outgoing)
+            }
+        }
         selectedDesktopClientInstanceId = clientInstanceId
-        // The previous list belongs to another machine; showing it against this
-        // one would be worse than showing nothing for a moment.
+        viewedDesktops.view(clientInstanceId)
+        // The previous computer's list, terminals and in-flight work belong to it.
         summary = nil
+        releaseViewing()
         Task { await refreshDesktops() }
+    }
+
+    /// Tells a computer this phone is no longer holding its terminals.
+    ///
+    /// Quiet: the reader's action was "switch computer". Nothing on screen has "the
+    /// detach failed" as its subject, and the screens describe the state that follows.
+    /// A detach that cannot be delivered is not a problem to report either — the
+    /// computer being left may already be gone, and it releases this phone's
+    /// attachments on its own when the phone's socket closes.
+    private func detachQuietly(_ sessionId: String, from desktopClientInstanceId: String) {
+        let intent = MobileIntentRequest(intentId: UUID().uuidString, kind: "detach", sessionId: sessionId)
+        rememberQuiet(intent.intentId)
+        send(intent, to: desktopClientInstanceId)
+    }
+
+    /// Drops everything that only means anything to the computer being left.
+    ///
+    /// Session ids are the leaving computer's own; anything keyed by one and resolved
+    /// against the *current* selection is a wrong-machine bug waiting for a timing
+    /// window — a `pendingWrite` replayed after the switch would send the reader's
+    /// command to a computer that never heard of that terminal.
+    ///
+    /// `terminalStores` is not touched: `pruneTerminalStores` removes whatever the new
+    /// computer's summary does not list, and doing it here as well would be a second
+    /// implementation of the same rule.
+    private func releaseViewing() {
+        openSessions.removeAll()
+        pendingWrites.removeAll()
+        pendingAttachments.removeAll()
+        pendingHistory.removeAll()
+        preemptedSessions.removeAll()
+        requestedGrid.removeAll()
+        gridSizeTasks.values.forEach { $0.cancel() }
+        gridSizeTasks.removeAll()
+        stopKeepAliveIfIdle()
+        releaseReceivingAttachments()
     }
 
     // MARK: - Sessions
@@ -1312,7 +1488,17 @@ final class SynapseAppModel {
                 if Task.isCancelled { return }
                 guard let self, let desktop = self.selectedDesktopClientInstanceId else { return }
                 guard self.realtime.state.isConnected else { continue }
-                self.send(MobileIntentRequest(intentId: UUID().uuidString, kind: "ping"), to: desktop)
+                // A computer that has gone away is kept as the one being viewed, so
+                // this loop has to check for itself rather than relying on there being
+                // no selection. Pinging one that is not there is answered with a
+                // refusal, and a refusal nobody asked for is a message nobody wants.
+                guard self.onlineDesktopIds.contains(desktop) else { continue }
+                // Quiet for the same reason `requestSync` is: the lease this keeps
+                // alive is bookkeeping, and no part of the screen has "the ping
+                // failed" as its subject.
+                let intent = MobileIntentRequest(intentId: UUID().uuidString, kind: "ping")
+                self.rememberQuiet(intent.intentId)
+                self.send(intent, to: desktop)
             }
         }
     }
@@ -1346,7 +1532,11 @@ final class SynapseAppModel {
     /// to work it out, and from getting it wrong in its own way.
     var connectivity: Connectivity {
         guard realtime.state.isConnected else { return .noServer(realtime.state.label) }
-        return onlineDesktops.isEmpty ? .noComputer : .online
+        guard !onlineDesktops.isEmpty else { return .noComputer }
+        // The computer being viewed having gone away is its own answer, and only when
+        // there is somewhere else to go: with nothing else online the reader is being
+        // sent to a machine either way, which is what `.noComputer` already says.
+        return viewedDesktopIsOffline ? .viewedComputerOffline : .online
     }
 
     // MARK: - Sending files to the computer
@@ -1373,6 +1563,10 @@ final class SynapseAppModel {
         }
         guard !accepted.isEmpty else { return }
 
+        // Whichever computer this terminal is on, in case the reader switches before
+        // the file is handed over. A file belongs to the computer it was picked for,
+        // not to whichever one happens to be on screen when its bytes finish going up.
+        guard let targetDesktop = selectedDesktopClientInstanceId else { return }
         let uploads = accepted.map { file in
             (
                 file,
@@ -1380,6 +1574,7 @@ final class SynapseAppModel {
                     id: UUID().uuidString,
                     name: file.name,
                     sessionId: sessionId,
+                    desktopClientInstanceId: targetDesktop,
                     intentId: UUID().uuidString,
                     driveItemId: nil,
                     state: .queued
@@ -1459,13 +1654,18 @@ final class SynapseAppModel {
         guard let attachment = relayAttachments.first(where: { $0.id == attachmentId }),
               let driveItemId = attachment.driveItemId
         else { return }
-        guard let desktop = selectedDesktopClientInstanceId,
+        // The computer this file was picked for, which is not always the one being
+        // viewed: the reader can switch before the bytes are finished going up, and
+        // the file still belongs to the terminal it was picked in. Waiting is the
+        // right answer there, not a refusal on the other computer.
+        let desktop = attachment.desktopClientInstanceId
+        guard desktop == selectedDesktopClientInstanceId,
               realtime.state.isConnected,
               // The cloud refuses an intent for a computer that is not there, and it
               // says so as a rejection rather than as a wait — so a file handed to a
               // computer the phone already knows has gone would come back failed
               // instead of staying in the queue. Presence is the only way to know.
-              onlineDesktops.contains(desktop)
+              onlineDesktopIds.contains(desktop)
         else {
             update(attachmentId) { $0.state = .waitingForComputer }
             return

@@ -204,6 +204,7 @@ struct TerminalAttachmentStateTests {
     private func attachment(_ state: TerminalAttachment.State) -> TerminalAttachment {
         TerminalAttachment(
             id: "a1", name: "a.png", sessionId: "s1",
+            desktopClientInstanceId: "desktop-1",
             intentId: "i1", driveItemId: nil, state: state
         )
     }
@@ -265,6 +266,7 @@ struct TerminalAttachmentStateTests {
     @Test func aRetryIsOfferedOnlyWhereThereIsSomethingToRetryWith() {
         let uploaded = TerminalAttachment(
             id: "a1", name: "a.png", sessionId: "s1",
+            desktopClientInstanceId: "desktop-1",
             intentId: "i1", driveItemId: "item-1", state: .failed("电脑没有接收")
         )
         // The bytes are in the drive, so sending it again can work.
@@ -356,6 +358,7 @@ struct RelayActionMenuTests {
     ) -> TerminalAttachment {
         TerminalAttachment(
             id: "a1", name: "a.png", sessionId: "s1",
+            desktopClientInstanceId: "desktop-1",
             intentId: "i1", driveItemId: driveItemId, state: state
         )
     }
@@ -407,6 +410,7 @@ struct RelayCommitTests {
     ) -> TerminalAttachment {
         TerminalAttachment(
             id: id, name: "\(id).png", sessionId: session,
+            desktopClientInstanceId: "desktop-1",
             intentId: "i-\(id)", driveItemId: nil, state: state
         )
     }
