@@ -1016,9 +1016,9 @@ describe("TerminalModule", () => {
   it("shows the empty state and creates a terminal session", async () => {
     await renderModule()
 
-    expect(document.body.textContent).toContain("暂无会话")
+    expect(document.body.textContent).toContain("暂无标签")
 
-    await clickButton("新建终端")
+    await clickButton("新建标签")
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       cols: 80,
@@ -1070,7 +1070,7 @@ describe("TerminalModule", () => {
     expect(settingsButton?.dataset.variant).toBe("ghost")
     expect(createButton?.querySelector("svg")).toBeTruthy()
     expect(settingsButton?.querySelector("svg")).toBeTruthy()
-    expect(actions?.textContent).not.toContain("新建终端")
+    expect(actions?.textContent).not.toContain("新建标签")
     expect(actions?.textContent).not.toContain("终端设置")
   })
 
@@ -1082,7 +1082,7 @@ describe("TerminalModule", () => {
 
     await renderEmbeddedModule()
 
-    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    const navigation = document.querySelector('[aria-label="活动终端标签"]')
     expect(navigation?.classList.contains("h-10")).toBe(true)
     expect(navigation?.classList.contains("no-scrollbar")).toBe(true)
     expect(navigation?.textContent).toContain("开发终端")
@@ -1102,7 +1102,7 @@ describe("TerminalModule", () => {
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
 
     await renderEmbeddedModule()
-    expect(document.querySelector('[aria-label="活动终端会话"]')?.textContent).toContain("开发终端")
+    expect(document.querySelector('[aria-label="活动终端标签"]')?.textContent).toContain("开发终端")
 
     bridgeState.sessions = bridgeState.sessions.map((session) => ({
       ...session,
@@ -1114,7 +1114,7 @@ describe("TerminalModule", () => {
       await Promise.resolve()
     })
 
-    expect(document.querySelector('[aria-label="活动终端会话"]')).toBeNull()
+    expect(document.querySelector('[aria-label="活动终端标签"]')).toBeNull()
   })
 
   it("opens a header session tab context menu without switching the active workspace", async () => {
@@ -1134,7 +1134,7 @@ describe("TerminalModule", () => {
     ])
     expect(menuItems[3]?.dataset.variant).toBe("destructive")
 
-    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    const navigation = document.querySelector('[aria-label="活动终端标签"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
   })
@@ -1163,7 +1163,7 @@ describe("TerminalModule", () => {
       "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
       "session_id=session-2",
     ].join("\n"))
-    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    const navigation = document.querySelector('[aria-label="活动终端标签"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
   })
 
@@ -1358,9 +1358,9 @@ describe("TerminalModule", () => {
     await openSidebarSessionMenu("开发终端")
     await clickContextMenuItem("重命名")
 
-    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="终端名称"]')?.value).toBe("开发终端")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="标签名称"]')?.value).toBe("开发终端")
 
-    await changeInput("终端名称", "构建日志")
+    await changeInput("标签名称", "构建日志")
     await clickButton("保存")
 
     expect(terminalBridge.renameWorkspace).toHaveBeenCalledWith({
@@ -1391,7 +1391,7 @@ describe("TerminalModule", () => {
       await renderEmbeddedModule()
       await openSidebarSessionMenu("开发终端")
       await clickContextMenuItem("重命名")
-      await changeInput("终端名称", "构建日志")
+      await changeInput("标签名称", "构建日志")
       await clickButton("保存")
 
       await act(async () => {
@@ -1491,10 +1491,10 @@ describe("TerminalModule", () => {
     await openHeaderSessionMenu("日志终端")
     await clickContextMenuItem("重命名")
 
-    expect(document.body.textContent).toContain("重命名终端")
-    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="终端名称"]')?.value).toBe("日志终端")
+    expect(document.body.textContent).toContain("重命名标签")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="标签名称"]')?.value).toBe("日志终端")
 
-    await changeInput("终端名称", "  构建日志  ")
+    await changeInput("标签名称", "  构建日志  ")
     await clickButton("保存")
 
     expect(terminalBridge.renameWorkspace).toHaveBeenCalledWith({
@@ -1502,7 +1502,7 @@ describe("TerminalModule", () => {
       title: "构建日志",
       expectedLayoutRevision: 1,
     })
-    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    const navigation = document.querySelector('[aria-label="活动终端标签"]')
     expect(navigation?.textContent).toContain("构建日志")
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
     await act(async () => {
@@ -1519,10 +1519,10 @@ describe("TerminalModule", () => {
     await openPaneTitleMenu("开发终端")
     await clickContextMenuItem("重命名")
 
-    expect(document.body.textContent).toContain("重命名对话")
-    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="对话名称"]')?.value).toBe("开发终端")
+    expect(document.body.textContent).toContain("重命名会话")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="会话名称"]')?.value).toBe("开发终端")
 
-    await changeInput("对话名称", "  构建日志  ")
+    await changeInput("会话名称", "  构建日志  ")
     await clickButton("保存")
 
     expect(terminalBridge.renameSession).toHaveBeenCalledWith({ sessionId: "session-1", title: "构建日志" })
@@ -1540,9 +1540,9 @@ describe("TerminalModule", () => {
     await renderEmbeddedModule()
     await doubleClickPaneTitle("开发终端")
 
-    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="对话名称"]')?.value).toBe("开发终端")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="会话名称"]')?.value).toBe("开发终端")
 
-    await changeInput("对话名称", "日志终端")
+    await changeInput("会话名称", "日志终端")
     await clickButton("保存")
 
     expect(terminalBridge.renameSession).toHaveBeenCalledWith({ sessionId: "session-1", title: "日志终端" })
@@ -1577,7 +1577,7 @@ describe("TerminalModule", () => {
       workspaceId: "workspace-session-2",
       expectedLayoutRevision: 1,
     })
-    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    const navigation = document.querySelector('[aria-label="活动终端标签"]')
     expect(navigation?.textContent).not.toContain("日志终端")
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
     expect(document.querySelector("[data-terminal-xterm-frame]")).toBe(xtermFrame)
@@ -1635,7 +1635,7 @@ describe("TerminalModule", () => {
 
     await clickButton("设置")
     await selectTab("通知")
-    expect(document.body.textContent).toContain("仅对新建终端生效")
+    expect(document.body.textContent).toContain("仅对新建的会话生效")
     const notificationSwitch = document.querySelector<HTMLButtonElement>("#terminal-agent-notifications")
     expect(notificationSwitch).not.toBeNull()
     await act(async () => notificationSwitch?.click())
@@ -1701,7 +1701,7 @@ describe("TerminalModule", () => {
     expect(main?.textContent).not.toContain("运行中")
     expect(main?.textContent).not.toContain("终止进程")
     expect(main?.textContent).not.toContain("同目录新开")
-    expect(document.querySelector("[aria-label^='终端输出与输入']")).toBeTruthy()
+    expect(document.querySelector("[aria-label^='终端会话']")).toBeTruthy()
   })
 
   it("renders a compact toolbar below the active terminal surface", async () => {
@@ -1711,7 +1711,7 @@ describe("TerminalModule", () => {
     await renderModule()
 
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
-    const terminalRegion = document.querySelector("[aria-label^='终端输出与输入']")
+    const terminalRegion = document.querySelector("[aria-label^='终端会话']")
     expect(toolbar).toBeTruthy()
     expect(toolbar?.classList.contains("overflow-x-auto")).toBe(true)
     expect(toolbar?.classList.contains("no-scrollbar")).toBe(true)
@@ -1988,7 +1988,7 @@ describe("TerminalModule", () => {
     await renderModule()
 
     expect(document.body.querySelector("[data-terminal-toolbar]")).toBeNull()
-    expect(document.body.textContent).toContain("新建终端")
+    expect(document.body.textContent).toContain("新建标签")
   })
 
   it("writes interrupt and slash actions into the running terminal", async () => {
@@ -2176,7 +2176,7 @@ describe("TerminalModule", () => {
     await renderModule()
 
     const main = document.body.querySelector("main")
-    const terminalRegion = document.querySelector("[aria-label^='终端输出与输入']")
+    const terminalRegion = document.querySelector("[aria-label^='终端会话']")
     const xtermMount = terminalRegion?.querySelector("[data-terminal-xterm-mount]")
     const xtermFrame = xtermMount?.parentElement
     expect(main?.classList.contains("h-full")).toBe(true)
@@ -2246,7 +2246,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await doubleClickSession("开发终端")
-    await changeInput("终端名称", "  构建日志  ")
+    await changeInput("标签名称", "  构建日志  ")
     await clickButton("保存")
 
     expect(terminalBridge.renameWorkspace).toHaveBeenCalledWith({
@@ -2288,7 +2288,7 @@ describe("TerminalModule", () => {
     bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
 
     await renderModule()
-    await clickButtonByTitle("新建终端")
+    await clickButtonByTitle("新建标签")
 
     expect(terminalBridge.createSession).toHaveBeenCalledWith({
       groupId: "group-build",
@@ -2307,7 +2307,7 @@ describe("TerminalModule", () => {
     await clickButton("默认分组")
 
     expect(document.querySelector("[data-slot='collapsible'][data-state='closed']")).toBeTruthy()
-    expect(document.querySelector("[aria-label^='终端输出与输入']")).toBeTruthy()
+    expect(document.querySelector("[aria-label^='终端会话']")).toBeTruthy()
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
   })
 
@@ -2565,9 +2565,9 @@ describe("TerminalModule", () => {
     terminalBridge.createSession.mockRejectedValueOnce(new Error("Terminal cwd must be an existing absolute path"))
 
     await renderModule()
-    await clickButtonByTitle("新建终端")
+    await clickButtonByTitle("新建标签")
 
-    expect(toastState.error).toHaveBeenCalledWith("新建终端失败")
+    expect(toastState.error).toHaveBeenCalledWith("新建标签失败")
   })
 
   it("deletes a terminal group with sessions and selects the next remaining session", async () => {
@@ -2634,7 +2634,7 @@ describe("TerminalModule", () => {
       workspaceId: "workspace-session-1",
       expectedLayoutRevision: 1,
     })
-    expect(document.body.textContent).toContain("新建终端")
+    expect(document.body.textContent).toContain("新建标签")
     await vi.waitFor(() => {
       expect(document.activeElement).toBe(document.body.querySelector("[data-system-app-top-bar-actions] button"))
     })
@@ -2644,9 +2644,9 @@ describe("TerminalModule", () => {
     terminalBridge.createSession.mockRejectedValueOnce(new Error("spawn failed"))
 
     await renderModule()
-    await clickButton("新建终端")
+    await clickButton("新建标签")
 
-    expect(toastState.error).toHaveBeenCalledWith("新建终端失败")
+    expect(toastState.error).toHaveBeenCalledWith("新建标签失败")
   })
 
   it("shows a user-visible error when the terminal projection cannot be attached", async () => {
@@ -2833,7 +2833,7 @@ describe("TerminalModule", () => {
     expect(paneHeaders[0]?.textContent).toContain("开发终端")
     expect(paneHeaders[1]?.textContent).toContain("Session 2")
 
-    const closeButton = document.body.querySelector<HTMLButtonElement>('[aria-label="关闭分屏：Session 2"]')
+    const closeButton = document.body.querySelector<HTMLButtonElement>('[aria-label="关闭会话：Session 2"]')
     await act(async () => {
       closeButton?.click()
       await Promise.resolve()
@@ -2889,7 +2889,7 @@ describe("TerminalModule", () => {
     await clickButtonByAriaLabel("最大化分屏：中间终端")
 
     expect(document.querySelector('button[aria-label="还原分屏：中间终端"]')).toBeTruthy()
-    expect(document.querySelector('[aria-label="终端输出与输入：中间终端"]')
+    expect(document.querySelector('[aria-label="终端会话：中间终端"]')
       ?.getAttribute("data-terminal-pane-maximized")).toBe("true")
     expect(Array.from(document.querySelectorAll("[data-terminal-maximized-sibling]"))
       .map((element) => element.getAttribute("data-terminal-maximized-sibling"))).toEqual([
@@ -2901,7 +2901,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
 
     await act(async () => {
-      document.querySelector<HTMLElement>('[aria-label="终端输出与输入：左侧终端"]')?.click()
+      document.querySelector<HTMLElement>('[aria-label="终端会话：左侧终端"]')?.click()
       await Promise.resolve()
     })
 
@@ -3029,7 +3029,7 @@ describe("TerminalModule", () => {
     await renderModule()
     const survivingXterm = xtermState.instances[1]
 
-    const closeButton = document.body.querySelector<HTMLButtonElement>('[aria-label="关闭分屏：关闭终端"]')
+    const closeButton = document.body.querySelector<HTMLButtonElement>('[aria-label="关闭会话：关闭终端"]')
     await act(async () => {
       closeButton?.click()
       await flushPromises()
@@ -3062,7 +3062,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
 
-    const originalPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：开发终端"]')
+    const originalPane = document.querySelector<HTMLElement>('[aria-label="终端会话：开发终端"]')
     expect(originalPane?.classList.contains("opacity-50")).toBe(false)
 
     await act(async () => {
@@ -3070,8 +3070,8 @@ describe("TerminalModule", () => {
       await flushPromises()
     })
 
-    const firstPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：开发终端"]')
-    const secondPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：Session 2"]')
+    const firstPane = document.querySelector<HTMLElement>('[aria-label="终端会话：开发终端"]')
+    const secondPane = document.querySelector<HTMLElement>('[aria-label="终端会话：Session 2"]')
     expect(firstPane?.classList.contains("opacity-50")).toBe(true)
     expect(secondPane?.classList.contains("opacity-50")).toBe(false)
 
@@ -3108,7 +3108,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
 
-    const visiblePanes = document.querySelectorAll<HTMLElement>('[aria-label^="终端输出与输入："]')
+    const visiblePanes = document.querySelectorAll<HTMLElement>('[aria-label^="终端会话："]')
     expect(visiblePanes).toHaveLength(2)
     expect([...visiblePanes].every((pane) => !pane.classList.contains("opacity-50"))).toBe(true)
   })
@@ -3127,7 +3127,7 @@ describe("TerminalModule", () => {
 
     const sourceHeader = Array.from(document.querySelectorAll<HTMLElement>("[data-terminal-pane-header]"))
       .find((header) => header.textContent?.includes("Session 2"))
-    const targetPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：开发终端"]')
+    const targetPane = document.querySelector<HTMLElement>('[aria-label="终端会话：开发终端"]')
     if (!sourceHeader || !targetPane) throw new Error("Terminal panes not found")
     targetPane.getBoundingClientRect = () => new DOMRect(0, 0, 400, 300)
     const dataTransfer = createTerminalPaneDataTransfer()
@@ -3200,10 +3200,10 @@ describe("TerminalModule", () => {
     })
 
     expect(terminalBridge.closePane).toHaveBeenCalledTimes(1)
-    const firstCloseButton = document.body.querySelector<HTMLButtonElement>('[aria-label="正在关闭分屏：终端一"]')
+    const firstCloseButton = document.body.querySelector<HTMLButtonElement>('[aria-label="正在关闭会话：终端一"]')
     expect(firstCloseButton?.disabled).toBe(true)
 
-    const secondPane = document.body.querySelector<HTMLElement>('[aria-label="终端输出与输入：终端二"]')
+    const secondPane = document.body.querySelector<HTMLElement>('[aria-label="终端会话：终端二"]')
     await act(async () => {
       secondPane?.click()
       xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
@@ -3767,7 +3767,7 @@ describe("TerminalModule", () => {
     // 文件夹按钮就是标题里那一个：文件树开着的时候，本地看到的和手机看到的不是一回事。
     expect(document.querySelector<HTMLButtonElement>('button[aria-label="打开文件树：开发终端"]')?.disabled)
       .toBe(true)
-    expect(document.querySelector<HTMLButtonElement>('button[aria-label="关闭分屏：开发终端"]')?.disabled)
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="关闭会话：开发终端"]')?.disabled)
       .toBe(true)
     // 标题还在，但双击重命名和右键菜单都收走了。
     const title = document.querySelector<HTMLElement>('[data-track="terminal-pane-title"]')
@@ -3776,7 +3776,7 @@ describe("TerminalModule", () => {
       title?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
       await Promise.resolve()
     })
-    expect(document.body.querySelector('input[aria-label="对话名称"]')).toBeNull()
+    expect(document.body.querySelector('input[aria-label="会话名称"]')).toBeNull()
 
     // 蒙层盖的是内容区：顶栏不在它盖住的那个容器里。
     const overlay = document.querySelector("[data-terminal-pane-mobile-overlay]")
@@ -3825,7 +3825,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
 
-    for (const label of ["平分宽度", "最大化分屏", "关闭分屏"]) {
+    for (const label of ["平分宽度", "最大化分屏", "关闭会话"]) {
       expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}：被手机接管的终端"]`)?.disabled)
         .toBe(true)
       expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}：本地终端"]`)?.disabled)
@@ -4107,7 +4107,7 @@ describe("TerminalModule", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("暂无会话")
+    expect(document.body.textContent).toContain("暂无标签")
     expect(toastState.error).not.toHaveBeenCalledWith("终端画面无法恢复")
   })
 
@@ -4355,7 +4355,7 @@ function sidebarSortableGroupIds(): string[] {
 
 function headerSessionTab(title: string): HTMLButtonElement | null {
   return document.body.querySelector<HTMLButtonElement>(
-    `[aria-label="活动终端会话"] button[aria-label="切换到会话：${title}"]`,
+    `[aria-label="活动终端标签"] button[aria-label="切换到标签：${title}"]`,
   )
 }
 
@@ -4494,7 +4494,7 @@ async function dispatchTerminalDragEvent(
   type: "dragover" | "drop",
   files: DroppedTerminalFile[],
 ): Promise<TerminalDragTestEvent> {
-  const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端输出与输入']")
+  const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端会话']")
   if (!terminalRegion) throw new Error("Terminal region not found")
 
   const dataTransfer = {
@@ -4527,7 +4527,7 @@ async function dispatchTerminalWorkspaceTreeDragEvent(
   payload: string,
   types = [WORKSPACE_FILE_TREE_DRAG_TYPE],
 ): Promise<TerminalDragTestEvent> {
-  const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端输出与输入']")
+  const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端会话']")
   if (!terminalRegion) throw new Error("Terminal region not found")
   const dataTransfer = {
     files: [],

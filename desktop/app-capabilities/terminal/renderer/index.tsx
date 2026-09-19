@@ -450,7 +450,7 @@ export function TerminalModule({
         })
     } catch (error) {
       logger.error("Failed to create terminal session.", error)
-      toast.error("新建终端失败")
+      toast.error("新建标签失败")
     }
   }, [terminalBridge])
 
@@ -656,7 +656,7 @@ export function TerminalModule({
     } catch (error) {
       logger.error("Failed to rename terminal workspace.", error)
       await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after renaming a workspace.")
-      toast.error("重命名终端失败")
+      toast.error("重命名标签失败")
     } finally {
       setRenameSaving(false)
     }
@@ -712,7 +712,7 @@ export function TerminalModule({
       closeSessionRenameDialog()
     } catch (error) {
       logger.error("Failed to rename terminal session.", error)
-      toast.error("重命名对话失败")
+      toast.error("重命名会话失败")
     } finally {
       setSessionRenameSaving(false)
     }
@@ -743,7 +743,7 @@ export function TerminalModule({
     } catch (error) {
       logger.error("Failed to close terminal workspace.", error)
       await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a workspace close error.")
-      toast.error("关闭终端失败")
+      toast.error("关闭标签失败")
     } finally {
       setClosingWorkspaceId((current) => current === target.id ? null : current)
     }
@@ -796,7 +796,7 @@ export function TerminalModule({
       logger.error("Failed to split terminal pane.", error)
       await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a pane split error.")
       toast.error(error instanceof Error && error.message.includes("quota_exceeded")
-        ? "一个终端最多支持 8 个分屏"
+        ? "一个标签最多支持 8 个分屏"
         : "创建分屏失败")
     }
   }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
@@ -831,7 +831,7 @@ export function TerminalModule({
     } catch (error) {
       logger.error("Failed to close terminal pane.", error)
       await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a pane close error.")
-      toast.error("关闭分屏失败")
+      toast.error("关闭会话失败")
     } finally {
       setPaneClosePending(paneId, false)
     }
@@ -1378,11 +1378,11 @@ export function TerminalModule({
         type="button"
         variant="ghost"
         size="icon-xs"
-        title="新建终端"
+        title="新建标签"
         onClick={() => { void createSession({ groupId: group.id }) }}
       >
         <Plus className="size-3.5" />
-        <span className="sr-only">新建终端</span>
+        <span className="sr-only">新建标签</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -1536,7 +1536,7 @@ export function TerminalModule({
             </>
           ) : (
             <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
-              暂无会话
+              暂无标签
             </div>
           )}
         </div>
@@ -1563,7 +1563,7 @@ export function TerminalModule({
     <>
       {sidebarToggle}
       {activeHeaderWorkspaces.length > 0 ? (
-        <nav aria-label="活动终端会话" className="no-scrollbar flex h-10 min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
+        <nav aria-label="活动终端标签" className="no-scrollbar flex h-10 min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
           {activeHeaderWorkspaces.map((workspace) => {
             const session = workspaceActiveSession(workspace, activePaneIds, sessions)
             return (
@@ -1814,10 +1814,10 @@ export function TerminalModule({
           ) : (
             <div className="flex h-full min-h-0 items-center justify-center">
               <div className="grid justify-items-center gap-2">
-                <div className="text-sm text-muted-foreground">{loadError ?? "暂无会话"}</div>
+                <div className="text-sm text-muted-foreground">{loadError ?? "暂无标签"}</div>
                 <Button type="button" onClick={() => { void createSession() }}>
                   <TerminalIcon data-icon="inline-start" />
-                  新建终端
+                  新建标签
                 </Button>
               </div>
             </div>
@@ -2140,13 +2140,13 @@ export function TerminalModule({
           renameReturnFocusRef.current?.focus()
         }}>
           <DialogHeader>
-            <DialogTitle>重命名终端</DialogTitle>
+            <DialogTitle>重命名标签</DialogTitle>
             <DialogDescription className="sr-only">
-              输入新的终端名称。
+              输入新的标签名称。
             </DialogDescription>
           </DialogHeader>
           <Input
-            aria-label="终端名称"
+            aria-label="标签名称"
             value={renameTitle}
             onChange={(event) => setRenameTitle(event.target.value)}
             onKeyDown={(event) => {
@@ -2184,13 +2184,13 @@ export function TerminalModule({
           sessionRenameReturnFocusRef.current?.focus()
         }}>
           <DialogHeader>
-            <DialogTitle>重命名对话</DialogTitle>
+            <DialogTitle>重命名会话</DialogTitle>
             <DialogDescription className="sr-only">
-              输入新的对话名称。
+              输入新的会话名称。
             </DialogDescription>
           </DialogHeader>
           <Input
-            aria-label="对话名称"
+            aria-label="会话名称"
             value={sessionRenameTitle}
             onChange={(event) => setSessionRenameTitle(event.target.value)}
             onKeyDown={(event) => {
@@ -2231,7 +2231,7 @@ export function TerminalModule({
             <AlertDialogTitle>删除分组</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteGroupHasActiveSessions
-                ? "请先停止该分组内运行中的终端。"
+                ? "请先停止该分组内运行中的标签。"
                 : deleteGroupMembers.length
                   ? `将删除 ${deleteGroupMembers.length} 个已结束会话及其保留输出。`
                   : "删除该空分组。"}
@@ -2302,7 +2302,7 @@ function TerminalHeaderSessionTab({
           ref={buttonRef}
           type="button"
           aria-current={active ? "page" : undefined}
-          aria-label={`切换到会话：${title}`}
+          aria-label={`切换到标签：${title}`}
           className={active ? "bg-muted text-foreground" : undefined}
           data-track="terminal-header-session-select"
           onClick={onSelect}
@@ -2527,7 +2527,7 @@ function groupWorkspaces(
     ...grouped,
     {
       id: UNGROUPED_TERMINAL_GROUP_ID,
-      name: "会话",
+      name: "未分组",
       createdAt: "",
       updatedAt: "",
       sortOrder: Number.MAX_SAFE_INTEGER,

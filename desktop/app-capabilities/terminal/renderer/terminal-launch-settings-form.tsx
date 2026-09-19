@@ -114,7 +114,7 @@ export function TerminalLaunchSettingsForm({
             <FieldContent>
               <FieldLabel htmlFor="terminal-agent-notifications">Agent 原生通知</FieldLabel>
               <FieldDescription>
-                仅对新建终端生效。Codex 首次使用需在 /hooks 中信任 Synapse Hook。
+                仅对新建的会话生效。Codex 首次使用需在 /hooks 中信任 Synapse Hook。
               </FieldDescription>
             </FieldContent>
             <Switch

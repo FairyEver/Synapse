@@ -43,8 +43,9 @@
 ### Terminal
 
 - app id `terminal`，capability 使用 `app.terminal.<subdomain>.<action>`，tool 名严格点转下划线。
+- 分层叫法固定为：应用是「终端」，文件夹是「终端分组」，文件夹下那一行是「终端标签」（代码里的 workspace），标签内部可分成最多 8 个「分屏」，每个分屏里的那一个才叫「终端会话」（代码里的 session，也就是 `sessionId` 寻址的对象）。界面文案与文档一律按这套叫法，不得再把标签叫成「终端」或把会话叫成「对话」。代码标识符（`TerminalGroup` / `TerminalWorkspace` / `TerminalPaneLeaf` / `TerminalSession`）保持不变。
 - UI、IPC、MCP 复用 `desktop/app-capabilities/terminal/main/service.ts` 的分组、活动会话、命令、有界输出和不可变 `sessionId`。
-- UI 中一个侧边栏终端对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行；拖动 pane 顶栏只能投放到另一 pane 的四个边缘并重组布局树，不合并 session 或创建标签容器。关闭侧边栏终端必须删除整个 workspace、全部叶子 session 及其数据；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
+- UI 中一个侧边栏标签对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行；拖动 pane 顶栏只能投放到另一 pane 的四个边缘并重组布局树，不合并 session、也不在 pane 内新增标签层。关闭侧边栏标签必须删除整个 workspace、全部叶子 session 及其数据；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
 - session 进入 `ended`、`failed` 或 `lost` 后必须立即移除对应 pane，并删除会话标识、输出、检查点、操作和短期幂等数据；最后一个 pane 移除后 workspace 不得继续出现在侧边栏。终止态仅可用于唤醒已在等待的观察请求，之后按原 `sessionId` 查询必须返回 `not_found`。
 - Synapse 退出时必须终止并销毁所有 Terminal session，只保留全局设置、分组、快捷命令和工具栏操作。启动时必须清理任何旧版或异常遗留的 session/workspace 及关联数据，不恢复 PTY，不将旧记录转成 `lost`，不重放生命周期操作。
 - workspace 与 pane 是 UI/IPC 聚合，不新增 MCP 工具；MCP 继续按不可变 `sessionId` 管理底层会话，不能假定或修改 Renderer 布局。
@@ -61,9 +62,9 @@
 - 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调或统一通知中心。除精确 session 位于当前焦点时抑制外，统一使用系统原生通知，不得改用 renderer 应用内通知。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
 - 终端字符宽度表以 Claude Code 的宽度库口径（`Bun.stringWidth`，等同 `string-width` / `emoji-regex`：`Emoji` 属性码点算 2 格）为准，渲染端与主进程 headless 仿真器必须共用同一张表；改装宽度表必须同时保证 MCP 读屏与序列化恢复的换行与渲染端一致。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
-- 终端会话定位是会话级纯导航，只接受不可变 `sessionId`，并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane；会话不跨重启（ADR 0215），因此不提供任何 Deep Link，也不得扩展为命令执行、输出读取或 workspace/pane 引用。复制入口属于分屏：只出现在 pane 顶栏标题的右键菜单（以及顶部会话标签菜单），产出的是纯文本 `workspace_id` / `session_ref` / `session_id` 三行：ref 是由 `sessionId` 派生的本机短校验引用，供人识别；只有 `session_id` 可被外部寻址。复制入口的文案必须说明该引用只在本机本次运行期间有效。
+- 终端会话定位是会话级纯导航，只接受不可变 `sessionId`，并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane；会话不跨重启（ADR 0215），因此不提供任何 Deep Link，也不得扩展为命令执行、输出读取或 workspace/pane 引用。复制入口属于分屏：只出现在 pane 顶栏标题的右键菜单（以及顶部标签菜单），产出的是纯文本 `workspace_id` / `session_ref` / `session_id` 三行：ref 是由 `sessionId` 派生的本机短校验引用，供人识别；只有 `session_id` 可被外部寻址。复制入口的文案必须说明该引用只在本机本次运行期间有效。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
-- 终端会话（workspace）的置顶只通过 UI 私有 IPC 写入 workspace 记录既有字段：置顶只改变同分组内的排序，不得影响会话生命周期、布局或启动设置。它只活到本次运行结束——会话与 workspace 不跨重启（ADR 0215），刷新后的 workspace 是一张新面孔，因此不得承诺保留，也不得为此引入跨重启的 workspace 身份。会话列表与顶部会话标签只显示「需要你动手」的等待输入标记；不得再引入「有新消息」一类由原始输出事件推断的未读标记，它会随每次输出恒亮，反而稀释等待输入标记。
+- 终端标签（workspace）的置顶只通过 UI 私有 IPC 写入 workspace 记录既有字段：置顶只改变同分组内的排序，不得影响会话生命周期、布局或启动设置。它只活到本次运行结束——会话与 workspace 不跨重启（ADR 0215），刷新后的 workspace 是一张新面孔，因此不得承诺保留，也不得为此引入跨重启的 workspace 身份。侧栏标签列表与顶部标签只显示「需要你动手」的等待输入标记；不得再引入「有新消息」一类由原始输出事件推断的未读标记，它会随每次输出恒亮，反而稀释等待输入标记。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
 - 尺寸归属是独立于写入租约的运行时维度：只有手机自己的 resize 主张它，任何其它 resize（桌面 fit、自动化 resize、创建初始尺寸）都释放它，因此不需要额外的释放调用。归属变化即使格子数没变也必须广播，且不推进 `sizeRevision`。手机 detach 或超过更短的归属空闲阈值即释放；应用重启不恢复归属。同一会话只能有一个归属方，多端并发后写者胜，不做仲裁。完整规格见 `docs/adr/0216-coordinate-terminal-size-ownership-separately-from-leases.md`。
 - 手机终端有两种显示模式，属于手机端的呈现选择：优先移动端（手机上报自己的格数，PTY 随之重排，手机 1:1 渲染）与优先还原（PTY 不变，手机按桌面网格整帧缩放，可双指放大）。桌面端在归属为手机时抑制自身 fit，该会话同时整块锁住：内容区、键盘输入、拖入路径、pane 顶栏的文件夹/平分/最大化/关闭按钮、以及底部命令条（含麦克风）全部不可用，pane 内容区显示「正在被 X 使用」与「转移到电脑」按钮，pane 顶栏不盖蒙层但整体惰性。锁只针对该会话，同 workspace 的其它 pane、会话列表和应用顶栏不受影响。释放按钮只走 UI 私有 IPC，不新增 MCP 工具，也不改变 `app.terminal.session.resize` 的自动化契约。完整规格见 `docs/adr/0219-lock-the-terminal-while-a-phone-holds-the-grid.md`。

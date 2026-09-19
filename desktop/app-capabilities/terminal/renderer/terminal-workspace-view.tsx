@@ -1591,8 +1591,8 @@ function TerminalPane({
   }, [fileTreeWidth, onFileTreeWidthChange, onFileTreeWidthCommit])
 
   const closeActionLabel = closePending || (closing && platform !== "darwin")
-    ? "正在关闭分屏"
-    : closing ? "强制关闭分屏" : "关闭分屏"
+    ? "正在关闭会话"
+    : closing ? "强制关闭会话" : "关闭会话"
   const equalizeActionLabel = equalizeDirection === "horizontal"
     ? "平分宽度"
     : equalizeDirection === "vertical" ? "平分高度" : "平分分屏"
@@ -1604,7 +1604,7 @@ function TerminalPane({
         registerElement(paneId, element)
       }}
       role="region"
-      aria-label={`终端输出与输入：${session.title}`}
+      aria-label={`终端会话：${session.title}`}
       data-terminal-pane-maximized={maximized ? "true" : undefined}
       data-track="terminal.pane.surface"
       data-track-native="true"
