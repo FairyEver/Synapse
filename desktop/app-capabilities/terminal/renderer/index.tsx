@@ -1377,6 +1377,19 @@ export function TerminalModule({
     }
   }, [])
 
+  /**
+   * Copies the reference of one named session.
+   *
+   * The pane header is the only place that knows *which* session it speaks for, so it hands over a
+   * sessionId rather than letting the caller guess the workspace's active pane.
+   */
+  const copyPaneSessionReference = useCallback((
+    workspace: SynapseTerminalWorkspace,
+    sessionId: string,
+  ) => {
+    void copySessionReference(workspace, sessions.find((session) => session.id === sessionId) ?? null)
+  }, [copySessionReference, sessions])
+
   const selectWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId)
   }, [])
@@ -1488,9 +1501,6 @@ export function TerminalModule({
         waiting={workspaceWaitingForInput(workspace, sessions)}
         workspaceId={workspace.id}
         onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-        onCopyReference={() => {
-          void copySessionReference(workspace, workspaceActiveSession(workspace, activePaneIds, sessions))
-        }}
         onEditDescription={(returnFocus) => openDescriptionDialog(workspace, returnFocus)}
         onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
         onSelect={() => selectWorkspace(workspace.id)}
@@ -1664,6 +1674,7 @@ export function TerminalModule({
                           setActivePaneIds((current) => ({ ...current, [workspace.id]: paneId }))
                         }}
                         onClosePane={closePane}
+                        onCopySessionReference={(sessionId) => copyPaneSessionReference(workspace, sessionId)}
                         onEqualizePane={equalizePane}
                         onMovePane={movePane}
                         onRenameSession={openSessionRenameDialog}
@@ -2418,7 +2429,6 @@ function TerminalSidebarWorkspaceRow({
   description,
   lifecycleDisabled,
   onClose,
-  onCopyReference,
   onEditDescription,
   onRename,
   onSelect,
@@ -2436,7 +2446,6 @@ function TerminalSidebarWorkspaceRow({
   readonly description?: string
   readonly lifecycleDisabled: boolean
   readonly onClose: () => void
-  readonly onCopyReference: () => void
   readonly onEditDescription: (returnFocus: HTMLElement) => void
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
@@ -2500,10 +2509,6 @@ function TerminalSidebarWorkspaceRow({
         }}>
           <FileText />
           编辑描述
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={onCopyReference}>
-          <Copy />
-          复制引用
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
           <X />

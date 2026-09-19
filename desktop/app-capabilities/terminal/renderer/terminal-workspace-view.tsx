@@ -20,7 +20,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Columns3, Folder, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
+import { Columns3, Copy, Folder, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
@@ -126,6 +126,7 @@ export function TerminalWorkspaceView({
   appearanceSize,
   onActivePaneChange,
   onClosePane,
+  onCopySessionReference,
   onEqualizePane,
   onMovePane,
   onRenameSession,
@@ -144,6 +145,8 @@ export function TerminalWorkspaceView({
   readonly appearanceSize: TerminalAppearanceSize
   readonly onActivePaneChange: (paneId: string) => void
   readonly onClosePane: (paneId: string) => void
+  /** Copies the reference of the session this pane owns (one pane = one session). */
+  readonly onCopySessionReference: (sessionId: string) => void
   readonly onEqualizePane: (paneId: string) => void
   readonly onMovePane: (
     sourcePaneId: string,
@@ -487,6 +490,7 @@ export function TerminalWorkspaceView({
             onPaneDragEnd={handlePaneDragEnd}
             onPaneDragStart={() => handlePaneDragStart(pane.paneId)}
             onPaneDragTargetChange={(edge) => handlePaneDragTargetChange(pane.paneId, edge)}
+            onCopySessionReference={onCopySessionReference}
             onRenameSession={onRenameSession}
             onSessionChanged={onSessionChanged}
             onSessionDeleted={onSessionDeleted}
@@ -703,11 +707,14 @@ function captureTerminalSplitLayouts(
 function TerminalPaneTitle({
   disabled,
   onActive,
+  onCopyReference,
   onRename,
   title,
 }: {
   readonly disabled: boolean
   readonly onActive: () => void
+  /** Copies this pane's own session reference — not the workspace's active one. */
+  readonly onCopyReference: () => void
   readonly onRename: () => void
   readonly title: string
 }) {
@@ -748,6 +755,10 @@ function TerminalPaneTitle({
           <Pencil />
           重命名
         </ContextMenuItem>
+        <ContextMenuItem onSelect={onCopyReference}>
+          <Copy />
+          复制引用
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -770,6 +781,7 @@ function TerminalPane({
   maximizeDisabled,
   onActive,
   onCloseFileTree,
+  onCopySessionReference,
   onEqualize,
   onFileTreeWidthChange,
   onFileTreeWidthCommit,
@@ -806,6 +818,7 @@ function TerminalPane({
   readonly maximizeDisabled: boolean
   readonly onActive: () => void
   readonly onCloseFileTree: () => void
+  readonly onCopySessionReference: (sessionId: string) => void
   readonly onEqualize: () => void
   readonly onFileTreeWidthChange: (width: number) => void
   readonly onFileTreeWidthCommit: (width: number) => void
@@ -1584,6 +1597,7 @@ function TerminalPane({
           <TerminalPaneTitle
             disabled={remoteSized}
             onActive={onActive}
+            onCopyReference={() => onCopySessionReference(session.id)}
             onRename={() => onRenameSession(session.id, paneRootRef.current)}
             title={session.title}
           />

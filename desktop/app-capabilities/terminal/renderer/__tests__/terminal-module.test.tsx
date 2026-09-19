@@ -1136,7 +1136,7 @@ describe("TerminalModule", () => {
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
   })
 
-  it("copies the session reference from its sidebar session row context menu", async () => {
+  it("copies the session reference from the pane header, not from the sidebar row", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
     createSession({
@@ -1152,24 +1152,41 @@ describe("TerminalModule", () => {
     })
 
     await renderEmbeddedModule()
-    await openSidebarSessionMenu("日志终端")
 
+    // 引用天然属于一个会话，而一个会话就是一个分屏：侧边栏那一行代表的是整个 workspace，
+    // 分屏时它没有「哪一个会话」可指，所以复制只留在分屏头部。
+    await openSidebarSessionMenu("日志终端")
     expect(headerSessionMenuItems().map((item) => item.textContent)).toEqual([
       "重命名",
       "置顶",
       "编辑描述",
-      "复制引用",
       "关闭",
     ])
+  })
 
+  it("offers the reference copy on the pane header, next to rename", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderEmbeddedModule()
+
+    await openPaneTitleMenu("开发终端")
+    expect(headerSessionMenuItems().map((item) => item.textContent)).toEqual([
+      "重命名",
+      "复制引用",
+    ])
     await clickContextMenuItem("复制引用")
 
     expect(writeText).toHaveBeenCalledWith([
-      "workspace_id=workspace-session-2",
-      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
-      "session_id=session-2",
+      "workspace_id=workspace-session-1",
+      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
+      "session_id=session-1",
     ].join("\n"))
-    expect(document.activeElement).not.toBe(headerSessionTab("日志终端"))
   })
 
   it("pins a workspace from its context menu and moves it above the unpinned ones", async () => {
@@ -1355,7 +1372,7 @@ describe("TerminalModule", () => {
     }
   })
 
-  it("copies the focused pane session reference from a split workspace row", async () => {
+  it("copies each split pane's own session reference from that pane's header", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({
       id: "session-1",
@@ -1378,13 +1395,21 @@ describe("TerminalModule", () => {
     })
     expect(document.querySelectorAll('[data-track="terminal-session-select"]')).toHaveLength(1)
 
-    await openSidebarSessionMenu("开发终端")
+    // 分屏之后每个 pane 有自己的头部。这里故意从**不是**活动 pane 的那个复制（分屏后
+    // 活动的是新开的 session-2），拿到 session-1 才说明复制认的是这个 pane 自己，
+    // 而不是 workspace 的活动会话。
+    const titles = Array.from(document.querySelectorAll<HTMLElement>('[data-track="terminal-pane-title"]'))
+    expect(titles).toHaveLength(2)
+    await act(async () => {
+      titles[0]!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+      await Promise.resolve()
+    })
     await clickContextMenuItem("复制引用")
 
     expect(writeText).toHaveBeenCalledWith([
       "workspace_id=workspace-session-1",
-      "session_ref=tsr_abcdefghijklmnopqrstuv.abc",
-      "session_id=session-2",
+      "session_ref=tsr_zyxwvutsrqponmlkjihgfe.zyx",
+      "session_id=session-1",
     ].join("\n"))
   })
 
