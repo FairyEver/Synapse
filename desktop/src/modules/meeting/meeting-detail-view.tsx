@@ -87,11 +87,18 @@ export function MeetingDetailView(props: MeetingDetailViewProps) {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-4 pt-3.5 pb-7">
-          {props.mode === "voice" ? (
-            <VoiceView meeting={meeting} recordingDeleted={recordingDeleted} />
-          ) : (
+          {/* 两个视图都挂着，只藏起不看的那一个：切到「文字」时播放要继续，切回「语音」
+              时播放头还得在原来的位置上。卸载播放器会把音频连位置一起丢掉。 */}
+          <div className={props.mode === "voice" ? undefined : "hidden"}>
+            <VoiceView
+              meeting={meeting}
+              recordingDeleted={recordingDeleted}
+              visible={props.mode === "voice"}
+            />
+          </div>
+          <div className={props.mode === "text" ? undefined : "hidden"}>
             <TextView meeting={meeting} onRetry={props.onRetryTranscription} />
-          )}
+          </div>
         </div>
       </ScrollArea>
 
@@ -173,7 +180,11 @@ function MeetingTitle(props: {
 }
 
 /** 语音：一整段铺满宽度的波形 + 播放键 + ±15 秒 + 当前时间 / 总时长。 */
-function VoiceView(props: { readonly meeting: SynapseMeetingDetail; readonly recordingDeleted: boolean }) {
+function VoiceView(props: {
+  readonly meeting: SynapseMeetingDetail
+  readonly recordingDeleted: boolean
+  readonly visible: boolean
+}) {
   if (props.recordingDeleted) {
     return (
       <div className="rounded-lg border px-3 py-8 text-center">
@@ -182,7 +193,13 @@ function VoiceView(props: { readonly meeting: SynapseMeetingDetail; readonly rec
       </div>
     )
   }
-  return <MeetingPlayback meetingId={props.meeting.id} durationMs={props.meeting.durationMs} />
+  return (
+    <MeetingPlayback
+      meetingId={props.meeting.id}
+      durationMs={props.meeting.durationMs}
+      visible={props.visible}
+    />
+  )
 }
 
 /** 文字：腾讯云返回什么就显示什么，按自然段排开。 */

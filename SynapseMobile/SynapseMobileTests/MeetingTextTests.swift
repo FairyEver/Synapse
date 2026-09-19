@@ -115,6 +115,56 @@ struct MeetingTextTests {
         #expect(!decoded.recording.isDeleted)
     }
 
+    @Test func detailStillDecodesTheFieldsTheUiNoLongerShows() throws {
+        // 服务端继续返回 speakers / segments / minutes，只是界面不再渲染。这两个字段在
+        // 手机端是非可选数组：一旦服务端停止返回，没升级到新版本的 App 打开详情页就会
+        // 解码失败。这条用例钉住的就是那份兼容性。
+        let json = """
+        {
+          "id": "m-1",
+          "title": "Q3 路线图评审",
+          "startedAt": "2026-09-19T14:00:00.000Z",
+          "durationMs": 240000,
+          "speakerCount": 2,
+          "status": "done",
+          "recording": {
+            "status": "ready",
+            "mimeType": "audio/mp4",
+            "size": 1024,
+            "durationMs": 240000,
+            "deletedAt": null
+          },
+          "minutesStatus": "ready",
+          "createdAt": "2026-09-19T14:00:00.000Z",
+          "failureReason": null,
+          "speakers": [{ "speakerId": 0, "name": "李杨" }],
+          "segments": [
+            {
+              "id": "seg-1",
+              "speakerId": 0,
+              "startMs": 420,
+              "endMs": 900,
+              "text": "先说排序。",
+              "words": [{ "text": "先说", "startMs": 420, "endMs": 600 }]
+            }
+          ],
+          "minutes": {
+            "topics": ["路线图"],
+            "conclusions": [],
+            "todos": [],
+            "editedAt": null
+          },
+          "minutesFailureReason": null
+        }
+        """
+        let detail = try JSONDecoder().decode(MeetingDetail.self, from: Data(json.utf8))
+        #expect(detail.speakers.count == 1)
+        #expect(detail.segments.first?.startMs == 420)
+        #expect(detail.minutes?.topics == ["路线图"])
+        // 界面只读 text，但分段规则依赖整段文字仍然接得上。
+        #expect(MeetingText.paragraphs(detail.segments) == ["先说排序。"])
+    }
+
     @Test func deletedRecordingIsRecognised() throws {
         #expect(try meeting(recordingStatus: "deleted").recording.isDeleted)
         #expect(!(try meeting(recordingStatus: "ready").recording.isDeleted))

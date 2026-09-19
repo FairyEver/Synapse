@@ -22,6 +22,8 @@ const SKIP_MS = 15_000
 type MeetingPlaybackProps = {
   readonly meetingId: string
   readonly durationMs: number
+  /** 语音视图现在是不是看得见。切回来时画布宽度才有值，要按这个重画一次。 */
+  readonly visible: boolean
 }
 
 export function MeetingPlayback(props: MeetingPlaybackProps) {
@@ -66,12 +68,13 @@ export function MeetingPlayback(props: MeetingPlaybackProps) {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    // 藏起来的时候画布宽高是 0，画不出东西；切回来时 visible 变化会再走一遍这里。
+    if (!canvas || !props.visible) return
     const redraw = () => drawPlaybackWaveform(canvas, peaksRef.current, { progress })
     redraw()
     window.addEventListener("resize", redraw)
     return () => window.removeEventListener("resize", redraw)
-  }, [ready, url, progress])
+  }, [ready, url, progress, props.visible])
 
   function toggle(): void {
     const audio = audioRef.current

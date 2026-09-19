@@ -148,7 +148,12 @@ function MeetingRow(props: MeetingRowProps) {
   )
 }
 
-/** 悬停或选中时才出现的次要操作。点它不能触发行的选中。 */
+/**
+ * 悬停或选中时才出现的次要操作。点它不能触发行的选中。
+ *
+ * 平时不只是透明，还要 `pointer-events-none`：看不见却点得动的话，点行右侧的空白处会
+ * 莫名弹出菜单。
+ */
 function MeetingRowMenu(props: {
   readonly meeting: SynapseMeetingSummary
   readonly onRename: (meetingId: string) => void
@@ -162,7 +167,7 @@ function MeetingRowMenu(props: {
           size="icon"
           aria-label="更多操作"
           onClick={(event) => event.stopPropagation()}
-          className="size-6 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 group-aria-selected:opacity-100 data-[state=open]:opacity-100"
+          className="pointer-events-none size-6 shrink-0 text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-aria-selected:pointer-events-auto group-aria-selected:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100"
         >
           <MoreHorizontal />
         </Button>
