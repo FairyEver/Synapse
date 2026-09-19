@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto"
-import { chmod, mkdir, writeFile } from "node:fs/promises"
+import { chmod, mkdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
@@ -24,6 +24,18 @@ import {
   TERMINAL_AGENT_HOOK_RUNTIME,
   TERMINAL_AGENT_WRAPPER_RUNTIME,
 } from "./agent-notification-runtime"
+import {
+  applyTerminalAgentUpdate,
+  createTerminalAgentSession,
+  isTerminalAgentSessionUnstarted,
+  nextTerminalAgentVersion,
+  reduceTerminalAgentEvent,
+  terminalAgentProcessExitUpdate,
+  terminalAgentStalledUpdate,
+  type TerminalAgentEvent,
+  type TerminalAgentSession,
+  type TerminalAgentUpdate,
+} from "./agent-session"
 
 export const TERMINAL_AGENT_NOTIFICATION_SERVICE_ID = "core.terminal-agent-notifications"
 const NETWORK_SERVICE_ID = "terminal.agent-notifications"
@@ -31,6 +43,17 @@ const EVENT_PATH = "/terminal-agent-event"
 const MAX_BODY_BYTES = 16 * 1024
 const RATE_LIMIT_PER_MINUTE = 120
 const DEDUPLICATION_WINDOW_MS = 2_000
+/**
+ * How often the archive asks whether the process it is watching still exists.
+ *
+ * This is the fallback that does not depend on hook delivery: an agent whose `Stop` or
+ * `SessionEnd` never arrived still has to stop showing as running. Minutes apart, because
+ * a terminal that lingers a few seconds too long in "工作中" costs nothing next to a timer
+ * that wakes the main process for every running session every second.
+ */
+const AGENT_SESSION_SWEEP_MS = 30_000
+/** A `working` this long with a transcript that stopped growing is not working. */
+const AGENT_TRANSCRIPT_STALE_MS = 10 * 60_000
 
 type AgentProvider = "codex" | "claude"
 type AgentNotificationKind = "needs_action" | "completed"
@@ -54,6 +77,8 @@ export type TerminalAgentNotificationHandle = {
 
 export type TerminalAgentNotificationServiceDeps = {
   readonly settings: DataNamespace<TerminalAgentNotificationSettings>
+  /** 结构化元数据落这里；原始输出与检查点不走这条路（见 `encrypted-block-store`）。 */
+  readonly agentSessions: DataNamespace<TerminalAgentSession>
   readonly networkRegistry: NetworkServiceRegistry
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
@@ -70,11 +95,19 @@ export type TerminalAgentNotificationServiceDeps = {
   readonly openTerminalSession: (sessionId: string) => Promise<void>
   readonly setSessionAttention?: (update: TerminalAgentAttentionUpdate) => void
   readonly now?: () => number
+  /** Injectable so the liveness sweep can be decided without real processes. */
+  readonly isProcessAlive?: (pid: number) => boolean
+  readonly readTranscriptMtimeMs?: (path: string) => Promise<number | null>
+  readonly sweepIntervalMs?: number
 }
 
 export class TerminalAgentNotificationService {
   private readonly platform: NodeJS.Platform
   private readonly now: () => number
+  private readonly isProcessAlive: (pid: number) => boolean
+  private readonly readTranscriptMtimeMs: (path: string) => Promise<number | null>
+  /** 权威副本。查询读它，写入经 {@link commitAgentSessionUpdate} 之后才追上磁盘。 */
+  private readonly agentSessions = new Map<string, TerminalAgentSession>()
   private readonly sessionsByToken = new Map<string, SessionBinding>()
   private readonly sessionTokens = new Map<string, string>()
   private readonly activeSessionByWebContents = new Map<number, string | null>()
@@ -82,17 +115,22 @@ export class TerminalAgentNotificationService {
   private readonly lastNotificationAt = new Map<string, number>()
   private readonly liveNotifications = new Set<TerminalAgentNotificationHandle>()
   private settingsQueue: Promise<void> = Promise.resolve()
+  private stateQueue: Promise<void> = Promise.resolve()
   private settings: TerminalAgentNotificationSettings = defaultSettings()
   private binding?: ResolvedNetworkBinding
   private runtime?: RuntimePaths
+  private sweepTimer: NodeJS.Timeout | null = null
 
   constructor(private readonly deps: TerminalAgentNotificationServiceDeps) {
     this.platform = deps.platform ?? process.platform
     this.now = deps.now ?? (() => Date.now())
+    this.isProcessAlive = deps.isProcessAlive ?? defaultIsProcessAlive
+    this.readTranscriptMtimeMs = deps.readTranscriptMtimeMs ?? defaultReadTranscriptMtimeMs
   }
 
   async start(): Promise<void> {
     this.settings = await this.deps.settings.getSingleton() ?? defaultSettings()
+    await this.hydrateAgentSessions()
     if (this.settings.enabled) {
       try {
         await this.enableRuntime()
@@ -100,14 +138,153 @@ export class TerminalAgentNotificationService {
         this.deps.logger.warn("Terminal agent notifications could not start.", { error })
       }
     }
+    this.startSweep()
   }
 
   async stop(): Promise<void> {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer)
+      this.sweepTimer = null
+    }
     await this.stopIngress()
     this.sessionsByToken.clear()
     this.sessionTokens.clear()
     this.activeSessionByWebContents.clear()
     this.liveNotifications.clear()
+    this.agentSessions.clear()
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Agent 会话档案
+   * ---------------------------------------------------------------- */
+
+  /** 权威答案。推送只是提示，这里才是事实。 */
+  getAgentSession(sessionId: string): TerminalAgentSession | null {
+    return this.agentSessions.get(sessionId) ?? null
+  }
+
+  /**
+   * 所有真的跑过 agent 的会话档案。
+   *
+   * 停在 `launching` 的不在其中：那是「这个终端开过、但没有任何 agent 进来过」，
+   * 它只在内存里活着，不该被当成一条 agent 记录读出去。
+   */
+  listAgentSessions(): TerminalAgentSession[] {
+    return [...this.agentSessions.values()].filter((session) => !isTerminalAgentSessionUnstarted(session))
+  }
+
+  /**
+   * 一次存活探测。
+   *
+   * 公开出来是为了让「想知道就走一次」这件事不必等到下一个 tick，也让测试能直接决定
+   * 某个 pid 死没死，而不是去杀真进程。
+   */
+  async sweepAgentSessions(): Promise<void> {
+    const at = new Date(this.now()).toISOString()
+    for (const session of [...this.agentSessions.values()]) {
+      if (session.state === "ended" || session.state === "launching") continue
+      if (session.pid !== undefined && !this.isProcessAlive(session.pid)) {
+        this.commitAgentSessionUpdate(
+          session.sessionId,
+          terminalAgentProcessExitUpdate(session, { pid: session.pid, at }),
+        )
+        continue
+      }
+      await this.correctStalledAgentSession(session, at)
+    }
+  }
+
+  /**
+   * `working` 卡住了：agent 的 transcript 已经很久没长过。
+   *
+   * 只读 `stat`，不读内容——档案里永远不该出现终端输出的正文。文件读不到就什么都不做：
+   * 这条纠正宁可不动，也不能靠猜。
+   */
+  private async correctStalledAgentSession(session: TerminalAgentSession, at: string): Promise<void> {
+    if (!session.transcriptPath) return
+    const stalled = terminalAgentStalledUpdate(session, { at, staleMs: AGENT_TRANSCRIPT_STALE_MS })
+    if (!stalled) return
+    const mtimeMs = await this.readTranscriptMtimeMs(session.transcriptPath)
+    if (mtimeMs === null) return
+    if (mtimeMs > Date.parse(session.stateChangedAt)) return
+    this.commitAgentSessionUpdate(session.sessionId, stalled)
+  }
+
+  private async applyAgentEvent(sessionId: string, payload: AgentEventPayload): Promise<void> {
+    const current = this.agentSessions.get(sessionId)
+      ?? createTerminalAgentSession({ sessionId, at: new Date(this.now()).toISOString() })
+    const event: TerminalAgentEvent = {
+      source: payload.source,
+      event: payload.event,
+      at: new Date(this.now()).toISOString(),
+      ...(payload.toolName ? { toolName: payload.toolName } : {}),
+      ...(payload.notificationType ? { notificationType: payload.notificationType } : {}),
+      ...(payload.agentId ? { agentId: payload.agentId } : {}),
+      ...(payload.parentSessionId ? { parentSessionId: payload.parentSessionId } : {}),
+      ...(payload.agentSessionId ? { agentSessionId: payload.agentSessionId } : {}),
+      ...(payload.transcriptPath ? { transcriptPath: payload.transcriptPath } : {}),
+      ...(payload.agentPid === undefined ? {} : { pid: payload.agentPid }),
+    }
+    const update = reduceTerminalAgentEvent({ current, sessionId, event })
+    if (update) this.commitAgentSessionUpdate(sessionId, update)
+  }
+
+  /**
+   * 合并、落盘、并把结果记一行。
+   *
+   * 被拒绝的更新不写任何东西，所以重复送达、前任的迟到结论、乱序的旧事件都停在这里：
+   * 档案不会因为它们抖一下。
+   */
+  private commitAgentSessionUpdate(sessionId: string, update: TerminalAgentUpdate): void {
+    const current = this.agentSessions.get(sessionId)
+    const { applied, session } = applyTerminalAgentUpdate(current, update)
+    if (!applied) return
+    this.agentSessions.set(sessionId, session)
+    this.deps.logger.info("Terminal agent session state changed.", {
+      sessionId,
+      state: session.state,
+      version: session.version,
+      reason: update.reason,
+    })
+    this.queueAgentSessionWrite(session)
+  }
+
+  private queueAgentSessionWrite(session: TerminalAgentSession): void {
+    const write = async (): Promise<void> => {
+      // 从没有 agent 进来过的终端不值得在库里占一行。
+      if (isTerminalAgentSessionUnstarted(session)) return
+      try {
+        await this.deps.agentSessions.upsert(session)
+      } catch (error) {
+        this.deps.logger.warn("Terminal agent session persistence failed.", {
+          sessionId: session.sessionId,
+          error,
+        })
+      }
+    }
+    this.stateQueue = this.stateQueue.then(write, write)
+  }
+
+  private async hydrateAgentSessions(): Promise<void> {
+    try {
+      for (const session of await this.deps.agentSessions.list()) {
+        this.agentSessions.set(session.sessionId, session)
+      }
+    } catch (error) {
+      this.deps.logger.warn("Terminal agent sessions could not be read back.", { error })
+    }
+  }
+
+  private startSweep(): void {
+    if (this.sweepTimer) return
+    const interval = this.deps.sweepIntervalMs ?? AGENT_SESSION_SWEEP_MS
+    if (interval <= 0) return
+    this.sweepTimer = setInterval(() => {
+      void this.sweepAgentSessions().catch((error: unknown) => {
+        this.deps.logger.warn("Terminal agent session sweep failed.", { error })
+      })
+    }, interval)
+    this.sweepTimer.unref?.()
   }
 
   getSettings(): TerminalAgentNotificationSettings {
@@ -174,6 +351,12 @@ export class TerminalAgentNotificationService {
     }
     this.sessionsByToken.set(token, session)
     this.sessionTokens.set(input.sessionId, token)
+    // 档案从这一刻就存在，早于任何事件——「不依赖 hook 送达」的意思正是如此。它还停在
+    // `launching`，所以只在内存里：没有 agent 进来过的终端不值得在库里占一行。
+    this.agentSessions.set(
+      input.sessionId,
+      createTerminalAgentSession({ sessionId: input.sessionId, at: new Date(this.now()).toISOString() }),
+    )
     const delimiter = this.platform === "win32" ? ";" : ":"
     const originalPath = input.env.PATH ?? ""
     const env: Record<string, string> = {
@@ -239,6 +422,21 @@ export class TerminalAgentNotificationService {
     this.sessionTokens.delete(sessionId)
     this.lastNotificationAt.delete(`${sessionId}:needs_action`)
     this.lastNotificationAt.delete(`${sessionId}:completed`)
+    // 终端会话本身没了，跑在里面的 agent 自然也没了。这不是「某个 pid 死了」的判断，
+    // 所以不带 aboutPid——它是本机的直接事实，不需要再等存活探测确认一次。
+    const current = this.agentSessions.get(sessionId)
+    if (current && current.state !== "ended") {
+      this.commitAgentSessionUpdate(sessionId, {
+        id: current.id,
+        schemaVersion: 1,
+        sessionId,
+        state: "ended",
+        version: nextTerminalAgentVersion(current),
+        at: new Date(this.now()).toISOString(),
+        ...(current.agentKind ? { agentKind: current.agentKind } : {}),
+        reason: "terminal_session_unregistered",
+      })
+    }
   }
 
   reportActiveSession(webContentsId: number, sessionId: string | null): void {
@@ -373,6 +571,9 @@ export class TerminalAgentNotificationService {
 
   private async handleAgentEvent(session: SessionBinding, payload: AgentEventPayload): Promise<void> {
     if (payload.agentId || payload.parentSessionId || payload.event === "SubagentStop") return
+    // 档案先于通知推进：通知是提示，档案是事实，而两者由同一批事件驱动。子 agent 的事件
+    // 在两个地方都提前返回，父级状态不会被它带动。
+    await this.applyAgentEvent(session.sessionId, payload)
     if (payload.event === "SessionStart" || payload.event === "UserPromptSubmit") {
       session.waiting = false
       this.applyAttention({
@@ -619,6 +820,10 @@ type AgentEventPayload = {
   readonly notificationType?: string
   readonly agentId?: string
   readonly parentSessionId?: string
+  readonly agentSessionId?: string
+  readonly transcriptPath?: string
+  /** 这一任 agent 进程的 pid，由 wrapper 在 spawn 之后报上来。 */
+  readonly agentPid?: number
 }
 
 function defaultSettings(): TerminalAgentNotificationSettings {
@@ -644,6 +849,38 @@ function parseAgentEvent(body: Buffer): AgentEventPayload {
     ...(typeof value.notificationType === "string" ? { notificationType: value.notificationType.slice(0, 128) } : {}),
     ...(typeof value.agentId === "string" ? { agentId: value.agentId.slice(0, 128) } : {}),
     ...(typeof value.parentSessionId === "string" ? { parentSessionId: value.parentSessionId.slice(0, 128) } : {}),
+    ...(typeof value.agentSessionId === "string" ? { agentSessionId: value.agentSessionId.slice(0, 200) } : {}),
+    // 路径只被 `stat`，所以给它一个够用又不会失控的长度上限。
+    ...(typeof value.transcriptPath === "string" ? { transcriptPath: value.transcriptPath.slice(0, 4096) } : {}),
+    ...(isPositiveInteger(value.agentPid) ? { agentPid: value.agentPid } : {}),
+  }
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+}
+
+/**
+ * 进程还在不在。
+ *
+ * `EPERM` 也算活着：那说明进程存在，只是不归我们管。只有 `ESRCH` 才是「没有这个进程」。
+ */
+function defaultIsProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM"
+  }
+}
+
+/** `null` 表示读不到——文件不存在或读不动，两种都只意味着「不知道」，不是「没在写」。 */
+async function defaultReadTranscriptMtimeMs(path: string): Promise<number | null> {
+  try {
+    return (await stat(path)).mtimeMs
+  } catch {
+    // 不存在、没权限、路径已经变了——原因不同，结论一样：这一轮不知道，那就什么都别改。
+    return null
   }
 }
 

@@ -127,6 +127,7 @@ export {
 } from "./update-install-recovery"
 export {
   terminalAgentNotificationSettingsSchemaDefinition,
+  terminalAgentSessionsSchemaDefinition,
   terminalBlocksSchema,
   terminalCommandBodiesSchema,
   terminalCommandsSchema,
@@ -244,6 +245,7 @@ import { systemNotifierSettingsSchemaDefinition } from "./system-notifier"
 import { updateInstallRecoverySchema } from "./update-install-recovery"
 import {
   terminalAgentNotificationSettingsSchemaDefinition,
+  terminalAgentSessionsSchemaDefinition,
   terminalBlocksSchema,
   terminalCommandBodiesSchema,
   terminalCommandsSchema,
@@ -318,6 +320,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,
   terminalAgentNotificationSettingsSchemaDefinition,
+  terminalAgentSessionsSchemaDefinition,
   terminalGlobalLaunchSchema,
   terminalGlobalLaunchBodiesSchema,
   terminalToolbarActionsSchema,

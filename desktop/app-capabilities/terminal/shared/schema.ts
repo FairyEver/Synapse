@@ -80,6 +80,26 @@ export const terminalUpdateAgentNotificationSettingsInputSchema = z.object({
   expectedRevision: z.number().int().positive(),
 }).strict()
 
+/**
+ * 一条 agent 会话档案的落盘形状。
+ *
+ * `.strict()` 在这里不只是校验习惯：它把「不许往档案里塞别的东西」变成一条会失败的规则。
+ * 提示词、回答、终端输出、工具参数一旦有人想顺手存进来，落盘那一刻就会被拒。
+ */
+export const terminalAgentSessionRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  agentKind: z.enum(["claude", "codex"]).optional(),
+  agentSessionId: z.string().min(1).max(200).optional(),
+  state: z.enum(["launching", "idle", "working", "needs_input", "ended"]),
+  version: z.number().int().nonnegative(),
+  lastActivityAt: z.string().datetime(),
+  stateChangedAt: z.string().datetime(),
+  pid: z.number().int().positive().optional(),
+  transcriptPath: z.string().min(1).max(4096).optional(),
+}).strict()
+
 export const terminalReportActiveSessionInputSchema = z.object({
   sessionId: z.string().uuid().nullable(),
 }).strict()
@@ -446,6 +466,7 @@ export type TerminalEnvironmentEntry = z.infer<typeof terminalEnvironmentEntrySc
 export type TerminalLaunchLayer = z.infer<typeof terminalLaunchLayerSchema>
 export type TerminalGlobalLaunchSettings = z.infer<typeof terminalGlobalLaunchSettingsSchema>
 export type TerminalAgentNotificationSettings = z.infer<typeof terminalAgentNotificationSettingsSchema>
+export type TerminalAgentSessionRecord = z.infer<typeof terminalAgentSessionRecordSchema>
 export type TerminalCustomToolbarAction = z.infer<typeof terminalCustomToolbarActionSchema>
 export type TerminalCreateCustomToolbarActionInput = z.infer<typeof terminalCreateCustomToolbarActionInputSchema>
 export type TerminalUpdateCustomToolbarActionInput = z.infer<typeof terminalUpdateCustomToolbarActionInputSchema>

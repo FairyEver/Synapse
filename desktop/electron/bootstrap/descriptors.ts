@@ -97,6 +97,7 @@ import {
   TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
 } from "../../app-capabilities/terminal/main/agent-notification-service"
 import type { TerminalAgentNotificationSettings } from "../../app-capabilities/terminal/shared/schema"
+import type { TerminalAgentSession } from "../../app-capabilities/terminal/main/agent-session"
 import {
   createWorkspaceFileTreeService,
   WORKSPACE_FILE_TREE_SERVICE_ID,
@@ -1949,6 +1950,8 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
     return new TerminalAgentNotificationService({
       settings: ctx.registry.get<DataRepository>("core.data-repository")
         .namespace<TerminalAgentNotificationSettings>("app.terminal.agent-notification-settings"),
+      agentSessions: ctx.registry.get<DataRepository>("core.data-repository")
+        .namespace<TerminalAgentSession>("app.terminal.agent-sessions"),
       networkRegistry: ctx.registry.get<NetworkServiceRegistry>("core.network-registry"),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),

@@ -22,6 +22,10 @@ describe("Terminal DataRepository schemas", () => {
     expect(byName.get("app.terminal.blocks")?.backend).toBe("sqlite")
     expect(byName.get("app.terminal.delete-intents")?.backend).toBe("sqlite")
     expect(byName.get("app.terminal.domain-state")?.backend).toBe("json")
+    // Agent 会话档案是元数据：会话 id、状态、版本、时间戳，加一条 transcript 的路径。
+    // 终端输出的正文与检查点从来不走这里，只进有界加密块存储。
+    expect(byName.get("app.terminal.agent-sessions")?.backend).toBe("sqlite")
+    expect(byName.get("app.terminal.agent-sessions")?.encrypted).toBe(false)
   })
 
   it("indexes stable Terminal list and resource lookups", () => {

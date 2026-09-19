@@ -28,9 +28,11 @@ import {
 } from "../../../../app-capabilities/terminal/shared/contract-schema"
 import {
   TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT,
+  terminalAgentSessionRecordSchema,
   terminalCustomToolbarActionSchema,
   terminalAgentNotificationSettingsSchema,
   type TerminalAgentNotificationSettings,
+  type TerminalAgentSessionRecord,
 } from "../../../../app-capabilities/terminal/shared/schema"
 import type { NamespaceSchema } from "../types"
 
@@ -89,6 +91,23 @@ export const terminalAgentNotificationSettingsSchemaDefinition: NamespaceSchema<
     revision: 1,
     updatedAt: new Date(0).toISOString(),
   }),
+}
+
+/**
+ * Agent 会话档案的元数据。
+ *
+ * `sqlite` 而不是加密：这里面没有需要保护的东西——会话 id、状态、版本、时间戳，加上一条
+ * transcript 的路径。终端输出的正文与检查点从来不走这里，它们只进 `encrypted-block-store`
+ * 那一个有界加密块存储。
+ */
+export const terminalAgentSessionsSchemaDefinition: NamespaceSchema<TerminalAgentSessionRecord> = {
+  name: "app.terminal.agent-sessions",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: false,
+  validate: (value): value is TerminalAgentSessionRecord =>
+    terminalAgentSessionRecordSchema.safeParse(value).success,
 }
 
 export const terminalGlobalLaunchSchema: NamespaceSchema<TerminalGlobalLaunchRecord> = {

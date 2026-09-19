@@ -83,6 +83,7 @@ export {
   soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
   terminalAgentNotificationSettingsSchemaDefinition,
+  terminalAgentSessionsSchemaDefinition,
   updateInstallRecoverySchema,
   relayBindingsSchema,
   relayRunsSchema,

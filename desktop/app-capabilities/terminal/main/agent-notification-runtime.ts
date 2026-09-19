@@ -25,6 +25,9 @@ process.stdin.on("end", () => {
     notificationType: typeof payload.notification_type === "string" ? payload.notification_type : undefined,
     agentId: typeof payload.agent_id === "string" ? payload.agent_id : undefined,
     parentSessionId: typeof payload.parent_session_id === "string" ? payload.parent_session_id : undefined,
+    agentSessionId: typeof payload.session_id === "string" ? payload.session_id : undefined,
+    transcriptPath: typeof payload.transcript_path === "string" ? payload.transcript_path : undefined,
+    agentPid: Number.parseInt(process.env.SYNAPSE_TERMINAL_AGENT_AGENT_PID || "", 10) || undefined,
   })
   if (!url || !token || !sessionId) return finish()
   try {
@@ -188,12 +191,30 @@ function deepMerge(base, overlay) {
   return overlay
 }
 
+function reportAgentProcessStarted(pid) {
+  const node = process.env.SYNAPSE_TERMINAL_AGENT_NODE
+  const helper = process.env.SYNAPSE_TERMINAL_AGENT_HOOK
+  if (!node || !helper) return
+  try {
+    const reporter = spawn(node, [helper, provider, "AgentProcessStart"], {
+      stdio: ["ignore", "ignore", "ignore"],
+      detached: true,
+      env: { ...process.env, SYNAPSE_TERMINAL_AGENT_AGENT_PID: String(pid) },
+    })
+    reporter.on("error", () => {})
+    reporter.unref()
+  } catch {
+    // 报不上就算了，只是少一条「这一任进程是谁」的线索；状态兜底另有进程存活探测。
+  }
+}
+
 function launch(realPath, args, cleanup) {
   const child = spawn(realPath, args, {
     stdio: "inherit",
     env: { ...process.env, SYNAPSE_TERMINAL_AGENT_WRAPPER_ACTIVE: "1" },
     shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(realPath),
   })
+  if (child.pid) reportAgentProcessStarted(child.pid)
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => {
     try { child.kill(signal) } catch { return }
   })
