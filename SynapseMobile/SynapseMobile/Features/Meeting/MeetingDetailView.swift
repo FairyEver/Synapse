@@ -281,8 +281,11 @@ private struct MeetingAudioPane: View {
             } label: {
                 Image(systemName: "gobackward.15")
                     .font(.title2)
+                    // 载入中一起置灰：这会儿点它什么都不会发生。电脑端也是三个一起禁用的。
+                    .opacity(model.playback.isLoading ? 0.35 : 1)
             }
             .buttonStyle(.plain)
+            .disabled(model.playback.isLoading)
             .accessibilityLabel("后退 15 秒")
 
             Button {
@@ -305,8 +308,11 @@ private struct MeetingAudioPane: View {
             } label: {
                 Image(systemName: "goforward.15")
                     .font(.title2)
+                    // 同后退：载入中三个一起置灰，与电脑端一致。
+                    .opacity(model.playback.isLoading ? 0.35 : 1)
             }
             .buttonStyle(.plain)
+            .disabled(model.playback.isLoading)
             .accessibilityLabel("前进 15 秒")
 
             Spacer(minLength: 8)

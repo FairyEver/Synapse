@@ -184,6 +184,24 @@ struct MeetingAudioCacheTests {
         #expect(!exists(cache.audioURL(meetingId: "b")))
     }
 
+    @Test func signingOutTakesEveryCachedRecordingButLeavesTheRecordingInProgressAlone() throws {
+        // 退出登录时整个清掉：缓存里每一条都是某个账号的录音，换个人登进来不该还在盘上。
+        // 但同一个目录里还躺着录音中途那份按 recordingId 命名的音频——那是异常退出之后
+        // 唯一的依据，由收尾那条路管，**不归这里删**。清成整个目录就把它一起毁了。
+        let cache = try makeCache()
+        let first = try put(cache, meetingId: "m-1", bytes: 16)
+        let second = try put(cache, meetingId: "m-2", bytes: 16)
+        let recordingInProgress = cache.directory.appendingPathComponent("rec-not-in-index.m4a")
+        try Data(repeating: 0x42, count: 16).write(to: recordingInProgress)
+
+        cache.clearAll()
+
+        #expect(!exists(first))
+        #expect(!exists(second))
+        #expect(cache.loadIndex().isEmpty)
+        #expect(exists(recordingInProgress))
+    }
+
     @Test func anEmptyListStillCountsAsFewerThanTheLimit() throws {
         let cache = try makeCache()
         try put(cache, meetingId: "a", bytes: 8)

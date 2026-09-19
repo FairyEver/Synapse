@@ -464,6 +464,8 @@ final class SynapseAppModel {
         if recording.isRecording { recording.cancel() }
         // 正在播的那一段也是。它会连着一条已经不属于这个账号的 URL 继续放。
         playback.stop()
+        // 听过留在本机的那些音频同理：它们是这个账号的录音，换个人登进来不该还在盘上。
+        MeetingAudioCache.shared.clearAll()
         await apiClient.logout()
         authState = .signedOut
     }

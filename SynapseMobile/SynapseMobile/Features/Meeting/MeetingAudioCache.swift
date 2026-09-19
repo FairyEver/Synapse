@@ -215,6 +215,20 @@ struct MeetingAudioCache {
         saveIndex(survivors)
     }
 
+    /// 整个清掉：退出登录时用。
+    ///
+    /// 缓存里每一条都是某个账号的录音，换个人登进来不该还留着——`signOut` 里清录音列表、停
+    /// 播放器用的是同一个理由。
+    ///
+    /// **只删索引里记着的那几个文件**，不是把目录清空：同一个目录里还躺着录音中途那份按
+    /// recordingId 命名的音频，那是异常退出之后唯一的依据，有别的路子在管，不归这里删。
+    func clearAll() {
+        for entry in loadIndex() {
+            try? FileManager.default.removeItem(at: audioURL(meetingId: entry.meetingId))
+        }
+        try? FileManager.default.removeItem(at: indexURL)
+    }
+
     /// 最久没听的排前面。同一个时间戳（索引里的时刻只到秒）按写进索引的先后排，顺序才是
     /// 确定的——LRU 淘汰的先后不该随排序算法摆动。
     private func orderedForEviction(_ entries: [Entry]) -> [Entry] {

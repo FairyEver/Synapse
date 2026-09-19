@@ -36,9 +36,6 @@ final class MeetingPlayback {
     private(set) var isLoading = false
     /// 录音没了。历史数据里有，别的端也可能删过。
     private(set) var isUnavailable = false
-    /// 读不到音频的原因。**只进日志，不进界面**：载入态不说失败，它多半只是没网，而网回来
-    /// 自己就会好。写成「播放失败」会让用户去找一个不需要他解决的问题。
-    private(set) var failureMessage: String?
     /// 这一屏载入过几次。界面靠它决定「10 秒那个计时」要不要重新起算：按下「重试」也让它
     /// 加一，用户才看得见那一下的反应。
     private(set) var loadAttempt = 0
@@ -76,7 +73,6 @@ final class MeetingPlayback {
             teardownPlayer()
             peaks = []
             isUnavailable = false
-            failureMessage = nil
             isLoading = true
             loadAttempt += 1
             retryDelay = Self.initialRetryDelay
@@ -111,7 +107,8 @@ final class MeetingPlayback {
     /// 试一次：先看本机有没有，没有才去云端下。
     ///
     /// 失败**不改变任何界面状态**，只安排下一次自动尝试：没网不是错误，是一个会自己好的
-    /// 状态。`failureMessage` 落进日志，界面上仍然只是「正在下载」。
+    /// 状态。原因落进日志，界面上仍然只是「正在下载」——所以这里没有失败字段可读，界面也
+    /// 不该有：文案表里根本没有「播放失败」这一条。
     private func attempt(meetingId: String, using client: APIClient) async {
         isAttempting = true
         defer { isAttempting = false }
@@ -145,7 +142,6 @@ final class MeetingPlayback {
             isLoading = false
         } catch {
             let message = (error as? APIError)?.message ?? "读不到这段录音的音频。"
-            failureMessage = message
             AppLog.recording.warning("meeting audio load failed, retrying: \(message, privacy: .public)")
             scheduleRetry(meetingId: meetingId, using: client)
         }
@@ -231,7 +227,6 @@ final class MeetingPlayback {
         teardownPlayer()
         peaks = []
         isUnavailable = false
-        failureMessage = nil
         isLoading = false
     }
 
