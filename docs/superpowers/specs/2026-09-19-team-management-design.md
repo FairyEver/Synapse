@@ -140,7 +140,9 @@ model TeamMembership {
 
 - 目录：`server/prisma/migrations/20260919130000_team_foundation/`
 - 命名在 `20260919120000_meeting_recording` 之后，保证顺序
-- **不含** `DROP` 与 `ADD NOT NULL COLUMN`，所以不会被 `deploy-migration-risk.spec.ts` 的风险扫描标记为需要审批的迁移
+- **不含** `DROP` 与 `ADD NOT NULL COLUMN`
+
+> **实施补充**：风险扫描器 `scripts/deploy/check-prisma-migration-risk.mjs` 的规则里还有一条 `CREATE UNIQUE INDEX`，`Team.name` 的 `@unique` 会被它报成一条风险。该扫描器默认只记录不拦截（只有 `STRICT_MIGRATION_RISK_SCAN=1` 才失败），所以不影响部署；但「完全不会被标记」这句判断并不成立。
 
 ## 6. 接口
 
@@ -149,6 +151,7 @@ model TeamMembership {
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/admin/teams` | 团队列表，分页 + 排序 |
+| GET | `/api/admin/teams/:id` | 单个团队（详情页深链冷启动时用；列表是分页的，不能靠它反查） |
 | POST | `/api/admin/teams` | 创建团队 |
 | PATCH | `/api/admin/teams/:id` | 重命名 |
 | DELETE | `/api/admin/teams/:id` | 删除团队 |
@@ -206,6 +209,8 @@ teams: { id, name }[]
 ```
 
 按加入时间正序。实现时给 `adminUserSelect` 加嵌套查询即可。
+
+> **实施补充**：Prisma 侧这个关系在 `User` 上叫 `teamMemberships`（见 §5），接口字段叫 `teams`，两者不同名。select 写成变量时 TS 不做多余属性检查，写错成 `teams` 编译期不会报错、只会在连真库时报 500——实施时给 `adminUserSelect` 加了 `satisfies Prisma.UserSelect` 把这类错误挡在编译期。
 
 > **已知规模上限**：这一列会随团队数线性增长，且不受分页约束（一个用户属于 20 个团队就返回 20 个）。按 §4.8 的判断，团队数在几十以内没问题。**如果哪天真到了要分页的量级，第一个该改的就是这一列**——改成只显示前 N 个 + 总数。
 
@@ -299,9 +304,9 @@ teams: { id, name }[]
 
 | 位置 | 现状 | 要改成 |
 |---|---|---|
-| `server/nginx.conf:65` | 正则把 `/admin/teams` 也 404 掉 | `/admin/teams` 放行；`/console/teams`、`/dashboard/teams` 继续 404 |
+| `server/nginx.conf:65` | 正则把 `/admin/teams` 也 404 掉 | 拆成两条 location：一条「邀请域永久下线」，一条「团队页只存在于管理后台」；`/admin/teams` 放行，`/console/teams`、`/dashboard/teams` 继续 404。不带前缀的 `/invitations` 也一并纳入 404（此前它落到 `location /` 的 302 → `/console/`，不是真 404） |
 | `server/src/deploy-config.spec.ts` | 断言那段 404 块的内容 | 跟着 nginx 的新写法更新 |
-| `dashboard/vite.config.ts` `isRetiredTeamRoutePath` | 开发环境同样 404 掉 `/admin/teams` | 同上，admin 放行、console/dashboard 保持 404 |
+| `dashboard/vite.config.ts` `isRetiredTeamRoutePath` | 开发环境同样 404 掉 `/admin/teams` | 同上，admin 放行、console/dashboard 保持 404，与 nginx 同口径（含不带前缀的 `/invitations`） |
 | `dashboard/vite.config.test.ts` | 断言 `/admin/teams` 属于退役路由 | 跟着改 |
 | `dashboard/src/lib/admin-redirect.ts` | 白名单里没有 `/teams` | 加入 `/teams`（含详情路径） |
 | `dashboard/src/lib/admin-redirect.test.ts` | 断言 `/teams` 会被拒绝 | 改成接受 |
