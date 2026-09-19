@@ -47,10 +47,6 @@ export function AddMembersDialog({
     setPicked(new Set())
   }, [open])
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedQuery])
-
   const candidatesQuery = useQuery({
     queryKey: ['admin-team-candidates', teamId, debouncedQuery.trim(), page],
     queryFn: () =>
@@ -112,7 +108,11 @@ export function AddMembersDialog({
             placeholder='搜索邮箱或用户名'
             autoComplete='off'
             aria-label='搜索邮箱或用户名'
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              // 换搜索词必须回到第一页，否则会先按旧页码去查新词。
+              setPage(1)
+            }}
           />
           <div className='max-h-72 overflow-y-auto rounded-md border'>
             {candidates.length === 0 ? (
