@@ -83,19 +83,32 @@ export function useMeetingDetail(
 }
 
 /**
- * 转写进行中时按固定间隔刷新。
+ * 定时刷新。
  *
  * 只在这一条上轮询，不在整个模块上装定时器：列表页和详情页都可能开着，各自只刷自己
  * 需要的那个接口。
+ *
+ * 窗口不在人眼前时不空转，一被激活立刻刷一次——和仓库里其它自动刷新（Git 仓库、模型
+ * 服务商）同一套写法。录音列表要它是因为**另一台设备随时可能新建一条**（手机录的音
+ * 要自己出现在电脑上），而服务端没有面向这个列表的推送。
  */
-export function useTranscriptionPolling(active: boolean, onTick: () => void, intervalMs = 5000): void {
+export function useMeetingPolling(active: boolean, onTick: () => void, intervalMs = 5000): void {
   const callback = useRef(onTick)
   callback.current = onTick
 
   useEffect(() => {
     if (!active) return
-    const timer = window.setInterval(() => callback.current(), intervalMs)
-    return () => window.clearInterval(timer)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") callback.current()
+    }
+    window.addEventListener("focus", refreshWhenVisible)
+    document.addEventListener("visibilitychange", refreshWhenVisible)
+    const timer = window.setInterval(refreshWhenVisible, intervalMs)
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible)
+      document.removeEventListener("visibilitychange", refreshWhenVisible)
+      window.clearInterval(timer)
+    }
   }, [active, intervalMs])
 }
 

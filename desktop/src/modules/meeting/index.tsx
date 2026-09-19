@@ -13,7 +13,7 @@ import {
   useMeetingDetail,
   useMeetingList,
   useTranscriptionCompletionSubscription,
-  useTranscriptionPolling,
+  useMeetingPolling,
 } from "./hooks/use-meetings"
 
 /**
@@ -65,10 +65,11 @@ export function MeetingModule() {
     if (detailStatus === "failed") setDetailMode("text")
   }, [detailId, detailStatus])
 
-  // 列表里有任何一条在转写就轮询：转完了徽标要自己变成「已完成」，不用用户手动刷新。
-  const hasTranscribing = meetings.data.some((meeting) => meeting.status === "transcribing")
-  useTranscriptionPolling(view.kind === "list" && hasTranscribing, () => setListRefreshKey((key) => key + 1))
-  useTranscriptionPolling(
+  // 列表一直轮询，不只在转写中：**另一台设备随时可能新建一条**（手机录的音要在电脑上
+  // 自己出现），服务端只有「转写完成」那一条实时消息，覆盖不到。转写那条也一样要跟，
+  // 完成后徽标自己变。
+  useMeetingPolling(view.kind === "list", () => setListRefreshKey((key) => key + 1))
+  useMeetingPolling(
     view.kind === "list" && detail.data?.status === "transcribing",
     () => setDetailRefreshKey((key) => key + 1),
   )

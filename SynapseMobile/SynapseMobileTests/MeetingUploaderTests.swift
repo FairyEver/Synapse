@@ -12,6 +12,8 @@ struct MeetingUploaderTests {
     @MainActor
     final class FakeSender {
         var sent: [(partNumber: Int, count: Int)] = []
+        /// 每一个编号**最后**一次送到的字节。服务端最终拼出来的就是这些。
+        var delivered: [Int: Data] = [:]
         /// 每一次调用都记一笔，包括失败的那几次。只看 `sent` 分不清「重试过」和
         /// 「根本没失败」。
         var attempts: [Int] = []
@@ -40,6 +42,7 @@ struct MeetingUploaderTests {
                 throw APIError(status: 0, code: "network", message: "网络不可用。")
             }
             sent.append((partNumber, bytes.count))
+            delivered[partNumber] = bytes
         }
 
         func abort() async { aborted = true }
@@ -141,8 +144,37 @@ struct MeetingUploaderTests {
         sender.sent.removeAll()
         #expect(await uploader.finish(audioFile: url))
 
-        // 只有变过的那一片被重发；上一片没变，最后一片是刚发的，都不动。
+        // 只有变过的那一片被重发；没变的那一片不动。
         #expect(sender.sent.map(\.partNumber) == [1])
+    }
+
+    /// 短片录音整条都在最后一片里，而最后一片原来是不核对的。
+    ///
+    /// 这不是边角情况，而是**录完就播不出来**的正因：m4a 编码器把开头那 60 KB 留成
+    /// 占位区，`stop()` 时才把 `moov` 补进去，所以录的时候读到的开头和定稿的开头不是
+    /// 同一份字节。短于一片（64 kbps 下约两分钟以内）的录音全部字节都在最后一片里，
+    /// 不核对它，服务端拿到的那段音频就没有 `moov`——大小、时长、波形都对，谁都打不开。
+    @Test func aRecordingShorterThanOnePartIsReconciledToo() async throws {
+        let finalizedHead = Data("ftypmoovmdat".utf8)
+        var streamed = Data(repeating: 0, count: finalizedHead.count)
+        streamed.append(payload(4096))
+        var finalized = finalizedHead
+        finalized.append(payload(4096))
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("short-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // 编码器已经定稿了：本机文件里开头是真的头部。
+        try finalized.write(to: url)
+
+        let sender = FakeSender()
+        let uploader = uploader(sender)
+        uploader.enqueue(streamed)
+        #expect(await uploader.finish(audioFile: url))
+
+        // 唯一的那一片被重发了，服务端最终拿到的是定稿后的字节。
+        #expect(sender.sent.map(\.partNumber) == [1, 1])
+        #expect(sender.delivered[1] == finalized)
     }
 
     @Test func reconcileLeavesUntouchedPartsAlone() async throws {

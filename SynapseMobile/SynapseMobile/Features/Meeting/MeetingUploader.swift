@@ -156,15 +156,21 @@ final class MeetingUploader {
     // MARK: - 收尾核对
 
     /// 拿本机文件逐片比对：只重传真的变过的那几片。
+    ///
+    /// **最后一片也要比，哪怕它是唯一的一片。** m4a 编码器把开头那 60 KB 留成占位区，
+    /// 收尾（`AVAudioRecorder.stop()`）时才把 `moov` 和几个盒子的头补进去——所以「录的
+    /// 时候看到的开头」和「定稿的开头」不是同一份字节。整条录音短于一片（64 kbps 下约
+    /// 两分钟）时，全部字节都在最后一片里，不比它就会上传一段没有 `moov` 的音频：大小、
+    /// 时长、波形都对，任何播放器都打不开。
+    ///
+    /// 后面对齐靠的是「分片是按字节流的整数倍切的」：文件从 0 开始顺序读，读出来的第
+    /// N 段就正好是第 N 片发出去的那段字节。
     private func reconcile(with audioFile: URL) async {
-        guard uploadedParts > 1, let handle = try? FileHandle(forReadingFrom: audioFile) else { return }
+        guard uploadedParts > 0, let handle = try? FileHandle(forReadingFrom: audioFile) else { return }
         defer { try? handle.close() }
-        // 最后一片在收尾时刚发过，不必再核对；前面那些才是可能被编码器回头改写的。
-        for partNumber in 1...(uploadedParts - 1) {
+        for partNumber in 1...uploadedParts {
             guard !isCancelled else { return }
             guard let data = try? handle.read(upToCount: MeetingAudio.partBytes), !data.isEmpty else { break }
-            // 只核对「当时是按整片发出去」的那些；尾巴在收尾时已经单独发过。
-            guard data.count == MeetingAudio.partBytes else { break }
             guard digests[partNumber] != SHA256.hash(data: data) else { continue }
             do {
                 try await send(partNumber, data)
