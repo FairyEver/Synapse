@@ -14,16 +14,29 @@ enum RecordingIntentAction {
 ///
 /// 意图必须同时编进 App 和扩展——锁屏上那个按钮是扩展画的——但扩展里没有录音机，
 /// 所以这里不直接做事：App 启动时把自己的处理函数挂上来，意图负责调用它。
-/// 按下去的时候录音正在跑，App 也就一定活着，这条路径不会落空。
 @MainActor
 enum RecordingIntentRouter {
     static var handler: ((RecordingIntentAction) -> Void)?
 
+    /// 比处理函数先到的动作。
+    ///
+    /// 锁屏上的按钮是在 App 的进程里执行的，而系统是**在后台把 App 拉起来**执行的：
+    /// 那一刻 SwiftUI 的界面一个都还没建，处理函数也可能还没挂上。这时候丢掉这一条，
+    /// 用户看到的就是一个按了没反应的按钮，而且不会有任何错误——所以要留着，等挂上
+    /// 处理函数时补做。
+    private static var pending: [RecordingIntentAction] = []
+
+    /// App 把自己的处理函数挂上来。挂上的一刻，先把攒下的动作补做完。
+    static func install(_ handler: @escaping (RecordingIntentAction) -> Void) {
+        self.handler = handler
+        let queued = pending
+        pending = []
+        for action in queued { handler(action) }
+    }
+
     static func send(_ action: RecordingIntentAction) {
         guard let handler else {
-            // 没有处理函数就说明 App 里没有录音在跑。锁屏上若还留着一条活动，那是上
-            // 一次没收拾干净的，收掉它，不留一个按了没反应的按钮。
-            Task { await RecordingActivityHousekeeping.endOrphans() }
+            pending.append(action)
             return
         }
         handler(action)
@@ -31,6 +44,11 @@ enum RecordingIntentRouter {
 }
 
 /// 结束所有还挂着的录音实时活动。
+///
+/// 按在一条**已经不存在**的录音上时用它：App 被系统杀掉过，实时活动却还留在锁屏上
+/// （系统最长留 8 小时）。这时该做的不是「再结束一次」，而是把它收掉，不留一个按了
+/// 没反应的按钮。判断放在 App 那一侧（`SynapseAppModel.handleRecordingIntent`），
+/// 因为只有那里知道录音到底还在不在跑。
 enum RecordingActivityHousekeeping {
     static func endOrphans() async {
         for activity in Activity<RecordingActivityAttributes>.activities {
@@ -55,11 +73,23 @@ struct StartRecordingIntent: AppIntent {
 }
 
 /// 收尾并保存。锁屏和灵动岛上的「完成」走它。
-struct FinishRecordingIntent: AppIntent {
+///
+/// **必须是 `LiveActivityIntent`，不能是普通的 `AppIntent`。** 这一条决定了按钮按下去
+/// 到底会不会发生事情：
+///
+/// - 普通的 `AppIntent` 默认在 **Widget 扩展的进程**里执行，而扩展里没有录音机 ——
+///   `RecordingIntentRouter.handler` 在那边永远是 nil，按下去等于什么都没发生，而且
+///   不会有任何报错。这正是它原来的表现。
+/// - `LiveActivityIntent` 让系统改在 **App 的进程**里执行，必要时还会在后台把 App
+///   拉起来（不打开界面）。Apple 对实时活动上的可交互元素就是这么要求的。
+///
+/// 前提在这里正好成立：录音正在跑，说明 App 活着 —— `UIBackgroundModes: audio`
+/// 保着它不被挂起。
+///
+/// 也不要把 App 拉到前台：按下「完成」的人要的是这件事结束，不是换个地方看它。
+/// Apple 的规范里，实时活动上的按钮只该做事，要开 App 得用 `Link`。
+struct FinishRecordingIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "完成录音"
-
-    /// 不把 App 拉到前台：按下「完成」的人要的是这件事结束，不是换个地方看它。
-    static var openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -68,11 +98,9 @@ struct FinishRecordingIntent: AppIntent {
     }
 }
 
-/// 丢掉这一段。锁屏和灵动岛上的「取消」走它。
-struct CancelRecordingIntent: AppIntent {
+/// 丢掉这一段。锁屏和灵动岛上的「取消」走它。为什么是 `LiveActivityIntent`，见上。
+struct CancelRecordingIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "取消录音"
-
-    static var openAppWhenRun: Bool = false
 
     @MainActor
     func perform() async throws -> some IntentResult {

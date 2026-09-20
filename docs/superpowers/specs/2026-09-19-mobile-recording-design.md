@@ -208,6 +208,25 @@
 
 **锁屏实时活动**：录音名 + 计时 + 波形 + 取消 / 完成。
 
+> 2026-09-20 补记（样式按 Apple 规范重做）：
+>
+> 排布不变，改的是尺寸、字重、边距和颜色。四条值得留下来的：
+>
+> 1. **计时是主角，名字不是。** 锁屏那张卡高度上限 160 pt（超了系统直接截），原来
+>    名字和计时都是 `.headline`，谁也压不住谁。现在名字 `.subheadline` + `.secondary`，
+>    计时 `.title2` + `.semibold`。Apple 对实时活动的要求是「大字号、中等以上字重」。
+> 2. **波形和 App 内必须是同一套比例。** 原来锁屏上是「有几个采样就把宽度分几份」，
+>    32 个采样在一整行里摊成 32 根又粗又扁的方块；录音页那条是 1.5 pt 宽、1.1 pt
+>    间距的细柱。现在两边共用 `RecordingActivityLimits.barWidth / barGap`（`MeetingAudio`
+>    直接读它），柱宽间距固定、一行放不下就少画几条。载荷随之从 32 个槽位提到 160 个，
+>    并压到三位小数 —— 它**每秒推一次**。
+> 3. **锁屏内容边距 14 pt**，不是随手写的 16：这是 Apple 给实时活动锁屏形态定的标准
+>    布局边距（HIG「Live Activities」Specifications）。系统只画卡片和圆角。
+> 4. **颜色只用语义色**（`.primary` / `.secondary`），不引入第二种。扩展里没有 App 的
+>    accent（App 内是 `Theme.ink`，也就是 `.primary`），写 `.tint` 会落回系统蓝，压在
+>    灵动岛那块纯黑上既不是这个 App 的样子也看不清。`keylineTint` 一并去掉 —— 硬漆成
+>    纯白会变成一圈很重的白边，那是系统自己该判断的事。
+
 **控制中心控件**（`ControlWidget`，iOS 18+）：一枚圆角方块，图标 +「录音」，点一下开始。
 
 **主屏长按 App 图标**（`UIApplicationShortcutItem`）：「开始录音」排第一。
@@ -284,6 +303,24 @@
 ### 6.3 全仓没有 App Intents
 
 实时活动的按钮、控制中心控件、主屏快捷操作、Siri 快捷指令都是 App Intent，要从零建一套。四个入口共用同一份 intent。
+
+> 2026-09-20 补记（**强约束，不要改回去**）：实时活动上那两个按钮的意图**必须是
+> `LiveActivityIntent`，不能是普通的 `AppIntent`**。
+>
+> 普通的 `AppIntent` 默认在 **Widget 扩展的进程**里执行。扩展里没有录音机，
+> `RecordingIntentRouter.handler` 在那边永远是 nil，于是按下去等于什么都没发生，
+> 而且不会有任何报错 —— 这就是它最初上线时的表现。`LiveActivityIntent` 让系统改在
+> **App 的进程**里执行，必要时还会在后台把 App 拉起来（不打开界面）。Apple 对实时
+> 活动上的可交互元素就是这么要求的。
+>
+> 配套两点：`RecordingIntentRouter.install(_:)` 会把比处理函数先到的动作攒下来补做
+> （系统后台拉起 App 的那一刻，界面和模型都可能还没就位）；按在一条已经不存在的录音上
+> 时由 `SynapseAppModel.handleRecordingIntent` 收掉那条孤儿活动，不留一个按了没反应
+> 的按钮。
+>
+> 另外，**锁屏状态下 iOS 本来就不执行**实时活动上的按钮，要先认证解锁 —— 这是系统
+> 规则（Apple：「On a locked device, buttons and toggles are inactive…」），不是本
+> App 的缺陷，按了没反应时先分辨是哪一种。
 
 现有代码里 `ActivityKit`、`ControlWidget`、`AppIntent` **零命中**（grep 命中的全部是 `SynapseMobile/build/` 下的构建产物）。
 

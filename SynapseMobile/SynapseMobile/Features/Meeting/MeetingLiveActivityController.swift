@@ -86,9 +86,14 @@ final class MeetingLiveActivityController {
 
     /// 展开态那条滚动波形要的振幅。
     ///
-    /// 录音页留的是最近 5 秒、每 28 毫秒一个（约 180 个）。实时活动的载荷不该带这么多，
-    /// 所以按槽位数重新分桶、每桶取最大值——和回放波形同一套读法。
+    /// 录音页留的是最近 5 秒、每 28 毫秒一个（约 180 个）。实时活动那条波形按固定柱宽
+    /// 一整行排下来，一行放得下一百四五十条，所以这里按槽位数重新分桶、每桶取最大值
+    /// ——和回放波形同一套读法。
+    ///
+    /// 末了压到三位小数：这份载荷**每一秒推一次**，而画一根 1.5 pt 宽的柱子用不上
+    /// 小数点后十位，多的位数只是让每次更新多背几百字节。
     private func recentLevels(_ levels: [Double]) -> [Double] {
         resamplePlaybackPeaks(levels, columns: RecordingActivityLimits.levelCount)
+            .map { (($0 * 1000).rounded()) / 1000 }
     }
 }

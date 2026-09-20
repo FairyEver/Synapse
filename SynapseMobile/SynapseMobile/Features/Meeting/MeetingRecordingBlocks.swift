@@ -49,8 +49,11 @@ nonisolated enum MeetingAudio {
     static let meterCeilingDecibels = 0.0
 
     /// 录音页那条滚动波形的柱宽与间距，与电脑端同一组数。
-    static let barWidth = 1.5
-    static let barGap = 1.1
+    ///
+    /// 值定义在 `RecordingActivityLimits` 里，因为锁屏实时活动和灵动岛上那条波形画的
+    /// 是同一套比例 —— 那里是这一组数唯一该被改动的地方。
+    static let barWidth = Double(RecordingActivityLimits.barWidth)
+    static let barGap = Double(RecordingActivityLimits.barGap)
 
     /// 电平 → 包络上的振幅。**在对数域上摊开，不是换回线性再乘一个增益。**
     ///

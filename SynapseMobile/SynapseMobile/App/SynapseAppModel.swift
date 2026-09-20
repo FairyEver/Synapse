@@ -367,9 +367,12 @@ final class SynapseAppModel {
         wireRealtime()
 
         // 实时活动、控制中心控件、主屏快捷操作、Siri 那四个入口的意图都落到这里。
-        // 挂在这里而不是某个视图上：锁屏上的「完成」可能把 App 从后台唤起，那一刻
-        // 还没有任何界面，但模型已经在了。
-        RecordingIntentRouter.handler = { [weak self] action in
+        // 挂在这里而不是某个视图上：锁屏上的「完成」是在后台把 App 拉起来执行的，
+        // 那一刻还没有任何界面，但模型已经在了。
+        //
+        // 走 `install` 而不是直接赋值：万一意图比这里先到（系统在后台拉起 App 的
+        // 那一段），它会把动作攒着，挂上的一刻补做。
+        RecordingIntentRouter.install { [weak self] action in
             self?.handleRecordingIntent(action)
         }
     }
@@ -538,10 +541,22 @@ final class SynapseAppModel {
             // Siri 按下去会什么都没发生。主屏长按那条走的是同一条路。
             NotificationRouter.shared.route(to: .newRecording)
         case .finish:
+            guard recording.isRecording else { return discardOrphanActivity() }
             recording.finish()
         case .cancel:
+            guard recording.isRecording else { return discardOrphanActivity() }
             recording.cancel()
         }
+    }
+
+    /// 锁屏上那两个按钮按在一条已经不存在的录音上时要做的事。
+    ///
+    /// App 被系统杀掉过，实时活动却还留在锁屏上（系统最长留 8 小时）。这时该做的不是
+    /// 「再结束一次」——`finish` / `cancel` 在没录音时本来就是空操作——而是把它收掉，
+    /// 不留一个按了没反应的按钮。这条兜底原先写在意图那一侧，但那一刻还不知道有没有
+    /// 录音在跑；只有这里知道。
+    private func discardOrphanActivity() {
+        Task { await RecordingActivityHousekeeping.endOrphans() }
     }
 
     /// 语音视图要的那几样：音频和波形。都是按需取的，不进列表的载荷。
