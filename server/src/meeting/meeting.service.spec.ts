@@ -106,7 +106,9 @@ beforeEach(() => {
     headObject: vi.fn(async () => null),
     createDownloadUrl: vi.fn(async () => "https://example.invalid/a"),
     getObjectStream: vi.fn(),
-    readObjectRange: vi.fn(),
+    // 默认给一段读不出时长的字节：量时长是「量到就用、量不到退回上报值」，不需要它的
+    // 用例应该走退回那条路，而不是靠一个抛异常来碰巧掉进去。
+    readObjectRange: vi.fn(async () => Buffer.alloc(8)),
     deleteObject: vi.fn(async () => undefined),
     listStaleMultipartUploads: vi.fn(async () => []),
   }
@@ -226,6 +228,54 @@ describe("完成录音", () => {
       { partNumber: 1, size: 5, etag: '"etag-1"' },
       { partNumber: 2, size: 3, etag: '"etag-2"' },
     ])
+  })
+
+  /** 一段结构完整的 m4a 开头：`ftyp` 之后跟着 `moov/mvhd`，时长 = duration / timescale。 */
+  function audioHead(timescale: number, duration: number): Buffer {
+    const ftyp = Buffer.alloc(28)
+    ftyp.writeUInt32BE(28, 0)
+    ftyp.write("ftyp", 4, "latin1")
+    const mvhdContent = Buffer.alloc(108)
+    mvhdContent.writeUInt32BE(timescale, 12)
+    mvhdContent.writeUInt32BE(duration, 16)
+    const mvhd = Buffer.concat([boxHeader("mvhd", mvhdContent.length), mvhdContent])
+    return Buffer.concat([ftyp, boxHeader("moov", mvhd.length), mvhd])
+  }
+
+  function boxHeader(type: string, payloadBytes: number): Buffer {
+    const header = Buffer.alloc(8)
+    header.writeUInt32BE(8 + payloadBytes, 0)
+    header.write(type, 4, "latin1")
+    return header
+  }
+
+  /**
+   * 现场那条 6 秒录音上报的就是 0 秒（`AVAudioRecorder` 的 `currentTime` 读成了 0），
+   * 界面因此显示「0 秒的录音，预计 1 分左右完成」。文件本身才是准的。
+   */
+  it("时长以量出来的为准：客户端报 0，服务端从 mvhd 量出 5.99 秒", async () => {
+    storage.completeMultipartUpload.mockResolvedValue({ size: BigInt(8), etag: '"final"' })
+    storage.readObjectRange.mockResolvedValue(audioHead(48_000, 287_744))
+    await service.completeRecording("user-1", "rec-1", { durationMs: 0, peaks: "", speakerCount: 0 })
+    expect(prisma.meetingRecording.update.mock.calls.at(-1)?.[0].data).toMatchObject({ durationMs: 5995 })
+    expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({ durationMs: 5995 })
+  })
+
+  /** 按字节估出来的那个值偏大（占位区不是音频），量不出来时也不该反过来被它盖掉。 */
+  it("量不出来就退回客户端上报的值，不写 0", async () => {
+    storage.completeMultipartUpload.mockResolvedValue({ size: BigInt(8), etag: '"final"' })
+    storage.readObjectRange.mockResolvedValue(Buffer.alloc(64))
+    await service.completeRecording("user-1", "rec-1", { durationMs: 13_639, peaks: "", speakerCount: 0 })
+    expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({ durationMs: 13_639 })
+  })
+
+  it("读对象失败不能挡住收尾", async () => {
+    storage.completeMultipartUpload.mockResolvedValue({ size: BigInt(8), etag: '"final"' })
+    storage.readObjectRange.mockRejectedValue(new Error("对象存储抖了一下"))
+    await expect(
+      service.completeRecording("user-1", "rec-1", { durationMs: 5000, peaks: "", speakerCount: 0 }),
+    ).resolves.toEqual({ meetingId: "meeting-1", status: "transcribing" })
+    expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({ durationMs: 5000 })
   })
 
   it("合并、校验大小、存波形，然后把任务交给转写", async () => {

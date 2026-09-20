@@ -4,6 +4,7 @@ import {
   inspectMeetingAudioContainer,
   MEETING_AUDIO_CONTAINER_BROKEN_REASON,
   MEETING_AUDIO_PROBE_BYTES,
+  readMeetingAudioDurationMs,
 } from "./meeting-audio-container"
 
 const PROBE = MEETING_AUDIO_PROBE_BYTES
@@ -114,5 +115,66 @@ describe("容器结构判定", () => {
     const whole = Buffer.concat([box("ftyp", 20), box("moov", 60), box("mdat", 200)])
     expect(whole.length).toBeLessThanOrEqual(PROBE * 2)
     expect(inspect(whole)).toEqual({ ok: true })
+  })
+})
+
+/**
+ * `moov/mvhd` 的布局按真实的 108 字节摆：盒子头 8 字节之后是 1 字节 version + 3 字节
+ * flags，再往后 creation/modification 两个时间戳，然后才是 `timescale` 和 `duration`。
+ * 版本 1 把两个时间戳和时长都加宽成 64 位，`timescale` 跟着往后挪。
+ */
+function movieHeader(timescale: number, duration: number, version: 0 | 1 = 0): Buffer {
+  const content = Buffer.alloc(version === 1 ? 120 : 108)
+  content.writeUInt8(version, 0)
+  if (version === 1) {
+    content.writeUInt32BE(timescale, 20)
+    content.writeBigUInt64BE(BigInt(duration), 24)
+  } else {
+    content.writeUInt32BE(timescale, 12)
+    content.writeUInt32BE(duration, 16)
+  }
+  return boxWith("mvhd", content)
+}
+
+function withMovieHeader(timescale: number, duration: number, version: 0 | 1 = 0): Buffer {
+  return Buffer.concat([box("ftyp", 20), boxWith("moov", movieHeader(timescale, duration, version)), box("mdat", 400)])
+}
+
+describe("从音频里量时长", () => {
+  /**
+   * 数取自现场那条真实录音：`mvhd` 的 287744/48000 正好是 5.9947 秒，和腾讯云回的
+   * `AudioDuration` 5.994688 对得上。量出来的就是这个数，不是按字节估的 13 秒。
+   */
+  it("读 mvhd 的 duration/timescale", () => {
+    expect(readMeetingAudioDurationMs(withMovieHeader(48_000, 287_744))).toBe(5995)
+  })
+
+  it("version 1 的 64 位时长也读得出来", () => {
+    expect(readMeetingAudioDurationMs(withMovieHeader(1000, 3_600_000, 1))).toBe(3_600_000)
+  })
+
+  /**
+   * 现场那条「音频文件不完整」的录音：`ftyp` 之后是一大段零占位，通篇没有 `moov`。
+   * 量不出来就返回 null，让调用方退回客户端上报的值——这里绝不能返回 0。
+   */
+  it("没有 moov 就量不出来", () => {
+    const broken = Buffer.concat([box("ftyp", 20), Buffer.alloc(8192)])
+    expect(readMeetingAudioDurationMs(broken)).toBeNull()
+  })
+
+  it("分片 fMP4 的 mvhd 时长是 0，不能当成 0 秒的录音", () => {
+    const fragmented = Buffer.concat([box("ftyp", 20), boxWith("moov", movieHeader(1000, 0)), box("moof", 800)])
+    expect(readMeetingAudioDurationMs(fragmented)).toBeNull()
+  })
+
+  it("moov 写在文件末尾、头部窗口里没有，就量不出来", () => {
+    const whole = Buffer.concat([box("ftyp", 20), boxWith("mdat", Buffer.alloc(200_000))])
+    expect(readMeetingAudioDurationMs(whole.subarray(0, PROBE))).toBeNull()
+  })
+
+  it("头部窗口正好切断 mvhd，也不猜", () => {
+    const full = withMovieHeader(48_000, 287_744)
+    // 只切到 mvhd 的 version/flags，后面的字段一个都没进来。
+    expect(readMeetingAudioDurationMs(full.subarray(0, 28 + 8 + 4))).toBeNull()
   })
 })

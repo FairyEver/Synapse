@@ -28,6 +28,7 @@ import {
 import { randomUUID } from "node:crypto"
 
 import { PrismaService } from "../prisma/prisma.service"
+import { MEETING_AUDIO_PROBE_BYTES, readMeetingAudioDurationMs } from "./meeting-audio-container"
 import { MeetingTranscriptionService } from "./meeting-transcription.service"
 import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage.service"
 
@@ -416,7 +417,7 @@ export class MeetingService {
     })
     if (parts.length === 0) throw new BadRequestException("这段录音里没有内容。")
 
-    const durationMs = Math.max(0, Math.min(MEETING_MAX_DURATION_MS, Math.round(input.durationMs)))
+    const reportedDurationMs = Math.max(0, Math.min(MEETING_MAX_DURATION_MS, Math.round(input.durationMs)))
     const completed = await this.storage.completeMultipartUpload({
       key: recording.storageKey,
       uploadId: job.uploadId,
@@ -426,6 +427,9 @@ export class MeetingService {
     if (Number(completed.size) !== expectedBytes) {
       throw new BadRequestException("音频合并后的大小与分片之和不一致。")
     }
+    // **以量出来的为准，客户端上报的只当兜底。** 上报值出过两种偏差：一条 6 秒的录音报成
+    // 0 秒，按字节估的又把开头那段占位区算成音频（6 秒的报成 13 秒）。量不到才退回上报值。
+    const durationMs = (await this.measureDuration(recording.storageKey, completed.size)) ?? reportedDurationMs
 
     const peaks = compactMeetingPeaks(input.peaks)
     await this.prisma.$transaction([
@@ -459,6 +463,31 @@ export class MeetingService {
     }
 
     return { meetingId: recording.meetingId, status: "transcribing" }
+  }
+
+  /**
+   * 从合并好的对象里量真实时长。
+   *
+   * 只读头部那一段——`moov/mvhd` 就在开头，把整场会议的音频（五小时能有 140 MB）拉下来
+   * 只为读 8 个字节不划算。量不到就返回 `null`，由调用方退回客户端上报的值：宁可要一个
+   * 可能不准的数，也不要一个 0。
+   */
+  private async measureDuration(storageKey: string, size: bigint): Promise<number | null> {
+    const total = Number(size)
+    if (!Number.isFinite(total) || total <= 0) return null
+    try {
+      const head = await this.storage.readObjectRange(storageKey, 0, Math.min(MEETING_AUDIO_PROBE_BYTES, total) - 1)
+      const measured = readMeetingAudioDurationMs(head)
+      if (measured === null) return null
+      return Math.max(0, Math.min(MEETING_MAX_DURATION_MS, measured))
+    } catch (error) {
+      // 读对象失败是暂时性的，和上报值不准一样不该挡住收尾：退回上报值，记一条日志。
+      this.logger.warn(
+        { storageKey, errorMessage: error instanceof Error ? error.message : String(error) },
+        "Meeting audio duration measurement failed",
+      )
+      return null
+    }
   }
 
   /**
