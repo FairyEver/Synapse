@@ -34,6 +34,10 @@ struct RecordingLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RecordingActivityAttributes.self) { context in
             LockScreenRecordingView(context: context)
+                // 卡片本身点一下开 App 的录音界面 —— 不是把这一条结束掉，结束是下面那
+                // 两个按钮的事。Apple 的规范也是这么分的：要开 App 用链接，要做事用
+                // App Intent，两者不要互相冒充。
+                .widgetURL(URL(string: RecordingDeepLink.openRecording))
                 // 背景交给系统：锁屏那块材质在浅色和深色下都比我们自己涂一层准。
                 .activityBackgroundTint(nil)
                 // 系统在右上角另画一个关闭按钮，颜色要跟着内容走。

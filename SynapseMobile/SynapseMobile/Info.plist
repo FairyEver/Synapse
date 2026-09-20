@@ -27,6 +27,25 @@
 	-->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!--
+	  `synapse://`，与桌面端同一个命名空间（那边是 `synapse://threads/<id>`、
+	  `synapse://update`、`synapse://auth/...`）。
+
+	  这里注册它只为一件事：锁屏和灵动岛上那张录音卡片贴了一条 `synapse://recording`，
+	  点开要落在录音界面上。实时活动的卡片不是按钮——不注册 scheme，`widgetURL` 交出去
+	  的链接没有 App 接得住，点一下就是什么都不发生，而且不会有任何报错。
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.liy.SynapseMobile.deep-link</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>synapse</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!--

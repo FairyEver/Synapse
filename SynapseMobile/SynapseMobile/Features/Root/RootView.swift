@@ -51,6 +51,12 @@ struct RootView: View {
         .onChange(of: NotificationRouter.shared.pending) { _, _ in
             handleRoute(NotificationRouter.shared.consume())
         }
+        // 锁屏和灵动岛上那张卡被点开。走 URL 而不是 App Intent：卡片是「带我去看」
+        // 的那一个，那两个按钮才是「替我做」。这是 Apple 给实时活动定的分工。
+        .onOpenURL { url in
+            guard RecordingDeepLink.isOpenRecording(url) else { return }
+            handleRoute(.liveRecording)
+        }
         .onChange(of: scenePhase) { _, phase in
             // 会话标记是崩溃的第三种证据：进程被系统杀掉时不会留下任何遗言，
             // 而"文件末尾没有 sessionClose"就是它来过又走了的唯一痕迹。
@@ -143,6 +149,19 @@ struct RootView: View {
             selectedTab = .meetings
             meetingPath = []
             model.isRecordingPresented = true
+        case .liveRecording:
+            // 锁屏那张卡。同样先落到录音 Tab，但**只在真的在录的时候**才把录音页浮
+            // 出来：起新录音是 `.newRecording` 的事，这里只负责把人带到那一条跟前。
+            selectedTab = .meetings
+            meetingPath = []
+            if model.recording.isRecording {
+                model.isRecordingPresented = true
+            } else {
+                // 卡片还在、录音却没了：App 被系统杀掉过（系统最长把实时活动留 8 小时）。
+                // 那条录音会在启动时被静默收尾、照常出现在列表里，所以这里只把锁屏上
+                // 那条已经不作数的活动收掉，不凭空起一条新的。
+                Task { await RecordingActivityHousekeeping.endOrphans() }
+            }
         }
     }
 }

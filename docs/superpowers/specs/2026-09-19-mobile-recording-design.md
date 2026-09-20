@@ -321,6 +321,21 @@
 > 另外，**锁屏状态下 iOS 本来就不执行**实时活动上的按钮，要先认证解锁 —— 这是系统
 > 规则（Apple：「On a locked device, buttons and toggles are inactive…」），不是本
 > App 的缺陷，按了没反应时先分辨是哪一种。
+>
+> 2026-09-20 再补记（卡片点开）：卡片本身和那两个按钮是**两件事**，别让它们互相冒充。
+>
+> - **卡片点一下 → 落在录音界面**，不结束这条录音、也不起新的一条。机制是
+>   `View.widgetURL(_:)` 贴 `synapse://recording`，App 侧在 `RootView.onOpenURL` 解析后
+>   走 `NotificationRouter.Destination.liveRecording`。用 `synapse://` 是产品已有的
+>   命名空间，App 的 `Info.plist` 因此新增了 `CFBundleURLTypes`（不注册 scheme，
+>   `widgetURL` 交出去的链接没有 App 接得住，点一下就是什么都不发生，且无报错）。
+> - `.liveRecording` 与 `.newRecording` **不能合并**：前者只在真的在录时把录音页浮
+>   出来，后者才起新录音。卡片还在、录音却已经没了（App 被系统杀掉过）时，凭空起
+>   一条正是用户没要的 —— 那时落回列表并把孤儿活动收掉即可。
+> - Apple 的分工：**要开 App 用链接，要做事用 App Intent**（「An interaction with a
+>   button or toggle should do more than open the app. If you want to offer an
+>   interaction that opens the app, use `Link` and `View.widgetURL(_:)`」）。所以两个
+>   按钮保持 `LiveActivityIntent`，卡片走 URL，两者各归各位。
 
 现有代码里 `ActivityKit`、`ControlWidget`、`AppIntent` **零命中**（grep 命中的全部是 `SynapseMobile/build/` 下的构建产物）。
 

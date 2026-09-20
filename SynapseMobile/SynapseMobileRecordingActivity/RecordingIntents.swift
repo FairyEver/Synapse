@@ -10,6 +10,25 @@ enum RecordingIntentAction {
     case cancel
 }
 
+/// 点开锁屏和灵动岛上那张卡时走的那条链接。
+///
+/// 卡片本身不是按钮：它**点一下要开 App 的录音界面**，不是把这一条结束掉（结束是那两个
+/// 按钮的事）。Apple 给的机制就是这条——按钮之外的区域贴一个 `widgetURL`，要开 App 走
+/// 链接，要做事走 App Intent，两者不要互相冒充。
+///
+/// 用产品已有的 `synapse://` 命名空间，host 就是这条路由的名字，和 `synapse://threads/<id>`、
+/// `synapse://update` 是同一套写法。这份文件**同时编进 App 和扩展**，所以这条链接两边
+/// 必然是同一个字符串。
+enum RecordingDeepLink {
+    /// 贴在卡片上的那一条。扩展只负责把它挂上去，解析在 App 那一侧。
+    nonisolated static let openRecording = "synapse://recording"
+
+    /// 进来的 URL 是不是它。
+    nonisolated static func isOpenRecording(_ url: URL) -> Bool {
+        url.scheme == "synapse" && url.host() == "recording"
+    }
+}
+
 /// 意图和录音机之间的那一个入口。
 ///
 /// 意图必须同时编进 App 和扩展——锁屏上那个按钮是扩展画的——但扩展里没有录音机，

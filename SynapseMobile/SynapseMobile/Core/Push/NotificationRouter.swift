@@ -19,6 +19,11 @@ final class NotificationRouter {
         case meeting(meetingId: String)
         /// 开始一段新录音。目前只有主屏长按图标那条快捷操作会用它。
         case newRecording
+        /// 看正在录的那一条。锁屏和灵动岛上那张卡点开时用它。
+        ///
+        /// 和 `.newRecording` 是两件事，不能合并：这个只把录音页浮出来，**不起新录音**
+        /// ——卡片还在、录音却已经没了（App 被系统杀掉过）时，凭空起一条正是用户没要的。
+        case liveRecording
     }
 
     /// Non-nil until the UI consumes it.
