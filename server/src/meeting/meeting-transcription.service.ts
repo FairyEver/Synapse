@@ -6,6 +6,7 @@ import {
   MEETING_ASR_URL_TTL_SECONDS,
   MEETING_TENCENT_TASK_STATUS,
   MEETING_TRANSCRIPTION_MAX_ATTEMPTS,
+  MEETING_TRANSCRIPTION_STALL_MS,
   MEETING_TRANSCRIPTION_TTL_MS,
   MeetingTranscriptionCompletedPayload,
 } from "@synapse/shared"
@@ -38,6 +39,13 @@ const POLL_BATCH_SIZE = 50
 
 /** 超过这个时间还没收尾的分块上传视为废弃，中止掉。 */
 const STALE_UPLOAD_MS = 24 * 60 * 60 * 1000
+
+/**
+ * 引擎读都没读过这份音频时的失败原因。
+ *
+ * 这类失败是终局：同一份字节再投一次，引擎还是读不进去（见 `MEETING_TRANSCRIPTION_STALL_MS`）。
+ */
+const MEETING_TRANSCRIPTION_STALL_REASON = "这段录音里没有检测到说话内容，无法转写。"
 
 const JOB_STATUS_PENDING = "pending"
 const JOB_STATUS_RUNNING = "running"
@@ -180,7 +188,9 @@ export class MeetingTranscriptionService {
         orderBy: { updatedAt: "asc" },
         take: POLL_BATCH_SIZE,
       })
-      for (const job of running) await this.collectJob(job.id, job.meetingId, job.taskId, job.expiresAt)
+      for (const job of running) {
+        await this.collectJob(job.id, job.meetingId, job.taskId, job.expiresAt, job.submittedAt)
+      }
     } catch (error) {
       this.logger.warn(
         { errorMessage: error instanceof Error ? error.message : String(error) },
@@ -189,8 +199,19 @@ export class MeetingTranscriptionService {
     }
   }
 
-  /** 单独取出一个任务的结果，测试直接调它，不用等定时器。 */
-  async collectJob(jobId: string, meetingId: string, taskId: string | null, expiresAt: Date | null): Promise<void> {
+  /**
+   * 单独取出一个任务的结果，测试直接调它，不用等定时器。
+   *
+   * `submittedAt` 是**投递成功**的时刻，不是任务建出来的时刻——卡死判定从投出去那一刻
+   * 起算，队列里的等待不算数。
+   */
+  async collectJob(
+    jobId: string,
+    meetingId: string,
+    taskId: string | null,
+    expiresAt: Date | null,
+    submittedAt: Date | null,
+  ): Promise<void> {
     if (!taskId) return
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
       await this.recordAttemptFailure(jobId, meetingId, new Error("转写任务已超过 24 小时有效期。"))
@@ -202,6 +223,15 @@ export class MeetingTranscriptionService {
     try {
       const status = await describeTaskStatus(Number(taskId), credentials)
       if (status.status === MEETING_TENCENT_TASK_STATUS.waiting || status.status === MEETING_TENCENT_TASK_STATUS.doing) {
+        // 引擎真的读到过这份音频就一定会回填 `AudioDuration`，所以「等够了还是没填」等于
+        // 它从来没碰过——这种任务不会自己好，别让用户等到 24 小时的有效期才看到失败。
+        if (this.hasStalledWithoutBeingRead(submittedAt, status.audioDuration)) {
+          this.logger.warn(
+            { meetingId, taskId, audioDuration: status.audioDuration },
+            "Meeting transcription task stalled without being read",
+          )
+          await this.failJob(jobId, meetingId, MEETING_TRANSCRIPTION_STALL_REASON)
+        }
         return
       }
       if (status.status === MEETING_TENCENT_TASK_STATUS.failed) {
@@ -291,6 +321,19 @@ export class MeetingTranscriptionService {
       this.storage.readObjectRange(storageKey, totalBytes - probe, totalBytes - 1),
     ])
     return inspectMeetingAudioContainer({ head, tail, totalBytes })
+  }
+
+  /**
+   * 任务投出去够久、引擎却始终没有回填音频时长。
+   *
+   * 这就是「引擎根本没读过这份音频」的判据，不是「跑得慢」——同一批实测里，能被读到的
+   * 音频（6 秒到 34 秒）全部在提交后 5 秒内就填好了 `AudioDuration`。所以一旦这个数有值，
+   * 这里立刻让路，长录音该等多久还是等多久。
+   */
+  private hasStalledWithoutBeingRead(submittedAt: Date | null, audioDurationSeconds: number | null): boolean {
+    if (!submittedAt) return false
+    if (audioDurationSeconds !== null && audioDurationSeconds > 0) return false
+    return Date.now() - submittedAt.getTime() >= MEETING_TRANSCRIPTION_STALL_MS
   }
 
   private credentials(): TencentAsrCredentials | null {

@@ -251,7 +251,12 @@ describe("提交转写任务", () => {
 })
 
 describe("取结果", () => {
-  const runningJob = { status: "running", taskId: "42", expiresAt: new Date(Date.now() + 60_000) }
+  const runningJob = {
+    status: "running",
+    taskId: "42",
+    expiresAt: new Date(Date.now() + 60_000),
+    submittedAt: new Date(),
+  }
 
   it("结果落库：逐字稿按段落存，说话人建映射记录", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
@@ -268,7 +273,7 @@ describe("取结果", () => {
       errorMessage: null,
       audioDuration: 2,
     })
-    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
 
     const created = prisma.meetingTranscriptSegment.createMany.mock.calls[0][0].data
     expect(created).toHaveLength(2)
@@ -288,13 +293,44 @@ describe("取结果", () => {
       errorMessage: null,
       audioDuration: 1,
     })
-    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
     expect(prisma.meetingTranscriptSegment.deleteMany).toHaveBeenCalledWith({ where: { meetingId: "meeting-1" } })
   })
 
   it("还在跑就什么都不做，等下一轮", async () => {
     describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 1, statusText: "doing", result: null, detail: null, errorMessage: null, audioDuration: null })
-    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
+    expect(prisma.meeting.update).not.toHaveBeenCalled()
+    expect(prisma.meetingTranscriptionJob.update).not.toHaveBeenCalled()
+  })
+
+  // 直播里真实撞到过的那一类：6 秒、几乎没有语音的录音配着说话人分离投出去之后，腾讯云的
+  // 会议引擎会永久停在 doing，既不回结果也不报错（实测连等 20 多分钟，`AudioDuration`
+  // 一直是 0）。没有这个兜底，用户就要在「转写中」上一直等到 24 小时的有效期。
+  const stalledJob = { ...runningJob, submittedAt: new Date(Date.now() - 16 * 60 * 1000) }
+
+  it("引擎始终没读过这份音频，等够就当场判失败，不拖到 24 小时", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(stalledJob))
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 1, statusText: "doing", result: null, detail: null, errorMessage: null, audioDuration: 0 })
+    await service.collectJob("job-1", "meeting-1", "42", stalledJob.expiresAt, stalledJob.submittedAt)
+    expect(prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "failed" })
+    expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({
+      status: "failed",
+      failureReason: "这段录音里没有检测到说话内容，无法转写。",
+    })
+  })
+
+  it("引擎读到了音频就接着等，等多久都不算卡死", async () => {
+    // `AudioDuration` 有值就等于引擎已经读过这份音频——长录音本来就该慢慢等，不能误杀。
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 1, statusText: "doing", result: null, detail: null, errorMessage: null, audioDuration: 5.99 })
+    await service.collectJob("job-1", "meeting-1", "42", stalledJob.expiresAt, stalledJob.submittedAt)
+    expect(prisma.meeting.update).not.toHaveBeenCalled()
+    expect(prisma.meetingTranscriptionJob.update).not.toHaveBeenCalled()
+  })
+
+  it("刚投出去的任务，哪怕时长还没回填也不能判死", async () => {
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 1, statusText: "doing", result: null, detail: null, errorMessage: null, audioDuration: 0 })
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
     expect(prisma.meeting.update).not.toHaveBeenCalled()
     expect(prisma.meetingTranscriptionJob.update).not.toHaveBeenCalled()
   })
@@ -302,7 +338,7 @@ describe("取结果", () => {
   it("失败时把腾讯云给的原因落下来", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 3, statusText: "failed", result: null, detail: null, errorMessage: "音频格式不支持", audioDuration: null })
-    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
     expect(prisma.meetingTranscriptionJob.update.mock.calls[0][0].data.lastError).toContain("音频格式不支持")
   })
 
@@ -314,7 +350,7 @@ describe("取结果", () => {
   it("引擎真的判失败就当场收尾，不退回队列重排", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 3, statusText: "failed", result: null, detail: null, errorMessage: "Invalid audio file!", audioDuration: null })
-    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
 
     const jobUpdate = prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data
     expect(jobUpdate).toMatchObject({ status: "failed", lastError: "Invalid audio file!" })
@@ -325,7 +361,7 @@ describe("取结果", () => {
   })
 
   it("超过 24 小时的任务不再去取，直接判超期", async () => {
-    await service.collectJob("job-1", "meeting-1", "42", new Date(Date.now() - 1000))
+    await service.collectJob("job-1", "meeting-1", "42", new Date(Date.now() - 1000), runningJob.submittedAt)
     expect(describeTaskStatusMock).not.toHaveBeenCalled()
     expect(prisma.meetingTranscriptionJob.update.mock.calls[0][0].data.lastError).toContain("24 小时")
   })
@@ -333,7 +369,7 @@ describe("取结果", () => {
   it("还没到上限时只是重排队，不判失败", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockRejectedValue(new Error("抖了一下"))
-    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
     expect(prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data).toMatchObject({
       status: "pending",
       taskId: null,
@@ -346,7 +382,7 @@ describe("取结果", () => {
     describeTaskStatusMock.mockRejectedValue(new Error("一直失败"))
     // 连着失败到上限：最后一次必须落成 failed 并写清原因。
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+      await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
     }
     expect(prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "failed" })
     expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "failed" })
@@ -355,7 +391,12 @@ describe("取结果", () => {
 })
 
 describe("收尾通知", () => {
-  const runningJob = { status: "running", taskId: "42", expiresAt: new Date(Date.now() + 60_000) }
+  const runningJob = {
+    status: "running",
+    taskId: "42",
+    expiresAt: new Date(Date.now() + 60_000),
+    submittedAt: new Date(),
+  }
 
   function withNotifications() {
     const broadcastToUser = vi.fn(() => ({ onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0, clientResults: [] }))
@@ -382,7 +423,7 @@ describe("收尾通知", () => {
       audioDuration: 1,
     })
     const { notifying, broadcastToUser, sendMeetingTranscription } = withNotifications()
-    await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
 
     expect(broadcastToUser).toHaveBeenCalledWith("user-1", expect.objectContaining({
       type: "meeting.transcription.completed",
@@ -397,7 +438,7 @@ describe("收尾通知", () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 2, statusText: "success", result: null, detail: [], errorMessage: null, audioDuration: null })
     const { notifying, sendMeetingTranscription } = withNotifications()
-    await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)
     expect(sendMeetingTranscription).toHaveBeenCalledTimes(1)
   })
 
@@ -419,7 +460,7 @@ describe("收尾通知", () => {
       { broadcastToUser: () => { throw new Error("socket 挂了") } } as never,
       { sendMeetingTranscription: async () => { throw new Error("APNs 挂了") } } as never,
     )
-    await expect(notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)).resolves.toBeUndefined()
+    await expect(notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt, runningJob.submittedAt)).resolves.toBeUndefined()
     expect(prisma.meeting.update.mock.calls[0][0].data).toMatchObject({ status: "done" })
   })
 })
