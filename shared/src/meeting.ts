@@ -76,8 +76,9 @@ export const MEETING_TRANSCRIPTION_TTL_MS = 24 * 60 * 60 * 1000
  *
  * 起因是一次真实故障：一段 6 秒、几乎没有语音的录音（峰值只有满量程的 4%，通篇是麦克风
  * 底噪），配上 `SpeakerDiarization=1` 之后，腾讯云的会议引擎既不出结果也不报错，长时间停
- * 在 `doing`——`Status` 恒为 1、`AudioDuration` 恒为 0。实测其中一条在提交后 47 分钟才由
- * 腾讯云判失败，错误是 `Failed to recognize audio!`；在那之前用户看到的一直是「转写中」。
+ * 在 `doing`——`Status` 恒为 1、`AudioDuration` 恒为 0。引擎大约 45~52 分钟之后才放弃（实
+ * 测两条：47 分 16 秒、51.9 分钟），错误都停在 `Failed to recognize audio!`；在那之前用户
+ * 看到的一直是「转写中」。
  * 同一份音频关掉说话人分离 5 秒就出结果，所以卡住的是引擎的说话人分离，跟音频采样率
  * （16 kHz 和 48 kHz 都复现）、跟网络都没有关系。
  *
