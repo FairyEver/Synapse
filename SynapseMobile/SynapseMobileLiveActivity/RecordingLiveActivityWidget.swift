@@ -28,16 +28,16 @@ private enum RecordingPalette {
     static let accent = Color.red
 }
 
-/// 那枚停止键的两种尺寸。
+/// 那枚停止键的直径。
 ///
-/// 尺寸分两档是因为两处的宽度差着一个量级：锁屏那张卡拿的是整幅宽度，灵动岛那一行只有
-/// 贴着传感器挖孔的一条窄缝。**没有第三档**——多一档就要多解释一次它为什么是那个数。
+/// 锁屏卡片和灵动岛**用同一个数**。上一版这里分两档（锁屏 52、灵动岛 34），理由是灵动岛
+/// 那条窄缝放不下；2026-09-20 用户看过真机之后要求「灵动岛应该类似锁屏界面那个活动卡片的
+/// 布局和尺寸」，于是统一成一档。52 pt 在 Apple 的最小可点区域（44 pt）之上。
+///
+/// 这个数在灵动岛那一侧还兼一个作用：它是**两块的公共高度**，对齐靠的就是它，见
+/// `RecordingLiveActivityWidget` 里那段注释。
 private enum RecordingButtonSize {
-    /// 锁屏：Apple 的最小可点区域是 44 pt，这里再大一档。它现在是整张卡上唯一能按的东西，
-    /// 没有理由缩着。
-    static let lockScreen: CGFloat = 52
-    /// 灵动岛展开态：落在计时那一行的右端。
-    static let expanded: CGFloat = 34
+    static let diameter: CGFloat = 52
 }
 
 /// 「在录」的那颗红点。
@@ -60,7 +60,8 @@ private struct RecordingDot: View {
 ///
 /// 内容只剩两件：**录了多久**，和**怎么停**。上一版中间那条点阵（语音备忘录那种圆点加一根
 /// 播放头）已经去掉，理由是它右半边是补出来的占位圆点、左半边是压成一颗点的振幅——看着像
-/// 波形，读不出音量。去掉之后这两件事都放大了：锁屏上计时到 `.title`、停止键 52 pt。
+/// 波形，读不出音量。去掉之后这两件事都放大了，而且**锁屏和灵动岛用的是同一套尺寸**：
+/// 计时 `.title`、停止键 52 pt。
 struct RecordingLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RecordingActivityAttributes.self) { context in
@@ -77,18 +78,35 @@ struct RecordingLiveActivityWidget: Widget {
             DynamicIsland {
                 // 一行：左边计时，右边停止键。传感器挖孔在中间，内容只能贴着两头放。
                 //
-                // 左右两个区域都**不自己加 padding**：灵动岛每一块都有系统给的默认 content
-                // margin，Apple 的原话是内容和岛的形状同心、四周留一样的边距、别贴到边上。
-                // 自己再塞一圈只会和默认值叠。两边都不加，实测左右留白 19.0 / 18.0 pt
-                // （差的那 1 pt 是数字字形自带的边距），已经是对称的。
+                // **两块给同一个高度**，就是停止键的直径。这不是排版偏好，是这里唯一能让
+                // 两件东西对齐的办法：实测展开态的两块区域是**顶端对齐**的——内容顶边固定
+                // 落在距药丸顶边约 17.3 pt 处，内容多高就从那里往下长，而不是在药丸里居中
+                // （拿旧布局当对照组：两块内容的中心各差 6 pt，顶边却落在同一处）。两边各长
+                // 各的，中心自然错开：.title2 那行计时比 34 pt 的按钮中心高 3.8 pt。框成同
+                // 一个高度、各自居中，两个中心才重合。
+                //
+                // 52 pt 顺带把「整行坐得偏高」也一并解决：药丸高 84 pt 是系统定死的（点阵
+                // 那版、34 pt 那版、52 pt 这版量下来都是 84~85 pt，与内容无关），52 pt 的
+                // 内容从 17.3 pt 起落到 17.3…69.3，中心 43.3 pt，比药丸中线低 1.5 pt——
+                // 肉眼就是居中。上一版 34 pt 的内容中心在 34.8 pt，高 7 pt，那才是「圆心不
+                // 重合」的来源。
+                //
+                // 左右仍然不自己加 padding：留白由系统给，实测 19.0 / 18.0 pt（差的那 1 pt
+                // 是数字字形自带的边距），已经是对称的。
                 DynamicIslandExpandedRegion(.leading) {
                     RecordingTimer(state: context.state)
-                        .font(.title2)
+                        .font(.title)
                         .fontWeight(.semibold)
                         .foregroundStyle(RecordingPalette.accent)
+                        // 窄缝里放得下「00:00」，放不下「1:23:45」。宁可让字缩一点，也不要
+                        // 让它折成两行——旧布局就是这样折过。
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(height: RecordingButtonSize.diameter)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    RecordingStopButton(diameter: RecordingButtonSize.expanded)
+                    RecordingStopButton(diameter: RecordingButtonSize.diameter)
+                        .frame(height: RecordingButtonSize.diameter)
                 }
             } compactLeading: {
                 // 收起时左边原来也是个 `waveform` 图标，同样去掉了：换成那颗红点，它至少
@@ -101,17 +119,6 @@ struct RecordingLiveActivityWidget: Widget {
                 // 同时有两个实时活动时收成一个圆点：这里放不下任何字。
                 RecordingDot(diameter: 12)
             }
-            // 把系统留给 `.bottom` 区域的那条底部空带收掉，否则整行会被顶高。
-            //
-            // 实测（iPhone 17 Pro / iOS 26.7，截图逐像素量的）：展开态是一枚 373 × 84 pt
-            // 的胶囊（圆角是高度的一半，逐行验过），而计时和停止键的中心落在距顶边
-            // 34.8 pt 处——比胶囊中线高 7.0 pt，右边那颗按钮因此看着浮在右端半圆的上半
-            // 边。只有一种解释对得上：区域内容是在 [顶边距, 高 − 底边距] 这条带里居中的，
-            // 反推系统默认底边距约 14 pt，带高 70 pt、中心 35 pt。
-            //
-            // `.bottom` 归零之后内容区就是整枚胶囊，中心回到 42 pt，和胶囊中线重合——
-            // 计时和那颗按钮落回同一条中线上。
-            .contentMargins(.bottom, 0, for: .expanded)
         }
     }
 }
@@ -136,7 +143,7 @@ private struct LockScreenRecordingView: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(RecordingPalette.accent)
                 Spacer(minLength: 12)
-                RecordingStopButton(diameter: RecordingButtonSize.lockScreen)
+                RecordingStopButton(diameter: RecordingButtonSize.diameter)
             }
             // 被系统中断占着麦克风时才有的一行。此时计时是不动的，没有它这张卡看着像坏了。
             if let reason = context.state.pausedReason {
