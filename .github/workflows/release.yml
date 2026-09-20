@@ -106,6 +106,12 @@ jobs:
       - name: Generate definitions registry
         run: pnpm --filter @synapse/desktop run generate:definitions-registry
 
+      # Windows-only attachment regressions must not reach an installer: the staging path fsyncs
+      # the file it just wrote, and Windows only allows that through a writable handle.
+      - name: Run Agent attachment tests
+        if: matrix.label == 'Windows'
+        run: pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/attachment-staging-service.test.ts electron/services/agent-runtime/__tests__/attachment-staging-fsync-contract.test.ts electron/modules/agent/__tests__/ipc.test.ts src/modules/agent/__tests__/agent-composer.test.tsx
+
       - name: Build renderer
         run: pnpm --filter @synapse/desktop run build:renderer
 

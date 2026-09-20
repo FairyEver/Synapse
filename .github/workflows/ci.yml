@@ -145,6 +145,12 @@ jobs:
           "CLAUDE_CODE_GIT_BASH_PATH=$gitBash" >> $env:GITHUB_ENV
       - name: Run native Agent continuation and cross-platform contracts
         run: pnpm --filter @synapse/desktop run test:agent:cross-platform
+      # Wired in on 2026-09-20. Attachments had no Windows coverage at all before that, and it
+      # cost a user every image they tried to add: the staging path fsyncs the file it just
+      # wrote, and Windows only allows that through a writable handle. macOS CI stayed green
+      # for the whole time because POSIX allows fsyncing a read-only descriptor.
+      - name: Run Agent attachment tests
+        run: pnpm --filter @synapse/desktop exec vitest run electron/services/agent-runtime/__tests__/attachment-staging-service.test.ts electron/services/agent-runtime/__tests__/attachment-staging-fsync-contract.test.ts electron/modules/agent/__tests__/ipc.test.ts src/modules/agent/__tests__/agent-composer.test.tsx
       - name: Run local service shutdown contracts
         run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
       - name: Run Git unit and integration tests

@@ -48,7 +48,7 @@
     "test:ci": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
-    "test:agent:cross-platform": "vitest run electron/services/__tests__/error-sanitize.test.ts electron/services/agent-runtime/__tests__/export-evidence.test.ts electron/services/agent-runtime/__tests__/query-stop-barrier.test.ts electron/runtime/data-repo/__tests__/sqlite-atomic.test.ts electron/runtime/data-repo/__tests__/schemas.test.ts electron/services/agent-runtime/__tests__/timeline-page.test.ts electron/services/agent-runtime/__tests__/attachment-staging-fsync-contract.test.ts app-capabilities/agent/main/__tests__/conversation-reference.test.ts src/modules/agent/hooks/__tests__/use-stick-to-bottom.hook.test.tsx"
+    "test:agent:cross-platform": "vitest run electron/services/__tests__/error-sanitize.test.ts electron/services/agent-runtime/__tests__/export-evidence.test.ts electron/services/agent-runtime/__tests__/query-stop-barrier.test.ts electron/runtime/data-repo/__tests__/sqlite-atomic.test.ts electron/runtime/data-repo/__tests__/schemas.test.ts electron/services/agent-runtime/__tests__/timeline-page.test.ts app-capabilities/agent/main/__tests__/conversation-reference.test.ts src/modules/agent/hooks/__tests__/use-stick-to-bottom.hook.test.tsx"
   },
   "repository": {
     "type": "git",

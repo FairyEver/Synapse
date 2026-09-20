@@ -20,6 +20,7 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 ## 跨平台验证
 
 - `test:agent:cross-platform` 覆盖 SDK 参数、会话持久化、SQLite、停止屏障和 timeline，不使用真实服务凭据。Windows runner 显式提供 Git Bash，并隔离 HOME、USERPROFILE、临时目录与用户配置。
+- Agent 附件链路在 Windows runner 上原生执行：`attachment-staging-service`、附件 fsync 契约、附件 IPC 和 composer 四组测试。附件落盘对刚写入的文件做 fsync，而 Windows 只允许通过可写句柄 fsync（只读句柄返回 `ERROR_ACCESS_DENIED`）；这条平台差异在 macOS 上不可见，任何附件写入改动都要看 Windows runner 结果。
 - macOS 的模拟 Windows 路径测试不等于 Windows 原生执行通过；必须保留 CI/实机结果。当前审计状态见 `docs/reference/2026-09-14-macos-windows-compatibility-audit.md`。
 
 ## Claude SDK 配置
