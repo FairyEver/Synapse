@@ -41,6 +41,11 @@ nonisolated enum DiagnosticField: String, Sendable {
     case session, kind, from, to, rowCount, gridColumns, gridRows, bytes, truncated, title
     case historyBefore, historyLimit, historyRows
     case desktopCount, sessionCount, gridOwner
+    /// REST 方法与路由家族。**不记原始 path**：`/mobile/devices/<id>`、
+    /// `/meetings/<id>/audio-url` 都带真实标识符。
+    case method, route
+    /// intent 的种类（闭合枚举）与它自己的别名（`r1`/`r2`），后者用来把请求和回执配对。
+    case intent, request
 
     // MARK: 终端版面
     case displayMode, density, atHistoryFloor, cellHeight, contentInsetTop
@@ -98,8 +103,14 @@ nonisolated enum DiagnosticEvent: String, Sendable, CaseIterable {
     case launch = "app.launch"
     case sessionOpen = "app.sessionOpen"
     case sessionClose = "app.sessionClose"
+    /// 启动时对上一次会话未收尾的**推断** —— 它是应用层的一条结论，不是崩溃本身，
+    /// 所以留在 app 路，只是内容指向 crash 路。
     case crashSuspected = "app.crashSuspected"
-    case uncaughtException = "app.uncaughtException"
+
+    // MARK: 崩溃
+    /// 未捕获异常。单独一路（`crash`），因为它是唯一需要在**磁盘洪峰之外**留下痕迹的东西：
+    /// term / net 两路被输出打满时轮转的是它们自己，crash 路不受影响。
+    case uncaughtException = "crash.exception"
 
     // MARK: 认证与推送
     case authState = "auth.state"
@@ -107,9 +118,18 @@ nonisolated enum DiagnosticEvent: String, Sendable, CaseIterable {
 
     // MARK: 网络
     case connect = "net.connect"
+    case connected = "net.connected"
     case disconnect = "net.disconnect"
     case reconnectScheduled = "net.reconnectScheduled"
     case frame = "net.frame"
+    /// 出站 WS 信封（hello / ping / intent）。只记类型与字节数，不记内容。
+    case send = "net.send"
+    /// 一次 REST 请求 ↔ 响应。记路由家族、方法、状态码、耗时与**响应**字节数 ——
+    /// 请求体一个字节都不进（`/auth/login` 的体里是密码）。
+    case rest = "net.rest"
+    /// 一个 intent 发出。与下面的回执配对，时延靠同文件相邻记录的时间戳算。
+    case intent = "net.intent"
+    case intentResult = "net.intent.result"
     case historyRequest = "net.history.request"
     case historyResponse = "net.history.response"
     case historyTimeout = "net.history.timeout"
@@ -129,6 +149,9 @@ nonisolated enum DiagnosticEvent: String, Sendable, CaseIterable {
     case terminalSnapshotRejected = "term.snapshot.rejected"
     case terminalLifecycle = "term.lifecycle"
     case terminalError = "term.error"
+    /// 一帧终端内容被取下来（终端里的行文本）。**默认不记**，只在用户打开
+    /// 「记录终端屏幕内容」之后才记，唯一构造入口是 `DiagnosticLog.captureScreen`。
+    case frameContent = "term.frameContent"
 
     // MARK: 界面
     case screen = "ui.screen"
@@ -153,6 +176,54 @@ nonisolated enum DiagnosticEvent: String, Sendable, CaseIterable {
             .info
         }
     }
+}
+
+/// 落盘时按什么分文件。
+///
+/// 分域是这件东西存在的理由：一份混在一起的日志里，终端输出每秒几十条会把网络与生命周期
+/// 那几条挤到看不见的地方（轮转按时间走，不按重要程度走）。分路之后「哪个域出了事」
+/// 在磁盘上就是真的。
+nonisolated enum DiagnosticLane: String, CaseIterable, Sendable {
+    case app
+    case term
+    case net
+    case env
+    case crash
+    case log
+
+    /// 这个域在磁盘上的子目录名。就是 `rawValue` —— 不另起一套命名，
+    /// 免得读日志的人要在两套词之间对照。
+    var directoryName: String { rawValue }
+}
+
+extension DiagnosticEvent {
+    /// 事件名里 `.` 之前的那一段。
+    var lanePrefix: String { String(rawValue.prefix(while: { $0 != "." })) }
+
+    /// 域**从事件名的前缀派生**，而不是给每个 case 手写一个属性。
+    ///
+    /// 手写的那种允许不一致：两个 `net.*` 被分到两路，没有任何机制会报错。派生没有这个
+    /// 失败模式 —— 前缀表是闭合的，写了个没见过的前缀就是 `default` 那格，而
+    /// `DiagnosticVocabularyTests` 会把每一个 `allCases` 的前缀都过一遍，于是
+    /// 「随手写了个 `netx.foo`」是红灯，而不是磁盘上悄悄多出一路文件。
+    var lane: DiagnosticLane {
+        switch lanePrefix {
+        case "app", "ui": .app
+        case "term": .term
+        case "net", "auth", "push": .net
+        case "env": .env
+        case "crash": .crash
+        case "log": .log
+        // 不可达：前缀表由上面的测试穷尽。写成 .app 而不是 fatalError —— 一个日志事件
+        // 的类型错误不该让 App 崩在热路径上，落错一个域是可接受的降级。
+        default: .app
+        }
+    }
+
+    /// 已知前缀。测试拿它证明上面那个 switch 的 `default` 不可达。
+    static let knownLanePrefixes: Set<String> = [
+        "app", "ui", "term", "net", "auth", "push", "env", "crash", "log",
+    ]
 }
 
 /// 一条记录。

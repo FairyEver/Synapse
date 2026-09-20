@@ -138,6 +138,30 @@ struct DiagnosticRotationTests {
         #expect(plan.removals.count >= 1)
         #expect(!plan.removals.contains("active.log"))
     }
+
+    /// 各域配额之和不能超过愿意给这套日志的总量。
+    ///
+    /// 分域之后「总量封顶」不再是运行时的一次驱逐，而是**各配额相加这个构造性事实**。
+    /// 于是它也就成了一件很容易在加一路、或把某一路调大时忘掉的事 —— 而那时磁盘上
+    /// 真的会多占那么多，没有任何运行时代码会拦。
+    @Test func laneQuotasStayUnderTheDiskCeiling() {
+        #expect(DiagnosticRotation.Limits.diskCeilingBytes <= 10 << 20)
+        for lane in DiagnosticLane.allCases {
+            let limits = DiagnosticRotation.Limits.forLane(lane)
+            #expect(limits.maxFiles >= 1, "\(lane.rawValue) 一路都不留，等于没开这一路")
+            #expect(
+                limits.maxFiles * limits.maxFileBytes >= limits.maxTotalBytes,
+                "\(lane.rawValue) 的 maxTotalBytes 比自己 maxFiles 个满文件还大，那一格是死的"
+            )
+        }
+    }
+
+    /// 每一路拿到的都是自己那一份配额，不是同一份。
+    @Test func eachLaneGetsItsOwnQuota() {
+        #expect(DiagnosticRotation.Limits.forLane(.term) != DiagnosticRotation.Limits.forLane(.env))
+        #expect(DiagnosticRotation.Limits.perLane.count == DiagnosticLane.allCases.count)
+        #expect(DiagnosticRotation.Limits.perLane[.term] == DiagnosticRotation.Limits.forLane(.term))
+    }
 }
 
 /// 一行一条是这份文件唯一的结构保证。

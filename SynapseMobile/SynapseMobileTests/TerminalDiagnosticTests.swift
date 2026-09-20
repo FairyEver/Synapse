@@ -17,11 +17,22 @@ struct TerminalDiagnosticTests {
             .appendingPathComponent("term-diag-\(UUID().uuidString)", isDirectory: true)
     }
 
+    /// 目录下写进去的全部内容，**递归**。
+    ///
+    /// 分域之后每路是根目录下的一个子目录，浅列举会一条都读不到 —— 而那会让下面每一条
+    /// 断言都以「日志是空的」的名义红掉，看起来像埋点没接上，其实是读取方式陈旧了。
     private func written(in directory: URL) -> String {
-        ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [])
-            .filter { $0.pathExtension == "log" }
-            .compactMap { try? String(contentsOf: $0, encoding: .utf8) }
-            .joined()
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        )) ?? []
+        return children.compactMap { url -> String? in
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            if isDirectory { return written(in: url) }
+            guard url.pathExtension == "log" else { return nil }
+            return try? String(contentsOf: url, encoding: .utf8)
+        }
+        .joined()
     }
 
     private func lines(_ count: Int) -> [DisplayRow] {

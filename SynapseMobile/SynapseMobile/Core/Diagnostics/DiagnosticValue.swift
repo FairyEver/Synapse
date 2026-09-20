@@ -32,6 +32,10 @@ nonisolated enum DiagnosticValue: Equatable, Sendable {
     case name(DeviceName)
     /// 会话标题。用户已同意记录 —— 缺了它没法把日志和录屏里的那个终端对上号。
     case title(SessionTitle)
+    /// 一次 REST 请求打在哪一族接口上。闭合枚举，不是自由字符串。
+    case route(DiagnosticRoute)
+    /// 手机发给电脑的 intent 的种类。闭合枚举。
+    case intent(DiagnosticIntent)
 }
 
 /// 日志里用作标签的闭合取值集。
@@ -103,6 +107,17 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     case singleLine
     case multiLine
 
+    // MARK: 出站与 HTTP
+    case hello
+    case ping
+    case intent
+    case httpGet
+    case httpPost
+    case httpPut
+    case httpDelete
+    /// 认不出的方法。HTTP 方法在 `APIClient` 里是字面量，加一个没见过的走这里。
+    case other
+
     // MARK: 触发原因
     case contentGrew
     case insetChanged
@@ -114,6 +129,55 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     /// 视口离底部凭空远了一整块。贴底读者要先补偿掉这一块，再去跟随。
     case aboveInserted
     case unknownCause
+}
+
+/// 一次 REST 请求打在哪一族接口上。
+///
+/// **记家族，不记 path**。`/mobile/devices/<clientInstanceId>`、`/meetings/<id>/audio-url`、
+/// `/drive/items/<id>/permanent` 里都嵌着真实标识符，而这条纪律对整个出口都成立。
+/// 家族由 path 的第一段派生，调用点零成本。
+///
+/// 升级路径：如果日后「哪个 endpoint 慢」变成刚需，把它提升成每路由一个 case，
+/// 并从各 typed 方法显式传 `route:` —— 那时是一处枚举 + 一处 switch 的改动。
+nonisolated enum DiagnosticRoute: String, CaseIterable, Sendable {
+    case auth
+    case mobile
+    case drive
+    case meetings
+    case voice
+    case other
+
+    /// 由 path 的第一段派生。前导斜杠先去掉，空段忽略。
+    static func family(of path: String) -> DiagnosticRoute {
+        switch path.split(separator: "/").first.map(String.init) {
+        case "auth": return .auth
+        case "mobile": return .mobile
+        case "drive": return .drive
+        case "meetings": return .meetings
+        case "voice": return .voice
+        default: return .other
+        }
+    }
+}
+
+/// 手机发给电脑的 intent 的种类。
+///
+/// 和事件目录一样是闭合的：加一种 intent 要在这里加一个 case。这样「日志里出现过哪些
+/// 意图」是个可枚举的事实，而不是一堆自由文本。
+nonisolated enum DiagnosticIntent: String, CaseIterable, Sendable {
+    case attach, detach, sync, history
+    case command, keys, unlock
+    case stop, delete, rename, create
+    case createAgentConversation, launchCommand
+    case resize, releaseGrid
+    case fileUpload, ping
+    case other
+
+    /// 由 `MobileIntentRequest.kind` 的字面量转过来。认不出的走 `.other` ——
+    /// 协议加了一种新 intent 而这里忘了跟，日志会显示 `other`，不会丢记录也不会崩。
+    static func named(_ raw: String) -> DiagnosticIntent {
+        DiagnosticIntent(rawValue: raw) ?? .other
+    }
 }
 
 /// 形态与来源都合法的文本，且**已经过脱敏**。

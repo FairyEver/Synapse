@@ -17,9 +17,20 @@ nonisolated final class DiagnosticBuffer: @unchecked Sendable {
         var maxRecordsPerSecond = 200
         var maxBytesPerSecond = 64 * 1024
         /// 高频事件的采样率。表里没有的事件不采样，来一条记一条。
+        ///
+        /// **每一个高频新事件都必须在这里有一格。** 忘了配不会报错，只会让它在洪峰里
+        /// 和终端那两条抢同一桶令牌 —— 而那正是「日志里最关键的那条恰好没记上」的来源。
+        /// `DiagnosticInterfaceLoggingTests` 里有一条「合成最坏一秒」按这个前提断言。
+        ///
+        /// 稳态最坏一秒的量级：`scrollTick` 10 + `rows` 20 + `frame` 4 + `frameContent` 1
+        /// + `send` 2 + 连续按键的 intent 与其回执各 ~5 + REST 突发 ~5 ≈ 57 条，
+        /// 对 200 条/秒有 3.5 倍余量 —— 不需要第二套配给机制。
         var samplesPerSecond: [DiagnosticEvent: Int] = [
             .terminalScrollTick: 10,
             .terminalRows: 20,
+            .frame: 4,
+            .frameContent: 1,
+            .send: 2,
         ]
     }
 
@@ -206,6 +217,8 @@ nonisolated extension DiagnosticValue {
         case .stack(let stack): stack.text.utf8.count
         case .name(let name): name.text.utf8.count
         case .title(let title): title.text.utf8.count
+        case .route(let route): route.rawValue.utf8.count
+        case .intent(let intent): intent.rawValue.utf8.count
         }
     }
 }
