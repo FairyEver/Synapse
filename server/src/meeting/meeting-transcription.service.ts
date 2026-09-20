@@ -224,7 +224,8 @@ export class MeetingTranscriptionService {
       const status = await describeTaskStatus(Number(taskId), credentials)
       if (status.status === MEETING_TENCENT_TASK_STATUS.waiting || status.status === MEETING_TENCENT_TASK_STATUS.doing) {
         // 引擎真的读到过这份音频就一定会回填 `AudioDuration`，所以「等够了还是没填」等于
-        // 它从来没碰过——这种任务不会自己好，别让用户等到 24 小时的有效期才看到失败。
+        // 它从来没碰过——这种任务不会给出结果，只会让用户对着「转写中」干等到腾讯云自己
+        // 判失败为止（实测一条 47 分钟），然后收到一句英文的 `Failed to recognize audio!`。
         if (this.hasStalledWithoutBeingRead(submittedAt, status.audioDuration)) {
           this.logger.warn(
             { meetingId, taskId, audioDuration: status.audioDuration },
