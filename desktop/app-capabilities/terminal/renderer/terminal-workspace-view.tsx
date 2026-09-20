@@ -83,6 +83,10 @@ import {
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
 } from "./terminal-rendering"
+import {
+  notifyTerminalAtlasRestructured,
+  registerTerminalAtlasRepair,
+} from "./terminal-atlas-repair"
 
 /**
  * Width the viewport's scrollbar takes over the right edge of the screen.
@@ -2003,13 +2007,36 @@ function splitTerminalInput(input: string): string[] {
 function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {
   try {
     const webglAddon = new WebglAddon()
+    // 上下文丢掉之后 addon 就不该再被碰，重建目标要靠这个标志自己退场。
+    let disposed = false
+    const atlasRepair = registerTerminalAtlasRepair(() => {
+      if (disposed) return
+      try {
+        // 图集在分屏之间共享：清页之后每个分屏都得整屏重画，否则会取到被清空的字形。
+        webglAddon.clearTextureAtlas()
+        xterm.refresh(0, xterm.rows - 1)
+      } catch (error) {
+        logger.warn("Terminal glyph atlas rebuild failed.", { error })
+      }
+    })
     const contextLossDisposable = webglAddon.onContextLoss(() => {
       logger.warn("Terminal WebGL renderer context lost; falling back to DOM renderer.")
+      disposed = true
+      atlasRepair.dispose()
       webglAddon.dispose()
+    })
+    // 页合并是图集唯一会重排已缓存字形的事件，也是这里唯一需要知道的时机。
+    const atlasRestructureDisposable = webglAddon.onRemoveTextureAtlasCanvas(() => {
+      notifyTerminalAtlasRestructured()
     })
     xterm.loadAddon(webglAddon)
     return {
-      dispose: () => contextLossDisposable.dispose(),
+      dispose: () => {
+        disposed = true
+        atlasRepair.dispose()
+        atlasRestructureDisposable.dispose()
+        contextLossDisposable.dispose()
+      },
     }
   } catch (error) {
     logger.warn("Terminal WebGL renderer unavailable; falling back to DOM renderer.", { error })

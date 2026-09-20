@@ -563,10 +563,13 @@ const xtermState = vi.hoisted(() => ({
 const webglState = vi.hoisted(() => ({
   instances: [] as Array<{
     onContextLoss: ReturnType<typeof vi.fn>
+    onRemoveTextureAtlasCanvas: ReturnType<typeof vi.fn>
     dispose: ReturnType<typeof vi.fn>
     clearTextureAtlas: ReturnType<typeof vi.fn>
     contextLossDispose: ReturnType<typeof vi.fn>
+    atlasRestructureDispose: ReturnType<typeof vi.fn>
   }>,
+  atlasRestructureHandlers: [] as Array<() => void>,
 }))
 
 const toastState = vi.hoisted(() => ({
@@ -779,9 +782,14 @@ vi.mock("@xterm/addon-webgl", () => ({
   WebglAddon: vi.fn().mockImplementation(function WebglAddonMock() {
     const instance = {
       onContextLoss: vi.fn(() => ({ dispose: instance.contextLossDispose })),
+      onRemoveTextureAtlasCanvas: vi.fn((handler: () => void) => {
+        webglState.atlasRestructureHandlers.push(handler)
+        return { dispose: instance.atlasRestructureDispose }
+      }),
       dispose: vi.fn(),
       clearTextureAtlas: vi.fn(),
       contextLossDispose: vi.fn(),
+      atlasRestructureDispose: vi.fn(),
     }
     webglState.instances.push(instance)
     return instance
@@ -955,6 +963,7 @@ beforeEach(() => {
   xtermState.fitInstances = []
   xtermState.webLinksInstances = []
   webglState.instances = []
+  webglState.atlasRestructureHandlers = []
   vi.mocked(WebglAddon).mockClear()
   resizeObservers.length = 0
 })
@@ -3690,6 +3699,28 @@ describe("TerminalModule", () => {
     expect(xtermState.instances[0]?.open.mock.invocationCallOrder[0])
       .toBeLessThan(xtermState.instances[0]?.loadAddon.mock.invocationCallOrder.at(-1) ?? 0)
     expect(webglState.instances[0]?.onContextLoss).toHaveBeenCalled()
+  })
+
+  it("rebuilds the glyph atlas once a page merge has settled", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const addon = webglState.instances[0]
+    const xterm = xtermState.instances[0]
+    expect(addon?.onRemoveTextureAtlasCanvas).toHaveBeenCalledWith(expect.any(Function))
+
+    vi.useFakeTimers()
+    try {
+      webglState.atlasRestructureHandlers[0]?.()
+      vi.advanceTimersByTime(1_500)
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(addon?.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(xterm?.refresh).toHaveBeenCalledWith(0, expect.any(Number))
   })
 
   it("attaches the authoritative snapshot before requesting container geometry", async () => {
