@@ -138,6 +138,14 @@ final class MeetingRecorder {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
+    /// 等编码器收工。
+    ///
+    /// 取消那条路要在删本机文件之前等它——它可能还在往同一个路径上写最后几个分片，删早了
+    /// 会留下一个写到一半的文件没人收。
+    func awaitFinalize() async {
+        await finalizing?.value
+    }
+
     /// 停录之后剩下的那些字节。
     ///
     /// 两件事在这里合流：编码器是收尾之后才把最后那几个分片和索引写出来的，所以要等

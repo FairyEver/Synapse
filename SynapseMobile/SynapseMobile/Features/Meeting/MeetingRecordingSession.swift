@@ -267,6 +267,7 @@ final class MeetingRecordingSession {
         guard phase == .recording || phase == .paused else { return }
         let record = pending
         let uploader = self.uploader
+        let recorder = self.recorder
         stopCapture()
         phase = .saving
         self.recorder = nil
@@ -275,6 +276,9 @@ final class MeetingRecordingSession {
         Task { [weak self] in
             guard let self else { return }
             await uploader?.cancel()
+            // **等编码器彻底收工再删。** 它可能还在往这个路径上写最后那几个分片，删早了
+            // 会留下一个写到一半的文件；而待收尾记录已经清掉，再没人会来收它。
+            await recorder?.awaitFinalize()
             if let record {
                 self.discardLocalFiles(record.recordingId)
             }
