@@ -219,6 +219,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// 就是白白唤醒屏幕。这一段比批与批之间的间隔长，又短到不会让闲置的终端一直转。
     private static let followIdleBeforeStopping: CFTimeInterval = 0.35
 
+    /// 读者的手离底多远才算他离开了底部。
+    ///
+    /// 紧到近乎为零，因为这一档里唯一的信号就是读者的手：他往上挪了，跟随就该让位。
+    /// 见 `pinAfterScroll`。
+    static let readerUnpinSlack: CGFloat = 1
+    /// 内容自己长高时留的余量。
+    ///
+    /// 新一行到达时 offset 没动，离底的距离凭空多出一行 —— 这条路径上的余量要够吸收
+    /// 一两次这样的增长，否则跟随会被输出自己关掉。但它是给**内容**的，不是给手的。
+    static let contentUnpinSlack: CGFloat = 40
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
@@ -1579,18 +1590,22 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         // 把布局引起的那次回调认出来：画布高度或内容 inset 刚变过、而且不是拖拽或惯性，
         // 那这一格说的是布局，不是读者的手 —— 只允许它重新贴上底，不允许它解除跟随。
         // 其余情况照旧重算，所以「往下拖回底部」和「点状态栏回顶部」都还是原来那个结果。
+        //
+        // 三条路径的判定都在 `pinAfterScroll` 里，好让它们各自能被单独钉住 ——
+        // 它们在屏幕上长得一模一样，而各自要的结果完全不同。
         let paneChanged = lastScrollPaneHeight.map { abs($0 - scrollView.bounds.height) > 0.5 } ?? false
         let insetChanged = lastScrollInsetTop.map { abs($0 - scrollView.contentInset.top) > 0.5 } ?? false
         lastScrollPaneHeight = scrollView.bounds.height
         lastScrollInsetTop = scrollView.contentInset.top
         let isReaderScrolling = scrollView.isDragging || scrollView.isDecelerating
-        // 我们自己的平滑跟随也在写 offset，它同样属于「不是读者的手」那一类 —— 滑行
-        // 本来就要经过离底很远的位置，让它按距离重算就会把跟随在半路关掉。
-        if isReaderScrolling || !(paneChanged || insetChanged || isDrivingFollow) {
-            isPinnedToBottom = distanceFromBottom < 40
-        } else if distanceFromBottom < 40 {
-            isPinnedToBottom = true
-        }
+        isPinnedToBottom = Self.pinAfterScroll(
+            isPinned: isPinnedToBottom,
+            distanceFromBottom: distanceFromBottom,
+            isReaderScrolling: isReaderScrolling,
+            paneChanged: paneChanged,
+            insetChanged: insetChanged,
+            isDrivingFollow: isDrivingFollow
+        )
 
         // 这条是滚动问题的底噪：它同时回答"手指在动而 offset 没动"（手势被吞）、
         // "offset 在动但离底一直不到 40 点"（跟随一直没解除）这两个问题。
@@ -1629,6 +1644,40 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         if scrollView.contentOffset.y < 240, !requestsInFlight, !atHistoryFloor, !appliedKeys.isEmpty {
             onRequestHistory?()
         }
+    }
+
+    /// 这一格滚动回调之后，跟随该不该还在。
+    ///
+    /// 纯函数，因为这个回调有三条来源，它们在屏幕上长得一模一样：读者的手、画布或
+    /// inset 变了、内容自己长高。三条要的结果却不同 —— 只有第一条能解除跟随。
+    /// 抽出来是为了让每条各自被断言：一个把余量统一调小的实现能满足「读者的手能解开
+    /// 跟随」，却会把内容长高也判成读者翻了页，跟随从此再不打开。
+    static func pinAfterScroll(
+        isPinned: Bool,
+        distanceFromBottom: CGFloat,
+        isReaderScrolling: Bool,
+        paneChanged: Bool,
+        insetChanged: Bool,
+        isDrivingFollow: Bool
+    ) -> Bool {
+        // 读者的手：离开最底一丁点就算解除。
+        //
+        // 这里原来和下面共用 40 点。那 40 点是给「内容自己长高」留的 —— 新一行到了、
+        // offset 没动，离底的距离凭空多出一行。拿同一把尺子量读者的手，等于把「往上
+        // 挪两行」判成没动：跟随没解除，下一批输出一到，`apply(rows:)` 看见 `wasAtBottom`
+        // 还是真，就把视口一步拽回最底。读者的手指刚把画面带上去、半秒后弹回来，就是
+        // 「滚不动」报告里的第一号成因（判读表见
+        // `docs/superpowers/specs/2026-09-19-mobile-diagnostic-log-design.md`）。
+        // 优先还原模式下 cellHeight 只有 10 点，40 点就是四行。
+        if isReaderScrolling {
+            return distanceFromBottom < readerUnpinSlack
+        }
+        // 我们自己的平滑跟随也在写 offset，它同样属于「不是读者的手」那一类 —— 滑行
+        // 本来就要经过离底很远的位置，让它按距离重算就会把跟随在半路关掉。
+        if paneChanged || insetChanged || isDrivingFollow {
+            return isPinned || distanceFromBottom < contentUnpinSlack
+        }
+        return distanceFromBottom < contentUnpinSlack
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {

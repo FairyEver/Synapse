@@ -634,7 +634,19 @@ final class SynapseAppModel {
         realtime.onFrame = { [weak self] payload in
             guard let self else { return }
             guard payload.desktopClientInstanceId == self.selectedDesktopClientInstanceId else { return }
-            self.store(for: payload.frame.sessionId).apply(payload.frame)
+            let frame = payload.frame
+            let store = self.store(for: frame.sessionId)
+            store.apply(frame)
+            // 与 `net.history.request` 配对。一页空的就是电脑说"没有更早的了"，
+            // 而它在屏幕上和"请求丢了"长得一模一样 —— 只有这一对能分开它们。
+            if frame.isHistory {
+                DiagnosticLog.record(.historyResponse, [
+                    .init(.session, DiagnosticLog.alias(.session, frame.sessionId)),
+                    .init(.from, .int(frame.from)),
+                    .init(.historyRows, .int(frame.lines.count)),
+                    .init(.atHistoryFloor, .bool(store.reachedHistoryFloor)),
+                ])
+            }
         }
         realtime.onIntentResult = { [weak self] result in
             guard let self else { return }
@@ -1081,15 +1093,21 @@ final class SynapseAppModel {
         let store = store(for: sessionId)
         guard !store.isLoadingHistory, !store.reachedHistoryFloor else { return }
 
+        let before = store.oldestIndex
         let intent = MobileIntentRequest(
             intentId: UUID().uuidString,
             kind: "history",
             sessionId: sessionId,
-            before: store.oldestIndex,
+            before: before,
             limit: 200
         )
         store.beginHistoryLoad()
         pendingHistory[intent.intentId] = sessionId
+        DiagnosticLog.record(.historyRequest, [
+            .init(.session, DiagnosticLog.alias(.session, sessionId)),
+            .init(.historyBefore, .int(before)),
+            .init(.historyLimit, .int(200)),
+        ])
         send(intent, to: desktop)
 
         // A reply can be lost with the connection; without this the spinner
@@ -1098,6 +1116,10 @@ final class SynapseAppModel {
             try? await Task.sleep(nanoseconds: 8_000_000_000)
             guard let self, let stuck = self.pendingHistory.removeValue(forKey: intent.intentId) else { return }
             self.store(for: stuck).endHistoryLoad()
+            DiagnosticLog.record(.historyTimeout, [
+                .init(.session, DiagnosticLog.alias(.session, stuck)),
+                .init(.historyBefore, .int(before)),
+            ])
         }
     }
 

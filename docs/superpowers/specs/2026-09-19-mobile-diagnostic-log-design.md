@@ -102,9 +102,9 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 
 | 成因 | 决定性组合 | 修法方向 |
 |---|---|---|
-| ① 离底不足 40 点被拽回 | `followGrab{trigger=contentGrew}` 且 `offsetAfter > offsetBefore`，紧邻 `pinChanged` | 按下即解除跟随，或调小阈值 |
+| ① 读者挪一两行被拽回 | `followGrab{trigger=contentGrew}` 且 `offsetAfter > offsetBefore`，紧邻 `pinChanged` | **已修**（2026-09-20）：40 点那条余量原本同时量着「内容自己长高」和「读者的手」，现在只有 `isDragging \|\| isDecelerating` 走紧的那一档（`TerminalCollectionView.pinAfterScroll`）。旧构建的日志里这一条仍然是它 |
 | ② 放大后滚动被关 | `zoomChanged{isScrollEnabled=F}` → `scrollTick{isScrollEnabled=F}` → `gesture.outcome{didMoveScrollOffset=F}` | 放大态下允许滚动，或让 pan 与滚动共存 |
-| ③ 手上没有可滚的行 | `rows{contentSizeHeight<=boundsHeight}`，且 `history.request` 没有配对的 `response` | 查电脑侧 `history` 意图 |
+| ③ 手上没有可滚的行 | `rows{contentSizeHeight<=boundsHeight}`，且 `history.request` 没有配对成 `historyRows>0` 的 `response` | 有配对的空 `response` 就是电脑侧说"没有更早的"；只有请求没有回应才查电脑侧 `history` 意图 |
 | ④ 长按进了选字 | `selection{phase=began, isScrollEnabled=F}` → `gesture.outcome{didMoveScrollOffset=F}` | 调整长按阈值/漂移容忍 |
 
 ## 测试

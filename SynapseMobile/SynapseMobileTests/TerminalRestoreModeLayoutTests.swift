@@ -492,6 +492,108 @@ struct TerminalRestoreModeLayoutTests {
         }
     }
 
+    /// 读者往上挪一点，跟随就得让位。
+    ///
+    /// 这是朋友那台手机上「终端不能滚动」的第一号成因：读者把画面带上去两行，跟随
+    /// 没解除，下一批输出一到就把视口一步拽回最底 —— 手指刚推上去、半秒后被弹回来。
+    ///
+    /// 两行在两种密度下分别是 20 点（优先还原，cellHeight 10）与 32 点（手机优先，
+    /// cellHeight 16），两个都要能解除。用 40 点当判据时这两条都是红的。
+    @Test func aShortReaderScrollUnpinsTheFollow() {
+        for distance in [CGFloat(20), 32] {
+            let pinned = TerminalCollectionView.pinAfterScroll(
+                isPinned: true,
+                distanceFromBottom: distance,
+                isReaderScrolling: true,
+                paneChanged: false,
+                insetChanged: false,
+                isDrivingFollow: false
+            )
+            #expect(pinned == false, "离底 \(distance) 点是读者自己挪的，跟随必须解除")
+        }
+    }
+
+    /// 内容自己长高不能被当成读者翻页。
+    ///
+    /// 这条挡的是「把余量统一调小」那个改法：新一行到了、offset 没动，离底的距离凭空
+    /// 多出一行，那同样是二十来点。判成读者往上翻，跟随就在第一批输出到达时把自己关掉，
+    /// 从此再也不跟 —— 屏幕上表现为新输出全部落在可视区外面。
+    @Test func contentGrowingDoesNotUnpinTheFollow() {
+        let pinned = TerminalCollectionView.pinAfterScroll(
+            isPinned: true,
+            distanceFromBottom: 20,
+            isReaderScrolling: false,
+            paneChanged: false,
+            insetChanged: false,
+            isDrivingFollow: false
+        )
+        #expect(pinned, "内容长高一行不是读者在翻页")
+
+        let driving = TerminalCollectionView.pinAfterScroll(
+            isPinned: true,
+            distanceFromBottom: 300,
+            isReaderScrolling: false,
+            paneChanged: false,
+            insetChanged: false,
+            isDrivingFollow: true
+        )
+        #expect(driving, "我们自己的滑行途中离底很远，那不是读者松手了")
+    }
+
+    /// 画布变矮仍然只能把跟随粘得更牢，解不开它。
+    ///
+    /// 键盘升起时 UIKit 会把 offset 钳回新的合法区间，那一下和读者往上翻长得一模一样。
+    /// 认错就等于跟随被永久关掉：键盘或面板开着的时候新输出全落在屏幕外面。
+    @Test func aLayoutChangeCannotUnpinTheFollow() {
+        for changed in [(pane: true, inset: false), (pane: false, inset: true)] {
+            let pinned = TerminalCollectionView.pinAfterScroll(
+                isPinned: true,
+                distanceFromBottom: 200,
+                isReaderScrolling: false,
+                paneChanged: changed.pane,
+                insetChanged: changed.inset,
+                isDrivingFollow: false
+            )
+            #expect(pinned, "布局引起的那一格不是读者的手")
+
+            let alreadyOff = TerminalCollectionView.pinAfterScroll(
+                isPinned: false,
+                distanceFromBottom: 200,
+                isReaderScrolling: false,
+                paneChanged: changed.pane,
+                insetChanged: changed.inset,
+                isDrivingFollow: false
+            )
+            #expect(alreadyOff == false, "布局回调也不该把读者已经解开的跟随重新扣上")
+        }
+    }
+
+    /// 回到最底就重新跟上，点状态栏回顶部仍然解除。
+    ///
+    /// 紧的那一档不能紧到「再也回不来」：读者拖回底部、或者往下甩到最底，跟随要恢复。
+    /// 而状态栏回顶部不是读者的手，它走的是另一条路径 —— 那条路上离底几百点，照旧解除。
+    @Test func theFollowResumesAtTheBottomAndStillYieldsAtTheTop() {
+        let back = TerminalCollectionView.pinAfterScroll(
+            isPinned: false,
+            distanceFromBottom: 0,
+            isReaderScrolling: true,
+            paneChanged: false,
+            insetChanged: false,
+            isDrivingFollow: false
+        )
+        #expect(back, "读者把画面拖回最底，跟随要接上")
+
+        let top = TerminalCollectionView.pinAfterScroll(
+            isPinned: true,
+            distanceFromBottom: 600,
+            isReaderScrolling: false,
+            paneChanged: false,
+            insetChanged: false,
+            isDrivingFollow: false
+        )
+        #expect(top == false, "点状态栏回到顶部之后，新输出不该把读者拽回去")
+    }
+
     /// 插值不冲过目标。
     ///
     /// 冲过去就是一次回弹，屏幕上比原来那记硬跳还糟。单调收敛是这条的性质本身，
