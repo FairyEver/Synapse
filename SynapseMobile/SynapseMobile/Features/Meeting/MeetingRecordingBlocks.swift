@@ -50,9 +50,9 @@ nonisolated enum MeetingAudio {
 
     /// 录音页那条滚动波形的柱宽与间距，与电脑端同一组数。
     ///
-    /// **不与实时活动共用**：锁屏和灵动岛上那条已经改成语音备忘录那种圆点（见
-    /// `RecordingActivityLimits` 的 `dotWidth` / `dotGap`）。两处是两种画法，不该再
-    /// 互相引用——共用会让改一边就动到另一边，而它们本来就要长得不一样。
+    /// **只属于录音页**：锁屏和灵动岛上那条曾按同一组数画过一段时间的圆点，2026-09-20
+    /// 连波形一起删掉了（见 `RecordingLiveActivityWidget`）。实时活动现在不画任何波形，
+    /// 所以这里没有第二处要跟它对齐。
     static let barWidth = 1.5
     static let barGap = 1.1
 

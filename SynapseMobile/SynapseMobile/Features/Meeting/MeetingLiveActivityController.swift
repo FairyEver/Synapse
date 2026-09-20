@@ -3,7 +3,7 @@ import Foundation
 import Observation
 import os
 
-/// 把正在录的那一条搬到系统里：锁屏实时活动、灵动岛、以及它们上面的取消 / 完成。
+/// 把正在录的那一条搬到系统里：锁屏实时活动、灵动岛、以及它们上面那枚停止键。
 ///
 /// 它不参与录音本身，只做一件事：跟着录音的状态走。所以它是一台**同步器**而不是一组
 /// 回调——录音开始它就起来，录音结束它就收掉。这样「谁先谁后」这类问题不存在：任何
@@ -38,7 +38,6 @@ final class MeetingLiveActivityController {
         case .recording, .paused:
             let state = RecordingActivityAttributes.ContentState(
                 elapsedSeconds: session.elapsedMs / 1000,
-                levels: recentLevels(session.levels),
                 pausedReason: session.phase == .paused ? "录音已暂停，麦克风被其他应用占用" : nil
             )
             if let activity {
@@ -62,7 +61,7 @@ final class MeetingLiveActivityController {
         }
         do {
             activity = try Activity.request(
-                attributes: RecordingActivityAttributes(startedAt: Date(), title: title),
+                attributes: RecordingActivityAttributes(title: title),
                 content: ActivityContent(state: state, staleDate: nil)
             )
             isLive = true
@@ -82,18 +81,5 @@ final class MeetingLiveActivityController {
         guard let activity else { return }
         self.activity = nil
         Task { await activity.end(nil, dismissalPolicy: .immediate) }
-    }
-
-    /// 展开态那条点阵要的振幅。
-    ///
-    /// 录音页留的是最近 5 秒、每 28 毫秒一个（约 180 个）。实时活动那条点阵按固定点宽
-    /// 一整行排下来，播放头左边放得下三四十颗，所以这里按槽位数重新分桶、每桶取最大值
-    /// ——和回放波形同一套读法。
-    ///
-    /// 末了压到三位小数：这份载荷**每一秒推一次**，而画一根 1.5 pt 宽的柱子用不上
-    /// 小数点后十位，多的位数只是让每次更新多背几百字节。
-    private func recentLevels(_ levels: [Double]) -> [Double] {
-        resamplePlaybackPeaks(levels, columns: RecordingActivityLimits.levelCount)
-            .map { (($0 * 1000).rounded()) / 1000 }
     }
 }

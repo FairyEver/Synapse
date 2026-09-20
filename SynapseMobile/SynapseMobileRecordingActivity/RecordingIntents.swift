@@ -2,8 +2,8 @@ import ActivityKit
 import AppIntents
 import Foundation
 
-/// 四个入口共用同一份意图：实时活动上的取消 / 完成、控制中心的控件、主屏长按图标
-/// 的快捷操作、以及 Siri。
+/// 几个入口共用同一份意图：实时活动上的停止、控制中心的控件、主屏长按图标的快捷操作、
+/// 以及 Siri。
 enum RecordingIntentAction {
     case start
     case finish
@@ -12,8 +12,8 @@ enum RecordingIntentAction {
 
 /// 点开锁屏和灵动岛上那张卡时走的那条链接。
 ///
-/// 卡片本身不是按钮：它**点一下要开 App 的录音界面**，不是把这一条结束掉（结束是那两个
-/// 按钮的事）。Apple 给的机制就是这条——按钮之外的区域贴一个 `widgetURL`，要开 App 走
+/// 卡片本身不是按钮：它**点一下要开 App 的录音界面**，不是把这一条结束掉（结束是那枚
+/// 停止键的事）。Apple 给的机制就是这条——按钮之外的区域贴一个 `widgetURL`，要开 App 走
 /// 链接，要做事走 App Intent，两者不要互相冒充。
 ///
 /// 用产品已有的 `synapse://` 命名空间，host 就是这条路由的名字，和 `synapse://threads/<id>`、
@@ -117,7 +117,12 @@ struct FinishRecordingIntent: LiveActivityIntent {
     }
 }
 
-/// 丢掉这一段。锁屏和灵动岛上的「取消」走它。为什么是 `LiveActivityIntent`，见上。
+/// 丢掉这一段。
+///
+/// **界面上暂时没有入口**：2026-09-20 锁屏和灵动岛各只留了一枚停止键，原来那柄取消的叉
+/// 撤了（取消只能在 App 内做）。这个意图留着是因为它是公开的 App Intent——快捷指令和 Siri
+/// 仍然能挑到它，`RecordingIntentRouter` 也照常认 `.cancel`。哪天要在别处再放一个「丢弃
+/// 这一段」的按钮，直接接它就行，不用重写。
 struct CancelRecordingIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "取消录音"
 
