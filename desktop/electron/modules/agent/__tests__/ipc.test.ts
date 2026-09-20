@@ -793,6 +793,9 @@ describe("agentIpcModule", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  // Creating 4,097 entries and then walking them is filesystem-bound: ~0.4s on macOS, but measured
+  // at 5.0s on the Windows release runner, right on the 5s default. The budget assertion is the
+  // point of this test, so give the slow filesystem room instead of shrinking what it stages.
   it("blocks directory attachments that exceed the aggregate scan entry budget", async () => {
     const realTmpDir = await fs.realpath(tmpdir())
     const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-wide-"))
@@ -817,7 +820,7 @@ describe("agentIpcModule", () => {
     }
 
     expect(send).not.toHaveBeenCalled()
-  })
+  }, 30_000)
 
   it("blocks directory attachments that exceed the scan depth limit", async () => {
     const realTmpDir = await fs.realpath(tmpdir())
