@@ -39,6 +39,22 @@ struct DiagnosticLogView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                // 各域占用。只列有内容的 —— 一个字节都没写的域不占一行，而"某一路
+                // 永远是空的"恰恰是这套机制最安静的失效方式（不报错、不崩，只是那条
+                // 线索永远不在）。要分辨"没发生"与"没接上"，这一行就是全部依据。
+                let used = DiagnosticLane.allCases.filter { snapshot.bytes(in: $0) > 0 }
+                if !used.isEmpty {
+                    LabeledContent("各域占用") {
+                        Text(used.map { lane in
+                            "\(lane.rawValue) "
+                                + ByteCountFormatter.string(
+                                    fromByteCount: Int64(snapshot.bytes(in: lane)),
+                                    countStyle: .file
+                                )
+                        }.joined(separator: " · "))
+                        .foregroundStyle(.secondary)
+                    }
+                }
             } footer: {
                 Text("记录崩溃、网络与终端交互的元数据，以及每一路各占多少。")
             }
