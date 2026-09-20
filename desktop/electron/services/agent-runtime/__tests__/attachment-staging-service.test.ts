@@ -15,7 +15,11 @@ import {
 } from "../attachment-staging-service"
 import { directoriesForPathAttachments } from "../attachments"
 
-describe("AttachmentStagingService", () => {
+// Every case here stages attachments into controlled storage, and staging fsyncs each file it writes.
+// That is cheap on macOS but expensive on Windows CI runners, where the same suite has been measured
+// from 1.7s to 9.9s for identical work — well past the 5s default. The assertions are the point, so
+// give this filesystem-bound suite room rather than thinning out what it writes.
+describe("AttachmentStagingService", { timeout: 30_000 }, () => {
   it("stages 50 images while returning references without image bytes", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-staging-"))
     try {
