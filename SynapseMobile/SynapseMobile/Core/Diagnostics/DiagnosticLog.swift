@@ -109,10 +109,27 @@ nonisolated enum DiagnosticLog {
         state.sink?.snapshot() ?? DiagnosticFileSink.Snapshot(status: .disabled)
     }
 
+    /// 导出一个压缩包。**是 async 的**：打包要压缩，而压缩是 CPU 活。
+    ///
+    /// 从前的实现在主线程上 `queue.sync` 拼文件，几 MiB 拼接会卡住那一下；
+    /// 里面再叠一层 deflate 就不是"卡一下"了。现在整件事排在 sink 自己那条队列上。
     @MainActor
-    static func export() -> URL? {
+    static func export() async -> URL? {
         guard let sink = state.sink else { return nil }
-        return sink.export(header: DiagnosticEnvironment.exportHeader(counters: sink.snapshot()))
+        let snapshot = sink.snapshot()
+        // 目前恒为 false：屏幕内容的采集在下一步接上（`capturesContent` 开关与
+        // `captureScreen(_:)`）。导出如实说"不含"比先说"含"要诚实。
+        let includesTerminalContent = false
+        return await sink.export(
+            header: DiagnosticEnvironment.exportHeader(
+                counters: snapshot,
+                includesTerminalContent: includesTerminalContent
+            ),
+            manifest: DiagnosticEnvironment.exportManifest(
+                includesTerminalContent: includesTerminalContent,
+                snapshot: snapshot
+            )
+        )
     }
 
     /// 删掉全部日志。**不关开关** —— 用户按下的是"把已有的删掉"，不是"以后别记了"，

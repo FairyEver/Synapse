@@ -23,6 +23,17 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     /// 那一批是**混合的**（缓冲区不分域），所以不能让它冒充 crash 路自己的记录。
     static let crashBatchNotice = "# 以下为崩溃时从缓冲区取出的未落盘记录，可能来自其它域\n"
 
+    /// 导出取多少。
+    ///
+    /// 磁盘上最多留 10 MiB，而一次复现需要的窗口只有几分钟 —— 取少一点，包就小一点，
+    /// 发出去也快一点。这些数按**原始字节**算，压缩之后通常只剩五分之一到十分之一。
+    enum DiagnosticExportLimits {
+        /// 单路取多少。net / term 两路最吵，额度和它们各自的磁盘配额一样大。
+        static let bytesPerLane = 512 << 10
+        /// 全部加起来。加上 README 与 manifest 之后仍然远小于磁盘上那份。
+        static let totalRawBytes = 2_500 << 10
+    }
+
     enum Status: String, Sendable {
         case running = "记录中"
         case paused = "已暂停"
@@ -74,6 +85,8 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var paused = false
     private var started = false
+    /// 上一次导出的产物，下次导出前删掉。只在队列上读写。
+    private var lastExportURL: URL?
 
     init?(
         directory base: URL? = nil,
@@ -396,51 +409,110 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         }
     }
 
-    /// 导出一个可以直接发出去的文件。
+    /// 导出一个可以直接发出去的压缩包。
     ///
-    /// 只取最近 3 MiB：整份可以到 10 MiB，而一次复现需要的窗口只有几分钟。
-    /// 截断了就在头部写明，不让人以为自己拿到的是全部。
+    /// **裁剪必须在压缩之前做。** 反过来（先压再按包大小裁）产物的大小就依赖可压缩性，
+    /// 同一份日志在不同内容下裁掉的量完全不同 —— 一个说不清行为的上限，不如一个算得清
+    /// 的。所以按原始字节裁，再由"STORED 保证条目 ≤ 原始、deflate 保证 ≤ 原始 + 0.1%"
+    /// 推出包的上界；不需要"超了就再裁一轮"的循环。
     ///
-    /// 每一行自己带着事件名（`net.frame` / `term.rows`），所以不必再按路加分隔标记 ——
-    /// 哪一行属于哪一路，读的时候就看得到。
-    func export(header: String, maxBytes: Int = 3 << 20) -> URL? {
-        queue.sync {
-            let files = DiagnosticLane.allCases
-                .flatMap { lane in
-                    listFiles(in: lane).map { (lane: lane, info: $0) }
-                }
-                .sorted { $0.info.modified < $1.info.modified }
-            var body = Data()
-            var included = 0
+    /// 每一行自己带着事件名（`net.frame` / `term.rows`），所以包里不必再加分隔标记。
+    func export(
+        header: String,
+        manifest: DiagnosticExportManifest
+    ) async -> URL? {
+        await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                continuation.resume(returning: self?.exportNow(header: header, manifest: manifest))
+            }
+        }
+    }
+
+    private func exportNow(header: String, manifest: DiagnosticExportManifest) -> URL? {
+        var remaining = DiagnosticExportLimits.totalRawBytes
+        var entries: [DiagnosticZip.Entry] = []
+        var manifest = manifest
+
+        for lane in DiagnosticLane.allCases {
+            guard remaining > 0 else { break }
+            let files = listFiles(in: lane).sorted { $0.modified < $1.modified }
+            guard !files.isEmpty else { continue }
+
+            var budget = min(DiagnosticExportLimits.bytesPerLane, remaining)
+            var laneEntries: [DiagnosticZip.Entry] = []
             var truncated = false
-            for entry in files.reversed() {
-                let url = laneDirectory(entry.lane).appendingPathComponent(entry.info.name)
-                guard let data = try? Data(contentsOf: url) else { continue }
-                if body.count + data.count > maxBytes {
-                    let room = max(0, maxBytes - body.count)
-                    body.insert(contentsOf: data.suffix(room), at: 0)
+            // 从新到旧取，直到这一路的预算用完。最后一个文件允许只取**尾部** ——
+            // 那是"最近发生的"，也正是要发出去的东西。
+            for file in files.reversed() {
+                guard budget > 0 else {
                     truncated = true
                     break
                 }
-                body.insert(contentsOf: data, at: 0)
-                included += 1
+                let url = laneDirectory(lane).appendingPathComponent(file.name)
+                guard let data = try? Data(contentsOf: url), !data.isEmpty else { continue }
+                let taken: Data
+                if data.count <= budget {
+                    taken = data
+                } else {
+                    taken = Data(data.suffix(budget))
+                    truncated = true
+                }
+                budget -= taken.count
+                remaining -= taken.count
+                laneEntries.append(.init(
+                    name: "\(lane.directoryName)/\(file.name)",
+                    data: taken,
+                    modified: file.modified
+                ))
+                if truncated { break }
             }
-            guard !body.isEmpty else { return nil }
 
-            let stamp = DiagnosticLineRenderer.timestamp(Date())
-                .replacingOccurrences(of: ":", with: "-")
-                .replacingOccurrences(of: " ", with: "_")
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("synapse-diagnostics-\(stamp).txt")
-            var text = header
-            if truncated || included < files.count {
-                text += "# 只包含最近的日志，更早的没有包含在内\n"
-            }
-            var payload = Data(text.utf8)
-            payload.append(body)
-            guard (try? payload.write(to: url)) != nil else { return nil }
-            return url
+            guard !laneEntries.isEmpty else { continue }
+            entries.append(contentsOf: laneEntries.reversed())
+            manifest.lanes.append(.init(
+                lane: lane.rawValue,
+                files: laneEntries.count,
+                bytes: laneEntries.reduce(0) { $0 + $1.data.count },
+                truncated: truncated
+            ))
         }
+
+        guard !entries.isEmpty else { return nil }
+
+        if let previous = previousSessionTail() {
+            manifest.previousSession = .init(
+                lastEvent: previous.event,
+                lastAt: previous.timestamp,
+                closedCleanly: false
+            )
+        }
+
+        let stamp = DiagnosticLineRenderer.timestamp(Date())
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: " ", with: "_")
+        // 包里再套一层同名目录：解压出来的人不会把一堆 .log 直接撒进他当前那层目录，
+        // 而"这一包是什么"从目录名上就读得到。
+        let root = "synapse-diagnostics-\(stamp)"
+        var all: [DiagnosticZip.Entry] = [
+            .init(name: "\(root)/README.txt", data: Data(header.utf8)),
+            .init(name: "\(root)/manifest.json", data: Data(DiagnosticExportManifest.encode(manifest).utf8)),
+        ]
+        all.append(contentsOf: entries.map {
+            DiagnosticZip.Entry(name: "\(root)/\($0.name)", data: $0.data, modified: $0.modified)
+        })
+
+        guard let archive = DiagnosticZip.archive(all) else { return nil }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(root).zip")
+        // 上一次导出的产物还躺在 tmp 里。导出会重复发生（发一次不够就再发一次），
+        // 不清理的话每一份都留到系统回收为止。
+        if let previousExport = lastExportURL, previousExport != url {
+            try? FileManager.default.removeItem(at: previousExport)
+        }
+        guard (try? archive.write(to: url)) != nil else { return nil }
+        lastExportURL = url
+        return url
     }
 
     /// 连目录一起删掉，下次写入时惰性重建。

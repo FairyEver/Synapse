@@ -174,8 +174,95 @@ struct DiagnosticFileSinkTests {
         #expect(second.previousSessionTail() == nil, "正常收尾的会话被误判成了崩溃")
     }
 
-    /// 导出的文件带头部、能被读回来，并且**不因为读不到就崩**。
-    @Test func exportProducesAShareableFile() throws {
+    private func manifest(includesTerminalContent: Bool = false) -> DiagnosticExportManifest {
+        DiagnosticExportManifest(
+            exportedAt: "2026-09-20T21:00:00Z",
+            timeZone: "Asia/Shanghai",
+            app: .init(version: "1.0.8", build: "23"),
+            device: .init(model: "iPhone17,1", name: "测试机"),
+            os: "26.0",
+            includesTerminalContent: includesTerminalContent,
+            counters: .init(written: 1, dropped: 0, overwritten: 0),
+            redaction: .init(markers: ["[redacted]", "[key]"], note: "测试")
+        )
+    }
+
+    /// 导出是一个能解开的压缩包：结构、README、manifest 都在，内容对得上。
+    @Test func exportProducesAShareableArchive() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.append(event: .launch, level: .info, fields: [])
+        sink.append(event: .frame, level: .info, fields: [.init(.bytes, .int(1_200))])
+        sink.flushForTesting()
+
+        let url = try #require(await sink.export(header: "# 测试头部\n", manifest: manifest()))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(url.pathExtension == "zip")
+
+        let read = try ZipReader(try Data(contentsOf: url))
+        #expect(read.corrupt.isEmpty, "包里有 CRC 对不上的条目：\(read.corrupt)")
+
+        // 解压出来再套一层同名目录：不会把一堆 .log 直接撒进解压的人那层目录里。
+        let root = try #require(read.items.first?.name.split(separator: "/").first.map(String.init))
+        #expect(root.hasPrefix("synapse-diagnostics-"))
+
+        let names = Set(read.items.map(\.name))
+        #expect(names.contains("\(root)/README.txt"))
+        #expect(names.contains("\(root)/manifest.json"))
+        #expect(names.contains { $0.hasPrefix("\(root)/app/") && $0.hasSuffix(".log") })
+        #expect(names.contains { $0.hasPrefix("\(root)/net/") && $0.hasSuffix(".log") })
+
+        let readme = try #require(read.items.first { $0.name.hasSuffix("README.txt") })
+        #expect(String(decoding: readme.data, as: UTF8.self).hasPrefix("# 测试头部"))
+
+        let manifestItem = try #require(read.items.first { $0.name.hasSuffix("manifest.json") })
+        let json = try #require(
+            try JSONSerialization.jsonObject(with: manifestItem.data) as? [String: Any]
+        )
+        #expect(json["schema"] as? Int == 1)
+        #expect(json["includesTerminalContent"] as? Bool == false)
+        let lanes = try #require(json["lanes"] as? [[String: Any]])
+        #expect(lanes.contains { $0["lane"] as? String == "app" && $0["truncated"] as? Bool == false })
+        #expect(lanes.contains { $0["lane"] as? String == "net" })
+
+        // 内容真的在包里，不是只有一个空壳。
+        let appFile = try #require(read.items.first { $0.name.hasPrefix("\(root)/app/") })
+        #expect(String(decoding: appFile.data, as: UTF8.self).contains("app.launch"))
+    }
+
+    /// **最要紧的那条不变量的另一半**：canary 也不许出现在压缩包里。
+    ///
+    /// 必须在**解压之后**搜。压缩字节里碰巧出现 canary 子串的概率极低，但极低不等于零 ——
+    /// 而这条断言要的是"交出去的东西里没有它"，那就得看交给别人的那副样子。
+    @Test func canariesNeverReachTheArchive() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let canary = "canary-must-not-ship-3c9a"
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.append(event: .networkError, level: .error, fields: [
+            .init(.reason, .message(RedactedMessage(redacting: "Bearer \(canary)"))),
+        ])
+        sink.flushForTesting()
+
+        let url = try #require(await sink.export(header: "# 头部\n", manifest: manifest()))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let read = try ZipReader(try Data(contentsOf: url))
+
+        for item in read.items {
+            let text = String(decoding: item.data, as: UTF8.self)
+            #expect(!text.contains(canary), "\(item.name) 里带着 canary")
+        }
+    }
+
+    /// 上一次导出的产物会被下一次删掉。
+    ///
+    /// 导出会重复发生（发一次不够就再发一次），不清理的话 tmp 里每导一次多留一份。
+    @Test func exportingAgainReplacesThePreviousArtifact() async throws {
         let directory = makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -184,11 +271,27 @@ struct DiagnosticFileSinkTests {
         sink.append(event: .launch, level: .info, fields: [])
         sink.flushForTesting()
 
-        let url = try #require(sink.export(header: "# 测试头部\n"))
-        defer { try? FileManager.default.removeItem(at: url) }
-        let content = try String(contentsOf: url, encoding: .utf8)
-        #expect(content.hasPrefix("# 测试头部"))
-        #expect(content.contains("app.launch"))
+        let first = try #require(await sink.export(header: "# 一\n", manifest: manifest()))
+        // 时间戳按秒，同一秒内两次导出会撞成同一个文件名 —— 那就换个戳再导，
+        // 否则这条用例验的是"同名没被删"（那本来也不该删）。
+        try await Task.sleep(for: .milliseconds(1_100))
+        let second = try #require(await sink.export(header: "# 二\n", manifest: manifest()))
+
+        #expect(first != second)
+        #expect(!FileManager.default.fileExists(atPath: first.path), "上一次的产物还在")
+        #expect(FileManager.default.fileExists(atPath: second.path))
+        try? FileManager.default.removeItem(at: second)
+    }
+
+    /// 没有内容可导时返回 nil，而不是一个空包。
+    @Test func nothingToExportYieldsNoArchive() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        // 刻意不 start()：一个字节也没写过。
+        let url = await sink.export(header: "# 头部\n", manifest: manifest())
+        #expect(url == nil, "什么都没有却导出了一个包")
     }
 
     /// 每一路写进自己的文件，互不串门。

@@ -176,7 +176,8 @@ struct DiagnosticZipTests {
 ///
 /// 刻意写得笨：它唯一的工作是**独立于写入端**把字节解回来，所以宁可逐字段搬规范，
 /// 也不复用写入端的任何常量或函数。
-private struct ZipReader {
+/// 同一测试目标里 `DiagnosticFileSinkTests` 也在用它验导出包的内部结构。
+struct ZipReader {
     struct Item {
         let name: String
         let data: Data
@@ -283,10 +284,10 @@ private struct ZipReader {
     }
 }
 
-private func readU16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
+func readU16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
     UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8)
 }
 
-private func readU32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+func readU32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
     UInt32(readU16(bytes, offset)) | (UInt32(readU16(bytes, offset + 2)) << 16)
 }

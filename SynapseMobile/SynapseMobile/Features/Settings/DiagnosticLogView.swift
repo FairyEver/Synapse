@@ -81,11 +81,11 @@ struct DiagnosticLogView: View {
     }
 
     private func export() {
-        // 导出要读好几个文件、拼成一整份，在主线程上做会让这一下卡住。日志本来就
-        // 已经落在磁盘上了，多等这一会儿没有代价。
+        // 导出要读好几个文件、拼成一整份、再压成一个包。这些全排在日志自己那条
+        // 后台队列上，这里只等结果 —— 从前那层 `Task.detached` 是无效的（它会先跳回
+        // 主线程再同步阻塞）。
         Task {
-            let url = await Task.detached { DiagnosticLog.export() }.value
-            guard let url else { return }
+            guard let url = await DiagnosticLog.export() else { return }
             exportURL = url
         }
     }
