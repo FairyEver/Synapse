@@ -30,6 +30,7 @@ nonisolated final class DiagnosticBuffer: @unchecked Sendable {
             .terminalRows: 20,
             .frame: 4,
             .frameContent: 1,
+            .terminalInput: 1,
             .send: 2,
         ]
     }
@@ -219,6 +220,7 @@ nonisolated extension DiagnosticValue {
         case .title(let title): title.text.utf8.count
         case .route(let route): route.rawValue.utf8.count
         case .intent(let intent): intent.rawValue.utf8.count
+        case .captured(let captured): captured.text.utf8.count
         }
     }
 }

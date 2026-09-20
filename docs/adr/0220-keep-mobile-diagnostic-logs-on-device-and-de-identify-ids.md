@@ -49,14 +49,42 @@ problem feedback, a stricter and lossier channel where an identifier becomes
 `<session>` and stays anonymous. A diagnostic log needs the file to be internally
 coherent, which a single opaque placeholder would destroy.
 
-**3. Terminal content is not recorded, and the type system is what enforces it.**
+**3. Terminal content is recorded only behind an explicit switch, and one type is
+the only way in.**
+*(Revised 2026-09-20. Originally: terminal content was not recorded at all, and
+`DiagnosticValue` had no case that could accept an arbitrary string. Users asked for
+the content to be in the exported archive so a report can be checked against it, so
+that line moved — what replaced it is recorded here.)*
 
-`DiagnosticValue` has no case that accepts an arbitrary string. Values arrive as
-numbers, closed-enum labels, redacted messages, aliases, or the two names the user
-agreed to (device name, session title). Writing `row.text` into a field does not
-compile. This is deliberate: the failure mode being prevented is the *incidental*
-one — someone adds an event during a later change and reaches for the nearest
-string.
+`DiagnosticValue` has exactly one case that carries un-redacted user content:
+`.captured(CapturedText)`. Its only construction sites are `DiagnosticLog.captureScreen`
+and `DiagnosticLog.captureInput`; a source-level test walks the app target and fails
+if `CapturedText(` appears anywhere else. The remaining properties:
+
+- **A user-visible switch**, separate from the log's own. Off means the screen's rows
+  are not even built — the call sites pass a closure, and the gate runs before it.
+- **At most one record per second per direction**, gated at the call site.
+- **Three bounds**: 12 rows, 256 bytes per row, 2 KiB total.
+- **Redacted first.** The same rules as everything else; note that they recognise
+  `key=value` shapes and known token prefixes, so a password typed at a prompt does
+  not match anything. The export asks for confirmation and the archive states whether
+  it contains content, because that is the only place the user can still consent.
+
+The failure mode the old rule prevented was the *incidental* one — someone adds an
+event during a later change and reaches for the nearest string. That is now caught by
+the source-level test rather than by the compiler, which is weaker; it was accepted
+because the construction sites are two functions and the test names the file.
+
+**3b. The log is split into one file per domain, and the export is a ZIP.**
+
+`app/ term/ net/ env/ crash/ log/` under `Library/Caches/SynapseLogs/`, one rotation
+budget each, the total bounded by their sum. Terminal output is loud enough that a
+single file buries the network and lifecycle lines; the domain comes from the event
+name's prefix, so it cannot drift.
+
+The archive holds that structure plus `README.txt` and `manifest.json`, and the
+trimming happens before compression so the size bound is computable rather than
+hopeful. Nothing about "local-only, user-initiated, no automatic upload" changes.
 
 **4. The redaction rules mirror `log-store.ts`, including its `[redacted]` / `[key]`
 markers.**

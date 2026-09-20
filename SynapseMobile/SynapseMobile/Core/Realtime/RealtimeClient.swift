@@ -350,17 +350,6 @@ final class RealtimeClient {
     /// that path is `idle` → `connecting` — so a phone put down and picked up again
     /// does not buzz each time. Neither does the first connect of a launch, for the
     /// same reason.
-    /// 帧的语义 → 日志里的标签。协议加一种新的 kind 时走 `.other`，
-    /// 记录不丢，只是看不出来是哪一种。
-    private static func frameKindFlag(_ kind: String) -> DiagnosticFlag {
-        switch kind {
-        case "reset": .reset
-        case "suffix": .suffix
-        case "history": .history
-        default: .other
-        }
-    }
-
     private func markConnected() {
         let wasRecovering = state.isWaiting
         state = .connected
@@ -423,7 +412,7 @@ final class RealtimeClient {
                 let frame = payload.frame
                 DiagnosticLog.record(.frame, [
                     .init(.session, DiagnosticLog.alias(.session, frame.sessionId)),
-                    .init(.kind, .flag(Self.frameKindFlag(frame.kind))),
+                    .init(.kind, .flag(.frameKind(frame.kind))),
                     .init(.from, .int(frame.from)),
                     .init(.rowCount, .int(frame.lines.count)),
                     .init(.bytes, .int(data.count)),

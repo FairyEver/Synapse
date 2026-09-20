@@ -95,7 +95,7 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 - JSON 诊断导出必须先对结构化值脱敏再序列化，不得对序列化后的 JSON 字符串做路径替换；所有导出的 JSON 文件必须保持可解析。工具结果中的内嵌 Base64 图片只保留省略标记，不得进入 timeline、history 或诊断正文。
 - 相关修改必须用假 canary 回归测试 provider/side-channel token、Authorization/Bearer、Cookie、JSON `token`/`apiKey`、data-server token、`--env KEY=value` 不出现，普通 `/Users/...` 路径仍保留。
 - 手工验证只用假 canary，优先只打印、不 export、不写文件、不改配置；不得要求用户提供真实 token。
-- **手机端诊断日志（`SynapseMobile/Core/Diagnostics/`）同样受这一节约束**，另有三条自己的不变量：① 终端正文一个字节都不记——这条靠 `DiagnosticValue` 的类型系统保证（那种值类型里没有能装任意字符串的 case，`row.text` 塞进去编译不过），不得为了"多记一点好排查"给它加一个 String case；② 真实会话/电脑/项目 id 只用进程内的本地别名（`s1`/`d1`/`p1`），不得改用哈希、UUID 派生或任何可跨文件对照的稳定标识，别名表不得落盘；③ 日志放 `Library/Caches/SynapseLogs/` 而不是 Documents，不得移进会被 iCloud 备份的目录。日志只在本机产生、只在用户主动导出时经系统分享离开设备，不得新增自动上传路径。完整规格见 `docs/adr/0220-keep-mobile-diagnostic-logs-on-device-and-de-identify-ids.md`。
+- **手机端诊断日志（`SynapseMobile/Core/Diagnostics/`）同样受这一节约束**，另有三条自己的不变量：① `DiagnosticValue` 里能装未脱敏内容的只有 `case captured(CapturedText)` 一格，**再给它加第二个这样的 case 属于改变这条边界**；那一格的唯一构造点是 `DiagnosticLog.captureScreen` / `captureInput`，受一个用户可见的开关控制（关掉时连屏幕上的行都不会被拼出来），每秒至多一条、三重限长且先跑脱敏，导出的包与界面必须明示本次是否包含终端内容；② 真实会话/电脑/项目 id 只用进程内的本地别名（`s1`/`d1`/`p1`），不得改用哈希、UUID 派生或任何可跨文件对照的稳定标识，别名表不得落盘；③ 日志放 `Library/Caches/SynapseLogs/` 而不是 Documents，不得移进会被 iCloud 备份的目录。日志只在本机产生、只在用户主动导出时经系统分享离开设备，不得新增自动上传路径。完整规格见 `docs/adr/0220-keep-mobile-diagnostic-logs-on-device-and-de-identify-ids.md`。
 
 ## 工具输入、提问与事件关联
 

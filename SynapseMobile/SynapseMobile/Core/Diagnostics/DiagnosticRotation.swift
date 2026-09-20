@@ -107,6 +107,9 @@ nonisolated enum DiagnosticLineRenderer {
     /// 单条记录的上限。带栈的记录单独放宽 —— 栈是崩溃现场的全部。
     static let maxRecordBytes = 2 * 1024
     static let maxRecordBytesWithStack = 9 * 1024
+    /// 带屏幕内容的记录也是单独一档：一条内容记录本身就可能有 4 KiB，
+    /// 用 2 KiB 去截会把后面的字段整段吃掉。比照带栈的那一档先例。
+    static let maxRecordBytesWithCaptured = 6 * 1024
 
     static func render(_ record: DiagnosticRecord) -> String {
         var line = "\(timestamp(record.time)) \(letter(record.level)) \(record.event.rawValue)"
@@ -114,11 +117,16 @@ nonisolated enum DiagnosticLineRenderer {
             line += " #\(record.seq)"
         }
         var carriesStack = false
+        var carriesCaptured = false
         for entry in record.fields {
             if case .stack = entry.value { carriesStack = true }
+            if case .captured = entry.value { carriesCaptured = true }
             line += " \(entry.field.rawValue)=\(render(entry.value))"
         }
-        let cap = carriesStack ? maxRecordBytesWithStack : maxRecordBytes
+        // 取最宽的那一档。两者同时出现是不可能的（栈只在崩溃路径上），真出现时按栈算。
+        var cap = maxRecordBytes
+        if carriesCaptured { cap = maxRecordBytesWithCaptured }
+        if carriesStack { cap = maxRecordBytesWithStack }
         return DiagnosticText.clamp(line, to: cap)
     }
 
@@ -141,6 +149,7 @@ nonisolated enum DiagnosticLineRenderer {
         case .title(let title): quote(title.text)
         case .route(let route): route.rawValue
         case .intent(let intent): intent.rawValue
+        case .captured(let captured): quote(captured.text)
         }
     }
 

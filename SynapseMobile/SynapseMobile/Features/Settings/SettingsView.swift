@@ -103,7 +103,7 @@ struct SettingsView: View {
             } header: {
                 Text("诊断")
             } footer: {
-                Text("只记录崩溃、网络与终端交互的元数据，不记录你输入的命令和终端里的内容。")
+                Text("记录崩溃、网络与终端交互的元数据；终端屏幕内容可以单独关掉。")
             }
 
             Section {

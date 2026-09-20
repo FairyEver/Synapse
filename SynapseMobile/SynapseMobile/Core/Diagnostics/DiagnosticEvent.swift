@@ -68,6 +68,16 @@ nonisolated enum DiagnosticField: String, Sendable {
     case inputLength, isMultiline, hasAttachments, submitKind
     case screenName, action, entry
 
+    // MARK: 被取下来的内容
+    //
+    // 只有两个字段能装未脱敏的用户内容，而且它们只在开关打开后才会出现。
+    // 分成两个而不是一个：屏幕上的东西与发出去的东西在排查时是两个方向，
+    // 混在一个字段里读的时候还得靠事件名去猜。
+    /// 屏幕上当时可见的行。
+    case screenText
+    /// 发给电脑的内容：键入的命令、按下的键、递过去的文件路径。
+    case inputText
+
     // MARK: 日志子系统自己
     case droppedCount, droppedBytes, overwritten, totalCount, repeatCount, spanMs
 }

@@ -9,6 +9,8 @@ struct DiagnosticLogView: View {
     @State private var snapshot = DiagnosticLog.snapshot()
     @State private var exportURL: URL?
     @State private var showingDeleteConfirm = false
+    @State private var showingContentExportConfirm = false
+    @State private var capturesContent = DiagnosticLog.capturesContent
 
     var body: some View {
         List {
@@ -38,16 +40,35 @@ struct DiagnosticLogView: View {
                     }
                 }
             } footer: {
-                Text("只记录崩溃、网络与终端交互的元数据，不记录你输入的命令和终端里的内容。")
+                Text("记录崩溃、网络与终端交互的元数据，以及每一路各占多少。")
+            }
+
+            Section {
+                Toggle("记录终端屏幕内容", isOn: $capturesContent)
+                    .onChange(of: capturesContent) { _, value in
+                        DiagnosticLog.capturesContent = value
+                    }
+            } footer: {
+                Text("打开后会记下屏幕上的内容与你发给电脑的命令（每秒至多一条，先经脱敏）。"
+                    + "导出时的压缩包里会一并包含，并写明本次是否包含。")
             }
 
             Section {
                 Button {
-                    export()
+                    // 包含内容时先问一句。这份包是从微信发出去的，而"用户交出去的东西
+                    // 必须是他当场就知道的"是这件事唯一站得住的理由 —— 开关开着久了，
+                    // 按导出的人未必还记得自己当初打开过它。
+                    if capturesContent {
+                        showingContentExportConfirm = true
+                    } else {
+                        export()
+                    }
                 } label: {
                     Label("导出并分享", systemImage: "square.and.arrow.up")
                 }
                 .disabled(snapshot.fileCount == 0)
+            } footer: {
+                Text(capturesContent ? "本次导出包含终端屏幕内容。" : "本次导出不含终端屏幕内容。")
             }
 
             Section {
@@ -64,6 +85,12 @@ struct DiagnosticLogView: View {
             if let exportURL {
                 ActivityView(url: exportURL) { self.exportURL = nil }
             }
+        }
+        .alert("这份压缩包里包含终端屏幕内容", isPresented: $showingContentExportConfirm) {
+            Button("取消", role: .cancel) {}
+            Button("继续导出") { export() }
+        } message: {
+            Text("里面会有最近记下的终端屏幕内容与你发给电脑的命令。确认要分享时请注意发给谁。")
         }
         .alert("删除全部日志？", isPresented: $showingDeleteConfirm) {
             Button("取消", role: .cancel) {}

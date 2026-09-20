@@ -637,6 +637,12 @@ final class SynapseAppModel {
             let frame = payload.frame
             let store = self.store(for: frame.sessionId)
             store.apply(frame)
+            // 屏幕内容记在**这里**，不在 `RealtimeClient.handle`：上面那句已经滤掉了
+            // 「用户在看的不是这台电脑」，记在 handle 里会把别人电脑的屏幕也写进日志。
+            // 关着开关时连这些行都不会被拼出来 —— 那些行是闭包里取的。
+            DiagnosticLog.captureScreen(kind: .frameKind(frame.kind), session: frame.sessionId) {
+                frame.lines.map(\.text)
+            }
             // 与 `net.history.request` 配对。一页空的就是电脑说"没有更早的了"，
             // 而它在屏幕上和"请求丢了"长得一模一样 —— 只有这一对能分开它们。
             if frame.isHistory {
@@ -1640,7 +1646,25 @@ final class SynapseAppModel {
             .init(.request, DiagnosticLog.alias(.request, intent.intentId)),
             .init(.session, intent.sessionId.map { DiagnosticLog.alias(.session, $0) } ?? .redacted(.session)),
         ])
+        // 发给电脑的内容：键入的命令、按下的键、递过去的路径。其余 intent
+        // （attach / sync / resize / 拉历史…）是手机自己的动作，没有用户输入。
+        DiagnosticLog.captureInput(kind: DiagnosticIntent.named(intent.kind), session: intent.sessionId) {
+            Self.capturableText(of: intent)
+        }
         realtime.sendIntent(intent, desktopClientInstanceId: desktopClientInstanceId)
+    }
+
+    /// 一个 intent 里"用户发出去的东西"。没有用户输入的那种返回 nil —— 那正是
+    /// `captureInput` 用来决定要不要记一条的判据。
+    private static func capturableText(of intent: MobileIntentRequest) -> String? {
+        if let text = intent.text, !text.isEmpty { return text }
+        guard let actions = intent.actions, !actions.isEmpty else { return nil }
+        return actions.map { action in
+            switch action {
+            case .text(let value): value
+            case .key(let key): key.rawValue
+            }
+        }.joined(separator: " ")
     }
 
     /// intent 回执 → 日志里的结果标签。四档的判据与界面上那套完全一致 —— 不另定一套，

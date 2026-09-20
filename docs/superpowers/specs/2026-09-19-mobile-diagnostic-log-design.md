@@ -12,7 +12,7 @@
 
 | 决策 | 取值 | 理由 |
 |---|---|---|
-| 终端正文 | **一个字都不记** | 命令、输出、转写、剪贴板。这份文件要经微信发出去 |
+| 终端正文 | **默认开、但可关、每秒至多一条、三重限长、先脱敏** | 2026-09-20 改：用户要求导出包能自查，于是把"一个字都不记"换成了"记，但收窄到可控"。脱敏只认 `key=value` 与已知 token 前缀，**密码提示符下敲进去的密码认得出来才怪** —— 这是明确接受过的代价，用导出时的二次确认与包内的明示来抵 |
 | 默认开关 | **默认常开** | 用户复现一次不容易，"忘了先打开开关"是最没必要的浪费 |
 | 崩溃捕获 | 未捕获异常 + 崩溃前日志，**不装 signal handler** | 信号处理里能用的 API 极少，日志模块自己出错违背"不得卡死 App" |
 | 身份字段 | 记**设备名**与**会话标题**，**邮箱用占位符** | 前两者回答"哪台手机、哪个终端"；邮箱对定位问题毫无用处 |
@@ -29,9 +29,16 @@
 | `DiagnosticBuffer.swift` | 环形缓冲、采样、令牌桶、相邻合并 | 纯（时钟可注入） |
 | `DiagnosticRotation.swift` | 轮转/删除决策、记录渲染成单行 | 纯（不 import FileManager） |
 | `DiagnosticLog.swift` | 门面与开关 | 薄壳 |
-| `DiagnosticFileSink.swift` | 串行队列、fd、批量落盘、导出、删除 | 薄壳 |
+| `DiagnosticFileSink.swift` | 串行队列、每个域一份 fd、批量落盘、导出、删除 | 薄壳 |
 | `DiagnosticCrashHandler.swift` | 未捕获异常处理器 | 薄壳 |
-| `DiagnosticEnvironment.swift` | 设备与环境快照 | `@MainActor` |
+| `DiagnosticEnvironment.swift` | 设备与环境快照、`manifest.json` | `@MainActor` |
+| `DiagnosticZip.swift` | ZIP 容器（手写，零依赖） | 纯，只 import Foundation + Compression |
+| `DiagnosticCRC32.swift` | ZIP 每条记录的校验和 | 纯 |
+
+`DiagnosticZip` 刻意不 import FileManager、不认识日志、不认识域 —— 只认
+`Entry(name:data:modified:)` 数组、返回 `Data`。正因为边界这么窄，它能被 `swiftc`
+单独编译出来，在 macOS 上用真正的 `unzip -t`、Python `zipfile.testzip()` 与 `ditto -x -k`
+交叉验一遍。见 `DiagnosticZipTests` 里记的那套命令。
 
 UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的「诊断」一节。
 
@@ -39,11 +46,17 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 
 ## 关键决定
 
-### 「不记终端正文」由类型系统保证，不靠自觉
+### 正文的防线：从「编译不过」换成「只有一个入口 + 一条源码守卫」
 
-`DiagnosticValue` 里**没有**能直接装任意字符串的 case。值只能经数字、闭合枚举标签、脱敏后的消息、标识符别名，以及用户已同意记录的两个名字进来。于是调用点上想顺手写 `["text": row.text]` 是**编译不过**的。
+**（2026-09-20 修正。**原先这里写的是「`DiagnosticValue` 里没有能装任意字符串的 case，所以把终端正文当普通字段记下来编译不过」。用户后来要求导出包能自查，正文于是进了日志，那道防线让了出去。）
 
-诚实的边界：`DeviceName` 与 `SessionTitle` 接受裸字符串，`RedactedMessage` 也接受（但它先跑脱敏）。所以这挡的是**无意**泄漏 —— 想故意塞进 `SessionTitle(row.text)` 仍然写得出来，那要靠评审。真正要防的那个失误（把终端正文当普通字段记下来）被挡住了。
+现在是 `case captured(CapturedText)` 一格，配三样东西：
+
+1. **唯一入口**：`DiagnosticLog.captureScreen` / `captureInput`。参数是**复数行**（或一个闭包），`CapturedText(redacting: row.text)` 写不出来 —— `row.text` 是个 `String`。
+2. **一条源码级的守卫测试**（`DiagnosticContentCaptureTests.capturedTextIsOnlyConstructedInTwoPlaces`）：它遍历 App target，任何新出现的 `CapturedText(` 都会让它红。这是替代「编译不过」的东西，比评审可靠 —— 评审会漏，它不会。
+3. **开关 + 调用点采样闸**：关着的时候连那些行都不会被拼出来（闭包没被调用）；开着也每秒至多一条。
+
+诚实的边界：`DeviceName` / `SessionTitle` / `RedactedMessage` 仍接受裸字符串（后者先跑脱敏），而脱敏规则只认 `key=value` 形状与已知 token 前缀。**在密码提示符下敲进去的密码、`cat ~/.ssh/id_rsa` 的输出，都会原样进包。** 导出时会再问一句、包里会写明本次含不含，那是用户还能表示同意的最后一个地方。
 
 ### 并发：采样前置 + 锁 + 独立串行队列落盘
 
@@ -95,6 +108,45 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 | `term.zoomChanged` | 缩放前后、`isScrollEnabled` 前后、两个 pan 的开关 | 放大后滚动被关掉 |
 | `term.selection` | 阶段、锚点、`isScrollEnabled` | 长按进入选字 |
 | `term.gesture.outcome` | `didMoveScrollOffset` | 一次拖动**到底有没有让内容移动** |
+
+## 分域落盘
+
+`Library/Caches/SynapseLogs/<lane>/`，`lane ∈ {app, term, net, env, crash, log}`。
+域**由事件名的前缀派生**（`DiagnosticEvent.lane`），不是给每个事件手写一个属性 ——
+手写允许两个 `net.*` 被分到两路而没有任何机制报错，派生没有这个失败模式，
+配一条测试盯住前缀表闭合。
+
+每路一份配额，**总量由各配额之和保证**（≈9.5 MiB），不做跨域驱逐：跨域要从"哪些域
+可以让出空间"里选，那既破坏 `plan` 的纯函数性质，又让"哪一路丢了数据"变得不确定。
+顺带的收益是 crash 路有自己的额度，不会被输出洪峰轮转掉。
+
+`previousSessionTail()` 只读 app 路 —— 分域之后 net 路几乎总比 app 路新，按修改时间取
+全局最新文件会永远看不到 `app.sessionClose`，于是每次正常退出都被记成疑似崩溃。
+分域之前留在根目录的旧日志在 `init` 里同步收编进 `app/`（放在 `start()` 之后的话，
+升级后第一次启动反而读不到上一次会话）。
+
+## 导出
+
+一个 ZIP：`README.txt` + `manifest.json` + 六个域目录，包内再套一层同名目录。
+裁剪**在压缩之前**按原始字节做（单路 512 KiB、合计 2.5 MiB）—— 反过来产物大小就依赖
+可压缩性，同一份日志在不同内容下裁掉的量完全不同。有 STORED 兜底与 deflate 的上界，
+包的大小是可证的。
+
+`export()` 是 `async` 的：压缩是 CPU 活，从前那版在主线程上 `queue.sync` 拼文件。
+
+## 接口日志
+
+`net.*` 那一组：每一帧下行（kind/from/行数/字节/truncated）、进出站信封、连接生命周期、
+重连的**原因**、一次 REST 请求↔响应（路由家族 / 方法 / 状态码 / 时延 / 响应字节）、
+以及 intent 与回执的配对。最后那一对的往返时延就是两条相邻记录的时间戳之差，
+不必再维护一张"什么时候发的"表。
+
+**REST 只记路由家族，不记原始 path** —— `/mobile/devices/<id>`、`/meetings/<id>/audio-url`
+里都嵌着真实标识符。
+
+**请求体一个字节都不进日志**，连长度都不记：`/auth/login` 的体是 `email + password`，
+长度就是密码的长度。这句话写在 `APIClient.perform` 里，因为那正是下一个人会顺手加
+`.bytes` 的地方。
 
 ## 「滚不动」判读表
 
