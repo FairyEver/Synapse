@@ -650,6 +650,13 @@ final class SynapseAppModel {
         }
         realtime.onIntentResult = { [weak self] result in
             guard let self else { return }
+            // 记在**分流之前**：下面六条分支各自 return，挂在任何一条上都会有别的分支
+            // 漏掉 —— 自己发的那几条静默意图、文件中继的回执，都会从这里溜走。
+            DiagnosticLog.record(.intentResult, [
+                .init(.request, DiagnosticLog.alias(.request, result.intentId)),
+                .init(.outcome, .flag(Self.outcomeFlag(result))),
+                .init(.reason, .message(RedactedMessage(redacting: result.code ?? ""))),
+            ])
             if let sessionId = self.pendingHistory.removeValue(forKey: result.intentId) {
                 self.store(for: sessionId).endHistoryLoad()
             }
@@ -1624,7 +1631,26 @@ final class SynapseAppModel {
     }
 
     private func send(_ intent: MobileIntentRequest, to desktopClientInstanceId: String) {
+        // **全部 17 种 intent 的唯一漏斗** —— 打字、按键、拉历史、切格数、建会话、
+        // 删终端，一条都不落。和下面 `onIntentResult` 里那条配对，往返时延就是两条
+        // 相邻记录的时间戳之差，不必再维护一张"什么时候发的"表（那种表要在六条清理
+        // 路径上同步维护，漏一条就是内存泄漏）。
+        DiagnosticLog.record(.intent, [
+            .init(.intent, .intent(DiagnosticIntent.named(intent.kind))),
+            .init(.request, DiagnosticLog.alias(.request, intent.intentId)),
+            .init(.session, intent.sessionId.map { DiagnosticLog.alias(.session, $0) } ?? .redacted(.session)),
+        ])
         realtime.sendIntent(intent, desktopClientInstanceId: desktopClientInstanceId)
+    }
+
+    /// intent 回执 → 日志里的结果标签。四档的判据与界面上那套完全一致 —— 不另定一套，
+    /// 否则日志与屏幕上说的会是两件事。
+    private static func outcomeFlag(_ result: MobileIntentResult) -> DiagnosticFlag {
+        if result.isAccepted { return .ok }
+        if result.isNoOp { return .noop }
+        // `no_result` 是"电脑没给答复"，与"电脑拒绝了"要分开：前者可能只是链路丢了。
+        if result.code == "no_result" { return .timeout }
+        return .rejected
     }
 
     /// Asks the desktop for a fresh snapshot on this app's own behalf, not the

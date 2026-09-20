@@ -165,6 +165,10 @@ final class RealtimeClient {
         shouldStayConnected = false
         teardown()
         state = reason
+        DiagnosticLog.record(.disconnect, [
+            .init(.reason, .flag(reason == .unauthenticated ? .rejected : .disconnected)),
+            .init(.attempt, .int(reconnectAttempt)),
+        ])
     }
 
     /// Asks the cloud for a fresh snapshot. Sent on every reconnect because the
@@ -192,8 +196,21 @@ final class RealtimeClient {
         ) else {
             return intent.intentId
         }
-        task.send(.string(text)) { _ in }
+        send(text, kind: .intent, on: task)
         return intent.intentId
+    }
+
+    /// 所有出站信封的唯一出口。
+    ///
+    /// 三个 `socket.send` 收在这里而不是在 `LiveWire`（那在 `Core/Protocol`，是协议的
+    /// 编码层）上埋点 —— 诊断不该被引进一个只管编解码的地方。这里拿得到的是
+    /// **序列化之后的字节数**，那正是要量的东西。
+    private func send(_ text: String, kind: DiagnosticFlag, on socket: URLSessionWebSocketTask) {
+        DiagnosticLog.record(.send, [
+            .init(.kind, .flag(kind)),
+            .init(.bytes, .int(text.utf8.count)),
+        ])
+        socket.send(.string(text)) { _ in }
     }
 
     // MARK: - Socket lifecycle
@@ -219,7 +236,8 @@ final class RealtimeClient {
                 // computer until it was relaunched by hand.
                 await MainActor.run {
                     guard self.generation == current else { return }
-                    self.scheduleReconnect()
+                    // 到不了服务端，不是凭据的问题 —— 这条路径上账号还是登着的。
+                    self.scheduleReconnect(reason: .unavailable)
                 }
             case .unauthenticated:
                 await MainActor.run {
@@ -243,6 +261,7 @@ final class RealtimeClient {
         lastServerTrafficAt = Date()
         socket.resume()
 
+        DiagnosticLog.record(.connect, [.init(.attempt, .int(reconnectAttempt))])
         sendHello(on: socket)
         startHeartbeat(on: socket, generation: current)
         receiveLoop = Task { [weak self] in
@@ -260,7 +279,7 @@ final class RealtimeClient {
                 deviceName: deviceName
             )
         ) else { return }
-        socket.send(.string(text)) { _ in }
+        send(text, kind: .hello, on: socket)
     }
 
     private func startHeartbeat(on socket: URLSessionWebSocketTask, generation current: Int) {
@@ -277,14 +296,14 @@ final class RealtimeClient {
                     AppLog.realtime.warning(
                         "live socket went quiet for \(Int(silence), privacy: .public)s, reconnecting."
                     )
-                    self.scheduleReconnect()
+                    self.scheduleReconnect(reason: .timeout)
                     return
                 }
                 guard let text = LiveWire.text(
                     LiveMessageType.ping,
                     PingPayload(sentAt: ISO8601DateFormatter.wire.string(from: Date()))
                 ) else { continue }
-                socket.send(.string(text)) { _ in }
+                send(text, kind: .ping, on: socket)
             }
         }
     }
@@ -300,8 +319,8 @@ final class RealtimeClient {
                 handle(message)
             } catch {
                 guard generation == current else { return }
-                reportFailure(of: socket, error: error)
-                scheduleReconnect()
+                let status = reportFailure(of: socket, error: error)
+                scheduleReconnect(reason: .failed, status: status)
                 return
             }
         }
@@ -311,11 +330,15 @@ final class RealtimeClient {
     /// anything was wrong, and the two causes behind it need opposite reactions:
     /// a rejected handshake is a credential problem, a dropped socket is a network
     /// one. The HTTP status is what tells them apart, so it is worth having.
-    private func reportFailure(of socket: URLSessionWebSocketTask, error: Error) {
-        let status = (socket.response as? HTTPURLResponse).map { String($0.statusCode) } ?? "none"
+    @discardableResult
+    private func reportFailure(of socket: URLSessionWebSocketTask, error: Error) -> Int? {
+        let code = (socket.response as? HTTPURLResponse)?.statusCode
         AppLog.realtime.warning(
-            "live socket failed: \(error.localizedDescription, privacy: .public) (http=\(status, privacy: .public))"
+            "live socket failed: \(error.localizedDescription, privacy: .public) (http=\(code.map(String.init) ?? "none", privacy: .public))"
         )
+        // 也交给下面那条 `net.reconnectScheduled` 带上：一条故障只留一条记录，
+        // 而不是"失败了"和"准备重连"各占一条、读的人还要自己对起来。
+        return code
     }
 
     /// Marks the link up, and — when that ends an outage rather than opening the
@@ -327,9 +350,26 @@ final class RealtimeClient {
     /// that path is `idle` → `connecting` — so a phone put down and picked up again
     /// does not buzz each time. Neither does the first connect of a launch, for the
     /// same reason.
+    /// 帧的语义 → 日志里的标签。协议加一种新的 kind 时走 `.other`，
+    /// 记录不丢，只是看不出来是哪一种。
+    private static func frameKindFlag(_ kind: String) -> DiagnosticFlag {
+        switch kind {
+        case "reset": .reset
+        case "suffix": .suffix
+        case "history": .history
+        default: .other
+        }
+    }
+
     private func markConnected() {
         let wasRecovering = state.isWaiting
         state = .connected
+        // 一次连接成功本身没什么可看的，可它把「断了多久、试了几次才回来」钉住了 ——
+        // 那正是「终端忽然不动了」要回答的问题。
+        DiagnosticLog.record(.connected, [
+            .init(.attempt, .int(reconnectAttempt)),
+            .init(.kind, .flag(wasRecovering ? .reconnecting : .connected)),
+        ])
         if wasRecovering { Haptics.success() }
     }
 
@@ -378,6 +418,17 @@ final class RealtimeClient {
             }
         case LiveMessageType.mobileFrame:
             if let payload = payload(MobileFramePayload.self, from: data) {
+                // 每一帧一条：这是回答"电脑到底发了什么、发了多少"的唯一入口。
+                // 频率靠缓冲的采样表压（4/s），不在这里判断。
+                let frame = payload.frame
+                DiagnosticLog.record(.frame, [
+                    .init(.session, DiagnosticLog.alias(.session, frame.sessionId)),
+                    .init(.kind, .flag(Self.frameKindFlag(frame.kind))),
+                    .init(.from, .int(frame.from)),
+                    .init(.rowCount, .int(frame.lines.count)),
+                    .init(.bytes, .int(data.count)),
+                    .init(.truncated, .bool(frame.truncated)),
+                ])
                 onFrame?(payload)
             }
         case LiveMessageType.mobileIntentResult:
@@ -418,7 +469,12 @@ final class RealtimeClient {
         (try? Self.decoder.decode(PayloadEnvelope<T>.self, from: data))?.payload
     }
 
-    private func scheduleReconnect() {
+    /// - Parameter reason: 这一次为什么重连。**分开记才有用** —— 凭据被拒、对面不发
+    ///   东西了、连接自己失败了，在屏幕上都是同一句「等待网络」，而要查的方向完全不同。
+    private func scheduleReconnect(
+        reason: DiagnosticFlag = .unknownCause,
+        status: Int? = nil
+    ) {
         teardown(keepIntent: true)
         guard shouldStayConnected else {
             state = .idle
@@ -430,6 +486,14 @@ final class RealtimeClient {
         let base = min(2.0 * pow(2.0, Double(max(0, reconnectAttempt - 1))), 30.0)
         let delay = base + Double.random(in: 0...(base * 0.3))
         state = .waiting("网络中断，正在重连")
+
+        var fields: [DiagnosticEntry] = [
+            .init(.attempt, .int(reconnectAttempt)),
+            .init(.delayMs, .durationMs(Int(delay * 1_000))),
+            .init(.reason, .flag(reason)),
+        ]
+        if let status { fields.append(.init(.status, .int(status))) }
+        DiagnosticLog.record(.reconnectScheduled, fields)
 
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))

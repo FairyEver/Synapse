@@ -661,6 +661,33 @@ actor APIClient {
         authenticated: Bool,
         allowRefresh: Bool
     ) async throws -> Response {
+        // 一次 REST 请求 ↔ 响应。**一个 `defer` 覆盖全部出口**（包括抛出去的那些），
+        // 401 之后的重试会递归进这里，于是"重试过"这个事实白得一条记录。
+        //
+        // **字段里没有任何一项来自请求体。** 连 `encodedBody?.count` 都不记 ——
+        // `/auth/login` 的体是 `{"email":…,"password":…}`，它的长度就是密码的长度。
+        // 下一个人会想在这里顺手加一个 `.bytes`，所以这句话留在这儿而不是留在文档里。
+        let started = Date()
+        var recordedStatus: Int?
+        var recordedBytes: Int?
+        defer {
+            let elapsedMs = Int(Date().timeIntervalSince(started) * 1_000)
+            // 2xx 降到 debug：正常流量几乎不值得占位，而桶里剩下的位置要留给异常。
+            // 其余（含"连接都没成"的 0）走 error —— error 绕过令牌桶，故障风暴里不会丢。
+            let succeeded = recordedStatus.map { (200..<300).contains($0) } ?? false
+            DiagnosticLog.record(
+                .rest,
+                [
+                    .init(.route, .route(DiagnosticRoute.family(of: path))),
+                    .init(.method, .flag(Self.wireMethodFlag(method))),
+                    .init(.status, .int(recordedStatus ?? 0)),
+                    .init(.durationMs, .durationMs(elapsedMs)),
+                    .init(.bytes, .int(recordedBytes ?? 0)),
+                ],
+                level: succeeded ? .debug : .error
+            )
+        }
+
         if authenticated, accessToken == nil {
             _ = await refreshAccessToken()
         }
@@ -685,10 +712,12 @@ actor APIClient {
         } catch {
             throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
         }
+        recordedBytes = data.count
 
         guard let http = response as? HTTPURLResponse else {
             throw APIError(status: 0, code: "network", message: "服务器返回的数据无法读取。")
         }
+        recordedStatus = http.statusCode
 
         if http.statusCode == 401 || http.statusCode == 403, authenticated, allowRefresh {
             // One refresh and one retry, matching the desktop client.
@@ -721,6 +750,19 @@ actor APIClient {
             return try JSONDecoder().decode(Response.self, from: data)
         } catch {
             throw APIError(status: http.statusCode, code: "decode", message: "服务器返回了无法识别的数据。")
+        }
+    }
+
+    /// HTTP 方法 → 日志里的标签。认不出的走 `.other` —— 加一个方法却忘了这里，
+    /// 日志会显示 `other`，记录本身不会丢。
+    private static func wireMethodFlag(_ method: String) -> DiagnosticFlag {
+        switch method.uppercased() {
+        case "GET": .httpGet
+        case "POST": .httpPost
+        case "PUT": .httpPut
+        case "PATCH": .httpPatch
+        case "DELETE": .httpDelete
+        default: .other
         }
     }
 

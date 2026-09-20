@@ -84,6 +84,9 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     case rejected
     case timeout
     case unavailable
+    /// 电脑收下了，但本来就无事可做（例如重复的 attach）。它与 `ok` 分开，
+    /// 因为「发了没反应」和「发了但对面说不用做」在排查时是两件事。
+    case noop
     case unknown
 
     // MARK: 场景与连接
@@ -114,6 +117,7 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     case httpGet
     case httpPost
     case httpPut
+    case httpPatch
     case httpDelete
     /// 认不出的方法。HTTP 方法在 `APIClient` 里是字面量，加一个没见过的走这里。
     case other
