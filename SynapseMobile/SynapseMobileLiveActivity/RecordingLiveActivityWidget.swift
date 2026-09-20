@@ -75,19 +75,21 @@ struct RecordingLiveActivityWidget: Widget {
                 .activitySystemActionForegroundColor(.primary)
         } dynamicIsland: { context in
             DynamicIsland {
-                // 一行：左边是这条录音（名字压着计时），右边是停止键。传感器挖孔在中间，
-                // 内容只能贴着两头放。
+                // 一行：左边计时，右边停止键。传感器挖孔在中间，内容只能贴着两头放。
+                //
+                // 两个区域都**不自己加 padding**：灵动岛每一块都有系统给的默认 content
+                // margin（`contentMargins(_:_:for:)` 能改的正是它），Apple 的原话是内容要
+                // 和岛的形状同心、四周留一样的边距、别贴到边上。自己再塞一圈只会和默认值
+                // 叠加。两边都不加，计时和停止键的边距自然就是同一个数。
+                //
+                // 上下也不用管：区域内容默认垂直居中，一行里两件东西就落在同一条中线上。
+                // 上一版左边是「名字压着计时」的两行，计时被压得比右边那枚低一截——那才
+                // 是看着不齐的原因。
                 DynamicIslandExpandedRegion(.leading) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(context.attributes.title)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        RecordingTimer(state: context.state)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(RecordingPalette.accent)
-                    }
+                    RecordingTimer(state: context.state)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(RecordingPalette.accent)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     RecordingStopButton(diameter: RecordingButtonSize.expanded)
@@ -107,47 +109,37 @@ struct RecordingLiveActivityWidget: Widget {
     }
 }
 
-/// 锁屏那张卡：录音名、计时、一枚停止键。
+/// 锁屏那张卡：左边计时，右边一枚停止键。
 ///
-/// 只排两行。系统对锁屏形态的高度上限是 160 pt，超了会被截——元素少了之后这里反而宽裕，
-/// 所以计时给了 `.title`（比上一版的 `.title2` 大一档），停止键 52 pt。
+/// **一行，就这两件。** 上一版左边是「录音名 + 计时」竖着排、停止键另起一行居中，用户
+/// 看过真机之后要求把名字去掉、把时间挪到左边和停止键并排——这样一眼是「录了多久」和
+/// 「怎么停」，中间不再隔着一行空。
+///
+/// 对齐靠两件事：`HStack` 默认垂直居中，所以计时和 52 pt 的停止键落在同一条中线上；
+/// 外边距用 HIG 给锁屏形态定的那 14 pt（见 `RecordingActivityLimits.contentMargin`）。
+/// 系统对锁屏形态的高度上限是 160 pt，一行远够。
 private struct LockScreenRecordingView: View {
     let context: ActivityViewContext<RecordingActivityAttributes>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                RecordingTimer(state: context.state)
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(RecordingPalette.accent)
+                Spacer(minLength: 12)
+                RecordingStopButton(diameter: RecordingButtonSize.lockScreen)
+            }
+            // 被系统中断占着麦克风时才有的一行。此时计时是不动的，没有它这张卡看着像坏了。
             if let reason = context.state.pausedReason {
                 Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            HStack {
-                Spacer(minLength: 0)
-                RecordingStopButton(diameter: RecordingButtonSize.lockScreen)
-                Spacer(minLength: 0)
-            }
         }
         .padding(RecordingActivityLimits.contentMargin)
-    }
-
-    /// 计时和名字共处一行，但差着两档字重与字号。
-    ///
-    /// Apple 对实时活动的要求是「用大字号、中等以上的字重」，而这一行里真正要看的是
-    /// 计时——名字只是让人认出这是哪一条。计时用那一个红色，和红点、停止键是同一个。
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(context.attributes.title)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            RecordingTimer(state: context.state)
-                .font(.title)
-                .fontWeight(.semibold)
-                .foregroundStyle(RecordingPalette.accent)
-        }
     }
 }
 

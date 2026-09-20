@@ -43,7 +43,7 @@ final class MeetingLiveActivityController {
             if let activity {
                 Task { await activity.update(ActivityContent(state: state, staleDate: nil)) }
             } else {
-                request(title: session.title.isEmpty ? "新录音" : session.title, state: state)
+                request(state: state)
             }
             return false
         case .idle, .saving:
@@ -53,7 +53,7 @@ final class MeetingLiveActivityController {
         }
     }
 
-    private func request(title: String, state: RecordingActivityAttributes.ContentState) {
+    private func request(state: RecordingActivityAttributes.ContentState) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             // 用户关掉了实时活动。这不是错误，录音照常——只是系统里没有那一块。
             AppLog.recording.info("live activities are disabled for this device")
@@ -61,7 +61,7 @@ final class MeetingLiveActivityController {
         }
         do {
             activity = try Activity.request(
-                attributes: RecordingActivityAttributes(title: title),
+                attributes: RecordingActivityAttributes(),
                 content: ActivityContent(state: state, staleDate: nil)
             )
             isLive = true

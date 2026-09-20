@@ -7,8 +7,11 @@ import Foundation
 /// 这份文件**同时编进 App 和扩展**：`Activity.request` 由 App 发起，锁屏和灵动岛由
 /// 扩展渲染，两边必须是同一个类型。
 ///
-/// 静态那半只剩一个录音名。曾经还有一个录音开始时刻，是给锁屏那条点阵定位时间轴的——
-/// 点阵 2026-09-20 删掉之后没有人再读它，一并去了（见 `RecordingLiveActivityWidget`）。
+/// **静态那半现在是空的**，不是漏了。这里原本放着录音名和录音开始时刻，2026-09-20 两样
+/// 都删了：开始时刻是给锁屏那条点阵定位时间轴的，点阵先没；录音名紧接着也没了——用户
+/// 要求锁屏卡片和灵动岛都只留「时间 + 停止键」，名字在系统这一层没有显示位置（App 内
+/// 照常有）。留着不读的字段只会让下一个人以为它在哪儿用得着。真要用回来，加回一个
+/// `var title: String` 就够。
 struct RecordingActivityAttributes: ActivityAttributes {
     /// 会变的那部分。
     struct ContentState: Codable, Hashable {
@@ -17,9 +20,6 @@ struct RecordingActivityAttributes: ActivityAttributes {
         /// 有值代表正被系统中断占着麦克风，界面要照原样说明原因。
         var pausedReason: String?
     }
-
-    /// 列表里那条录音的名字，默认「新录音」。
-    var title: String
 }
 
 /// 实时活动的展示常量，两边共用。
