@@ -666,15 +666,35 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // is gone, so content that fits cannot be scrolled at all and this is a
             // no-op until there is genuinely more to follow.
             //
-            // This comes before the compensation below, and has to. A reader on the
-            // newest line is not holding a place in the buffer to be preserved: on a
-            // session long enough that the store is trimming its head, every frame
-            // both drops a line above them and adds one below, and preserving their
-            // place through the first half of that leaves them one line short of the
-            // tail for as long as the output lasts.
+            // 上方插入的行要**先补偿掉，再去跟随** —— 这一步不能省，也不能指望下面
+            // 那个滑行代劳。滑行走的是「离底部还差多远」，而上方插进来一整块之后，
+            // 那整块就凭空成了「还差的距离」：视口先当着读者的面跳回一页滚动历史（离底
+            // 一整个内容块的量），再花近一秒滑回来。屏幕上看就是「上下狂滚」，而输出
+            // 持续期间这块会一批接一批地插。
             //
-            // 这是唯一一条走插值的跟随路径 —— 新输出一批一批地到，一步一跳就是屏幕上
-            // 每 125 毫秒闪一下。别处（`reset`、切网格、inset 变化）仍然一次落位。
+            // 这不论证「谁先谁后」那个老问题：只插上方时，补偿后的偏移**正好等于**新的
+            // `bottomOffsetY`，`followNewestLine()` 的 `abs(target - from) <= 0.5` 直接
+            // 空转返回 —— 一步都不滑，比原样交给它更好。而「上方插一页」与「头部裁一行」
+            // 是两件不同的事，前者要补偿、后者不用，所以下面这段只认插入方向。
+            //
+            // 裁剪方向（`rowShift < 0`）不补：贴底读者的底部根本没动，补偿反而把他往上
+            // 推 `-rowShift` 行；而指数平滑越近越慢，补出来的这段距离可能永远够不到
+            // `followSettleDistance`，`settledSince` 就始终为 nil，逐帧驱动器在持续输出
+            // 期间再也不停 —— 那是屏幕按刷新率一直醒着。
+            if rowShift > 0 {
+                collectionView.contentOffset.y = offsetBefore
+                    + CGFloat(rowShift) * TerminalRowCell.rowHeight(for: fontSize)
+                // 上面那条直写 `contentOffset` 既不触发 `scrollViewDidScroll`、也不被
+                // `scrollTick` 看见 —— 不在这里记一笔，这一跳在日志里是完全隐形的。
+                DiagnosticLog.record(.terminalFollowGrab, [
+                    .init(.trigger, .flag(.aboveInserted)),
+                    .init(.rowShift, .int(rowShift)),
+                    .init(.offsetBefore, .scalar(Double(offsetBefore))),
+                    .init(.offsetAfter, .scalar(Double(collectionView.contentOffset.y))),
+                    .init(.contentSizeHeight, .scalar(Double(collectionView.contentSize.height))),
+                    .init(.boundsHeight, .scalar(Double(collectionView.bounds.height))),
+                ])
+            }
             followNewestLine()
         } else if rowShift != 0 {
             collectionView.contentOffset.y = offsetBefore

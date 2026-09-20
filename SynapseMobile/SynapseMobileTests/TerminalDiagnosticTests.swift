@@ -150,6 +150,12 @@ struct TerminalDiagnosticTests {
         view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
 
         // 有窗口才有滑行 —— 没有窗口时视图会有意退回一步落位。
+        //
+        // `animatesFollow` 也要摁成 true：它默认跟着系统的「减弱动态效果」走，而那是一个
+        // 跟着目标机走的环境量。开了它的模拟器上 `followNewestLine()` 整条走回落路径，
+        // 这条用例就会红在一个跟被测代码毫无关系的地方 —— 而它红得对，因为那时它验的
+        // 确实不是「滑行留下了痕迹」。
+        view.animatesFollow = true
         let window = UIWindow(frame: pane)
         window.addSubview(view)
         window.isHidden = false

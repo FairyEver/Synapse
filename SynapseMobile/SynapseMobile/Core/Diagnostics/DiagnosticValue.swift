@@ -110,6 +110,9 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     case layoutResize
     case zoomReset
     case userDrag
+    /// 一行也没有新到，但有一块行插在视口**上方**（一页滚动历史、快照的一块），
+    /// 视口离底部凭空远了一整块。贴底读者要先补偿掉这一块，再去跟随。
+    case aboveInserted
     case unknownCause
 }
 

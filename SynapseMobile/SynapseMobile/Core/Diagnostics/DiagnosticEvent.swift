@@ -51,6 +51,8 @@ nonisolated enum DiagnosticField: String, Sendable {
     case isDragging, isDecelerating, zoom, isScrollEnabled, requestsInFlight
     case trigger, offsetBefore, offsetAfter, distanceFromBottomBefore, wasPinned
     case zoomFrom, zoomTo, cvPanEnabled, canvasPanEnabled
+    /// 两次读取缓冲区之间，视口**上方**多了或少了几行。正数=上方插入，负数=头部裁剪。
+    case rowShift
 
     // MARK: 选字与手势
     case selectionPhase, anchorRow, anchorColumn, headRow, headColumn, longPressState

@@ -464,11 +464,72 @@ struct TerminalRestoreModeLayoutTests {
         #expect(visibleFrame(ofRow: 499, in: list)?.maxY == list.bounds.height)
     }
 
+    /// 上方插进来一整页滚动历史，贴底的读者当场上到新的最底 —— 不跳、也不滑。
+    ///
+    /// 这是「输出时上下狂滚」那一幕的成因：`apply` 里 `wasAtBottom` 那一支排在补偿
+    /// 之前，于是上方插入的行**一条也没被补偿**。视口离底部凭空远了一整块，而跟随滑的
+    /// 正是「离底部还差多远」—— 屏幕上先整段跳回一页更早的内容，再花近一秒滑回来；
+    /// 输出持续期间这块一批接一批地插，就一直上下滚。
+    ///
+    /// 必须挂着窗口：没有窗口时 `followNewestLine()` 会退化成一步落位，跳和滑长得一样，
+    /// 这条就分不出两种实现了。断言也不等滑行 —— 等完之后两种实现都落在底上，
+    /// 只有「apply 一返回就在底上」才说明那块距离是被补偿掉的、不是被滑掉的。
+    @Test func aPageOfHistoryAboveTheReaderIsCompensatedNotGlided() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(200..<400), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let window = inWindow(view)
+        defer { view.removeFromSuperview(); window.isHidden = true }
+
+        // 200 行插在视口上方，下面一行新的也没有。
+        view.apply(rows: lines(0..<400), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        #expect(
+            abs(list.contentOffset.y - view.bottomOffsetY) < 0.5,
+            "上方插入一整页之后视口没跟到底 —— 它会先跳回去，再当着读者的面滑回来"
+        )
+        #expect(!view.isFollowingPerFrame, "这段距离是被补偿掉的，没有距离要滑")
+        #expect(visibleFrame(ofRow: 399, in: list)?.maxY == list.bounds.height)
+    }
+
+    /// 头部裁剪的时候**不能**补偿，否则贴底的读者反而被推离底部。
+    ///
+    /// 上面那条的另一半，也是补偿条件为什么必须写成 `rowShift > 0` 的证明。裁剪方向
+    /// 贴底读者的底部本来就没动，补偿会把他往上推 `-rowShift` 行；而指数平滑越近越慢，
+    /// 补出来的这段距离可能永远够不到 `followSettleDistance`，`settledSince` 就始终为
+    /// nil，逐帧驱动器在持续输出期间再也不停 —— 屏幕按刷新率一直醒着。
+    ///
+    /// 不加窗口：这一条要的就是「apply 一返回就在底上」，滑行到位不算数。
+    @Test func aTrimmedHeadDoesNotPushTheFollowerOffTheBottom() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(0..<500), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        // 稳态的一帧：头掉 3 行，尾进 3 行，行数不变，底部也没动。
+        view.apply(rows: lines(3..<503), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        #expect(
+            abs(list.contentOffset.y - view.bottomOffsetY) < 0.5,
+            "裁剪方向被补偿了 —— 贴底读者被推离底部，随后还要滑回来"
+        )
+        #expect(!view.isFollowingPerFrame, "底部没动，不该有滑行起来")
+    }
+
     /// 把视图真的挂进一个窗口。
     ///
     /// 平滑跟随要一个屏幕刷新源，没有窗口就没有它 —— 视图会有意退回一步落位，于是
     /// 「滑过去」与「跳过去」在没有窗口的测试里长得一样。这一条就是为那两者分开而立的。
+    ///
+    /// **同时把 `animatesFollow` 摁成 true。** 它默认跟着系统的「减弱动态效果」走，
+    /// 而那是一个**跟着目标机走的环境量**：同一份代码在开了它的模拟器上会让
+    /// `followNewestLine()` 整条走一步落位的回落路径 —— 滑行根本不发生，「跳过去」
+    /// 与「滑过去」的断言于是全都名存实亡（跑出来是绿的，而它断言的行为一次都没执行）。
+    /// 这个属性从加上那天起就是为这件事留的口子：这一层要验的是滑行本身，
+    /// 不是那台机器有没有开减弱动态效果。
     private func inWindow(_ view: TerminalCollectionView) -> UIWindow {
+        view.animatesFollow = true
         let window = UIWindow(frame: pane)
         window.addSubview(view)
         view.frame = pane
