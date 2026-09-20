@@ -1,6 +1,8 @@
 # 终端键盘面板照电脑键盘重做（两页 + 修饰键行） · 产品设计文档
 
-> 状态：**定稿，已实施**（2026-09-19）。
+> 状态：**定稿，已实施**（2026-09-19）。**已被下一轮部分改写，见下。**
+> 下一轮：`docs/superpowers/specs/2026-09-20-terminal-keyboard-high-frequency-design.md`——方向键与回车进第一页，
+> 改写本文档的 §3.2、§3.3、§5 的六列键宽、§7 第 3 / 4 / 21 / 23 条；本文档其余部分仍然有效。
 > 上一轮：`2026-09-18-terminal-keyboard-two-pages-design.md`（四页并两页、方块键、面板 351）、`2026-09-18-terminal-keyboard-slot-design.md`（面板改为键盘槽位）、`2026-09-17-terminal-full-keyboard-design.md`（真键盘、修饰键锁存、白名单扩到 38）。
 > 界面原型：`docs/prototypes/2026-09-19-terminal-keyboard-todesk.html`（可交互，逐键可点）。
 >

@@ -8,6 +8,15 @@ import SwiftUI
 /// puts them. The layout is the interface — a key is found by where it is, not by reading
 /// it — so nothing here is a list of buttons that happens to be sorted.
 ///
+/// **The arrows and Enter are on page one** (2026-09-20), because that pair is what this
+/// panel is asked for over and over: Claude Code stops, lists what it wants decided, and
+/// waits for `↑`/`↓` and a commit — `Esc` to leave it. That is a high-frequency motion and
+/// it must not cost a swipe. Page one was using four of the board's six lines, the two
+/// under Space deliberately empty, so moving the arrows up cost no height at all: `,` `.`
+/// `/` now close the bottom letter row exactly where a real board closes it, and the two
+/// empty lines became the arrow strip and the action row that holds `Esc` `Tab` `Space`
+/// `Enter`. 设计文档 §3.2、§3.3。
+///
 /// One keyboard, and one thing on screen at a time. While this panel is up the toolbar and
 /// the input bar stand down (`TerminalScreen.barsStandDown`), so what is above the board is
 /// the terminal and nothing else — the whole of the light half of the screen is the
@@ -84,8 +93,6 @@ private struct KeyboardPanelKey: Identifiable {
         case caps
         /// A key a computer keyboard has and a terminal has no byte for.
         case dead
-        /// A hole the size of a key, so a row lines up with the one above it.
-        case hole
     }
 
     /// Also the accessibility identifier's tail, so it has to be stable: the UI tests
@@ -127,8 +134,6 @@ private func panelDead(_ name: String) -> KeyboardPanelKey {
     KeyboardPanelKey(id: "dead-\(name)", kind: .dead, title: name)
 }
 
-private let keyboardPanelHole = KeyboardPanelKey(id: "hole", kind: .hole)
-
 /// The three letter rows of a QWERTY board.
 ///
 /// Drawn upper case, the way the board is: a real keycap has `Q` on it and prints `q`,
@@ -145,7 +150,16 @@ private func panelLetterRow(_ letters: String) -> [KeyboardPanelKey] {
     }
 }
 
-/// Page one of 电脑键盘: the digits over the letters, Space and Enter under the thumb.
+/// Page one: the board a person types on, and the two lines a prompt waits on.
+///
+/// Rows one to four are the computer keyboard — digits over letters, with `,` `.` `/`
+/// closing the bottom letter row where a real board closes it. Rows five and six are why
+/// this page is the first one: an arrow strip four keys wide, wide enough to hit without
+/// looking, and under it an action row where `Space` and `Enter` are more than twice the
+/// width they had while they shared a row with `M`.
+///
+/// A page is six lines and this is six lines, so nothing above the board moves when the
+/// page changes — the two lines that used to sit empty under Space are these.
 private let keyboardPanelComputerRows: [[KeyboardPanelKey]] = [
     ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map { digit in
         panelText(
@@ -159,50 +173,67 @@ private let keyboardPanelComputerRows: [[KeyboardPanelKey]] = [
     panelLetterRow("qwertyuiop"),
     panelLetterRow("asdfghjkl") + [panelKey(.backspace, "⌫")],
     panelLetterRow("zxcvbnm") + [
-        panelText("space", " ", " ", title: "Space", weight: 1.5),
-        panelKey(.enter, "Enter", weight: 1.5),
-    ],
-]
-
-/// Page two: the symbol row, and under it the twelve function keys beside the block a
-/// computer keyboard puts to their right.
-///
-/// `PrtScr`, `ScrLK` and `Pause` are on the board and cannot be sent. They are kept
-/// because this page is a picture of the block they belong to, and a keyboard with a
-/// hole where three keys should be is harder to read than one that dims them.
-private let keyboardPanelFunctionRows: [[KeyboardPanelKey]] = [
-    [
-        panelText("symbol-equals", "="),
-        panelText("symbol-plusminus", "±"),
-        panelText("symbol-bracket-left", "[", "{"),
-        panelText("symbol-bracket-right", "]", "}"),
-        panelText("symbol-backslash", "\\", "|"),
-        panelText("symbol-semicolon", ";", ":"),
-        panelText("symbol-quote", "'", "\""),
         panelText("symbol-comma", ",", "<"),
         panelText("symbol-period", ".", ">"),
         panelText("symbol-slash", "/", "?"),
     ],
     [
-        panelKey(.escape, "Esc"), panelKey(.tab, "Tab"),
+        panelKey(.arrowLeft, "←", weight: 2.5),
+        panelKey(.arrowUp, "↑", weight: 2.5),
+        panelKey(.arrowDown, "↓", weight: 2.5),
+        panelKey(.arrowRight, "→", weight: 2.5),
+    ],
+    [
+        panelKey(.escape, "Esc", weight: 1.5),
+        panelKey(.tab, "Tab", weight: 1.5),
+        panelText("space", " ", " ", title: "Space", weight: 3.5),
+        panelKey(.enter, "Enter", weight: 3.5),
+    ],
+]
+
+/// Page two: everything else a terminal can be told, in five columns and six rows with
+/// nothing left over.
+///
+/// The symbols a bottom letter row does not carry — `-` `=` `[` `]` `\` `;` `'` `` ` ``
+/// and what Shift makes of them, which together with page one is the whole of printable
+/// ASCII — then the editing and navigation block, then the function keys, with `PrtScr`,
+/// `ScrLK` and `Pause` after `F12` exactly where a computer keyboard keeps them.
+///
+/// Those three are on the board and cannot be sent. They are kept because the person who
+/// signed off on this panel asked for that block to be copied strictly (设计文档 §3.3),
+/// and a keyboard with a hole where three keys belong is harder to read than one that
+/// dims them. `-` is here rather than the `±` it replaced because that is the key a real
+/// board has in that place — and the one this page could not type at all before.
+private let keyboardPanelFunctionRows: [[KeyboardPanelKey]] = [
+    [
+        panelText("symbol-hyphen", "-", "_"),
+        panelText("symbol-equals", "=", "+"),
+        panelText("symbol-bracket-left", "[", "{"),
+        panelText("symbol-bracket-right", "]", "}"),
+        panelText("symbol-backslash", "\\", "|"),
+    ],
+    [
+        panelText("symbol-semicolon", ";", ":"),
+        panelText("symbol-quote", "'", "\""),
         panelText("symbol-grave", "`", "~"),
-        panelDead("PrtScr"), panelDead("ScrLK"), panelDead("Pause"),
+        panelCaps(),
+        panelKey(.insert, "Ins"),
+    ],
+    [
+        panelKey(.delete, "Del"), panelKey(.home, "Home"), panelKey(.end, "End"),
+        panelKey(.pageUp, "PgUp"), panelKey(.pageDown, "PgDn"),
     ],
     [
         panelKey(.f1, "F1"), panelKey(.f2, "F2"), panelKey(.f3, "F3"),
-        panelKey(.insert, "Ins"), panelKey(.home, "Home"), panelKey(.pageUp, "PgUp"),
+        panelKey(.f4, "F4"), panelKey(.f5, "F5"),
     ],
     [
-        panelKey(.f4, "F4"), panelKey(.f5, "F5"), panelKey(.f6, "F6"),
-        panelKey(.delete, "Del"), panelKey(.end, "End"), panelKey(.pageDown, "PgDn"),
+        panelKey(.f6, "F6"), panelKey(.f7, "F7"), panelKey(.f8, "F8"),
+        panelKey(.f9, "F9"), panelKey(.f10, "F10"),
     ],
     [
-        panelKey(.f7, "F7"), panelKey(.f8, "F8"), panelKey(.f9, "F9"),
-        panelCaps(), panelKey(.arrowUp, "↑"), keyboardPanelHole,
-    ],
-    [
-        panelKey(.f10, "F10"), panelKey(.f11, "F11"), panelKey(.f12, "F12"),
-        panelKey(.arrowLeft, "←"), panelKey(.arrowDown, "↓"), panelKey(.arrowRight, "→"),
+        panelKey(.f11, "F11"), panelKey(.f12, "F12"),
+        panelDead("PrtScr"), panelDead("ScrLK"), panelDead("Pause"),
     ],
 ]
 
@@ -405,9 +436,6 @@ struct TerminalKeyboardPanel: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
 
-            // The shorter page keeps its keys at the top of the board and leaves the rest
-            // of it empty — the visible cost of one height for both pages, and what a page
-            // change costs to move nothing above the panel.
             board
                 .padding(.horizontal, 14)
 
@@ -517,11 +545,11 @@ struct TerminalKeyboardPanel: View {
     /// selected" — both halves would draw the same board, and the swipe would have
     /// nothing to slide in.
     ///
-    /// The frame is **one height for both pages**, the taller one's. Both pages are built
-    /// on every pass, so sizing to the page showing would clip the one being dragged in
-    /// for the length of the drag and hand it its last two rows back on settle — a hitch
-    /// in the swipe, bought for a frame that is the same size either way once the panel
-    /// holds still (`panelHeight`).
+    /// The frame is **one height for both pages**, and since 2026-09-20 both pages use all
+    /// of it. Both pages are built on every pass, so sizing to the page showing would clip
+    /// the one being dragged in for the length of the drag and hand it its last rows back
+    /// on settle — a hitch in the swipe, bought for a frame that is the same size either
+    /// way (`panelHeight`).
     private var board: some View {
         GeometryReader { proxy in
             TabView(selection: $page) {
@@ -566,9 +594,6 @@ struct TerminalKeyboardPanel: View {
     @ViewBuilder
     private func keyView(_ key: KeyboardPanelKey, width: CGFloat) -> some View {
         switch key.kind {
-        case .hole:
-            // Invisible rather than absent: it holds the column so the row above lines up.
-            Color.clear.frame(width: width, height: KeyboardPanelMetrics.keyHeight)
         case .text(let plain, let shifted):
             characterKey(key, plain: plain, shifted: shifted, width: width)
         case .key(let mobileKey):
@@ -856,8 +881,9 @@ enum KeyboardPanelMetrics {
     /// its label to sit in the middle of it.
     static let modifierRowHeight: CGFloat = 42
 
-    /// How many rows the taller page has — the symbol line over the four rows of function
-    /// keys and the navigation block.
+    /// How many rows a page has — **both pages, and both of them full** since 2026-09-20:
+    /// page one is the board, the arrow strip and the action row; page two is the symbols,
+    /// the editing block and the function keys.
     ///
     /// It is the board's height and therefore the panel's, on both pages: see
     /// `TerminalKeyboardPanel.panelHeight`.

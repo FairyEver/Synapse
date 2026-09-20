@@ -595,8 +595,14 @@ final class TerminalFlowUITests: XCTestCase {
         )
         capture(app, name: "11-keyboard-panel-board")
 
-        // 第二页：符号行、功能键 F1–F12，以及它们右边那一片导航键。翻页靠板子底下那两
-        // 个点 —— 板子本身也能滑，但滑动在 UI 测试里落点不稳，点是最确定的一条路。
+        // 第 1 页是高频页，也是这一版重排版的全部理由：**方向键和回车都在这一页**。
+        // Claude Code 弹选项时要按 ↑↓ 再回车，翻页的成本正好落在最不该落的地方。
+        XCTAssertTrue(app.buttons["panelkey-key-ArrowDown"].isHittable, "第 1 页没有方向键")
+        XCTAssertTrue(app.buttons["panelkey-key-ArrowUp"].isHittable, "第 1 页只有一半方向键")
+        XCTAssertTrue(app.buttons["panelkey-key-Enter"].isHittable, "第 1 页没有回车")
+
+        // 第二页：符号、编辑块、F1–F12，以及 F12 后面那三颗终端发不出去的键。翻页靠板子
+        // 底下那两个点 —— 板子本身也能滑，但滑动在 UI 测试里落点不稳，点是最确定的一条路。
         // 两页各问一次，是因为「并页时悄悄丢了一半」这种错，只问落点那一页是看不出来的。
         // 「这一页在不在前面」问的是**能不能点到**，不是存不存在：`TabView` 会把两页
         // 都建出来，没露面的那一页的键在无障碍树里照样存在，只是落在屏幕外面。
@@ -609,6 +615,9 @@ final class TerminalFlowUITests: XCTestCase {
         )
         XCTAssertTrue(app.buttons["panelkey-key-PageUp"].isHittable, "the second page has no navigation block")
         XCTAssertTrue(app.buttons["panelkey-dead-PrtScr"].isHittable, "the second page is missing the keys a terminal cannot send")
+        // 方向键搬走之后这一页不该还留着一份：一颗键在两个地方，等于「键靠位置找」是句
+        // 空话，而两处的压暗逻辑哪天会各自漂开。
+        XCTAssertFalse(app.buttons["panelkey-key-ArrowUp"].isHittable, "方向键在第 2 页还留着一份")
         capture(app, name: "12-keyboard-panel-function-page")
 
         // The function keys are the names this version added to the wire (38 → 51), so
@@ -628,9 +637,32 @@ final class TerminalFlowUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.5)
         XCTAssertEqual(lastLine(), beforeDead, "a key the terminal has no byte for was sent anyway")
 
+        // Back to the first page, which is what the rest of this test presses. 同上：
+        // 两页都在无障碍树里，只有「点得到」的那一页才是前面那一页。
+        app.buttons["panelkey-page-0"].tap()
+        XCTAssertTrue(
+            waitForHittable(app.buttons["panelkey-key-Backspace"], timeout: 5),
+            "the board did not come back"
+        )
+
+        // 方向键和回车这一版搬到了第 1 页，所以它们也得走完整条 wire。断言「键画出来了」
+        // 对一个把 `ArrowDown` 拼错、或把字节接反了的实现照样是绿的 —— 电脑端收到什么
+        // 才算数。这是这次重排版真正要买的东西，所以两条都问。
+        app.buttons["panelkey-key-ArrowDown"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:ArrowDown", in: app, timeout: 20),
+            "第 1 页的 ↓ 没有到达电脑端"
+        )
+        app.buttons["panelkey-key-Enter"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Enter", in: app, timeout: 20),
+            "第 1 页的回车没有到达电脑端"
+        )
+
         // `⇧tab` 在这一版里没有自己的键 —— 电脑键盘上本来也没有这样一颗，这是照 ToDesk
         // 的键位排的。它是 Claude Code 切权限模式用的那一颗，所以它必须拼得出来：修饰键
-        // 那一行两页都常驻，Tab 在第二页，于是 Shift + Tab 在两页里都成立。
+        // 那一行两页都常驻，而 Tab 跟着高频键一起搬到了第 1 页 —— 于是它现在是「同页两
+        // 步」，不再要先翻页（上一版要翻到第二页才拼得出来，代价记在设计文档 §3.8）。
         XCTAssertTrue(
             waitForHittable(app.buttons["panelkey-modifier-Shift"], timeout: 10),
             "the modifier row never became pressable"
@@ -646,14 +678,6 @@ final class TerminalFlowUITests: XCTestCase {
             let visible = app.staticTexts.allElementsBoundByIndex.suffix(12).map(\.label)
             XCTFail("⇧tab did not reach the computer; last lines: \(visible)")
         }
-
-        // Back to the first page, which is what the rest of this test presses. 同上：
-        // 两页都在无障碍树里，只有「点得到」的那一页才是前面那一页。
-        app.buttons["panelkey-page-0"].tap()
-        XCTAssertTrue(
-            waitForHittable(app.buttons["panelkey-key-Backspace"], timeout: 5),
-            "the board did not come back"
-        )
 
         // The point of the page: a chord is two taps, and what the computer receives is
         // the combination rather than the letter. Latched first, then the letter.
@@ -823,8 +847,8 @@ final class TerminalFlowUITests: XCTestCase {
         let keyboardButton = app.buttons["toolbar-keyboard"]
         let toolbar = app.buttons["toolbar-all"]
         let toggle = app.buttons["voice-mode-toggle"]
-        // 用修饰键那一行当「面板开没开」的探针：它两页都在，而 `esc` 现在住在第二页，
-        // 面板是先落在第一页上的。
+        // 用修饰键那一行当「面板开没开」的探针：它两页都在，所以拿它当探针不会随版面
+        // 改动失效 —— `esc` 曾住在第二页，2026-09-20 搬到了第一页，这颗探针两次都还在。
         let escapeKey = app.buttons["panelkey-modifier-Ctrl"]
         XCTAssertTrue(waitForHittable(keyboardButton, timeout: 10), "no way into the panel")
 
@@ -865,8 +889,9 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertEqual((a.minY - q.minY) - 36, columnPitch - keyWidth, accuracy: 1,
                        "纵向的缝和横向的缝不一样宽，板子就不是一个网格")
 
-        // 面板只有一个高度：第二页六行是它的高度，第一页四行也用同一个 —— 翻页时
-        // 终端一动不动。第一页底下多出来的那两行空白是有意的，代价换来的就是这一条。
+        // 面板只有一个高度，两页都是这个高度 —— 翻页时终端一动不动。2026-09-20 之前
+        // 这条是用「第一页底下空两行」换来的；方向键搬上去之后两页都铺满，它仍然成立，
+        // 但不再是白扔两行换的。
         app.buttons["panelkey-page-1"].tap()
         XCTAssertTrue(
             waitForHittable(app.buttons["panelkey-key-F1"], timeout: 10),
