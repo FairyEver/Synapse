@@ -108,9 +108,14 @@ struct LoginView: View {
                     // The disabled cue dims the fill only — fading the label too would
                     // leave grey text on a grey rectangle — which is why the dimming is
                     // bounded by what keeps the label readable (see the constant).
+                    //
+                    // `.circular`: a continuous corner is drawn larger than the radius it
+                    // is given, and on a bar this short (46 pt, the same as the sheet's
+                    // 开始对话) that swallows both ends — the reason is recorded there in
+                    // full. The two filled buttons are one shape.
                     .background(
                         Theme.ink.opacity(canSubmit ? 1 : Theme.disabledInkOpacity),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: 12, style: .circular)
                     )
                     .foregroundStyle(Theme.paper)
                     .disabled(!canSubmit)

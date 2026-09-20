@@ -189,9 +189,16 @@ struct NewSessionSheet: View {
                 // does not pair them: it painted the fill with the ink and then drew the
                 // label in white as well, so in dark appearance this was a blank white
                 // pill with nothing written on it.
+                //
+                // `.circular`, not `.continuous`: the continuous corner is drawn larger
+                // than the radius it is given — at 12 pt the curve only meets the flat
+                // edge about 15 pt in, which on a bar this short (46 pt) leaves under
+                // 10 pt of straight edge on each end. The two ends then read as a pill
+                // whose top and bottom have been sliced flat. The prototype's
+                // `border-radius: 11px` is an ordinary corner, and this is that.
                 .background(
                     Theme.ink.opacity(canStart ? 1 : Theme.disabledInkOpacity),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: 12, style: .circular)
                 )
                 .foregroundStyle(Theme.paper)
                 .disabled(!canStart)
