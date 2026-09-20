@@ -468,16 +468,28 @@ export class MeetingService {
   /**
    * 从合并好的对象里量真实时长。
    *
-   * 只读头部那一段——`moov/mvhd` 就在开头，把整场会议的音频（五小时能有 140 MB）拉下来
-   * 只为读 8 个字节不划算。量不到就返回 `null`，由调用方退回客户端上报的值：宁可要一个
-   * 可能不准的数，也不要一个 0。
+   * 按 `MEETING_AUDIO_PROBE_BYTES` 取头尾两段就够——`moov` 要么在开头（录音中途被杀留下的
+   * 分片形态），要么在末尾（正常收尾之后重排的那份），把整场会议的音频（五小时能有
+   * 140 MB）全拉下来只为读 8 个字节不划算。取法与转写那边提交前的完成度检查完全一致。
+   *
+   * 量不到就返回 `null`，由调用方退回客户端上报的值：宁可要一个可能不准的数，也不要一个 0。
    */
   private async measureDuration(storageKey: string, size: bigint): Promise<number | null> {
     const total = Number(size)
     if (!Number.isFinite(total) || total <= 0) return null
     try {
-      const head = await this.storage.readObjectRange(storageKey, 0, Math.min(MEETING_AUDIO_PROBE_BYTES, total) - 1)
-      const measured = readMeetingAudioDurationMs(head)
+      const probe = MEETING_AUDIO_PROBE_BYTES
+      let measured: number | null
+      if (total <= probe) {
+        const head = await this.storage.readObjectRange(storageKey, 0, total - 1)
+        measured = readMeetingAudioDurationMs({ head, tail: null, totalBytes: total })
+      } else {
+        const [head, tail] = await Promise.all([
+          this.storage.readObjectRange(storageKey, 0, probe - 1),
+          this.storage.readObjectRange(storageKey, total - probe, total - 1),
+        ])
+        measured = readMeetingAudioDurationMs({ head, tail, totalBytes: total })
+      }
       if (measured === null) return null
       return Math.max(0, Math.min(MEETING_MAX_DURATION_MS, measured))
     } catch (error) {

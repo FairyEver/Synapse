@@ -140,17 +140,46 @@ function withMovieHeader(timescale: number, duration: number, version: 0 | 1 = 0
   return Buffer.concat([box("ftyp", 20), boxWith("moov", movieHeader(timescale, duration, version)), box("mdat", 400)])
 }
 
+/** 按服务端那样取头尾两段，再交给时长解析。 */
+function measure(whole: Buffer) {
+  const totalBytes = whole.length
+  if (totalBytes <= PROBE) {
+    return readMeetingAudioDurationMs({ head: whole, tail: null, totalBytes })
+  }
+  return readMeetingAudioDurationMs({
+    head: whole.subarray(0, PROBE),
+    tail: whole.subarray(totalBytes - PROBE),
+    totalBytes,
+  })
+}
+
 describe("从音频里量时长", () => {
   /**
    * 数取自现场那条真实录音：`mvhd` 的 287744/48000 正好是 5.9947 秒，和腾讯云回的
    * `AudioDuration` 5.994688 对得上。量出来的就是这个数，不是按字节估的 13 秒。
    */
-  it("读 mvhd 的 duration/timescale", () => {
-    expect(readMeetingAudioDurationMs(withMovieHeader(48_000, 287_744))).toBe(5995)
+  it("初始化段在开头时分片形态：读 mvhd 的 duration/timescale", () => {
+    expect(measure(withMovieHeader(48_000, 287_744))).toBe(5995)
+  })
+
+  /**
+   * **正常收尾之后客户端写出来的就是这一种**：`AVAssetWriter.finishWriting()` 把分片重排成
+   * `ftyp + mdat + moov`，`moov` 跑到了文件末尾，头部窗口里根本没有。只看头会读出一个
+   * `null`，然后退回客户端上报的值——那样这次修复在正常路径上等于没生效。
+   */
+  it("收尾后的形状：moov 在末尾，靠尾部窗口读出来", () => {
+    const whole = Buffer.concat([
+      box("ftyp", 20),
+      boxWith("mdat", Buffer.alloc(200_000)),
+      boxWith("moov", movieHeader(48_000, 287_744)),
+    ])
+    expect(whole.length).toBeGreaterThan(PROBE)
+    expect(whole.subarray(0, PROBE).indexOf("moov", 0, "latin1")).toBeLessThan(0)
+    expect(measure(whole)).toBe(5995)
   })
 
   it("version 1 的 64 位时长也读得出来", () => {
-    expect(readMeetingAudioDurationMs(withMovieHeader(1000, 3_600_000, 1))).toBe(3_600_000)
+    expect(measure(withMovieHeader(1000, 3_600_000, 1))).toBe(3_600_000)
   })
 
   /**
@@ -158,23 +187,31 @@ describe("从音频里量时长", () => {
    * 量不出来就返回 null，让调用方退回客户端上报的值——这里绝不能返回 0。
    */
   it("没有 moov 就量不出来", () => {
-    const broken = Buffer.concat([box("ftyp", 20), Buffer.alloc(8192)])
-    expect(readMeetingAudioDurationMs(broken)).toBeNull()
+    expect(measure(Buffer.concat([box("ftyp", 20), Buffer.alloc(8192)]))).toBeNull()
   })
 
-  it("分片 fMP4 的 mvhd 时长是 0，不能当成 0 秒的录音", () => {
+  /**
+   * 进程被杀留下的分片文件：初始化段的 `mvhd` 时长是 0，真实时长分散在各个 `moof` 里。
+   * 这种要返回 null 而不是 0——分片形态下没有占位区，客户端按字节估算反而准。
+   */
+  it("分片 m4a 的 mvhd 时长是 0，不能当成 0 秒的录音", () => {
     const fragmented = Buffer.concat([box("ftyp", 20), boxWith("moov", movieHeader(1000, 0)), box("moof", 800)])
-    expect(readMeetingAudioDurationMs(fragmented)).toBeNull()
+    expect(measure(fragmented)).toBeNull()
   })
 
-  it("moov 写在文件末尾、头部窗口里没有，就量不出来", () => {
-    const whole = Buffer.concat([box("ftyp", 20), boxWith("mdat", Buffer.alloc(200_000))])
-    expect(readMeetingAudioDurationMs(whole.subarray(0, PROBE))).toBeNull()
+  it("尾部那串 moov 长度对不上，不算数", () => {
+    // 数据里埋一个假索引：声明长度 500，而它离文件末尾还有别的字节。
+    const content = Buffer.alloc(200_000)
+    const at = content.length - 100
+    content.writeUInt32BE(500, at)
+    content.write("moov", at + 4, "latin1")
+    const whole = Buffer.concat([box("ftyp", 20), boxWith("mdat", content)])
+    expect(measure(whole)).toBeNull()
   })
 
   it("头部窗口正好切断 mvhd，也不猜", () => {
     const full = withMovieHeader(48_000, 287_744)
     // 只切到 mvhd 的 version/flags，后面的字段一个都没进来。
-    expect(readMeetingAudioDurationMs(full.subarray(0, 28 + 8 + 4))).toBeNull()
+    expect(measure(full.subarray(0, 28 + 8 + 4))).toBeNull()
   })
 })

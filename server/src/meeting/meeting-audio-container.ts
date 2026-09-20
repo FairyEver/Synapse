@@ -111,19 +111,53 @@ const UNKNOWN_DURATION_32 = 0xffffffff
 /**
  * 从录音文件里量出真实时长。
  *
- * **客户端上报的时长只当参考。** 现场撞到过一条 6 秒的录音上报 0 秒（`AVAudioRecorder`
- * 的 `currentTime` 读成了 0），而按文件字节估出来的又必然偏大——m4a 开头那段约 60 KB 的
- * 占位区不是音频，按总字节数折算会把一条 6 秒的录音算成 13 秒。文件本身才是最可靠的来源。
+ * **客户端上报的时长只当参考。** 现场撞到过一条 6 秒的录音上报 0 秒（录音器的
+ * `currentTime` 读成了 0），而按文件字节估出来的又必然偏大——老写法下 m4a 开头那段约
+ * 60 KB 的占位区不是音频，按总字节数折算会把一条 6 秒的录音算成 13 秒。文件本身才是最
+ * 可靠的来源。
  *
  * 读的是 `moov/mvhd`：`duration / timescale` 与识别引擎报的时长分毫不差（实测一条
- * 287744/48000 = 5.9947 秒的录音，腾讯云回的 `AudioDuration` 正是 5.994688）。盒子链的
- * 走法和上面那道完成度检查共用同一套，所以头部探测窗口够不够是同一件事。
+ * 287744/48000 = 5.9947 秒的录音，腾讯云回的 `AudioDuration` 正是 5.994688）。
  *
- * **读不出来就返回 `null`，调用方退回客户端上报的值。** 已知读不出来的情形：分片 fMP4
- * 的 `mvhd` 时长是 0，真实时长分散在各个 `moof` 里；`moov` 写在文件末尾的、而头部窗口
- * 又没覆盖到它。这两种都不猜。
+ * **头尾都要看**，因为 `moov` 两边都可能：
+ * - 录音进行中和进程被杀时留下的分片 m4a，初始化段在开头；
+ * - 正常收尾之后客户端会把它重排成 `ftyp + mdat + moov`，`moov` 跑到了末尾。
+ *
+ * 头尾的取法与上面那道完成度检查完全一致，`tail` 为 `null` 表示「整个对象都在 head 里」。
+ *
+ * **读不出来就返回 `null`，调用方退回客户端上报的值。** 已知读不出来的情形：分片 m4a
+ * 的初始化 `mvhd` 时长是 0（真实时长分散在各个 `moof` 里，没有收尾的进程读不全）。这种
+ * 不猜——它是「进程被杀」那条路，客户端的按字节估算反而准，因为分片形态下没有占位区。
  */
-export function readMeetingAudioDurationMs(head: Buffer): number | null {
+export function readMeetingAudioDurationMs(input: {
+  readonly head: Buffer
+  readonly tail: Buffer | null
+  readonly totalBytes: number
+}): number | null {
+  const inHead = walkForMovieHeader(input.head)
+  if (inHead !== null) return inHead
+  const tail = input.tail
+  if (!tail) return null
+
+  // `moov` 写在文件末尾的那种。和完成度检查同一个口径：只认**正好收在文件末尾**的那一个，
+  // 音频数据里撞上一串碰巧是 "moov" 的字节是有可能的，而「它的长度正好补齐到文件末尾」
+  // 不是碰巧。
+  const tailStart = input.totalBytes - tail.length
+  let searchFrom = 0
+  while (searchFrom <= tail.length - 4) {
+    const at = tail.indexOf("moov", searchFrom, "latin1")
+    if (at < 0) break
+    searchFrom = at + 1
+    if (at < 4) continue
+    const size = tail.readUInt32BE(at - 4)
+    if (size < BOX_HEADER_BYTES || tailStart + at - 4 + size !== input.totalBytes) continue
+    return readMovieHeaderDuration(tail, at + 4, tail.length)
+  }
+  return null
+}
+
+/** 从头走盒子链找 `moov`，再取它的 `mvhd`。 */
+function walkForMovieHeader(head: Buffer): number | null {
   let offset = 0
   while (offset + BOX_HEADER_BYTES <= head.length) {
     const box = readBoxHeader(head, offset)
@@ -146,7 +180,7 @@ export function readMeetingAudioDurationMs(head: Buffer): number | null {
   return null
 }
 
-/** 在 `moov` 的直接子盒子里找 `mvhd`。 */
+/** 在 `moov` 的直接子盒子里找 `mvhd`。`start` / `end` 都是这个 buffer 内部的偏移。 */
 function readMovieHeaderDuration(buffer: Buffer, start: number, end: number): number | null {
   let offset = start
   const limit = Math.min(end, buffer.length)
