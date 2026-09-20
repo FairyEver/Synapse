@@ -25,26 +25,35 @@ struct RecordingActivityAttributes: ActivityAttributes {
 
 /// 实时活动的展示常量，两边共用，免得 App 画的波形和锁屏画的不是同一套比例。
 enum RecordingActivityLimits {
-    /// 一次更新带多少个振幅槽位。
+    /// 一次更新带多少个振幅采样。
     ///
-    /// **这不是「画几条柱子」。** 锁屏那张卡和灵动岛展开态都是整行宽的，一条条按固定
-    /// 柱宽排下来，一行放得下一百四五十条。载荷按最大的那一种屏幕给够，视图再按自己
-    /// 手里的宽度决定画几条（见 `RecordingLevelBars`）。给少了，波形就填不满那一行。
-    static let levelCount = 160
+    /// 点阵一行放得下三四十颗，这里面只有播放头左边那一段会被画出来。取够一行用的量
+    /// 就够——给多了只是让每一颗代表的时段变短，看不出更多东西。
+    static let levelCount = 48
     /// 振幅低于这个值的算安静，用来判断开始那几秒有没有听到声音。
     static let silenceThreshold = 0.02
 
-    /// 波形的柱宽与间距。
+    /// 点阵：圆点宽度与间距。
     ///
-    /// 与 `MeetingAudio.barWidth` / `barGap` 是同一组数（那一组又和电脑端同一组）——
-    /// 锁屏和灵动岛上这条波形要和录音页那条是同一个东西，比例就不能各画各的。
-    /// `MeetingAudio` 直接读这里，所以改只会在一处发生。
+    /// 照语音备忘录那条抄的：几颗分开的小圆点，不是一条密排的细柱。**不与
+    /// `MeetingAudio.barWidth` / `barGap` 共用**——App 内那条仍是细柱，两边是有意
+    /// 长得不一样的画法。
+    nonisolated static let dotWidth: CGFloat = 3.6
+    nonisolated static let dotGap: CGFloat = 2.2
+
+    /// 播放头（那条红色竖线）落在整条点阵的哪个位置。
     ///
-    /// `nonisolated`：这个工程默认每个类型都归主 actor 管，而 `MeetingAudio` 那边是
-    /// 在 `static let` 的初始化式里读它 —— 那是非隔离上下文。三个都是不变量，本来就
-    /// 不该跟着 actor 走。
-    nonisolated static let barWidth: CGFloat = 1.5
-    nonisolated static let barGap: CGFloat = 1.1
+    /// 0.59 是量着语音备忘录那张灵动岛截图取的：它右边留出的空档是整条的四成上下。
+    /// 播放头左边的圆点是**已经录到的**（真实振幅），右边是**还没到的**（暗色小点，
+    /// 让这条点阵无论录了多久都保持同一个形状）。
+    nonisolated static let playheadFraction: CGFloat = 0.59
+
+    /// 播放头那根竖线的宽度，以及暗色小点的高度。
+    nonisolated static let playheadWidth: CGFloat = 1.8
+    nonisolated static let placeholderDotHeight: CGFloat = 3.4
+
+    /// 有声音的圆点最矮也有这么高——安静的时候它是一颗点，不是一条线。
+    nonisolated static let minimumDotHeight: CGFloat = 4.6
 
     /// 锁屏那张卡的内容外边距。
     ///

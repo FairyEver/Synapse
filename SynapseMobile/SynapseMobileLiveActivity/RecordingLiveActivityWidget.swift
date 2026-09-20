@@ -5,7 +5,7 @@ import WidgetKit
 
 /// 录音住进系统的那一层。
 ///
-/// 这里只画系统模板：名字、计时、波形、两个按钮。没有主屏 Widget，也没有可配置项
+/// 这里只画系统模板：点阵、计时、两个圆形按钮。没有主屏 Widget，也没有可配置项
 /// ——扩展 target 是灵动岛、锁屏实时活动和控制中心控件唯一能待的地方，不是一处
 /// 顺带加东西的地方。
 @main
@@ -18,18 +18,21 @@ struct SynapseRecordingWidgetBundle: WidgetBundle {
     }
 }
 
+/// 录音的那**一个**颜色。
+///
+/// 系统红，和语音备忘录同一个。它只出现在锁屏和灵动岛上：App 内（录音页、列表、
+/// 详情）保持原来的单色，所以点开 App 之后不会有第二个颜色跟着进来。设计文档第 89
+/// 行原来写的是「Synapse 不引入语音备忘录的红色」，2026-09-20 按用户要求改成
+/// 「只限实时活动」——这一条要看就以设计文档里的补记为准。
+private enum RecordingPalette {
+    static let accent = Color.red
+}
+
 /// 锁屏实时活动 + 灵动岛三态。
 ///
-/// 这里能动的只有内容：卡片本身、它的圆角、外边距、以及锁屏右上角那个系统画的关闭
-/// 按钮都不归我们画。所以两条形态共用同一套内容——同一枚图标、同一口钟、同一条波形、
-/// 同样两个按钮——差别只在排布和字号。
-///
-/// 颜色一律用语义色（`.primary` / `.secondary`），不引入第二种颜色：灵动岛的底是
-/// 系统固定的纯黑、字色固定纯白，Apple 明说不许改；锁屏上跟着系统材质走，比我们
-/// 自己抹一层准。
-///
-/// 另外两处是照着 Apple 的规范特意**没有**做的：没有 `keylineTint`（那道描边留给
-/// 系统自己的判断，硬漆成纯白会变成一圈很重的白边），锁屏也不自己加粗边框。
+/// 形状照语音备忘录那条抄：一条圆点排成的点阵、一颗红色的计时、一枚圆形的停止键。
+/// 卡片本身、它的圆角、外边距，以及外面那个宽药丸都是系统的——第三方拿到的宽度和
+/// 系统 App 一样，区别只在内容怎么排。
 struct RecordingLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RecordingActivityAttributes.self) { context in
@@ -44,27 +47,26 @@ struct RecordingLiveActivityWidget: Widget {
                 .activitySystemActionForegroundColor(.primary)
         } dynamicIsland: { context in
             DynamicIsland {
+                // 一行：点阵在左，计时和停止键在右。语音备忘录在灵动岛上就是这一行，
+                // 不再往下堆第二排。
                 DynamicIslandExpandedRegion(.leading) {
-                    RecordingGlyph(levels: context.state.levels)
-                        .font(.title3)
+                    RecordingDotStrip(levels: context.state.levels)
+                        .frame(height: 22)
                 }
-                // 计时只放一处：上排右边。左边那个位置留给录音这件事本身（波形）。
                 DynamicIslandExpandedRegion(.trailing) {
-                    RecordingTimer(state: context.state)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 12) {
-                        RecordingLevelBars(levels: context.state.levels)
-                            .frame(height: 20)
-                        RecordingActivityButtons()
+                    HStack(spacing: 10) {
+                        RecordingTimer(state: context.state)
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(RecordingPalette.accent)
+                        RecordingActivityButtons(diameter: 28)
                     }
                 }
             } compactLeading: {
                 RecordingGlyph(levels: context.state.levels)
             } compactTrailing: {
                 RecordingTimer(state: context.state)
+                    .foregroundStyle(RecordingPalette.accent)
             } minimal: {
                 // 同时有两个实时活动时收成一个圆点：这里没有任何字能显示。
                 RecordingGlyph(levels: context.state.levels)
@@ -73,7 +75,7 @@ struct RecordingLiveActivityWidget: Widget {
     }
 }
 
-/// 锁屏那张卡：录音名、计时、波形、取消 / 完成。
+/// 锁屏那张卡：录音名、计时、点阵、取消 / 完成。
 ///
 /// 只排三行。系统对锁屏形态的高度上限是 160 pt，超了会被截——所以这里不追求信息量，
 /// 追求一眼看清「在录、录了多久、怎么停」。
@@ -83,7 +85,7 @@ private struct LockScreenRecordingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            RecordingLevelBars(levels: context.state.levels)
+            RecordingDotStrip(levels: context.state.levels)
                 .frame(height: 24)
             if let reason = context.state.pausedReason {
                 Text(reason)
@@ -91,7 +93,11 @@ private struct LockScreenRecordingView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            RecordingActivityButtons()
+            HStack {
+                Spacer(minLength: 0)
+                RecordingActivityButtons(diameter: 44)
+                Spacer(minLength: 0)
+            }
         }
         .padding(RecordingActivityLimits.contentMargin)
     }
@@ -99,8 +105,7 @@ private struct LockScreenRecordingView: View {
     /// 计时和名字共处一行，但差着两档字重与字号。
     ///
     /// Apple 对实时活动的要求是「用大字号、中等以上的字重」，而这一行里真正要看的是
-    /// 计时——名字只是让人认出这是哪一条。原来两样都是 `.headline`，谁也不比谁重要，
-    /// 于是在一块本来就只有一百多 pt 高的卡片上，两行字在争同一个位置。
+    /// 计时——名字只是让人认出这是哪一条。计时用那一个红色，和点阵、按钮是同一个。
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(context.attributes.title)
@@ -111,7 +116,7 @@ private struct LockScreenRecordingView: View {
             RecordingTimer(state: context.state)
                 .font(.title2)
                 .fontWeight(.semibold)
-                .foregroundStyle(.primary)
+                .foregroundStyle(RecordingPalette.accent)
         }
     }
 }
@@ -120,17 +125,13 @@ private struct LockScreenRecordingView: View {
 ///
 /// 用 `variableColor`：它表达的是「量」，而这里的量正好是麦克风听到了多响——不是装饰，
 /// 是 App 一直在算的那个数。
-///
-/// 颜色用 `.primary` 而不是 `.tint`：扩展里没有 App 的 accent（App 内是 `Theme.ink`，
-/// 也就是 `.primary`），`.tint` 在扩展里会落回系统蓝，压在灵动岛那块纯黑上既不是这个
-/// App 的样子，也看不清。
 private struct RecordingGlyph: View {
     let levels: [Double]
 
     var body: some View {
         Image(systemName: "waveform")
             .symbolEffect(.variableColor.iterative, value: currentLevel)
-            .foregroundStyle(.primary)
+            .foregroundStyle(RecordingPalette.accent)
     }
 
     private var currentLevel: Double {
@@ -162,71 +163,107 @@ private struct RecordingTimer: View {
     }
 }
 
-/// 滚动波形。
+/// 那条点阵。
 ///
-/// 与录音页是同一种读法，也是同一套比例：最新的贴右边缘，旧的往左排，**柱宽和间距
-/// 都是固定的**（和 `MeetingAudio` 共用同一组值），一格放不下就少画几条，而不是把手里
-/// 这几十个采样拉满整行。
+/// 形状是语音备忘录的：一排分开的小圆点，中间一根红色竖线当播放头。竖线左边是**已经
+/// 录到的**，右边的圆点小一圈、压暗，是**还没到的**——所以这条点阵无论录了多久都保持
+/// 同一个形状，播放头不会跑到最右边去。
 ///
-/// 这一条是这次改动的重点。原来是「有几个采样就把宽度分成几份」，于是 32 个采样在
-/// 一整行里变成 32 根又粗又扁的方块——而录音页上那条是 1.5 pt 宽、1.1 pt 间距的细柱。
-/// 同一个东西在两处长得不一样，锁屏那条就显得很别扭。
-private struct RecordingLevelBars: View {
+/// 与语音备忘录唯一的不同是**每颗点的实际高度**：这些点带的是真实的麦克风振幅（和
+/// 录音页、电脑端同一套读法），所以说话时它们会高起来、安静时缩成一颗点。语音备忘录
+/// 那条是等高的进度点，不带音量。
+private struct RecordingDotStrip: View {
     let levels: [Double]
 
     var body: some View {
         GeometryReader { geometry in
-            let pitch = RecordingActivityLimits.barWidth + RecordingActivityLimits.barGap
-            let slots = max(1, Int(floor(geometry.size.width / pitch)))
-            let visible = min(levels.count, slots)
-            HStack(alignment: .center, spacing: RecordingActivityLimits.barGap) {
-                ForEach(Array(levels.suffix(visible).enumerated()), id: \.offset) { _, level in
+            let limits = RecordingActivityLimits.self
+            let pitch = limits.dotWidth + limits.dotGap
+            // 播放头占掉一格的位置，剩下的按比例分给左右两段。
+            let slots = max(2, Int(floor((geometry.size.width + limits.dotGap) / pitch)))
+            let units = slots - 1
+            let played = max(1, min(units - 1, Int((CGFloat(units) * limits.playheadFraction).rounded())))
+            let remaining = units - played
+            // 播放头左边的格子**永远是那么多个**：刚开始录、采样还不够铺满的时候，
+            // 缺的那几格用安静的圆点补上。不补的话播放头会贴着最后一颗点跑，等它慢慢
+            // 挪到 59% —— 那是「进度条」，不是这条点阵要的样子。
+            let history: [Double] = {
+                let recent = levels.suffix(played)
+                guard recent.count < played else { return Array(recent) }
+                return Array(repeating: 0, count: played - recent.count) + recent
+            }()
+
+            HStack(alignment: .center, spacing: limits.dotGap) {
+                ForEach(Array(history.enumerated()), id: \.offset) { _, level in
                     Capsule()
-                        .frame(
-                            width: RecordingActivityLimits.barWidth,
-                            height: barHeight(level, in: geometry.size.height)
-                        )
+                        .fill(RecordingPalette.accent)
+                        .frame(width: limits.dotWidth, height: dotHeight(level, in: geometry.size.height))
+                }
+                Capsule()
+                    .fill(RecordingPalette.accent)
+                    .frame(width: limits.playheadWidth, height: geometry.size.height * 0.62)
+                    .frame(width: limits.dotWidth)
+                ForEach(0..<remaining, id: \.self) { _ in
+                    Capsule()
+                        .fill(.tertiary)
+                        .frame(width: limits.dotWidth, height: limits.placeholderDotHeight)
+                        .frame(height: geometry.size.height)
                 }
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .trailing)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
         }
-        .foregroundStyle(.primary)
         .accessibilityHidden(true)
     }
 
-    /// 半高最多到画布的一半，再留一成边距——和录音页那条一样，柱子不会顶到框上。
-    private func barHeight(_ level: Double, in available: CGFloat) -> CGFloat {
+    /// 安静的圆点也有一颗点的高度，说话时往上长——最高的那颗也不顶到框上。
+    private func dotHeight(_ level: Double, in available: CGFloat) -> CGFloat {
+        let limits = RecordingActivityLimits.self
         let clamped = min(1, max(0, level))
-        return max(1, available * clamped * 0.9)
+        let ceiling = max(limits.minimumDotHeight, available * 0.45)
+        return limits.minimumDotHeight + (ceiling - limits.minimumDotHeight) * clamped
     }
 }
 
 /// 实时活动上的取消 / 完成。
 ///
+/// 形状照语音备忘录那枚停止键：一圈环套着一个实心方块。这里有两枚——完成的实心块是
+/// 那个红色，取消的是一个叉。**没有文字**：语音备忘录也没有，文字会把这条点阵挤窄。
+/// 每一个都带 `accessibilityLabel`，读屏时仍然念得出「取消」「完成」。
+///
 /// 按钮不必解锁就能按，前提是它们得在 **App 的进程**里执行——见 `RecordingIntents.swift`
 /// 里 `LiveActivityIntent` 那一段。那是这两个按钮唯一的开关，画得再好，执行落在扩展
 /// 进程里也是白按。
-///
-/// 颜色跟着 App 里那套走：填充用 `.primary`、文字交给系统挑对比色，与录音页上「确定的
-/// 那一个」同一套（那里是 `Theme.ink` 作填充、`Theme.paper` 作文字，`ink` 就是
-/// `.primary`）。App 在根视图上把 accent 覆盖成了 `.primary`，这里补上同一件事——
-/// 否则扩展拿不到那个覆盖，实心那颗会变成系统蓝，和 App 里不是同一个颜色。
 private struct RecordingActivityButtons: View {
+    /// 圆形按钮的直径。
+    ///
+    /// 锁屏上给 44pt —— Apple 的最小可点区域，也差不多就是量到的语音备忘录那枚（42）。
+    /// 灵动岛那一行要在计时右边挤下两枚，只能给 28pt，**这一处是比语音备忘录小的**：
+    /// 它那枚 42pt 是单独一枚，我们有两枚。
+    let diameter: CGFloat
+
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: diameter * 0.34) {
             Button(intent: CancelRecordingIntent()) {
-                Text("取消")
-                    .frame(maxWidth: .infinity)
+                Image(systemName: "xmark")
+                    .font(.system(size: diameter * 0.34, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: diameter, height: diameter)
+                    .background(Circle().strokeBorder(.primary.opacity(0.55), lineWidth: diameter * 0.07))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .accessibilityLabel("取消")
 
             Button(intent: FinishRecordingIntent()) {
-                Text("完成")
-                    .frame(maxWidth: .infinity)
+                RoundedRectangle(cornerRadius: diameter * 0.15, style: .continuous)
+                    .fill(RecordingPalette.accent)
+                    .frame(width: diameter * 0.42, height: diameter * 0.42)
+                    .frame(width: diameter, height: diameter)
+                    .background(Circle().strokeBorder(.primary, lineWidth: diameter * 0.075))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.primary)
+            .buttonStyle(.plain)
+            .accessibilityLabel("完成")
         }
-        .font(.subheadline)
     }
 }
