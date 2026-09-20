@@ -251,7 +251,7 @@ export class MobileGatewayService {
       resendSummary: () => this.resendSummary(),
       sendToolbar: () => this.resendToolbar(),
       sendQuickPhrases: () => this.resendQuickPhrases(),
-      pushSnapshot: (attachment) => this.pushSnapshot(attachment),
+      pushSnapshot: (attachment, reason) => this.pushSnapshot(attachment, reason),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
       reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
         this.reportTransferProgress(mobileClientInstanceId, intentId, completedBytes, totalBytes),
@@ -522,15 +522,42 @@ export class MobileGatewayService {
       attachment.needsSnapshot = true
       attachment.dirty = true
       this.scheduleFlush()
+      this.deps.logger.warn("Mobile update dropped by the uplink budget; a snapshot replaces it.", {
+        sessionId: attachment.sessionId,
+        frames: frames.length,
+        bytes: frameBytes(frames),
+        windowLines: content.lines.length,
+      })
       return
     }
+    // Frame-level logging is a **decision** log, not a traffic log.
+    //
+    // Both entries below are the two halves of one causal chain: an update is dropped
+    // because the uplink budget is spent, and the next flush replaces it with a whole
+    // window. That chain is what a phone sees as an unbounded stream of resets — and
+    // until this existed there was nothing in the desktop's log to read it off.
+    //
+    // The ordinary update path deliberately logs nothing: on a healthy session it runs
+    // every 60 ms, and "nothing happened" is the absence of these lines.
+    if (mustSnapshot) {
+      this.deps.logger.info("Mobile frame flush: full window snapshot.", {
+        sessionId: attachment.sessionId,
+        frames: frames.length,
+        windowLines: content.lines.length,
+        bytes: frameBytes(frames),
+      })
+    }
+
     for (const frame of frames) {
       transport.sendFrame(attachment.mobileClientInstanceId, frame)
     }
   }
 
   /** Sends one full window immediately, for attach and for post-reconnect resync. */
-  private async pushSnapshot(attachment: MobileAttachment): Promise<void> {
+  private async pushSnapshot(
+    attachment: MobileAttachment,
+    reason: "attach" | "sync",
+  ): Promise<void> {
     const window = await this.terminal.readLineWindow({
       sessionId: attachment.sessionId,
       maxLines: this.lineWindowLines,
@@ -561,6 +588,15 @@ export class MobileGatewayService {
       sizeRevision: window.sizeRevision,
     })
     this.consumeBudget(attachment.mobileClientInstanceId, frames)
+    // 谁把这一整窗推出去的。手机侧看到的是"又一轮 reset + 十几块 history"，
+    // 而这一行是它唯一的解释：attach / sync 各一条通路。
+    this.deps.logger.info("Mobile window pushed.", {
+      sessionId: attachment.sessionId,
+      reason,
+      frames: frames.length,
+      windowLines: snapshot.lines.length,
+      bytes: frameBytes(frames),
+    })
     for (const frame of frames) {
       this.transport?.sendFrame(attachment.mobileClientInstanceId, frame)
     }
@@ -585,6 +621,13 @@ export class MobileGatewayService {
     // the server answers a malformed frame by closing the desktop's connection.
     const count = Math.min(requested, emulatorOfBefore, before)
     if (count <= 0) {
+      // 空页 = 电脑说"没有更早的了"。它与"请求丢了"在手机上长得一样，所以这条也要记。
+      this.deps.logger.info("Mobile history page empty.", {
+        sessionId: attachment.sessionId,
+        before,
+        limit,
+        windowStart: attachment.tracker.oldestIndex,
+      })
       this.emitHistoryFrame(attachment, before, [])
       return
     }
@@ -597,6 +640,12 @@ export class MobileGatewayService {
       this.emitHistoryFrame(attachment, before, [])
       return
     }
+    this.deps.logger.info("Mobile history page served.", {
+      sessionId: attachment.sessionId,
+      before,
+      limit,
+      lines: range.lines.length,
+    })
     this.emitHistoryFrame(attachment, before - range.lines.length, range.lines)
   }
 
@@ -635,8 +684,7 @@ export class MobileGatewayService {
       entry = { windowStartedMs: nowMs, bytes: 0 }
       this.bytesByClient.set(mobileClientInstanceId, entry)
     }
-    let bytes = 0
-    for (const frame of frames) bytes += Buffer.byteLength(JSON.stringify(frame), "utf8")
+    const bytes = frameBytes(frames)
     const withinBudget = entry.bytes + bytes <= MOBILE_FRAME_LIMITS.maxBytesPerSecond
     entry.bytes += bytes
     return withinBudget
@@ -1243,6 +1291,7 @@ export class MobileGatewayService {
     return (this.deps.now?.() ?? new Date()).getTime()
   }
 
+
   private clearTimerIfSet(kind: "flush" | "summary" | "lease"): void {
     const handle = kind === "flush" ? this.flushTimer : kind === "summary" ? this.summaryTimer : this.leaseTimer
     if (!handle) return
@@ -1277,6 +1326,19 @@ type MobileSummaryContent = {
 /** What the socket will have to carry, measured the same way the budget is stated. */
 function summaryBytes(content: MobileSummaryContent): number {
   return Buffer.byteLength(JSON.stringify(content), "utf8")
+}
+
+/**
+ * The same measurement, for a batch of frames.
+ *
+ * One implementation rather than two: the budget spends these bytes and the log line
+ * reports them, and a log that disagrees with the number the decision was made on is
+ * worse than no log at all.
+ */
+function frameBytes(frames: readonly MobileTerminalFrame[]): number {
+  let bytes = 0
+  for (const frame of frames) bytes += Buffer.byteLength(JSON.stringify(frame), "utf8")
+  return bytes
 }
 
 /**

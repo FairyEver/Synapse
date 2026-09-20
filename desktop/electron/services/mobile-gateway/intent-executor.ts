@@ -80,7 +80,10 @@ export type IntentExecutorDeps = {
    */
   readonly sendQuickPhrases: () => void
   /** Sends a full-window frame immediately, for attach and resync. */
-  readonly pushSnapshot: (attachment: MobileAttachment) => Promise<void>
+  readonly pushSnapshot: (
+    attachment: MobileAttachment,
+    reason: "attach" | "sync",
+  ) => Promise<void>
   /** Sends one page of scrollback below `before`, or an empty page at the end. */
   readonly sendHistory: (attachment: MobileAttachment, before: number, limit: number) => Promise<void>
   /**
@@ -214,7 +217,7 @@ export class MobileIntentExecutor {
         this.deps.sendQuickPhrases()
         const existing = registry.get(mobileClientInstanceId, intent.sessionId)
         if (existing) {
-          await this.deps.pushSnapshot(existing)
+          await this.deps.pushSnapshot(existing, "attach")
           return accepted(intent.intentId, { sessionId: session.id })
         }
         const attachment = createAttachment({
@@ -224,7 +227,7 @@ export class MobileIntentExecutor {
         })
         registry.attach(attachment)
         const message = await this.tryAcquireLease(attachment)
-        await this.deps.pushSnapshot(attachment)
+        await this.deps.pushSnapshot(attachment, "attach")
         return { ...accepted(intent.intentId, { sessionId: session.id }), message }
       }
 
@@ -631,7 +634,7 @@ export class MobileIntentExecutor {
    */
   private async pushSnapshotOrForget(attachment: MobileAttachment): Promise<void> {
     try {
-      await this.deps.pushSnapshot(attachment)
+      await this.deps.pushSnapshot(attachment, "sync")
     } catch (error) {
       if (!isMissingSession(error)) throw error
       this.deps.registry.detach(attachment.mobileClientInstanceId, attachment.sessionId)
