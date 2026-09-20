@@ -61,6 +61,9 @@ struct DiagnosticLogView: View {
 
             Section {
                 Toggle("记录终端屏幕内容", isOn: $capturesContent)
+                    // 同一个根因：应用根的 tint 在深色下是白色，开关的圆点也是白的，
+                    // 一颗开着的开关就成了一块没有圆点的白方块。见 `Theme.switchOn`。
+                    .tint(Theme.switchOn)
                     .onChange(of: capturesContent) { _, value in
                         DiagnosticLog.capturesContent = value
                     }
