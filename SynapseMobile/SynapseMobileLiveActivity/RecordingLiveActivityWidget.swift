@@ -77,14 +77,10 @@ struct RecordingLiveActivityWidget: Widget {
             DynamicIsland {
                 // 一行：左边计时，右边停止键。传感器挖孔在中间，内容只能贴着两头放。
                 //
-                // 两个区域都**不自己加 padding**：灵动岛每一块都有系统给的默认 content
-                // margin（`contentMargins(_:_:for:)` 能改的正是它），Apple 的原话是内容要
-                // 和岛的形状同心、四周留一样的边距、别贴到边上。自己再塞一圈只会和默认值
-                // 叠加。两边都不加，计时和停止键的边距自然就是同一个数。
-                //
-                // 上下也不用管：区域内容默认垂直居中，一行里两件东西就落在同一条中线上。
-                // 上一版左边是「名字压着计时」的两行，计时被压得比右边那枚低一截——那才
-                // 是看着不齐的原因。
+                // 左右两个区域都**不自己加 padding**：灵动岛每一块都有系统给的默认 content
+                // margin，Apple 的原话是内容和岛的形状同心、四周留一样的边距、别贴到边上。
+                // 自己再塞一圈只会和默认值叠。两边都不加，实测左右留白 19.0 / 18.0 pt
+                // （差的那 1 pt 是数字字形自带的边距），已经是对称的。
                 DynamicIslandExpandedRegion(.leading) {
                     RecordingTimer(state: context.state)
                         .font(.title2)
@@ -105,6 +101,17 @@ struct RecordingLiveActivityWidget: Widget {
                 // 同时有两个实时活动时收成一个圆点：这里放不下任何字。
                 RecordingDot(diameter: 12)
             }
+            // 把系统留给 `.bottom` 区域的那条底部空带收掉，否则整行会被顶高。
+            //
+            // 实测（iPhone 17 Pro / iOS 26.7，截图逐像素量的）：展开态是一枚 373 × 84 pt
+            // 的胶囊（圆角是高度的一半，逐行验过），而计时和停止键的中心落在距顶边
+            // 34.8 pt 处——比胶囊中线高 7.0 pt，右边那颗按钮因此看着浮在右端半圆的上半
+            // 边。只有一种解释对得上：区域内容是在 [顶边距, 高 − 底边距] 这条带里居中的，
+            // 反推系统默认底边距约 14 pt，带高 70 pt、中心 35 pt。
+            //
+            // `.bottom` 归零之后内容区就是整枚胶囊，中心回到 42 pt，和胶囊中线重合——
+            // 计时和那颗按钮落回同一条中线上。
+            .contentMargins(.bottom, 0, for: .expanded)
         }
     }
 }
