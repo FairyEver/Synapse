@@ -3,19 +3,22 @@ import Testing
 
 @testable import SynapseMobile
 
-/// 键盘面板的几何（设计文档 `2026-09-19-terminal-keyboard-todesk-design.md` §5）。
+/// 键盘面板的几何（设计文档 `2026-09-20-terminal-keyboard-high-frequency-design.md` §5）。
 ///
 /// 这一条钉的是**面板只有一个高度**，以及它和键、行距之间的关系。它一度是两档（第一页
 /// 306、第二页 390，随页走），2026-09-19 面板上面那三行 —— 分页器、工具栏、输入栏 ——
-/// 一起去掉之后回到一档：腾出来的地方正好装得下第一页多出来的那两行空白，翻页于是既
-/// 不欠高度、也不动终端。
+/// 一起去掉之后回到一档，代价是第一页底下空着两行。
+///
+/// **2026-09-20 那两行不再是空的**：方向键与回车搬进第一页之后两页都铺满，一档高度不再
+/// 由「白扔两行」换，但翻页时终端依旧一动不动 —— 下面那条测的就是这件事。
 ///
 /// 这里**只能**钉住算术。真正出过一次的那个 bug —— 每颗键的点击盒比键高高出一截，那截
 /// 又成了布局高度，纵向的缝于是变成横向的两倍（12 对 6）—— 是 SwiftUI 的布局事实，
 /// 单值算不出来，由 `SynapseMobileUITests/TerminalFlowUITests.swift` 在真界面上量。
 struct TerminalKeyboardPanelMetricsTests {
-    /// 两页各有多少行：数字加三行字母是一页，符号行加功能键与导航块是另一页。
-    private let computerRows = 4
+    /// 两页各有多少行：数字加三行字母加方向键行与动作行是一页，符号加编辑块加功能键是
+    /// 另一页。**两页都是六行** —— 板子多高，两页就都用满多高。
+    private let computerRows = 6
     private let functionRows = 6
 
     /// 一档高度，就是行数最多的那一页所需要的。
@@ -26,12 +29,19 @@ struct TerminalKeyboardPanelMetricsTests {
         #expect(KeyboardPanelMetrics.boardHeight == KeyboardPanelMetrics.rowPitch * CGFloat(functionRows))
     }
 
-    /// 板子给的是最多行数的那一页，所以第一页底下空出来的就是差的那两行 ——
-    /// 这是**有意的**：翻页时终端一动不动，代价画在第一页下面。
-    @Test func theShorterPageIsShorterThanTheBoardByExactlyItsMissingRows() {
-        let missing = KeyboardPanelMetrics.boardHeight
-            - KeyboardPanelMetrics.rowPitch * CGFloat(computerRows)
-        #expect(missing == 84)
+    /// 两页都把板子铺满：两页一样高，翻页时终端一动不动，而这一次没有哪一页底下
+    /// 需要空着。
+    ///
+    /// 2026-09-20 之前这里钉的是「第一页比板子矮两行、正好 84pt」—— 那 84pt 是买
+    /// 「一档高度」付的钱。方向键与动作行搬进第一页之后不用付了，但**要买的东西没变**，
+    /// 所以这条从断言「差两行」改成断言「两页都不差」，而不是删掉。
+    ///
+    /// 两边都对着**产品里的那个数**比，不是拿两个测试本地常量互比 —— 后者恒真。
+    @Test func bothPagesFillTheBoard() {
+        #expect(KeyboardPanelMetrics.maximumRows == computerRows)
+        #expect(KeyboardPanelMetrics.maximumRows == functionRows)
+        #expect(KeyboardPanelMetrics.boardHeight == KeyboardPanelMetrics.rowPitch * CGFloat(computerRows))
+        #expect(KeyboardPanelMetrics.boardHeight == KeyboardPanelMetrics.rowPitch * CGFloat(functionRows))
     }
 
     /// 行距就是键高加键距，而键距和键距是同一个数 —— 板子读成一个网格的全部依据。
