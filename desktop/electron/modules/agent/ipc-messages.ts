@@ -149,6 +149,13 @@ async function stagePathsForRenderer(
         })
         return { attachments: [], rejectedCount: input.paths.length }
       }
+      // 渲染层只会看到「被拒绝」的计数，失败原因必须留在主进程日志里。
+      logger.warn("Agent attachment path rejected.", {
+        boundary: "agent.attachment.resolve-paths",
+        draftScopeId: input.draftScopeId,
+        sourceIndex,
+        ...sendFailureDiagnostic(error),
+      })
       rejectedCount += 1
     }
   }
@@ -661,10 +668,19 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     response: attachmentSelectionResultSchema,
     handler: async (ctx, request: z.infer<typeof stageClipboardImageRequestSchema>) => {
       const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      return clipboardAttachmentService.stage(agent, {
+      const result = await clipboardAttachmentService.stage(agent, {
         draftScopeId: request.draftScopeId,
         name: request.name,
       })
+      if (result.rejectedCount > 0) {
+        // 剪贴板读不出图片时渲染层只看到拒绝计数，原因必须留在主进程日志里。
+        logger.warn("Agent clipboard image rejected.", {
+          boundary: "agent.attachment.stage-clipboard-image",
+          draftScopeId: request.draftScopeId,
+          reason: "empty_clipboard_image",
+        })
+      }
+      return result
     },
   },
   releaseAttachments: {

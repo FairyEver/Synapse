@@ -994,7 +994,9 @@ async function atomicWrite(
   const tempPath = `${targetPath}.${randomUUID()}.tmp`
   try {
     await writeFile(tempPath, bytes, { flag: "wx" })
-    const handle = await open(tempPath, "r")
+    // 必须是可写句柄：Windows 的 fsync 走 FlushFileBuffers，只读句柄上会返回
+    // ERROR_ACCESS_DENIED（Node 抛 EPERM），用 "r" 会让整个附件写入在 Windows 上失败。
+    const handle = await open(tempPath, "r+")
     try {
       await handle.sync()
     } finally {
