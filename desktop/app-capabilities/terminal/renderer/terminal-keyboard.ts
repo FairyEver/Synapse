@@ -19,21 +19,29 @@ export function getTerminalClipboardShortcut(
   event: TerminalKeyboardEvent,
   platform: string | undefined,
 ): TerminalClipboardShortcut | null {
-  if (
-    platform !== "darwin"
-    || event.isComposing
-    || !event.metaKey
-    || event.altKey
-    || event.ctrlKey
-    || event.shiftKey
-  ) {
+  // Alt belongs to whatever runs inside: `Alt+V` is how the TUI pastes an image from the clipboard.
+  if (event.isComposing || event.altKey) return null
+
+  const key = event.key.toLowerCase()
+
+  if (platform === "darwin") {
+    if (!event.metaKey || event.ctrlKey || event.shiftKey) return null
+    if (key === "c") return "copy"
+    if (key === "v") return "paste"
     return null
   }
 
-  const key = event.key.toLowerCase()
-  if (key === "c") return "copy"
-  if (key === "v") return "paste"
-  return null
+  /*
+   * `Ctrl+V` pastes on every other platform's terminal — Windows Terminal, conhost and VS Code
+   * all do it — and text is the one thing the TUI cannot fetch for itself: it reads the system
+   * clipboard for images only, so a paste of text has to be typed into the PTY from here.
+   * `Ctrl+Shift+V` is the same key for people who learned that one.
+   *
+   * `Ctrl+C` is not the copy key and stays the shell's: inside a terminal it is the interrupt,
+   * and copying a selection keeps its own button.
+   */
+  if (!event.ctrlKey || event.metaKey) return null
+  return key === "v" ? "paste" : null
 }
 
 /**
