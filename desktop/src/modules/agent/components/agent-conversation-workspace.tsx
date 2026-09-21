@@ -7,7 +7,8 @@ import { useAppConfig } from "@/app-shell/config"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { getSynapseBridge, requireBridgeDomain, requireSynapseBridge } from "@/lib/electron-bridge"
+import { useQuickInputItems } from "@/hooks/use-quick-input-items"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { redactSessionKey } from "@/lib/agent-redaction"
 import { track } from "@/lib/ui-tracking"
 import type {
@@ -80,7 +81,6 @@ import { AgentWorkspaceShell } from "./agent-workspace-shell"
 import { AgentFileCheckpointPanel } from "./agent-file-checkpoint-panel"
 
 const logger = createRendererLogger("agent")
-const EMPTY_QUICK_INPUTS: readonly SynapseQuickInputItem[] = []
 
 export type AgentConversationTarget = ImportedAgentConversationTarget
 
@@ -931,44 +931,6 @@ function trackDirectAgentSend(input: DirectSendTrackInput): void {
       sending: input.sending,
     },
   })
-}
-
-function useQuickInputItems(initialItems: readonly SynapseQuickInputItem[] = EMPTY_QUICK_INPUTS): readonly SynapseQuickInputItem[] {
-  const [items, setItems] = useState<SynapseQuickInputItem[]>(() => [...initialItems])
-
-  useEffect(() => {
-    setItems([...initialItems])
-  }, [initialItems])
-
-  useEffect(() => {
-    let disposed = false
-    let unsubscribe: (() => void) | undefined
-    try {
-      const bridge = requireBridgeDomain("quickInput")
-      void bridge.item.list().then((nextItems) => {
-        if (!disposed) setItems(nextItems)
-      }).catch((rawError: unknown) => {
-        logger.warn("Agent quick input load failed.", {
-          boundary: "renderer.agent.quick-input.load",
-          ...errorDiagnostic(rawError),
-        })
-      })
-      unsubscribe = bridge.item.onChanged((event) => {
-        setItems(event.items)
-      })
-    } catch (rawError) {
-      logger.warn("Agent quick input bridge unavailable.", {
-        boundary: "renderer.agent.quick-input.bridge",
-        ...errorDiagnostic(rawError),
-      })
-    }
-    return () => {
-      disposed = true
-      unsubscribe?.()
-    }
-  }, [])
-
-  return items
 }
 
 function slashCommandName(content: string): string {
