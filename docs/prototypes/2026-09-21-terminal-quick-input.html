@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>终端快捷输入 · 原型</title>
+<style>
+  /* 浅色 = 应用的浅色主题（窗口壳 + 侧栏）。终端那块永远带 .dark，所以命令条
+     和面板取的是深色 token；两套值都照抄 desktop/src/styles/globals.css。 */
+  :root{
+    --light-bg:oklch(1 0 0); --light-fg:oklch(0.145 0 0);
+    --light-card:oklch(1 0 0); --light-border:oklch(0.922 0 0);
+    --light-muted-token:oklch(0.97 0 0); --light-muted:oklch(0.556 0 0);
+    --light-accent:oklch(0.97 0 0); --light-ring:oklch(0.708 0 0);
+
+    --dark-bg:oklch(0.145 0 0); --dark-fg:oklch(0.985 0 0);
+    --dark-card:oklch(0.205 0 0); --dark-border:oklch(1 0 0 / 10%);
+    --dark-muted-token:oklch(0.269 0 0); --dark-muted:oklch(0.708 0 0);
+    --dark-accent:oklch(0.269 0 0); --dark-ring:oklch(0.556 0 0);
+    --radius:.625rem;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:#e9e9ee;color:#111;
+    font:400 14px/1.5 var(--sans);padding:34px 24px 90px}
+  @media (prefers-color-scheme:dark){body{background:#111113;color:#f2f2f7}}
+
+  .head{max-width:1080px;margin:0 auto 40px}
+  .head h1{font-size:20px;font-weight:600;margin:0 0 10px}
+  .head ul{margin:0;padding-left:18px;font-size:13px;line-height:1.85;color:#5b5b64}
+  .head li b{color:#111;font-weight:600}
+  @media (prefers-color-scheme:dark){.head ul{color:#98989f}.head li b{color:#f2f2f7}}
+  .head code{font-family:var(--mono);font-size:12px;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
+  @media (prefers-color-scheme:dark){.head code{background:rgba(255,255,255,.1)}}
+
+  .stage{display:flex;flex-direction:column;align-items:center;gap:64px}
+  figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:16px;width:100%}
+  figcaption{font-size:13px;color:#5b5b64;line-height:1.75;max-width:1036px;width:100%}
+  figcaption b{color:#111;font-weight:600;display:block;margin-bottom:4px;font-size:13.5px}
+  @media (prefers-color-scheme:dark){figcaption{color:#98989f}figcaption b{color:#f2f2f7}}
+
+  /* ============ 窗口 ============ */
+  .win{width:1440px;height:860px;zoom:.72;border-radius:12px;overflow:hidden;
+    background:var(--light-bg);color:var(--light-fg);
+    box-shadow:0 0 0 1px rgba(0,0,0,.14),0 26px 50px rgba(0,0,0,.24);
+    display:flex;flex-direction:column;flex:none}
+  .win.dark{background:var(--dark-bg);color:var(--dark-fg);
+    box-shadow:0 0 0 1px rgba(255,255,255,.1),0 26px 50px rgba(0,0,0,.5)}
+
+  /* 顶部：红绿灯 + 侧栏开关 + 标签 + 右侧动作（SystemAppWindowShell 那条） */
+  .topbar{height:52px;display:flex;align-items:center;gap:12px;padding:0 14px 0 18px;
+    border-bottom:1px solid var(--light-border);background:var(--light-bg);flex:none}
+  .win.dark .topbar{border-bottom-color:var(--dark-border);background:var(--dark-bg)}
+  .lights{display:flex;gap:8px;margin-right:10px}
+  .lights i{width:12px;height:12px;border-radius:50%;background:#d5d5da}
+  .lights i:nth-child(1){background:#ff5f57}
+  .lights i:nth-child(2){background:#febc2e}
+  .lights i:nth-child(3){background:#28c840}
+  .iconbtn{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+    color:var(--light-muted);flex:none}
+  .win.dark .iconbtn{color:var(--dark-muted)}
+  .tabs{display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden}
+  .tab{display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:8px;
+    font-size:13px;color:var(--light-muted);white-space:nowrap}
+  .tab.on{background:var(--light-muted-token);color:var(--light-fg)}
+  .win.dark .tab{color:var(--dark-muted)}
+  .win.dark .tab.on{background:var(--dark-muted-token);color:var(--dark-fg)}
+  .tab .dotx{color:var(--light-muted);opacity:.7}
+  .grow{flex:1}
+  .tbtns{display:flex;align-items:center;gap:4px;flex:none}
+  .tbtn{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;
+    font-size:13px;color:var(--light-fg);white-space:nowrap}
+  .win.dark .tbtn{color:var(--dark-fg)}
+
+  /* 主体：侧栏 + 终端 */
+  .body{flex:1;min-height:0;display:flex}
+  .side{width:236px;flex:none;border-right:1px solid var(--light-border);
+    background:var(--light-bg);padding:10px 8px;font-size:13px;overflow:hidden}
+  .win.dark .side{border-right-color:var(--dark-border);background:var(--dark-bg)}
+  .side .sect{margin:10px 0 4px;padding:0 8px;font-size:11.5px;color:var(--light-muted)}
+  .win.dark .side .sect{color:var(--dark-muted)}
+  .row{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:7px;
+    color:var(--light-fg);white-space:nowrap;overflow:hidden}
+  .row.on{background:var(--light-muted-token)}
+  .win.dark .row{color:var(--dark-fg)}
+  .win.dark .row.on{background:var(--dark-muted-token)}
+  .row .st{width:6px;height:6px;border-radius:50%;background:#34c759;flex:none}
+  .row .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .row .m{color:var(--light-muted);font-size:11.5px}
+  .win.dark .row .m{color:var(--dark-muted)}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+  /* 终端区：应用里这一层永远带 dark */
+  .term{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;
+    background:var(--dark-bg);color:var(--dark-fg)}
+  .screen{flex:1;min-height:0;padding:12px 14px;font:13px/1.55 var(--mono);
+    white-space:pre-wrap;overflow:hidden;color:var(--dark-fg)}
+  .screen .dim{color:var(--dark-muted)}
+  .screen .grn{color:oklch(0.78 0.1 154)}
+  .screen .blu{color:oklch(0.74 0.12 248)}
+
+  /* TUI 输入框：那一句话落进来的地方 */
+  .tui{margin:0 14px 12px;border-radius:8px;border:1px solid var(--dark-border);
+    padding:8px 10px;font:13px/1.55 var(--mono);white-space:pre-wrap;min-height:34px}
+  .tui .caret{color:var(--dark-muted)}
+  .tui .ph{color:var(--dark-muted);font-style:normal}
+  .tui .cursor{display:inline-block;width:7px;height:15px;background:var(--dark-fg);
+    vertical-align:-3px;animation:bl 1.05s steps(2,start) infinite}
+  @keyframes bl{to{visibility:hidden}}
+
+  /* 待执行提示条（应用里已有，语音输入用的就是它） */
+  .pending{display:flex;align-items:center;gap:10px;padding:6px 10px;flex:none;
+    border-top:1px solid var(--dark-border);background:var(--dark-card)}
+  .pending .p-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;font:12px/1.4 var(--mono);color:var(--dark-fg)}
+  .pending .p-hint{flex:none;font-size:11.5px;color:var(--dark-muted)}
+  .pending .iconbtn{color:var(--dark-muted)}
+
+  /* ============ 命令条 ============ */
+  .bar{position:relative;flex:none;display:flex;align-items:stretch;min-height:44px;
+    border-top:1px solid var(--dark-border);background:var(--dark-card)}
+  .bar-left{position:relative;flex:none;display:flex;align-items:center;
+    padding:6px 6px 6px 10px}
+  .bar-left::after{content:"";position:absolute;right:0;top:12px;bottom:12px;width:1px;
+    background:var(--dark-border)}
+  .bar-scroll{flex:1;min-width:0;display:flex;align-items:center;gap:4px;
+    padding:6px 10px;overflow-x:auto;white-space:nowrap}
+  .bar-scroll::-webkit-scrollbar{height:0}
+  .cap{flex:none;height:28px;padding:0 8px;border-radius:6px;display:inline-flex;
+    align-items:center;font-size:13px;color:var(--dark-fg);opacity:.75}
+  .cap.dim{opacity:.4}
+  .sep{flex:none;width:1px;height:16px;background:var(--dark-border);margin:0 4px}
+  .mic{margin-left:auto;flex:none;display:flex;align-items:center;padding-right:2px}
+
+  /* 新入口：快捷输入 */
+  .qi-trigger{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;
+    padding:0 10px;border-radius:8px;border:0;background:transparent;cursor:pointer;
+    font:500 13px var(--sans);color:var(--dark-fg);opacity:.8}
+  .qi-trigger:hover,.qi-trigger.open{background:var(--dark-accent);opacity:1}
+  .qi-trigger svg{transition:transform .16s ease}
+  .qi-trigger.open svg{transform:rotate(180deg)}
+  .qi-trigger:focus-visible{outline:2px solid var(--dark-ring);outline-offset:1px}
+
+  /* 面板 */
+  .qi-pop{position:absolute;left:10px;bottom:calc(100% + 8px);z-index:20;display:flex;
+    align-items:flex-start;gap:8px}
+  .qi-list{width:392px;max-height:340px;overflow-y:auto;padding:4px;border-radius:var(--radius);
+    background:var(--dark-card);color:var(--dark-fg);
+    border:1px solid var(--dark-border);box-shadow:0 18px 40px rgba(0,0,0,.5)}
+  .qi-list::-webkit-scrollbar{width:8px}
+  .qi-list::-webkit-scrollbar-thumb{background:var(--dark-border);border-radius:4px}
+  .prow{display:flex;align-items:flex-start;gap:6px;border-radius:6px;padding:0}
+  .prow:hover,.prow.hot{background:var(--dark-accent)}
+  .prow-main{flex:1;min-width:0;text-align:left;border:0;background:transparent;cursor:pointer;
+    padding:8px 4px 8px 8px;font:inherit;color:inherit;display:block}
+  .prow-label{display:block;font-size:13.5px;line-height:1.5;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .prow-body{display:block;font-size:12px;line-height:1.5;color:var(--dark-muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .eye{flex:none;width:26px;height:26px;margin:5px 4px 0 0;border:0;border-radius:6px;
+    background:transparent;cursor:pointer;display:grid;place-items:center;
+    color:var(--dark-muted)}
+  .eye:hover{background:var(--dark-border);color:var(--dark-fg)}
+  .qi-empty{padding:18px 12px;font-size:13px;color:var(--dark-muted);text-align:center}
+
+  /* 看全文 */
+  .qi-preview{width:392px;max-height:340px;overflow-y:auto;padding:12px 14px;
+    border-radius:var(--radius);background:var(--dark-card);color:var(--dark-fg);
+    border:1px solid var(--dark-border);box-shadow:0 18px 40px rgba(0,0,0,.5)}
+  .qi-preview .ph{display:flex;align-items:center;justify-content:space-between;
+    font-size:11.5px;color:var(--dark-muted);margin-bottom:8px}
+  .qi-preview .pv-text{white-space:pre-wrap;font-size:13px;line-height:1.7;
+    user-select:text;cursor:text}
+
+  /* ============ 变体：入口形态对照 ============ */
+  .variants{display:flex;gap:28px;align-items:flex-start}
+  .vbox{border:1px solid rgba(0,0,0,.12);border-radius:10px;overflow:hidden;background:var(--dark-card)}
+  .win.dark .vbox{border-color:var(--dark-border)}
+  .vbox .vbar{display:flex;align-items:center;gap:4px;padding:6px 10px;min-height:44px}
+  .vcap{font-size:12.5px;color:#5b5b64;margin-top:8px;line-height:1.7;max-width:420px}
+  @media (prefers-color-scheme:dark){.vcap{color:#98989f}}
+  .pick{display:inline-block;font-size:11px;padding:1px 6px;border-radius:5px;
+    background:rgba(0,0,0,.07);color:#5b5b64;margin-left:6px}
+  @media (prefers-color-scheme:dark){.pick{background:rgba(255,255,255,.12);color:#c7c7cc}}
+
+  /* 标注：只用于指出屏幕上的新东西，不是界面的一部分 */
+  .mark{outline:1.5px dashed oklch(0.72 0.14 248);outline-offset:2px;border-radius:8px}
+  .marklbl{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;
+    border-radius:50%;background:oklch(0.62 0.15 248);color:#fff;font:600 10.5px var(--sans);
+    margin-left:6px;vertical-align:1px}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>终端快捷输入 · 原型</h1>
+  <ul>
+    <li><b>接的是哪个「快捷输入」：</b>Synapse 里那个 System App（<code>快捷输入</code>，存 <code>app.quick-input.items</code>）。Agent 对话里已经接上了，终端这次是把同一份句子接进命令条。手机端也已经在用这份数据。</li>
+    <li><b>入口在命令条最左侧，而且是钉住的。</b>命令条本身是横向滚动容器，指令一多最左边的东西会被滚出去 —— 所以这颗键放在滚动区之外，跟手机端「左固定 · 中横滑」是同一种做法。</li>
+    <li><b>点一句只落进输入框，不执行。</b>和语音输入、手机端同一条口径：整句文字写进命令行/TUI 输入框，执行与否留给按 Enter。句子是多行的，写入时按 bracketed paste 包一层，避免第二个换行被当成回车。</li>
+    <li><b>名单为空时这颗键不出现。</b>与 Agent 对话里的做法一致（<code>quickInputs.length === 0</code> 时不渲染菜单），不摆一个点开是空的按钮。</li>
+    <li><b>面板是深色的，因为终端那一块自己带 <code>.dark</code>。</b>应用浅色主题下窗口壳是浅的，终端永远是深的；面板浮在终端上，所以取深色 token。</li>
+    <li><b>名字已经分开：</b>终端工具栏原来那套自定义按钮改叫<b>快捷命令</b>，跟手机端面板里的叫法一致；「快捷输入」这个词留给这个 App 里的句子。两处不再同名。</li>
+  </ul>
+</div>
+
+<div class="stage">
+
+  <!-- ============================================================ 1 -->
+  <figure>
+    <div class="win" id="winA">
+      <div class="topbar">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="iconbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></div>
+        <div class="tabs">
+          <div class="tab on">项目:Synapse <span class="dotx"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+          <div class="tab">api <span class="dotx"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div>
+        </div>
+        <div class="grow"></div>
+        <div class="tbtns">
+          <div class="tbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 新建</div>
+          <div class="tbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 设置</div>
+        </div>
+      </div>
+
+      <div class="body">
+        <div class="side">
+          <div class="sect">项目:Synapse</div>
+          <div class="row on"><span class="st"></span><span class="t">claude</span></div>
+          <div class="sect">默认</div>
+          <div class="row"><span class="st"></span><span class="t">zsh</span></div>
+          <div class="row"><span class="st"></span><span class="t">api-server</span></div>
+        </div>
+
+        <div class="main">
+          <div class="term">
+            <div class="screen"> <span class="blu">▐▛███▜▌</span>   <b>Claude Code</b> v2.0.31
+<span class="blu">▝▜█████▛▘</span>  ~/Documents/code/github/Synapse
+ <span class="blu">▘▘ ▝▝</span>
+
+<span class="dim">&gt;</span> 帮我看一下终端命令条这次的改动
+
+<span class="grn">⏺</span> 读一下命令条那一段。
+
+<span class="grn">⏺</span> Read(desktop/app-capabilities/terminal/renderer/index.tsx)
+  <span class="dim">⎿  Read 2689 lines</span>
+
+<span class="grn">⏺</span> 命令条在第 1746–1822 行：一条横向滚动的容器，里面是
+  内置指令、你自己加的指令、铅笔和麦克风。最左侧现在是「回车」。</div>
+
+            <div class="tui" id="tuiBox">
+              <span class="caret">&gt;</span> <span id="tuiText"></span><span class="cursor" id="tuiCaret"></span>
+            </div>
+          </div>
+
+          <div class="pending" id="pending" hidden>
+            <span class="p-text" id="pendingText"></span>
+            <span class="p-hint">待执行 · Enter 执行</span>
+            <span class="iconbtn" id="pendingClose"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+          </div>
+
+          <div class="bar">
+            <div class="bar-left">
+              <button class="qi-trigger mark" id="qiTrigger" aria-haspopup="true" aria-expanded="false">
+                <span>快捷输入</span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+              </button>
+              <div class="qi-pop" id="qiPop" hidden>
+                <div class="qi-list" id="qiList"></div>
+                <div class="qi-preview" id="qiPreview" hidden>
+                  <div class="ph"><span>全文</span><button class="eye" id="pvClose" aria-label="收起全文"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
+                  <div class="pv-text" id="pvText"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bar-scroll">
+              <span class="cap">回车</span>
+              <span class="cap">Ctrl+C</span>
+              <span class="cap">Clear</span>
+              <span class="sep"></span>
+              <span class="cap">/exit</span>
+              <span class="cap">/clear</span>
+              <span class="sep"></span>
+              <span class="cap">跑一下测试</span>
+              <span class="cap"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg><span class="marklbl" id="pencilMark">?</span></span>
+              <span class="mic"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <figcaption>
+      <b>完整流程（可点）</b>
+      这一屏进来时面板就是开着的。点其中任意一句 → 整句落进输入框，命令行上方出现「待执行 · Enter 执行」，面板收起 —— 没有执行，等你按 Enter。
+      每行右侧那枚眼睛是「先读全文再决定」（点一下试试，左侧列表右边会展开全文）。
+      点面板外任意处收起，再点左下角那颗「快捷输入」重新打开。那颗铅笔管的是<b>另一套东西</b>，见页面末尾。
+    </figcaption>
+  </figure>
+
+  <!-- ============================================================ 2 -->
+  <figure>
+    <div class="win" id="winB">
+      <div class="topbar">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="iconbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></div>
+        <div class="tabs"><div class="tab on">项目:Synapse <span class="dotx"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div></div>
+        <div class="grow"></div>
+        <div class="tbtns">
+          <div class="tbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 新建</div>
+          <div class="tbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 设置</div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="side">
+          <div class="sect">项目:Synapse</div>
+          <div class="row on"><span class="st"></span><span class="t">claude</span></div>
+        </div>
+        <div class="main">
+          <div class="term">
+            <div class="screen"><span class="dim">（终端内容）</span>
+
+  <span class="dim">把中间那条横向滚到底 ——</span>
+  <span class="dim">最左这颗「快捷输入」不会跟着走。</span>
+  <span class="dim">原来「回车」那一颗是被滚走的。</span>
+
+</div>
+            <div class="tui"><span class="caret">&gt;</span> <span class="cursor"></span></div>
+          </div>
+          <div class="bar">
+            <div class="bar-left">
+              <button class="qi-trigger"> <span>快捷输入</span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
+            </div>
+            <div class="bar-scroll" id="longScroll">
+              <span class="cap">回车</span>
+              <span class="cap">Ctrl+C</span>
+              <span class="cap">Clear</span>
+              <span class="sep"></span>
+              <span class="cap">/exit</span>
+              <span class="cap">/clear</span>
+              <span class="sep"></span>
+              <span class="cap">跑一下测试</span>
+              <span class="cap">起服务</span>
+              <span class="cap">看日志</span>
+              <span class="cap">装依赖</span>
+              <span class="cap">回滚上一次</span>
+              <span class="cap">查端口占用</span>
+              <span class="cap">清缓存</span>
+              <span class="cap"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></span>
+              <span class="mic"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>命令条很长时，最左那颗钉住不动</b>
+      这一屏是自动滚到中间的，可以直接横向拖动那条命令条看。用户的指令没有上限，今天最左边的「回车」会被滚出屏幕 —— 新入口不能重蹈这一点。
+    </figcaption>
+  </figure>
+
+  <!-- ============================================================ 3 -->
+  <figure>
+    <div class="win dark">
+      <div class="topbar">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="iconbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></div>
+        <div class="tabs"><div class="tab on">项目:Synapse <span class="dotx"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span></div></div>
+        <div class="grow"></div>
+        <div class="tbtns">
+          <div class="tbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 新建</div>
+          <div class="tbtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 设置</div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="side">
+          <div class="sect">项目:Synapse</div>
+          <div class="row on"><span class="st"></span><span class="t">claude</span></div>
+        </div>
+        <div class="main">
+          <div class="term">
+            <div class="screen"><span class="dim">（同一屏，应用切到深色主题）</span>
+
+  <span class="dim">终端那块本来永远带 .dark，所以这里的差别只在</span>
+  <span class="dim">窗口壳和侧栏 —— 面板和命令条两屏长得一样。</span>
+</div>
+            <div class="tui"><span class="caret">&gt;</span> <span class="cursor"></span></div>
+          </div>
+          <div class="bar">
+            <div class="bar-left">
+              <button class="qi-trigger"> <span>快捷输入</span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
+            </div>
+            <div class="bar-scroll">
+              <span class="cap">回车</span>
+              <span class="cap">Ctrl+C</span>
+              <span class="cap">Clear</span>
+              <span class="sep"></span>
+              <span class="cap">/exit</span>
+              <span class="cap">/clear</span>
+              <span class="sep"></span>
+              <span class="cap">跑一下测试</span>
+              <span class="cap"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></span>
+              <span class="mic"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>深色主题</b>
+      只是确认一件事：面板要跟着终端一起是深的。弹层默认挂到 <code>body</code> 上，会继承窗口壳的主题 —— 浅色主题下就变成一块浅色浮层压在深色终端上。实现时得把面板包在 <code>.dark</code> 里。
+    </figcaption>
+  </figure>
+
+  <!-- ============================================================ 4 -->
+  <figure>
+    <div class="variants">
+      <div>
+        <div class="vbox">
+          <div class="vbar">
+            <button class="qi-trigger" style="background:var(--dark-accent)">
+              <span>快捷输入</span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+            </button>
+            <span class="sep"></span>
+            <span class="cap">回车</span><span class="cap">Ctrl+C</span><span class="cap">Clear</span>
+          </div>
+        </div>
+        <div class="vcap"><b>A · 文字 + 向上箭头</b><span class="pick">推荐</span><br>
+          跟 Agent 对话里那颗一模一样：同一个词、同一个箭头、同样向上弹。两个地方学一次就够。
+          占宽约 96px，和 <code>Ctrl+C</code> 一颗差不多。</div>
+      </div>
+
+      <div>
+        <div class="vbox">
+          <div class="vbar">
+            <button class="qi-trigger" style="background:var(--dark-accent);width:30px;
+              justify-content:center;padding:0" aria-label="快捷输入"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg></button>
+            <span class="sep"></span>
+            <span class="cap">回车</span><span class="cap">Ctrl+C</span><span class="cap">Clear</span>
+          </div>
+        </div>
+        <div class="vcap"><b>B · 只有图标</b><br>
+          省 70px，但命令条上其余全是文字，一颗孤零零的图标会先被当成「又一个指令」而不是「打开一个面板」。
+          悬停出 tooltip「快捷输入」。<br>
+          <span style="opacity:.75">图标本身还没定，这里先拿闪电占位。</span></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>入口形态</b>
+      两个都在最左侧、都钉住，差别只在占多宽。A 的好处是两个地方长得一样；B 的好处是把宽度留给指令。
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="head" style="margin:64px auto 0">
+  <h1 style="font-size:16px">名字怎么分</h1>
+  <ul>
+    <li>终端工具栏那颗铅笔（第一屏里带 <span class="marklbl" style="margin:0 2px">?</span> 的那颗）打开的弹窗，原来标题叫「自定义快捷输入」，管的是命令按钮：名称 + 内容 + 是否回车。存在 <code>app.terminal.toolbar-actions</code>，跟「快捷输入」App 里的句子没有关系。<b>改叫「快捷命令」。</b></li>
+    <li>改完之后，三处叫法就一致了：终端工具栏上的命令按钮、那个弹窗、手机端面板里的「快捷命令」段。而「快捷输入」只剩一个意思 —— 用户在「快捷输入」App 里维护的句子。</li>
+    <li>要改的字符串都在那个弹窗里（标题、表单标题、空态、删除确认、两条 aria-label），加上工具栏那颗铅笔的 aria-label 和自定义按钮的 aria-label，没有别的联动。</li>
+  </ul>
+</div>
+
+<script>
+(function () {
+  /* 真实内置的六条（desktop/app-capabilities/quick-input/shared/defaults.ts），
+     形状是「第一行当标题 + 空行 + 正文」—— 面板按第一行做标签。 */
+  var PHRASES = [
+    { label: "帮我捋一下", body: "把这里的信息重新整理一下，重点放在结论、分歧和下一步。" },
+    { label: "给个结论", body: "先说结论，再用几条要点说明理由。" },
+    { label: "哪里有问题", body: "帮我挑一下毛病，重点看不清楚、不完整、前后打架的地方。" },
+    { label: "改得像正式文档", body: "保持原意，把表达改得更清楚、更克制、更适合放进文档。" },
+    { label: "整理成待办", body: "拆成可执行的待办事项，按优先级排一下。" },
+    { label: "存到桌面", body: "整理成一份 Markdown 文件，保存到我的桌面。" }
+  ];
+
+  var list = document.getElementById("qiList");
+  var pop = document.getElementById("qiPop");
+  var trigger = document.getElementById("qiTrigger");
+  var preview = document.getElementById("qiPreview");
+  var pvText = document.getElementById("pvText");
+  var tuiText = document.getElementById("tuiText");
+  var tuiCaret = document.getElementById("tuiCaret");
+  var pending = document.getElementById("pending");
+  var pendingText = document.getElementById("pendingText");
+
+  PHRASES.forEach(function (p) {
+    var row = document.createElement("div");
+    row.className = "prow";
+
+    var main = document.createElement("button");
+    main.type = "button";
+    main.className = "prow-main";
+    main.setAttribute("aria-label", "填入快捷输入：" + p.label);
+    var l = document.createElement("span");
+    l.className = "prow-label";
+    l.textContent = p.label;
+    var b = document.createElement("span");
+    b.className = "prow-body";
+    b.textContent = p.body;
+    main.appendChild(l);
+    main.appendChild(b);
+    main.addEventListener("click", function () { choose(p); });
+
+    var eye = document.createElement("button");
+    eye.type = "button";
+    eye.className = "eye";
+    eye.setAttribute("aria-label", "看全文：" + p.label);
+    eye.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+    eye.addEventListener("click", function (e) {
+      e.stopPropagation();
+      pvText.textContent = p.label + "\n" + p.body;
+      preview.hidden = false;
+    });
+
+    row.appendChild(main);
+    row.appendChild(eye);
+    list.appendChild(row);
+  });
+
+  function choose(p) {
+    closePop();
+    /* 整句落进输入框，不补回车 —— 和语音输入、手机端同一条口径。 */
+    tuiText.textContent = p.label + "\n" + p.body;
+    tuiCaret.hidden = true;
+    pendingText.textContent = p.label + " " + p.body;
+    pending.hidden = false;
+  }
+
+  function openPop() {
+    pop.hidden = false;
+    trigger.classList.add("open");
+    trigger.setAttribute("aria-expanded", "true");
+  }
+  function closePop() {
+    pop.hidden = true;
+    preview.hidden = true;
+    trigger.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+  }
+
+  trigger.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (pop.hidden) openPop(); else closePop();
+  });
+  document.getElementById("pvClose").addEventListener("click", function () { preview.hidden = true; });
+  document.getElementById("pendingClose").addEventListener("click", function () {
+    pending.hidden = true;
+  });
+  document.addEventListener("click", function (e) {
+    if (pop.hidden) return;
+    if (pop.contains(e.target) || trigger.contains(e.target)) return;
+    closePop();
+  });
+
+  /* 一进页面就把面板摆开 —— 它才是这屏的主角；点空白处可关，再点入口可开。 */
+  openPop();
+
+  /* 演示「钉住」：把中间那条滚到中段，最左那颗不动。 */
+  var longScroll = document.getElementById("longScroll");
+  if (longScroll) longScroll.scrollLeft = 300;
+
+  /* 标出铅笔那颗：它管的是另一套东西。 */
+  var pm = document.getElementById("pencilMark");
+  if (pm) {
+    pm.title = "这里管理的是「快捷命令」——命令按钮（名称 + 内容 + 是否回车），不是这个面板里的句子";
+    pm.style.cursor = "help";
+  }
+})();
+</script>
+</body>
+</html>
