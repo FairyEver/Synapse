@@ -57,7 +57,7 @@ describe("SystemAppWindowShell", () => {
     ))
 
     const toolbar = document.querySelector("[data-system-app-window-toolbar]")
-    expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]")
+    expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_max-content]")
     expect(document.querySelector("[data-system-app-window-left]")?.textContent).toContain("应用标题")
     expect(document.querySelector("[data-system-app-window-tabs]")).toBeNull()
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("右侧操作")

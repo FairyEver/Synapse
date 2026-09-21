@@ -38,6 +38,19 @@ describe("SystemAppTopBar", () => {
     expect(document.querySelector("[data-system-app-top-bar-actions]")?.textContent).toContain("刷新")
   })
 
+  it("lets the left slot reach the action group when there is no centered column", async () => {
+    await renderTopBar(roots, (
+      <SystemAppTopBar
+        left={<h2>终端</h2>}
+        actions={<SystemAppTopBarActionButton onClick={vi.fn()}>新建</SystemAppTopBarActionButton>}
+      />
+    ))
+
+    const toolbar = document.querySelector("[data-system-app-top-bar]")
+    expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_max-content]")
+    expect(toolbar?.className).not.toContain("_minmax(0,1fr)]")
+  })
+
   it("renders top bar action buttons as borderless compact ghost controls", async () => {
     await renderTopBar(roots, (
       <SystemAppTopBarActions>

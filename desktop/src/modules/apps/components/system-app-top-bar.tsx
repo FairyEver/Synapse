@@ -41,11 +41,17 @@ function SystemAppTopBar({
   leftSlotProps,
   ...props
 }: SystemAppTopBarProps) {
+  // 有中间列时左右等宽，中间内容才能真正居中；没有中间列时左侧可以一直铺到右侧按钮组之前。
+  const hasCenter = Boolean(center)
+
   return (
     <div
       data-system-app-top-bar
       className={cn(
-        "grid min-h-10 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 border-b bg-background px-3",
+        "grid min-h-10 shrink-0 items-center gap-2 border-b bg-background px-3",
+        hasCenter
+          ? "grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]"
+          : "grid-cols-[minmax(0,1fr)_minmax(0,max-content)_max-content]",
         className,
       )}
       {...props}
@@ -57,7 +63,7 @@ function SystemAppTopBar({
       >
         {left}
       </div>
-      {center ? (
+      {hasCenter ? (
         <div
           {...centerSlotProps}
           data-system-app-top-bar-center
