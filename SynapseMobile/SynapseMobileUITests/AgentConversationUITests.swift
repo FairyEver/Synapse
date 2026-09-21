@@ -118,7 +118,8 @@ final class AgentConversationUITests: XCTestCase {
     }
 
     /// The terminal segment is unchanged on purpose, and this is what "unchanged" means:
-    /// tapping a group creates a terminal, with no button to confirm it first.
+    /// tapping a group creates a terminal, with no button to confirm it first. It grew a
+    /// search box, which shortens the list and decides nothing — see the assertions below.
     func testLeavesTheTerminalSegmentAlone() throws {
         let app = launch()
 
@@ -134,8 +135,28 @@ final class AgentConversationUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["new-session-project"].exists, "the terminal segment shows the conversation rows")
         // The groups themselves, which are what the segment has always offered.
-        XCTAssertGreaterThan(app.cells.count, 0, "the terminal segment lost its group list")
+        //
+        // 数的是带标识的分组行，不是 `app.cells`：弹层背后那条会话列表也在这棵树里，
+        // 数 cell 数到的是它，分组列表空着这句也照样绿。
+        let groups = app.buttons.matching(identifier: "terminal-group")
+        XCTAssertGreaterThan(groups.count, 0, "the terminal segment lost its group list")
         capture(app, name: "04-terminal-segment")
+
+        // 搜索框跟项目、供应商那两页是同一个做法，位置和外观都交给系统；这里验的是它在，
+        // 而且真的在筛——只画一个搜索框也能让上面那句「分组还在」成立。
+        let search = app.searchFields["搜索分组"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "终端分组这一段没有搜索框")
+        let found = groups.count
+
+        let miss = "zzz-没有这个分组"
+        search.tap()
+        search.typeText(miss)
+        XCTAssertTrue(waitForCount(groups, 0), "搜索没有把分组列表筛掉")
+        capture(app, name: "05-terminal-segment-no-match")
+
+        // 清掉搜索，分组要回来：筛得下去也要回得来。
+        search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: miss.count))
+        XCTAssertTrue(waitForCount(groups, found), "清掉搜索以后分组没有回来")
     }
 
     // MARK: - Helpers
@@ -170,7 +191,14 @@ final class AgentConversationUITests: XCTestCase {
         // The ＋ is disabled until a computer is reachable, which is also what makes the
         // panel's data available — waiting on it here keeps every later step about the
         // panel rather than about the connection.
-        XCTAssertTrue(app.buttons["new-session"].waitForExistence(timeout: 30), "no computer came online")
+        //
+        // 等的是「能按」，不是「在那儿」：按钮在会话列表一画出来就存在，而电脑要等摘要
+        // 回来才算上线。只等存在就点，点到的是一个禁用按钮——什么都没发生，报出来的
+        // 却是后面那句「面板没出来」。
+        let plus = app.buttons["new-session"]
+        XCTAssertTrue(plus.waitForExistence(timeout: 30), "no computer came online")
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: plus)
+        waitForExpectations(timeout: 30)
         return app
     }
 
@@ -209,6 +237,19 @@ final class AgentConversationUITests: XCTestCase {
                 return true
             }
             usleep(300_000)
+        }
+        return false
+    }
+
+    /// 等查询到的行数变成 `expected`。
+    ///
+    /// 搜索是逐字生效的，一次查询拿到的是那一刻的快照，紧接着断言会读到还没重算完的
+    /// 行数。等到行数对上，才是在断言筛完的结果。
+    private func waitForCount(_ query: XCUIElementQuery, _ expected: Int, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if query.count == expected { return true }
+            usleep(200_000)
         }
         return false
     }

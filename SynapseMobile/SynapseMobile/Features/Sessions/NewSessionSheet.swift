@@ -55,6 +55,7 @@ struct NewSessionSheet: View {
     @State private var starting = false
     @State private var projectSearch = ""
     @State private var providerSearch = ""
+    @State private var groupSearch = ""
 
     private var selection: AgentConversationSelection {
         resolveAgentConversationSelection(
@@ -85,13 +86,7 @@ struct NewSessionSheet: View {
                 .padding(.bottom, 6)
                 .accessibilityIdentifier("new-session-segment")
 
-                List {
-                    switch segment {
-                    case .conversation: conversationRows
-                    case .terminal: terminalRows
-                    }
-                }
-                .listStyle(.insetGrouped)
+                segmentList
 
                 // 只在有东西可建的那一段出现，位置与宽度见 `startButton` 的说明。
                 if segment == .conversation, conversationAvailable {
@@ -128,6 +123,24 @@ struct NewSessionSheet: View {
                 providerId: preferences.providerId,
                 modelTier: preferences.modelTier
             )
+        }
+    }
+
+    /// 两段各有一条自己的列表。
+    ///
+    /// 分开是因为搜索框只属于终端分组那一段：`searchable` 是加在 `List` 上的，
+    /// 一条共用的列表没法只给其中一段加。两段的内容、样式仍然一致。
+    @ViewBuilder
+    private var segmentList: some View {
+        switch segment {
+        case .conversation:
+            List { conversationRows }
+                .listStyle(.insetGrouped)
+        case .terminal:
+            List { terminalRows }
+                .listStyle(.insetGrouped)
+                // 和项目、供应商那两页同一种做法，位置与外观都交给系统。
+                .searchable(text: $groupSearch, prompt: "搜索分组")
         }
     }
 
@@ -315,10 +328,13 @@ struct NewSessionSheet: View {
     /// one creating a terminal immediately is the whole interaction — a confirm button
     /// here would be friction with nothing behind it. The two segments differing is a
     /// decision, not an oversight.
+    ///
+    /// 搜索不改变这一点：分组多起来以后，项目、供应商能搜而分组不能搜才是说不过去的
+    /// 那个。搜索只是把列表缩短，点了仍然立刻建终端。
     @ViewBuilder
     private var terminalRows: some View {
         Section {
-            ForEach(model.summary?.groups ?? []) { group in
+            ForEach(matchingGroups) { group in
                 Button {
                     // This row has no confirm button behind it (see the comment above),
                     // so the tap is the whole decision and is worth the weight of one.
@@ -329,9 +345,14 @@ struct NewSessionSheet: View {
                     Text(group.name)
                         .font(.subheadline)
                 }
+                // 一段里的每一行都是分组。测试靠它只数这一段的行——弹层背后那条会话
+                // 列表和这里同在一棵树里，数 cell 会把那边的行一起数进来。
+                .accessibilityIdentifier("terminal-group")
             }
         }
-        if (model.summary?.groups ?? []).isEmpty {
+        // 「搜不到」和「电脑上一个分组都没有」是两件事，两句话都要在：搜索没有命中时
+        // 说电脑上没有分组，会让人去电脑上找一个还在那儿的分组。
+        if allGroups.isEmpty {
             // 留在列表里而不是铺满整屏：这一屏还有项目、供应商、模型三段选择器，铺满
             // 会把它们全盖掉。这个分组只是这一张表单里少了一段。
             ContentUnavailableView(
@@ -340,7 +361,22 @@ struct NewSessionSheet: View {
                 description: Text("请先在电脑端创建。")
             )
             .listRowBackground(Color.clear)
+        } else if matchingGroups.isEmpty {
+            ContentUnavailableView.search(text: groupSearchQuery)
+                .listRowBackground(Color.clear)
         }
+    }
+
+    private var allGroups: [MobileSummaryGroup] { model.summary?.groups ?? [] }
+
+    /// 行上只写着分组名，所以按名字筛 —— 读者看得见什么就搜得到什么。
+    private var matchingGroups: [MobileSummaryGroup] {
+        guard !groupSearchQuery.isEmpty else { return allGroups }
+        return allGroups.filter { $0.name.localizedCaseInsensitiveContains(groupSearchQuery) }
+    }
+
+    private var groupSearchQuery: String {
+        groupSearch.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Pickers
