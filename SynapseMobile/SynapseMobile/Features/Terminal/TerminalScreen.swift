@@ -733,9 +733,9 @@ struct TerminalScreen: View {
                 isRunning: isRunning,
                 onRun: { button in
                     noteChromeActivity()
+                    // 焦点不动，和工具栏上那颗胶囊同一条规则（理由见 `accessoryKeys`）。
                     shortcutPanelPresented = false
                     model.runToolbarButton(button, sessionId: sessionId)
-                    inputFocused = true
                 },
                 onInsert: { phrase in
                     noteChromeActivity()
@@ -817,8 +817,8 @@ struct TerminalScreen: View {
             .onChange(of: inputFocused) {
                 // Asking for the system keyboard is asking for the other one to go:
                 // only one of the two can be up, and this is the only place either is
-                // asked for by name. Tapping the field, and the toolbar buttons that
-                // type into it, all arrive here.
+                // asked for by name. Tapping the field is the one thing on this screen
+                // that asks for this one — no button raises a keyboard (2026-09-21).
                 if inputFocused { keyboardPanelPresented = false }
                 reportGridToDesktop()
                 refreshPasteboardImage()
@@ -1234,11 +1234,15 @@ struct TerminalScreen: View {
                         if index > 0, buttons[index - 1].group != button.group {
                             divider
                         }
+                        // 按一条指令**不碰输入焦点**（2026-09-21 产品负责人在真机上点的：
+                        // 按「回车」把手机键盘叫起来了）。这是电脑上的一个动作，不是在这里
+                        // 打字 —— 把焦点要过来就是请系统键盘上来，而键盘一上来这整条栏自己
+                        // 让位（`toolbarStandDown`），于是刚按下的那颗键连同它正要读的结果
+                        // 一起被盖住。短语行不给焦点是同一条理由（见 `onInsert`）。
                         Button(button.label) {
                             Haptics.select()
                             noteChromeActivity()
                             model.runToolbarButton(button, sessionId: sessionId)
-                            inputFocused = true
                         }
                         .terminalKeyPill()
                         .buttonStyle(.plain)

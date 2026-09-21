@@ -506,6 +506,54 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "09-preempted-send-replayed")
     }
 
+    /// 按工具栏上的指令不唤起系统键盘。
+    ///
+    /// 产品负责人 2026-09-21 在真机上点的：按「回车」把手机键盘抬起来了。根因是每颗指令
+    /// 胶囊的点击处理里都跟着一句 `inputFocused = true`（手机端第一版就在），而
+    /// `toolbarStandDown` 把「正在打字」算成了工具栏让位的条件之一 —— 于是按下一颗键的
+    /// 代价是两件事：键盘盖住终端，整条栏自己消失；想再按一次 Ctrl+C，得先把键盘收掉。
+    ///
+    /// 两条断言就是上面那两件事，只断键盘会漏掉第二条。而起手那一下（点输入框、键盘起来、
+    /// 点画布收掉）不是走过场：少了它，这台机器要是根本弹不出键盘，下面那张「没弹」
+    /// 也照样是绿的。
+    func testTappingAToolbarCommandRaisesNoKeyboard() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+
+        let terminal = openClaudeCodeTerminal(app)
+        let enter = app.buttons["toolbar-enter"]
+        XCTAssertTrue(enter.waitForExistence(timeout: 15), "the mirrored toolbar has no return key")
+
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "input field missing")
+        field.tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: 10),
+            "点了输入框，系统键盘没起来 —— 这个环境证明不了任何事"
+        )
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForNonExistence(timeout: 8),
+            "tapping the terminal did not dismiss the keyboard"
+        )
+        XCTAssertTrue(waitForHittable(enter, timeout: 10), "收起键盘之后，工具栏没有回来")
+
+        enter.tap()
+        // 先等这条键真的到了电脑。否则「键盘没起来」也可能只是因为它压根没发出去。
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Enter", in: app, timeout: 20),
+            "the return key never reached the computer"
+        )
+        XCTAssertFalse(
+            app.keyboards.firstMatch.waitForExistence(timeout: 3),
+            "按指令把系统键盘抬起来了"
+        )
+        XCTAssertTrue(enter.isHittable, "按完指令，工具栏自己让位了")
+        capture(app, name: "16-toolbar-command-keeps-the-keyboard-down")
+    }
+
     /// The bar under the terminal is the computer's own, and the keys that left it are
     /// behind the keyboard button.
     ///
