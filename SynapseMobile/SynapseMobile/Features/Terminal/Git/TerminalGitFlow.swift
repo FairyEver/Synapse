@@ -22,24 +22,49 @@ enum TerminalGitPendingSwitch: Equatable, Identifiable {
     case createBranch(name: String, from: String?)
     /// 与这条分支合并。
     case merge(branch: String, direction: TerminalGitMergeDirection)
+    /// 迁出这条远端分支。`localBranch` 缺席＝建一条同名的跟踪分支。
+    case checkoutRemote(remote: String, branch: String, localBranch: String?)
 
     var id: String {
         switch self {
         case .checkout(let branch): return "checkout:\(branch)"
         case .createBranch(let name, let from): return "create:\(name):\(from ?? "")"
         case .merge(let branch, let direction): return "merge:\(direction.rawValue):\(branch)"
+        case .checkoutRemote(let remote, let branch, let localBranch):
+            return "checkoutRemote:\(remote)/\(branch):\(localBranch ?? "")"
         }
     }
 
     /// 「丢弃改动」这一步对哪些成立。
     ///
-    /// 只有 `checkout` 能表达它：协议里只有它带 `discardChanges`，而 git 也没有
-    /// 「把改动丢掉、但留在原地新建一条分支」这条原语。所以新建与合并只有两个走法 ——
-    /// 少一个选项，不是少一次确认。
+    /// `checkout` 与 `checkoutRemote` 都成立：前者是 `checkout -f`，后者是
+    /// `checkout -f -b <local> --track <remote>/<branch>` —— **这条原语 git 有**。
+    /// 而且同一件事说不通会很难看：本地 `feature-x` 跟踪着 `origin/feature-x` 时，
+    /// 从「分支」行进去有三个选项、从远端列表进来只有两个，用户看到的是同一个操作。
+    ///
+    /// 新建与合并仍然只有两个：git 没有「把改动丢掉、但留在原地新建一条分支」这条原语
+    /// —— 少一个选项，不是少一次确认。
     var canDiscardChanges: Bool {
-        if case .checkout = self { return true }
-        return false
+        switch self {
+        case .checkout, .checkoutRemote: return true
+        case .createBranch, .merge: return false
+        }
     }
+}
+
+/// 填另一个本地名那一页要的全部东西。
+///
+/// 名字存在这里、不存在视图的临时状态里：失败之后那一页要留着，用户刚打的字也要留着。
+struct TerminalGitLocalNamePrompt: Identifiable, Equatable {
+    let remote: String
+    let branch: String
+    /// **电脑给的原话**：这一页为什么在问。不改写、不翻译。
+    var message: String
+    /// 用户打的字。默认空 —— 不做任何猜测（猜一个名字然后建错分支，比多打几个字糟）。
+    var name: String = ""
+
+    var qualifiedName: String { "\(remote)/\(branch)" }
+    var id: String { qualifiedName }
 }
 
 /// 合并的方向。`rawValue` 就是线上的值，见 `shared/src/mobile-live.ts`。
@@ -100,6 +125,11 @@ final class TerminalGitFlow: Identifiable {
         case newBranch
         case commit
         case merge
+        /// 远端分支列表。
+        case remoteBranches
+        /// 同名本地分支不能直接用，要另一个名字。**推一页而不是弹一张表**：
+        /// 失败弹窗挂在面板上，表盖在面板之上时弹窗会被它挡住。
+        case remoteLocalName
     }
 
     let sessionId: String
@@ -116,6 +146,14 @@ final class TerminalGitFlow: Identifiable {
     var branches: [MobileGitBranch] = []
     var branchQuery = ""
     var isLoadingBranches = false
+
+    // MARK: 远端分支
+
+    var remoteBranches: [MobileGitRemoteBranch] = []
+    var remoteBranchQuery = ""
+    var isLoadingRemoteBranches = false
+    /// 重名时要另一个本地名：这一页为什么在问（电脑原话）与用户打的字。
+    var localNamePrompt: TerminalGitLocalNamePrompt?
 
     // MARK: 新建分支
 
@@ -149,6 +187,16 @@ final class TerminalGitFlow: Identifiable {
     /// 「提交并切换」带过来的那一步：提交**成功之后**才做。
     private var pendingSwitch: TerminalGitPendingSwitch?
 
+    /// 电脑没回答时，既有动作说这一句。
+    static let unansweredDefault = "电脑一直没有回答。"
+
+    /// 电脑没回答时，这一组新动作说这一句 —— 它们是可照做的。
+    ///
+    /// 新动作在**旧电脑端**上会被整帧丢弃（那边不认识这个 `action`），手机只会等到超时；
+    /// 而「升级电脑端」正是用户能做的那一件事。既有动作不换这句：它们的电脑端一定认识。
+    static let unansweredRetryable =
+        "电脑端没有回答。如果电脑上的 Synapse 不是最新版，先升级它再试。"
+
     init(sessionId: String) {
         self.sessionId = sessionId
     }
@@ -172,6 +220,10 @@ final class TerminalGitFlow: Identifiable {
         conflict = nil
         failure = nil
         pendingSwitch = nil
+        remoteBranches = []
+        remoteBranchQuery = ""
+        isLoadingRemoteBranches = false
+        localNamePrompt = nil
     }
 
     // MARK: - 读
@@ -188,7 +240,7 @@ final class TerminalGitFlow: Identifiable {
         )
     }
 
-    /// 列分支。**只列本地分支**，远端的新分支由「同步」带回来。
+    /// 列分支。**只列本地分支**；远端分支走「迁出远端分支」那一页。
     func loadBranches(on desk: TerminalGitDesk) async {
         guard !isLoadingBranches else { return }
         isLoadingBranches = true
@@ -209,6 +261,60 @@ final class TerminalGitFlow: Identifiable {
             return
         }
         branches = list
+    }
+
+    /// 列远端分支。**只读电脑缓存的 `refs/remotes`**，这一趟不联网。
+    ///
+    /// 成功且带 `message` 时用提示条说一句 —— 那是「只列出了前 512 条」这类
+    /// 「成了但有话说」，吞掉它等于让用户以为列表就是全部。
+    func loadRemoteBranches(on desk: TerminalGitDesk) async {
+        guard !isLoadingRemoteBranches else { return }
+        isLoadingRemoteBranches = true
+        defer { isLoadingRemoteBranches = false }
+        let result = await desk.send(
+            .git("remoteBranches", sessionId: sessionId),
+            AppConfiguration.gitLocalTimeout
+        )
+        guard let result else {
+            failure = TerminalGitFailure(
+                title: "读取远端分支失败",
+                message: Self.unansweredRetryable
+            )
+            return
+        }
+        guard result.isAccepted, let list = result.git?.remoteBranches else {
+            failure = TerminalGitFailure(
+                title: "读取远端分支失败",
+                message: result.message ?? "电脑没有完成这个操作。"
+            )
+            return
+        }
+        remoteBranches = list
+        if let message = result.message {
+            desk.notice(message, .info, "git.remoteBranches.truncated")
+        }
+    }
+
+    /// 下拉刷新：**先获取、再重取**。
+    ///
+    /// 获取失败就**不重取**：列表留在原地，用户可以继续拿旧的挑 —— 比把它变成一个空列表有用。
+    func refreshRemoteBranches(on desk: TerminalGitDesk) async {
+        let fetched = await desk.send(
+            .git("fetchRemotes", sessionId: sessionId),
+            AppConfiguration.gitRemoteTimeout
+        )
+        guard let fetched else {
+            failure = TerminalGitFailure(title: "获取远端分支失败", message: Self.unansweredRetryable)
+            return
+        }
+        guard fetched.isAccepted else {
+            failure = TerminalGitFailure(
+                title: "获取远端分支失败",
+                message: fetched.message ?? "电脑没有完成这个操作。"
+            )
+            return
+        }
+        await loadRemoteBranches(on: desk)
     }
 
     // MARK: - 写
@@ -269,6 +375,46 @@ final class TerminalGitFlow: Identifiable {
             .git("createBranch", sessionId: sessionId, branch: name, fromBranch: from)
         }
         if case .accepted = answer { newBranchName = "" }
+    }
+
+    /// 迁出一条远端分支。`localBranch` 缺席＝建一条同名的跟踪分支。
+    ///
+    /// 电脑要另一个本地名时会回 `localBranchName`，由 `send` 把它翻成推一页（见那里）。
+    /// **不走远端超时**：从头到尾一条网络命令都没有，慢不到推 / 同步那个量级去。
+    func checkoutRemote(
+        _ remote: String,
+        branch: String,
+        localBranch: String? = nil,
+        on desk: TerminalGitDesk
+    ) async {
+        await perform(
+            title: "迁出远端分支失败",
+            success: "已迁出 \(remote)/\(branch)",
+            id: "git.checkoutRemote",
+            pending: .checkoutRemote(remote: remote, branch: branch, localBranch: localBranch),
+            unanswered: Self.unansweredRetryable,
+            on: desk
+        ) {
+            .git("checkoutRemote", sessionId: sessionId, branch: branch, remote: remote, localBranch: localBranch)
+        }
+    }
+
+    /// 填另一个本地名那一页上按下「迁出」。
+    ///
+    /// 名字只做「非空」检查，合法性交给电脑（与新建分支同一口径）。
+    func submitLocalName(on desk: TerminalGitDesk) async {
+        guard let prompt = localNamePrompt else { return }
+        let name = prompt.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        await checkoutRemote(prompt.remote, branch: prompt.branch, localBranch: name, on: desk)
+    }
+
+    /// 离开「填另一个本地名」那一页时把它的状态清掉。
+    ///
+    /// 由那一页的 `onDisappear` 调：返回走的是系统那颗返回键（页与状态都由它收），
+    /// 所以这里不做任何导航、也不发任何 intent。
+    func clearLocalNamePrompt() {
+        localNamePrompt = nil
     }
 
     /// 提交。**全量**：电脑那边是 `add -A` + commit，手机上不挑文件也不看文件清单。
@@ -395,21 +541,45 @@ final class TerminalGitFlow: Identifiable {
         }
     }
 
-    /// 二次确认过了：发那次「丢弃改动并切换」。
+    /// 二次确认过了：发那次「丢弃改动并切换 / 迁出」。
     ///
     /// 同 `choose`：那个待确认的动作由调用方传进来，不在这一刻回头读 `discardConfirmation`
     /// —— 确认框一按下去就会把它清掉。
     func discardChanges(_ pending: TerminalGitPendingSwitch, on desk: TerminalGitDesk) async {
-        guard case .checkout(let branch) = pending else { return }
         discardConfirmation = nil
-        await perform(
-            title: "切换分支失败",
-            success: "已切换到 \(branch)",
-            id: "git.checkout",
-            on: desk
-        ) {
-            // `checkout -f` 的语义：只丢已跟踪文件的修改，**不删未跟踪的新文件**。
-            .git("checkout", sessionId: sessionId, branch: branch, discardChanges: true)
+        switch pending {
+        case .checkout(let branch):
+            await perform(
+                title: "切换分支失败",
+                success: "已切换到 \(branch)",
+                id: "git.checkout",
+                on: desk
+            ) {
+                // `checkout -f` 的语义：只丢已跟踪文件的修改，**不删未跟踪的新文件**。
+                .git("checkout", sessionId: sessionId, branch: branch, discardChanges: true)
+            }
+        case .checkoutRemote(let remote, let branch, let localBranch):
+            await perform(
+                title: "迁出远端分支失败",
+                success: "已迁出 \(remote)/\(branch)",
+                id: "git.checkoutRemote",
+                unanswered: Self.unansweredRetryable,
+                on: desk
+            ) {
+                // 同样是 `-f` 的语义（`checkout -f [-b local --track remote/branch]`）：
+                // 只丢已跟踪文件的修改，**不删未跟踪的新文件**。
+                .git(
+                    "checkoutRemote",
+                    sessionId: sessionId,
+                    branch: branch,
+                    discardChanges: true,
+                    remote: remote,
+                    localBranch: localBranch
+                )
+            }
+        case .createBranch, .merge:
+            // 这两条本来就没有「丢弃」这个选项（`canDiscardChanges` 为假），走不到这里。
+            return
         }
     }
 
@@ -447,6 +617,9 @@ final class TerminalGitFlow: Identifiable {
     // MARK: - 底下的两步
 
     /// 一次写动作的公共路径：发出去、按回答分四路、成功了清掉待做的那一步。
+    ///
+    /// `unanswered` 给这一组新动作换个说法：它们在**旧电脑端**上会被静默丢弃，而
+    /// 「升级电脑端」正是用户能做的那一件事。既有动作不传，保持原来那句。
     @discardableResult
     private func perform(
         title: String,
@@ -455,6 +628,7 @@ final class TerminalGitFlow: Identifiable {
         pending: TerminalGitPendingSwitch? = nil,
         remote: Bool = false,
         next: TerminalGitFailure.Next? = nil,
+        unanswered: String = TerminalGitFlow.unansweredDefault,
         on desk: TerminalGitDesk,
         _ makeIntent: () -> MobileIntentRequest
     ) async -> TerminalGitAnswer {
@@ -462,7 +636,7 @@ final class TerminalGitFlow: Identifiable {
         defer { isBusy = false }
         let answer = await send(makeIntent(), ifDirty: pending, remote: remote, on: desk)
         if case .accepted = answer { pendingSwitch = nil }
-        finish(answer, title: title, success: success, id: id, next: next, on: desk)
+        finish(answer, title: title, success: success, id: id, next: next, unanswered: unanswered, on: desk)
         return answer
     }
 
@@ -485,9 +659,37 @@ final class TerminalGitFlow: Identifiable {
             self.conflict = conflict
             return .conflicted
         }
-        if result.git?.needsDecision == "dirty", let pending {
-            decision = pending
-            return .decided
+        /*
+         * 两个取值都是「电脑问了一件事」，界面已经摆出来，**都不是失败**：
+         * `dirty` 摆三选一，`localBranchName` 推一页让用户填另一个本地名。
+         * 写死 `== "dirty"` 的话，后者会被当成一句普通的拒绝 —— 用户看到一句错，没有出路。
+         */
+        if let decision = result.git?.needsDecision, let pending {
+            switch decision {
+            case "dirty":
+                self.decision = pending
+                return .decided
+            case "localBranchName":
+                // 这条回答只可能来自 checkoutRemote；不是它就走普通拒绝。
+                guard case .checkoutRemote(let remote, let branch, _) = pending else { break }
+                let sameTarget = localNamePrompt?.qualifiedName == "\(remote)/\(branch)"
+                localNamePrompt = TerminalGitLocalNamePrompt(
+                    remote: remote,
+                    branch: branch,
+                    // 电脑这次的原话优先；它没说话才沿用上一次那句（同一页接着问，理由没变）。
+                    message: result.message ?? localNamePrompt?.message
+                        ?? "本地已有同名分支，另起一个本地名。",
+                    // 同一个目标的第二次问：用户刚打的字留着 —— 他正要改它。
+                    // 换了目标就是全新的一页，字不该带过来。
+                    name: sameTarget ? (localNamePrompt?.name ?? "") : ""
+                )
+                // **已经在那一页上就不再推一页。** 第二次问（用户填的名字也被占了）是同一页上
+                // 的一次失败，再推一次会叠出两层一模一样的页，返回要点两下。
+                if path.last != .remoteLocalName { path.append(.remoteLocalName) }
+                return .decided
+            default:
+                break
+            }
         }
         return result.isAccepted ? .accepted(result.message) : .rejected(result.message)
     }
@@ -502,22 +704,29 @@ final class TerminalGitFlow: Identifiable {
         success: String,
         id: String,
         next: TerminalGitFailure.Next?,
+        unanswered: String,
         on desk: TerminalGitDesk
     ) {
         switch answer {
         case .accepted(let message):
             path = []
+            localNamePrompt = nil
             // 电脑有话说时用它的话（例如「合并已完成，但没能切回 main」）—— 那是成功，
             // 只是另有一件用户要知道的事没做成。
             desk.notice(message ?? success, .success, id)
         case .rejected(let message):
+            /*
+             * 失败只写 `failure`：**页与 `localNamePrompt` 一个都不动**。
+             * 那一页要留着、刚打的字也要留着 —— 关掉它等于让用户从头再点一遍，
+             * 而手机上不能给分支改名。
+             */
             failure = TerminalGitFailure(
                 title: title,
                 message: message ?? "电脑没有完成这个操作。",
                 next: next
             )
         case .unanswered:
-            failure = TerminalGitFailure(title: title, message: "电脑一直没有回答。")
+            failure = TerminalGitFailure(title: title, message: unanswered)
         case .decided, .conflicted:
             break
         }
@@ -536,6 +745,8 @@ final class TerminalGitFlow: Identifiable {
             mergeBranch = branch
             mergeDirection = direction
             await merge(on: desk)
+        case .checkoutRemote(let remote, let branch, let localBranch):
+            await checkoutRemote(remote, branch: branch, localBranch: localBranch, on: desk)
         }
     }
 }
@@ -567,7 +778,9 @@ extension MobileIntentRequest {
         message: String? = nil,
         pushAfterCommit: Bool? = nil,
         direction: String? = nil,
-        discardChanges: Bool? = nil
+        discardChanges: Bool? = nil,
+        remote: String? = nil,
+        localBranch: String? = nil
     ) -> MobileIntentRequest {
         MobileIntentRequest(
             intentId: UUID().uuidString,
@@ -579,7 +792,9 @@ extension MobileIntentRequest {
             message: message,
             pushAfterCommit: pushAfterCommit,
             direction: direction,
-            discardChanges: discardChanges
+            discardChanges: discardChanges,
+            remote: remote,
+            localBranch: localBranch
         )
     }
 }

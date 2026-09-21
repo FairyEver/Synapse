@@ -69,12 +69,18 @@ struct TerminalGitFlowTests {
     }
 
     private func dirty() -> MobileIntentGitResult {
-        MobileIntentGitResult(branches: nil, conflict: nil, needsDecision: "dirty")
+        MobileIntentGitResult(branches: nil, remoteBranches: nil, conflict: nil, needsDecision: "dirty")
+    }
+
+    /// 电脑回「同名本地分支不能直接用，另起一个本地名」——那句话走 `MobileIntentResult.message`。
+    private func wantsAnotherLocalName() -> MobileIntentGitResult {
+        MobileIntentGitResult(branches: nil, remoteBranches: nil, conflict: nil, needsDecision: "localBranchName")
     }
 
     private func conflict(files: [String] = ["a.txt", "b.txt"]) -> MobileIntentGitResult {
         MobileIntentGitResult(
             branches: nil,
+            remoteBranches: nil,
             conflict: MobileGitConflict(
                 source: "feature/login",
                 target: "main",
@@ -345,6 +351,7 @@ struct TerminalGitFlowTests {
                     MobileGitBranch(name: "main", current: true),
                     MobileGitBranch(name: "dev", current: false),
                 ],
+                remoteBranches: nil,
                 conflict: nil,
                 needsDecision: nil
             )
@@ -470,6 +477,241 @@ struct TerminalGitFlowTests {
         #expect(flow.mergeDirection == .intoCurrent)
     }
 
+    // MARK: - 远端分支
+
+    private func remoteBranchesAnswer() -> MobileIntentGitResult {
+        MobileIntentGitResult(
+            branches: nil,
+            remoteBranches: [
+                MobileGitRemoteBranch(remote: "origin", name: "main"),
+                MobileGitRemoteBranch(remote: "origin", name: "dev"),
+            ],
+            conflict: nil,
+            needsDecision: nil
+        )
+    }
+
+    @Test func theRemoteBranchListCarriesWhatTheComputerSent() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.accept()]
+        fake.answers[0] = MobileIntentResult(
+            intentId: "answer",
+            outcome: "accepted",
+            code: nil,
+            message: nil,
+            sessionId: "sess-1",
+            createdSessionId: nil,
+            landedPath: nil,
+            git: remoteBranchesAnswer()
+        )
+
+        await flow.loadRemoteBranches(on: fake.desk)
+
+        // 打开列表只读缓存：发出去的就这一个动作，一条网络命令都没有。
+        #expect(fake.actions == ["remoteBranches"])
+        #expect(flow.remoteBranches.map(\.qualifiedName) == ["origin/main", "origin/dev"])
+        #expect(flow.failure == nil)
+    }
+
+    @Test func aTruncatedListSaysSo() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [MobileIntentResult(
+            intentId: "answer",
+            outcome: "accepted",
+            code: nil,
+            message: "远端分支过多，只列出了前 512 条。",
+            sessionId: "sess-1",
+            createdSessionId: nil,
+            landedPath: nil,
+            git: remoteBranchesAnswer()
+        )]
+
+        await flow.loadRemoteBranches(on: fake.desk)
+
+        // 「成了但有话说」要显示出来：吞掉它等于让用户以为列表就是全部。
+        #expect(fake.said.map(\.text) == ["远端分支过多，只列出了前 512 条。"])
+        #expect(flow.remoteBranches.count == 2)
+    }
+
+    @Test func refreshingFetchesFirstAndThenReadsTheListAgain() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.accept(), MobileIntentResult(
+            intentId: "answer",
+            outcome: "accepted",
+            code: nil,
+            message: nil,
+            sessionId: "sess-1",
+            createdSessionId: nil,
+            landedPath: nil,
+            git: remoteBranchesAnswer()
+        )]
+
+        await flow.refreshRemoteBranches(on: fake.desk)
+
+        #expect(fake.actions == ["fetchRemotes", "remoteBranches"])
+        #expect(flow.remoteBranches.count == 2)
+    }
+
+    @Test func aFailedFetchLeavesTheListAlone() async {
+        let (flow, fake) = makeFlow()
+        flow.remoteBranches = [MobileGitRemoteBranch(remote: "origin", name: "dev")]
+        fake.answers = [fake.reject(message: "没法连接远端。")]
+
+        await flow.refreshRemoteBranches(on: fake.desk)
+
+        // 不重取：宁可让用户拿旧的挑，也不要把它变成一个空列表。
+        #expect(fake.actions == ["fetchRemotes"])
+        #expect(flow.remoteBranches.map(\.name) == ["dev"])
+        #expect(flow.failure?.title == "获取远端分支失败")
+        #expect(flow.failure?.message == "没法连接远端。")
+    }
+
+    @Test func checkoutRemoteAsksForTheBranchWithItsRemote() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.accept(message: "已迁出 origin/dev 到 dev。")]
+
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+
+        #expect(fake.actions == ["checkoutRemote"])
+        #expect(fake.sent.first?.remote == "origin")
+        #expect(fake.sent.first?.branch == "dev")
+        // 第一次不带本地名：同名就建同名的，电脑说了算。
+        #expect(fake.sent.first?.localBranch == nil)
+        #expect(fake.said.map(\.text) == ["已迁出 origin/dev 到 dev。"])
+        #expect(flow.path.isEmpty)
+    }
+
+    @Test func aTakenLocalNameBecomesAPageRatherThanAnError() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.reject(
+            code: "local_branch_conflict",
+            message: "本地已有 dev，它跟踪的是 origin/other。",
+            git: wantsAnotherLocalName()
+        )]
+
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+
+        // 不是失败，是一个问题：推一页出来，正文用电脑的原话。
+        #expect(flow.path == [.remoteLocalName])
+        #expect(flow.localNamePrompt?.message == "本地已有 dev，它跟踪的是 origin/other。")
+        #expect(flow.localNamePrompt?.name == "")
+        #expect(flow.failure == nil)
+        #expect(flow.decision == nil)
+    }
+
+    @Test func theTypedNameIsSentBackAsTheLocalBranch() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [
+            fake.reject(code: "local_branch_conflict", message: "本地已有 dev。", git: wantsAnotherLocalName()),
+            fake.accept(message: "已迁出 origin/dev 到 dev-copy。"),
+        ]
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+
+        flow.localNamePrompt?.name = "dev-copy"
+        await flow.submitLocalName(on: fake.desk)
+
+        #expect(fake.actions == ["checkoutRemote", "checkoutRemote"])
+        #expect(fake.sent.last?.localBranch == "dev-copy")
+        // 做成了就退回面板根部，那一页与它的状态一起清掉。
+        #expect(flow.path.isEmpty)
+        #expect(flow.localNamePrompt == nil)
+    }
+
+    @Test func aRefusalLeavesThePageAndTheTypedNameInPlace() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [
+            fake.reject(code: "local_branch_conflict", message: "本地已有 dev。", git: wantsAnotherLocalName()),
+            fake.reject(message: "分支名称不合法：a b"),
+        ]
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+
+        flow.localNamePrompt?.name = "a b"
+        await flow.submitLocalName(on: fake.desk)
+
+        // 页留着、字留着：关掉它等于让用户从头再点一遍，而手机上不能给分支改名。
+        #expect(flow.path == [.remoteLocalName])
+        #expect(flow.localNamePrompt?.name == "a b")
+        #expect(flow.failure?.title == "迁出远端分支失败")
+        #expect(flow.failure?.message == "分支名称不合法：a b")
+    }
+
+    @Test func askingAgainDoesNotStackASecondIdenticalPage() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [
+            fake.reject(code: "local_branch_conflict", message: "本地已有 dev。", git: wantsAnotherLocalName()),
+            fake.reject(code: "local_branch_conflict", message: "本地已有 mine，换一个名字。", git: wantsAnotherLocalName()),
+        ]
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+        flow.localNamePrompt?.name = "mine"
+
+        await flow.submitLocalName(on: fake.desk)
+
+        // 同一个目标接着问：还是那一页，不叠第二层（叠了返回要点两下）。
+        #expect(flow.path == [.remoteLocalName])
+        #expect(flow.localNamePrompt?.name == "mine")
+        #expect(flow.localNamePrompt?.message == "本地已有 mine，换一个名字。")
+    }
+
+    @Test func aDirtyTreeTurnsIntoTheChoiceWithDiscardOffered() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.reject(code: "dirty_working_tree", message: "当前目录里有未提交的改动。", git: dirty())]
+
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+
+        #expect(flow.decision == .checkoutRemote(remote: "origin", branch: "dev", localBranch: nil))
+        // 迁出**有**「丢弃」这一条：git 有 `checkout -f -b --track` 这条原语，而同一个分支
+        // 从「分支」行进来就已经有三个选项，从这里进来少一个说不通。
+        #expect(TerminalGitDirtyChoice.allowed(
+            for: .checkoutRemote(remote: "origin", branch: "dev", localBranch: nil)
+        ) == [.commit, .discard, .cancel])
+        #expect(flow.failure == nil)
+        #expect(flow.path.isEmpty)
+    }
+
+    @Test func discardingThenCheckingOutCarriesTheFlag() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.accept()]
+        let pending = TerminalGitPendingSwitch.checkoutRemote(remote: "origin", branch: "dev", localBranch: nil)
+
+        await flow.discardChanges(pending, on: fake.desk)
+
+        #expect(fake.actions == ["checkoutRemote"])
+        #expect(fake.sent.first?.discardChanges == true)
+        #expect(fake.sent.first?.remote == "origin")
+    }
+
+    @Test func commitThenCheckoutHappensInThatOrder() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.reject(code: "dirty_working_tree", git: dirty()), fake.accept(), fake.accept()]
+        let pending = TerminalGitPendingSwitch.checkoutRemote(remote: "origin", branch: "dev", localBranch: nil)
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+        await flow.choose(.commit, from: pending, on: fake.desk)
+        #expect(flow.path == [.commit])
+
+        flow.commitMessage = "先存一下"
+        await flow.commit(on: fake.desk)
+
+        // 提交成功了才发迁出，而且是两个 intent 不是一个复合动作。
+        #expect(fake.actions == ["checkoutRemote", "commit", "checkoutRemote"])
+    }
+
+    @Test func anUnansweredNewActionSaysSomethingActionable() async {
+        let (flow, fake) = makeFlow()
+        // 没有回答：`answers` 是空的。
+        await flow.checkoutRemote("origin", branch: "dev", on: fake.desk)
+
+        // 新动作在**旧电脑端**上会被整帧丢弃，手机只会等到超时 —— 这句话要能照做。
+        #expect(flow.failure?.message == "电脑端没有回答。如果电脑上的 Synapse 不是最新版，先升级它再试。")
+    }
+
+    @Test func anUnansweredOldActionKeepsItsOwnSentence() async {
+        let (flow, fake) = makeFlow()
+        await flow.checkout("dev", on: fake.desk)
+
+        // 既有动作不换说法：它们的电脑端一定认识这个 action。
+        #expect(flow.failure?.message == "电脑一直没有回答。")
+    }
+
     // MARK: - 线上的形状
 
     @Test func aGitIntentOmitsWhatItDoesNotHave() throws {
@@ -480,9 +722,61 @@ struct TerminalGitFlowTests {
         #expect(json["action"] as? String == "status")
         #expect(json["sessionId"] as? String == "sess-1")
         // 缺席而不是 null：`Optional` 的合成编码只写有值的字段。
-        for key in ["branch", "fromBranch", "message", "pushAfterCommit", "direction", "discardChanges"] {
+        for key in [
+            "branch", "fromBranch", "message", "pushAfterCommit", "direction", "discardChanges",
+            "remote", "localBranch",
+        ] {
             #expect(json[key] == nil, "\(key) should be omitted")
         }
+    }
+
+    @Test func checkingOutARemoteBranchCarriesBothNames() throws {
+        let intent = MobileIntentRequest.git(
+            "checkoutRemote",
+            sessionId: "sess-1",
+            branch: "dev",
+            remote: "origin"
+        )
+        let json = try encoded(intent)
+
+        #expect(json["action"] as? String == "checkoutRemote")
+        #expect(json["remote"] as? String == "origin")
+        #expect(json["branch"] as? String == "dev")
+        #expect(json["localBranch"] == nil)
+    }
+
+    @Test func theRemoteBranchAnswerDecodes() throws {
+        let data = Data("""
+        {
+          "intentId": "i-1",
+          "outcome": "accepted",
+          "git": { "remoteBranches": [{ "remote": "origin", "name": "dev" }] }
+        }
+        """.utf8)
+
+        let result = try JSONDecoder().decode(MobileIntentResult.self, from: data)
+
+        #expect(result.git?.remoteBranches?.first?.remote == "origin")
+        #expect(result.git?.remoteBranches?.first?.name == "dev")
+        // 拼给人看的那一份在手机这侧拼：远端名本身可以含 `/`，拆回来是个会写错的一步。
+        #expect(result.git?.remoteBranches?.first?.qualifiedName == "origin/dev")
+    }
+
+    @Test func theAskForAnotherLocalNameDecodes() throws {
+        let data = Data("""
+        {
+          "intentId": "i-1",
+          "outcome": "rejected",
+          "code": "local_branch_conflict",
+          "message": "本地已有 dev，它跟踪的是 origin/other。",
+          "git": { "needsDecision": "localBranchName" }
+        }
+        """.utf8)
+
+        let result = try JSONDecoder().decode(MobileIntentResult.self, from: data)
+
+        #expect(result.git?.needsDecision == "localBranchName")
+        #expect(result.message == "本地已有 dev，它跟踪的是 origin/other。")
     }
 
     @Test func aDiscardingCheckoutCarriesTheFlag() throws {

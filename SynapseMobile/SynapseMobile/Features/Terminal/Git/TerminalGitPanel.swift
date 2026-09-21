@@ -152,6 +152,16 @@ struct TerminalGitPanel: View {
                     flow.path.append(.merge)
                 }
 
+                // 排在这一段的最后：它是这一组里唯一一个「从远端拿东西回来」的动作，
+                // 前面四个都是对本地已有的东西动手。
+                TerminalGitActionRow(
+                    title: "迁出远端分支",
+                    enabled: !flow.isBusy,
+                    identifier: "git-panel-remote-branches"
+                ) {
+                    flow.path.append(.remoteBranches)
+                }
+
                 if flow.isBusy {
                     HStack {
                         Spacer()
@@ -214,6 +224,10 @@ struct TerminalGitPanel: View {
             TerminalGitCommit(flow: flow, desk: desk, changeCount: status?.changeCount ?? 0)
         case .merge:
             TerminalGitMerge(flow: flow, desk: desk, currentBranch: status?.branch)
+        case .remoteBranches:
+            TerminalGitRemoteBranchList(flow: flow, desk: desk)
+        case .remoteLocalName:
+            TerminalGitLocalName(flow: flow, desk: desk)
         }
     }
 }

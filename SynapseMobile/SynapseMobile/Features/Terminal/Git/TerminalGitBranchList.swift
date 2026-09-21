@@ -12,7 +12,9 @@ enum TerminalGitBranchPurpose: Hashable {
 
 /// 本地分支列表，带搜索。
 ///
-/// **只列本地分支**：远端的新分支由「同步」带回来，本轮不做「检出远程分支」。
+/// **只列本地分支**：远端分支走「迁出远端分支」那一页（面板「操作」段的最后一行）。
+/// 注意「同步会把远端的新分支带回来」这句话是不成立的 —— 同步跑的是 `fetch --prune`
+/// 加 `merge --ff-only @{u}`，`@{u}` 只是当前分支的上游，`refs/heads` 一条都不会多。
 struct TerminalGitBranchList: View {
     @Environment(SynapseAppModel.self) private var model
     @Bindable var flow: TerminalGitFlow

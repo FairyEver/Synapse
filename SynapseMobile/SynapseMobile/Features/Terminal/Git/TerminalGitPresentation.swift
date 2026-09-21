@@ -95,4 +95,41 @@ enum TerminalGitPresentation {
         guard !trimmed.isEmpty else { return branches }
         return branches.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
     }
+
+    // MARK: - 远端分支列表
+
+    /// 按远端切段。**不重排**：顺序由电脑给（远端名 → 分支名）——
+    /// 手机再排一次就是第二份排序规则，两份迟早会分叉。
+    static func remoteBranchGroups(_ branches: [MobileGitRemoteBranch]) -> [TerminalGitRemoteBranchGroup] {
+        var groups: [TerminalGitRemoteBranchGroup] = []
+        for branch in branches {
+            if let last = groups.indices.last, groups[last].remote == branch.remote {
+                groups[last].branches.append(branch)
+            } else {
+                groups.append(TerminalGitRemoteBranchGroup(remote: branch.remote, branches: [branch]))
+            }
+        }
+        return groups
+    }
+
+    /// 名字命中的远端分支。空查询就是全部。
+    ///
+    /// 匹配**限定名**（`origin/dev`）：那一行写的就是限定名，用户照着屏幕打什么就该中什么，
+    /// 所以打 `origin/dev` 与打 `dev` 都命中。大小写与首尾空白的口径与本地分支一致。
+    static func matchingRemoteBranches(
+        _ branches: [MobileGitRemoteBranch],
+        query: String
+    ) -> [MobileGitRemoteBranch] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return branches }
+        return branches.filter { $0.qualifiedName.localizedCaseInsensitiveContains(trimmed) }
+    }
+}
+
+/// 远端列表里的一段：一个远端，和它下面那几条。
+struct TerminalGitRemoteBranchGroup: Identifiable, Equatable {
+    let remote: String
+    var branches: [MobileGitRemoteBranch]
+
+    var id: String { remote }
 }

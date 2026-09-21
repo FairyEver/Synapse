@@ -480,13 +480,17 @@ struct MobileIntentResult: Decodable {
     var isNoOp: Bool { outcome == "no_op" }
 }
 
-/// `git` 动作的回答里那两块**数据**，其余动作的回答是一句话。
+/// `git` 动作的回答里那几块**数据**，其余动作的回答是一句话。
 struct MobileIntentGitResult: Decodable, Equatable {
     /// `branches` 的回答：只给名字与是否当前。
     let branches: [MobileGitBranch]?
+    /// `remoteBranches` 的回答：平铺 + 已按「远端名 → 分支名」排好，分组是这一侧的事。
+    let remoteBranches: [MobileGitRemoteBranch]?
     /// `merge` 冲突后的结论：手机端只负责把 `summaryText` 复制走。
     let conflict: MobileGitConflict?
-    /// 脏工作区，需要用户先选一个走法。目前只有 `"dirty"` 一个值。
+    /// 要用户先给个东西，值说明是哪样东西。**两个取值都不是失败**：
+    /// `"dirty"` = 有未提交改动，弹三选一；`"localBranchName"` = 同名本地分支不能直接用，
+    /// 推一页让用户填另一个本地名。
     let needsDecision: String?
 }
 
@@ -496,6 +500,20 @@ struct MobileGitBranch: Decodable, Equatable, Identifiable {
     let current: Bool
 
     var id: String { name }
+}
+
+/// 一条远端分支。
+///
+/// 与电脑端分成两段而不是拼好的 `origin/dev`：分组要靠 `remote`，而拿一段拼字符串再拆回来
+/// 是个必然会写错的一步（远端名本身可以含 `/`）。给人看的那一份由 `qualifiedName` 拼。
+struct MobileGitRemoteBranch: Decodable, Equatable, Identifiable {
+    let remote: String
+    let name: String
+
+    /// 与 git 自己的说法一致的一行字：`origin/dev`。列表里那一行、搜索匹配、标识符都用它。
+    var qualifiedName: String { "\(remote)/\(name)" }
+
+    var id: String { qualifiedName }
 }
 
 /// 合并冲突的结论。
@@ -870,6 +888,10 @@ struct MobileIntentRequest: Encodable {
     var direction: String?
     /// `checkout` 的「丢弃改动并切换」。**不删未跟踪文件。**
     var discardChanges: Bool?
+    /// `checkoutRemote` 的远端名（`origin`）。远端名本身可以含 `/`。
+    var remote: String?
+    /// `checkoutRemote` 的另一个本地名；缺席＝与远端分支同名。
+    var localBranch: String?
 }
 
 struct MobileIntentPayloadOut: Encodable {

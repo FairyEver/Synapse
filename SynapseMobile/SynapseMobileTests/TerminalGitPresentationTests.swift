@@ -136,4 +136,51 @@ struct TerminalGitPresentationTests {
     private func branch(_ name: String, current: Bool = false) -> MobileGitBranch {
         MobileGitBranch(name: name, current: current)
     }
+
+    // MARK: - 远端分支
+
+    @Test func groupsRemoteBranchesWithoutReorderingThem() {
+        let branches = [
+            remote("origin", "main"),
+            remote("origin", "dev"),
+            remote("team/fork", "main"),
+        ]
+
+        let groups = TerminalGitPresentation.remoteBranchGroups(branches)
+
+        // 只切开，不重排：顺序由电脑给（远端名 → 分支名），手机上再排一次就是第二份规则。
+        #expect(groups.map(\.remote) == ["origin", "team/fork"])
+        #expect(groups[0].branches.map(\.name) == ["main", "dev"])
+        #expect(groups[1].branches.map(\.name) == ["main"])
+    }
+
+    @Test func anEmptyRemoteListHasNoGroups() {
+        #expect(TerminalGitPresentation.remoteBranchGroups([]).isEmpty)
+    }
+
+    @Test func filtersRemoteBranchesByTheirQualifiedName() {
+        let branches = [remote("origin", "main"), remote("origin", "feature/Login"), remote("team/fork", "dev")]
+
+        #expect(TerminalGitPresentation.matchingRemoteBranches(branches, query: "").count == 3)
+        #expect(TerminalGitPresentation.matchingRemoteBranches(branches, query: "   ").count == 3)
+        // 那一行写的就是限定名，用户照着屏幕打什么就该中什么。
+        // 打限定名命中（那一行写的就是它），打裸分支名也命中。
+        #expect(TerminalGitPresentation.matchingRemoteBranches(branches, query: "origin/main").map(\.name)
+            == ["main"])
+        #expect(TerminalGitPresentation.matchingRemoteBranches(branches, query: "dev").map(\.qualifiedName)
+            == ["team/fork/dev"])
+        // 大小写不敏感，与本地分支同一口径。
+        #expect(TerminalGitPresentation.matchingRemoteBranches(branches, query: "LOGIN").map(\.name)
+            == ["feature/Login"])
+        #expect(TerminalGitPresentation.matchingRemoteBranches(branches, query: "nope").isEmpty)
+    }
+
+    /// 远端名本身可以含 `/`，所以限定名的拼法不能被拆歧义掉。
+    @Test func aRemoteNameContainingASlashStillQualifies() {
+        #expect(remote("team/fork", "dev").qualifiedName == "team/fork/dev")
+    }
+
+    private func remote(_ remote: String, _ name: String) -> MobileGitRemoteBranch {
+        MobileGitRemoteBranch(remote: remote, name: name)
+    }
 }

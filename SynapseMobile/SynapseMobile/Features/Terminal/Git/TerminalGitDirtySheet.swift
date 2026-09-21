@@ -10,16 +10,17 @@ enum TerminalGitDirtyChoice: String, Identifiable, CaseIterable {
 
     /// 这一次动作上有哪几个走法。
     ///
-    /// 「丢弃改动并切换」只有切分支能表达（协议里只有 `checkout` 带 `discardChanges`，
-    /// 而 git 也没有「把改动丢掉、但留在原地新建一条分支」这条原语），所以新建与合并
-    /// 少一个选项 —— 少一个选项，不是少一次确认。
+    /// 「丢弃改动」只有 `checkout` 与 `checkoutRemote` 能表达：git 有 `checkout -f` 与
+    /// `checkout -f -b <local> --track <remote>/<branch>` 这两条原语。新建与合并没有
+    /// 「把改动丢掉、但留在原地新建一条分支」这条原语，所以它们少一个选项 ——
+    /// 少一个选项，不是少一次确认。
     ///
     /// **没有「暂存并切换」**，这一条是定死的：手机上暂存了却没法恢复，等于把人卡在半路。
     static func allowed(for pending: TerminalGitPendingSwitch) -> [TerminalGitDirtyChoice] {
         pending.canDiscardChanges ? [.commit, .discard, .cancel] : [.commit, .cancel]
     }
 
-    /// 按钮上的字跟着那一次动作换：同一件事在切分支、新建、合并上说法不同。
+    /// 按钮上的字跟着那一次动作换：同一件事在切分支、新建、合并、迁出上说法不同。
     func title(for pending: TerminalGitPendingSwitch) -> String {
         switch self {
         case .commit:
@@ -27,8 +28,11 @@ enum TerminalGitDirtyChoice: String, Identifiable, CaseIterable {
             case .checkout: return "提交并切换"
             case .createBranch: return "提交并新建"
             case .merge: return "提交并合并"
+            case .checkoutRemote: return "提交并迁出"
             }
-        case .discard: return "丢弃改动并切换"
+        case .discard:
+            if case .checkoutRemote = pending { return "丢弃改动并迁出" }
+            return "丢弃改动并切换"
         case .cancel: return "取消"
         }
     }
@@ -93,7 +97,7 @@ struct TerminalGitDirtySheet: ViewModifier {
             ) { pending in
                 Button("取消", role: .cancel) { flow.cancelDiscard() }
                     .accessibilityIdentifier("git-discard-cancel")
-                Button("丢弃并切换", role: .destructive) {
+                Button(Self.discardConfirmTitle(for: pending), role: .destructive) {
                     Task { await flow.discardChanges(pending, on: desk) }
                 }
                 .accessibilityIdentifier("git-discard-confirm")
@@ -129,6 +133,8 @@ extension TerminalGitDirtySheet {
             return "要新建并切换到 \(name)，先处理这些改动。"
         case .merge:
             return "合并前要先处理这些改动。"
+        case .checkoutRemote(let remote, let branch, _):
+            return "要迁出 \(remote)/\(branch)，先处理这些改动。"
         }
     }
 
@@ -137,11 +143,24 @@ extension TerminalGitDirtySheet {
     /// 后半句是这一整条路上最要紧的一句：它说的不是「我们会小心」，是**未跟踪的新文件
     /// 一个都不会少**。用户在这里丢的是已跟踪文件的修改，不是他放在同一个目录里的草稿 ——
     /// 而他看不出手机在这一点上会怎么选，所以必须写出来。
+    /// 二次确认那颗键上的字。
+    ///
+    /// 与 `TerminalGitDirtyChoice.title(for:)` 里那句分开写：这一颗说的是「丢掉」这件事本身，
+    /// 那一句说的是「丢掉之后再做什么」。
+    static func discardConfirmTitle(for pending: TerminalGitPendingSwitch?) -> String {
+        guard case .checkoutRemote? = pending else { return "丢弃并切换" }
+        return "丢弃并迁出"
+    }
+
     static func discardMessage(for pending: TerminalGitPendingSwitch?, changeCount: Int) -> String {
         let what = changeCount > 0 ? "这 \(changeCount) 个文件的修改" : "当前目录里未提交的修改"
-        guard case .checkout(let branch)? = pending else {
+        switch pending {
+        case .checkout(let branch)?:
+            return "切换到 \(branch) 会丢掉\(what)，无法撤销。未跟踪的新文件不会被删除。"
+        case .checkoutRemote(let remote, let branch, _)?:
+            return "迁出 \(remote)/\(branch) 会丢掉\(what)，无法撤销。未跟踪的新文件不会被删除。"
+        default:
             return "会丢掉\(what)，无法撤销。未跟踪的新文件不会被删除。"
         }
-        return "切换到 \(branch) 会丢掉\(what)，无法撤销。未跟踪的新文件不会被删除。"
     }
 }
