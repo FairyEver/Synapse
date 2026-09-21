@@ -1,7 +1,13 @@
 import SwiftUI
 
-/// The two things the panel can show, in the order the segment control draws them.
+/// The things the panel can show, in the order the segment control draws them.
+///
+/// The clipboard comes first because it is the one segment that is always there. The
+/// other two are whatever a particular computer has been asked about and has answered;
+/// this one is the reader's own list, kept on the phone, and nothing about a computer
+/// can take it away.
 enum ShortcutPanelSegment: String, CaseIterable, Identifiable {
+    case clipboard
     case commands
     case phrases
 
@@ -9,6 +15,7 @@ enum ShortcutPanelSegment: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .clipboard: return "剪切板"
         case .commands: return "自定义命令"
         case .phrases: return "快捷输入"
         }
@@ -24,11 +31,16 @@ enum ShortcutPanelSegment: String, CaseIterable, Identifiable {
 /// share the commands rather than the drawing — the bar is a single scrolling line, and
 /// this is a sheet that shows everything at once.
 ///
-/// The second segment exists only if the computer said it does. A computer that has
+/// The sentences' segment exists only if the computer said it does. A computer that has
 /// sent `mobile.quickPhrases` — with sentences or with none — decides that completely;
-/// a computer that has never sent it has not answered, and the panel stays the single
-/// section it has always been. That is `TerminalQuickPhrasesState`'s rule, and it is why
-/// `phrases` is optional rather than defaulting to empty.
+/// a computer that has never sent it has not answered, and its segment is left out
+/// altogether. That is `TerminalQuickPhrasesState`'s rule, and it is why `phrases` is
+/// optional rather than defaulting to empty.
+///
+/// It is no longer the only segment that can be absent, and it is not a reason for the
+/// picker to disappear: the clipboard segment is the reader's own list and the commands
+/// segment needs no answer from anybody, so those two are always drawn and the picker
+/// still has somewhere to switch. `availableSegments` is where that is decided.
 struct TerminalShortcutPanel: View {
     let buttons: [MobileToolbarButton]
     /// `nil` when the computer being viewed has never described its sentences. An empty
@@ -44,6 +56,19 @@ struct TerminalShortcutPanel: View {
     /// reader can carry on editing it — so it lands in the composer, the panel closes,
     /// and whether it is sent, and when, stays the reader's decision.
     let onInsert: (MobileQuickPhrase) -> Void
+    /// The text copied on the computer being viewed, newest first.
+    ///
+    /// Empty rather than optional: this list is the reader's own, kept on the phone, and
+    /// a computer never answers "I have no clipboard" for it to be missing from.
+    let clipboardEntries: [MobileClipboardEntry]
+    /// Puts one of them on this phone's clipboard.
+    ///
+    /// The panel does not close for this one, unlike the two actions above: copying is
+    /// usually followed by picking a second item, and the copy is already confirmed by
+    /// the buzz and the notice.
+    let onCopyClipboard: (MobileClipboardEntry) -> Void
+    /// Empties this computer's list, once the reader has confirmed it.
+    let onClearClipboard: () -> Void
 
     /// Which segment was last looked at, remembered across launches.
     ///
@@ -63,30 +88,42 @@ struct TerminalShortcutPanel: View {
         )
     }
 
+    /// Which segments this computer's answers make meaningful.
+    ///
+    /// The clipboard and the commands are always among them — one is the reader's own
+    /// list and the other needs no answer from anybody. The sentences are the only
+    /// conditional one, and leaving their segment out entirely is what keeps "this
+    /// computer has none" apart from "this computer has never been asked": the second
+    /// one has no segment to tap, so it cannot be misread as the first.
+    private var availableSegments: [ShortcutPanelSegment] {
+        phrases == nil ? [.clipboard, .commands] : [.clipboard, .commands, .phrases]
+    }
+
     /// What to draw, given what the computer answered.
     ///
-    /// With no second segment there is only one thing to draw whatever the remembered
-    /// value says — so a stale "phrases" from a previous computer cannot leave the
-    /// panel blank, and the picker is not drawn to switch away from anyway.
+    /// Only the sentences can be unavailable, so a remembered "phrases" from a previous
+    /// computer falls back to the first segment rather than leaving the panel blank.
     private var shown: ShortcutPanelSegment {
-        phrases == nil ? .commands : segment.wrappedValue
+        segment.wrappedValue == .phrases && phrases == nil ? .clipboard : segment.wrappedValue
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if phrases != nil {
-                Picker("", selection: segment) {
-                    ForEach(ShortcutPanelSegment.allCases) { option in
-                        Text(option.label).tag(option)
-                    }
+            // Drawn even for a computer that has never described its sentences: two of
+            // the three segments are always meaningful, so there is somewhere to switch
+            // from and somewhere to switch to.
+            Picker("", selection: segment) {
+                ForEach(availableSegments) { option in
+                    Text(option.label).tag(option)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-                .accessibilityIdentifier("shortcut-panel-segment")
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .accessibilityIdentifier("shortcut-panel-segment")
 
             switch shown {
+            case .clipboard: clipboard
             case .commands: commands
             case .phrases: phraseList
             }
@@ -120,6 +157,24 @@ struct TerminalShortcutPanel: View {
                 .presentationDetents([.fraction(0.32), .medium, .large])
                 .presentationDragIndicator(.visible)
         }
+    }
+
+    // MARK: - 剪切板
+
+    /// What the reader copied on this computer, for them to copy again here.
+    ///
+    /// A shared view rather than a third list written out in this file: the same rows,
+    /// the same two gestures and the same clear confirmation are drawn by the sheet over
+    /// the session list, and one implementation is one place for them to stay in step.
+    /// Its title is `nil` — this panel is already under a segmented control that says
+    /// which of the three it is.
+    private var clipboard: some View {
+        ClipboardList(
+            entries: clipboardEntries,
+            title: nil,
+            onCopy: onCopyClipboard,
+            onClear: onClearClipboard,
+        )
     }
 
     // MARK: - 快捷命令

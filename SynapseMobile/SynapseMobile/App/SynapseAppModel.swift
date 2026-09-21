@@ -1309,6 +1309,21 @@ final class SynapseAppModel {
         clipboard.clear(for: desktopClientInstanceId)
     }
 
+    /// Puts one copied item on this phone's clipboard.
+    ///
+    /// One implementation for both places the list appears, for the same reason the list
+    /// itself is one view: what the reader feels afterwards — the buzz and the
+    /// confirmation — must not depend on which door they came in through.
+    func copyClipboardEntry(_ entry: MobileClipboardEntry) {
+        UIPasteboard.general.string = entry.text
+        // The buzz is the call site's to send; `notice` only buzzes on its own for a
+        // failure. Sending both would make one outcome fire twice.
+        Haptics.success()
+        // The id is what makes a second tap restart this banner instead of queueing a
+        // second one, which is the whole of what the reader needs to see.
+        notice("已复制", tone: .success, id: "clipboard.copied")
+    }
+
     /// Runs one of the toolbar's buttons against a terminal.
     ///
     /// The command text is passed on untouched — no trimming, no quoting. The computer

@@ -771,8 +771,29 @@ struct TerminalScreen: View {
                     // the system keyboard — which would cover the terminal at the exact
                     // moment the reader is deciding whether to send.
                     draft = phrase.content
+                },
+                // The reader's own list for the computer being viewed. Empty rather
+                // than optional: a computer never answers "I have no clipboard", so
+                // there is no second meaning for the panel to keep apart — see
+                // `ClipboardHistoryStore`.
+                clipboardEntries: model.activeClipboardEntries,
+                onCopyClipboard: { entry in
+                    noteChromeActivity()
+                    // The panel stays open, unlike the two above. Copying is usually
+                    // followed by copying a second one, and the copy is already
+                    // confirmed by the buzz and the notice.
+                    model.copyClipboardEntry(entry)
+                },
+                onClearClipboard: {
+                    noteChromeActivity()
+                    model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId)
                 }
             )
+            // The panel is presented *over* this screen, so the overlay this screen
+            // already carries is behind it — and the clipboard segment's whole
+            // confirmation is a notice, raised while the panel stays open. Without this
+            // the reader copies an item and sees nothing at all.
+            .noticeOverlay(model)
         }
         .sheet(isPresented: $showingDocumentPicker) {
             DocumentPicker(

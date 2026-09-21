@@ -11,6 +11,7 @@ struct SessionListView: View {
     @Environment(TerminalDisplaySettings.self) private var display
     @Binding var path: [Route]
     @State private var showingNewSession = false
+    @State private var showingClipboard = false
     @State private var renameTarget: MobileSummarySession?
     @State private var deleteTarget: MobileSummarySession?
     /// Tabs the user has closed. Absent means open, so the default needs no state.
@@ -223,30 +224,58 @@ struct SessionListView: View {
     /// has gone away, where the one other computer is the only way out.
     private var deviceSection: some View {
         Section {
-            if model.desktopSwitchTargets.isEmpty {
-                deviceRow
-            } else {
-                Menu {
-                    ForEach(model.desktopSwitchTargets) { desktop in
-                        Button {
-                            Haptics.select()
-                            model.selectDesktop(desktop.clientInstanceId)
-                        } label: {
-                            Text(model.desktopName(desktop.clientInstanceId))
+            HStack(spacing: 8) {
+                // The switch menu wraps only the identity, not the whole row. The
+                // clipboard button sits at the other end of the same row and takes its
+                // own taps: inside the menu's label they would open the menu instead,
+                // and the reader would never reach the list.
+                if model.desktopSwitchTargets.isEmpty {
+                    deviceIdentity
+                } else {
+                    Menu {
+                        ForEach(model.desktopSwitchTargets) { desktop in
+                            Button {
+                                Haptics.select()
+                                model.selectDesktop(desktop.clientInstanceId)
+                            } label: {
+                                Text(model.desktopName(desktop.clientInstanceId))
+                            }
+                            .accessibilityIdentifier("switch-computer-option-\(desktop.clientInstanceId)")
                         }
-                        .accessibilityIdentifier("switch-computer-option-\(desktop.clientInstanceId)")
+                    } label: {
+                        deviceIdentity
                     }
-                } label: {
-                    deviceRow
+                    .tint(.primary)
+                    .accessibilityIdentifier("switch-computer")
+                    .accessibilityHint("切换到其它电脑")
                 }
-                .tint(.primary)
-                .accessibilityIdentifier("switch-computer")
-                .accessibilityHint("切换到其它电脑")
+                Spacer(minLength: 8)
+                Text(model.connectivity.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                clipboardButton
             }
+        }
+        .sheet(isPresented: $showingClipboard) {
+            // Titled, unlike the segment of the terminal's panel: nothing else on this
+            // sheet says what it is.
+            ClipboardList(
+                entries: model.activeClipboardEntries,
+                title: "剪切板",
+                onCopy: { model.copyClipboardEntry($0) },
+                onClear: { model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId) }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            // The list raises its confirmation as a notice, and this sheet covers the
+            // overlay the session list already carries — so the sheet needs one of its
+            // own or copying an item would say nothing at all.
+            .noticeOverlay(model)
         }
     }
 
-    private var deviceRow: some View {
+    /// Which computer is being viewed, and — when there is anywhere to go — the switch.
+    private var deviceIdentity: some View {
         HStack(spacing: 8) {
             Circle()
                 // Green only when a computer is actually reachable. A list that is
@@ -265,12 +294,29 @@ struct SessionListView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
-            Text(model.connectivity.label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
+    }
+
+    /// Opens the reader's list of what they copied on the computer being viewed.
+    ///
+    /// Here rather than in the toolbar because the clipboard belongs to a computer, and
+    /// this row is the only place on this screen that names one. It is drawn whenever
+    /// the device row is — a computer that is unreachable still has a list worth
+    /// reading, which is the whole reason that list is kept on the phone.
+    private var clipboardButton: some View {
+        Button {
+            Haptics.select()
+            showingClipboard = true
+        } label: {
+            Image(systemName: "doc.on.clipboard")
+                .font(.system(size: 17))
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("剪切板")
+        .accessibilityIdentifier("device-clipboard")
     }
 
     /// The computer being viewed is not reachable and at least one other is.

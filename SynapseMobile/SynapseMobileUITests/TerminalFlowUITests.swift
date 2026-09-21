@@ -1338,6 +1338,71 @@ final class TerminalFlowUITests: XCTestCase {
         )
     }
 
+    /// One copied item, in the shape the real computer sends.
+    ///
+    /// Callers pass ids unique to their own test, and that is not tidiness. The phone's
+    /// clipboard list is persisted and its clear is remembered against the exact rows it
+    /// removed, so two tests sharing an id interfere through the app's own storage even
+    /// though the mock is restarted between runs: the second one finds its rows missing
+    /// and the watermark refusing to accept them back.
+    private func mockClipboardEntry(_ id: String, _ text: String, secondsAgo: Int) -> [String: Any] {
+        // Stamped against now rather than a fixed moment, for the second half of the same
+        // problem: the phone keeps the newest fifty, so fixtures frozen at one timestamp
+        // would eventually be pushed out of its own list by later runs' identical ones.
+        ["id": id, "text": text, "copiedAt": clipboardWireStamp.string(from: Date().addingTimeInterval(-Double(secondsAgo)))]
+    }
+
+    private let clipboardWireStamp: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    /// Replaces what the computer has copied, and pushes it — the same thing the real one
+    /// does on every copy, and the reason the clear tests below can drive it.
+    private func setMockClipboard(_ entries: [[String: Any]]) throws {
+        let body = try JSONSerialization.data(withJSONObject: entries)
+        XCTAssertEqual(
+            post("/desktop/clipboard", body: body), 200,
+            "the mock desktop control channel is unreachable at \(controlBaseURL)"
+        )
+    }
+
+    /// A suffix unique to this run, used by every clipboard fixture.
+    ///
+    /// Not tidiness. The phone persists this list and remembers a clear against the exact
+    /// rows it removed, and the clearing test legitimately clears whatever is in the list
+    /// at that moment — so a fixture id reused across runs gets watermarked by a previous
+    /// run's clear and is refused forever after. Unique ids are what make these tests
+    /// order-independent, which is what a test that runs beside three others has to be.
+    private lazy var clipboardRunId = String(UUID().uuidString.prefix(8))
+
+    /// The name this run's mock desktop publishes, which is `mock-desktop.mjs`'s own
+    /// default and therefore what the switch below looks for.
+    private var mockDesktopName: String { "Mock MacBook Pro" }
+
+    /// Puts the phone on the mock desktop, whichever computer it started on.
+    ///
+    /// Not a convenience. A real Synapse signed into the same account is another online
+    /// computer, and a phone that has viewed it before starts there — so the terminal
+    /// these tests drive would be somebody else's, and the failures would read as a
+    /// broken feature. What this adds is only the switch a reader would make by hand.
+    /// An account with a single computer needs none of it, which is the case this is
+    /// written to be a no-op in.
+    private func selectMockDesktop(_ app: XCUIApplication) {
+        let switchControl = app.buttons["switch-computer"]
+        guard switchControl.waitForExistence(timeout: 25) else { return }
+        guard !switchControl.label.hasPrefix(mockDesktopName) else { return }
+
+        switchControl.tap()
+        let option = app.buttons[mockDesktopName]
+        if option.waitForExistence(timeout: 8) {
+            option.tap()
+        }
+        // No assertion here on purpose: if the switch did not land, the caller's own
+        // wait for the session row fails, and it fails saying what it was looking for.
+    }
+
     /// Opens the terminal `claude-code` and waits for its toolbar to arrive.
     ///
     /// The first session is the only fixture nobody consumes, and the toolbar is the
@@ -1649,12 +1714,13 @@ final class TerminalFlowUITests: XCTestCase {
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
         signIn(app)
+        selectMockDesktop(app)
         openClaudeCodeTerminal(app)
 
         app.buttons["toolbar-all"].tap()
         let segment = app.segmentedControls["shortcut-panel-segment"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
-        XCTAssertEqual(segment.buttons.count, 2, "the panel should offer two segments")
+        XCTAssertEqual(segment.buttons.count, 3, "the panel should offer three segments")
 
         segment.buttons["快捷输入"].tap()
         let row = app.staticTexts["phrase-row-mock-commit"]
@@ -1687,14 +1753,20 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "17-phrase-filled")
     }
 
-    /// A computer too old to have been asked gets a one-section panel.
+    /// A computer too old to have been asked gets no 快捷输入 segment, and still gets the
+    /// other two.
     ///
     /// The other half of the pair. "This computer has none" and "this computer has never
     /// heard of these" are different answers, and they arrive as different things: an
     /// empty list in the first case, no message at all in the second. Only the second
-    /// must leave the segment control off — a computer that cannot answer must not be
-    /// drawn as having answered "none", which a user reads as their own sentences having
-    /// gone missing.
+    /// must leave the segment out — a computer that cannot answer must not be drawn as
+    /// having answered "none", which a user reads as their own sentences having gone
+    /// missing.
+    ///
+    /// The picker itself stays, unlike before the clipboard existed: two of the three
+    /// segments need no answer from any computer — one is the reader's own list and the
+    /// other is built in — so there is still somewhere to switch from and somewhere to
+    /// switch to, and hiding the whole control would hide the clipboard with it.
     ///
     /// Run with a mock started `--no-toolbar`, which suppresses this message along with
     /// the toolbar, and `SYNAPSE_TEST_OLD_DESKTOP=1` — the same arrangement
@@ -1715,10 +1787,13 @@ final class TerminalFlowUITests: XCTestCase {
         app.buttons["toolbar-all"].tap()
         XCTAssertTrue(
             app.staticTexts["shortcut-commands-empty"].waitForExistence(timeout: 10),
-            "the panel never opened, so the segment assertion below would prove nothing"
+            "the panel never opened, so the segment assertions below would prove nothing"
         )
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        XCTAssertEqual(segment.buttons.count, 2, "an unanswered computer should offer two segments")
         XCTAssertFalse(
-            app.segmentedControls["shortcut-panel-segment"].exists,
+            segment.buttons["快捷输入"].exists,
             "a computer that never sent the sentences was drawn as having none"
         )
         XCTAssertFalse(
@@ -1726,6 +1801,180 @@ final class TerminalFlowUITests: XCTestCase {
             "an unanswered computer was shown the empty state meant for one that answered"
         )
         capture(app, name: "20-panel-old-desktop")
+    }
+
+    /// The clipboard segment shows what the computer copied, and tapping an item copies
+    /// it without closing the panel.
+    ///
+    /// What this can assert is the pair of things the reader sees: the confirmation, and
+    /// the list still being there. The pasteboard write itself is deliberately not read
+    /// back from here — reading what another app put on the pasteboard raises the system
+    /// paste prompt, and a test that hangs on a dialog is worse than no test. It is
+    /// covered by the acceptance walkthrough, where a person pastes it somewhere.
+    func testTheClipboardSegmentCopiesWithoutClosingThePanel() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        selectMockDesktop(app)
+        // Pushed now rather than before the launch, and that is the difference between a
+        // test that works and one that races: the control channel delivers to whatever
+        // phone is connected, and before the launch there is none — so the fixture would
+        // have to wait for the sync the phone sends on connecting, whose arrival is not
+        // this test's to schedule.
+        try setMockClipboard([
+            mockClipboardEntry("clip-single-\(clipboardRunId)-1", "pnpm mobile:install", secondsAgo: 10),
+            mockClipboardEntry("clip-single-\(clipboardRunId)-2", "这次改动整理成提交说明", secondsAgo: 8),
+        ])
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+
+        segment.buttons["剪切板"].tap()
+        let first = app.staticTexts["clipboard-row-clip-single-\(clipboardRunId)-1"]
+        XCTAssertTrue(first.waitForExistence(timeout: 15), "the computer's copied text never appeared")
+        capture(app, name: "24-clipboard-segment")
+
+        first.tap()
+        // The row itself says so, which is the assertion that can be made deterministically:
+        // the app's banner carries the same word but lives one second, and XCUITest waits
+        // for this app to go quiet after a tap — with a terminal streaming, that wait
+        // outlives the banner.
+        XCTAssertTrue(
+            app.staticTexts["clipboard-copied"].waitForExistence(timeout: 10),
+            "copying an item said nothing on the row it was copied from"
+        )
+        // Still open, unlike the two older segments: copying is usually followed by
+        // copying a second one, and this is the list the reader is choosing from.
+        XCTAssertTrue(segment.exists, "the panel closed over the list being chosen from")
+
+        let second = app.staticTexts["clipboard-row-clip-single-\(clipboardRunId)-2"]
+        XCTAssertTrue(second.waitForExistence(timeout: 10), "the second copied item is missing")
+        second.tap()
+        XCTAssertTrue(
+            app.staticTexts["clipboard-copied"].waitForExistence(timeout: 10),
+            "the second copy said nothing on the row it was copied from"
+        )
+    }
+
+    /// The eye beside an item reads it; it does not copy it.
+    ///
+    /// The two controls are in the same row and mean different things, so the assertion
+    /// that matters is that pressing the eye leaves the clipboard alone — an item put on
+    /// the reader's clipboard by someone who only wanted to read the end of it is the
+    /// failure. The confirmation is what says a copy happened, so its absence is the
+    /// evidence.
+    func testTheEyeShowsTheWholeCopiedItemWithoutCopyingIt() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        selectMockDesktop(app)
+        try setMockClipboard([
+            mockClipboardEntry("clip-eye-\(clipboardRunId)-1", "pnpm mobile:install", secondsAgo: 10),
+            mockClipboardEntry("clip-eye-\(clipboardRunId)-2", "这次改动整理成提交说明，中文，说清楚改了什么", secondsAgo: 8),
+        ])
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        segment.buttons["剪切板"].tap()
+
+        let eye = app.buttons["clipboard-preview-clip-eye-\(clipboardRunId)-2"]
+        XCTAssertTrue(eye.waitForExistence(timeout: 15), "the eye is missing")
+        eye.tap()
+
+        let full = app.staticTexts["clipboard-preview-text"]
+        XCTAssertTrue(full.waitForExistence(timeout: 10), "the eye showed nothing")
+        XCTAssertEqual(
+            full.label,
+            "这次改动整理成提交说明，中文，说清楚改了什么",
+            "the preview is not the item it stands for"
+        )
+        // Nothing on the row claims a copy, which is the evidence that this one did not
+        // happen: `clipboard-copied` is what a copy leaves behind, and the copy test
+        // above is what proves that word appears when one does.
+        XCTAssertFalse(
+            app.staticTexts["clipboard-copied"].exists,
+            "the eye copied the item"
+        )
+        capture(app, name: "25-clipboard-preview")
+    }
+
+    /// Clearing the list survives the computer sending the same rows again.
+    ///
+    /// The failure this exists for is the ordinary one: the computer keeps those entries
+    /// in its own ring and re-sends all of them the next time anything is copied, so
+    /// without a watermark the rows the reader just deleted come straight back and
+    /// "clear" means "until the next copy anywhere".
+    func testClearingKeepsTheClearedRowsFromComingBack() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        selectMockDesktop(app)
+        let fixture = [
+            mockClipboardEntry("clip-clear-\(clipboardRunId)-1", "pnpm mobile:install", secondsAgo: 10),
+            mockClipboardEntry("clip-clear-\(clipboardRunId)-2", "这次改动整理成提交说明", secondsAgo: 8),
+        ]
+        try setMockClipboard(fixture)
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        segment.buttons["剪切板"].tap()
+        XCTAssertTrue(
+            app.staticTexts["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
+            "the list never filled, so clearing it would prove nothing"
+        )
+
+        app.buttons["clipboard-clear"].tap()
+        app.alerts.firstMatch.buttons["清空"].tap()
+        XCTAssertTrue(
+            app.staticTexts["clipboard-empty"].waitForExistence(timeout: 10),
+            "clearing left the list standing"
+        )
+
+        // The computer's next copy, as far as the phone can tell: the same rows, the same
+        // moments, sent again — which is exactly what its ring produces.
+        try setMockClipboard(fixture)
+        XCTAssertFalse(
+            app.staticTexts["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 5),
+            "a cleared row came back on the computer's next snapshot"
+        )
+        XCTAssertTrue(
+            app.staticTexts["clipboard-empty"].exists,
+            "the list is no longer showing its empty state"
+        )
+    }
+
+    /// The device row opens the same list, for a reader who is not in a terminal yet.
+    ///
+    /// This is the entry that exists before any terminal is open, which is the whole
+    /// reason there are two: the clipboard belongs to a computer, and this row is the only
+    /// place on the session list that names one.
+    func testTheDeviceRowOpensTheClipboard() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        selectMockDesktop(app)
+
+        try setMockClipboard([mockClipboardEntry("clip-row-\(clipboardRunId)-1", "pnpm mobile:install", secondsAgo: 10)])
+
+        let button = app.buttons["device-clipboard"]
+        XCTAssertTrue(button.waitForExistence(timeout: 25), "the device row has no clipboard button")
+        button.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["clipboard-row-clip-row-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
+            "the device row's clipboard never opened the list"
+        )
+        capture(app, name: "26-clipboard-sheet")
     }
 
     /// The eye beside a sentence reads it; it does not use it.
