@@ -7,7 +7,7 @@ import type { UserAuthService } from "../auth/user-auth.service"
 import { LiveClientRegistry } from "../live/live-client-registry"
 import type { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobileLiveGateway, parseMobileMessage } from "./mobile-live.gateway"
-import type { MobileLiveRelayService } from "./mobile-live-relay.service"
+import { MobileLiveRelayService } from "./mobile-live-relay.service"
 import { MOBILE_LIVE_RATE_MESSAGES_PER_WINDOW } from "./mobile-live.types"
 
 class FakeSocket extends EventEmitter {
@@ -264,3 +264,141 @@ describe("MobileLiveGateway", () => {
   })
 
 })
+
+/**
+ * The fanout path a summary, a presence change, a toolbar, a phrase list and a
+ * clipboard snapshot all take. It runs on a timer's schedule — a computer
+ * publishes a summary every second — so the number of registry lookups and the
+ * number of serializations it costs per phone set the server's steady-state cost.
+ */
+describe("MobileLiveGateway fanout", () => {
+  async function connectPhones(
+    harness: ReturnType<typeof createHarness>,
+    clientInstanceIds: readonly string[],
+  ): Promise<Map<string, FakeSocket>> {
+    const sockets = new Map<string, FakeSocket>()
+    for (const clientInstanceId of clientInstanceIds) {
+      const socket = new FakeSocket()
+      harness.gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+      socket.emit("message", Buffer.from(helloMessage(clientInstanceId)))
+      sockets.set(clientInstanceId, socket)
+    }
+    await settle()
+    return sockets
+  }
+
+  const summaryPayload = () => ({
+    desktopClientInstanceId: "desktop-1",
+    desktopName: "MacBook",
+    revision: 1,
+    groups: [],
+    sessions: [],
+  })
+
+  const summaryMessage = () => createLiveEnvelope(
+    LIVE_MESSAGE_TYPES.mobileSummary,
+    summaryPayload(),
+    { id: "m", sentAt: new Date().toISOString() },
+  )
+
+  it("resolves the account's phones once for a whole fanout", async () => {
+    // Turning a phone's client instance into a connection is what makes this
+    // expensive: resolving it inside the send means one full-registry scan per
+    // phone, on top of the one the caller already paid to learn who the phones are.
+    const harness = createHarness()
+    const phones = await connectPhones(harness, ["phone-1", "phone-2", "phone-3"])
+    const relay = new MobileLiveRelayService({} as never, {} as never)
+    relay.setFanout(harness.gateway)
+    const listSpy = vi.spyOn(harness.registry, "listOnlineByUser")
+    listSpy.mockClear()
+
+    relay.handleSummary("user-1", summaryPayload())
+
+    expect(listSpy).toHaveBeenCalledTimes(1)
+    for (const socket of phones.values()) expect(socket.sent).toHaveLength(2)
+  })
+
+  it("serializes the payload once rather than once per phone", async () => {
+    // A summary can approach the desktop's payload ceiling, so building one string
+    // per recipient is a large string construction multiplied by the phone count —
+    // every second, for every computer.
+    const harness = createHarness()
+    const phones = await connectPhones(harness, ["phone-1", "phone-2", "phone-3"])
+    const stringifySpy = vi.spyOn(JSON, "stringify")
+
+    harness.gateway.sendToMobileClients({ userId: "user-1", message: summaryMessage() })
+    const stringifyCalls = stringifySpy.mock.calls.length
+    stringifySpy.mockRestore()
+
+    expect(stringifyCalls).toBe(1)
+    for (const socket of phones.values()) expect(socket.sent).toHaveLength(2)
+  })
+
+  it("keeps delivering to the other phones when one send fails", async () => {
+    const harness = createHarness()
+    const phones = await connectPhones(harness, ["phone-1", "phone-2", "phone-3"])
+    const broken = phones.get("phone-2")
+    const offline = phones.get("phone-3")
+    if (!broken || !offline) throw new Error("phones did not connect")
+    broken.send = () => {
+      throw new Error("socket is gone")
+    }
+    offline.readyState = 3
+
+    expect(() => harness.gateway.sendToMobileClients({
+      userId: "user-1",
+      message: summaryMessage(),
+    })).not.toThrow()
+
+    // The one that failed is skipped, not fatal; the one that is not open is never
+    // written to at all.
+    expect(phones.get("phone-1")?.sent).toHaveLength(2)
+    expect(broken.sent).toHaveLength(1)
+    expect(offline.sent).toHaveLength(1)
+  })
+})
+
+describe("MobileLiveGateway addressed send", () => {
+  it("reports whether the phone it named was reachable", async () => {
+    const harness = createHarness()
+    const phones = await connectPhonesForAddressedSend(harness)
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.pong, {
+      serverTime: new Date().toISOString(),
+    }, { id: "m", sentAt: new Date().toISOString() })
+
+    expect(harness.gateway.sendToMobile({ userId: "user-1", clientInstanceId: "phone-1", message })).toBe("sent")
+    // A phone that never registered, and an account with no phones at all.
+    expect(harness.gateway.sendToMobile({ userId: "user-1", clientInstanceId: "phone-9", message })).toBe("offline")
+    expect(harness.gateway.sendToMobile({ userId: "user-2", clientInstanceId: "phone-1", message })).toBe("offline")
+    expect(phones.get("phone-1")?.sent).toHaveLength(2)
+  })
+
+  it("reports a failing write rather than throwing at the caller", async () => {
+    const harness = createHarness()
+    const phones = await connectPhonesForAddressedSend(harness)
+    const socket = phones.get("phone-1")
+    if (!socket) throw new Error("phone did not connect")
+    socket.send = () => {
+      throw new Error("socket is gone")
+    }
+
+    expect(harness.gateway.sendToMobile({
+      userId: "user-1",
+      clientInstanceId: "phone-1",
+      message: createLiveEnvelope(LIVE_MESSAGE_TYPES.pong, { serverTime: new Date().toISOString() }, {
+        id: "m",
+        sentAt: new Date().toISOString(),
+      }),
+    })).toBe("send_failed")
+  })
+})
+
+async function connectPhonesForAddressedSend(
+  harness: ReturnType<typeof createHarness>,
+): Promise<Map<string, FakeSocket>> {
+  const socket = new FakeSocket()
+  harness.gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+  socket.emit("message", Buffer.from(helloMessage("phone-1")))
+  await settle()
+  return new Map([["phone-1", socket]])
+}

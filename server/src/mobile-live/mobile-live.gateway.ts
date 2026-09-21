@@ -142,23 +142,75 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
     readonly clientInstanceId: string
     readonly message: LiveMobileServerMessage
   }): "sent" | "offline" | "send_failed" {
-    const client = this.registry
-      .listOnlineByUser(input.userId)
-      .find((entry) => entry.clientInstanceId === input.clientInstanceId)
-    const connectionId = client?.connectionId
-    if (!connectionId) return "offline"
-    const socket = this.socketsByConnectionId.get(connectionId)
-    if (!socket || socket.readyState !== WebSocket.OPEN) return "offline"
-    try {
-      socket.send(JSON.stringify(input.message))
-      return "sent"
-    } catch (error) {
-      this.logger.warn({
-        clientInstanceId: input.clientInstanceId,
-        errorName: error instanceof Error ? error.name : typeof error,
-      }, "Mobile send failed")
-      return "send_failed"
+    const outcome = this.writeToPhones({
+      userId: input.userId,
+      clientInstanceIds: [input.clientInstanceId],
+      message: input.message,
+    })
+    if (outcome.sent > 0) return "sent"
+    return outcome.failed > 0 ? "send_failed" : "offline"
+  }
+
+  sendToMobileClients(input: {
+    readonly userId: string
+    readonly message: LiveMobileServerMessage
+  }): void {
+    this.writeToPhones({
+      userId: input.userId,
+      clientInstanceIds: null,
+      message: input.message,
+    })
+  }
+
+  /**
+   * The one place a message reaches a phone, so the addressed send above and the
+   * fanout beside it cannot drift apart.
+   *
+   * The registry is read once for the whole batch — turning a `clientInstanceId`
+   * into a connection is what used to make a summary cost one full-registry scan
+   * per phone — and the payload is serialized once for all of them: a summary can
+   * approach the desktop's payload ceiling, so serializing per recipient would
+   * multiply a large string construction by the phone count. One recipient's
+   * failure never reaches the next.
+   */
+  private writeToPhones(input: {
+    readonly userId: string
+    /** `null` addresses every phone of the account, which is the fanout case. */
+    readonly clientInstanceIds: readonly string[] | null
+    readonly message: LiveMobileServerMessage
+  }): { readonly sent: number; readonly failed: number } {
+    const connectionIdsByClientInstance = new Map<string, string>()
+    for (const client of this.registry.listOnlineByUser(input.userId)) {
+      if (client.connectionId) connectionIdsByClientInstance.set(client.clientInstanceId, client.connectionId)
     }
+    const recipients = input.clientInstanceIds ?? [...connectionIdsByClientInstance.keys()]
+    let payload: string | null = null
+    let sent = 0
+    let failed = 0
+    for (const clientInstanceId of recipients) {
+      const socket = this.openSocket(connectionIdsByClientInstance.get(clientInstanceId))
+      if (!socket) continue
+      try {
+        // Serialized on the first reachable recipient and shared from there: an
+        // unreachable phone costs no serialization at all.
+        payload ??= JSON.stringify(input.message)
+        socket.send(payload)
+        sent += 1
+      } catch (error) {
+        failed += 1
+        this.logger.warn({
+          clientInstanceId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        }, "Mobile send failed")
+      }
+    }
+    return { sent, failed }
+  }
+
+  private openSocket(connectionId: string | undefined): WebSocket | null {
+    if (!connectionId) return null
+    const socket = this.socketsByConnectionId.get(connectionId)
+    return socket && socket.readyState === WebSocket.OPEN ? socket : null
   }
 
   /** Public, like the desktop gateway's, so tests can drive a connection directly. */

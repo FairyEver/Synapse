@@ -3,7 +3,12 @@ import type { IncomingMessage } from "node:http"
 import { Socket } from "node:net"
 import { Logger } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
-import { LIVE_DESKTOP_CLOSE_CODES, LIVE_MESSAGE_TYPES, MOBILE_FRAME_LIMITS } from "@synapse/shared"
+import {
+  LIVE_DESKTOP_CLOSE_CODES,
+  LIVE_MESSAGE_TYPES,
+  MOBILE_FRAME_LIMITS,
+  MOBILE_PROTOCOL_VERSION,
+} from "@synapse/shared"
 import {
   createLiveDesktopGatewayForTest,
   liveDesktopMaxPayloadBytes,
@@ -98,6 +103,41 @@ function helloFor(clientInstanceId: string) {
       appVersion: "0.2.253",
       platform: "darwin-arm64",
       deviceName: "MacBook",
+    },
+  }
+}
+
+function pingMessage(sentAt: string) {
+  return {
+    type: "live.ping",
+    id: `msg-ping-${sentAt}`,
+    sentAt,
+    payload: { sentAt },
+  }
+}
+
+/** One terminal frame, the message a desktop sends many of per second. */
+function frameMessage(seq: number) {
+  return {
+    type: LIVE_MESSAGE_TYPES.mobileFrame,
+    id: `msg-frame-${seq}`,
+    sentAt: "2026-06-06T10:00:00.000Z",
+    payload: {
+      desktopClientInstanceId: "client-a",
+      mobileClientInstanceId: "mobile-a",
+      frame: {
+        v: MOBILE_PROTOCOL_VERSION,
+        sessionId: "sess-1",
+        kind: "suffix",
+        from: 0,
+        lines: [["hello"]],
+        total: 1,
+        cursor: { row: 0, col: 5, visible: true },
+        alt: false,
+        truncated: false,
+        seq,
+        sizeRevision: 1,
+      },
     },
   }
 }
@@ -318,6 +358,124 @@ describe("LiveDesktopGateway", () => {
     expect(presence).toHaveBeenCalledTimes(1)
   })
 
+  it("does not recount the online list for every frame a desktop streams", () => {
+    const socket = new FakeSocket()
+    const desktop = createClient({ clientInstanceId: "client-a" })
+    const presence = vi.fn()
+    const frame = vi.fn()
+    const listOnlineByUser = vi.fn().mockReturnValue([desktop])
+    const gateway = createGateway({
+      registry: {
+        register: vi.fn().mockReturnValue(desktop),
+        touch: vi.fn().mockReturnValue(desktop),
+        listOnlineByUser,
+      },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: frame,
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
+      handleDesktopPresence: presence,
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    const lookupsAfterHello = listOnlineByUser.mock.calls.length
+
+    const frames = 64
+    for (let seq = 0; seq < frames; seq += 1) {
+      socket.emit("message", JSON.stringify(frameMessage(seq)))
+    }
+
+    // Frames are the vast majority of the traffic through here, and the query
+    // behind a presence report is a scan over every client the server holds. The
+    // count has to be flat in the frame count: a desktop that is already on the
+    // reachable list cannot change it by talking. Asserting only that presence was
+    // not re-sent would stay green with the query still in the per-frame path,
+    // which is the whole cost being avoided.
+    expect(frame).toHaveBeenCalledTimes(frames)
+    expect(listOnlineByUser.mock.calls.length).toBe(lookupsAfterHello)
+    expect(presence).toHaveBeenCalledTimes(1)
+  })
+
+  it("puts a desktop that missed its heartbeat window back on the reachable list when it speaks", () => {
+    const socket = new FakeSocket()
+    const presence = vi.fn()
+    let now = new Date("2026-06-06T10:00:00.000Z")
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish: vi.fn() } as unknown as LiveStreamService,
+      clock: { randomId: () => "connection-1", now: () => now },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
+      handleDesktopPresence: presence,
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    expect(presence).toHaveBeenLastCalledWith("user-1", ["client-a"])
+    presence.mockClear()
+
+    // Past the heartbeat window, and this is what a phone draws as 电脑离线.
+    now = new Date("2026-06-06T10:00:50.000Z")
+    gateway.sweepStaleClients()
+    expect(presence).toHaveBeenCalledWith("user-1", [])
+
+    presence.mockClear()
+
+    // Speaking again is the only way back, so the per-message shortcut that skips
+    // a list the desktop is already on has to be off for exactly this message.
+    socket.emit("message", JSON.stringify(pingMessage("2026-06-06T10:00:50.000Z")))
+
+    expect(presence).toHaveBeenCalledWith("user-1", ["client-a"])
+  })
+
+  it("publishes a desktop's status change without waiting for the heartbeat window", () => {
+    const socket = new FakeSocket()
+    const desktop = createClient({ clientInstanceId: "client-a", connectionId: "conn-test" })
+    const publish = vi.fn()
+    const gateway = createGateway({
+      registry: {
+        register: vi.fn().mockReturnValue(desktop),
+        touch: vi.fn().mockReturnValue(desktop),
+        listAll: vi.fn().mockReturnValue([desktop]),
+        markStaleClients: vi.fn().mockReturnValue([
+          createClient({ clientInstanceId: "client-a", connectionId: "conn-test", status: "stale" }),
+        ]),
+      },
+      streams: { publish },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    expect(publish).toHaveBeenCalledTimes(1)
+
+    // Same clock reading throughout, so the window can never be what lets an
+    // event through here: only the status comparison can, and with it removed
+    // this sweep is silent.
+    socket.emit("message", JSON.stringify(pingMessage("2026-06-06T10:00:00.000Z")))
+    expect(publish).toHaveBeenCalledTimes(1)
+
+    gateway.sweepStaleClients()
+
+    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
+      client: expect.objectContaining({ status: "stale" }),
+    }))
+  })
+
   it("caps inbound websocket payloads before message parsing", () => {
     const gateway = createGateway()
     const server = gateway.createWebSocketServer() as ReturnType<LiveDesktopGateway["createWebSocketServer"]> & {
@@ -394,7 +552,10 @@ describe("LiveDesktopGateway", () => {
         serverTime: "2026-06-06T10:00:01.000Z",
       },
     })
-    expect(publish).toHaveBeenCalledTimes(2)
+    // The ping one second later carries nothing but `lastSeenAt`, which the admin
+    // list already has at heartbeat freshness: one event, not two. The cadence it
+    // is republished at is pinned by the heartbeat window tests below.
+    expect(publish).toHaveBeenCalledTimes(1)
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
       type: "live.client.changed",
       client: expect.objectContaining({ userId: "user-1" }),
@@ -1131,6 +1292,45 @@ describe("LiveDesktopGateway", () => {
     expect(verifyAccessToken).not.toHaveBeenCalled()
     expect(upgradeSocket.written).toEqual(["HTTP/1.1 401 Unauthorized\r\n\r\n"])
     expect(upgradeSocket.destroyedByGateway).toBe(true)
+  })
+
+  it("publishes a heartbeat's lastSeenAt once per heartbeat window", () => {
+    const socket = new FakeSocket()
+    const publish = vi.fn()
+    let now = new Date("2026-06-06T10:00:00.000Z")
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish } as unknown as LiveStreamService,
+      clock: { randomId: () => "connection-1", now: () => now },
+    })
+    const ping = JSON.stringify(pingMessage("2026-06-06T10:00:00.000Z"))
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    expect(publish).toHaveBeenCalledTimes(1)
+
+    // A ping's only difference from the event before it is `lastSeenAt`, which
+    // the desktop itself only refreshes on this cadence.
+    now = new Date("2026-06-06T10:00:19.000Z")
+    socket.emit("message", ping)
+    expect(publish).toHaveBeenCalledTimes(1)
+
+    now = new Date("2026-06-06T10:00:21.000Z")
+    socket.emit("message", ping)
+    expect(publish).toHaveBeenCalledTimes(2)
+
+    now = new Date("2026-06-06T10:00:22.000Z")
+    socket.emit("message", ping)
+    expect(publish).toHaveBeenCalledTimes(2)
+
+    // The one thing that is not a timestamp still goes out the moment it happens.
+    now = new Date("2026-06-06T10:01:11.000Z")
+    gateway.sweepStaleClients()
+    expect(publish).toHaveBeenCalledTimes(3)
+    expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({
+      client: expect.objectContaining({ status: "stale" }),
+    }))
   })
 
   it("publishes clients changed by stale sweep", () => {

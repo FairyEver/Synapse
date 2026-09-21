@@ -27,6 +27,8 @@ interface MarkDisconnectedInput {
 @Injectable()
 export class LiveClientRegistry {
   private readonly clients = new Map<string, LiveClientInstance>()
+  /** Secondary index: connectionId -> client key, kept in sync with `clients`. */
+  private readonly connectionKeys = new Map<string, string>()
   private heartbeatTimeoutMs = 45_000
   private offlineRetentionMs = 60 * 60_000
   private staleGraceMs = 45_000
@@ -55,6 +57,10 @@ export class LiveClientRegistry {
       input.onSupersede?.(existing.connectionId)
     }
 
+    if (existing?.connectionId && existing.connectionId !== input.connectionId) {
+      this.unlinkConnection(existing.connectionId, key)
+    }
+
     const timestamp = input.now.toISOString()
     const client: LiveClientInstance = {
       userId: input.userId,
@@ -69,6 +75,7 @@ export class LiveClientRegistry {
     }
 
     this.clients.set(key, client)
+    this.linkConnection(input.connectionId, key)
     return client
   }
 
@@ -107,6 +114,7 @@ export class LiveClientRegistry {
     for (const [key, client] of this.clients) {
       if (client.status === "offline") {
         if (this.isOfflineExpired(client, now)) {
+          this.unlinkConnection(client.connectionId, key)
           this.clients.delete(key)
         }
         continue
@@ -143,7 +151,17 @@ export class LiveClientRegistry {
   }
 
   listByUser(userId: string): LiveClientInstance[] {
-    return this.listAll().filter((client) => client.userId === userId)
+    const matched: Array<[string, LiveClientInstance]> = []
+
+    for (const entry of this.clients) {
+      if (entry[1].userId === userId) {
+        matched.push(entry)
+      }
+    }
+
+    return matched
+      .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([, client]) => client)
   }
 
   listOnlineByUser(userId: string): LiveClientInstance[] {
@@ -164,6 +182,7 @@ export class LiveClientRegistry {
       disconnectReason: reason,
     }
 
+    this.unlinkConnection(client.connectionId, key)
     this.clients.set(key, offlineClient)
     return offlineClient
   }
@@ -171,13 +190,33 @@ export class LiveClientRegistry {
   private findByConnectionId(
     connectionId: string,
   ): { readonly key: string; readonly client: LiveClientInstance } | undefined {
-    for (const [key, client] of this.clients) {
-      if (client.connectionId === connectionId) {
-        return { key, client }
-      }
+    const key = this.connectionKeys.get(connectionId)
+
+    if (key === undefined) {
+      return undefined
     }
 
-    return undefined
+    const client = this.clients.get(key)
+
+    if (!client || client.connectionId !== connectionId) {
+      return undefined
+    }
+
+    return { key, client }
+  }
+
+  private linkConnection(connectionId: string, key: string): void {
+    this.connectionKeys.set(connectionId, key)
+  }
+
+  private unlinkConnection(connectionId: string | null, key: string): void {
+    if (!connectionId) {
+      return
+    }
+
+    if (this.connectionKeys.get(connectionId) === key) {
+      this.connectionKeys.delete(connectionId)
+    }
   }
 
   private createKey(userId: string, clientInstanceId: string): string {

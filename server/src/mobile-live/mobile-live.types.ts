@@ -18,6 +18,20 @@ export interface MobileLiveFanout {
     readonly clientInstanceId: string
     readonly message: LiveMobileServerMessage
   }) => "sent" | "offline" | "send_failed"
+  /**
+   * One message to every phone of an account.
+   *
+   * Takes the user rather than a list of phones on purpose: the recipients are
+   * resolved here, next to the sockets, so a fanout costs one registry lookup
+   * instead of one in the caller plus one per phone when
+   * `clientInstanceId` has to be turned into a connection. A payload like a
+   * summary is also the same bytes for every recipient, which is why this side
+   * — not the caller — owns serializing it.
+   */
+  readonly sendToMobileClients: (input: {
+    readonly userId: string
+    readonly message: LiveMobileServerMessage
+  }) => void
 }
 
 export const MOBILE_LIVE_HEARTBEAT_INTERVAL_MS = 20_000

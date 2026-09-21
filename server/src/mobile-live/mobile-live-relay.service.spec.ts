@@ -1,7 +1,63 @@
 import { describe, expect, it, vi } from "vitest"
+import type { MobileSummaryPayload, MobileSummarySession } from "@synapse/shared"
 
 import { MobileLiveRelayService } from "./mobile-live-relay.service"
 import type { MobileLiveFanout } from "./mobile-live.types"
+
+/** The cache bound the service keeps privately; the eviction test needs its arithmetic. */
+const SUMMARY_CACHE_LIMIT = 200
+
+function session(id: string, state: MobileSummarySession["attention"]["state"] = "not_waiting"): MobileSummarySession {
+  return {
+    id,
+    groupId: "group-1",
+    title: `终端 ${id}`,
+    status: "running",
+    attention: { state, kind: "approval" },
+    cwd: "/tmp",
+    cols: 80,
+    rows: 24,
+    startedAt: "2026-09-21T10:00:00.000Z",
+    lastLine: "等待你的确认",
+    lastOutputSeq: 1,
+  }
+}
+
+function summary(
+  desktopClientInstanceId: string,
+  sessions: readonly MobileSummarySession[] = [],
+): MobileSummaryPayload {
+  return {
+    desktopClientInstanceId,
+    desktopName: "MacBook",
+    revision: 1,
+    groups: [],
+    sessions,
+  }
+}
+
+type FanoutSpies = {
+  readonly sendToMobile: ReturnType<typeof vi.fn>
+  readonly sendToMobileClients: ReturnType<typeof vi.fn>
+  readonly fanout: MobileLiveFanout
+}
+
+function createFanout(): FanoutSpies {
+  const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
+  const sendToMobileClients = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobileClients"]>[0]) => undefined)
+  return { sendToMobile, sendToMobileClients, fanout: { sendToMobile, sendToMobileClients } }
+}
+
+function createHarness() {
+  const fanout = createFanout()
+  const sendTerminalApproval = vi.fn(async (_userId: string, _notification: unknown) => undefined)
+  const service = new MobileLiveRelayService(
+    {} as never,
+    { sendTerminalApproval } as never,
+  )
+  service.setFanout(fanout.fanout)
+  return { service, sendTerminalApproval, ...fanout }
+}
 
 /**
  * Progress is addressed, not broadcast.
@@ -11,21 +67,9 @@ import type { MobileLiveFanout } from "./mobile-live.types"
  * waiting on it. Sending it to the others would put a bar on a file they never
  * sent, so the fanout contract is the whole thing worth pinning down here.
  */
-function createHarness() {
-  const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
-  const fanout: MobileLiveFanout = { sendToMobile }
-  const service = new MobileLiveRelayService(
-    { listOnlineByUser: vi.fn(() => []) } as never,
-    {} as never,
-    {} as never,
-  )
-  service.setFanout(fanout)
-  return { service, sendToMobile }
-}
-
 describe("MobileLiveRelayService transfer progress", () => {
   it("sends progress to the phone named in the payload and nobody else", () => {
-    const { service, sendToMobile } = createHarness()
+    const { service, sendToMobile, sendToMobileClients } = createHarness()
 
     service.handleTransferProgress("user-1", {
       mobileClientInstanceId: "phone-1",
@@ -35,6 +79,7 @@ describe("MobileLiveRelayService transfer progress", () => {
     })
 
     expect(sendToMobile).toHaveBeenCalledTimes(1)
+    expect(sendToMobileClients).not.toHaveBeenCalled()
     expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
       userId: "user-1",
       clientInstanceId: "phone-1",
@@ -46,11 +91,7 @@ describe("MobileLiveRelayService transfer progress", () => {
   })
 
   it("stays quiet when no fanout is installed", () => {
-    const service = new MobileLiveRelayService(
-      { listOnlineByUser: vi.fn(() => []) } as never,
-      {} as never,
-      {} as never,
-    )
+    const service = new MobileLiveRelayService({} as never, {} as never)
 
     expect(() => service.handleTransferProgress("user-1", {
       mobileClientInstanceId: "phone-1",
@@ -64,25 +105,13 @@ describe("MobileLiveRelayService transfer progress", () => {
 /**
  * The toolbar is fanned out and never cached, which is the opposite of what the
  * summary beside it does — so both halves of that are worth pinning.
+ *
+ * Who the phones are is no longer decided here: the batch call takes the account
+ * and the gateway resolves it once, which is what keeps a fanout at one registry
+ * lookup instead of one plus one per phone. What this file pins down is that the
+ * relay asks for a fanout rather than addressing phones one by one.
  */
 describe("MobileLiveRelayService toolbar", () => {
-  function createToolbarHarness() {
-    const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
-    const fanout: MobileLiveFanout = { sendToMobile }
-    const service = new MobileLiveRelayService(
-      {
-        listOnlineByUser: vi.fn(() => [
-          { clientInstanceId: "phone-1" },
-          { clientInstanceId: "phone-2" },
-        ]),
-      } as never,
-      {} as never,
-      {} as never,
-    )
-    service.setFanout(fanout)
-    return { service, sendToMobile }
-  }
-
   const payload = {
     desktopClientInstanceId: "client-a",
     revision: 3,
@@ -91,18 +120,18 @@ describe("MobileLiveRelayService toolbar", () => {
     ],
   }
 
-  it("reaches every phone of the account, leaving each to filter by computer", () => {
+  it("asks for one fanout instead of addressing each phone", () => {
     // Unlike a frame, which is addressed to the one phone that attached: the payload
     // names its own computer, so a phone showing a different one discards it and
     // costs nothing. Fanning out is what lets a phone that connects to any of the
     // user's computers get the list without the cloud tracking subscriptions.
-    const { service, sendToMobile } = createToolbarHarness()
+    const { service, sendToMobile, sendToMobileClients } = createHarness()
 
     service.handleToolbar("user-1", payload)
 
-    expect(sendToMobile).toHaveBeenCalledTimes(2)
-    expect(sendToMobile.mock.calls.map((call) => call[0].clientInstanceId)).toEqual(["phone-1", "phone-2"])
-    expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
+    expect(sendToMobileClients).toHaveBeenCalledTimes(1)
+    expect(sendToMobile).not.toHaveBeenCalled()
+    expect(sendToMobileClients.mock.calls[0]?.[0]).toMatchObject({
       userId: "user-1",
       message: { type: "mobile.toolbar", payload },
     })
@@ -116,20 +145,16 @@ describe("MobileLiveRelayService toolbar", () => {
      * layer closer to the change; doing it again here would mean the cloud deciding
      * which phone has already seen what, which it cannot know.
      */
-    const { service, sendToMobile } = createToolbarHarness()
+    const { service, sendToMobileClients } = createHarness()
 
     service.handleToolbar("user-1", payload)
     service.handleToolbar("user-1", payload)
 
-    expect(sendToMobile).toHaveBeenCalledTimes(4)
+    expect(sendToMobileClients).toHaveBeenCalledTimes(2)
   })
 
   it("stays quiet when no fanout is installed", () => {
-    const service = new MobileLiveRelayService(
-      { listOnlineByUser: vi.fn(() => []) } as never,
-      {} as never,
-      {} as never,
-    )
+    const service = new MobileLiveRelayService({} as never, {} as never)
 
     expect(() => service.handleToolbar("user-1", payload)).not.toThrow()
   })
@@ -143,18 +168,6 @@ describe("MobileLiveRelayService toolbar", () => {
  * second segment at all.
  */
 describe("MobileLiveRelayService quick phrases", () => {
-  function createHarness(phones: readonly string[] = ["phone-1", "phone-2"]) {
-    const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
-    const fanout: MobileLiveFanout = { sendToMobile }
-    const service = new MobileLiveRelayService(
-      { listOnlineByUser: vi.fn(() => phones.map((clientInstanceId) => ({ clientInstanceId }))) } as never,
-      {} as never,
-      {} as never,
-    )
-    service.setFanout(fanout)
-    return { service, sendToMobile }
-  }
-
   const payload = {
     desktopClientInstanceId: "client-a",
     revision: 1,
@@ -163,27 +176,26 @@ describe("MobileLiveRelayService quick phrases", () => {
 
   it("reaches every phone of the account and no other account's", () => {
     // Fanned out like the toolbar: the payload names its own computer, so a phone
-    // showing a different one discards it. The registry is asked by `userId`, which
-    // is what keeps one account's sentences away from another's.
-    const { service, sendToMobile } = createHarness()
+    // showing a different one discards it. The account is named rather than its
+    // phones, which is what keeps one account's sentences away from another's.
+    const { service, sendToMobileClients } = createHarness()
 
     service.handleQuickPhrases("user-1", payload)
 
-    expect(sendToMobile).toHaveBeenCalledTimes(2)
-    expect(sendToMobile.mock.calls.map((call) => call[0].clientInstanceId)).toEqual(["phone-1", "phone-2"])
-    expect(sendToMobile.mock.calls.every((call) => call[0].userId === "user-1")).toBe(true)
-    expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
+    expect(sendToMobileClients).toHaveBeenCalledTimes(1)
+    expect(sendToMobileClients.mock.calls[0]?.[0]).toMatchObject({
+      userId: "user-1",
       message: { type: "mobile.quickPhrases", payload },
     })
   })
 
   it("delivers an empty list rather than treating it as nothing to say", () => {
-    const { service, sendToMobile } = createHarness(["phone-1"])
+    const { service, sendToMobileClients } = createHarness()
 
     service.handleQuickPhrases("user-1", { ...payload, revision: 2, phrases: [] })
 
-    expect(sendToMobile).toHaveBeenCalledTimes(1)
-    expect(sendToMobile.mock.calls[0]?.[0].message.payload).toEqual({
+    expect(sendToMobileClients).toHaveBeenCalledTimes(1)
+    expect(sendToMobileClients.mock.calls[0]?.[0].message.payload).toEqual({
       desktopClientInstanceId: "client-a",
       revision: 2,
       phrases: [],
@@ -196,40 +208,22 @@ describe("MobileLiveRelayService quick phrases", () => {
     // phone's composer with no machine left to run them on — and no way for their
     // author to edit them. Deduplicating is the desktop's job, one layer closer to
     // the change, where an idle computer costs zero traffic.
-    const { service, sendToMobile } = createHarness()
+    const { service, sendToMobileClients } = createHarness()
 
     service.handleQuickPhrases("user-1", payload)
     service.handleQuickPhrases("user-1", payload)
 
-    expect(sendToMobile).toHaveBeenCalledTimes(4)
+    expect(sendToMobileClients).toHaveBeenCalledTimes(2)
   })
 
   it("stays quiet when no fanout is installed", () => {
-    const service = new MobileLiveRelayService(
-      { listOnlineByUser: vi.fn(() => []) } as never,
-      {} as never,
-      {} as never,
-    )
+    const service = new MobileLiveRelayService({} as never, {} as never)
 
     expect(() => service.handleQuickPhrases("user-1", payload)).not.toThrow()
   })
 })
 
 describe("MobileLiveRelayService clipboard", () => {
-  // Its own harness rather than the file-scope one, which answers with no phones at
-  // all: this family is fanned out, so the test needs a registry that has some.
-  function createHarness(phones: readonly string[] = ["phone-1", "phone-2"]) {
-    const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
-    const fanout: MobileLiveFanout = { sendToMobile }
-    const service = new MobileLiveRelayService(
-      { listOnlineByUser: vi.fn(() => phones.map((clientInstanceId) => ({ clientInstanceId }))) } as never,
-      {} as never,
-      {} as never,
-    )
-    service.setFanout(fanout)
-    return { service, sendToMobile }
-  }
-
   const payload = {
     desktopClientInstanceId: "client-a",
     revision: 1,
@@ -241,16 +235,15 @@ describe("MobileLiveRelayService clipboard", () => {
   it("reaches every phone of the account and no other account's", () => {
     // Fanned out like the toolbar and the phrases: the payload names its own
     // computer, so a phone showing a different one discards it for the cost of a
-    // comparison. The registry is asked by `userId`, which is what keeps one
-    // account's copied text away from another's.
-    const { service, sendToMobile } = createHarness()
+    // comparison. The account is named rather than its phones, which is what keeps
+    // one account's copied text away from another's.
+    const { service, sendToMobileClients } = createHarness()
 
     service.handleClipboard("user-1", payload)
 
-    expect(sendToMobile).toHaveBeenCalledTimes(2)
-    expect(sendToMobile.mock.calls.map((call) => call[0].clientInstanceId)).toEqual(["phone-1", "phone-2"])
-    expect(sendToMobile.mock.calls.every((call) => call[0].userId === "user-1")).toBe(true)
-    expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
+    expect(sendToMobileClients).toHaveBeenCalledTimes(1)
+    expect(sendToMobileClients.mock.calls[0]?.[0]).toMatchObject({
+      userId: "user-1",
       message: { type: "mobile.clipboard", payload },
     })
   })
@@ -260,21 +253,145 @@ describe("MobileLiveRelayService clipboard", () => {
     // families for that: its whole meaning is recency. A stored copy would answer a
     // phone with text its computer copied hours ago and has long since replaced, and
     // would keep answering after that computer had gone away entirely.
-    const { service, sendToMobile } = createHarness()
+    const { service, sendToMobileClients } = createHarness()
 
     service.handleClipboard("user-1", payload)
     service.handleClipboard("user-1", payload)
 
-    expect(sendToMobile).toHaveBeenCalledTimes(4)
+    expect(sendToMobileClients).toHaveBeenCalledTimes(2)
   })
 
   it("stays quiet when no fanout is installed", () => {
-    const service = new MobileLiveRelayService(
-      { listOnlineByUser: vi.fn(() => []) } as never,
-      {} as never,
-      {} as never,
-    )
+    const service = new MobileLiveRelayService({} as never, {} as never)
 
     expect(() => service.handleClipboard("user-1", payload)).not.toThrow()
+  })
+})
+
+/**
+ * A summary arrives once a second per computer, so the work it does is what the
+ * server's steady-state cost is made of.
+ */
+describe("MobileLiveRelayService summary fanout", () => {
+  it("asks for one fanout rather than one registry lookup per phone", () => {
+    // The recipients are resolved by the batch call, next to the sockets that have
+    // to be written to. Addressing each phone here would mean this side resolving a
+    // list it cannot use for anything else, and the gateway resolving it again per
+    // phone to turn a client instance into a connection.
+    const { service, sendToMobile, sendToMobileClients } = createHarness()
+
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1")]))
+
+    expect(sendToMobileClients).toHaveBeenCalledTimes(1)
+    expect(sendToMobile).not.toHaveBeenCalled()
+    expect(sendToMobileClients.mock.calls[0]?.[0]).toMatchObject({
+      userId: "user-1",
+      message: { type: "mobile.summary" },
+    })
+  })
+
+  it("keeps the published summary for a phone that connects later", () => {
+    const { service } = createHarness()
+
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1")]))
+
+    expect(service.cachedSummary("user-1", "desktop-1")?.sessions).toHaveLength(1)
+    // Another account's phone asks for the same computer id and gets nothing.
+    expect(service.cachedSummary("user-2", "desktop-1")).toBeNull()
+  })
+
+  it("stays quiet when no fanout is installed", () => {
+    const service = new MobileLiveRelayService({} as never, {} as never)
+
+    expect(() => service.handleSummary("user-1", summary("desktop-1"))).not.toThrow()
+  })
+})
+
+describe("MobileLiveRelayService summary cache", () => {
+  /**
+   * The cache is bounded by dropping the *least recently updated* entry, which is
+   * the computer a phone cold-starting has least use for — as opposed to the one
+   * that has merely been present the longest.
+   *
+   * A computer that publishes every second would otherwise be the first to go: its
+   * key was created early and `Map.set` does not move a key it already holds, so
+   * "oldest inserted" would pick exactly the busiest computer. That is the shape of
+   * the bug this pins: A is refreshed on every round while B is not, and A is the
+   * one that has to survive.
+   */
+  it("evicts the computer that went quiet, not the one that keeps publishing", () => {
+    const { service } = createHarness()
+
+    service.handleSummary("user-1", summary("desktop-A"))
+    service.handleSummary("user-1", summary("desktop-B"))
+    // Enough new computers, each preceded by a fresh A, to push the cache past its
+    // limit and force it to choose. The count only has to exceed the limit; A stays
+    // the most recently written entry throughout, so the choice is B either way.
+    for (let index = 0; index < SUMMARY_CACHE_LIMIT - 1; index += 1) {
+      service.handleSummary("user-1", summary("desktop-A"))
+      service.handleSummary("user-1", summary(`desktop-${index}`))
+    }
+
+    expect(service.cachedSummary("user-1", "desktop-A")).not.toBeNull()
+    expect(service.cachedSummary("user-1", "desktop-B")).toBeNull()
+  })
+
+  it("keeps the newest list for a computer that republishes", () => {
+    const { service } = createHarness()
+
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1")]))
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1"), session("session-2")]))
+
+    expect(service.cachedSummary("user-1", "desktop-1")?.sessions.map((entry) => entry.id))
+      .toEqual(["session-1", "session-2"])
+  })
+})
+
+describe("MobileLiveRelayService attention", () => {
+  it("notifies on a transition into waiting, and only on the transition", () => {
+    const { service, sendTerminalApproval } = createHarness()
+    const waiting = () => summary("desktop-1", [session("session-1", "waiting")])
+
+    service.handleSummary("user-1", waiting())
+    service.handleSummary("user-1", waiting())
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1", "not_waiting")]))
+    service.handleSummary("user-1", waiting())
+
+    expect(sendTerminalApproval).toHaveBeenCalledTimes(2)
+    expect(sendTerminalApproval.mock.calls[0]?.[0]).toBe("user-1")
+  })
+
+  it("never notifies for an unknown state", () => {
+    // `unknown` is explicitly not `not_waiting`, but it is also not evidence that a
+    // person is needed.
+    const { service, sendTerminalApproval } = createHarness()
+
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1", "unknown")]))
+
+    expect(sendTerminalApproval).not.toHaveBeenCalled()
+  })
+
+  it("forgets a departed session for its own computer and for no other", () => {
+    // Two computers can list a session by the same id, and one of them dropping it
+    // says nothing about the other. The states are kept per computer, so a summary
+    // only ever inspects the sender's own.
+    const { service, sendTerminalApproval } = createHarness()
+
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1", "waiting")]))
+    service.handleSummary("user-1", summary("desktop-2", [session("session-1", "waiting")]))
+    expect(sendTerminalApproval).toHaveBeenCalledTimes(2)
+
+    // desktop-1's PTY exits: it publishes without the session.
+    // desktop-2 still has it waiting and must not be re-notified.
+    service.handleSummary("user-1", summary("desktop-1"))
+    service.handleSummary("user-1", summary("desktop-2", [session("session-1", "waiting")]))
+
+    expect(sendTerminalApproval).toHaveBeenCalledTimes(2)
+
+    // desktop-1 running the same session id again is a fresh transition for it,
+    // which is only true because its entry was forgotten rather than left standing.
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1", "waiting")]))
+
+    expect(sendTerminalApproval).toHaveBeenCalledTimes(3)
   })
 })

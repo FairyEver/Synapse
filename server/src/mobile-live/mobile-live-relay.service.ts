@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common"
+import { Injectable, Logger, type OnModuleInit } from "@nestjs/common"
 import {
   LIVE_MESSAGE_TYPES,
   createLiveEnvelope,
@@ -14,10 +14,9 @@ import {
   type MobileToolbarPayload,
   type MobileTransferProgressPayload,
 } from "@synapse/shared"
-import { LiveClientRegistry } from "../live/live-client-registry"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import type { LiveReachableDesktop } from "../live/live.types"
-import { MOBILE_CLIENT_REGISTRY, type MobileLiveFanout } from "./mobile-live.types"
+import type { MobileLiveFanout } from "./mobile-live.types"
 import { MobilePushService } from "./mobile-push.service"
 
 /** How long a caller waits for the desktop to answer an intent. */
@@ -50,12 +49,18 @@ export class MobileLiveRelayService implements OnModuleInit {
   private readonly logger = new Logger(MobileLiveRelayService.name)
   private readonly summaries = new Map<string, MobileSummaryPayload>()
   private readonly pendingIntents = new Map<string, PendingIntent>()
-  /** Last attention state per session, so only transitions notify. */
-  private readonly attentionBySession = new Map<string, string>()
+  /**
+   * Last attention state per session, so only transitions notify.
+   *
+   * Keyed by user and then by computer rather than by one flat
+   * `user:computer:session` string. Every summary has to drop the sessions it no
+   * longer lists, and on a flat map that meant walking every entry on the server
+   * once a second per computer to find the handful belonging to the sender.
+   */
+  private readonly attentionByUser = new Map<string, Map<string, Map<string, string>>>()
   private fanout: MobileLiveFanout | null = null
 
   constructor(
-    @Inject(MOBILE_CLIENT_REGISTRY) private readonly mobileRegistry: LiveClientRegistry,
     private readonly desktopGateway: LiveDesktopGateway,
     private readonly push: MobilePushService,
   ) {}
@@ -91,7 +96,14 @@ export class MobileLiveRelayService implements OnModuleInit {
    * ---------------------------------------------------------------- */
 
   handleSummary(userId: string, payload: MobileSummaryPayload): void {
-    this.summaries.set(summaryKey(userId, payload.desktopClientInstanceId), payload)
+    // Re-inserted rather than written in place: `Map.set` on a key it already holds
+    // keeps that key's original position, so an updated summary would keep its old
+    // slot and `evictSummaries` would drop the computer that publishes most often —
+    // the one a phone cold-starting is most likely to need — while keeping one that
+    // went quiet long ago. Deleting first moves the key to the end.
+    const cached = summaryKey(userId, payload.desktopClientInstanceId)
+    this.summaries.delete(cached)
+    this.summaries.set(cached, payload)
     this.forgetDepartedSessions(userId, payload)
     this.evictSummaries()
     // Detected here rather than pushed by the desktop: the summary already carries
@@ -101,28 +113,39 @@ export class MobileLiveRelayService implements OnModuleInit {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileSummary, payload, envelopeMeta())
     // A phone filters by `desktopClientInstanceId`, so the summary is fanned out
     // to every phone of the user rather than tracked per subscription.
-    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
-      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
-    }
+    this.fanout?.sendToMobileClients({ userId, message })
   }
 
   /**
    * Sessions vanish from the summary when their PTY exits, so an attention entry
    * for a session that is no longer listed would otherwise be remembered forever.
+   *
+   * Only the sending computer's own states are looked at: the summary carries the
+   * whole list for that computer, so nothing else can have departed.
    */
   private forgetDepartedSessions(userId: string, payload: MobileSummaryPayload): void {
-    const present = new Set(payload.sessions.map((session) => summaryKey(userId, `${payload.desktopClientInstanceId}:${session.id}`)))
-    for (const key of this.attentionBySession.keys()) {
-      if (!key.startsWith(`${userId}:${payload.desktopClientInstanceId}:`)) continue
-      if (!present.has(key)) this.attentionBySession.delete(key)
+    const sessions = this.attentionByUser.get(userId)?.get(payload.desktopClientInstanceId)
+    if (!sessions) return
+    const present = new Set(payload.sessions.map((session) => session.id))
+    for (const sessionId of sessions.keys()) {
+      if (!present.has(sessionId)) sessions.delete(sessionId)
     }
   }
 
+  /** The attention states of one computer, created on first use. */
+  private attentionFor(userId: string, desktopClientInstanceId: string): Map<string, string> {
+    const byDesktop = this.attentionByUser.get(userId) ?? new Map<string, Map<string, string>>()
+    this.attentionByUser.set(userId, byDesktop)
+    const sessions = byDesktop.get(desktopClientInstanceId) ?? new Map<string, string>()
+    byDesktop.set(desktopClientInstanceId, sessions)
+    return sessions
+  }
+
   private notifyAttentionTransitions(userId: string, payload: MobileSummaryPayload): void {
+    const sessions = this.attentionFor(userId, payload.desktopClientInstanceId)
     for (const session of payload.sessions) {
-      const key = summaryKey(userId, `${payload.desktopClientInstanceId}:${session.id}`)
-      const previous = this.attentionBySession.get(key)
-      this.attentionBySession.set(key, session.attention.state)
+      const previous = sessions.get(session.id)
+      sessions.set(session.id, session.attention.state)
       // Only a fresh transition into "waiting" is worth waking someone for.
       // `unknown` is explicitly not `not_waiting`, but it is also not evidence
       // that a person is needed, so it never notifies.
@@ -155,9 +178,7 @@ export class MobileLiveRelayService implements OnModuleInit {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobilePresence, {
       desktopClientInstanceIds,
     }, envelopeMeta())
-    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
-      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
-    }
+    this.fanout?.sendToMobileClients({ userId, message })
   }
 
   handleFrame(userId: string, payload: MobileFramePayload): void {
@@ -202,9 +223,7 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   handleToolbar(userId: string, payload: MobileToolbarPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, payload, envelopeMeta())
-    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
-      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
-    }
+    this.fanout?.sendToMobileClients({ userId, message })
   }
 
   /**
@@ -225,9 +244,7 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   handleQuickPhrases(userId: string, payload: MobileQuickPhrasesPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileQuickPhrases, payload, envelopeMeta())
-    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
-      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
-    }
+    this.fanout?.sendToMobileClients({ userId, message })
   }
 
   /**
@@ -245,9 +262,7 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   handleClipboard(userId: string, payload: MobileClipboardPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileClipboard, payload, envelopeMeta())
-    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
-      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
-    }
+    this.fanout?.sendToMobileClients({ userId, message })
   }
 
   handleIntentResult(userId: string, payload: MobileIntentResultPayload): void {
@@ -366,6 +381,14 @@ export class MobileLiveRelayService implements OnModuleInit {
     this.pendingIntents.delete(intentId)
   }
 
+  /**
+   * Drops the least recently published summary.
+   *
+   * This relies on `handleSummary` re-inserting on every write, which is what makes
+   * insertion order mean "least recently updated": that is the computer a phone
+   * cold-starting has least use for, as opposed to the one that has simply been
+   * around the longest.
+   */
   private evictSummaries(): void {
     if (this.summaries.size <= SUMMARY_CACHE_LIMIT) return
     const oldest = this.summaries.keys().next()

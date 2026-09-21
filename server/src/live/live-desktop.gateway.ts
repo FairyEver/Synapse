@@ -31,6 +31,12 @@ interface LiveDesktopGatewayClock {
   readonly now: () => Date
 }
 
+/** What the admin stream was last told about one connection. */
+interface PublishedClientState {
+  readonly status: LiveClientInstance["status"]
+  readonly publishedAtMs: number
+}
+
 interface LiveDesktopGatewayTestInput {
   readonly auth: UserAuthService
   readonly registry: LiveClientRegistry
@@ -147,6 +153,18 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
   private mobileRelayHandler: LiveMobileRelayHandler | null = null
   /** Last presence list sent per user, so an unchanged one is not re-sent. */
   private readonly presenceByUser = new Map<string, string>()
+  /**
+   * Connections whose desktop is already on its user's reachable list.
+   *
+   * A desktop that is on that list cannot change it by talking — it is already
+   * counted — so its messages only recount presence when its own entry is gone,
+   * which is what a reconnect and a comeback from `stale` both look like. Without
+   * this, every terminal frame a desktop streams bought a list lookup over the
+   * whole fleet to learn what the previous frame had already established.
+   */
+  private readonly reachableConnectionIds = new Set<string>()
+  /** Last event sent per connection, so a steady frame stream stays one event per heartbeat window. */
+  private readonly publishedByConnectionId = new Map<string, PublishedClientState>()
 
   constructor(
     private readonly auth: UserAuthService,
@@ -238,6 +256,18 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     relay.handleDesktopPresence(userId, clientInstanceIds)
   }
 
+  /**
+   * Drops everything remembered about a connection that has ended.
+   *
+   * Called from the two places that forget a connection — `markDesktopOffline`
+   * and `closeStaleSocket` — so a long-lived process does not accumulate one
+   * entry per socket it has ever accepted.
+   */
+  private forgetConnection(connectionId: string): void {
+    this.reachableConnectionIds.delete(connectionId)
+    this.publishedByConnectionId.delete(connectionId)
+  }
+
   private rememberPresence(userId: string, fingerprint: string): void {
     this.presenceByUser.set(userId, fingerprint)
     if (this.presenceByUser.size <= liveDesktopPresenceCacheLimit) return
@@ -257,13 +287,17 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     readonly connectionId: string
     readonly reason: LiveClientDisconnectReason
   }): LiveClientInstance | undefined {
+    // The connection is over, so nothing remembered about it survives: whatever
+    // the next connection of this installation reports is a change by definition.
+    this.forgetConnection(input.connectionId)
+    const now = this.clock.now()
     const client = this.registry.markDisconnected({
       connectionId: input.connectionId,
-      now: this.clock.now(),
+      now,
       reason: input.reason,
     })
     if (!client) return undefined
-    this.publish(client)
+    this.publishClientChanged(client, input.connectionId, now)
     this.notifyDesktopPresence(client.userId)
     return client
   }
@@ -427,6 +461,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         })
         registeredClient = client
         registered = true
+        this.reachableConnectionIds.add(connectionId)
         this.logger.log({
           appVersion: client.appVersion,
           clientInstanceId: client.clientInstanceId,
@@ -436,7 +471,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
           userId: auth.userId,
         }, "Live desktop client registered")
         this.upsertDeviceMetadata(client, seenAt)
-        this.publish(client)
+        this.publishClientChanged(client, connectionId, seenAt)
         // A computer signing in is the whole point: a phone that was already open
         // and showing "电脑离线" learns about it here, not by asking again.
         this.notifyDesktopPresence(client.userId)
@@ -459,10 +494,16 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       const client = this.registry.touch(connectionId, now)
       if (client) {
         registeredClient = client
-        this.publish(client)
+        this.publishClientChanged(client, connectionId, now)
         // A client that missed its heartbeat window is off the reachable list
-        // until it speaks again, so this is also how it comes back.
-        this.notifyDesktopPresence(client.userId)
+        // until it speaks again, so this is also how it comes back — and the only
+        // case worth recounting the list for. A client that is still on it cannot
+        // have changed it by speaking, and this is the path every terminal frame
+        // takes, so the lookup has to be earned rather than assumed.
+        if (!this.reachableConnectionIds.has(connectionId)) {
+          this.reachableConnectionIds.add(connectionId)
+          this.notifyDesktopPresence(client.userId)
+        }
       }
       if (message.type === LIVE_MESSAGE_TYPES.webhookDeliveryAck) {
         const ackClient = client ?? registeredClient
@@ -540,7 +581,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
     }
 
-    for (const client of this.registry.markStaleClients(this.clock.now())) {
+    const now = this.clock.now()
+    for (const client of this.registry.markStaleClients(now)) {
       const connectionId = connectionIdsByClient.get(liveClientKey(client))
       this.logger.warn({
         clientInstanceId: client.clientInstanceId,
@@ -549,15 +591,21 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         status: client.status,
         userId: client.userId,
       }, "Live desktop client heartbeat stale")
+      // Both "stale" and "offline" drop the client off the reachable list, so its
+      // next message is a comeback however it gets there. Forgetting it here is
+      // what keeps that comeback from being read as "already on the list" — the
+      // state that the per-message path above trusts.
+      if (connectionId) {
+        this.reachableConnectionIds.delete(connectionId)
+      }
       if (client.status === "offline") {
         if (connectionId) {
           this.closeStaleSocket(connectionId, client)
         }
       }
-      this.publish(client)
+      this.publishClientChanged(client, connectionId, now)
       // This path marks clients offline through the registry rather than through
-      // `markDesktopOffline`, so it has to report presence itself. Both "stale"
-      // and "offline" drop the client off the reachable list.
+      // `markDesktopOffline`, so it has to report presence itself.
       this.notifyDesktopPresence(client.userId)
     }
   }
@@ -642,10 +690,44 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     return { userId: result.userId }
   }
 
-  private publish(client: LiveClientInstance): void {
+  /**
+   * Sends one client's state to the admin stream, at most once per heartbeat
+   * window unless something about it actually changed.
+   *
+   * Every message a desktop sends lands here, and a desktop streaming a terminal
+   * sends one per frame — each carrying nothing new but `lastSeenAt`, which is
+   * only ever as fresh as the heartbeat anyway. Status is what an admin list is
+   * made of, so a change to it (a computer going stale, or back online) goes out
+   * at once; the timestamp rides the cadence it is actually refreshed at.
+   *
+   * A connection with nothing remembered is published rather than skipped: the
+   * safe direction for a list someone is watching is one event too many.
+   */
+  private publishClientChanged(
+    client: LiveClientInstance,
+    connectionId: string | undefined,
+    now: Date,
+  ): void {
+    const previous = connectionId === undefined ? undefined : this.publishedByConnectionId.get(connectionId)
+
+    if (previous
+      && previous.status === client.status
+      && now.getTime() - previous.publishedAtMs < heartbeatIntervalMs) {
+      return
+    }
+
+    // An offline client has no connection left to throttle, and remembering one
+    // would only keep a dead connection id alive.
+    if (connectionId !== undefined && client.status !== "offline") {
+      this.publishedByConnectionId.set(connectionId, {
+        status: client.status,
+        publishedAtMs: now.getTime(),
+      })
+    }
+
     this.streams.publish({
       type: "live.client.changed",
-      occurredAt: this.clock.now().toISOString(),
+      occurredAt: now.toISOString(),
       client: toPublicDto(client, { includeUserId: true }),
     })
   }
@@ -702,6 +784,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
   private closeStaleSocket(connectionId: string, client: LiveClientInstance): void {
     const socket = this.socketsByConnectionId.get(connectionId)
     this.socketsByConnectionId.delete(connectionId)
+    this.forgetConnection(connectionId)
     if (!socket) return
 
     try {

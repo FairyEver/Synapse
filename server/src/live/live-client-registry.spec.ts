@@ -2,6 +2,20 @@ import { Test } from "@nestjs/testing"
 import { describe, expect, it, vi } from "vitest"
 import { LiveClientRegistry } from "./live-client-registry"
 
+/**
+ * White-box probe for the `connectionId -> key` secondary index. Returns its size so
+ * tests can assert that no stale entry survives a disconnect, a supersede or an expiry.
+ */
+function connectionIndexSize(registry: LiveClientRegistry): number {
+  const index: unknown = Reflect.get(registry, "connectionKeys")
+
+  if (!(index instanceof Map)) {
+    throw new Error("LiveClientRegistry no longer exposes a connectionKeys index")
+  }
+
+  return index.size
+}
+
 describe("LiveClientRegistry", () => {
   it("can be constructed as a normal Nest provider", async () => {
     const moduleRef = await Test.createTestingModule({
@@ -213,5 +227,184 @@ describe("LiveClientRegistry", () => {
 
     registry.markStaleClients(new Date("2026-06-06T10:03:01.000Z"))
     expect(registry.listByUser("user-1")).toEqual([])
+  })
+
+  it("returns each user's clients in `${userId}:${clientInstanceId}` ascending order", () => {
+    const registry = new LiveClientRegistry()
+    const now = new Date("2026-06-06T10:00:00.000Z")
+
+    // Registered deliberately out of order, and interleaved across two users.
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-z",
+      connectionId: "conn-1",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now,
+    })
+    registry.register({
+      userId: "user-2",
+      clientInstanceId: "client-m",
+      connectionId: "conn-2",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now,
+    })
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-3",
+      appVersion: "0.2.253",
+      platform: "win32-x64",
+      deviceName: "Workstation",
+      now,
+    })
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-m",
+      connectionId: "conn-4",
+      appVersion: "0.2.253",
+      platform: "linux-x64",
+      deviceName: "Server",
+      now,
+    })
+    registry.register({
+      userId: "user-2",
+      clientInstanceId: "client-a",
+      connectionId: "conn-5",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook Air",
+      now,
+    })
+
+    expect(registry.listByUser("user-1").map((client) => client.clientInstanceId)).toEqual([
+      "client-a",
+      "client-m",
+      "client-z",
+    ])
+    expect(registry.listByUser("user-2").map((client) => client.clientInstanceId)).toEqual([
+      "client-a",
+      "client-m",
+    ])
+    expect(registry.listByUser("user-3")).toEqual([])
+  })
+
+  it("resolves connection ids through the secondary index across register, touch and disconnect", () => {
+    const registry = new LiveClientRegistry()
+    const onSupersede = vi.fn()
+    const t0 = new Date("2026-06-06T10:00:00.000Z")
+
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-a",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now: t0,
+      onSupersede,
+    })
+
+    expect(connectionIndexSize(registry)).toBe(1)
+    expect(registry.touch("conn-a", t0)?.clientInstanceId).toBe("client-a")
+    expect(registry.touch("conn-missing", t0)).toBeUndefined()
+
+    // Supersede: the previous connection id has to stop resolving.
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-b",
+      appVersion: "0.2.254",
+      platform: "darwin-arm64",
+      deviceName: "MacBook Pro",
+      now: new Date("2026-06-06T10:01:00.000Z"),
+      onSupersede,
+    })
+
+    expect(onSupersede).toHaveBeenCalledWith("conn-a")
+    expect(registry.touch("conn-b", t0)?.connectionId).toBe("conn-b")
+    expect(registry.touch("conn-a", t0)).toBeUndefined()
+    expect(connectionIndexSize(registry)).toBe(1)
+
+    // Disconnect: the connection id is dropped together with the live connection.
+    expect(
+      registry.markDisconnected({
+        connectionId: "conn-b",
+        now: new Date("2026-06-06T10:02:00.000Z"),
+        reason: "socket_close",
+      })?.clientInstanceId,
+    ).toBe("client-a")
+    expect(registry.touch("conn-b", t0)).toBeUndefined()
+    expect(connectionIndexSize(registry)).toBe(0)
+
+    // Reconnect after a disconnect resolves again.
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-c",
+      appVersion: "0.2.254",
+      platform: "darwin-arm64",
+      deviceName: "MacBook Pro",
+      now: new Date("2026-06-06T10:03:00.000Z"),
+    })
+
+    expect(registry.touch("conn-c", t0)?.connectionId).toBe("conn-c")
+    expect(registry.touch("conn-b", t0)).toBeUndefined()
+    expect(registry.touch("conn-a", t0)).toBeUndefined()
+    expect(connectionIndexSize(registry)).toBe(1)
+  })
+
+  it("drops index entries when clients expire and stays correct when a connection id is reused", () => {
+    const registry = LiveClientRegistry.withOptions({ offlineRetentionMs: 60_000 })
+    const now = new Date("2026-06-06T10:00:00.000Z")
+
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-a",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now,
+    })
+    registry.markDisconnected({
+      connectionId: "conn-a",
+      now: new Date("2026-06-06T10:02:00.000Z"),
+      reason: "socket_close",
+    })
+
+    expect(connectionIndexSize(registry)).toBe(0)
+
+    registry.markStaleClients(new Date("2026-06-06T10:02:59.000Z"))
+    expect(registry.listByUser("user-1")).toHaveLength(1)
+
+    registry.markStaleClients(new Date("2026-06-06T10:03:01.000Z"))
+    expect(registry.listByUser("user-1")).toEqual([])
+    expect(connectionIndexSize(registry)).toBe(0)
+    expect(registry.touch("conn-a", new Date("2026-06-06T10:03:02.000Z"))).toBeUndefined()
+
+    // The same connection id can be reused by a different client after the expiry.
+    registry.register({
+      userId: "user-2",
+      clientInstanceId: "client-b",
+      connectionId: "conn-a",
+      appVersion: "0.2.253",
+      platform: "win32-x64",
+      deviceName: "Workstation",
+      now: new Date("2026-06-06T10:03:02.000Z"),
+    })
+
+    expect(connectionIndexSize(registry)).toBe(1)
+    expect(registry.touch("conn-a", new Date("2026-06-06T10:03:03.000Z"))?.clientInstanceId).toBe("client-b")
+    expect(
+      registry.markDisconnected({
+        connectionId: "conn-a",
+        now: new Date("2026-06-06T10:03:04.000Z"),
+        reason: "socket_close",
+      })?.userId,
+    ).toBe("user-2")
   })
 })
