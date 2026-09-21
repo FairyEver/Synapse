@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import { searchSynapseTools } from "../../electron/services/agent-runtime/synapse-tool-router"
+import { EXEMPT_SEGMENTS, LEXICON } from "../../electron/services/agent-runtime/synapse-tool-router-lexicon"
+import { buildAllMcpTools } from "../../synapse-capabilities/shared/registry"
 
 /**
  * 真实用户说法 → 期望工具。
@@ -144,6 +146,23 @@ describe("synapse tool router search", () => {
 
     // 用拼接字符串断言：数组 diff 会被 vitest 截断成 [ …(N) ]，看不到具体是哪几条。
     expect(misses.join("\n")).toBe("")
+  })
+
+  it("covers every tool-name segment that appears in more than one tool", () => {
+    const frequency = new Map<string, number>()
+    for (const tool of buildAllMcpTools()) {
+      for (const segment of tool.name.replace(/^app_/, "").split("_")) {
+        frequency.set(segment, (frequency.get(segment) ?? 0) + 1)
+      }
+    }
+
+    const covered = new Set(LEXICON.map(([, token]) => token))
+    const missing = [...frequency]
+      .filter(([segment, count]) => count >= 2 && !covered.has(segment) && !(segment in EXEMPT_SEGMENTS))
+      .map(([segment, count]) => `${segment}(${count} 个工具)`)
+      .sort()
+
+    expect(missing.join("\n")).toBe("")
   })
 
   it("routes by domain when the caller already narrowed it", async () => {

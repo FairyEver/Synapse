@@ -102,6 +102,8 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["字段", "column"],
   ["记录", "row"],
   ["数据", "row"],
+  ["批量", "rows"],
+  ["状态", "state"],
   ["选项", "choice"],
   ["概览", "overview"],
   ["数量", "count"],
@@ -117,6 +119,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["提示词", "prompt"],
   ["文档", "document"],
   ["模板", "template"],
+  ["EJS", "ejs"],
   ["文本", "text"],
   ["提取器", "extractor"],
   ["生成器", "generator"],
@@ -228,7 +231,8 @@ export function lexiconTokens(query: string): string[] {
   const normalized = query.toLowerCase()
   const tokens: string[] = []
   for (const [term, token] of LEXICON) {
-    if (normalized.includes(term) && !tokens.includes(token)) tokens.push(token)
+    // 两边都小写化：查询被 toLowerCase 过，含大写字母的词条（如「SQL」）否则永不命中。
+    if (normalized.includes(term.toLowerCase()) && !tokens.includes(token)) tokens.push(token)
   }
   return tokens
 }
