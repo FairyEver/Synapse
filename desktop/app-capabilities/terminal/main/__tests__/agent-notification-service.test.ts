@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -15,6 +15,7 @@ import {
   TerminalAgentNotificationService,
   type TerminalAgentNotificationHandle,
 } from "../agent-notification-service"
+import { createTerminalCoreEmulator } from "../emulator"
 
 const temporaryDirectories: string[] = []
 
@@ -26,6 +27,19 @@ function childEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
   delete environment.SYNAPSE_TERMINAL_AGENT_WRAPPER_ACTIVE
   delete environment.SYNAPSE_AGENT_NOTIFICATIONS_DISABLED
   return environment
+}
+
+// 在 Synapse 自己的终端里跑测试时，父进程正带着一整套 shell 集成变量（`ZDOTDIR`、shim 目录……）。
+// 它们漏进子进程会让「通知关闭时 PATH 没被动过」这类断言假红。起子进程前先把这一族清干净，
+// 再用被测的 launch env 铺上去。
+function isolatedShellEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("SYNAPSE_TERMINAL_") || key.startsWith("SYNAPSE_AGENT_")) continue
+    environment[key] = value
+  }
+  delete environment.ZDOTDIR
+  return { ...environment, ...extra }
 }
 
 afterEach(async () => {
@@ -413,6 +427,160 @@ describe("TerminalAgentNotificationService", () => {
       "-Command",
       "$env:Path = $env:SYNAPSE_TERMINAL_AGENT_SHIM_DIR + ';' + $env:Path",
     ])
+    await fixture.service.stop()
+  })
+})
+
+/*
+ * shell 集成（OSC 7 上报当前目录）与「agent 原生通知」是两件事，这两组用例钉住它们已经解耦：
+ * 通知关着也必须注入，且注入之后既要能被 emulator 解析出来、也不能破坏用户自己的 shell 配置。
+ */
+describe("TerminalAgentNotificationService shell integration", () => {
+  const sessionId = "1f0c7e5a-6f4b-4a2e-8a1f-9c3e2d5b7a41"
+
+  it.runIf(process.platform !== "win32")("reports the working directory for zsh while agent notifications are off", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    // 不调 updateSettings：默认就是「agent 原生通知关闭」。
+    expect(fixture.service.getSettings().enabled).toBe(false)
+    const home = await mkdtemp(path.join(os.tmpdir(), "synapse-cwd-home-"))
+    const realBin = path.join(home, "real-bin")
+    const projectDir = path.join(home, "project")
+    temporaryDirectories.push(home)
+    await mkdir(realBin)
+    await mkdir(projectDir)
+    await writeFile(
+      path.join(home, ".zshrc"),
+      `export PATH=${JSON.stringify(realBin)}\nalias ZZ='printf user-alias'\n`,
+      "utf8",
+    )
+    // PATH 里带着 `/bin` 是有意的：不带的话 `$(hostname)` 这类外部命令会静默取空，
+    // 一条「拼了主机名」的错误实现反而会发出合法的 URL，把下面那条断言洗成假绿。
+    const shellPath = `${realBin}:/usr/bin:/bin`
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "cwd-report",
+      shell: "/bin/zsh",
+      env: { PATH: shellPath, HOME: home },
+      defaultShellArgs: ["-l"],
+    })
+    expect(launch).not.toBeNull()
+    // 集成脚本被注入了……
+    expect(launch!.env.ZDOTDIR).toBe(launch!.env.SYNAPSE_TERMINAL_AGENT_ZDOTDIR)
+    // ……但通知专用的 PATH shim 一个字节都没碰。
+    expect(launch!.env.PATH).toBe(shellPath)
+    expect(launch!.env.SYNAPSE_TERMINAL_AGENT_SHIM_DIR).toBeUndefined()
+
+    const result = spawnSync("/bin/zsh", ["-i"], {
+      env: isolatedShellEnvironment({ ...launch!.env, HOME: home }),
+      cwd: home,
+      input: `cd ${projectDir}\nZZ; printf '\\n'\n`,
+      encoding: "utf8",
+    })
+    expect(result.status).toBe(0)
+    // 用户自己的 .zshrc 照旧生效。
+    expect(result.stdout).toContain("user-alias")
+    // 关键的一条：shell 真的发出来的那串字节，消费端能解析成新的目录。
+    // 它把「shell 发什么」与「emulator 认什么」钉在一起 —— 带主机名的 URL 会在这里变红。
+    const emulator = createTerminalCoreEmulator({ cols: 200, rows: 40, sizeRevision: 1 })
+    try {
+      await emulator.accept(result.stdout, 1)
+      expect(emulator.currentCwd).toBe(projectDir)
+    } finally {
+      emulator.dispose()
+    }
+    await fixture.service.stop()
+  })
+
+  it.runIf(process.platform !== "win32")("reports the working directory for bash while agent notifications are off", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    const home = await mkdtemp(path.join(os.tmpdir(), "synapse-cwd-bash-"))
+    const projectDir = path.join(home, "project")
+    temporaryDirectories.push(home)
+    await mkdir(projectDir)
+    await writeFile(path.join(home, ".bash_profile"), "alias BB='printf bash-alias'\n", "utf8")
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "cwd-report-bash",
+      shell: "/bin/bash",
+      env: { PATH: "/usr/bin:/bin", HOME: home },
+      defaultShellArgs: ["-l"],
+    })
+    expect(launch).not.toBeNull()
+    expect(launch!.env.PATH).toBe("/usr/bin:/bin")
+
+    const result = spawnSync("/bin/bash", [...launch!.shellArgs!], {
+      env: isolatedShellEnvironment({ ...launch!.env, HOME: home }),
+      cwd: home,
+      input: `cd ${projectDir}\nBB; printf '\\n'\n`,
+      encoding: "utf8",
+    })
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain("bash-alias")
+    const emulator = createTerminalCoreEmulator({ cols: 200, rows: 40, sizeRevision: 1 })
+    try {
+      await emulator.accept(result.stdout, 1)
+      expect(emulator.currentCwd).toBe(projectDir)
+    } finally {
+      emulator.dispose()
+    }
+    await fixture.service.stop()
+  })
+
+  it.runIf(process.platform !== "win32")("keeps the shim ahead of zsh profiles once notifications are on", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const home = await mkdtemp(path.join(os.tmpdir(), "synapse-cwd-on-"))
+    temporaryDirectories.push(home)
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "cwd-report-on",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin", HOME: home },
+      defaultShellArgs: ["-l"],
+    })!
+    expect(launch.env.PATH.startsWith(`${launch.env.SYNAPSE_TERMINAL_AGENT_SHIM_DIR}:`)).toBe(true)
+    // 通知开着的时候，生成文件里那条 PATH 前置要真的生效（它现在是有条件的）。
+    const result = spawnSync("/bin/zsh", ["-i", "-c", 'printf %s "$PATH"'], {
+      env: isolatedShellEnvironment({ ...launch.env, HOME: home }),
+      cwd: home,
+      encoding: "utf8",
+    })
+    expect(result.stdout.startsWith(`${launch.env.SYNAPSE_TERMINAL_AGENT_SHIM_DIR}:`)).toBe(true)
+    await fixture.service.stop()
+  })
+
+  it("never puts a hostname in the reported URL", async () => {
+    // 生产端只能写 `file://$PWD`。按 iTerm2 的惯例拼 `$(hostname)` 会被 `fileURLToPath`
+    // 抛 `ERR_INVALID_FILE_URL_HOST`，然后被 OSC 7 处理器的 catch 静默吃掉 ——
+    // 现象是「配置全对但目录不更新」。
+    const fixture = await createFixture()
+    await fixture.service.start()
+    const fish = fixture.service.prepareSession({
+      sessionId,
+      title: "fish",
+      shell: "/opt/homebrew/bin/fish",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: [],
+    })!
+    const fishInit = fish.shellArgs![1]!
+    expect(fishInit).toContain("file://%s")
+    expect(fishInit).toContain("fish_prompt")
+    expect(fishInit).not.toContain("hostname")
+
+    const zsh = fixture.service.prepareSession({
+      sessionId,
+      title: "zsh",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+    const zshRc = await readFile(path.join(zsh.env.ZDOTDIR!, ".zshrc"), "utf8")
+    expect(zshRc).toContain("file://%s")
+    expect(zshRc).toContain("add-zsh-hook precmd _synapse_report_cwd")
+    expect(zshRc).not.toContain("hostname")
     await fixture.service.stop()
   })
 })

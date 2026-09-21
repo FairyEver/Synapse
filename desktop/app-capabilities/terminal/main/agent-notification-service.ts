@@ -133,6 +133,14 @@ export class TerminalAgentNotificationService {
   async start(): Promise<void> {
     this.settings = await this.deps.settings.getSingleton() ?? defaultSettings()
     await this.hydrateAgentSessions()
+    // shell 集成不再由 Agent 原生通知的开关门控：先无条件把 runtime 文件准备好，
+    // 否则关掉通知的终端连 OSC 7 上报都没有，`getCurrentWorkingDirectory` 会一直
+    // 停在会话创建时的目录。
+    try {
+      await this.ensureRuntime()
+    } catch (error) {
+      this.deps.logger.warn("Terminal shell integration could not be prepared.", { error })
+    }
     if (this.settings.enabled) {
       try {
         await this.enableRuntime()
@@ -353,56 +361,69 @@ export class TerminalAgentNotificationService {
     readonly env: Record<string, string>
     readonly defaultShellArgs: readonly string[]
   }): TerminalAgentLaunchIntegration | null {
-    if (!this.settings.enabled || !this.binding || !this.runtime) return null
+    /*
+     * 门控只看 runtime 文件在不在：shell 集成（OSC 7 上报当前目录）**总是**注入，
+     * 它和「agent 原生通知」是两件事。通知相关的 PATH shim、官方 Hook 与会话绑定
+     * 仍然只在开关打开且 ingress 就绪时才做，见下面的 `agentNotificationsActive`。
+     *
+     * runtime 文件在 `start()` 时就准备好（不再等开关），所以这里返回 null 只剩
+     * 「runtime 建不出来」一种情形 —— 那时没有可注入的东西，退回默认启动参数。
+     */
+    if (!this.runtime) return null
+    const runtime = this.runtime
+    const binding = this.binding
+    const agentNotificationsActive = this.settings.enabled && binding !== undefined
     this.unregisterSession(input.sessionId)
-    const token = randomUUID()
-    const session: SessionBinding = {
-      sessionId: input.sessionId,
-      token,
-      title: input.title,
-      waiting: false,
-    }
-    this.sessionsByToken.set(token, session)
-    this.sessionTokens.set(input.sessionId, token)
-    // 档案从这一刻就存在，早于任何事件——「不依赖 hook 送达」的意思正是如此。它还停在
-    // `launching`，所以只在内存里：没有 agent 进来过的终端不值得在库里占一行。
-    this.agentSessions.set(
-      input.sessionId,
-      createTerminalAgentSession({ sessionId: input.sessionId, at: new Date(this.now()).toISOString() }),
-    )
     const delimiter = this.platform === "win32" ? ";" : ":"
     const originalPath = input.env.PATH ?? ""
-    const env: Record<string, string> = {
-      ...input.env,
-      PATH: `${this.runtime.shimDir}${delimiter}${originalPath}`,
-      SYNAPSE_TERMINAL_SESSION_ID: input.sessionId,
-      SYNAPSE_TERMINAL_AGENT_TOKEN: token,
-      SYNAPSE_TERMINAL_AGENT_EVENT_URL: `http://${this.binding.bindAddress}:${String(this.binding.port)}${EVENT_PATH}`,
-      SYNAPSE_TERMINAL_AGENT_NODE: this.deps.nodePath,
-      SYNAPSE_TERMINAL_AGENT_HOOK: this.runtime.hookPath,
-      SYNAPSE_TERMINAL_AGENT_WRAPPER: this.runtime.wrapperPath,
-      SYNAPSE_TERMINAL_AGENT_SHIM_DIR: this.runtime.shimDir,
-      SYNAPSE_TERMINAL_AGENT_ORIGINAL_PATH: originalPath,
+    const env: Record<string, string> = { ...input.env }
+    if (agentNotificationsActive && binding) {
+      const token = randomUUID()
+      const session: SessionBinding = {
+        sessionId: input.sessionId,
+        token,
+        title: input.title,
+        waiting: false,
+      }
+      this.sessionsByToken.set(token, session)
+      this.sessionTokens.set(input.sessionId, token)
+      // 档案从这一刻就存在，早于任何事件——「不依赖 hook 送达」的意思正是如此。它还停在
+      // `launching`，所以只在内存里：没有 agent 进来过的终端不值得在库里占一行。
+      this.agentSessions.set(
+        input.sessionId,
+        createTerminalAgentSession({ sessionId: input.sessionId, at: new Date(this.now()).toISOString() }),
+      )
+      env.PATH = `${runtime.shimDir}${delimiter}${originalPath}`
+      env.SYNAPSE_TERMINAL_SESSION_ID = input.sessionId
+      env.SYNAPSE_TERMINAL_AGENT_TOKEN = token
+      env.SYNAPSE_TERMINAL_AGENT_EVENT_URL = `http://${binding.bindAddress}:${String(binding.port)}${EVENT_PATH}`
+      env.SYNAPSE_TERMINAL_AGENT_NODE = this.deps.nodePath
+      env.SYNAPSE_TERMINAL_AGENT_HOOK = runtime.hookPath
+      env.SYNAPSE_TERMINAL_AGENT_WRAPPER = runtime.wrapperPath
+      env.SYNAPSE_TERMINAL_AGENT_SHIM_DIR = runtime.shimDir
+      env.SYNAPSE_TERMINAL_AGENT_ORIGINAL_PATH = originalPath
     }
     const shellName = (this.platform === "win32" ? path.win32.basename(input.shell) : path.basename(input.shell))
       .toLowerCase()
       .replace(/\.exe$/, "")
     if (shellName === "zsh") {
       env.SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR = input.env.ZDOTDIR ?? ""
-      env.SYNAPSE_TERMINAL_AGENT_ZDOTDIR = this.runtime.zshDir
-      env.ZDOTDIR = this.runtime.zshDir
+      env.SYNAPSE_TERMINAL_AGENT_ZDOTDIR = runtime.zshDir
+      env.ZDOTDIR = runtime.zshDir
       return { env, shellArgs: input.defaultShellArgs }
     }
     if (shellName === "bash") {
-      return { env, shellArgs: ["--noprofile", "--rcfile", this.runtime.bashRcPath, "-i"] }
+      return { env, shellArgs: ["--noprofile", "--rcfile", runtime.bashRcPath, "-i"] }
     }
     if (shellName === "fish") {
-      return { env, shellArgs: ["--init-command", "set -gx PATH \"$SYNAPSE_TERMINAL_AGENT_SHIM_DIR\" $PATH"] }
+      return { env, shellArgs: ["--init-command", fishInitCommand(agentNotificationsActive)] }
     }
-    if (shellName === "pwsh" || shellName === "powershell") {
+    // pwsh / cmd 这一轮不接入 OSC 7：它们没有 zsh / bash / fish 那种现成的提示符钩子，
+    // 交给「cwd 探测兜底」那条路（`working-directory-probe`）。通知相关的 PATH 前置照旧。
+    if (agentNotificationsActive && (shellName === "pwsh" || shellName === "powershell")) {
       return { env, shellArgs: ["-NoExit", "-Command", "$env:Path = $env:SYNAPSE_TERMINAL_AGENT_SHIM_DIR + ';' + $env:Path"] }
     }
-    if (shellName === "cmd") {
+    if (agentNotificationsActive && shellName === "cmd") {
       return { env, shellArgs: ["/K", "set \"PATH=%SYNAPSE_TERMINAL_AGENT_SHIM_DIR%;%PATH%\""] }
     }
     return { env, shellArgs: input.defaultShellArgs }
@@ -465,9 +486,20 @@ export class TerminalAgentNotificationService {
     if (session && !session.waiting) void this.notify(session, "completed", "terminal")
   }
 
-  private async enableRuntime(): Promise<void> {
+  /**
+   * 生成（或复用）shell 集成的运行时文件。
+   *
+   * `permissionGuard.check` 那次 `fs.write` **每条 PTY 都要过**，通知关着也一样 ——
+   * 这是有意的：注入到用户 shell 里的东西必须一直走在权限与审计里。
+   */
+  private async ensureRuntime(): Promise<RuntimePaths> {
     if (!this.deps.nodePath) throw new Error("Synapse Node runtime is unavailable.")
     if (!this.runtime) this.runtime = await this.ensureRuntimeFiles()
+    return this.runtime
+  }
+
+  private async enableRuntime(): Promise<void> {
+    await this.ensureRuntime()
     if (!this.binding) await this.startIngress()
   }
 
@@ -927,6 +959,54 @@ function sanitizeSessionTitle(value: string): string {
   return (normalized || "终端").slice(0, 60)
 }
 
+/**
+ * OSC 7 —— 把当前目录报给终端。
+ *
+ * URL 必须是**空主机名**的 `file://<绝对路径>`。`$PWD` 以 `/` 开头，拼出来天然是三个斜杠。
+ * 消费端 `emulator.ts` 的 OSC 7 处理器直接把它交给 `fileURLToPath`，而带主机名的形式
+ * （iTerm2 惯例的 `file://$(hostname)/path`）会抛 `ERR_INVALID_FILE_URL_HOST` ——
+ * handler 的 `catch` 只 `return false`，于是这条上报被**静默丢弃**，
+ * 现象是「配置全对但目录不更新」。绝对不要按 iTerm2 的惯例拼主机名。
+ * 结尾用 BEL，与 `/etc/zshrc_Apple_Terminal` 一致。
+ */
+const OSC7_REPORT_COMMAND = String.raw`printf '\033]7;file://%s\a' "$PWD"`
+
+/**
+ * zsh 的上报钩子。
+ *
+ * 追加进四个启动文件（`.zshenv` / `.zprofile` / `.zshrc` / `.zlogin`）：用户自己的 `.zshrc`
+ * 可能重置 `precmd_functions`，晚一点再 `add-zsh-hook` 一次能把它加回来。`add-zsh-hook`
+ * 自身幂等（同一个函数名不会重复注册），所以重复 source 不会变成多次上报 ——
+ * 钩子名必须固定，否则靠不住的就是这条幂等性。
+ */
+const ZSH_OSC7_HOOK = [
+  `_synapse_report_cwd() { ${OSC7_REPORT_COMMAND}; }`,
+  "autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _synapse_report_cwd",
+].join("\n")
+
+const BASH_OSC7_HOOK = [
+  `_synapse_report_cwd() { ${OSC7_REPORT_COMMAND}; }`,
+  'if [[ "${PROMPT_COMMAND:-}" != *"_synapse_report_cwd"* ]]; then',
+  '  PROMPT_COMMAND="_synapse_report_cwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"',
+  "fi",
+].join("\n")
+
+const FISH_OSC7_HOOK = `function _synapse_report_cwd --on-event fish_prompt; ${OSC7_REPORT_COMMAND}; end`
+
+/**
+ * PATH 前置只在 Agent 原生通知开着的时候做。
+ *
+ * 现在每条 PTY 都会注入 shell 集成（上报目录），但 PATH shim 与官方 Hook 仍然只服务于
+ * Agent 通知 —— 判据是 `SYNAPSE_TERMINAL_AGENT_SHIM_DIR` 存不存在，它由 `prepareSession`
+ * 按当时的开关决定，所以同一个生成文件能同时服务两种状态。
+ */
+const ZSH_SHIM_PATH_GUARD = [
+  'if [[ -n "${SYNAPSE_TERMINAL_AGENT_SHIM_DIR:-}" ]]; then',
+  "  typeset -gU path PATH",
+  '  path=("$SYNAPSE_TERMINAL_AGENT_SHIM_DIR" $path)',
+  "fi",
+].join("\n")
+
 function zshStartupFiles(): readonly (readonly [string, string])[] {
   const zshEnv = [
     'typeset _synapse_original_zdotdir="${SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR:-$HOME}"',
@@ -937,32 +1017,46 @@ function zshStartupFiles(): readonly (readonly [string, string])[] {
     '  export SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR="$ZDOTDIR"',
     "fi",
     'export ZDOTDIR="$SYNAPSE_TERMINAL_AGENT_ZDOTDIR"',
-    "typeset -gU path PATH",
-    'path=("$SYNAPSE_TERMINAL_AGENT_SHIM_DIR" $path)',
+    ZSH_SHIM_PATH_GUARD,
     "unset _synapse_original_zdotdir",
+    ZSH_OSC7_HOOK,
     "",
   ].join("\n")
-  const remaining = [".zprofile", ".zshrc", ".zlogin"].map((name) => [name, String.raw`if [[ -n "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR" && -r "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR/${name}" ]]; then
-  source "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR/${name}"
-elif [[ -r "$HOME/${name}" ]]; then
-  source "$HOME/${name}"
-fi
-typeset -gU path PATH
-path=("$SYNAPSE_TERMINAL_AGENT_SHIM_DIR" $path)
-`] as const)
+  const remaining = [".zprofile", ".zshrc", ".zlogin"].map((name) => [name, [
+    `if [[ -n "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR" && -r "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR/${name}" ]]; then`,
+    `  source "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR/${name}"`,
+    `elif [[ -r "$HOME/${name}" ]]; then`,
+    `  source "$HOME/${name}"`,
+    "fi",
+    ZSH_SHIM_PATH_GUARD,
+    ZSH_OSC7_HOOK,
+    "",
+  ].join("\n")] as const)
   return [[".zshenv", zshEnv] as const, ...remaining]
 }
 
 function bashIntegrationScript(): string {
-  return String.raw`if [[ -r "$HOME/.bash_profile" ]]; then
-  source "$HOME/.bash_profile"
-elif [[ -r "$HOME/.bash_login" ]]; then
-  source "$HOME/.bash_login"
-elif [[ -r "$HOME/.profile" ]]; then
-  source "$HOME/.profile"
-elif [[ -r "$HOME/.bashrc" ]]; then
-  source "$HOME/.bashrc"
-fi
-export PATH="$SYNAPSE_TERMINAL_AGENT_SHIM_DIR:$PATH"
-`
+  return [
+    'if [[ -r "$HOME/.bash_profile" ]]; then',
+    '  source "$HOME/.bash_profile"',
+    'elif [[ -r "$HOME/.bash_login" ]]; then',
+    '  source "$HOME/.bash_login"',
+    'elif [[ -r "$HOME/.profile" ]]; then',
+    '  source "$HOME/.profile"',
+    'elif [[ -r "$HOME/.bashrc" ]]; then',
+    '  source "$HOME/.bashrc"',
+    "fi",
+    'if [[ -n "${SYNAPSE_TERMINAL_AGENT_SHIM_DIR:-}" ]]; then',
+    '  export PATH="$SYNAPSE_TERMINAL_AGENT_SHIM_DIR:$PATH"',
+    "fi",
+    BASH_OSC7_HOOK,
+    "",
+  ].join("\n")
+}
+
+function fishInitCommand(includeAgentShimPath: boolean): string {
+  return [
+    FISH_OSC7_HOOK,
+    ...(includeAgentShimPath ? ['set -gx PATH "$SYNAPSE_TERMINAL_AGENT_SHIM_DIR" $PATH'] : []),
+  ].join("; ")
 }

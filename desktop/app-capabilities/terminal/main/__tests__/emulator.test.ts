@@ -47,6 +47,42 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
     }
   })
 
+  it("consumes an OSC 7 report without leaving it on the screen", async () => {
+    // 上报是给终端看的，不是给用户看的：序列化出来的屏幕里不能出现那串 URL。
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      sizeRevision: 1,
+    })
+    try {
+      await emulator.accept("\u001b]7;file:///tmp/project one\u0007\u001b[Hhi", 1)
+      expect(emulator.currentCwd).toBe("/tmp/project one")
+      const screen = emulator.serialize()
+      expect(screen).toContain("hi")
+      expect(screen).not.toContain("/tmp/project one")
+      expect(screen).not.toContain("file://")
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("drops an OSC 7 report that carries a hostname instead of throwing", async () => {
+    // iTerm2 惯例的 `file://$(hostname)/path` 会让 `fileURLToPath` 抛
+    // `ERR_INVALID_FILE_URL_HOST`，然后被 handler 的 catch 静默吃掉。这条钉住「静默」这个事实，
+    // 免得后人以为它会在别处报错。
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      sizeRevision: 1,
+    })
+    try {
+      await emulator.accept("\u001b]7;file://myhost/tmp/a\u0007", 1)
+      expect(emulator.currentCwd).toBeUndefined()
+    } finally {
+      emulator.dispose()
+    }
+  })
+
   it("orders resize behind prior output and restores the serialized state", async () => {
     const emulator = createTerminalCoreEmulator({
       cols: 80,
