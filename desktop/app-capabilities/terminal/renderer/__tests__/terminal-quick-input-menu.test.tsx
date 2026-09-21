@@ -266,6 +266,25 @@ describe("TerminalQuickInputMenu", () => {
     expect(panel()).toBeNull()
   })
 
+  it("面板开着时会话变成非 running，面板与预览一起收起", () => {
+    const onPick = vi.fn()
+    renderMenu(BUILT_IN_ITEMS, onPick, false)
+    openPanel()
+    act(() => {
+      eyeButton("给个结论")?.click()
+    })
+    expect(panel()).not.toBeNull()
+    expect(previewText()).toBe(DEFAULT_QUICK_INPUT_CONTENTS[1].content)
+
+    act(() => {
+      root?.render(<TerminalQuickInputMenu items={BUILT_IN_ITEMS} onPick={onPick} disabled />)
+    })
+
+    expect(panel()).toBeNull()
+    expect(previewText()).toBeNull()
+    expect(document.querySelector("button[aria-label='收起全文']")).toBeNull()
+  })
+
   it("disabled 时入口存在但不可用", () => {
     renderMenu(BUILT_IN_ITEMS, vi.fn(), true)
 

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ChevronUp, Eye, X } from "lucide-react"
 
 import { Button } from "../../../src/components/ui/button"
@@ -43,6 +43,14 @@ type TerminalQuickInputMenuProps = {
 export function TerminalQuickInputMenu({ items, disabled, onPick }: TerminalQuickInputMenuProps) {
   const [open, setOpen] = useState(false)
   const [previewedId, setPreviewedId] = useState<string | null>(null)
+
+  // 会话不再 running（被终止或被手机端接管）时，面板里的行点了也不会写入，
+  // 与其留一个点不动的面板，不如跟入口一起收起。
+  useEffect(() => {
+    if (!disabled) return
+    setOpen(false)
+    setPreviewedId(null)
+  }, [disabled])
 
   if (items.length === 0) return null
 
