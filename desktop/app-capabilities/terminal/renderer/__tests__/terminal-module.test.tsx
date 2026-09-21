@@ -3934,12 +3934,27 @@ describe("TerminalModule", () => {
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
     await renderModule()
+    /*
+     * 先把挂载时那次几何同步排干，再清计数器。
+     *
+     * `syncTerminalGeometry` 会从 `requestAnimationFrame` 里发出 `xterm.refresh`，而那一帧
+     * 什么时候落地取决于调度：不清干净的话，下面那句「Clear 没有强制重画」验的其实是
+     * 「挂载那一帧还没轮到」，机器忙不忙会得出不同结论。排干之后验的才是 Clear 本身。
+     */
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
     xtermState.fitInstances[0]?.fit.mockClear()
     xtermState.instances[0]?.refresh.mockClear()
     webglState.instances[0]?.clearTextureAtlas.mockClear()
     terminalBridge.resizeSession.mockClear()
 
     await clickButton("Clear")
+    // 清完之后再排干一次：真要是 Clear 引起了重画，它得落进下面那条断言。
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
 
     expect(xtermState.instances[0]?.clear).toHaveBeenCalled()
     expect(xtermState.fitInstances[0]?.fit).not.toHaveBeenCalled()
