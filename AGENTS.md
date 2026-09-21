@@ -111,6 +111,19 @@ pnpm --filter @synapse/desktop run test
 
 装上去的是开发包，代价见上一节：**收不到推送**。这是已知且接受的，装机时不必重新讨论，更不要为此去动网关。只出 ipa 用 `pnpm mobile:build`（App Store 签名，装不上机），上传 TestFlight 用 `pnpm mobile:release`；发版细节见 `.claude/skills/ios-release`。
 
+## 「静默发版」/「静默部署」
+
+用户说「静默发版」或「静默部署」时，这是一条完整指令，按顺序做完四件事，不要拆开问：
+
+1. 需要的话先把当前仓库的改动全部提交。发版命令自己会 `git add -A`（`bump-version-commit-push.mjs`），不先提交，未提交的东西会被安静地卷进那句 `chore: bump version` 里。**只提交，不要 push** —— 紧接着的发版命令会把它一起推上去；提前推会让 CI 和 Release 在旧版本号上各多跑一轮。
+2. 按 `synapse-release-publisher` skill 跑完整发版流程，**跳过第 11 节的企业微信通知**；第 0 节的 destination 校验只是为了让第 11 节能发出去，一并不做 —— 不发通知时，通知配置有问题不该拦下一次发版。
+3. 发版成功后把最新 iOS 包传到 TestFlight：`pnpm mobile:release`。
+4. 最后执行服务器部署脚本：`bash deploy.sh`。
+
+第 3 步开始上传后就可以并行跑第 4 步，不必等构建处理完：`deploy.sh` 的 `sync_remote_code` 是 `--include` 白名单且收在 `--exclude='*'`，名单里没有 `SynapseMobile/`（也没有 `desktop/`），iOS 产物不会上服务器，两边不碰同一个东西。
+
+「静默」的边界只有通知。归档 Release 正文、写 `docs/releases/`、打开 Release 页面都照做，只是不发企业微信。结束时明说一句「通知已按静默要求跳过」，别让人以为漏了。
+
 ## 开发命令
 
 - 根目录：`pnpm dev`、`pnpm dev:desktop`、`pnpm dev:server`、`pnpm dev:document`

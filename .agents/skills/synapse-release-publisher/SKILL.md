@@ -1,13 +1,13 @@
 ---
 name: synapse-release-publisher
-description: Use when working in the Synapse repository and the user asks to release, publish a new version, 发版, 发布新版, 发布新版本, 打包发布, run release, or continue the CI/Release publish loop for FairyEver/Synapse, including the success-only Enterprise WeChat update notification.
+description: Use when working in the Synapse repository and the user asks to release, publish a new version, 发版, 发布新版, 发布新版本, 打包发布, 静默发版, 静默部署, run release, or continue the CI/Release publish loop for FairyEver/Synapse, including the success-only Enterprise WeChat update notification.
 ---
 
 # Synapse Release Publisher
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a versioned update notification with product notes and a one-click update entry.
+Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a versioned update notification with product notes and a one-click update entry. A release the user asked for as 「静默发版」/「静默部署」 runs the same loop without the notification and continues into TestFlight and a server deploy — see Silent Release.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
@@ -366,9 +366,33 @@ Keep every message at or below 4096 UTF-8 bytes. The bundled command splits long
 
 The bundled command sends all message chunks to the first robot, then all chunks to the second robot. If any message fails, it stops before sending later messages or destinations. Do not rerun or roll back the successful release, do not change pending release notes again, and do not retry either destination. Report that the release succeeded but the Enterprise WeChat notification failed, including the failed robot position, failed message position, status, `errcode`, and `errmsg` when available.
 
+## Silent Release
+
+「静默发版」/「静默部署」 is one instruction covering four steps, not four separate requests. Work through them in order without asking between steps.
+
+Skip exactly two things from the loop above. Both exist only to get a notification delivered, so neither has anything to do when there is none:
+
+- **Section 0** — destination validation. Its only job is to prove section 11 can deliver, and a broken webhook must not be able to block a release that will not notify anyone.
+- **Section 11** — the Enterprise WeChat notification.
+
+Everything else is unchanged: the version bump and push, the CI/Release loop, publishing the product notes into the GitHub Release body, archiving to `docs/releases/`, and opening the Release page.
+
+Before starting, commit whatever is outstanding in the repository — commit it only, do not push. `bump-version-commit-push.mjs` runs `git add -A` at the repo root and pushes what it finds, so anything left uncommitted is quietly folded into the `chore: bump version` commit instead of becoming a commit of its own; and pushing ahead of it would run CI and Release once more on the outgoing version.
+
+After the release succeeds, two further steps belong to the same instruction:
+
+```bash
+pnpm mobile:release    # upload the iOS build for the new version to TestFlight
+bash deploy.sh         # deploy the server
+```
+
+Start `deploy.sh` as soon as the TestFlight upload has begun; there is no reason to wait for the build to finish processing. `deploy.sh`'s `sync_remote_code` is an `--include` whitelist closed by `--exclude='*'`, and `SynapseMobile/` — like `desktop/` — is not on it, so neither iOS nor desktop artifacts ever reach the server and the two do not contend for anything.
+
+Say in the final response that the notification was skipped as required, so its absence is not read as an omission.
+
 ## Exit Conditions
 
-- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, the Enterprise WeChat versioned update notification was delivered to both configured robots, and the final response includes version and download links.
+- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, the Enterprise WeChat versioned update notification was delivered to both configured robots, and the final response includes version and download links. In a silent release the notification is deliberately absent instead, and the run additionally uploads the iOS build to TestFlight and runs the server deploy script — see Silent Release.
 - Notification failure: keep the package release successful, stop after reporting the Enterprise WeChat delivery failure, and do not claim the complete release workflow succeeded.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
