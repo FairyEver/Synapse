@@ -18,6 +18,13 @@ export type PermissionAction =
   | "fs.read.outside-userdata"
   | "fs.write.outside-userdata"
   | "shell.exec"
+  /**
+   * 读取某个 PTY 里进程的当前目录，用来给 OSC 7 没覆盖到的 shell 兜底。
+   *
+   * 它是**窄动作**而不是又一个 `shell.exec`：请求里只允许出现 tty（或 pid）与固定的
+   * `ps` / `lsof` argv，因而不构成 `module-boundaries` 所禁止的通用命令通道。
+   */
+  | "process.cwd_probe"
   | "network.connect"
   | "network.listen"
   | "extension.load"
@@ -149,6 +156,9 @@ export function createPermissionGuard(): PermissionGuardImpl {
   return new PermissionGuardImpl()
 }
 
+/** The single actor allowed to run the terminal working-directory probe. */
+export const TERMINAL_CWD_PROBE_ACTOR_ID = "terminal-cwd-probe"
+
 /** Default policy: user-initiated allowed, others deferred. */
 export const userInitiatedAllowPolicy: PermissionPolicy = {
   id: "user-initiated-allow",
@@ -160,6 +170,23 @@ export const systemShellExecPolicy: PermissionPolicy = {
   id: "system-shell-exec-allow",
   decide: (req) =>
     req.actor.kind === "system" && req.action === "shell.exec"
+      ? "allow"
+      : "defer-to-next",
+}
+
+/**
+ * Allow the Terminal's own working-directory probe to read a PTY process's cwd.
+ *
+ * Narrow on purpose: the actor id is fixed and the action is the probe — not
+ * `shell.exec`. Widening this to other actors or actions would hand the terminal
+ * side a general command channel.
+ */
+export const systemTerminalCwdProbePolicy: PermissionPolicy = {
+  id: "system-terminal-cwd-probe-allow",
+  decide: (req) =>
+    req.actor.kind === "system"
+    && req.actor.id === TERMINAL_CWD_PROBE_ACTOR_ID
+    && req.action === "process.cwd_probe"
       ? "allow"
       : "defer-to-next",
 }

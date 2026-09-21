@@ -59,7 +59,7 @@ const TERMINATION_GRACE_MS = 5_000
 
 export type ControlledProcessAction = Extract<
   PermissionAction,
-  "agent.spawn" | "shell.exec"
+  "agent.spawn" | "shell.exec" | "process.cwd_probe"
 >
 
 export type ControlledProcessOutputMode = "buffer" | "json-lines" | "ignore"

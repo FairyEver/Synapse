@@ -102,6 +102,7 @@ import {
   type TerminalStyledLine,
 } from "./emulator"
 import type { TerminalAgentNotificationService } from "./agent-notification-service"
+import type { TerminalWorkingDirectoryProbe } from "./working-directory-probe"
 import { projectMobileToolbarButtons } from "./mobile-toolbar"
 import {
   applyTerminalSessionIdentity,
@@ -341,6 +342,8 @@ export function createTerminalService(deps: {
   readonly agentNotifications?: Pick<TerminalAgentNotificationService,
     "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession" | "handleOscNotification"
     | "getAgentStateView">
+  /** shell 报不出目录时的兜底（自定义 shell、pwsh / cmd……）。没有就只靠 OSC 7。 */
+  readonly workingDirectoryProbe?: TerminalWorkingDirectoryProbe
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
@@ -365,6 +368,8 @@ export function createTerminalService(deps: {
   const idempotency = new Map<string, IdempotencyEntry>()
   const idempotencyInFlight = new Map<string, { digest: string; promise: Promise<unknown> }>()
   const dirtyRuntimeSessionIds = new Set<string>()
+  /** 正在探测目录的会话：同一时刻只放一次探测出去，见 `scheduleWorkingDirectoryProbe`。 */
+  const workingDirectoryProbes = new Set<string>()
   const persistedOutputSeqBySession = new Map<string, number>()
   const deletePlans = new Map<string, {
     readonly deletePlanId: string
@@ -1849,6 +1854,7 @@ export function createTerminalService(deps: {
 
   function removeSessionResources(sessionId: string): void {
     deps.agentNotifications?.unregisterSession(sessionId)
+    deps.workingDirectoryProbe?.forget(sessionId)
     cleanupRuntime(sessionId)
     sessions.delete(sessionId)
     buffers.delete(sessionId)
@@ -3436,9 +3442,80 @@ export function createTerminalService(deps: {
     }
   }
 
+  /*
+   * 目录从哪来：先是 shell 自己报的 OSC 7（`emulator.currentCwd`），这条路覆盖不了的
+   * 才走兜底探测（`working-directory-probe`）。
+   *
+   * 这个函数是**同步的纯读**，是刻意的：它在摘要那条 1 Hz 的路上会被反复调用，绝不能
+   * 在这里藏 IO。兜底探测只在没人报目录时**排一次后台任务**，结果按 PTY 输出水位缓存，
+   * 下一次读就能拿到。想要「这一次问就一定拿到最新值」的调用方用
+   * `probeCurrentWorkingDirectory`（打开文件树、手机 attach 这类「有人问」的时刻）。
+   */
   function getCurrentWorkingDirectory(sessionId: string): string {
     const session = getSessionOrThrow(sessionId)
-    return runtimes.get(sessionId)?.emulator.currentCwd ?? session.cwd
+    const runtime = runtimes.get(sessionId)
+    if (!runtime) return session.cwd
+    const reported = runtime.emulator.currentCwd
+    if (reported) return reported
+    const probed = deps.workingDirectoryProbe?.read({
+      sessionId,
+      watermark: runtime.emulator.throughOutputSeq,
+    })
+    if (probed) return probed
+    scheduleWorkingDirectoryProbe(session, runtime)
+    return session.cwd
+  }
+
+  /**
+   * 探测当前目录并等它出结果。兜底探测失败时退回会话启动目录 —— 它不是错误。
+   */
+  async function probeCurrentWorkingDirectory(sessionId: string): Promise<string> {
+    const session = getSessionOrThrow(sessionId)
+    const runtime = runtimes.get(sessionId)
+    if (!runtime) return session.cwd
+    const reported = runtime.emulator.currentCwd
+    if (reported) return reported
+    const probed = await deps.workingDirectoryProbe?.probe(
+      workingDirectoryProbeInput(sessionId, runtime),
+    )
+    return probed ?? session.cwd
+  }
+
+  function workingDirectoryProbeInput(sessionId: string, runtime: TerminalRuntime): {
+    readonly sessionId: string
+    readonly watermark: number
+    readonly tty?: string
+    readonly pid?: number
+  } {
+    const tty = runtime.pty.ptsName
+    const pid = runtime.pty.pid
+    return {
+      sessionId,
+      watermark: runtime.emulator.throughOutputSeq,
+      ...(tty ? { tty } : {}),
+      ...(pid === undefined ? {} : { pid }),
+    }
+  }
+
+  /**
+   * 一个会话同时只排一次探测：这个函数会被 1 Hz 的摘要路反复调到，重复排队等于
+   * 把兜底变成轮询。
+   */
+  function scheduleWorkingDirectoryProbe(session: TerminalSession, runtime: TerminalRuntime): void {
+    const probe = deps.workingDirectoryProbe
+    if (!probe || workingDirectoryProbes.has(session.id)) return
+    if (!runtime.pty.ptsName && runtime.pty.pid === undefined) return
+    workingDirectoryProbes.add(session.id)
+    void probe.probe(workingDirectoryProbeInput(session.id, runtime))
+      .catch((error: unknown) => {
+        deps.logger?.warn("Terminal working directory probe failed.", {
+          sessionId: session.id,
+          error,
+        })
+      })
+      .finally(() => {
+        workingDirectoryProbes.delete(session.id)
+      })
   }
 
   return {
@@ -3484,6 +3561,7 @@ export function createTerminalService(deps: {
     createSessionWithEphemeralEnvironment,
     getSession,
     getCurrentWorkingDirectory,
+    probeCurrentWorkingDirectory,
     readSession,
     attachSession,
     resizeSessionFromDevice,

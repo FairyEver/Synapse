@@ -271,8 +271,9 @@ import type {
 } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
-import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy, systemDataMaintenancePolicy } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, systemTerminalCwdProbePolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy, systemDataMaintenancePolicy } from "../runtime/security"
 import { createMobileGatewayService, type MobileGatewayService } from "../services/mobile-gateway-service"
+import { createTerminalWorkingDirectoryProbe } from "../../app-capabilities/terminal/main/working-directory-probe"
 import {
   MOBILE_RELAY_DIRECTORY_NAME,
   mobileGatewayFileRelayPolicy,
@@ -481,8 +482,23 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   id: "core.terminal",
   criticality: "degraded",
-  dependsOn: ["core.data-repository", TERMINAL_AGENT_NOTIFICATION_SERVICE_ID],
+  dependsOn: [
+    "core.data-repository",
+    TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
+    // 兜底探测目录要跑 `ps` / `lsof`：走受控执行器，权限与审计由它一并完成。
+    "core.permission-guard",
+    "core.audit-sink",
+  ],
   create(ctx) {
+    const workingDirectoryProbe = createTerminalWorkingDirectoryProbe({
+      processRunner: createControlledProcessRunner({
+        permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+        auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      }),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("terminal.cwd-probe"),
+    })
     const baseDir = path.join(app.getPath("userData"), "terminal")
     const repository = createTerminalRepository(ctx.registry.get<DataRepository>("core.data-repository"))
     const dataStore = createTerminalDataRepositoryStore({
@@ -502,6 +518,7 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
       logger: ctx.logger.child("terminal"),
       appVersion: SYNAPSE_APP_VERSION,
       agentNotifications: ctx.registry.get<TerminalAgentNotificationService>(TERMINAL_AGENT_NOTIFICATION_SERVICE_ID),
+      workingDirectoryProbe,
     })
   },
   async start(instance) {
@@ -2336,6 +2353,7 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     const guard = createPermissionGuard()
     guard.registerPolicy(userInitiatedAllowPolicy)
     guard.registerPolicy(systemShellExecPolicy)
+    guard.registerPolicy(systemTerminalCwdProbePolicy)
     guard.registerPolicy(webhookShellExecPolicy)
     guard.registerPolicy(systemAutomationPolicy)
     guard.registerPolicy(systemMcpAutoRegisterPolicy)

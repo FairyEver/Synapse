@@ -168,6 +168,54 @@ describe("TerminalService core", () => {
     expect(service.getCurrentWorkingDirectory(session.id)).toBe("/tmp")
   })
 
+  it("falls back to the probe when the shell never reports a directory", async () => {
+    // 阶段 1 的钩子只覆盖 zsh / bash / fish；这里连注入都没有（没有 agentNotifications 依赖），
+    // 等价于「shell 报不出目录」，走的正是那条兜底。
+    const pty = fakePty({ ptsName: "/dev/ttys006" })
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-probe-"))
+    const probe = {
+      read: vi.fn(() => undefined as string | null | undefined),
+      probe: vi.fn(async () => "/tmp/probed"),
+      forget: vi.fn(),
+    }
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => pty,
+      resolveDefaultShell: () => "/bin/sh",
+      resolveDefaultCwd: () => cwd,
+      workingDirectoryProbe: probe,
+    })
+    await service.start()
+    const session = await service.createSession({})
+
+    // 有人问的时候才探：问的这一刻拿到的是最新值。
+    await expect(service.probeCurrentWorkingDirectory(session.id)).resolves.toBe("/tmp/probed")
+    expect(probe.probe).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: session.id, tty: "/dev/ttys006" }),
+    )
+    // 探到的结果被缓存住，同步那条路也读得到。
+    probe.read.mockReturnValue("/tmp/probed")
+    expect(service.getCurrentWorkingDirectory(session.id)).toBe("/tmp/probed")
+
+    // 没人问过、也没缓存时，同步读退回会话启动目录，并且只排一次后台探测。
+    probe.read.mockReturnValue(undefined)
+    probe.probe.mockClear()
+    expect(service.getCurrentWorkingDirectory(session.id)).toBe(cwd)
+    expect(service.getCurrentWorkingDirectory(session.id)).toBe(cwd)
+    await vi.waitFor(() => expect(probe.probe).toHaveBeenCalledTimes(1))
+
+    // shell 自己报了目录时，兜底一次都不跑。
+    probe.probe.mockClear()
+    const reported = new Promise<{ sessionId: string }>((resolve) => {
+      service.events.once("workingDirectoryChanged", resolve)
+    })
+    pty.emitData("\u001b]7;file:///tmp/from-osc7\u0007")
+    await reported
+    expect(service.getCurrentWorkingDirectory(session.id)).toBe("/tmp/from-osc7")
+    await Promise.resolve()
+    expect(probe.probe).not.toHaveBeenCalled()
+  })
+
   it("batches PTY output into one incremental runtime save", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-09-04T00:00:00.000Z"))

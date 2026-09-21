@@ -28,14 +28,19 @@ export const terminalWorkspaceTreeMethods: IpcModule["methods"] = {
     kind: "invoke",
     request: terminalSessionIdInputSchema,
     response: workspaceFileTreeScopeSchema,
-    handler: (ctx, request: z.infer<typeof terminalSessionIdInputSchema>) => {
+    handler: async (ctx, request: z.infer<typeof terminalSessionIdInputSchema>) => {
       const ownerId = requireOwner(ctx)
       const service = resolveWorkspaceFileTreeService(ctx)
       const terminal = ctx.resolve<TerminalService>("core.terminal")
       observeOwner(ctx, service, ownerId)
+      /*
+       * 打开文件树正是「有人问目录」的时刻，所以这里等一次兜底探测的结果 ——
+       * 用同步的 `getCurrentWorkingDirectory` 只拿得到上一次的缓存，第一次打开会显示
+       * 会话启动目录。shell 报得出 OSC 7 时这次探测根本不会跑。
+       */
       return service.openScope({
         ownerId,
-        rootPath: terminal.getCurrentWorkingDirectory(request.sessionId),
+        rootPath: await terminal.probeCurrentWorkingDirectory(request.sessionId),
         surface: "terminal",
         sessionId: request.sessionId,
       })
