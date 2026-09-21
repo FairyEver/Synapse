@@ -100,6 +100,7 @@ import {
   gitRepositoryRegistryDescriptor,
   gitStatusServiceDescriptor,
   gitSyncServiceDescriptor,
+  terminalGitServiceDescriptor,
   providerServiceDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
@@ -201,6 +202,7 @@ export function buildServiceRegistry(
   registry.register(gitSyncServiceDescriptor)
   registry.register(gitBranchServiceDescriptor)
   registry.register(gitHistoryServiceDescriptor)
+  registry.register(terminalGitServiceDescriptor)
   registry.register(coreDiagnosticsDescriptor)
   registry.register(coreDataMaintenanceDescriptor)
   registry.register(coreUpdateDescriptor)

@@ -254,6 +254,7 @@ import { createGitOperationCoordinator, type GitOperationCoordinator } from "../
 import { createGitRepositoryRegistry, type GitRepositoryRegistry } from "../services/git-client/git-repository-registry"
 import { createGitStateDiagnosticsReader, createGitStatusService, type GitStatusService } from "../services/git-client/git-status-service"
 import { createGitSyncService, type GitSyncService } from "../services/git-client/git-sync-service"
+import { createTerminalGitService, type TerminalGitService } from "../services/terminal-git/terminal-git-service"
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
@@ -2939,6 +2940,22 @@ export const gitHistoryServiceDescriptor: ServiceDescriptor<GitHistoryService> =
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       logger: ctx.logger.child("git.history"),
     })
+  },
+}
+
+/**
+ * 按终端当前目录跑 git。
+ *
+ * 只依赖 `git.command-runner`：命令执行、权限与审计都走 `runGitCommand`
+ * （它的安全策略由 `core.action-runtime` 在启动时一次性接好），仓库注册表不在这条路上。
+ */
+export const terminalGitServiceDescriptor: ServiceDescriptor<TerminalGitService> = {
+  id: "terminal.git-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner"],
+  create(ctx) {
+    const logger = ctx.logger.child("terminal-git")
+    return createTerminalGitService({ logger })
   },
 }
 
