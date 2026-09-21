@@ -62,6 +62,20 @@ export const DIRTY_WORKING_TREE_MESSAGE = "当前目录里有未提交的改动�
 /** 同步类操作天然慢，超时值参考既有的 120s；其余命令沿用默认的 60s。 */
 export const TERMINAL_GIT_REMOTE_TIMEOUT_MS = 120_000
 
+/**
+ * 冲突那段文本里最多列几个文件、每个路径最长多少。
+ *
+ * 这两个数是**产生端的截断**，不是显示偏好：那段文本会被送回手机，而手机的通道
+ * 装不下任意长的消息（`mobile.intentResult` 走的是 `maxPayload` 为 256 KiB 的那条
+ * 套接字，装不下就是断连）。截断之后文本里会写明「还有 N 个未列出」，所以拿这段
+ * 文本去问别的 Agent 的人知道自己看到的不是全部。
+ *
+ * 协议层（`shared/src/mobile-live.ts` 的 `maxGitConflict*`）用同一组数字再守一遍 ——
+ * 这里是产生端，那里是不信任对端的第二道。两处要一起改。
+ */
+export const TERMINAL_GIT_CONFLICT_FILE_LIMIT = 128
+export const TERMINAL_GIT_CONFLICT_PATH_LIMIT = 512
+
 export function emptySnapshot(cwd: string): TerminalGitSnapshot {
   return {
     cwd,

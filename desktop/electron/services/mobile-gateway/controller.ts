@@ -42,6 +42,12 @@ export const MOBILE_GATEWAY_ALLOWED_ACTIONS: ReadonlySet<PermissionAction> = new
   "terminal.session.resize",
   "terminal.session.stop",
   "terminal.metadata.manage",
+  /*
+   * 手机在终端当前目录上跑 Git 写操作。它是这一轮新出现的一件事 ——
+   * 「手机让电脑改动了用户的仓库」—— 所以有自己的名字，不去借 `fs.write` 那类
+   * 说的是别的事情的动作。操作的是哪个目录由电脑按会话解析，与「代码仓库」注册表无关。
+   */
+  "terminal.git.manage",
 ])
 
 export const mobileGatewayTerminalPolicy: PermissionPolicy = {

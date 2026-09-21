@@ -1,5 +1,6 @@
 import { MOBILE_FRAME_LIMITS } from "@synapse/shared/mobile-live-constants"
 import type {
+  MobileGitStatus,
   MobileIntent,
   MobileIntentResult,
   MobileModelTier,
@@ -24,12 +25,15 @@ import type {
   PermissionGuard,
 } from "../runtime/security/permission-guard"
 import type { ClipboardSyncEntry } from "./clipboard-sync-service"
+import type { TerminalGitService } from "./terminal-git/terminal-git-service"
+import type { TerminalGitSnapshot } from "./terminal-git/terminal-git-types"
 import type { MobileAttachment } from "./mobile-gateway/attachment-registry"
 import { AttachmentRegistry } from "./mobile-gateway/attachment-registry"
 import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
 import type { MobileFileRelay } from "./mobile-gateway/file-relay"
 import { buildSnapshotFrames, buildTerminalFrames } from "./mobile-gateway/frame-builder"
 import type { ClaudeCodeConversationLaunch, MobileGatewayLogger } from "./mobile-gateway/intent-executor"
+import { createMobileGitIntentRunner, type MobileGitIntentRunner } from "./mobile-gateway/git-intent"
 import { MobileIntentError, MobileIntentExecutor } from "./mobile-gateway/intent-executor"
 import type { MobileGatewayTransport } from "./mobile-gateway/transport"
 
@@ -142,6 +146,13 @@ const SIZE_OWNERSHIP_IDLE_TIMEOUT_MS = 90_000
 
 export type MobileGatewayServiceDeps = {
   readonly terminal: TerminalService
+  /**
+   * 按终端当前目录跑 git 的那一层。
+   *
+   * 只认路径：它不认识「代码仓库」注册表，也不产生那本账上的条目。手机端看到的
+   * Git 是「这个目录恰好是个 Git 仓库」，不是「用户添加过的仓库」。
+   */
+  readonly terminalGit: TerminalGitService
   readonly fileRelay: MobileFileRelay
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
@@ -236,6 +247,7 @@ export class MobileGatewayService {
   private readonly terminal: TerminalService
   private readonly registry = new AttachmentRegistry()
   private readonly executor: MobileIntentExecutor
+  private readonly gitIntent: MobileGitIntentRunner
   private readonly setTimer: (callback: () => void, delayMs: number) => NodeJS.Timeout
   private readonly clearTimer: (handle: NodeJS.Timeout) => void
   private readonly lineWindowLines: number
@@ -291,6 +303,19 @@ export class MobileGatewayService {
    */
   private clipboardRevision = 0
   private lastClipboardContent = ""
+  /**
+   * 上一次算过的是哪个目录，按「哪台手机 + 哪个会话」记。
+   *
+   * 就一个目录字符串：它是那道具名昭著的廉价闸门 —— 摘要在有输出时是 1 Hz，
+   * 而这一份要跑一次 `git status`，不比目录就等于每秒 spawn 一次 git。
+   * 见 `flushGitStatus`，那里写了为什么「再比一次内容」是多余的。
+   *
+   * 按手机分开记，因为这份状态是点对点发的：两台手机可能停在不同会话上。
+   */
+  private readonly gitStatusSeen = new Map<string, string>()
+  private gitStatusRevision = 0
+  private gitStatusFlushing = false
+  private gitStatusResendPending = false
   private readonly bytesByClient = new Map<string, { windowStartedMs: number; bytes: number }>()
   private readonly lastLineCache = new Map<string, string>()
   private readonly lastLineDirty = new Set<string>()
@@ -302,6 +327,11 @@ export class MobileGatewayService {
     this.setTimer = deps.setTimeout ?? ((callback, delayMs) => setTimeout(callback, delayMs))
     this.clearTimer = deps.clearTimeout ?? ((handle) => clearTimeout(handle))
     this.lineWindowLines = deps.lineWindowLines ?? DEFAULT_LINE_WINDOW
+    this.gitIntent = createMobileGitIntentRunner({
+      terminal: deps.terminal,
+      terminalGit: deps.terminalGit,
+      authorize: (action, resource, context) => this.authorize(action, resource, context),
+    })
     this.executor = new MobileIntentExecutor({
       terminal: deps.terminal,
       registry: this.registry,
@@ -321,6 +351,9 @@ export class MobileGatewayService {
       reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
         this.reportTransferProgress(mobileClientInstanceId, intentId, completedBytes, totalBytes),
       createClaudeCodeConversation: (input) => deps.createClaudeCodeConversation(input),
+      runGitIntent: (request) => this.gitIntent(request),
+      sendGitStatus: (mobileClientInstanceId, sessionId) =>
+        this.resendGitStatus(mobileClientInstanceId, sessionId),
     })
   }
 
@@ -371,6 +404,7 @@ export class MobileGatewayService {
     this.lastToolbarContent = ""
     this.lastQuickPhrasesContent = ""
     this.lastClipboardContent = ""
+    this.gitStatusSeen.clear()
     this.agentGroupsCache = null
     this.agentProvidersCache = null
   }
@@ -892,6 +926,8 @@ export class MobileGatewayService {
     // event emitter is at Node's default limit of ten listeners and this list is not
     // allowed to grow. See the note on `start()`.
     this.flushToolbar()
+    // Piggy-backed on this tick rather than on a listener of its own — see `flushGitStatus`.
+    void this.flushGitStatus()
     try {
       const sessions = await this.summarySessions()
       const [agentGroups, agentProviders] = await Promise.all([
@@ -1089,6 +1125,22 @@ export class MobileGatewayService {
     }
   }
 
+  /**
+   * 会话当前所在的目录，读不出来就退回它的启动目录。
+   *
+   * 这是**同步的纯读**（OSC 7 → 兜底探测的缓存 → 排一次后台探测 → 会话启动目录），
+   * 在这里等任何 IO 都是错的：它走的是一条 1 Hz 的路。手机打开 Git 面板那一刻要的是
+   * 一个确定的答案，那走的是可等待的 `probeCurrentWorkingDirectory`，不在这一条上。
+   */
+  private currentWorkingDirectoryFor(sessionId: string, fallback: string): string {
+    try {
+      return this.terminal.getCurrentWorkingDirectory(sessionId)
+    } catch {
+      // 会话没了：摘要那一轮本来也会把它从列表里去掉。
+      return fallback
+    }
+  }
+
   private async summarySessions(): Promise<MobileSummarySession[]> {
     const sessions = this.terminal.listSessions()
     const rows: MobileSummarySession[] = []
@@ -1099,7 +1151,10 @@ export class MobileGatewayService {
         title: clampSummaryText(session.title, MOBILE_FRAME_LIMITS.maxTitleLength),
         status: session.status,
         attention: { state: session.attention.state, kind: session.attention.kind },
-        cwd: clampSummaryText(session.cwd, MOBILE_FRAME_LIMITS.maxSummaryCwdLength),
+        cwd: clampSummaryText(
+          this.currentWorkingDirectoryFor(session.id, session.cwd),
+          MOBILE_FRAME_LIMITS.maxSummaryCwdLength,
+        ),
         cols: session.cols,
         rows: session.rows,
         startedAt: clampSummaryText(session.startedAt, MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength),
@@ -1177,6 +1232,108 @@ export class MobileGatewayService {
       scanned += window.lines.length
     }
     return ""
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Git status
+   * ------------------------------------------------------------------ */
+
+  /**
+   * 终端当前目录的 Git 状态，推给正开着这个终端的那台手机。
+   *
+   * **搭在既有的摘要 tick 上，不新增任何 `terminal.events` 监听器。** 这一条不是
+   * 省事，是预算：网关 4 个（`start()` 里那四个）加终端 IPC 层的 6 个，正好是 Node
+   * 默认的十个，`start()` 上的注释写着这份清单不应再增长，全仓没有一处
+   * `setMaxListeners`。目录变化本身也没有专属事件可搭 —— `cd` 不 emit
+   * `sessionChanged`（那个只在 `updateSessionState` 里发），`workingDirectoryChanged`
+   * 倒是存在、也确实是我们想要的，但它**已经被终端 IPC 层订阅了**，再订一次就是
+   * 第 11 个，与是不是同一个事件无关。
+   *
+   * 能跟上 `cd` 的原因：终端每输出一个 chunk 都会同时 emit `data` 与 `stateChanged`，
+   * 网关转手就 `scheduleSummary()` —— 所以「有终端在打字时 1 Hz」这个心跳本来就活着，
+   * `cd` 之后的提示符重绘一定落在它上面，延迟不超过一个 tick。
+   *
+   * 代价闸门只有一道，就是**目录**：它同时是「要不要跑 git」与「要不要发」的判据。
+   *
+   * 实现计划里写的是「先比目录、再比内容」两道，这里合成了一道，因为这道比内容更严：
+   * `MobileGitStatus.cwd` 就在 payload 里，所以「内容一模一样」蕴含「目录一模一样」，
+   * 内容那道闸永远轮不到它拦人 —— 留着它只会是一段看起来在工作、其实一次都不会命中的
+   * 判断。省下的也正是那一次 `JSON.stringify`。
+   *
+   * 代价是明确的：在终端里手工 `git commit` 不会让第二行动，要等目录变了、手机重新
+   * attach、或手机自己发起一次 Git 动作。这是这条路必然的取舍 —— 仓库变化在这条线上
+   * 没有事件可搭（监听器预算已满，见上），剩下的办法只有定时重算，而那正是这道闸要
+   * 防的东西。
+   */
+  private async flushGitStatus(): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    // 一次算一轮就够。`git status` 在一个大仓库上可能超过一个 tick，没有这道闸
+    // 会让两轮叠在一起算同一个目录。
+    if (this.gitStatusFlushing) {
+      this.gitStatusResendPending = true
+      return
+    }
+    this.gitStatusFlushing = true
+    try {
+      for (const attachment of this.registry.all()) {
+        try {
+          await this.flushAttachmentGitStatus(attachment)
+        } catch (error) {
+          // 一台手机的 Git 状态读不出来，不该带走别的手机的这一轮。
+          this.logWarn("Mobile git status flush failed.", error, { sessionId: attachment.sessionId })
+        }
+      }
+    } finally {
+      this.gitStatusFlushing = false
+    }
+    if (!this.gitStatusResendPending) return
+    // 本轮跑的时候有人要求重发（手机刚 attach / sync，或刚做完一个写动作）：
+    // 它清掉的那条记录已经被这一轮又写回去了，所以必须再走一遍。
+    this.gitStatusResendPending = false
+    await this.flushGitStatus()
+  }
+
+  private async flushAttachmentGitStatus(attachment: MobileAttachment): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    const key = gitStatusKey(attachment.mobileClientInstanceId, attachment.sessionId)
+    // 同步的纯读：1 Hz 这条路上绝不能藏 IO。兜底探测在这里只是「排一次后台任务」，
+    // 结果下一次读就有；真正要等一个答案的时刻是手机打开面板，那走的是 intent。
+    let cwd: string
+    try {
+      cwd = this.terminal.getCurrentWorkingDirectory(attachment.sessionId)
+    } catch {
+      // 会话已经不在了。它自己的清理走 attach 的别的路，这里没有可做的。
+      this.gitStatusSeen.delete(key)
+      return
+    }
+    // 目录没变就不跑 git、也不发：这一条就是全部的去重。摘要在有输出时是 1 Hz，
+    // 少了它就等于每秒 spawn 一次 `git status`。
+    if (this.gitStatusSeen.get(key) === cwd) return
+    this.gitStatusSeen.set(key, cwd)
+
+    const snapshot = await this.deps.terminalGit.getSnapshot(cwd)
+    const status = toMobileGitStatus(snapshot)
+    this.gitStatusRevision += 1
+    transport.sendGitStatus({
+      mobileClientInstanceId: attachment.mobileClientInstanceId,
+      sessionId: attachment.sessionId,
+      revision: this.gitStatusRevision,
+      status,
+    })
+  }
+
+  /**
+   * 清掉记录再推一次，给「刚到的」与「刚做完的」两种调用方。
+   *
+   * 与 `resendToolbar` 同一个套路，理由也一样：`flushGitStatus` 比的是「上次发过什么」，
+   * 而那个比较只对**收到过**的一方有意义。刚连上的手机什么都没收到；刚做完一个写动作的
+   * 手机拿到的还是动作之前那份。两种都不该被指纹挡住。
+   */
+  private resendGitStatus(mobileClientInstanceId: string, sessionId: string): void {
+    this.gitStatusSeen.delete(gitStatusKey(mobileClientInstanceId, sessionId))
+    void this.flushGitStatus()
   }
 
   /* ------------------------------------------------------------------ *
@@ -1559,6 +1716,42 @@ function ownerIdForSummary(session: {
   return id.length > 0 && id.length <= MOBILE_FRAME_LIMITS.maxSummaryGridOwnerIdLength
     ? { gridOwnerId: id }
     : null
+}
+
+/** 一台手机在一个会话上算过的那一笔，只认这一对。 */
+function gitStatusKey(mobileClientInstanceId: string, sessionId: string): string {
+  return `${mobileClientInstanceId}\x00${sessionId}`
+}
+
+/**
+ * 服务层的快照 → 线上的那份状态。
+ *
+ * **`changes` 不上这条线**：手机端不接收任何文件清单（设计文档决策六），它只回答
+ * 「有几个改动」这一个数。这不是「暂时没做」，是一条口径 —— 省的是流量，也是
+ * 「用户在手机上不会以为自己能挑文件提交」。
+ *
+ * 不是仓库时整份是 `null`，而不是一个字段都空的对象：手机端要用它把「这里不是
+ * 仓库」（第二行退回版本号）与「还没收到回答」（维持现状）分开，两者在屏幕上长得
+ * 一样但含义完全不同。
+ */
+function toMobileGitStatus(snapshot: TerminalGitSnapshot): MobileGitStatus | null {
+  if (!snapshot.isRepository) return null
+  return {
+    cwd: clampSummaryText(snapshot.cwd, MOBILE_FRAME_LIMITS.maxGitPathLength),
+    branch: snapshot.branch === null
+      ? null
+      : clampSummaryText(snapshot.branch, MOBILE_FRAME_LIMITS.maxGitRefNameLength),
+    ...(snapshot.detachedSha === null
+      ? {}
+      : { detachedSha: clampSummaryText(snapshot.detachedSha, MOBILE_FRAME_LIMITS.maxGitShortShaLength) }),
+    upstream: snapshot.upstream === null
+      ? null
+      : clampSummaryText(snapshot.upstream, MOBILE_FRAME_LIMITS.maxGitRefNameLength),
+    ahead: snapshot.ahead,
+    behind: snapshot.behind,
+    changeCount: snapshot.changeCount,
+    hasConflicts: snapshot.hasConflicts,
+  }
 }
 
 /**

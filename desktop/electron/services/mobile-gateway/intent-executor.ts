@@ -15,6 +15,7 @@ import { AttachmentRegistry, createAttachment } from "./attachment-registry"
 import { mobileControllerFor, MOBILE_RELAY_RESOURCE } from "./controller"
 import type { MobileFileRelay } from "./file-relay"
 import { MobileFileRelayError } from "./file-relay"
+import type { MobileGitIntentRunner } from "./git-intent"
 
 /** Long enough that an actively used terminal never loses control mid-sentence. */
 const LEASE_DURATION_MS = 60_000
@@ -125,6 +126,20 @@ export type IntentExecutorDeps = {
   readonly createClaudeCodeConversation: (
     input: ClaudeCodeConversationLaunch,
   ) => Promise<{ readonly id: string }>
+  /**
+   * 手机端 Git 操作。它自己解析目录、自己过权限，这一层只负责把它挂到 `git` 这个
+   * kind 上，并把结论原样搬进结果信封 —— `git` 是唯一一个 kind 因为动作不同而要
+   * 各自回答不同数据块的，把它摊在这里会让这个 switch 长出八份重复。
+   */
+  readonly runGitIntent: MobileGitIntentRunner
+  /**
+   * 重推一次「终端当前目录的 Git 状态」。
+   *
+   * 与 `sendToolbar` 那两个是同一族（一个「已经收到过什么」的指纹被清掉再推一次），
+   * 但它是**点对点**的：这份状态说的是「你正开着的那个终端」，所以要点名发给哪台手机。
+   * 动作改过仓库之后调用它 —— 目录没变，光靠摘要那个「目录变了才重算」的闸门等不到。
+   */
+  readonly sendGitStatus: (mobileClientInstanceId: string, sessionId: string) => void
 }
 
 /** What a phone may name, and nothing else. No credential, no environment, no path. */
@@ -206,6 +221,9 @@ export class MobileIntentExecutor {
         // received nothing at all.
         this.deps.sendClipboard()
         for (const attachment of registry.forClient(mobileClientInstanceId)) {
+          // 每台被这个手机开着的终端各推一份它的目录状态 —— 这份状态是点对点的，
+          // 没有附件就没有「你正开着的那个终端」可回答。
+          this.deps.sendGitStatus(mobileClientInstanceId, attachment.sessionId)
           await this.pushSnapshotOrForget(attachment)
         }
         return accepted(intent.intentId)
@@ -232,6 +250,9 @@ export class MobileIntentExecutor {
         // like `sync` does, instead of waiting for the fingerprint to move.
         this.deps.sendToolbar()
         this.deps.sendQuickPhrases()
+        // 打开终端是这一族里唯一「有人正看着」的时刻，所以状态也重推一次：刚 attach
+        // 的手机什么都没收到，而指纹只对已经收到过的一方有意义。
+        this.deps.sendGitStatus(mobileClientInstanceId, intent.sessionId)
         const existing = registry.get(mobileClientInstanceId, intent.sessionId)
         if (existing) {
           await this.deps.pushSnapshot(existing, "attach")
@@ -546,6 +567,40 @@ export class MobileIntentExecutor {
         })
         await this.adoptCreatedSession(mobileClientInstanceId, session.id)
         return accepted(intent.intentId, { createdSessionId: session.id })
+      }
+
+      /**
+       * 在终端当前目录上跑一次 Git 操作。
+       *
+       * 它**不写终端**（决策一）：命令在电脑后台跑，结果结构化回传 —— 终端前台很
+       * 可能正跑着 Claude Code 的全屏界面，往 PTY 里打一行 `git checkout` 会被吃掉
+       * 或弄乱那一屏。也正因如此，这里没有任何一条把手机给的字符串当命令跑的路径：
+       * `intent.action` 是枚举，电脑侧按枚举分派。
+       */
+      case "git": {
+        const outcome = await this.deps.runGitIntent({
+          sessionId: intent.sessionId,
+          action: intent.action,
+          ...(intent.branch === undefined ? {} : { branch: intent.branch }),
+          ...(intent.fromBranch === undefined ? {} : { fromBranch: intent.fromBranch }),
+          ...(intent.message === undefined ? {} : { message: intent.message }),
+          ...(intent.pushAfterCommit === undefined ? {} : { pushAfterCommit: intent.pushAfterCommit }),
+          ...(intent.direction === undefined ? {} : { direction: intent.direction }),
+          ...(intent.discardChanges === undefined ? {} : { discardChanges: intent.discardChanges }),
+        })
+        // 动过仓库就把状态重算一遍推过去。这也是 `status` 这个动作的全部作用 ——
+        // 它自己不进结果信封（见 `MobileGitAction`）。
+        if (outcome.repositoryChanged) {
+          this.deps.sendGitStatus(mobileClientInstanceId, intent.sessionId)
+        }
+        return {
+          intentId: intent.intentId,
+          outcome: outcome.outcome,
+          sessionId: intent.sessionId,
+          ...(outcome.code === undefined ? {} : { code: outcome.code }),
+          ...(outcome.message === undefined ? {} : { message: outcome.message }),
+          ...(outcome.git === undefined ? {} : { git: outcome.git }),
+        }
       }
 
       case "launchCommand": {
@@ -935,6 +990,7 @@ const UNFINISHED_OPERATION_MESSAGES: Readonly<Record<MobileIntent["kind"], strin
   launchCommand: "启动命令没有完成。",
   createAgentConversation: "启动对话没有完成。",
   fileUpload: "文件没有送到终端。",
+  git: "Git 操作没有完成。",
 }
 
 function describeError(error: unknown, intent: MobileIntent): string {

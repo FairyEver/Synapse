@@ -1,5 +1,6 @@
 import type {
   MobileClipboardPayload,
+  MobileGitStatusPayload,
   MobileIntent,
   MobileIntentResult,
   MobileQuickPhrasesPayload,
@@ -28,6 +29,14 @@ export type MobileQuickPhrasesDraft = Omit<MobileQuickPhrasesPayload, "desktopCl
 
 /** The recently copied text, minus the identity, for the same reason. */
 export type MobileClipboardDraft = Omit<MobileClipboardPayload, "desktopClientInstanceId">
+
+/**
+ * 一台电脑上、一个终端当前目录的 Git 状态，减去电脑身份（同为 `MobileSummaryDraft` 的理由）。
+ *
+ * 它**不像**上面三条那样减去收件人：这份状态说的是「你正开着的那个终端」，
+ * 所以它本来就带 `mobileClientInstanceId`，点对点发出去。
+ */
+export type MobileGitStatusDraft = Omit<MobileGitStatusPayload, "desktopClientInstanceId">
 
 /**
  * Outbound side of the gateway.
@@ -84,6 +93,15 @@ export type MobileGatewayTransport = {
    * that treated this as the whole truth would shrink its own.
    */
   readonly sendClipboard: (draft: MobileClipboardDraft) => void
+  /**
+   * 终端当前目录的 Git 状态，发给正开着这个终端的那台手机。
+   *
+   * 与摘要分开的一条消息，理由不是字节预算而是**代价**：摘要在有输出时以 1 Hz 刷新，
+   * 而这一份要跑一次 `git status` —— 骑上去等于每秒 spawn 一次 git。
+   *
+   * 整份快照，和上面四条一样：手机用它替换自己那份，所以丢一条只等于等下一个。
+   */
+  readonly sendGitStatus: (draft: MobileGitStatusDraft) => void
 }
 
 /** Inbound side: the live connection hands cloud-delivered events to the gateway. */

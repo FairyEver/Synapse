@@ -16,6 +16,7 @@ import { createLiveReconnectDelay, isStableLiveConnection } from "./live-reconne
 import { createMainLogger } from "./log-store"
 import type {
   MobileClipboardDraft,
+  MobileGitStatusDraft,
   MobileIntentHandler,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
@@ -454,6 +455,25 @@ export class LiveConnectionService {
     if (!clientInstanceId) return
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileQuickPhrases, {
+      desktopClientInstanceId: clientInstanceId,
+      ...draft,
+    }, this.envelopeMetadata()))
+  }
+
+  /**
+   * 终端当前目录的 Git 状态，发给正开着这个终端的那台手机。
+   *
+   * 点对点，像 frame 与 transferProgress 而不像上面三条快照：这条消息答的是
+   * 「你正开着的那个终端」，一份发给所有手机没有意义。payload 自己带着收件人。
+   *
+   * 减掉电脑身份的理由与上面三条相同：手机按「哪台电脑」归档，说不清自己是谁的
+   * 一条只会在手机上被归到「没有」。
+   */
+  async sendMobileGitStatus(draft: MobileGitStatusDraft): Promise<void> {
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileGitStatus, {
       desktopClientInstanceId: clientInstanceId,
       ...draft,
     }, this.envelopeMetadata()))

@@ -6,6 +6,8 @@ import {
   DETACHED_HEAD_MESSAGE,
   DIRTY_WORKING_TREE_MESSAGE,
   NOT_A_REPOSITORY_MESSAGE,
+  TERMINAL_GIT_CONFLICT_FILE_LIMIT,
+  TERMINAL_GIT_CONFLICT_PATH_LIMIT,
   TERMINAL_GIT_REMOTE_TIMEOUT_MS,
   failure,
   success,
@@ -202,6 +204,17 @@ function buildConflict(input: {
   readonly files: readonly string[]
   readonly rolledBack: boolean
 }): TerminalGitConflict {
+  /*
+   * 截断在这里，不在协议层：文件清单和那段文本是同一次拼装的产物，分两处截就会
+   * 拼出一段说「3 个」、清单里却只有 1 个的文本。截断本身要写在文本里，让读它的人
+   * 知道自己看到的不是全部。
+   */
+  const files = input.files
+    .slice(0, TERMINAL_GIT_CONFLICT_FILE_LIMIT)
+    .map((file) => (file.length > TERMINAL_GIT_CONFLICT_PATH_LIMIT
+      ? `${file.slice(0, TERMINAL_GIT_CONFLICT_PATH_LIMIT)}…`
+      : file))
+  const omitted = input.files.length - files.length
   const lines = [
     "【Synapse · Git 合并冲突】",
     `仓库目录：${input.cwd}`,
@@ -209,15 +222,16 @@ function buildConflict(input: {
     input.rolledBack
       ? "结果：检测到冲突，已自动取消合并并回退（git merge --abort），仓库回到了合并前的状态。"
       : "结果：检测到冲突，已执行 git merge --abort，但仓库状态与合并前不一致，请在电脑上确认后再处理。",
-    `冲突文件（${String(input.files.length)} 个）：`,
-    ...input.files.map((file) => `- ${file}`),
+    `冲突文件（共 ${String(input.files.length)} 个）：`,
+    ...files.map((file) => `- ${file}`),
+    ...(omitted > 0 ? [`（清单只列了前 ${String(files.length)} 个，另有 ${String(omitted)} 个未列出）`] : []),
     "",
     "请帮我解决这些冲突。",
   ]
   return {
     source: input.source,
     target: input.target,
-    files: input.files,
+    files,
     summaryText: `${lines.join("\n")}\n`,
   }
 }

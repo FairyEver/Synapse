@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events"
+import { readFileSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -25,10 +26,13 @@ import {
 } from "../mobile-gateway-service"
 import type { ClipboardSyncEntry } from "../clipboard-sync-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
+import type { TerminalGitService } from "../terminal-git/terminal-git-service"
+import type { TerminalGitOutcome, TerminalGitSnapshot } from "../terminal-git/terminal-git-types"
 import type { ClaudeCodeConversationLaunch } from "../mobile-gateway/intent-executor"
 import type {
   MobileClipboardDraft,
   MobileGatewayTransport,
+  MobileGitStatusDraft,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
   MobileToolbarDraft,
@@ -333,6 +337,131 @@ class FakeTerminal {
     this.calls.push("renameSession")
     return { id: "sess-1" }
   }
+
+  /**
+   * 会话当前所在的那个目录，按会话记。
+   *
+   * 它就是「用户在终端里 cd 走了」这件事在测试里的写法：真实的实现先看外壳上报的
+   * OSC 7，没有才去探测缓存，最后退回会话启动目录 —— 这里只要一个可写的答案。
+   */
+  readonly reportedCwd = new Map<string, string>()
+
+  getCurrentWorkingDirectory(sessionId: string): string {
+    const session = this.sessions.get(sessionId)
+    if (!session) throw terminalContractError("not_found", "not_found")
+    return this.reportedCwd.get(sessionId) ?? session.cwd
+  }
+
+  /** 可等待的那一个，给「有人问」的时刻（手机发起一次 Git 动作）。 */
+  async probeCurrentWorkingDirectory(sessionId: string): Promise<string> {
+    this.calls.push("probeCurrentWorkingDirectory")
+    return this.getCurrentWorkingDirectory(sessionId)
+  }
+}
+
+/**
+ * 按目录跑 git 的那一层，记下每次调用与参数。
+ *
+ * 这里不是「顺手 mock 掉」：手机端的每个动作都要落到这个服务的某个方法上，
+ * 而落错方法（比如「合并」落到「同步」）在读代码时是看不出来的。
+ */
+class FakeTerminalGit {
+  readonly calls: { readonly method: string; readonly input: Record<string, unknown> }[] = []
+  /** 按目录给的快照覆盖：同一台电脑上不同会话可能停在不同仓库。 */
+  readonly byCwd = new Map<string, Partial<TerminalGitSnapshot>>()
+  /** 让动作失败，用来测失败面；`null` = 一切照常成功。 */
+  failure:
+    | {
+        readonly message: string
+        readonly needsDecision?: "dirty"
+        readonly conflict?: unknown
+        /** 只让这几个方法失败；缺席＝每个方法都失败。 */
+        readonly only?: readonly string[]
+      }
+    | null = null
+  branches: readonly { readonly name: string; readonly current: boolean }[] = [
+    { name: "main", current: true },
+    { name: "release", current: false },
+  ]
+
+  private record(method: string, input: Record<string, unknown>): void {
+    this.calls.push({ method, input })
+  }
+
+  snapshotFor(cwd: string): TerminalGitSnapshot {
+    return {
+      cwd,
+      isRepository: true,
+      branch: "main",
+      detachedSha: null,
+      upstream: "origin/main",
+      ahead: 0,
+      behind: 0,
+      changeCount: 0,
+      hasConflicts: false,
+      changes: [],
+      ...this.byCwd.get(cwd),
+    }
+  }
+
+  private outcome(cwd: string, method: string): TerminalGitOutcome<TerminalGitSnapshot> {
+    const failure = this.failure
+    if (failure && (!failure.only || failure.only.includes(method))) {
+      const { message, needsDecision, conflict } = failure
+      return {
+        ok: false,
+        message,
+        ...(needsDecision === undefined ? {} : { needsDecision }),
+        ...(conflict === undefined ? {} : { conflict }),
+      } as TerminalGitOutcome<TerminalGitSnapshot>
+    }
+    return { ok: true, value: this.snapshotFor(cwd) }
+  }
+
+  async getSnapshot(cwd: string) {
+    this.record("getSnapshot", { cwd })
+    return this.snapshotFor(cwd)
+  }
+
+  async isRepository(cwd: string) {
+    this.record("isRepository", { cwd })
+    return true
+  }
+
+  async listBranches(cwd: string) {
+    this.record("listBranches", { cwd })
+    return this.branches
+  }
+
+  async checkout(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("checkout", input)
+    return this.outcome(input.cwd, "checkout")
+  }
+
+  async createBranch(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("createBranch", input)
+    return this.outcome(input.cwd, "createBranch")
+  }
+
+  async commit(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("commit", input)
+    return this.outcome(input.cwd, "commit")
+  }
+
+  async push(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("push", input)
+    return this.outcome(input.cwd, "push")
+  }
+
+  async sync(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("sync", input)
+    return this.outcome(input.cwd, "sync")
+  }
+
+  async merge(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("merge", input)
+    return this.outcome(input.cwd, "merge")
+  }
 }
 
 function createHarness(options: { sessionLines?: number; lineWindowLines?: number } = {}) {
@@ -362,6 +491,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
   const toolbars: MobileToolbarDraft[] = []
   const quickPhrases: MobileQuickPhrasesDraft[] = []
   const clipboards: MobileClipboardDraft[] = []
+  const gitStatuses: MobileGitStatusDraft[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
     // The transport is handed the frame already serialized — the very bytes the uplink
@@ -379,6 +509,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
     sendToolbar: (draft) => toolbars.push(draft),
     sendQuickPhrases: (draft) => quickPhrases.push(draft),
     sendClipboard: (draft) => clipboards.push(draft),
+    sendGitStatus: (draft) => gitStatuses.push(draft),
   }
   const audits: unknown[] = []
   const warns: { message: string; meta?: Record<string, unknown> }[] = []
@@ -484,8 +615,10 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
   ]
   const listClipboard = vi.fn(async () => [...clipboardEntries])
 
+  const terminalGit = new FakeTerminalGit()
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
+    terminalGit: terminalGit as unknown as TerminalGitService,
     fileRelay,
     createClaudeCodeConversation,
     listAgentConversationGroups,
@@ -509,7 +642,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits, toolbars,
     quickPhrases, quickPhraseItems, listQuickPhrases,
-    clipboards, clipboardEntries, listClipboard,
+    clipboards, clipboardEntries, listClipboard, gitStatuses, terminalGit,
     permissionGuard, fileRelay, landings, discarded, progress, warns, infos,
     launches, createClaudeCodeConversation, agentGroups, agentProviders,
     listAgentConversationGroups, listAgentConversationProviders,
@@ -2804,5 +2937,463 @@ describe("MobileGatewayService", () => {
       { paneId: "pane-1", sessionId: "sess-1" },
       { paneId: "pane-2", sessionId: "sess-2" },
     ])
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * Git
+ * ------------------------------------------------------------------ */
+
+/**
+ * 一次摘要把这一族的两件事都带上了：算一份算得起的 Git 状态，以及把用户刚做的
+ * Git 动作重算一遍。两件事都必须**搭在既有的 tick 上** —— 网关的监听器预算已经满了。
+ */
+describe("MobileGatewayService · Git 状态", () => {
+  it("does not run git at all until a phone is watching a terminal", async () => {
+    const harness = createHarness()
+
+    await harness.timers.advance(5_000)
+
+    // 没有 attach 就没有「你正开着的那个终端」，也就没有可回答的东西。摘要在有输出时
+    // 是 1 Hz，这里的每一条命令都会变成每秒一次的代价。
+    expect(harness.terminalGit.calls).toEqual([])
+    expect(harness.gitStatuses).toEqual([])
+  })
+
+  it("computes once and sends once, then goes quiet while the directory stays put", async () => {
+    const harness = createHarness()
+    await attach(harness)
+
+    /*
+     * 有终端在打字，摘要就是 1 Hz —— 这里把那个心跳造出来：终端每输出一个 chunk 都会
+     * emit `stateChanged`，网关转手就 `scheduleSummary()`（`data` 那一条只安排帧的
+     * flush，摘要不看它）。四次 tick 之后要的仍然只有一份状态。
+     *
+     * 反证：把 `flushAttachmentGitStatus` 里那句目录比对删掉，下面的 1 会变成 4
+     * ——「一个字节都不发」这条断言的全部意义就在这里。
+     */
+    for (let tick = 0; tick < 4; tick += 1) {
+      harness.terminal.events.emit("stateChanged", { sessionId: "sess-1", changeTypes: ["output"] })
+      await harness.timers.advance(1_000)
+    }
+    expect(harness.gitStatuses).toHaveLength(1)
+    expect(harness.gitStatuses[0]).toMatchObject({
+      mobileClientInstanceId: "phone-1",
+      sessionId: "sess-1",
+      revision: 1,
+      status: {
+        cwd: "/Users/liy/code",
+        branch: "main",
+        upstream: "origin/main",
+        changeCount: 0,
+        hasConflicts: false,
+      },
+    })
+    expect(harness.terminalGit.calls.filter((call) => call.method === "getSnapshot")).toHaveLength(1)
+  })
+
+  it("follows the terminal into another directory, with a new revision", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    await harness.timers.advance(5_000)
+
+    // 用户在终端里 cd 走了。
+    harness.terminal.reportedCwd.set("sess-1", "/Users/liy/code/other")
+    harness.terminalGit.byCwd.set("/Users/liy/code/other", { branch: "release", changeCount: 3 })
+    harness.terminal.events.emit("stateChanged", { sessionId: "sess-1", changeTypes: ["output"] })
+    await harness.timers.advance(5_000)
+
+    expect(harness.gitStatuses).toHaveLength(2)
+    expect(harness.gitStatuses[1]).toMatchObject({
+      revision: 2,
+      status: { cwd: "/Users/liy/code/other", branch: "release", changeCount: 3 },
+    })
+  })
+
+  it("says 「不是仓库」 as null rather than staying silent", async () => {
+    const harness = createHarness()
+    harness.terminalGit.byCwd.set("/Users/liy/code", { isRepository: false })
+    await attach(harness)
+
+    await harness.timers.advance(5_000)
+
+    // 手机端要靠这个 `null` 把「这里不是仓库」（第二行退回版本号）与「还没收到回答」
+    // （保持现状不动）分开 —— 两者在屏幕上长得一样但含义完全不同。
+    expect(harness.gitStatuses).toHaveLength(1)
+    expect(harness.gitStatuses[0]?.status).toBeNull()
+  })
+
+  it("re-sends on attach and on sync even when nothing about the directory changed", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    await harness.timers.advance(5_000)
+    expect(harness.gitStatuses).toHaveLength(1)
+
+    // attach 与 sync 都是「刚到的手机什么都没收到」，指纹只对收到过的一方有意义。
+    await attach(harness, { intentId: "i-attach-2" })
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    await harness.timers.advance(5_000)
+
+    expect(harness.gitStatuses).toHaveLength(3)
+    expect(harness.gitStatuses.map((status) => status.revision)).toEqual([1, 2, 3])
+  })
+
+  it("carries the live directory in the session list rather than the one it started in", async () => {
+    const harness = createHarness()
+    harness.terminal.reportedCwd.set("sess-1", "/Users/liy/code/deep")
+    await attach(harness)
+
+    await harness.timers.advance(5_000)
+
+    const summary = harness.summaries.at(-1) as { sessions: readonly { cwd: string }[] }
+    expect(summary.sessions[0]?.cwd).toBe("/Users/liy/code/deep")
+  })
+})
+
+describe("MobileGatewayService · Git 意图", () => {
+  /** 一个已经 attach 过的手机，落在 /Users/liy/code 上。 */
+  async function attached(): Promise<ReturnType<typeof createHarness>> {
+    const harness = createHarness()
+    await attach(harness)
+    harness.terminalGit.calls.length = 0
+    harness.gitStatuses.length = 0
+    return harness
+  }
+
+  function gitIntent(overrides: Record<string, unknown> = {}): MobileIntent {
+    return intent({
+      v: 1,
+      intentId: `i-git-${String(overrides.action)}`,
+      kind: "git",
+      sessionId: "sess-1",
+      action: "status",
+      ...overrides,
+    } as MobileIntent)
+  }
+
+  function lastResult(harness: ReturnType<typeof createHarness>): Record<string, unknown> {
+    return (harness.results.at(-1) as { result: Record<string, unknown> }).result
+  }
+
+  it("routes each of the eight actions to its own method, with the arguments it was given", async () => {
+    const harness = await attached()
+    const cases: readonly { readonly intent: Record<string, unknown>; readonly method: string; readonly input: Record<string, unknown> }[] = [
+      { intent: { action: "branches" }, method: "listBranches", input: { cwd: "/Users/liy/code" } },
+      { intent: { action: "checkout", branch: "release" }, method: "checkout", input: { cwd: "/Users/liy/code", branch: "release" } },
+      {
+        intent: { action: "checkout", branch: "release", discardChanges: true },
+        method: "checkout",
+        input: { cwd: "/Users/liy/code", branch: "release", discardChanges: true },
+      },
+      {
+        intent: { action: "createBranch", branch: "feature", fromBranch: "main" },
+        method: "createBranch",
+        input: { cwd: "/Users/liy/code", branch: "feature", fromBranch: "main" },
+      },
+      { intent: { action: "commit", message: "改一行" }, method: "commit", input: { cwd: "/Users/liy/code", message: "改一行" } },
+      { intent: { action: "push" }, method: "push", input: { cwd: "/Users/liy/code" } },
+      { intent: { action: "sync" }, method: "sync", input: { cwd: "/Users/liy/code" } },
+      {
+        intent: { action: "merge", branch: "release", direction: "outOfCurrent" },
+        method: "merge",
+        input: { cwd: "/Users/liy/code", branch: "release", direction: "outOfCurrent" },
+      },
+    ]
+
+    for (const [index, testCase] of cases.entries()) {
+      harness.terminalGit.calls.length = 0
+      await harness.gateway.handleIntent("phone-1", gitIntent({ ...testCase.intent, intentId: `i-git-${String(index)}` }))
+
+      // 动过仓库的动作随后会重算一次状态，那一次读的是 `getSnapshot` —— 它不属于
+      // 这个动作的路由，而且是不等待的，落在这里与否取决于调度。剔掉它再比。
+      expect(
+        harness.terminalGit.calls.filter((call) => call.method !== "getSnapshot"),
+        String(testCase.intent.action),
+      ).toEqual([
+        // 每个动作之前都先问一句「是不是仓库」（`status` 之外），不是仓库就一行都不跑。
+        { method: "isRepository", input: { cwd: "/Users/liy/code" } },
+        { method: testCase.method, input: testCase.input },
+      ])
+    }
+  })
+
+  it("answers a commit-then-push as two steps, and still calls it a success when only the push failed", async () => {
+    const harness = await attached()
+    const first = gitIntent({ action: "commit", message: "只改一行", pushAfterCommit: true, intentId: "i-git-cp" })
+    await harness.gateway.handleIntent("phone-1", first)
+    expect(harness.terminalGit.calls.map((call) => call.method)).toContain("commit")
+    expect(harness.terminalGit.calls.map((call) => call.method)).toContain("push")
+    expect(lastResult(harness)).toMatchObject({ outcome: "accepted" })
+
+    // 现在让 push 失败：提交已经进了历史，报成失败会让用户再提交一次，而那次只会
+    // 得到「没有改动可提交」。
+    harness.terminalGit.failure = { message: "远端有你还不知道的提交。", only: ["push"] }
+    await harness.gateway.handleIntent("phone-1", gitIntent({
+      action: "commit", message: "又改一行", pushAfterCommit: true, intentId: "i-git-cp-2",
+    }))
+    harness.terminalGit.failure = null
+
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "accepted",
+      message: "提交已完成，但推送没有成功：远端有你还不知道的提交。",
+    })
+  })
+
+  it("hands back the branches, and only the branches", async () => {
+    const harness = await attached()
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "branches", intentId: "i-git-branches" }))
+
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "accepted",
+      git: { branches: [{ name: "main", current: true }, { name: "release", current: false }] },
+    })
+  })
+
+  it("asks the user to decide instead of reporting a failure when the tree is dirty", async () => {
+    const harness = await attached()
+    harness.terminalGit.failure = { message: "当前目录里有未提交的改动。", needsDecision: "dirty" }
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "checkout", branch: "release", intentId: "i-dirty" }))
+
+    // 手机靠 `git.needsDecision` 把「弹一个选择」与「报一条错误」分开，所以它必须带着
+    // 一个能分辨的 code 回来，而不是只有一句话。
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "rejected",
+      code: "dirty_working_tree",
+      message: "当前目录里有未提交的改动。",
+      git: { needsDecision: "dirty" },
+    })
+  })
+
+  it("hands the conflict text back whole, for the phone to copy", async () => {
+    const harness = await attached()
+    harness.terminalGit.failure = {
+      message: "检测到冲突，已自动取消合并并回退。",
+      conflict: {
+        source: "feature",
+        target: "main",
+        files: ["a.txt"],
+        summaryText: "【Synapse · Git 合并冲突】\n请帮我解决这些冲突。\n",
+      },
+    }
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "merge", branch: "feature", intentId: "i-conflict" }))
+
+    // 这段文本由电脑拼好、手机只负责复制 —— 它一个字都不能被改写或截断。
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "rejected",
+      code: "merge_conflict",
+      git: {
+        conflict: {
+          source: "feature",
+          target: "main",
+          files: ["a.txt"],
+          summaryText: "【Synapse · Git 合并冲突】\n请帮我解决这些冲突。\n",
+        },
+      },
+    })
+  })
+
+  it("refuses an action with the argument it needs missing, without running a git command", async () => {
+    const harness = await attached()
+
+    for (const missing of [
+      { action: "checkout", intentId: "i-no-branch" },
+      { action: "createBranch", intentId: "i-no-new-branch" },
+      { action: "merge", intentId: "i-no-merge-branch" },
+      { action: "commit", intentId: "i-no-message" },
+    ]) {
+      harness.terminalGit.calls.length = 0
+      await harness.gateway.handleIntent("phone-1", gitIntent(missing))
+
+      expect(lastResult(harness), missing.action).toMatchObject({ outcome: "rejected", code: "invalid_argument" })
+      expect(harness.terminalGit.calls, missing.action).toEqual([])
+    }
+  })
+
+  it("answers 「不是仓库」 for every action but the one that answers from the pushed status", async () => {
+    const harness = await attached()
+    harness.terminalGit.byCwd.set("/Users/liy/code", { isRepository: false })
+    // `isRepository` 由假服务直接答，这里要的是「它答不是」。
+    harness.terminalGit.isRepository = async (cwd: string) => {
+      harness.terminalGit.calls.push({ method: "isRepository", input: { cwd } })
+      return false
+    }
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "branches", intentId: "i-not-repo" }))
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "rejected",
+      code: "not_a_repository",
+      message: "这个目录不是 Git 仓库。",
+    })
+
+    // `status` 自己一条 git 都不跑：它要的是「重算一次并推给我」，「不是仓库」由那份
+    // 状态自己说（`null`），第二行据此退回版本号 —— 所以它不该报错。
+    harness.gitStatuses.length = 0
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "status", intentId: "i-status-not-repo" }))
+    expect(lastResult(harness)).toMatchObject({ outcome: "accepted" })
+    await harness.timers.advance(5_000)
+    expect(harness.gitStatuses.at(-1)?.status).toBeNull()
+  })
+
+  it("reads the directory with the awaitable probe, not the cached synchronous one", async () => {
+    const harness = await attached()
+    harness.terminal.calls.length = 0
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "push", intentId: "i-probe" }))
+
+    // 有人问的时刻要的是「这一次」的答案，不是上一次缓存下来的那个 —— 手机打开面板
+    // 时算错的目录，等于在错的仓库上干活。
+    expect(harness.terminal.calls).toContain("probeCurrentWorkingDirectory")
+  })
+
+  it("recomputes the pushed status after an action that could have changed the repository", async () => {
+    const harness = await attached()
+    await harness.timers.advance(5_000)
+    expect(harness.gitStatuses).toHaveLength(1)
+
+    harness.terminalGit.byCwd.set("/Users/liy/code", { changeCount: 4 })
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "commit", message: "改一行", intentId: "i-after" }))
+    await harness.timers.advance(5_000)
+
+    // 目录没变，光靠那道闸门是等不到的：动过仓库的动作必须自己要求重算一次。
+    expect(harness.gitStatuses).toHaveLength(2)
+    expect(harness.gitStatuses[1]).toMatchObject({ status: { changeCount: 4 } })
+  })
+
+  it("authorizes a write as its own action and a read as the terminal read it is", async () => {
+    const harness = await attached()
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "branches", intentId: "i-read" }))
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "checkout", branch: "release", intentId: "i-write" }))
+
+    // 读走的还是只读终端那一档；写另有一个名字 —— 「手机让电脑改动了用户的仓库」
+    // 是这一轮新出现的一件事，借别的名字记，事后查审计的人会被误导。
+    expect(harness.audits).toContainEqual(expect.objectContaining({
+      action: "terminal.state.read",
+      outcome: "allowed",
+    }))
+    expect(harness.audits).toContainEqual(expect.objectContaining({
+      action: "terminal.git.manage",
+      outcome: "allowed",
+    }))
+  })
+
+  it("refuses a write the policy denies, and records it as denied", async () => {
+    const harness = await attached()
+    harness.permissionGuard.check = vi.fn(async () => ({ allowed: false, reason: "denied" })) as never
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "push", intentId: "i-denied" }))
+
+    expect(lastResult(harness)).toMatchObject({ outcome: "rejected", code: "permission_denied" })
+    expect(harness.terminalGit.calls.filter((call) => call.method === "push")).toEqual([])
+    expect(harness.audits).toContainEqual(expect.objectContaining({
+      action: "terminal.git.manage",
+      outcome: "denied",
+    }))
+  })
+
+  it("says the terminal is gone rather than guessing a directory for it", async () => {
+    const harness = await attached()
+    harness.terminal.sessions.delete("sess-1")
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "status", intentId: "i-gone" }))
+
+    expect(lastResult(harness)).toMatchObject({ outcome: "rejected", code: "session_not_found" })
+  })
+})
+
+/**
+ * 终端的事件发射器是这一族里最稀缺的资源，这一节把它当成一道闸而不是一句注释。
+ *
+ * Node 默认每个事件最多 10 个监听器。网关占了 4 个，终端 IPC 层占了 6 个 ——
+ * 4 + 6 正好用满。所以「再想想有没有别的办法」不是风格建议，是一个会崩的边界：
+ * 第 11 个监听器会让 Node 打一条警告，然后在某个版本里直接变成一个错误。
+ */
+describe("MobileGatewayService · 监听器预算", () => {
+  /** 网关自己订阅的那四个，写在这里是为了让「4」这个数字有出处。 */
+  const GATEWAY_EVENTS = ["data", "stateChanged", "sessionChanged", "sessionDeleted"] as const
+
+  /**
+   * 全仓不许出现 `setMaxListeners`。
+   *
+   * 这是这条预算成不成立的另一半：只要有哪怕一处把它调大，「总数 10」就不再是
+   * 上限，而下面那条断言只是在数一个还能再涨的数字。所以扫一遍比断言一个数字更
+   * 接近这条约束本身。
+   *
+   * 找的是**调用**（`setMaxListeners(`）而不是这四个字：这一段的注释、以及
+   * `mobile-gateway-service.ts` 里劝人别用它的话，都只是提到了这个名字。
+   */
+  function filesCallingSetMaxListeners(root: string): readonly string[] {
+    const hits: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "node_modules" || entry.name === "__tests__" || entry.name === "dist-electron") continue
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+          continue
+        }
+        if (!entry.name.endsWith(".ts")) continue
+        if (/setMaxListeners\s*\(/.test(readFileSync(full, "utf8"))) hits.push(full)
+      }
+    }
+    walk(root)
+    return hits
+  }
+
+  it("keeps the terminal event emitter inside Node's default listener budget", async () => {
+    const harness = createHarness()
+    // 先让摘要真的跑过一轮：`flushSummary` 是这个网关上唯一「可能顺手加一个监听器」的
+    // 地方，在它跑之前数是数不到那个人的。
+    await attach(harness)
+    harness.terminal.events.emit("stateChanged", { sessionId: "sess-1", changeTypes: ["output"] })
+    await harness.timers.advance(1_000)
+
+    // 数的是发射器上**全部**的监听器，不是那四个名字上的：预算按个算，挂在哪个
+    // 事件上无关紧要 —— 这也正是「再订一次 workingDirectoryChanged」不行的原因。
+    const gatewayListeners = harness.terminal.events.eventNames()
+      .reduce((total, event) => total + harness.terminal.events.listenerCount(event), 0)
+    // 终端 IPC 层在另一个目录、另一个生命周期里订阅，这个套件起不到它，所以数它的源码。
+    // 数不到（文件改名、写法变了）这条断言自己会红 —— 那正是它该红的时候。
+    const ipcSource = readFileSync(
+      path.resolve(import.meta.dirname, "../../../app-capabilities/terminal/main/ipc.ts"),
+      "utf8",
+    )
+    const ipcListeners = ipcSource.split("service.events.on(").length - 1
+
+    expect(gatewayListeners).toBe(4)
+    // 而且就是那四个。多订一个别的事件（比如 `workingDirectoryChanged`）同样让上一行
+    // 变红，但这一行说的是它必须正好是那四个。
+    expect([...harness.terminal.events.eventNames()].sort())
+      .toEqual([...GATEWAY_EVENTS].sort())
+    expect(ipcListeners).toBe(6)
+    expect(
+      gatewayListeners + ipcListeners,
+      "网关 4 个 + 终端 IPC 层 6 个 = Node 默认上限。要让它变大，先去解决预算，"
+      + "不要调 setMaxListeners、也不要把这条断言删掉。",
+    ).toBe(10)
+
+    const services = path.resolve(import.meta.dirname, "../..")
+    expect(filesCallingSetMaxListeners(services)).toEqual([])
+    expect(filesCallingSetMaxListeners(
+      path.resolve(import.meta.dirname, "../../../app-capabilities"),
+    )).toEqual([])
+  })
+
+  it("rides the summary tick instead of subscribing for the directory changes it follows", () => {
+    const harness = createHarness()
+
+    // `workingDirectoryChanged` 确实存在、也确实是我们想要的那个事件 —— 但它已经被
+    // 终端 IPC 层订阅了，再订一次就是第 11 个，跟是不是同一个事件无关。所以这一族
+    // 的目录跟随是搭在既有的摘要 tick 上的。
+    expect(harness.terminal.events.listenerCount("workingDirectoryChanged")).toBe(0)
+
+    harness.terminal.reportedCwd.set("sess-1", "/tmp/elsewhere")
+    void attach(harness)
+    harness.terminal.events.emit("workingDirectoryChanged", { sessionId: "sess-1" })
+
+    expect(harness.terminal.events.listenerCount("workingDirectoryChanged")).toBe(0)
   })
 })

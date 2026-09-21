@@ -550,6 +550,8 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
     "core.terminal",
     "core.permission-guard",
     "core.audit-sink",
+    // 手机在终端当前目录上跑的 Git 操作。
+    "terminal.git-service",
     // The phone's new-conversation panel is drawn from this service's directory, and
     // starting one goes through the same launcher the desktop's own shortcut uses.
     AGENT_CONVERSATION_CONTROL_SERVICE_ID,
@@ -561,6 +563,9 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
   create(ctx) {
     return createMobileGatewayService({
       terminal: ctx.registry.get<TerminalService>("core.terminal"),
+      // 手机端看到的 Git 是「这个目录恰好是个 Git 仓库」，不是「用户添加过的仓库」——
+      // 这一层只认路径，不碰注册表，也不产生那本账上的条目。
+      terminalGit: ctx.registry.get<TerminalGitService>("terminal.git-service"),
       fileRelay: createMobileFileRelay({
         downloadDriveFile: (input) => accountService.downloadDriveFile(input),
         permanentlyDeleteDriveItem: (itemId) => accountService.permanentlyDeleteDriveItem(itemId),

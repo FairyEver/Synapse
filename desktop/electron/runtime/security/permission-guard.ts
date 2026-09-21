@@ -62,6 +62,14 @@ export type PermissionAction =
   | "terminal.group.manage"
   | "terminal.command.manage"
   | "terminal.session.delete"
+  /**
+   * 手机让电脑在终端当前目录上跑一次 Git 写操作（切分支、提交、推送、同步、合并）。
+   *
+   * 单独一个动作而不是借 `fs.write.outside-userdata`：借来的名字会让事后查审计的人
+   * 以为当时只是落了一个文件，而实际发生的是「有人从手机上改动了用户的仓库」。
+   * 读操作（看状态、列分支）不走这里，用既有的 `terminal.state.read`。
+   */
+  | "terminal.git.manage"
   | "terminal.group.delete"
   | "terminal.workspace.manage"
   | "terminal.workspace.delete"
