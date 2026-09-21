@@ -13,6 +13,7 @@ import {
   getMcpToolDomainId,
 } from "../../../synapse-capabilities/shared/registry"
 import type { McpToolDefinition } from "../../../synapse-capabilities/shared/types"
+import { lexiconTokens } from "./synapse-tool-router-lexicon"
 
 export const SYNAPSE_TOOL_ROUTER_SERVER_NAME = "synapse-tool-router"
 export const SYNAPSE_TOOL_ROUTER_SEARCH_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVER_NAME}__search`
@@ -44,16 +45,6 @@ const SEARCH_STOP_WORDS = new Set([
   "the",
   "to",
 ])
-
-const SEARCH_QUERY_ALIASES: readonly (readonly [term: string, token: string])[] = [
-  ["云盘", "drive"],
-  ["文件夹", "item"],
-  ["文件", "item"],
-  ["条目", "item"],
-  ["列表", "list"],
-  ["列出", "list"],
-  ["清单", "list"],
-]
 
 export type SynapseToolRouterExecutor = (
   toolName: string,
@@ -317,7 +308,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
   const limit = normalizeLimit(input.limit)
 
   const exact = catalogByName.get(query)
-  const aliasTokens = queryAliasTokens(query)
+  const aliasTokens = lexiconTokens(query)
   const queryTokens = [
     ...tokenizeSearchText(query).filter((token) => (
       !SEARCH_STOP_WORDS.has(token)
@@ -405,13 +396,6 @@ function indexSummary(description: string): string {
   return sentence.length <= INDEX_SUMMARY_MAX
     ? sentence
     : `${sentence.slice(0, INDEX_SUMMARY_MAX - 1).trimEnd()}…`
-}
-
-function queryAliasTokens(query: string): string[] {
-  const normalized = query.toLowerCase()
-  return [...new Set(SEARCH_QUERY_ALIASES
-    .filter(([term]) => normalized.includes(term))
-    .map(([, token]) => token))]
 }
 
 function mergeFuseResults(
