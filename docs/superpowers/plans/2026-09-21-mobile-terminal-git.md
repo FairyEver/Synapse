@@ -94,8 +94,11 @@
 
 具体：
 
-- 外层门控从 `settings.enabled && binding && runtime` 改成 `binding 与 runtime 齐备`
-  —— 注意现在 `runtime` 是随通知功能建立的，**要让它在通知关闭时也建立**。
+- 外层门控从 `settings.enabled && binding && runtime` 改成**只看 `runtime`**。
+  **不能要求 `binding`**：它只在通知打开时才建（`startIngress` 要占一个 loopback 端口），
+  要求它会让关掉通知的人永远进不来，与「OSC 7 总是注入」直接冲突；通知相关的部分另用
+  `settings.enabled && binding` 判。
+  —— 注意 `runtime` 原本是随通知功能建立的，**要让它在通知关闭时也建立**。
 - `enableRuntime()` / `ensureRuntimeFiles()`（`:470-520`）里那次 `permissionGuard.check({action:"fs.write",
   resource: runtimeDir})` 保持不变 —— 现在它成了每条 PTY 都要过的路，**确认它在通知关闭时也会被调用**。
 - zsh 启动文件（`zshStartupFiles()`，`:930-954`）：四个文件里**总是**追加 OSC 7 的 `precmd` 钩子；
@@ -108,8 +111,8 @@
 **OSC 7 的 shell 写法**（三处语义一致，注意结尾用 BEL `\a`）：
 
 ```sh
-# zsh：放进 precmd 钩子
-_synapse_report_cwd() { printf '\033]7;file://%s\033\\' "$PWD" }
+# zsh：放进 precmd 钩子。**结尾用 BEL（`\a`）**，与 /etc/zshrc_Apple_Terminal 一致。
+_synapse_report_cwd() { printf '\033]7;file://%s\a' "$PWD" }
 autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _synapse_report_cwd
 ```
 
