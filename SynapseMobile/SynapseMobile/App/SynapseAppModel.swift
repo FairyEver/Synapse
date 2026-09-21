@@ -31,6 +31,13 @@ final class SynapseAppModel {
     /// them. See `TerminalQuickPhrasesState` for why "none" and "never heard of it"
     /// have to stay apart.
     private var quickPhrases = TerminalQuickPhrasesState()
+    /// The text recently copied on each of the user's computers.
+    ///
+    /// Unlike the two slots above this is one list per computer rather than one value
+    /// with an owner, and unlike them it is written to disk. Both differences have the
+    /// same cause: the reader has to be able to open this panel with no computer
+    /// reachable at all. See `ClipboardHistoryStore`.
+    private let clipboard = ClipboardHistoryStore()
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
     private var preemptedSessions: Set<String> = []
@@ -474,6 +481,9 @@ final class SynapseAppModel {
         NotificationRouter.shared.discard()
         // Those are another account's computers' sentences, and nothing here persists.
         quickPhrases.reset()
+        // 剪切板与上面两样不同，它是**落盘**的：不清掉，下一个人登进来会在面板里看到
+        // 上一个人复制过的正文。这是本机第一份「内容属于账号、文件留在机器上」的数据。
+        clipboard.clearAll()
         // 录音是另一个账号的东西，换人之后不该还留在内存里。
         meetings.clear()
         // 正在录的那条也是。录着的时候退出登录，本机那份音频留在盘上等下次启动收尾——
@@ -762,6 +772,12 @@ final class SynapseAppModel {
         }
         realtime.onQuickPhrases = { [weak self] payload in
             self?.quickPhrases.adopt(payload)
+        }
+        // Merged rather than adopted: what arrives is the computer's twenty newest, and
+        // the list kept here is longer. Assigning it would cut this one down to twenty
+        // every time something was copied anywhere.
+        realtime.onClipboard = { [weak self] payload in
+            self?.clipboard.merge(payload)
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
@@ -1275,6 +1291,22 @@ final class SynapseAppModel {
     /// missing and must not be drawn as though it were.
     var activeQuickPhrases: [MobileQuickPhrase]? {
         quickPhrases.phrases(forSelected: selectedDesktopClientInstanceId)
+    }
+
+    /// The copied text for the computer being viewed, newest first.
+    ///
+    /// Empty rather than `nil` when there is nothing, and that is the deliberate
+    /// difference from the sentences above: a computer never answers "I have no
+    /// clipboard", so there is no second meaning to keep apart. What the reader sees is
+    /// their own list either way, and none of it is an ordinary empty state.
+    var activeClipboardEntries: [MobileClipboardEntry] {
+        clipboard.entries(for: selectedDesktopClientInstanceId)
+    }
+
+    /// Empties one computer's list, leaving the computer's own clipboard untouched.
+    func clearClipboardHistory(for desktopClientInstanceId: String?) {
+        guard let desktopClientInstanceId else { return }
+        clipboard.clear(for: desktopClientInstanceId)
     }
 
     /// Runs one of the toolbar's buttons against a terminal.

@@ -111,6 +111,10 @@ final class RealtimeClient {
     /// A computer's terminal buttons. A full snapshot, so it replaces what is held.
     var onToolbar: ((MobileToolbarPayload) -> Void)?
     var onQuickPhrases: ((MobileQuickPhrasesPayload) -> Void)?
+    /// A computer's recently copied text. A snapshot, but **not** one that replaces what
+    /// is held — the local list is longer than the computer's by design, so whoever
+    /// receives this merges it. See `ClipboardHistoryStore`.
+    var onClipboard: ((MobileClipboardPayload) -> Void)?
     /// Fires when the handshake completes, including after every reconnect.
     /// Anything that must be re-established per connection belongs here: a send
     /// issued before this point is dropped, not queued.
@@ -376,6 +380,7 @@ final class RealtimeClient {
         LiveMessageType.mobilePresence,
         LiveMessageType.mobileToolbar,
         LiveMessageType.mobileQuickPhrases,
+        LiveMessageType.mobileClipboard,
     ]
 
     /// 复用同一个解码器：每条下行消息都要解一次，而帧在终端持续输出时每秒到好几次。
@@ -446,6 +451,10 @@ final class RealtimeClient {
         case LiveMessageType.mobileQuickPhrases:
             if let payload = payload(MobileQuickPhrasesPayload.self, from: data) {
                 onQuickPhrases?(payload)
+            }
+        case LiveMessageType.mobileClipboard:
+            if let payload = payload(MobileClipboardPayload.self, from: data) {
+                onClipboard?(payload)
             }
         default:
             // `live.pong`：没有要派发的载荷，它作证的那件事上面已经做了。

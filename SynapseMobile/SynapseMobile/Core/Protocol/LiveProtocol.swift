@@ -27,6 +27,14 @@ enum LiveMessageType {
     /// the toolbar has built-in buttons to fall back to and a sentence is the user's
     /// own words, with nothing to stand in for them.
     static let mobileQuickPhrases = "mobile.quickPhrases"
+    /// The text this computer has copied recently, for this phone to copy again.
+    ///
+    /// The third of the "what this computer has" family, and the one that is *not* a
+    /// whole truth: the computer keeps twenty entries and this phone keeps fifty, so
+    /// what arrives is merged into the local list rather than replacing it. See
+    /// `ClipboardHistoryStore` — getting that wrong silently shrinks the phone's list,
+    /// which is why the rule lives in one place with the arithmetic spelled out.
+    static let mobileClipboard = "mobile.clipboard"
 }
 
 /// Which of the user's computers are reachable right now.
@@ -643,6 +651,63 @@ struct MobileQuickPhrasesPayload: Decodable {
         desktopClientInstanceId = try container.decode(String.self, forKey: .desktopClientInstanceId)
         revision = try container.decode(Int.self, forKey: .revision)
         phrases = try container.decode([MobileQuickPhrase].self, forKey: .phrases)
+    }
+}
+
+/// One thing the user copied on their computer.
+///
+/// `id` is the computer's own hash of the text. This side never recomputes it and does
+/// not need to: it is how a row is addressed across sends, which is what lets a
+/// repeated copy move the existing row instead of adding a second one.
+/// `Codable` rather than `Decodable`, unlike every other payload type on this file: the
+/// phone writes these down. Its list has to survive the app being killed and the network
+/// being gone, which is the whole reason it keeps its own copy instead of asking the
+/// computer every time it opens the panel. The stored shape is the wire shape — three
+/// strings — so there is no second type to keep in step; a build that cannot read a
+/// stored entry treats the store as empty rather than failing, the way the meeting audio
+/// cache does.
+struct MobileClipboardEntry: Codable, Identifiable, Hashable {
+    let id: String
+    /// The copied text, verbatim. It is on its way to this phone's own clipboard, so
+    /// nothing here may tidy it up.
+    let text: String
+    /// When it was copied, as the computer wrote it. Kept as the wire string with the
+    /// parse on demand, the way every other timestamp on this protocol is: a computed
+    /// property cannot fail a decode, and `parseWireTimestamp` is the one place that
+    /// knows about the milliseconds.
+    let copiedAt: String
+
+    var copiedAtDate: Date? { ISO8601DateFormatter.parseWireTimestamp(copiedAt) }
+}
+
+/// The text one computer has copied recently, newest first.
+///
+/// A snapshot of the computer's in-memory ring, and deliberately not everything this
+/// phone should show: twenty here against fifty kept locally. The two lists are not
+/// meant to be equal, and what arrives is merged rather than assigned.
+struct MobileClipboardPayload: Decodable {
+    let desktopClientInstanceId: String
+    let revision: Int
+    let entries: [MobileClipboardEntry]
+
+    init(desktopClientInstanceId: String, revision: Int, entries: [MobileClipboardEntry]) {
+        self.desktopClientInstanceId = desktopClientInstanceId
+        self.revision = revision
+        self.entries = entries
+    }
+
+    private enum CodingKeys: String, CodingKey { case desktopClientInstanceId, revision, entries }
+
+    /// Strict, like the phrases and for the same reason: an entry is three strings, so
+    /// one that will not decode means the message is malformed rather than newer than
+    /// this build. Lenient decoding would be worse here than anywhere else on this
+    /// protocol — the phone's list outlives the message, so a half-decoded entry would
+    /// sit in it across launches.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        desktopClientInstanceId = try container.decode(String.self, forKey: .desktopClientInstanceId)
+        revision = try container.decode(Int.self, forKey: .revision)
+        entries = try container.decode([MobileClipboardEntry].self, forKey: .entries)
     }
 }
 
