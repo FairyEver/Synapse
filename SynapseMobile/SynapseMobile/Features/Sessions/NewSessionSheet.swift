@@ -92,6 +92,14 @@ struct NewSessionSheet: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+
+                // 只在有东西可建的那一段出现，位置与宽度见 `startButton` 的说明。
+                if segment == .conversation, conversationAvailable {
+                    startButton
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                }
             }
             .navigationTitle("新建")
             .navigationBarTitleDisplayMode(.inline)
@@ -171,44 +179,52 @@ struct NewSessionSheet: View {
                 )
                 .accessibilityIdentifier("new-session-model")
             }
-
-            Section {
-                Button {
-                    Task { await start() }
-                } label: {
-                    Group {
-                        if starting {
-                            ProgressView()
-                        } else {
-                            Text("开始对话").font(.callout.weight(.semibold))
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                }
-                // Ink fill, paper label — the same pair the sign-in button uses, and for
-                // the same reason. `.borderedProminent` with `Color.primary` as the tint
-                // does not pair them: it painted the fill with the ink and then drew the
-                // label in white as well, so in dark appearance this was a blank white
-                // pill with nothing written on it.
-                //
-                // `.circular`, not `.continuous`: the continuous corner is drawn larger
-                // than the radius it is given — at 12 pt the curve only meets the flat
-                // edge about 15 pt in, which on a bar this short (46 pt) leaves under
-                // 10 pt of straight edge on each end. The two ends then read as a pill
-                // whose top and bottom have been sliced flat. The prototype's
-                // `border-radius: 11px` is an ordinary corner, and this is that.
-                .background(
-                    Theme.ink.opacity(canStart ? 1 : Theme.disabledInkOpacity),
-                    in: RoundedRectangle(cornerRadius: 12, style: .circular)
-                )
-                .foregroundStyle(Theme.paper)
-                .disabled(!canStart)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .accessibilityIdentifier("start-conversation")
-            }
         }
+    }
+
+    /// 「开始对话」画在列表外面，不在列表的一行里。
+    ///
+    /// iOS 26 起，列表里每一行的内容会被按分组卡片的圆角裁掉。这个按钮在列表里既是
+    /// 那个分组唯一的一行、又左右拉满（`.listRowInsets(EdgeInsets())`），上下两端就
+    /// 一起被裁成卡片的圆角：它比这里的 12 点大得多，一条 46 点高的按钮左右两端被切到
+    /// 只剩两三点的直边，读起来像一颗被削平了顶底的胶囊——这就是「上下被截了一些」的
+    /// 来源。同一份代码在 iOS 18 上不做这层裁剪，所以只有 iOS 26 看得见，改半径也没有
+    /// 用：在那种摆法下 `.circular` 和 `.continuous` 渲染出来逐像素相同。
+    ///
+    /// 列表外面没有这层裁剪，12 点就是画出来的 12 点，左右各 16 点让它和上面的卡片同宽。
+    /// 代价是它不再跟着列表滚——`List` 会占满剩余高度，所以它停在面板底部，而不是紧贴
+    /// 卡片下方。
+    private var startButton: some View {
+        Button {
+            Task { await start() }
+        } label: {
+            Group {
+                if starting {
+                    ProgressView()
+                } else {
+                    Text("开始对话").font(.callout.weight(.semibold))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+        }
+        // Ink fill, paper label — the same pair the sign-in button uses, and for the
+        // same reason. `.borderedProminent` with `Color.primary` as the tint does not
+        // pair them: it painted the fill with the ink and then drew the label in white
+        // as well, so in dark appearance this was a blank white pill with nothing
+        // written on it.
+        //
+        // `.circular`, not `.continuous`: `.continuous` draws a larger curve than the
+        // radius it is given, so a 12 pt continuous corner is not a 12 pt corner. The
+        // prototype's `border-radius: 11px` is an ordinary corner, and this is that —
+        // the sign-in button is the same shape.
+        .background(
+            Theme.ink.opacity(canStart ? 1 : Theme.disabledInkOpacity),
+            in: RoundedRectangle(cornerRadius: 12, style: .circular)
+        )
+        .foregroundStyle(Theme.paper)
+        .disabled(!canStart)
+        .accessibilityIdentifier("start-conversation")
     }
 
     /// One place for the two reasons the button cannot be pressed — a request already
