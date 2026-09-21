@@ -312,6 +312,9 @@ struct SessionListView: View {
             Image(systemName: "doc.on.clipboard")
                 .font(.system(size: 17))
                 .frame(width: 30, height: 30)
+                // 画 30×30，点 44×44。它和同一行的那台电脑名字只隔着 8pt，按 30 的框
+                // 算就是在赌用户不会点偏——而点偏的那个是切换电脑。
+                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

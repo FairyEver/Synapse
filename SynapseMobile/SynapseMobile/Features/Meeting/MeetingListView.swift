@@ -241,5 +241,10 @@ private struct RenameRecordingSheet: View {
                 }
             }
         }
+        // 跟会话重命名那一个同一个形状——都是「改一个名字、一个输入框、取消加保存」。
+        // 那个是 `.medium` 加拖条，这个原来是一张全高的弹窗、没有拖条，两行字的表单
+        // 浮在整屏中间。同一件事在两处两种样子是错的，这是这一处错在哪。
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }

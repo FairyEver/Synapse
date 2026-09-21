@@ -155,6 +155,9 @@ struct ClipboardList: View {
                     .font(.system(size: 19))
                     .foregroundStyle(.secondary)
                     .frame(width: 30, height: 30)
+                    // 画的是 30×30，能点的是 44×44。加在画完之后：圆圈大小不变，长的
+                    // 只有可点的框——`Metrics.minimumTapTarget` 是手指的下限。
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

@@ -300,6 +300,8 @@ struct TerminalShortcutPanel: View {
                     .font(.system(size: 19))
                     .foregroundStyle(.secondary)
                     .frame(width: 30, height: 30)
+                    // 同剪切板那一枚：画 30×30，点 44×44。
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

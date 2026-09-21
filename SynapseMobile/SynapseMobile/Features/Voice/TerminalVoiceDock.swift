@@ -122,11 +122,17 @@ struct TerminalVoiceDock: View {
 
                 if presentation.locked {
                     // 固定之后手指早走了，长录要收摊的话这是面板上唯一的退路。
-                    Button("取消", role: .destructive, action: onCancelLocked)
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color(uiColor: .systemRed))
-                        .accessibilityIdentifier("voice-lock-cancel")
+                    Button(role: .destructive, action: onCancelLocked) {
+                        Text("取消")
+                            .font(.caption)
+                            // 画的是这行字（约 13pt），点的是 44 高。固定之后手指早走
+                            // 了，这里是长录唯一的退路，按字高算等于点不中。
+                            .frame(minHeight: Metrics.minimumTapTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color(uiColor: .systemRed))
+                    .accessibilityIdentifier("voice-lock-cancel")
                 }
             }
         }

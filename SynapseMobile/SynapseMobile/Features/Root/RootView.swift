@@ -9,6 +9,9 @@ enum Route: Hashable {
 struct RootView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    /// 胶囊的浮出与收起是纯装饰，别的地方（`NoticeBar`、终端那几条栏）都已经照这个
+    /// 开关做了，这一处漏了。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab = Tab.terminals
     @State private var terminalPath: [Route] = []
     @State private var meetingPath: [Route] = []
@@ -39,7 +42,7 @@ struct RootView: View {
                                 .transition(.move(edge: .top).combined(with: .opacity))
                         }
                     }
-                    .animation(.snappy, value: model.recording.phase)
+                    .animation(reduceMotion ? nil : .snappy, value: model.recording.phase)
             }
         }
         .task {

@@ -245,7 +245,7 @@ struct TerminalScreen: View {
         guard keyboardPanelPresented != presented else { return }
         panelSettleTask?.cancel()
         panelIsSettling = true
-        withAnimation(.easeOut(duration: 0.26)) { keyboardPanelPresented = presented }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.26)) { keyboardPanelPresented = presented }
         panelSettleTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 320_000_000)
             guard !Task.isCancelled else { return }

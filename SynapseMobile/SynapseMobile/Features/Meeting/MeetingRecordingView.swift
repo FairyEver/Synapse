@@ -182,12 +182,16 @@ struct RecordingCapsule: View {
                 Text(model.recording.phase == .paused ? "已暂停" : "完成")
                     .font(.footnote)
                     .foregroundStyle(Theme.ink)
+                    // 画的是这行字，能点的是整枚胶囊那么高。这是录音页收起之后唯一
+                    // 的落点，按字高算的话它只有 16pt。
+                    .frame(minHeight: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(model.recording.phase == .paused)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        // 竖向的内边距由按钮那 44pt 撑着，这里再加就是 60 高的一枚胶囊了。
         .background(.regularMaterial, in: Capsule())
         .accessibilityIdentifier("recording-capsule")
     }

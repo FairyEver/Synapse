@@ -22,7 +22,9 @@ struct MeetingDetailView: View {
             if let detail = model.meetings.detail(for: meetingId) {
                 content(detail)
             } else {
-                ProgressView()
+                // 同一个页面上的音频区载入时写的是「正在下载」，这里却是一个不说在等
+                // 什么的圈——同一次等待，两处两种说法。
+                ProgressView("正在读取录音…")
                     .task { await model.loadMeetingDetail(meetingId) }
             }
         }
@@ -140,16 +142,14 @@ struct MeetingDetailView: View {
                     .focused($renamingFocus)
                     .accessibilityIdentifier("recording-title-field")
             } else {
-                Button {
-                    draftTitle = detail.title
-                    isRenaming = true
-                } label: {
-                    Text(detail.title)
-                        .font(.title3)
-                        .foregroundStyle(Theme.ink)
-                        .multilineTextAlignment(.leading)
-                }
-                .buttonStyle(.plain)
+                // 只是一行标题，不再是一个按钮。它原来点一下就进重命名，可它身上没有
+                // 任何提示说明能点——没有铅笔、没有下划线、没有箭头——而工具栏的 ⋯
+                // 菜单里本来就有同一个入口。同一件事两个入口，其中一个还看不出来，
+                // 那一个就该去掉；剩下的那个才是用户找得到的那个。
+                Text(detail.title)
+                    .font(.title3)
+                    .foregroundStyle(Theme.ink)
+                    .multilineTextAlignment(.leading)
             }
             Text(MeetingText.secondaryLine(detail))
                 .font(.caption)
@@ -285,6 +285,9 @@ private struct MeetingAudioPane: View {
                         .font(.title2)
                         // 载入中一起置灰：这会儿点它什么都不会发生。电脑端也是三个一起禁用的。
                         .opacity(model.playback.isLoading ? 0.35 : 1)
+                        // 画的是这个字形（约 22pt），点的是 44×44。
+                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(model.playback.isLoading)
@@ -312,6 +315,9 @@ private struct MeetingAudioPane: View {
                         .font(.title2)
                         // 同后退：载入中三个一起置灰，与电脑端一致。
                         .opacity(model.playback.isLoading ? 0.35 : 1)
+                        // 同后退那一枚：画字形，点 44×44。
+                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(model.playback.isLoading)

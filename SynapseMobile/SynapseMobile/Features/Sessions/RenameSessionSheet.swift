@@ -54,6 +54,11 @@ struct RenameSessionSheet: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(Color.secondary)
+                                .frame(width: 22, height: 22)
+                                // 画 22×22，点 44×44：它长在输入框里，两边都是会打断
+                                // 输入的地方，按字大小算太容易点空。
+                                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         // Named for what it does, not for what it looks like: this is what
