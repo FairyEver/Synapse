@@ -118,7 +118,28 @@ export function createTerminalGitIntegration(deps: {
       return failure(message)
     }
 
-    await restore()
+    /*
+     * 合并已经进了历史，切回原分支失败**不能**把它报成合并失败 —— 用户会以为
+     * 什么都没发生，然后去做一遍已经做过的事。所以这条路上报的仍然是成功，
+     * 只是把「没切回去」如实说出来（口吻与同步那条「远程仍有未拉取提交」一致）。
+     *
+     * 说的时候带上真实的分支名：手机端第二行会显示它现在停在哪条分支上，
+     * 那句提示要和它对得上。
+     */
+    try {
+      await restore()
+    } catch (restoreError) {
+      const reason = gitFailureMessage(restoreError, "未知原因")
+      deps.logger?.warn("Terminal git merge could not return to the original branch.", {
+        cwd: input.cwd,
+        branch: current,
+        error: restoreError,
+      })
+      return success(
+        await deps.status.getSnapshot(input.cwd),
+        `合并已完成，但没能切回 ${current}：${reason}`,
+      )
+    }
     return success(await deps.status.getSnapshot(input.cwd))
   }
 

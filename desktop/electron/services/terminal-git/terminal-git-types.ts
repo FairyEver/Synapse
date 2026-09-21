@@ -47,7 +47,12 @@ export type TerminalGitFailure = {
 }
 
 export type TerminalGitOutcome<T> =
-  | { readonly ok: true; readonly value: T }
+  /**
+   * `message` 是**成功但有话说**：操作已经达成，另有一件用户需要知道的事没做成
+   * （例如合并成功、却没切回原分支）。它绝不能借失败的形状说 —— 手机端拿到
+   * `ok: false` 会说「合并失败」，而合并其实已经进了历史。
+   */
+  | { readonly ok: true; readonly value: T; readonly message?: string }
   | ({ readonly ok: false } & TerminalGitFailure)
 
 export const NOT_A_REPOSITORY_MESSAGE = "这个目录不是 Git 仓库。"
@@ -76,6 +81,6 @@ export function failure(message: string, extra: Omit<TerminalGitFailure, "messag
   return { ok: false, message, ...extra }
 }
 
-export function success<T>(value: T): TerminalGitOutcome<T> {
-  return { ok: true, value }
+export function success<T>(value: T, message?: string): TerminalGitOutcome<T> {
+  return { ok: true, value, ...(message === undefined ? {} : { message }) }
 }

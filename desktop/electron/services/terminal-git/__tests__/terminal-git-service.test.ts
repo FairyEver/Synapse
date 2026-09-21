@@ -450,6 +450,56 @@ describe("TerminalGitService · 合并", () => {
     expect(mergeInProgress(repo)).toBe(false)
   })
 
+  /**
+   * 只让「切回原分支」那一条命令失败，其余照跑真实 git。
+   *
+   * 这一步在真实仓库里没有可靠的造法（干净的合并之后，工作区不会凭空长出会被覆盖的
+   * 文件），但它在真实世界里是会发生的 —— 用户自己的配置、钩子、权限都可能让它失败。
+   * 这里注入的就是那一次失败本身。
+   */
+  function runnerFailingRestore(): { runner: GitClientCommandRunner; commands: string[] } {
+    const inner = createGitClientCommandRunner()
+    const commands: string[] = []
+    return {
+      commands,
+      runner: {
+        async run(input) {
+          commands.push(input.args.join(" "))
+          if (input.operation === "terminal-git.merge.restore") {
+            throw new Error("error: Your local changes would be overwritten by checkout.")
+          }
+          return inner.run(input)
+        },
+      } as GitClientCommandRunner,
+    }
+  }
+
+  it("reports a finished merge as finished even when it cannot come back to the original branch", async () => {
+    const repo = await createRepository()
+    git(repo, ["checkout", "-b", "release"])
+    git(repo, ["checkout", "main"])
+    await writeFile(path.join(repo, "work.txt"), "work\n", "utf8")
+    git(repo, ["add", "-A"])
+    git(repo, ["commit", "-m", "work on main"])
+
+    const failing = runnerFailingRestore()
+    const service = serviceWith(failing.runner)
+    const outcome = await service.merge({ cwd: repo, direction: "outOfCurrent", branch: "release" })
+
+    // 合并真的进了历史。这就是它不能被报成失败的全部理由：用户会以为什么都没发生。
+    expect(git(repo, ["log", "--pretty=%s", "release"]).trim().split("\n")).toEqual(["work on main", "init"])
+    expect(failing.commands).toContain("checkout main")
+
+    expect(outcome.ok).toBe(true)
+    // 成功归成功，切不回去这件事要如实说出来，而且带上真实的分支名。
+    expect(outcome.ok === true ? outcome.message : undefined).toBe(
+      "合并已完成，但没能切回 main：error: Your local changes would be overwritten by checkout.",
+    )
+    // 快照是当下的实话：它还停在 release 上。
+    expect(outcome.ok === true ? outcome.value.branch : null).toBe("release")
+    expect(git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]).trim()).toBe("release")
+  })
+
   it("refuses to merge a branch into itself and refuses while detached", async () => {
     const repo = await createRepository()
     const service = serviceWith(recordingRunner().runner)
