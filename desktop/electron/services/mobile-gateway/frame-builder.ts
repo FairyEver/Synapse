@@ -80,6 +80,14 @@ export type TerminalFrameInput = {
  * the followers the same flag lands on a `from` deep inside the window the leading
  * chunks just delivered, and a client that acts on it drops the lines it was sent
  * a moment ago and keeps the tail.
+ *
+ * `total` is the third thing a split must not spoil. A suffix frame voids
+ * everything at or past the line it establishes, and on a chunk that line is the
+ * chunk's own end — which is not the update's end. So **every chunk carries the
+ * same `total`**, the update's own end, and the client truncates there. Recomputing
+ * it per chunk leaves the first one voiding everything the rest are about to
+ * deliver: the client drops lines it already had, and the screen collapses to the
+ * first chunk's size until the followers land.
  */
 export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFrame[] {
   const frames: MobileTerminalFrame[] = []

@@ -297,6 +297,11 @@ struct MobileTerminalFrame: Decodable {
     let kind: String
     let from: Int
     let lines: [TerminalLine]
+    /// 这次更新立起来的最远行：`total` 及以后的内容都不存在了。
+    ///
+    /// 一次更新装不下一帧时会被切成好几条，而**每一条带的都是同一个 `total`** ——
+    /// 它就是"这次更新的结尾"，不是"这一块的结尾"。作废要用它，不能用
+    /// `from + lines.count`，否则第一块会把后面几块马上要补上来的行全删掉。
     let total: Int
     let cursor: TerminalCursor
     let alt: Bool

@@ -173,6 +173,24 @@ describe("terminal frame builder", () => {
     }
   })
 
+  it("gives every chunk the whole update's end, never its own", () => {
+    // The client truncates at `total`. A suffix frame voids everything at or past
+    // the line it stands up, and on a chunk that line is the chunk's own end — so a
+    // `total` recomputed per chunk would make the first one delete every line the
+    // followers are about to deliver, and the screen would collapse to one chunk's
+    // worth until they land. This asserts the contract the phone relies on rather
+    // than a bug that was ever here (see TerminalStoreSplitUpdateTests).
+    const lines = Array.from({ length: 900 }, (_, index) => plain(`line ${index}`))
+
+    const frames = buildTerminalFrames({ ...base, lines, total: 900 })
+
+    expect(frames.length).toBeGreaterThan(1)
+    expect(frames.every((frame) => frame.total === 900)).toBe(true)
+    // And the first chunk really does end short of it — which is the whole reason
+    // its own end cannot be the boundary.
+    expect(frames[0].from + frames[0].lines.length).toBeLessThan(900)
+  })
+
   it("truncates a pathological line instead of dropping the frame", () => {
     const frames = buildTerminalFrames({
       ...base,

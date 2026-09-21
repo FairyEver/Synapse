@@ -178,8 +178,19 @@ final class TerminalStore {
             lines[frame.from + offset] = frame.lines[offset]
         }
         if !frame.lines.isEmpty { highestLineIndex = max(highestLineIndex, frame.from + frame.lines.count - 1) }
-        // Suffix semantics: anything past the frame's own content is gone.
-        let voidFrom = frame.from + frame.lines.count
+        // Suffix semantics: anything at or past `total` is gone — `total`, not the end
+        // of this frame. An update too large for one frame arrives as several, and none
+        // of their ends is the update's end; `total` is the one field that is the same
+        // on all of them. Voiding at the frame's own end makes the first chunk delete
+        // every line the later chunks are about to deliver: the buffer collapses to
+        // that chunk's size on the spot, the reader is thrown hundreds of lines back,
+        // and the rest of the chunks drag them forward again. On the phone that reads
+        // as the terminal scrolling up and down on its own.
+        //
+        // The larger of the two is defensive: a `total` below its own frame's end would
+        // otherwise make this delete lines it was handed a moment ago, and falling back
+        // to the frame's own end can only ever delete too little.
+        let voidFrom = max(frame.from + frame.lines.count, frame.total)
         // 只走真正可能删到的那一段。以前是遍历**全部**键去找通常为 0 个匹配（上限
         // 6000），而 `lines.keys` 这个视图持着字典的缓冲区 —— 只要真删掉一个键，
         // `removeValue` 就会因为非唯一引用而把整份字典拷贝一遍。

@@ -365,7 +365,16 @@ export interface MobileTerminalFrame {
   /** Absolute line index of `lines[0]`. Monotonic within a session; scrollback does not shift it. */
   readonly from: number
   readonly lines: readonly MobileLineWire[]
-  /** Current total line count; the client truncates anything beyond `from + lines.length`. */
+  /**
+   * The furthest line this update stands up: everything at or past `total` is
+   * gone, and the client truncates there.
+   *
+   * An update too large for one frame is split across several, and **every one of
+   * them carries this same `total`** — that is what lets a client apply the chunks
+   * one at a time without deleting the lines the later chunks are about to bring.
+   * `from + lines.length` is only the end of *this* chunk and must not be used as
+   * the truncation boundary.
+   */
   readonly total: number
   readonly cursor: MobileTerminalCursor
   /** True while the session is on the alternate screen (TUI programs). */
