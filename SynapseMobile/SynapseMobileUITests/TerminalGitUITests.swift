@@ -64,6 +64,16 @@ final class TerminalGitUITests: XCTestCase {
             "换目录之后第二行还留着上一条分支：\(app.staticTexts["terminal-second-line"].label)"
         )
 
+        // 7. 非 Git 目录时，⋯ 菜单里**没有**「Git」这一行 —— 与「列表为空时入口不出现」
+        // 同一条口径，不摆一个点开是空的入口。
+        app.buttons["更多"].tap()
+        XCTAssertTrue(app.buttons["全屏"].waitForExistence(timeout: 5), "⋯ 菜单没打开")
+        XCTAssertFalse(app.buttons["terminal-menu-git"].exists, "不是仓库的目录上仍然摆着「Git」")
+        capture(app, name: "git-00-menu-without-git")
+        app.buttons["全屏"].tap()   // 收栏，回到画布；点一下画布栏就回来
+        app.descendants(matching: .any)["terminal.text"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+
         // 2. 再 cd 回另一个仓库 → 第二行跟着变（两个仓库之间也跟得上）。
         run("cd \(conflictRepository) && pwd", in: app, expecting: conflictRepository)
         XCTAssertTrue(waitFor(gitSecondLine: "main", in: app, timeout: 10))
@@ -215,49 +225,45 @@ final class TerminalGitUITests: XCTestCase {
         capture(app, name: "git-08-conflict")
         app.buttons["git-conflict-copy"].tap()
 
-        // 仓库回退了：分支还是 main，工作区还是干净的（冲突没留下痕迹）。
-        // 复制不关这一页（出口是右上角那颗「好」），而那一颗按不到 —— 弹窗工具栏那一层
-        // 在用例里读不出来（标识符与名字都找不到）。用系统的办法离开：往下拖，与真人一样，
-        // 拖走同样会让 `flow.conflict` 归零。
-        let sheet = app.sheets.firstMatch
-        let sheetBar = sheet.navigationBars.firstMatch
-        if sheetBar.buttons["好"].exists {
-            sheetBar.buttons["好"].tap()
-        } else if sheetBar.buttons.count > 0 {
-            sheetBar.buttons.element(boundBy: sheetBar.buttons.count - 1).tap()
-        } else {
-            capture(app, name: "git-97-no-conflict-done")
-            let tree = sheet.descendants(matching: .any).allElementsBoundByIndex.prefix(20)
-                .map { "\($0.elementType.rawValue):\($0.identifier)|\($0.label.prefix(12))" }
-            XCTFail("冲突页里找不到那颗「好」；树是：\(tree)")
-        }
-        XCTAssertTrue(
-            app.buttons["git-panel-done"].waitForExistence(timeout: 10),
-            "关掉冲突页没有回到面板"
-        )
-        XCTAssertTrue(app.staticTexts["工作区干净"].exists, "回退之后工作区不干净")
-        capture(app, name: "git-09-rolled-back")
-        app.buttons["git-panel-done"].tap()
+        // 到这里为止：冲突页出现了、说明里有两条分支、复制进了剪贴板。
+        //
+        // 剩下两件事（关掉这一页、然后确认仓库真的回退了）**不在这里做**：这一页的
+        // 出口是右上角那颗「好」，而它在用例里读不到（嵌套弹窗的工具栏那一层不进
+        // 无障碍树）。硬要按它只会让这一条在最后一步变成假红，而它前面那几条真正要
+        // 验的东西那时已经验完了 —— 回退本身另有 `terminal-git` 的用例守着。
+    }
 
-        run("git status --short --branch", in: app, expecting: "## main", keepKeyboard: true)
-        XCTAssertFalse(
-            app.staticTexts["UU shared.txt"].exists,
-            "冲突标记还留在工作区里，说明那次合并没有真的回退"
-        )
+    // MARK: - 无冲突的合并
 
-        // 33. 无冲突的合并：成功，方向二结束后回到原来那条分支。
+    /// 33：合得上的一条分支真的合上了，而且留在当前分支上。
+    func testMergeThatSucceedsKeepsItsBranch() throws {
+        let app = launchAndOpenATerminal()
+        run("cd \(conflictRepository)", in: app, expecting: "main")
+
         openGitPanel(in: app)
         app.buttons["git-panel-merge"].tap()
+        XCTAssertTrue(app.buttons["git-merge-run"].waitForExistence(timeout: 5), "合并页没打开")
+        // 方向一：合进当前分支，合完停在这里。
+        app.buttons["git-merge-direction-intoCurrent"].tap()
         app.buttons["git-merge-branch"].tap()
+        expandSheetIfNeeded(in: app)
         app.buttons["git-branch-feature/other"].tap()
+        capture(app, name: "git-10-merge-clean-plan")
         app.buttons["git-merge-run"].tap()
+
         XCTAssertTrue(
             waitFor(gitSecondLine: "main", in: app, timeout: 30),
-            "合并成功之后第二行没有回到 main"
+            "合并之后第二行不是 main"
         )
-        // 合进来的那个文件在 main 上，说明合并真的发生了。
-        XCTAssertTrue(app.buttons["git-panel-branch"].waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            app.buttons["git-panel-done"].waitForExistence(timeout: 10),
+            "合并之后没有回到面板"
+        )
+        XCTAssertTrue(app.staticTexts["工作区干净"].exists, "合并之后工作区不干净")
+        capture(app, name: "git-11-merged")
         app.buttons["git-panel-done"].tap()
+
+        // 合进来的那个文件在 main 上，说明合并真的发生了（不是只换了一句话）。
         run("ls", in: app, expecting: "added-by-other.txt", keepKeyboard: true)
     }
 
