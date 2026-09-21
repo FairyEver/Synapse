@@ -15,9 +15,7 @@ struct MeetingListView: View {
     var body: some View {
         @Bindable var model = model
         return List {
-            if model.meetings.meetings.isEmpty {
-                emptySection
-            } else {
+            if !model.meetings.meetings.isEmpty {
                 Section {
                     ForEach(model.meetings.meetings) { meeting in
                         NavigationLink(value: Route.meeting(meeting.id)) {
@@ -70,6 +68,25 @@ struct MeetingListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // 空态铺在列表上，而不是列表里的一行：`ContentUnavailableView` 要的是整块内容
+        // 区。留在 `List` 上也让下拉刷新在空态下照旧能用。
+        //
+        // 「读失败」的时候这里一个字都不画：失败本身已经由列表里的那条红字交代了，
+        // 再叠一句「还没有录音」就是自相矛盾——一边说读不出来，一边说没有。这时候
+        // 唯一诚实的说法是失败加一条重试，而不是一个空态。
+        .overlay {
+            if model.meetings.meetings.isEmpty {
+                if model.meetings.isLoading {
+                    ProgressView()
+                } else if model.meetings.errorMessage == nil {
+                    ContentUnavailableView {
+                        Label("还没有录音", systemImage: "waveform")
+                    } actions: {
+                        Button("开始录音") { model.isRecordingPresented = true }
+                    }
+                }
+            }
+        }
         .navigationTitle("录音")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -165,22 +182,6 @@ struct MeetingListView: View {
         Task { await model.startRecording() }
     }
 
-    private var emptySection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(model.meetings.isLoading ? "正在读取…" : "还没有录音")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                if !model.meetings.isLoading {
-                    Button("开始录音") {
-                        model.isRecordingPresented = true
-                    }
-                    .font(.subheadline)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
 
     private func row(_ meeting: MeetingSummary) -> some View {
         VStack(alignment: .leading, spacing: 3) {

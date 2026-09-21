@@ -92,18 +92,26 @@ struct ClipboardList: View {
 
     private var list: some View {
         List {
-            if entries.isEmpty {
-                Text("电脑上复制的文本会出现在这里")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("clipboard-empty")
-            } else {
-                ForEach(entries) { entry in
-                    row(entry)
-                }
+            ForEach(entries) { entry in
+                row(entry)
             }
         }
         .listStyle(.insetGrouped)
+        // 空态铺在列表**上面**，而不是当作 `List` 里的一行：`ContentUnavailableView`
+        // 要的是整块内容区，塞进列表会先被压成一条窄行。
+        //
+        // 标识符挂在说明那行而不是整个组件上：`ContentUnavailableView` 是容器，
+        // 标识符挂在它身上元素类型会变成 other，而用例查的是 `staticTexts[...]`。
+        .overlay {
+            if entries.isEmpty {
+                ContentUnavailableView {
+                    Label("还没有可粘贴的内容", systemImage: "doc.on.clipboard")
+                } description: {
+                    Text("电脑上复制的文本会出现在这里。")
+                        .accessibilityIdentifier("clipboard-empty")
+                }
+            }
+        }
     }
 
     /// Greyed rather than hidden, which is what the meetings detail page does: a control

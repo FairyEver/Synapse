@@ -314,9 +314,14 @@ struct NewSessionSheet: View {
             }
         }
         if (model.summary?.groups ?? []).isEmpty {
-            Text("电脑上还没有分组，请先在电脑端创建。")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            // 留在列表里而不是铺满整屏：这一屏还有项目、供应商、模型三段选择器，铺满
+            // 会把它们全盖掉。这个分组只是这一张表单里少了一段。
+            ContentUnavailableView(
+                "电脑上还没有分组",
+                systemImage: "folder",
+                description: Text("请先在电脑端创建。")
+            )
+            .listRowBackground(Color.clear)
         }
     }
 

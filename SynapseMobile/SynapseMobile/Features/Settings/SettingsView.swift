@@ -45,9 +45,23 @@ struct SettingsView: View {
             // （`mobile.presence` 只带 id），现在由 `/api/mobile/desktops` 带回来。
             Section("已连接的电脑") {
                 if model.onlineDesktops.isEmpty {
-                    Text("没有在线的电脑")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    // 标题和说明都取自 `model.connectivity`，也就是终端页空态用的同
+                    // 一个来源：同一件事在一处告诉用户怎么解决（「请在电脑上打开
+                    // Synapse 并登录。」或「请检查这台手机的网络。」），在另一处只丢一
+                    // 句「没有」，两个答案就对不上了。
+                    //
+                    // `.online` 落不到这里——在线就至少有一台电脑签着。真落到了就按
+                    // 「没有电脑」说，总比报一句「已连接」强。
+                    //
+                    // 留在列表里而不是铺满整屏：这一屏还有账号、终端、诊断日志几段，
+                    // 空掉的只是其中一段。
+                    let state = model.connectivity == .online ? .noComputer : model.connectivity
+                    ContentUnavailableView(
+                        state.label,
+                        systemImage: "desktopcomputer",
+                        description: state.guidance.map { Text($0) }
+                    )
+                    .listRowBackground(Color.clear)
                 } else {
                     ForEach(model.onlineDesktops) { desktop in
                         Button {

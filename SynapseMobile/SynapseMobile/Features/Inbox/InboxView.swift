@@ -9,18 +9,7 @@ struct InboxView: View {
 
     var body: some View {
         List {
-            if model.waitingSessions.isEmpty {
-                Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("暂无待处理事项")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Claude Code 或 Codex 请求确认或提问时，会推送通知。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-            } else {
+            if !model.waitingSessions.isEmpty {
                 Section("等待中") {
                     ForEach(model.waitingSessions) { session in
                         // NavigationLink, not Button: the plain button style was
@@ -57,6 +46,18 @@ struct InboxView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // 铺在列表上而不是当列表里的一行：这是一个独立的「这里空了」状态，不是一个
+        // 单元格。留在 `List` 上也是为了让下拉刷新在空态下照旧能用——换成直接替换
+        // 整个 `List`，那根下拉手势就跟着没了。
+        .overlay {
+            if model.waitingSessions.isEmpty {
+                ContentUnavailableView(
+                    "暂无待处理事项",
+                    systemImage: "checkmark.circle",
+                    description: Text("Claude Code 或 Codex 请求确认或提问时，会推送通知。")
+                )
+            }
+        }
         .noticeOverlay(model)
         .navigationTitle("需要我")
         .refreshable { await model.refreshDesktops() }

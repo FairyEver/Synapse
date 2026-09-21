@@ -354,10 +354,15 @@ struct SessionListView: View {
 
     /// Title only: the sentence that used to sit here restated it, and "a session
     /// may have just ended" is not something the reader can act on.
+    ///
+    /// Drawn **inside** the list rather than over it, unlike the other empty states:
+    /// it is not the whole screen that is empty. The computer is right there above,
+    /// with its own row and its clipboard button, and a full-height empty state would
+    /// paint over the one control this state still leaves the reader.
     private var emptySection: some View {
         Section {
-            Text("没有正在运行的会话")
-                .font(.subheadline.weight(.semibold))
+            ContentUnavailableView("没有正在运行的会话", systemImage: "terminal")
+                .listRowBackground(Color.clear)
         }
     }
 }

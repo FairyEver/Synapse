@@ -473,17 +473,15 @@ private struct MeetingTextPane: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("还没有文字")
-                .font(.subheadline)
+        ContentUnavailableView {
+            Label("还没有文字", systemImage: "captions.bubble")
+        } description: {
             // 转写还没跑完的时候不说「没有识别到语音」——那是一个结论，现在还不知道。
             if detail.status != "transcribing" {
                 Text("这段录音里没有识别到语音。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
         .padding(16)
         .surfaceCard()
     }

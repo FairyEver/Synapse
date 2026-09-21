@@ -198,12 +198,7 @@ struct TerminalShortcutPanel: View {
     /// list says so the same way.
     private var commands: some View {
         List {
-            if customCommands.isEmpty {
-                Text("暂无自定义快捷命令")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("shortcut-commands-empty")
-            } else {
+            if !customCommands.isEmpty {
                 ForEach(customCommands) { button in
                     Button(button.label) {
                         Haptics.select()
@@ -222,6 +217,19 @@ struct TerminalShortcutPanel: View {
             }
         }
         .listStyle(.insetGrouped)
+        // 空态铺在列表上面：`ContentUnavailableView` 要的是整块内容区，塞进 `List`
+        // 会先被压成一条窄行。标识符挂在说明那行——它才是用例查的 `staticTexts`，
+        // 挂在容器上元素类型会变成 other。
+        .overlay {
+            if customCommands.isEmpty {
+                ContentUnavailableView {
+                    Label("还没有自定义快捷命令", systemImage: "terminal")
+                } description: {
+                    Text("在电脑端添加的快捷命令会出现在这里。")
+                        .accessibilityIdentifier("shortcut-commands-empty")
+                }
+            }
+        }
     }
 
     /// What this segment is for: the commands the user put on their computer themselves.
@@ -242,16 +250,23 @@ struct TerminalShortcutPanel: View {
                 ForEach(phrases) { phrase in
                     row(phrase)
                 }
-            } else {
-                Text("电脑上还没有快捷输入")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("shortcut-phrases-empty")
             }
         }
         // The look of the list is the system's own — row height, corner radius, the
         // separator's inset — rather than a set of numbers written out to imitate it.
         .listStyle(.insetGrouped)
+        // 只有「电脑答过、但它没有」才叫空。电脑根本没答过（`phrases == nil`）不是空，
+        // 是不知道——那种情况这一段压根不会被画出来，`shown` 会落到剪切板那一段。
+        .overlay {
+            if let phrases, phrases.isEmpty {
+                ContentUnavailableView {
+                    Label("还没有快捷输入", systemImage: "text.bubble")
+                } description: {
+                    Text("在电脑端添加的快捷输入会出现在这里。")
+                        .accessibilityIdentifier("shortcut-phrases-empty")
+                }
+            }
+        }
     }
 
     /// One sentence, and the key that shows the part of it a single line cannot.
