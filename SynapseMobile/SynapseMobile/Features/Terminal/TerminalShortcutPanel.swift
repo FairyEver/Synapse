@@ -108,55 +108,74 @@ struct TerminalShortcutPanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Drawn even for a computer that has never described its sentences: two of
-            // the three segments are always meaningful, so there is somewhere to switch
-            // from and somewhere to switch to.
-            Picker("", selection: segment) {
-                ForEach(availableSegments) { option in
-                    Text(option.label).tag(option)
-                }
+        // 导航栏是这个面板自己带的，因为「清空」这类作用于整段列表的动作，iOS 只给了
+        // 工具栏这一个位置。它由剪切板那一段并进来（见 `ClipboardList`），所以栏本身
+        // 画在这里。
+        NavigationStack { panel }
+            // The sheet's own base is the grouped grey, and it is set out here rather than
+            // inside either section so that switching segments cannot change it — and so that
+            // the bar, which draws over nothing of its own, has the same grey behind it as the
+            // list below. It is also what the command pills stand on: their resting fill is the
+            // plain background, and on a plain sheet they would have no edge at all.
+            .background(Color(uiColor: .systemGroupedBackground))
+            // Fixed detents rather than a height that follows the content: switching segments
+            // must not move the sheet, and a sheet sized to its content would jump every time
+            // a shorter segment was chosen.
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            // A second sheet over this one rather than a replacement for it, so closing the
+            // preview comes back to the panel still open and still on the same segment — the
+            // reader was looking at one sentence, not leaving the list.
+            .sheet(item: $previewing) { phrase in
+                PhrasePreviewSheet(phrase: phrase)
+                    // 从贴合内容的高度起，而不是半屏。一句话通常只有一两行，半屏的弹窗会
+                    // 有九成是空的 —— 用户看到的是「一句话浮在一大片灰里」。往上拖还是能
+                    // 到半屏和全屏，长句子照样读得完（内容是滚动视图）。
+                    .presentationDetents([.fraction(0.32), .medium, .large])
+                    .presentationDragIndicator(.visible)
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .accessibilityIdentifier("shortcut-panel-segment")
+    }
 
+    /// 正显示的那一段。
+    ///
+    /// 分段器不在这里 —— 它在栏上（见 `picker`），所以这一块起手就是列表。
+    private var panel: some View {
+        VStack(spacing: 0) {
             switch shown {
             case .clipboard: clipboard
             case .commands: commands
             case .phrases: phraseList
             }
         }
-        // 上下与左右取**同一个值**，这不是随手定的：面板圆角的圆心在 (R, R)，而里面
-        // 第一件控件的圆角圆心在 (X + r, Y + r) —— 只有 X == Y 时两个圆心才会落在同
-        // 一条对角线上，两段弧看起来才是同心的一圈。上一版为了躲拖条只把上边加到 24、
-        // 左右还是 16，于是两段弧错开了一截，正是产品负责人指出的那处。
-        //
-        // 16 同时是拖条下方的安全距离（系统拖条占顶边不到 12pt），也是下方那些分节
-        // 卡片自己的左右留白 —— 于是分段器与卡片左右对齐，三样东西同一条竖线。
-        .padding(.top, 16)
-        // The sheet's own base is the grouped grey, and it is set here rather than inside
-        // either section so that switching segments cannot change it. It is also what the
-        // command pills stand on: their resting fill is the plain background, and on a
-        // plain sheet they would have no edge at all.
-        .background(Color(uiColor: .systemGroupedBackground))
-        // Fixed detents rather than a height that follows the content: switching segments
-        // must not move the sheet, and a sheet sized to its content would jump every time
-        // a shorter segment was chosen.
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        // A second sheet over this one rather than a replacement for it, so closing the
-        // preview comes back to the panel still open and still on the same segment — the
-        // reader was looking at one sentence, not leaving the list.
-        .sheet(item: $previewing) { phrase in
-            PhrasePreviewSheet(phrase: phrase)
-                // 从贴合内容的高度起，而不是半屏。一句话通常只有一两行，半屏的弹窗会
-                // 有九成是空的 —— 用户看到的是「一句话浮在一大片灰里」。往上拖还是能
-                // 到半屏和全屏，长句子照样读得完（内容是滚动视图）。
-                .presentationDetents([.fraction(0.32), .medium, .large])
-                .presentationDragIndicator(.visible)
+        .toolbar {
+            // 分段器放在栏里，而不是自己占一行。两个理由，第二个是这一版才量出来的：
+            //
+            // 一、它是这一整张弹窗的导航方式，系统里同类的东西都长在栏上；
+            // 二、栏在**没有工具项时会自己收起来**。上一版把分段器留在栏下面，于是只有
+            // 剪切板那一段有「清空」这一项、另外两段是空的 —— 切过去时整条栏塌掉，分段
+            // 器和列表一起上跳 67pt，还贴到拖条上。分段器常驻，栏就常驻。
+            //
+            // 摆中间是量过的结果，不是随手写的：`.topBarLeading` 拿不到宽度，三个标签
+            // 会被压成一小块（只剩「剪」字和几个竖条）。居中要付的代价是，系统在**剩下
+            // 的空间**里居中，于是「清空」在不在场上，分段器会左右挪 40pt —— 三段里只
+            // 有剪切板那一段有它，切换时会看到这一下。
+            ToolbarItem(placement: .principal) { picker }
         }
+    }
+
+    /// 三段之间的开关。
+    ///
+    /// Drawn even for a computer that has never described its sentences: two of the three
+    /// segments are always meaningful, so there is somewhere to switch from and somewhere
+    /// to switch to.
+    private var picker: some View {
+        Picker("", selection: segment) {
+            ForEach(availableSegments) { option in
+                Text(option.label).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("shortcut-panel-segment")
     }
 
     // MARK: - 剪切板
@@ -166,8 +185,9 @@ struct TerminalShortcutPanel: View {
     /// A shared view rather than a third list written out in this file: the same rows,
     /// the same two gestures and the same clear confirmation are drawn by the sheet over
     /// the session list, and one implementation is one place for them to stay in step.
-    /// Its title is `nil` — this panel is already under a segmented control that says
-    /// which of the three it is.
+    /// Its title is `nil` — the bar it lands in already holds the segmented control, and a
+    /// title beside it would be a second header saying nothing new. The 清空 that comes with
+    /// the list lands in that same bar.
     private var clipboard: some View {
         ClipboardList(
             entries: clipboardEntries,

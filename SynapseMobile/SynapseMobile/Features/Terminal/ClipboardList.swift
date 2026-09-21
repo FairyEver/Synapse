@@ -13,9 +13,9 @@ import SwiftUI
 /// taps.
 struct ClipboardList: View {
     let entries: [MobileClipboardEntry]
-    /// The sheet's navigation title, when there is one to draw. The panel's segment is
-    /// already under a segmented control that says which of the three it is, and a
-    /// navigation bar there would be a second header saying nothing new.
+    /// The sheet's navigation title, when there is one to draw. `nil` means the caller
+    /// owns the bar: it has a `NavigationStack` of its own around this list, and the
+    /// toolbar item below merges into that bar rather than one drawn here.
     let title: String?
     /// Puts one entry on this phone's clipboard.
     let onCopy: (MobileClipboardEntry) -> Void
@@ -57,17 +57,12 @@ struct ClipboardList: View {
                         }
                 }
             } else {
-                // 终端面板里没有导航栏可放：上面那排分段控制器已经说明了这是三段里的
-                // 哪一段。它的「清空」留在原处。
-                VStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        Spacer(minLength: 0)
-                        clearButton
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 8)
-                    list
+                // 终端面板：导航栏由面板给（`TerminalShortcutPanel` 的 `NavigationStack`），
+                // `.toolbar` 会并进那一条。清空是整段列表的动作，工具栏就是它在系统里的
+                // 位置 —— 上一版把它画成贴在内容区右边缘的一行裸文字，没有 tint 也没有
+                // 按钮外观，看着像静态文本；而它触发的是一次不可撤销的删除。
+                list.toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { clearButton }
                 }
             }
         }
