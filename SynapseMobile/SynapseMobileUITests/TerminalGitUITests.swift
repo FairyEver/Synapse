@@ -312,13 +312,14 @@ final class TerminalGitUITests: XCTestCase {
     /// 例如 `liyang.local`）；没指定时退而求其次，挑一台不是 UI 测试留下的假电脑的。
     private func selectAnOnlineDesktop(in app: XCUIApplication) {
         let switchMenu = app.buttons["switch-computer"]
-        guard switchMenu.waitForExistence(timeout: 20) else { return }
-        let wanted = ProcessInfo.processInfo.environment["SYNAPSE_TEST_DESKTOP_NAME"]
-        // 已经在正确的那一台上就什么都不用做。
-        if let wanted, app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", wanted)).firstMatch.exists {
+        guard switchMenu.waitForExistence(timeout: 20) else {
+            // 没有可换的电脑：那这就是唯一在线的那一台（或者是 mock，后面各步会自己报出来）。
             return
         }
-        guard app.staticTexts["这台电脑不在线"].exists || wanted != nil else { return }
+        let wanted = ProcessInfo.processInfo.environment["SYNAPSE_TEST_DESKTOP_NAME"]
+        // 判「已经在正确的那一台上」只看这颗菜单**自己**的名字 —— 它画的就是当前在看的
+        // 那台电脑。看屏幕上有没有出现过这个名字是不够的：会话行里的路径也带着用户名。
+        if let wanted, switchMenu.label.contains(wanted) { return }
 
         switchMenu.tap()
         let options = app.buttons.matching(
