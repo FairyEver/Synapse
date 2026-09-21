@@ -100,6 +100,22 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// What those identities stand for, kept so the cursor can be re-keyed on a
     /// blink without waiting for new rows to arrive.
     private var appliedRows: [DisplayRow] = []
+    /// `appliedKeys` 是在哪一组输入下算出来的。
+    ///
+    /// 只由整份重建（`push`）写，所以它读作「这一整份数组都成立的那一组输入」——
+    /// 见 `reusedKeys`，那里是唯一读它的地方。
+    ///
+    /// **不含闪烁相位**，这一点是刻意的：相位只影响光标那一行，而快路要求那一行永远
+    /// 落在重算的那一段里（`apply` 里那次重建拼 keys 时相位还没落定 —— 落定在它下面
+    /// 几行，所以写进这里反而会写错）。
+    ///
+    /// 不 private，是为了让 `reusedKeys` 那条相等性能脱离集合视图断言。
+    struct KeyEpoch {
+        var cursor: TerminalStore.CursorPosition?
+        var selection: TerminalSelection?
+        var fontSize: CGFloat
+    }
+    private var appliedKeyEpoch: KeyEpoch?
     private var isPinnedToBottom = true
     /// 一次拖动开始时的偏移。结束时与它比，才知道这次拖动**到底有没有让内容移动**
     /// —— 这正是"拖不动"要问的那个问题。
@@ -167,6 +183,25 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// 分开（见 `scrollViewDidScroll`）。nil 表示还没有过一次回调。
     private var lastScrollPaneHeight: CGFloat?
     private var lastScrollInsetTop: CGFloat?
+
+    /// `terminalScrollTick` 的调用点采样闸。
+    ///
+    /// 那个回调在 120 Hz 屏上每秒能来 120 次，而它每次都要构造 11 个 entry、再分配一个
+    /// 数组 —— 缓冲区那一层的采样拦在**字符串与数组拼好之后**，拦不住这笔开销。
+    /// 用的是现成的那一个（`DiagnosticLog.CaptureGate`，`captureScreen` 用的同一个），
+    /// 间隔取自缓冲区那张采样表，所以「同一事件 1/rate 秒只放行一条」没有第二套实现。
+    private let scrollTickGate = DiagnosticLog.CaptureGate()
+    /// 上面那个闸的间隔。取自 `DiagnosticBuffer` 那张表，不在这里再写一遍 10。
+    ///
+    /// 表里没有这一格（或配成 0）时取 0，也就是"每次都放行" —— 这时采样照旧由缓冲区那
+    /// 一层决定，与没有这道闸时**完全一样**，不会凭空多丢记录。
+    private static let scrollTickInterval: TimeInterval = {
+        guard let rate = DiagnosticBuffer.Limits().samplesPerSecond[.terminalScrollTick], rate > 0 else {
+            return 0
+        }
+        return 1.0 / Double(rate)
+    }()
+
     /// 拟合所依据的那块地方。
     ///
     /// 多数时候就是这块画布，但它**不跟着画布一起变小**（见 `noteFitPane`）。
@@ -604,7 +639,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         appliedRenderRevision = renderRevision
         appliedFontSize = fontSize
 
-        let keys = identities(for: rows, cursor: cursor)
+        // 只重算变过的那一段。标识符里织着下标、光标、选区与字号，而每帧为全部 6000 行
+        // 各拼一个字符串是白做的 —— 变的是尾部那几行。快路算出来的数组与
+        // `identities(for:cursor:)` 逐字相等（依据见 `reusedKeys`），不满足前提时它返回
+        // nil，这里照旧整份重建。
+        let keys = reusedKeys(for: rows, cursor: cursor) ?? identities(for: rows, cursor: cursor)
         let floorChanged = atHistoryFloor != self.atHistoryFloor
         let rowsChanged = keys != appliedKeys
         guard rowsChanged || floorChanged else { return }
@@ -746,9 +785,15 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// The cursor is part of those identities rather than a reload performed after
     /// the fact, so every change — output, a cursor move, a blink — reaches the
     /// collection view through the one mechanism that keeps the two in step.
+    ///
+    /// 这是唯一写 `appliedKeyEpoch` 的地方，所以四处调用点都得守一条规矩：`keys` 必须是
+    /// 用**当时视图自己的** `appliedCursor`、`selection`、`fontSize` 拼出来的。
+    /// `remeasureRows`、`didMoveToWindow`、`refreshSelection` 三处直接把这三个值传给了
+    /// `identities`，`apply` 那处传的是新光标，但 `appliedCursor` 在它上面几行就跟着走了。
     private func push(rows: [DisplayRow], keys: [String]) {
         appliedKeys = keys
         appliedRows = rows
+        appliedKeyEpoch = KeyEpoch(cursor: appliedCursor, selection: selection, fontSize: fontSize)
         rowsByKey = Dictionary(uniqueKeysWithValues: zip(keys, rows))
 
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
@@ -772,6 +817,106 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             selection: selection,
             fontSize: fontSize
         )
+    }
+
+    /// 这次 `apply` 走快路复用了多长的前缀；`nil` 表示退回整份重建。
+    ///
+    /// 只给测试读（同 `resolvableRows`），产品代码不碰它。存在的理由是一条会**静默**发生的
+    /// 退化：`push` 里那行 `appliedKeyEpoch = ...` 一旦被谁顺手删掉，快路的准入条件就永远
+    /// 不成立，于是这个优化从不生效 —— 而所有等价性测试照样是绿的，因为它们直接调静态
+    /// 接缝。把「到底有没有走快路」变成可断言的事实，是唯一能看见它的办法。
+    private(set) var reusedKeyPrefixLength: Int?
+
+    /// 拿视图当下这一份状态去走快路。
+    private func reusedKeys(for rows: [DisplayRow], cursor: TerminalStore.CursorPosition?) -> [String]? {
+        let keys = Self.reusedKeys(
+            for: rows,
+            cursor: cursor,
+            cursorVisible: cursorPhaseOn,
+            selection: selection,
+            fontSize: fontSize,
+            appliedRows: appliedRows,
+            appliedKeys: appliedKeys,
+            epoch: appliedKeyEpoch
+        )
+        // 快路本来就只在「有前缀可复用」时才不为 nil，所以这次长度换算只发生在它真正
+        // 省下活儿的那一帧上；比的是 `id`（`==` 在同一个实例上短路），不分配。
+        reusedKeyPrefixLength = keys == nil ? nil : Self.commonPrefixLength(rows, appliedRows)
+        return keys
+    }
+
+    /// 快路：只重算变了的那一段标识符。
+    ///
+    /// 每帧整份重建要为全部 6000 行各拼一个字符串，而常态是只有尾部几行变了。快路拿
+    /// `appliedKeys` 里没变的那一段当前缀复用它，只把尾部交给 `identity(...)` 重算 ——
+    /// 尾部因此**由构造保证**逐字一致（同一个函数、同一组入参），前缀则要靠下面几条
+    /// 前提。
+    ///
+    /// 返回 nil 表示这一帧不满足前提，调用方整份重建。**宁可返回 nil，也不要让画面
+    /// 显示错的内容**：前缀复用错了意味着某一行不重画，而屏幕上就是光标停在旧位置、
+    /// 选区颜色不褪、字号变了那一行还是旧尺寸。
+    ///
+    /// 标识符是 `(row.id, 下标, 光标位置, 光标相位, 选区, 字号)` 的函数，逐条对：
+    ///
+    /// - **行**：`identity` 只用 `row.id`，而 id 自带内容哈希（见 `TerminalStore.wrap`），
+    ///   所以「前缀里逐行 id 相同」就是「同样的行、同样的文字与样式」。下标也相同 ——
+    ///   前缀是对齐着比的。
+    /// - **字号**：`epoch.fontSize` 是整份重建时用的那个值，不相等就退出。不能拿
+    ///   `appliedFontSize` 顶替：那个在 `apply` 里算 keys **之前**就被写过了。
+    /// - **选区**：同上，对 `epoch.selection`。这里有两条容易漏的路：选区的每一次改动
+    ///   都会整份重建（`refreshSelection`），但**清空选区那条不会**（`selection == nil`
+    ///   时它直接返回，为了不拿空快照把画面抹掉），于是 `appliedKeys` 里可能留着已经不
+    ///   存在的 `#sel:`。所以比的是"当初算 keys 时的选区"，而不是"现在有没有选区"。
+    /// - **光标**：位置相等（`epoch.cursor`）。
+    /// - **光标相位**：不单独对账，而是要求光标那一行**落在重算的尾部里**。相位只影响
+    ///   光标所在那一行的标识符，那一行重算了，用的就一定是当前相位 —— 与整份重建的
+    ///   结果相同。这也顺手盖住另一条路：`advanceCursorPhase` 在光标行不在屏幕上时不推
+    ///   快照，那时 `appliedKeys` 里那一格留着的是旧相位，而这里不碰它。
+    ///
+    /// 参数化在这一层而不是直接读视图状态，是为了让这条相等性能脱离集合视图断言 ——
+    /// 与下面那对 `identity` / `identities` 同一个理由。
+    static func reusedKeys(
+        for rows: [DisplayRow],
+        cursor: TerminalStore.CursorPosition?,
+        cursorVisible: Bool,
+        selection: TerminalSelection?,
+        fontSize: CGFloat,
+        appliedRows: [DisplayRow],
+        appliedKeys: [String],
+        epoch: KeyEpoch?
+    ) -> [String]? {
+        let prefix = commonPrefixLength(rows, appliedRows)
+        guard prefix > 0, prefix <= appliedKeys.count, let epoch,
+              cursor == epoch.cursor,
+              selection == epoch.selection,
+              fontSize == epoch.fontSize,
+              // 没有光标，或者光标就在重算的那一段里，才允许复用。
+              cursor.map({ $0.rowIndex >= prefix }) ?? true
+        else { return nil }
+
+        var keys = Array(appliedKeys.prefix(prefix))
+        keys.reserveCapacity(rows.count)
+        for index in prefix..<rows.count {
+            keys.append(identity(
+                for: rows[index],
+                at: index,
+                cursor: cursor,
+                cursorVisible: cursorVisible,
+                selection: selection,
+                fontSize: fontSize
+            ))
+        }
+        return keys
+    }
+
+    /// 两份行数组从头开始逐行相同的那一段有多长。
+    ///
+    /// 比 id 而不是整行：`identity` 只用得到 id，而且比 id 便宜（整行要过 `runs`）。
+    static func commonPrefixLength(_ rows: [DisplayRow], _ applied: [DisplayRow]) -> Int {
+        let limit = min(rows.count, applied.count)
+        var index = 0
+        while index < limit, rows[index].id == applied[index].id { index += 1 }
+        return index
     }
 
     /// Static and parameterised on the blink phase so both halves of the property
@@ -894,6 +1039,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// 用于光标闪的那一下 —— 变的只有光标所在的那一行。`push` 那条路要重建整份
     /// `rowsByKey`（上限 6000 个长字符串做 key，每个都得哈希一遍），在闪这件事上纯属
     /// 白做。标识符本身仍由 `Self.identity` 算，所以快路和整份重建算出来的逐字一致。
+    ///
+    /// 不动 `appliedKeyEpoch`：它改的那一格是光标所在行，而快路要么要求光标行落在重算
+    /// 的尾部里、要么整份重建（见 `reusedKeys`）；它另外还用的是"当前"这一组输入，而
+    /// epoch 说的是"整份数组一致的那一组"。
     private func pushOneRow(at index: Int, row: DisplayRow) {
         guard index >= 0, index < appliedKeys.count, index < appliedRows.count else { return }
         let key = Self.identity(
@@ -1630,21 +1779,26 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         // 这条是滚动问题的底噪：它同时回答"手指在动而 offset 没动"（手势被吞）、
         // "offset 在动但离底一直不到 40 点"（跟随一直没解除）这两个问题。
         //
-        // 每次回调都调它，采样交给缓冲区 —— 120 Hz 的判断属于那一层，写在调用点上
-        // 就得在每个高频回调里各写一遍，而那正是漏的开始。
-        DiagnosticLog.record(.terminalScrollTick, [
-            .init(.offsetY, .scalar(Double(scrollView.contentOffset.y))),
-            .init(.contentSizeHeight, .scalar(Double(scrollView.contentSize.height))),
-            .init(.boundsHeight, .scalar(Double(scrollView.bounds.height))),
-            .init(.distanceFromBottom, .scalar(Double(distanceFromBottom))),
-            .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
-            .init(.isDragging, .bool(scrollView.isDragging)),
-            .init(.isDecelerating, .bool(scrollView.isDecelerating)),
-            .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
-            .init(.zoom, .scalar(Double(zoom))),
-            .init(.atHistoryFloor, .bool(atHistoryFloor)),
-            .init(.requestsInFlight, .bool(requestsInFlight)),
-        ])
+        // 采样判定放在**构造之前**：这个回调 120 Hz 都能来，11 个 entry 加一个数组是每
+        // 次都要付的开销，而其中绝大多数注定被采样丢掉。闸门用的是 `CaptureGate`
+        // （`captureScreen` 用的同一个），间隔取自缓冲区那张表 —— 被放行的那些回调写进去
+        // 的字段与数值和从前逐字一致，频率也仍是它配的 10/s。缓冲区那一层照旧按自己的表
+        // 再判一次，所以它只会少放行、不会多放行。
+        if scrollTickGate.admits(.terminalScrollTick, minInterval: Self.scrollTickInterval, at: Date()) {
+            DiagnosticLog.record(.terminalScrollTick, [
+                .init(.offsetY, .scalar(Double(scrollView.contentOffset.y))),
+                .init(.contentSizeHeight, .scalar(Double(scrollView.contentSize.height))),
+                .init(.boundsHeight, .scalar(Double(scrollView.bounds.height))),
+                .init(.distanceFromBottom, .scalar(Double(distanceFromBottom))),
+                .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
+                .init(.isDragging, .bool(scrollView.isDragging)),
+                .init(.isDecelerating, .bool(scrollView.isDecelerating)),
+                .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
+                .init(.zoom, .scalar(Double(zoom))),
+                .init(.atHistoryFloor, .bool(atHistoryFloor)),
+                .init(.requestsInFlight, .bool(requestsInFlight)),
+            ])
+        }
 
         if wasPinned != isPinnedToBottom {
             DiagnosticLog.record(.terminalPinChanged, [

@@ -5,10 +5,10 @@ import Testing
 
 /// 缓冲区到顶之后的稳态。
 ///
-/// 裁剪原来是「丢掉头部再**把剩下的全部重新折一遍**」，现在只丢头部。两者在屏幕上必须
-/// 一模一样，所以这里钉的是结果而不是做法 —— 而稳态恰恰是最容易出错的地方：第一次裁剪
-/// 之后每一帧都会再裁剪一次，落在这条路上的偏移换算、`oldestIndex` 和 `rowsFirstLine`
-/// 只要差一格，终端就会从某一行开始整体错位，或者最老的那行永远滚不出去。
+/// 裁剪原来是「丢掉头部再**把剩下的全部重新折一遍**」，现在只丢头部、并且按
+/// `trimBatchRows` 成批发生。两者在屏幕上必须一模一样，所以这里钉的是结果而不是做法 ——
+/// 而稳态恰恰是最容易出错的地方：落在这条路上的偏移换算、`oldestIndex` 和
+/// `rowsFirstLine` 只要差一格，终端就会从某一行开始整体错位，或者最老的那行永远滚不出去。
 @MainActor
 struct TerminalStoreTrimTests {
     private func line(_ text: String) throws -> TerminalLine {
@@ -30,33 +30,47 @@ struct TerminalStoreTrimTests {
         )
     }
 
-    /// 一行一帧地推过上限，每一帧都要裁掉最老的那一行。
+    /// 一行一帧地推过上限，头部按批移动，最新那一行必须一直在。
     ///
     /// 这里刻意**一行一帧**：批量推 6000 行只会在一次调用里裁一次，而真机上跑起来的是
     /// 这个循环 —— 输出每来一帧就裁一次，那才是这段代码真正被调用的形状。
-    @Test func theHeadMovesOneLinePerFrameAndTheNewestLineStays() throws {
+    ///
+    /// 稳态不再是「进一行丢一行」，而是「进一批丢一批」（见 `trimBatchRows`）：一批之
+    /// 内头部不动、缓冲区只是长高。每一帧都要成立的约束没变 —— 最新的那行在、头部与
+    /// `oldestIndex` 同步、行数不越上限。
+    @Test func theHeadMovesInBatchesAndTheNewestLineStays() throws {
         let store = TerminalStore()
         store.update(columns: 80)
         let filler = try line("x")
 
-        // 一次越过上限，进入稳态。
+        // 一次越过上限，进入稳态：一次推 6_002 行，头部直接落到批次水位。
         store.apply(frame(lines: Array(repeating: filler, count: 6_002), from: 0))
-        #expect(store.rows.first?.lineIndex == 1)
+        #expect(store.rows.first?.lineIndex == 513)
+        #expect(store.oldestIndex == 513)
 
-        // 稳态下每一帧的行数都不该再变 —— 进一行、丢一行。
-        let steadyRowCount = store.rows.count
+        // 一批之内：头部不动，只是长高，最新的那一行一直在。
+        let batchFloor = store.rows.count
 
-        for step in 1...5 {
+        for step in 1...512 {
             let newest = 6_001 + step
             store.apply(frame(lines: [try line("line \(step)")], from: newest))
 
-            // 最老的往前走了一行，最新的那一行还在，行数没变。
-            #expect(store.oldestIndex == 1 + step)
-            #expect(store.rows.first?.lineIndex == 1 + step)
+            #expect(store.oldestIndex == 513)
+            #expect(store.rows.first?.lineIndex == 513)
             #expect(store.rows.last?.lineIndex == newest)
             #expect(store.rows.last?.text == "line \(step)")
-            #expect(store.rows.count == steadyRowCount)
+            #expect(store.rows.count == batchFloor + step)
+            // 上限一点没抬：长到顶就裁，和改动前触发的那一帧是同一帧。
+            #expect(store.rows.count <= 6_001)
         }
+
+        // 第 513 行把这一批走完：头部一次前移一整批，行数回到批次水位。
+        store.apply(frame(lines: [try line("batch two")], from: 6_514))
+        #expect(store.oldestIndex == 1_026)
+        #expect(store.rows.first?.lineIndex == 1_026)
+        #expect(store.rows.last?.lineIndex == 6_514)
+        #expect(store.rows.last?.text == "batch two")
+        #expect(store.rows.count == batchFloor)
     }
 
     /// 后缀语义在裁剪之后照样成立：帧说什么，尾部就是什么。

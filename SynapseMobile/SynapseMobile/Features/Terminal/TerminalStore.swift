@@ -83,6 +83,23 @@ final class TerminalStore {
     /// become unreachable. Roughly 1.5 MB of rows at the cap.
     private let maxLines = 6_000
 
+    /// 一次裁剪比 `maxLines` 多丢多少行。
+    ///
+    /// `trimToLimit` 每帧都跑，而它贵的那一半（`removeFirst` 搬数组，加重建约 `maxLines`
+    /// 项的下标字典）就是为这个常量而存在的。**刚好裁到 `maxLines` 会让那句 guard 在下一
+    /// 行就重新成立**：第一次裁剪之后 `firstLineIndex == highestLineIndex - maxLines` 恒定，
+    /// 于是长跑会话（`tail -f`、构建日志、TUI 输出）永久停在「每帧搬一次数组 + 重建 6000 项
+    /// 字典」上。裁到上限以下一批，就是一次裁剪换 `trimBatchRows + 1` 行：**上限一点没抬**
+    /// （guard 没动，缓冲区到顶时的高度和以前一模一样），贵的路径从每行一次变成每一批一次。
+    /// 代价只是回滚缓冲的深度在 `maxLines - trimBatchRows` 到 `maxLines` 之间浮动
+    /// （这里是 5_488…6_001 行），而不是一直顶在最后一行上。
+    ///
+    /// 512 这个数的两头都有约束。往下：桌面模拟器只留 5_000 行（`emulator.ts` 的
+    /// `scrollback`），而下限必须是「比桌面还深」的那一侧 —— 6_000 - 512 留 488 行余量，
+    /// 桌面还愿意给的页一页都不会变得取不到。往上：一次挪掉的下限不能比一屏还小气，也不能
+    /// 大到把读者正在看的东西整段抽走，512 行是十几屏手机终端，两头都够。
+    private let trimBatchRows = 512
+
     private var lines: [Int: TerminalLine] = [:]
     /// 还持有着的最高行号，-1 表示一行都没有。
     ///
@@ -358,7 +375,9 @@ final class TerminalStore {
 
     private func trimToLimit() {
         guard highestLineIndex - firstLineIndex > maxLines else { return }
-        let newFirst = highestLineIndex - maxLines
+        // 裁到上限**以下**一批，而不是刚好裁到上限：理由见 `trimBatchRows`。裁到上限的
+        // 话，下一行进来的那一刻这句 guard 就又成立了。
+        let newFirst = highestLineIndex - maxLines + trimBatchRows
         for key in firstLineIndex..<newFirst {
             lines.removeValue(forKey: key)
         }
@@ -381,10 +400,9 @@ final class TerminalStore {
     /// 会把最多 6000 行全部重新折一遍（每行一次 `Array(line.text)`、一次 id 字符串插值、
     /// 两次 `String.hashValue`）。
     ///
-    /// 而且这一条**每一帧**都在跑：第一次裁剪之后 `firstLineIndex == highestLineIndex -
-    /// maxLines`，此后只要再进一行，`highestLineIndex - firstLineIndex > maxLines` 就
-    /// 重新成立。也就是说长跑会话一旦过了上限（`tail -f`、构建日志、TUI 输出），就永久
-    /// 停在「每帧重折整个缓冲区」上。
+    /// 而且这一条是**按批**跑的，不是每帧：一次裁剪落在 `maxLines - trimBatchRows` 上，
+    /// 要再进 `trimBatchRows + 1` 行那句 guard 才会重新成立。长跑会话一旦过了上限
+    /// （`tail -f`、构建日志、TUI 输出），每一批才付一次这里的代价 —— 以前是每一帧。
     private func dropRowsBefore(_ newFirst: Int) {
         // 没有这一行的折行记录（缓冲区里有缺口）：退回整体重建，慢但一定对。
         guard let dropRows = rowOffsetByLine[newFirst] else {

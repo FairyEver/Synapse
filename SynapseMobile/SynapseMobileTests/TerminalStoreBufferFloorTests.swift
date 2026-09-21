@@ -42,13 +42,17 @@ struct TerminalStoreBufferFloorTests {
         store.update(columns: 80)
         let filler = try line("x")
 
-        // One line past the cap, so the trim fires and drops the oldest line.
+        // One line past the cap, so the trim fires and drops the oldest lines.
         store.apply(frame(lines: Array(repeating: filler, count: 6_002)))
 
         // The cursor is where the next page is asked from, so it may never name a
         // line the store has already thrown away.
         #expect(store.oldestIndex == store.rows.first?.lineIndex)
-        #expect(store.oldestIndex == 1)
+        // The trim drops to the batch floor rather than to the cap, so the head
+        // lands at `6_001 - 6_000 + 512` and the buffer holds what is left of the
+        // 6_002 lines. See `trimBatchRows` for why it is not `1` any more.
+        #expect(store.oldestIndex == 513)
+        #expect(store.rows.count == 5_489)
     }
 
     @Test func keepsDrawingTheNewestLinesAfterAPageLandsBelowTheFloor() throws {
