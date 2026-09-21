@@ -229,6 +229,45 @@ export const MOBILE_FRAME_LIMITS = {
   maxClipboardEntries: 20,
   maxClipboardTextLength: 128 * 1024,
   maxClipboardBytes: 192 * 1024,
+  /**
+   * 手机端 Git 操作（`git` intent 与 `mobile.gitStatus`）的字段上限。
+   *
+   * `maxGitPathLength` 比 `maxSummaryCwdLength` 大得多，而且两者**刻意不共用**：
+   * 那一处是会话列表行里的显示文本，这一处是 Git 面板的「目录」行 —— 它是这个功能的
+   * 信任基础，用户要在上面核对电脑到底在哪个目录上干活。两者都只用于显示、谁也不做
+   * 比较，所以同一条路径在两处的上限不同不会让任何东西分叉。冲突文件清单里的每一项
+   * 也是路径，共用这一个。
+   *
+   * `maxGitRefNameLength` 取 255：git 自己的 ref 名上限就是文件名字节的量级，真实的
+   * `feature/...` 分支名远在它之下。`upstream` 是同一族的字符串，共用这一个。
+   *
+   * `maxGitConflictFiles` / `maxGitConflictTextLength` 守的是合并冲突那段整文本
+   * ——它由电脑拼好、手机只负责复制，所以文本本身是唯一要守的东西。两个上限都**由
+   * 产生端先守住**（`terminal-git-integration.ts` 的 `buildConflict` 截断文件清单并
+   * 在文本里写明），这里再写一遍是第二道：这条线上的每个校验器都假设 payload 可能
+   * 来自一个行为不端的对端。
+   *
+   * 96 KiB 这个数字是算出来的，不是拍的：文件清单最多 128 项、每项最多 512 字节，
+   * 加上抬头与结尾，`summaryText` 最宽约 67 KiB —— 96 KiB 稳稳盖住它（`mobile-live.test.ts`
+   * 里有一条边界用例把这个算式钉住）。上界之所以不能随便加，是因为
+   * `mobile.intentResult` 走的是电脑那条 `maxPayload` 为 256 KiB 的套接字，装不下就是
+   * 断连 —— 不是丢一条消息。
+   */
+  maxGitPathLength: 512,
+  maxGitRefNameLength: 255,
+  maxGitShortShaLength: 64,
+  maxGitBranches: 512,
+  maxGitConflictFiles: 128,
+  maxGitConflictTextLength: 96 * 1024,
+  /**
+   * `MobileIntentResult.message` 的上限。
+   *
+   * 它在校验器里一直是写死的一个数，现在被提到这里是因为**产生端也要收**：Git 的失败
+   * 原文会走这条字段（失败时显示电脑返回的原文，是这一族消息的口径），而 git 的 stderr
+   * 长度不由我们决定。超长的消息在云端会被判为非法消息直接丢掉 —— 手机上表现为
+   * 「点了没反应」，比截断难查得多。
+   */
+  maxIntentResultMessageLength: 500,
 } as const
 
 /** Style attribute bits packed into the fifth element of a run tuple. */
@@ -757,6 +796,56 @@ export interface MobileClipboardPayload {
 }
 
 /* ------------------------------------------------------------------ *
+ * Git
+ * ------------------------------------------------------------------ */
+
+/**
+ * 终端当前目录的 Git 状态。
+ *
+ * 来自电脑上按目录跑的一次 `git status`，**不是** Synapse「代码仓库」注册表里的东西：
+ * 这一族消息只认路径，一个仓库不需要先被用户添加过。字段只保留手机第二行与 Git 面板
+ * 真正画得出的那几个 —— 改动文件清单不在其中（手机端不接收文件清单）。
+ *
+ * `branch` 与 `upstream` 是 `null` 而不是缺席：缺席在这条线上意味着「这台电脑太老、
+ * 不会说这个字段」，而这里要说的是「它就是没有」。
+ */
+export interface MobileGitStatus {
+  /** 电脑在哪个目录上干的活。面板的「目录」行直接显示它 —— 这是这个功能的信任基础。 */
+  readonly cwd: string
+  /** `null` = 游离 HEAD；那时代替它显示的是 `detachedSha`。 */
+  readonly branch: string | null
+  /** 只有游离 HEAD 时才有值（短 sha）。 */
+  readonly detachedSha?: string
+  readonly upstream: string | null
+  readonly ahead: number
+  readonly behind: number
+  readonly changeCount: number
+  readonly hasConflicts: boolean
+}
+
+/**
+ * 一台电脑上、一个会话当前所在目录的 Git 状态，发给**那一台**手机。
+ *
+ * 与摘要分开而不是塞进去，理由不是字节预算而是代价：摘要在有输出时以 1 Hz 刷新，
+ * 而这份状态要跑一次 `git status` —— 塞进去等于每秒 spawn 一次 git。
+ *
+ * 带 `mobileClientInstanceId` 说明它是**点对点**的（像 `mobile.frame`），不是像
+ * `mobile.summary` 那样扇出给账号里每一台手机：它答的是「你正开着的那个终端」，
+ * 而这个问法只对问它的那台手机成立。
+ *
+ * `revision` 是产生端自己的计数器，每次发送递增；手机不比它（整份是快照），
+ * 但它让一份抓下来的 payload 自带上下文。
+ */
+export interface MobileGitStatusPayload {
+  readonly desktopClientInstanceId: string
+  readonly mobileClientInstanceId: string
+  readonly sessionId: string
+  readonly revision: number
+  /** `null` = 这个目录不是 Git 仓库（第二行要退回显示版本号）。 */
+  readonly status: MobileGitStatus | null
+}
+
+/* ------------------------------------------------------------------ *
  * Intent
  * ------------------------------------------------------------------ */
 
@@ -927,6 +1016,58 @@ export type MobileIntent =
      */
     readonly fileName: string
   })
+  /**
+   * 在终端当前目录上跑一次 Git 操作。
+   *
+   * **八个动作是一个 kind，不是八个**：它们共享同一份鉴权、同一个错误面、同一个结果
+   * 信封，拆开只会让校验分支和 switch 各长出八份重复。动作由 `action` 区分。
+   *
+   * `action` **必须是这个枚举，不接受任何命令字符串** —— 这是
+   * `module-boundaries.md` 那条「不得新增通用 `shell.exec`」在协议层的落点：
+   * 手机能说的只有这八个词，电脑上没有一条「拿手机给的字符串去跑」的路。
+   *
+   * 目录不在请求里：手机说的是「你正开着的那个终端」，电脑按 `sessionId` 自己解析
+   * 当前目录（外壳上报 + 兜底探测），所以用户在终端里 `cd` 到哪它就跟着到哪。
+   *
+   * 只对 `action` 需要的字段才赋值；电脑侧会按动作核对必需项，缺了就回一句人能读懂的
+   * 拒绝，而不是把 `undefined` 当成命令参数发出去。
+   */
+  | (MobileIntentEnvelope<"git"> & {
+    readonly sessionId: string
+    readonly action: MobileGitAction
+    /** checkout / createBranch / merge 的对象分支。 */
+    readonly branch?: string
+    /** createBranch 的起点；缺席＝从当前 HEAD 起。 */
+    readonly fromBranch?: string
+    /** commit 的提交信息。 */
+    readonly message?: string
+    /** commit 之后是否接着推送（手机上的「提交后立即推送」，默认关）。 */
+    readonly pushAfterCommit?: boolean
+    /** merge 的方向，见 `MobileGitMergeDirection`。 */
+    readonly direction?: MobileGitMergeDirection
+    /** checkout 的「丢弃改动并切换」。**不删未跟踪文件。** */
+    readonly discardChanges?: boolean
+  })
+
+/**
+ * 手机能说的 Git 动作。**枚举，不是字符串** —— 见 `MobileIntent` 上 `git` 那一段。
+ *
+ * `status` 与 `branches` 是读，其余是写；这一条也决定了各自要过哪个权限。
+ * `status` 的回答**不在结果信封里**：手机端的状态永远以 `mobile.gitStatus` 为准，
+ * 两个来源写同一件事迟早会分叉 —— 它要的是「重算一次并推给我」。
+ */
+export type MobileGitAction =
+  | "status" | "branches" | "checkout" | "createBranch"
+  | "commit" | "push" | "sync" | "merge"
+
+/**
+ * 合并的两个方向。
+ *
+ * `intoCurrent` = 把选中分支合进当前分支（留在原地）；`outOfCurrent` = 把当前分支的
+ * 成果并进选中分支（先切过去、合并、再切回来）。手机端两行都让用户选，因为
+ * 「把 A 合到 B」这句话在两种读法下都成立。
+ */
+export type MobileGitMergeDirection = "intoCurrent" | "outOfCurrent"
 
 type MobileIntentEnvelope<TKind extends string> = {
   readonly v: typeof MOBILE_PROTOCOL_VERSION
@@ -958,6 +1099,40 @@ export interface MobileIntentResult {
    * backspace per character — and to say truthfully where the file went.
    */
   readonly landedPath?: string
+  /**
+   * Set for `git`, for the two actions whose answer is data rather than a side effect.
+   *
+   * `status` 的回答不在这里 —— 它走 `mobile.gitStatus`（见 `MobileGitAction`）。
+   * 动作只是把那次重算叫起来，结果从推送那条路回来。
+   */
+  readonly git?: {
+    /** `branches` 的回答。只给名字与是否当前，手机端不需要更多。 */
+    readonly branches?: readonly MobileGitBranch[]
+    /** `merge` 冲突后的结论：手机端只负责把 `summaryText` 复制走。 */
+    readonly conflict?: MobileGitConflict
+    /** 脏工作区，需要用户先选一个走法（提交并切换 / 丢弃并切换 / 取消）。 */
+    readonly needsDecision?: "dirty"
+  }
+}
+
+/** 一条本地分支，供手机端的分支列表画一行。 */
+export interface MobileGitBranch {
+  readonly name: string
+  readonly current: boolean
+}
+
+/**
+ * 合并冲突的结论。
+ *
+ * 传输的是**一段给人（以及别的 Agent）读的完整说明**，不是文件清单结构：手机端
+ * 不解析文件列表，只把 `summaryText` 放进剪贴板。`files` 仍然在，因为手机要在
+ * 弹窗里说「有 N 个文件冲突」，而它不该去数一段文本里的行。
+ */
+export interface MobileGitConflict {
+  readonly source: string
+  readonly target: string
+  readonly files: readonly string[]
+  readonly summaryText: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -1128,6 +1303,36 @@ export function isMobileClipboardPayload(value: unknown): value is MobileClipboa
   return (value.entries as readonly unknown[]).every(isMobileClipboardEntry)
 }
 
+/**
+ * 严格：这一份的每个字段都会被手机直接画到屏幕上，解不出来就是消息坏了。
+ *
+ * `status` 的 `null` 是**一个答案**（这个目录不是 Git 仓库），不是缺席 —— 手机端
+ * 「不是仓库」与「还没收到回答」是两种完全不同的状态，第二行一个退回版本号、一个
+ * 保持现状不动，所以这里必须能把它们分开。
+ */
+export function isMobileGitStatusPayload(value: unknown): value is MobileGitStatusPayload {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.desktopClientInstanceId, 120)) return false
+  if (!boundedString(value.mobileClientInstanceId, 120)) return false
+  if (!boundedString(value.sessionId, 120)) return false
+  if (!nonNegativeInteger(value.revision)) return false
+  return value.status === null || isMobileGitStatus(value.status)
+}
+
+function isMobileGitStatus(value: unknown): value is MobileGitStatus {
+  if (!isRecord(value)) return false
+  // 目录与摘要里的 `cwd` 同族：空是合法的（一个目录名读不出来），但不接受超长。
+  if (!boundedText(value.cwd, MOBILE_FRAME_LIMITS.maxGitPathLength)) return false
+  if (!nullableBoundedString(value.branch, MOBILE_FRAME_LIMITS.maxGitRefNameLength)) return false
+  if (value.detachedSha !== undefined &&
+    !boundedString(value.detachedSha, MOBILE_FRAME_LIMITS.maxGitShortShaLength)) return false
+  if (!nullableBoundedString(value.upstream, MOBILE_FRAME_LIMITS.maxGitRefNameLength)) return false
+  if (!nonNegativeInteger(value.ahead)) return false
+  if (!nonNegativeInteger(value.behind)) return false
+  if (!nonNegativeInteger(value.changeCount)) return false
+  return typeof value.hasConflicts === "boolean"
+}
+
 export function isMobilePresencePayload(value: unknown): value is MobilePresencePayload {
   if (!isRecord(value)) return false
   const ids = value.desktopClientInstanceIds
@@ -1213,6 +1418,20 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
       return boundedString(value.sessionId, 120) &&
         boundedString(value.driveItemId, MOBILE_FRAME_LIMITS.maxUploadDriveItemIdLength) &&
         boundedString(value.fileName, MOBILE_FRAME_LIMITS.maxRelayedFileNameLength)
+    /**
+     * 这里只核对形状与上限，不核对「这个动作要哪些字段」：那是业务判断，电脑侧
+     * 会按动作给出人能读懂的拒绝。协议这层要挡住的是一个行为不端的对端把
+     * 超长或错类型的字段送进来。
+     */
+    case "git":
+      return boundedString(value.sessionId, 120) &&
+        isMobileGitAction(value.action) &&
+        optionalBoundedString(value.branch, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
+        optionalBoundedString(value.fromBranch, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
+        optionalBoundedString(value.message, MOBILE_FRAME_LIMITS.maxIntentTextLength) &&
+        optionalBoolean(value.pushAfterCommit) &&
+        (value.direction === undefined || value.direction === "intoCurrent" || value.direction === "outOfCurrent") &&
+        optionalBoolean(value.discardChanges)
     default:
       return false
   }
@@ -1223,11 +1442,56 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
   if (!boundedString(value.intentId, 120)) return false
   if (value.outcome !== "accepted" && value.outcome !== "rejected" && value.outcome !== "no_op") return false
   if (value.code !== undefined && !boundedString(value.code, 80)) return false
-  if (value.message !== undefined && !boundedString(value.message, 500)) return false
+  if (value.message !== undefined &&
+    !boundedString(value.message, MOBILE_FRAME_LIMITS.maxIntentResultMessageLength)) return false
   if (value.sessionId !== undefined && !boundedString(value.sessionId, 120)) return false
   if (value.createdSessionId !== undefined && !boundedString(value.createdSessionId, 120)) return false
   if (value.landedPath !== undefined && !boundedString(value.landedPath, 512)) return false
+  if (value.git !== undefined && !isMobileIntentGitResult(value.git)) return false
   return true
+}
+
+/**
+ * `MobileIntentResult.git`：空对象不是一份结果，所以至少要有一块内容。
+ *
+ * 三个字段各自独立（`branches` 回答列分支，`conflict` 回答合并冲突，`needsDecision`
+ * 回答脏工作区），一次只会出现其中一块，但校验不假设是哪一个 —— 那是电脑侧的事。
+ */
+function isMobileIntentGitResult(value: unknown): value is NonNullable<MobileIntentResult["git"]> {
+  if (!isRecord(value)) return false
+  if (value.branches !== undefined) {
+    if (!boundedArray(value.branches, MOBILE_FRAME_LIMITS.maxGitBranches)) return false
+    if (!(value.branches as readonly unknown[]).every(isMobileGitBranch)) return false
+  }
+  if (value.conflict !== undefined && !isMobileGitConflict(value.conflict)) return false
+  if (value.needsDecision !== undefined && value.needsDecision !== "dirty") return false
+  return value.branches !== undefined || value.conflict !== undefined || value.needsDecision !== undefined
+}
+
+function isMobileGitBranch(value: unknown): value is MobileGitBranch {
+  return isRecord(value) &&
+    boundedString(value.name, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
+    typeof value.current === "boolean"
+}
+
+/**
+ * 冲突那段文本按 8 KiB 量级守：它是给别的 Agent 读的一整段说明，本来就只有几十行。
+ * 文件清单在电脑侧就截断了（并且文本里会写明），所以这里再遇到超量的清单只可能是
+ * 一个不守规矩的对端。
+ */
+function isMobileGitConflict(value: unknown): value is MobileGitConflict {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.source, MOBILE_FRAME_LIMITS.maxGitRefNameLength)) return false
+  if (!boundedString(value.target, MOBILE_FRAME_LIMITS.maxGitRefNameLength)) return false
+  if (!boundedArray(value.files, MOBILE_FRAME_LIMITS.maxGitConflictFiles)) return false
+  if (!(value.files as readonly unknown[]).every((file) =>
+    boundedString(file, MOBILE_FRAME_LIMITS.maxGitPathLength))) return false
+  return boundedString(value.summaryText, MOBILE_FRAME_LIMITS.maxGitConflictTextLength)
+}
+
+function isMobileGitAction(value: unknown): value is MobileGitAction {
+  return value === "status" || value === "branches" || value === "checkout" || value === "createBranch"
+    || value === "commit" || value === "push" || value === "sync" || value === "merge"
 }
 
 export function isMobileKey(value: unknown): value is MobileKey {
@@ -1431,6 +1695,20 @@ function nonNegativeInteger(value: unknown): value is number {
 
 function boundedArray(value: unknown, maxLength: number): value is readonly unknown[] {
   return Array.isArray(value) && value.length <= maxLength
+}
+
+/** 可选字段：缺席就通过，在就必须是个合法串。 */
+function optionalBoundedString(value: unknown, maxLength: number): boolean {
+  return value === undefined || boundedString(value, maxLength)
+}
+
+function optionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === "boolean"
+}
+
+/** `null` 是一个答案（这一项就是没有），所以要收；缺席或空串则不是。 */
+function nullableBoundedString(value: unknown, maxLength: number): boolean {
+  return value === null || boundedString(value, maxLength)
 }
 
 function boundedCols(value: unknown): value is number {

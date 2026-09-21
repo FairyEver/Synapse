@@ -152,6 +152,24 @@ function clipboardPayload() {
   }
 }
 
+function gitStatusPayload() {
+  return {
+    desktopClientInstanceId: "client-a",
+    mobileClientInstanceId: "phone-1",
+    sessionId: "sess-1",
+    revision: 3,
+    status: {
+      cwd: "/Users/liy/code/Synapse",
+      branch: "main",
+      upstream: "origin/main",
+      ahead: 2,
+      behind: 0,
+      changeCount: 3,
+      hasConflicts: false,
+    },
+  }
+}
+
 function webhookDeliveryPayload() {
   return {
     deliveryId: "delivery-1",
@@ -270,6 +288,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -306,6 +325,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -341,6 +361,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -379,6 +400,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -420,6 +442,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -737,6 +760,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -780,6 +804,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar,
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -824,6 +849,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases,
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -870,6 +896,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard,
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -883,6 +910,45 @@ describe("LiveDesktopGateway", () => {
     }))
 
     expect(handleClipboard).toHaveBeenCalledWith("user-1", clipboardPayload())
+    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
+  })
+
+  it("hands a desktop's git status to the relay instead of dropping it silently", () => {
+    /*
+     * The failure this guards against is the quiet one: a type missing from the
+     * relay branch above falls through to the pong and is answered with a pong —
+     * no error, no log a user would ever see, and a phone whose second line simply
+     * never changes. So the assertion is not "the server did not throw" but "the
+     * relay was handed this payload", and the second one is that the desktop got
+     * nothing back but its welcome.
+     */
+    const socket = new FakeSocket()
+    const handleGitStatus = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
+      handleGitStatus,
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileGitStatus,
+      id: "msg-git-status",
+      sentAt: "2026-06-06T10:00:05.000Z",
+      payload: gitStatusPayload(),
+    }))
+
+    expect(handleGitStatus).toHaveBeenCalledWith("user-1", gitStatusPayload())
     expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
   })
 
@@ -904,6 +970,7 @@ describe("LiveDesktopGateway", () => {
       handleToolbar: vi.fn(),
       handleQuickPhrases,
       handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 

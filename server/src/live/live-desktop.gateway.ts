@@ -11,6 +11,7 @@ import {
   type LiveDesktopServerMessage,
   type MobileClipboardPayload,
   type MobileFramePayload,
+  type MobileGitStatusPayload,
   type MobileIntentResultPayload,
   type MobileQuickPhrasesPayload,
   type MobileSummaryPayload,
@@ -106,6 +107,18 @@ export interface LiveMobileRelayHandler {
    * nothing.
    */
   readonly handleClipboard: (userId: string, payload: MobileClipboardPayload) => void
+  /**
+   * The Git state of the directory one of a user's terminals is sitting in.
+   *
+   * Addressed to one phone rather than fanned out, on `handleFrame`'s terms: it
+   * answers "the terminal *you* have open", and a phone looking at another
+   * computer — or at none — has no use for it.
+   *
+   * Never stored, like the three above it. A desktop re-sends this whenever a
+   * phone syncs or attaches, which is the path every snapshot here already takes,
+   * so a cache would only ever serve a phone whose computer has gone away.
+   */
+  readonly handleGitStatus: (userId: string, payload: MobileGitStatusPayload) => void
   /**
    * One of the user's computers became reachable, or stopped being reachable.
    * Fired on every change, so it carries the current list rather than a delta.
@@ -538,7 +551,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         || message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress
         || message.type === LIVE_MESSAGE_TYPES.mobileToolbar
         || message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases
-        || message.type === LIVE_MESSAGE_TYPES.mobileClipboard) {
+        || message.type === LIVE_MESSAGE_TYPES.mobileClipboard
+        || message.type === LIVE_MESSAGE_TYPES.mobileGitStatus) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
         this.handleMobileRelayMessage(auth.userId, message)
@@ -765,6 +779,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileClipboard) {
         relay.handleClipboard(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileGitStatus) {
+        relay.handleGitStatus(userId, message.payload)
         return
       }
       // Named rather than cast into the last handler that happens to accept this

@@ -1,6 +1,7 @@
 import {
   isMobileClipboardPayload,
   isMobileDetachedPayload,
+  isMobileGitStatusPayload,
   isMobileFramePayload,
   isMobileIntentPayload,
   isMobileIntentResultPayload,
@@ -30,6 +31,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileToolbar: "mobile.toolbar",
   mobileQuickPhrases: "mobile.quickPhrases",
   mobileClipboard: "mobile.clipboard",
+  mobileGitStatus: "mobile.gitStatus",
   meetingTranscriptionCompleted: "meeting.transcription.completed",
 } as const
 
@@ -105,6 +107,7 @@ export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileToolbar, import("./mobile-live.js").MobileToolbarPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileClipboard, import("./mobile-live.js").MobileClipboardPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGitStatus, import("./mobile-live.js").MobileGitStatusPayload>
 
 export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
@@ -138,6 +141,7 @@ export type LiveMobileServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileToolbar, import("./mobile-live.js").MobileToolbarPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileClipboard, import("./mobile-live.js").MobileClipboardPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGitStatus, import("./mobile-live.js").MobileGitStatusPayload>
 
 export function isLiveMobileClientMessage(value: unknown): value is LiveMobileClientMessage {
   if (!isLiveEnvelope(value)) return false
@@ -163,6 +167,7 @@ export function isLiveMobileServerMessage(value: unknown): value is LiveMobileSe
   if (value.type === LIVE_MESSAGE_TYPES.mobileToolbar) return isMobileToolbarPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileClipboard) return isMobileClipboardPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileGitStatus) return isMobileGitStatusPayload(value.payload)
   return false
 }
 
@@ -199,6 +204,7 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
   if (value.type === LIVE_MESSAGE_TYPES.mobileToolbar) return isMobileToolbarPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileClipboard) return isMobileClipboardPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileGitStatus) return isMobileGitStatusPayload(value.payload)
   return false
 }
 

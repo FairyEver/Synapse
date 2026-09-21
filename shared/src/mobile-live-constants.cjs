@@ -60,6 +60,13 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxClipboardEntries: number,
  *   readonly maxClipboardTextLength: number,
  *   readonly maxClipboardBytes: number,
+ *   readonly maxGitPathLength: number,
+ *   readonly maxGitRefNameLength: number,
+ *   readonly maxGitShortShaLength: number,
+ *   readonly maxGitBranches: number,
+ *   readonly maxGitConflictFiles: number,
+ *   readonly maxGitConflictTextLength: number,
+ *   readonly maxIntentResultMessageLength: number,
  * }}
  */
 exports.MOBILE_FRAME_LIMITS = {
@@ -120,6 +127,18 @@ exports.MOBILE_FRAME_LIMITS = {
   maxClipboardEntries: 20,
   maxClipboardTextLength: 128 * 1024,
   maxClipboardBytes: 192 * 1024,
+  /**
+   * 手机端 Git 操作的字段上限（`git` intent 与 `mobile.gitStatus`）。
+   * 口径见 `mobile-live.ts` 上同一段注释 —— 两个文件的一致性由测试守着。
+   */
+  maxGitPathLength: 512,
+  maxGitRefNameLength: 255,
+  maxGitShortShaLength: 64,
+  maxGitBranches: 512,
+  maxGitConflictFiles: 128,
+  maxGitConflictTextLength: 96 * 1024,
+  /** `MobileIntentResult.message` 的上限；产生端也要按它收。 */
+  maxIntentResultMessageLength: 500,
 }
 
 /**

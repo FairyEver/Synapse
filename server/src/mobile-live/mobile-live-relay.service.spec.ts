@@ -268,6 +268,62 @@ describe("MobileLiveRelayService clipboard", () => {
   })
 })
 
+describe("MobileLiveRelayService git status", () => {
+  const payload = {
+    desktopClientInstanceId: "client-a",
+    mobileClientInstanceId: "phone-1",
+    sessionId: "sess-1",
+    revision: 1,
+    status: {
+      cwd: "/Users/liy/code/Synapse",
+      branch: "main",
+      upstream: "origin/main",
+      ahead: 2,
+      behind: 0,
+      changeCount: 3,
+      hasConflicts: false,
+    },
+  }
+
+  it("reaches the one phone that asked and not its siblings", () => {
+    /*
+     * 这条断言的是「手机真的收到了」，而不是「服务端没报错」。
+     *
+     * 这个家族在服务端有两处会静默吃掉消息：`live-desktop.gateway.ts` 的类型门
+     * （漏了走不到这里）与这里的收件人。所以断言落在 `sendToMobile` 上，并且点名
+     * 收件人 —— 这份状态说的是「你正开着的那个终端」，扇出给账号里每台手机是错的。
+     */
+    const { service, sendToMobile, sendToMobileClients } = createHarness()
+
+    service.handleGitStatus("user-1", payload)
+
+    expect(sendToMobile).toHaveBeenCalledTimes(1)
+    expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
+      userId: "user-1",
+      clientInstanceId: "phone-1",
+      message: { type: "mobile.gitStatus", payload },
+    })
+    expect(sendToMobileClients).not.toHaveBeenCalled()
+  })
+
+  it("sends again on every call rather than caching a computer's state", () => {
+    // 不缓存：这份状态的意思就是「现在」。一台已经走开的电脑留下的缓存只会是错的，
+    // 而手机在两个时刻（sync / attach）都会让电脑重发一次，不需要服务端替它记。
+    const { service, sendToMobile } = createHarness()
+
+    service.handleGitStatus("user-1", payload)
+    service.handleGitStatus("user-1", payload)
+
+    expect(sendToMobile).toHaveBeenCalledTimes(2)
+  })
+
+  it("stays quiet when no fanout is installed", () => {
+    const service = new MobileLiveRelayService({} as never, {} as never)
+
+    expect(() => service.handleGitStatus("user-1", payload)).not.toThrow()
+  })
+})
+
 /**
  * A summary arrives once a second per computer, so the work it does is what the
  * server's steady-state cost is made of.

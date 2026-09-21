@@ -6,6 +6,7 @@ import {
   type LiveMobileServerMessage,
   type MobileClipboardPayload,
   type MobileFramePayload,
+  type MobileGitStatusPayload,
   type MobileIntent,
   type MobileIntentResult,
   type MobileIntentResultPayload,
@@ -86,6 +87,7 @@ export class MobileLiveRelayService implements OnModuleInit {
       handleToolbar: (userId, payload) => this.handleToolbar(userId, payload),
       handleQuickPhrases: (userId, payload) => this.handleQuickPhrases(userId, payload),
       handleClipboard: (userId, payload) => this.handleClipboard(userId, payload),
+      handleGitStatus: (userId, payload) => this.handleGitStatus(userId, payload),
       handleDesktopPresence: (userId, clientInstanceIds) =>
         this.handleDesktopPresence(userId, clientInstanceIds),
     })
@@ -263,6 +265,24 @@ export class MobileLiveRelayService implements OnModuleInit {
   handleClipboard(userId: string, payload: MobileClipboardPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileClipboard, payload, envelopeMeta())
     this.fanout?.sendToMobileClients({ userId, message })
+  }
+
+  /**
+   * 一台电脑上、一个终端当前目录的 Git 状态。
+   *
+   * 点对点发给那一台手机，像 `handleFrame` 而不像 `handleToolbar`：它答的是
+   * 「你正开着的那个终端」，而这句话只对问它的那台手机成立。payload 自己带着收件人的
+   * `mobileClientInstanceId`，所以这里不需要把「谁订阅了什么」再记一份。
+   *
+   * 不缓存，理由与上面三条相同。电脑在手机的 `sync` 与 `attach` 两个时刻都会重发一次，
+   * 所以一台不在线的电脑留下的缓存没有存在的必要，而有的话它一定是错的。
+   */
+  handleGitStatus(userId: string, payload: MobileGitStatusPayload): void {
+    this.fanout?.sendToMobile({
+      userId,
+      clientInstanceId: payload.mobileClientInstanceId,
+      message: createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileGitStatus, payload, envelopeMeta()),
+    })
   }
 
   handleIntentResult(userId: string, payload: MobileIntentResultPayload): void {

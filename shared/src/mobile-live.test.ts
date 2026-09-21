@@ -18,12 +18,14 @@ import {
   isMobileFramePayload,
   isMobileIntent,
   isMobileIntentResult,
+  isMobileGitStatusPayload,
   isMobileQuickPhrasesPayload,
   isMobileSummaryPayload,
   isMobileTerminalFrame,
   isMobileToolbarPayload,
   isMobileTransferProgressPayload,
   type MobileClipboardPayload,
+  type MobileGitStatusPayload,
   type MobileIntent,
   type MobileQuickPhrasesPayload,
   type MobileSummaryAgentGroup,
@@ -35,6 +37,28 @@ import {
 } from "./mobile-live.js"
 
 const envelopeMeta = { id: "msg-1", sentAt: "2026-09-15T10:00:00.000Z" }
+
+/** 一份最普通的 `mobile.gitStatus`：一台电脑上、一个终端当前目录的 Git 状态。 */
+function gitStatusPayload(
+  overrides: Partial<MobileGitStatusPayload> = {},
+): MobileGitStatusPayload {
+  return {
+    desktopClientInstanceId: "client-a",
+    mobileClientInstanceId: "phone-1",
+    sessionId: "sess-1",
+    revision: 1,
+    status: {
+      cwd: "/Users/liy/code/Synapse",
+      branch: "main",
+      upstream: "origin/main",
+      ahead: 2,
+      behind: 0,
+      changeCount: 3,
+      hasConflicts: false,
+    },
+    ...overrides,
+  }
+}
 
 function frame(overrides: Partial<MobileTerminalFrame> = {}): MobileTerminalFrame {
   return {
@@ -934,6 +958,208 @@ describe("mobile live protocol", () => {
     // desktop builds and the one this test builds serialize to the same bytes.
     expect(Object.keys(clipboard())).toEqual(["desktopClientInstanceId", "revision", "entries"])
     expect(Object.keys(clipboard().entries[0])).toEqual(["id", "text", "copiedAt"])
+  })
+
+  it("routes the git status through both sides of the relay", () => {
+    /*
+     * 一条新消息要在四个地方各写一次：常量表、电脑上行联合、手机下行联合、两个校验
+     * 分支。漏掉任何一个都有明确症状，而且都不是「报个错」：漏在电脑上行那侧，服务端
+     * 收到不认识的类型会**直接切断电脑的连接**（用户看到的是「设备莫名离线」，日志里
+     * 只有一句校验失败）；漏在手机下行那侧，消息到不了手机，第二行永远停在原样。
+     *
+     * 两个联合是类型层的事 —— 少了哪一条这里根本编译不过（`createLiveEnvelope` 的
+     * 类型参数对不上）。这个用例守的是能跑到的那两个：常量与两个校验分支。
+     */
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileGitStatus,
+      gitStatusPayload(),
+      envelopeMeta,
+    ))).toBe(true)
+    expect(isLiveMobileServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileGitStatus,
+      gitStatusPayload(),
+      envelopeMeta,
+    ))).toBe(true)
+  })
+
+  it("answers 「不是仓库」 as an answer, and rejects a malformed git status", () => {
+    expect(isMobileGitStatusPayload(gitStatusPayload())).toBe(true)
+    // `null` 是一个答案：这个目录不是 Git 仓库，第二行据此退回显示版本号。
+    expect(isMobileGitStatusPayload(gitStatusPayload({ status: null }))).toBe(true)
+    // 游离 HEAD：没有分支名，但有短 sha。
+    expect(isMobileGitStatusPayload(gitStatusPayload({
+      status: {
+        cwd: "/tmp", branch: null, detachedSha: "0a1b2c3", upstream: null,
+        ahead: 0, behind: 0, changeCount: 0, hasConflicts: true,
+      },
+    }))).toBe(true)
+
+    const limits = MOBILE_FRAME_LIMITS
+    const status = gitStatusPayload().status as NonNullable<MobileGitStatusPayload["status"]>
+    const malformed: unknown[] = [
+      // 缺席不是「不是仓库」：手机分不清它与「从来没收到过」，而这两者在屏幕上不同 ——
+      // 一个退回版本号，一个保持现状不动。
+      { ...gitStatusPayload(), status: undefined },
+      { ...gitStatusPayload(), status: "main" },
+      { ...gitStatusPayload(), revision: -1 },
+      { ...gitStatusPayload(), sessionId: "" },
+      { ...gitStatusPayload(), mobileClientInstanceId: undefined },
+      { ...gitStatusPayload(), status: { ...status, branch: undefined } },
+      { ...gitStatusPayload(), status: { ...status, upstream: undefined } },
+      { ...gitStatusPayload(), status: { ...status, ahead: 0.5 } },
+      { ...gitStatusPayload(), status: { ...status, changeCount: -1 } },
+      { ...gitStatusPayload(), status: { ...status, hasConflicts: "no" } },
+      { ...gitStatusPayload(), status: { ...status, cwd: 7 } },
+      { ...gitStatusPayload(), status: { ...status, branch: "b".repeat(limits.maxGitRefNameLength + 1) } },
+      { ...gitStatusPayload(), status: { ...status, cwd: "c".repeat(limits.maxGitPathLength + 1) } },
+      { ...gitStatusPayload(), status: { ...status, detachedSha: "d".repeat(limits.maxGitShortShaLength + 1) } },
+    ]
+    for (const value of malformed) expect(isMobileGitStatusPayload(value)).toBe(false)
+  })
+
+  it("validates the git intent, whose action is an enum rather than a command string", () => {
+    /*
+     * `action` 只接受这八个词，不接受任何命令字符串 —— 这是「不得新增通用 shell.exec」
+     * 在协议层的落点：电脑侧按枚举分派，这条线上不存在一条「把手机给的字符串当命令跑」
+     * 的路。所以 `action` 不在枚举里，必须在这里就被拒掉。
+     */
+    const base = { v: MOBILE_PROTOCOL_VERSION, intentId: "i1", kind: "git", sessionId: "sess-1" }
+    const limits = MOBILE_FRAME_LIMITS
+
+    expect(isMobileIntent({ ...base, action: "status" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "branches" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "checkout", branch: "main", discardChanges: true })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "createBranch", branch: "feature", fromBranch: "main" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "commit", message: "只改一行", pushAfterCommit: true })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "push" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "sync" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "merge", branch: "release", direction: "outOfCurrent" })).toBe(true)
+
+    // 没有终端就不知道在哪个目录上跑。
+    expect(isMobileIntent({ ...base, sessionId: undefined, action: "status" })).toBe(false)
+    // 不在枚举里的动作。
+    expect(isMobileIntent({ ...base, action: "log" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "rm -rf /" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "status " })).toBe(false)
+    expect(isMobileIntent({ ...base, action: undefined })).toBe(false)
+    expect(isMobileIntent({ ...base, action: 8 })).toBe(false)
+    // 类型不对 / 超界的可选字段。
+    expect(isMobileIntent({ ...base, action: "commit", message: 42 })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "commit", message: "" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "commit", message: "m".repeat(limits.maxIntentTextLength + 1) })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "commit", pushAfterCommit: "yes" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "checkout", branch: "" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "checkout", branch: "b".repeat(limits.maxGitRefNameLength + 1) })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "merge", direction: "sideways" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "checkout", discardChanges: "true" })).toBe(false)
+  })
+
+  it("carries the git answers back, and refuses an empty block", () => {
+    // 「要用户先选一个走法」的结论带着一句要显示的话，所以它在 `rejected` 那一支上 ——
+    // 但校验器只看块内形状，不看它与 `outcome` 的搭配：那是电脑侧的业务判断。
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      message: "当前目录里有未提交的改动。",
+      git: { needsDecision: "dirty" },
+    })).toBe(true)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "accepted",
+      git: { branches: [{ name: "main", current: true }, { name: "release", current: false }] },
+    })).toBe(true)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      git: {
+        conflict: {
+          source: "feature",
+          target: "main",
+          files: ["a.txt"],
+          summaryText: "【Synapse · Git 合并冲突】\n",
+        },
+      },
+    })).toBe(true)
+
+    // 空对象不是一份结果：电脑要么有话说，要么什么都不填。
+    expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: {} })).toBe(false)
+    expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { needsDecision: "later" } })).toBe(false)
+    expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { branches: "main" } })).toBe(false)
+    expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { branches: [{ name: "main" }] } })).toBe(false)
+    expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { branches: [null] } })).toBe(false)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      git: { conflict: { source: "a", target: "b", files: [], summaryText: "" } },
+    })).toBe(false)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      git: { conflict: { source: "", target: "b", files: [], summaryText: "x" } },
+    })).toBe(false)
+
+    const limits = MOBILE_FRAME_LIMITS
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      git: {
+        conflict: {
+          source: "a",
+          target: "b",
+          files: Array.from({ length: limits.maxGitConflictFiles + 1 }, (_value, index) => `f${index}`),
+          summaryText: "x",
+        },
+      },
+    })).toBe(false)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      git: {
+        conflict: {
+          source: "a",
+          target: "b",
+          files: [],
+          summaryText: "s".repeat(limits.maxGitConflictTextLength + 1),
+        },
+      },
+    })).toBe(false)
+  })
+
+  it("keeps the widest conflict text the producer can build inside its declared bound", () => {
+    /*
+     * 这条例用把那个上界的算式钉住。产生端（`terminal-git-integration.ts` 的
+     * `buildConflict`）把文件清单截到 `maxGitConflictFiles` 项、每项截到
+     * `maxGitPathLength` 字节，所以最宽的文本是「128 项 × 每项 516 字节 + 抬头结尾」。
+     *
+     * 上界为什么不能随便加：`mobile.intentResult` 走的是电脑那条 `maxPayload` 为
+     * 256 KiB 的套接字，装不下就是**断连**，不是丢一条消息。
+     */
+    const limits = MOBILE_FRAME_LIMITS
+    const files = Array.from({ length: limits.maxGitConflictFiles }, () =>
+      "p".repeat(limits.maxGitPathLength))
+    const summaryText = [
+      "【Synapse · Git 合并冲突】",
+      "仓库目录：/tmp",
+      "操作：把分支 feature 合并到 main",
+      "结果：检测到冲突，已自动取消合并并回退（git merge --abort），仓库回到了合并前的状态。",
+      `冲突文件（共 ${String(files.length)} 个）：`,
+      ...files.map((file) => `- ${file}`),
+      "（清单只列了前 128 个，另有 3 个未列出）",
+      "",
+      "请帮我解决这些冲突。",
+      "",
+    ].join("\n")
+
+    expect(summaryText.length).toBeLessThanOrEqual(limits.maxGitConflictTextLength)
+
+    const result = {
+      intentId: "i1",
+      outcome: "rejected" as const,
+      git: { conflict: { source: "feature", target: "main", files, summaryText } },
+    }
+    expect(isMobileIntentResult(result)).toBe(true)
+    // 一条消息，不是一条流：整份 JSON 远在那条套接字之下，也给信封留足了余地。
+    expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBeLessThan(200 * 1024)
   })
 
   it("adds no bytes to the messages that predate the toolbar", () => {
