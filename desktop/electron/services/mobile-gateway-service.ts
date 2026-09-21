@@ -36,6 +36,14 @@ import type { MobileGatewayTransport } from "./mobile-gateway/transport"
 export type { MobileGatewayTransport, MobileSummaryDraft } from "./mobile-gateway/transport"
 
 /**
+ * What one read of a terminal's visible tail returns.
+ *
+ * Taken from the service rather than declared again, so a change to the window's
+ * shape cannot leave this file describing a window that no longer exists.
+ */
+type TerminalLineWindow = Awaited<ReturnType<TerminalService["readLineWindow"]>>
+
+/**
  * How long output is accumulated before a frame is sent.
  *
  * Terminal output arrives in bursts — a build emits dozens of chunks in a few
@@ -47,6 +55,24 @@ const FLUSH_INTERVAL_MS = 60
 
 /** The session list changes far less often than the screen; 1 Hz is plenty. */
 const SUMMARY_INTERVAL_MS = 1_000
+
+/**
+ * How long a read of the project and Provider directories is reused.
+ *
+ * Those two lists come out of the user's stored configuration, and reading them costs
+ * a sanitize-and-clone of the whole config plus a project listing — roughly a thousand
+ * times more work than everything else a summary tick does, for data that changes only
+ * when the user renames a project or edits a Provider. The summary runs at 1 Hz for as
+ * long as *any* terminal is printing, whether or not a phone is listening, so loading
+ * them every tick is a permanent background cost for a list nobody is changing.
+ *
+ * Fifteen seconds is the bound on how stale a change can be on a phone: a directory
+ * edited while a phone is already connected and idle reaches it within one tick of the
+ * cache expiring. The common case is fresher than that — a phone sends `sync` as it
+ * connects, which clears the cache outright (see `resendSummary`), so a rename made
+ * before the phone was picked up is on its first screen.
+ */
+export const MOBILE_AGENT_DIRECTORY_CACHE_MS = 15_000
 
 /**
  * Slack for the fields a toolbar payload carries besides its buttons.
@@ -223,6 +249,18 @@ export class MobileGatewayService {
   private summaryRevision = 0
   private lastSummaryContent = ""
   /**
+   * The last directory read, with the time it was taken; `null` means "read now".
+   *
+   * Held separately from `lastSummaryContent` because the two answer different
+   * questions: the fingerprint says whether the payload changed, this says whether it
+   * is worth looking at the configuration again. See `MOBILE_AGENT_DIRECTORY_CACHE_MS`
+   * for the bound and `resendSummary` for the one caller that overrides it.
+   */
+  private agentGroupsCache:
+    { readonly readAtMs: number; readonly groups: readonly MobileSummaryAgentGroup[] } | null = null
+  private agentProvidersCache:
+    { readonly readAtMs: number; readonly providers: readonly MobileSummaryAgentProvider[] } | null = null
+  /**
    * Fingerprint of the last toolbar sent, kept apart from the summary's.
    *
    * Separate on purpose: the two change on entirely different occasions — the session
@@ -333,6 +371,8 @@ export class MobileGatewayService {
     this.lastToolbarContent = ""
     this.lastQuickPhrasesContent = ""
     this.lastClipboardContent = ""
+    this.agentGroupsCache = null
+    this.agentProvidersCache = null
   }
 
   /** Called by the live connection when a phone sends an intent. */
@@ -472,24 +512,49 @@ export class MobileGatewayService {
   private async flush(): Promise<void> {
     const transport = this.transport
     if (!transport) return
+    // One read of a session's window per flush, however many phones are watching it.
+    // `readLineWindow` rebuilds up to 500 styled lines, so N attachments on one
+    // session used to cost N full rebuilds of the same window in the same tick — the
+    // phone count multiplied the most expensive thing this service does. The cache
+    // lives exactly as long as the loop: reusing a window across flushes would need a
+    // cheap "has the terminal changed since" accessor, and that belongs to the
+    // emulator rather than here.
+    const windows = new Map<string, Promise<TerminalLineWindow>>()
     for (const attachment of this.registry.all()) {
       if (!attachment.dirty) continue
       attachment.dirty = false
       try {
-        await this.flushAttachment(attachment)
+        await this.flushAttachment(attachment, windows)
       } catch (error) {
         this.logWarn("Mobile frame flush failed.", error, { sessionId: attachment.sessionId })
       }
     }
   }
 
-  private async flushAttachment(attachment: MobileAttachment): Promise<void> {
+  /**
+   * The shared read. Cached as a promise rather than as a value so that two reads
+   * cannot be in flight at once for one session even if a future caller stops
+   * awaiting them in sequence.
+   */
+  private readFlushWindow(
+    cache: Map<string, Promise<TerminalLineWindow>>,
+    sessionId: string,
+  ): Promise<TerminalLineWindow> {
+    let window = cache.get(sessionId)
+    if (!window) {
+      window = this.terminal.readLineWindow({ sessionId, maxLines: this.lineWindowLines })
+      cache.set(sessionId, window)
+    }
+    return window
+  }
+
+  private async flushAttachment(
+    attachment: MobileAttachment,
+    windows: Map<string, Promise<TerminalLineWindow>>,
+  ): Promise<void> {
     const transport = this.transport
     if (!transport) return
-    const window = await this.terminal.readLineWindow({
-      sessionId: attachment.sessionId,
-      maxLines: this.lineWindowLines,
-    })
+    const window = await this.readFlushWindow(windows, attachment.sessionId)
     // Anchor before the first push so gateway indices and emulator indices share
     // an origin; history paging needs to be able to name lines older than the window.
     if (!attachment.anchored) {
@@ -535,12 +600,15 @@ export class MobileGatewayService {
     const frames = mustSnapshot
       ? buildSnapshotFrames(shared)
       : buildTerminalFrames({ ...shared, kind: "suffix", truncated: content.truncated })
+    // Serialized once, here: the budget is charged these bytes, the log lines report
+    // them, and the transport sends these exact strings. See `serializeFrames`.
+    const wire = serializeFrames(frames)
 
     // A snapshot is the recovery path, so it always goes out. Ordinary updates are
     // subject to the uplink budget: past it, the update is dropped and the next
     // flush sends a fresh window instead of queueing frames the phone will never
     // catch up on. On a metered link the latest screen always beats a full history.
-    if (!mustSnapshot && !this.consumeBudget(attachment.mobileClientInstanceId, frames)) {
+    if (!mustSnapshot && !this.consumeBudget(attachment.mobileClientInstanceId, wireBytes(wire))) {
       // The snapshot that replaces this update only exists on the next flush, and
       // flush scheduling rides on `markDirty` — which rides on terminal output. A
       // drop therefore strands the phone whenever the burst it landed on was the
@@ -553,7 +621,7 @@ export class MobileGatewayService {
       this.deps.logger.warn("Mobile update dropped by the uplink budget; a snapshot replaces it.", {
         sessionId: attachment.sessionId,
         frames: frames.length,
-        bytes: frameBytes(frames),
+        bytes: wireBytes(wire),
         windowLines: content.lines.length,
       })
       return
@@ -572,12 +640,12 @@ export class MobileGatewayService {
         sessionId: attachment.sessionId,
         frames: frames.length,
         windowLines: content.lines.length,
-        bytes: frameBytes(frames),
+        bytes: wireBytes(wire),
       })
     }
 
-    for (const frame of frames) {
-      transport.sendFrame(attachment.mobileClientInstanceId, frame)
+    for (const frameJson of wire) {
+      transport.sendFrame(attachment.mobileClientInstanceId, frameJson)
     }
   }
 
@@ -615,7 +683,8 @@ export class MobileGatewayService {
       seq: window.throughOutputSeq,
       sizeRevision: window.sizeRevision,
     })
-    this.consumeBudget(attachment.mobileClientInstanceId, frames)
+    const wire = serializeFrames(frames)
+    this.consumeBudget(attachment.mobileClientInstanceId, wireBytes(wire))
     // 谁把这一整窗推出去的。手机侧看到的是"又一轮 reset + 十几块 history"，
     // 而这一行是它唯一的解释：attach / sync 各一条通路。
     this.deps.logger.info("Mobile window pushed.", {
@@ -623,10 +692,10 @@ export class MobileGatewayService {
       reason,
       frames: frames.length,
       windowLines: snapshot.lines.length,
-      bytes: frameBytes(frames),
+      bytes: wireBytes(wire),
     })
-    for (const frame of frames) {
-      this.transport?.sendFrame(attachment.mobileClientInstanceId, frame)
+    for (const frameJson of wire) {
+      this.transport?.sendFrame(attachment.mobileClientInstanceId, frameJson)
     }
   }
 
@@ -697,22 +766,18 @@ export class MobileGatewayService {
       seq: attachment.lastSeq,
       sizeRevision: attachment.lastSizeRevision,
     })
-    for (const frame of frames) {
-      transport.sendFrame(attachment.mobileClientInstanceId, frame)
+    for (const frameJson of serializeFrames(frames)) {
+      transport.sendFrame(attachment.mobileClientInstanceId, frameJson)
     }
   }
 
-  private consumeBudget(
-    mobileClientInstanceId: string,
-    frames: readonly MobileTerminalFrame[],
-  ): boolean {
+  private consumeBudget(mobileClientInstanceId: string, bytes: number): boolean {
     const nowMs = this.nowMs()
     let entry = this.bytesByClient.get(mobileClientInstanceId)
     if (!entry || nowMs - entry.windowStartedMs >= 1_000) {
       entry = { windowStartedMs: nowMs, bytes: 0 }
       this.bytesByClient.set(mobileClientInstanceId, entry)
     }
-    const bytes = frameBytes(frames)
     const withinBudget = entry.bytes + bytes <= MOBILE_FRAME_LIMITS.maxBytesPerSecond
     entry.bytes += bytes
     return withinBudget
@@ -746,6 +811,13 @@ export class MobileGatewayService {
    */
   private resendSummary(): void {
     this.lastSummaryContent = ""
+    // The one caller that overrides the directory cache's clock. A `sync` comes from a
+    // phone that has just connected and is about to draw this list, so it is both the
+    // moment a stale project name is most visible and the moment the cost of reading
+    // it again buys the most. Everything else — the 1 Hz tick that any printing
+    // terminal keeps alive — reuses the read for up to `MOBILE_AGENT_DIRECTORY_CACHE_MS`.
+    this.agentGroupsCache = null
+    this.agentProvidersCache = null
     this.scheduleSummary()
   }
 
@@ -963,14 +1035,21 @@ export class MobileGatewayService {
    * nothing; the sessions in the same payload are unaffected either way.
    */
   private async summaryAgentGroups(): Promise<readonly MobileSummaryAgentGroup[] | undefined> {
+    const cached = this.agentGroupsCache
+    if (cached && this.nowMs() - cached.readAtMs < MOBILE_AGENT_DIRECTORY_CACHE_MS) return cached.groups
     try {
-      return (await this.deps.listAgentConversationGroups())
+      const groups = (await this.deps.listAgentConversationGroups())
         .slice(0, MOBILE_FRAME_LIMITS.maxSummaryAgentGroups)
         .map((group) => ({
           projectId: clampSummaryText(group.projectId, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
           name: clampSummaryText(group.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength),
           isDefault: group.isDefault,
         }))
+      // Only a read that worked is remembered. A directory that could not be read is
+      // not worth caching — it is the one case where trying again on the next tick is
+      // exactly what should happen, and there is nothing to serve in the meantime.
+      this.agentGroupsCache = { readAtMs: this.nowMs(), groups }
+      return groups
     } catch (error) {
       this.logWarn("Mobile summary could not read the project directory.", error)
       return undefined
@@ -986,8 +1065,10 @@ export class MobileGatewayService {
    * is clamped like any other display string.
    */
   private async summaryAgentProviders(): Promise<readonly MobileSummaryAgentProvider[] | undefined> {
+    const cached = this.agentProvidersCache
+    if (cached && this.nowMs() - cached.readAtMs < MOBILE_AGENT_DIRECTORY_CACHE_MS) return cached.providers
     try {
-      return (await this.deps.listAgentConversationProviders())
+      const providers = (await this.deps.listAgentConversationProviders())
         .slice(0, MOBILE_FRAME_LIMITS.maxSummaryAgentProviders)
         .map((provider) => ({
           id: clampSummaryText(provider.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
@@ -1000,6 +1081,8 @@ export class MobileGatewayService {
               .map(([tier, model]) => [tier, clampSummaryText(model, MOBILE_FRAME_LIMITS.maxSummaryModelNameLength)]),
           ),
         }))
+      this.agentProvidersCache = { readAtMs: this.nowMs(), providers }
+      return providers
     } catch (error) {
       this.logWarn("Mobile summary could not read the Provider directory.", error)
       return undefined
@@ -1432,15 +1515,30 @@ function summaryBytes(content: MobileSummaryContent): number {
 }
 
 /**
- * The same measurement, for a batch of frames.
+ * Serializes a batch of frames once, for everything that needs the bytes.
+ *
+ * The budget is stated in bytes on the wire, and the wire form of a frame *is*
+ * `JSON.stringify`'s output — so the string produced here is what the decision is made
+ * on, what the log lines report, and what the transport sends. The alternative, which
+ * this replaces, was to serialize each frame to count it and then let the envelope
+ * serialize the same frame again on the way out: two full escaping passes over up to
+ * 8 KiB of terminal text per frame, and two places that could disagree about how many
+ * bytes a frame costs.
+ */
+function serializeFrames(frames: readonly MobileTerminalFrame[]): string[] {
+  return frames.map((frame) => JSON.stringify(frame))
+}
+
+/**
+ * The bytes those serialized frames cost, measured the way the budget is stated.
  *
  * One implementation rather than two: the budget spends these bytes and the log line
  * reports them, and a log that disagrees with the number the decision was made on is
  * worse than no log at all.
  */
-function frameBytes(frames: readonly MobileTerminalFrame[]): number {
+function wireBytes(serialized: readonly string[]): number {
   let bytes = 0
-  for (const frame of frames) bytes += Buffer.byteLength(JSON.stringify(frame), "utf8")
+  for (const frame of serialized) bytes += Buffer.byteLength(frame, "utf8")
   return bytes
 }
 

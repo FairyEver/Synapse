@@ -1,8 +1,10 @@
 import { EventEmitter } from "node:events"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { LIVE_DESKTOP_CLOSE_CODES, LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
+import { LIVE_DESKTOP_CLOSE_CODES, LIVE_MESSAGE_TYPES, MOBILE_FRAME_LIMITS, createLiveEnvelope } from "@synapse/shared"
+import type { MobileTerminalFrame } from "@synapse/shared"
 import type { SynapseAccountState } from "../../../src/types/account"
-import { LiveConnectionService } from "../live-connection-service"
+import { MAX_SOCKET_BUFFERED_BYTES, LiveConnectionService } from "../live-connection-service"
+import { buildTerminalFrames } from "../mobile-gateway/frame-builder"
 
 vi.mock("electron", () => ({
   app: {
@@ -29,6 +31,8 @@ class FakeSocket extends EventEmitter {
   readonly sent: string[] = []
   readonly close = vi.fn()
   readyState = 1
+  /** What `ws` is still holding for a link that has stopped draining. */
+  bufferedAmount = 0
   throwOnWebhookAck = false
 
   send(payload: string): void {
@@ -95,6 +99,94 @@ async function waitForCondition(condition: () => boolean): Promise<void> {
     })
   }
   throw new Error("Timed out waiting for condition")
+}
+
+const welcomeMessage = JSON.stringify({
+  type: "live.welcome",
+  id: "msg-welcome",
+  sentAt: "2026-06-06T10:00:01.000Z",
+  payload: {
+    connectionId: "conn-a",
+    serverTime: "2026-06-06T10:00:01.000Z",
+    heartbeatIntervalMs: 20_000,
+    heartbeatTimeoutMs: 45_000,
+  },
+})
+
+/** The two steps that make a socket a connection: it opens, and the cloud welcomes it. */
+async function openAndWelcome(service: LiveConnectionService, socket: FakeSocket): Promise<void> {
+  socket.emit("open")
+  await waitForCondition(() => socket.sent.length > 0)
+  socket.emit("message", welcomeMessage)
+  await waitForCondition(() => service.getState().status === "connected")
+}
+
+async function connectAndWelcome(service: LiveConnectionService, socket: FakeSocket): Promise<void> {
+  service.handleAccountState(authenticatedState)
+  await flushPromises()
+  await openAndWelcome(service, socket)
+}
+
+/** A frame, as opposed to the envelope around it or the summary and toolbar payloads. */
+function isFrameLike(value: unknown): boolean {
+  return typeof value === "object" && value !== null && "sessionId" in value && "lines" in value
+}
+
+/**
+ * Whether a value being serialized carries a terminal frame inside it.
+ *
+ * The envelope is what reaches `JSON.stringify`, so asking whether its *argument* is a
+ * frame would answer "no" for the implementation this replaced as readily as for this
+ * one — the frame used to sit at `payload.frame`. What has to be absent is a frame
+ * anywhere in the value: that is the second pass over the same bytes.
+ */
+function containsFrame(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false
+  return Object.values(value).some((nested) => isFrameLike(nested) || containsFrame(nested))
+}
+
+/**
+ * The frames whose bytes are most likely to be measured wrongly: a plain short line, the
+ * characters `JSON.stringify` has to escape (quote, backslash, control characters, a
+ * non-BMP emoji, a lone surrogate), and enough lines to reach the per-frame ceiling.
+ *
+ * Built by the real builder so the shapes are the ones the wire actually carries.
+ */
+function representativeFrames(): readonly MobileTerminalFrame[] {
+  const escaping = [
+    "plain ascii line",
+    'quote " backslash \\ slash /',
+    "tab\there newline\nthere bell\u0007",
+    "中文行 中文 emoji 👍🏽",
+    "lone\ud800surrogate",
+  ]
+  const shared = {
+    sessionId: "sess-1",
+    kind: "suffix" as const,
+    from: 0,
+    cursor: { row: 2, col: 5, visible: true },
+    alt: false,
+    truncated: false,
+    seq: 42,
+    sizeRevision: 3,
+  }
+  const atLineLimit = buildTerminalFrames({
+    ...shared,
+    from: 100,
+    lines: Array.from(
+      { length: MOBILE_FRAME_LIMITS.maxLinesPerFrame + 1 },
+      (_, index) => ({ text: `line-${index}` }),
+    ),
+    total: 100 + MOBILE_FRAME_LIMITS.maxLinesPerFrame + 1,
+  })
+  return [
+    ...buildTerminalFrames({
+      ...shared,
+      lines: escaping.map((text) => ({ text })),
+      total: escaping.length,
+    }),
+    ...atLineLimit,
+  ]
 }
 
 describe("LiveConnectionService", () => {
@@ -606,16 +698,21 @@ describe("LiveConnectionService", () => {
     service.handleAccountState(authenticatedState)
     await flushPromises()
     firstSocket.emit("close", LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict)
+    await waitForCondition(() => reissue.mock.calls.length === 1)
 
-    await waitForCondition(() => createSocket.mock.calls.length === 2)
+    expect(reissue).toHaveBeenCalledTimes(1)
+    // On the backoff timer, not straight into a new connection. A fresh id is the one
+    // thing only this side can do about the refusal, but a relay that turns away the id
+    // it was just handed must not be met with connections as fast as they can be built
+    // — that is the loop this used to be, with no delay in it at all.
+    expect(createSocket).toHaveBeenCalledTimes(1)
+    expect(timers.timers.map((timer) => timer.delay)).toEqual([2_000])
+
+    timers.timers[0]?.callback()
     await flushPromises()
     secondSocket.emit("open")
     await waitForCondition(() => secondSocket.sent.length > 0)
 
-    expect(reissue).toHaveBeenCalledTimes(1)
-    // Immediate rather than on the backoff timer: nothing on this side failed,
-    // and reconnecting under the same id would be refused exactly the same way.
-    expect(timers.setTimeout).not.toHaveBeenCalled()
     expect(JSON.parse(secondSocket.sent[0] ?? "{}")).toMatchObject({
       type: "live.hello",
       payload: { clientInstanceId: "client-b" },
@@ -838,6 +935,170 @@ describe("LiveConnectionService", () => {
 
     expect(reconnectDelay).toHaveBeenNthCalledWith(1, 0)
     expect(reconnectDelay).toHaveBeenNthCalledWith(2, 1)
+  })
+
+  it("does not reset the backoff for a connection that closes straight after welcome", async () => {
+    /*
+     * A relay restarting, or a proxy draining a node, accepts the socket, sends `welcome`
+     * and closes it again. Every one of those connections looked like a success for an
+     * instant, and treating that as one held the delay at its floor: a two-second loop,
+     * every two seconds, for as long as the flapping lasts. The counter has to survive it
+     * so the delay can grow.
+     */
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const reconnectDelay = vi.fn((attempt: number) => 2_000 + attempt)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn()
+        .mockReturnValueOnce(firstSocket as never)
+        .mockReturnValueOnce(secondSocket as never),
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay,
+      // A frozen clock: both connections are over in the same instant.
+      now: () => new Date("2026-06-06T10:00:00.000Z"),
+    })
+
+    await connectAndWelcome(service, firstSocket)
+    firstSocket.emit("close")
+
+    expect(reconnectDelay).toHaveBeenNthCalledWith(1, 0)
+    timers.timers.find((timer) => timer.delay === 2_000)?.callback()
+    await flushPromises()
+    await openAndWelcome(service, secondSocket)
+    secondSocket.emit("close")
+
+    // The second close is not a fresh start any more.
+    expect(reconnectDelay).toHaveBeenNthCalledWith(2, 1)
+  })
+
+  it("forgives the backoff once a connection has stayed up", async () => {
+    /*
+     * The other half, and the reason the reset was not simply deleted: a connection that
+     * has demonstrably worked must not leave the next ordinary drop inheriting the delay
+     * of some failure an hour ago. Nothing here should reconnect more slowly than it did
+     * before any of this existed.
+     */
+    let clockMs = Date.parse("2026-06-06T10:00:00.000Z")
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const reconnectDelay = vi.fn((attempt: number) => 2_000 + attempt)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn()
+        .mockReturnValueOnce(firstSocket as never)
+        .mockReturnValueOnce(secondSocket as never),
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay,
+      now: () => new Date(clockMs),
+    })
+
+    // A connection that flaps once, so the counter is not at zero when it matters.
+    await connectAndWelcome(service, firstSocket)
+    firstSocket.emit("close")
+    timers.timers.find((timer) => timer.delay === 2_000)?.callback()
+    await flushPromises()
+    await openAndWelcome(service, secondSocket)
+    expect(reconnectDelay).toHaveBeenNthCalledWith(1, 0)
+
+    // Then it stays up for five minutes, and *that* is what earns the floor back.
+    clockMs += 5 * 60_000
+    secondSocket.emit("close")
+
+    expect(reconnectDelay).toHaveBeenNthCalledWith(2, 0)
+  })
+
+  it("sends a frame as the gateway serialized it, byte for byte", async () => {
+    /*
+     * The frame arrives already JSON, because that string is what the phone's uplink
+     * budget was charged for — the point being that one representation is measured and a
+     * different one is not sent. What must not change is the message: the envelope is
+     * still built by `createLiveEnvelope` and serialized by `JSON.stringify`, with the
+     * frame spliced in, and the result has to be exactly what serializing the whole
+     * envelope would have produced.
+     */
+    const socket = new FakeSocket()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      now: () => new Date("2026-06-06T10:00:00.000Z"),
+    })
+    await connectAndWelcome(service, socket)
+    socket.sent.length = 0
+
+    const frames = representativeFrames()
+    // Serialized before the spy goes on, or the test's own call would be the one counted.
+    const payloads = frames.map((frame) => JSON.stringify(frame))
+    const stringify = vi.spyOn(JSON, "stringify")
+    for (const frameJson of payloads) {
+      await service.sendMobileFrame("phone-1", frameJson)
+    }
+    // The pass this removes: nothing here carried a frame into `JSON.stringify` — the
+    // strings arrived ready to send.
+    const serializedAFrame = stringify.mock.calls.some(([value]) => containsFrame(value))
+    stringify.mockRestore()
+    expect(serializedAFrame).toBe(false)
+
+    expect(socket.sent).toHaveLength(frames.length)
+    for (const [index, frame] of frames.entries()) {
+      const sent = socket.sent[index] ?? ""
+      // The reference is the implementation this replaced: the frame object inside the
+      // envelope, serialized once. Escaping, key order and placement all have to match.
+      const envelope = JSON.parse(sent) as { readonly id: string; readonly sentAt: string }
+      expect(sent).toBe(JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileFrame, {
+        desktopClientInstanceId: "client-a",
+        mobileClientInstanceId: "phone-1",
+        frame,
+      }, { id: envelope.id, sentAt: envelope.sentAt })))
+      // And what the phone parses back is the very frame the gateway measured.
+      expect(JSON.parse(sent)).toMatchObject({
+        type: LIVE_MESSAGE_TYPES.mobileFrame,
+        payload: { desktopClientInstanceId: "client-a", mobileClientInstanceId: "phone-1", frame },
+      })
+    }
+    // One of them really did reach the per-frame line ceiling, which is the shape whose
+    // bytes the budget decision is most likely to be wrong about.
+    expect(frames.some((frame) => frame.lines.length === MOBILE_FRAME_LIMITS.maxLinesPerFrame))
+      .toBe(true)
+  })
+
+  it("drops a message rather than queueing it behind a backed-up socket", async () => {
+    /*
+     * `ws` buffers without limit, and the gateway produces frames whether or not anyone
+     * is reading — a stalled link must cost a lost frame, not unbounded memory in the
+     * main process. Dropping is safe by protocol: the next frame carries the state that
+     * matters, and a summary is re-sent on the next tick.
+     */
+    const socket = new FakeSocket()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      now: () => new Date("2026-06-06T10:00:00.000Z"),
+    })
+    await connectAndWelcome(service, socket)
+    socket.sent.length = 0
+    const frameJson = JSON.stringify(representativeFrames()[0]!)
+
+    socket.bufferedAmount = MAX_SOCKET_BUFFERED_BYTES + 1
+    await expect(service.sendMobileFrame("phone-1", frameJson)).resolves.toBeUndefined()
+    expect(socket.sent).toHaveLength(0)
+
+    // At the limit and below, the message goes out exactly as it always did.
+    socket.bufferedAmount = MAX_SOCKET_BUFFERED_BYTES
+    await service.sendMobileFrame("phone-1", frameJson)
+    expect(socket.sent).toHaveLength(1)
+
+    socket.bufferedAmount = 0
+    await service.sendMobileFrame("phone-1", frameJson)
+    expect(socket.sent).toHaveLength(2)
   })
 
   it("refreshes once for a missing token and does not connect when still missing", async () => {

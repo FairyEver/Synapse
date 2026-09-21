@@ -3,7 +3,6 @@ import { app } from "electron"
 import WebSocket from "ws"
 import type {
   MobileIntentResult,
-  MobileTerminalFrame,
   MobileTransferProgressPayload,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { SynapseAccountState } from "../../src/types/account"
@@ -13,7 +12,7 @@ import type { AccountService } from "./account-service"
 import type { LiveMeetingTranscriptionHandler } from "./live-meeting-transcription-handler"
 import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler"
 import { LiveClientIdStore } from "./live-client-id-store"
-import { createLiveReconnectDelay } from "./live-reconnect-policy"
+import { createLiveReconnectDelay, isStableLiveConnection } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
 import type {
   MobileClipboardDraft,
@@ -28,7 +27,37 @@ const defaultHeartbeatIntervalMs = 20_000
 const defaultHeartbeatTimeoutMs = 45_000
 const liveProtocolPromise = import("@synapse/shared")
 
-type LiveSocket = Pick<WebSocket, "on" | "send" | "close" | "readyState">
+/**
+ * How much unsent data may pile up in the socket's own buffer before this side stops
+ * adding to it.
+ *
+ * `ws` buffers without limit, so a link that has stopped draining turns every frame
+ * the gateway produces into memory held by the main process — and the gateway produces
+ * them whether or not anyone is reading, because a terminal is printing. Dropping is
+ * safe by protocol: a frame the phone never received is covered by the next one, which
+ * carries the state that matters, and a summary is re-sent on the next tick.
+ *
+ * Half a megabyte, against an uplink budget of 64 KiB per second per phone and frames
+ * of at most 8 KiB, is several seconds of backlog. A phone that far behind is not
+ * looking at this screen any more; the bound is what keeps a stalled socket from
+ * becoming a memory leak rather than a number anyone is meant to tune.
+ */
+export const MAX_SOCKET_BUFFERED_BYTES = 512 * 1024
+
+/**
+ * The marker standing in for a terminal frame that is already serialized.
+ *
+ * `sendMobileFrame` receives the frame's JSON rather than the frame, so that the bytes
+ * the gateway charged the uplink budget are the bytes that go out. The envelope is
+ * still built by `createLiveEnvelope` and serialized by `JSON.stringify` — the marker
+ * is what that string is then spliced around, rather than a second full pass over the
+ * frame. It is plain printable ASCII, so `JSON.stringify` emits it verbatim and it can
+ * be found in the result — and because the frame is the payload's last field, the last
+ * occurrence is the one to replace, whatever an earlier field happens to contain.
+ */
+const RAW_FRAME_MARKER = "__synapse_raw_mobile_frame__"
+
+type LiveSocket = Pick<WebSocket, "on" | "send" | "close" | "readyState" | "bufferedAmount">
 
 type LiveConnectionServiceDeps = {
   readonly accountService: AccountService
@@ -76,6 +105,13 @@ export class LiveConnectionService {
    */
   private clientInstanceIdConflictCloseCode = -1
   private reconnectAttempt = 0
+  /**
+   * When the current connection was welcomed, in the same clock as `now`.
+   *
+   * Held so the attempt counter is only cleared by a connection that survived — see
+   * `isStableLiveConnection`. `null` means this socket never got that far.
+   */
+  private connectedAtMs: number | null = null
   private connectionGeneration = 0
   private closedIntentionally = false
   private authenticatedAccountUserId: string | null = null
@@ -291,7 +327,7 @@ export class LiveConnectionService {
       this.heartbeatTimeoutMs = welcome.heartbeatTimeoutMs > 0
         ? welcome.heartbeatTimeoutMs
         : defaultHeartbeatTimeoutMs
-      this.reconnectAttempt = 0
+      this.connectedAtMs = this.now().getTime()
       this.startHeartbeat(intervalMs)
       this.startServerTimeout(this.heartbeatTimeoutMs)
       this.setState({
@@ -433,15 +469,26 @@ export class LiveConnectionService {
     }, this.envelopeMetadata()))
   }
 
-  async sendMobileFrame(mobileClientInstanceId: string, frame: MobileTerminalFrame): Promise<void> {
+  /**
+   * One terminal frame, already serialized by the gateway.
+   *
+   * `frameJson` is the string the gateway measured against the phone's uplink budget,
+   * so it is sent as it stands — spliced into the envelope instead of being handed back
+   * to `JSON.stringify` inside it. See `sendLiveEnvelopeWithRawFrame`.
+   */
+  async sendMobileFrame(mobileClientInstanceId: string, frameJson: string): Promise<void> {
     const clientInstanceId = this.state.clientInstanceId
     if (!clientInstanceId) return
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
-    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileFrame, {
-      desktopClientInstanceId: clientInstanceId,
-      mobileClientInstanceId,
-      frame,
-    }, this.envelopeMetadata()))
+    const metadata = this.envelopeMetadata()
+    this.sendLiveEnvelopeWithRawFrame(
+      (frame) => createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileFrame, {
+        desktopClientInstanceId: clientInstanceId,
+        mobileClientInstanceId,
+        frame,
+      }, metadata),
+      frameJson,
+    )
   }
 
   async sendMobileIntentResult(
@@ -470,9 +517,68 @@ export class LiveConnectionService {
   }
 
   private sendLiveEnvelope(envelope: unknown): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return
+    this.sendSerialized(JSON.stringify(envelope))
+  }
+
+  /**
+   * Sends an envelope whose `frame` field is already JSON, without serializing the
+   * frame a second time.
+   *
+   * The frame arrives as a string precisely because the gateway charged the phone's
+   * uplink budget for it, and charging one representation while sending another is how
+   * the two drift apart. `createLiveEnvelope` and `JSON.stringify` still build every
+   * other byte of the message, so the envelope's shape and escaping stay theirs; the
+   * marker is the one place the frame's own JSON is spliced in. Both the marker and the
+   * spliced JSON are text `JSON.stringify` emitted, so what goes on the wire is what
+   * serializing the same envelope with the frame in it would have produced.
+   */
+  private sendLiveEnvelopeWithRawFrame(
+    buildEnvelope: (frame: unknown) => unknown,
+    frameJson: string,
+  ): void {
+    const marker = `"${RAW_FRAME_MARKER}"`
+    const serialized = JSON.stringify(buildEnvelope(RAW_FRAME_MARKER))
+    // Last occurrence, not first: the frame is the payload's last field, so anything
+    // earlier in the message that happened to carry the same text — a client instance
+    // id is only bounded by its length — cannot be mistaken for it.
+    const at = serialized.lastIndexOf(marker)
+    if (at < 0) {
+      // Unreachable while the marker is plain ASCII and the frame is the payload's last
+      // field. Rebuilding the frame from its own JSON is the honest degradation, and it
+      // is the same message: a phone that received the marker itself would read a
+      // malformed frame, and losing every frame would look like a dead terminal.
+      logger.warn("Live mobile frame could not be spliced and was serialized again.", {
+        reason: "marker_missing",
+      })
+      this.sendLiveEnvelope(buildEnvelope(JSON.parse(frameJson) as unknown))
+      return
+    }
+    this.sendSerialized(serialized.slice(0, at) + frameJson + serialized.slice(at + marker.length))
+  }
+
+  /**
+   * The one place a message reaches the socket, so the one place the socket's own
+   * backlog is checked.
+   *
+   * Over the limit the message is dropped rather than queued behind it, and the drop is
+   * logged: on a link that is not draining, waiting only moves the growth from this
+   * process's heap into a queue the phone will never read. The heartbeat does not go
+   * through here — it is a few dozen bytes, and losing it is what would tear down a
+   * connection that might still recover.
+   */
+  private sendSerialized(payload: string): void {
+    const socket = this.socket
+    if (socket?.readyState !== WebSocket.OPEN) return
+    const buffered = socket.bufferedAmount
+    if (buffered > MAX_SOCKET_BUFFERED_BYTES) {
+      logger.warn("Live outbound message dropped: the socket is backed up.", {
+        bufferedBytes: buffered,
+        limitBytes: MAX_SOCKET_BUFFERED_BYTES,
+      })
+      return
+    }
     try {
-      this.socket.send(JSON.stringify(envelope))
+      socket.send(payload)
     } catch (error) {
       logger.warn("Live outbound message failed.", this.liveErrorMetadata(error))
     }
@@ -550,17 +656,19 @@ export class LiveConnectionService {
   /**
    * Takes a new client instance id after the cloud refused the one in hand.
    *
-   * Reconnects at once rather than on a backoff timer: nothing on this side
-   * failed, and the refusal is settled the moment the id is replaced. The attempt
-   * counter is cleared with it for the same reason — what comes next is a first
-   * attempt under a new identity, not a retry of a connection that keeps failing.
+   * A fresh id is the one thing only this side can do about the refusal, and it is
+   * settled the moment the id is replaced — but the reconnection still goes through the
+   * ordinary backoff rather than starting at once. Nothing here can promise the *next*
+   * refusal is about the id: a relay that turns away whatever it was just handed would
+   * otherwise be met with connections as fast as they can be built, which is a loop
+   * with no delay in it at all. The attempt counter is deliberately not cleared, for
+   * the same reason `welcome` no longer clears it — that a connection was refused is a
+   * fact about the connection, not about the id it carried.
    */
   private async replaceClientInstanceId(): Promise<void> {
-    this.socket = null
-    this.clearHeartbeat()
-    this.clearServerTimeout()
-    this.reconnectAttempt = 0
-
+    logger.warn("Live client instance id refused; reconnecting under a new one.", {
+      closeCode: this.clientInstanceIdConflictCloseCode,
+    })
     try {
       await this.clientIdStore.reissue()
     } catch (error) {
@@ -569,7 +677,11 @@ export class LiveConnectionService {
       logger.warn("Client instance id reissue failed.", this.liveErrorMetadata(error))
     }
 
-    await this.startConnect()
+    // The generic sentence a dropped connection already produces, rather than a new one
+    // for this case: the reason reaches the settings panel, and what the user needs to
+    // know is that the computer is offline for a moment. Which ended it is in the log
+    // line above.
+    this.scheduleReconnect("连接已断开")
   }
 
   private scheduleReconnect(error: string, options: { readonly allowUnauthenticatedState?: boolean } = {}): void {
@@ -583,6 +695,15 @@ export class LiveConnectionService {
     this.socket = null
     this.clearHeartbeat()
     this.clearServerTimeout()
+    // Backoff is forgiven only by a connection that lasted, and forgiving it is what
+    // makes an ordinary drop reconnect promptly instead of inheriting the delay of some
+    // failure an hour ago.
+    if (this.connectedAtMs !== null) {
+      if (isStableLiveConnection(this.now().getTime() - this.connectedAtMs)) {
+        this.reconnectAttempt = 0
+      }
+      this.connectedAtMs = null
+    }
     const delay = this.reconnectDelay(this.reconnectAttempt)
     this.reconnectAttempt += 1
     this.setState({
@@ -634,6 +755,9 @@ export class LiveConnectionService {
 
   private closeCurrentSocket(reason: string): void {
     this.closedIntentionally = true
+    // The connection this timestamp belongs to ends here, and it must not be credited
+    // to whatever socket comes next.
+    this.connectedAtMs = null
     if (this.reconnectTimer) {
       this.clearTimer(this.reconnectTimer)
       this.reconnectTimer = null
@@ -670,6 +794,9 @@ export class LiveConnectionService {
 
     this.socket = null
     this.clearHeartbeat()
+    // Same reason as `closeCurrentSocket`: this connection is over, and the credential
+    // it was made with is gone, so nothing about its lifetime carries over.
+    this.connectedAtMs = null
     const generation = this.nextConnectionGeneration()
     this.setState({
       ...this.state,

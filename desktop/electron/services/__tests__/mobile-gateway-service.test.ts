@@ -18,6 +18,7 @@ import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shar
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
 import {
   clampSummaryText,
+  MOBILE_AGENT_DIRECTORY_CACHE_MS,
   MobileGatewayService,
   type MobileGatewayAgentGroup,
   type MobileGatewayAgentProvider,
@@ -334,7 +335,7 @@ class FakeTerminal {
   }
 }
 
-function createHarness(options: { sessionLines?: number } = {}) {
+function createHarness(options: { sessionLines?: number; lineWindowLines?: number } = {}) {
   const terminal = new FakeTerminal()
   terminal.sessions.set("sess-1", {
     id: "sess-1",
@@ -354,7 +355,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   )
 
   const timers = new ManualTimers()
-  const frames: { mobileClientInstanceId: string; frame: MobileTerminalFrame }[] = []
+  const frames: { mobileClientInstanceId: string; frame: MobileTerminalFrame; json: string }[] = []
   const summaries: unknown[] = []
   const results: unknown[] = []
   const progress: MobileTransferProgressPayload[] = []
@@ -363,7 +364,14 @@ function createHarness(options: { sessionLines?: number } = {}) {
   const clipboards: MobileClipboardDraft[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
-    sendFrame: (mobileClientInstanceId, frame) => frames.push({ mobileClientInstanceId, frame }),
+    // The transport is handed the frame already serialized — the very bytes the uplink
+    // budget was charged — so the double keeps both: the string for the tests that are
+    // about the bytes, and the parsed frame for the many that are about its content.
+    sendFrame: (mobileClientInstanceId, frameJson) => frames.push({
+      mobileClientInstanceId,
+      json: frameJson,
+      frame: JSON.parse(frameJson) as MobileTerminalFrame,
+    }),
     sendIntentResult: (mobileClientInstanceId, result) => {
       results.push({ mobileClientInstanceId, result })
     },
@@ -374,6 +382,9 @@ function createHarness(options: { sessionLines?: number } = {}) {
   }
   const audits: unknown[] = []
   const warns: { message: string; meta?: Record<string, unknown> }[] = []
+  // Kept as well as the warnings: the frame-flush entries are `info`, and they are where
+  // the byte count a flush was charged is written down.
+  const infos: { message: string; meta?: Record<string, unknown> }[] = []
   const permissionGuard = {
     check: vi.fn(async () => (terminal.deny
       ? { allowed: false, reason: "denied" }
@@ -483,11 +494,14 @@ function createHarness(options: { sessionLines?: number } = {}) {
     listClipboard,
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
-    logger: { info: () => {}, warn: (message: string, meta?: Record<string, unknown>) => warns.push({ message, meta }) },
+    logger: {
+      info: (message: string, meta?: Record<string, unknown>) => infos.push({ message, meta }),
+      warn: (message: string, meta?: Record<string, unknown>) => warns.push({ message, meta }),
+    },
     now: () => new Date(timers.nowMs),
     setTimeout: timers.set,
     clearTimeout: timers.clear,
-    lineWindowLines: 100,
+    lineWindowLines: options.lineWindowLines ?? 100,
   })
   gateway.start()
   gateway.setTransport(transport)
@@ -496,7 +510,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
     gateway, terminal, timers, transport, frames, summaries, results, audits, toolbars,
     quickPhrases, quickPhraseItems, listQuickPhrases,
     clipboards, clipboardEntries, listClipboard,
-    permissionGuard, fileRelay, landings, discarded, progress, warns,
+    permissionGuard, fileRelay, landings, discarded, progress, warns, infos,
     launches, createClaudeCodeConversation, agentGroups, agentProviders,
     listAgentConversationGroups, listAgentConversationProviders,
   }
@@ -520,6 +534,32 @@ function addSession(harness: ReturnType<typeof createHarness>, id: string, title
 
 function intent<T extends MobileIntent>(value: T): T {
   return value
+}
+
+/**
+ * Lines chosen for what `JSON.stringify` has to work at: a quote and a backslash (which
+ * change a string's length on the wire), a tab, a newline and a bell (escaped, not
+ * emitted), non-BMP characters, and a lone surrogate — which has to be escaped, because
+ * emitting it would produce bytes no JSON parser can read back.
+ */
+function trickyLines(count: number): TerminalStyledLine[] {
+  const texts = [
+    'quote " backslash \\ slash /',
+    "中文行 中文 emoji 👍🏽",
+    "tab\there newline\nthere bell\u0007",
+    "lone\ud800surrogate",
+    "plain ascii",
+  ]
+  return Array.from({ length: count }, (_, index) => ({ text: texts[index % texts.length]! }))
+}
+
+/** A frame, as opposed to the summary and toolbar payloads that are serialized too. */
+function isTerminalFrame(value: unknown): boolean {
+  return typeof value === "object"
+    && value !== null
+    && "sessionId" in value
+    && "lines" in value
+    && "cursor" in value
 }
 
 async function attach(
@@ -568,6 +608,108 @@ describe("MobileGatewayService", () => {
     expect(harness.frames).toHaveLength(1)
     expect(harness.frames[0].frame.kind).toBe("suffix")
     expect(harness.frames[0].frame.lines.map((line) => line[0])).toEqual(["line-3"])
+  })
+
+  it("charges the budget what the frame costs once serialized, and serializes it once", async () => {
+    /*
+     * The uplink budget is stated in bytes on the wire, and the only honest way to know
+     * them is to serialize the frame — so the string the measurement produced is the one
+     * the transport is handed, and the decision, the log line and the send all read the
+     * same number. The lines below are the ones JSON has to work at: quotes, a
+     * backslash, control characters, non-BMP characters and a lone surrogate that has to
+     * be escaped rather than emitted.
+     */
+    const harness = createHarness({ sessionLines: 0, lineWindowLines: 600 })
+    harness.terminal.lines.set("sess-1", trickyLines(600))
+    const stringify = vi.spyOn(JSON, "stringify")
+
+    await attach(harness)
+    // Read before restoring: `mockRestore` clears the recorded calls with the spy.
+    const frameSerializations = stringify.mock.calls.filter(([value]) => isTerminalFrame(value)).length
+    stringify.mockRestore()
+
+    // 600 lines do not fit one frame, so the escape-heavy content really is spread over
+    // several of them.
+    expect(harness.frames.length).toBeGreaterThan(1)
+    const pushed = harness.infos.find((entry) => entry.message === "Mobile window pushed.")
+    expect(pushed).toBeDefined()
+    // The number the budget was charged, against the number it used to be charged:
+    // `Buffer.byteLength(JSON.stringify(frame), "utf8")`, frame by frame.
+    const asChargedBefore = harness.frames.reduce(
+      (bytes, entry) => bytes + Buffer.byteLength(JSON.stringify(entry.frame), "utf8"),
+      0,
+    )
+    expect(pushed?.meta?.bytes).toBe(asChargedBefore)
+    // And the string that goes to the transport is byte-for-byte that measurement.
+    for (const entry of harness.frames) {
+      expect(entry.json).toBe(JSON.stringify(entry.frame))
+    }
+    // One serialization per frame. Counting them is the point of the change: the budget
+    // and the envelope used to serialize the same frame independently.
+    expect(frameSerializations).toBe(harness.frames.length)
+  })
+
+  it("charges and sends the same bytes for a frame that hits the line limit", async () => {
+    /*
+     * The other way a window splits: not by bytes but by the line-per-frame ceiling. The
+     * first frame is exactly that long, and it is the one whose size the budget decision
+     * is most likely to be wrong about, because the split happened on a count the byte
+     * measurement knows nothing about.
+     */
+    const harness = createHarness({ sessionLines: 0, lineWindowLines: 600 })
+    harness.terminal.lines.set(
+      "sess-1",
+      Array.from({ length: 600 }, (_, index) => ({ text: `x${index % 10}` })),
+    )
+
+    await attach(harness)
+
+    // A snapshot goes out newest-chunk-first, so the frame at the ceiling is not the
+    // first one on the wire — it is the one the split produced.
+    const atLineLimit = harness.frames.find(
+      (entry) => entry.frame.lines.length === MOBILE_FRAME_LIMITS.maxLinesPerFrame,
+    )
+    expect(atLineLimit).toBeDefined()
+    const pushed = harness.infos.find((entry) => entry.message === "Mobile window pushed.")
+    expect(pushed?.meta?.bytes).toBe(harness.frames.reduce(
+      (bytes, entry) => bytes + Buffer.byteLength(JSON.stringify(entry.frame), "utf8"),
+      0,
+    ))
+  })
+
+  it("reads a session's window once for every phone watching it", async () => {
+    /*
+     * `readLineWindow` rebuilds up to 500 styled lines, which is by far the most
+     * expensive thing a flush does — and it used to be done once per attachment, so two
+     * phones on one terminal paid for the same window twice in the same 60 ms tick. Each
+     * attachment still applies the window to its own tracker: what is shared is the read,
+     * not the state.
+     */
+    const harness = createHarness({ sessionLines: 40 })
+    const readLineWindow = vi.spyOn(harness.terminal, "readLineWindow")
+
+    await attach(harness)
+    await harness.gateway.handleIntent("phone-2", intent({
+      v: 1,
+      intentId: "i-attach-2",
+      kind: "attach",
+      sessionId: "sess-1",
+    }))
+    harness.frames.length = 0
+    readLineWindow.mockClear()
+
+    harness.terminal.lines.set("sess-1", [
+      ...(harness.terminal.lines.get("sess-1") ?? []),
+      { text: "line-40" },
+    ])
+    harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+    await harness.timers.advance(60)
+
+    expect(readLineWindow).toHaveBeenCalledTimes(1)
+    // Both attachments got the update, from that one read.
+    expect(harness.frames.map((entry) => entry.mobileClientInstanceId).sort())
+      .toEqual(["phone-1", "phone-2"])
+    expect(harness.frames[0]?.frame.lines.map((line) => line[0])).toEqual(["line-40"])
   })
 
   it("stays completely silent while the terminal is idle", async () => {
@@ -2365,14 +2507,65 @@ describe("MobileGatewayService", () => {
     await harness.timers.advance(1_000)
     expect(harness.summaries.length).toBe(afterFirst)
 
-    // A rename is a change to the directory, so the next one does go out — a phone
-    // that kept showing the old name would be showing a project that no longer exists.
+    // A rename is a change to the directory, so it does go out — a phone that kept
+    // showing the old name would be showing a project that no longer exists. It goes
+    // out on the first tick after the directory's cache window closes, which is the
+    // bound on how stale a project name can be while a phone is already connected.
     harness.agentGroups[1] = { ...harness.agentGroups[1]!, name: "Synapse 重命名" }
+    harness.terminal.events.emit("sessionChanged", { sessionId: "sess-1" })
+    await harness.timers.advance(1_000)
+    // Still inside the window: the directory above has not been looked at again, so the
+    // payload is byte-identical and there is nothing to send.
+    expect(harness.summaries.length).toBe(afterFirst)
+
+    await harness.timers.advance(MOBILE_AGENT_DIRECTORY_CACHE_MS)
     harness.terminal.events.emit("sessionChanged", { sessionId: "sess-1" })
     await harness.timers.advance(1_000)
 
     expect(harness.summaries.length).toBeGreaterThan(afterFirst)
     expect((harness.summaries.at(-1) as MobileSummaryDraft).agentGroups?.[1]?.name).toBe("Synapse 重命名")
+  })
+
+  it("reads the project and Provider directories once per window, not once per tick", async () => {
+    /*
+     * Both come out of the stored configuration, and reading them costs a sanitize and
+     * clone of the whole config plus a project listing — the expensive part of a tick
+     * that otherwise just walks a list of sessions. The tick runs at 1 Hz for as long as
+     * any terminal is printing, whether or not a phone is connected, so this is the
+     * difference between a permanent background cost and one paid every fifteen seconds.
+     */
+    const harness = createHarness()
+    // Five ticks, all comfortably inside one window (the harness's clock starts at zero
+    // and the window is fifteen seconds), so one read has to answer all five. Each tick
+    // is scheduled by a chunk of terminal output, which is what keeps this pipeline
+    // running at 1 Hz on a desktop that is merely printing — the case the caching is for.
+    for (let tick = 0; tick < 5; tick += 1) {
+      harness.terminal.events.emit("stateChanged", { sessionId: "sess-1", changeTypes: [] })
+      await harness.timers.advance(1_000)
+    }
+
+    expect(harness.listAgentConversationGroups).toHaveBeenCalledTimes(1)
+    expect(harness.listAgentConversationProviders).toHaveBeenCalledTimes(1)
+    // And the list is unchanged by the caching: the directories are still in the payload
+    // the phone receives.
+    expect((harness.summaries.at(-1) as MobileSummaryDraft).agentGroups).toHaveLength(2)
+  })
+
+  it("re-reads the directories straight away for a phone that has just connected", async () => {
+    /*
+     * The window above is a bound on how stale a directory can be on a phone, and this
+     * is the case that keeps the bound invisible: a `sync` comes from a phone that has
+     * just connected and is about to draw the list, which is exactly when a rename made
+     * while the desktop was idle would otherwise show up with the old name.
+     */
+    const harness = createHarness()
+    await harness.timers.advance(1_000)
+    const readsBefore = harness.listAgentConversationGroups.mock.calls.length
+
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    await harness.timers.advance(1_000)
+
+    expect(harness.listAgentConversationGroups.mock.calls.length).toBeGreaterThan(readsBefore)
   })
 
   it("clamps a directory entry that outgrows the wire bound rather than failing validation", async () => {

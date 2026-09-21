@@ -4,7 +4,6 @@ import type {
   MobileIntentResult,
   MobileQuickPhrasesPayload,
   MobileSummaryPayload,
-  MobileTerminalFrame,
   MobileToolbarPayload,
   MobileTransferProgressPayload,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -39,7 +38,17 @@ export type MobileClipboardDraft = Omit<MobileClipboardPayload, "desktopClientIn
  */
 export type MobileGatewayTransport = {
   readonly sendSummary: (draft: MobileSummaryDraft) => void
-  readonly sendFrame: (mobileClientInstanceId: string, frame: MobileTerminalFrame) => void
+  /**
+   * One terminal frame, already serialized.
+   *
+   * The gateway decides whether a flush fits the phone's uplink budget, and the only
+   * measurement that is honest about that is the frame's own serialized size — so the
+   * string it measured is the string it hands over, and the live connection splices it
+   * into the envelope instead of serializing the same frame a second time. Passing the
+   * object would put the decision and the send back on two different measurements, and
+   * cost a second full pass over up to 8 KiB of escaped terminal text per frame.
+   */
+  readonly sendFrame: (mobileClientInstanceId: string, frameJson: string) => void
   readonly sendIntentResult: (mobileClientInstanceId: string, result: MobileIntentResult) => void
   /**
    * Fire-and-forget by design: progress that arrives late is worth less than the

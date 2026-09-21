@@ -458,15 +458,30 @@ function readStyledLine(line: TerminalBufferLine | undefined, scratch: TerminalB
   return runs.length > 0 ? { text, runs } : { text }
 }
 
+/**
+ * Index just past the last cell that carries visible text.
+ *
+ * Scanned from the right because the caller walks `[0, end)` right afterwards:
+ * searching left to right re-visits every cell of the row's trailing blanks, and
+ * those blanks are most of a row once the text stops short of the edge. From the
+ * right the scan is over at the row's last glyph, usually a cell or two away.
+ *
+ * Blank cells are stepped over rather than treated as the row's end — a status
+ * line jumps the cursor across gaps and keeps drawing after them — so the search
+ * keeps going until it meets a cell with characters that are not whitespace.
+ *
+ * xterm only fails `getCell` past `line.length`, so the loop bound keeps the miss
+ * unreachable; skipping instead of stopping keeps a hypothetical hole from hiding
+ * the glyphs in front of it.
+ */
 function trimmedCellCount(line: TerminalBufferLine, scratch: TerminalBufferCell): number {
-  let end = 0
-  for (let x = 0; x < line.length; x += 1) {
+  for (let x = line.length - 1; x >= 0; x -= 1) {
     const cell = line.getCell(x, scratch)
-    if (!cell) break
+    if (!cell) continue
     const chars = cell.getChars()
-    if (chars.length > 0 && chars.trim().length > 0) end = x + 1
+    if (chars.length > 0 && chars.trim().length > 0) return x + 1
   }
-  return end
+  return 0
 }
 
 function readCellColor(cell: TerminalBufferCell, foreground: boolean): number {
