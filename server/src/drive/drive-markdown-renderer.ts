@@ -71,6 +71,7 @@ type MutableDriveMarkdownOutlineItem = {
 }
 
 const safeHtmlBreakPattern = /^<br\s*\/?>$/iu
+const markdownEscapedPunctuationPattern = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu
 
 export async function renderDriveMarkdownFragment(
   markdown: string,
@@ -146,6 +147,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
   if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
   normalizeSafeTableHtmlBreaks(tree)
   normalizeEscapedRawHtmlNodes(tree)
+  normalizeEscapedAutolinkNodes(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
   const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
   if (options.pdfImageResourceKeys) {
@@ -293,6 +295,24 @@ function escapeRawHtmlPlugin() {
   return (tree: MarkdownAstNode) => {
     visitMarkdownAst(tree)
   }
+}
+
+// Autolinks keep Markdown escape sequences literally, so a document exported by a tool that escapes
+// `_` (common in share links such as `shr_xxx_yyy`) renders the backslashes and links to a broken URL.
+function normalizeEscapedAutolinkNodes(node: MarkdownAstNode): void {
+  const url = node.url
+  if (node.type === "link" && typeof url === "string" && url.includes("\\")) {
+    const children = node.children ?? []
+    const label = children.length === 1 && children[0]?.type === "text" ? children[0] : null
+    if (label && typeof label.value === "string" && label.value === url) {
+      const unescaped = url.replace(markdownEscapedPunctuationPattern, "$1")
+      if (unescaped !== url) {
+        node.url = unescaped
+        label.value = unescaped
+      }
+    }
+  }
+  for (const child of node.children ?? []) normalizeEscapedAutolinkNodes(child)
 }
 
 function normalizeEscapedRawHtmlNodes(node: MarkdownAstNode): void {

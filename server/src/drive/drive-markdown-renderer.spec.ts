@@ -377,4 +377,35 @@ describe("drive markdown renderer", () => {
       },
     ])
   })
+
+  it("renders punctuation escaped inside autolinks as literal text", async () => {
+    const shareUrl = "https://synapse.d2.pub/share/shr_Ardg-oQHwrTJ5dI3zz_LUfPIhH7Peadb"
+    const result = await renderDriveMarkdownFragment([
+      "网页分享：平台供应商与平台物料原型-单文件版",
+      "",
+      "https://synapse.d2.pub/share/shr\\_Ardg-oQHwrTJ5dI3zz\\_LUfPIhH7Peadb",
+      "",
+      "<https://example.com/发布\\_说明>",
+    ].join("\n"))
+
+    expect(result.html).toContain(`href="${shareUrl}"`)
+    expect(result.html).toContain(`>${shareUrl}</a>`)
+    expect(result.html).toContain(">https://example.com/发布_说明</a>")
+    expect(result.html).not.toContain("\\")
+    expect(result.renderedText).toContain(shareUrl)
+    expect(result.renderedText).not.toContain("\\")
+  })
+
+  it("keeps explicit links and plain text escapes with the parser", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "[原型\\_说明](https://example.com/a\\_b)",
+      "",
+      "图片\\_说明 通过\\=已通过",
+    ].join("\n"))
+
+    expect(result.html).toContain('href="https://example.com/a_b"')
+    expect(result.html).toContain(">原型_说明</a>")
+    expect(result.html).toContain("图片_说明 通过=已通过")
+    expect(result.html).not.toContain("\\")
+  })
 })
