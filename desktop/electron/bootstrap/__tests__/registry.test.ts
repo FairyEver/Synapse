@@ -151,6 +151,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workspace-file-tree",
         "core.json-repair",
         "core.clipboard",
+        "core.clipboard-sync",
         "git.access-service",
         "git.branch-service",
         "git.change-selection-service",

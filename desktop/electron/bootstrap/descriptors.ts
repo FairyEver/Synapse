@@ -226,6 +226,7 @@ import { userIdentityService } from "../services/user-identity-service"
 import { accountService } from "../services/account-service"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
+import { ClipboardSyncService, CLIPBOARD_SYNC_SERVICE_ID } from "../services/clipboard-sync-service"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { SkillRepositoryUploadService } from "../services/skill-repository-upload-service"
 import { createDriveSyncService, type DriveSyncService } from "../services/drive-sync-service"
@@ -866,6 +867,30 @@ export const coreClipboardDescriptor: ServiceDescriptor<ClipboardService> = {
       auditSink,
       createMainLogger("core.clipboard"),
     )
+  },
+}
+
+/**
+ * 剪切板同步的采集侧：一直跑，把最近复制的文本攒在内存里。
+ *
+ * 与 `core.clipboard` 分开是刻意的。那是 Workflow 节点的能力契约（读写文本，带
+ * 授权与审计，边界写在 CONTEXT.md），而这里要读粘贴板类型、要按秒轮询——两件事
+ * 的授权模型和调用节奏都不一样，合并会把能力契约拖进一个它没打算承担的节奏里。
+ */
+export const coreClipboardSyncDescriptor: ServiceDescriptor<ClipboardSyncService> = {
+  id: CLIPBOARD_SYNC_SERVICE_ID,
+  // 采集失败不该拖垮整个应用：手机取不到剪切板，别的功能照常。
+  criticality: "degraded",
+  // 顺序在审计之后，但审计起不来也不拦着采集 —— 所以是 startAfter 而不是 dependsOn。
+  startAfter: ["core.audit-sink"],
+  create() {
+    return new ClipboardSyncService({ clipboard })
+  },
+  start(service) {
+    service.start()
+  },
+  stop(service) {
+    service.stop()
   },
 }
 

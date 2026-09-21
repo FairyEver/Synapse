@@ -76,6 +76,7 @@ import {
   coreKnowledgeBaseTransferDescriptor,
   coreJsonRepairDescriptor,
   coreClipboardDescriptor,
+  coreClipboardSyncDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   coreWorkflowServiceDescriptor,
@@ -165,6 +166,7 @@ export function buildServiceRegistry(
   registry.register(coreHtmlGenerationFileDescriptor)
   registry.register(coreJsonRepairDescriptor)
   registry.register(coreClipboardDescriptor)
+  registry.register(coreClipboardSyncDescriptor)
   registry.register(coreDriveSyncDescriptor)
   registry.register(coreRelayDescriptor)
   registry.register(coreAutomationIngressDescriptor)
