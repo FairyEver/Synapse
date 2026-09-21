@@ -112,11 +112,18 @@ const logger = createRendererLogger("terminal.workspace")
 
 export type TerminalWorkspaceViewHandle = {
   clearActivePane(): void
+  /**
+   * 当前 pane 的前台应用有没有打开 bracketed paste（DECSET 2004）。
+   *
+   * 终端模拟器粘贴时用的就是这个判据：开了才把多行内容当一次粘贴送进去。
+   */
+  isBracketedPasteMode(): boolean
 }
 
 type PaneControls = {
   clear(): void
   focus(): void
+  isBracketedPasteMode(): boolean
 }
 
 type SplitLayoutControls = {
@@ -356,6 +363,9 @@ export function TerminalWorkspaceView({
   useImperativeHandle(ref, () => ({
     clearActivePane() {
       paneControlsRef.current.get(activePaneId)?.clear()
+    },
+    isBracketedPasteMode() {
+      return paneControlsRef.current.get(activePaneId)?.isBracketedPasteMode() ?? false
     },
   }), [activePaneId])
 
@@ -1140,6 +1150,8 @@ function TerminalPane({
     const controls: PaneControls = {
       clear: () => xterm.clear(),
       focus: () => xterm.focus(),
+      // 每次现读，前台应用随时可能开或关掉这个模式。
+      isBracketedPasteMode: () => xterm.modes.bracketedPasteMode,
     }
     registerControls(paneId, controls)
 

@@ -16,6 +16,7 @@ import type {
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalWorkspace,
 } from "../../../../src/types/terminal"
+import type { SynapseQuickInputItem } from "../../../../src/types/quick-input"
 import {
   WORKSPACE_FILE_TREE_DRAG_TYPE,
   writeWorkspaceFileTreeDrag,
@@ -521,6 +522,15 @@ const shellBridge = vi.hoisted(() => ({
   filePathForDroppedFile: vi.fn((file: File) => droppedPathState.paths.get(file) ?? null),
 }))
 
+/**
+ * 「快捷输入」App 的句子走的是 renderer 里的真实 hook，这里只把桥换成可脚本化的
+ * 替身。默认空列表 —— 空列表下命令条上不该出现那颗入口。
+ */
+const quickInputState = vi.hoisted(() => ({
+  items: [] as SynapseQuickInputItem[],
+  unsubscribe: vi.fn(),
+}))
+
 const xtermState = vi.hoisted(() => ({
   instances: [] as Array<{
     open: ReturnType<typeof vi.fn>
@@ -540,6 +550,8 @@ const xtermState = vi.hoisted(() => ({
     cols: number
     rows: number
     options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number }
+    /** 前台应用通过 DECSET 2004 打开的 bracketed paste；默认关。 */
+    modes: { bracketedPasteMode: boolean }
     emitInput: (data: string) => void
     emitKeyEvent: (event: KeyboardEvent) => boolean | undefined
     bufferLines: string[]
@@ -664,6 +676,12 @@ vi.mock("@/lib/electron-bridge", () => ({
         onDomainChanged: terminalBridge.onDomainChanged,
       },
     }
+    if (domain === "quickInput") return {
+      item: {
+        list: vi.fn(async () => quickInputState.items),
+        onChanged: vi.fn(() => quickInputState.unsubscribe),
+      },
+    }
     if (domain === "shell") return shellBridge
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
@@ -722,6 +740,7 @@ vi.mock("@xterm/xterm", () => ({
       cols: options.cols ?? 100,
       rows: options.rows ?? 30,
       options,
+      modes: { bracketedPasteMode: false },
       emitInput: (data: string) => instance.inputListener?.(data),
       emitKeyEvent: (event: KeyboardEvent) => instance.keyEventHandler?.(event),
       /**
@@ -880,6 +899,8 @@ beforeEach(() => {
   bridgeState.workspaces = []
   bridgeState.sessions = []
   bridgeState.customToolbarActions = []
+  quickInputState.items = []
+  quickInputState.unsubscribe.mockClear()
   bridgeState.chunks = []
   bridgeState.nextSeq = 0
   bridgeState.dataListener = null
@@ -1771,13 +1792,17 @@ describe("TerminalModule", () => {
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
     const terminalRegion = document.querySelector("[aria-label^='终端会话']")
     expect(toolbar).toBeTruthy()
-    expect(toolbar?.classList.contains("overflow-x-auto")).toBe(true)
-    expect(toolbar?.classList.contains("no-scrollbar")).toBe(true)
-    expect(toolbar?.classList.contains("whitespace-nowrap")).toBe(true)
     expect(toolbar?.classList.contains("min-h-10")).toBe(true)
     expect(toolbar?.classList.contains("bg-card")).toBe(true)
     expect(toolbar?.classList.contains("border-t")).toBe(true)
     expect(toolbar?.classList.contains("border-b")).toBe(false)
+    // 横向滚动收在内层：快捷输入那一格钉在外面，滚不走。
+    const scrollArea = toolbar?.querySelector(":scope > .overflow-x-auto")
+    expect(scrollArea).toBeTruthy()
+    expect(scrollArea?.classList.contains("overflow-x-auto")).toBe(true)
+    expect(scrollArea?.classList.contains("no-scrollbar")).toBe(true)
+    expect(scrollArea?.classList.contains("whitespace-nowrap")).toBe(true)
+    expect(scrollArea?.classList.contains("min-h-10")).toBe(true)
     if (!toolbar || !terminalRegion) throw new Error("Missing terminal toolbar or region")
     expect(terminalRegion.compareDocumentPosition(toolbar)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(document.body.textContent).toContain("Ctrl+C")
@@ -1854,7 +1879,7 @@ describe("TerminalModule", () => {
     expect(written.some((data) => data.includes("\r"))).toBe(false)
 
     // 写完之后给出「待执行」提示，而不是当作已执行。
-    const pending = document.body.querySelector("[data-terminal-pending-voice]")
+    const pending = document.body.querySelector("[data-terminal-pending-input]")
     expect(pending?.textContent).toContain("待执行 · Enter 执行")
     expect(pending?.textContent).toContain("git status --short")
   })
@@ -1939,7 +1964,7 @@ describe("TerminalModule", () => {
     expect(confirm?.disabled).toBe(true)
 
     expect(terminalBridge.writeSession).not.toHaveBeenCalled()
-    expect(document.body.querySelector("[data-terminal-pending-voice]")).toBeNull()
+    expect(document.body.querySelector("[data-terminal-pending-input]")).toBeNull()
   })
 
   /**
@@ -2120,13 +2145,15 @@ describe("TerminalModule", () => {
         pressEnter: false,
       }),
     ]
+    quickInputState.items = [quickInputItem("qi-1", "帮我捋一下\n把信息整理一下。")]
 
     await renderModule()
 
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
     const labels = Array.from(toolbar?.querySelectorAll("button") ?? []).map((button) =>
       button.getAttribute("aria-label") ?? button.textContent)
-    expect(labels).toEqual(["发送回车", "中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷命令：检查状态", "输入快捷命令：输入路径", "管理快捷命令"])
+    // 快捷输入钉在最前，且不在滚动容器里。
+    expect(labels).toEqual(["快捷输入", "发送回车", "中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷命令：检查状态", "输入快捷命令：输入路径", "管理快捷命令"])
 
     await clickButton("检查状态")
     expect(terminalBridge.writeSession).toHaveBeenLastCalledWith({ sessionId: "session-1", data: "git status" })
@@ -2142,6 +2169,165 @@ describe("TerminalModule", () => {
     })
     expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
     expect(terminalBridge.writeSession).toHaveBeenCalledWith({ sessionId: "session-1", data: "/repo/app" })
+  })
+
+  /**
+   * 命令条最左边的快捷输入，以及它那条「落进命令行、不执行」的写入通道。
+   *
+   * 这里是这个功能最关键的一条：句子天生是多行，多行写进 PTY 时不包 bracketed
+   * paste 就会被执行掉。断言的是「写进去的字节长什么样」，不是「写了东西」。
+   */
+  describe("终端命令条上的快捷输入", () => {
+    const CONTENT = "帮我捋一下\n把这里的信息重新整理一下。"
+
+    async function renderWithQuickInputs(
+      sessionOverrides: Partial<SynapseTerminalSession> = {},
+    ): Promise<void> {
+      quickInputState.items = [quickInputItem("qi-1", CONTENT)]
+      bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+      bridgeState.sessions = [createSession({
+        id: "session-1",
+        groupId: "group-1",
+        title: "开发终端",
+        ...sessionOverrides,
+      })]
+      await renderModule()
+    }
+
+    function quickInputTrigger(): HTMLButtonElement | null {
+      return document.body.querySelector<HTMLButtonElement>("button[aria-label='快捷输入']")
+    }
+
+    function writtenData(): string[] {
+      return terminalBridge.writeSession.mock.calls.map(([input]) => input.data as string)
+    }
+
+    async function openPanel(): Promise<void> {
+      await act(async () => {
+        quickInputTrigger()?.click()
+        await Promise.resolve()
+      })
+    }
+
+    async function pickRow(): Promise<void> {
+      await act(async () => {
+        document.body
+          .querySelector<HTMLButtonElement>("button[aria-label='填入快捷输入：帮我捋一下']")
+          ?.click()
+        await Promise.resolve()
+      })
+    }
+
+    it("列表为空时命令条上没有这颗入口，其余按钮一个不少", async () => {
+      bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+      bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+      await renderModule()
+
+      expect(quickInputTrigger()).toBeNull()
+      const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+      const labels = Array.from(toolbar?.querySelectorAll("button") ?? []).map((button) =>
+        button.getAttribute("aria-label") ?? button.textContent)
+      expect(labels).toEqual(["发送回车", "中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "管理快捷命令"])
+    })
+
+    it("入口是命令条里第一个按钮，且不在横向滚动容器里", async () => {
+      await renderWithQuickInputs()
+
+      const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+      const trigger = quickInputTrigger()
+      expect(trigger).not.toBeNull()
+      expect(toolbar?.querySelector("button")).toBe(trigger)
+      // 滚动容器是它的兄弟，不是祖先 —— 命令条滚到底它也钉在原处。
+      const scrollArea = toolbar?.querySelector(":scope > .overflow-x-auto")
+      expect(scrollArea).not.toBeNull()
+      expect(scrollArea?.contains(trigger!)).toBe(false)
+      expect(toolbar?.querySelectorAll(":scope > span[aria-hidden='true']").length).toBe(1)
+    })
+
+    it("入口可点开面板，列出快捷输入里的句子", async () => {
+      await renderWithQuickInputs()
+
+      await openPanel()
+
+      expect(document.body.querySelector("[data-slot='popover-content']")).not.toBeNull()
+      expect(document.body.querySelector("button[aria-label='填入快捷输入：帮我捋一下']")).not.toBeNull()
+    })
+
+    it("应用开了 bracketed paste 时整段按粘贴包写入，且不补回车", async () => {
+      await renderWithQuickInputs()
+      for (const instance of xtermState.instances) instance.modes.bracketedPasteMode = true
+      terminalBridge.writeSession.mockClear()
+
+      await openPanel()
+      await pickRow()
+
+      expect(writtenData()).toEqual([`\x1b[200~${CONTENT}\x1b[201~`])
+      const data = writtenData()[0]!
+      expect(data.startsWith("\x1b[200~")).toBe(true)
+      expect(data.endsWith("\x1b[201~")).toBe(true)
+      expect(data.includes("\r")).toBe(false)
+    })
+
+    it("应用没开 bracketed paste 时写的是原文", async () => {
+      await renderWithQuickInputs()
+      terminalBridge.writeSession.mockClear()
+
+      await openPanel()
+      await pickRow()
+
+      expect(writtenData()).toEqual([CONTENT])
+      expect(writtenData()[0]!.includes("\x1b[")).toBe(false)
+    })
+
+    it("写入后出现待执行提示，命令行还没执行", async () => {
+      await renderWithQuickInputs()
+      terminalBridge.writeSession.mockClear()
+
+      await openPanel()
+      await pickRow()
+
+      const pending = document.body.querySelector("[data-terminal-pending-input]")
+      expect(pending).not.toBeNull()
+      expect(pending?.textContent).toContain("待执行 · Enter 执行")
+      expect(pending?.textContent).toContain("帮我捋一下")
+      // 提示挂在命令条上方。
+      const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+      expect(toolbar!.compareDocumentPosition(pending!) & Node.DOCUMENT_POSITION_PRECEDING).not.toBe(0)
+    })
+
+    it("会话非 running 时入口渲染但禁用", async () => {
+      await renderWithQuickInputs({ status: "ended" })
+
+      expect(quickInputTrigger()).not.toBeNull()
+      expect(quickInputTrigger()?.disabled).toBe(true)
+    })
+
+    it("手机占用会话时入口渲染但禁用", async () => {
+      await renderWithQuickInputs({
+        sizeOwner: {
+          kind: "mobile",
+          deviceLabel: "iPhone",
+          mobileClientInstanceId: "client-1",
+          cols: 45,
+          rows: 33,
+        },
+      })
+
+      expect(quickInputTrigger()).not.toBeNull()
+      expect(quickInputTrigger()?.disabled).toBe(true)
+    })
+
+    it("写入失败时给出用户可见的错误", async () => {
+      await renderWithQuickInputs()
+      terminalBridge.writeSession.mockRejectedValueOnce(new Error("write failed"))
+
+      await openPanel()
+      await pickRow()
+
+      expect(toastState.error).toHaveBeenCalledWith("写入终端失败")
+      expect(document.body.querySelector("[data-terminal-pending-input]")).toBeNull()
+    })
   })
 
   it("creates edits and deletes only user-defined toolbar actions in the manager", async () => {
@@ -4836,6 +5022,17 @@ function createSession(overrides: Partial<SynapseTerminalSession> = {}): Synapse
     bridgeState.workspaces = [...bridgeState.workspaces, createWorkspace(session)]
   }
   return session
+}
+
+function quickInputItem(id: string, content: string): SynapseQuickInputItem {
+  return {
+    id,
+    schemaVersion: 1,
+    content,
+    sortOrder: 0,
+    createdAt: "2026-09-21T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
+  }
 }
 
 function createWorkspace(session: SynapseTerminalSession): SynapseTerminalWorkspace {
