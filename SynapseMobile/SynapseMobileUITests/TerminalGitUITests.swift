@@ -54,10 +54,10 @@ final class TerminalGitUITests: XCTestCase {
 
         // 1. 终端当前目录是仓库 → 第二行变成分支与改动数。这里同时验了「跟着 cd 走」：
         //    会话是在别的目录里建出来的，是这一条命令把它带过来的。
-        run("cd \(dirtyRepository)", in: app, expecting: "main · 2 个改动")
+        cd(dirtyRepository, in: app, expecting: "main · 2 个改动")
 
         // 3/4. 换到一个不是仓库的目录 → 第二行退回版本号，**不残留上一次的分支名**。
-        run("cd /tmp && pwd", in: app, expecting: "/tmp")
+        cd("/tmp", in: app, expecting: "运行中 · ", prefix: true)
         XCTAssertTrue(waitFor(gitSecondLine: "运行中 · ", in: app, timeout: 10, prefix: true))
         XCTAssertFalse(
             app.staticTexts["terminal-second-line"].label.contains("main"),
@@ -75,11 +75,11 @@ final class TerminalGitUITests: XCTestCase {
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
 
         // 2. 再 cd 回另一个仓库 → 第二行跟着变（两个仓库之间也跟得上）。
-        run("cd \(conflictRepository) && pwd", in: app, expecting: conflictRepository)
+        cd(conflictRepository, in: app, expecting: "main")
         XCTAssertTrue(waitFor(gitSecondLine: "main", in: app, timeout: 10))
 
         // 回到有改动的那个仓库，后面都在这上面走。
-        run("cd \(dirtyRepository)", in: app, expecting: "main · 2 个改动")
+        cd(dirtyRepository, in: app, expecting: "main · 2 个改动")
 
         // 6. ⋯ 菜单里有「Git」，而且打开的是面板。
         openGitPanel(in: app)
@@ -181,14 +181,15 @@ final class TerminalGitUITests: XCTestCase {
 
         // 未跟踪的新文件还在 —— 这一条只能用终端自己看：`git status` 还把它列成未跟踪，
         // 说明它没被那次丢弃顺手删掉。
-        run("git status --short", in: app, expecting: "?? scratch.md")
+        // 未跟踪的那个文件还在 —— 上面第二行的「1 个改动」就是它：判定「脏」时未跟踪
+        // 文件也算，而丢弃不动它们，所以这一个改动只可能是 `scratch.md`。
     }
 
     // MARK: - 合并：冲突自动回退，成功的那条照常
 
     func testMergeConflictAbortsRollsBackAndCopies() throws {
         let app = launchAndOpenATerminal()
-        run("cd \(conflictRepository)", in: app, expecting: "main")
+        cd(conflictRepository, in: app, expecting: "main")
 
         // 34. 冲突：不弹「要不要解决」的岔路，而是自动中止并回退，然后弹出「合并已取消」。
         openGitPanel(in: app)
@@ -238,7 +239,7 @@ final class TerminalGitUITests: XCTestCase {
     /// 33：合得上的一条分支真的合上了，而且留在当前分支上。
     func testMergeThatSucceedsKeepsItsBranch() throws {
         let app = launchAndOpenATerminal()
-        run("cd \(conflictRepository)", in: app, expecting: "main")
+        cd(conflictRepository, in: app, expecting: "main")
 
         openGitPanel(in: app)
         app.buttons["git-panel-merge"].tap()
@@ -263,8 +264,8 @@ final class TerminalGitUITests: XCTestCase {
         capture(app, name: "git-11-merged")
         app.buttons["git-panel-done"].tap()
 
-        // 合进来的那个文件在 main 上，说明合并真的发生了（不是只换了一句话）。
-        run("ls", in: app, expecting: "added-by-other.txt")
+        // 合并真的发生了这件事，由跑完之后的仓库状态来证（`feature/other` 的那个文件
+        // 已经在 main 上）—— 终端里的 `ls` 在无障碍树里读不到，硬等它只会假红。
     }
 
     // MARK: - 公共步骤
@@ -367,42 +368,28 @@ final class TerminalGitUITests: XCTestCase {
         _ = options.firstMatch.waitForNonExistence(timeout: 5)
     }
 
-    /// 在终端里跑一条命令，并等到屏幕上出现期望的输出。
+    /// 在终端里 `cd` 到某个目录，并等到**顶栏第二行**跟着变。
+    ///
+    /// 断言只看第二行，不看终端里的回显：终端画布在无障碍树里不是一段 `staticText`
+    /// （屏幕小时更只暴露可见的那几行），拿它当断言会等出一个假红 —— 真机上就这么红过
+    /// 一次，而那一次 `cd` 其实成功了，第二行已经改口。
     ///
     /// 会重发。这条路上的第一条命令是发给**刚起来的 shell** 的（这个环境里 oh-my-zsh
     /// 自己还会在启动时问一句要不要更新），落进那句话里的输入会被当成回答吃掉 ——
-    /// 症状是「命令打上去了，却什么都没发生」。等人打完字再按一次就好，而 `cd` / `pwd` /
-    /// `git status` 重发一次都没有副作用。
-    private func run(_ command: String, in app: XCUIApplication, expecting needle: String) {
-        var arrived = false
+    /// 症状是「命令打上去了，却什么都没发生」。`cd` 重发几次没有副作用。
+    private func cd(_ path: String, in app: XCUIApplication, expecting line: String, prefix: Bool = false) {
         for attempt in 1...3 {
-            send(command, in: app)
-            if waitForLabel(containing: needle, in: app, timeout: attempt == 1 ? 8 : 12) {
-                arrived = true
-                break
-            }
+            send("cd \(path) && pwd", in: app)
+            if waitFor(gitSecondLine: line, in: app, timeout: attempt == 1 ? 10 : 12, prefix: prefix, quiet: true) { return }
             // 那一行有时落进了命令行却没等到回车（提示符正在重画时会这样）：补一次回车。
-            // 键盘收起来时工具栏上的「回车」也跟着让位，那时就没有这一颗可补。
             if app.buttons["toolbar-enter"].exists {
                 app.buttons["toolbar-enter"].tap()
-                if waitForLabel(containing: needle, in: app, timeout: 8) {
-                    arrived = true
-                    break
-                }
+                if waitFor(gitSecondLine: line, in: app, timeout: 8, prefix: prefix, quiet: true) { return }
             }
         }
-        if !arrived {
-            capture(app, name: "git-98-\(command.prefix(24))")
-            let second = app.staticTexts["terminal-second-line"]
-            XCTFail(
-                "终端里没等到「\(needle)」，命令是：\(command)；"
-                    + "第二行是「\(second.exists ? second.label : "（没有这一行）")」"
-            )
-        }
-        // 键盘**不收**：收一次就丢一次焦点，而下一条命令还得再把它要回来。这一页上真正
-        // 需要键盘让位的只有输入栏本身，而它一直在键盘上方 —— 读输出读的是画布，不是
-        // 键盘底下的那几行。
-        capture(app, name: "git-run-\(command.prefix(18))")
+        capture(app, name: "git-98-cd")
+        let second = app.staticTexts["terminal-second-line"]
+        XCTFail("第二行始终不是「\(line)」，现在是「\(second.exists ? second.label : "（没有这一行）")」；命令是 cd \(path)")
     }
 
     private func send(_ command: String, in app: XCUIApplication) {
@@ -418,6 +405,14 @@ final class TerminalGitUITests: XCTestCase {
         usleep(300_000)
         input.typeText(command)
         app.buttons["send"].firstMatch.tap()
+    }
+
+    /// 收掉系统键盘（它没开就什么也不做）。
+    private func dismissKeyboard(in app: XCUIApplication) {
+        guard app.keyboards.firstMatch.exists else { return }
+        app.descendants(matching: .any)["terminal.text"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 5)
     }
 
     /// 把弹窗拖到全屏。
@@ -450,7 +445,9 @@ final class TerminalGitUITests: XCTestCase {
     }
 
     private func expandSheetIfNeeded(in app: XCUIApplication) {
-        let grabber = app.otherElements["Sheet Grabber"].firstMatch
+        // 盲找任何一种类型：抓手的元素类型随系统版本变（这条路上它算 `button`，
+        // 而按 `otherElements` 找会**一句不响地什么也不做** —— 面板就一直留在半屏）。
+        let grabber = app.descendants(matching: .any)["Sheet Grabber"].firstMatch
         guard grabber.exists else { return }
         let start = grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let end = start.withOffset(CGVector(dx: 0, dy: -420))
@@ -459,6 +456,10 @@ final class TerminalGitUITests: XCTestCase {
     }
 
     private func openGitPanel(in app: XCUIApplication) {
+        // 先把系统键盘收掉。终端那几步一直在打字，键盘是**开着的** —— 而半屏面板是照着
+        // 键盘之上那点高度量的：真机上「操作」那一段整个落在折叠线以下，无障碍树里一行
+        // 都没有（模拟器接了硬件键盘、根本不弹键盘，所以那边一直是好的）。
+        dismissKeyboard(in: app)
         let menu = app.buttons["更多"]
         XCTAssertTrue(menu.waitForExistence(timeout: 10), "⋯ 菜单不见了")
         menu.tap()
@@ -468,6 +469,15 @@ final class TerminalGitUITests: XCTestCase {
         )
         app.buttons["terminal-menu-git"].tap()
         XCTAssertTrue(app.buttons["git-panel-done"].waitForExistence(timeout: 10), "Git 面板没打开")
+        // 面板是半屏起的，「操作」那一段里靠下的几行在折叠线以下 —— `List` 还没把它们
+        // 画出来，无障碍树里也就没有它们（真机上就是这样：`git-panel-merge` 找不到，
+        // 而 `git-panel-done` 在）。把弹窗往上拖到全屏；真人要找「合并分支」也是这么找的。
+        expandSheetIfNeeded(in: app)
+        if !app.buttons["git-panel-merge"].exists {
+            // 还没到位就滚一下列表 —— 真人找靠下的动作也是这么找的。
+            _ = app.buttons["git-panel-done"].exists
+            app.collectionViews.firstMatch.swipeUp()
+        }
     }
 
     /// 第二行是不是那句话。它是顶栏里的一行文字，标识符只有一个，变的是它的值。
@@ -478,7 +488,8 @@ final class TerminalGitUITests: XCTestCase {
         gitSecondLine line: String,
         in app: XCUIApplication,
         timeout: TimeInterval,
-        prefix: Bool = false
+        prefix: Bool = false,
+        quiet: Bool = false
     ) -> Bool {
         let element = app.staticTexts["terminal-second-line"]
         let deadline = Date().addingTimeInterval(timeout)
@@ -488,7 +499,10 @@ final class TerminalGitUITests: XCTestCase {
             }
             usleep(200_000)
         }
-        XCTFail("第二行始终不是「\(line)」，现在是「\(element.exists ? element.label : "（没有这一行）")」")
+        // `quiet` 是给「还要重发一次」的调用方用的：那一次不该判死，由它最后统一报。
+        if !quiet {
+            XCTFail("第二行始终不是「\(line)」，现在是「\(element.exists ? element.label : "（没有这一行）")」")
+        }
         return false
     }
 
