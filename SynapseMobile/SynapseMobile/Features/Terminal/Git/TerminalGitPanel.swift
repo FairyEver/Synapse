@@ -30,8 +30,7 @@ struct TerminalGitPanel: View {
             .modifier(TerminalGitDirtySheet(
                 flow: flow,
                 desk: desk,
-                changeCount: status?.changeCount ?? 0,
-                currentBranch: status?.branch
+                changeCount: status?.changeCount ?? 0
             ))
             .modifier(TerminalGitFailureAlert(
                 flow: flow,

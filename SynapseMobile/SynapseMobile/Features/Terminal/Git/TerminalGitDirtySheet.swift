@@ -47,7 +47,6 @@ struct TerminalGitDirtySheet: ViewModifier {
     let desk: TerminalGitDesk
     /// 电脑说的改动数。用来把「有 3 个文件未提交」说成具体数，而不是手机自己数的。
     let changeCount: Int
-    let currentBranch: String?
 
     private var isPresentingDecision: Binding<Bool> {
         Binding(

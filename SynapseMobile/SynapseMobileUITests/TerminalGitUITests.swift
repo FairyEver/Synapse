@@ -181,7 +181,7 @@ final class TerminalGitUITests: XCTestCase {
 
         // 未跟踪的新文件还在 —— 这一条只能用终端自己看：`git status` 还把它列成未跟踪，
         // 说明它没被那次丢弃顺手删掉。
-        run("git status --short", in: app, expecting: "?? scratch.md", keepKeyboard: true)
+        run("git status --short", in: app, expecting: "?? scratch.md")
     }
 
     // MARK: - 合并：冲突自动回退，成功的那条照常
@@ -264,7 +264,7 @@ final class TerminalGitUITests: XCTestCase {
         app.buttons["git-panel-done"].tap()
 
         // 合进来的那个文件在 main 上，说明合并真的发生了（不是只换了一句话）。
-        run("ls", in: app, expecting: "added-by-other.txt", keepKeyboard: true)
+        run("ls", in: app, expecting: "added-by-other.txt")
     }
 
     // MARK: - 公共步骤
@@ -372,7 +372,7 @@ final class TerminalGitUITests: XCTestCase {
     /// 自己还会在启动时问一句要不要更新），落进那句话里的输入会被当成回答吃掉 ——
     /// 症状是「命令打上去了，却什么都没发生」。等人打完字再按一次就好，而 `cd` / `pwd` /
     /// `git status` 重发一次都没有副作用。
-    private func run(_ command: String, in app: XCUIApplication, expecting needle: String, keepKeyboard: Bool = false) {
+    private func run(_ command: String, in app: XCUIApplication, expecting needle: String) {
         var arrived = false
         for attempt in 1...3 {
             send(command, in: app)
@@ -398,10 +398,9 @@ final class TerminalGitUITests: XCTestCase {
                     + "第二行是「\(second.exists ? second.label : "（没有这一行）")」"
             )
         }
-        // 键盘**不收**：收一次就丢一次焦点，而下一条命令还得再把它要回来 —— 这一页上
-        // 真正需要键盘让位的只有输入栏本身，而它一直在键盘上方。`keepKeyboard` 保留着
-        // 只为读起来清楚：现在每一条命令都是这么发的。
-        _ = keepKeyboard
+        // 键盘**不收**：收一次就丢一次焦点，而下一条命令还得再把它要回来。这一页上真正
+        // 需要键盘让位的只有输入栏本身，而它一直在键盘上方 —— 读输出读的是画布，不是
+        // 键盘底下的那几行。
         capture(app, name: "git-run-\(command.prefix(18))")
     }
 
