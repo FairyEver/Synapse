@@ -16,6 +16,7 @@ struct SessionListView: View {
     @State private var deleteTarget: MobileSummarySession?
     /// Tabs the user has closed. Absent means open, so the default needs no state.
     @State private var collapsedTabs: Set<String> = []
+    @State private var searchText = ""
 
     var body: some View {
         List {
@@ -31,10 +32,12 @@ struct SessionListView: View {
                 offlineSection
             } else if model.sessions.isEmpty {
                 emptySection
+            } else if isSearching, searchMatches.isEmpty {
+                searchEmptySection
             } else {
                 ForEach(model.summary?.groups ?? []) { group in
                     let blocks = sessionListBlocks(
-                        sessions: model.sessions(inGroup: group.id),
+                        sessions: matching(search: model.sessions(inGroup: group.id)),
                         workspaces: model.splitTabs(inGroup: group.id),
                     )
                     if !blocks.isEmpty {
@@ -47,10 +50,10 @@ struct SessionListView: View {
                 // otherwise never be rendered: it would simply not exist on the
                 // phone, with nothing to indicate why. Listing it ungrouped is
                 // strictly better than dropping it silently.
-                if !ungroupedSessions.isEmpty {
+                if !matching(search: ungroupedSessions).isEmpty {
                     Section("其它") {
                         blockRows(sessionListBlocks(
-                            sessions: ungroupedSessions,
+                            sessions: matching(search: ungroupedSessions),
                             // Every workspace, not just the ungrouped ones: these
                             // sessions only belong to groups that are missing from
                             // the advertised list, so nothing else can match them.
@@ -61,6 +64,9 @@ struct SessionListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // 位置和外观都交给系统：导航栏下拉露出搜索框（`.automatic`，苹果自己的
+        // 「邮件」「备忘录」就是这个行为），输入时标题自动让位，不用自己画。
+        .searchable(text: $searchText, prompt: "搜索会话")
         .noticeOverlay(model)
         .navigationTitle("终端")
         .toolbar {
@@ -212,6 +218,41 @@ struct SessionListView: View {
     private var ungroupedSessions: [MobileSummarySession] {
         let known = Set((model.summary?.groups ?? []).map(\.id))
         return model.sessions.filter { !known.contains($0.groupId) }
+    }
+
+    // MARK: - 搜索
+
+    /// 输入框里那串字，去掉首尾空白。空串就是没在搜。
+    private var searchQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isSearching: Bool { !searchQuery.isEmpty }
+
+    /// 只筛会话。设备行和「电脑不在线」那几句不跟着筛——它们说的是这台手机连没连上
+    /// 电脑，跟「我要找的是哪个会话」无关，被搜没了反而像是电脑掉了。
+    ///
+    /// 匹配标题、路径、最后一行：会话行上就这三样东西，读者看得见什么就搜得到什么。
+    /// 一个标签页里只有部分窗格命中时，标签页照常画出，但只展开命中的那几个窗格——
+    /// `sessionListBlocks` 本来就是按「这批会话里还有谁在」算的。
+    private func matching(search sessions: [MobileSummarySession]) -> [MobileSummarySession] {
+        guard isSearching else { return sessions }
+        return sessions.filter { session in
+            session.title.localizedCaseInsensitiveContains(searchQuery)
+                || session.cwd.localizedCaseInsensitiveContains(searchQuery)
+                || session.lastLine.localizedCaseInsensitiveContains(searchQuery)
+        }
+    }
+
+    private var searchMatches: [MobileSummarySession] { matching(search: model.sessions) }
+
+    /// 搜不到。标题交给系统的 `ContentUnavailableView.search` 去写（它会把这几个字
+    /// 带进「找不到"xxx"」里），不自己拼一句话。
+    private var searchEmptySection: some View {
+        Section {
+            ContentUnavailableView.search(text: searchQuery)
+                .listRowBackground(Color.clear)
+        }
     }
 
     /// The computer being viewed — and, when there is anywhere to go, the switch.

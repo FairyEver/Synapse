@@ -53,6 +53,8 @@ struct NewSessionSheet: View {
     /// Why the last attempt did not start anything. Cleared by the next one.
     @State private var failure: String?
     @State private var starting = false
+    @State private var projectSearch = ""
+    @State private var providerSearch = ""
 
     private var selection: AgentConversationSelection {
         resolveAgentConversationSelection(
@@ -329,7 +331,7 @@ struct NewSessionSheet: View {
 
     private var projectPicker: some View {
         List {
-            ForEach(model.summary?.agentGroups ?? []) { group in
+            ForEach(matchingProjects) { group in
                 pickerRow(
                     title: group.name,
                     detail: nil,
@@ -343,15 +345,33 @@ struct NewSessionSheet: View {
                     path.removeAll()
                 }
             }
+            if !projectSearchQuery.isEmpty, matchingProjects.isEmpty {
+                ContentUnavailableView.search(text: projectSearchQuery)
+                    .listRowBackground(Color.clear)
+            }
         }
         .listStyle(.insetGrouped)
+        // 这一个和下面那个供应商是这台电脑列得最长的两张表（项目随电脑端的仓库数长，
+        // 供应商随配了几个 Provider 长），所以有搜索。模型那一页只有四个固定档位，
+        // 给它一个搜索框是多余的东西。
+        .searchable(text: $projectSearch, prompt: "搜索项目")
         .navigationTitle("项目")
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    private var projectSearchQuery: String {
+        projectSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var matchingProjects: [MobileSummaryAgentGroup] {
+        let all = model.summary?.agentGroups ?? []
+        guard !projectSearchQuery.isEmpty else { return all }
+        return all.filter { $0.name.localizedCaseInsensitiveContains(projectSearchQuery) }
+    }
+
     private var providerPicker: some View {
         List {
-            ForEach(model.summary?.agentProviders ?? []) { provider in
+            ForEach(matchingProviders) { provider in
                 pickerRow(
                     title: provider.name,
                     detail: provider.modelName(for: provider.defaultTier),
@@ -365,10 +385,30 @@ struct NewSessionSheet: View {
                     path.removeAll()
                 }
             }
+            if !providerSearchQuery.isEmpty, matchingProviders.isEmpty {
+                ContentUnavailableView.search(text: providerSearchQuery)
+                    .listRowBackground(Color.clear)
+            }
         }
         .listStyle(.insetGrouped)
+        .searchable(text: $providerSearch, prompt: "搜索供应商")
         .navigationTitle("供应商")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var providerSearchQuery: String {
+        providerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 名称和模型名都算命中：列表行上写着的就是这两样，读者看得见什么就搜得到什么。
+    private var matchingProviders: [MobileSummaryAgentProvider] {
+        let all = model.summary?.agentProviders ?? []
+        guard !providerSearchQuery.isEmpty else { return all }
+        return all.filter { provider in
+            provider.name.localizedCaseInsensitiveContains(providerSearchQuery)
+                || (provider.modelName(for: provider.defaultTier)?
+                        .localizedCaseInsensitiveContains(providerSearchQuery) ?? false)
+        }
     }
 
     private var modelPicker: some View {
