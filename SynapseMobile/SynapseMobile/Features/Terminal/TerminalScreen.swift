@@ -430,10 +430,14 @@ struct TerminalScreen: View {
         }
         // 「语音识别未配置」不进预检：它是平台侧的配置问题，唯一能自救的人是部署方，
         // 预检它只是白搭一次网络往返（§3.8）。它留给真正去签名的那一刻。
+        // 拒绝的理由说连接状态自己的话，不笼统给一句「网络已断开」：token 过期和正在
+        // 重连要用户做的事完全不同（去重新登录 vs 等一会儿），而它们在这一格里长得
+        // 一模一样。这条记的是状态，连接回来会自己消失（`expiresWithConnectivity`）。
         if case .noServer = model.connectivity {
             model.raiseTerminalMessage(
-                VoiceInputController.Failure.network.message,
-                sessionId: sessionId
+                model.connectivity.label,
+                sessionId: sessionId,
+                id: TerminalMessageId.voiceOffline
             )
             return
         }
@@ -505,22 +509,43 @@ struct TerminalScreen: View {
                 // `raiseTerminalMessage`，由它自己震（见 `Haptics` 的「一声」）。
                 Haptics.warning()
             }
-            if let notice { model.raiseTerminalMessage(notice, sessionId: sessionId) }
+            if let notice {
+                model.raiseTerminalMessage(notice.text, sessionId: sessionId, id: notice.id)
+            }
             return
         }
 
         land(VoiceLanding.resolve(transcript: heard, draft: draft))
-        if let notice { model.raiseTerminalMessage(notice, sessionId: sessionId) }
+        if let notice {
+            model.raiseTerminalMessage(notice.text, sessionId: sessionId, id: notice.id)
+        }
+    }
+
+    /// 要浮出来的那一条：文案 + 它认哪个 id。
+    ///
+    /// `id` 为 nil 表示 id 按文案走 —— 那些是对这一轮录音的回答，留到用户手动关。
+    private struct VoiceInterruption {
+        let text: String
+        let id: String?
     }
 
     /// 这次录音是被什么打断的。nil 表示用户自己说完松的手。
     ///
     /// 三条原因原样复用 `VoiceInputController.Failure.message`，不新编同义句（§4.8）。
-    private func voiceInterruption() -> String? {
+    private func voiceInterruption() -> VoiceInterruption? {
         switch voice.phase {
-        case .failed(let failure): return failure.message
-        case .interrupted: return HoldToTalkPresentation.interruptedNotice
-        default: return nil
+        case .failed(let failure):
+            return VoiceInterruption(
+                text: failure.message,
+                // 只有「网络断了」那条认固定 id：它记的是网络通不通这个状态，连接回来
+                // 就该跟着消失（`expiresWithConnectivity`）。「没有听到声音」和「语音
+                // 识别未配置」说的是这一轮和平台配置，网络回来它们照样成立。
+                id: failure == .network ? TerminalMessageId.voiceNetwork : nil
+            )
+        case .interrupted:
+            return VoiceInterruption(text: HoldToTalkPresentation.interruptedNotice, id: nil)
+        default:
+            return nil
         }
     }
 

@@ -338,6 +338,11 @@ func generatedFileName(prefix: String, extension ext: String, at date: Date = Da
 /// rather than in the queue because a refusal to send a command belongs beside the
 /// field the command was typed into — and because the reasons are often several at
 /// once, which a single slot could not hold.
+/// One family is the exception, and it is a family by construction rather than by
+/// taste: the two messages that mean "the network is down" report a **state** of the
+/// phone, not an answer to something the user just did. A state heals on its own, so
+/// the sentence has to go when it does — which is what `expiresWithConnectivity`
+/// marks out, and why that goes by id rather than by wording.
 struct TerminalMessage: Identifiable, Equatable {
     /// Names the message, not the occurrence: raising the same id again replaces it,
     /// so a retry that fails the same way does not stack a second copy.
@@ -348,6 +353,31 @@ struct TerminalMessage: Identifiable, Equatable {
     /// button, because naming a path in Settings without offering to open it asks
     /// the user to navigate a maze from memory.
     var opensSettings: Bool = false
+}
+
+/// Ids of the messages that stand for network state rather than for an answer.
+///
+/// They live next to the rule that reads them, not next to the screens that raise
+/// them, because the rule decides *which* messages expire and must not be written
+/// against the wording: one of these says 「网络已断开」, the other says whatever the
+/// connection's own state calls itself that moment.
+enum TerminalMessageId {
+    /// Going into voice mode was refused: the socket is not up right now.
+    static let voiceOffline = "voice.connectivity"
+    /// The speech recogniser's own connection went before it finished the sentence.
+    static let voiceNetwork = "voice.failure.network"
+}
+
+extension TerminalMessage {
+    /// Whether this message is a report on the network rather than an answer to
+    /// something the user did — and so has no business outliving the outage.
+    ///
+    /// Only these two: 「没有听到声音」 is about one recording, 「语音识别未配置」 is
+    /// about the platform's configuration, and 「录音被打断」 is about a phone call.
+    /// A connection coming back says nothing about any of them.
+    var expiresWithConnectivity: Bool {
+        id == TerminalMessageId.voiceOffline || id == TerminalMessageId.voiceNetwork
+    }
 }
 
 /// Why a pick was refused, so the user is told at the moment they pick rather

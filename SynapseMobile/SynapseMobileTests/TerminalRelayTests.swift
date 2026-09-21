@@ -521,3 +521,40 @@ struct TerminalFileIntakeVideoTests {
         #expect(AppConfiguration.relayCameraVideoSeconds < 600)
     }
 }
+
+/// Which terminal messages are allowed to leave on their own, and which have to be
+/// dismissed by hand.
+///
+/// The rule has to be narrow in both directions. Too wide, and a user who was mid
+/// dictation loses the only account of why their words never landed. Too narrow, and
+/// the row outlives the outage it describes — which is how a phone with a perfectly
+/// good connection ends up being told the network is down.
+struct TerminalMessageExpiryTests {
+    private func row(_ id: String) -> TerminalMessage {
+        TerminalMessage(id: id, sessionId: "session", text: "…")
+    }
+
+    @Test func theTwoNetworkReportsExpire() {
+        #expect(row(TerminalMessageId.voiceOffline).expiresWithConnectivity)
+        #expect(row(TerminalMessageId.voiceNetwork).expiresWithConnectivity)
+    }
+
+    @Test func answersToAnActionOutliveTheOutage() {
+        // Every id below is one a raise site really uses, and every one of them is
+        // still true once the connection is back: 没听到 is about one recording,
+        // 未配置 is about the platform, 被打断 is about a phone call, a refused file
+        // is about the file, and a permission prompt has to wait for Settings. None
+        // of them are answered by the network returning.
+        let survivors = [
+            "text:\(VoiceInputController.Failure.noSpeech.message)",
+            "text:\(VoiceInputController.Failure.notConfigured.message)",
+            "text:\(HoldToTalkPresentation.interruptedNotice)",
+            "text:电脑离线，命令没有发送。",
+            "text:没有读取到可发送的文件。",
+            "voice.notice",
+        ]
+        for id in survivors {
+            #expect(!row(id).expiresWithConnectivity, "「\(id)」不该自己消失")
+        }
+    }
+}

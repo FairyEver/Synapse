@@ -11,6 +11,11 @@ import UIKit
 /// It stays until dismissed, unlike the notice bar at the bottom of the screen. These
 /// are answers to an action taken moments ago, and an answer that leaves on a clock can
 /// be gone before the user looks up from the keyboard.
+///
+/// The one exception rides in with the messages themselves: a row that reports the
+/// network instead of answering an action goes when the connection comes back — see
+/// `TerminalMessage.expiresWithConnectivity`. That is not a clock either. The moment it
+/// goes is the moment its sentence stops being true.
 struct TerminalMessageList: View {
     let messages: [TerminalMessage]
     let onDismiss: (String) -> Void

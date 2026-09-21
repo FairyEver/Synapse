@@ -287,6 +287,17 @@ final class SynapseAppModel {
         terminalMessages.removeAll { $0.sessionId == sessionId }
     }
 
+    /// The messages that report the network go when the connection comes back: the
+    /// sentence they carry stops being true, and one that outlives its own truth
+    /// reads as a fresh problem rather than as the same old one.
+    ///
+    /// Run on every (re)connect, and from here rather than from the terminal screen,
+    /// because what they report is the whole phone's state: leaving that screen must
+    /// not leave one behind for the user to find on the way back.
+    private func clearExpiredTerminalMessages() {
+        terminalMessages.removeAll { $0.expiresWithConnectivity }
+    }
+
     // MARK: - File hand-off
 
     /// Files on their way to the computer, newest last.
@@ -754,6 +765,7 @@ final class SynapseAppModel {
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
+            self.clearExpiredTerminalMessages()
             // The computer may have been away for days while this phone was closed;
             // anything it never acknowledged is either obsolete by now or worth one
             // more try before it is.
