@@ -56,7 +56,7 @@
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane、`Cmd+R` 重命名当前会话；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane、`Ctrl+Shift+R` 重命名当前会话（`Ctrl+R` 归命令行的历史搜索）。`Cmd+R` 可用是因为应用菜单里没有「重新加载」：整页重载会丢掉未持久化的活动应用，界面回落成默认应用。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
 - Terminal pane 文件树允许按系统平台使用 `Cmd/Ctrl` 切换选择、`Shift` 连续选择，并把全部选中路径拖入当前 session；路径必须由文件树 scope 在主进程解析，按现有终端路径规则转义后写入，不得伪造成外部文件或新增 MCP 工具。
-- Terminal 底部内置快捷输入由代码定义且只读；用户快捷输入是独立的应用级数据，只允许名称、单行输入内容和是否回车，通过 UI 私有 IPC 管理并加密存入 `app.terminal.toolbar-actions`。两者不得混存，也不得注册 MCP 工具。
+- Terminal 底部内置快捷命令由代码定义且只读；用户快捷命令是独立的应用级数据，只允许名称、单行输入内容和是否回车，通过 UI 私有 IPC 管理并加密存入 `app.terminal.toolbar-actions`。两者不得混存，也不得注册 MCP 工具。
 - 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
 - Agent 原生通知是默认关闭的 Terminal 启动设置，只影响新 PTY。启用后可为 `codex`、`claude` 注入会话级 PATH shim 和官方 Hook；用户别名或函数最终按 PATH 调用这两个命令时必须继续生效，绝对路径、远程 Shell、主动重置 PATH 或 `SYNAPSE_AGENT_NOTIFICATIONS_DISABLED=1` 不承诺接入。
 - Agent Hook 只能向随机会话 token 保护的 loopback 端口上报有限事件元数据，不得上报提示词、回答、终端输出或工具参数。通知只显示 Agent 名、session 标题和状态；当前精确 session 聚焦时抑制，子 Agent 完成不得触发。同一批 Hook 事件同时驱动会话 `attention`：只在等待用户输入时写入 `waiting` 及 `approval` / `agent_question` 等 kind，用户提交提示、工具继续、中断、会话结束或用户在终端里手动输入后必须回到 `not_waiting`；该状态只含状态、kind、原因、置信度与水位，不得携带提示词、输出或工具参数。
@@ -82,7 +82,7 @@
 - 手机端不处理 `mobile.detached`：服务端只把它发给桌面（只有桌面知道该释放哪些写租约），没有回传手机的通路。客户端不得再为它接回调。
 - 手机端诊断日志是**纯本地产物**：落在 `Library/Caches/SynapseLogs/`，不进 Documents（那会跟着 iCloud 备份离开设备），不自动上传，不进 `ui.tracking` 遥测通道，也不与桌面日志通道合并。它唯一的出口是用户在「我的」→「诊断日志」里主动导出，走系统分享。终端正文默认**不记**，用户可以在「我的」→「诊断日志」里单独打开「记录终端屏幕内容」（默认开，见下）：打开后每秒至多记一条屏幕内容与发给电脑的命令，三重限长（12 行 × 每行 256 B × 总 2 KiB）并先跑脱敏，导出时二次确认并在包里写明本次是否包含。真实会话/电脑/项目 id 一律换成进程内的本地别名（`s1`/`d1`/`p1`，映射表不落盘、退出登录即清）；改用哈希或改为可跨文件对照的稳定标识都属于改变这条边界。完整规格见 `docs/adr/0220-keep-mobile-diagnostic-logs-on-device-and-de-identify-ids.md`。
 - 结构元数据使用已注册 `app.terminal.*` DataRepository；原始输出/检查点只进入专属有界加密块存储，安全存储不可用时不得回退明文。
-- 普通备份排除输出、检查点、命令正文、用户快捷输入正文、活动租约、删除意图和短期幂等记录；恢复时必须丢弃所有 Terminal session/workspace 和关联操作，不得重建 PTY 或重投生命周期操作。
+- 普通备份排除输出、检查点、命令正文、用户快捷命令正文、活动租约、删除意图和短期幂等记录；恢复时必须丢弃所有 Terminal session/workspace 和关联操作，不得重建 PTY 或重投生命周期操作。
 
 ### Notifier
 
