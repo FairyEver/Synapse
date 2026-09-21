@@ -74,6 +74,7 @@
 - Terminal 分组拖拽排序仅属于现有 System App 的 UI 私有 IPC：顺序写入分组既有 `sortOrder` 字段，不注册 MCP capability、tool、Workflow Node 或 Deep Link，不新增 Terminal MCP 工具。
 - Terminal 标签（workspace）的置顶仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，只改变同分组内排序；它随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 49。
 - Agent 侧栏项目分组顺序存放在全局配置 `global.agentProjectOrder`，只影响侧栏展示顺序，不重排 `config.global.projects`，不注册 MCP capability、tool 或 Deep Link，Agent Conversation 工具数量不变。
+- 手机端的 Git 操作走一个新的 `git` intent（`action` 是枚举：`status` / `branches` / `checkout` / `createBranch` / `commit` / `push` / `sync` / `merge`，不接受任意命令字符串），状态经 `mobile.gitStatus` 下行消息按会话推送，写操作的权限族是 `terminal.git.manage`（读走既有的 `terminal.state.read`）。它执行在**终端当前所在的目录**上：目录来自 shell 上报的 OSC 7 与 `process.cwd_probe` 兜底，**只认路径**，不接「代码仓库」注册表、不产生 `repositories.json` 条目，与 `app.git.*` 那套既有的 Git 应用没有产品关系（共享的只有底层命令封装与解析器）。冲突一律在电脑侧自动 `merge --abort` 回退、只回一段可复制的文本，手机端不解决冲突。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
 
 ## 普通业务模块 System App
 

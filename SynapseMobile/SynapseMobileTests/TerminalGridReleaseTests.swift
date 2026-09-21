@@ -39,7 +39,9 @@ struct TerminalGridReleaseTests {
             message: nil,
             sessionId: sessionId,
             createdSessionId: nil,
-            landedPath: nil
+            landedPath: nil,
+            // 这条路上没有 Git 的数据回答 —— 它只问网格有没有交回来。
+            git: nil
         )
     }
 

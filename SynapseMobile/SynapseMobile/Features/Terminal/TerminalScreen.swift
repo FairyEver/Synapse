@@ -47,6 +47,11 @@ struct TerminalScreen: View {
     /// Whether the command panel is open. The bar's right-hand key owns this, and the
     /// panel that reads it is presented as a sheet at the end of the screen.
     @State private var shortcutPanelPresented = false
+    /// 这一页的 Git 面板。非空＝面板开着，它同时是这一个弹窗的状态机（见 `TerminalGitFlow`）。
+    ///
+    /// 由 `⋯` 菜单里那一行建起来，带上发 intent 与说话两件事 —— `model` 只在那一刻
+    /// 拿得到（属性初始化时还读不到 environment），所以它在这里建。
+    @State private var gitFlow: TerminalGitFlow?
     @FocusState private var inputFocused: Bool
 
     @State private var showingPhotoPicker = false
@@ -308,7 +313,7 @@ struct TerminalScreen: View {
             isVoiceBusy: holdLatched || voice.phase != .idle || voiceGrid.isLocked,
             isOverlayUp: showingRename || showingStopConfirm || showingBusyConfirm
                 || showingPhotoPicker || showingDocumentPicker || showingCamera
-                || shortcutPanelPresented,
+                || shortcutPanelPresented || gitFlow != nil,
             isPhotoBubbleUp: recentPhoto != nil,
             isPortrait: !isCompactHeight,
             isSettling: chromeIsSettling,
@@ -795,6 +800,12 @@ struct TerminalScreen: View {
             // the reader copies an item and sees nothing at all.
             .noticeOverlay(model)
         }
+        .sheet(item: $gitFlow) { flow in
+            TerminalGitPanel(flow: flow)
+                // 面板盖在这一页上，这一页自己的提示条就在它下面 —— 而面板里每个动作的
+                // 结果都是一句提示。少了这一条，用户按了「推送」什么也看不到。
+                .noticeOverlay(model)
+        }
         .sheet(isPresented: $showingDocumentPicker) {
             DocumentPicker(
                 onPicked: { urls in
@@ -1076,27 +1087,40 @@ struct TerminalScreen: View {
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 5) {
+                    // 圆点留着：它是**会话**状态（运行中 / 等确认 / 离线），与这一轮无关。
                     Circle()
                         .fill(statusColor)
                         .frame(width: 6, height: 6)
-                    Text(statusLabel)
+                    // 这一行现在是两种东西二选一：会话状态加版本号（现状），或者当前目录的
+                    // Git 那一行。合成一句话而不是让视图各判一次，是因为「还没收到回答」与
+                    // 「不是仓库」在这里必须长得一模一样、而与「是仓库」必须不同 ——
+                    // 判据只有 `TerminalGitPresentation` 那一处。
+                    //
+                    // 版本文本是**让位**给分支的，不是被删掉：版本号是报问题时引用的号，
+                    // 不是抬头要看的东西，而终端目录不是仓库时它照旧显示。
+                    //
+                    // One line always so a narrow phone truncates this row instead of
+                    // wrapping it — a wrap would cost the terminal a row, which is the
+                    // same reason the version text was put on this line in the first place.
+                    Text(secondLine)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    // Which build of the app is asking. On the status line rather
-                    // than a line of its own: it is the number a report quotes back,
-                    // not something anyone needs at a glance, and a third line would
-                    // cost the terminal a row on every screen. Both texts are held
-                    // to one line so a narrow phone truncates this row instead of
-                    // wrapping it — a wrap would cost that row anyway.
-                    Text("· \(AppVersion.label)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        // 这一行有两个来源（会话状态那一句，或当前目录的 Git 那一句），
+                        // 而验收要看的正是「现在是哪一个」—— 给它一个稳定的地址。
+                        .accessibilityIdentifier("terminal-second-line")
                 }
             }
             .frame(maxWidth: .infinity)
         }
+
+    /// 顶栏第二行那句话。Git 那一行的口径见 `TerminalGitPresentation`。
+    private var secondLine: String {
+        TerminalGitPresentation.secondLine(
+            model.gitStatus(for: sessionId),
+            otherwise: "\(statusLabel) · \(AppVersion.label)"
+        )
+    }
 
     /// 横屏那一行里的标题：一行，圆点 + 标题 + 状态。
     ///
@@ -1147,6 +1171,22 @@ struct TerminalScreen: View {
                 } label: {
                     Label("本会话显示密度", systemImage: "textformat.size")
                 }
+            }
+            // Git：排在这几个动作的最前面，而且**不是仓库时不出现** —— 与「列表为空时
+            // 入口不出现」同一条口径，不摆一个点开是空的入口。第二行显示分支用的也是
+            // 同一个判据（`TerminalGitPresentation.isRepository`），两处不可能说岔。
+            if TerminalGitPresentation.isRepository(model.gitStatus(for: sessionId)) {
+                Button {
+                    noteChromeActivity()
+                    let flow = TerminalGitFlow(sessionId: sessionId)
+                    flow.prepare()
+                    gitFlow = flow
+                } label: {
+                    // 同下面几行：不带图标。上面那两组选项本来就只画文字，只有这几行各多
+                    // 一个图标，摆在一起是两种样子。
+                    Text("Git")
+                }
+                .accessibilityIdentifier("terminal-menu-git")
             }
             // 全屏。竖屏收栏只有这一条路（三条栏在那里不自己走，见 `armChromeIdle`），
             // 横屏也有 —— 两个方向都能把栏收起来，所以两处都该有这颗开关。

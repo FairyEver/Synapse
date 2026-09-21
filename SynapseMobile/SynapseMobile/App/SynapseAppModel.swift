@@ -1105,6 +1105,8 @@ final class SynapseAppModel {
         for key in terminalStores.keys.filter({ !live.contains($0) }) {
             terminalStores.removeValue(forKey: key)
             preemptedSessions.remove(key)
+            // 那条记录连着一个已经不存在的会话，留着只占一个格子。
+            gitStatus.forget(sessionId: key)
         }
         openSessions.formIntersection(live)
         // 会话级的显示模式只对签发它的那台电脑成立，而它每次改动都会整份写回
@@ -1297,6 +1299,35 @@ final class SynapseAppModel {
     /// ⋯ 菜单里的「Git」不渲染，而前者只是还没到，屏幕上的东西不该因此动一下。
     func gitStatus(for sessionId: String) -> TerminalGitStatusState.Status? {
         gitStatus.status(for: sessionId, onSelected: selectedDesktopClientInstanceId)
+    }
+
+    /// 手机端做 Git 操作时要问电脑的那两件事。
+    ///
+    /// 面板与它下面几页都不直接拿 `model`：它们拿的是一对闭包，这样「先提交、成功了再
+    /// 切换」这类时序可以被单独验，而不必先起一个 App。见 `TerminalGitFlow`。
+    var gitDesk: TerminalGitDesk {
+        TerminalGitDesk(
+            send: { [weak self] intent, timeout in
+                guard let self else { return nil }
+                return await self.runGitIntent(intent, waiting: timeout)
+            },
+            notice: { [weak self] text, tone, id in
+                self?.notice(text, tone: tone, id: id)
+            }
+        )
+    }
+
+    /// 发一个 `git` intent 并等电脑的回答，等不到就是 `nil`。
+    ///
+    /// 它**不走 `write(_:to:)`**：那条路是为「往终端里打字」准备的 —— 要写租约、要腾出
+    /// 控制权、被抢占时还会重放一次。Git 动作一件都不需要：命令在电脑后台跑，不碰 PTY，
+    /// 也就没有键盘在前面等着。而且它**绝不能重放**：一次合并跑两遍不是无害的重复。
+    ///
+    /// 每个动作都在电脑侧自己过权限（读走 `terminal.state.read`，写走
+    /// `terminal.git.manage`），审计记录说的是实话：手机让电脑改动了用户的仓库。
+    private func runGitIntent(_ intent: MobileIntentRequest, waiting timeout: TimeInterval) async -> MobileIntentResult? {
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else { return nil }
+        return await awaitResult(of: intent, sentTo: desktop, timeoutSeconds: timeout)
     }
 
     /// The 快捷输入 sentences for the computer being viewed, or `nil` for one that has

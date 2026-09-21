@@ -471,9 +471,46 @@ struct MobileIntentResult: Decodable {
     /// Set for `fileUpload`: where the file ended up on the computer. The phone
     /// cannot derive it, and needs it to undo the insertion it caused.
     let landedPath: String?
+    /// Set for `git`，for the two actions whose answer is data rather than a side
+    /// effect. `status` 的回答**不在这里** —— 手机端的状态永远以 `mobile.gitStatus`
+    /// 为准，两个来源写同一件事迟早会分叉。
+    let git: MobileIntentGitResult?
 
     var isAccepted: Bool { outcome == "accepted" }
     var isNoOp: Bool { outcome == "no_op" }
+}
+
+/// `git` 动作的回答里那两块**数据**，其余动作的回答是一句话。
+struct MobileIntentGitResult: Decodable, Equatable {
+    /// `branches` 的回答：只给名字与是否当前。
+    let branches: [MobileGitBranch]?
+    /// `merge` 冲突后的结论：手机端只负责把 `summaryText` 复制走。
+    let conflict: MobileGitConflict?
+    /// 脏工作区，需要用户先选一个走法。目前只有 `"dirty"` 一个值。
+    let needsDecision: String?
+}
+
+/// 一条本地分支，供分支列表画一行。
+struct MobileGitBranch: Decodable, Equatable, Identifiable {
+    let name: String
+    let current: Bool
+
+    var id: String { name }
+}
+
+/// 合并冲突的结论。
+///
+/// 传的是**一段给人（以及别的 Agent）读的完整说明**，不是文件清单结构：手机端不解析
+/// 文件列表，只把 `summaryText` 放进剪贴板。`files` 仍然在，因为要在弹窗里说「有 N 个
+/// 文件冲突」，而它不该去数一段文本里的行。
+struct MobileGitConflict: Decodable, Equatable, Identifiable {
+    let source: String
+    let target: String
+    let files: [String]
+    let summaryText: String
+
+    /// 这一页要的是「哪两条分支撞上了」，那就是它的身份。
+    var id: String { "\(source)→\(target)" }
 }
 
 struct MobileIntentResultPayload: Decodable {
@@ -815,6 +852,24 @@ struct MobileIntentRequest: Encodable {
     /// and what it should call the result. See `shared/src/mobile-live.ts`.
     var driveItemId: String?
     var fileName: String?
+    /// Git 操作（`kind == "git"`）。
+    ///
+    /// `action` 是**枚举**，不是命令字符串：手机把用户按下的那个动作名发过去，电脑按
+    /// 名字分派（`shared/src/mobile-live.ts` 的 `MobileGitAction`）。这条线只认路径，
+    /// 与 Synapse 的「代码仓库」那套没有产品关系。
+    var action: String?
+    /// `checkout` / `createBranch` / `merge` 的对象分支。
+    var branch: String?
+    /// `createBranch` 的起点；缺席＝从当前 HEAD 起。
+    var fromBranch: String?
+    /// `commit` 的提交信息。
+    var message: String?
+    /// `commit` 之后是否接着推送（提交页那个开关，默认关）。
+    var pushAfterCommit: Bool?
+    /// `merge` 的方向，见 `MobileGitMergeDirection`。
+    var direction: String?
+    /// `checkout` 的「丢弃改动并切换」。**不删未跟踪文件。**
+    var discardChanges: Bool?
 }
 
 struct MobileIntentPayloadOut: Encodable {

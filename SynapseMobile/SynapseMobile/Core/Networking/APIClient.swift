@@ -477,7 +477,10 @@ actor APIClient {
             message: response.delivered ? nil : "电脑离线。",
             sessionId: nil,
             createdSessionId: nil,
-            landedPath: nil
+            landedPath: nil,
+            // 这条路上不会有 Git 的**数据**回答：HTTP 回执只带一句话，而分支与冲突
+            // 只在实时通道上走（`mobile.gitStatus` 与 `mobile.intentResult`）。
+            git: nil
         )
     }
 

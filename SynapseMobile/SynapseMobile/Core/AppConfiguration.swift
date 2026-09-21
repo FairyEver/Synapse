@@ -114,6 +114,17 @@ enum AppConfiguration {
         return override > 0 ? override : 3
     }
 
+    // MARK: - Git
+
+    /// 一个 Git 动作等电脑回答的上限。
+    ///
+    /// 两档，因为电脑那一侧本来就有两档：本地命令 60 秒，远端命令 120 秒
+    /// （`TERMINAL_GIT_REMOTE_TIMEOUT_MS`）。手机这一档总比它长一点 —— 先到点的那一方
+    /// 说的话才算数，而**电脑**才拿得到 git 的原文；手机先放弃，只会把一次其实还在跑的
+    /// 推送说成「电脑没有回答」。
+    static let gitLocalTimeout: TimeInterval = 65
+    static let gitRemoteTimeout: TimeInterval = 130
+
     // MARK: - File hand-off
 
     /// Mirrors `MOBILE_FRAME_LIMITS.maxRelayedFileBytes` in
