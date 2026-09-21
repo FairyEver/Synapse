@@ -13,8 +13,9 @@ import SwiftUI
 /// taps.
 struct ClipboardList: View {
     let entries: [MobileClipboardEntry]
-    /// Drawn above the list when there is one to draw. The sheet is titled; the panel's
-    /// segment is already under a segmented control with no room for a second one.
+    /// The sheet's navigation title, when there is one to draw. The panel's segment is
+    /// already under a segmented control that says which of the three it is, and a
+    /// navigation bar there would be a second header saying nothing new.
     let title: String?
     /// Puts one entry on this phone's clipboard.
     let onCopy: (MobileClipboardEntry) -> Void
@@ -38,21 +39,37 @@ struct ClipboardList: View {
     @State private var copiedId: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            List {
-                if entries.isEmpty {
-                    Text("电脑上复制的文本会出现在这里")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("clipboard-empty")
-                } else {
-                    ForEach(entries) { entry in
-                        row(entry)
+        Group {
+            if let title {
+                // 标题与它唯一的动作属于导航栏。系统给弹窗顶部留了一条拖条的带子，导
+                // 航栏画在那条带子下面；上一版是压在弹窗最顶上的一个手写 `HStack`，
+                // 「剪切板」「清空」和拖条挤在同一条 5pt 高的横带里，字还顶着弹窗的
+                // 上圆角 —— 放大截图能量到：字的墨迹顶边距弹窗顶边 4pt，拖条占
+                // 2.3–7pt，两者重叠了 3pt。系统的弹窗里没有一处长这样。
+                //
+                // 这是本仓库另一个带标题的弹窗 `RenameSessionSheet` 已经在用的写法。
+                NavigationStack {
+                    list
+                        .navigationTitle(title)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) { clearButton }
+                        }
+                }
+            } else {
+                // 终端面板里没有导航栏可放：上面那排分段控制器已经说明了这是三段里的
+                // 哪一段。它的「清空」留在原处。
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Spacer(minLength: 0)
+                        clearButton
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
+                    list
                 }
             }
-            .listStyle(.insetGrouped)
         }
         .alert("清空剪切板记录？", isPresented: $confirmingClear) {
             Button("取消", role: .cancel) {}
@@ -73,25 +90,29 @@ struct ClipboardList: View {
         }
     }
 
-    @ViewBuilder
-    private var header: some View {
-        HStack(spacing: 12) {
-            if let title {
-                Text(title)
-                    .font(.headline)
+    private var list: some View {
+        List {
+            if entries.isEmpty {
+                Text("电脑上复制的文本会出现在这里")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("clipboard-empty")
+            } else {
+                ForEach(entries) { entry in
+                    row(entry)
+                }
             }
-            Spacer(minLength: 0)
-            Button("清空") { confirmingClear = true }
-                // Greyed rather than hidden, which is what the meetings detail page
-                // does: a control that vanishes is a control the reader has to hunt for
-                // the next time, and an empty list is exactly when they might wonder
-                // whether this one exists.
-                .disabled(entries.isEmpty)
-                .accessibilityIdentifier("clipboard-clear")
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 8)
+        .listStyle(.insetGrouped)
+    }
+
+    /// Greyed rather than hidden, which is what the meetings detail page does: a control
+    /// that vanishes is a control the reader has to hunt for the next time, and an empty
+    /// list is exactly when they might wonder whether this one exists.
+    private var clearButton: some View {
+        Button("清空") { confirmingClear = true }
+            .disabled(entries.isEmpty)
+            .accessibilityIdentifier("clipboard-clear")
     }
 
     private func row(_ entry: MobileClipboardEntry) -> some View {
