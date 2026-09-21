@@ -43,6 +43,8 @@ describe("CreateTableDialog", () => {
     await act(async () => root.render(<Harness />))
     await act(async () => {
       document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      // Radix 在 DialogContent 卸载后的 setTimeout(0) 里才恢复焦点，刷新两轮宏任务才等得到。
+      await new Promise((resolve) => window.setTimeout(resolve))
       await new Promise((resolve) => window.setTimeout(resolve))
     })
 
