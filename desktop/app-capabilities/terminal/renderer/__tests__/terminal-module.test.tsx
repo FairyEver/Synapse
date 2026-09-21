@@ -1797,7 +1797,7 @@ describe("TerminalModule", () => {
       expect(button.className).toContain("active:scale-[0.96]")
       expect(button.className).toContain("hover:text-foreground")
     }
-    const manageButton = toolbar.querySelector("button[aria-label='管理自定义快捷输入']")
+    const manageButton = toolbar.querySelector("button[aria-label='管理快捷命令']")
     expect(manageButton?.className).toContain("text-foreground/75")
     expect(manageButton?.className).toContain("hover:text-foreground")
     expect(toolbar.querySelector("[aria-hidden='true']")?.className).toContain("bg-border")
@@ -1822,8 +1822,8 @@ describe("TerminalModule", () => {
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
     const mic = toolbar?.querySelector("button[aria-label='语音输入']")
     expect(mic).toBeTruthy()
-    // 排在「管理自定义快捷输入」之后，也就是整条工具栏的最后。
-    const manage = toolbar?.querySelector("button[aria-label='管理自定义快捷输入']")
+    // 排在「管理快捷命令」之后，也就是整条工具栏的最后。
+    const manage = toolbar?.querySelector("button[aria-label='管理快捷命令']")
     expect(manage).toBeTruthy()
     if (!manage || !mic) throw new Error("Missing toolbar buttons")
     expect(manage.compareDocumentPosition(mic)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
@@ -1956,7 +1956,7 @@ describe("TerminalModule", () => {
 
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
     expect(toolbar?.querySelector("button[aria-label='中断当前进程']")).toBeNull()
-    expect(toolbar?.querySelector("button[aria-label='管理自定义快捷输入']")).toBeNull()
+    expect(toolbar?.querySelector("button[aria-label='管理快捷命令']")).toBeNull()
     expect(toolbar?.querySelector("button[aria-label='语音输入']")).toBeNull()
     expect(toolbar?.textContent).not.toContain("Ctrl+C")
   })
@@ -2126,7 +2126,7 @@ describe("TerminalModule", () => {
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
     const labels = Array.from(toolbar?.querySelectorAll("button") ?? []).map((button) =>
       button.getAttribute("aria-label") ?? button.textContent)
-    expect(labels).toEqual(["发送回车", "中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷输入：检查状态", "输入快捷输入：输入路径", "管理自定义快捷输入"])
+    expect(labels).toEqual(["发送回车", "中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷命令：检查状态", "输入快捷命令：输入路径", "管理快捷命令"])
 
     await clickButton("检查状态")
     expect(terminalBridge.writeSession).toHaveBeenLastCalledWith({ sessionId: "session-1", data: "git status" })
@@ -2149,14 +2149,14 @@ describe("TerminalModule", () => {
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
     await renderModule()
-    await clickButtonByAriaLabel("管理自定义快捷输入")
+    await clickButtonByAriaLabel("管理快捷命令")
 
     const dialog = document.body.querySelector("[role='dialog']")
-    expect(dialog?.textContent).toContain("自定义快捷输入")
+    expect(dialog?.textContent).toContain("快捷命令")
     expect(dialog?.textContent).not.toContain("Ctrl+C")
     expect(dialog?.textContent).not.toContain("/exit")
 
-    await clickButton("新增快捷输入", dialog ?? document.body)
+    await clickButton("新增快捷命令", dialog ?? document.body)
     await changeInputById("terminal-toolbar-action-label", "  部署  ")
     await changeInputById("terminal-toolbar-action-content", "  pnpm deploy  ")
     await clickButton("保存")
@@ -2168,7 +2168,7 @@ describe("TerminalModule", () => {
     })
     expect(document.body.textContent).toContain("部署")
 
-    await clickButtonByAriaLabel("编辑快捷输入：部署")
+    await clickButtonByAriaLabel("编辑快捷命令：部署")
     await changeInputById("terminal-toolbar-action-label", "发布")
     await changeInputById("terminal-toolbar-action-content", "pnpm release")
     await clickButton("保存")
@@ -2179,12 +2179,12 @@ describe("TerminalModule", () => {
       pressEnter: true,
     }))
 
-    await clickButtonByAriaLabel("删除快捷输入：发布")
-    expect(document.body.textContent).toContain("删除快捷输入？")
-    await clickButton("删除快捷输入")
+    await clickButtonByAriaLabel("删除快捷命令：发布")
+    expect(document.body.textContent).toContain("删除快捷命令？")
+    await clickButton("删除快捷命令")
 
     expect(terminalBridge.deleteCustomToolbarAction).toHaveBeenCalledTimes(1)
-    expect(document.body.textContent).toContain("暂无自定义快捷输入")
+    expect(document.body.textContent).toContain("暂无快捷命令")
   })
 
   it("keeps running-only toolbar actions disabled for a lost session while allowing local clear", async () => {
@@ -2204,7 +2204,7 @@ describe("TerminalModule", () => {
     expect(buttonForText("/clear")?.disabled).toBe(true)
     expect(buttonForText("Clear")?.disabled).toBe(false)
     expect(buttonForText("检查状态")?.disabled).toBe(true)
-    expect(document.body.querySelector<HTMLButtonElement>("button[aria-label='管理自定义快捷输入']")?.disabled).toBe(false)
+    expect(document.body.querySelector<HTMLButtonElement>("button[aria-label='管理快捷命令']")?.disabled).toBe(false)
 
     await clickButton("Clear")
 
@@ -4020,14 +4020,14 @@ describe("TerminalModule", () => {
     expect(overlay).not.toBeNull()
     // 盖住的正是那条工具栏本身。
     expect(overlay?.parentElement?.querySelector("[data-terminal-toolbar]")).not.toBeNull()
-    for (const label of ["发送回车", "清空终端显示", "管理自定义快捷输入", "语音输入"]) {
+    for (const label of ["发送回车", "清空终端显示", "管理快捷命令", "语音输入"]) {
       expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(true)
     }
 
     await clickButton("转移到电脑")
 
     expect(document.querySelector("[data-terminal-toolbar-mobile-overlay]")).toBeNull()
-    for (const label of ["发送回车", "清空终端显示", "管理自定义快捷输入", "语音输入"]) {
+    for (const label of ["发送回车", "清空终端显示", "管理快捷命令", "语音输入"]) {
       expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(false)
     }
   })

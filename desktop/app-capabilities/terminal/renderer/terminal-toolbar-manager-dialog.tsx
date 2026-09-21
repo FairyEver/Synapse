@@ -93,7 +93,7 @@ export function TerminalToolbarManagerDialog({
     }
   }, [open])
 
-  const formTitle = form?.mode === "edit" ? "编辑快捷输入" : "新增快捷输入"
+  const formTitle = form?.mode === "edit" ? "编辑快捷命令" : "新增快捷命令"
   const canCreate = actions.length < TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT
 
   const editAction = (action: SynapseTerminalCustomToolbarAction) => {
@@ -158,7 +158,7 @@ export function TerminalToolbarManagerDialog({
             <form className="grid gap-4" onSubmit={submit}>
               <DialogHeader>
                 <DialogTitle>{formTitle}</DialogTitle>
-                <DialogDescription className="sr-only">设置按钮名称、输入内容和回车行为。</DialogDescription>
+                <DialogDescription className="sr-only">设置命令名称、输入内容和回车行为。</DialogDescription>
               </DialogHeader>
               <FieldGroup>
                 <Field data-invalid={Boolean(errors.label) || undefined}>
@@ -223,8 +223,8 @@ export function TerminalToolbarManagerDialog({
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>自定义快捷输入</DialogTitle>
-                <DialogDescription className="sr-only">管理终端快捷栏中的自定义按钮。</DialogDescription>
+                <DialogTitle>快捷命令</DialogTitle>
+                <DialogDescription className="sr-only">管理终端快捷栏中的自定义命令。</DialogDescription>
               </DialogHeader>
               {actions.length ? (
                 <ScrollArea className="max-h-80 rounded-md border">
@@ -249,7 +249,7 @@ export function TerminalToolbarManagerDialog({
                                 type="button"
                                 variant="ghost"
                                 size="icon-xs"
-                                aria-label={`编辑快捷输入：${action.label}`}
+                                aria-label={`编辑快捷命令：${action.label}`}
                                 onClick={() => editAction(action)}
                               >
                                 <Pencil />
@@ -258,7 +258,7 @@ export function TerminalToolbarManagerDialog({
                                 type="button"
                                 variant="ghost"
                                 size="icon-xs"
-                                aria-label={`删除快捷输入：${action.label}`}
+                                aria-label={`删除快捷命令：${action.label}`}
                                 onClick={() => setDeleteTarget(action)}
                               >
                                 <Trash2 />
@@ -273,11 +273,11 @@ export function TerminalToolbarManagerDialog({
               ) : (
                 <Empty className="min-h-40">
                   <EmptyHeader>
-                    <EmptyTitle>暂无自定义快捷输入</EmptyTitle>
+                    <EmptyTitle>暂无快捷命令</EmptyTitle>
                   </EmptyHeader>
                   <EmptyContent>
                     <Button type="button" variant="outline" onClick={() => setForm(EMPTY_FORM)}>
-                      新增快捷输入
+                      新增快捷命令
                     </Button>
                   </EmptyContent>
                 </Empty>
@@ -301,7 +301,7 @@ export function TerminalToolbarManagerDialog({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除快捷输入？</AlertDialogTitle>
+            <AlertDialogTitle>删除快捷命令？</AlertDialogTitle>
             <AlertDialogDescription>删除“{deleteTarget?.label}”后无法恢复。</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -311,7 +311,7 @@ export function TerminalToolbarManagerDialog({
               disabled={deleting}
               onClick={(event) => { event.preventDefault(); void deleteAction() }}
             >
-              删除快捷输入
+              删除快捷命令
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1778,7 +1778,7 @@ export function TerminalModule({
                           size="sm"
                           variant="ghost"
                           className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
-                          aria-label={`${action.pressEnter ? "运行" : "输入"}快捷输入：${action.label}`}
+                          aria-label={`${action.pressEnter ? "运行" : "输入"}快捷命令：${action.label}`}
                           disabled={terminalSessionStatus !== "running" || sessionLockedByMobile}
                           onClick={() => { void runCustomToolbarAction(action) }}
                         >
@@ -1790,7 +1790,7 @@ export function TerminalModule({
                         size="icon-xs"
                         variant="ghost"
                         className="text-foreground/75 hover:text-foreground"
-                        aria-label="管理自定义快捷输入"
+                        aria-label="管理快捷命令"
                         disabled={sessionLockedByMobile}
                         onClick={() => setToolbarManagerOpen(true)}
                       >
