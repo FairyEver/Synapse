@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>手机端终端 · Git 操作 · 原型</title>
+<style>
+  :root{
+    --blue:#007AFF; --red:#FF3B30; --green:#34C759; --orange:#FF9500;
+    --gray6:#F2F2F7; --gray5:#E5E5EA; --gray4:#D1D1D6;
+    --label:rgba(0,0,0,.92); --label2:rgba(60,60,67,.6); --label3:rgba(60,60,67,.3);
+    --sep:rgba(60,60,67,.29); --card:#FFFFFF;
+    --canvas:#1B1B1D; --canvas2:#131315;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+    background:#101013;color:#EDEDF0;
+    display:flex;justify-content:center;align-items:flex-start;
+    padding:28px 20px 60px;gap:36px;flex-wrap:wrap;
+  }
+
+  /* ---------- 手机外壳 ---------- */
+  .phone{
+    width:390px;height:844px;border-radius:52px;background:#000;
+    padding:10px;position:relative;flex:0 0 auto;
+    box-shadow:0 30px 70px rgba(0,0,0,.6),0 0 0 1.5px #2b2b30;
+  }
+  .screen{
+    width:100%;height:100%;border-radius:43px;overflow:hidden;position:relative;
+    background:var(--gray6);color:var(--label);display:flex;flex-direction:column;
+  }
+  .statusbar{
+    height:54px;flex:0 0 auto;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 30px 5px;font-size:14px;font-weight:600;background:var(--card);
+    position:relative;z-index:30;
+  }
+  .statusbar .icons{display:flex;gap:5px;align-items:center;font-size:12px;letter-spacing:.5px}
+  .notch{
+    position:absolute;top:9px;left:50%;transform:translateX(-50%);
+    width:120px;height:33px;border-radius:20px;background:#000;z-index:40;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{
+    flex:0 0 auto;display:flex;align-items:center;gap:10px;
+    padding:8px 12px;background:var(--card);position:relative;z-index:20;
+    border-bottom:.5px solid rgba(0,0,0,.08);
+  }
+  .iconbtn{
+    width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+    font-size:19px;color:var(--blue);cursor:pointer;flex:0 0 auto;border:0;background:none;padding:0;
+  }
+  .iconbtn.plain{color:var(--label)}
+  .more-circle{
+    width:30px;height:30px;border-radius:50%;background:#EFEFF4;
+    display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--label);
+    letter-spacing:1px;
+  }
+  .titleblock{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px}
+  .titleblock .t1{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .titleblock .t2{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--label2);max-width:100%}
+  .titleblock .t2 span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:0 0 auto}
+  .branchchip{font-variant-numeric:tabular-nums}
+
+  /* ---------- 工具栏 ---------- */
+  .toolbar{
+    flex:0 0 auto;display:flex;align-items:center;gap:0;
+    padding:0 12px;background:var(--card);height:44px;
+  }
+  .pill{
+    height:30px;padding:0 12px;border-radius:15px;background:#EFEFF4;color:var(--label);
+    font-size:14px;display:flex;align-items:center;white-space:nowrap;cursor:pointer;
+  }
+  .toolscroll{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:0 2px}
+  .toolscroll::-webkit-scrollbar{display:none}
+
+  /* ---------- 终端画布 ---------- */
+  .canvas{
+    flex:1;min-height:0;background:var(--canvas);color:#D8D8DC;
+    font:12.5px/17px var(--mono);padding:12px 10px;overflow:hidden;white-space:pre-wrap;word-break:break-all;
+  }
+  .canvas .g{color:#8A8A90}
+  .canvas .b{color:#7FB8FF}
+  .canvas .y{color:#E6C07B}
+  .canvas .r{color:#FF7B72}
+  .canvas .gr{color:#7BD88F}
+
+  /* ---------- 输入栏 ---------- */
+  .inputbar{
+    flex:0 0 auto;height:56px;display:flex;align-items:center;gap:8px;
+    padding:0 12px;background:var(--card);border-top:.5px solid rgba(0,0,0,.08);
+  }
+  .field{
+    flex:1;height:36px;border-radius:18px;background:#EFEFF4;
+    display:flex;align-items:center;padding:0 14px;color:var(--label3);font-size:15px;
+  }
+  .send{width:38px;height:38px;border-radius:50%;background:var(--gray5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px}
+
+  /* ---------- 菜单（⋯） ---------- */
+  .menuwrap{position:absolute;inset:0;z-index:60}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.12)}
+  .menu{
+    position:absolute;top:104px;right:14px;width:250px;background:rgba(250,250,252,.94);
+    backdrop-filter:blur(24px);border-radius:13px;overflow:hidden;
+    box-shadow:0 10px 40px rgba(0,0,0,.22);
+  }
+  .menu .mrow{
+    height:44px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;font-size:16px;cursor:pointer;position:relative;
+  }
+  .menu .mrow+.mrow::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:var(--sep)}
+  .menu .msep{height:8px;background:rgba(120,120,128,.14)}
+  .menu .mval{color:var(--label2);font-size:15px}
+  .menu .mrow.sel{color:var(--blue)}
+
+  /* ---------- 底部 sheet ---------- */
+  .sheetwrap{position:absolute;inset:0;z-index:70;display:flex;flex-direction:column;justify-content:flex-end}
+  .sheetwrap .scrim{position:absolute;inset:0;background:rgba(0,0,0,.3)}
+  .sheet{
+    position:relative;background:var(--gray6);border-radius:12px 12px 0 0;
+    max-height:92%;height:auto;display:flex;flex-direction:column;overflow:hidden;
+    animation:rise .26s cubic-bezier(.32,.72,0,1);box-shadow:0 -8px 40px rgba(0,0,0,.3);
+  }
+  @keyframes rise{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet.full{height:92%}
+  .sheet.mid{height:62%}
+  .grabber{width:36px;height:5px;border-radius:3px;background:var(--gray4);margin:6px auto 2px;flex:0 0 auto}
+  .navbar{
+    flex:0 0 auto;height:44px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 8px;background:var(--gray6);position:relative;
+  }
+  .navbar .navtitle{position:absolute;left:50%;transform:translateX(-50%);font-size:17px;font-weight:600;white-space:nowrap}
+  .navlink{color:var(--blue);font-size:17px;padding:0 8px;cursor:pointer;background:none;border:0;min-width:56px;text-align:left}
+  .navlink.right{text-align:right}
+  .navlink[disabled]{color:var(--label3);cursor:default}
+  .navlink.bold{font-weight:600}
+  .sheetbody{flex:1;min-height:0;overflow-y:auto;padding-bottom:24px}
+
+  /* ---------- 分组列表 ---------- */
+  .grouphdr{font-size:13px;color:var(--label2);padding:18px 16px 6px;text-transform:none}
+  .group{background:var(--card);border-radius:10px;margin:0 16px;overflow:hidden}
+  .row{
+    min-height:44px;display:flex;align-items:center;gap:8px;padding:8px 16px;
+    position:relative;font-size:17px;background:var(--card);
+  }
+  .row+.row::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:var(--sep)}
+  .row.tap{cursor:pointer}
+  .row .rl{flex:0 0 auto;color:var(--label)}
+  .row .rv{margin-left:auto;color:var(--label2);font-size:16px;text-align:right;max-width:56%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .rv.mono{font-family:var(--mono);font-size:13px}
+  .row .chev{color:var(--label3);font-size:15px;flex:0 0 auto;margin-left:2px}
+  .row .sc{flex:1;min-width:0;display:flex;flex-direction:column}
+  .row .sc .s1{font-size:17px}
+  .row .sc .s2{font-size:12.5px;color:var(--label2);margin-top:1px}
+  .row.blue .rl,.row.blue .sc .s1{color:var(--blue)}
+  .row.dim .rl,.row.dim .sc .s1,.row.dim .rv{color:var(--label3)}
+  .row.dim{cursor:default}
+  .row.tick .rl{max-width:78%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .tick{color:var(--blue);font-size:17px;margin-left:auto;flex:0 0 auto}
+  .note{font-size:13px;color:var(--label2);padding:8px 32px 0;line-height:1.4}
+
+  /* ---------- 搜索框 ---------- */
+  .searchwrap{padding:8px 16px 4px;flex:0 0 auto}
+  .search{
+    height:36px;border-radius:10px;background:rgba(118,118,128,.12);
+    display:flex;align-items:center;gap:6px;padding:0 8px;color:var(--label3);font-size:17px;
+  }
+  .search input{
+    flex:1;border:0;background:none;outline:0;font:inherit;color:var(--label);font-size:16px;min-width:0;
+  }
+  .search input::placeholder{color:var(--label3)}
+
+  /* ---------- 表单 ---------- */
+  .textarea{
+    width:100%;min-height:96px;border:0;outline:0;resize:none;font:17px/1.4 inherit;
+    padding:12px 16px;background:var(--card);color:var(--label);border-radius:0;
+  }
+  .textarea::placeholder{color:var(--label3)}
+  .toggle{width:51px;height:31px;border-radius:16px;background:var(--gray5);position:relative;transition:background .2s;flex:0 0 auto;cursor:pointer}
+  .toggle.on{background:var(--green)}
+  .toggle i{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2);transition:transform .2s}
+  .toggle.on i{transform:translateX(20px)}
+
+  /* ---------- 操作表 / 弹窗 ---------- */
+  .dialogwrap{position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:0 24px}
+  .dialogwrap .scrim{position:absolute;inset:0;background:rgba(0,0,0,.4)}
+  .dialog{
+    position:relative;width:100%;max-width:290px;background:rgba(250,250,252,.96);backdrop-filter:blur(24px);
+    border-radius:14px;overflow:hidden;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);
+    animation:pop .18s ease-out;
+  }
+  @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+  .dialog .dhead{padding:19px 16px 15px}
+  .dialog .dtitle{font-size:17px;font-weight:600}
+  .dialog .dmsg{font-size:13px;margin-top:4px;color:var(--label);line-height:1.4}
+  .dialog .dbody{font-size:13px;text-align:left;padding:0 16px 14px;color:var(--label);line-height:1.45}
+  .dialog .dbtn{
+    height:44px;display:flex;align-items:center;justify-content:center;font-size:17px;color:var(--blue);
+    border-top:.5px solid var(--sep);cursor:pointer;width:100%;background:none;border-left:0;border-right:0;border-bottom:0;
+  }
+  .dialog .dbtn.destructive{color:var(--red)}
+  .dialog .dbtn.cancel{font-weight:600}
+  .dialog .dbtn[disabled]{color:var(--label3)}
+  .dialog .dfiles{
+    font-family:var(--mono);font-size:12px;text-align:left;background:rgba(118,118,128,.1);
+    border-radius:8px;margin:0 16px 14px;padding:10px 12px;max-height:150px;overflow:auto;line-height:1.6;
+    word-break:break-all;
+  }
+  .actionsheet{
+    position:absolute;left:8px;right:8px;bottom:8px;z-index:1;
+  }
+  .as-group{background:rgba(250,250,252,.94);backdrop-filter:blur(24px);border-radius:14px;overflow:hidden;margin-bottom:8px}
+  .as-title{padding:14px 16px;font-size:13px;color:var(--label2);text-align:center;border-bottom:.5px solid var(--sep)}
+  .as-btn{height:57px;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--blue);position:relative;cursor:pointer;background:none;border:0;width:100%}
+  .as-btn+.as-btn::before{content:"";position:absolute;top:0;left:0;right:0;height:.5px;background:var(--sep)}
+  .as-btn.destructive{color:var(--red)}
+  .as-btn.cancel{background:rgba(250,250,252,.98);font-weight:600}
+
+  /* ---------- 提示 toast ---------- */
+  .toast{
+    position:absolute;left:50%;transform:translateX(-50%);bottom:110px;z-index:95;
+    background:rgba(30,30,32,.92);color:#fff;font-size:14px;padding:10px 16px;border-radius:12px;
+    max-width:78%;text-align:center;animation:pop .18s ease-out;
+  }
+
+  /* ---------- 右侧说明 ---------- */
+  .notes{width:430px;max-width:100%;font-size:13.5px;line-height:1.6;color:#C9C9D1;flex:0 0 auto}
+  .notes h1{font-size:17px;color:#fff;margin:0 0 4px}
+  .notes .sub{color:#8b8b95;font-size:12.5px;margin-bottom:16px}
+  .notes h2{font-size:13px;color:#fff;margin:20px 0 6px;letter-spacing:.02em}
+  .notes ul{margin:0;padding-left:18px}
+  .notes li{margin-bottom:5px}
+  .notes code{font-family:var(--mono);font-size:12px;background:#25252b;padding:1px 5px;border-radius:4px;color:#D7D7DE}
+  .notes .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .scenario{
+    display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;max-width:390px;
+  }
+  .scenario button{
+    font:12.5px/1 inherit;padding:8px 11px;border-radius:8px;border:1px solid #34343c;background:#1c1c21;color:#CFCFD6;cursor:pointer;
+  }
+  .scenario button.on{background:#2d5fd0;border-color:#2d5fd0;color:#fff}
+  .badge{display:inline-block;font-size:11px;padding:2px 6px;border-radius:5px;background:#2b2b33;color:#9a9aa5;margin-left:6px}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div class="screen" id="screen"></div>
+</div>
+
+<aside class="notes">
+  <h1>手机端终端 · Git 操作</h1>
+  <div class="sub">可交互原型 · 2026-09-21 · 点着走一遍</div>
+
+  <h2>三条入口/形态</h2>
+  <ul>
+    <li>顶栏<b>第二行</b>：当前目录是 Git 仓库时，显示 <code>分支名 · 改动数</code>；不是仓库时保持现状（<code>运行中 · 版本号</code>）。</li>
+    <li>操作全部收在右上角 <b>⋯ 菜单 → Git</b>，点开是面板。</li>
+    <li>不是 Git 仓库时，⋯ 菜单里<b>没有 Git 这一行</b>（不摆点开是空的入口）。</li>
+  </ul>
+
+  <h2>面板里的动作</h2>
+  <ul>
+    <li>看：分支、远端、领先/落后、改动文件数。</li>
+    <li>切分支 / 新建分支（两处都有搜索框）。</li>
+    <li>提交（全量，不挑文件；可开「提交后立即推送」，默认关）。</li>
+    <li>推送、同步。</li>
+    <li>合并：<b>两个方向</b>都支持。</li>
+  </ul>
+
+  <h2>冲突</h2>
+  <ul>
+    <li>一旦冲突：<b>自动取消合并并回退</b>，弹框说明 + 把冲突信息<b>复制到剪贴板</b>，你粘给别的 Agent 处理。</li>
+    <li>同步走的是快进式，<b>不会产生冲突</b>；会冲突的只有「合并分支」。</li>
+  </ul>
+
+  <h2>脏工作区切分支</h2>
+  <ul>
+    <li>三个选项：提交并切换 / 丢弃改动并切换 / 取消。<b>已去掉「暂存并切换」。</b></li>
+  </ul>
+
+  <h2>手机端不传文件列表</h2>
+  <ul>
+    <li>除了「提交页那一个改动数量」和「冲突时电脑拼好的那段文本」，手机端不接收任何文件清单 / diff。为的是省流量。</li>
+  </ul>
+
+  <h2>两个已定口径（可推翻）</h2>
+  <ul>
+    <li>「把当前分支合并到其他分支」的实际链路是<b>切到目标分支 → 合并 → 切回原分支</b>，因为 git 没有「不切分支就合并过去」的原语。合并页会把这三步写在脸上。</li>
+    <li>顶栏第二行<b>不可点</b>（按你说的，操作收在 ⋯ 菜单）。如果想让它点开面板，说一声。</li>
+  </ul>
+
+  <div class="scenario" id="scenario"></div>
+</aside>
+
+<script>
+/* ====================== 状态 ====================== */
+const S = {
+  scenario: 'dirty',
+  menu: false,
+  sheet: null,        // panel | branches | newbranch | commit | merge | mergebranch | conflict
+  back: null,
+  sheetSize: 'full',
+  dialog: null,       // {kind:'action'|'alert', ...}
+  toast: null,
+  branchFilter: '',
+  mergeBranchFilter: '',
+  pickerTarget: null, // 'checkout' | 'newbranch' | 'merge'
+  pendingBranch: null,
+  newBranchName: '',
+  newBranchFrom: 'main',
+  commitMessage: '',
+  pushAfterCommit: false,
+  mergeDirection: 'intoCurrent',
+  mergeOther: 'feature/login',
+  copied: false,
+};
+
+const SCENARIOS = {
+  dirty:      { git:true,  branch:'main', changes:3, ahead:2, behind:0, upstream:'origin/main' },
+  clean:      { git:true,  branch:'main', changes:0, ahead:0, behind:0, upstream:'origin/main' },
+  behind:     { git:true,  branch:'main', changes:0, ahead:0, behind:3, upstream:'origin/main' },
+  noupstream: { git:true,  branch:'dev-2', changes:2, ahead:0, behind:0, upstream:null },
+  detached:   { git:true,  branch:null,  changes:1, ahead:0, behind:0, upstream:null, sha:'a1b2c3d' },
+  nongit:     { git:false, branch:null,  changes:0, ahead:0, behind:0, upstream:null },
+};
+const SCENARIO_LABEL = {
+  dirty:'有改动 · 领先 2', clean:'干净 · 已同步', behind:'落后 3',
+  noupstream:'没设上游', detached:'游离 HEAD', nongit:'不是 Git 仓库',
+};
+
+const BRANCHES = ['main','dev-2','feature/login','feature/pay','release/1.0',
+  'fix/terminal-scroll','fix/update-handoff','chore/bump-version','experiment/canvas'];
+
+const CWD = '/Users/liyang/Documents/code/github/Synapse';
+
+/* 场景是「现场」不是「定义」：每次切场景都从定义复制一份，
+   否则演示一轮之后切走再切回来，数据还是被改过的样子。 */
+function sc(){
+  if(!S.live) S.live = JSON.parse(JSON.stringify(SCENARIOS[S.scenario]));
+  return S.live;
+}
+/* 合并页里「另一个分支」永远是被选中的那条，与方向无关：
+   方向只决定它是来源还是目标。 */
+function otherBranch(){ return S.mergeOther; }
+function currentBranchLabel(){ const c = sc(); return c.branch || (c.sha ? c.sha : '—'); }
+
+/* ====================== 小工具 ====================== */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function syncLabel(){
+  const c = sc();
+  if(!c.upstream) return '未设置远端';
+  if(c.ahead && c.behind) return `领先 ${c.ahead}，落后 ${c.behind}`;
+  if(c.ahead) return `领先 ${c.ahead} 个提交`;
+  if(c.behind) return `落后 ${c.behind} 个提交`;
+  return '已与远端一致';
+}
+function changeLabel(){
+  const n = sc().changes;
+  return n ? `${n} 个文件已更改` : '工作区干净';
+}
+function secondLine(){
+  const c = sc();
+  if(!c.git) return `<span>运行中</span><span>· 1.0.16 (13)</span>`;
+  const b = c.branch || `${c.sha}（游离）`;
+  const bits = [b];
+  if(c.changes) bits.push(`${c.changes} 个改动`);
+  else if(c.ahead) bits.push(`领先 ${c.ahead}`);
+  return bits.map(x => `<span class="${x===b?'branchchip':''}">${esc(x)}</span>`).join('<span>·</span>');
+}
+
+/* ====================== 终端主屏 ====================== */
+function terminalScreen(){
+  const c = sc();
+  return `
+  <div class="statusbar"><span>9:41</span><span class="icons">▮▮▮ ⌾ 100%</span></div>
+
+  <div class="topbar">
+    <button class="iconbtn">‹</button>
+    <div class="titleblock">
+      <div class="t1">Synapse #2</div>
+      <div class="t2"><i class="dot"></i>${secondLine()}</div>
+    </div>
+    <button class="iconbtn plain" onclick="toggleMenu()" aria-label="更多"><span class="more-circle">⋯</span></button>
+  </div>
+
+  <div class="toolbar">
+    <button class="iconbtn plain" style="width:40px">⌘</button>
+    <div class="toolscroll">
+      <span class="pill">回车</span><span class="pill">Ctrl+C</span><span class="pill">/exit</span><span class="pill">/clear</span>
+    </div>
+    <button class="iconbtn plain" style="width:40px">⇧</button>
+  </div>
+
+  <div class="canvas"><span class="g">Last login: Sun Sep 21 09:36:12 on ttys004</span>
+<span class="b">liyang@LiYangdeMacBook-Pro</span> <span class="y">Synapse</span> <span class="gr">%</span> cd ~/Documents/code/github/Synapse
+<span class="b">liyang@LiYangdeMacBook-Pro</span> <span class="y">Synapse</span> <span class="gr">%</span> git status -sb
+## main...origin/main [ahead 2]
+<span class="r"> M</span> desktop/src/modules/git/components/git-workbench.tsx
+<span class="r"> M</span> server/src/mobile-live/mobile-push.service.ts
+<span class="r">??</span> 临时笔记.md
+<span class="b">liyang@LiYangdeMacBook-Pro</span> <span class="y">Synapse</span> <span class="gr">%</span> <span style="background:#D8D8DC;color:#1B1B1D">▌</span></div>
+
+  <div class="inputbar">
+    <div class="iconbtn plain" style="width:32px;font-size:18px">🎙</div>
+    <div class="field">输入命令</div>
+    <div class="iconbtn plain" style="width:32px;font-size:19px">＋</div>
+    <div class="send">➤</div>
+  </div>`;
+}
+
+function menuOverlay(){
+  if(!S.menu) return '';
+  const c = sc();
+  return `
+  <div class="menuwrap">
+    <div class="scrim" onclick="toggleMenu()"></div>
+    <div class="menu">
+      <div class="mrow">显示模式<span class="mval">手机驱动 ›</span></div>
+      <div class="mrow">本会话显示密度<span class="mval">跟随系统 ›</span></div>
+      <div class="msep"></div>
+      ${c.git ? `<div class="mrow" onclick="openGit()">Git</div>` : ''}
+      <div class="mrow" onclick="toast('三条栏收起来了');toggleMenu()">全屏</div>
+      <div class="mrow">重命名</div>
+      <div class="mrow">复制全部输出</div>
+      <div class="mrow" style="color:var(--red)">停止会话</div>
+    </div>
+  </div>`;
+}
+
+/* ====================== Git 面板 ====================== */
+function panelSheet(){
+  const c = sc();
+  const canCommit = c.changes > 0;
+  // 没设上游时也要能点：那正是「首次推送」这个动作存在的理由。
+  const canPush = !c.upstream || c.ahead > 0;
+  const pushLabel = !c.upstream ? '首次推送' : '推送';
+  const pushValue = c.upstream ? '无未推送提交' : '';
+  return `
+  <div class="navbar">
+    <button class="navlink" style="visibility:hidden">完成</button>
+    <div class="navtitle">Git</div>
+    <button class="navlink right" onclick="closeSheet()">完成</button>
+  </div>
+  <div class="sheetbody">
+    <div class="grouphdr">仓库目录</div>
+    <div class="group">
+      <div class="row"><span class="rl">目录</span><span class="rv mono">${esc(CWD)}</span></div>
+    </div>
+
+    <div class="grouphdr">当前状态</div>
+    <div class="group">
+      <div class="row tap" onclick="pushSheet('branches')">
+        <span class="rl">分支</span><span class="rv">${esc(currentBranchLabel())}</span><span class="chev">›</span>
+      </div>
+      <div class="row"><span class="rl">远端</span><span class="rv">${c.upstream ? esc(c.upstream) : '未设置'}</span></div>
+      <div class="row"><span class="rl">同步</span><span class="rv">${esc(syncLabel())}</span></div>
+      <div class="row"><span class="rl">改动</span><span class="rv">${esc(changeLabel())}</span></div>
+    </div>
+
+    <div class="grouphdr">操作</div>
+    <div class="group">
+      <div class="row ${canCommit?'tap blue':'dim'}" ${canCommit?'onclick="S.commitThenCheckout=null;startCommit()"':''}><span class="rl">提交</span>${canCommit?'<span class="chev">›</span>':'<span class="rv">无改动</span>'}</div>
+      <div class="row ${canPush?'tap blue':'dim'}" ${canPush?'onclick="doPush()"':''}><span class="rl">${pushLabel}</span>${canPush?'<span class="chev">›</span>':`<span class="rv">${pushValue}</span>`}</div>
+      <div class="row tap blue" onclick="doSync()"><span class="rl">同步</span><span class="chev">›</span></div>
+      <div class="row tap blue" onclick="pushSheet('merge')"><span class="rl">合并分支</span><span class="chev">›</span></div>
+    </div>
+
+    <div class="note">这一行「提交」只提交当前目录下的全部改动；手机上不看文件清单，也不挑文件。</div>
+  </div>`;
+}
+
+/* ====================== 分支列表 ====================== */
+function branchesSheet(){
+  const c = sc();
+  const mode = S.pickerTarget;         // 'checkout' | 'newbranch' | 'merge'
+  const filter = S.branchFilter.trim();
+  const list = BRANCHES.filter(b => !filter || b.toLowerCase().includes(filter.toLowerCase()));
+  const title = mode === 'merge' ? '选择分支' : '分支';
+  const ticked = mode === 'newbranch' ? S.newBranchFrom : (mode === 'merge' ? S.mergeOther : c.branch);
+  return `
+  <div class="navbar">
+    <button class="navlink" onclick="popSheet()">‹ 返回</button>
+    <div class="navtitle">${title}</div>
+    ${mode === 'checkout'
+      ? `<button class="navlink right" onclick="pushSheet('newbranch')">＋</button>`
+      : `<button class="navlink right" style="visibility:hidden">＋</button>`}
+  </div>
+  <div class="searchwrap">
+    <div class="search">🔍<input id="branch-search" placeholder="搜索分支" value="${esc(S.branchFilter)}"
+      oninput="S.branchFilter=this.value;render(true)"><span onclick="S.branchFilter='';render(true)" style="cursor:pointer">${S.branchFilter?'✕':''}</span></div>
+  </div>
+  <div class="sheetbody">
+    ${list.length ? `
+    <div class="grouphdr">本地分支 · ${list.length}</div>
+    <div class="group">
+      ${list.map(b => `
+        <div class="row tick tap" onclick="pickBranch('${esc(b)}')">
+          <span class="rl">${esc(b)}</span>
+          ${b === ticked ? '<span class="tick">✓</span>' : ''}
+        </div>`).join('')}
+    </div>` : `
+    <div style="padding:70px 24px;text-align:center;color:var(--label2)">
+      <div style="font-size:38px">🌿</div>
+      <div style="margin-top:8px">没有匹配的分支</div>
+    </div>`}
+    ${mode === 'checkout' ? `<div class="note">只列本地分支。远端的新分支由「同步」带回来。</div>` : ''}
+  </div>`;
+}
+
+function pickBranch(name){
+  const mode = S.pickerTarget;
+  if(mode === 'newbranch'){ S.newBranchFrom = name; popSheet(); return; }
+  if(mode === 'merge'){ S.mergeOther = name; popSheet(); return; }
+  if(name === sc().branch){ toast('已经在这条分支上'); return; }
+  if(sc().changes > 0){ S.pendingBranch = name; askDirty(); return; }
+  doCheckout(name);
+}
+
+function doCheckout(name){
+  sc().branch = name; sc().changes = 0; sc().ahead = 0; sc().behind = 0;
+  sc().upstream = 'origin/' + name;
+  closeSheetRecursive();
+  toast(`已切换到 ${name}`);
+}
+
+function askDirty(){
+  S.dialog = { kind:'action', title:`有 ${sc().changes} 个文件未提交`, sub:`要切换到 ${S.pendingBranch}，先处理这些改动。`,
+    actions:[
+      {label:'提交并切换', run:()=>{ S.dialog=null; S.commitThenCheckout = S.pendingBranch; startCommit(); }},
+      {label:'丢弃改动并切换', destructive:true, run:()=>{ S.dialog=null; confirmDiscard(); }},
+      {label:'取消', cancel:true, run:()=>{ S.dialog=null; S.pendingBranch=null; }},
+    ]};
+  render();
+}
+function confirmDiscard(){
+  S.dialog = { kind:'alert', title:'丢弃改动？',
+    msg:`${S.pendingBranch} 上会丢掉当前目录里这 ${sc().changes} 个文件的修改，无法撤销。未跟踪的新文件不会被删除。`,
+    actions:[
+      {label:'丢弃并切换', destructive:true, run:()=>{ const b=S.pendingBranch; S.dialog=null; S.pendingBranch=null; doCheckout(b); }},
+      {label:'取消', cancel:true, run:()=>{ S.dialog=null; }},
+    ]};
+  render();
+}
+
+/* ====================== 新建分支 ====================== */
+function newBranchSheet(){
+  return `
+  <div class="navbar">
+    <button class="navlink" onclick="popSheet()">‹ 取消</button>
+    <div class="navtitle">新建分支</div>
+    <button class="navlink right bold" ${S.newBranchName.trim()?'':'disabled'} onclick="createBranch()">创建</button>
+  </div>
+  <div class="sheetbody">
+    <div class="grouphdr">分支名</div>
+    <div class="group"><div class="row"><input id="newbranch-input" class="textarea" style="min-height:44px;padding:10px 16px"
+      placeholder="feature/xxx" value="${esc(S.newBranchName)}" oninput="S.newBranchName=this.value;render(true)"></div></div>
+
+    <div class="grouphdr">起点</div>
+    <div class="group">
+      <div class="row tap" onclick="S.pickerTarget='newbranch';pushSheet('branches')">
+        <span class="rl">从哪条分支开始</span><span class="rv">${esc(S.newBranchFrom)}</span><span class="chev">›</span>
+      </div>
+    </div>
+    <div class="note">新建之后会直接切过去，工作区里的改动会一起带过去。</div>
+  </div>`;
+}
+function createBranch(){
+  const n = S.newBranchName.trim();
+  sc().branch = n; sc().upstream = null; sc().ahead = 0; sc().behind = 0;
+  closeSheetRecursive();
+  toast(`已新建并切换到 ${n}`);
+}
+
+/* ====================== 提交 ====================== */
+function commitSheet(){
+  const c = sc();
+  return `
+  <div class="navbar">
+    <button class="navlink" onclick="popSheet()">‹ 取消</button>
+    <div class="navtitle">提交</div>
+    <button class="navlink right bold" ${S.commitMessage.trim()?'':'disabled'} onclick="doCommit()">提交</button>
+  </div>
+  <div class="sheetbody">
+    <div class="grouphdr">将要提交</div>
+    <div class="group">
+      <div class="row"><span class="rl">全部改动</span><span class="rv">${c.changes} 个文件</span></div>
+    </div>
+    <div class="note">手机端不展示文件清单，一律全部提交。</div>
+
+    <div class="grouphdr">提交信息</div>
+    <div class="group">
+      <textarea id="commit-input" class="textarea" placeholder="写一句这次改了什么" oninput="S.commitMessage=this.value;render(true)">${esc(S.commitMessage)}</textarea>
+    </div>
+
+    <div class="grouphdr">之后</div>
+    <div class="group">
+      <div class="row"><span class="rl">提交后立即推送</span>
+        <span class="toggle ${S.pushAfterCommit?'on':''}" onclick="S.pushAfterCommit=!S.pushAfterCommit;render()"><i></i></span>
+      </div>
+    </div>
+    <div class="note">默认关。推送是对外动作，不该在你没要求时发生。</div>
+  </div>`;
+}
+function doCommit(){
+  const name = S.commitThenCheckout;
+  sc().changes = 0;
+  if(S.pushAfterCommit){ sc().ahead = 0; }
+  else { sc().ahead = (sc().ahead || 0) + 1; }
+  if(name){
+    S.commitThenCheckout = null; S.pendingBranch = null;
+    closeSheetRecursive();
+    setTimeout(()=>{ doCheckout(name); }, 300);
+    return;
+  }
+  closeSheetRecursive();
+  toast(S.pushAfterCommit ? '已提交并推送' : '已提交');
+}
+
+/* ====================== 合并 ====================== */
+function mergeSheet(){
+  const c = sc();
+  const cur = currentBranchLabel();
+  const other = otherBranch();
+  return `
+  <div class="navbar">
+    <button class="navlink" onclick="popSheet()">‹ 取消</button>
+    <div class="navtitle">合并分支</div>
+    <button class="navlink right bold" onclick="doMerge()">合并</button>
+  </div>
+  <div class="sheetbody">
+    <div class="grouphdr">方向</div>
+    <div class="group">
+      <div class="row tap" onclick="S.mergeDirection='intoCurrent';render()">
+        <span class="sc"><span class="s1">把其他分支合并到当前分支</span><span class="s2">合进 ${esc(cur)}，合完停在这里</span></span>
+        ${S.mergeDirection==='intoCurrent'?'<span class="tick">✓</span>':''}
+      </div>
+      <div class="row tap" onclick="S.mergeDirection='outOfCurrent';render()">
+        <span class="sc"><span class="s1">把当前分支合并到其他分支</span><span class="s2">先切过去、合并、再切回 ${esc(cur)}</span></span>
+        ${S.mergeDirection==='outOfCurrent'?'<span class="tick">✓</span>':''}
+      </div>
+    </div>
+
+    <div class="grouphdr">分支</div>
+    <div class="group">
+      <div class="row tap" onclick="S.pickerTarget='merge';pushSheet('branches')">
+        <span class="rl">${S.mergeDirection==='intoCurrent'?'来源分支':'目标分支'}</span>
+        <span class="rv">${esc(other)}</span><span class="chev">›</span>
+      </div>
+    </div>
+
+    <div class="grouphdr">将要执行</div>
+    <div class="group">
+      <div class="row"><span class="sc"><span class="s2" style="margin:0;line-height:1.5">${
+        S.mergeDirection==='intoCurrent'
+          ? `在 ${esc(cur)} 上合并 ${esc(other)}`
+          : `切到 ${esc(other)} → 合并 ${esc(cur)} → 切回 ${esc(cur)}`
+      }</span></span></div>
+    </div>
+
+    <div class="note">${
+      S.mergeDirection==='intoCurrent'
+        ? '一旦发生冲突，会自动取消这次合并并回退到合并前，然后给你一段可复制的冲突信息。'
+        : 'git 没有「留在原分支、把成果合进别的分支」这条原语，所以这一步必然要离开当前分支；结束后会切回来。一旦冲突，会取消合并、切回原分支。'
+    }</div>
+  </div>`;
+}
+function doMerge(){
+  const c = sc();
+  const cur = currentBranchLabel();
+  const other = otherBranch();
+  const src = S.mergeDirection === 'intoCurrent' ? other : cur;
+  const dst = S.mergeDirection === 'intoCurrent' ? cur : other;
+  S.conflictInfo = {
+    src, dst,
+    files:['desktop/src/modules/git/components/git-workbench.tsx',
+           'server/src/mobile-live/mobile-push.service.ts',
+           'shared/src/mobile-live.ts'],
+  };
+  c.changes = 0;
+  pushSheet('conflict');
+}
+
+const CONFLICT_TEXT = () => `【Synapse · Git 合并冲突】
+仓库目录：${CWD}
+操作：把分支 ${S.conflictInfo.src} 合并到 ${S.conflictInfo.dst}
+结果：检测到冲突，已自动取消合并并回退（git merge --abort），仓库回到了合并前的状态。
+冲突文件（${S.conflictInfo.files.length} 个）：
+${S.conflictInfo.files.map(f => '- ' + f).join('\n')}
+
+请帮我解决这些冲突。`;
+
+function conflictSheet(){
+  const i = S.conflictInfo;
+  return `
+  <div class="navbar">
+    <button class="navlink" style="visibility:hidden">·</button>
+    <div class="navtitle">合并已取消</div>
+    <button class="navlink right" onclick="closeSheetRecursive()">好</button>
+  </div>
+  <div class="sheetbody">
+    <div class="grouphdr">发生了什么</div>
+    <div class="group" style="padding:14px 16px">
+      <div style="font-size:15px;line-height:1.5">
+        把 <b>${esc(i.src)}</b> 合并到 <b>${esc(i.dst)}</b> 时发生冲突。<br>
+        已经自动取消这次合并并回退，仓库回到了合并前的状态。
+      </div>
+    </div>
+
+    <div class="grouphdr">冲突文件 · ${i.files.length}</div>
+    <div class="group" style="padding:12px 16px">
+      <div style="font-family:var(--mono);font-size:12.5px;line-height:1.7;word-break:break-all">
+        ${i.files.map(f=>esc(f)).join('<br>')}
+      </div>
+    </div>
+
+    <div style="padding:6px 16px 0">
+      <div class="row tap blue" style="border-radius:10px;background:var(--card);justify-content:center"
+        onclick="copyConflict()"><span class="rl">复制冲突信息</span></div>
+    </div>
+    <div class="note">复制之后粘给任意一个 Agent，它就能接手处理这些冲突。手机上不提供解决冲突的入口。</div>
+  </div>`;
+}
+function copyConflict(){
+  const text = CONFLICT_TEXT();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).catch(()=>{});
+  }
+  S.copied = true;
+  toast('冲突信息已复制到剪贴板');
+}
+
+/* ====================== 弹窗 ====================== */
+function dialogOverlay(){
+  const d = S.dialog;
+  if(!d) return '';
+  if(d.kind === 'action'){
+    return `
+    <div class="dialogwrap" style="align-items:flex-end;padding:0 8px 8px">
+      <div class="scrim" onclick="dismissDialog()"></div>
+      <div class="actionsheet">
+        <div class="as-group">
+          <div class="as-title"><b style="color:var(--label)">${esc(d.title)}</b><br>${esc(d.sub)}</div>
+          ${d.actions.filter(a=>!a.cancel).map(a => `
+            <button class="as-btn ${a.destructive?'destructive':''}" onclick="runAction(${d.actions.indexOf(a)})">${esc(a.label)}</button>`).join('')}
+        </div>
+        <div class="as-group">
+          <button class="as-btn cancel" onclick="dismissDialog()">取消</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  return `
+  <div class="dialogwrap">
+    <div class="scrim"></div>
+    <div class="dialog">
+      <div class="dhead"><div class="dtitle">${esc(d.title)}</div>${d.msg?`<div class="dmsg">${esc(d.msg)}</div>`:''}</div>
+      ${d.actions.map((a,i) => `<button class="dbtn ${a.destructive?'destructive':''} ${a.cancel?'cancel':''}" onclick="runAction(${i})">${esc(a.label)}</button>`).join('')}
+    </div>
+  </div>`;
+}
+function runAction(i){
+  const d = S.dialog; if(!d) return;
+  const a = d.actions[i]; if(!a) return;
+  a.run();
+}
+function dismissDialog(){ S.dialog = null; render(); }
+
+/* ====================== 路由 ====================== */
+function toggleMenu(){ S.menu = !S.menu; render(); }
+function openGit(){ S.menu = false; S.sheet = 'panel'; S.back = null; render(); }
+function closeSheet(){ S.sheet = null; S.back = null; S.pickerTarget = null; render(); }
+function closeSheetRecursive(){ S.sheet = null; S.back = null; S.pickerTarget = null; render(); }
+function pushSheet(name){
+  S.back = S.sheet; S.sheet = name;
+  if(name === 'branches') S.branchFilter = '';
+  render();
+}
+function popSheet(){ S.sheet = S.back; S.back = null; S.pickerTarget = null; render(); }
+
+function toast(t){ S.toast = t; render(); setTimeout(()=>{ if(S.toast===t){ S.toast=null; render(); } }, 1800); }
+
+function sheetHTML(){
+  if(!S.sheet) return '';
+  let inner = '', size = 'full';
+  if(S.sheet === 'panel')     inner = panelSheet();
+  if(S.sheet === 'branches'){ inner = branchesSheet(); size = 'full'; }
+  if(S.sheet === 'newbranch'){ inner = newBranchSheet(); size='mid'; }
+  if(S.sheet === 'commit'){ inner = commitSheet(); size = 'full'; }
+  if(S.sheet === 'merge'){ inner = mergeSheet(); size = 'full'; }
+  if(S.sheet === 'conflict'){ inner = conflictSheet(); size = 'full'; }
+  return `
+  <div class="sheetwrap">
+    <div class="scrim" onclick="closeSheet()"></div>
+    <div class="sheet ${size}">
+      <div class="grabber"></div>
+      ${inner}
+    </div>
+  </div>`;
+}
+
+function render(keepFocus){
+  const active = document.activeElement;
+  const focusedId = active && active.id;
+  const selStart = active && active.selectionStart;
+
+  document.getElementById('screen').innerHTML =
+    terminalScreen() + menuOverlay() + sheetHTML() + dialogOverlay() +
+    (S.toast ? `<div class="toast">${esc(S.toast)}</div>` : '');
+
+  if(keepFocus && focusedId){
+    const el = document.getElementById(focusedId);
+    if(el){ el.focus(); try{ el.setSelectionRange(selStart, selStart); }catch(e){} }
+  }
+  renderScenarioBar();
+}
+
+function renderScenarioBar(){
+  const bar = document.getElementById('scenario');
+  if(!bar) return;
+  bar.innerHTML = Object.keys(SCENARIOS).map(k =>
+    `<button class="${S.scenario===k?'on':''}" onclick="setScenario('${k}')">${SCENARIO_LABEL[k]}</button>`).join('');
+}
+function setScenario(k){
+  S.scenario = k;
+  S.live = JSON.parse(JSON.stringify(SCENARIOS[k]));
+  S.sheet = null; S.back = null; S.dialog = null; S.menu = false;
+  S.pendingBranch = null; S.commitThenCheckout = null; S.commitMessage = '';
+  S.pushAfterCommit = false; S.newBranchName = ''; S.branchFilter = '';
+  S.mergeOther = 'feature/login'; S.pickerTarget = null; S.mergeDirection = 'intoCurrent';
+  render();
+}
+
+function startCommit(){ pushSheet('commit'); }
+
+function doPush(){
+  const c = sc();
+  if(!c.upstream){ toast('已推送并建立远端跟踪'); c.upstream = 'origin/' + c.branch; c.ahead = 0; render(); return; }
+  if(c.behind > 0){
+    S.dialog = { kind:'alert', title:'推送被拒绝',
+      msg:'远端有你还不知道的提交。先同步，再推送。',
+      actions:[
+        {label:'同步', run:()=>{ S.dialog=null; doSync(); }},
+        {label:'好', cancel:true, run:()=>{ S.dialog=null; }},
+      ]};
+    render(); return;
+  }
+  c.ahead = 0; toast('已推送'); render();
+}
+function doSync(){
+  const c = sc();
+  if(c.changes > 0){
+    S.dialog = { kind:'alert', title:'同步不了', msg:'当前目录里有未提交的改动，先提交再同步。',
+      actions:[
+        {label:'去提交', run:()=>{ S.dialog=null; startCommit(); }},
+        {label:'好', cancel:true, run:()=>{ S.dialog=null; }},
+      ]};
+    render(); return;
+  }
+  const parts = [];
+  if(c.behind){ c.behind = 0; parts.push('拉取'); }
+  if(c.ahead){ c.ahead = 0; parts.push('推送'); }
+  if(!parts.length){ toast('已经是最新的'); return; }
+  toast('已' + parts.join('并'));
+  render();
+}
+
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ if(S.dialog) dismissDialog(); else if(S.sheet) closeSheet(); else if(S.menu) toggleMenu(); } });
+
+render();
+</script>
+</body>
+</html>
