@@ -4,6 +4,7 @@ import type {
   MobileGitBranch,
   MobileGitConflict,
   MobileGitMergeDirection,
+  MobileGitRemoteBranch,
   MobileIntentResult,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
@@ -40,6 +41,10 @@ export type MobileGitIntentRequest = {
   readonly pushAfterCommit?: boolean
   readonly direction?: MobileGitMergeDirection
   readonly discardChanges?: boolean
+  /** `checkoutRemote` 的远端名。远端名本身可以含 `/`。 */
+  readonly remote?: string
+  /** `checkoutRemote` 的另一个本地名；缺席＝与远端分支同名。 */
+  readonly localBranch?: string
 }
 
 export type MobileGitIntentOutcome = {
@@ -81,9 +86,20 @@ export function createMobileGitIntentRunner(deps: {
     }
   }
 
-  /** 这三个动作的名字就是它们要的那个分支，缺了就没法进行下去。 */
+  /** 这几个动作的名字就是它们要的那个分支，缺了就没法进行下去。 */
   function needsBranch(action: MobileGitAction): boolean {
     return action === "checkout" || action === "createBranch" || action === "merge"
+      || action === "checkoutRemote"
+  }
+
+  /**
+   * 只有 `checkoutRemote` 要远端名。
+   *
+   * 它与 `branch` 一样是「缺了就走不下去」的那一类，所以走同一个 `required` ——
+   * 先核参数、再碰仓库，与 `branch` 那条同一个理由。
+   */
+  function needsRemote(action: MobileGitAction): boolean {
+    return action === "checkoutRemote"
   }
 
   function required(value: string | undefined, what: string): string {
@@ -100,15 +116,18 @@ export function createMobileGitIntentRunner(deps: {
      * 一次执行，也让「参数不对」与「目录不对」在审计里长得一样。
      */
     const action = request.action
-    // 空串是「这个动作不需要分支」的占位，下面只在那三个需要它的分支里读 —— 真缺了
+    // 空串是「这个动作不需要分支」的占位，下面只在需要它的分支里读 —— 真缺了
     // `required` 会先抛，读不到空串。
     const branch = needsBranch(action) ? required(request.branch, "要操作的分支") : ""
+    const remote = needsRemote(action) ? required(request.remote, "远端") : ""
     const message = action === "commit" ? required(request.message, "提交信息") : ""
 
     const cwd = await resolveCwd(request.sessionId)
 
     // 读操作按只读动作的口径处理（`terminal.state.read`），写的另有一个名字。
-    if (action === "status" || action === "branches") {
+    // `remoteBranches` 是读（只读缓存的 `refs/remotes`，不联网），`fetchRemotes` 与
+    // `checkoutRemote` 是写 —— 联网那一次也记在写的名字下。
+    if (action === "status" || action === "branches" || action === "remoteBranches") {
       await deps.authorize("terminal.state.read", sessionResource(request.sessionId))
     } else {
       await deps.authorize("terminal.git.manage", sessionResource(request.sessionId))
@@ -168,6 +187,35 @@ export function createMobileGitIntentRunner(deps: {
           // 而且它是更不容易出错的那一个（不离开当前分支）。
           direction: request.direction === "outOfCurrent" ? "outOfCurrent" : "intoCurrent",
         }), true)
+
+      case "remoteBranches": {
+        const branches = await deps.terminalGit.listRemoteBranches(cwd)
+        /*
+         * 超过上界就**在产生端截断**：校验器那边是 `boundedArray(..., maxGitBranches)`，
+         * 超了整条结果被判非法、结果被丢，手机上表现为「电脑一直没有回答」——
+         * 比少列几条糟得多。截了一条就要说一句：不说的截断等于骗人。
+         */
+        const listed = branches.slice(0, MOBILE_FRAME_LIMITS.maxGitBranches)
+        return {
+          outcome: "accepted",
+          git: { remoteBranches: listed.map(toWireRemoteBranch) },
+          ...(branches.length > listed.length
+            ? { message: `远端分支过多，只列出了前 ${MOBILE_FRAME_LIMITS.maxGitBranches} 条。` }
+            : {}),
+        }
+      }
+
+      case "fetchRemotes":
+        return fromOutcome(await deps.terminalGit.fetchRemotes({ cwd }), true)
+
+      case "checkoutRemote":
+        return fromOutcome(await deps.terminalGit.checkoutRemote({
+          cwd,
+          remote,
+          branch,
+          ...(request.localBranch === undefined ? {} : { localBranch: request.localBranch }),
+          ...(request.discardChanges === true ? { discardChanges: true } : {}),
+        }), true)
     }
   }
 
@@ -225,17 +273,21 @@ function fromOutcome(
   const git: {
     branches?: readonly MobileGitBranch[]
     conflict?: MobileGitConflict
-    needsDecision?: "dirty"
+    needsDecision?: "dirty" | "localBranchName"
   } = {}
-  if (outcome.needsDecision === "dirty") git.needsDecision = "dirty"
+  // 原样透传：手机靠这个取值分「弹三选一」与「推一页填名字」，写死 `"dirty"` 会让后者
+  // 变成一句错，而用户根本没有出路。
+  if (outcome.needsDecision) git.needsDecision = outcome.needsDecision
   if (outcome.conflict) git.conflict = toWireConflict(outcome.conflict)
   return {
     outcome: "rejected",
     code: outcome.needsDecision === "dirty"
       ? "dirty_working_tree"
-      : outcome.conflict
-        ? "merge_conflict"
-        : "git_failed",
+      : outcome.needsDecision === "localBranchName"
+        ? "local_branch_conflict"
+        : outcome.conflict
+          ? "merge_conflict"
+          : "git_failed",
     message: clampMessage(outcome.message),
     ...(Object.keys(git).length === 0 ? {} : { git }),
   }
@@ -282,6 +334,17 @@ function toWireConflict(conflict: {
 /** 分支名是 ref 名，按同一个上界收。 */
 function toWireBranch(branch: { readonly name: string; readonly current: boolean }): MobileGitBranch {
   return { name: clamp(branch.name, MOBILE_FRAME_LIMITS.maxGitRefNameLength), current: branch.current }
+}
+
+/** 远端分支的两段都是 ref 名，按同一个上界收。 */
+function toWireRemoteBranch(branch: {
+  readonly remote: string
+  readonly name: string
+}): MobileGitRemoteBranch {
+  return {
+    remote: clamp(branch.remote, MOBILE_FRAME_LIMITS.maxGitRefNameLength),
+    name: clamp(branch.name, MOBILE_FRAME_LIMITS.maxGitRefNameLength),
+  }
 }
 
 function clamp(value: string, maxLength: number): string {

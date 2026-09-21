@@ -12,6 +12,18 @@ export type TerminalGitBranch = {
   readonly current: boolean
 }
 
+/**
+ * 一条远端分支。
+ *
+ * 远端与分支分成两段，而不是拼好的 `origin/dev`：`refs/remotes/<remote>/<name>` 里的
+ * `<remote>` 本身可以含 `/`（`team/fork`），所以「在哪里切开」这件事只能由**按
+ * `git remote` 最长前缀匹配**的那一处做 —— 下游拿到的就该是两段明确的值。
+ */
+export type TerminalGitRemoteBranch = {
+  readonly remote: string
+  readonly name: string
+}
+
 export type TerminalGitSnapshot = {
   readonly cwd: string
   readonly isRepository: boolean
@@ -41,8 +53,12 @@ export type TerminalGitConflict = {
 export type TerminalGitFailure = {
   /** 给用户看的原文，不改写。 */
   readonly message: string
-  /** 有未提交改动，需要用户先选一个走法（提交并切换 / 丢弃并切换 / 取消）。 */
-  readonly needsDecision?: "dirty"
+  /**
+   * 要用户先给个东西，值说明是哪样东西。**两个取值都不是失败**：
+   * `dirty` = 有未提交改动，先选一个走法（提交并切换 / 丢弃并切换 / 取消）；
+   * `localBranchName` = 同名本地分支不能直接用，另起一个本地名。
+   */
+  readonly needsDecision?: "dirty" | "localBranchName"
   readonly conflict?: TerminalGitConflict
 }
 

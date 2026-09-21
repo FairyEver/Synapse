@@ -373,7 +373,7 @@ class FakeTerminalGit {
   failure:
     | {
         readonly message: string
-        readonly needsDecision?: "dirty"
+        readonly needsDecision?: "dirty" | "localBranchName"
         readonly conflict?: unknown
         /** 只让这几个方法失败；缺席＝每个方法都失败。 */
         readonly only?: readonly string[]
@@ -382,6 +382,10 @@ class FakeTerminalGit {
   branches: readonly { readonly name: string; readonly current: boolean }[] = [
     { name: "main", current: true },
     { name: "release", current: false },
+  ]
+  remoteBranches: readonly { readonly remote: string; readonly name: string }[] = [
+    { remote: "origin", name: "main" },
+    { remote: "origin", name: "release" },
   ]
 
   private record(method: string, input: Record<string, unknown>): void {
@@ -433,6 +437,11 @@ class FakeTerminalGit {
     return this.branches
   }
 
+  async listRemoteBranches(cwd: string) {
+    this.record("listRemoteBranches", { cwd })
+    return this.remoteBranches
+  }
+
   async checkout(input: { readonly cwd: string } & Record<string, unknown>) {
     this.record("checkout", input)
     return this.outcome(input.cwd, "checkout")
@@ -461,6 +470,16 @@ class FakeTerminalGit {
   async merge(input: { readonly cwd: string } & Record<string, unknown>) {
     this.record("merge", input)
     return this.outcome(input.cwd, "merge")
+  }
+
+  async fetchRemotes(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("fetchRemotes", input)
+    return this.outcome(input.cwd, "fetchRemotes")
+  }
+
+  async checkoutRemote(input: { readonly cwd: string } & Record<string, unknown>) {
+    this.record("checkoutRemote", input)
+    return this.outcome(input.cwd, "checkoutRemote")
   }
 }
 
@@ -3075,7 +3094,7 @@ describe("MobileGatewayService · Git 意图", () => {
     return (harness.results.at(-1) as { result: Record<string, unknown> }).result
   }
 
-  it("routes each of the eight actions to its own method, with the arguments it was given", async () => {
+  it("routes each of the eleven actions to its own method, with the arguments it was given", async () => {
     const harness = await attached()
     const cases: readonly { readonly intent: Record<string, unknown>; readonly method: string; readonly input: Record<string, unknown> }[] = [
       { intent: { action: "branches" }, method: "listBranches", input: { cwd: "/Users/liy/code" } },
@@ -3097,6 +3116,23 @@ describe("MobileGatewayService · Git 意图", () => {
         intent: { action: "merge", branch: "release", direction: "outOfCurrent" },
         method: "merge",
         input: { cwd: "/Users/liy/code", branch: "release", direction: "outOfCurrent" },
+      },
+      { intent: { action: "remoteBranches" }, method: "listRemoteBranches", input: { cwd: "/Users/liy/code" } },
+      { intent: { action: "fetchRemotes" }, method: "fetchRemotes", input: { cwd: "/Users/liy/code" } },
+      {
+        intent: { action: "checkoutRemote", remote: "origin", branch: "release" },
+        method: "checkoutRemote",
+        input: { cwd: "/Users/liy/code", remote: "origin", branch: "release" },
+      },
+      {
+        intent: { action: "checkoutRemote", remote: "origin", branch: "release", localBranch: "mine" },
+        method: "checkoutRemote",
+        input: { cwd: "/Users/liy/code", remote: "origin", branch: "release", localBranch: "mine" },
+      },
+      {
+        intent: { action: "checkoutRemote", remote: "origin", branch: "release", discardChanges: true },
+        method: "checkoutRemote",
+        input: { cwd: "/Users/liy/code", remote: "origin", branch: "release", discardChanges: true },
       },
     ]
 
@@ -3203,6 +3239,9 @@ describe("MobileGatewayService · Git 意图", () => {
       { action: "createBranch", intentId: "i-no-new-branch" },
       { action: "merge", intentId: "i-no-merge-branch" },
       { action: "commit", intentId: "i-no-message" },
+      // 迁出要的是两个名字：少了远端、或者少了分支，都走不下去。
+      { action: "checkoutRemote", branch: "release", intentId: "i-no-remote" },
+      { action: "checkoutRemote", remote: "origin", intentId: "i-no-remote-branch" },
     ]) {
       harness.terminalGit.calls.length = 0
       await harness.gateway.handleIntent("phone-1", gitIntent(missing))
@@ -3262,6 +3301,57 @@ describe("MobileGatewayService · Git 意图", () => {
     expect(harness.gitStatuses[1]).toMatchObject({ status: { changeCount: 4 } })
   })
 
+  it("hands back the remote branches, and only them", async () => {
+    const harness = await attached()
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "remoteBranches", intentId: "i-remote" }))
+
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "accepted",
+      git: { remoteBranches: [{ remote: "origin", name: "main" }, { remote: "origin", name: "release" }] },
+    })
+  })
+
+  it("cuts the remote branch list at the ceiling and says so", async () => {
+    const harness = await attached()
+    harness.terminalGit.remoteBranches = Array.from(
+      { length: MOBILE_FRAME_LIMITS.maxGitBranches + 1 },
+      (_, index) => ({ remote: "origin", name: `b${index}` }),
+    )
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "remoteBranches", intentId: "i-remote-cut" }))
+
+    /*
+     * 截断必须发生在**这里**：协议层的校验器用 `boundedArray(..., maxGitBranches)`，
+     * 超了整条结果被判非法、结果被丢掉，手机上表现为「电脑一直没有回答」——
+     * 比少列一条糟得多。截了还要说一句，不说的截断等于骗人。
+     */
+    const result = lastResult(harness) as { git: { remoteBranches: readonly unknown[] }; message?: string }
+    expect(result.git.remoteBranches).toHaveLength(MOBILE_FRAME_LIMITS.maxGitBranches)
+    expect(result.message).toBe(`远端分支过多，只列出了前 ${MOBILE_FRAME_LIMITS.maxGitBranches} 条。`)
+  })
+
+  it("asks for another local name as a decision, not as an error", async () => {
+    const harness = await attached()
+    harness.terminalGit.failure = {
+      message: "本地已有 release，它跟踪的是 origin/other。",
+      needsDecision: "localBranchName",
+    }
+
+    await harness.gateway.handleIntent("phone-1", gitIntent({
+      action: "checkoutRemote", remote: "origin", branch: "release", intentId: "i-name",
+    }))
+
+    // 手机靠 `git.needsDecision` 分「推一页填名字」与「弹三选一」，所以它必须**原样透传**，
+    // 不能像以前那样写死 `"dirty"` —— 写死了用户看到的是一句错，而他没有出路。
+    expect(lastResult(harness)).toMatchObject({
+      outcome: "rejected",
+      code: "local_branch_conflict",
+      message: "本地已有 release，它跟踪的是 origin/other。",
+      git: { needsDecision: "localBranchName" },
+    })
+  })
+
   it("authorizes a write as its own action and a read as the terminal read it is", async () => {
     const harness = await attached()
 
@@ -3278,6 +3368,26 @@ describe("MobileGatewayService · Git 意图", () => {
       action: "terminal.git.manage",
       outcome: "allowed",
     }))
+  })
+
+  it("marks listing remote branches as a read and fetching them as a write", async () => {
+    const harness = await attached()
+
+    // 读缓存的 `refs/remotes` 不碰网络、不动仓库，所以它走只读那一档；获取与迁出都动仓库。
+    // 三个动作分成三个名字，事后查审计的人看到的才是当时真发生的那件事。
+    harness.audits.length = 0
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "remoteBranches", intentId: "i-rm-read" }))
+    expect(harness.audits.at(-1)).toMatchObject({ action: "terminal.state.read", outcome: "allowed" })
+
+    harness.audits.length = 0
+    await harness.gateway.handleIntent("phone-1", gitIntent({ action: "fetchRemotes", intentId: "i-rm-fetch" }))
+    expect(harness.audits.at(-1)).toMatchObject({ action: "terminal.git.manage", outcome: "allowed" })
+
+    harness.audits.length = 0
+    await harness.gateway.handleIntent("phone-1", gitIntent({
+      action: "checkoutRemote", remote: "origin", branch: "release", intentId: "i-rm-write",
+    }))
+    expect(harness.audits.at(-1)).toMatchObject({ action: "terminal.git.manage", outcome: "allowed" })
   })
 
   it("refuses a write the policy denies, and records it as denied", async () => {

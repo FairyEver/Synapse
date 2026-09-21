@@ -587,6 +587,8 @@ export class MobileIntentExecutor {
           ...(intent.pushAfterCommit === undefined ? {} : { pushAfterCommit: intent.pushAfterCommit }),
           ...(intent.direction === undefined ? {} : { direction: intent.direction }),
           ...(intent.discardChanges === undefined ? {} : { discardChanges: intent.discardChanges }),
+          ...(intent.remote === undefined ? {} : { remote: intent.remote }),
+          ...(intent.localBranch === undefined ? {} : { localBranch: intent.localBranch }),
         })
         // 动过仓库就把状态重算一遍推过去。这也是 `status` 这个动作的全部作用 ——
         // 它自己不进结果信封（见 `MobileGitAction`）。

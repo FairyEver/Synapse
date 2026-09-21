@@ -134,6 +134,11 @@ exports.MOBILE_FRAME_LIMITS = {
   maxGitPathLength: 512,
   maxGitRefNameLength: 255,
   maxGitShortShaLength: 64,
+  /**
+   * 一次能送回手机的分支条数。**本地分支与远端分支共用这一个数**：同一类东西、
+   * 走同一条套接字，上界没理由不同。超量在这里是整条结果作废，所以产生端必须先截断
+   * 并说一句（见 `mobile-gateway/git-intent.ts`）。
+   */
   maxGitBranches: 512,
   maxGitConflictFiles: 128,
   maxGitConflictTextLength: 96 * 1024,

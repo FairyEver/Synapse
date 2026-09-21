@@ -3,7 +3,12 @@ import {
   createGitStatusPorcelainV2Parser,
   parseGitStatusPorcelainV2,
 } from "../git-client/git-status-parser"
-import { emptySnapshot, type TerminalGitBranch, type TerminalGitSnapshot } from "./terminal-git-types"
+import {
+  emptySnapshot,
+  type TerminalGitBranch,
+  type TerminalGitRemoteBranch,
+  type TerminalGitSnapshot,
+} from "./terminal-git-types"
 
 const MAX_VISIBLE_STATUS_CHANGES = 10_000
 
@@ -12,6 +17,7 @@ export type TerminalGitStatusReader = {
   isRepository(cwd: string): Promise<boolean>
   getSnapshot(cwd: string): Promise<TerminalGitSnapshot>
   listBranches(cwd: string): Promise<readonly TerminalGitBranch[]>
+  listRemoteBranches(cwd: string): Promise<readonly TerminalGitRemoteBranch[]>
 }
 
 export function createTerminalGitStatusReader(deps: {
@@ -113,7 +119,54 @@ export function createTerminalGitStatusReader(deps: {
       .map((name) => ({ name, current: name === currentBranch }))
   }
 
-  return { isRepository, getSnapshot, listBranches }
+  /**
+   * 列远端分支。
+   *
+   * **只读本地缓存的 `refs/remotes`，一行网络命令都不跑** —— 打开列表要快、要离线可用，
+   * 要最新的话由 `fetchRemotes` 负责，那是另一个动作（也过另一套权限）。这条规矩与桌面端
+   * 那套一致（`git-branch-service.ts` 的 `listRemote` 同样只读缓存）。
+   */
+  async function listRemoteBranches(cwd: string): Promise<readonly TerminalGitRemoteBranch[]> {
+    const [remotes, refs] = await Promise.all([
+      deps.commandRunner.run({
+        cwd,
+        args: ["remote"],
+        operation: "terminal-git.remote-branch.remotes",
+        repoPath: cwd,
+      }),
+      deps.commandRunner.run({
+        cwd,
+        args: ["for-each-ref", "--format=%(refname:strip=2)%00%(symref)", "refs/remotes"],
+        operation: "terminal-git.remote-branch.list",
+        repoPath: cwd,
+      }),
+    ])
+    /*
+     * 最长前缀优先：`team/fork` 必须先于 `team` 命中，否则 `team/fork/x` 会被拆成
+     * remote=`team`、name=`fork/x`。规则与桌面端 `git-branch-service.ts` 的 `listRemote` 同款。
+     */
+    const remoteNames = remotes.stdout.split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .sort((left, right) => right.length - left.length)
+    const branches: TerminalGitRemoteBranch[] = []
+    for (const line of refs.stdout.split(/\r?\n/)) {
+      const [fullName = "", symbolicTarget = ""] = line.split("\0")
+      // 符号引用（`origin/HEAD -> origin/main`）与 `*/HEAD` 都不是一条分支。
+      if (!fullName || symbolicTarget || fullName.endsWith("/HEAD")) continue
+      const remote = remoteNames.find((candidate) => fullName.startsWith(`${candidate}/`))
+      if (!remote) continue
+      const name = fullName.slice(remote.length + 1)
+      if (!name) continue
+      branches.push({ remote, name })
+    }
+    return branches.sort((left, right) =>
+      left.remote === right.remote
+        ? left.name.localeCompare(right.name)
+        : left.remote.localeCompare(right.remote))
+  }
+
+  return { isRepository, getSnapshot, listBranches, listRemoteBranches }
 }
 
 /**

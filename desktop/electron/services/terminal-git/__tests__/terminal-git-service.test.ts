@@ -168,6 +168,11 @@ describe("TerminalGitService · 拒绝面", () => {
       { name: "push", run: (service: TerminalGitService) => service.push({ cwd: plain }) },
       { name: "sync", run: (service: TerminalGitService) => service.sync({ cwd: plain }) },
       { name: "merge", run: (service: TerminalGitService) => service.merge({ cwd: plain, direction: "intoCurrent", branch: "x" }) },
+      { name: "fetchRemotes", run: (service: TerminalGitService) => service.fetchRemotes({ cwd: plain }) },
+      {
+        name: "checkoutRemote",
+        run: (service: TerminalGitService) => service.checkoutRemote({ cwd: plain, remote: "origin", branch: "x" }),
+      },
     ]
     for (const action of actions) {
       const recording = recordingRunner()
@@ -509,6 +514,211 @@ describe("TerminalGitService · 合并", () => {
     git(repo, ["checkout", "--detach"])
     await expect(service.merge({ cwd: repo, direction: "intoCurrent", branch: "main" }))
       .resolves.toMatchObject({ ok: false })
+  })
+})
+
+describe("TerminalGitService · 远端分支", () => {
+  /**
+   * 一个有远端的仓库：
+   *
+   * - `main` 跟踪 `origin/main`；
+   * - `origin/only-remote` **只有远端有**（推上去之后把本地那条删了）；
+   * - 本地 `taken` 与远端 `origin/taken` 同名，但它**没有上游** —— 迁出时该问用户要另一个名字。
+   */
+  async function repositoryWithRemoteBranch(): Promise<{ repo: string; remote: string }> {
+    const remote = await createBareRemote()
+    const repo = await createRepository()
+    git(repo, ["remote", "add", "origin", remote])
+    git(repo, ["push", "-q", "-u", "origin", "main"])
+
+    git(repo, ["checkout", "-qb", "only-remote"])
+    await writeFile(path.join(repo, "remote.txt"), "from remote\n", "utf8")
+    git(repo, ["add", "-A"])
+    git(repo, ["commit", "-qm", "remote only"])
+    git(repo, ["push", "-q", "-u", "origin", "only-remote"])
+    git(repo, ["checkout", "-q", "main"])
+    git(repo, ["branch", "-D", "only-remote"])
+
+    git(repo, ["branch", "taken"])
+    git(repo, ["push", "-q", "origin", "taken:refs/heads/taken"])
+
+    // 一次 fetch 把三条远端跟踪引用都坐实，并造出克隆才会有的 `origin/HEAD` ——
+    // 那个符号引用不是一条分支，列的时候必须排除。
+    git(repo, ["fetch", "-q", "--all", "--prune"])
+    git(repo, ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"])
+    return { repo, remote }
+  }
+
+  it("lists cached remote branches, sorted, without the symbolic HEAD", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await expect(serviceWith(recordingRunner().runner).listRemoteBranches(repo)).resolves.toEqual([
+      { remote: "origin", name: "main" },
+      { remote: "origin", name: "only-remote" },
+      { remote: "origin", name: "taken" },
+    ])
+  })
+
+  it("reads the list without touching the network", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    const recording = recordingRunner()
+    await serviceWith(recording.runner).listRemoteBranches(repo)
+    // 打开列表是纯读缓存（设计文档决策二）：一行会联网的命令都不许有。
+    expect(recording.commands).toEqual(["remote", "for-each-ref --format=%(refname:strip=2)%00%(symref) refs/remotes"])
+  })
+
+  it("splits a remote name that itself contains a slash, longest prefix first", async () => {
+    const { repo, remote } = await repositoryWithRemoteBranch()
+    // 同时挂 `team` 与 `team/fork`。**只有两个都在才验得出最长前缀**：只挂 `team/fork`
+    // 的话，随便哪种匹配方式都对得上。
+    git(repo, ["remote", "add", "team", remote])
+    git(repo, ["remote", "add", "team/fork", remote])
+    git(repo, ["fetch", "-q", "--all"])
+
+    const branches = await serviceWith(recordingRunner().runner).listRemoteBranches(repo)
+    expect(branches).toContainEqual({ remote: "team", name: "main" })
+    expect(branches).toContainEqual({ remote: "team/fork", name: "main" })
+    expect(branches).not.toContainEqual({ remote: "team", name: "fork/main" })
+  })
+
+  it("creates a tracking branch for a remote-only one, with the remote's content", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    const recording = recordingRunner()
+
+    await expect(serviceWith(recording.runner).checkoutRemote({ cwd: repo, remote: "origin", branch: "only-remote" }))
+      .resolves.toMatchObject({
+        ok: true,
+        value: { branch: "only-remote", upstream: "origin/only-remote" },
+        message: "已迁出 origin/only-remote 到 only-remote。",
+      })
+    expect(recording.commands).toContain("checkout --no-overwrite-ignore -b only-remote --track origin/only-remote")
+    /*
+     * 内容是**远端那条**的，不是从当前 HEAD 起的一条同名新分支 —— 这一条才是
+     * 「`checkout -b` 静默分叉」那个陷阱的反证。
+     */
+    expect(existsSync(path.join(repo, "remote.txt"))).toBe(true)
+  })
+
+  it("switches to an existing same-named branch that already tracks that remote", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    git(repo, ["branch", "--set-upstream-to=origin/taken", "taken"])
+    const recording = recordingRunner()
+
+    await expect(serviceWith(recording.runner).checkoutRemote({ cwd: repo, remote: "origin", branch: "taken" }))
+      .resolves.toMatchObject({ ok: true, value: { branch: "taken" }, message: "已切换到 taken。" })
+    expect(recording.commands).toContain("checkout --no-overwrite-ignore taken")
+    // 不新建：它已经就是那条分支了。
+    expect(recording.commands).not.toContain("checkout --no-overwrite-ignore -b taken --track origin/taken")
+  })
+
+  it("does nothing when the remote branch resolves to the branch it is already on", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    const recording = recordingRunner()
+
+    await expect(serviceWith(recording.runner).checkoutRemote({ cwd: repo, remote: "origin", branch: "main" }))
+      .resolves.toMatchObject({ ok: true, message: "已经在 main 上，没有做任何操作。" })
+    expect(recording.commands.filter((command) => command.startsWith("checkout"))).toEqual([])
+  })
+
+  it("asks for another local name when a same-named branch tracks something else", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await expect(serviceWith(recordingRunner().runner).checkoutRemote({ cwd: repo, remote: "origin", branch: "taken" }))
+      .resolves.toMatchObject({
+        ok: false,
+        needsDecision: "localBranchName",
+        message: "本地已有 taken，它没有上游。",
+      })
+  })
+
+  it("asks again when the local name the user picked is taken too", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await expect(serviceWith(recordingRunner().runner).checkoutRemote({
+      cwd: repo, remote: "origin", branch: "only-remote", localBranch: "taken",
+    })).resolves.toMatchObject({
+      ok: false,
+      needsDecision: "localBranchName",
+      message: "本地已有 taken，换一个名字。",
+    })
+  })
+
+  it("asks again when the local name the user picked is not a legal ref name", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await expect(serviceWith(recordingRunner().runner).checkoutRemote({
+      cwd: repo, remote: "origin", branch: "only-remote", localBranch: "a b",
+    })).resolves.toMatchObject({ ok: false, needsDecision: "localBranchName" })
+  })
+
+  it("uses the local name the user picked when it is free", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    const recording = recordingRunner()
+
+    await expect(serviceWith(recording.runner).checkoutRemote({
+      cwd: repo, remote: "origin", branch: "only-remote", localBranch: "my-copy",
+    })).resolves.toMatchObject({
+      ok: true,
+      value: { branch: "my-copy", upstream: "origin/only-remote" },
+      message: "已迁出 origin/only-remote 到 my-copy。",
+    })
+  })
+
+  it("refuses a remote the repository does not have", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await expect(serviceWith(recordingRunner().runner).checkoutRemote({ cwd: repo, remote: "nope", branch: "main" }))
+      .resolves.toMatchObject({ ok: false, message: "远端不存在：nope。" })
+  })
+
+  it("refuses a remote branch that is not in the cache", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await expect(serviceWith(recordingRunner().runner).checkoutRemote({ cwd: repo, remote: "origin", branch: "ghost" }))
+      .resolves.toMatchObject({ ok: false, message: "远端分支不存在：origin/ghost。下拉刷新之后再试。" })
+  })
+
+  it("asks the user to decide instead of touching a dirty working tree", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await writeFile(path.join(repo, "a.txt"), "dirty\n", "utf8")
+    const recording = recordingRunner()
+
+    await expect(serviceWith(recording.runner).checkoutRemote({ cwd: repo, remote: "origin", branch: "only-remote" }))
+      .resolves.toMatchObject({ ok: false, needsDecision: "dirty" })
+    expect(recording.commands.filter((command) => command.startsWith("checkout"))).toEqual([])
+  })
+
+  it("discards tracked changes on request but keeps untracked files while bringing out a remote branch", async () => {
+    const { repo } = await repositoryWithRemoteBranch()
+    await writeFile(path.join(repo, "a.txt"), "dirty\n", "utf8")
+    await writeFile(path.join(repo, "scratch.md"), "草稿\n", "utf8")
+
+    await expect(serviceWith(recordingRunner().runner).checkoutRemote({
+      cwd: repo, remote: "origin", branch: "only-remote", discardChanges: true,
+    })).resolves.toMatchObject({ ok: true, value: { branch: "only-remote", upstream: "origin/only-remote" } })
+    // 已跟踪文件的修改丢了，未跟踪的新文件一个都不少。
+    expect(git(repo, ["status", "--porcelain", "--untracked-files=all"]).trim()).toBe("?? scratch.md")
+  })
+
+  it("brings back a branch pushed from elsewhere, and only then lists it", async () => {
+    const { repo, remote } = await repositoryWithRemoteBranch()
+    const service = serviceWith(recordingRunner().runner)
+
+    const other = await mkdtemp(path.join(os.tmpdir(), "synapse-terminal-git-other-"))
+    temporaryDirectories.push(other)
+    git(other, ["clone", "-q", remote, "work"])
+    const work = path.join(other, "work")
+    git(work, ["config", "user.email", "other@example.com"])
+    git(work, ["config", "user.name", "Other"])
+    git(work, ["checkout", "-qb", "from-elsewhere"])
+    await writeFile(path.join(work, "b.txt"), "b\n", "utf8")
+    git(work, ["add", "-A"])
+    git(work, ["commit", "-qm", "elsewhere"])
+    git(work, ["push", "-q", "origin", "from-elsewhere"])
+
+    // 没获取之前它不在列表里 —— 打开列表不联网，这正是「读缓存」的意思。
+    expect((await service.listRemoteBranches(repo)).map((branch) => branch.name)).not.toContain("from-elsewhere")
+    await expect(service.fetchRemotes({ cwd: repo })).resolves.toMatchObject({ ok: true })
+    expect((await service.listRemoteBranches(repo)).map((branch) => branch.name)).toContain("from-elsewhere")
+  })
+
+  it("fetches without complaining in a repository that has no remote at all", async () => {
+    const repo = await createRepository()
+    await expect(serviceWith(recordingRunner().runner).fetchRemotes({ cwd: repo })).resolves.toMatchObject({ ok: true })
   })
 })
 

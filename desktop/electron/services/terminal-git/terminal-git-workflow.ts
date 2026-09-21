@@ -26,6 +26,14 @@ export type TerminalGitWorkflow = {
   commit(input: { readonly cwd: string; readonly message: string }): Promise<TerminalGitOutcome<TerminalGitSnapshot>>
   push(input: { readonly cwd: string }): Promise<TerminalGitOutcome<TerminalGitSnapshot>>
   sync(input: { readonly cwd: string }): Promise<TerminalGitOutcome<TerminalGitSnapshot>>
+  fetchRemotes(input: { readonly cwd: string }): Promise<TerminalGitOutcome<TerminalGitSnapshot>>
+  checkoutRemote(input: {
+    readonly cwd: string
+    readonly remote: string
+    readonly branch: string
+    readonly localBranch?: string
+    readonly discardChanges?: boolean
+  }): Promise<TerminalGitOutcome<TerminalGitSnapshot>>
 }
 
 export function createTerminalGitWorkflow(deps: {
@@ -203,7 +211,143 @@ export function createTerminalGitWorkflow(deps: {
     return null
   }
 
-  return { checkout, createBranch, commit, push, sync }
+  /**
+   * 同步远端引用。**只 fetch，不碰本地分支、不 merge、不 push** —— 它服务的是
+   * 「远端分支列表要最新的」这一件事，与「同步」（拉 + 推）不是同一件事，也不该
+   * 因为用户想看列表就顺手把一个 merge 做了。
+   *
+   * 无远端时 `git fetch --all --prune` 退出码 0、不报错，所以这里不预先拦。
+   */
+  async function fetchRemotes(input: { readonly cwd: string }): Promise<TerminalGitOutcome<TerminalGitSnapshot>> {
+    const required = await requireRepository(input.cwd)
+    if ("rejected" in required) return required.rejected
+    await run({
+      cwd: input.cwd,
+      args: ["fetch", "--all", "--prune"],
+      operation: "terminal-git.remote-branch.fetch",
+      timeoutMs: TERMINAL_GIT_REMOTE_TIMEOUT_MS,
+    })
+    return success(await deps.status.getSnapshot(input.cwd))
+  }
+
+  /**
+   * 迁出一条远端分支：建一条跟踪它的本地分支并切过去，或者切到已有的同名分支。
+   *
+   * 与 `checkout` 同款的三条规矩：**已经在这条分支上就什么都不做**（带 `-f` 的一条会把
+   * 改动丢掉却什么也没换到）、**脏工作区不替用户决定**、**丢弃只丢已跟踪文件的修改**。
+   *
+   * 与桌面端 `git-branch-service.ts` 的 `checkoutRemote` 是同一套规则，但那条绑
+   * `repositoryId` 与「代码仓库」注册表，这里只认路径。
+   */
+  async function checkoutRemote(input: {
+    readonly cwd: string
+    readonly remote: string
+    readonly branch: string
+    readonly localBranch?: string
+    readonly discardChanges?: boolean
+  }): Promise<TerminalGitOutcome<TerminalGitSnapshot>> {
+    const required = await requireRepository(input.cwd)
+    if ("rejected" in required) return required.rejected
+    const { snapshot } = required
+
+    const remote = input.remote.trim()
+    if (!remote) return failure("没有指定远端。")
+    const remotes = await deps.commandRunner.run({
+      cwd: input.cwd,
+      args: ["remote"],
+      operation: "terminal-git.checkout-remote.remotes",
+      repoPath: input.cwd,
+    })
+    if (!remotes.stdout.split(/\r?\n/).map((value) => value.trim()).includes(remote)) {
+      return failure(`远端不存在：${remote}。`)
+    }
+
+    const branch = await deps.validateBranchName(input.cwd, input.branch)
+    if (!branch) return failure(`分支名称不合法：${input.branch}`)
+    const remoteBranch = `${remote}/${branch}`
+    const remoteRef = await deps.commandRunner.run({
+      cwd: input.cwd,
+      args: ["rev-parse", "--verify", "--quiet", `refs/remotes/${remoteBranch}`],
+      acceptedExitCodes: [0, 1],
+      operation: "terminal-git.checkout-remote.verify",
+      repoPath: input.cwd,
+    })
+    if (!remoteRef.stdout.trim()) return failure(`远端分支不存在：${remoteBranch}。下拉刷新之后再试。`)
+
+    /*
+     * 这一步就是「要哪个本地名」的全部。回 `localBranchName` 是请手机推一页让用户填一个，
+     * 而不是报一个错 —— 它不是失败，是一个问题。
+     */
+    const wanted = input.localBranch === undefined ? branch : input.localBranch.trim()
+    const wantedName = await deps.validateBranchName(input.cwd, wanted)
+    if (!wantedName) return failure(`分支名称不合法：${wanted}`, { needsDecision: "localBranchName" })
+    const localRef = await deps.commandRunner.run({
+      cwd: input.cwd,
+      args: ["rev-parse", "--verify", "--quiet", `refs/heads/${wantedName}`],
+      acceptedExitCodes: [0, 1],
+      operation: "terminal-git.checkout-remote.local",
+      repoPath: input.cwd,
+    })
+    const localExists = Boolean(localRef.stdout.trim())
+    if (input.localBranch !== undefined) {
+      // 用户点名的那个名字必须是一条**新**分支：重名就再问一个。
+      if (localExists) {
+        return failure(`本地已有 ${wantedName}，换一个名字。`, { needsDecision: "localBranchName" })
+      }
+    } else if (localExists) {
+      // 同名分支已存在：只有它跟踪的正是这条远端分支时，才可以「就是它」。
+      const upstream = await deps.commandRunner.run({
+        cwd: input.cwd,
+        args: ["for-each-ref", "--format=%(upstream:short)", `refs/heads/${wantedName}`],
+        operation: "terminal-git.checkout-remote.upstream",
+        repoPath: input.cwd,
+      })
+      const tracking = upstream.stdout.trim()
+      if (tracking !== remoteBranch) {
+        return failure(
+          tracking ? `本地已有 ${wantedName}，它跟踪的是 ${tracking}。` : `本地已有 ${wantedName}，它没有上游。`,
+          { needsDecision: "localBranchName" },
+        )
+      }
+    }
+
+    // 已经在这条分支上：什么都不做，也**不许走丢弃那条路** —— 那会把改动丢掉却什么也没换到。
+    if (localExists && wantedName === snapshot.branch) {
+      return success(snapshot, `已经在 ${wantedName} 上，没有做任何操作。`)
+    }
+
+    if (!input.discardChanges) {
+      const dirty = dirtyDecision(snapshot)
+      if (dirty) return dirty
+    }
+
+    await run({
+      cwd: input.cwd,
+      /*
+       * 新建那条**必须显式 `--track`**：绝不能依赖 DWIM，`checkout -b <name>` 在没有起点时
+       * 是「从当前 HEAD 建一条同名分支」，用户以为拿到了远端那条，实际拿到一条静静分叉的分支。
+       * 丢弃那条不带 `--no-overwrite-ignore` —— 与既有 `checkout -f` 逐字一致。
+       */
+      args: localExists
+        ? (input.discardChanges
+            ? ["checkout", "-f", wantedName]
+            : ["checkout", "--no-overwrite-ignore", wantedName])
+        : (input.discardChanges
+            ? ["checkout", "-f", "--no-overwrite-ignore", "-b", wantedName, "--track", remoteBranch]
+            : ["checkout", "--no-overwrite-ignore", "-b", wantedName, "--track", remoteBranch]),
+      operation: localExists ? "terminal-git.checkout-remote.switch" : "terminal-git.checkout-remote.create",
+    })
+    /*
+     * 成功那句话由**电脑**说：只有它解析得出最终用的是哪个本地名（可能不是手机猜的那个）。
+     * 手机那侧的 success 文案只是兜底。
+     */
+    return success(
+      await deps.status.getSnapshot(input.cwd),
+      localExists ? `已切换到 ${wantedName}。` : `已迁出 ${remoteBranch} 到 ${wantedName}。`,
+    )
+  }
+
+  return { checkout, createBranch, commit, push, sync, fetchRemotes, checkoutRemote }
 }
 
 /**

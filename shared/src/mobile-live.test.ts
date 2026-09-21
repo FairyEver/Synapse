@@ -1034,6 +1034,15 @@ describe("mobile live protocol", () => {
     expect(isMobileIntent({ ...base, action: "push" })).toBe(true)
     expect(isMobileIntent({ ...base, action: "sync" })).toBe(true)
     expect(isMobileIntent({ ...base, action: "merge", branch: "release", direction: "outOfCurrent" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "remoteBranches" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "fetchRemotes" })).toBe(true)
+    expect(isMobileIntent({ ...base, action: "checkoutRemote", remote: "origin", branch: "dev" })).toBe(true)
+    // 要另一个本地名的那一次重发：`localBranch` 与 `remote` 一起带回来。
+    expect(isMobileIntent({
+      ...base, action: "checkoutRemote", remote: "origin", branch: "dev", localBranch: "dev-copy",
+    })).toBe(true)
+    // 远端名本身可以含 `/`（`team/fork`）—— 拆开是电脑的事，协议这层只按 ref 名的上界收。
+    expect(isMobileIntent({ ...base, action: "checkoutRemote", remote: "team/fork", branch: "dev" })).toBe(true)
 
     // 没有终端就不知道在哪个目录上跑。
     expect(isMobileIntent({ ...base, sessionId: undefined, action: "status" })).toBe(false)
@@ -1052,6 +1061,16 @@ describe("mobile live protocol", () => {
     expect(isMobileIntent({ ...base, action: "checkout", branch: "b".repeat(limits.maxGitRefNameLength + 1) })).toBe(false)
     expect(isMobileIntent({ ...base, action: "merge", direction: "sideways" })).toBe(false)
     expect(isMobileIntent({ ...base, action: "checkout", discardChanges: "true" })).toBe(false)
+    // 新加的两个字段同样要过类型与上界：空串不是「没给」，超长的 ref 名不是 ref 名。
+    expect(isMobileIntent({
+      ...base, action: "checkoutRemote", remote: "o".repeat(limits.maxGitRefNameLength + 1), branch: "dev",
+    })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "checkoutRemote", remote: 8, branch: "dev" })).toBe(false)
+    expect(isMobileIntent({ ...base, action: "checkoutRemote", remote: "", branch: "dev" })).toBe(false)
+    expect(isMobileIntent({
+      ...base, action: "checkoutRemote", remote: "origin", branch: "dev",
+      localBranch: "l".repeat(limits.maxGitRefNameLength + 1),
+    })).toBe(false)
   })
 
   it("carries the git answers back, and refuses an empty block", () => {
@@ -1080,10 +1099,54 @@ describe("mobile live protocol", () => {
         },
       },
     })).toBe(true)
+    // 「要另一个本地名」与「脏工作区」是同一类回答的两个取值：都不是失败，都要显示一句话。
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "rejected",
+      message: "本地已有 feature-x，它跟踪的是 origin/other。",
+      git: { needsDecision: "localBranchName" },
+    })).toBe(true)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "accepted",
+      git: { remoteBranches: [{ remote: "origin", name: "main" }, { remote: "origin", name: "dev" }] },
+    })).toBe(true)
+    // 远端名本身可以含 `/`（`team/fork`）；两段各自都按 ref 名的上界收。
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "accepted",
+      git: { remoteBranches: [{ remote: "team/fork", name: "dev" }] },
+    })).toBe(true)
 
     // 空对象不是一份结果：电脑要么有话说，要么什么都不填。
     expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: {} })).toBe(false)
     expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { needsDecision: "later" } })).toBe(false)
+    // 空列表**是合法的**：一个没有远端的仓库就该回一个空列表，而不是什么都不回 ——
+    // 手机端要靠它把「还没有远端分支」那种空态画出来。
+    expect(isMobileIntentResult({
+      intentId: "i1", outcome: "accepted", git: { remoteBranches: [] },
+    })).toBe(true)
+    // 两段缺一段、空串、类型不对、超量都不收。超量这一条要紧 —— 校验器拒掉就是整条结果
+    // 作废，手机上表现为「电脑一直没有回答」，所以产生端必须先截断。
+    expect(isMobileIntentResult({
+      intentId: "i1", outcome: "accepted", git: { remoteBranches: [{ remote: "origin" }] },
+    })).toBe(false)
+    expect(isMobileIntentResult({
+      intentId: "i1", outcome: "accepted", git: { remoteBranches: [{ remote: "", name: "dev" }] },
+    })).toBe(false)
+    expect(isMobileIntentResult({
+      intentId: "i1", outcome: "accepted", git: { remoteBranches: "origin/dev" },
+    })).toBe(false)
+    expect(isMobileIntentResult({
+      intentId: "i1",
+      outcome: "accepted",
+      git: {
+        remoteBranches: Array.from(
+          { length: MOBILE_FRAME_LIMITS.maxGitBranches + 1 },
+          (_, index) => ({ remote: "origin", name: `b${index}` }),
+        ),
+      },
+    })).toBe(false)
     expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { branches: "main" } })).toBe(false)
     expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { branches: [{ name: "main" }] } })).toBe(false)
     expect(isMobileIntentResult({ intentId: "i1", outcome: "accepted", git: { branches: [null] } })).toBe(false)

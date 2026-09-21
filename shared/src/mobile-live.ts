@@ -1035,7 +1035,7 @@ export type MobileIntent =
   | (MobileIntentEnvelope<"git"> & {
     readonly sessionId: string
     readonly action: MobileGitAction
-    /** checkout / createBranch / merge 的对象分支。 */
+    /** checkout / createBranch / merge / checkoutRemote 的对象分支。 */
     readonly branch?: string
     /** createBranch 的起点；缺席＝从当前 HEAD 起。 */
     readonly fromBranch?: string
@@ -1047,18 +1047,32 @@ export type MobileIntent =
     readonly direction?: MobileGitMergeDirection
     /** checkout 的「丢弃改动并切换」。**不删未跟踪文件。** */
     readonly discardChanges?: boolean
+    /** checkoutRemote 的远端名（`origin`）。远端名本身可以含 `/`。 */
+    readonly remote?: string
+    /**
+     * checkoutRemote 的另一个本地名。缺席＝与远端分支同名。
+     *
+     * 有这个字段是因为同名本地分支可能已经存在、且跟踪的不是这条远端分支 —— 那时
+     * 电脑会回 `needsDecision: "localBranchName"`，用户填一个名字之后带着它重发。
+     */
+    readonly localBranch?: string
   })
 
 /**
  * 手机能说的 Git 动作。**枚举，不是字符串** —— 见 `MobileIntent` 上 `git` 那一段。
  *
- * `status` 与 `branches` 是读，其余是写；这一条也决定了各自要过哪个权限。
+ * `status`、`branches`、`remoteBranches` 是读，其余是写；这一条也决定了各自要过哪个权限。
  * `status` 的回答**不在结果信封里**：手机端的状态永远以 `mobile.gitStatus` 为准，
  * 两个来源写同一件事迟早会分叉 —— 它要的是「重算一次并推给我」。
+ *
+ * 远端分支是三件事而不是一件：`remoteBranches` 只读本地缓存的 `refs/remotes`（快、离线可用），
+ * `fetchRemotes` 才联网（`fetch --all --prune`），`checkoutRemote` 建一条跟踪远端分支的本地分支。
+ * 读与联网分开是因为**权限按动作名分**：合成一个带开关的动作，就得按参数分叉审计名。
  */
 export type MobileGitAction =
   | "status" | "branches" | "checkout" | "createBranch"
   | "commit" | "push" | "sync" | "merge"
+  | "remoteBranches" | "fetchRemotes" | "checkoutRemote"
 
 /**
  * 合并的两个方向。
@@ -1108,10 +1122,19 @@ export interface MobileIntentResult {
   readonly git?: {
     /** `branches` 的回答。只给名字与是否当前，手机端不需要更多。 */
     readonly branches?: readonly MobileGitBranch[]
+    /**
+     * `remoteBranches` 的回答。平铺 + 已按「远端名 → 分支名」排好；分组是手机端的事，
+     * 手机上再排一次就是第二份排序规则，两份迟早会分叉。
+     */
+    readonly remoteBranches?: readonly MobileGitRemoteBranch[]
     /** `merge` 冲突后的结论：手机端只负责把 `summaryText` 复制走。 */
     readonly conflict?: MobileGitConflict
-    /** 脏工作区，需要用户先选一个走法（提交并切换 / 丢弃并切换 / 取消）。 */
-    readonly needsDecision?: "dirty"
+    /**
+     * 要用户先给个东西，值说明是哪样东西 —— 两个取值都**不是失败**：
+     * `dirty` = 有未提交改动，先选一个走法（提交并切换 / 丢弃并切换 / 取消）；
+     * `localBranchName` = 同名本地分支不能直接用，另起一个本地名。
+     */
+    readonly needsDecision?: "dirty" | "localBranchName"
   }
 }
 
@@ -1119,6 +1142,17 @@ export interface MobileIntentResult {
 export interface MobileGitBranch {
   readonly name: string
   readonly current: boolean
+}
+
+/**
+ * 一条远端分支。
+ *
+ * 分成两段而不是拼好的 `origin/dev`：手机端要靠 `remote` 分组，而拿一段拼字符串再拆回来
+ * 是个必然会写错的一步（远端名本身可以含 `/`）。拼给人看的那一份由手机端拼。
+ */
+export interface MobileGitRemoteBranch {
+  readonly remote: string
+  readonly name: string
 }
 
 /**
@@ -1428,6 +1462,8 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
         isMobileGitAction(value.action) &&
         optionalBoundedString(value.branch, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
         optionalBoundedString(value.fromBranch, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
+        optionalBoundedString(value.remote, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
+        optionalBoundedString(value.localBranch, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
         optionalBoundedString(value.message, MOBILE_FRAME_LIMITS.maxIntentTextLength) &&
         optionalBoolean(value.pushAfterCommit) &&
         (value.direction === undefined || value.direction === "intoCurrent" || value.direction === "outOfCurrent") &&
@@ -1454,8 +1490,13 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
 /**
  * `MobileIntentResult.git`：空对象不是一份结果，所以至少要有一块内容。
  *
- * 三个字段各自独立（`branches` 回答列分支，`conflict` 回答合并冲突，`needsDecision`
- * 回答脏工作区），一次只会出现其中一块，但校验不假设是哪一个 —— 那是电脑侧的事。
+ * 四个字段各自独立（`branches` / `remoteBranches` 回答列分支，`conflict` 回答合并冲突，
+ * `needsDecision` 回答「要用户先给个东西」），一次只会出现其中一块，但校验不假设是哪一个
+ * —— 那是电脑侧的事。
+ *
+ * 远端分支列表与本地列表共用 `maxGitBranches`：同一类东西、走同一条套接字，上界没理由
+ * 不同。**超了在这里是整条结果作废**（手机表现为「电脑一直没有回答」），所以截断必须发生在
+ * 产生端（`mobile-gateway/git-intent.ts`），这一层只是第二道守卫。
  */
 function isMobileIntentGitResult(value: unknown): value is NonNullable<MobileIntentResult["git"]> {
   if (!isRecord(value)) return false
@@ -1463,15 +1504,28 @@ function isMobileIntentGitResult(value: unknown): value is NonNullable<MobileInt
     if (!boundedArray(value.branches, MOBILE_FRAME_LIMITS.maxGitBranches)) return false
     if (!(value.branches as readonly unknown[]).every(isMobileGitBranch)) return false
   }
+  if (value.remoteBranches !== undefined) {
+    if (!boundedArray(value.remoteBranches, MOBILE_FRAME_LIMITS.maxGitBranches)) return false
+    if (!(value.remoteBranches as readonly unknown[]).every(isMobileGitRemoteBranch)) return false
+  }
   if (value.conflict !== undefined && !isMobileGitConflict(value.conflict)) return false
-  if (value.needsDecision !== undefined && value.needsDecision !== "dirty") return false
-  return value.branches !== undefined || value.conflict !== undefined || value.needsDecision !== undefined
+  if (value.needsDecision !== undefined &&
+    value.needsDecision !== "dirty" && value.needsDecision !== "localBranchName") return false
+  return value.branches !== undefined || value.remoteBranches !== undefined ||
+    value.conflict !== undefined || value.needsDecision !== undefined
 }
 
 function isMobileGitBranch(value: unknown): value is MobileGitBranch {
   return isRecord(value) &&
     boundedString(value.name, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
     typeof value.current === "boolean"
+}
+
+/** 远端分支的两段都是 ref 名，按同一个上界收。 */
+function isMobileGitRemoteBranch(value: unknown): value is MobileGitRemoteBranch {
+  return isRecord(value) &&
+    boundedString(value.remote, MOBILE_FRAME_LIMITS.maxGitRefNameLength) &&
+    boundedString(value.name, MOBILE_FRAME_LIMITS.maxGitRefNameLength)
 }
 
 /**
@@ -1492,6 +1546,7 @@ function isMobileGitConflict(value: unknown): value is MobileGitConflict {
 function isMobileGitAction(value: unknown): value is MobileGitAction {
   return value === "status" || value === "branches" || value === "checkout" || value === "createBranch"
     || value === "commit" || value === "push" || value === "sync" || value === "merge"
+    || value === "remoteBranches" || value === "fetchRemotes" || value === "checkoutRemote"
 }
 
 export function isMobileKey(value: unknown): value is MobileKey {

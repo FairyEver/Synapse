@@ -26,11 +26,14 @@ export type TerminalGitService = {
   readonly getSnapshot: TerminalGitStatusReader["getSnapshot"]
   readonly isRepository: TerminalGitStatusReader["isRepository"]
   readonly listBranches: TerminalGitStatusReader["listBranches"]
+  readonly listRemoteBranches: TerminalGitStatusReader["listRemoteBranches"]
   readonly checkout: TerminalGitWorkflow["checkout"]
   readonly createBranch: TerminalGitWorkflow["createBranch"]
   readonly commit: TerminalGitWorkflow["commit"]
   readonly push: TerminalGitWorkflow["push"]
   readonly sync: TerminalGitWorkflow["sync"]
+  readonly fetchRemotes: TerminalGitWorkflow["fetchRemotes"]
+  readonly checkoutRemote: TerminalGitWorkflow["checkoutRemote"]
   readonly merge: TerminalGitIntegration["merge"]
 }
 
@@ -55,11 +58,14 @@ export function createTerminalGitService(deps: {
     getSnapshot: status.getSnapshot,
     isRepository: status.isRepository,
     listBranches: status.listBranches,
+    listRemoteBranches: status.listRemoteBranches,
     checkout: workflow.checkout,
     createBranch: workflow.createBranch,
     commit: workflow.commit,
     push: workflow.push,
     sync: workflow.sync,
+    fetchRemotes: workflow.fetchRemotes,
+    checkoutRemote: workflow.checkoutRemote,
     merge: integration.merge,
   }
 }
