@@ -159,13 +159,27 @@ Chromium 的 `clipboard` 模块不提供 change 事件，也没有 `NSPasteboard
 
 由此的代价，要写清楚：**监听必须一直跑**（只在有手机连着时才跑的话，刚连上时电脑的内存里一条历史都没有，「补 20 条」这个承诺就不成立）。轮询间隔定 1 秒，比对用内容哈希。典型文本的单次读取是微秒级；极端情况下（用户复制了一段几十 MB 的文本）会每秒读一次那个大字符串，直到剪切板被换成别的东西——这是这条路的固有代价，接受，不为此增加复杂度。
 
-### 6.2 concealed 标记：本设计的隐私前提，必须先用探针证实
+### 6.2 concealed 标记：探针已跑，结论与最初设想不同
 
-敏感内容不过滤的话，决策五整条落空。所以实施第一步是写一个探针，确认 Electron 的 `clipboard.availableFormats()` 在 macOS 上能不能看到密码管理器打的 concealed 标记（1Password 打的是 `org.nspasteboard.ConcealedType`）。API 面已确认存在（`availableFormats(type?): string[]`、`has(format, type?): boolean`），要验的是 macOS 上返回的字符串里到底有没有那个 UTI——这是唯一没法靠读代码回答的一步。
+**检测必须用 `clipboard.readBuffer(uti)`，不能用 `availableFormats()` 或 `has()`。** 2026-09-21 在 macOS 26 / Electron 41.2.1 上实测：
 
-已知的坏消息，探针要盯住这一条：**不同工具暴露这个类型名的方式不一样**。Qt 系（CopyQ）在 macOS 上看到的是 `application/x-nspasteboard-concealed-type`，KDE Connect 的缺陷报告里两种名字同时出现过。Electron 是否原样暴露 `NSPasteboard` 的类型名**没有文档保证**，所以探针不能只试 `org.nspasteboard.ConcealedType` 一个字符串，要把 `availableFormats()` 的完整返回值打印出来看。
+| 读法 | 对 `org.nspasteboard.ConcealedType` 的结果 |
+|---|---|
+| `availableFormats()` | 只返回 `["text/plain"]`——Chromium 把它转成自己的格式词汇表，**自定义 UTI 根本不列出** |
+| `has(uti)` | `false` |
+| `read(uti)` | `""` |
+| **`readBuffer(uti)`** | **`Buffer(1)`——通的**，格式名被原样透传给 `NSPasteboard` |
 
-**探针不成立怎么办**：停下来告诉用户，不要退化成「猜密码长什么样」这类启发式——那既不可靠，又会让正常内容被误伤。没有可靠的敏感标记，宁可把决策五改成「不做过滤、如实告知用户剪切板内容会被同步」，让用户在知情的前提下重新决定。
+所以判断条件是 `readBuffer(...).length > 0`，两个名字都要查（`org.nspasteboard.ConcealedType` 和 Qt 系看到过的 `application/x-nspasteboard-concealed-type`），顺带也可以查 `org.nspasteboard.TransientType`。**不需要打包任何原生助手。**
+
+**做这个探针有两个坑，都会给出假的「做不到」：**
+
+1. **不能拿 `availableFormats()` 当判据。** 它对自定义类型一律说谎，用它测会得出「Electron 看不见 concealed」这个错误结论。
+2. **探针必须跑在标记还在的时间窗内。** 这台开发机上装了 PastePal，它会在**约 1 秒内**改写剪切板并抹掉 concealed 标记（实测 changeCount +1、typeCount 3→2）。Electron 冷启动要一两秒，等它起来再读，标记早就没了——第一次探针就是这么得出假阴性的。正确做法是让 Electron 常驻，用信号触发出读取，把读取压进那个窗口里。
+
+**剪切板管理器可能让过滤失效（真实风险，不是理论）。** 上一条实测到的那件事本身就是产品风险：macOS 上有其它剪切板管理器在跑时，它们可能自行改写剪切板，把 concealed 标记抹掉。抹掉之后**任何**检测手段都看不见了——不是我们读得不对，是标记真的不在。
+
+影响范围：装了这类工具的用户，密码有几率被同步到手机上。本设计不为此加复杂度（不可能枚举并适配所有管理器），但要知道这条边界存在，并且轮询间隔因此不宜再拉长——**间隔越长，落在「标记已被抹掉」之后才读到的概率越高**。1 秒是这个理由下的取值，不是随手定的。
 
 ### 6.3 云端只转发、不落库
 
