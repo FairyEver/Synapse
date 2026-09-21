@@ -173,6 +173,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "repo.pending-pushes",
         "repo.sync-coordinator",
         "repo.watch",
+        "terminal.git-service",
         "ui.tray",
       ].sort(),
     )
@@ -230,7 +231,10 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.terminal")?.dependsOn).toEqual([
       "core.data-repository",
       "core.terminal-agent-notifications",
+      "core.permission-guard",
+      "core.audit-sink",
     ])
+    expect(byId.get("terminal.git-service")?.dependsOn).toEqual(["git.command-runner"])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("git.operation-coordinator")?.dependsOn).toEqual(["core.event-bus"])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
