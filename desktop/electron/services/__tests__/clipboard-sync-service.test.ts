@@ -173,11 +173,15 @@ describe("ClipboardSyncService", () => {
     expect(changes.length).toBe(1)
   })
 
-  it("records nothing for an empty clipboard", () => {
+  it("records nothing for an empty clipboard, or one holding only whitespace", () => {
     const { clipboard, timers, service, changes } = createHarness()
     service.start()
 
     clipboard.text = ""
+    timers.advance(1_000)
+    // 纯空白同样丢掉，且判据只放在这一处：协议那边的校验器会先 trim 再判空，
+    // 如果这里放行，手机上会因为一行空格把整包 20 条都拒掉。
+    clipboard.text = "   \n  "
     timers.advance(1_000)
 
     expect(changes.length).toBe(0)

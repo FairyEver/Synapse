@@ -14,6 +14,7 @@ import {
   MOBILE_RUN_FLAGS,
   MOBILE_TRUECOLOR_BASE,
   encodeMobileTruecolor,
+  isMobileClipboardPayload,
   isMobileFramePayload,
   isMobileIntent,
   isMobileIntentResult,
@@ -22,6 +23,7 @@ import {
   isMobileTerminalFrame,
   isMobileToolbarPayload,
   isMobileTransferProgressPayload,
+  type MobileClipboardPayload,
   type MobileIntent,
   type MobileQuickPhrasesPayload,
   type MobileSummaryAgentGroup,
@@ -94,6 +96,18 @@ function quickPhrases(overrides: Partial<MobileQuickPhrasesPayload> = {}): Mobil
     phrases: [
       { id: "q1", content: "用 Easy Worklog 初始化今天的工作日志" },
       { id: "q2", content: "这次改动整理成提交说明，中文，说清楚改了什么" },
+    ],
+    ...overrides,
+  }
+}
+
+function clipboard(overrides: Partial<MobileClipboardPayload> = {}): MobileClipboardPayload {
+  return {
+    desktopClientInstanceId: "desktop-1",
+    revision: 1,
+    entries: [
+      { id: "a".repeat(64), text: "pnpm mobile:install", copiedAt: "2026-09-21T10:00:00.000Z" },
+      { id: "b".repeat(64), text: "这次改动整理成提交说明", copiedAt: "2026-09-21T09:58:00.000Z" },
     ],
     ...overrides,
   }
@@ -842,6 +856,84 @@ describe("mobile live protocol", () => {
     // desktop builds and the one this test builds serialize to the same bytes.
     expect(Object.keys(quickPhrases())).toEqual(["desktopClientInstanceId", "revision", "phrases"])
     expect(Object.keys(quickPhrases().phrases[0])).toEqual(["id", "content"])
+  })
+
+  it("routes the clipboard through both sides of the relay", () => {
+    // One guard each way, and the two failures are the toolbar's two: rejected on the
+    // desktop's hop the cloud closes the socket and the computer reads as offline;
+    // rejected on the phone's hop the entries never arrive, and a phone that has
+    // never seen this message from this computer draws an empty list it cannot tell
+    // apart from a computer that has copied nothing.
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileClipboard,
+      clipboard(),
+      envelopeMeta,
+    ))).toBe(true)
+    expect(isLiveMobileServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileClipboard,
+      clipboard(),
+      envelopeMeta,
+    ))).toBe(true)
+  })
+
+  it("accepts a computer that has copied nothing, and rejects a malformed clipboard", () => {
+    // `[]` is a computer that has just started and copied nothing yet. Unlike the
+    // phrases, this one has no second meaning to keep apart: the phone's own bucket
+    // is what it draws, so an empty snapshot is just "nothing new to merge".
+    expect(isMobileClipboardPayload(clipboard({ entries: [] }))).toBe(true)
+
+    // Absent rather than empty: without it the phone cannot tell which of its
+    // computers these entries belong to.
+    const withoutDesktop: Record<string, unknown> = { ...clipboard() }
+    delete withoutDesktop.desktopClientInstanceId
+    expect(isMobileClipboardPayload(withoutDesktop)).toBe(false)
+    expect(isMobileClipboardPayload(clipboard({ desktopClientInstanceId: "" }))).toBe(false)
+    expect(isMobileClipboardPayload(clipboard({ revision: -1 }))).toBe(false)
+    expect(isMobileClipboardPayload(clipboard({ revision: 1.5 }))).toBe(false)
+    expect(isMobileClipboardPayload({ ...clipboard(), entries: "none" })).toBe(false)
+
+    const limits = MOBILE_FRAME_LIMITS
+    // One past the ring the desktop keeps. A snapshot longer than that could not
+    // have been produced by this wire's own producer.
+    const many = Array.from({ length: limits.maxClipboardEntries + 1 }, (_value, index) => ({
+      id: `c${index}`,
+      text: "pnpm mobile:install",
+      copiedAt: "2026-09-21T10:00:00.000Z",
+    }))
+    expect(isMobileClipboardPayload(clipboard({ entries: many }))).toBe(false)
+
+    const entry = clipboard().entries[0]
+    const malformed = [
+      { ...entry, id: "" },
+      { ...entry, text: undefined },
+      { ...entry, copiedAt: undefined },
+      { ...entry, copiedAt: "t".repeat(limits.maxSummaryStartedAtLength + 1) },
+      // Over the ceiling the desktop's own collector drops whole rather than
+      // truncating — see `maxClipboardTextLength`.
+      { ...entry, text: "s".repeat(limits.maxClipboardTextLength + 1) },
+      { ...entry, id: "i".repeat(limits.maxToolbarButtonIdLength + 1) },
+      "pnpm mobile:install",
+      null,
+    ]
+    for (const malformedEntry of malformed) {
+      expect(isMobileClipboardPayload(clipboard({
+        entries: [malformedEntry] as unknown as MobileClipboardPayload["entries"],
+      }))).toBe(false)
+    }
+
+    // Whitespace-only is rejected by `boundedString`, which trims before judging.
+    // That is only defensible because the desktop's collector makes the same call:
+    // it drops text that is empty *or* all whitespace. If the producer could emit
+    // one, this validator would be the reason a phone threw away a whole snapshot —
+    // twenty entries — over a single row of spaces.
+    expect(isMobileClipboardPayload(clipboard({
+      entries: [{ ...entry, text: "   " }],
+    }))).toBe(false)
+
+    // Every field is required and none arrived with a default, so the payload the
+    // desktop builds and the one this test builds serialize to the same bytes.
+    expect(Object.keys(clipboard())).toEqual(["desktopClientInstanceId", "revision", "entries"])
+    expect(Object.keys(clipboard().entries[0])).toEqual(["id", "text", "copiedAt"])
   })
 
   it("adds no bytes to the messages that predate the toolbar", () => {

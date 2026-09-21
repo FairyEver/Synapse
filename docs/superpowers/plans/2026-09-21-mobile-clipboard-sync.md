@@ -139,7 +139,8 @@ pnpm --filter @synapse/desktop run check:hard-constraints
 **`shared/src/mobile-live.ts`**：
 
 - 新增 payload 类型与校验器（放 `:989` 那一带），照 `mobile.quickPhrases`（`:697` / `:1055`）走**严格**路线——剪切板条目和短语一样只有字符串，解不出就是消息坏了，不该宽松放过。
-- `MOBILE_FRAME_LIMITS`（`:34`）新增 `maxClipboardBytes`，值取 **256KB**。参照 `maxSummaryBytes: 248KB` 这个已经在用的量级，不要凭感觉定一个新数量级。
+- `MOBILE_FRAME_LIMITS`（`:34`）新增 `maxClipboardBytes`，值取 **192 KiB**。**不要取 256 KiB**——套接字的 `maxPayload` 正好是它，等于它就没给信封留余地了；`maxSummaryBytes: 248KB` 也是同一个理由压下来的。
+- **`MOBILE_FRAME_LIMITS` 在 `shared/src/mobile-live-constants.cjs` 里还有一份手抄副本**（Electron 主进程是 CommonJS，读不了 ESM 那份）。新常量要两边都加，`mobile-live.test.ts` 有一条专门的测试盯这个，漏了就红。
 - 载荷形状：`{ desktopClientInstanceId, revision, entries: [{ id, text, copiedAt }] }`，`entries` 最新在前、最多 20 条。
 
 **`shared/src/live.ts`**：

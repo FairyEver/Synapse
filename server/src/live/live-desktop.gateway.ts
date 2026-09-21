@@ -9,6 +9,7 @@ import {
   isLiveDesktopClientMessage,
   type LiveDesktopClientMessage,
   type LiveDesktopServerMessage,
+  type MobileClipboardPayload,
   type MobileFramePayload,
   type MobileIntentResultPayload,
   type MobileQuickPhrasesPayload,
@@ -89,6 +90,16 @@ export interface LiveMobileRelayHandler {
    * can no longer edit.
    */
   readonly handleQuickPhrases: (userId: string, payload: MobileQuickPhrasesPayload) => void
+  /**
+   * The text one of a user's computers has copied recently.
+   *
+   * Never stored, for `handleToolbar`'s reason and one more of its own: a clipboard
+   * is the most transient thing on this wire — it means "this is what you copied
+   * just now", and a copy of it held here would outlive both the computer that made
+   * it and the moment it was true. The phone keeps its own list; the cloud keeps
+   * nothing.
+   */
+  readonly handleClipboard: (userId: string, payload: MobileClipboardPayload) => void
   /**
    * One of the user's computers became reachable, or stopped being reachable.
    * Fired on every change, so it carries the current list rather than a delta.
@@ -485,7 +496,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         || message.type === LIVE_MESSAGE_TYPES.mobileIntentResult
         || message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress
         || message.type === LIVE_MESSAGE_TYPES.mobileToolbar
-        || message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) {
+        || message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases
+        || message.type === LIVE_MESSAGE_TYPES.mobileClipboard) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
         this.handleMobileRelayMessage(auth.userId, message)
@@ -667,6 +679,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) {
         relay.handleQuickPhrases(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileClipboard) {
+        relay.handleClipboard(userId, message.payload)
         return
       }
       // Named rather than cast into the last handler that happens to accept this

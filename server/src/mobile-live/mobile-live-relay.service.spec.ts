@@ -214,3 +214,67 @@ describe("MobileLiveRelayService quick phrases", () => {
     expect(() => service.handleQuickPhrases("user-1", payload)).not.toThrow()
   })
 })
+
+describe("MobileLiveRelayService clipboard", () => {
+  // Its own harness rather than the file-scope one, which answers with no phones at
+  // all: this family is fanned out, so the test needs a registry that has some.
+  function createHarness(phones: readonly string[] = ["phone-1", "phone-2"]) {
+    const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
+    const fanout: MobileLiveFanout = { sendToMobile }
+    const service = new MobileLiveRelayService(
+      { listOnlineByUser: vi.fn(() => phones.map((clientInstanceId) => ({ clientInstanceId }))) } as never,
+      {} as never,
+      {} as never,
+    )
+    service.setFanout(fanout)
+    return { service, sendToMobile }
+  }
+
+  const payload = {
+    desktopClientInstanceId: "client-a",
+    revision: 1,
+    entries: [
+      { id: "a".repeat(64), text: "pnpm mobile:install", copiedAt: "2026-09-21T10:00:00.000Z" },
+    ],
+  }
+
+  it("reaches every phone of the account and no other account's", () => {
+    // Fanned out like the toolbar and the phrases: the payload names its own
+    // computer, so a phone showing a different one discards it for the cost of a
+    // comparison. The registry is asked by `userId`, which is what keeps one
+    // account's copied text away from another's.
+    const { service, sendToMobile } = createHarness()
+
+    service.handleClipboard("user-1", payload)
+
+    expect(sendToMobile).toHaveBeenCalledTimes(2)
+    expect(sendToMobile.mock.calls.map((call) => call[0].clientInstanceId)).toEqual(["phone-1", "phone-2"])
+    expect(sendToMobile.mock.calls.every((call) => call[0].userId === "user-1")).toBe(true)
+    expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
+      message: { type: "mobile.clipboard", payload },
+    })
+  })
+
+  it("sends the snapshot again on every call rather than remembering it", () => {
+    // Nothing is cached here, and this message has the strongest reason of the three
+    // families for that: its whole meaning is recency. A stored copy would answer a
+    // phone with text its computer copied hours ago and has long since replaced, and
+    // would keep answering after that computer had gone away entirely.
+    const { service, sendToMobile } = createHarness()
+
+    service.handleClipboard("user-1", payload)
+    service.handleClipboard("user-1", payload)
+
+    expect(sendToMobile).toHaveBeenCalledTimes(4)
+  })
+
+  it("stays quiet when no fanout is installed", () => {
+    const service = new MobileLiveRelayService(
+      { listOnlineByUser: vi.fn(() => []) } as never,
+      {} as never,
+      {} as never,
+    )
+
+    expect(() => service.handleClipboard("user-1", payload)).not.toThrow()
+  })
+})

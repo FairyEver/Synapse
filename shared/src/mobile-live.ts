@@ -208,6 +208,27 @@ export const MOBILE_FRAME_LIMITS = {
   maxQuickPhrases: 64,
   maxQuickPhraseLength: 4096,
   maxQuickPhrasesBytes: 64 * 1024,
+  /**
+   * 剪切板：电脑上复制过的一段文本，电脑主动推给手机的。
+   *
+   * `maxClipboardEntries` 是**电脑侧内存环的长度**，不是手机本地那份的容量。两者
+   * 刻意不等：电脑只留 20 条，用来回答「这台电脑最近复制过什么」；手机按电脑各留
+   * 50 条，用来离线翻看。正因为不等，手机收到快照之后要做的是**归并**而不是整包
+   * 替换 —— 整包替换会让手机上那份凭空缩到 20 条。这条规则写在手机端的 store 里，
+   * 协议这层只负责把 20 条原样送到。
+   *
+   * `maxClipboardTextLength` 是产生端单条上限的兜底。真正的把关在电脑侧采集处
+   * （超过 128 KiB 的条目在那里就被丢掉了），这里再写一遍不是冗余：这条线上的每个
+   * 校验器都假设 payload 可能来自一个行为不端的对端。
+   *
+   * `maxClipboardBytes` 是快照的总预算，取 192 KiB 而不是 256 KiB：套接字的
+   * `maxPayload` 正好是 256 KiB，等于它就没有给信封留余地了。摘要那份也刻意压在
+   * 248 KiB，同一个理由。装不下的条目这一轮不带，而不是把快照切开发两次 ——
+   * 手机本地本来就存着它自己见过的那些，补缺比补全重要。
+   */
+  maxClipboardEntries: 20,
+  maxClipboardTextLength: 128 * 1024,
+  maxClipboardBytes: 192 * 1024,
 } as const
 
 /** Style attribute bits packed into the fifth element of a run tuple. */
@@ -701,6 +722,40 @@ export interface MobileQuickPhrasesPayload {
   readonly phrases: readonly MobileQuickPhrase[]
 }
 
+/**
+ * 一条剪切板记录：电脑上复制过的一段文本。
+ *
+ * `id` 是正文的 sha256，由电脑侧算。手机靠它去重，也靠它实现「同一段内容再复制
+ * 一次就把它提到最前」；正因为两端认的是同一个值，「重连时电脑补推当前剪切板」
+ * 才不会在手机上变成第二条。
+ *
+ * `copiedAt` 用 `maxSummaryStartedAtLength` 来界定，和摘要的 `startedAt` 同一个
+ * 理由：这条线上凡是"某个时刻"的字符串，量级都一样。
+ */
+export interface MobileClipboardEntry {
+  readonly id: string
+  /** 正文。电脑侧已经做过长度把关，这里是第二道。 */
+  readonly text: string
+  readonly copiedAt: string
+}
+
+/**
+ * 电脑内存里最近复制过的文本，最新在前。
+ *
+ * 与 `MobileQuickPhrasesPayload` 同族：都带电脑身份、都由电脑说了算、都在手机侧按
+ * `desktopClientInstanceId` 过滤。区别在于它**不是**一份可以整包替换的真相，原因见
+ * `maxClipboardEntries` 那段。
+ *
+ * 与短语不同的另一点：这里没有"空"与"从来没说过"的分野。电脑从不回「我没有剪切板」
+ * 这种话，手机那一桶是它自己攒的，「这台电脑没有记录」就是一个普通的空态。
+ */
+export interface MobileClipboardPayload {
+  readonly desktopClientInstanceId: string
+  /** The producer's own counter, bumped per send; not compared by the phone. */
+  readonly revision: number
+  readonly entries: readonly MobileClipboardEntry[]
+}
+
 /* ------------------------------------------------------------------ *
  * Intent
  * ------------------------------------------------------------------ */
@@ -1060,6 +1115,19 @@ export function isMobileQuickPhrasesPayload(value: unknown): value is MobileQuic
   return (value.phrases as readonly unknown[]).every(isMobileQuickPhrase)
 }
 
+/**
+ * 严格，和短语一样：一条记录只有三个字符串，解不出来就是消息坏了，没有"宽松放过"
+ * 的余地。宽松在这里会变成更坏的事——手机那一桶是跨会话留存的数据，一条半截的
+ * 记录会一直躺在里面。
+ */
+export function isMobileClipboardPayload(value: unknown): value is MobileClipboardPayload {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.desktopClientInstanceId, 120)) return false
+  if (!nonNegativeInteger(value.revision)) return false
+  if (!boundedArray(value.entries, MOBILE_FRAME_LIMITS.maxClipboardEntries)) return false
+  return (value.entries as readonly unknown[]).every(isMobileClipboardEntry)
+}
+
 export function isMobilePresencePayload(value: unknown): value is MobilePresencePayload {
   if (!isRecord(value)) return false
   const ids = value.desktopClientInstanceIds
@@ -1213,6 +1281,18 @@ function isMobileQuickPhrase(value: unknown): value is MobileQuickPhrase {
   if (!isRecord(value)) return false
   if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxToolbarButtonIdLength)) return false
   return boundedString(value.content, MOBILE_FRAME_LIMITS.maxQuickPhraseLength)
+}
+
+/**
+ * 正文用 `boundedString` 而不是 `boundedText`：一段只由空白组成的内容在这里是
+ * 允许的。空白也是用户复制的东西，拒掉它等于替用户判断什么值得记——而真正的
+ * 取舍（空串）在电脑侧采集处就已经做完了。
+ */
+function isMobileClipboardEntry(value: unknown): value is MobileClipboardEntry {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxToolbarButtonIdLength)) return false
+  if (!boundedString(value.text, MOBILE_FRAME_LIMITS.maxClipboardTextLength)) return false
+  return boundedString(value.copiedAt, MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength)
 }
 
 function isCursor(value: unknown): value is MobileTerminalCursor {

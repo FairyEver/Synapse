@@ -102,6 +102,16 @@ function helloFor(clientInstanceId: string) {
   }
 }
 
+function clipboardPayload() {
+  return {
+    desktopClientInstanceId: "client-a",
+    revision: 1,
+    entries: [
+      { id: "a".repeat(64), text: "pnpm mobile:install", copiedAt: "2026-09-21T10:00:00.000Z" },
+    ],
+  }
+}
+
 function webhookDeliveryPayload() {
   return {
     deliveryId: "delivery-1",
@@ -219,6 +229,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -254,6 +265,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -288,6 +300,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -562,6 +575,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress,
       handleToolbar: vi.fn(),
       handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -604,6 +618,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress: vi.fn(),
       handleToolbar,
       handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -647,6 +662,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
       handleQuickPhrases,
+      handleClipboard: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -673,6 +689,42 @@ describe("LiveDesktopGateway", () => {
     expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
   })
 
+  it("hands a desktop's clipboard to the relay instead of the unhandled fallback", () => {
+    /*
+     * The same silent failure the toolbar's and the phrases' cases guard against: a
+     * type missing from `handleMobileRelayMessage` is only ever logged, and on the
+     * phone's side that reads as a computer which has copied nothing — an empty list
+     * with nothing anywhere saying why.
+     */
+    const socket = new FakeSocket()
+    const handleClipboard = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
+      handleClipboard,
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileClipboard,
+      id: "msg-clipboard",
+      sentAt: "2026-06-06T10:00:05.000Z",
+      payload: clipboardPayload(),
+    }))
+
+    expect(handleClipboard).toHaveBeenCalledWith("user-1", clipboardPayload())
+    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
+  })
+
   it("relays a computer that has no quick phrases rather than dropping the message", () => {
     // The empty list is the *answer* "this computer has none", and it is the only
     // thing that tells a phone its second segment should exist but be empty. A
@@ -690,6 +742,7 @@ describe("LiveDesktopGateway", () => {
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
       handleQuickPhrases,
+      handleClipboard: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 

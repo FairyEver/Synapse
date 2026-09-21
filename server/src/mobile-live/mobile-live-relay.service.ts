@@ -4,6 +4,7 @@ import {
   LIVE_MESSAGE_TYPES,
   createLiveEnvelope,
   type LiveMobileServerMessage,
+  type MobileClipboardPayload,
   type MobileFramePayload,
   type MobileIntent,
   type MobileIntentResult,
@@ -79,6 +80,7 @@ export class MobileLiveRelayService implements OnModuleInit {
       handleTransferProgress: (userId, payload) => this.handleTransferProgress(userId, payload),
       handleToolbar: (userId, payload) => this.handleToolbar(userId, payload),
       handleQuickPhrases: (userId, payload) => this.handleQuickPhrases(userId, payload),
+      handleClipboard: (userId, payload) => this.handleClipboard(userId, payload),
       handleDesktopPresence: (userId, clientInstanceIds) =>
         this.handleDesktopPresence(userId, clientInstanceIds),
     })
@@ -223,6 +225,26 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   handleQuickPhrases(userId: string, payload: MobileQuickPhrasesPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileQuickPhrases, payload, envelopeMeta())
+    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
+      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
+    }
+  }
+
+  /**
+   * The text one of the user's computers copied recently, for its phones to read and
+   * copy into their own clipboard.
+   *
+   * Fanned out and never stored, on `handleQuickPhrases`' terms. This one has an
+   * extra reason of its own: its whole meaning is recency. A stored copy would
+   * answer a phone with text its computer copied hours ago and has long since
+   * replaced, and would keep answering after that computer had gone away entirely.
+   *
+   * Not a request either, and no result to wait on: the desktop re-sends this when a
+   * phone's `sync` intent arrives, which is the path every snapshot on this wire
+   * already takes.
+   */
+  handleClipboard(userId: string, payload: MobileClipboardPayload): void {
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileClipboard, payload, envelopeMeta())
     for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
       this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
     }

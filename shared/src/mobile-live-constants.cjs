@@ -57,6 +57,9 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxQuickPhrases: number,
  *   readonly maxQuickPhraseLength: number,
  *   readonly maxQuickPhrasesBytes: number,
+ *   readonly maxClipboardEntries: number,
+ *   readonly maxClipboardTextLength: number,
+ *   readonly maxClipboardBytes: number,
  * }}
  */
 exports.MOBILE_FRAME_LIMITS = {
@@ -109,6 +112,14 @@ exports.MOBILE_FRAME_LIMITS = {
   maxQuickPhrases: 64,
   maxQuickPhraseLength: 4096,
   maxQuickPhrasesBytes: 64 * 1024,
+  /**
+   * 剪切板：电脑上复制过的文本。条数是**电脑侧内存环**的长度，手机本地另按电脑
+   * 各留 50 条 —— 正因为两者不等，手机收到快照之后是归并不是整包替换。
+   * 正文上限与电脑侧采集处同值；总预算压在套接字的 maxPayload 之下。
+   */
+  maxClipboardEntries: 20,
+  maxClipboardTextLength: 128 * 1024,
+  maxClipboardBytes: 192 * 1024,
 }
 
 /**
