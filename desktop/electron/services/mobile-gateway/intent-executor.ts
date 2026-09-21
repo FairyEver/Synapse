@@ -79,6 +79,18 @@ export type IntentExecutorDeps = {
    * and a phone looking at a different one would discard the list anyway.
    */
   readonly sendQuickPhrases: () => void
+  /**
+   * Pushes the text this computer has copied recently, unconditionally.
+   *
+   * Deliberately **only** on `sync`, not on `attach` alongside the two above. Those
+   * two moments are "a phone is looking at this computer", and the clipboard is not
+   * about any terminal: sending it on every `attach` would mean a phone opening a
+   * terminal is told the clipboard again, which is nothing it asked for. `sync` is
+   * the moment that actually matters here — it is what a phone sends when it
+   * connects, when it reconnects, and when it switches to this computer, and those
+   * are exactly the three occasions its own list may have a gap in it.
+   */
+  readonly sendClipboard: () => void
   /** Sends a full-window frame immediately, for attach and resync. */
   readonly pushSnapshot: (
     attachment: MobileAttachment,
@@ -188,6 +200,11 @@ export class MobileIntentExecutor {
         this.deps.resendSummary()
         this.deps.sendToolbar()
         this.deps.sendQuickPhrases()
+        // The one moment a phone's own clipboard list may have a hole in it: it was
+        // away, or it is looking at this computer for the first time. Nothing is
+        // gated on the ring having changed since the last phone — this caller has
+        // received nothing at all.
+        this.deps.sendClipboard()
         for (const attachment of registry.forClient(mobileClientInstanceId)) {
           await this.pushSnapshotOrForget(attachment)
         }

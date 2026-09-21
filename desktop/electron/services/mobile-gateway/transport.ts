@@ -1,4 +1,5 @@
 import type {
+  MobileClipboardPayload,
   MobileIntent,
   MobileIntentResult,
   MobileQuickPhrasesPayload,
@@ -25,6 +26,9 @@ export type MobileToolbarDraft = Omit<MobileToolbarPayload, "desktopClientInstan
 
 /** The 快捷输入 sentences, minus the identity, for the same reason. */
 export type MobileQuickPhrasesDraft = Omit<MobileQuickPhrasesPayload, "desktopClientInstanceId">
+
+/** The recently copied text, minus the identity, for the same reason. */
+export type MobileClipboardDraft = Omit<MobileClipboardPayload, "desktopClientInstanceId">
 
 /**
  * Outbound side of the gateway.
@@ -61,6 +65,16 @@ export type MobileGatewayTransport = {
    * toolbar could only ever say the first.
    */
   readonly sendQuickPhrases: (draft: MobileQuickPhrasesDraft) => void
+  /**
+   * The text this computer has copied recently.
+   *
+   * A full snapshot like the two above it, and — unlike them — one whose *only*
+   * meaning is recency. It is also the one message on this wire whose payload a
+   * phone merges rather than replaces: the desktop keeps twenty entries and the
+   * phone keeps fifty, so the two lists are deliberately not equal, and a phone
+   * that treated this as the whole truth would shrink its own.
+   */
+  readonly sendClipboard: (draft: MobileClipboardDraft) => void
 }
 
 /** Inbound side: the live connection hands cloud-delivered events to the gateway. */

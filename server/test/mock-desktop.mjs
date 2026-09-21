@@ -353,6 +353,39 @@ function sendQuickPhrases() {
 }
 
 /**
+ * The text this double has "copied", newest first.
+ *
+ * An empty array is a real answer it can give ("this computer has copied nothing"),
+ * which is what the control route is for: unlike the toolbar there is no `--no-*`
+ * switch here, because a computer that has never heard of the clipboard and one that
+ * has nothing to report are the same thing to a phone — it keeps its own list either
+ * way. There is nothing to suppress.
+ *
+ * The ids are the real thing's shape (the desktop hashes the text) but not its values:
+ * nothing on either side recomputes them, they are only how a row is addressed.
+ */
+let clipboardEntries = [
+  { id: "mock-clip-1", text: "pnpm mobile:install", copiedAt: "2026-09-21T10:00:00.000Z" },
+  { id: "mock-clip-2", text: "这次改动整理成提交说明，中文，说清楚改了什么", copiedAt: "2026-09-21T09:58:00.000Z" },
+]
+
+let clipboardRevision = 0
+
+/**
+ * Sent from `sync` and nowhere else, which is the real gateway's rule rather than an
+ * omission: the clipboard belongs to the computer, not to any terminal, so a phone
+ * opening one is not a reason to be told about it again.
+ */
+function sendClipboard() {
+  clipboardRevision += 1
+  sendIfOpen(JSON.stringify(envelope("mobile.clipboard", {
+    desktopClientInstanceId,
+    revision: clipboardRevision,
+    entries: clipboardEntries,
+  })))
+}
+
+/**
  * Wraps one terminal frame in its envelope.
  *
  * Shared by every sender rather than written out at each: the shape is the gateway's,
@@ -590,6 +623,7 @@ function handleIntent(message) {
     // nothing, and "unchanged since I last sent it" is not an answer to it.
     sendToolbar()
     sendQuickPhrases()
+    sendClipboard()
     // And a fresh window for every terminal this phone holds open, which is how the
     // real gateway answers a client that reconnects — it walks its own attachments and
     // re-pushes each. A double that only sent the summary left a phone returning from a
@@ -924,6 +958,27 @@ function startControlServer(port) {
      * toolbar route gives: what is being driven from here is the phone, and it does the
      * same thing with a snapshot whenever it lands.
      */
+    /*
+     * Replaces what this double has "copied". Sent straight away, for the reason the
+     * quick-phrases route gives: what is being driven from here is the phone, and it
+     * merges a snapshot into its own list whenever one lands.
+     */
+    if (route === "/desktop/clipboard") {
+      let body = ""
+      request.on("data", (chunk) => { body += chunk })
+      request.on("end", () => {
+        try {
+          const parsed = JSON.parse(body || "[]")
+          if (!Array.isArray(parsed)) throw new Error("expected an array of entries")
+          clipboardEntries = parsed
+          sendClipboard()
+          response.writeHead(200).end("ok")
+        } catch (error) {
+          response.writeHead(400).end(String(error?.message ?? error))
+        }
+      })
+      return
+    }
     if (route === "/desktop/quick-phrases") {
       let body = ""
       request.on("data", (chunk) => { body += chunk })

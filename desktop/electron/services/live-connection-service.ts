@@ -16,6 +16,7 @@ import { LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
 import type {
+  MobileClipboardDraft,
   MobileIntentHandler,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
@@ -417,6 +418,16 @@ export class LiveConnectionService {
     if (!clientInstanceId) return
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileQuickPhrases, {
+      desktopClientInstanceId: clientInstanceId,
+      ...draft,
+    }, this.envelopeMetadata()))
+  }
+
+  async sendMobileClipboard(draft: MobileClipboardDraft): Promise<void> {
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileClipboard, {
       desktopClientInstanceId: clientInstanceId,
       ...draft,
     }, this.envelopeMetadata()))

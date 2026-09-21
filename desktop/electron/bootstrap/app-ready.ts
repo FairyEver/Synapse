@@ -30,6 +30,10 @@ import type { SynapseSkillService } from "../../app-capabilities/synapse-skill/m
 import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 import type { CoreDatabaseService } from "./descriptors"
 import type { QuickInputService } from "../../app-capabilities/quick-input/main/service"
+import {
+  ClipboardSyncService,
+  CLIPBOARD_SYNC_SERVICE_ID,
+} from "../services/clipboard-sync-service"
 
 const logger = createMainLogger("bootstrap.app-ready")
 
@@ -43,6 +47,7 @@ const logger = createMainLogger("bootstrap.app-ready")
  * being sent twice per edit.
  */
 const quickPhraseSubscriptionWired = new WeakSet<QuickInputService>()
+const clipboardSyncSubscriptionWired = new WeakSet<ClipboardSyncService>()
 
 type InitializeReadyAppDeps = {
   focusOrCreateMainWindow: () => void
@@ -168,6 +173,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       },
       sendToolbar: (draft) => void liveConnectionService.sendMobileToolbar(draft),
       sendQuickPhrases: (draft) => void liveConnectionService.sendMobileQuickPhrases(draft),
+      sendClipboard: (draft) => void liveConnectionService.sendMobileClipboard(draft),
     })
   } catch (error) {
     logger.warn("Mobile terminal gateway transport not installed.", {
@@ -192,6 +198,26 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     }
   } catch (error) {
     logger.warn("Mobile quick phrase subscription not installed.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
+  try {
+    // The collector emits once per copy and has already compared contents, so what
+    // arrives here is "something new was copied" rather than "look again". The
+    // fingerprinted flush is used anyway, for the reason it exists: without a
+    // comparison the gateway would re-send the whole ring on every copy, including
+    // to phones looking at a different computer.
+    //
+    // Its own try/catch, like the subscription above, so that a collector that could
+    // not start cannot cost the mobile gateway everything else it does.
+    const mobileGateway = registry.get<MobileGatewayService>("core.mobile-gateway")
+    const clipboardSync = registry.get<ClipboardSyncService>(CLIPBOARD_SYNC_SERVICE_ID)
+    if (!clipboardSyncSubscriptionWired.has(clipboardSync)) {
+      clipboardSync.events.on("changed", () => void mobileGateway.flushClipboard())
+      clipboardSyncSubscriptionWired.add(clipboardSync)
+    }
+  } catch (error) {
+    logger.warn("Mobile clipboard subscription not installed.", {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }

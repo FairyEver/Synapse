@@ -23,6 +23,7 @@ import type {
   PermissionAction,
   PermissionGuard,
 } from "../runtime/security/permission-guard"
+import type { ClipboardSyncEntry } from "./clipboard-sync-service"
 import type { MobileAttachment } from "./mobile-gateway/attachment-registry"
 import { AttachmentRegistry } from "./mobile-gateway/attachment-registry"
 import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
@@ -59,6 +60,9 @@ const TOOLBAR_ENVELOPE_ALLOWANCE_BYTES = 1_024
 
 /** The same slack, on the same terms, for the 快捷输入 payload. */
 const QUICK_PHRASES_ENVELOPE_ALLOWANCE_BYTES = 1_024
+
+/** The same slack, on the same terms, for the clipboard payload. */
+const CLIPBOARD_ENVELOPE_ALLOWANCE_BYTES = 1_024
 
 /**
  * Lines read per step when hunting for the line a session row shows.
@@ -149,6 +153,16 @@ export type MobileGatewayServiceDeps = {
    * nothing writes back to the computer's table from here.
    */
   readonly listQuickPhrases: () => Promise<readonly MobileQuickPhrase[]>
+  /**
+   * The text this computer has copied recently, newest first.
+   *
+   * Injected rather than reached for, like the three lists above. Unlike them this
+   * one is a snapshot of the collector's in-memory ring rather than a read of
+   * something stored, which is exactly why it is passed as a function: the ring
+   * changes under this service, and holding a copy here would be a second, staler
+   * answer to "what has this computer copied".
+   */
+  readonly listClipboard: () => Promise<readonly ClipboardSyncEntry[]>
   readonly now?: () => Date
   readonly setTimeout?: (callback: () => void, delayMs: number) => NodeJS.Timeout
   readonly clearTimeout?: (handle: NodeJS.Timeout) => void
@@ -227,6 +241,18 @@ export class MobileGatewayService {
    */
   private quickPhrasesRevision = 0
   private lastQuickPhrasesContent = ""
+  /**
+   * Fingerprint of the last clipboard snapshot sent, kept apart from all three above.
+   *
+   * The fourth occasion in its own right: the clipboard changes when the user copies
+   * something, which is none of a terminal event, a command edit or a quick-input
+   * edit. This is also the only one whose producer already deduplicates — the
+   * collector emits only when the text actually changed — so this fingerprint is a
+   * second gate rather than the first, and it is here for the same reason the others
+   * are: `resendClipboard` needs a comparison to clear.
+   */
+  private clipboardRevision = 0
+  private lastClipboardContent = ""
   private readonly bytesByClient = new Map<string, { windowStartedMs: number; bytes: number }>()
   private readonly lastLineCache = new Map<string, string>()
   private readonly lastLineDirty = new Set<string>()
@@ -251,6 +277,7 @@ export class MobileGatewayService {
       resendSummary: () => this.resendSummary(),
       sendToolbar: () => this.resendToolbar(),
       sendQuickPhrases: () => this.resendQuickPhrases(),
+      sendClipboard: () => this.resendClipboard(),
       pushSnapshot: (attachment, reason) => this.pushSnapshot(attachment, reason),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
       reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
@@ -305,6 +332,7 @@ export class MobileGatewayService {
     this.lastSummaryContent = ""
     this.lastToolbarContent = ""
     this.lastQuickPhrasesContent = ""
+    this.lastClipboardContent = ""
   }
 
   /** Called by the live connection when a phone sends an intent. */
@@ -1154,6 +1182,81 @@ export class MobileGatewayService {
       const candidate = [...kept, phrase]
       if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budget) break
       kept.push(phrase)
+    }
+    return kept
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Clipboard
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Sends the collector's ring when it differs from what was last sent.
+   *
+   * The comparison is the point, exactly as it is for the three above: the collector
+   * emits once per copy, and without a fingerprint here every copy would also be a
+   * send even when a phone is looking at a computer it is not the one for.
+   */
+  async flushClipboard(): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    try {
+      const entries = this.fitClipboardToBudget(await this.deps.listClipboard())
+      // Compared without the revision, so an unchanged ring produces nothing at all.
+      const serialized = JSON.stringify(entries)
+      if (serialized === this.lastClipboardContent) return
+      this.lastClipboardContent = serialized
+      this.clipboardRevision += 1
+      transport.sendClipboard({ revision: this.clipboardRevision, entries })
+    } catch (error) {
+      // A phone without the clipboard still has the terminal and every other
+      // snapshot; failing to read one line of text is not a reason to lose them.
+      this.logWarn("Mobile clipboard flush failed.", error)
+    }
+  }
+
+  /**
+   * Sends even when nothing changed, for a caller that has nothing yet.
+   *
+   * `resendQuickPhrases`' reasoning, and this is the family that needs it most: a
+   * phone merges what arrives into a list it keeps across launches, so the snapshot
+   * it gets after reconnecting is how it fills the gap left by everything copied
+   * while it was away.
+   */
+  resendClipboard(): void {
+    this.lastClipboardContent = ""
+    void this.flushClipboard()
+  }
+
+  /**
+   * Drops what does not fit, entry by entry, without ever shortening an entry.
+   *
+   * The same rule as the toolbar's and the phrases' budgets, for a reason that is
+   * sharper here: a phone is about to put this text on its own clipboard, and its
+   * user is about to paste it somewhere believing it is what they copied. A trimmed
+   * entry would make that belief wrong in a way nothing on the screen reveals. The
+   * tail is dropped rather than the oversized entry, because newest-first means the
+   * tail is the oldest — and the phone already has its own copy of anything that old.
+   *
+   * The per-entry check should be unreachable: the collector drops over-long text by
+   * the same constant. It is here so that the two constants coming apart shows up as
+   * a warning rather than as a payload the phone silently refuses.
+   */
+  private fitClipboardToBudget(entries: readonly ClipboardSyncEntry[]): readonly ClipboardSyncEntry[] {
+    const budget = MOBILE_FRAME_LIMITS.maxClipboardBytes - CLIPBOARD_ENVELOPE_ALLOWANCE_BYTES
+    const kept: ClipboardSyncEntry[] = []
+    for (const entry of entries) {
+      if (entry.text.length > MOBILE_FRAME_LIMITS.maxClipboardTextLength) {
+        this.logWarn("Mobile clipboard entry dropped for exceeding the wire limit.", {
+          entryId: entry.id,
+          length: entry.text.length,
+        })
+        continue
+      }
+      if (kept.length >= MOBILE_FRAME_LIMITS.maxClipboardEntries) break
+      const candidate = [...kept, entry]
+      if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budget) break
+      kept.push(entry)
     }
     return kept
   }

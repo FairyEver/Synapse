@@ -537,6 +537,8 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
     AGENT_CONVERSATION_CONTROL_SERVICE_ID,
     // The sentences a phone can tap into its composer instead of typing.
     "core.quick-input",
+    // The text this computer has copied recently, for a phone to copy again.
+    CLIPBOARD_SYNC_SERVICE_ID,
   ],
   create(ctx) {
     return createMobileGatewayService({
@@ -575,6 +577,10 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
       // and this service has no business holding a second one. The list is already
       // ordered the way the desktop shows it, which is what the phone draws.
       listQuickPhrases: () => ctx.registry.get<QuickInputService>("core.quick-input").list(),
+      // A snapshot of the collector's ring, taken at the moment of the send rather
+      // than kept here: the ring changes under this service, and a copy held by the
+      // gateway would be a second, staler answer to "what has this computer copied".
+      listClipboard: async () => ctx.registry.get<ClipboardSyncService>(CLIPBOARD_SYNC_SERVICE_ID).snapshot(),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("mobile-gateway"),

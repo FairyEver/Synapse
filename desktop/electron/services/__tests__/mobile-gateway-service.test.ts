@@ -22,9 +22,11 @@ import {
   type MobileGatewayAgentGroup,
   type MobileGatewayAgentProvider,
 } from "../mobile-gateway-service"
+import type { ClipboardSyncEntry } from "../clipboard-sync-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
 import type { ClaudeCodeConversationLaunch } from "../mobile-gateway/intent-executor"
 import type {
+  MobileClipboardDraft,
   MobileGatewayTransport,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
@@ -358,6 +360,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   const progress: MobileTransferProgressPayload[] = []
   const toolbars: MobileToolbarDraft[] = []
   const quickPhrases: MobileQuickPhrasesDraft[] = []
+  const clipboards: MobileClipboardDraft[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
     sendFrame: (mobileClientInstanceId, frame) => frames.push({ mobileClientInstanceId, frame }),
@@ -367,6 +370,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
     sendTransferProgress: (payload) => progress.push(payload),
     sendToolbar: (draft) => toolbars.push(draft),
     sendQuickPhrases: (draft) => quickPhrases.push(draft),
+    sendClipboard: (draft) => clipboards.push(draft),
   }
   const audits: unknown[] = []
   const warns: { message: string; meta?: Record<string, unknown> }[] = []
@@ -463,6 +467,11 @@ function createHarness(options: { sessionLines?: number } = {}) {
     { id: "q1", content: "整理成提交说明" },
   ]
   const listQuickPhrases = vi.fn(async () => [...quickPhraseItems])
+  /** Mutable so a test can copy something and see whether the gateway notices. */
+  const clipboardEntries: ClipboardSyncEntry[] = [
+    { id: "c1", text: "pnpm mobile:install", copiedAt: "2026-09-21T10:00:00.000Z" },
+  ]
+  const listClipboard = vi.fn(async () => [...clipboardEntries])
 
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
@@ -471,6 +480,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
     listAgentConversationGroups,
     listAgentConversationProviders,
     listQuickPhrases,
+    listClipboard,
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
     logger: { info: () => {}, warn: (message: string, meta?: Record<string, unknown>) => warns.push({ message, meta }) },
@@ -485,6 +495,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits, toolbars,
     quickPhrases, quickPhraseItems, listQuickPhrases,
+    clipboards, clipboardEntries, listClipboard,
     permissionGuard, fileRelay, landings, discarded, progress, warns,
     launches, createClaudeCodeConversation, agentGroups, agentProviders,
     listAgentConversationGroups, listAgentConversationProviders,
@@ -1776,6 +1787,135 @@ describe("MobileGatewayService", () => {
       expect(harness.summaries.length).toBeGreaterThan(summariesAfterSync)
       expect(harness.toolbars).toHaveLength(toolbarsAfterSync)
       expect(harness.quickPhrases).toHaveLength(phrasesAfterSync)
+    })
+  })
+
+  describe("clipboard", () => {
+    /** Lets the flush — which reads through an async source — run to completion. */
+    async function settle(): Promise<void> {
+      for (let index = 0; index < 5; index += 1) await Promise.resolve()
+    }
+
+    it("sends the entries on sync, then stays silent while nothing is copied", async () => {
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      expect(harness.clipboards).toHaveLength(1)
+      expect(harness.clipboards[0]?.entries.map((entry) => entry.text))
+        .toEqual(["pnpm mobile:install"])
+      const afterSync = harness.clipboards.length
+
+      // Summary ticks and terminal output are not reasons to re-send it.
+      await harness.timers.advance(3_000)
+      harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+      await harness.timers.advance(3_000)
+      await settle()
+
+      expect(harness.clipboards).toHaveLength(afterSync)
+    })
+
+    it("sends the entries to a second phone that has just connected", async () => {
+      // `sync` is unconditional for the reason the two above it are, and this is the
+      // family where it matters most: a phone that was away has a hole in its own
+      // list, and this snapshot is the only thing that can fill it.
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const afterFirstPhone = harness.clipboards.length
+
+      await harness.gateway.handleIntent("phone-2", intent({ v: 1, intentId: "i-sync-2", kind: "sync" }))
+      await settle()
+
+      expect(harness.clipboards.length).toBeGreaterThan(afterFirstPhone)
+    })
+
+    it("pushes a fresh copy as soon as the collector says the clipboard changed", async () => {
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const afterSync = harness.clipboards.length
+
+      harness.clipboardEntries.unshift({
+        id: "c2",
+        text: "这次改动整理成提交说明",
+        copiedAt: "2026-09-21T10:01:00.000Z",
+      })
+      // What the app-ready subscription does when the collector emits `changed`.
+      await harness.gateway.flushClipboard()
+      await settle()
+
+      expect(harness.clipboards).toHaveLength(afterSync + 1)
+      expect(harness.clipboards.at(-1)?.entries.map((entry) => entry.id)).toEqual(["c2", "c1"])
+    })
+
+    it("does not send the clipboard when a phone merely opens a terminal", async () => {
+      // The one deliberate difference from the toolbar and the phrases, which both
+      // ride on `attach`. The clipboard belongs to the computer rather than to any
+      // terminal, so opening one is not a reason to be told about it again.
+      const harness = createHarness()
+      const before = harness.clipboards.length
+
+      await attach(harness)
+      await settle()
+
+      expect(harness.clipboards).toHaveLength(before)
+    })
+
+    it("drops the oldest tail rather than shortening any entry", async () => {
+      const harness = createHarness()
+      harness.clipboardEntries.length = 0
+      const total = MOBILE_FRAME_LIMITS.maxClipboardEntries + 5
+      for (let index = 0; index < total; index += 1) {
+        // Newest first, which is how the collector hands them over.
+        harness.clipboardEntries.unshift({
+          id: `c${index}`,
+          text: `entry-${index}`,
+          copiedAt: "2026-09-21T10:00:00.000Z",
+        })
+      }
+
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      const sent = harness.clipboards.at(-1)?.entries ?? []
+      expect(sent).toHaveLength(MOBILE_FRAME_LIMITS.maxClipboardEntries)
+      expect(sent[0]?.id).toBe(`c${total - 1}`)
+      // Every entry that made it arrives whole — a phone is about to paste this text.
+      for (const entry of sent) expect(entry.text).toBe(`entry-${entry.id.slice(1)}`)
+    })
+
+    it("says so when an entry is past the wire limit instead of sending it", async () => {
+      // Unreachable through the collector, which drops over-long text by the same
+      // constant. The check is here so that the two constants coming apart surfaces
+      // as a warning rather than as a payload the phone silently refuses.
+      const harness = createHarness()
+      harness.clipboardEntries.unshift({
+        id: "c-huge",
+        text: "s".repeat(MOBILE_FRAME_LIMITS.maxClipboardTextLength + 1),
+        copiedAt: "2026-09-21T10:02:00.000Z",
+      })
+
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      const sent = harness.clipboards.at(-1)?.entries ?? []
+      expect(sent.map((entry) => entry.id)).toEqual(["c1"])
+      expect(harness.warns.map((entry) => entry.message))
+        .toContain("Mobile clipboard entry dropped for exceeding the wire limit.")
+    })
+
+    it("keeps the clipboard's fingerprint separate from the other three", async () => {
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const clipboardsAfterSync = harness.clipboards.length
+
+      await harness.timers.advance(1_000)
+      await settle()
+
+      expect(harness.summaries.length).toBeGreaterThan(0)
+      expect(harness.clipboards).toHaveLength(clipboardsAfterSync)
     })
   })
 
