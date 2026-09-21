@@ -115,6 +115,11 @@ final class RealtimeClient {
     /// is held — the local list is longer than the computer's by design, so whoever
     /// receives this merges it. See `ClipboardHistoryStore`.
     var onClipboard: ((MobileClipboardPayload) -> Void)?
+    /// The Git state of the directory one of this phone's terminals is sitting in.
+    ///
+    /// 点对点，像 `onFrame` 与 `onTransferProgress`：它答的是「你正开着的那个终端」，
+    /// 所以载荷里就带着 `sessionId`，手机端按它归档。
+    var onGitStatus: ((MobileGitStatusPayload) -> Void)?
     /// Fires when the handshake completes, including after every reconnect.
     /// Anything that must be re-established per connection belongs here: a send
     /// issued before this point is dropped, not queued.
@@ -381,6 +386,7 @@ final class RealtimeClient {
         LiveMessageType.mobileToolbar,
         LiveMessageType.mobileQuickPhrases,
         LiveMessageType.mobileClipboard,
+        LiveMessageType.mobileGitStatus,
     ]
 
     /// 复用同一个解码器：每条下行消息都要解一次，而帧在终端持续输出时每秒到好几次。
@@ -455,6 +461,10 @@ final class RealtimeClient {
         case LiveMessageType.mobileClipboard:
             if let payload = payload(MobileClipboardPayload.self, from: data) {
                 onClipboard?(payload)
+            }
+        case LiveMessageType.mobileGitStatus:
+            if let payload = payload(MobileGitStatusPayload.self, from: data) {
+                onGitStatus?(payload)
             }
         default:
             // `live.pong`：没有要派发的载荷，它作证的那件事上面已经做了。

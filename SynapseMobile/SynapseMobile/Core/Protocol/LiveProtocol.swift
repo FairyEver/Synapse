@@ -35,6 +35,15 @@ enum LiveMessageType {
     /// `ClipboardHistoryStore` — getting that wrong silently shrinks the phone's list,
     /// which is why the rule lives in one place with the arithmetic spelled out.
     static let mobileClipboard = "mobile.clipboard"
+    /// The Git state of the directory a terminal is sitting in, on one computer.
+    ///
+    /// 与上面三条「这台电脑有什么」不同，它是**点对点**的：它答的是「你正开着的那个
+    /// 终端」，所以载荷里带着 `sessionId` 与收件人的 `mobileClientInstanceId`。
+    ///
+    /// 一条与摘要有明确边界的消息：摘要在有输出时以 1 Hz 刷新，而这一份要跑一次
+    /// `git status` —— 骑上去等于每秒 spawn 一次 git。所以它按「目录变了」推，
+    /// 手机端拉一次面板也会让电脑重算一遍。
+    static let mobileGitStatus = "mobile.gitStatus"
 }
 
 /// Which of the user's computers are reachable right now.
@@ -48,6 +57,46 @@ enum LiveMessageType {
 /// from `APIClient.onlineDesktops()` — see `ReachableDesktop`.
 struct MobilePresencePayload: Decodable {
     let desktopClientInstanceIds: [String]
+}
+
+/// The Git state of the directory a terminal is sitting in.
+///
+/// 只认路径：它与 Synapse 的「代码仓库」那套没有产品关系，一个目录不必先被用户添加过
+/// 仓库就能有状态。字段就是手机第二行与 Git 面板画得出的那几个 —— **改动文件清单不在
+/// 其中**，手机端不接收任何文件清单。
+struct MobileGitStatus: Decodable, Equatable {
+    /// 电脑在哪个目录上干的活。面板的「目录」行直接显示它。
+    let cwd: String
+    /// `nil` = 游离 HEAD；那时代替它显示的是 `detachedSha`。
+    let branch: String?
+    let detachedSha: String?
+    let upstream: String?
+    let ahead: Int
+    let behind: Int
+    let changeCount: Int
+    let hasConflicts: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case cwd, branch, detachedSha, upstream, ahead, behind, changeCount, hasConflicts
+    }
+}
+
+/// One terminal's Git state on one computer, sent to the one phone that is watching it.
+///
+/// `status` 的 `nil` 是**一个答案**（这个目录不是 Git 仓库），而不是缺席：手机端
+/// 「不是仓库」与「还没收到回答」是两种完全不同的状态 —— 前者第二行退回显示版本号，
+/// 后者保持现状不动 —— 所以整条消息的缺席与它必须分得开。见 `TerminalGitStatusState`。
+struct MobileGitStatusPayload: Decodable, Equatable {
+    let desktopClientInstanceId: String
+    let mobileClientInstanceId: String
+    let sessionId: String
+    let revision: Int
+    /// `nil` = 这个目录不是 Git 仓库。
+    let status: MobileGitStatus?
+
+    private enum CodingKeys: String, CodingKey {
+        case desktopClientInstanceId, mobileClientInstanceId, sessionId, revision, status
+    }
 }
 
 /// One computer this account can reach right now, as the picker offers it.

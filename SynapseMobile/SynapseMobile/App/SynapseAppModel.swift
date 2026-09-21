@@ -38,6 +38,9 @@ final class SynapseAppModel {
     /// same cause: the reader has to be able to open this panel with no computer
     /// reachable at all. See `ClipboardHistoryStore`.
     private let clipboard = ClipboardHistoryStore()
+    /// 终端当前目录的 Git 状态，按终端记。见 `TerminalGitStatusState` —— 它守的是
+    /// 「不是仓库」与「还没收到回答」这条线。
+    private var gitStatus = TerminalGitStatusState()
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
     private var preemptedSessions: Set<String> = []
@@ -484,6 +487,9 @@ final class SynapseAppModel {
         // 剪切板与上面两样不同，它是**落盘**的：不清掉，下一个人登进来会在面板里看到
         // 上一个人复制过的正文。这是本机第一份「内容属于账号、文件留在机器上」的数据。
         clipboard.clearAll()
+        // 仓库状态同理，而且它连着电脑上的目录路径：换个人登进来不该看到上一个人
+        // 在哪个仓库、哪条分支上。
+        gitStatus.reset()
         // 录音是另一个账号的东西，换人之后不该还留在内存里。
         meetings.clear()
         // 正在录的那条也是。录着的时候退出登录，本机那份音频留在盘上等下次启动收尾——
@@ -778,6 +784,9 @@ final class SynapseAppModel {
         // every time something was copied anywhere.
         realtime.onClipboard = { [weak self] payload in
             self?.clipboard.merge(payload)
+        }
+        realtime.onGitStatus = { [weak self] payload in
+            self?.gitStatus.adopt(payload)
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
@@ -1280,6 +1289,14 @@ final class SynapseAppModel {
     /// no keyboard of its own, nothing could be confirmed in a TUI at all.
     var activeToolbarButtons: [MobileToolbarButton] {
         toolbar.buttons(forSelected: selectedDesktopClientInstanceId)
+    }
+
+    /// The Git state of one terminal's directory on the computer being viewed.
+    ///
+    /// `nil` 是「那台电脑还没回答过」—— 它不等于「不是仓库」：后者是一个答案，会让
+    /// ⋯ 菜单里的「Git」不渲染，而前者只是还没到，屏幕上的东西不该因此动一下。
+    func gitStatus(for sessionId: String) -> TerminalGitStatusState.Status? {
+        gitStatus.status(for: sessionId, onSelected: selectedDesktopClientInstanceId)
     }
 
     /// The 快捷输入 sentences for the computer being viewed, or `nil` for one that has
