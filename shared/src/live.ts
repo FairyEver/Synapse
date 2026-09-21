@@ -31,6 +31,25 @@ export const LIVE_MESSAGE_TYPES = {
   meetingTranscriptionCompleted: "meeting.transcription.completed",
 } as const
 
+/**
+ * Close codes the desktop gateway defines beyond the standard ones.
+ *
+ * Shared rather than written twice, because this one is a decision the two ends
+ * have to agree on: the server closes with it and the desktop acts on it, and a
+ * literal in each place drifts the first time one of them is edited.
+ *
+ * `clientInstanceIdConflict` says "this id is already held by a different
+ * machine". It exists because an installation's id is generated locally and can
+ * be carried to a second machine by a migration or a restored backup, and the
+ * registry keeps one entry per id — so the two would otherwise take turns
+ * evicting each other, and every phone of the account would see a single
+ * computer whose identity flipped between them. The newcomer is the one that
+ * can act on it, so it is the one told.
+ */
+export const LIVE_DESKTOP_CLOSE_CODES = {
+  clientInstanceIdConflict: 4009,
+} as const
+
 export const LIVE_HELLO_FIELD_LIMITS = {
   clientInstanceId: 120,
   deviceName: 120,

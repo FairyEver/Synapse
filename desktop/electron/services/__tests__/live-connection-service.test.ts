@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
+import { LIVE_DESKTOP_CLOSE_CODES, LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
 import type { SynapseAccountState } from "../../../src/types/account"
 import { LiveConnectionService } from "../live-connection-service"
 
@@ -581,6 +581,69 @@ describe("LiveConnectionService", () => {
     })
     expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 2_000)
     expect(timers.timers).toHaveLength(1)
+  })
+
+  it("takes a new client instance id when the cloud says another machine holds it", async () => {
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const reissue = vi.fn().mockResolvedValue("client-b")
+    const createSocket = vi.fn()
+      .mockReturnValueOnce(firstSocket as never)
+      .mockReturnValueOnce(secondSocket as never)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: {
+        getOrCreate: vi.fn().mockResolvedValueOnce("client-a").mockResolvedValue("client-b"),
+        reissue,
+      } as never,
+      createSocket,
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 2_000,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    firstSocket.emit("close", LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict)
+
+    await waitForCondition(() => createSocket.mock.calls.length === 2)
+    await flushPromises()
+    secondSocket.emit("open")
+    await waitForCondition(() => secondSocket.sent.length > 0)
+
+    expect(reissue).toHaveBeenCalledTimes(1)
+    // Immediate rather than on the backoff timer: nothing on this side failed,
+    // and reconnecting under the same id would be refused exactly the same way.
+    expect(timers.setTimeout).not.toHaveBeenCalled()
+    expect(JSON.parse(secondSocket.sent[0] ?? "{}")).toMatchObject({
+      type: "live.hello",
+      payload: { clientInstanceId: "client-b" },
+    })
+  })
+
+  it("keeps the client instance id when a connection closes for any other reason", async () => {
+    const socket = new FakeSocket()
+    const timers = createTimerFns()
+    const reissue = vi.fn().mockResolvedValue("client-b")
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: {
+        getOrCreate: vi.fn().mockResolvedValue("client-a"),
+        reissue,
+      } as never,
+      createSocket: vi.fn(() => socket as never),
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 2_000,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("close", 1006)
+
+    expect(reissue).not.toHaveBeenCalled()
+    expect(service.getState().clientInstanceId).toBe("client-a")
   })
 
   it("does not rebuild the socket for duplicate authenticated state of the same account", async () => {

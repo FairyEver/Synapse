@@ -3,7 +3,7 @@ import type { IncomingMessage } from "node:http"
 import { Socket } from "node:net"
 import { Logger } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
-import { LIVE_MESSAGE_TYPES, MOBILE_FRAME_LIMITS } from "@synapse/shared"
+import { LIVE_DESKTOP_CLOSE_CODES, LIVE_MESSAGE_TYPES, MOBILE_FRAME_LIMITS } from "@synapse/shared"
 import {
   createLiveDesktopGatewayForTest,
   liveDesktopMaxPayloadBytes,
@@ -143,6 +143,7 @@ function createGateway(input: {
       markDisconnected: vi.fn(),
       markStaleClients: vi.fn().mockReturnValue([]),
       listAll: vi.fn().mockReturnValue([]),
+      listOnlineByUser: vi.fn().mockReturnValue([]),
       ...input.registry,
     } as unknown as LiveClientRegistry,
     streams: {
@@ -812,6 +813,54 @@ describe("LiveDesktopGateway", () => {
     supersede?.("conn-old")
 
     expect(oldSocket.closeCalls).toEqual([{ code: 1000, reason: "superseded" }])
+  })
+
+  it("turns away a different machine claiming a client instance id that is already online", () => {
+    const socket = new FakeSocket()
+    const register = vi.fn().mockReturnValue(createClient())
+    const gateway = createGateway({
+      registry: {
+        register,
+        listOnlineByUser: vi.fn().mockReturnValue([
+          createClient({ connectionId: "conn-other", deviceName: "MacBook Pro" }),
+        ]),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+
+    // Refused instead of superseding: the online connection belongs to another
+    // computer, and evicting it is exactly the ping-pong this prevents. The
+    // newcomer is told, because minting a new id is the only thing that settles it.
+    expect(socket.closeCalls).toEqual([
+      {
+        code: LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict,
+        reason: "client_instance_id_conflict",
+      },
+    ])
+    expect(register).not.toHaveBeenCalled()
+  })
+
+  it("registers a reconnect from the same machine reporting the same client instance id", () => {
+    const socket = new FakeSocket()
+    const register = vi.fn().mockReturnValue(createClient())
+    const gateway = createGateway({
+      registry: {
+        register,
+        listOnlineByUser: vi.fn().mockReturnValue([
+          createClient({ connectionId: "conn-other", deviceName: "MacBook" }),
+        ]),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+
+    // Same device name means the same installation reconnecting, which is the
+    // ordinary supersede case and must stay one.
+    expect(socket.closeCalls).toEqual([])
+    expect(register).toHaveBeenCalledTimes(1)
   })
 
   it("broadcasts a server message to every online socket for one user", () => {

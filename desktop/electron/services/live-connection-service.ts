@@ -31,7 +31,7 @@ type LiveSocket = Pick<WebSocket, "on" | "send" | "close" | "readyState">
 
 type LiveConnectionServiceDeps = {
   readonly accountService: AccountService
-  readonly clientIdStore?: Pick<LiveClientIdStore, "getOrCreate">
+  readonly clientIdStore?: Pick<LiveClientIdStore, "getOrCreate" | "reissue">
   readonly createSocket?: (url: string, options: { headers: Record<string, string> }) => LiveSocket
   readonly setTimeout?: (callback: () => void, delay: number) => NodeJS.Timeout
   readonly clearTimeout?: (timer: NodeJS.Timeout) => void
@@ -46,7 +46,7 @@ type LiveConnectionServiceDeps = {
 
 export class LiveConnectionService {
   private readonly accountService: AccountService
-  private readonly clientIdStore: Pick<LiveClientIdStore, "getOrCreate">
+  private readonly clientIdStore: Pick<LiveClientIdStore, "getOrCreate" | "reissue">
   private readonly createSocket: (url: string, options: { headers: Record<string, string> }) => LiveSocket
   private readonly setTimer: (callback: () => void, delay: number) => NodeJS.Timeout
   private readonly clearTimer: (timer: NodeJS.Timeout) => void
@@ -67,6 +67,13 @@ export class LiveConnectionService {
   private connectInFlight: Promise<void> | null = null
   private accountRefreshInFlight = false
   private heartbeatTimeoutMs = defaultHeartbeatTimeoutMs
+  /**
+   * Captured rather than imported: `@synapse/shared` is loaded asynchronously in
+   * this process, and a socket close is handled synchronously. Every socket is
+   * made inside `connect`, which has already awaited the protocol, so the value
+   * is in place before any close can arrive.
+   */
+  private clientInstanceIdConflictCloseCode = -1
   private reconnectAttempt = 0
   private connectionGeneration = 0
   private closedIntentionally = false
@@ -185,8 +192,9 @@ export class LiveConnectionService {
     const clientInstanceId = await this.clientIdStore.getOrCreate()
     if (!this.isCurrentGeneration(generation)) return
 
-    const { buildLiveDesktopSocketUrl } = await liveProtocolPromise
+    const { LIVE_DESKTOP_CLOSE_CODES, buildLiveDesktopSocketUrl } = await liveProtocolPromise
     if (!this.isCurrentGeneration(generation)) return
+    this.clientInstanceIdConflictCloseCode = LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict
     const socketUrl = buildLiveDesktopSocketUrl(this.accountService.getApiBaseUrlForLive())
     this.closeCurrentSocket("reconnect")
     this.closedIntentionally = false
@@ -216,10 +224,18 @@ export class LiveConnectionService {
       })
     })
 
-    socket.on("close", () => {
-      if (this.socket === socket) {
-        this.scheduleReconnect("连接已断开")
+    socket.on("close", (code?: number) => {
+      if (this.socket !== socket) return
+      // The cloud turned this connection away rather than accepting it: the id
+      // this installation registers under belongs to another computer, which a
+      // copied or restored app data directory can bring along. Reconnecting with
+      // it would be refused the same way, so a fresh id is minted first — the one
+      // thing only this side can do about it.
+      if (code === this.clientInstanceIdConflictCloseCode) {
+        void this.replaceClientInstanceId()
+        return
       }
+      this.scheduleReconnect("连接已断开")
     })
 
     socket.on("error", (error: unknown) => {
@@ -518,6 +534,31 @@ export class LiveConnectionService {
       sentAt,
     }, { id: this.createMessageId(), sentAt })))
     this.startHeartbeat(intervalMs)
+  }
+
+  /**
+   * Takes a new client instance id after the cloud refused the one in hand.
+   *
+   * Reconnects at once rather than on a backoff timer: nothing on this side
+   * failed, and the refusal is settled the moment the id is replaced. The attempt
+   * counter is cleared with it for the same reason — what comes next is a first
+   * attempt under a new identity, not a retry of a connection that keeps failing.
+   */
+  private async replaceClientInstanceId(): Promise<void> {
+    this.socket = null
+    this.clearHeartbeat()
+    this.clearServerTimeout()
+    this.reconnectAttempt = 0
+
+    try {
+      await this.clientIdStore.reissue()
+    } catch (error) {
+      // The next connection is refused again if this fails, so it falls back to
+      // the ordinary reconnect loop rather than giving up.
+      logger.warn("Client instance id reissue failed.", this.liveErrorMetadata(error))
+    }
+
+    await this.startConnect()
   }
 
   private scheduleReconnect(error: string, options: { readonly allowUnauthenticatedState?: boolean } = {}): void {

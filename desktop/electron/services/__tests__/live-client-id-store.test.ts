@@ -23,4 +23,18 @@ describe("LiveClientIdStore", () => {
     await expect(store.getOrCreate()).resolves.toBe("client-new")
     expect(namespace.setSingleton).toHaveBeenCalledWith({ clientInstanceId: "client-new" })
   })
+
+  it("replaces an existing client instance id and keeps the rest of the record", async () => {
+    const namespace = {
+      getSingleton: vi.fn().mockResolvedValue({ clientInstanceId: "client-existing", note: "kept" }),
+      setSingleton: vi.fn().mockResolvedValue(undefined),
+    }
+    const store = new LiveClientIdStore({ namespace: namespace as never, createId: () => "client-new" })
+
+    await expect(store.reissue()).resolves.toBe("client-new")
+    expect(namespace.setSingleton).toHaveBeenCalledWith({
+      clientInstanceId: "client-new",
+      note: "kept",
+    })
+  })
 })

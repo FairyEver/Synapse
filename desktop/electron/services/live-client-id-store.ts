@@ -44,4 +44,24 @@ export class LiveClientIdStore {
     await this.namespace.setSingleton({ ...(current ?? {}), clientInstanceId })
     return clientInstanceId
   }
+
+  /**
+   * Replaces this installation's id with a fresh one.
+   *
+   * For the case the id turns out to belong to another machine — the file it is
+   * stored in was copied here by a migration or a restored backup — where the
+   * server refuses the connection and names this as the reason. Nothing else can
+   * be done about it locally: only the cloud sees that two machines are claiming
+   * one id, and only this side can pick a new one.
+   *
+   * Unlike `getOrCreate`, it always writes: the caller asked because the id it
+   * already has is unusable, so returning the existing one would be a no-op that
+   * loops.
+   */
+  async reissue(): Promise<string> {
+    const current = await this.namespace.getSingleton()
+    const clientInstanceId = this.createId()
+    await this.namespace.setSingleton({ ...(current ?? {}), clientInstanceId })
+    return clientInstanceId
+  }
 }

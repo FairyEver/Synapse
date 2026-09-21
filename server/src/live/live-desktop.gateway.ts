@@ -3,6 +3,7 @@ import type { Server as HttpServer, IncomingMessage } from "node:http"
 import { Injectable, Logger, Optional, type OnApplicationShutdown } from "@nestjs/common"
 import {
   WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS,
+  LIVE_DESKTOP_CLOSE_CODES,
   LIVE_MESSAGE_TYPES,
   createLiveEnvelope,
   isLiveDesktopClientMessage,
@@ -365,6 +366,34 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         }
 
         const hello = message.payload
+        // An installation's id is minted locally, so a second machine can be
+        // holding the same one: the encrypted file it lives in travels with a
+        // migration or a restored backup. The registry keeps one entry per id, so
+        // without this the two would take turns evicting each other — a reconnect
+        // every couple of seconds apiece — and every phone of the account would see
+        // a single computer whose identity flipped between them.
+        //
+        // The newcomer is the one that has to change, and only it can: it is told
+        // to mint a fresh id rather than being registered. A connection reporting
+        // the same device name is the same installation reconnecting, which is the
+        // ordinary case the supersede below is for.
+        const conflicting = this.registry.listOnlineByUser(auth.userId).find(
+          (entry) => entry.clientInstanceId === hello.clientInstanceId
+            && entry.deviceName !== hello.deviceName,
+        )
+        if (conflicting) {
+          socket.close(LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict, "client_instance_id_conflict")
+          this.logger.warn({
+            clientInstanceId: hello.clientInstanceId,
+            connectionId,
+            conflictingConnectionId: conflicting.connectionId,
+            existingDeviceName: conflicting.deviceName,
+            deviceName: hello.deviceName,
+            userId: auth.userId,
+          }, "Live desktop client instance id conflict")
+          return
+        }
+
         const seenAt = this.clock.now()
         const client = this.registry.register({
           userId: auth.userId,

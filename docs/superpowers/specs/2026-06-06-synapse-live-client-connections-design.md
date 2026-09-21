@@ -58,7 +58,8 @@ Rules:
 - Logging out closes the Live connection but does not delete `clientInstanceId`.
 - Clearing app data or reinstalling can create a new `clientInstanceId`.
 - Multiple `clientInstanceId` values for the same account can be online at the same time.
-- If the same `clientInstanceId` opens a new connection, the server keeps the latest connection and closes or supersedes the old one.
+- If the same `clientInstanceId` opens a new connection from the same device name, the server keeps the latest connection and closes or supersedes the old one.
+- A new connection reporting the same `clientInstanceId` under a **different device name** is a different machine that inherited the id — copying or restoring the app data directory carries it along. The server refuses that connection with close code `4009` (`client_instance_id_conflict`) and leaves the connection already holding the id untouched; the refused machine mints a new `clientInstanceId` and reconnects. Without this the registry holds one entry per id, so the two would take turns evicting each other every couple of seconds, and every phone of the account would see a single computer whose identity flipped between them.
 
 ### connectionId
 
@@ -363,6 +364,7 @@ Do not start local dev servers or browser previews unless explicitly requested.
 - A logged-out desktop client does not connect.
 - One account can have multiple desktop clients online at once.
 - The same desktop client instance cannot appear as multiple active online instances after reconnect.
+- Two machines that inherited one `clientInstanceId` become two distinct online client instances, and neither evicts the other.
 - The desktop client reconnects after interruption with bounded, jittered backoff.
 - Admin dashboard can see all users' connected desktop clients.
 - Normal user dashboard can see only the current user's connected desktop clients.
