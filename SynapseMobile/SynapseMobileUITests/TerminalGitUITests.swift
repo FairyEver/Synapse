@@ -27,13 +27,16 @@ final class TerminalGitUITests: XCTestCase {
         "-terminal.inputBar.voiceMode", "NO",
     ]
 
-    /// 两个夹具仓库，各自验一半。
+    /// 三个夹具仓库，各自验一半。
     ///
     /// A 用来验「有改动」那一半：一个已跟踪文件的修改 + 一个未跟踪的新文件。
     /// B 用来验合并：`feature/conflict` 与 `main` 改的是同一行（必定冲突），
     /// `feature/other` 只加了个文件（必定合得上）。
+    /// C 用来验远端分支：有真远端，`origin/only-on-remote` 只有远端有，
+    /// `origin/taken` 的本地同名分支存在但没有上游（迁出时该问另一个本地名）。
     private let dirtyRepository = "/tmp/synapse-git-acceptance/dirty"
     private let conflictRepository = "/tmp/synapse-git-acceptance/conflict"
+    private let remoteRepository = "/tmp/synapse-git-acceptance/remote"
 
     override func setUpWithError() throws {
         // **默认跳过**：这一条走查要一台登录着、在线、且能跑 git 的电脑，还要先把夹具
@@ -269,6 +272,78 @@ final class TerminalGitUITests: XCTestCase {
     }
 
     // MARK: - 公共步骤
+
+    // MARK: - 远端分支：列表、搜索、迁出
+
+    /// 夹具是**有状态**的：这一条会在 `remote/` 里建出一条本地分支 `only-on-remote`，
+    /// 所以每次跑之前都要重建夹具（与「丢弃」那一半同一条理由）。
+    func testRemoteBranchListAndCheckout() throws {
+        let app = launchAndOpenATerminal()
+        cd(remoteRepository, in: app, expecting: "main")
+
+        openGitPanel(in: app)
+        XCTAssertTrue(
+            app.buttons["git-panel-remote-branches"].waitForExistence(timeout: 10),
+            "面板「操作」段少了「迁出远端分支」"
+        )
+        app.buttons["git-panel-remote-branches"].tap()
+        expandSheetIfNeeded(in: app)
+
+        // 打开列表**只读电脑缓存的 refs/remotes**，所以「远端有、本地没有」那条必须已经在里面。
+        XCTAssertTrue(
+            app.buttons["git-remote-branch-origin/only-on-remote"].waitForExistence(timeout: 10),
+            "远端分支列表里没有 only-on-remote"
+        )
+        XCTAssertTrue(app.buttons["git-remote-branch-origin/taken"].exists, "列表里没有 taken")
+        // 选分支的地方一定要有搜索框。
+        XCTAssertTrue(app.searchFields.firstMatch.exists, "远端分支列表没有搜索框")
+        capture(app, name: "git-12-remote-branches")
+
+        // 先走重名那条：本地 `taken` 存在、但它没有上游，所以电脑要问另一个本地名。
+        app.buttons["git-remote-branch-origin/taken"].tap()
+
+        XCTAssertTrue(
+            app.textFields["git-remote-local-name"].waitForExistence(timeout: 30),
+            "重名时没有推出「填另一个本地名」那一页"
+        )
+        // 正文是**电脑的原话**：它点名那个本地分支。
+        XCTAssertTrue(
+            app.staticTexts["git-remote-local-name-reason"].label.contains("taken"),
+            "那一页没写清为什么在问：\(app.staticTexts["git-remote-local-name-reason"].label)"
+        )
+        // 名字为空时确认键不可点。
+        XCTAssertFalse(app.buttons["git-remote-local-name-confirm"].isEnabled, "名字还空着，确认键却是可点的")
+        capture(app, name: "git-14-local-name")
+
+        app.textFields["git-remote-local-name"].tap()
+        app.textFields["git-remote-local-name"].typeText("taken-copy")
+        app.buttons["git-remote-local-name-confirm"].tap()
+
+        // 成功之后退回面板根部，「分支」那一行已经是新的那条 —— 那一行是电脑推回来的状态，
+        // 所以这一条同时验了「迁出真的建出了本地分支」。
+        XCTAssertTrue(
+            waitForLabel(containing: "taken-copy", in: app, timeout: 30),
+            "填了另一个本地名之后没有迁出：\(app.buttons["git-panel-branch"].label)"
+        )
+
+        // 再进一次列表，走搜索 + 一键迁出那条。搜索放在最后：搜索框里的字在导航之后还在
+        // （与本地分支列表同一条口径），先搜会把后面要点的那条滤掉。
+        app.buttons["git-panel-remote-branches"].tap()
+        XCTAssertTrue(app.buttons["git-remote-branch-origin/only-on-remote"].waitForExistence(timeout: 10))
+        // 搜索按**限定名**匹配：打裸名 `only` 也要命中 `origin/only-on-remote`。
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("only")
+        XCTAssertTrue(app.buttons["git-remote-branch-origin/only-on-remote"].waitForExistence(timeout: 5))
+
+        app.buttons["git-remote-branch-origin/only-on-remote"].tap()
+
+        XCTAssertTrue(
+            waitForLabel(containing: "only-on-remote", in: app, timeout: 30),
+            "迁出之后面板上的分支没变：\(app.buttons["git-panel-branch"].label)"
+        )
+        capture(app, name: "git-13-after-checkout")
+    }
 
     private func launchAndOpenATerminal() -> XCUIApplication {
         let app = XCUIApplication()
