@@ -12,7 +12,7 @@ type Operation = { op: "context" }
   | { op: "read"; input: z.infer<typeof readInput> }
 const baseUrl = "https://biz-api-test.wodecorp.cn"
 const protocolVersion = 1
-const catalogRevision = "0dae0247f34ee503d6086c58a5f6243f3665fb3d"
+const catalogRevision = "0dae0247f34ee503d6086c58a5f6243f3665fb3d:page-permissions-v1"
 const allowedIds = new Set<string>(Object.keys(readParameters))
 
 function failure(status: number, code: string, message: string): HttpException {
@@ -25,7 +25,7 @@ function page<T>(items: readonly T[], offset: number, limit: number) {
 function permitted(catalog: Catalog, id: string) {
   const description = catalog.describe(id)
   if (!allowedIds.has(id)) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前扩展目录未配置此能力。")
-  if (!description.ok) throw failure(404, "CAPABILITY_NOT_VISIBLE", "服务端已配置此能力，但当前用户与企业的菜单目录未包含它；不能据此判断部署缺失、没有业务数据或没有 Portal 权限。")
+  if (!description.ok) throw failure(404, "CAPABILITY_NOT_VISIBLE", "服务端已配置此能力，但当前用户与企业的页面权限未包含它，未查询业务数据；不能据此判断部署缺失或没有业务记录。")
   if (description.write || description.ai?.effect !== "read" || !description.invoke) {
     throw failure(403, "READ_ONLY_REQUIRED", "此扩展仅允许已绑定的只读能力。")
   }
@@ -78,13 +78,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
         data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
           environment: "test", now: new Date().toISOString(), timeZone: "Asia/Shanghai", configuredReadCapabilities: [...allowedIds] }
       } else {
-        const visible = await scoped.visibleCatalog({ project: 2, maxNodes: 500, onUnavailable: "throw" })
-        if (!visible.applied) throw failure(503, "CATALOG_UNAVAILABLE", "当前 Portal 目录不可用，请稍后重试。")
-        const capabilities = visible.catalog.index.capabilities.filter((entry) => allowedIds.has(entry.id))
-        const catalog = sdk.createCatalog({
-          capabilities: capabilities.flatMap((entry) => entry.definitions),
-          rows: visible.catalog.index.pages.filter((entry) => entry.capabilityIds.some((id) => allowedIds.has(id))),
-        })
+        const catalog = await this.sessionCatalog(sdk, server.catalog, (codes) => scoped.baseData.checkPermissions(codes))
         if (operation.op === "catalog") data = this.catalog(catalog, operation.input)
         else if (operation.op === "describe") {
           const description = permitted(catalog, operation.input.capabilityId)
@@ -109,6 +103,30 @@ export class PortalHeadlessService implements OnModuleDestroy {
       server?.sessions.clear()
       this.active.delete(controller)
     }
+  }
+
+  private async sessionCatalog(sdk: PortalSdk, full: Catalog, checkPermissions: (codes: string[]) => Promise<{ granted: string[] }>): Promise<Catalog> {
+    const candidates = full.index.pages.filter((entry) => entry.capabilityIds.some((id) => allowedIds.has(id)))
+    const codes = [...new Set(candidates.filter((entry) => entry.source === "menu-catalog" && entry.permission).map((entry) => entry.permission))]
+    let granted: Set<string>
+    try {
+      // Match Portal's permissionFilter exactly. The legacy project nav contains group paths,
+      // not the page permissions used by the web UI. Never infer access from path prefixes.
+      granted = new Set(codes.length ? (await checkPermissions(codes)).granted : [])
+    } catch (error) {
+      const normalized = normalizePortalError(error)
+      if ([401, 403].includes(normalized.getStatus())) throw normalized
+      throw failure(503, "CATALOG_UNAVAILABLE", "Portal 页面权限暂不可用，未查询业务数据，请稍后重试。")
+    }
+    // SDK capability-only pages (flow forms and dictionaries) have no sidebar permission.
+    // They remain subject to the extension allowlist and Portal's business authorization.
+    const pages = candidates.filter((entry) => entry.source === "capability-only" || !entry.permission || granted.has(entry.permission))
+    const paths = new Set(pages.map((entry) => entry.menuPath))
+    return sdk.createCatalog({
+      capabilities: full.index.capabilities.filter((entry) => allowedIds.has(entry.id))
+        .flatMap((entry) => entry.definitions.filter((definition) => paths.has(definition.pagePath))),
+      rows: pages.filter((entry) => entry.source === "menu-catalog"),
+    })
   }
 
   private parameterSchema(id: string) {
@@ -138,7 +156,6 @@ export function normalizePortalError(error: unknown, timedOut = false): HttpExce
       return failure(401, "PORTAL_CREDENTIAL_INVALID", "Portal 凭证已失效，请重新连接。")
     }
     if (item.code === "ECONNABORTED" || item.code === "ERR_CANCELED") timedOut = true
-    if (item.name === "MenuVisibilityUnavailableError") return failure(503, "CATALOG_UNAVAILABLE", "Portal 菜单目录不可用，未回退到全量目录。")
     current = item.cause
   }
   return timedOut ? failure(504, "PORTAL_TIMEOUT", "Portal 查询超时，请稍后重试。")

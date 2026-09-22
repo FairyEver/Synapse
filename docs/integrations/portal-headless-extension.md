@@ -34,10 +34,14 @@ SDK 源码仍在独立仓库维护，SY 不复制一套业务源码。当前固�
 
 ## 运行范围与限制
 
-仅测试 API `https://biz-api-test.wodecorp.cn`，菜单 project 固定 2（SDK 已有 HR/Portal 菜单契约）；不允许客户端覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。目录不可用或截断时失败关闭。
+仅测试 API `https://biz-api-test.wodecorp.cn`；不允许客户端覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。页面权限查询失败或返回格式异常时失败关闭，不回退到全量目录。
 
 首期只读 allowlist：`meeting-room-usage`、`perf-year-agreement-list`、`base-dict-get`（仅 protocol_status）。执行时同时复核 SDK 的 write=false、ai.effect=read、invoke 绑定，参数用同一份 schema 校验并通过 describe 返回。其它能力即使已在 SDK 中也不能执行；扩大范围需要对应契约验证与 allowlist 更新。
 
-年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。`context.configuredReadCapabilities` 仅表示服务端配置范围；目录是当前用户与企业的菜单可见面，不是最终数据权限。服务端已配置但菜单不可见时返回 `CAPABILITY_NOT_VISIBLE`，不得误判为部署缺失或没有业务数据；Portal 业务响应决定实际访问结果。
+目录、describe 与 read 统一调用 SDK `baseData.checkPermissions`，数据来自 `/admin-api/sys/menu/permissionsNotBySystem`，与 Portal 网页的 `fetchPermissions` / `permissionFilter` 一致。只批量检查 allowlist 所关联页面的 `permission`，精确匹配；不得把导航树 `/sys/menu/nav?project=2`、分组入口、路径前缀或猜测的别名当成页面授权。SDK 的 `capability-only` 页面（流程表单、基础字典）继续按既有规则保留，仍受 allowlist、只读校验与 Portal 业务鉴权约束。过滤定义时同步过滤绑定页面，避免重建目录把已剔除能力补成 capability-only；不把用户完整权限列表返回 AI 或写入日志。每次 HTTP 请求均独立查询，不跨用户或企业缓存。
 
-完整请求、响应与错误契约见系统 Skill 的 `extend/portal-headless/api-reference.md`。2026-09-22 已在用户启动的本机开发环境通过 Computer Use 验证 SY 登录回调、用户完成 Portal 授权后的连接状态、AI 取凭证与直连后端会议室查询。当前测试连接的年度协议不在会话可见目录中，未执行年度业务读取；生产部署、其它账号与跨平台授权仍未验收。本地合成测试不能代替真实验收。
+核对依据：Portal `app/portal/utils/system.js` 中的 `fetchPermissions`、`permissionFilter`，`app/portal/menus/hr.js` 中个人年度页面的 permission；固定 SDK `base-dept-dict-permission.ts` 已封装相同权限接口。旧导航树返回 `/dashboard/agreement`，并不代表新页面 `/dashboard/year-agreement/main` 无权限。该类兼容问题通过统一权限数据源修复，不逐个添加路径别名。`catalogRevision` 在 SDK 提交号后加 `:page-permissions-v1` 标识接入层过滤规则变更。
+
+年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。`context.configuredReadCapabilities` 仅表示服务端配置范围；目录按当前用户与企业的页面权限收敛，不是最终数据权限。服务端已配置但页面权限不包含时返回 `CAPABILITY_NOT_VISIBLE`，不得误判为部署缺失或没有业务数据；Portal 业务响应决定实际访问结果。
+
+完整请求、响应与错误契约见系统 Skill 的 `extend/portal-headless/api-reference.md`。2026-09-22 已在用户启动的本机开发环境通过 Computer Use 验证 SY 登录回调、用户完成 Portal 授权后的连接状态、AI 取凭证与直连后端会议室查询。首次年度查询被旧导航树过滤；该问题的修复与复测记录见 `portal-headless-gui-acceptance.md`。生产部署、其它账号与跨平台授权仍未验收。本地合成测试不能代替真实验收。
