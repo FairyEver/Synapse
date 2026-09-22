@@ -1,3 +1,4 @@
+import { connectorsCredentialsSchema } from "../schemas/connectors"
 import { describe, expect, it } from "vitest"
 import {
   allSchemas,
@@ -61,6 +62,19 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       schemaVersion: 1,
       connectors: { figma: { enabled: "yes" } },
     })).toBe(false)
+  })
+
+  it("requires the owner, environment and tenant binding in Portal credential records", () => {
+    const portal = { ownerUserId: "owner", connectorId: "portal-headless-test", environmentId: "test", tenantId: "2", portalUserId: "42" }
+    const credential = { id: "reference", schemaVersion: 1, accessToken: "synthetic", updatedAt: "2026-09-22T00:00:00Z", portal }
+    expect(connectorsCredentialsSchema.validate(credential)).toBe(true)
+    expect(connectorsCredentialsSchema.encrypted).toBe(true)
+    for (const key of Object.keys(portal)) {
+      expect(connectorsCredentialsSchema.validate({ ...credential, portal: { ...portal, [key]: "" } })).toBe(false)
+    }
+    const binding = { ...portal, credentialRef: "reference", enabled: false, connectedAt: credential.updatedAt, lastValidatedAt: credential.updatedAt }
+    expect(connectorsStateSchema.validate({ schemaVersion: 1, connectors: {}, portalBinding: binding })).toBe(true)
+    expect(connectorsStateSchema.validate({ schemaVersion: 1, connectors: {}, portalBinding: { ...binding, credentialRef: null } })).toBe(false)
   })
 
   it("allSchemas exposes runtime namespaces", () => {

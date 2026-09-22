@@ -41,6 +41,7 @@ let allowAppQuit = false
 let processLevelCleanup: (() => Promise<void>) | undefined
 let windowManager: WindowManager | undefined
 let protocolActionRouter: SynapseActionRouter | undefined
+const privateProtocolHandlers: Record<string, (params: Record<string, unknown>) => Promise<void>> = {}
 const scriptRuntimeSmokeConfig = resolveScriptRuntimeSmokeBootstrap(process.env)
 
 function focusOrCreateMainWindow(): void {
@@ -76,6 +77,7 @@ function startSynapse(): void {
     openSkillRepositoryInstallWindow: (request) => skillRepositoryInstallWindowService.open(request),
     publishUpdateOpenRequest: (automatic) => updateService.publishUpdateOpenRequest(automatic),
     verifyUpdateIntent: (token) => updateService.verifyUpdateIntent(token),
+    privateProtocolHandlers,
     dispatchAppAction: async (capabilityId, params) => {
       if (!protocolActionRouter) throw new Error("应用能力暂不可用")
       return protocolActionRouter.dispatch(capabilityId, params, {
@@ -122,6 +124,7 @@ function startSynapse(): void {
         setWindowManager: (manager) => {
           windowManager = manager
         },
+        setPrivateProtocolHandlers: (handlers) => { Object.assign(privateProtocolHandlers, handlers) },
         setProtocolActionRouter: (router) => {
           protocolActionRouter = router
         },

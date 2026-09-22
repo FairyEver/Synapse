@@ -358,6 +358,7 @@ export const IPC_CHANNELS = {
   "connectors": {
     "list": "synapse:app:connectors:item:list",
     "connect": "synapse:app:connectors:item:connect",
+    "retry": "synapse:app:connectors:item:retry",
     "disconnect": "synapse:app:connectors:item:disconnect",
     "changed": "synapse:app:connectors:item:changed",
   },

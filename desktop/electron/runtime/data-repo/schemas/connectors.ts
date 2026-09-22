@@ -19,6 +19,7 @@ export interface ConnectorItemEntryV1 extends Record<string, unknown> {
 export interface ConnectorCredentialEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
+  portal?: PortalCredentialBindingV1
   accessToken: string
   refreshToken?: string
   expiresAt?: number
@@ -47,9 +48,27 @@ export interface ConnectorLocalStateV1 extends Record<string, unknown> {
   }
 }
 
+export interface PortalCredentialBindingV1 {
+  ownerUserId: string
+  connectorId: string
+  environmentId: string
+  tenantId: string
+  portalUserId: string
+}
+
+export interface PortalConnectionBindingV1 extends PortalCredentialBindingV1 {
+  credentialRef: string
+  enabled: boolean
+  displayName?: string
+  tenantName?: string
+  connectedAt: string
+  lastValidatedAt: string
+}
+
 export interface ConnectorStateStoreV1 extends Record<string, unknown> {
   schemaVersion: 1
   connectors: Record<string, ConnectorLocalStateV1>
+  portalBinding?: PortalConnectionBindingV1
 }
 
 const noMigrations: readonly Migration[] = []
@@ -80,6 +99,7 @@ export const connectorsCredentialsSchema: NamespaceSchema<ConnectorCredentialEnt
   validate: (value): value is ConnectorCredentialEntryV1 => {
     if (!isRecord(value)) return false
     return value.schemaVersion === 1 && typeof value.id === "string" && typeof value.accessToken === "string" && isDate(value.updatedAt)
+      && (value.portal === undefined || isPortalCredentialBinding(value.portal))
   },
 }
 
@@ -103,6 +123,7 @@ export const connectorsStateSchema: NamespaceSchema<ConnectorStateStoreV1> = {
   encrypted: false,
   validate: (value): value is ConnectorStateStoreV1 => {
     if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.connectors)) return false
+    if (value.portalBinding !== undefined && !isPortalConnectionBinding(value.portalBinding)) return false
     return Object.values(value.connectors).every((state) => {
       if (!isRecord(state) || typeof state.enabled !== "boolean") return false
       if (state.lastProbe === undefined) return true
@@ -112,4 +133,15 @@ export const connectorsStateSchema: NamespaceSchema<ConnectorStateStoreV1> = {
         || connectorProbeErrorCodes.has(state.lastProbe.errorCode as ConnectorProbeErrorCodeV1)
     })
   },
+}
+
+function isPortalCredentialBinding(value: unknown): value is PortalCredentialBindingV1 {
+  return isRecord(value) && ["ownerUserId", "connectorId", "environmentId", "tenantId", "portalUserId"]
+    .every((key) => typeof value[key] === "string" && value[key].length > 0)
+}
+function isPortalConnectionBinding(value: unknown): value is PortalConnectionBindingV1 {
+  return isRecord(value) && isPortalCredentialBinding(value) && typeof value.credentialRef === "string"
+    && typeof value.enabled === "boolean" && isDate(value.connectedAt) && isDate(value.lastValidatedAt)
+    && (value.displayName === undefined || typeof value.displayName === "string")
+    && (value.tenantName === undefined || typeof value.tenantName === "string")
 }

@@ -1,3 +1,4 @@
+import { connectorsCapabilityManifest } from "./connectors/shared/manifest"
 import type {
   AppDeepLinkDeclaration,
   AppProtocolRouteDeclaration,
@@ -21,6 +22,7 @@ export {
 } from "./surface-discovery"
 
 const appDeepLinkManifests = [
+  connectorsCapabilityManifest,
   agentConversationCapabilityManifest,
   terminalCapabilityManifest,
   fileOpenerCapabilityManifest,

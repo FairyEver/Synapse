@@ -213,3 +213,7 @@ Rules:
 - `SUBMISSION_OUTCOME_UNKNOWN`：明确说明可能已提交及重复风险。只有用户理解后明确要求再次尝试，才可重新展示并确认。
 
 所有结果都不得复述反馈正文；只有新的确认稿可以完整展示正文。成功后同一问题不得重复提交，除非用户明确要求形成一条新反馈并再次确认。
+
+## Portal Headless Test connector boundary
+
+Portal Headless Test is a desktop-only connector in the existing Connectors app. It exposes no MCP tool, business capability, credential reader, or Agent Skill contribution. Do not request tokens in chat or invoke its private authorization callback through tools; the user authorizes in Portal Web, and Synapse verifies the current user and tenant before storing credentials. Test and future production connections are separate. Do not invent Portal business tools or treat the pending Web authorization page as already deployed.

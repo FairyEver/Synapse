@@ -4,12 +4,14 @@ import { sanitizeUrl } from "../../src/lib/url-sanitize"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import { createMainLogger } from "../services/log-store"
 
-type AccountExternalUrlOpener = (url: string) => Promise<void>
+type AccountExternalUrlOpener = (url: string, signal?: AbortSignal) => Promise<void>
 
 type AccountExternalUrlOpenerDeps = {
   auditSink: AuditSink
   permissionGuard: PermissionGuard
-  openExternal?: AccountExternalUrlOpener
+  openExternal?: (url: string) => Promise<void>
+  source?: string
+  omitUrlDetails?: boolean
 }
 
 const ACCOUNT_LOGIN_SHELL_SOURCE = "account.startLogin"
@@ -37,20 +39,22 @@ function createAccountExternalUrlOpener({
   auditSink,
   permissionGuard,
   openExternal = shell.openExternal,
+  source = ACCOUNT_LOGIN_SHELL_SOURCE,
+  omitUrlDetails = false,
 }: AccountExternalUrlOpenerDeps): AccountExternalUrlOpener {
-  return async (rawUrl: string) => {
+  return async (rawUrl: string, signal?: AbortSignal) => {
     const url = new URL(rawUrl)
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new Error("Only http and https links can be opened.")
     }
 
     const externalUrl = url.toString()
-    const resource = sanitizeUrl(externalUrl)
+    const resource = omitUrlDetails ? `${url.origin}${url.pathname}` : sanitizeUrl(externalUrl)
     const permission = await permissionGuard.check({
       action: "shell.exec",
       actor: userActor,
       resource,
-      context: { source: ACCOUNT_LOGIN_SHELL_SOURCE },
+      context: { source },
     })
 
     if (!permission.allowed) {
@@ -60,7 +64,7 @@ function createAccountExternalUrlOpener({
         resource,
         outcome: "denied",
         metadata: {
-          source: ACCOUNT_LOGIN_SHELL_SOURCE,
+          source,
           reason: permission.reason,
           policyId: permission.policyId,
         },
@@ -69,6 +73,7 @@ function createAccountExternalUrlOpener({
     }
 
     try {
+      if (signal?.aborted) throw new Error("浏览器打开已取消。")
       await openExternal(externalUrl)
     } catch (error) {
       recordAccountShellAudit(auditSink, {
@@ -77,7 +82,7 @@ function createAccountExternalUrlOpener({
         resource,
         outcome: "failed",
         metadata: {
-          source: ACCOUNT_LOGIN_SHELL_SOURCE,
+          source,
           errorName: error instanceof Error ? error.name : typeof error,
           errorLength: String(error).length,
         },
@@ -90,7 +95,7 @@ function createAccountExternalUrlOpener({
       actor: userActor,
       resource,
       outcome: "allowed",
-      metadata: { source: ACCOUNT_LOGIN_SHELL_SOURCE },
+      metadata: { source },
     })
   }
 }

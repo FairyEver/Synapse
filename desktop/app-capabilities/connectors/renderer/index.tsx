@@ -1,60 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
 import { ExternalLink } from "lucide-react"
-import { toast } from "sonner"
 import { Button } from "../../../src/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../src/components/ui/card"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { Switch } from "../../../src/components/ui/switch"
-import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { ConnectorItem } from "../shared/schema"
-import icon from "./assets/figma.png"
+import figmaIcon from "./assets/figma.png"
+import connectorIcon from "./assets/connector.png"
+import { useConnectors } from "./hooks/use-connectors"
 
 export function ConnectorsModule() {
-  const bridge = useMemo(() => requireBridgeDomain("connectors"), [])
-  const [items, setItems] = useState<ConnectorItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [busyId, setBusyId] = useState<string | null>(null)
-
-  const reload = useCallback(async () => {
-    try {
-      setLoading(true)
-      setItems((await bridge.item.list()).items)
-    } catch {
-      toast.error("加载连接器失败")
-    } finally {
-      setLoading(false)
-    }
-  }, [bridge])
-
-  useEffect(() => {
-    void reload()
-    return bridge.item.onChanged((event) => setItems(event.items))
-  }, [bridge, reload])
-
-  const handleAction = useCallback(async (item: ConnectorItem) => {
-    setBusyId(item.id)
-    try {
-      if (item.enabled) {
-        await bridge.item.disconnect({ id: item.id })
-        setItems((current) => current.map((entry) => entry.id === item.id
-          ? { ...entry, enabled: false }
-          : entry))
-        toast.success(`${item.name} MCP 已停用`)
-      } else {
-        const connected = await bridge.item.connect({ id: item.id })
-        setItems((current) => current.map((entry) => entry.id === connected.id ? connected : entry))
-        toast.success(`${item.name} MCP 已激活`)
-      }
-    } catch (error) {
-      await reload()
-      toast.error(error instanceof Error ? error.message : "连接失败")
-    } finally {
-      setBusyId(null)
-    }
-  }, [bridge])
+  const { items, loading, busyIds, toggle, reconnect, retry, openDocumentation } = useConnectors()
 
   return (
     <SystemAppWindowShell>
@@ -63,7 +21,7 @@ export function ConnectorsModule() {
           <div className="flex flex-col gap-3">
             {loading ? <ConnectorCardSkeleton /> : null}
             {!loading && items.length === 0 ? <p className="px-1 py-6 text-sm text-muted-foreground">暂无连接器</p> : null}
-            {!loading ? items.map((item) => <ConnectorCard key={item.id} item={item} busy={busyId === item.id} onAction={handleAction} />) : null}
+            {!loading ? items.map((item) => <ConnectorCard key={item.id} item={item} busy={busyIds.has(item.id)} onAction={toggle} onReconnect={reconnect} onRetry={retry} openDocumentation={openDocumentation} />) : null}
           </div>
         </div>
       </ScrollArea>
@@ -71,23 +29,28 @@ export function ConnectorsModule() {
   )
 }
 
-function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem; readonly busy: boolean; readonly onAction: (item: ConnectorItem) => void }) {
-  const connecting = busy || item.probeStatus === "checking"
-  const stateLabel = connecting ? "检测中" : item.enabled ? "已激活" : item.probeStatus === "error" ? "连接失败" : "未激活"
+const connectionLabels = {
+  disconnected: "未连接", connecting: "连接中", verifying: "验证中", connected: "已连接",
+  reconnect_required: "需重新连接", failed: "连接失败",
+} as const
 
-  const openDocumentation = useCallback(async () => {
-    if (!item.documentationUrl) return
-    try {
-      await requireBridgeDomain("shell").openExternal(item.documentationUrl)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "无法打开文档")
-    }
-  }, [item.documentationUrl])
+function ConnectorCard({ item, busy, onAction, onReconnect, onRetry, openDocumentation }: {
+  readonly item: ConnectorItem
+  readonly busy: boolean
+  readonly onAction: (item: ConnectorItem) => void
+  readonly onReconnect: (item: ConnectorItem) => void
+  readonly onRetry: (item: ConnectorItem) => void
+  readonly openDocumentation: (url: string) => Promise<void>
+}) {
+  const connecting = busy || item.probeStatus === "checking"
+  const stateLabel = item.connectionStatus ? connectionLabels[item.connectionStatus]
+    : connecting ? "检测中" : item.enabled ? "已激活" : item.probeStatus === "error" ? "连接失败" : "未激活"
+  const accountLabel = item.account ? [item.account.displayName ?? item.account.portalUserId, item.account.tenantName ?? item.account.tenantId].join(" · ") : undefined
 
   return (
     <Card size="sm">
       <CardContent className="flex items-center gap-4 py-1">
-        <img src={icon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
+        <img src={item.connectionStatus ? connectorIcon : figmaIcon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
         <div className="min-w-0 flex-1">
           <CardTitle className="text-base">{item.name}</CardTitle>
           {item.documentationUrl ? (
@@ -97,22 +60,25 @@ function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem;
               size="sm"
               className="mt-1 h-auto p-0 text-xs font-normal text-muted-foreground"
               data-track="connectors.connector.documentation"
-              onClick={() => void openDocumentation()}
+              onClick={() => void openDocumentation(item.documentationUrl!)}
             >
               更多信息
               <ExternalLink data-icon="inline-end" />
             </Button>
           ) : null}
+          {accountLabel ? <p className="mt-1 text-xs text-muted-foreground">{accountLabel}</p> : null}
           {item.probeStatus === "error" && item.errorMessage ? <p className="mt-1 text-xs text-destructive">{item.errorMessage}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {busy ? <Spinner className="size-3.5" aria-hidden="true" /> : null}
+          {item.canRetry ? <Button variant="ghost" size="sm" data-track="connectors.connector.retry" onClick={() => onRetry(item)}>重试验证</Button> : null}
+          {item.connectionStatus && item.connectionStatus !== "disconnected" ? <Button variant="ghost" size="sm" data-track="connectors.connector.reconnect" onClick={() => onReconnect(item)}>重新连接</Button> : null}
+          {connecting ? <Spinner className="size-3.5" aria-hidden="true" /> : null}
           <span className="text-sm text-muted-foreground">{stateLabel}</span>
           <Switch
             checked={item.enabled}
-            disabled={connecting}
+            disabled={!item.connectionStatus && connecting}
             aria-busy={busy}
-            aria-label={`${item.name}${item.enabled ? "已激活" : item.probeStatus === "error" ? "连接失败" : "未激活"}`}
+            aria-label={`${item.name}${stateLabel}`}
             data-track="connectors.connector.toggle"
             onCheckedChange={() => onAction(item)}
           />

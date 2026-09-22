@@ -14,6 +14,8 @@
 | MCP 公开工具表面 | `tools/list` 载荷、`initialize` instructions | `desktop/electron/services/agent-runtime/synapse-tool-router.ts` |
 | Deep Link | 默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
 
+Portal Headless Test 在既有 Connectors 应用内增加一个连接器定义和一个声明式私有回调 `synapse://portal-headless-test/callback`。该入口通过 `mainHandlerId` 直接交给可信主进程，不进入公开 ActionRouter。新增公开 capability/MCP 工具数量为 0，System App/Dock/Workflow/Automation 数量不变；只增加 UI retry IPC 与内部状态事件。Portal 不贡献 Agent MCP 或 Skill；正式环境入口尚未注册。连接器凭据不属于 Secrets MCP 数据。
+
 ## `desktop/app-capabilities` 产品表面
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
@@ -22,7 +24,7 @@
 |---|---:|---:|---:|---:|---:|---:|
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 11 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
-| Connectors | 是 | 否 | — | — | — | — |
+| Connectors | 是 | 否 | — | — | — | 1 个私有授权回调 |
 | Clipboard | 否 | 否 | 2 | — | — | — |
 | Document Template | 否 | 否 | 1 | — | 1 | — |
 | File Opener | 否 | 否 | 1 | — | 1 | `open` |

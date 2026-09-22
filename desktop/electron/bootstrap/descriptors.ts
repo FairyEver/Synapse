@@ -106,6 +106,11 @@ import {
 import { createQuickInputService, type QuickInputService } from "../../app-capabilities/quick-input/main/service"
 import { ConnectorDriverRegistry } from "../../app-capabilities/connectors/main/driver-registry"
 import { createMcpStreamableHttpDriver } from "../../app-capabilities/connectors/main/mcp-streamable-http-driver"
+import { createPortalSessionDriver } from "../../app-capabilities/connectors/main/portal-session-driver"
+import { createPortalVerifier } from "../../app-capabilities/connectors/main/portal-verifier"
+import { builtinConnectors } from "../../app-capabilities/connectors/main/definitions"
+import { createAccountExternalUrlOpener } from "./account-external-opener"
+import type { ConnectorCredentialEntryV1 } from "../runtime/data-repo/schemas/connectors"
 import { createConnectorsService } from "../../app-capabilities/connectors/main/service"
 import type { ReturnTypeOfConnectorsService } from "../../app-capabilities/connectors/main/service-types"
 import {
@@ -664,7 +669,7 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
 export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsService> = {
   id: "core.connectors",
   criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink", "core.event-bus"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     const drivers = new ConnectorDriverRegistry()
@@ -672,7 +677,21 @@ export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsS
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
     }))
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    drivers.register("portal-session", createPortalSessionDriver({
+      definitions: builtinConnectors,
+      state: dataRepository.namespace<ConnectorStateStoreV1>(CONNECTORS_STATE_NAMESPACE),
+      credentials: dataRepository.namespace<ConnectorCredentialEntryV1>("app.connectors.credentials"),
+      account: accountService,
+      permissionGuard, auditSink,
+      openExternal: createAccountExternalUrlOpener({ permissionGuard, auditSink, source: "connectors.portal", omitUrlDetails: true }),
+      verify: createPortalVerifier(),
+      secureStorageAvailable: () => safeStorage.isEncryptionAvailable()
+        && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
+    }))
     return createConnectorsService({
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
       state: dataRepository.namespace<ConnectorStateStoreV1>(CONNECTORS_STATE_NAMESPACE),
       legacyItems: dataRepository.namespace<ConnectorItemEntryV1>(CONNECTORS_ITEMS_NAMESPACE),
       drivers,
@@ -680,6 +699,7 @@ export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsS
     })
   },
   async start(instance) { await instance.initialize() },
+  async stop(instance) { instance.dispose() },
 }
 
 export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {

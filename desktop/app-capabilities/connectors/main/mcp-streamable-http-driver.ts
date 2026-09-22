@@ -35,7 +35,7 @@ export function createMcpStreamableHttpDriver(deps: McpStreamableHttpDriverDeps)
           name: definition.id,
           config: { type: "http", url: definition.integration.endpoint },
         }],
-        skillPackageIds: [definition.skillPackageId],
+        skillPackageIds: definition.skillPackageId ? [definition.skillPackageId] : [],
       }
     },
   }

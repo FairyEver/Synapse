@@ -193,6 +193,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.event-bus",
     ])
     expect(byId.get("core.agent-personas")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.agent-reference-actions")?.dependsOn).toEqual([

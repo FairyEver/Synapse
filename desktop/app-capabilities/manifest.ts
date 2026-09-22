@@ -9,9 +9,8 @@ export type AppDeepLinkDeclaration = {
 export type AppProtocolRouteDeclaration = {
   readonly hostname: string
   readonly action: string
-  readonly capabilityId: string
   readonly paramsSchema: z.ZodType<Record<string, unknown>>
-}
+} & ({ readonly capabilityId: string } | { readonly mainHandlerId: string })
 
 export type MainAppCapabilityManifest = {
   readonly id: string

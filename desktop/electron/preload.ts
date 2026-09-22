@@ -476,8 +476,9 @@ const synapseBridge: SynapseBridge = {
     item: {
       list: () => invoke(IPC_CHANNELS.connectors.list)(),
       connect: (input) => invoke(IPC_CHANNELS.connectors.connect)(input),
+      retry: (input) => invoke(IPC_CHANNELS.connectors.retry)(input),
       disconnect: (input) => invoke(IPC_CHANNELS.connectors.disconnect)(input),
-      onChanged: createRawPayloadSubscription(subscribe, IPC_CHANNELS.connectors.changed),
+      onChanged: createDomainEventPayloadSubscription(subscribe, "connector", "item.changed"),
     },
   },
   agentPersonas: {

@@ -6,9 +6,8 @@ import {
 export type ParsedAppDeepLink = {
   readonly appId: string
   readonly action: string
-  readonly capabilityId: string
   readonly params: Record<string, unknown>
-}
+} & ({ readonly capabilityId: string } | { readonly mainHandlerId: string })
 
 export class AppDeepLinkError extends Error {
   constructor(readonly code: "invalid_url" | "unknown_app_action" | "invalid_params") {
@@ -51,7 +50,9 @@ export function parseDeclaredAppDeepLink(rawUrl: string): ParsedAppDeepLink {
     return {
       appId: route.appId,
       action: route.declaration.action,
-      capabilityId: route.declaration.capabilityId,
+      ...("mainHandlerId" in route.declaration
+        ? { mainHandlerId: route.declaration.mainHandlerId }
+        : { capabilityId: route.declaration.capabilityId }),
       params: result.data,
     }
   }

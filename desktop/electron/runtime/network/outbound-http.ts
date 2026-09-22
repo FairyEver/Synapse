@@ -7,6 +7,7 @@ export type OutboundHttpRequest = {
   readonly body?: string
   readonly timeoutMs?: number
   readonly abortSignal?: AbortSignal
+  readonly redirect?: RequestRedirect
   readonly fetchImpl?: typeof fetch
   readonly maxResponseBodyBytes?: number
   readonly logger?: {
@@ -42,6 +43,7 @@ export async function sendOutboundHttpRequest(
       headers: request.headers,
       body: request.body,
       signal: controller.signal,
+      redirect: request.redirect,
     })
     const elapsedMs = Math.round(performance.now() - startedAt)
     if (!response.ok) {
@@ -107,7 +109,7 @@ async function readBodyWithLimit(response: Response, maxBytes?: number): Promise
   return result + decoder.decode()
 }
 
-const SENSITIVE_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key|x-auth-token)$/i
+const SENSITIVE_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key|x-auth-token|token)$/i
 
 function sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
   if (!headers) return undefined

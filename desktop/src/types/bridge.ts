@@ -1126,6 +1126,7 @@ export type SynapseBridge = {
     item: {
       list: () => Promise<ConnectorListResult>
       connect: (input: { id: string }) => Promise<ConnectorItem>
+      retry: (input: { id: string }) => Promise<ConnectorItem>
       disconnect: (input: { id: string }) => Promise<void>
       onChanged: (listener: (event: { items: ConnectorItem[] }) => void) => () => void
     }

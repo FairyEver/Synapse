@@ -33,6 +33,29 @@ function createDeps(input: {
 }
 
 describe("createAccountExternalUrlOpener", () => {
+  it("omits hash authorization parameters from Portal permission and audit records", async () => {
+    const deps = createDeps()
+    const open = createAccountExternalUrlOpener({ ...deps, source: "connectors.portal", omitUrlDetails: true })
+    const url = "https://webtest01.wodecorp.cn/portal.html#/connect/synapse?state=private-state&callback=synapse%3A%2F%2Fportal-headless-test%2Fcallback"
+    await open(url)
+    expect(deps.openExternal).toHaveBeenCalledWith(url)
+    expect(JSON.stringify(vi.mocked(deps.permissionGuard.check).mock.calls)).not.toContain("private-state")
+    expect(JSON.stringify(vi.mocked(deps.auditSink.record).mock.calls)).not.toContain("private-state")
+    expect(deps.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({ resource: "https://webtest01.wodecorp.cn/portal.html", metadata: { source: "connectors.portal" } }))
+  })
+
+  it("does not open a cancelled Portal attempt after permission checks", async () => {
+    const deps = createDeps()
+    const controller = new AbortController()
+    vi.mocked(deps.permissionGuard.check).mockImplementationOnce(async () => {
+      controller.abort()
+      return { allowed: true }
+    })
+    const open = createAccountExternalUrlOpener({ ...deps, source: "connectors.portal", omitUrlDetails: true })
+    await expect(open("https://webtest01.wodecorp.cn/portal.html#/connect/synapse", controller.signal)).rejects.toThrow("取消")
+    expect(deps.openExternal).not.toHaveBeenCalled()
+  })
+
   it("opens login links through permission guard and audit sink", async () => {
     const deps = createDeps()
     const openExternal = createAccountExternalUrlOpener(deps)

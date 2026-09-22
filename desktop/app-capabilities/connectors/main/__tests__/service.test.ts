@@ -24,27 +24,29 @@ function createHarness(options: {
   const driver: ConnectorDriver = {
     probe: vi.fn(async () => options.probe ?? { ok: true, toolCount: 2 }),
     createAgentContribution: vi.fn((definition) => ({
-      mcpServers: [{ name: definition.id, config: { type: "http", url: definition.integration.endpoint } }],
-      skillPackageIds: [definition.skillPackageId],
+      mcpServers: [{ name: definition.id, config: { type: "http", url: definition.integration.kind === "mcp-streamable-http" ? definition.integration.endpoint : "" } }],
+      skillPackageIds: definition.skillPackageId ? [definition.skillPackageId] : [],
     })),
   }
   const drivers = new ConnectorDriverRegistry()
   drivers.register("mcp-streamable-http", driver)
   const logger = { warn: vi.fn() }
+  const eventBus = { emit: vi.fn() }
   const service = createConnectorsService({
+    eventBus,
     state: stateNamespace as never,
     legacyItems: legacyItems as never,
     drivers,
-    definitions: options.definitions,
+    definitions: options.definitions ?? [figmaConnector],
     logger,
     now: () => new Date("2026-09-03T08:00:00.000Z"),
   })
-  return { service, stateNamespace, legacyItems, driver, logger, readState: () => state }
+  return { service, eventBus, stateNamespace, legacyItems, driver, logger, readState: () => state }
 }
 
 describe("connectors service", () => {
   it("lists builtin definitions and enables a connector only after a successful probe", async () => {
-    const { service, driver, readState } = createHarness()
+    const { service, driver, readState, eventBus } = createHarness()
 
     await service.initialize()
     await expect(service.list()).resolves.toEqual({
@@ -63,6 +65,7 @@ describe("connectors service", () => {
       enabled: true,
       probeStatus: "ready",
     })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({ domain: "connector", type: "item.changed", payload: { items: [expect.objectContaining({ enabled: true })] } }), { backpressure: "block" })
     expect(driver.probe).toHaveBeenCalledWith(figmaConnector)
     expect(readState()).toEqual({
       schemaVersion: 1,

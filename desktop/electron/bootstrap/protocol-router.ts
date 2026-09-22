@@ -15,6 +15,7 @@ type ProtocolUrlRouterDeps = {
   openSkillRepositoryInstallWindow: (request: SynapseSkillRepositoryInstallWindowRequest) => Promise<void>
   publishUpdateOpenRequest: (automatic: boolean) => void
   verifyUpdateIntent: (token: string) => Promise<boolean>
+  privateProtocolHandlers?: Readonly<Record<string, (params: Record<string, unknown>) => Promise<void>>>
   dispatchAppAction?: (
     capabilityId: string,
     params: Record<string, unknown>,
@@ -107,6 +108,13 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
     if (isAppDeepLinkCandidate(url)) {
       try {
         const request = parseDeclaredAppDeepLink(url)
+        if ("mainHandlerId" in request) {
+          const handler = deps.privateProtocolHandlers?.[request.mainHandlerId]
+          if (!handler) throw new Error("连接服务暂不可用，请重新连接。")
+          await handler(request.params)
+          deps.focusMainWindow()
+          return 0
+        }
         if (!deps.dispatchAppAction) throw new Error("应用能力暂不可用")
         const result = await deps.dispatchAppAction(request.capabilityId, request.params)
         if (!result.ok) throw new Error(result.error || "应用操作失败")

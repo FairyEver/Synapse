@@ -1,3 +1,4 @@
+import type { EventBus } from "../../../electron/runtime/event-bus"
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type {
   ConnectorItemEntryV1,
@@ -11,6 +12,7 @@ import type { ConnectorDriverRegistry } from "./driver-registry"
 import type { AgentContribution, BuiltinConnectorDefinition, ProbeResult } from "./types"
 
 export type ConnectorServiceDeps = {
+  readonly eventBus?: Pick<EventBus, "emit">
   readonly state: DataNamespace<ConnectorStateStoreV1>
   readonly legacyItems: DataNamespace<ConnectorItemEntryV1>
   readonly drivers: ConnectorDriverRegistry
@@ -22,7 +24,7 @@ export type ConnectorServiceDeps = {
 type ConnectorEvents = { changed: [payload: { items: ConnectorItem[] }] }
 
 export function createConnectorsService(deps: ConnectorServiceDeps) {
-  const definitions = deps.definitions ?? builtinConnectors
+  const definitions: readonly BuiltinConnectorDefinition[] = deps.definitions ?? builtinConnectors
   const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]))
   const listeners = new Set<(payload: ConnectorEvents["changed"][0]) => void>()
   const probingIds = new Set<string>()
@@ -34,19 +36,27 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
     const existing = await deps.state.getSingleton()
     if (!existing) await deps.state.setSingleton(await migrateLegacyState())
     await removeMigratedLegacyFigmaItem()
+    const lifecycles = new Set(definitions.map((definition) => deps.drivers.resolve(definition).lifecycle))
+    for (const lifecycle of lifecycles) await lifecycle?.initialize(() => {
+      void emit().catch(() => deps.logger.warn("Connector state notification failed."))
+    })
   }
 
   async function list(): Promise<{ items: ConnectorItem[] }> {
     const store = await readState()
     return {
-      items: definitions
-        .map((definition) => toPublic(definition, store.connectors[definition.id], probingIds.has(definition.id)))
+      items: (await Promise.all(definitions.map((definition) => {
+        const lifecycle = deps.drivers.resolve(definition).lifecycle
+        return lifecycle ? lifecycle.item(definition) : toPublic(definition, store.connectors[definition.id], probingIds.has(definition.id))
+      })))
         .sort((a, b) => a.name.localeCompare(b.name)),
     }
   }
 
   async function connect(id: string): Promise<ConnectorItem> {
     const definition = requireDefinition(id)
+    const lifecycle = deps.drivers.resolve(definition).lifecycle
+    if (lifecycle) return lifecycle.connect(definition)
     probingIds.add(id)
     await emit()
 
@@ -83,7 +93,9 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
   }
 
   async function disconnect(id: string): Promise<void> {
-    requireDefinition(id)
+    const definition = requireDefinition(id)
+    const lifecycle = deps.drivers.resolve(definition).lifecycle
+    if (lifecycle) return lifecycle.disconnect(definition)
     const store = await readState()
     await updateConnectorState(id, {
       ...(store.connectors[id] ?? { enabled: false }),
@@ -95,7 +107,7 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
   async function getEnabledConnectorIds(): Promise<string[]> {
     const store = await readState()
     return definitions
-      .filter((definition) => store.connectors[definition.id]?.enabled === true)
+      .filter((definition) => definition.skillPackageId && store.connectors[definition.id]?.enabled === true)
       .map((definition) => definition.id)
   }
 
@@ -106,6 +118,7 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
 
     for (const id of new Set(connectorIds)) {
       const definition = requireDefinition(id)
+      if (!definition.skillPackageId) continue
       const contribution = deps.drivers.resolve(definition).createAgentContribution(definition)
       for (const server of contribution.mcpServers) {
         if (serverNames.has(server.name)) throw new Error(`Duplicate connector MCP server name: ${server.name}`)
@@ -118,6 +131,30 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
     return { mcpServers, skillPackageIds: [...skillPackageIds] }
   }
 
+  async function retry(id: string): Promise<ConnectorItem> {
+    const definition = requireDefinition(id)
+    const lifecycle = deps.drivers.resolve(definition).lifecycle
+    return lifecycle ? lifecycle.retry(definition) : connect(id)
+  }
+
+  async function handleCallback(id: string, url: string): Promise<void> {
+    const driver = deps.drivers.resolve(requireDefinition(id))
+    if (!driver.handleCallback) throw new Error("连接器不支持授权回调。")
+    await driver.handleCallback(url)
+  }
+
+  async function getSessionInput(id: string) {
+    const driver = deps.drivers.resolve(requireDefinition(id))
+    if (!driver.getSessionInput) throw new Error("连接器不提供会话凭据。")
+    return driver.getSessionInput(id)
+  }
+
+  function dispose(): void {
+    const lifecycles = new Set(definitions.map((definition) => deps.drivers.resolve(definition).lifecycle))
+    for (const lifecycle of lifecycles) lifecycle?.dispose()
+    listeners.clear()
+  }
+
   function onChanged(listener: (payload: ConnectorEvents["changed"][0]) => void): () => void {
     listeners.add(listener)
     return () => listeners.delete(listener)
@@ -125,6 +162,7 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
 
   async function emit(): Promise<void> {
     const payload = await list()
+    deps.eventBus?.emit({ domain: "connector", type: "item.changed", payload, timestamp: now() }, { backpressure: "block" })
     for (const listener of listeners) listener(payload)
   }
 
@@ -191,6 +229,10 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
     list,
     connect,
     disconnect,
+    retry,
+    handleCallback,
+    getSessionInput,
+    dispose,
     getEnabledConnectorIds,
     createAgentContribution,
     onChanged,

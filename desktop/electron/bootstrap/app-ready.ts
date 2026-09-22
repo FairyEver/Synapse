@@ -1,3 +1,4 @@
+import { createConnectorProtocolHandlers } from "./connector-protocol-handlers"
 import { dialog } from "electron"
 
 import type { AutomationService } from "../services/automation"
@@ -57,6 +58,7 @@ type InitializeReadyAppDeps = {
   setProcessLevelCleanup?: (cleanup: (() => Promise<void>) | undefined) => void
   setWindowManager: (windowManager: WindowManager) => void
   setProtocolActionRouter?: (router: CoreDatabaseService["actionRouter"] | undefined) => void
+  setPrivateProtocolHandlers?: (handlers: Record<string, (params: Record<string, unknown>) => Promise<void>>) => void
   shouldCreateMainWindowBeforeProtocolHandling?: () => boolean
   startProtocolHandling: (
     prepareBeforeNonAuthRoutes: (handledAuthCallbacks: number) => Promise<void>,
@@ -131,6 +133,8 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }
+
+  deps.setPrivateProtocolHandlers?.(createConnectorProtocolHandlers(registry))
 
   const eventBus = registry.get<EventBus>("core.event-bus")
   accountService.setEventBus(eventBus)

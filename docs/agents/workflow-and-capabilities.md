@@ -45,6 +45,7 @@
 
 - 通用格式：`synapse://app/<app-id>/<action>?<params>`。
 - 每个 App 在主进程可导入的 manifest 中通过 `deepLinks` 明确声明 `action → capabilityId → 参数 Schema`；注册 App/capability/MCP 不会自动暴露 Deep Link。
+- 声明式 `protocolRoutes` 可显式指向 `mainHandlerId`，用于凭据交接等仅限主进程的回调；该类入口不注册公开 capability、MCP 或 HTTP action，必须自行校验一次性 state、归属与有效期，原始参数不得进入公开 dispatcher。Portal Test 的唯一入口为 `synapse://portal-headless-test/callback`。
 - 协议路由只做严格解析和分发，不得硬编码具体 App，也不得根据无效输入猜测相近 action。
 - App Deep Link 不做 Synapse 二次确认、签名、Origin 或调用者可信性校验；安全边界是 manifest 显式声明、Schema 和能力自身的权限/运行条件/审计/脱敏。
 - 无效 Deep Link 不得打开或聚焦主窗口；日志不得记录原始 URL。

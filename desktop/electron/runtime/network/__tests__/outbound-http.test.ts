@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from "vitest"
 import { sendOutboundHttpRequest } from "../outbound-http"
 
 describe("sendOutboundHttpRequest", () => {
+  it("supports manual redirects and redacts Portal token headers", async () => {
+    const logger = { warn: vi.fn(), error: vi.fn() }
+    const fetchImpl = vi.fn(async () => new Response("redirect", { status: 302, headers: { token: "response-secret", location: "https://other.invalid" } }))
+    const result = await sendOutboundHttpRequest({ method: "GET", url: "https://example.test", redirect: "manual", headers: { token: "request-secret" }, logger, fetchImpl })
+    expect(fetchImpl.mock.calls[0]).toBeDefined()
+    expect(fetchImpl).toHaveBeenCalledWith("https://example.test", expect.objectContaining({ redirect: "manual" }))
+    expect(result.headers.token).toBe("[redacted]")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("request-secret")
+  })
+
   it("sends method, headers, body, and returns text response", async () => {
     const fetchImpl = vi.fn(async () => new Response("ok", {
       status: 201,

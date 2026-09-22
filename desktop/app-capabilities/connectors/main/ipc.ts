@@ -12,6 +12,7 @@ export const connectorsIpcModule: IpcModule = {
   methods: {
     list: { operationId: "app.connectors.item.list", kind: "invoke", request: z.void(), response: connectorListResultSchema, handler: (ctx) => service(ctx).list() },
     connect: { operationId: "app.connectors.item.connect", kind: "invoke", request: connectorIdInputSchema, response: connectorItemSchema, handler: (ctx, request: z.infer<typeof connectorIdInputSchema>) => service(ctx).connect(request.id) },
+    retry: { operationId: "app.connectors.item.retry", kind: "invoke", request: connectorIdInputSchema, response: connectorItemSchema, handler: (ctx, request: z.infer<typeof connectorIdInputSchema>) => service(ctx).retry(request.id) },
     disconnect: { operationId: "app.connectors.item.disconnect", kind: "invoke", request: connectorIdInputSchema, response: z.void(), handler: (ctx, request: z.infer<typeof connectorIdInputSchema>) => service(ctx).disconnect(request.id) },
   },
   events: { changed: { operationId: "app.connectors.item.changed", kind: "event", payload: connectorChangedEventSchema } },

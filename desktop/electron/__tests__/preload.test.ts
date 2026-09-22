@@ -74,6 +74,19 @@ describe("preload bridge", () => {
     expect(output).not.toMatch(/require\(["']\.{1,2}\//)
   })
 
+  it("subscribes connectors to their EventBus payload without exposing credential operations", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+    bridge.connectors.item.onChanged(listener)
+    const registration = electronMock.ipcRenderer.on.mock.calls.find(([channel]) => channel === "synapse:app:events:operation:connector")
+    expect(registration).toBeDefined()
+    const payload = { items: [{ id: "portal-headless-test", connectionStatus: "connected" }] }
+    registration?.[1]({}, { domain: "connector", type: "item.changed", payload, timestamp: "now" })
+    expect(listener).toHaveBeenCalledWith(payload)
+    expect(bridge.connectors).not.toHaveProperty("getSessionInput")
+    expect(bridge.connectors.item).not.toHaveProperty("handleCallback")
+  })
+
   it("subscribes repository listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

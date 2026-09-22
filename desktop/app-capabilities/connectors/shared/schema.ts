@@ -9,6 +9,12 @@ export const connectorItemSchema = z.object({
   enabled: z.boolean(),
   probeStatus: connectorProbeStatusSchema,
   errorMessage: z.string().optional(),
+  connectionStatus: z.enum(["disconnected", "connecting", "verifying", "connected", "reconnect_required", "failed"]).optional(),
+  canRetry: z.boolean().optional(),
+  account: z.object({
+    portalUserId: z.string(), tenantId: z.string(), displayName: z.string().optional(), tenantName: z.string().optional(),
+    connectedAt: z.string(), lastValidatedAt: z.string(),
+  }).optional(),
 })
 export const connectorCredentialSchema = z.object({
   id: z.string().min(1),
