@@ -16,6 +16,10 @@ export const EXEMPT_SEGMENTS: Readonly<Record<string, string>> = {
   to: "extract_to_file 的结构助词，语义由 extract 与 file 承载",
   set: "set_visibility 的动词，语义由 visibility 承载",
   used: "used_model 的修饰词，语义由 model 承载",
+  file: "「文件」在中文里同时指 item 与 file 两个段。映射给 item 是既有产品语义"
+    + "（app_drive_item_list 必须压过 app_drive_file_version_list，由既有测试锁定），"
+    + "再映射给 file 会把常见说法「云盘文件列表」带到版本列表上去。file 段由"
+    + "content / version / upload / download 等更具体的名词承载。",
 }
 
 /**
@@ -52,7 +56,6 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
 
   // ---------------- 名词：drive ----------------
   ["文件", "item"],
-  ["文件", "file"],
   ["条目", "item"],
   ["文件夹", "folder"],
   ["目录树", "tree"],
