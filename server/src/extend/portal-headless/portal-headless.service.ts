@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { HttpException, Inject, Injectable, Logger, OnModuleDestroy } from "@nestjs/common"
 import type { Catalog } from "portal-headless" with { "resolution-mode": "import" }
-import { z } from "zod"
-import { catalogInput, describeInput, parseInput, readInput, readParameters, type PortalCredentials } from "./contract"
+import type { z } from "zod"
+import { catalogInput, describeInput, readInput, type PortalCredentials } from "./contract"
 
 export const PORTAL_SDK_LOADER = "PORTAL_HEADLESS_SDK_LOADER"
 export type PortalSdk = typeof import("portal-headless", { with: { "resolution-mode": "import" } })
@@ -10,10 +10,13 @@ type Operation = { op: "context" }
   | { op: "catalog"; input: z.infer<typeof catalogInput> }
   | { op: "describe"; input: z.infer<typeof describeInput> }
   | { op: "read"; input: z.infer<typeof readInput> }
+  | { op: "invoke"; input: z.infer<typeof readInput> }
 const baseUrl = "https://biz-api-test.wodecorp.cn"
 const protocolVersion = 1
-const catalogRevision = "0dae0247f34ee503d6086c58a5f6243f3665fb3d:page-permissions-v1"
-const allowedIds = new Set<string>(Object.keys(readParameters))
+const catalogRevision = "0dae0247f34ee503d6086c58a5f6243f3665fb3d:full-test-v1"
+type CapabilityDescription = Extract<ReturnType<Catalog["describe"]>, { ok: true }>
+type ExecutableCapabilityDescription = CapabilityDescription & { invoke: NonNullable<CapabilityDescription["invoke"]> }
+const jsonSchemaTypes = new Set(["array", "boolean", "integer", "null", "number", "object", "string"])
 
 function failure(status: number, code: string, message: string): HttpException {
   return new HttpException({ code, message }, status)
@@ -22,14 +25,11 @@ function page<T>(items: readonly T[], offset: number, limit: number) {
   const end = Math.min(offset + limit, items.length)
   return { items: items.slice(offset, end), total: items.length, nextOffset: end < items.length ? end : null, complete: end >= items.length }
 }
-function permitted(catalog: Catalog, id: string) {
+function permitted(catalog: Catalog, id: string): ExecutableCapabilityDescription {
   const description = catalog.describe(id)
-  if (!allowedIds.has(id)) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前扩展目录未配置此能力。")
-  if (!description.ok) throw failure(404, "CAPABILITY_NOT_VISIBLE", "服务端已配置此能力，但当前用户与企业的页面权限未包含它，未查询业务数据；不能据此判断部署缺失或没有业务记录。")
-  if (description.write || description.ai?.effect !== "read" || !description.invoke) {
-    throw failure(403, "READ_ONLY_REQUIRED", "此扩展仅允许已绑定的只读能力。")
-  }
-  return description
+  if (!description.ok) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前 SDK 目录不存在此能力。")
+  if (!description.invoke) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前 SDK 能力没有可执行绑定。")
+  return description as ExecutableCapabilityDescription
 }
 
 /** 每个 HTTP 请求独立 SDK 会话，用完清理，避免跨凭证缓存与本机断开语义混淆。 */
@@ -75,25 +75,26 @@ export class PortalHeadlessService implements OnModuleDestroy {
       let data: unknown
       if (operation.op === "context") {
         const user = await scoped.baseShell.getUserInfo()
+        const capabilities = server.catalog.index.capabilities
         data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
-          environment: "test", now: new Date().toISOString(), timeZone: "Asia/Shanghai", configuredReadCapabilities: [...allowedIds] }
+          environment: "test", now: new Date().toISOString(), timeZone: "Asia/Shanghai",
+          capabilityAccess: { mode: "all", total: capabilities.length,
+            read: capabilities.filter((entry) => !entry.write).length, write: capabilities.filter((entry) => entry.write).length } }
       } else {
-        const catalog = await this.sessionCatalog(sdk, server.catalog, (codes) => scoped.baseData.checkPermissions(codes))
+        const catalog = server.catalog
         if (operation.op === "catalog") data = this.catalog(catalog, operation.input)
         else if (operation.op === "describe") {
           const description = permitted(catalog, operation.input.capabilityId)
-          if (operation.input.kind === "capability") data = { ...description, extensionInputSchema: this.parameterSchema(operation.input.capabilityId) }
+          if (operation.input.kind === "capability") data = { ...description, extensionInputSchema: this.parameterSchema(description) }
           else if (operation.input.kind === "method" && operation.input.id && operation.input.id === description.invoke?.sdkPath) data = catalog.describeMethod(operation.input.id)
           else throw failure(404, "REFERENCE_UNAVAILABLE", "当前能力没有此结构或方法引用。")
         } else {
           const description = permitted(catalog, operation.input.capabilityId)
-          const parameters = readParameters[operation.input.capabilityId as keyof typeof readParameters]
-          const args = parseInput(parameters as z.ZodType<Record<string, unknown>>, operation.input.arguments)
-          const result = await scoped.capabilities.invoke(description.invoke!.capabilityId, args)
+          const result = await scoped.capabilities.invoke(description.invoke.capabilityId, operation.input.arguments)
           data = { result, ai: description.ai, capabilityId: description.capabilityId }
         }
       }
-      if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 查询超时，请稍后重试。")
+      if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
       return { protocolVersion, catalogRevision, data }
     } catch (error) {
       if (error instanceof HttpException) throw error
@@ -105,33 +106,24 @@ export class PortalHeadlessService implements OnModuleDestroy {
     }
   }
 
-  private async sessionCatalog(sdk: PortalSdk, full: Catalog, checkPermissions: (codes: string[]) => Promise<{ granted: string[] }>): Promise<Catalog> {
-    const candidates = full.index.pages.filter((entry) => entry.capabilityIds.some((id) => allowedIds.has(id)))
-    const codes = [...new Set(candidates.filter((entry) => entry.source === "menu-catalog" && entry.permission).map((entry) => entry.permission))]
-    let granted: Set<string>
-    try {
-      // Match Portal's permissionFilter exactly. The legacy project nav contains group paths,
-      // not the page permissions used by the web UI. Never infer access from path prefixes.
-      granted = new Set(codes.length ? (await checkPermissions(codes)).granted : [])
-    } catch (error) {
-      const normalized = normalizePortalError(error)
-      if ([401, 403].includes(normalized.getStatus())) throw normalized
-      throw failure(503, "CATALOG_UNAVAILABLE", "Portal 页面权限暂不可用，未查询业务数据，请稍后重试。")
+  private parameterSchema(description: CapabilityDescription) {
+    const required = description.params.filter((parameter) => parameter.required).map((parameter) => parameter.name)
+    return {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: Object.fromEntries(description.params.map((parameter) => {
+        const types = (parameter.contract?.type?.split("|").map((type) => type.trim()).filter((type) => jsonSchemaTypes.has(type)) ?? [])
+        if (parameter.contract?.nullable && !types.includes("null")) types.push("null")
+        return [parameter.name, {
+          ...(types.length ? { type: types.length === 1 ? types[0] : types } : {}),
+          ...(parameter.description ? { description: parameter.description } : {}),
+          ...(parameter.contract?.format ? { format: parameter.contract.format } : {}),
+          ...(parameter.options ? { enum: parameter.options.map((option) => option.value) } : {}),
+        }]
+      })),
+      ...(required.length ? { required } : {}),
+      additionalProperties: false,
     }
-    // SDK capability-only pages (flow forms and dictionaries) have no sidebar permission.
-    // They remain subject to the extension allowlist and Portal's business authorization.
-    const pages = candidates.filter((entry) => entry.source === "capability-only" || !entry.permission || granted.has(entry.permission))
-    const paths = new Set(pages.map((entry) => entry.menuPath))
-    return sdk.createCatalog({
-      capabilities: full.index.capabilities.filter((entry) => allowedIds.has(entry.id))
-        .flatMap((entry) => entry.definitions.filter((definition) => paths.has(definition.pagePath))),
-      rows: pages.filter((entry) => entry.source === "menu-catalog"),
-    })
-  }
-
-  private parameterSchema(id: string) {
-    // Returned schema is the same validator read() consumes, including tighter first-release bounds.
-    return z.toJSONSchema(readParameters[id as keyof typeof readParameters], { io: "input" })
   }
 
   private catalog(catalog: Catalog, input: z.infer<typeof catalogInput>) {
@@ -158,6 +150,6 @@ export function normalizePortalError(error: unknown, timedOut = false): HttpExce
     if (item.code === "ECONNABORTED" || item.code === "ERR_CANCELED") timedOut = true
     current = item.cause
   }
-  return timedOut ? failure(504, "PORTAL_TIMEOUT", "Portal 查询超时，请稍后重试。")
-    : failure(502, "PORTAL_REQUEST_FAILED", "Portal 查询失败，请检查连接与企业后重试。")
+  return timedOut ? failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
+    : failure(502, "PORTAL_REQUEST_FAILED", "Portal 操作失败，请检查参数、连接与企业权限后重试。")
 }

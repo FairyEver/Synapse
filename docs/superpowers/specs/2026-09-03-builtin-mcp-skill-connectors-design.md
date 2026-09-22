@@ -70,4 +70,4 @@ type ConnectorStateStore = {
 
 ## 2026-09-22：Portal 独立扩展补充
 
-用户确认 Portal Headless 作为 `extend` 扩展，不升级为内置 App。连接器只负责本机授权和安全凭据管理；专用 MCP `extend_portal_headless_credential_get` 向用户自己的 AI 交付 Portal 凭证与短期 SY 授权，系统 Skill 引导 AI 直连 `/api/extend/portal-headless/*`，后端验证两类身份后调用固定版本 SDK。此交付是原“凭据不进入模型结果”约束的专用例外，不开放通用 Secrets、Renderer、业务转发 MCP 或任意 HTTP 代理。实现和部署边界见 `docs/integrations/portal-headless-extension.md`。
+用户确认 Portal Headless 作为 `extend` 扩展，不升级为内置 App。连接器只负责本机授权和安全凭据管理；专用 MCP `extend_portal_headless_credential_get` 向用户自己的 AI 交付 Portal 凭证与短期 SY 授权，系统 Skill 引导 AI 直连 `/api/extend/portal-headless/*`，后端验证两类身份后调用固定版本 SDK。测试扩展发布该固定 SDK 的完整读写目录，不设置 Synapse allowlist 或 Portal 页面权限目录过滤，实际执行仍使用当前 Portal 身份并由业务接口鉴权。此交付是原“凭据不进入模型结果”约束的专用例外，不开放通用 Secrets、Renderer、业务转发 MCP 或任意 HTTP 代理。实现和部署边界见 `docs/integrations/portal-headless-extension.md`。

@@ -15,7 +15,7 @@
 | MCP 公开工具表面 | `tools/list` 载荷、`initialize` instructions | `desktop/electron/services/agent-runtime/synapse-tool-router.ts` |
 | Deep Link | 默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
 
-Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `synapse://portal-headless-test/callback` 直接交给可信主进程。独立 `extend` domain 新增 1 个 capability / MCP 索引工具：`extend.portal-headless.credential.get` / `extend_portal_headless_credential_get`，仅允许 MCP 来源；不新增 System App、Dock、Workflow、Automation 或 Deep Link。系统 Skill 指南位于 `skill-package/extend/portal-headless/`，引导 AI 携带短期 SY 授权与 Portal 凭证直连 `/api/extend/portal-headless/*`。连接器凭据不属于 Secrets MCP 数据；正式环境尚未注册。
+Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `synapse://portal-headless-test/callback` 直接交给可信主进程。独立 `extend` domain 新增 1 个 capability / MCP 索引工具：`extend.portal-headless.credential.get` / `extend_portal_headless_credential_get`，仅允许 MCP 来源；不新增 System App、Dock、Workflow、Automation 或 Deep Link。系统 Skill 指南位于 `skill-package/extend/portal-headless/`，引导 AI 携带短期 SY 授权与 Portal 凭证直连 `/api/extend/portal-headless/*`。该测试 HTTP 扩展发布固定 SDK 的完整读写目录，但不改变 Synapse MCP capability/tool 数量；连接器凭据不属于 Secrets MCP 数据，正式环境尚未注册。
 
 ## `desktop/app-capabilities` 产品表面
 

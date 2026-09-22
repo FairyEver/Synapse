@@ -34,15 +34,15 @@ SDK 源码仍在独立仓库维护，SY 不复制一套业务源码。当前固�
 
 ## 运行范围与限制
 
-仅测试 API `https://biz-api-test.wodecorp.cn`；不允许客户端覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。页面权限查询失败或返回格式异常时失败关闭，不回退到全量目录。
+仅测试 API `https://biz-api-test.wodecorp.cn`；不允许客户端覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。
 
-首期只读 allowlist：`meeting-room-usage`、`perf-year-agreement-list`、`base-dict-get`（仅 protocol_status）。执行时同时复核 SDK 的 write=false、ai.effect=read、invoke 绑定，参数用同一份 schema 校验并通过 describe 返回。其它能力即使已在 SDK 中也不能执行；扩大范围需要对应契约验证与 allowlist 更新。
+测试扩展直接发布固定版本 SDK 的完整能力目录，不设置 Synapse capability allowlist，也不按 Portal 页面权限收窄目录。`describe` 只接受目录中的精确 capability/method 引用并返回 SDK 契约与顶层参数 schema；`/invoke` 和兼容 `/read` 只调用 SDK 已登记的 `capabilities.invoke` 绑定，不接受客户端指定 URL、header 或任意方法路径。读写能力均可执行，Portal 后端业务鉴权仍是最终权限边界。
 
-目录、describe 与 read 统一调用 SDK `baseData.checkPermissions`，数据来自 `/admin-api/sys/menu/permissionsNotBySystem`，与 Portal 网页的 `fetchPermissions` / `permissionFilter` 一致。只批量检查 allowlist 所关联页面的 `permission`，精确匹配；不得把导航树 `/sys/menu/nav?project=2`、分组入口、路径前缀或猜测的别名当成页面授权。SDK 的 `capability-only` 页面（流程表单、基础字典）继续按既有规则保留，仍受 allowlist、只读校验与 Portal 业务鉴权约束。过滤定义时同步过滤绑定页面，避免重建目录把已剔除能力补成 capability-only；不把用户完整权限列表返回 AI 或写入日志。每次 HTTP 请求均独立查询，不跨用户或企业缓存。
+全量目录是测试发现面，不表示当前账号具备每项业务权限；执行仍使用当前用户与企业绑定的 Portal 凭据，由目标业务接口返回真实授权结果。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。每次 HTTP 请求仍使用独立会话，不跨用户或企业缓存。
 
-核对依据：Portal `app/portal/utils/system.js` 中的 `fetchPermissions`、`permissionFilter`，`app/portal/menus/hr.js` 中个人年度页面的 permission；固定 SDK `base-dept-dict-permission.ts` 已封装相同权限接口。旧导航树返回 `/dashboard/agreement`，并不代表新页面 `/dashboard/year-agreement/main` 无权限。该类兼容问题通过统一权限数据源修复，不逐个添加路径别名。`catalogRevision` 在 SDK 提交号后加 `:page-permissions-v1` 标识接入层过滤规则变更。
+`context.capabilityAccess` 返回 `mode=all` 及固定 SDK 的总数、读能力数和写能力数；具体清单通过分页目录读取。`catalogRevision` 在 SDK 提交号后加 `:full-test-v1`，标识当前测试扩展采用全量目录规则。
 
-年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。`context.configuredReadCapabilities` 仅表示服务端配置范围；目录按当前用户与企业的页面权限收敛，不是最终数据权限。服务端已配置但页面权限不包含时返回 `CAPABILITY_NOT_VISIBLE`，不得误判为部署缺失或没有业务数据；Portal 业务响应决定实际访问结果。
+年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。目录不存在某项能力表示固定 SDK 未发布它；目录中存在但执行返回 `PORTAL_FORBIDDEN` 表示当前 Portal 身份或企业被业务接口拒绝。
 
 完整请求、响应与错误契约见系统 Skill 的 `extend/portal-headless/api-reference.md`。2026-09-22 已在用户启动的本机开发环境通过 Computer Use 验证 SY 登录回调、用户完成 Portal 授权后的连接状态、AI 取凭证与直连后端会议室查询。首次年度查询被旧导航树过滤；该问题的修复与复测记录见 `portal-headless-gui-acceptance.md`。生产部署、其它账号与跨平台授权仍未验收。本地合成测试不能代替真实验收。
 

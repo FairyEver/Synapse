@@ -51,4 +51,10 @@ export class PortalHeadlessController {
   async read(@Headers() headers: Record<string, string | string[] | undefined>, @Body() body: unknown) {
     return this.portal.run(await this.identity(headers), { op: "read", input: parseInput(readInput, body) })
   }
+
+  @Post("invoke")
+  @HttpCode(200)
+  async invoke(@Headers() headers: Record<string, string | string[] | undefined>, @Body() body: unknown) {
+    return this.portal.run(await this.identity(headers), { op: "invoke", input: parseInput(readInput, body) })
+  }
 }

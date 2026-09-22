@@ -3,7 +3,6 @@ import { JwtService } from "@nestjs/jwt"
 import { Logger } from "@nestjs/common"
 import { PortalHeadlessAccessService } from "./access.service"
 import { PortalHeadlessService, normalizePortalError, type PortalSdk } from "./portal-headless.service"
-import { parseInput, readParameters } from "./contract"
 import { PortalHeadlessController } from "./portal-headless.controller"
 
 vi.mock("../../config/env", () => ({ loadEnv: () => ({ userAccessJwtSecret: "synthetic-sy-test-secret-not-real" }) }))
@@ -33,6 +32,8 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
         return options.permissions === undefined ? ["/dashboard/year-agreement/main"] : options.permissions
       }
       if (url.endsWith("/meeting-room-usage")) return { meetingRooms: [{ meetingRoomId: "room", meetingRoomName: "会议室", timeSlots: [] }] }
+      if (url.endsWith("/org/hrposttype/page")) return { list: [{ id: "post-type", name: "测试类别" }], total: 1 }
+      if (url.endsWith("/org/hrposttype/save")) return null
       if (url.endsWith("/kpiyearprotocol/page")) {
         if (options.yearlyError) throw options.yearlyError
         return { list: [{ id: "agreement", year: 2026, status: "1" }], total: 1 }
@@ -48,7 +49,8 @@ describe("Portal Headless backend extension", () => {
   it("loads the packaged SDK, validates identity and returns only safe context", async () => {
     const { service, calls, runtimes } = fixture()
     const result = await service.run(identity, { op: "context" })
-    expect(result).toMatchObject({ protocolVersion: 1, data: { portalUser: { id: "portal-user", name: "测试用户" }, tenantId: "tenant-one" } })
+    expect(result).toMatchObject({ protocolVersion: 1, data: { portalUser: { id: "portal-user", name: "测试用户" }, tenantId: "tenant-one",
+      capabilityAccess: { mode: "all", total: sdk.createPortalServer({ baseUrl: "https://example.invalid" }).catalog.index.capabilities.length } } })
     expect(JSON.stringify(result)).not.toMatch(/private-canary|salt-canary|portal-canary/)
     expect(calls.some((call) => String(call.request.url).endsWith("getUserTenantsByPage"))).toBe(true)
     expect(calls.every((call) => call.request.maxRedirects === 0 && call.request.timeout === 10_000 && call.request.signal instanceof AbortSignal)).toBe(true)
@@ -64,16 +66,21 @@ describe("Portal Headless backend extension", () => {
     const result = await service.run(identity, { op: "read", input: { capabilityId: "meeting-room-usage", arguments: { date: "2026-09-22" } } })
     expect(result.data).toMatchObject({ result: { meetingRooms: [{ meetingRoomId: "room" }] } })
   })
-  it("rejects write capabilities, guessed parameters and method paths", async () => {
+  it("publishes and executes write capabilities through invoke and the read compatibility route", async () => {
     const { service, calls } = fixture()
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "meeting-application-submit", arguments: {} } })).rejects.toThrow("当前扩展目录")
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "meeting-room-usage", arguments: { readOnly: true, url: "https://evil.invalid" } } })).rejects.toThrow("参数无效")
+    const description = await service.run(identity, { op: "describe", input: { kind: "capability", capabilityId: "hr-post-type-create" } })
+    expect(description.data).toMatchObject({ write: true, extensionInputSchema: { required: ["name", "sort"], additionalProperties: false,
+      properties: { name: { type: "string" }, sort: { type: "integer" } } } })
+    await expect(service.run(identity, { op: "invoke", input: { capabilityId: "hr-post-type-create", arguments: { name: "测试类别", sort: 1 } } }))
+      .resolves.toMatchObject({ data: { capabilityId: "hr-post-type-create" } })
+    await expect(service.run(identity, { op: "read", input: { capabilityId: "hr-post-type-create", arguments: { name: "测试类别", sort: 1 } } }))
+      .resolves.toMatchObject({ data: { capabilityId: "hr-post-type-create" } })
     await expect(service.run(identity, { op: "describe", input: { kind: "method", capabilityId: "meeting-room-usage", id: "__proto__" } })).rejects.toThrow("引用")
-    expect(calls.every((call) => !String(call.request.url).includes("submit"))).toBe(true)
-    expect(() => parseInput(readParameters["perf-year-agreement-list"], { year: 2026 })).toThrow()
-    expect(() => parseInput(readParameters["meeting-room-usage"], { date: "2026-02-30" })).toThrow()
+    expect(calls.filter((call) => String(call.request.url).endsWith("/org/hrposttype/save"))).toHaveLength(2)
+    expect(calls.find((call) => String(call.request.url).endsWith("/org/hrposttype/save"))?.request)
+      .toMatchObject({ method: "post", data: { name: "测试类别", sort: 1 } })
   })
-  it("invokes the personal yearly list with pagination and only the allowed status dictionary", async () => {
+  it("keeps the existing read entry compatible", async () => {
     const { service, calls } = fixture()
     const yearly = await service.run(identity, { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: { pageNo: 2, pageSize: 10 } } })
     expect(yearly.data).toMatchObject({ result: { list: [{ year: 2026 }], total: 1 } })
@@ -81,24 +88,16 @@ describe("Portal Headless backend extension", () => {
       .toMatchObject({ pageNo: 2, pageSize: 10 })
     const dict = await service.run(identity, { op: "read", input: { capabilityId: "base-dict-get", arguments: { dictType: "protocol_status" } } })
     expect(dict.data).toMatchObject({ result: { dictType: "protocol_status", entries: [{ label: "已签订", value: "1" }] } })
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "base-dict-get", arguments: { dictType: "other" } } })).rejects.toThrow("参数无效")
   })
-  it("uses exact Portal web page permissions consistently for discovery, describe and reads", async () => {
-    const { service, calls } = fixture()
-    const catalog = await service.run(identity, { op: "catalog", input: { op: "search", query: "年度双赢协议", offset: 0, limit: 20 } })
-    expect(JSON.stringify(catalog.data)).toContain("perf-year-agreement-list")
-    await expect(service.run(identity, { op: "describe", input: { kind: "capability", capabilityId: "perf-year-agreement-list" } }))
+  it("uses the full SDK catalog without allowlist or Portal page-permission filtering", async () => {
+    const { service, calls } = fixture({ permissionFailure: true })
+    const catalog = await service.run(identity, { op: "catalog", input: { op: "search", query: "岗位类别", offset: 0, limit: 20 } })
+    expect(JSON.stringify(catalog.data)).toContain("hr-post-type-list")
+    await expect(service.run(identity, { op: "describe", input: { kind: "capability", capabilityId: "hr-post-type-list" } }))
       .resolves.toMatchObject({ data: { ok: true, write: false } })
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: {} } }))
+    await expect(service.run(identity, { op: "read", input: { capabilityId: "hr-post-type-list", arguments: {} } }))
       .resolves.toMatchObject({ data: { result: { total: 1 } } })
-    expect(calls.filter((call) => String(call.request.url).endsWith("/permissionsNotBySystem"))).toHaveLength(3)
-    expect(calls.some((call) => String(call.request.url).endsWith("/sys/menu/nav"))).toBe(false)
-  })
-  it.each(["/dashboard/agreement", "/dashboard/year-agreement", "/dashboard/year-agreement/main/list", "/dashboard/year-agreement/others"])("does not infer personal-page access from %s", async (permission) => {
-    const { service, calls } = fixture({ permissions: [permission] })
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: {} } }))
-      .rejects.toMatchObject({ response: { code: "CAPABILITY_NOT_VISIBLE" } })
-    expect(calls.some((call) => String(call.request.url).endsWith("/kpiyearprotocol/page"))).toBe(false)
+    expect(calls.some((call) => String(call.request.url).endsWith("/permissionsNotBySystem"))).toBe(false)
   })
   it("preserves Portal business denial even when the page permission is granted", async () => {
     const { service } = fixture({ yearlyError: { response: { status: 403 } } })
@@ -112,43 +111,6 @@ describe("Portal Headless backend extension", () => {
       service.run({ owner: "owner-two", credential: { ...identity.credential, tenantId: "tenant-two", token: "other-canary" } }, { op: "context" }),
     ])
     expect(calls.every((call) => call.token === "portal-canary" ? call.tenantId === "tenant-one" : call.token === "other-canary" && call.tenantId === "tenant-two")).toBe(true)
-  })
-  it("does not share page permissions across simultaneous users or tenants", async () => {
-    const { service, calls } = fixture({ permissionsByTenant: { "tenant-one": ["/dashboard/year-agreement/main"], "tenant-two": [] } })
-    const operation = { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: {} } } as const
-    const results = await Promise.allSettled([
-      service.run(identity, operation),
-      service.run({ owner: "owner-two", credential: { ...identity.credential, tenantId: "tenant-two", token: "other-canary" } }, operation),
-    ])
-    expect(results[0]).toMatchObject({ status: "fulfilled", value: { data: { result: { total: 1 } } } })
-    expect(results[1]).toMatchObject({ status: "rejected", reason: { response: { code: "CAPABILITY_NOT_VISIBLE" } } })
-    const reads = calls.filter((call) => String(call.request.url).endsWith("/kpiyearprotocol/page"))
-    expect(reads).toHaveLength(1)
-    expect(reads[0]).toMatchObject({ tenantId: "tenant-one", token: "portal-canary" })
-  })
-  it("keeps configured capability-only reads usable without a sidebar page permission", async () => {
-    const { service } = fixture({ permissions: [] })
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "meeting-room-usage", arguments: {} } }))
-      .resolves.toMatchObject({ data: { result: { meetingRooms: [{ meetingRoomId: "room" }] } } })
-  })
-  it("distinguishes configured support from a capability absent in this session's page permissions", async () => {
-    const { service, calls } = fixture({ permissions: [] })
-    const context = await service.run(identity, { op: "context" })
-    expect(context.data).toMatchObject({ configuredReadCapabilities: expect.arrayContaining(["perf-year-agreement-list"]) })
-    expect(context.data).not.toHaveProperty("allowedCapabilities")
-    const catalog = await service.run(identity, { op: "catalog", input: { op: "search", query: "年度双赢协议", offset: 0, limit: 20 } })
-    expect(catalog.data).toMatchObject({ total: 0, complete: true })
-    await expect(service.run(identity, { op: "describe", input: { kind: "capability", capabilityId: "perf-year-agreement-list" } }))
-      .rejects.toMatchObject({ response: { code: "CAPABILITY_NOT_VISIBLE" } })
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: {} } }))
-      .rejects.toMatchObject({ response: { code: "CAPABILITY_NOT_VISIBLE" } })
-    expect(calls.some((call) => String(call.request.url).endsWith("/kpiyearprotocol/page"))).toBe(false)
-  })
-  it.each([{ permissionFailure: true }, { permissions: {} }, { permissions: null }])("fails closed when page permissions are unavailable: %j", async (options) => {
-    const { service, calls } = fixture(options)
-    await expect(service.run(identity, { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: {} } }))
-      .rejects.toMatchObject({ response: { code: "CATALOG_UNAVAILABLE" } })
-    expect(calls.some((call) => String(call.request.url).endsWith("/kpiyearprotocol/page"))).toBe(false)
   })
   it("strips SDK error details", async () => {
     const failed = fixture({ error: Object.assign(new Error("token=leak-canary"), { code: 401 }) })
@@ -166,7 +128,7 @@ describe("Portal Headless backend extension", () => {
         config?.sessionOptions?.logger?.error("token=log-canary", { error: "log-canary" })
         throw new Error("log-canary")
       } }))
-      await expect(service.run(identity, { op: "context" })).rejects.toThrow("Portal 查询失败")
+      await expect(service.run(identity, { op: "context" })).rejects.toThrow("Portal 操作失败")
       expect(warn).toHaveBeenCalledWith({ event: "portal.session.degraded" })
       expect(error).toHaveBeenCalledWith({ event: "portal.session.failed" })
       expect(JSON.stringify([warn.mock.calls, error.mock.calls])).not.toContain("log-canary")
@@ -210,6 +172,7 @@ describe("SY extension authorization", () => {
       (h: typeof headers) => controller.catalog(h, { op: "domains" }),
       (h: typeof headers) => controller.describe(h, { kind: "capability", capabilityId: "meeting-room-usage" }),
       (h: typeof headers) => controller.read(h, { capabilityId: "meeting-room-usage" }),
+      (h: typeof headers) => controller.invoke(h, { capabilityId: "hr-post-type-create", arguments: { name: "测试", sort: 1 } }),
     ]
     for (const operation of operations) {
       await expect(operation({ ...headers, authorization: "" })).rejects.toMatchObject({ status: 401 })

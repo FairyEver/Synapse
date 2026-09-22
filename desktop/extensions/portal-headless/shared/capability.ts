@@ -11,6 +11,6 @@ export const portalHeadlessCapability: CapabilityDefinition = {
 }
 export const portalHeadlessTool: McpToolDefinition = {
   name: PORTAL_CREDENTIAL_TOOL,
-  description: "Get credentials for the Portal Headless extension (Portal 会议室、双赢协议). Returns the connected user's Portal token, tenant, fixed backend URL and short-lived SY extension authorization. Sensitive output: use only for HTTPS requests to the returned extension URL; never quote credentials in answers or logs. Business requests go directly from your HTTP client to that backend, not through this MCP. Permissions: secret.read, network.connect.",
+  description: "Get credentials for the Portal Headless test extension and its full SDK business catalog. Returns the connected user's Portal token, tenant, fixed backend URL and short-lived SY extension authorization. Sensitive output: use only for HTTPS requests to the returned extension URL; never quote credentials in answers or logs. Business requests go directly from your HTTP client to that backend, not through this MCP. Permissions: secret.read, network.connect.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 }
