@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
 import { liveConnectionService } from "../../services/live-connection-service-instance"
+import { liveDeviceNameSchema, liveDeviceSettingsSchema } from "../../../src/types/live-device-settings"
 
 const liveStateSchema = z.object({
   status: z.enum(["connected", "reconnecting", "disconnected", "unauthenticated"]),
@@ -21,6 +22,20 @@ const liveStateChangedDomainEventSchema = z.object({
 export const liveIpcModule: IpcModule = {
   id: "live",
   methods: {
+    getDeviceSettings: {
+      kind: "invoke",
+      operationId: "app.live.device.get_settings",
+      request: z.void(),
+      response: liveDeviceSettingsSchema,
+      handler: async () => liveConnectionService.getDeviceSettings(),
+    },
+    setDeviceName: {
+      kind: "invoke",
+      operationId: "app.live.device.set_name",
+      request: z.object({ name: liveDeviceNameSchema }),
+      response: liveDeviceSettingsSchema,
+      handler: async (_ctx, payload: { name: string }) => liveConnectionService.setDeviceName(payload.name),
+    },
     getState: {
       kind: "invoke",
       operationId: "app.live.operation.get_state",

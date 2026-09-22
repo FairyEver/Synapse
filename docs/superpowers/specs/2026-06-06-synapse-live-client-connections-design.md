@@ -58,8 +58,19 @@ Rules:
 - Logging out closes the Live connection but does not delete `clientInstanceId`.
 - Clearing app data or reinstalling can create a new `clientInstanceId`.
 - Multiple `clientInstanceId` values for the same account can be online at the same time.
-- If the same `clientInstanceId` opens a new connection from the same device name, the server keeps the latest connection and closes or supersedes the old one.
-- A new connection reporting the same `clientInstanceId` under a **different device name** is a different machine that inherited the id — copying or restoring the app data directory carries it along. The server refuses that connection with close code `4009` (`client_instance_id_conflict`) and leaves the connection already holding the id untouched; the refused machine mints a new `clientInstanceId` and reconnects. Without this the registry holds one entry per id, so the two would take turns evicting each other every couple of seconds, and every phone of the account would see a single computer whose identity flipped between them.
+- The same `clientInstanceId` reconnects by superseding the previous connection only when no hardware conflict is known. Device names never determine identity.
+- The desktop stores a SHA-256 machine fingerprint beside its random `clientInstanceId` in `core.live-client`. macOS reads `IOPlatformUUID`; Windows reads `Win32_ComputerSystemProduct.UUID` through PowerShell/CIM. Both use fixed commands through ControlledProcessRunner, PermissionGuard and AuditSink, with a 5-second timeout and bounded output. Raw hardware identifiers are neither persisted nor sent to the server or logs.
+- Before connecting, a changed fingerprint generates and persists a fresh random `clientInstanceId`. First binding preserves a legacy installation's ID. All in-process identity consumers share the same store and serialized mutation queue.
+- `live.hello` optionally carries the 64-character lowercase hex `machineFingerprint`. When two online connections claim one ID with different fingerprints, the server refuses the newcomer with `4009` (`client_instance_id_conflict`); that desktop reissues its ID before reconnecting. This also separates already-migrated legacy records after both clients are upgraded, even when their display names match.
+- Missing, invalid, all-zero/all-FF or unreadable hardware identifiers do not rotate the ID or overwrite its last valid stored binding. An unavailable current fingerprint is omitted from the handshake, never replaced with the copied stored fingerprint. Successful reads are cached for the process; failures can retry on a later connection.
+- Fingerprints are migration hints, not credentials or a hardware attestation. If either peer lacks a fingerprint, or cloned/virtual hardware reports identical UUIDs, automatic conflict detection cannot prove the machines differ. Deploy the server change before updating desktop clients; complete protection for already-migrated unbound installations requires both clients to run the updated version.
+
+### Device display name
+
+- Settings → 基础设置 adds `设备名称` below appearance. A non-empty, trimmed name of up to 120 characters is saved in the same local encrypted namespace. Control characters are rejected. Without an override, the name defaults to `os.hostname()` (bounded to the protocol limit).
+- Saving changes display metadata only, retains the device ID, and reconnects the authenticated Live client to publish the new hello; subsequent mobile summaries use the same name. Logged-out clients save locally for the next login.
+- Device naming uses UI-private `app.live.device.get_settings` and `app.live.device.set_name` IPC. It does not register a public MCP capability, Workflow, Automation or Deep Link, and never changes the OS computer name or local user identity.
+- Device ID, fingerprint and name are machine-local state, outside the user-facing configuration export/import. Full OS migration can copy them; hardware binding handles identity changes in that case.
 
 ### connectionId
 
@@ -145,6 +156,7 @@ type LiveDesktopHello = {
   appVersion: string
   platform: string
   deviceName: string
+  machineFingerprint?: string
 }
 ```
 

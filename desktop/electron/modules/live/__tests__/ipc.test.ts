@@ -23,6 +23,13 @@ vi.mock("electron", () => ({
 import { liveIpcModule } from "../ipc"
 
 describe("liveIpcModule", () => {
+  it("validates device names before writing settings", () => {
+    const schema = liveIpcModule.methods.setDeviceName.request
+    expect(schema.parse({ name: "  公司 Mac  " })).toEqual({ name: "公司 Mac" })
+    for (const name of ["", "  ", "a".repeat(121), "bad\nname", "bad\u0000name"]) {
+      expect(schema.safeParse({ name }).success).toBe(false)
+    }
+  })
   it("declares live invoke and event channels", () => {
     expect(liveIpcModule.id).toBe("live")
     expect(liveIpcModule.methods.getState.operationId).toBe("app.live.operation.get_state")

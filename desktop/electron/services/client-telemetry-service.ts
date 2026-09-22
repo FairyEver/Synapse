@@ -10,7 +10,7 @@ import type {
 import type { SynapseRendererLogPayload } from "../../src/types/log"
 import type { SynapseAccountState } from "../../src/types/account"
 import type { AccountService } from "./account-service"
-import { LiveClientIdStore } from "./live-client-id-store"
+import { getLiveClientIdStore, type LiveClientIdStore } from "./live-client-id-store"
 import { createMainLogger } from "./log-store"
 export { CLIENT_TELEMETRY_SERVICE_ID } from "./client-telemetry-constants"
 
@@ -87,7 +87,7 @@ export class ClientTelemetryService {
     this.outbox = deps.outbox
     this.environments = deps.environments
     this.account = deps.account
-    this.clientIdStore = deps.clientIdStore ?? new LiveClientIdStore()
+    this.clientIdStore = deps.clientIdStore ?? getLiveClientIdStore()
     this.appVersion = deps.appVersion
     this.platform = deps.platform
     this.osName = deps.osName

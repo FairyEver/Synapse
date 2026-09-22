@@ -179,3 +179,10 @@
 
 - 扫描详情“发布到仓库”不得静默落库；覆盖路径只预填本地版本并进入内容详情编辑态，用户保存后才写入。
 - 修改编辑器 Rule/Skill/Prompt 安装、扫描、复制或兼容策略前，阅读 `docs/reference/editor-integration-matrix.md`。
+
+## Live 设备身份与名称
+
+- macOS 使用 IOPlatformUUID、Windows 使用 SMBIOS UUID，经受控进程、权限和审计读取；仅保存和传输带 Synapse 域前缀的 SHA-256 摘要，不记录或上传原始硬件码。
+- `core.live-client` 的随机设备 ID、机器绑定和设备名称通过同一进程内存储实例与写队列维护；迁移到不同机器时更换设备 ID，读取失败保留 ID 与已保存绑定，不把旧机器摘要冒充当前机器上报。
+- 设备名称仅为显示元数据，设置入口位于基础设置；改名不得改变设备 ID、OS 主机名或本地用户身份。Live hello 与 mobile summary 使用同一名称。服务端只按不同机器摘要判定顶号，不再用名称推断机器身份。
+- 设备设置只有两个 UI 私有 IPC，无公开 MCP/Workflow/Automation/Deep Link。硬件摘要不能作为认证凭证；缺少摘要或克隆硬件 UUID 相同时无法保证自动区分。协议与旧客户端升级边界见 Live Client Connections 设计。

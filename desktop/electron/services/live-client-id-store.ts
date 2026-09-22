@@ -7,11 +7,14 @@ const LIVE_CLIENT_NAMESPACE = "core.live-client"
 
 type PersistedLiveClient = Record<string, unknown> & {
   clientInstanceId?: string
+  machineFingerprint?: string
+  deviceName?: string
 }
 
 type LiveClientIdStoreDeps = {
   readonly namespace?: EncryptedJsonNamespace<PersistedLiveClient>
   readonly createId?: () => string
+  readonly readMachineFingerprint?: () => Promise<string | null>
 }
 
 function createNamespace(): EncryptedJsonNamespace<PersistedLiveClient> {
@@ -27,22 +30,52 @@ function createNamespace(): EncryptedJsonNamespace<PersistedLiveClient> {
 export class LiveClientIdStore {
   private readonly namespace: EncryptedJsonNamespace<PersistedLiveClient>
   private readonly createId: () => string
+  private readMachineFingerprint: () => Promise<string | null>
+  private machineFingerprint: string | null = null
+  private mutations: Promise<unknown> = Promise.resolve()
 
   constructor(deps: LiveClientIdStoreDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
     this.createId = deps.createId ?? randomUUID
+    this.readMachineFingerprint = deps.readMachineFingerprint ?? (async () => null)
   }
 
-  async getOrCreate(): Promise<string> {
-    const current = await this.namespace.getSingleton()
-    const existing = current?.clientInstanceId?.trim()
-    if (existing) {
-      return existing
-    }
+  setMachineFingerprintReader(reader: () => Promise<string | null>): void {
+    this.readMachineFingerprint = reader
+  }
 
-    const clientInstanceId = this.createId()
-    await this.namespace.setSingleton({ ...(current ?? {}), clientInstanceId })
-    return clientInstanceId
+  getMachineFingerprint(): string | null {
+    return this.machineFingerprint
+  }
+
+  getOrCreate(): Promise<string> {
+    return this.serialize(async () => {
+      const current = await this.namespace.getSingleton()
+      const fingerprint = await this.readMachineFingerprint()
+      this.machineFingerprint = fingerprint
+      const existing = current?.clientInstanceId?.trim()
+      const migrated = fingerprint && current?.machineFingerprint && fingerprint !== current.machineFingerprint
+      const clientInstanceId = existing && !migrated ? existing : this.createId()
+      if (clientInstanceId !== existing || (fingerprint && fingerprint !== current?.machineFingerprint)) {
+        await this.namespace.setSingleton({
+          ...(current ?? {}), clientInstanceId,
+          ...(fingerprint ? { machineFingerprint: fingerprint } : {}),
+        })
+      }
+      return clientInstanceId
+    })
+  }
+
+  async getDeviceName(): Promise<string | null> {
+    await this.mutations
+    return (await this.namespace.getSingleton())?.deviceName?.trim() || null
+  }
+
+  setDeviceName(name: string): Promise<void> {
+    return this.serialize(async () => {
+      const current = await this.namespace.getSingleton()
+      await this.namespace.setSingleton({ ...(current ?? {}), deviceName: name })
+    })
   }
 
   /**
@@ -58,10 +91,25 @@ export class LiveClientIdStore {
    * already has is unusable, so returning the existing one would be a no-op that
    * loops.
    */
-  async reissue(): Promise<string> {
-    const current = await this.namespace.getSingleton()
-    const clientInstanceId = this.createId()
-    await this.namespace.setSingleton({ ...(current ?? {}), clientInstanceId })
-    return clientInstanceId
+  reissue(): Promise<string> {
+    return this.serialize(async () => {
+      const current = await this.namespace.getSingleton()
+      const clientInstanceId = this.createId()
+      await this.namespace.setSingleton({ ...(current ?? {}), clientInstanceId })
+      return clientInstanceId
+    })
   }
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutations.then(operation)
+    // Callers receive the rejection; the queue remains usable for a later retry.
+    this.mutations = result.then(() => undefined, () => undefined)
+    return result
+  }
+}
+
+// All consumers must share the encrypted namespace cache and mutation queue.
+let defaultStore: LiveClientIdStore | undefined
+export function getLiveClientIdStore(): LiveClientIdStore {
+  return defaultStore ??= new LiveClientIdStore()
 }

@@ -63,6 +63,15 @@ describe("shared live protocol", () => {
     }
   })
 
+  it("accepts only a SHA-256 machine digest when the optional binding is supplied", () => {
+    const payload = { clientInstanceId: "a", appVersion: "1", platform: "win32-x64", deviceName: "PC" }
+    for (const machineFingerprint of [undefined, "a".repeat(64), "raw-hardware-uuid", "", null, 123]) {
+      expect(isLiveDesktopClientMessage(createLiveEnvelope(LIVE_MESSAGE_TYPES.hello,
+        { ...payload, machineFingerprint }, { id: "hello", sentAt: "2026-09-22T00:00:00.000Z" },
+      ))).toBe(machineFingerprint === undefined || machineFingerprint === "a".repeat(64))
+    }
+  })
+
   it("recognizes client webhook delivery ack messages", () => {
     expect(isLiveDesktopClientMessage(createLiveEnvelope(LIVE_MESSAGE_TYPES.webhookDeliveryAck, {
       deliveryId: "delivery-1",

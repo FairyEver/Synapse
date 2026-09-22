@@ -1096,7 +1096,7 @@ describe("LiveDesktopGateway", () => {
     expect(oldSocket.closeCalls).toEqual([{ code: 1000, reason: "superseded" }])
   })
 
-  it("turns away a different machine claiming a client instance id that is already online", () => {
+  it("does not infer a hardware conflict from different names on legacy clients", () => {
     const socket = new FakeSocket()
     const register = vi.fn().mockReturnValue(createClient())
     const gateway = createGateway({
@@ -1111,16 +1111,8 @@ describe("LiveDesktopGateway", () => {
     gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
     socket.emit("message", JSON.stringify(helloFor("client-a")))
 
-    // Refused instead of superseding: the online connection belongs to another
-    // computer, and evicting it is exactly the ping-pong this prevents. The
-    // newcomer is told, because minting a new id is the only thing that settles it.
-    expect(socket.closeCalls).toEqual([
-      {
-        code: LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict,
-        reason: "client_instance_id_conflict",
-      },
-    ])
-    expect(register).not.toHaveBeenCalled()
+    expect(socket.closeCalls).toEqual([])
+    expect(register).toHaveBeenCalledTimes(1)
   })
 
   it("registers a reconnect from the same machine reporting the same client instance id", () => {
@@ -1138,10 +1130,37 @@ describe("LiveDesktopGateway", () => {
     gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
     socket.emit("message", JSON.stringify(helloFor("client-a")))
 
-    // Same device name means the same installation reconnecting, which is the
-    // ordinary supersede case and must stay one.
+    // Without hardware metadata the registry retains ordinary reconnect semantics.
     expect(socket.closeCalls).toEqual([])
     expect(register).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects migrated copies with identical names but different machine digests", () => {
+    const socket = new FakeSocket()
+    const register = vi.fn().mockReturnValue(createClient())
+    const gateway = createGateway({ registry: {
+      register,
+      listOnlineByUser: vi.fn().mockReturnValue([createClient({ machineFingerprint: "a".repeat(64) })]),
+    } })
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    const hello = helloFor("client-a")
+    socket.emit("message", JSON.stringify({ ...hello, payload: { ...hello.payload, machineFingerprint: "b".repeat(64) } }))
+    expect(register).not.toHaveBeenCalled()
+    expect(socket.closeCalls).toEqual([{ code: LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict, reason: "client_instance_id_conflict" }])
+  })
+
+  it("allows a renamed machine to reconnect without changing its identity", () => {
+    const socket = new FakeSocket()
+    const register = vi.fn().mockReturnValue(createClient())
+    const gateway = createGateway({ registry: {
+      register,
+      listOnlineByUser: vi.fn().mockReturnValue([createClient({ machineFingerprint: "a".repeat(64), deviceName: "旧名称" })]),
+    } })
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    const hello = helloFor("client-a")
+    socket.emit("message", JSON.stringify({ ...hello, payload: { ...hello.payload, deviceName: "新名称", machineFingerprint: "a".repeat(64) } }))
+    expect(socket.closeCalls).toEqual([])
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ clientInstanceId: "client-a", deviceName: "新名称", machineFingerprint: "a".repeat(64) }))
   })
 
   it("broadcasts a server message to every online socket for one user", () => {

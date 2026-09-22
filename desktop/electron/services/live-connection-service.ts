@@ -7,11 +7,12 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseLiveState } from "../../src/types/live"
+import { liveDeviceNameSchema, type LiveDeviceSettings } from "../../src/types/live-device-settings"
 import type { EventBus } from "../runtime/event-bus"
 import type { AccountService } from "./account-service"
 import type { LiveMeetingTranscriptionHandler } from "./live-meeting-transcription-handler"
 import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler"
-import { LiveClientIdStore } from "./live-client-id-store"
+import { getLiveClientIdStore, type LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay, isStableLiveConnection } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
 import type {
@@ -62,7 +63,7 @@ type LiveSocket = Pick<WebSocket, "on" | "send" | "close" | "readyState" | "buff
 
 type LiveConnectionServiceDeps = {
   readonly accountService: AccountService
-  readonly clientIdStore?: Pick<LiveClientIdStore, "getOrCreate" | "reissue">
+  readonly clientIdStore?: Pick<LiveClientIdStore, "getOrCreate" | "reissue" | "getMachineFingerprint" | "setMachineFingerprintReader" | "getDeviceName" | "setDeviceName">
   readonly createSocket?: (url: string, options: { headers: Record<string, string> }) => LiveSocket
   readonly setTimeout?: (callback: () => void, delay: number) => NodeJS.Timeout
   readonly clearTimeout?: (timer: NodeJS.Timeout) => void
@@ -77,7 +78,8 @@ type LiveConnectionServiceDeps = {
 
 export class LiveConnectionService {
   private readonly accountService: AccountService
-  private readonly clientIdStore: Pick<LiveClientIdStore, "getOrCreate" | "reissue">
+  private readonly clientIdStore: NonNullable<LiveConnectionServiceDeps["clientIdStore"]>
+  private savedDeviceName: string | null = null
   private readonly createSocket: (url: string, options: { headers: Record<string, string> }) => LiveSocket
   private readonly setTimer: (callback: () => void, delay: number) => NodeJS.Timeout
   private readonly clearTimer: (timer: NodeJS.Timeout) => void
@@ -126,7 +128,7 @@ export class LiveConnectionService {
 
   constructor(deps: LiveConnectionServiceDeps) {
     this.accountService = deps.accountService
-    this.clientIdStore = deps.clientIdStore ?? new LiveClientIdStore()
+    this.clientIdStore = deps.clientIdStore ?? getLiveClientIdStore()
     this.createSocket = deps.createSocket ?? ((url, options) => new WebSocket(url, options))
     this.setTimer = deps.setTimeout ?? setTimeout
     this.clearTimer = deps.clearTimeout ?? clearTimeout
@@ -157,6 +159,31 @@ export class LiveConnectionService {
 
   getState(): SynapseLiveState {
     return this.state
+  }
+
+  setMachineFingerprintReader(reader: () => Promise<string | null>): void {
+    this.clientIdStore.setMachineFingerprintReader(reader)
+  }
+
+  private currentDeviceName(): string {
+    return this.savedDeviceName ?? (this.deviceName().trim().slice(0, 120) || "Synapse")
+  }
+
+  async getDeviceSettings(): Promise<LiveDeviceSettings> {
+    this.savedDeviceName = await this.clientIdStore.getDeviceName()
+    return { name: this.currentDeviceName() }
+  }
+
+  async setDeviceName(input: string): Promise<LiveDeviceSettings> {
+    const name = liveDeviceNameSchema.parse(input)
+    await this.clientIdStore.setDeviceName(name)
+    this.savedDeviceName = name
+    if (this.accountService.getState().status === "authenticated") {
+      this.closeSocket("device_name_changed")
+      await this.connectInFlight
+      if (this.accountService.getState().status === "authenticated") await this.startConnect()
+    }
+    return { name }
   }
 
   handleAccountState(state: SynapseAccountState): void {
@@ -228,6 +255,8 @@ export class LiveConnectionService {
     }
 
     const clientInstanceId = await this.clientIdStore.getOrCreate()
+    if (!this.isCurrentGeneration(generation)) return
+    await this.getDeviceSettings()
     if (!this.isCurrentGeneration(generation)) return
 
     const { LIVE_DESKTOP_CLOSE_CODES, buildLiveDesktopSocketUrl } = await liveProtocolPromise
@@ -420,7 +449,7 @@ export class LiveConnectionService {
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileSummary, {
       desktopClientInstanceId: clientInstanceId,
-      desktopName: this.deviceName(),
+      desktopName: this.currentDeviceName(),
       ...draft,
     }, this.envelopeMetadata()))
   }
@@ -648,11 +677,13 @@ export class LiveConnectionService {
     }
 
     const sentAt = this.now().toISOString()
+    const machineFingerprint = this.clientIdStore.getMachineFingerprint()
     socket.send(JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.hello, {
       clientInstanceId,
       appVersion: this.appVersion(),
       platform: this.platform(),
-      deviceName: this.deviceName(),
+      deviceName: this.currentDeviceName(),
+      ...(machineFingerprint ? { machineFingerprint } : {}),
     }, { id: this.createMessageId(), sentAt })))
   }
 

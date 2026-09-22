@@ -325,6 +325,7 @@ import type {
   SynapseLiveState,
   SynapseLiveStateChangedEvent,
 } from "./live"
+import type { LiveDeviceSettings } from "./live-device-settings"
 import type {
   SynapseAgentCancelTurnResult,
   SynapseAgentConversationExportResult,
@@ -1470,6 +1471,8 @@ export type SynapseBridge = {
     }
   }
   live: {
+    getDeviceSettings: () => Promise<LiveDeviceSettings>
+    setDeviceName: (input: { name: string }) => Promise<LiveDeviceSettings>
     getState: () => Promise<SynapseLiveState>
     retry: () => Promise<SynapseLiveState>
     onStateChanged: (listener: (event: SynapseLiveStateChangedEvent) => void) => () => void

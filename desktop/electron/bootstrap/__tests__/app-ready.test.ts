@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => {
       addPreparedSourceProvider: vi.fn(),
     },
     liveConnectionService: {
+      setMachineFingerprintReader: vi.fn(),
       handleAccountState: vi.fn(),
       setEventBus: vi.fn(),
       setWebhookDeliveryHandler: vi.fn(),

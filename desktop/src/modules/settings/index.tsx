@@ -29,6 +29,7 @@ import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-p
 import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
 import { ClaudeCodePanel } from "@/modules/settings/components/claude-code-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
+import { DeviceNamePanel } from "@/modules/settings/components/device-name-panel"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
 import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
@@ -300,6 +301,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
 
         {isReady && activeCategory === "account" && accountUiVisible ? <AccountPanel /> : null}
 
+        {isReady && activeCategory === "general" ? <DeviceNamePanel /> : null}
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}

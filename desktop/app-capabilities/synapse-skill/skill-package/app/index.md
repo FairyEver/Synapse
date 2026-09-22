@@ -217,3 +217,7 @@ Rules:
 ## Portal Headless Test connector boundary
 
 Portal Headless Test is a desktop-only connector in the existing Connectors app. It exposes no MCP tool, business capability, credential reader, or Agent Skill contribution. Do not request tokens in chat or invoke its private authorization callback through tools; the user authorizes in Portal Web, and Synapse verifies the current user and tenant before storing credentials. Test and future production connections are separate. Do not invent Portal business tools or treat the pending Web authorization page as already deployed.
+
+## Desktop device name
+
+The device display name is configured in Settings → 基础设置 → 设备名称 on macOS and Windows. It does not change the OS hostname or the device identity. Naming is desktop UI-only: there is no public MCP tool for device settings or machine fingerprints. Do not edit the encrypted identity store through filesystem/database tools or invent a device-naming capability. Hardware fingerprints are migration hints, never login credentials.

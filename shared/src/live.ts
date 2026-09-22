@@ -75,6 +75,7 @@ export interface LiveDesktopHelloPayload {
   readonly appVersion: string
   readonly platform: string
   readonly deviceName: string
+  readonly machineFingerprint?: string
 }
 
 export interface LiveDesktopWelcomePayload {
@@ -228,7 +229,9 @@ function isHelloPayload(value: unknown): value is LiveDesktopHelloPayload {
     boundedString(value.clientInstanceId, LIVE_HELLO_FIELD_LIMITS.clientInstanceId) &&
     boundedString(value.appVersion, LIVE_HELLO_FIELD_LIMITS.appVersion) &&
     boundedString(value.platform, LIVE_HELLO_FIELD_LIMITS.platform) &&
-    boundedString(value.deviceName, LIVE_HELLO_FIELD_LIMITS.deviceName)
+    boundedString(value.deviceName, LIVE_HELLO_FIELD_LIMITS.deviceName) &&
+    (value.machineFingerprint === undefined ||
+      (typeof value.machineFingerprint === "string" && /^[0-9a-f]{64}$/.test(value.machineFingerprint)))
 }
 
 function isWelcomePayload(value: unknown): value is LiveDesktopWelcomePayload {

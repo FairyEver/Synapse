@@ -194,6 +194,53 @@ describe("LiveConnectionService", () => {
     vi.clearAllMocks()
   })
 
+  it("publishes the saved name in hello and mobile summaries, then reconnects with a renamed device", async () => {
+    const first = new FakeSocket()
+    const second = new FakeSocket()
+    let name = "公司 Mac"
+    const store = {
+      getOrCreate: vi.fn().mockResolvedValue("client-a"),
+      getMachineFingerprint: () => "a".repeat(64),
+      getDeviceName: async () => name,
+      setDeviceName: vi.fn(async (value: string) => { name = value }),
+      reissue: vi.fn(),
+      setMachineFingerprintReader: vi.fn(),
+    }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: store,
+      createSocket: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second),
+    })
+    await service.connect()
+    first.emit("open")
+    await waitForCondition(() => first.sent.length > 0)
+    expect(JSON.parse(first.sent[0]!)).toMatchObject({ payload: { deviceName: "公司 Mac", machineFingerprint: "a".repeat(64) } })
+    await service.setDeviceName("  家里 Windows  ")
+    second.emit("open")
+    await waitForCondition(() => second.sent.length > 0)
+    expect(JSON.parse(second.sent[0]!)).toMatchObject({ payload: { clientInstanceId: "client-a", deviceName: "家里 Windows" } })
+    await service.sendMobileSummary({} as never)
+    expect(second.sent.map((message) => JSON.parse(message))).toContainEqual(expect.objectContaining({ payload: expect.objectContaining({ desktopName: "家里 Windows" }) }))
+    expect(store.reissue).not.toHaveBeenCalled()
+    service.close()
+  })
+
+  it("does not reconnect or change the displayed name if saving fails", async () => {
+    const socket = new FakeSocket()
+    const store = {
+      getOrCreate: vi.fn().mockResolvedValue("client-a"), getMachineFingerprint: () => null,
+      getDeviceName: async () => "旧名称", setDeviceName: vi.fn().mockRejectedValue(new Error("disk full")),
+      reissue: vi.fn(), setMachineFingerprintReader: vi.fn(),
+    }
+    const createSocket = vi.fn(() => socket as never)
+    const service = new LiveConnectionService({ accountService: createAccountService() as never, clientIdStore: store, createSocket })
+    await service.connect()
+    await expect(service.setDeviceName("新名称")).rejects.toThrow("disk full")
+    expect(await service.getDeviceSettings()).toEqual({ name: "旧名称" })
+    expect(createSocket).toHaveBeenCalledTimes(1)
+    service.close()
+  })
+
   it("creates socket with bearer header and waits for welcome before connected", async () => {
     const socket = new FakeSocket()
     const accountService = createAccountService()
@@ -201,7 +248,7 @@ describe("LiveConnectionService", () => {
     const eventBus = { emit: vi.fn() }
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
       now: () => new Date("2026-06-06T10:00:00.000Z"),
     })
@@ -259,7 +306,7 @@ describe("LiveConnectionService", () => {
     ]
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       now: () => times.shift() ?? new Date("2026-06-06T10:00:05.000Z"),
     })
@@ -296,7 +343,7 @@ describe("LiveConnectionService", () => {
     const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       webhookDeliveryHandler,
     })
@@ -339,7 +386,7 @@ describe("LiveConnectionService", () => {
     const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       webhookDeliveryHandler,
     })
@@ -375,7 +422,7 @@ describe("LiveConnectionService", () => {
     const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       webhookDeliveryHandler,
     })
@@ -407,7 +454,7 @@ describe("LiveConnectionService", () => {
     const socket = new FakeSocket()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       now: () => new Date("2026-06-06T10:00:00.000Z"),
     })
@@ -450,7 +497,7 @@ describe("LiveConnectionService", () => {
     const socket = new FakeSocket()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       now: () => new Date("2026-06-06T10:00:00.000Z"),
     })
@@ -495,7 +542,7 @@ describe("LiveConnectionService", () => {
     ]
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       setTimeout: timers.setTimeout as never,
       clearTimeout: timers.clearTimeout as never,
@@ -537,7 +584,7 @@ describe("LiveConnectionService", () => {
       .mockReturnValueOnce(secondSocket as never)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
       setTimeout: timers.setTimeout as never,
       clearTimeout: timers.clearTimeout as never,
@@ -581,7 +628,7 @@ describe("LiveConnectionService", () => {
     const socket = new FakeSocket()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
     })
 
@@ -601,7 +648,7 @@ describe("LiveConnectionService", () => {
     const createSocket = vi.fn()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockReturnValue(clientIdPromise) } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockReturnValue(clientIdPromise) } as never,
       createSocket,
     })
 
@@ -632,7 +679,7 @@ describe("LiveConnectionService", () => {
       .mockReturnValueOnce(secondSocket as never)
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
     })
 
@@ -656,7 +703,7 @@ describe("LiveConnectionService", () => {
     const timers = createTimerFns()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       setTimeout: timers.setTimeout as never,
       clearTimeout: timers.clearTimeout as never,
@@ -685,7 +732,7 @@ describe("LiveConnectionService", () => {
       .mockReturnValueOnce(secondSocket as never)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: {
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null,
         getOrCreate: vi.fn().mockResolvedValueOnce("client-a").mockResolvedValue("client-b"),
         reissue,
       } as never,
@@ -725,7 +772,7 @@ describe("LiveConnectionService", () => {
     const reissue = vi.fn().mockResolvedValue("client-b")
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: {
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null,
         getOrCreate: vi.fn().mockResolvedValue("client-a"),
         reissue,
       } as never,
@@ -748,7 +795,7 @@ describe("LiveConnectionService", () => {
     const createSocket = vi.fn(() => socket as never)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
     })
 
@@ -778,7 +825,7 @@ describe("LiveConnectionService", () => {
     }
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
     })
 
@@ -811,7 +858,7 @@ describe("LiveConnectionService", () => {
       .mockReturnValueOnce(secondSocket as never)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
       setTimeout: timers.setTimeout as never,
       clearTimeout: timers.clearTimeout as never,
@@ -841,7 +888,7 @@ describe("LiveConnectionService", () => {
       .mockReturnValueOnce(secondSocket as never)
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
       setTimeout: timers.setTimeout as never,
       clearTimeout: timers.clearTimeout as never,
@@ -866,6 +913,8 @@ describe("LiveConnectionService", () => {
     const timers = createTimerFns()
     const eventBus = { emit: vi.fn() }
     const clientIdStore = {
+      getDeviceName: vi.fn().mockResolvedValue(null),
+      getMachineFingerprint: () => null,
       getOrCreate: vi.fn()
         .mockRejectedValueOnce(new Error("client id unavailable"))
         .mockResolvedValueOnce("client-a"),
@@ -915,7 +964,7 @@ describe("LiveConnectionService", () => {
     const reconnectDelay = vi.fn((attempt: number) => 2_000 + attempt)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn()
         .mockReturnValueOnce(firstSocket as never)
         .mockReturnValueOnce(secondSocket as never),
@@ -951,7 +1000,7 @@ describe("LiveConnectionService", () => {
     const reconnectDelay = vi.fn((attempt: number) => 2_000 + attempt)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn()
         .mockReturnValueOnce(firstSocket as never)
         .mockReturnValueOnce(secondSocket as never),
@@ -989,7 +1038,7 @@ describe("LiveConnectionService", () => {
     const reconnectDelay = vi.fn((attempt: number) => 2_000 + attempt)
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn()
         .mockReturnValueOnce(firstSocket as never)
         .mockReturnValueOnce(secondSocket as never),
@@ -1026,7 +1075,7 @@ describe("LiveConnectionService", () => {
     const socket = new FakeSocket()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       now: () => new Date("2026-06-06T10:00:00.000Z"),
     })
@@ -1079,7 +1128,7 @@ describe("LiveConnectionService", () => {
     const socket = new FakeSocket()
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket: vi.fn(() => socket as never),
       now: () => new Date("2026-06-06T10:00:00.000Z"),
     })
@@ -1106,7 +1155,7 @@ describe("LiveConnectionService", () => {
     const createSocket = vi.fn()
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
     })
 
@@ -1138,7 +1187,7 @@ describe("LiveConnectionService", () => {
     const createSocket = vi.fn()
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
     })
 
@@ -1170,7 +1219,7 @@ describe("LiveConnectionService", () => {
     const createSocket = vi.fn()
     const service = new LiveConnectionService({
       accountService: accountService as never,
-      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
       createSocket,
     })
 

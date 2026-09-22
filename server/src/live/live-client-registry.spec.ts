@@ -17,6 +17,16 @@ function connectionIndexSize(registry: LiveClientRegistry): number {
 }
 
 describe("LiveClientRegistry", () => {
+  it("retains the private machine binding across heartbeat updates", () => {
+    const registry = new LiveClientRegistry()
+    const client = registry.register({
+      userId: "user-1", clientInstanceId: "client-a", connectionId: "conn-a",
+      appVersion: "1", platform: "win32-x64", deviceName: "电脑",
+      machineFingerprint: "a".repeat(64), now: new Date("2026-09-22T00:00:00.000Z"),
+    })
+    expect(client.machineFingerprint).toBe("a".repeat(64))
+    expect(registry.touch("conn-a", new Date("2026-09-22T00:00:01.000Z"))?.machineFingerprint).toBe("a".repeat(64))
+  })
   it("can be constructed as a normal Nest provider", async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [LiveClientRegistry],

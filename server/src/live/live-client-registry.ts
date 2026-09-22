@@ -14,6 +14,7 @@ interface RegisterLiveClientInput {
   readonly appVersion: string
   readonly platform: string
   readonly deviceName: string
+  readonly machineFingerprint?: string
   readonly now: Date
   readonly onSupersede?: (connectionId: string) => void
 }
@@ -70,6 +71,7 @@ export class LiveClientRegistry {
       appVersion: input.appVersion,
       platform: input.platform,
       deviceName: input.deviceName,
+      ...(input.machineFingerprint ? { machineFingerprint: input.machineFingerprint } : {}),
       connectedAt: timestamp,
       lastSeenAt: timestamp,
     }

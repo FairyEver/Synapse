@@ -424,20 +424,13 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         }
 
         const hello = message.payload
-        // An installation's id is minted locally, so a second machine can be
-        // holding the same one: the encrypted file it lives in travels with a
-        // migration or a restored backup. The registry keeps one entry per id, so
-        // without this the two would take turns evicting each other — a reconnect
-        // every couple of seconds apiece — and every phone of the account would see
-        // a single computer whose identity flipped between them.
-        //
-        // The newcomer is the one that has to change, and only it can: it is told
-        // to mint a fresh id rather than being registered. A connection reporting
-        // the same device name is the same installation reconnecting, which is the
-        // ordinary case the supersede below is for.
+        // Hardware digests distinguish migrated copies even when their names match.
+        // Names are display metadata only: renaming must never rotate identity.
+        // Legacy/unavailable digests cannot prove a hardware conflict.
         const conflicting = this.registry.listOnlineByUser(auth.userId).find(
           (entry) => entry.clientInstanceId === hello.clientInstanceId
-            && entry.deviceName !== hello.deviceName,
+            && entry.machineFingerprint && hello.machineFingerprint
+            && entry.machineFingerprint !== hello.machineFingerprint,
         )
         if (conflicting) {
           socket.close(LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict, "client_instance_id_conflict")
@@ -460,6 +453,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
           appVersion: hello.appVersion,
           platform: hello.platform,
           deviceName: hello.deviceName,
+          machineFingerprint: hello.machineFingerprint,
           now: seenAt,
           onSupersede: (oldConnectionId) => {
             this.socketsByConnectionId.get(oldConnectionId)?.close(1000, "superseded")

@@ -34,9 +34,7 @@ vi.mock("../account-service", () => {
 })
 
 vi.mock("../live-client-id-store", () => ({
-  LiveClientIdStore: class {
-    getOrCreate = vi.fn().mockResolvedValue("client-1")
-  },
+  getLiveClientIdStore: () => ({ getOrCreate: vi.fn().mockResolvedValue("client-1") }),
 }))
 
 import { SkillRepositoryInstallService } from "../skill-repository-install-service"

@@ -87,7 +87,7 @@ Portal Headless Test 在既有 Connectors 应用内增加一个连接器定义�
 | Drive | 是 | 是 | `drive` |
 | Automation | 是 | 是 | `automation` |
 | Launcher | 自身即应用页 | 是且不可移除 | — |
-| Settings | 是 | 是 | `repository` |
+| Settings（含设备命名） | 是 | 是 | `repository` |
 | Resource Repository | 是 | 否 | `content`、`skill_repository` |
 | Git | 是 | 否 | — |
 | Database | 是 | 否 | `database` |
@@ -96,6 +96,8 @@ Portal Headless Test 在既有 Connectors 应用内增加一个连接器定义�
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
 | Meeting | 是 | 否 | — |
+
+Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
 
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 

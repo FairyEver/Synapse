@@ -17,6 +17,8 @@ export interface LiveClientInstance {
   readonly appVersion: string
   readonly platform: string
   readonly deviceName: string
+  /** Private connection metadata; never included in public device DTOs. */
+  readonly machineFingerprint?: string
   readonly connectedAt: string | null
   readonly lastSeenAt: string | null
   readonly disconnectedAt?: string

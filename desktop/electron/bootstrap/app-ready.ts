@@ -7,6 +7,8 @@ import { accountService } from "../services/account-service"
 import { editorInstallService } from "../services/editor-install-service"
 import { installStatusCacheService } from "../services/install-status-cache-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
+import { createMachineFingerprintReader } from "../services/live-machine-fingerprint"
+import { createControlledProcessRunner } from "../runtime/process"
 import { LiveMeetingTranscriptionHandler } from "../services/live-meeting-transcription-handler"
 import { LiveWebhookDeliveryHandler } from "../services/live-webhook-delivery-handler"
 import { createMainLogger, logStore } from "../services/log-store"
@@ -139,6 +141,10 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
   const eventBus = registry.get<EventBus>("core.event-bus")
   accountService.setEventBus(eventBus)
   liveConnectionService.setEventBus(eventBus)
+  liveConnectionService.setMachineFingerprintReader(createMachineFingerprintReader(createControlledProcessRunner({
+    permissionGuard: registry.get<PermissionGuard>("core.permission-guard"),
+    auditSink: registry.get<AuditSink>("core.audit-sink"),
+  })))
   try {
     liveConnectionService.setWebhookDeliveryHandler(new LiveWebhookDeliveryHandler({
       automation: registry.get<AutomationService>("core.automation"),

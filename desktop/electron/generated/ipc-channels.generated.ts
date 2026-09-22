@@ -66,6 +66,8 @@ export const IPC_CHANNELS = {
     "driveLocalUploadProgress": "synapse:app:account:state:changed",
   },
   "live": {
+    "getDeviceSettings": "synapse:app:live:device:get_settings",
+    "setDeviceName": "synapse:app:live:device:set_name",
     "getState": "synapse:app:live:operation:get_state",
     "retry": "synapse:app:live:operation:retry",
     "stateChanged": "synapse:app:live:state:changed",

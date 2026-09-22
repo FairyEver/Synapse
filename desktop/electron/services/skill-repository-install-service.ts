@@ -30,7 +30,7 @@ import {
   type ZipEntry,
 } from "./install-package-utils"
 import type { PreparedContentInstallSourceProvider } from "./editor-install-service"
-import { LiveClientIdStore } from "./live-client-id-store"
+import { getLiveClientIdStore, type LiveClientIdStore } from "./live-client-id-store"
 import { createMainLogger } from "./log-store"
 import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
@@ -120,7 +120,7 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
 
   constructor(deps: SkillRepositoryInstallServiceDeps = {}) {
     this.account = deps.accountService ?? accountService
-    this.clientIdStore = deps.clientIdStore ?? new LiveClientIdStore()
+    this.clientIdStore = deps.clientIdStore ?? getLiveClientIdStore()
     this.createId = deps.createId ?? randomUUID
     this.limits = deps.limits ?? DEFAULT_LIMITS
     this.tempRoot = deps.tempRoot ?? path.join(app.getPath("temp"), "synapse-skill-repository-install")
