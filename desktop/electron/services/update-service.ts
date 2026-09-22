@@ -152,6 +152,7 @@ class UpdateService {
   private pageEntryCheckPromise: Promise<SynapseAppUpdateState> | null = null
   private lastPageEntryCheckCompletedAt: number | null = null
   private lastNotifiedVersion: string | null = null
+  private autoCheckPromise: Promise<unknown> | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
   private installQuitHandlers: InstallQuitHandlers | null = null
@@ -603,20 +604,9 @@ class UpdateService {
         void this.enterManualRecovery()
         return
       }
-      if (this.isManualUpdateFlow()) {
-        this.availableUpdateInfo = null
-        this.setState({
-          status: "not-available",
-          message: "当前已经是最新版本。",
-          error: null,
-          releaseVersion: updateInfo.version,
-          downloadPercent: null,
-          bytesPerSecond: null,
-          transferredBytes: null,
-          totalBytes: null,
-          lastCheckedAt: new Date().toISOString(),
-          canCheck: true,
-        })
+      const isAutoRefreshOfAvailableUpdate = this.isAutoUpdateFlow() && this.state.status === "available"
+      if (this.isManualUpdateFlow() || isAutoRefreshOfAvailableUpdate) {
+        this.applyNotAvailableState(updateInfo)
       }
       this.clearUpdateFlow()
     })
@@ -815,6 +805,12 @@ class UpdateService {
       return this.getState()
     }
 
+    // 自动重查在飞时先等它落地，否则这次点击会被下面的守卫静默吞掉。
+    const inFlightAutoCheck = this.autoCheckPromise
+    if (inFlightAutoCheck) {
+      await inFlightAutoCheck
+    }
+
     if (
       this.state.status === "downloading"
       || this.state.status === "downloaded"
@@ -893,6 +889,22 @@ class UpdateService {
       canCheck: false,
     })
     this.clearUpdateFlow("manual")
+  }
+
+  private applyNotAvailableState(updateInfo: UpdateInfo): void {
+    this.availableUpdateInfo = null
+    this.setState({
+      status: "not-available",
+      message: "当前已经是最新版本。",
+      error: null,
+      releaseVersion: updateInfo.version,
+      downloadPercent: null,
+      bytesPerSecond: null,
+      transferredBytes: null,
+      totalBytes: null,
+      lastCheckedAt: new Date().toISOString(),
+      canCheck: true,
+    })
   }
 
   private async handleRecoveryUpdateAvailable(updateInfo: UpdateInfo): Promise<void> {
@@ -1128,7 +1140,6 @@ class UpdateService {
     const runAutoCheck = () => {
       if (
         this.state.status === "checking"
-        || this.state.status === "available"
         || this.state.status === "downloading"
         || this.state.status === "downloaded"
         || this.activeUpdateMode !== null
@@ -1136,10 +1147,23 @@ class UpdateService {
         return
       }
 
+      // 已发现的版本会一直挂在界面上，只有定期重查才能发现它已经下线或被更晚的版本取代。
+      // 距上次检查不足一个轮询周期的元数据视为仍然新鲜，避免与手动检查叠加成连续请求。
+      if (this.state.status === "available" && !this.isAvailableUpdateMetadataStale()) {
+        return
+      }
+
       this.beginUpdateFlow("auto")
-      autoUpdater.checkForUpdates().catch((error) => {
+      const checkPromise = autoUpdater.checkForUpdates().catch((error) => {
         logger.warn("Auto update check failed.", { error })
         this.handleAutoCheckError()
+      })
+      this.autoCheckPromise = checkPromise
+
+      void checkPromise.finally(() => {
+        if (this.autoCheckPromise === checkPromise) {
+          this.autoCheckPromise = null
+        }
       })
     }
 

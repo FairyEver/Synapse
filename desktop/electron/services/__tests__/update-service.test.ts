@@ -567,6 +567,102 @@ describe("UpdateService", () => {
     }))
   })
 
+  it("refreshes a pending update when the automatic check finds a newer version", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    updateService.initialize()
+
+    updateService.startAutoCheck()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.32",
+      status: "available",
+    }))
+
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-available", {
+        version: "0.2.33",
+        files: [{ url: "v0.2.33/Synapse-0.2.33-mac-arm64.zip" }],
+      })
+      return {
+        isUpdateAvailable: true,
+        updateInfo: { version: "0.2.33" },
+        versionInfo: { version: "0.2.33" },
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.33",
+      status: "available",
+    }))
+  })
+
+  it("clears a pending update when the automatic check reports the latest version", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    updateService.initialize()
+
+    updateService.startAutoCheck()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updateService.getState().status).toBe("available")
+
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-not-available", { version: "0.2.32" })
+      return {
+        isUpdateAvailable: false,
+        updateInfo: { version: "0.2.32" },
+        versionInfo: { version: "0.2.32" },
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      canCheck: true,
+      releaseVersion: "0.2.32",
+      status: "not-available",
+    }))
+  })
+
+  it("starts a download requested while an automatic check is in flight", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    let resolveAutoCheck: (() => void) | undefined
+
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAutoCheck = () => {
+        updaterMock.autoUpdater.emit("checking-for-update")
+        updaterMock.autoUpdater.emit("update-available", {
+          version: "0.2.32",
+          files: [{ url: "v0.2.32/Synapse-0.2.32-mac-arm64.zip" }],
+        })
+        resolve({
+          isUpdateAvailable: true,
+          updateInfo: { version: "0.2.32" },
+          versionInfo: { version: "0.2.32" },
+        })
+      }
+    }))
+
+    updateService.startAutoCheck()
+    const downloadRequest = updateService.downloadUpdate()
+
+    resolveAutoCheck?.()
+    const state = await downloadRequest
+
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(state).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.32",
+      status: "downloading",
+    }))
+  })
+
   it("checks immediately on startup and then polls update metadata every ten minutes", async () => {
     vi.useFakeTimers()
     const { updateService } = await importUpdateService()
