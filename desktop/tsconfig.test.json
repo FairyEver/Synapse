@@ -17,6 +17,7 @@
     }
   },
   "include": [
+    "extensions/**/__tests__/**/*.ts",
     "workflow-nodes/**/__tests__/**/*.ts",
     "workflow-nodes/**/*.ts",
     "action-packages/**/__tests__/**/*.{ts,tsx}",

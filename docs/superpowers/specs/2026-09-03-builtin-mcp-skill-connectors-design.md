@@ -66,3 +66,8 @@ type ConnectorStateStore = {
 - `app.connectors.state` 兼容保留原 singleton，新增同 namespace 的账号/环境独立记录；`app.connectors.credentials` 复用 encrypted-json，加可选 Portal 绑定元数据。普通状态不保存 token，恢复必须重新验证。
 - Deep Link 使用既有声明式路由的私有 `mainHandlerId`，不进入 ActionRouter/MCP/HTTP。Renderer 状态通过 EventBus `connector/item.changed` 发送，回调凭据不进入 IPC。
 - 精确契约、生命周期和凭据字段来源见 `docs/integrations/portal-headless-test.md`；给 Web 的实施提示词见同目录 `portal-headless-test-web-prompt.md`。
+
+
+## 2026-09-22：Portal 独立扩展补充
+
+用户确认 Portal Headless 作为 `extend` 扩展，不升级为内置 App。连接器只负责本机授权和安全凭据管理；专用 MCP `extend_portal_headless_credential_get` 向用户自己的 AI 交付 Portal 凭证与短期 SY 授权，系统 Skill 引导 AI 直连 `/api/extend/portal-headless/*`，后端验证两类身份后调用固定版本 SDK。此交付是原“凭据不进入模型结果”约束的专用例外，不开放通用 Secrets、Renderer、业务转发 MCP 或任意 HTTP 代理。实现和部署边界见 `docs/integrations/portal-headless-extension.md`。

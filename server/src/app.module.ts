@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common"
+import { PortalHeadlessModule } from "./extend/portal-headless/portal-headless.module"
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
 import { ScheduleModule } from "@nestjs/schedule"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
@@ -50,7 +51,7 @@ type RequestLogObject = {
             return url.split("?")[0] === "/api/problem-feedback"
           },
         },
-        redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
+        redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret", 'req.headers["x-portal-token"]'],
         serializers: {
           req(request: RequestLogObject) {
             return sanitizeWebhookLogRequest(request)
@@ -98,6 +99,7 @@ type RequestLogObject = {
     MeetingModule,
     TeamModule,
     HealthModule,
+    PortalHeadlessModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -11,7 +11,7 @@ import type { BuiltinConnectorDefinition, ConnectorDriver, PortalIntegration } f
 
 type PortalDefinition = BuiltinConnectorDefinition & { integration: PortalIntegration }
 type Attempt = {
-  key: string; ownerUserId: string; definition: PortalDefinition; controller: AbortController
+  generation: string; key: string; ownerUserId: string; definition: PortalDefinition; controller: AbortController
   status: NonNullable<ConnectorItem["connectionStatus"]>; state?: string; expiresAt?: number
   timer?: ReturnType<typeof setTimeout>; errorCode?: PortalErrorCode
   pending?: PortalCredentialInput; binding?: PortalConnectionBindingV1
@@ -73,7 +73,7 @@ export function createPortalSessionDriver(deps: PortalSessionDriverDeps) {
     const key = portalBindingKey(ownerUserId, definition)
     const previous = attempts.get(key)
     if (previous) cancel(previous)
-    const attempt: Attempt = { key, ownerUserId, definition, controller: new AbortController(), status: "disconnected" }
+    const attempt: Attempt = { generation: randomUUID(), key, ownerUserId, definition, controller: new AbortController(), status: "disconnected" }
     attempts.set(key, attempt)
     return attempt
   }
@@ -337,7 +337,7 @@ export function createPortalSessionDriver(deps: PortalSessionDriverDeps) {
       const credential = await savedCredential(attempt)
       assertCurrent(attempt)
       if (attempt.status !== "connected") throw new PortalConnectionError("credential_invalid")
-      return { baseUrl: definition.integration.baseUrl, userId, language: definition.integration.language,
+      return { connectionGeneration: attempt.generation, baseUrl: definition.integration.baseUrl, userId, language: definition.integration.language,
         credential: { token: credential.token, tenantId: credential.tenantId } }
     },
   }

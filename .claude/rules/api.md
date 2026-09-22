@@ -5,6 +5,7 @@ paths:
   - desktop/app-capabilities/**/*.ts
   - desktop/synapse-capabilities/**/*.ts
   - desktop/database/**/*.ts
+  - desktop/extensions/**/*.ts
 ---
 
 # 主进程 Service / IPC Handler 设计约定
@@ -14,7 +15,7 @@ paths:
 - 按领域拆分文件：`electron/ipc/<domain>-handlers.ts`
 - 使用 `validated-ipc.ts` 封装，确保类型安全
 - handler 只做参数校验和调度，业务逻辑下沉到 service
-- capability 和 IPC operation id 统一使用 `app.<namespace>.<resource>.<action>`。IPC descriptor 只声明 operation id，channel 统一派生为 `synapse:app:<namespace>:<resource>:<action>`。
+- 内置 capability 和 IPC operation id 统一使用 `app.<namespace>.<resource>.<action>`。IPC descriptor 只声明 operation id，channel 统一派生为 `synapse:app:<namespace>:<resource>:<action>`。
 - capability 对应的 preload bridge 去掉 `app` 前缀、snake_case 转 camelCase，并按资源嵌套，例如 `app.database.table.list` 对应 `window.synapse.database.table.list()`。
 - UI 专用 IPC 可以使用独立的规范 operation id，但没有同语义 capability 时不得注册 MCP 工具。旧 action、channel 和 bridge 名称不得保留兼容入口。
 
@@ -39,8 +40,8 @@ paths:
 ## Capability API
 
 - 本地 HTTP 路径保持 `POST /api`，请求体 `action` 必须是已注册的规范 `app.*` capability id。
-- MCP 工具名只能由 capability id 把点号替换为下划线得到，例如 `app.database.table.list` 对应 `app_database_table_list`。
-- 唯一例外：公开 MCP 表面额外暴露两个路由包装工具 `search` 与 `invoke`。它们不对应任何 capability id，不得注册进 capability catalog 或 `MCP_TOOL_ACTIONS`，也不得出现在 `app.*` 命名空间里。除这两个名字外不得新增非 `app_*` 的公开工具名。
+- MCP 索引工具名由 capability id 的点号和连字符替换为下划线得到。内置能力使用 `app.*`；扩展使用 `extend.<extension-slug>.<resource>.<action>`，例如 `extend.portal-headless.credential.get`。扩展通过 ExtensionPoint 注册，不可派生 IPC；Portal 凭证 action 仅允许 MCP 来源。
+- 唯一例外：公开 MCP 表面额外暴露两个路由包装工具 `search` 与 `invoke`。它们不对应任何 capability id，不得注册进 capability catalog 或 `MCP_TOOL_ACTIONS`，也不得出现在 `app.*` 命名空间里。`app_*` / `extend_*` 仅作为 search 索引和 invoke 映射，不直接加入 tools/list。
 - dispatcher 直接接收规范 action；禁止旧 action 转译、别名、fallback 或双重注册。
 
 ## 分页约定

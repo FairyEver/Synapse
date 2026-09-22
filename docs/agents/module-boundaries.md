@@ -10,7 +10,7 @@
 - MCP Driver 支持无认证的本机 IPv4 回环 Streamable HTTP MCP。启用前必须经过权限与审计，并完成 initialize、initialized、`tools/list` 和必需工具校验；定义、协议版本、超时和用户状态不得混存。
 - `app.connectors.state` 的 singleton 保存 MCP 启用标志和探测状态；Portal 的独立 collection 记录按 owner/environment/connector 保存凭据引用与白名单身份摘要。Portal token 仅在 `app.connectors.credentials` 的 encrypted-json 中成对绑定 tenantId；不得使用通用 Secrets 工具可读条目。
 - Portal 连接器仅由用户在现有 UI 授权，`portal-session` Driver 在主进程验证真实身份和企业成员关系；state 一次性、五分钟、绑定 SY 登录用户与环境。开关打开不等于已连接；账号切换、断开和重新连接必须使旧结果失效，重启重新验证。网络失败不视为凭据失效；没有自动刷新或 Portal token 吊销承诺。
-- 当前只注册 Portal Headless Test（`portal-headless-test`），测试 API/网页/授权入口固定且分别保存于可信定义；未来独立新增 Portal Headless（`portal-headless`），不替换测试连接器。Portal 不贡献 MCP/Skill，不进入 Agent 快照，内部凭据提供接口不得暴露给 Renderer、MCP 或 HTTP。契约与 Web 提示词见 `docs/integrations/portal-headless-test.md`。
+- 当前只注册 Portal Headless Test（`portal-headless-test`），测试 API/网页/授权入口固定且分别保存于可信定义；未来独立新增 Portal Headless（`portal-headless`），不替换测试连接器。Portal 不进入 Agent 连接器快照；内部凭据接口不直接暴露给 Renderer 或通用 HTTP。独立扩展 `extend.portal-headless.credential.get` 仅允许 MCP 来源，经权限与审计交付 Portal 凭据和短期 SY 扩展授权；Skill 引导 AI 直连 SY 扩展后端。不注册 System App。契约见 `docs/integrations/portal-headless-test.md` 与 `docs/integrations/portal-headless-extension.md`。
 - 新 Agent 对话仅保存有 Agent contribution 的连接器 ID 快照，运行时再从当前内置定义生成 MCP 与 Skill contribution；之后启停不得改变已有对话。
 - 会话启动时连接器 MCP 不可用只记录诊断并降级该工具，不得阻断用户 Prompt 或普通对话。
 - 内置 Skill 只保存使用说明，开发和正式包路径由 Agent Runtime 按 `skillPackageId` 统一解析；不得从网络下载 Skill 或让 Skill 建立 MCP 连接。

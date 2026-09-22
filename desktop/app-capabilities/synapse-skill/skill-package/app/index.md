@@ -216,7 +216,7 @@ Rules:
 
 ## Portal Headless Test connector boundary
 
-Portal Headless Test is a desktop-only connector in the existing Connectors app. It exposes no MCP tool, business capability, credential reader, or Agent Skill contribution. Do not request tokens in chat or invoke its private authorization callback through tools; the user authorizes in Portal Web, and Synapse verifies the current user and tenant before storing credentials. Test and future production connections are separate. Do not invent Portal business tools or treat the pending Web authorization page as already deployed.
+Portal Headless Test remains in Connectors for authorization and encrypted local storage. Its dedicated credential tool is registered in the separate `extend` domain, not as an App capability. Read `../extend/portal-headless/index.md` for the MCP credential → AI HTTP → backend SDK flow. Do not invoke the private authorization callback or assume the Portal Web authorization page has already been deployed.
 
 ## Desktop device name
 

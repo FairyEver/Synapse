@@ -65,7 +65,7 @@ const CAPABILITY_ACTIONS = [
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]
-export type CapabilityId = `app.${string}.${string}.${CapabilityAction}`
+export type CapabilityId = `app.${string}.${string}.${CapabilityAction}` | `extend.${string}.${string}.${CapabilityAction}`
 export type IpcOperationId = `app.${string}.${string}.${string}`
 
 const TOKEN_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/
@@ -87,8 +87,11 @@ function toPascalToken(token: string): string {
 
 export function isCanonicalCapabilityId(id: string): id is CapabilityId {
   const parts = splitCapabilityId(id)
-  if (parts.length < 4 || parts[0] !== "app") return false
-  if (!parts.every((part) => TOKEN_PATTERN.test(part))) return false
+  if (parts.length < 4 || !["app", "extend"].includes(parts[0])) return false
+  if (parts[0] === "extend") {
+    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(parts[1])) return false
+    if (!parts.slice(2).every((part) => TOKEN_PATTERN.test(part))) return false
+  } else if (!parts.every((part) => TOKEN_PATTERN.test(part))) return false
   return isKnownAction(parts[parts.length - 1])
 }
 
@@ -108,7 +111,7 @@ export function getCapabilityAction(id: CapabilityId): CapabilityAction {
 }
 
 export function capabilityIdToMcpTool(id: CapabilityId): string {
-  return id.replaceAll(".", "_")
+  return id.replaceAll(".", "_").replaceAll("-", "_")
 }
 
 export function isCanonicalIpcOperationId(id: string): id is IpcOperationId {
@@ -140,6 +143,7 @@ export function assertCanonicalIpcChannel(channel: string): void {
 
 export function capabilityIdToIpcChannel(id: CapabilityId): string {
   assertCanonicalCapabilityId(id)
+  assertCanonicalIpcOperationId(id)
   return ipcOperationIdToChannel(id)
 }
 

@@ -11,10 +11,11 @@
 | Workflow Node | 节点类型、Renderer manifest、Main executor | `desktop/workflow-nodes/register.renderer.ts`、`register.main.ts` |
 | Automation Action | 动作类型、Renderer 配置、Main executor | `desktop/src/action-runtime/builtin-actions.ts`、`desktop/electron/action-runtime/builtin-actions.ts` |
 | MCP Capability / Tool | capability catalog、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
+| Extension Capability | 扩展贡献，通过 `extend.capabilities` ExtensionPoint 注册 | `desktop/extensions/shared/registry.ts` |
 | MCP 公开工具表面 | `tools/list` 载荷、`initialize` instructions | `desktop/electron/services/agent-runtime/synapse-tool-router.ts` |
 | Deep Link | 默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
 
-Portal Headless Test 在既有 Connectors 应用内增加一个连接器定义和一个声明式私有回调 `synapse://portal-headless-test/callback`。该入口通过 `mainHandlerId` 直接交给可信主进程，不进入公开 ActionRouter。新增公开 capability/MCP 工具数量为 0，System App/Dock/Workflow/Automation 数量不变；只增加 UI retry IPC 与内部状态事件。Portal 不贡献 Agent MCP 或 Skill；正式环境入口尚未注册。连接器凭据不属于 Secrets MCP 数据。
+Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `synapse://portal-headless-test/callback` 直接交给可信主进程。独立 `extend` domain 新增 1 个 capability / MCP 索引工具：`extend.portal-headless.credential.get` / `extend_portal_headless_credential_get`，仅允许 MCP 来源；不新增 System App、Dock、Workflow、Automation 或 Deep Link。系统 Skill 指南位于 `skill-package/extend/portal-headless/`，引导 AI 携带短期 SY 授权与 Portal 凭证直连 `/api/extend/portal-headless/*`。连接器凭据不属于 Secrets MCP 数据；正式环境尚未注册。
 
 ## `desktop/app-capabilities` 产品表面
 
@@ -120,11 +121,12 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 64 | 64 |
-| 合计 | 247 | 243 |
+| `extend` | 1 | 1 |
+| 合计 | 248 | 244 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 243 个 `app_*` 工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 244 个工具（243 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

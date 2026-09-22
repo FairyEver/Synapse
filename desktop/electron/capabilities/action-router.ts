@@ -15,6 +15,7 @@ export type SynapseActionRouter = {
 }
 
 export type SynapseActionRouterDeps = {
+  readonly extendDispatch?: DomainDispatch
   readonly appDispatch: DomainDispatch
   readonly automationDispatch: DomainDispatch
   readonly contentDispatch: DomainDispatch
@@ -30,6 +31,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
   return {
     async dispatch(action, params, context) {
       const domainId = resolveActionDomainId(action)
+      if (domainId === "extend") {
+        if (!deps.extendDispatch) throw new Error("Extension dispatcher is not configured")
+        return deps.extendDispatch(action, params, context)
+      }
       if (domainId === "app") return deps.appDispatch(action, params, context)
       if (domainId === "automation") return deps.automationDispatch(action, params, context)
       if (domainId === "content") return deps.contentDispatch(action, params, context)

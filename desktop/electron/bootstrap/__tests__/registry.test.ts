@@ -381,6 +381,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     ])
     expect(byId.get("core.database")?.dependsOn).toEqual([
       "core.config",
+      "core.connectors",
       "core.event-bus",
       "core.automation",
       "core.action-runtime",
@@ -445,6 +446,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     // Each dependency precedes its dependent.
     const idx = (id: string) => order.indexOf(id)
     expect(idx("core.config")).toBeLessThan(idx("core.database"))
+    expect(idx("core.connectors")).toBeLessThan(idx("core.database"))
     expect(idx("core.action-runtime")).toBeLessThan(idx("core.database"))
     expect(idx("core.automation")).toBeLessThan(idx("core.database"))
     expect(idx("core.text-extractor")).toBeLessThan(idx("core.database"))

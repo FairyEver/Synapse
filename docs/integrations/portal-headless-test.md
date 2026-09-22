@@ -66,9 +66,9 @@ Synapse 连接器中的 **Portal Headless Test** 永久用于测试环境。打�
 
 恢复连接先后台验证，不阻塞启动，验证前不给执行层使用；网络失败保留已保存凭据以便重试。切换 SY 账号不会展示、使用其他账号绑定；返回原账号会重新验证。断开先使正在进行的尝试失效，持久化禁用标记，再删除凭据与摘要；删除失败明确报错，禁用记录用于下次清理。启动清理本 owner/environment/connector 下的孤立凭据。
 
-所有凭据访问、网络和浏览器打开经过权限与无正文审计。回调走已有声明式协议路由的私有主进程 handler，不注册公开 capability/MCP/HTTP/Workflow/Automation。Renderer 仅收到白名单状态摘要，变更通过 EventBus 的 `connector/item.changed` 发送。禁止 token 进入日志、错误、埋点、普通配置、模型结果或 Agent 快照。
+所有凭据访问、网络和浏览器打开经过权限与无正文审计。回调走已有声明式协议路由的私有主进程 handler，不注册公开 capability/MCP/HTTP/Workflow/Automation。Renderer 仅收到白名单状态摘要，变更通过 EventBus 的 `connector/item.changed` 发送。禁止 token 进入日志、错误、埋点、普通配置或 Agent 快照。唯一专用交付面是扩展凭证 MCP 响应，允许用户自己的 AI 临时使用，不得复述或保存到文档。
 
-## 未来 SDK 接线
+## SDK 扩展接线
 
 内部 `core.connectors.getSessionInput(connectorId)` 在主进程检查当前账号、连接代次、验证状态和凭据绑定后返回：
 
@@ -77,13 +77,14 @@ Synapse 连接器中的 **Portal Headless Test** 永久用于测试环境。打�
   baseUrl,       // 可信环境定义
   userId,        // ownerUserId，不是 portalUserId
   language,      // zh-CN
+  connectionGeneration, // 本次连接尝试代次，用于异步交付前复核
   credential: { token, tenantId }
 }
 ```
 
-未来可信执行层按环境分别建立 `createPortalServer({ baseUrl })`，将 `userId`、`credential`、`language` 传给 `forSession`；最小验证所需能力为 `['user-basic', 'tenant-context']`，并实际调用用户资料接口。此内部入口没有 preload/MCP/HTTP 暴露；本次不安装 SDK、不建立 SY 服务端 Portal 会话，也不注册 Agent contribution。
+独立扩展的凭证 dispatcher 复用该内部入口，经过权限和审计，再向后端换取短期 SY 扩展授权；返回前复核账号与 connectionGeneration。AI 携带两类凭证直连 SY 后端，后端按请求创建 SDK 会话，显式验证 `user-basic`、`tenant-context` 并在 finally 清理。SDK 仅安装在服务端，连接器不注册 Agent contribution。详见 [扩展直连契约](portal-headless-extension.md)。
 
-可信执行层未来使用凭据时仍需处理远端失效，不能将最近一次验证当作永久有效。断开只停止 SY 使用并删除本地凭据，不承诺吊销 Portal token。
+使用凭据时仍需处理远端失效，不能将最近一次验证当作永久有效。断开删除本机凭据并阻止后续交付，不承诺吊销 Portal token 或即时撤销已交付的五分钟 SY 授权。
 
 ## 验收口径
 

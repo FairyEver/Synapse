@@ -111,11 +111,11 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(247)
+    expect(allCapabilityIds()).toHaveLength(248)
     expect(APP_DOMAIN.capabilities).toHaveLength(83)
     expect(buildAppTools()).toHaveLength(79)
-    expect(toolNames).toHaveLength(243)
-    expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
+    expect(toolNames).toHaveLength(244)
+    expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual(["extend_portal_headless_credential_get"])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
 
@@ -126,8 +126,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(243)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(243)
+    expect(buildAllMcpTools()).toHaveLength(244)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(244)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
@@ -154,9 +154,10 @@ describe("API and MCP capability surface", () => {
     expect(documentedPairs).toHaveLength(146)
   })
 
-  it("routes every registered API action to its owning domain dispatcher", async () => {
+  it("routes every registered capability to its owning domain dispatcher", async () => {
     const dispatchers = {
       app: vi.fn(async () => ({ ok: true as const })),
+      extend: vi.fn(async () => ({ ok: true as const })),
       automation: vi.fn(async () => ({ ok: true as const })),
       content: vi.fn(async () => ({ ok: true as const })),
       database: vi.fn(async () => ({ ok: true as const })),
@@ -168,6 +169,7 @@ describe("API and MCP capability surface", () => {
     }
     const router = createSynapseActionRouter({
       appDispatch: dispatchers.app,
+      extendDispatch: dispatchers.extend,
       automationDispatch: dispatchers.automation,
       contentDispatch: dispatchers.content,
       databaseDispatch: dispatchers.database,
@@ -231,7 +233,7 @@ describe("API and MCP capability surface", () => {
       && !file.path.startsWith("skill-authoring/")
     ))
 
-    expect(routingDocs).toHaveLength(22)
+    expect(routingDocs).toHaveLength(25)
     for (const doc of routingDocs) {
       expect(doc.content, doc.path).toContain("Reaching Synapse tools")
       expect(doc.content, doc.path).toContain("publishes only two tools")

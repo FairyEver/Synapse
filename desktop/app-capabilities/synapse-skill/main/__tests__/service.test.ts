@@ -242,7 +242,7 @@ describe("SynapseSkillService", () => {
     expect(detail.content).toContain("static site publishing or republishing")
     expect(detail.content).toContain("mcp__synapse-tool-router__search")
     expect(detail.content).toContain("mcp__synapse-tool-router__invoke")
-    expect(detail.content).toContain("exact original `app_*` name")
+    expect(detail.content).toContain("exact original name")
     // The two-tool surface is the main path, not a fallback; a future edit that
     // demotes it back to "only when not visible" turns this red.
     expect(detail.content).toContain("publishes only two tools")
@@ -260,6 +260,9 @@ describe("SynapseSkillService", () => {
       "database/index.md",
       "drive/api-reference.md",
       "drive/index.md",
+      "extend/index.md",
+      "extend/portal-headless/api-reference.md",
+      "extend/portal-headless/index.md",
       "model-price/api-reference.md",
       "model-price/index.md",
       "repository/api-reference.md",

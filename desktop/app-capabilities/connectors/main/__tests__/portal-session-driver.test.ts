@@ -72,7 +72,7 @@ describe("Portal session connector", () => {
     expect(publicItem).toMatchObject({ connectionStatus: "connected", account: profile })
     expect(JSON.stringify([publicItem, [...h.state.entries.values()], h.auditSink.record.mock.calls])).not.toContain(token)
     const sdkInput = await h.driver.getSessionInput(portalTestConnector.id)
-    expect(sdkInput).toEqual({ baseUrl: portalTestConnector.integration.baseUrl, userId: "owner-a", language: "zh-CN", credential: { token, tenantId: profile.tenantId } })
+    expect(sdkInput).toEqual({ connectionGeneration: expect.any(String), baseUrl: portalTestConnector.integration.baseUrl, userId: "owner-a", language: "zh-CN", credential: { token, tenantId: profile.tenantId } })
     expect(h.driver.createAgentContribution(portalTestConnector)).toEqual({ mcpServers: [], skillPackageIds: [] })
   })
   it("cancels without storing credentials and rejects replay", async () => {

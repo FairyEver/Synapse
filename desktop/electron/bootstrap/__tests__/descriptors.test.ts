@@ -159,6 +159,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreDatabaseDescriptor.criticality).toBe("degraded")
     expect(coreDatabaseDescriptor.dependsOn).toEqual([
       "core.config",
+      "core.connectors",
       "core.event-bus",
       "core.automation",
       "core.action-runtime",
