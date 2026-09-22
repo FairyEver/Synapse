@@ -24,7 +24,8 @@ function page<T>(items: readonly T[], offset: number, limit: number) {
 }
 function permitted(catalog: Catalog, id: string) {
   const description = catalog.describe(id)
-  if (!allowedIds.has(id) || !description.ok) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前扩展目录未提供此能力；这不等同于 Portal 权限判断。")
+  if (!allowedIds.has(id)) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前扩展目录未配置此能力。")
+  if (!description.ok) throw failure(404, "CAPABILITY_NOT_VISIBLE", "服务端已配置此能力，但当前用户与企业的菜单目录未包含它；不能据此判断部署缺失、没有业务数据或没有 Portal 权限。")
   if (description.write || description.ai?.effect !== "read" || !description.invoke) {
     throw failure(403, "READ_ONLY_REQUIRED", "此扩展仅允许已绑定的只读能力。")
   }
@@ -75,7 +76,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
       if (operation.op === "context") {
         const user = await scoped.baseShell.getUserInfo()
         data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
-          environment: "test", now: new Date().toISOString(), timeZone: "Asia/Shanghai", allowedCapabilities: [...allowedIds] }
+          environment: "test", now: new Date().toISOString(), timeZone: "Asia/Shanghai", configuredReadCapabilities: [...allowedIds] }
       } else {
         const visible = await scoped.visibleCatalog({ project: 2, maxNodes: 500, onUnavailable: "throw" })
         if (!visible.applied) throw failure(503, "CATALOG_UNAVAILABLE", "当前 Portal 目录不可用，请稍后重试。")

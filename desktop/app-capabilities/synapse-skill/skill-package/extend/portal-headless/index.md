@@ -20,9 +20,16 @@ Test environment only; read-only. Meeting room occupancy, personal yearly agreem
 
 - “今天”: determine the date in the user's timezone. The context reports server time and `Asia/Shanghai`; use an explicit user timezone if given.
 - Meeting occupancy: describe first, then pass optional `date`; no room filter parameter exists. Filter names in the actual result if needed.
+- Intersect cross-day reservations with the requested calendar day. An interval ending today at 23:00 covers today's 00:00–23:00, not the entire day; do not erase the remaining hour or infer a guaranteed booking slot from it.
 - “我今年的年度双赢协议”: use the personal list, page through `pageNo/pageSize`, filter the returned `year`. Do not pass a nonexistent `year` filter or substitute the supervised-users list. Report partial results if you have not exhausted pagination.
 - The pinned SDK has no yearly agreement detail capability. Explain this if tasks, indicators or the agreement body are requested; neither the list nor yearly schedule configuration is the body.
 - Only `protocol_status` is exposed through `base-dict-get` in this release; do not assume the SDK's broader dictionary contract means every dictionary is available.
+
+## Answering
+
+Respond in the user's language. Lead with the requested business result; for occupancy prefer a compact room/time table. Omit SDK IDs, endpoint names, tool-by-tool execution logs and repeated claims about credential handling unless the user requests diagnostics. Keep necessary scope or uncertainty to one short sentence.
+
+`context.configuredReadCapabilities` is the server's configured allowlist, not this account's visible catalog. Catalog results are filtered by the current user's and tenant's Portal menu. A missing result is not proof of missing deployment, absence of records, or absence of Portal permission. On `CAPABILITY_NOT_VISIBLE`, say that the current connection's menu does not expose the capability and that no business data was queried. Do not prescribe redeployment or permission changes without independent evidence, and do not switch identities or bypass the catalog.
 
 ## Credentials and errors
 

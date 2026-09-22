@@ -51,6 +51,8 @@ Only exact registered method references from that capability are accepted. Schem
 
 Success envelope: `{ protocolVersion, catalogRevision, data }`. Domain/page/search lists use `data.items`, `total`, `nextOffset`, `complete`; send the same query with `offset: nextOffset` until null. `limit` is 1–50. Recommendation and page detail preserve SDK structure.
 
+`context.data.configuredReadCapabilities` describes server configuration only. The catalog reflects the current session's menu and may contain fewer capabilities; these are different scopes, not inconsistent deployment reports.
+
 `describe` includes the complete SDK contract plus `extensionInputSchema`, which specifies the actual accepted read arguments. `/read` returns `data.result`, `data.ai`, `data.capabilityId`; SDK business pagination (such as `{list,total}`) is inside `result`, separate from directory pagination.
 
 ## Failures
@@ -62,6 +64,7 @@ Errors include `code`, `message`, and HTTP `statusCode` through the standard SY 
 - `PORTAL_CREDENTIAL_INVALID`: Portal connection must be renewed.
 - `PORTAL_FORBIDDEN`: Portal denied access to this user/tenant; do not report it as token expiry.
 - `CAPABILITY_UNAVAILABLE` / `REFERENCE_UNAVAILABLE`: this extension cannot provide the requested capability/reference.
+- `CAPABILITY_NOT_VISIBLE`: configured on the server but absent from the current user/tenant menu catalog; no business read was made. Do not infer deployment failure, no records or definitive Portal permissions.
 - `READ_ONLY_REQUIRED`: a write/unbound capability cannot run here.
 - `CATALOG_UNAVAILABLE`: menu loading failed or was truncated; no fallback to a full catalog.
 - `EXTENSION_BUSY` / `PORTAL_TIMEOUT` / `PORTAL_REQUEST_FAILED`: bounded retry or report the failure; retain valid credentials.

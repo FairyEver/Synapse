@@ -38,6 +38,6 @@ SDK 源码仍在独立仓库维护，SY 不复制一套业务源码。当前固�
 
 首期只读 allowlist：`meeting-room-usage`、`perf-year-agreement-list`、`base-dict-get`（仅 protocol_status）。执行时同时复核 SDK 的 write=false、ai.effect=read、invoke 绑定，参数用同一份 schema 校验并通过 describe 返回。其它能力即使已在 SDK 中也不能执行；扩大范围需要对应契约验证与 allowlist 更新。
 
-年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。目录是会话可见面，不是最终数据权限；Portal 业务响应决定实际访问结果。
+年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。`context.configuredReadCapabilities` 仅表示服务端配置范围；目录是当前用户与企业的菜单可见面，不是最终数据权限。服务端已配置但菜单不可见时返回 `CAPABILITY_NOT_VISIBLE`，不得误判为部署缺失或没有业务数据；Portal 业务响应决定实际访问结果。
 
-完整请求、响应与错误契约见系统 Skill 的 `extend/portal-headless/api-reference.md`。Portal Web 授权页交付、真实身份与查询结果仍需部署后的授权账号联调；本地合成测试不能代替真实验收。
+完整请求、响应与错误契约见系统 Skill 的 `extend/portal-headless/api-reference.md`。2026-09-22 已在用户启动的本机开发环境通过 Computer Use 验证 SY 登录回调、用户完成 Portal 授权后的连接状态、AI 取凭证与直连后端会议室查询。当前测试连接的年度协议不在会话可见目录中，未执行年度业务读取；生产部署、其它账号与跨平台授权仍未验收。本地合成测试不能代替真实验收。

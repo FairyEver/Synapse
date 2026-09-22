@@ -10,7 +10,7 @@ vi.mock("../../config/env", () => ({ loadEnv: () => ({ userAccessJwtSecret: "syn
 let sdk: PortalSdk
 beforeAll(async () => { sdk = await import("portal-headless") })
 const identity = { owner: "owner-one", credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
-function fixture(options: { error?: unknown; menuFailure?: boolean } = {}) {
+function fixture(options: { error?: unknown; menuFailure?: boolean; hideYearlyMenu?: boolean } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []
   const runtimes: ReturnType<PortalSdk["createPortalServer"]>[] = []
   const loader = async () => ({ ...sdk,
@@ -25,6 +25,7 @@ function fixture(options: { error?: unknown; menuFailure?: boolean } = {}) {
       if (url.endsWith("getUserTenantsByPage")) return { list: [{ id: context.credential.tenantId }], total: 1 }
       if (url.endsWith("/sys/menu/nav")) {
         if (options.menuFailure) throw new Error("menu secret-canary")
+        if (options.hideYearlyMenu) return []
         return [{ id: "menu", name: "个人年度", permissions: "/dashboard/year-agreement/main", url: "/dashboard/year-agreement/main", children: [] }]
       }
       if (url.endsWith("/meeting-room-usage")) return { meetingRooms: [{ meetingRoomId: "room", meetingRoomName: "会议室", timeSlots: [] }] }
@@ -82,6 +83,19 @@ describe("Portal Headless backend extension", () => {
       service.run({ owner: "owner-two", credential: { ...identity.credential, tenantId: "tenant-two", token: "other-canary" } }, { op: "context" }),
     ])
     expect(calls.every((call) => call.token === "portal-canary" ? call.tenantId === "tenant-one" : call.token === "other-canary" && call.tenantId === "tenant-two")).toBe(true)
+  })
+  it("distinguishes configured support from a capability absent in this session's menu", async () => {
+    const { service, calls } = fixture({ hideYearlyMenu: true })
+    const context = await service.run(identity, { op: "context" })
+    expect(context.data).toMatchObject({ configuredReadCapabilities: expect.arrayContaining(["perf-year-agreement-list"]) })
+    expect(context.data).not.toHaveProperty("allowedCapabilities")
+    const catalog = await service.run(identity, { op: "catalog", input: { op: "search", query: "年度双赢协议", offset: 0, limit: 20 } })
+    expect(catalog.data).toMatchObject({ total: 0, complete: true })
+    await expect(service.run(identity, { op: "describe", input: { kind: "capability", capabilityId: "perf-year-agreement-list" } }))
+      .rejects.toMatchObject({ response: { code: "CAPABILITY_NOT_VISIBLE" } })
+    await expect(service.run(identity, { op: "read", input: { capabilityId: "perf-year-agreement-list", arguments: {} } }))
+      .rejects.toMatchObject({ response: { code: "CAPABILITY_NOT_VISIBLE" } })
+    expect(calls.some((call) => String(call.request.url).endsWith("/kpiyearprotocol/page"))).toBe(false)
   })
   it("fails closed on menu errors and strips SDK error details", async () => {
     const { service } = fixture({ menuFailure: true })
