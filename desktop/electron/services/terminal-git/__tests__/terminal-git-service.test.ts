@@ -58,6 +58,19 @@ async function createBareRemote(): Promise<string> {
   return dir
 }
 
+/**
+ * 挂远端时直接写配置，不走 `git remote add`。
+ *
+ * 新版 git 的 `remote add` 会拒掉互为斜杠前缀的两个远端名（`team` 与 `team/fork`），
+ * 报 `remote name 'team/fork' is a subset of existing remote 'team'`，反过来挂也一样。
+ * 这种仓库在用户那里是存在的（旧版 git 建的，或直接改的配置），拆名字的规则必须处理它，
+ * 所以这里绕开挂的时候的校验，落成的状态与用户那边一致，后面 `fetch --all` 还是真 git。
+ */
+function attachRemote(repo: string, name: string, url: string): void {
+  git(repo, ["config", `remote.${name}.url`, url])
+  git(repo, ["config", `remote.${name}.fetch`, `+refs/heads/*:refs/remotes/${name}/*`])
+}
+
 /** 只包一层用来记命令，执行本身还是真的。 */
 function recordingRunner(): { runner: GitClientCommandRunner; commands: string[] } {
   const inner = createGitClientCommandRunner()
@@ -570,8 +583,8 @@ describe("TerminalGitService · 远端分支", () => {
     const { repo, remote } = await repositoryWithRemoteBranch()
     // 同时挂 `team` 与 `team/fork`。**只有两个都在才验得出最长前缀**：只挂 `team/fork`
     // 的话，随便哪种匹配方式都对得上。
-    git(repo, ["remote", "add", "team", remote])
-    git(repo, ["remote", "add", "team/fork", remote])
+    attachRemote(repo, "team", remote)
+    attachRemote(repo, "team/fork", remote)
     git(repo, ["fetch", "-q", "--all"])
 
     const branches = await serviceWith(recordingRunner().runner).listRemoteBranches(repo)
