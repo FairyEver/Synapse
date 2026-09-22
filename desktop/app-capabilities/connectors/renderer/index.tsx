@@ -8,7 +8,7 @@ import { Switch } from "../../../src/components/ui/switch"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { ConnectorItem } from "../shared/schema"
 import figmaIcon from "./assets/figma.png"
-import connectorIcon from "./assets/connector.png"
+import portalHeadlessIcon from "./assets/portal-headless.png"
 import { useConnectors } from "./hooks/use-connectors"
 
 export function ConnectorsModule() {
@@ -50,7 +50,7 @@ function ConnectorCard({ item, busy, onAction, onReconnect, onRetry, openDocumen
   return (
     <Card size="sm">
       <CardContent className="flex items-center gap-4 py-1">
-        <img src={item.connectionStatus ? connectorIcon : figmaIcon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
+        <img src={item.connectionStatus ? portalHeadlessIcon : figmaIcon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
         <div className="min-w-0 flex-1">
           <CardTitle className="text-base">{item.name}</CardTitle>
           {item.documentationUrl ? (
