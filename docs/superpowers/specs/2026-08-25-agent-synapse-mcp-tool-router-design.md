@@ -1,6 +1,8 @@
 # Agent Synapse MCP 工具按需加载设计
 
 > Superseded note: `search`/`invoke` 已从进程内实验升级为 `/mcp` 的**唯一**公开工具表面。本文件中「`/mcp`、Claude Code 注册、公开工具名、schema 与 225/223 能力数量不变」以及「两个 router 工具只存在于 Agent SDK 进程内会话」的描述已失效；权威现状见 `docs/agents/capability-registry.md` 与 `docs/agents/agent-runtime-security.md`。进程内注入流程本身仍然有效。
+>
+> 中文检索范围另有更新：下方「内部协议」一节中「中文常用的云盘、文件和列表词汇映射到规范索引词，不为单个模型维护别名」的表述已被 `docs/superpowers/specs/2026-09-22-synapse-tool-router-chinese-search-lexicon-design.md` 取代 —— 中文支持从 7 条别名扩展为覆盖全部工具名段的中文词表。
 
 ## 目标
 
