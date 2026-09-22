@@ -108,6 +108,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["概览", "overview"],
   ["数量", "count"],
   ["日志", "log"],
+  ["摘要", "summary"],
   ["SQL", "sql"],
 
   // ---------------- 名词：其他 ----------------
@@ -120,6 +121,8 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["文档", "document"],
   ["模板", "template"],
   ["EJS", "ejs"],
+  ["docx", "docx"],
+  ["JSON", "json"],
   ["文本", "text"],
   ["提取器", "extractor"],
   ["生成器", "generator"],
@@ -137,6 +140,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["轮次", "turn"],
   ["权限", "permission"],
   ["通知", "notifier"],
+  ["通知", "notification"],
   ["声音", "sound"],
   ["系统", "system"],
   ["问题", "problem"],
@@ -146,6 +150,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["访问", "access"],
   ["本地", "local"],
   ["内容", "content"],
+  ["原始", "raw"],
 
   // ---------------- 动词 ----------------
   ["列表", "list"],

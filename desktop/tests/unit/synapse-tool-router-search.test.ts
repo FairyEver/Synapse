@@ -165,6 +165,36 @@ describe("synapse tool router search", () => {
     expect(missing.join("\n")).toBe("")
   })
 
+  it("reaches every tool through a chinese query built from its own name segments", async () => {
+    // 段 -> 中文词的反查表，取表中第一条命中的
+    const chineseFor = new Map<string, string>()
+    for (const [term, token] of LEXICON) {
+      if (!chineseFor.has(token)) chineseFor.set(token, term)
+    }
+
+    const misses: string[] = []
+    for (const tool of buildAllMcpTools()) {
+      const segments = tool.name
+        .replace(/^app_/, "")
+        .split("_")
+        .filter((segment) => !(segment in EXEMPT_SEGMENTS))
+      const uncovered = segments.filter((segment) => !chineseFor.has(segment))
+      if (uncovered.length > 0) {
+        misses.push(`${tool.name}：段 ${uncovered.join("、")} 缺中文词`)
+        continue
+      }
+
+      const query = segments.map((segment) => chineseFor.get(segment)).join("")
+      const names = await topToolNames(query)
+      if (!names.includes(tool.name)) {
+        misses.push(`${tool.name}：「${query}」实际 top-5：${names.join("、") || "(空)"}`)
+      }
+    }
+
+    expect(misses.join("\n")).toBe("")
+    // 243 次真实检索实测约 15 秒，远超 vitest 默认的 5 秒超时。
+  }, 60_000)
+
   it("routes by domain when the caller already narrowed it", async () => {
     const result = await searchSynapseTools({ query: "列表", domain: "automation", limit: 5 })
 
