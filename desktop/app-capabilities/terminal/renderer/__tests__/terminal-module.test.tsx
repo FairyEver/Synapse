@@ -2280,20 +2280,15 @@ describe("TerminalModule", () => {
       expect(writtenData()[0]!.includes("\x1b[")).toBe(false)
     })
 
-    it("写入后出现待执行提示，命令行还没执行", async () => {
+    it("写入后不显示待执行提示，仍由用户按回车执行", async () => {
       await renderWithQuickInputs()
       terminalBridge.writeSession.mockClear()
 
       await openPanel()
       await pickRow()
 
-      const pending = document.body.querySelector("[data-terminal-pending-input]")
-      expect(pending).not.toBeNull()
-      expect(pending?.textContent).toContain("待执行 · Enter 执行")
-      expect(pending?.textContent).toContain("帮我捋一下")
-      // 提示挂在命令条上方。
-      const toolbar = document.body.querySelector("[data-terminal-toolbar]")
-      expect(toolbar!.compareDocumentPosition(pending!) & Node.DOCUMENT_POSITION_PRECEDING).not.toBe(0)
+      expect(document.body.querySelector("[data-terminal-pending-input]")).toBeNull()
+      expect(writtenData()).toEqual([CONTENT])
     })
 
     it("会话非 running 时入口渲染但禁用", async () => {

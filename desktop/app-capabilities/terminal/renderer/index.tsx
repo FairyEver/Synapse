@@ -1288,7 +1288,7 @@ export function TerminalModule({
         sessionId: activeSession.id,
         data: wrapBracketedPaste(content, enabled),
       })
-      setPendingInputText(content)
+      setPendingInputText(null)
     } catch (error) {
       logger.error("Failed to write quick input to the terminal.", error)
       toast.error("写入终端失败")
@@ -1753,7 +1753,7 @@ export function TerminalModule({
                 </div>
               ) : null}
               {pendingInputText && !voicePresentation.active ? (
-                /* 有东西填进命令行了但还没执行（语音转写或快捷输入）—— 提示挂在转写条
+                /* 语音转写填进命令行了但还没执行 —— 提示挂在转写条
                    自己身上，不去动 pane 头，改动半径最小。 */
                 <div
                   className="flex shrink-0 items-center gap-2 border-t border-border bg-card px-2.5 py-1.5"

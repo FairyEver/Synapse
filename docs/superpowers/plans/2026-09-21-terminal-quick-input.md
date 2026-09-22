@@ -12,7 +12,7 @@
 | 2 | 把 `useQuickInputItems` 提到共享 hooks | `src/hooks/use-quick-input-items.ts` |
 | 3 | 新建面板组件 | `terminal-quick-input-menu.tsx` |
 | 4 | 接进命令条最左侧（钉住） | `index.tsx` |
-| 5 | 写入通道：bracketed paste + 待执行提示 | `index.tsx`、`terminal-workspace-view.tsx` |
+| 5 | 写入通道：bracketed paste，不显示重复提示 | `index.tsx`、`terminal-workspace-view.tsx` |
 | 6 | 规则文档、发布说明、收尾 | `docs/agents/*`、`RELEASE_NOTES_PENDING.md` |
 
 阶段 1 和 2 是准备，可以并行做，也可以先做。**阶段 4 之前不要合并阶段 3**，否则命令条上会先出现一颗点了没反应的按钮。
@@ -244,16 +244,14 @@ function wrapBracketedPaste(content: string, enabled: boolean): string {
 ```tsx
 const data = wrapBracketedPaste(content, workspaceViewRefs.current.get(activeWorkspace.id)?.isBracketedPasteMode() ?? false)
 await terminalBridge.session.write({ sessionId: activeSession.id, data })
-setPendingInputText(content)   // ← 见 5.2
+setPendingInputText(null)   // 清除已有提示，见 5.2
 ```
 
 **不补 `\r`。** 不走 `buildTerminalCommandWrites`。
 
-### 5.2 待执行提示条复用
+### 5.2 快捷输入不显示待执行提示
 
-`index.tsx:141` 的 `pendingVoiceText` 改名成 `pendingInputText`（状态、setter、`:1723` 的渲染条件、`:1731` 的取值、以及两处清空 useEffect：会话切换与开始录音）。`data-terminal-pending-voice` 这个属性名**保留**（手机端/测试可能在用，先查），或一并改名并同步测试。
-
-提示条本身一个字不改，仍然显示「待执行 · Enter 执行」。
+2026-09-22 调整：快捷输入成功写入后清除 `pendingInputText`，不重复展示输入内容或「待执行 · Enter 执行」。语音输入自身的提示行为保持不变。
 
 ### 5.3 错误路径
 
@@ -264,14 +262,14 @@ setPendingInputText(content)   // ← 见 5.2
 - `wrapBracketedPaste` 的单元测试：`enabled` 真假两条、内容含换行、内容为空。
 - 选一句之后：`session.write` 收到的是 `\x1b[200~…\x1b[201~`，且**以 `\x1b[201~` 结尾、不含 `\r`**。
 - 应用没开 bracketed paste 时收到的是原文。
-- 写入后出现「待执行」提示；按 Enter 那条路不被本改动影响。
+- 写入后不显示「待执行」提示；按 Enter 那条路不被本改动影响。
 - **反证**：把 `wrapBracketedPaste` 的 `enabled` 恒置为 `false`，断言必须红；把 `\x1b[201~` 去掉，断言必须红。只断言「收到了内容」的测试在这两种坏法下都是绿的。
 
 ### 完成标准
 
 - 在 Claude Code TUI 会话里点一句：整段进输入框、多行保留、**没有提交**。
 - 在纯 zsh 会话里点一句：整段进命令行、**没有执行**。
-- 命令行上方出现待执行提示。
+- 命令条上方不显示待执行提示。
 
 ---
 
