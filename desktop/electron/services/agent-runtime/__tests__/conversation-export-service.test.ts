@@ -15,6 +15,7 @@ import { AgentConversationExportService } from "../conversation-export-service"
 
 const tempRoots: string[] = []
 const TEST_SESSION_KEY = "local:renderer-secret-session"
+const TEST_JWT = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString("base64url")}.${Buffer.from('{"sub":"export-canary"}').toString("base64url")}.c2lnbmF0dXJl`
 
 afterEach(async () => {
   for (const root of tempRoots.splice(0)) {
@@ -34,6 +35,7 @@ describe("AgentConversationExportService", () => {
       windowsPath: "C:\\Users\\Fixture\\folder with spaces\\log.json",
       unixPath: "/Users/Fixture/folder with spaces/log.json",
       remoteUrl: "https://example.test/events?kind=tool",
+      command: `SY=${TEST_JWT} PT='${TEST_JWT}'`,
       chinese: "中文与 emoji 😀\r\n下一行",
       layers: [[[{ text: "尾部标记" }]]],
     })
@@ -60,6 +62,7 @@ describe("AgentConversationExportService", () => {
           const text = await readFile(path.join(directory, file), "utf8")
           expect(() => JSON.parse(text), file).not.toThrow()
           expect(text, file).not.toContain("sk-monitoring-canary-DO-NOT-EXPORT")
+          expect(text, file).not.toContain(TEST_JWT)
           expect(text, file).not.toContain("c3ludGhldGljLWltYWdl")
           expect(text, file).not.toContain("/Users/Fixture/")
         }

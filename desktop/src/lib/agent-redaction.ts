@@ -7,6 +7,8 @@ const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 const AUTHORIZATION_HEADER_PATTERN = /\b(authorization)(\s*:\s*)([^\r\n]+)/gi
 const COOKIE_HEADER_PATTERN = /\b((?:set-)?cookie)(\s*:\s*)([^\r\n]+)/gi
 const SK_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g
+// Match by credential content as well as field name (e.g. shell SY= / PT=).
+const JWT_PATTERN = /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*(?![A-Za-z0-9_-])/g
 const CIRCULAR_MARKER = "[Circular]"
 
 function isSensitiveKey(key: string): boolean {
@@ -23,6 +25,14 @@ function isSensitiveKey(key: string): boolean {
 
 function redactSensitiveText(value: string): string {
   return value
+    .replace(JWT_PATTERN, (match, header: string) => {
+      try {
+        const parsed: unknown = JSON.parse(atob(header.replace(/-/g, "+").replace(/_/g, "/")))
+        return parsed && typeof parsed === "object" && "alg" in parsed && typeof parsed.alg === "string" ? REDACTED : match
+      } catch {
+        return match
+      }
+    })
     .replace(
       JSON_ASSIGNMENT_PATTERN,
       (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>

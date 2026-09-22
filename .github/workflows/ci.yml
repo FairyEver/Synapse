@@ -96,6 +96,8 @@ jobs:
         run: pnpm --filter @synapse/desktop run build
       - name: Run tests
         run: pnpm --filter @synapse/desktop run test
+      - name: Run Portal Headless client contracts
+        run: node --test desktop/tests/portal-headless-client.test.mjs
       - name: Run local service shutdown contracts
         run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
       - name: Verify IPC codegen drift

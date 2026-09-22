@@ -10,6 +10,7 @@ import type { Response } from "express"
 import { PinoLogger } from "nestjs-pino"
 import { randomUUID } from "node:crypto"
 import { formatAuditError } from "./audit-error"
+import { RequestValidationException } from "./request-validation.exception"
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -50,6 +51,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
       statusCode,
       ...(code ? { code } : {}),
+      ...(exception instanceof RequestValidationException ? { fields: exception.fields } : {}),
     })
   }
 
