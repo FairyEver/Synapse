@@ -1020,6 +1020,39 @@ describe("TerminalService core", () => {
     expect(pty.write).toHaveBeenLastCalledWith("\x1b[200~one\ntwo\x1b[201~")
   })
 
+  it("submits a multi-line command as one paste, with the Enter outside the block", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000060",
+    }, controllerA)
+    const request = {
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedInputRevision: 0, idempotencyKey: "019f8a39-0000-7000-8000-000000000061",
+      text: "整理成提交说明\n中文，说清楚改了什么",
+    }
+
+    // 前台应用没开 bracketed paste 就没有退路：原样写会在第一个换行上执行掉第一行，
+    // 而用户还没有看过它。这条拒绝就是那个决定。
+    await expect(service.pasteCommand(request, controllerA)).rejects.toThrow("paste_mode_unavailable")
+    pty.emitData("\x1b[?2004h")
+
+    const result = await service.pasteCommand(request, controllerA)
+
+    // 整段一个粘贴块，回车在块**外面** —— 句子里的换行是句子的一部分，不是提交。
+    expect(pty.write.mock.calls).toEqual([
+      ["\x1b[200~整理成提交说明\n中文，说清楚改了什么\x1b[201~"],
+      ["\r"],
+    ])
+    expect(result).toMatchObject({
+      outcome: "accepted",
+      inputRevisionBefore: 0,
+      inputRevisionAfter: 1,
+      acceptedActionCount: 2,
+    })
+  })
+
   it("UI input explicitly takes over and invalidates the automation lease", async () => {
     const { service } = await startedHarness()
     const session = await service.createSession({})

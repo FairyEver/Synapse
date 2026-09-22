@@ -299,6 +299,20 @@ class FakeTerminal {
     return { outcome: "accepted" }
   }
 
+  /**
+   * 多行命令走的那一条：粘贴 + 回车。
+   *
+   * 记下原文而不只是记下调用，因为这条通道的整个意义就在那段文字上 —— 换行有没有
+   * 被归一化、整段是不是一条，只有看文字才知道。
+   */
+  readonly pasteCommands: string[] = []
+
+  async pasteCommand(input: { readonly text: string }) {
+    this.calls.push("pasteCommand")
+    this.pasteCommands.push(input.text)
+    return { outcome: "accepted" }
+  }
+
   /** What was typed, not just that typing happened: the text is the whole point. */
   readonly semanticWrites: {
     readonly sessionId: string
@@ -898,6 +912,55 @@ describe("MobileGatewayService", () => {
       action: "terminal.session.control",
       outcome: "allowed",
     }))
+  })
+
+  it("sends a multi-line sentence as one paste, so no line runs before the user sees it", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    harness.terminal.calls.length = 0
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-multi",
+      kind: "command",
+      sessionId: "sess-1",
+      // 电脑上「快捷输入」的句子就是这个形状：第一行当标题，其余是正文。
+      text: "synapse 静默发版\r\n第 1 步：先提交\r\n第 2 步：跑发版流程",
+    }))
+
+    // 原样写进 PTY，行规程会在第一个换行上把第一行执行掉 —— 那一行用户还没看过。
+    expect(harness.terminal.calls).not.toContain("sendCommand")
+    expect(harness.terminal.calls).toContain("pasteCommand")
+    // 换行归一成 LF：句子里带的是编辑器写的 CRLF，而 PTY 收的是 LF。
+    expect(harness.terminal.pasteCommands).toEqual([
+      "synapse 静默发版\n第 1 步：先提交\n第 2 步：跑发版流程",
+    ])
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
+  it("tells the phone why a multi-line sentence could not go in", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    vi.spyOn(harness.terminal, "pasteCommand")
+      .mockRejectedValue(terminalContractError("paste_mode_unavailable", "capability"))
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-multi-refused",
+      kind: "command",
+      sessionId: "sess-1",
+      text: "整理成提交说明\n中文，说清楚改了什么",
+    }))
+
+    // 终端服务给的代码要说成人话，而且说清用户该怎么办 —— 否则手机收到的只是一句
+    // 「命令没有送到终端」，那既没说是为什么，也没说还能做什么。
+    expect(harness.results.at(-1)).toMatchObject({
+      result: {
+        outcome: "rejected",
+        code: "paste_mode_unavailable",
+        message: "这个终端不接受多行内容，请改成一行发送。",
+      },
+    })
   })
 
   it("replays the stored result for a resent intent instead of acting twice", async () => {

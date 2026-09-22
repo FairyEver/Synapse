@@ -303,22 +303,26 @@ export class MobileIntentExecutor {
       case "command": {
         await this.deps.authorize("terminal.session.control", sessionResource(intent.sessionId))
         const attachment = requireWritable(registry, mobileClientInstanceId, intent.sessionId)
-        if (/[\r\n]/u.test(intent.text)) {
-          return {
-            intentId: intent.intentId,
-            outcome: "rejected",
-            code: "invalid_argument",
-            message: "一次只能提交一行命令。",
-          }
-        }
         const lease = await this.requireLease(attachment)
-        await terminal.sendCommand({
+        // 电脑上那句「快捷输入」句子天生是多行的（第一行当标题），手机上点它进输入框、
+        // 按发送就发到这儿 —— 用户按的是发送键，所以整段要落进终端并且执行。
+        //
+        // 多行只能走粘贴：原样写进 PTY，行规程会在第一个换行上把它当成行终止符，第一行
+        // 自己就跑了，而那一行用户还没看过。回车照旧补，见 `pasteCommand`。
+        //
+        // 换行统一成 LF：句子是在电脑上某个编辑器里写的，`\r\n` 很常见，而 PTY 收的是
+        // `\n`；一个落在粘贴块里的裸 `\r` 还可能被前台应用当成一次提交读掉。与
+        // `buildTerminalCommandWrites` 是同一条归一化。
+        const text = intent.text.replace(/\r\n?/gu, "\n")
+        const write = {
           sessionId: intent.sessionId,
           leaseId: lease.leaseId,
           expectedInputRevision: lease.inputRevision,
-          text: intent.text,
+          text,
           idempotencyKey: intentKey(intent.intentId),
-        }, lease.controller)
+        }
+        if (text.includes("\n")) await terminal.pasteCommand(write, lease.controller)
+        else await terminal.sendCommand(write, lease.controller)
         lease.attachment.leaseId = lease.leaseId
         this.deps.markDirty(intent.sessionId)
         return accepted(intent.intentId, { sessionId: intent.sessionId })
@@ -962,6 +966,9 @@ const TERMINAL_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   idempotency_conflict: "这次操作已经处理过了。",
   idempotency_expired: "这次操作已经过期，请重试。",
   delivery_uncertain: "电脑是否收到不确定，请确认后再试。",
+  // 终端里的程序没开 bracketed paste，多行粘不进去。手机那头是「快捷输入」的句子，
+  // 除了改成一行没有别的做法。
+  paste_mode_unavailable: "这个终端不接受多行内容，请改成一行发送。",
   caller_identity_required: "手机身份没有通过电脑的校验。",
 }
 

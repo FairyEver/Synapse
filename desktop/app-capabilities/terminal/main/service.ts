@@ -2707,6 +2707,38 @@ export function createTerminalService(deps: {
     })
   }
 
+  /**
+   * 一条多行的命令：整段按 bracketed paste 写进去，再补一个回车。
+   *
+   * 与 `paste` 只差最后那一下，而这一下正是它存在的理由：`paste` 是「粘进去、不
+   * 执行」，这条是「粘进去、执行」—— 手机上按的是发送键，那是用户自己按的，和电脑
+   * 上「点一句只填不发」不是同一种动作。
+   *
+   * 必须是粘贴而不是原样写：多行文本直接进 PTY，行规程会在第一个换行上把它当成行
+   * 终止符，于是第一行自己跑掉了 —— 用户还没看过的那一行。所以前台应用没开
+   * bracketed paste 时这里**拒绝**（`paste_mode_unavailable`），不退回原样写。桌面
+   * 端那条通道可以退，因为它不补回车；这条一退就等于替用户执行了他没看过的内容。
+   *
+   * 没有 `expectedThroughOutputSeq`：那是给看得见终端的调用方留的水位，手机网关没有
+   * 视图，它要问的就是「此刻前台应用自己开着它吗」，而 `enabled` 与 `fresh` 正是这个
+   * 问题的答案。
+   */
+  async function pasteCommand(input: TerminalCommandInput, controller: TerminalControllerContext) {
+    if (hasForbiddenTextControl(input.text, true)) throw terminalContractError("invalid_argument", "validation")
+    return idempotentAsync(controller.clientId, "session_input.paste_command", input.idempotencyKey, input, async () => {
+      validateInputRequest(input.sessionId, input.leaseId, input.expectedInputRevision, controller)
+      const runtime = getRuntimeForInput(input.sessionId)
+      await runtime.emulator.ready()
+      const evidence = runtime.emulator.bracketedPasteEvidence()
+      if (!evidence.enabled || !evidence.fresh) {
+        throw terminalContractError("paste_mode_unavailable", "capability", {
+          details: { throughOutputSeq: evidence.throughOutputSeq, sizeRevision: evidence.sizeRevision },
+        })
+      }
+      return deliverCommandWrites(input.sessionId, `\x1b[200~${input.text}\x1b[201~`)
+    })
+  }
+
   function sendRaw(input: TerminalRawInput, controller: TerminalControllerContext) {
     const decoded = Buffer.from(input.dataBase64, "base64")
     if (!decoded.length || decoded.toString("base64") !== input.dataBase64) {
@@ -3581,6 +3613,7 @@ export function createTerminalService(deps: {
     sendSemanticInput,
     sendCommand,
     paste,
+    pasteCommand,
     sendRaw,
     resizeControlledSession,
     stopControlledSession,
