@@ -12,6 +12,7 @@ import {
   type MobileClipboardPayload,
   type MobileFramePayload,
   type MobileGitStatusPayload,
+  type MobileGroupCommandsPayload,
   type MobileIntentResultPayload,
   type MobileQuickPhrasesPayload,
   type MobileSummaryPayload,
@@ -84,6 +85,14 @@ export interface LiveMobileRelayHandler {
    * offline is not a button.
    */
   readonly handleToolbar: (userId: string, payload: MobileToolbarPayload) => void
+  /**
+   * 一台电脑上那些配了启动命令的分组。
+   *
+   * 转发扇出但不落库，与 `handleToolbar` 同一条理由：它只在发出它的那台电脑还在的
+   * 时候才有意义 —— 一份属于已经连不上的电脑的命令列表，在手机上只会画出一个点开
+   * 没有东西的箭头。
+   */
+  readonly handleGroupCommands: (userId: string, payload: MobileGroupCommandsPayload) => void
   /**
    * The 快捷输入 sentences one of a user's computers offers its phones.
    *
@@ -546,7 +555,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         || message.type === LIVE_MESSAGE_TYPES.mobileToolbar
         || message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases
         || message.type === LIVE_MESSAGE_TYPES.mobileClipboard
-        || message.type === LIVE_MESSAGE_TYPES.mobileGitStatus) {
+        || message.type === LIVE_MESSAGE_TYPES.mobileGitStatus
+        || message.type === LIVE_MESSAGE_TYPES.mobileGroupCommands) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
         this.handleMobileRelayMessage(auth.userId, message)
@@ -765,6 +775,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileToolbar) {
         relay.handleToolbar(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileGroupCommands) {
+        relay.handleGroupCommands(userId, message.payload)
         return
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) {

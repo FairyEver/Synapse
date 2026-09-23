@@ -286,6 +286,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -323,6 +324,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -359,6 +361,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -398,6 +401,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -440,6 +444,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -758,6 +763,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress,
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -802,6 +808,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar,
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -828,6 +835,45 @@ describe("LiveDesktopGateway", () => {
     })
   })
 
+  it("hands a group command list from a desktop to the relay", () => {
+    const socket = new FakeSocket()
+    const handleGroupCommands = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleGroupCommands,
+      handleQuickPhrases: vi.fn(),
+      handleClipboard: vi.fn(),
+      handleGitStatus: vi.fn(),
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileGroupCommands,
+      id: "msg-group-commands",
+      sentAt: "2026-06-06T10:00:03.000Z",
+      payload: {
+        desktopClientInstanceId: "client-a",
+        revision: 1,
+        groups: [{ groupId: "g1", commands: [{ id: "c1", name: "Claude" }] }],
+      },
+    }))
+
+    expect(handleGroupCommands).toHaveBeenCalledWith("user-1", {
+      desktopClientInstanceId: "client-a",
+      revision: 1,
+      groups: [{ groupId: "g1", commands: [{ id: "c1", name: "Claude" }] }],
+    })
+  })
+
   it("hands a desktop's quick phrases to the relay instead of the unhandled fallback", () => {
     /*
      * The same fallback the toolbar's own case guards against, and the same silent
@@ -847,6 +893,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases,
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),
@@ -894,6 +941,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard,
       handleGitStatus: vi.fn(),
@@ -933,6 +981,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases: vi.fn(),
       handleClipboard: vi.fn(),
       handleGitStatus,
@@ -968,6 +1017,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleGroupCommands: vi.fn(),
       handleQuickPhrases,
       handleClipboard: vi.fn(),
       handleGitStatus: vi.fn(),

@@ -161,6 +161,52 @@ describe("MobileLiveRelayService toolbar", () => {
 })
 
 /**
+ * 与工具栏逐条同构：转发、扇出、不落库。分开写是因为它们说的是两件事 ——
+ * 工具栏是「手机上能按什么」，这一份是「新建终端时能跑哪条命令」。
+ */
+describe("MobileLiveRelayService group commands", () => {
+  const payload = {
+    desktopClientInstanceId: "client-a",
+    revision: 3,
+    groups: [{ groupId: "g1", commands: [{ id: "c1", name: "Claude" }] }],
+  }
+
+  it("fans a group command list out to the whole account in one call", () => {
+    // 与工具栏同一条理由：载荷自带是哪台电脑发的，所以一台正看着别的电脑的手机会
+    // 丢掉它、什么也不花。扇出是「连到任意一台电脑的手机都拿得到这份列表」的代价
+    // 最低的做法 —— 云端不必记录谁的订阅是什么。
+    const { service, sendToMobile, sendToMobileClients } = createHarness()
+
+    service.handleGroupCommands("user-1", payload)
+
+    expect(sendToMobileClients).toHaveBeenCalledTimes(1)
+    expect(sendToMobile).not.toHaveBeenCalled()
+    expect(sendToMobileClients.mock.calls[0]?.[0]).toMatchObject({
+      userId: "user-1",
+      message: { type: "mobile.groupCommands", payload },
+    })
+  })
+
+  it("sends the list again on every call rather than deduplicating it", () => {
+    // 每一次都是整份快照，手机整包替换，所以两次一样的发送只是多余、不是错。在云端
+    // 去重等于让云端去决定哪台手机已经看过什么，那是它不知道的事 —— 电脑端那一层
+    // 已经按内容比过一次了。
+    const { service, sendToMobileClients } = createHarness()
+
+    service.handleGroupCommands("user-1", payload)
+    service.handleGroupCommands("user-1", payload)
+
+    expect(sendToMobileClients).toHaveBeenCalledTimes(2)
+  })
+
+  it("stays quiet when no fanout is installed", () => {
+    const service = new MobileLiveRelayService({} as never, {} as never)
+
+    expect(() => service.handleGroupCommands("user-1", payload)).not.toThrow()
+  })
+})
+
+/**
  * The same fanout-and-forget shape as the toolbar, with one thing the toolbar cannot
  * pin down: an empty list has to be *delivered*. That is what tells a phone its
  * second segment exists and its user has not configured anything yet — as opposed to

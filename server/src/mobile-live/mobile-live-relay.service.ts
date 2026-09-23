@@ -7,6 +7,7 @@ import {
   type MobileClipboardPayload,
   type MobileFramePayload,
   type MobileGitStatusPayload,
+  type MobileGroupCommandsPayload,
   type MobileIntent,
   type MobileIntentResult,
   type MobileIntentResultPayload,
@@ -91,6 +92,7 @@ export class MobileLiveRelayService implements OnModuleInit {
       handleIntentResult: (userId, payload) => this.handleIntentResult(userId, payload),
       handleTransferProgress: (userId, payload) => this.handleTransferProgress(userId, payload),
       handleToolbar: (userId, payload) => this.handleToolbar(userId, payload),
+      handleGroupCommands: (userId, payload) => this.handleGroupCommands(userId, payload),
       handleQuickPhrases: (userId, payload) => this.handleQuickPhrases(userId, payload),
       handleClipboard: (userId, payload) => this.handleClipboard(userId, payload),
       handleGitStatus: (userId, payload) => this.handleGitStatus(userId, payload),
@@ -251,6 +253,17 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   handleToolbar(userId: string, payload: MobileToolbarPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, payload, envelopeMeta())
+    this.fanout?.sendToMobileClients({ userId, message })
+  }
+
+  /**
+   * 一台电脑上那些配了启动命令的分组，扇出给这个账号的每一台手机。
+   *
+   * 与 `handleToolbar` 一样转发而不缓存：一台中途连上来的手机会在它的 `sync` 意图到达
+   * 时由电脑回答，而不是由这里存着的东西回答。
+   */
+  handleGroupCommands(userId: string, payload: MobileGroupCommandsPayload): void {
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileGroupCommands, payload, envelopeMeta())
     this.fanout?.sendToMobileClients({ userId, message })
   }
 
