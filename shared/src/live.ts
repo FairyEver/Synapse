@@ -3,6 +3,7 @@ import {
   isMobileDetachedPayload,
   isMobileGitStatusPayload,
   isMobileFramePayload,
+  isMobileGroupCommandsPayload,
   isMobileIntentPayload,
   isMobileIntentResultPayload,
   isMobileQuickPhrasesPayload,
@@ -29,6 +30,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileDetached: "mobile.detached",
   mobilePresence: "mobile.presence",
   mobileToolbar: "mobile.toolbar",
+  mobileGroupCommands: "mobile.groupCommands",
   mobileQuickPhrases: "mobile.quickPhrases",
   mobileClipboard: "mobile.clipboard",
   mobileGitStatus: "mobile.gitStatus",
@@ -111,6 +113,7 @@ export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntentResult, import("./mobile-live.js").MobileIntentResultPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileTransferProgress, import("./mobile-live.js").MobileTransferProgressPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileToolbar, import("./mobile-live.js").MobileToolbarPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGroupCommands, import("./mobile-live.js").MobileGroupCommandsPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileClipboard, import("./mobile-live.js").MobileClipboardPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGitStatus, import("./mobile-live.js").MobileGitStatusPayload>
@@ -146,6 +149,7 @@ export type LiveMobileServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileTransferProgress, import("./mobile-live.js").MobileTransferProgressPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobilePresence, import("./mobile-live.js").MobilePresencePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileToolbar, import("./mobile-live.js").MobileToolbarPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGroupCommands, import("./mobile-live.js").MobileGroupCommandsPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileClipboard, import("./mobile-live.js").MobileClipboardPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGitStatus, import("./mobile-live.js").MobileGitStatusPayload>
@@ -173,6 +177,9 @@ export function isLiveMobileServerMessage(value: unknown): value is LiveMobileSe
   }
   if (value.type === LIVE_MESSAGE_TYPES.mobilePresence) return isMobilePresencePayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileToolbar) return isMobileToolbarPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileGroupCommands) {
+    return isMobileGroupCommandsPayload(value.payload)
+  }
   if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileClipboard) return isMobileClipboardPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileGitStatus) return isMobileGitStatusPayload(value.payload)
@@ -211,6 +218,9 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
     return isMobileTransferProgressPayload(value.payload)
   }
   if (value.type === LIVE_MESSAGE_TYPES.mobileToolbar) return isMobileToolbarPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileGroupCommands) {
+    return isMobileGroupCommandsPayload(value.payload)
+  }
   if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileClipboard) return isMobileClipboardPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileGitStatus) return isMobileGitStatusPayload(value.payload)

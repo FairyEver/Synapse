@@ -19,6 +19,7 @@ import {
   isMobileIntent,
   isMobileIntentResult,
   isMobileGitStatusPayload,
+  isMobileGroupCommandsPayload,
   isMobileQuickPhrasesPayload,
   isMobileSummaryPayload,
   isMobileTerminalFrame,
@@ -26,6 +27,7 @@ import {
   isMobileTransferProgressPayload,
   type MobileClipboardPayload,
   type MobileGitStatusPayload,
+  type MobileGroupCommandsPayload,
   type MobileIntent,
   type MobileQuickPhrasesPayload,
   type MobileSummaryAgentGroup,
@@ -108,6 +110,18 @@ function toolbar(overrides: Partial<MobileToolbarPayload> = {}): MobileToolbarPa
       { id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } },
       { id: "slash-exit", label: "/exit", group: "command", action: { type: "text", text: "/exit", pressEnter: true } },
       { id: "c1", label: "部署", group: "custom", action: { type: "text", text: "pnpm deploy", pressEnter: false } },
+    ],
+    ...overrides,
+  }
+}
+
+function groupCommands(overrides: Partial<MobileGroupCommandsPayload> = {}): MobileGroupCommandsPayload {
+  return {
+    desktopClientInstanceId: "desktop-1",
+    revision: 1,
+    groups: [
+      { groupId: "g1", commands: [{ id: "c1", name: "Claude" }, { id: "c2", name: "Codex" }] },
+      { groupId: "g2", commands: [{ id: "c3", name: "小慧日报" }] },
     ],
     ...overrides,
   }
@@ -807,6 +821,81 @@ describe("mobile live protocol", () => {
     // the desktop's reverse lookup pick one of them silently.
     expect(MOBILE_KEYS).not.toContain("Ctrl+I")
     expect(MOBILE_KEYS).not.toContain("Ctrl+M")
+  })
+
+  it("routes the group command list through both sides of the relay", () => {
+    // 两个方向各一道闸，失败的样子完全不同：在电脑那一跳被拒，云端回一个 1003 关闭，
+    // 用户看到的是电脑掉线；在手机那一跳被拒，这份列表永远到不了，所有分组行都不带箭头。
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileGroupCommands,
+      groupCommands(),
+      envelopeMeta,
+    ))).toBe(true)
+    expect(isLiveMobileServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileGroupCommands,
+      groupCommands(),
+      envelopeMeta,
+    ))).toBe(true)
+  })
+
+  it("accepts a group command list, including one with no groups", () => {
+    expect(isMobileGroupCommandsPayload(groupCommands())).toBe(true)
+    // 空列表是一台电脑说「一个分组都没配」，这是一句合法的话：手机对它的表现和不带
+    // 箭头的分组一样，但它与「这台电脑太旧、从没发过这条消息」不是同一件事。
+    expect(isMobileGroupCommandsPayload(groupCommands({ groups: [] }))).toBe(true)
+    // 只有一个分组、一条命令也是合法的：这正是最常见的账号。
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{ groupId: "g1", commands: [{ id: "c1", name: "Claude" }] }],
+    }))).toBe(true)
+  })
+
+  it("rejects a malformed group command list", () => {
+    const entry = groupCommands().groups[0]
+
+    // 缺了它，手机无法知道这份列表是哪台电脑的。
+    const withoutDesktop: Record<string, unknown> = { ...groupCommands() }
+    delete withoutDesktop.desktopClientInstanceId
+    expect(isMobileGroupCommandsPayload(withoutDesktop)).toBe(false)
+    expect(isMobileGroupCommandsPayload(groupCommands({ desktopClientInstanceId: "" }))).toBe(false)
+    expect(isMobileGroupCommandsPayload(groupCommands({ revision: -1 }))).toBe(false)
+    expect(isMobileGroupCommandsPayload(groupCommands({ revision: 1.5 }))).toBe(false)
+    expect(isMobileGroupCommandsPayload({ ...groupCommands(), groups: "none" })).toBe(false)
+
+    const limits = MOBILE_FRAME_LIMITS
+    const tooManyGroups = Array.from(
+      { length: limits.maxGroupCommandGroups + 1 },
+      (_value, index) => ({ ...entry, groupId: `g${index}` }),
+    )
+    expect(isMobileGroupCommandsPayload(groupCommands({ groups: tooManyGroups }))).toBe(false)
+    // 分组里命令太多
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{
+        groupId: "g1",
+        commands: Array.from(
+          { length: limits.maxGroupCommandsPerGroup + 1 },
+          (_value, index) => ({ id: `c${index}`, name: "n" }),
+        ),
+      }],
+    }))).toBe(false)
+    // 名字与 id 的上限，和电脑自己的 schema、摘要里的分组名同值
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{ groupId: "g1", commands: [{ id: "c1", name: "n".repeat(limits.maxGroupCommandNameLength + 1) }] }],
+    }))).toBe(false)
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{ groupId: "g1", commands: [{ id: "i".repeat(limits.maxSummaryIdLength + 1), name: "Claude" }] }],
+    }))).toBe(false)
+
+    // 一个分组缺了 groupId，或一条命令缺了名字：整条消息作废。这两个字段在电脑上都是
+    // 非空的，产生端不出来的东西，也不该被线上放过去。
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{ commands: [{ id: "c1", name: "Claude" }] }],
+    }))).toBe(false)
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{ groupId: "g1", commands: [{ id: "c1" }] }],
+    }))).toBe(false)
+    expect(isMobileGroupCommandsPayload(groupCommands({
+      groups: [{ groupId: "g1", commands: "none" }],
+    }))).toBe(false)
   })
 
   it("routes the quick phrases through both sides of the relay", () => {

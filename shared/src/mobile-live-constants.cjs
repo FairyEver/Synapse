@@ -54,6 +54,10 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxToolbarLabelLength: number,
  *   readonly maxToolbarTextLength: number,
  *   readonly maxToolbarBytes: number,
+ *   readonly maxGroupCommandGroups: number,
+ *   readonly maxGroupCommandsPerGroup: number,
+ *   readonly maxGroupCommandNameLength: number,
+ *   readonly maxGroupCommandsBytes: number,
  *   readonly maxQuickPhrases: number,
  *   readonly maxQuickPhraseLength: number,
  *   readonly maxQuickPhrasesBytes: number,
@@ -115,6 +119,17 @@ exports.MOBILE_FRAME_LIMITS = {
   maxToolbarTextLength: 4096,
   /** Bounds one serialized toolbar payload, which is trimmed button-by-button. */
   maxToolbarBytes: 64 * 1024,
+  /**
+   * 分组快捷命令：电脑上给每个终端分组配的启动命令，手机用它决定分组行画不画箭头。
+   *
+   * 条数与字节上限都照工具栏那一组自己的值 —— 同一类东西（一份「电脑上的启动命令」
+   * 列表），没理由两套数。名字的 80 与终端 schema、摘要分组名的上限同值。
+   */
+  maxGroupCommandGroups: 128,
+  maxGroupCommandsPerGroup: 64,
+  maxGroupCommandNameLength: 80,
+  /** Bounds one serialized group-command payload, which is trimmed command by command. */
+  maxGroupCommandsBytes: 64 * 1024,
   /** The 快捷输入 sentences; the count and byte bounds are the producer's clamp. */
   maxQuickPhrases: 64,
   maxQuickPhraseLength: 4096,

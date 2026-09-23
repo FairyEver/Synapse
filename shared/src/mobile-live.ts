@@ -184,6 +184,17 @@ export const MOBILE_FRAME_LIMITS = {
    */
   maxToolbarBytes: 64 * 1024,
   /**
+   * 分组快捷命令：电脑上给每个终端分组配的启动命令，手机用它决定分组行画不画箭头。
+   *
+   * 条数与字节上限都照工具栏那一组自己的值 —— 同一类东西（一份「电脑上的启动命令」
+   * 列表），没理由两套数。名字的 80 与终端 schema、摘要分组名的上限同值。
+   */
+  maxGroupCommandGroups: 128,
+  maxGroupCommandsPerGroup: 64,
+  maxGroupCommandNameLength: 80,
+  /** Bounds one serialized group-command payload, which is trimmed command by command. */
+  maxGroupCommandsBytes: 64 * 1024,
+  /**
    * The sentences a desktop mirrors onto a phone from its 快捷输入 app.
    *
    * `maxQuickPhrases` has nothing to restate: unlike a custom command, a stored
@@ -721,6 +732,61 @@ export interface MobileToolbarPayload {
    * press", and a desktop is allowed to give the first one.
    */
   readonly buttons: readonly MobileToolbarButton[]
+}
+
+/* ------------------------------------------------------------------ *
+ * Terminal group commands
+ * ------------------------------------------------------------------ */
+
+/**
+ * 一个分组里保存的一条启动命令，手机只用来画一行。
+ *
+ * 只有 id 与 name，正文不上这条线：桌面自己那个「以命令启动」下拉也只写名字，而正文在
+ * 电脑上是加密存储的、还可以挂自己的环境变量。这一屏要回答的是「跑哪一条」，不是
+ * 「它是什么」。
+ *
+ * 名字上限与电脑自己 schema 的上限同值（80）。
+ */
+export interface MobileGroupCommand {
+  readonly id: string
+  readonly name: string
+}
+
+/**
+ * 一个分组保存的启动命令，按电脑上的顺序（电脑侧就是创建顺序，没有排序字段）。
+ *
+ * 没有命令的分组**不在** `MobileGroupCommandsPayload.groups` 里，所以这个类型不需要
+ * 「空列表」这种说法：手机对「不在列表里」画的和「这台电脑说了它没有」是同一个东西 ——
+ * 分组行上不画箭头。
+ */
+export interface MobileGroupCommandsEntry {
+  readonly groupId: string
+  readonly commands: readonly MobileGroupCommand[]
+}
+
+/**
+ * 一台电脑上那些配了启动命令的分组，fanned out to every phone of the account.
+ *
+ * 独立成一条消息而不是并进 `MobileSummaryPayload`，理由与工具栏那条一字不差，而且是
+ * 算术：摘要不可分片 —— 手机收到一份就整包替换 —— 所以它的字节预算要一次装下所有字段。
+ * 摘要自己的预算离承载它的套接字只剩不到 3 KiB（见 `maxSummaryBytes` 的注释），而在它
+ * 允许的分组数上限上各带上自己的命令，远超这个数。放在这里则 `maxSummaryBytes` 一个字
+ * 不用动，这条消息也有了自己的、可以单独裁剪的上限。
+ *
+ * `desktopClientInstanceId` 与 `revision` 的理由同 `MobileToolbarPayload`：手机可能同时
+ * 连着几台电脑，只有一台拥有它正在看的那份列表；`revision` 是产生端自己的计数器，手机
+ * 不比较它，它只让一份抓到的 payload 自证来历。
+ */
+export interface MobileGroupCommandsPayload {
+  readonly desktopClientInstanceId: string
+  readonly revision: number
+  /**
+   * 有命令的那些分组。空数组是合法值：这台电脑一个分组都没配。
+   *
+   * 「没配」与「这台电脑从没发过这条消息」是两回事，虽然手机对两者画出来的东西一样
+   * （都不画箭头）。
+   */
+  readonly groups: readonly MobileGroupCommandsEntry[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -1344,6 +1410,14 @@ export function isMobileClipboardPayload(value: unknown): value is MobileClipboa
   return (value.entries as readonly unknown[]).every(isMobileClipboardEntry)
 }
 
+export function isMobileGroupCommandsPayload(value: unknown): value is MobileGroupCommandsPayload {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.desktopClientInstanceId, 120)) return false
+  if (!nonNegativeInteger(value.revision)) return false
+  if (!boundedArray(value.groups, MOBILE_FRAME_LIMITS.maxGroupCommandGroups)) return false
+  return (value.groups as readonly unknown[]).every(isMobileGroupCommandsEntry)
+}
+
 /**
  * 严格：这一份的每个字段都会被手机直接画到屏幕上，解不出来就是消息坏了。
  *
@@ -1607,6 +1681,24 @@ function isMobileQuickPhrase(value: unknown): value is MobileQuickPhrase {
   if (!isRecord(value)) return false
   if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxToolbarButtonIdLength)) return false
   return boundedString(value.content, MOBILE_FRAME_LIMITS.maxQuickPhraseLength)
+}
+
+function isMobileGroupCommandsEntry(value: unknown): value is MobileGroupCommandsEntry {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.groupId, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
+  if (!boundedArray(value.commands, MOBILE_FRAME_LIMITS.maxGroupCommandsPerGroup)) return false
+  return (value.commands as readonly unknown[]).every(isMobileGroupCommand)
+}
+
+/**
+ * 严格，和短语、剪切板一样：一条记录只有两个字符串，解不出来就是消息坏了。这两个字段
+ * 在电脑上都非空（命令名有 `min(1)`，id 是 uuid），产生端不可能造出一个坏的 —— 所以
+ * 放过去只会把一条坏记录留在手机那份列表里。
+ */
+function isMobileGroupCommand(value: unknown): value is MobileGroupCommand {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
+  return boundedString(value.name, MOBILE_FRAME_LIMITS.maxGroupCommandNameLength)
 }
 
 /**
