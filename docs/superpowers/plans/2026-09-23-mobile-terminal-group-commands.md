@@ -1787,9 +1787,13 @@ dismiss 有可能只弹掉那一屏、面板还开着。"
 
 - [ ] **Step 2: 核对能力注册表与模块边界**
 
-Run: `grep -n "terminal" docs/agents/capability-registry.md | head -20`，并读 `docs/agents/module-boundaries.md` 里终端那一段。
+`docs/agents/capability-registry.md` 的 `## desktop/app-capabilities 产品表面` 一节已经为**手机端的只读投影**立过先例：`:76` 那条写的是「手机端终端快捷栏是上述同一批按钮的只读投影」。照它的形状与口吻，在它旁边加一条：
 
-对照结论写进提交正文：本次**不新增** capability、System App、Dock、Workflow Node、Automation Action、Deep Link（新能力走 mobile gateway，不是 `app.*` 注册表面），但新增了一个终端能力对外的读取方法 `listMobileGroupCommands` —— 若注册表为终端能力列了「对手机暴露什么」，需要补一行；若没有这样一栏，则说明「无需改动」并写清依据。
+```markdown
+- 手机端终端分组的启动命令同样是终端能力那份列表的**只读投影**：主进程用终端服务自己的 `listMobileGroupCommands()` 把用户在每个分组上配好的启动命令投影成 `mobile.groupCommands` 下行消息（只带 `groupId`、命令 `id` 与 `name`，不含命令正文、环境变量、cwd 与 shell —— 桌面自己那个「以命令启动」下拉也只写名字），手机据此决定分组行上画不画箭头；选中一条走的是既有 `launchCommand` 意图，不新增 intent。投影源是主进程内部方法而非 IPC 或 capability；该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量（49）均不变。
+```
+
+再读 `docs/agents/module-boundaries.md` 里终端那一段，确认无需改动（若确需改，改在本 Task 里，并把理由写进提交正文）。
 
 - [ ] **Step 3: 跑一遍两个包的完整检查**
 
