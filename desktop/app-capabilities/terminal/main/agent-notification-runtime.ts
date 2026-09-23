@@ -1,3 +1,43 @@
+/**
+ * Claude Code 的 Hook 事件表。
+ *
+ * 有两个写入方，两边必须一模一样：用户手敲 `claude` 时 wrapper 把这段合并进用户自己的
+ * `--settings`；Synapse 自己拉起 Claude Code 时（⌘-点击、新建对话、手机端）launcher 把同一份
+ * 写进它自己生成的 settings。定义只留这一处，wrapper 的源码由它插值生成。
+ */
+export const CLAUDE_AGENT_HOOK_EVENTS = [
+  "SessionStart",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PermissionRequest",
+  "Notification",
+  "Stop",
+  "SessionEnd",
+  "SubagentStop",
+] as const
+
+/** 写在 settings 里的身份标记，用来认出哪一段 hooks 是 Synapse 写的。 */
+export const CLAUDE_AGENT_MANAGED_MARKER = {
+  managed: "terminal-agent-notifications",
+  version: 1,
+} as const
+
+/**
+ * 与 wrapper 里的 `quoteShell` 逐字对应。
+ *
+ * 两份实现是重复的（wrapper 是独立脚本，import 不进来），所以有一条测试直接把 wrapper 合并出来
+ * 的 hooks 和这里构造的比对 —— 谁先漂移谁的用例就红。
+ */
+function quoteShellArgument(value: string): string {
+  if (process.platform === "win32") return `"${value.replace(/"/g, '""')}"`
+  return `'${value.replace(/'/g, "'\\''")}'`
+}
+
+/** wrapper 的 `hookCommand("claude", event)` 在 TS 侧的对应物。 */
+export function claudeHookCommand(nodePath: string, hookPath: string, event: string): string {
+  return [nodePath, hookPath, "claude", event].map((value) => quoteShellArgument(value)).join(" ")
+}
+
 export const TERMINAL_AGENT_HOOK_RUNTIME = String.raw`#!/usr/bin/env node
 const http = require("node:http")
 
@@ -156,8 +196,8 @@ function codexArgs(args) {
 }
 
 function launchClaude(realPath, args) {
-  const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "Notification", "Stop", "SessionEnd", "SubagentStop"]
-  const managed = { __synapse: { managed: "terminal-agent-notifications", version: 1 }, hooks: {} }
+  const events = ${JSON.stringify(CLAUDE_AGENT_HOOK_EVENTS)}
+  const managed = { __synapse: ${JSON.stringify(CLAUDE_AGENT_MANAGED_MARKER)}, hooks: {} }
   for (const event of events) managed.hooks[event] = [{ matcher: "", hooks: [{ type: "command", command: hookCommand("claude", event), timeout: 5, async: true }] }]
   const filtered = []
   const settings = []

@@ -252,11 +252,40 @@ describe("TerminalAgentNotificationService", () => {
     expect(result.status).toBe(0)
     const merged = JSON.parse(result.stdout) as {
       permissions: { allow: string[] }
-      hooks: { Stop: unknown[]; PermissionRequest: unknown[] }
+      hooks: Record<string, unknown[]>
+      __synapse: unknown
     }
     expect(merged.permissions.allow).toEqual(["Bash(*)"])
     expect(merged.hooks.Stop).toHaveLength(2)
     expect(merged.hooks.PermissionRequest).toHaveLength(1)
+
+    /*
+     * 两条路之间的锁。
+     *
+     * wrapper 把 hooks 合并进用户自己的 `--settings`（手敲 claude），服务把同一份交给 launcher
+     * 写进它自己生成的 settings（Synapse 起的 Claude Code）。两边的事件表和命令构造各有一份实现
+     * （wrapper 是独立脚本，import 不进来），所以这里直接逐字比对：谁先漂移，这条就红。
+     */
+    const built = fixture.service.buildClaudeCodeHookSettings()!
+    expect(merged.__synapse).toEqual(built.__synapse)
+    expect(Object.keys(built.hooks as Record<string, unknown>).sort()).toEqual([
+      "Notification", "PermissionRequest", "PreToolUse", "SessionEnd",
+      "SessionStart", "Stop", "SubagentStop", "UserPromptSubmit",
+    ])
+    for (const [event, entries] of Object.entries(built.hooks as Record<string, unknown[]>)) {
+      // 用户自己在 Stop 上有一条，合并结果是「用户的 + 我们的」，我们那条在末尾。
+      expect(merged.hooks[event]?.at(-1)).toEqual(entries[0])
+    }
+    await fixture.service.stop()
+  })
+
+  it("offers no hooks to a launcher while the master switch is off", async () => {
+    // Synapse 自己拉起 Claude Code 那条路也由总闸决定：关着就一个字节都不注入。
+    const fixture = await createFixture()
+    await fixture.service.start()
+    expect(fixture.service.buildClaudeCodeHookSettings()).toBeNull()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    expect(fixture.service.buildClaudeCodeHookSettings()).not.toBeNull()
     await fixture.service.stop()
   })
 

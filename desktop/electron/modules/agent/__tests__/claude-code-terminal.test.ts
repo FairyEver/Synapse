@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { existsSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import os from "node:os"
 
 const configStoreMock = vi.hoisted(() => ({ load: vi.fn() }))
@@ -73,6 +73,8 @@ function harness(input: {
   readonly defaultProviderModel?: { providerId: string; modelTier: string } | null
   readonly buildEnv?: ReturnType<typeof vi.fn>
   readonly createSession?: ReturnType<typeof vi.fn>
+  /** Omitted means "no notification service registered", which is its own case. */
+  readonly notificationService?: unknown
 } = {}) {
   const buildEnv = input.buildEnv ?? vi.fn().mockResolvedValue(providerEnv)
   const listAllProviders = vi.fn().mockResolvedValue(input.providers ?? [])
@@ -90,6 +92,10 @@ function harness(input: {
   const resolve = <T,>(serviceId: string): T => {
     if (serviceId === "core.terminal") {
       return { createSessionWithEphemeralEnvironment: createSession } as unknown as T
+    }
+    // 常量来自通知服务；这里写成字面量是为了顺带钉住 launcher 解析的就是这个 id。
+    if (serviceId === "core.terminal-agent-notifications" && input.notificationService) {
+      return input.notificationService as unknown as T
     }
     throw new Error(`Unknown service: ${serviceId}`)
   }
@@ -259,5 +265,46 @@ describe("Claude Code terminal launch", () => {
     expect(existsSync(launched.args[1]!)).toBe(true)
     launched.onEnded()
     await vi.waitFor(() => expect(existsSync(launched.args[1]!)).toBe(false))
+  })
+
+  it("writes the notification hooks the notification service builds into the settings file", async () => {
+    // 这条路绕过了 PATH shim（内置 runtime 是绝对路径启动），所以 hooks 只能由 launcher 自己写进
+    // settings。写法与 wrapper 合并出来的那份必须一致 —— 逐字比对的锁在通知服务那一侧。
+    const managed = {
+      __synapse: { managed: "terminal-agent-notifications", version: 1 },
+      hooks: { Stop: [{ matcher: "", hooks: [{ type: "command", command: "hook-command", timeout: 5, async: true }] }] },
+    }
+    const buildClaudeCodeHookSettings = vi.fn(() => managed)
+    const { createSession, resolve } = harness({
+      providers: [configured],
+      notificationService: { buildClaudeCodeHookSettings },
+    })
+
+    await createClaudeCodeTerminalSession(resolve, { projectId: "project-1" })
+
+    expect(buildClaudeCodeHookSettings).toHaveBeenCalledOnce()
+    const settings = JSON.parse(readFileSync(
+      (createSession.mock.calls[0]![0] as { readonly args: readonly string[] }).args[1]!,
+      "utf8",
+    )) as Record<string, unknown>
+    expect(settings.hooks).toEqual(managed.hooks)
+    expect(settings.__synapse).toEqual(managed.__synapse)
+    // 凭据那条承诺不变：settings 里仍然只有 env、可选的 model，以及这次加的 hooks 与身份标记。
+    expect(Object.keys(settings).filter((key) => !["env", "model", "hooks", "__synapse"].includes(key))).toEqual([])
+  })
+
+  it("starts without hooks when the notification service is not available", async () => {
+    // 通知从来不是启动的前置条件：拿不到服务就照常起，且不能因此抛错。
+    const { createSession, resolve } = harness({ providers: [configured] })
+
+    await createClaudeCodeTerminalSession(resolve, { projectId: "project-1" })
+
+    const settings = JSON.parse(readFileSync(
+      (createSession.mock.calls[0]![0] as { readonly args: readonly string[] }).args[1]!,
+      "utf8",
+    )) as Record<string, unknown>
+    expect(settings).not.toHaveProperty("hooks")
+    expect(settings).not.toHaveProperty("__synapse")
+    expect(settings).toHaveProperty("env")
   })
 })

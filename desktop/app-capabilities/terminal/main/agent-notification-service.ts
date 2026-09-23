@@ -19,6 +19,9 @@ import type {
   TerminalUpdateAgentNotificationSettingsInput,
 } from "../shared/schema"
 import {
+  CLAUDE_AGENT_HOOK_EVENTS,
+  CLAUDE_AGENT_MANAGED_MARKER,
+  claudeHookCommand,
   createTerminalAgentUnixShim,
   createTerminalAgentWindowsShim,
   TERMINAL_AGENT_HOOK_RUNTIME,
@@ -446,6 +449,33 @@ export class TerminalAgentNotificationService {
       return { env, shellArgs: ["/K", "set \"PATH=%SYNAPSE_TERMINAL_AGENT_SHIM_DIR%;%PATH%\""] }
     }
     return { env, shellArgs: input.defaultShellArgs }
+  }
+
+  /**
+   * 给「Synapse 自己拉起的 Claude Code」用的 hooks 片段。
+   *
+   * 用户自己敲 `claude` 时，PATH 上的 wrapper 把同一份块合并进 `--settings`；而 Synapse 用内置
+   * runtime 起会话时是绝对路径启动、绕过了 wrapper，所以那条路要由这里把同样的东西交给 launcher
+   * 写进它自己生成的 settings。两条路写出来的 hooks 必须逐字一致 —— 有测试直接比对两边。
+   *
+   * 返回 null 表示这次不该注入（总闸关着，或运行时与监听还没就绪），调用方照原样启动即可。
+   * `notify` 不参与这里的判断：它只决定最后一公里弹不弹，不决定注不注入。
+   */
+  buildClaudeCodeHookSettings(): Record<string, unknown> | null {
+    if (!this.settings.enabled || !this.binding || !this.runtime) return null
+    const hooks: Record<string, unknown> = {}
+    for (const event of CLAUDE_AGENT_HOOK_EVENTS) {
+      hooks[event] = [{
+        matcher: "",
+        hooks: [{
+          type: "command",
+          command: claudeHookCommand(this.deps.nodePath, this.runtime.hookPath, event),
+          timeout: 5,
+          async: true,
+        }],
+      }]
+    }
+    return { __synapse: CLAUDE_AGENT_MANAGED_MARKER, hooks }
   }
 
   renameSession(sessionId: string, title: string): void {

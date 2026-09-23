@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
+import { TERMINAL_AGENT_NOTIFICATION_SERVICE_ID } from "../../../app-capabilities/terminal/main/agent-notification-service"
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { TerminalSession } from "../../../app-capabilities/terminal/shared/schema"
 import type { ModelTier } from "../../../src/types/provider-model"
@@ -44,6 +45,32 @@ export class ClaudeCodeTerminalError extends Error {
 }
 
 const NO_DEFAULT_MODEL_MESSAGE = "电脑上没有可用的供应商模型，请先在桌面端配置供应商。"
+
+/** 只声明要用到的那一个方法：启动路径不依赖通知服务的其余表面。 */
+type ClaudeCodeHookSettingsSource = {
+  buildClaudeCodeHookSettings(): Record<string, unknown> | null
+}
+
+/**
+ * 这次启动要带上的通知 hooks，没有就是 `null`。
+ *
+ * 用户自己敲 `claude` 走的是 PATH shim，wrapper 把 hooks 合并进 `--settings`；而这里起的是内置
+ * runtime 的绝对路径，shim 不会被触发 —— 同一个注入，只有这一扇门开着。两条路写出的 hooks 由
+ * 通知服务那一侧保证逐字一致。
+ *
+ * 解析不到服务（没注册、启动早期）时返回 `null` 而不是抛出：会话本身是产品，通知只是顺手，
+ * 任何情况下都不能因为通知而让 Claude Code 起不来。
+ */
+function resolveClaudeCodeHookSettings(
+  resolve: <T>(serviceId: string) => T,
+): Record<string, unknown> | null {
+  try {
+    return resolve<ClaudeCodeHookSettingsSource>(TERMINAL_AGENT_NOTIFICATION_SERVICE_ID)
+      .buildClaudeCodeHookSettings()
+  } catch {
+    return null
+  }
+}
 
 export interface CreateClaudeCodeTerminalSessionInput {
   readonly projectId: string
@@ -123,6 +150,7 @@ export async function createClaudeCodeTerminalSession(
   }
   // The user's own ~/.claude/settings.json env outranks the process env, so the selected
   // Provider and model must be pinned through the higher-priority flag settings layer.
+  const hookSettings = resolveClaudeCodeHookSettings(resolve)
   await sweepStaleClaudeCodeLaunchDirectories()
   const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-claude-code-"))
   const settingsPath = path.join(directory, "settings.json")
@@ -130,6 +158,7 @@ export async function createClaudeCodeTerminalSession(
     await writeFile(settingsPath, JSON.stringify({
       env: environment,
       ...(tierModel ? { model: tierModel } : {}),
+      ...(hookSettings ?? {}),
     }), { mode: 0o600 })
     // Concurrent Claude Code sessions must stay distinguishable in the terminal list.
     const title = project.name
