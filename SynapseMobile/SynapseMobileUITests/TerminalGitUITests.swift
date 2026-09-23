@@ -368,6 +368,15 @@ final class TerminalGitUITests: XCTestCase {
         let group = app.buttons["terminal-group"].firstMatch
         XCTAssertTrue(group.waitForExistence(timeout: 15), "电脑上一个终端分组都没有，先建一个再用")
         group.tap()
+        // 这个分组配了快捷命令时，上面那一点进去的是命令列表，不是直接建终端。两条路都要
+        // 走得通，而这里要的只是一条终端，所以命令列表出现时改点底部那条「直接新建终端」。
+        //
+        // 短超时：没配命令的分组上这一屏根本不会出现，而每个用这个 helper 的用例都会走
+        // 到这一句，等久了就是白等。
+        let plain = app.buttons["terminal-group-command-none"]
+        if plain.waitForExistence(timeout: 3) {
+            plain.tap()
+        }
 
         let terminal = app.descendants(matching: .any)["terminal.text"]
         if !terminal.waitForExistence(timeout: 30) {
