@@ -28,7 +28,7 @@ import {
 import { randomUUID } from "node:crypto"
 
 import { PrismaService } from "../prisma/prisma.service"
-import { MEETING_AUDIO_PROBE_BYTES, readMeetingAudioDurationMs } from "./meeting-audio-container"
+import { probeMeetingAudio } from "./meeting-audio-container"
 import { MeetingTranscriptionService } from "./meeting-transcription.service"
 import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage.service"
 
@@ -468,9 +468,8 @@ export class MeetingService {
   /**
    * 从合并好的对象里量真实时长。
    *
-   * 按 `MEETING_AUDIO_PROBE_BYTES` 取头尾两段就够——`moov` 要么在开头（录音中途被杀留下的
-   * 分片形态），要么在末尾（正常收尾之后重排的那份），把整场会议的音频（五小时能有
-   * 140 MB）全拉下来只为读 8 个字节不划算。取法与转写那边提交前的完成度检查完全一致。
+   * 取法与转写那边提交前的完成度检查完全一致，也是同一份实现：沿盒子链走到 `moov`，只读
+   * 盒头所在的那几段。把整场会议的音频（五小时能有 140 MB）全拉下来只为读 8 个字节不划算。
    *
    * 量不到就返回 `null`，由调用方退回客户端上报的值：宁可要一个可能不准的数，也不要一个 0。
    */
@@ -478,20 +477,12 @@ export class MeetingService {
     const total = Number(size)
     if (!Number.isFinite(total) || total <= 0) return null
     try {
-      const probe = MEETING_AUDIO_PROBE_BYTES
-      let measured: number | null
-      if (total <= probe) {
-        const head = await this.storage.readObjectRange(storageKey, 0, total - 1)
-        measured = readMeetingAudioDurationMs({ head, tail: null, totalBytes: total })
-      } else {
-        const [head, tail] = await Promise.all([
-          this.storage.readObjectRange(storageKey, 0, probe - 1),
-          this.storage.readObjectRange(storageKey, total - probe, total - 1),
-        ])
-        measured = readMeetingAudioDurationMs({ head, tail, totalBytes: total })
-      }
-      if (measured === null) return null
-      return Math.max(0, Math.min(MEETING_MAX_DURATION_MS, measured))
+      const probe = await probeMeetingAudio({
+        readRange: (start, end) => this.storage.readObjectRange(storageKey, start, end),
+        totalBytes: total,
+      })
+      if (probe.durationMs === null) return null
+      return Math.max(0, Math.min(MEETING_MAX_DURATION_MS, probe.durationMs))
     } catch (error) {
       // 读对象失败是暂时性的，和上报值不准一样不该挡住收尾：退回上报值，记一条日志。
       this.logger.warn(

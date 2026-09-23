@@ -15,11 +15,7 @@ import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
 import { NotificationService } from "../notifications/notification.service"
 import { PrismaService } from "../prisma/prisma.service"
-import {
-  inspectMeetingAudioContainer,
-  MEETING_AUDIO_PROBE_BYTES,
-  type MeetingAudioInspection,
-} from "./meeting-audio-container"
+import { probeMeetingAudio, type MeetingAudioInspection } from "./meeting-audio-container"
 import { meetingConfigToken, type MeetingConfig } from "./meeting.config"
 import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage.service"
 import { parseTencentTranscript } from "./meeting-transcript-parser"
@@ -40,6 +36,9 @@ const POLL_BATCH_SIZE = 50
 
 /** 超过这个时间还没收尾的分块上传视为废弃，中止掉。 */
 const STALE_UPLOAD_MS = 24 * 60 * 60 * 1000
+
+/** 逐字稿一次入库多少段。见 `storeResult`：一行 7 个绑定参数，Postgres 单条语句封顶 65535 个。 */
+const SEGMENT_INSERT_BATCH_SIZE = 500
 
 /**
  * 引擎读都没读过这份音频时的失败原因。
@@ -306,24 +305,19 @@ export class MeetingTranscriptionService {
   }
 
   /**
-   * 拉对象头尾两段，看容器写完没有。
+   * 拉对象里需要的那几段，看容器写完没有。
    *
-   * 只看得见头尾：非分片的 m4a 把 `moov` 放在最后，分片的 fMP4 把它放在最前，两端各看
-   * 一段就够，不必把整条录音（一场五小时的是 140 MB）拉下来。判定逻辑是纯的，在
-   * `meeting-audio-container.ts` 里，有它自己的单测。
+   * 只读盒头所在的那几段：分片的 fMP4 把 `moov` 放在最前，非分片的 m4a 放在最后，而大块的
+   * `mdat` 是按它自己声明的长度**跳过去**的——所以一条 85 分钟的录音也只补读两段 64 KB，
+   * 不必把整条（一场五小时的是 140 MB）拉下来。判定逻辑不碰 IO（要看哪一段由这里送进去），
+   * 在 `meeting-audio-container.ts` 里，有它自己的单测。
    */
   private async inspectContainer(storageKey: string, totalBytes: number): Promise<MeetingAudioInspection> {
-    const probe = MEETING_AUDIO_PROBE_BYTES
-    // 对象比两个窗口加起来还小的时候两次读会重叠，直接整段读一次更简单。
-    if (totalBytes <= probe * 2) {
-      const whole = await this.storage.readObjectRange(storageKey, 0, Math.max(0, totalBytes - 1))
-      return inspectMeetingAudioContainer({ head: whole, tail: null, totalBytes })
-    }
-    const [head, tail] = await Promise.all([
-      this.storage.readObjectRange(storageKey, 0, probe - 1),
-      this.storage.readObjectRange(storageKey, totalBytes - probe, totalBytes - 1),
-    ])
-    return inspectMeetingAudioContainer({ head, tail, totalBytes })
+    const probe = await probeMeetingAudio({
+      readRange: (start, end) => this.storage.readObjectRange(storageKey, start, end),
+      totalBytes,
+    })
+    return probe.inspection
   }
 
   /**
@@ -351,17 +345,21 @@ export class MeetingTranscriptionService {
     await this.prisma.$transaction(async (tx) => {
       // 重试会重跑一次，先清干净再写，避免同一段话出现两遍。
       await tx.meetingTranscriptSegment.deleteMany({ where: { meetingId } })
-      if (parsed.segments.length > 0) {
+      const rows = parsed.segments.map((segment, index) => ({
+        meetingId,
+        segmentIndex: index,
+        speakerId: segment.speakerId,
+        startMs: segment.startMs,
+        endMs: segment.endMs,
+        text: segment.text,
+        words: segment.words.map((word) => ({ ...word })),
+      }))
+      // **分批写。** 几小时的会议段落数上千，而 Postgres 单条语句最多 65535 个绑定参数（一行
+      // 7 个，九千行左右封顶），一次全塞进去会把一次**已经付过钱的**转写成功变成一句数据库
+      // 报错，用户拿不到文字。
+      for (let start = 0; start < rows.length; start += SEGMENT_INSERT_BATCH_SIZE) {
         await tx.meetingTranscriptSegment.createMany({
-          data: parsed.segments.map((segment, index) => ({
-            meetingId,
-            segmentIndex: index,
-            speakerId: segment.speakerId,
-            startMs: segment.startMs,
-            endMs: segment.endMs,
-            text: segment.text,
-            words: segment.words.map((word) => ({ ...word })),
-          })),
+          data: rows.slice(start, start + SEGMENT_INSERT_BATCH_SIZE),
         })
       }
       for (const speakerId of new Set(parsed.segments.map((segment) => segment.speakerId))) {

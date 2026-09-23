@@ -254,8 +254,14 @@ describe("完成录音", () => {
    * 界面因此显示「0 秒的录音，预计 1 分左右完成」。文件本身才是准的。
    */
   it("时长以量出来的为准：客户端报 0，服务端从 mvhd 量出 5.99 秒", async () => {
-    storage.completeMultipartUpload.mockResolvedValue({ size: BigInt(8), etag: '"final"' })
-    storage.readObjectRange.mockResolvedValue(audioHead(48_000, 287_744))
+    const audio = audioHead(48_000, 287_744)
+    prisma.meetingUploadPart.findMany.mockResolvedValue([{ partNumber: 1, size: audio.length, etag: '"etag-1"' }])
+    storage.completeMultipartUpload.mockResolvedValue({ size: BigInt(audio.length), etag: '"final"' })
+    // 桩要和线上一样**按请求的范围**给字节：判定和量时长都是顺着盒子链走的，返回一整段
+    // 与对象长度对不上的字节会让链在文件末尾之外找索引。
+    storage.readObjectRange.mockImplementation(async (_key: string, start: number, end: number) =>
+      audio.subarray(start, end + 1),
+    )
     await service.completeRecording("user-1", "rec-1", { durationMs: 0, peaks: "", speakerCount: 0 })
     expect(prisma.meetingRecording.update.mock.calls.at(-1)?.[0].data).toMatchObject({ durationMs: 5995 })
     expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({ durationMs: 5995 })

@@ -116,7 +116,10 @@ beforeEach(() => {
     createDownloadUrl: vi.fn(async () => "https://example.invalid/signed-audio"),
     deleteObject: vi.fn(async () => undefined),
     listStaleMultipartUploads: vi.fn(async () => []),
-    readObjectRange: vi.fn(async () => validContainerHead()),
+    // 按请求的范围给字节，和线上一样：判定是顺着盒子链读的，不能整段原样吐回去。
+    readObjectRange: vi.fn(async (_key: string, start: number, end: number) =>
+      validContainerHead().subarray(start, end + 1),
+    ),
   }
   service = new MeetingTranscriptionService(
     prisma as unknown as PrismaService,
