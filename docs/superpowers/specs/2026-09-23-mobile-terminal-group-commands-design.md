@@ -181,8 +181,11 @@ id 复用既有的 `maxSummaryIdLength`（48）。
   因为这个 tick 一直在跑，而新建面板正是「差异会被看见」的那一屏。
 - **`sync`**：`intent-executor.ts:216-217` 那两行 `sendToolbar()` / `sendQuickPhrases()` 旁边加一行
   `sendGroupCommands()` —— 刚连上的手机什么都还没收到，指纹必须清掉再推一次。
-- 复用同一次 `listGroups()`：它在 `flushSummary` 里已经为摘要调过一次（`summaryGroups()`，同文件 1055），
-  两者共用同一份快照，不要为它再取一次。
+- 投影归**终端能力**所有，不归网关：网关调 `terminal.listMobileGroupCommands()`，与它调
+  `listMobileToolbarButtons()` 完全同构 —— 「手机能看见什么」由能力决定，网关不必知道终端
+  的分组长什么样。代价是每次 tick 多一次 `listGroups()`（就是 128 个分组排个序），换的是
+  这条边界不被拆开。**2026-09-23 修正**：本文档初稿写的是「与摘要复用同一份 `listGroups()`
+  快照」，那与上面这条归属冲突，且省下来的是微不足道的一次数组排序 —— 以归属为准。
 
 ### 3.5 服务端
 
