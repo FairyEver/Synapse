@@ -111,6 +111,7 @@ final class RealtimeClient {
     var onNotificationChanged: (() -> Void)?
     /// A computer's terminal buttons. A full snapshot, so it replaces what is held.
     var onToolbar: ((MobileToolbarPayload) -> Void)?
+    var onGroupCommands: ((MobileGroupCommandsPayload) -> Void)?
     var onQuickPhrases: ((MobileQuickPhrasesPayload) -> Void)?
     /// A computer's recently copied text. A snapshot, but **not** one that replaces what
     /// is held — the local list is longer than the computer's by design, so whoever
@@ -385,6 +386,7 @@ final class RealtimeClient {
         LiveMessageType.mobileDetached,
         LiveMessageType.mobilePresence,
         LiveMessageType.mobileToolbar,
+        LiveMessageType.mobileGroupCommands,
         LiveMessageType.mobileQuickPhrases,
         LiveMessageType.mobileClipboard,
         LiveMessageType.mobileGitStatus,
@@ -455,6 +457,10 @@ final class RealtimeClient {
         case LiveMessageType.mobileToolbar:
             if let payload = payload(MobileToolbarPayload.self, from: data) {
                 onToolbar?(payload)
+            }
+        case LiveMessageType.mobileGroupCommands:
+            if let payload = payload(MobileGroupCommandsPayload.self, from: data) {
+                onGroupCommands?(payload)
             }
         case LiveMessageType.mobileQuickPhrases:
             if let payload = payload(MobileQuickPhrasesPayload.self, from: data) {

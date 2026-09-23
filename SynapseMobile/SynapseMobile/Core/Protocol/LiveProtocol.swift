@@ -22,6 +22,12 @@ enum LiveMessageType {
     /// The command buttons a computer offers this phone. A family of its own rather
     /// than part of the summary, whose byte budget cannot carry them.
     static let mobileToolbar = "mobile.toolbar"
+    /// 一台电脑上那些配了启动命令的分组，手机用它决定分组行上画不画箭头。
+    ///
+    /// 与工具栏同族、同样独立：摘要的字节预算装不下它（理由见 `mobileToolbar` 那条），
+    /// 而且「这台电脑没给任何分组配命令」与「这台电脑太旧、还不认识这条消息」是两回事。
+    /// 手机对两者的表现相同（都不画箭头），但它们不能混成一份状态。
+    static let mobileGroupCommands = "mobile.groupCommands"
     /// The sentences a computer's 快捷输入 app holds, for this phone to tap into its
     /// composer. Beside the toolbar rather than part of it: the two come from two
     /// different computer apps, and having none of these is not having no toolbar —
@@ -711,6 +717,37 @@ struct MobileToolbarPayload: Decodable {
             value = try? MobileToolbarButton(from: decoder)
         }
     }
+}
+
+// MARK: - Group commands
+
+/// 一个分组里保存的一条启动命令。
+///
+/// 只有 id 与 name：正文不在这条消息里 —— 桌面自己那个「以命令启动」下拉也只写名字，
+/// 而正文在电脑上是加密存储的、还可以挂自己的环境变量。
+struct MobileGroupCommand: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+}
+
+/// 一个分组保存的启动命令，按电脑上的顺序。
+struct MobileGroupCommandsEntry: Decodable, Hashable {
+    let groupId: String
+    let commands: [MobileGroupCommand]
+}
+
+/// 一台电脑上配了启动命令的那些分组。
+///
+/// 整份快照，与工具栏一样：手机用它替换自己那份，所以丢一条只等于等下一个 —— 而电脑
+/// 每秒都在比一次内容，变化约一秒内就会再来一次。
+///
+/// 与 `MobileToolbarPayload` 不同，这里**没有**逐条容错的解码：一条记录只有两个字符串，
+/// 没有「更新的电脑送来的、这个版本还不认识的那种命令」。多出来的字段会被合成解码器
+/// 忽略，那正是以后加字段该有的样子。
+struct MobileGroupCommandsPayload: Decodable {
+    let desktopClientInstanceId: String
+    let revision: Int
+    let groups: [MobileGroupCommandsEntry]
 }
 
 // MARK: - Quick phrases

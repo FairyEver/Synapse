@@ -27,6 +27,8 @@ final class SynapseAppModel {
     /// The buttons the last `mobile.toolbar` carried, and which computer sent them.
     /// See `TerminalToolbarState` for why one slot is enough.
     private var toolbar = TerminalToolbarState()
+    /// 分组里配了哪些启动命令，和是哪台电脑说的。见 `TerminalGroupCommandState`。
+    private var groupCommandState = TerminalGroupCommandState()
     /// The sentences the last `mobile.quickPhrases` carried, and which computer sent
     /// them. See `TerminalQuickPhrasesState` for why "none" and "never heard of it"
     /// have to stay apart.
@@ -477,6 +479,7 @@ final class SynapseAppModel {
         // These are another account's computers' commands, and nothing here is
         // persisted, so the next sign-in starts from the fallback as it should.
         toolbar.reset()
+        groupCommandState.reset()
         // 别名的坐标系是"这个人、这一份日志"。换个人接着数 `s3`，会让下一个人
         // 以为那两份日志之间有什么关系。
         DiagnosticLog.resetAliases()
@@ -799,6 +802,9 @@ final class SynapseAppModel {
         }
         realtime.onToolbar = { [weak self] payload in
             self?.toolbar.adopt(payload)
+        }
+        realtime.onGroupCommands = { [weak self] payload in
+            self?.groupCommandState.adopt(payload)
         }
         realtime.onQuickPhrases = { [weak self] payload in
             self?.quickPhrases.adopt(payload)
@@ -1320,6 +1326,21 @@ final class SynapseAppModel {
     /// no keyboard of its own, nothing could be confirmed in a TUI at all.
     var activeToolbarButtons: [MobileToolbarButton] {
         toolbar.buttons(forSelected: selectedDesktopClientInstanceId)
+    }
+
+    // MARK: - 分组快捷命令
+
+    /// 这个分组配了启动命令没有 —— 有就在分组行上画箭头，点进去先选命令。
+    ///
+    /// 电脑没说过、或者说得太旧（从没发过这条消息）都是 `false`：那时分组行上不画
+    /// 箭头，点一下直接建终端，与这条消息存在之前完全一样。
+    func hasGroupCommands(_ groupId: String) -> Bool {
+        groupCommandState.hasCommands(for: groupId, onSelected: selectedDesktopClientInstanceId)
+    }
+
+    /// 一个分组配的命令，按电脑上的顺序。
+    func groupCommands(for groupId: String) -> [MobileGroupCommand] {
+        groupCommandState.commands(for: groupId, onSelected: selectedDesktopClientInstanceId)
     }
 
     /// The Git state of one terminal's directory on the computer being viewed.
