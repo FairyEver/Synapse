@@ -71,6 +71,13 @@ export type IntentExecutorDeps = {
    */
   readonly sendToolbar: () => void
   /**
+   * 把电脑上的分组命令列表无条件推给它所有的手机。
+   *
+   * 与工具栏共享那两个时刻，理由也相同：都是「一台刚到的手机什么都没收到」，而
+   * 「这台电脑最近没改过命令」不是对它的回答。
+   */
+  readonly sendGroupCommands: () => void
+  /**
    * Pushes the computer's 快捷输入 sentences, unconditionally, for the same two
    * callers and the same reason: a phone that has just arrived has been told nothing
    * yet, and "the user has not edited their sentences lately" is not an answer.
@@ -215,6 +222,7 @@ export class MobileIntentExecutor {
         this.deps.resendSummary()
         this.deps.sendToolbar()
         this.deps.sendQuickPhrases()
+        this.deps.sendGroupCommands()
         // The one moment a phone's own clipboard list may have a hole in it: it was
         // away, or it is looking at this computer for the first time. Nothing is
         // gated on the ring having changed since the last phone — this caller has
@@ -250,6 +258,7 @@ export class MobileIntentExecutor {
         // like `sync` does, instead of waiting for the fingerprint to move.
         this.deps.sendToolbar()
         this.deps.sendQuickPhrases()
+        this.deps.sendGroupCommands()
         // 打开终端是这一族里唯一「有人正看着」的时刻，所以状态也重推一次：刚 attach
         // 的手机什么都没收到，而指纹只对已经收到过的一方有意义。
         this.deps.sendGitStatus(mobileClientInstanceId, intent.sessionId)

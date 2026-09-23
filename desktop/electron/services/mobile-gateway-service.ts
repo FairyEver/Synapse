@@ -359,6 +359,7 @@ export class MobileGatewayService {
       resendSummary: () => this.resendSummary(),
       sendToolbar: () => this.resendToolbar(),
       sendQuickPhrases: () => this.resendQuickPhrases(),
+      sendGroupCommands: () => this.resendGroupCommands(),
       sendClipboard: () => this.resendClipboard(),
       pushSnapshot: (attachment, reason) => this.pushSnapshot(attachment, reason),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),

@@ -2130,6 +2130,40 @@ describe("MobileGatewayService", () => {
     )
   })
 
+  it("sends the group command list to a phone that has just arrived", async () => {
+    /*
+     * 指纹只对「已经收到过」的一方有意义。刚连上的手机什么都没收到，所以两个「有人
+     * 正看着这台电脑」的时刻都必须无条件重推一遍 —— 少了这一条，第二台连上来的手机
+     * 面板上永远没有箭头。
+     */
+    const harness = createHarness()
+    await harness.timers.advance(1_000)
+    const afterTick = harness.groupCommands.length
+
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    expect(harness.groupCommands.length).toBeGreaterThan(afterTick)
+    expect(harness.groupCommands.at(-1)?.groups).toEqual([
+      { groupId: "g1", commands: [{ id: "c1", name: "Claude" }] },
+    ])
+
+    // 连内容都没变，第二台手机连上来也一样要给。
+    const afterSync = harness.groupCommands.length
+    await harness.gateway.handleIntent("phone-2", intent({ v: 1, intentId: "i-sync-2", kind: "sync" }))
+    expect(harness.groupCommands.length).toBeGreaterThan(afterSync)
+  })
+
+  it("refreshes the group command list when a phone opens a terminal", async () => {
+    // 与 `sync` 同一个理由，与工具栏共享同一个时刻：打开终端是「有人正看着这台电脑」
+    // 的另一个确定的瞬间。
+    const harness = createHarness()
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    const afterSync = harness.groupCommands.length
+
+    await attach(harness)
+
+    expect(harness.groupCommands.length).toBeGreaterThan(afterSync)
+  })
+
   /*
    * The 快捷输入 sentences are the third payload family out of this gateway, and they
    * fail differently from the other two: a toolbar that goes missing leaves a phone
