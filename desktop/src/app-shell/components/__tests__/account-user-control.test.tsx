@@ -80,6 +80,8 @@ vi.mock("@/lib/electron-bridge", () => ({
   },
 }))
 
+vi.mock("../message-center", () => ({ MessageCenter: () => null }))
+
 import { AccountUserControl } from "../account-user-control"
 import { AppShellActions } from "../app-shell-actions"
 

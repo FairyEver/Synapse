@@ -6,9 +6,15 @@ import type { SynapseAccountState } from "../../../src/types/account"
 import { MAX_SOCKET_BUFFERED_BYTES, LiveConnectionService } from "../live-connection-service"
 import { buildTerminalFrames } from "../mobile-gateway/frame-builder"
 
+const nativeNotificationShow = vi.hoisted(() => vi.fn())
+
 vi.mock("electron", () => ({
   app: {
     getVersion: () => "0.2.253",
+  },
+  Notification: class {
+    static isSupported() { return true }
+    show() { nativeNotificationShow() }
   },
 }))
 
@@ -190,6 +196,36 @@ function representativeFrames(): readonly MobileTerminalFrame[] {
 }
 
 describe("LiveConnectionService", () => {
+  it("refreshes the message center and suppresses a second native alert on the originating desktop", async () => {
+    nativeNotificationShow.mockClear()
+    const socket = new FakeSocket()
+    const getNotification = vi.fn(async (id: string) => ({
+      id, title: "完成", body: "已完成", level: "active", readAt: null,
+      deviceId: id === "local" ? "client-a" : null,
+      createdAt: new Date().toISOString(),
+    }))
+    const account = { ...createAccountService(), getNotification }
+    const eventBus = { emit: vi.fn() }
+    const service = new LiveConnectionService({
+      accountService: account as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+    })
+    service.setEventBus(eventBus as never)
+    await connectAndWelcome(service, socket)
+    for (const notificationId of ["local", "remote"]) {
+      socket.emit("message", JSON.stringify(createLiveEnvelope(
+        LIVE_MESSAGE_TYPES.notificationChanged, { notificationId },
+        { id: `change-${notificationId}`, sentAt: new Date().toISOString() },
+      )))
+    }
+    await waitForCondition(() => getNotification.mock.calls.length === 2)
+    expect(nativeNotificationShow).toHaveBeenCalledTimes(1)
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "account", type: "account.notificationChanged", payload: { notificationId: "remote" },
+    }))
+    service.close()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })

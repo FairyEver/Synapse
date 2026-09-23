@@ -57,6 +57,28 @@ const dashboardWebhookSchema = z.object({
   ]).optional(),
 })
 
+const notificationSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  title: z.string(),
+  body: z.string(),
+  group: z.string().nullable(),
+  url: z.string().nullable(),
+  level: z.enum(["active", "passive", "timeSensitive"]),
+  targetId: z.string().nullable(),
+  deviceId: z.string().nullable(),
+  readAt: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  createdAt: z.string(),
+})
+
+const notificationListRequestSchema = z.object({
+  cursor: z.string().optional(),
+  filter: z.enum(["all", "unread", "pending"]).optional(),
+})
+
+const notificationIdSchema = z.object({ id: z.string().min(1) })
+
 const driveItemSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
@@ -1027,6 +1049,41 @@ export const accountIpcModule: IpcModule = {
       request: z.void(),
       response: z.array(dashboardWebhookSchema),
       handler: async () => accountService.listWebhooks(),
+    },
+    listNotifications: {
+      kind: "invoke",
+      operationId: "app.account.notification.list",
+      request: notificationListRequestSchema,
+      response: z.object({ items: z.array(notificationSchema), nextCursor: z.string().nullable() }),
+      handler: async (_ctx, input) => accountService.listNotifications(notificationListRequestSchema.parse(input)),
+    },
+    notificationUnreadCount: {
+      kind: "invoke",
+      operationId: "app.account.notification.count",
+      request: z.void(),
+      response: z.object({ unread: z.number().int().nonnegative() }),
+      handler: async () => accountService.notificationUnreadCount(),
+    },
+    markNotificationRead: {
+      kind: "invoke",
+      operationId: "app.account.notification.read",
+      request: notificationIdSchema,
+      response: z.object({ ok: z.literal(true) }),
+      handler: async (_ctx, input) => accountService.markNotificationRead(notificationIdSchema.parse(input).id),
+    },
+    markAllNotificationsRead: {
+      kind: "invoke",
+      operationId: "app.account.notification.read_all",
+      request: z.void(),
+      response: z.object({ ok: z.literal(true) }),
+      handler: async () => accountService.markAllNotificationsRead(),
+    },
+    deleteNotification: {
+      kind: "invoke",
+      operationId: "app.account.notification.delete",
+      request: notificationIdSchema,
+      response: z.object({ ok: z.literal(true) }),
+      handler: async (_ctx, input) => accountService.deleteNotification(notificationIdSchema.parse(input).id),
     },
     listDriveItems: {
       kind: "invoke",

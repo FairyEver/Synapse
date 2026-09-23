@@ -46,7 +46,13 @@ final class PushRegistrar: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        center.setNotificationCategories([category, meetingCategory])
+        let messageCategory = UNNotificationCategory(
+            identifier: NotificationCategory.synapseNotification,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category, meetingCategory, messageCategory])
         // AppDelegate owns the notification-centre delegate. Claiming it here too
         // would silently replace the object that handles notification taps, and a
         // delegate that does not implement `didReceive` turns every tap into a no-op.
@@ -66,6 +72,7 @@ final class PushRegistrar: NSObject {
 
 enum NotificationCategory {
     static let meetingTranscription = "MEETING_TRANSCRIPTION"
+    static let synapseNotification = "SYNAPSE_NOTIFICATION"
 }
 
 enum NotificationAction {

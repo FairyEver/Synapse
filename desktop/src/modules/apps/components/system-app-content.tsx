@@ -54,6 +54,8 @@ type SystemAppContentProps = {
   readonly onGitOpenRequestConsumed?: (requestId: string) => void
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
   readonly onTerminalOpenRequestConsumed?: (requestId: string) => void
+  readonly meetingOpenRequest?: string | null
+  readonly onMeetingOpenRequestConsumed?: () => void
 }
 
 function SystemAppContent({
@@ -69,6 +71,8 @@ function SystemAppContent({
   onGitOpenRequestConsumed,
   terminalOpenRequest = null,
   onTerminalOpenRequestConsumed,
+  meetingOpenRequest = null,
+  onMeetingOpenRequestConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
     if (appId === "resource-repository" || !onContentOpenRequest) return undefined
@@ -130,7 +134,7 @@ function SystemAppContent({
   if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />
   if (appId === "connectors") return <ConnectorsModule />
-  if (appId === "meeting") return <MeetingModule />
+  if (appId === "meeting") return <MeetingModule openRequest={meetingOpenRequest} onOpenRequestConsumed={onMeetingOpenRequestConsumed} />
 
   return assertNever(appId)
 }

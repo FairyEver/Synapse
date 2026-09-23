@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
+import { NOTIFICATION_SEND_SCOPE, PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
 
 export const OPEN_API_CONTRACT_BASE_PATH = "/api/open"
 export const OPEN_API_CONTRACT_PATH = "/openapi.json"
@@ -94,12 +94,31 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
   },
   servers: [{ url: OPEN_API_V1_BASE_PATH }],
   tags: [
+    { name: "Notifications", description: "向账号下所有设备发送消息。" },
     {
       name: "Public links",
       description: "将 Synapse Drive 公共链接转换为临时下载制品。",
     },
   ],
   paths: {
+    "/notifications": {
+      post: {
+        tags: ["Notifications"],
+        summary: "发送通知",
+        operationId: "sendNotification",
+        security: [{ ApiKeyBearer: [] }],
+        "x-required-scope": NOTIFICATION_SEND_SCOPE,
+        parameters: [{ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string", minLength: 8, maxLength: 120 } }],
+        requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/SendNotificationRequest" } } } },
+        responses: {
+          "201": { description: "消息已保存。系统推送可能随后失败，消息仍可在消息中心查看。", content: { "application/json": { schema: { $ref: "#/components/schemas/SendNotificationResponse" } } } },
+          "400": errorResponse("请求体或去重键无效。"),
+          "401": errorResponse("API 密钥无效。"),
+          "403": errorResponse("缺少 notification.send 权限。"),
+          "429": errorResponse("请求频率超限。"),
+        },
+      },
+    },
     [OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH]: {
       post: createDownloadOperation,
     },
@@ -198,6 +217,20 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
       NoStore: noStoreHeader,
     },
     schemas: {
+      SendNotificationRequest: {
+        type: "object", required: ["title", "body"], additionalProperties: false,
+        properties: {
+          title: { type: "string", minLength: 1, maxLength: 64 },
+          body: { type: "string", minLength: 1, maxLength: 512 },
+          group: { type: "string", minLength: 1, maxLength: 64 },
+          url: { type: "string", format: "uri", maxLength: 2048, pattern: "^https://" },
+          level: { type: "string", enum: ["active", "passive", "timeSensitive"], default: "active" },
+        },
+      },
+      SendNotificationResponse: {
+        type: "object", required: ["id", "createdAt"], additionalProperties: false,
+        properties: { id: { type: "string" }, createdAt: { type: "string", format: "date-time" } },
+      },
       CreateDownloadRequest: createDownloadRequestJsonSchema,
       CreateDownloadResponse: {
         type: "object",
@@ -266,6 +299,8 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
                 type: "string",
                 enum: [
                   "INVALID_REQUEST",
+                  "INVALID_IDEMPOTENCY_KEY",
+                  "RATE_LIMITED",
                   "INVALID_API_KEY",
                   "INSUFFICIENT_SCOPE",
                   "LINK_PASSWORD_REQUIRED_OR_INVALID",

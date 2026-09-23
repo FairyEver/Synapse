@@ -19,6 +19,7 @@ import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import type { LiveReachableDesktop } from "../live/live.types"
 import type { MobileLiveFanout } from "./mobile-live.types"
 import { MobilePushService } from "./mobile-push.service"
+import type { NotificationService } from "../notifications/notification.service"
 
 /** How long a caller waits for the desktop to answer an intent. */
 const INTENT_RESULT_TIMEOUT_MS = 8_000
@@ -60,6 +61,7 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   private readonly attentionByUser = new Map<string, Map<string, Map<string, string>>>()
   private fanout: MobileLiveFanout | null = null
+  private notifications: Pick<NotificationService, "create" | "resolveAttention"> | null = null
 
   constructor(
     private readonly desktopGateway: LiveDesktopGateway,
@@ -73,6 +75,10 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   setFanout(fanout: MobileLiveFanout): void {
     this.fanout = fanout
+  }
+
+  setNotificationSink(sink: Pick<NotificationService, "create" | "resolveAttention">): void {
+    this.notifications = sink
   }
 
   onModuleInit(): void {
@@ -130,7 +136,10 @@ export class MobileLiveRelayService implements OnModuleInit {
     if (!sessions) return
     const present = new Set(payload.sessions.map((session) => session.id))
     for (const sessionId of sessions.keys()) {
-      if (!present.has(sessionId)) sessions.delete(sessionId)
+      if (!present.has(sessionId)) {
+        sessions.delete(sessionId)
+        void this.notifications?.resolveAttention(userId, payload.desktopClientInstanceId, sessionId)
+      }
     }
   }
 
@@ -148,10 +157,27 @@ export class MobileLiveRelayService implements OnModuleInit {
     for (const session of payload.sessions) {
       const previous = sessions.get(session.id)
       sessions.set(session.id, session.attention.state)
+      if (previous === "waiting" && session.attention.state !== "waiting") {
+        void this.notifications?.resolveAttention(userId, payload.desktopClientInstanceId, session.id)
+      }
       // Only a fresh transition into "waiting" is worth waking someone for.
       // `unknown` is explicitly not `not_waiting`, but it is also not evidence
       // that a person is needed, so it never notifies.
       if (session.attention.state !== "waiting" || previous === "waiting") continue
+      if (payload.notificationsEnabled === false) continue
+      if (this.notifications) {
+        void this.notifications.create({
+          userId,
+          source: "terminal-attention",
+          title: `${session.title} 需要你确认`,
+          body: "有一个终端正在等待你的操作。",
+          targetId: session.id,
+          deviceId: payload.desktopClientInstanceId,
+        }).catch((error: unknown) => {
+          this.logger.warn({ errorName: error instanceof Error ? error.name : typeof error }, "Attention notification persistence failed")
+        })
+        continue
+      }
       void this.push.sendTerminalApproval(userId, {
         title: `${session.title} 需要你确认`,
         body: session.lastLine.trim() || "有一个终端正在等待你的操作。",

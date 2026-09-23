@@ -46,6 +46,7 @@ model User {
   modulePermissions              UserModulePermission[]
   webhooks                       UserWebhook[]
   apiKeys                        UserApiKey[]
+  notifications                  UserNotification[]
   openApiDownloadGrants          OpenApiDownloadGrant[]
   openApiUsageLogs               OpenApiUsageLog[]
   devices                        UserDevice[]
@@ -72,6 +73,31 @@ model User {
   teamMemberships                TeamMembership[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
+}
+
+model UserNotification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source      String    @db.VarChar(32)
+  sourceKey   String?   @db.VarChar(200)
+  title       String    @db.VarChar(64)
+  body        String    @db.VarChar(512)
+  group       String?   @db.VarChar(64)
+  url         String?   @db.VarChar(2048)
+  level       String    @db.VarChar(20)
+  targetId    String?   @db.VarChar(120)
+  deviceId    String?   @db.VarChar(120)
+  readAt      DateTime?
+  resolvedAt  DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, sourceKey])
+  @@index([userId, deletedAt, createdAt, id])
+  @@index([userId, readAt, deletedAt])
+  @@index([userId, source, deviceId, targetId, resolvedAt])
+  @@index([createdAt])
 }
 
 model ClientTelemetryEvent {

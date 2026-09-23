@@ -4,7 +4,7 @@
 
 System Notifier is a desktop-only system app and capability that triggers the current computer's native system notification. It provides one stable MCP tool and one Workflow node while keeping platform differences, notification permission state, and Electron delivery failures behind a fire-and-forget boundary.
 
-It is a generic, one-way, non-interactive notifier. It is not a notification center, reliable delivery queue, history store, or callback framework. Existing interactive notifications such as Update Service navigation remain owned by their business modules.
+It is a generic, one-way, non-interactive notifier. The account-level message center now owns cloud history for accepted formal triggers when the user is signed in and online. The trigger remains fire-and-forget and is not a reliable delivery queue or callback framework. Existing interactive notifications such as Update Service navigation remain owned by their business modules.
 
 ## Stable identities
 
@@ -63,9 +63,10 @@ For each valid call the service:
 4. For a test call, skips only the enabled check and uses the current silent value or `false` when unavailable.
 5. Atomically acquires one identity-bucket and one global-bucket token.
 6. Invokes the adapter once when both tokens are available.
-7. Returns fixed success immediately.
+7. Starts a best-effort account message-center sync for formal calls only when signed in and online; the test button never syncs.
+8. Returns fixed success immediately.
 
-There is no persistent queue, retry, delayed delivery, crash recovery, replay, idempotency key, notification ID, content deduplication, or cancellation handle. Workflow cancellation is honored before interpolation and again after validation immediately before core acceptance. Cancellation after acceptance cannot revoke the attempt or fixed success.
+The core service has no persistent queue, retry, delayed delivery, crash recovery, replay, idempotency key, content deduplication, or cancellation handle. The separate message center assigns an ID and retains successful online syncs for 90 days. Offline or unauthenticated calls only show locally and are never backfilled. Workflow cancellation is honored before interpolation and again after validation immediately before core acceptance. Cancellation after acceptance cannot revoke the attempt or fixed success.
 
 ## Native adapter
 
@@ -106,7 +107,7 @@ Both buckets refresh at the same monotonic timestamp and are decremented only wh
 
 MCP identity uses trusted source, client, controller, and actor context in the fixed fallback order. Workflow identity is `workflowId + nodeId` and excludes `runId`. The system-app test uses a separate fixed UI identity. Identity keys never enter logs or audit metadata.
 
-Every valid accepted call attempts one audit event with action `notification.trigger`, resource `app.system_notifier.notification.trigger`, outcome `allowed`, trusted actor, source, title/body code-point lengths, and the applicable trusted MCP or Workflow identifiers. Notification content, summaries, hashes, names, settings, limiter state, adapter state, and delivery facts are never recorded. Audit failure is not retried.
+Every valid accepted call attempts one audit event with action `notification.trigger`, resource `app.system_notifier.notification.trigger`, outcome `allowed`, trusted actor, source, title/body code-point lengths, and the applicable trusted MCP or Workflow identifiers. Notification content is not recorded in audit or logs. When online sync succeeds, the complete title and body are stored in plaintext in the account's server-side message history and may appear in another device's lock-screen preview. Audit failure is not retried.
 
 The `core.system-notifier` logger accepts only fixed stages and reasons plus aggregated counts. It never records raw errors, stacks, notification content, or identity keys. Health exposes only `healthy` or `degraded` with fixed reasons and is not surfaced through MCP, Workflow, or the App UI.
 
@@ -126,4 +127,4 @@ Switches auto-save. Saving disables controls; failure rolls back and displays on
 
 The Workflow node persists `title`, `body`, and shared `VariableBinding[]`. It uses two PromptEditors and one VariableBindingEditor, supports existing `{{name}}` and `{{$name}}` syntax through a no-content-log interpolation path, and shares the public input validator after interpolation. Its primary output is `{"success":true}` and structured output is `{ success: true }`. Its share contract requires `app.system_notifier.notification.trigger >= 1.0.0` and declares no additional resources, models, projects, sensitive paths, or high-risk permissions.
 
-Adding the node advances the Workflow document schema from `2.5.0` to `2.6.0` with an empty migration and current fixture. Workflow share package format remains `4.0.0`. V1 ships directly without a feature flag and does not add server, account, cloud-sync, or website APIs.
+Adding the node advanced the Workflow document schema from `2.5.0` to `2.6.0` with an empty migration and current fixture. Workflow share package format remains `4.0.0`. Account sync was added later through the message center without changing the public MCP or Workflow success response.

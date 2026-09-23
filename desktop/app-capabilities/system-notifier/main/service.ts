@@ -53,6 +53,7 @@ export interface SystemNotifierServicePorts {
   readonly settings?: DataNamespace<SystemNotifierSettingsEntryV1>
   readonly auditSink?: AuditSink
   readonly adapter?: SystemNotificationAdapter
+  readonly sync?: (input: SystemNotificationInput) => Promise<void>
 }
 
 export interface SystemNotifierHealth {
@@ -76,6 +77,7 @@ export class SystemNotifierService {
   private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV1>
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
+  private sync?: (input: SystemNotificationInput) => Promise<void>
   private snapshot: Readonly<SystemNotifierSettings> | null = null
   private hasValidSnapshot = false
   private settingsQueue: Promise<void> = Promise.resolve()
@@ -97,6 +99,7 @@ export class SystemNotifierService {
     this.settingsPort = ports.settings
     this.auditSink = ports.auditSink
     this.adapter = ports.adapter ?? createNoopSystemNotificationAdapter()
+    this.sync = ports.sync
     if (this.adapter.kind === "electron") this.degradedReasons.delete("adapter_unavailable")
     else this.degradedReasons.add("adapter_unavailable")
 
@@ -124,6 +127,11 @@ export class SystemNotifierService {
       })
     } catch {
       this.diagnostics.record("notification_show", "synchronous_exception")
+    }
+    if (!context.bypassEnabled) {
+      void this.sync?.(input).catch(() => {
+        this.diagnostics.record("notification_show", "synchronous_exception")
+      })
     }
     return { success: true }
   }

@@ -23,6 +23,7 @@ export type TerminalApprovalPush = {
    * than an alert that only says something needs attention.
    */
   readonly detail: string
+  readonly notificationId?: string
 }
 
 /**
@@ -44,6 +45,7 @@ type PushContent = {
   readonly category: string
   readonly threadId: string
   readonly data: Record<string, unknown>
+  readonly level?: "active" | "passive" | "timeSensitive"
 }
 
 function terminalApprovalContent(push: TerminalApprovalPush): PushContent {
@@ -55,6 +57,7 @@ function terminalApprovalContent(push: TerminalApprovalPush): PushContent {
     category: "TERMINAL_APPROVAL",
     threadId: push.sessionId,
     data: {
+      ...(push.notificationId ? { notificationId: push.notificationId } : {}),
       desktopClientInstanceId: push.desktopClientInstanceId,
       sessionId: push.sessionId,
       sessionTitle: push.sessionTitle,
@@ -129,6 +132,23 @@ export class MobilePushService {
     return this.sendToAllDevices(userId, meetingTranscriptionContent(push))
   }
 
+  async sendNotification(userId: string, push: {
+    id: string
+    title: string
+    body: string
+    level: "active" | "passive" | "timeSensitive"
+    group: string | null
+  }): Promise<PushOutcome> {
+    return this.sendToAllDevices(userId, {
+      title: push.title,
+      body: push.body,
+      category: "SYNAPSE_NOTIFICATION",
+      threadId: push.group ?? push.id,
+      data: { notificationId: push.id, notificationLevel: push.level },
+      level: push.level,
+    })
+  }
+
   private async sendToAllDevices(userId: string, content: PushContent): Promise<PushOutcome> {
     if (!this.isConfigured()) {
       this.logger.warn({ reason: "not_configured" }, "Mobile push skipped")
@@ -173,7 +193,8 @@ export class MobilePushService {
     const body = JSON.stringify({
       aps: {
         alert: { title: content.title, body: content.body },
-        sound: "default",
+        ...(content.level === "passive" ? {} : { sound: "default" }),
+        ...(content.level ? { "interruption-level": content.level === "timeSensitive" ? "time-sensitive" : content.level } : {}),
         // Matches the category the app registers, so the lock screen can offer
         // per-category actions without opening the app.
         category: content.category,

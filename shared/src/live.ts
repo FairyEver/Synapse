@@ -33,6 +33,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileClipboard: "mobile.clipboard",
   mobileGitStatus: "mobile.gitStatus",
   meetingTranscriptionCompleted: "meeting.transcription.completed",
+  notificationChanged: "notification.changed",
 } as const
 
 /**
@@ -97,6 +98,10 @@ export interface LiveWebhookDeliveryAckPayload {
   readonly deliveryId: string
 }
 
+export interface NotificationChangedPayload {
+  readonly notificationId: string
+}
+
 export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
@@ -117,6 +122,7 @@ export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntent, import("./mobile-live.js").MobileIntentPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileDetached, import("./mobile-live.js").MobileDetachedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted, import("./meeting.js").MeetingTranscriptionCompletedPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.notificationChanged, NotificationChangedPayload>
 
 /**
  * A phone reuses the desktop handshake (hello/welcome/ping/pong) so there is one
@@ -143,6 +149,7 @@ export type LiveMobileServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileClipboard, import("./mobile-live.js").MobileClipboardPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGitStatus, import("./mobile-live.js").MobileGitStatusPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.notificationChanged, NotificationChangedPayload>
 
 export function isLiveMobileClientMessage(value: unknown): value is LiveMobileClientMessage {
   if (!isLiveEnvelope(value)) return false
@@ -169,6 +176,7 @@ export function isLiveMobileServerMessage(value: unknown): value is LiveMobileSe
   if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileClipboard) return isMobileClipboardPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileGitStatus) return isMobileGitStatusPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.notificationChanged) return isNotificationChangedPayload(value.payload)
   return false
 }
 
@@ -221,7 +229,12 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
   if (value.type === LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted) {
     return isMeetingTranscriptionCompletedPayload(value.payload)
   }
+  if (value.type === LIVE_MESSAGE_TYPES.notificationChanged) return isNotificationChangedPayload(value.payload)
   return false
+}
+
+function isNotificationChangedPayload(value: unknown): value is NotificationChangedPayload {
+  return isRecord(value) && typeof value.notificationId === "string" && value.notificationId.length > 0
 }
 
 function isHelloPayload(value: unknown): value is LiveDesktopHelloPayload {

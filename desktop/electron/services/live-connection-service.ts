@@ -1,5 +1,5 @@
 import os from "node:os"
-import { app } from "electron"
+import { app, Notification } from "electron"
 import WebSocket from "ws"
 import type {
   MobileIntentResult,
@@ -378,6 +378,27 @@ export class LiveConnectionService {
         lastSeenAt: this.now().toISOString(),
         lastError: null,
       })
+      return
+    }
+
+    if (parsed.type === LIVE_MESSAGE_TYPES.notificationChanged) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      const notificationId = parsed.payload.notificationId
+      this.eventBus?.emit({
+        domain: "account",
+        type: "account.notificationChanged",
+        payload: { notificationId },
+        timestamp: this.now().toISOString(),
+      })
+      if (notificationId !== "all") {
+        void this.accountService.getNotification(notificationId).then((item) => {
+          if (item.readAt || item.level === "passive" || item.deviceId === clientInstanceId) return
+          if (Date.now() - new Date(item.createdAt).getTime() > 30_000) return
+          if (Notification.isSupported()) new Notification({ title: item.title, body: item.body }).show()
+        }).catch((error: unknown) => {
+          logger.warn("Notification could not be loaded after live event.", this.liveErrorMetadata(error))
+        })
+      }
       return
     }
 

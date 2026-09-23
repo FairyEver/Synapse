@@ -4,7 +4,7 @@
 
 When an interactive Codex or Claude Code process in Synapse Terminal needs user action or finishes its top-level task, Synapse may show a native desktop notification. Clicking it focuses Synapse and opens the exact Terminal session, workspace, and pane identified by the immutable `sessionId`.
 
-This is a Terminal-owned interactive notification feature. It is not a notification center, history, delivery queue, MCP tool, Workflow node, Deep Link, or extension of System Notifier.
+This is a Terminal-owned interactive notification feature. The later account message center stores a separate, sanitized record for enabled waiting and completion events; Terminal still owns the event decision and exact-session navigation. This feature does not add a delivery queue, MCP tool, Workflow node, Deep Link, or extension of System Notifier.
 
 ## Opt-in and launch boundary
 
@@ -43,6 +43,8 @@ Filesystem writes, listener creation, and notification triggering pass through `
 Top-level permission requests and question/plan-exit tools map to “需要你的操作”. A top-level stop maps to “任务已完成”. An idle prompt — the agent reporting that it finished and has been waiting on you since — maps to its own wording, “还在等你”: it arrives after the completion notification, and sharing that sentence would read as the same notification firing twice. Subagent events are ignored. New user input clears waiting state.
 
 The notification contains only the Agent product name, sanitized session title, and mapped status. It is suppressed only when the exact session is active in the currently focused renderer. Otherwise it always uses the native notification adapter, including when another Synapse window, System App, or pane is focused. The native notification object remains alive until close or click.
+
+When notification delivery is enabled, the message center records terminal completion using only the session ID, safe title, and mapped status. Waiting transitions are recorded by the server from the desktop's attention summary and resolved when that state ends. It never stores a prompt, terminal output, last line, transcript, or tool arguments. A continued wait does not create a second reminder record. The local native alert is not repeated when the account event returns to its originating desktop.
 
 On click, Synapse focuses the app and sends the existing Terminal System App open request containing only a new request id and the target `sessionId`. The renderer resolves the owning workspace and pane, selects them, and focuses the terminal. No notification action is routed through System Notifier.
 

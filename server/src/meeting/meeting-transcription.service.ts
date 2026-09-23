@@ -13,6 +13,7 @@ import {
 
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
+import { NotificationService } from "../notifications/notification.service"
 import { PrismaService } from "../prisma/prisma.service"
 import {
   inspectMeetingAudioContainer,
@@ -63,6 +64,7 @@ export class MeetingTranscriptionService {
     // 通知是锦上添花：推送通道不可用时转写照样要成功，所以两个都是可选的。
     @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
     @Optional() private readonly mobilePush?: MobilePushService,
+    @Optional() private readonly notifications?: NotificationService,
   ) {}
 
   /**
@@ -442,6 +444,21 @@ export class MeetingTranscriptionService {
       }
     }
 
+    if (this.notifications) {
+      try {
+        await this.notifications.create({
+          userId: meeting.userId,
+          source: "meeting-transcription",
+          sourceKey: `meeting-transcription:${meetingId}:${status}`,
+          title: meeting.title,
+          body: status === "done" ? "转写完成，文字可以看了。" : "转写失败，可以重新试一次。",
+          targetId: meetingId,
+        })
+      } catch (error) {
+        this.logger.warn({ meetingId, errorName: error instanceof Error ? error.name : typeof error }, "Meeting notification persistence failed")
+      }
+      return
+    }
     if (!this.mobilePush) return
     try {
       await this.mobilePush.sendMeetingTranscription(meeting.userId, {

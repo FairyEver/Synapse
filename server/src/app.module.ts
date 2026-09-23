@@ -19,6 +19,7 @@ import { OpenApiModule } from "./open-api/open-api.module"
 import { LiveModule } from "./live/live.module"
 import { MeetingModule } from "./meeting/meeting.module"
 import { MobileLiveModule } from "./mobile-live/mobile-live.module"
+import { NotificationModule } from "./notifications/notification.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
@@ -83,6 +84,7 @@ type RequestLogObject = {
     ClientTelemetryModule,
     LiveModule,
     MobileLiveModule,
+    NotificationModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

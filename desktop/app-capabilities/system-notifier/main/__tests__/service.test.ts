@@ -35,6 +35,19 @@ function logger() {
 }
 
 describe("SystemNotifierService", () => {
+  it("syncs formal accepted calls but never syncs disabled or test notifications", async () => {
+    const settings = settingsNamespace({ schemaVersion: 1, enabled: true, silent: false })
+    const sync = vi.fn(async () => undefined)
+    const service = new SystemNotifierService(logger())
+    await service.initialize({ settings: settings.port, adapter: { kind: "electron", show: vi.fn() }, sync })
+    service.trigger(input, context)
+    service.trigger(input, { ...context, bypassEnabled: true, identityKey: "test" })
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(input)
+    await service.updateSettings({ enabled: false })
+    service.trigger(input, { ...context, identityKey: "disabled" })
+    expect(sync).toHaveBeenCalledTimes(1)
+  })
   it("uses in-memory defaults without seeding an absent singleton", async () => {
     const settings = settingsNamespace(null)
     const show = vi.fn()

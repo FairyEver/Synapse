@@ -1,4 +1,5 @@
 import type { Request } from "express"
+import { HttpException } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
 import type { OpenApiPrincipal } from "../api-keys/api-key.service"
@@ -42,6 +43,9 @@ export function requireOpenApiScope(principal: OpenApiPrincipal, scope: string):
 }
 
 export function toOpenApiError(error: unknown): OpenApiHttpError {
+  if (error instanceof HttpException && error.getStatus() === 429) {
+    return new OpenApiHttpError(429, "RATE_LIMITED", "请求过于频繁，请稍后重试。")
+  }
   return error instanceof OpenApiHttpError
     ? error
     : new OpenApiHttpError(500, "INTERNAL_ERROR", "服务器内部错误。")

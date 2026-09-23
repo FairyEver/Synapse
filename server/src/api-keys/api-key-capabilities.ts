@@ -1,6 +1,7 @@
 import { buildPublicDocumentUrl } from "../common/public-document-url"
 
 export const PUBLIC_LINK_DOWNLOAD_SCOPE = "drive.public_link.download"
+export const NOTIFICATION_SEND_SCOPE = "notification.send"
 export const LEGACY_SHARE_LINK_DOWNLOAD_SCOPE = "drive.share_link.download"
 
 export const API_KEY_CAPABILITIES = [
@@ -9,6 +10,12 @@ export const API_KEY_CAPABILITIES = [
     name: "获取公共链接文件",
     description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
     documentationPath: "/open-api/api/share-link-download",
+  },
+  {
+    scope: NOTIFICATION_SEND_SCOPE,
+    name: "发送通知",
+    description: "允许通过开放接口向账号设备发送通知。",
+    documentationPath: "/open-api/api/notification-send",
   },
 ] as const
 

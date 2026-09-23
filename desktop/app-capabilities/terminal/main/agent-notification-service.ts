@@ -111,6 +111,7 @@ export type TerminalAgentNotificationServiceDeps = {
   readonly focusedWebContentsId: () => number | null
   readonly focusApp: () => void
   readonly openTerminalSession: (sessionId: string) => Promise<void>
+  readonly syncCompletion?: (input: { sessionId: string; title: string; body: string; sourceKey: string }) => Promise<void>
   readonly setSessionAttention?: (update: TerminalAgentAttentionUpdate) => void
   readonly now?: () => number
   /** Injectable so the liveness sweep can be decided without real processes. */
@@ -797,8 +798,9 @@ export class TerminalAgentNotificationService {
      *
      * 放在权限检查与审计之前是有意的：没有要触发的通知，就不该留下一条通知审计。
      */
-    if (!this.settings.notify) return
-    if (this.isExactSessionFocused(session.sessionId)) return
+    if (!this.settings.enabled || !this.settings.notify) return
+    const focused = this.isExactSessionFocused(session.sessionId)
+    if (focused && kind !== "completed") return
     const key = `${session.sessionId}:${kind}`
     const previous = this.lastNotificationAt.get(key) ?? 0
     if (this.now() - previous < DEDUPLICATION_WINDOW_MS) return
@@ -829,10 +831,22 @@ export class TerminalAgentNotificationService {
     }
     const title = provider === "codex" ? "Codex" : provider === "claude" ? "Claude Code" : "终端"
     const sessionTitle = sanitizeSessionTitle(session.title)
+    const body = agentNotificationBody(kind, sessionTitle, variant)
+    if (kind === "completed") {
+      void this.deps.syncCompletion?.({
+        sessionId: session.sessionId,
+        title,
+        body,
+        sourceKey: `terminal-complete:${session.sessionId}:${Math.floor(this.now() / DEDUPLICATION_WINDOW_MS)}`,
+      }).catch((error: unknown) => {
+        this.deps.logger.warn("Terminal completion could not be synced.", { sessionId: session.sessionId, error })
+      })
+    }
+    if (focused) return
     try {
       const notification = this.deps.createNotification({
         title,
-        body: agentNotificationBody(kind, sessionTitle, variant),
+        body,
       })
       if (!notification) {
         this.recordNotificationAudit(resource, provider, kind, "allowed")

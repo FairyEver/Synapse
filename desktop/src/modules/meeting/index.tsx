@@ -32,7 +32,7 @@ type MeetingView =
   | { readonly kind: "list" }
   | { readonly kind: "recording"; readonly recordingId: string; readonly title: string }
 
-export function MeetingModule() {
+export function MeetingModule({ openRequest, onOpenRequestConsumed }: { openRequest?: string | null; onOpenRequestConsumed?: () => void } = {}) {
   const notifications = useAppNotifications()
   const [view, setView] = useState<MeetingView>({ kind: "list" })
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -49,13 +49,23 @@ export function MeetingModule() {
   // 打开模块默认选中第一条，不留一个「什么都没选」的空右栏；选中的那条被删掉之后落到
   // 剩下的第一条，一条都不剩就回到空态。
   useEffect(() => {
+    if (meetings.loading) return
     if (meetings.data.length === 0) {
       setSelectedId(null)
       return
     }
     if (selectedId && meetings.data.some((meeting) => meeting.id === selectedId)) return
     setSelectedId(meetings.data[0]?.id ?? null)
-  }, [meetings.data, selectedId])
+  }, [meetings.data, meetings.loading, selectedId])
+
+  useEffect(() => {
+    if (!openRequest) return
+    setView({ kind: "list" })
+    setSelectedId(openRequest)
+    setDetailMode("text")
+    setListRefreshKey((key) => key + 1)
+    onOpenRequestConsumed?.()
+  }, [openRequest, onOpenRequestConsumed])
 
   // 转写失败的记录默认落到文字视图：它缺的就是文字，停在语音会让用户看不到失败原因和
   // 「重试」。这里只跟「看的是哪条、什么状态」走，用户手动切回语音不会被拽回去。
@@ -76,11 +86,9 @@ export function MeetingModule() {
 
   const refreshList = useCallback(() => setListRefreshKey((key) => key + 1), [])
 
-  useTranscriptionCompletionSubscription((event) => {
+  useTranscriptionCompletionSubscription(() => {
     setListRefreshKey((key) => key + 1)
     setDetailRefreshKey((key) => key + 1)
-    if (event.status === "done") notifications.success(`${event.title} 转写已完成`)
-    else notifications.error(`${event.title} 转写失败`)
   })
 
   async function startRecording(): Promise<void> {

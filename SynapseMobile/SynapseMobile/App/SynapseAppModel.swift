@@ -349,6 +349,7 @@ final class SynapseAppModel {
     /// 直连服务端，不经过任何一台电脑——转写发生在云端，结果也在服务端，这和手机端
     /// 既有的「电脑的远程视图」定位不同，所以它不挂在 terminalStores 那一套里。
     let meetings = MeetingStore()
+    let notifications = NotificationStore()
 
     /// 正在录的那一条。
     ///
@@ -513,6 +514,7 @@ final class SynapseAppModel {
             )
         }
         await apiClient.logout()
+        notifications.clear()
         authState = .signedOut
     }
 
@@ -522,6 +524,27 @@ final class SynapseAppModel {
     /// 录音列表。转写进行中时会自己刷新到出结果为止，由调用它的视图按需重复调用。
     func reloadMeetings() async {
         await meetings.load(using: apiClient)
+    }
+
+    func reloadNotifications(filter: String = "all") async {
+        await notifications.load(using: apiClient, filter: filter)
+    }
+
+    func loadMoreNotifications() async {
+        await notifications.loadMore(using: apiClient)
+    }
+
+    func readNotification(_ id: String) async {
+        await notifications.ensure(id, using: apiClient)
+        await notifications.read(id, using: apiClient)
+    }
+
+    func readAllNotifications() async {
+        await notifications.readAll(using: apiClient)
+    }
+
+    func deleteNotification(_ id: String) async {
+        await notifications.delete(id, using: apiClient)
     }
 
     func loadMeetingDetail(_ meetingId: String) async {
@@ -612,6 +635,7 @@ final class SynapseAppModel {
 
     private func startLiveSession() async {
         await refreshDesktops()
+        await reloadNotifications()
         realtime.connect()
         #if targetEnvironment(simulator)
         // The simulator cannot obtain a real APNs token; registration is a no-op
@@ -788,8 +812,13 @@ final class SynapseAppModel {
         realtime.onGitStatus = { [weak self] payload in
             self?.gitStatus.adopt(payload)
         }
+        realtime.onNotificationChanged = { [weak self] in
+            guard let self else { return }
+            Task { await self.reloadNotifications(filter: self.notifications.filter) }
+        }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
+            Task { await self.reloadNotifications(filter: self.notifications.filter) }
             self.clearExpiredTerminalMessages()
             // The computer may have been away for days while this phone was closed;
             // anything it never acknowledged is either obsolete by now or worth one

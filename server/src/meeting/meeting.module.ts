@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common"
 import { UserAuthModule } from "../auth/user-auth.module"
 import { LiveModule } from "../live/live.module"
 import { MobileLiveModule } from "../mobile-live/mobile-live.module"
+import { NotificationModule } from "../notifications/notification.module"
 import { createMeetingConfig, meetingConfigToken } from "./meeting.config"
 import { MeetingController } from "./meeting.controller"
 import {
@@ -29,7 +30,7 @@ import { MeetingTranscriptionService } from "./meeting-transcription.service"
  * 可能抛错的副作用。所有 env 读取都放进 useFactory，等真正实例化依赖时才跑。
  */
 @Module({
-  imports: [UserAuthModule, LiveModule, MobileLiveModule],
+  imports: [UserAuthModule, LiveModule, MobileLiveModule, NotificationModule],
   controllers: [MeetingController],
   providers: [
     MeetingService,

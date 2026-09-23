@@ -235,6 +235,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(service.initialize).toHaveBeenCalledWith({
       settings,
       auditSink,
+      sync: expect.any(Function),
       adapter: expect.objectContaining({ kind: "noop" }),
     })
   })
@@ -266,6 +267,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(service.initialize).toHaveBeenCalledWith({
       settings: undefined,
       auditSink: undefined,
+      sync: expect.any(Function),
       adapter: expect.objectContaining({ kind: "noop" }),
     })
   })

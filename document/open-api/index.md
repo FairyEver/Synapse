@@ -24,6 +24,8 @@ OpenAPI 3.1 契约由服务端提供：
 
 完整示例：[获取公共链接文件](/open-api/api/share-link-download)
 
+发送消息示例：[发送通知](/open-api/api/notification-send)。此接口需要单独的 `notification.send` 权限。
+
 ## 创建 API 密钥
 
 在 Console 的“设置 > API 秘钥”中创建密钥，并选择“获取公共链接文件”。该权限对应的 scope 是：
@@ -48,12 +50,13 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 
 - API 密钥仅用于服务端、CLI 或自动化客户端。开放接口不提供浏览器跨域调用所需的 CORS。
 - API 密钥和临时下载地址均属于 bearer credential，不得写入浏览器代码、公开仓库、日志、工单或公开消息。
-- JSON 响应中的 `requestId` 与 `X-Request-Id` 响应头一致，可用于 Console 使用记录和问题排查。
-- 当前接口不设置 API 密钥、IP、次数、并发数或请求频率限制。
+- 公共链接下载响应中的 `requestId` 与 `X-Request-Id` 响应头一致，可用于 Console 使用记录和问题排查。
+- 公共链接下载接口不设置额外请求频率限制；发送通知接口每分钟最多 60 次。
 
 ## 可用 API
 
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | API 密钥与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
+| `sendNotification` | `POST` | `/notifications` | API 密钥与 `notification.send` | [发送通知](/open-api/api/notification-send) |
 | `downloadPublicLinkArtifact` | `GET` | `/downloads/{grantId}` | 创建接口返回的临时 token | [获取公共链接文件](/open-api/api/share-link-download#临时下载地址) |

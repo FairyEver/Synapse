@@ -70,7 +70,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        if notification.request.content.userInfo["notificationLevel"] as? String == "passive" {
+            return []
+        }
+        return [.banner, .sound]
     }
 
     func userNotificationCenter(
@@ -78,6 +81,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let notificationId = info["notificationId"] as? String {
+            NotificationRouter.shared.route(to: .message(id: notificationId))
+            return
+        }
         // 转写完成的通知只带一个录音号：结果在服务端，点开直接看那一段文字，不需要电脑
         // 在线，也没有要在锁屏上做的决定。
         if let meetingId = info["meetingId"] as? String {

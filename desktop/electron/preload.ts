@@ -763,6 +763,14 @@ const synapseBridge: SynapseBridge = {
     refresh: invoke(IPC_CHANNELS.account.refresh),
     logout: invoke(IPC_CHANNELS.account.logout),
     listWebhooks: invoke(IPC_CHANNELS.account.listWebhooks),
+    notifications: {
+      onChanged: createDomainEventPayloadSubscription<{ notificationId: string }>(subscribe, "account", "account.notificationChanged"),
+      list: invoke(IPC_CHANNELS.account.listNotifications),
+      count: invoke(IPC_CHANNELS.account.notificationUnreadCount),
+      read: invoke(IPC_CHANNELS.account.markNotificationRead),
+      readAll: invoke(IPC_CHANNELS.account.markAllNotificationsRead),
+      delete: invoke(IPC_CHANNELS.account.deleteNotification),
+    },
   },
   drive: {
     item: {

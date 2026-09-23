@@ -281,6 +281,35 @@ actor APIClient {
         return response.summary
     }
 
+    func listNotifications(filter: String, cursor: String? = nil) async throws -> NotificationPage {
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "filter", value: filter)]
+        if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await send(path: "/notifications?\(components.percentEncodedQuery ?? "")", method: "GET")
+    }
+
+    func notification(_ id: String) async throws -> SynapseNotification {
+        try await send(path: "/notifications/\(id)", method: "GET")
+    }
+
+    func notificationUnreadCount() async throws -> Int {
+        struct Response: Decodable { let unread: Int }
+        let response: Response = try await send(path: "/notifications/count", method: "GET")
+        return response.unread
+    }
+
+    func markNotificationRead(_ id: String) async throws {
+        let _: EmptyResponse = try await send(path: "/notifications/\(id)/read", method: "PATCH", body: EmptyBody())
+    }
+
+    func markAllNotificationsRead() async throws {
+        let _: EmptyResponse = try await send(path: "/notifications/read-all", method: "PATCH", body: EmptyBody())
+    }
+
+    func deleteNotification(_ id: String) async throws {
+        let _: EmptyResponse = try await send(path: "/notifications/\(id)", method: "DELETE")
+    }
+
     /// 平台有没有开语音识别。
     ///
     /// 这是服务端的部署事实——腾讯云密钥在服务端，不是每台设备的设置——所以麦克风

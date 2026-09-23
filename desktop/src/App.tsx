@@ -88,6 +88,7 @@ function MainApp() {
     useState<ContentOpenRequest | null>(null)
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(null)
+  const [pendingMeetingId, setPendingMeetingId] = useState<string | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(initialWorkflowEntryVisible)
   const dock = useDockPreferences({ workflowEntryVisible })
@@ -338,6 +339,10 @@ function MainApp() {
         actions={accountUiVisible ? (
           <AppShellActions
             onOpenAccountSettings={requestOpenSettingsAccount}
+            onOpenMeeting={(meetingId) => {
+              setPendingMeetingId(meetingId)
+              setActiveAppId("meeting", "notification")
+            }}
           />
         ) : null}
       >
@@ -356,6 +361,8 @@ function MainApp() {
                   pendingAgentSession={pendingAgentSession}
                   onPendingAgentSessionConsumed={handlePendingAgentSessionConsumed}
                   terminalOpenRequest={pendingTerminalOpenRequest}
+                  meetingOpenRequest={pendingMeetingId}
+                  onMeetingOpenRequestConsumed={() => setPendingMeetingId(null)}
                   onTerminalOpenRequestConsumed={(requestId) => {
                     setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
                   }}

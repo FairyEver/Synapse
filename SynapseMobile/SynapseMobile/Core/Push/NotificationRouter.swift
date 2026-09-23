@@ -17,6 +17,7 @@ final class NotificationRouter {
     enum Destination: Equatable {
         case terminal(sessionId: String, desktopClientInstanceId: String)
         case meeting(meetingId: String)
+        case message(id: String)
         /// 开始一段新录音。目前只有主屏长按图标那条快捷操作会用它。
         case newRecording
         /// 看正在录的那一条。锁屏和灵动岛上那张卡点开时用它。

@@ -64,7 +64,7 @@
 - Terminal 启动时会为 `zsh` / `bash` / `fish` 注入一段 shell 集成，让 shell 每次画提示符前上报当前目录（OSC 7），**这部分不受任何开关门控**；只影响新 PTY，用户自己的启动文件照旧被 source。Agent 原生通知的会话级 PATH shim 与官方 Hook 仍是默认关闭的设置，启用后才注入；用户别名或函数最终按 PATH 调用 `codex`、`claude` 时必须继续生效。Synapse 自己拉起的 Claude Code（新建对话、项目分组按住 ⌘ 点击、手机端）走的是内置 runtime 的绝对路径，不经 PATH shim，改由启动器把**同一份** hooks 写进它自己生成的 settings；两条路写出的 hooks 必须逐字一致，也同受总闸门控，拿不到通知服务时按不带 hooks 启动、不得因此起不来。该设置有两颗开关：总闸 `enabled` 是注入边界，`notify` 只决定弹不弹系统通知 —— 关掉后者时注入、会话档案与等待输入标记一律不变，注入边界不随它移动；拆分前落盘的记录按 `notify: true` 升级，与「开关打开就会弹」的既有行为一致。绝对路径、远程 Shell、主动重置 PATH 或 `SYNAPSE_AGENT_NOTIFICATIONS_DISABLED=1` 不承诺接入 shell 集成，这些情况由按需探测 PTY 前台进程 cwd 的兜底接住。
 - Agent Hook 只能向随机会话 token 保护的 loopback 端口上报有限事件元数据，不得上报提示词、回答、终端输出或工具参数。通知只显示 Agent 名、session 标题和状态；当前精确 session 聚焦时抑制，子 Agent 完成不得触发。同一批 Hook 事件同时驱动会话 `attention`：只在等待用户输入时写入 `waiting` 及 `approval` / `agent_question` 等 kind，用户提交提示、工具继续、中断、会话结束或用户在终端里手动输入后必须回到 `not_waiting`；该状态只含状态、kind、原因、置信度与水位，不得携带提示词、输出或工具参数。
 - Agent 会话档案（`app.terminal.agent-sessions`）的读出口只有一份白名单投影：`state` / `agentKind` / `version` / `lastActivityAt` / `stateChangedAt`，由通知服务自己投影，原始档案类型不越过服务边界，好让泄露在类型层面就写不出来。`transcriptPath` 是指向用户整段对话的指针（提示词、回答、工具调用与被读进上下文的文件内容），交给外部等于把对话内容外包一次查询；`pid` 与 agent 自己的会话 id 是宿主进程细节。三者一律不出进程，审计与日志同样不记。投影块缺席（这里从来没有 agent）与 `state: "ended"`（跑过、已退出）是两件不同的事，不得合并；判变化用 `version`，不得把该块接进 `stateRevision` 或 observe 的唤醒条件。
-- 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调或统一通知中心。除精确 session 位于当前焦点时抑制外，统一使用系统原生通知，不得改用 renderer 应用内通知。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
+- 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调。账号消息中心只收纳安全的 session 标识、标题和状态，不保存提示词、输出或工具参数；终端业务仍决定是否需要操作。精确 session 位于当前焦点时抑制本机原生横幅。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
 - 终端字符宽度表以 Claude Code 的宽度库口径（`Bun.stringWidth`，等同 `string-width` / `emoji-regex`：`Emoji` 属性码点算 2 格）为准，渲染端与主进程 headless 仿真器必须共用同一张表；改装宽度表必须同时保证 MCP 读屏与序列化恢复的换行与渲染端一致。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
 - 终端会话定位是会话级纯导航，只接受不可变 `sessionId`，并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane；会话不跨重启（ADR 0215），因此不提供任何 Deep Link，也不得扩展为命令执行或输出读取；标签级寻址由独立的 `workspace.*` 能力承担，不由这个导航入口派生。复制入口属于分屏：pane 顶栏右侧按钮组有一颗「复制引用」，整条顶栏的右键菜单（以及顶部标签菜单）里也有同一项；顶栏标题上右键不弹菜单——那条同时是拖动分屏的把手，菜单会跟拖拽抢同一个手势——双击标题重命名保持不变。产出的是五行纯文本 `key=value`：`workspace_id` 寻址它所在的标签（`workspace.*` 接受），`session_id` 寻址那个会话，两者的 `_title` 是给人认出「这是哪一格」用的（一个标签里分屏出来的几个会话，光看 id 谁也不知道读的是谁），`session_ref` 是由 `sessionId` 派生的本机短校验引用、不可反查、不被任何工具接受。复制入口的文案必须说明该引用只在本机本次运行期间有效。
@@ -90,6 +90,7 @@
 
 ### Notifier
 
+- 账号消息中心的存储、投递、保留期和隐私边界见 `docs/superpowers/specs/2026-09-23-account-notification-center-design.md`。业务模块只提供安全摘要与目标 ID，消息中心负责历史与跨端状态。
 - Sound Notifier 是声音能力包，不是 System App。
 - System Notifier 的完整权威规格是 `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`。修改前必须完整阅读，不得以本摘要代替。
 
@@ -102,6 +103,7 @@
 ## Console 用户 API 秘钥
 
 - 用户 API 秘钥只通过受登录保护的 `/api/console/api-keys` 管理；创建响应只展示一次完整秘钥，数据库只保存 SHA-256 摘要和可识别前缀，列表不得返回摘要或明文。
+- `notification.send` 是独立于 Drive 下载的权限，只允许通过 `POST /api/open/v1/notifications` 向密钥所属账号发消息；通知内容不进入访问日志。该接口不兼容 Bark URL。
 - 查询、创建、重命名、权限更新和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，审计不得包含完整秘钥、摘要或可还原材料。
 - 密钥创建时必须显式选择非空开放 API scopes；已有未撤销密钥可以原地重命名、增删或清空 scopes，但不得通过该接口轮换密钥。首个 canonical scope `drive.public_link.download` 仅授权 `/api/open/v1/drive/public-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。旧 `drive.share_link.download` 与 `/api/open/v1/drive/share-links/downloads` 只作为已发布集成的兼容入口，不再用于新密钥或新文档。
 - 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/当前 scope/用户失效会阻止新的下载。

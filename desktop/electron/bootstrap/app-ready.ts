@@ -171,7 +171,16 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       releaseClient: (mobileClientInstanceId) => mobileGateway.releaseClient(mobileClientInstanceId),
     })
     mobileGateway.setTransport({
-      sendSummary: (draft) => void liveConnectionService.sendMobileSummary(draft),
+      sendSummary: (draft) => {
+        let notificationsEnabled = true
+        try {
+          const settings = registry.get<import("../../app-capabilities/terminal/main/agent-notification-service").TerminalAgentNotificationService>("core.terminal-agent-notifications").getSettings()
+          notificationsEnabled = settings.enabled && settings.notify
+        } catch {
+          notificationsEnabled = false
+        }
+        void liveConnectionService.sendMobileSummary({ ...draft, notificationsEnabled })
+      },
       sendFrame: (mobileClientInstanceId, frame) => {
         void liveConnectionService.sendMobileFrame(mobileClientInstanceId, frame)
       },

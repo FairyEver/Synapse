@@ -404,6 +404,26 @@ describe("MobileLiveRelayService summary cache", () => {
 })
 
 describe("MobileLiveRelayService attention", () => {
+  it("does not notify when the desktop disabled terminal notifications", () => {
+    const { service, sendTerminalApproval } = createHarness()
+    service.handleSummary("user-1", { ...summary("desktop-1", [session("session-1", "waiting")]), notificationsEnabled: false })
+    expect(sendTerminalApproval).not.toHaveBeenCalled()
+  })
+
+  it("persists only safe attention metadata and resolves the pending item", () => {
+    const { service, sendTerminalApproval } = createHarness()
+    const create = vi.fn(async () => undefined)
+    const resolveAttention = vi.fn(async () => undefined)
+    service.setNotificationSink({ create, resolveAttention } as never)
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1", "waiting")]))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      source: "terminal-attention", targetId: "session-1", deviceId: "desktop-1",
+      body: "有一个终端正在等待你的操作。",
+    }))
+    expect(sendTerminalApproval).not.toHaveBeenCalled()
+    service.handleSummary("user-1", summary("desktop-1", [session("session-1", "not_waiting")]))
+    expect(resolveAttention).toHaveBeenCalledWith("user-1", "desktop-1", "session-1")
+  })
   it("notifies on a transition into waiting, and only on the transition", () => {
     const { service, sendTerminalApproval } = createHarness()
     const waiting = () => summary("desktop-1", [session("session-1", "waiting")])

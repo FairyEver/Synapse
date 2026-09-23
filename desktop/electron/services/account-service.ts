@@ -472,6 +472,50 @@ export class AccountService {
     }
   }
 
+  async listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending" }) {
+    const params = new URLSearchParams()
+    if (input.cursor) params.set("cursor", input.cursor)
+    if (input.filter) params.set("filter", input.filter)
+    const suffix = params.size ? `?${params}` : ""
+    return this.getAuthenticatedJson<import("../../src/types/notification-center").NotificationPage>(
+      `${apiBaseUrl()}/notifications${suffix}`, "消息加载失败。",
+    )
+  }
+
+  async createInternalNotification(input: {
+    source: "system-notifier" | "terminal-complete"
+    sourceKey?: string
+    title: string
+    body: string
+    targetId?: string
+    deviceId?: string
+  }): Promise<void> {
+    if (this.state.status !== "authenticated" || this.state.connectivity !== "online") return
+    await this.requestAuthenticatedJson<{ id: string }>("POST", `${apiBaseUrl()}/notifications/internal`, input, "通知同步失败。")
+  }
+
+  async getNotification(id: string) {
+    return this.getAuthenticatedJson<import("../../src/types/notification-center").SynapseNotification>(
+      `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}`, "消息加载失败。",
+    )
+  }
+
+  async notificationUnreadCount() {
+    return this.getAuthenticatedJson<{ unread: number }>(`${apiBaseUrl()}/notifications/count`, "未读数加载失败。")
+  }
+
+  async markNotificationRead(id: string) {
+    return this.requestAuthenticatedJson<{ ok: true }>("PATCH", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}/read`, undefined, "标记已读失败。")
+  }
+
+  async markAllNotificationsRead() {
+    return this.requestAuthenticatedJson<{ ok: true }>("PATCH", `${apiBaseUrl()}/notifications/read-all`, undefined, "标记已读失败。")
+  }
+
+  async deleteNotification(id: string) {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}`, undefined, "删除消息失败。")
+  }
+
   async listSkillRepositories(): Promise<SkillRepositoryItemDto[]> {
     return this.getAuthenticatedJson<SkillRepositoryItemDto[]>(
       `${apiBaseUrl()}/skill-repositories/mine`,

@@ -230,6 +230,7 @@ import { readSkillDraftFromDirectory } from "../services/content-skill-source-se
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
 import { accountService } from "../services/account-service"
+import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
 import { ClipboardSyncService, CLIPBOARD_SYNC_SERVICE_ID } from "../services/clipboard-sync-service"
@@ -858,6 +859,12 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
     )
     await service.initialize({
       settings,
+      sync: (input) => accountService.createInternalNotification({
+        source: "system-notifier",
+        title: input.title,
+        body: input.body,
+        deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
+      }),
       auditSink: optionalSystemNotifierPort(
         () => ctx.registry.get<AuditSink>("core.audit-sink"),
       ),
@@ -2060,6 +2067,14 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
       focusApp: () => app.focus({ steal: true }),
       openTerminalSession: (sessionId) => systemAppWindows.open("terminal", {
         terminalOpenRequest: { requestId: randomUUID(), sessionId },
+      }),
+      syncCompletion: (input) => accountService.createInternalNotification({
+        source: "terminal-complete",
+        sourceKey: input.sourceKey,
+        title: input.title,
+        body: input.body,
+        targetId: input.sessionId,
+        deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
       }),
       setSessionAttention: (update) => ctx.registry
         .get<TerminalService>("core.terminal")

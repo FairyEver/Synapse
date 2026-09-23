@@ -49,6 +49,11 @@ describe("ApiKeyController", () => {
       name: "获取公共链接文件",
       description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
       documentationUrl: "http://localhost:19773/document/open-api/api/share-link-download",
+    }, {
+      scope: "notification.send",
+      name: "发送通知",
+      description: "允许通过开放接口向账号设备发送通知。",
+      documentationUrl: "http://localhost:19773/document/open-api/api/notification-send",
     }])
     await expect(controller.create({ name: " CLI ", scopes: ["drive.public_link.download"] }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },

@@ -4,6 +4,7 @@ import UserNotifications
 enum Route: Hashable {
     case terminal(String)
     case meeting(String)
+    case message(String)
 }
 
 struct RootView: View {
@@ -80,9 +81,8 @@ struct RootView: View {
             )
             model.handleScenePhase(phase == .active)
         }
-        .onChange(of: model.waitingSessions.count) { _, count in
-            // Surface waiting work on the tab even when the user is elsewhere.
-            let badge = (count > 0 && selectedTab != .inbox) ? count : 0
+        .onChange(of: model.notifications.unreadCount) { _, count in
+            let badge = count
             Task {
                 // Setting the badge needs no permission, but it does need the user to
                 // have granted notifications at all. This app treats push as best
@@ -112,11 +112,11 @@ struct RootView: View {
             NavigationStack(path: $inboxPath) {
                 // No path binding: the inbox's rows are `NavigationLink`s, which append
                 // to the stack on their own.
-                InboxView()
+                InboxView(path: $inboxPath)
                     .navigationDestination(for: Route.self, destination: destination)
             }
-            .tabItem { Label("需要我", systemImage: "exclamationmark.circle") }
-            .badge(model.waitingSessions.count)
+            .tabItem { Label("消息", systemImage: "bell") }
+            .badge(model.notifications.unreadCount)
             .tag(Tab.inbox)
 
             NavigationStack(path: $settingsPath) {
@@ -134,6 +134,8 @@ struct RootView: View {
             TerminalScreen(sessionId: sessionId)
         case .meeting(let meetingId):
             MeetingDetailView(meetingId: meetingId)
+        case .message(let id):
+            NotificationDetailView(id: id)
         }
     }
 
@@ -157,6 +159,12 @@ struct RootView: View {
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
             selectedTab = .meetings
             meetingPath = [.meeting(meetingId)]
+        case .message(let id):
+            selectedTab = .inbox
+            Task {
+                await model.reloadNotifications()
+                inboxPath = [.message(id)]
+            }
         case .newRecording:
             // 主屏长按图标那一条。先把人带到录音 Tab，再让录音页自己浮出来——否则
             // 用户看到的是一片别的界面盖着一张录音页，退出之后不知道自己回到了哪。

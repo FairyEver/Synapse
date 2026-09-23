@@ -611,6 +611,7 @@ export interface MobileSummarySession {
 export interface MobileSummaryPayload {
   readonly desktopClientInstanceId: string
   readonly desktopName: string
+  readonly notificationsEnabled?: boolean
   readonly revision: number
   readonly groups: readonly MobileSummaryGroup[]
   /**
@@ -1254,6 +1255,7 @@ export function isMobileSummaryPayload(value: unknown): value is MobileSummaryPa
   if (!isRecord(value)) return false
   if (!boundedString(value.desktopClientInstanceId, 120)) return false
   if (!boundedString(value.desktopName, 120)) return false
+  if (value.notificationsEnabled !== undefined && typeof value.notificationsEnabled !== "boolean") return false
   if (!nonNegativeInteger(value.revision)) return false
   if (!boundedArray(value.groups, MOBILE_FRAME_LIMITS.maxSummaryGroups)) return false
   if (!boundedArray(value.sessions, MOBILE_FRAME_LIMITS.maxSummarySessions)) return false

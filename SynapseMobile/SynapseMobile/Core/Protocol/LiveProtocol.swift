@@ -18,6 +18,7 @@ enum LiveMessageType {
     static let mobileTransferProgress = "mobile.transferProgress"
     static let mobileDetached = "mobile.detached"
     static let mobilePresence = "mobile.presence"
+    static let notificationChanged = "notification.changed"
     /// The command buttons a computer offers this phone. A family of its own rather
     /// than part of the summary, whose byte budget cannot carry them.
     static let mobileToolbar = "mobile.toolbar"
