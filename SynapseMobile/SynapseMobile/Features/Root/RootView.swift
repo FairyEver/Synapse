@@ -110,9 +110,9 @@ struct RootView: View {
             .tag(Tab.meetings)
 
             NavigationStack(path: $inboxPath) {
-                // No path binding: the inbox's rows are `NavigationLink`s, which append
-                // to the stack on their own.
-                InboxView(path: $inboxPath)
+                // 不把 path 交给它：这一屏的行都是 `NavigationLink`，自己就会往栈上
+                // 追加。`inboxPath` 仍然绑在栈上，因为消息推送要把人直接送进详情。
+                InboxView()
                     .navigationDestination(for: Route.self, destination: destination)
             }
             .tabItem { Label("消息", systemImage: "bell") }

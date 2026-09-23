@@ -432,7 +432,7 @@ struct SessionRow: View {
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(relativeTime)
+                        Text(session.elapsedLabel)
                             .font(.caption2)
                             // `.secondary`, not `.tertiary`: at this size tertiary
                             // measured 2.11:1 on the light background, well under the
@@ -468,17 +468,22 @@ struct SessionRow: View {
         }
     }
 
-    private var relativeTime: String {
-        guard let started = session.startedAtDate else { return "" }
+}
+
+extension MobileSummarySession {
+    /// 这条会话已经跑了多久，粗到「多久」这一档就够。
+    ///
+    /// 放在这里而不是留在 `SessionRow` 里：「消息」那一屏的待处理行说的是同一件事
+    /// （那是一条会话，不是一条消息），两处各写一遍的话，改了一处另一处就不会跟着改。
+    var elapsedLabel: String {
+        guard let started = startedAtDate else { return "" }
         let seconds = Int(Date().timeIntervalSince(started))
         if seconds < 60 { return "\(seconds) 秒" }
         if seconds < 3600 { return "\(seconds / 60) 分" }
         if seconds < 86_400 { return "\(seconds / 3600) 小时" }
         return "\(seconds / 86_400) 天"
     }
-}
 
-extension MobileSummarySession {
     /// The row's third line: the terminal's last readable output, or a space when
     /// it has nothing readable on screen.
     ///
