@@ -939,7 +939,15 @@ export class MobileGatewayService {
    *
    * 骑在摘要那个 1 Hz 的 tick 上，而不是给命令的增删改挂监听器：终端事件发射器已经
    * 到了 Node 的监听器上限，这张名单不许再长（见 `start()` 那条注释）。代价是一秒一次
-   * 的字符串比较，换来的是「电脑上改完命令，约一秒内手机就看到」。
+   * 的字符串比较。
+   *
+   * 那个 tick **不是常驻的** —— `flushSummary` 结束时不重新武装计时器，
+   * `SUMMARY_INTERVAL_MS` 只表示「有终端在打字时 1 Hz」。所以电脑上改完命令之后：有
+   * 任何终端正在输出，约一秒内手机就看到；桌面完全空闲，则要等到下一次 `sync`（手机
+   * 重连）、`attach`（在手机上打开一个终端），或那台电脑上任何终端再打出一行。
+   *
+   * 这个空窗是接受的，与 `flushToolbar` 那条注释里的空窗同源，代价比它更小：手机拿不到
+   * 新命令时，分组行只是没有箭头，点一下仍然直接建终端。
    */
   private flushGroupCommands(): void {
     const transport = this.transport
@@ -986,14 +994,19 @@ export class MobileGatewayService {
     const kept: { groupId: string; commands: MobileGroupCommand[] }[] = []
     for (const entry of entries) {
       const target = { groupId: entry.groupId, commands: [] as MobileGroupCommand[] }
+      // 这一组有没有命令放不下；整组被丢空也算截断了。
+      let truncated = false
       for (const command of entry.commands) {
         target.commands.push(command)
         if (Buffer.byteLength(JSON.stringify([...kept, target]), "utf8") <= budget) continue
         target.commands.pop()
+        truncated = true
         break
       }
       if (target.commands.length > 0) kept.push(target)
-      else break
+      // 放不下的命令之后**整个列表**都到此为止，不只是这一组：外层跟着停，与
+      // `fitToolbarToBudget` 那一个 `break` 同形。整组都放得下的分组不算截断，列表继续。
+      if (truncated) break
     }
     return kept
   }

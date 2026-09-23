@@ -2091,6 +2091,45 @@ describe("MobileGatewayService", () => {
     }
   })
 
+  it("stops at the first command that does not fit, rather than filling the rest with a later group", async () => {
+    /*
+     * 「第一条放不下的命令之后的一切都不发」里的**一切**包括后面的分组：一条命令放不
+     * 下就结束整份列表，与 `fitToolbarToBudget` 那一个 `break` 同形，不做「跳过大的、
+     * 塞进后面小的」这种聪明事 —— 那会让被丢掉的是哪些命令取决于预算还剩多少字节，而
+     * 谁都不知道自己在列表的哪一段（分组行上因此会少掉箭头，且少掉的是哪一行说不清）。
+     *
+     * 夹具得让「截断之后剩下的余量」真的装得下 `g-late`，否则跳过那条命令也就顺带放不
+     * 下它，两种写法碰巧同形，用例什么也没钉住。命令是 106 字节一条的网格，`g-first`
+     * 里那条 16 字符的填充把截断点顶到「还剩 100 字节」，而 `g-late` 只要 63 字节。
+     */
+    const harness = createHarness()
+    const name = "n".repeat(MOBILE_FRAME_LIMITS.maxGroupCommandNameLength)
+    harness.terminal.mobileGroupCommands = [
+      {
+        groupId: "g-first",
+        commands: [{ id: "keep", name }, { id: "pad", name: "p".repeat(16) }],
+      },
+      {
+        groupId: "g-big",
+        commands: Array.from({ length: 601 }, (_value, index) => ({
+          id: `cmd-${String(index).padStart(3, "0")}`,
+          name,
+        })),
+      },
+      { groupId: "g-late", commands: [{ id: "late", name: "Codex" }] },
+    ]
+
+    await harness.timers.advance(1_000)
+
+    const sent = harness.groupCommands.at(-1)?.groups ?? []
+    // 截断发生在 `g-big` 里面，于是列表就停在它这里；`g-first` 整组放得下，照常保留。
+    expect(sent.map((entry) => entry.groupId)).toEqual(["g-first", "g-big"])
+    expect(sent.at(-1)?.commands.length).toBeGreaterThan(0)
+    expect(Buffer.byteLength(JSON.stringify(sent), "utf8")).toBeLessThanOrEqual(
+      MOBILE_FRAME_LIMITS.maxGroupCommandsBytes - 1_024,
+    )
+  })
+
   /*
    * The 快捷输入 sentences are the third payload family out of this gateway, and they
    * fail differently from the other two: a toolbar that goes missing leaves a phone
