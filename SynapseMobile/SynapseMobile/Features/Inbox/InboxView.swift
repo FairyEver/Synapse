@@ -2,13 +2,15 @@ import SwiftUI
 
 /// 消息。
 ///
-/// 筛选栏是列表**上方一条独立的带子**，不是列表里的一行。
+/// 筛选栏是列表里**自己一行**：这一行清了底色，于是它不成卡片，只在页面底色上占一条
+/// 带子，和下面那张卡片之间隔着这条带子自己的留白。分段控件切换的是这一屏的**子视图**
+/// （HIG：closely related subviews），它和它切换的内容在视觉上必须看得出是两件事。
 ///
-/// 它原来是一个 `.listRowBackground(Color.clear)` 的 `List` 行——底色清了，行的位置
-/// 还在，于是 `insetGrouped` 照常按行给它留地方，它和下面那张卡片之间一点间距都没有，
-/// 顶上的灰色控件和底下的白色卡片贴在一起，看上去像同一块东西从中间断开。分段控件
-/// 切换的是这一屏的**子视图**（HIG：closely related subviews），它和它切换的内容
-/// 在视觉上必须看得出是两件事。
+/// 它一度是列表让出来的顶边安全区（`.safeAreaInset(edge: .top)`）。带子是钉住了，代价
+/// 是这一屏的**大标题跟着没了**：导航栏照旧给标题留着那一段高度，标题却一个字都不画，
+/// 左上角整片空白。顶在滚动视图上的那条 inset 被系统算进了滚动距离，大标题按「已经滚
+/// 上去了」淡到全透明，而栏本身还没到该收起的阈值，于是连内联标题也不出现。终端和录音
+/// 那两屏没有这条带子，标题都好好的——标题比钉住重要，带子回到列表里。
 struct InboxView: View {
     @Environment(SynapseAppModel.self) private var model
     @State private var filter = "pending"
@@ -23,38 +25,34 @@ struct InboxView: View {
                 }
             }
 
-            if filter == "pending" {
-                ForEach(model.waitingSessions) { session in
-                    NavigationLink(value: Route.terminal(session.id)) {
-                        WaitingSessionRow(session: session)
+            // 筛选带子在这一段里排头。它占着这一段的第一个位置，于是分段控件和下面那
+            // 张卡片之间的距离就是这一行自己的下边距——不用去猜两段之间隔了多少。
+            Section {
+                filterBar
+
+                if filter == "pending" {
+                    ForEach(model.waitingSessions) { session in
+                        NavigationLink(value: Route.terminal(session.id)) {
+                            WaitingSessionRow(session: session)
+                        }
                     }
-                }
-            } else {
-                Section {
+                } else {
                     ForEach(visibleItems) { item in
                         notificationRow(item)
                     }
                 }
-                // 「加载更多」自己占一段。留在消息那一段里的话，它清掉底色会在
-                // 卡片上戳出一个洞——最后一行下面的圆角是画在这一行身上的，
-                // 而这一行是透明的。
-                if model.notifications.nextCursor != nil {
-                    Section { loadMoreRow }
-                }
+            }
+
+            // 「加载更多」自己占一段。留在消息那一段里的话，它清掉底色会在卡片上戳出
+            // 一个洞——最后一行下面的圆角是画在这一行身上的，而这一行是透明的。
+            if filter != "pending" && model.notifications.nextCursor != nil {
+                Section { loadMoreRow }
             }
         }
         .listStyle(.insetGrouped)
         // 空态铺在列表上，铺的是 `List` 本身，不铺那条筛选带子——带子在这一屏的
         // 哪一档下都在，它不是内容，是控制。
         .overlay { emptyState }
-        // 筛选带子是列表自己让出来的一条安全区，不是塞在列表外面的一个兄弟节点。
-        //
-        // `safeAreaInset` 而不是把 `List` 包进 `VStack`：包起来之后 `List` 就不再是
-        // `NavigationStack` 的直接内容了，大标题该不该收起、iOS 26 的滚动边缘效果出
-        // 不出来，都会变成「系统能不能在容器里摸到那个滚动视图」的问题。让 `List`
-        // 留在原地，带子由平台让出来。`RootView` 里那条录音胶囊是同一个机制，理由
-        // 也是同一句话：带子要占自己的一条，不是盖在别人身上。
-        .safeAreaInset(edge: .top, spacing: 0) { filterBar }
         .refreshable {
             if filter == "pending" { await model.refreshDesktops() }
             else { await model.reloadNotifications(filter: filter) }
@@ -72,10 +70,11 @@ struct InboxView: View {
         .noticeOverlay(model)
     }
 
-    /// 分段控件自己占一条带子。
+    /// 分段控件占列表的一行，行的底色清掉。
     ///
-    /// 底色取 `systemGroupedBackground`——正是 `insetGrouped` 列表的页面底色。带子和
-    /// 它下面的卡片因此分得开，又仍然属于同一屏，不会变成第三条视觉通道。
+    /// 清了底色它就不是卡片，只是一条页面底色的带子；左右不另留边距，控件因此和下面
+    /// 那张卡片同宽。上下各 8 是这条带子自己的留白，也是它和卡片之间全部的间距。行下
+    /// 的那条分隔线也去掉：带子不是一条内容行，不该在结尾处横一道。
     private var filterBar: some View {
         Picker("筛选", selection: $filter) {
             Text("待处理").tag("pending")
@@ -83,9 +82,9 @@ struct InboxView: View {
             Text("未读").tag("unread")
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color(.systemGroupedBackground))
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     /// 「未读」是这一屏唯一的客户端筛选。服务端也认 `filter=unread`，而列表里拿到的
