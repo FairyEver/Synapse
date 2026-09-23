@@ -120,6 +120,9 @@ final class AgentConversationUITests: XCTestCase {
     /// The terminal segment is unchanged on purpose, and this is what "unchanged" means:
     /// tapping a group creates a terminal, with no button to confirm it first. It grew a
     /// search box, which shortens the list and decides nothing — see the assertions below.
+    ///
+    /// 「点分组即建」现在只对**没配快捷命令**的分组成立：配了命令的分组右侧有箭头，
+    /// 点进去先选命令。这里量的是没配的那些今天的样子，所以它在两种账号下都还成立。
     func testLeavesTheTerminalSegmentAlone() throws {
         let app = launch()
 
@@ -157,6 +160,45 @@ final class AgentConversationUITests: XCTestCase {
         // 清掉搜索，分组要回来：筛得下去也要回得来。
         search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: miss.count))
         XCTAssertTrue(waitForCount(groups, found), "清掉搜索以后分组没有回来")
+    }
+
+    /// 给分组配了快捷命令的电脑上，终端分组那一段会长出第二层：行右一个箭头，点进去是
+    /// 命令列表，列表底部永远有一条「直接新建终端」。
+    ///
+    /// 一条命令都没配的账号跑不了这个用例 —— 有没有配是用户自己的数据，测试造不出来，
+    /// 所以这里以跳过说明，而不是把电脑上的东西改掉。
+    func testRunsASavedCommandFromThePanel() throws {
+        let app = launch()
+
+        app.buttons["new-session"].tap()
+        XCTAssertTrue(segments(in: app)["项目"].waitForExistence(timeout: 10), "the panel never appeared")
+        segments(in: app)["终端分组"].tap()
+
+        let groups = app.buttons.matching(identifier: "terminal-group")
+        XCTAssertGreaterThan(groups.count, 0, "the terminal segment lost its group list")
+        groups.firstMatch.tap()
+
+        // 第一个分组没配命令时它会直接建终端 —— 那正是「没命令的分组一点即建」，本用例
+        // 要验的是另一条路，所以跳过并说清缺什么。
+        let plain = app.buttons["terminal-group-command-none"]
+        guard plain.waitForExistence(timeout: 10) else {
+            throw XCTSkip("这个账号的第一个分组没有配快捷命令；在电脑上给任意分组加一条命令后重跑")
+        }
+        capture(app, name: "06-group-command-list")
+
+        // 命令列表：至少一条命令，加底部那条「直接新建终端」。
+        let commands = app.buttons.matching(identifier: "terminal-group-command")
+        XCTAssertGreaterThan(commands.count, 0, "进了命令列表却没有命令")
+        XCTAssertTrue(plain.isHittable, "「直接新建终端」不在列表底部")
+
+        // 点一条命令：面板关掉，落到一个终端上 —— 与「开始对话」落的是同一屏。
+        let name = commands.firstMatch.staticTexts.firstMatch.label
+        XCTAssertFalse(name.isEmpty, "命令没有名字")
+        commands.firstMatch.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 30),
+            "点了命令没有落到终端上（命令：\(name)）"
+        )
     }
 
     // MARK: - Helpers

@@ -23,11 +23,15 @@ private enum NewSessionSegment: String, CaseIterable, Identifiable {
     }
 }
 
-/// The rows in the conversation segment that open a list of their own.
+/// 面板里那些「点了会打开另一屏」的行。
+///
+/// 前三条在「项目」段里，最后一条在「终端分组」段里：配了启动命令的分组点进去先选命令，
+/// 而不是当场建终端。
 private enum AgentRowRoute: Hashable {
     case project
     case provider
     case model
+    case groupCommands(groupId: String)
 }
 
 /// Creating a terminal, running a saved command, or starting a Claude Code conversation.
@@ -42,6 +46,8 @@ struct NewSessionSheet: View {
 
     /// A terminal was created in this group. The sheet is already gone by the time it runs.
     let onCreated: (String) -> Void
+    /// 电脑在这个分组里跑了一条保存的命令，并开了终端。面板这时已经不在了。
+    let onCommandLaunched: (String, String) -> Void
     /// A Claude Code conversation came up on the computer, with this session id.
     let onConversationStarted: (String) -> Void
 
@@ -56,6 +62,12 @@ struct NewSessionSheet: View {
     @State private var projectSearch = ""
     @State private var providerSearch = ""
     @State private var groupSearch = ""
+    /// 点了之后要做完的事，由根视图执行 —— 见 `finish`。
+    @State private var pending: Pending?
+    private enum Pending: Equatable {
+        case created(groupId: String)
+        case command(groupId: String, commandId: String)
+    }
 
     private var selection: AgentConversationSelection {
         resolveAgentConversationSelection(
@@ -103,6 +115,24 @@ struct NewSessionSheet: View {
                 case .project: projectPicker
                 case .provider: providerPicker
                 case .model: modelPicker
+                case .groupCommands(let groupId): groupCommandList(groupId: groupId)
+                }
+            }
+            // 收尾统一在根视图做，而不是在点了的那一行里做。命令列表是下钻进来的一屏，
+            // 在下钻的子页里调 `dismiss()` 有可能只把那一屏弹掉、面板还开着 —— 那样
+            // 点了命令就什么都不会发生，而且屏幕上没有任何东西说明为什么。
+            //
+            // 两条路（建普通终端、跑一条命令）在这里合流，触感与关闭顺序也就只有一处。
+            .onChange(of: pending) { _, finish in
+                guard let finish else { return }
+                pending = nil
+                Haptics.commit()
+                dismiss()
+                switch finish {
+                case .created(let groupId):
+                    onCreated(groupId)
+                case .command(let groupId, let commandId):
+                    onCommandLaunched(groupId, commandId)
                 }
             }
             .toolbar {
@@ -324,10 +354,12 @@ struct NewSessionSheet: View {
 
     // MARK: - Terminal
 
-    /// Unchanged on purpose. A terminal group has no default worth guessing, so tapping
-    /// one creating a terminal immediately is the whole interaction — a confirm button
-    /// here would be friction with nothing behind it. The two segments differing is a
-    /// decision, not an oversight.
+    /// 有命令的分组点进去先选命令，没有的仍然是一点即建。
+    ///
+    /// 箭头只在真的还有一层的时候出现（与 `SessionListView` 里那条「the chevron and the
+    /// tap target appear exactly when they mean」同一条口径），所以没配命令的分组与今天
+    /// 逐像素一致：点一下建终端，没有第二屏。两种分组背后都没有确认按钮：终端分组没有
+    /// 值得猜的默认值，多点一次只是没有来由的摩擦 —— 两段长得不一样是决定，不是疏忽。
     ///
     /// 搜索不改变这一点：分组多起来以后，项目、供应商能搜而分组不能搜才是说不过去的
     /// 那个。搜索只是把列表缩短，点了仍然立刻建终端。
@@ -336,14 +368,22 @@ struct NewSessionSheet: View {
         Section {
             ForEach(matchingGroups) { group in
                 Button {
-                    // This row has no confirm button behind it (see the comment above),
-                    // so the tap is the whole decision and is worth the weight of one.
-                    Haptics.commit()
-                    dismiss()
-                    onCreated(group.id)
+                    if model.hasGroupCommands(group.id) {
+                        path.append(.groupCommands(groupId: group.id))
+                    } else {
+                        pending = .created(groupId: group.id)
+                    }
                 } label: {
-                    Text(group.name)
-                        .font(.subheadline)
+                    HStack {
+                        Text(group.name)
+                            .font(.subheadline)
+                        if model.hasGroupCommands(group.id) {
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.forward")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
                 // 一段里的每一行都是分组。测试靠它只数这一段的行——弹层背后那条会话
                 // 列表和这里同在一棵树里，数 cell 会把那边的行一起数进来。
@@ -368,6 +408,40 @@ struct NewSessionSheet: View {
     }
 
     private var allGroups: [MobileSummaryGroup] { model.summary?.groups ?? [] }
+
+    /// 一个分组里保存的启动命令，外加一条「不带命令直接建终端」。
+    ///
+    /// 这一屏只在下钻时出现。标题用分组名而不是「命令」：它要回答的是「建在哪个分组里」，
+    /// 标题丢了这条信息，就会有人建错地方。
+    private func groupCommandList(groupId: String) -> some View {
+        List {
+            Section {
+                ForEach(model.groupCommands(for: groupId)) { command in
+                    Button {
+                        pending = .command(groupId: groupId, commandId: command.id)
+                    } label: {
+                        Text(command.name)
+                            .font(.subheadline)
+                    }
+                    .accessibilityIdentifier("terminal-group-command")
+                }
+            }
+            // 单独一段，而且永远在最后：它不是一条命令，是「哪条都别跑」。混在命令中间会
+            // 被读成其中一条。
+            Section {
+                Button {
+                    pending = .created(groupId: groupId)
+                } label: {
+                    Text("直接新建终端")
+                        .font(.subheadline)
+                }
+                .accessibilityIdentifier("terminal-group-command-none")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle(allGroups.first { $0.id == groupId }?.name ?? "命令")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 
     /// 行上只写着分组名，所以按名字筛 —— 读者看得见什么就搜得到什么。
     private var matchingGroups: [MobileSummaryGroup] {

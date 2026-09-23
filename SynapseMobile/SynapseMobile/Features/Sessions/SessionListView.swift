@@ -93,6 +93,16 @@ struct SessionListView: View {
                         }
                     }
                 },
+                onCommandLaunched: { groupId, commandId in
+                    // 与普通终端落的是同一屏：在协议上它就是同一个东西 —— 一个终端，
+                    // 附带一条启动命令。失败落 banner（见 `performReturningSession`），
+                    // 与建普通终端今天的行为一致。
+                    Task {
+                        if let created = await model.launchCommand(groupId: groupId, commandId: commandId) {
+                            openNewlyCreated(created)
+                        }
+                    }
+                },
                 onConversationStarted: { sessionId in
                     // The computer made this terminal at the phone's request, so the
                     // phone sizes it — the same landing as creating a plain terminal,
