@@ -26,7 +26,7 @@ Claude Code receives a temporary merged settings file containing equivalent Hook
 
 That merge happens in the wrapper, which only runs for a hand-typed `claude`. A Claude Code session Synapse starts itself (new conversation, ⌘-click on a project group, mobile) launches the bundled runtime by absolute path and never touches the shim, so the launcher writes the same Hooks into the settings file it already generates for that session, under the same `__synapse` marker. Both writers must produce byte-identical Hooks — the event list has one definition, and a test compares the wrapper's merged output against the launcher's settings directly. The launcher's injection is gated by the same master switch and, when the notification service cannot be resolved, the session starts without Hooks rather than not at all. `SYNAPSE_AGENT_NOTIFICATIONS_DISABLED` stays a shim-path affordance: the launcher decides before the session's resolved environment exists, so the setting is the control for that path.
 
-OSC 9, 99, and 777 remain a generic completion fallback. Hook and OSC events for the same session and state are deduplicated.
+OSC 9, 99, and 777 remain a generic completion fallback, and "fallback" is meant literally: a session whose agent has reported through its own Hooks has a primary channel, so its OSC completions are ignored outright. This is what keeps an unrelated OSC sequence in the terminal (a progress convention, say) from raising a completion for an agent that never signalled one. Hook and OSC events for the same session and state are additionally deduplicated within a short window, keyed by session and kind.
 
 ## Private event ingress
 
@@ -40,7 +40,7 @@ Filesystem writes, listener creation, and notification triggering pass through `
 
 ## Notification policy
 
-Top-level permission requests and question/plan-exit tools map to “需要你的操作”. A top-level stop maps to “任务已完成”. Subagent events are ignored. New user input clears waiting state.
+Top-level permission requests and question/plan-exit tools map to “需要你的操作”. A top-level stop maps to “任务已完成”. An idle prompt — the agent reporting that it finished and has been waiting on you since — maps to its own wording, “还在等你”: it arrives after the completion notification, and sharing that sentence would read as the same notification firing twice. Subagent events are ignored. New user input clears waiting state.
 
 The notification contains only the Agent product name, sanitized session title, and mapped status. It is suppressed only when the exact session is active in the currently focused renderer. Otherwise it always uses the native notification adapter, including when another Synapse window, System App, or pane is focused. The native notification object remains alive until close or click.
 

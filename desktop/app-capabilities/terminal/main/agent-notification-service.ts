@@ -62,12 +62,25 @@ const AGENT_TRANSCRIPT_STALE_MS = 10 * 60_000
 
 type AgentProvider = "codex" | "claude"
 type AgentNotificationKind = "needs_action" | "completed"
+/**
+ * 同一个 kind 下需要不同说法的细分。
+ *
+ * `idle_prompt` 不是「它在问你」，而是「它跑完了、一直没等到你」——和一分钟前那条「任务已完成」
+ * 共用一句会让用户以为同一条通知弹了两次，所以它有自己的文案。
+ */
+type AgentNotificationVariant = "idle"
 
 type SessionBinding = {
   readonly sessionId: string
   readonly token: string
   title: string
   waiting: boolean
+  /**
+   * 这个会话的 agent 有没有真的通过自己的 hooks 报过事件。
+   *
+   * OSC 只是兜底，兜的是「主通道没搭上」——一旦 agent 自己在说话，它就没有立足之地了。
+   */
+  agentHookSeen: boolean
 }
 
 export type TerminalAgentLaunchIntegration = {
@@ -406,6 +419,7 @@ export class TerminalAgentNotificationService {
         token,
         title: input.title,
         waiting: false,
+        agentHookSeen: false,
       }
       this.sessionsByToken.set(token, session)
       this.sessionTokens.set(input.sessionId, token)
@@ -532,7 +546,8 @@ export class TerminalAgentNotificationService {
 
   handleOscNotification(sessionId: string): void {
     const session = this.getSessionBinding(sessionId)
-    if (session && !session.waiting) void this.notify(session, "completed", "terminal")
+    if (!session || session.agentHookSeen || session.waiting) return
+    void this.notify(session, "completed", "terminal")
   }
 
   /**
@@ -664,6 +679,13 @@ export class TerminalAgentNotificationService {
   }
 
   private async handleAgentEvent(session: SessionBinding, payload: AgentEventPayload): Promise<void> {
+    /*
+     * 从这一刻起，OSC 兜底对这个会话闭嘴：agent 自己在通过 hooks 说话，兜底没有立足之地。
+     *
+     * `AgentProcessStart` 不算数 —— 那是 wrapper 自己报的，只证明 shim 跑起来了，不证明 agent 的
+     * hooks 通得了（用户可能关掉了自己的 hooks，或者压根没信任 Codex Hook）。兜底要救的正是后一种。
+     */
+    if (payload.event !== "AgentProcessStart") session.agentHookSeen = true
     if (payload.agentId || payload.parentSessionId || payload.event === "SubagentStop") return
     // 档案先于通知推进：通知是提示，档案是事实，而两者由同一批事件驱动。子 agent 的事件
     // 在两个地方都提前返回，父级状态不会被它带动。
@@ -718,7 +740,12 @@ export class TerminalAgentNotificationService {
         kind: payload.notificationType === "permission_prompt" ? "approval" : "agent_question",
         reason: `agent_notification_${payload.notificationType ?? "unspecified"}`,
       })
-      await this.notify(session, "needs_action", payload.source)
+      await this.notify(
+        session,
+        "needs_action",
+        payload.source,
+        payload.notificationType === "idle_prompt" ? "idle" : undefined,
+      )
       return
     }
     if (payload.event === "Stop") {
@@ -762,6 +789,7 @@ export class TerminalAgentNotificationService {
     session: SessionBinding,
     kind: AgentNotificationKind,
     provider: AgentProvider | "terminal",
+    variant?: AgentNotificationVariant,
   ): Promise<void> {
     /*
      * 「不弹系统通知」在这里短路。状态与 attention 在上游就已经更新完了，通知是整条链路唯一
@@ -804,7 +832,7 @@ export class TerminalAgentNotificationService {
     try {
       const notification = this.deps.createNotification({
         title,
-        body: kind === "needs_action" ? `“${sessionTitle}”需要你的操作` : `“${sessionTitle}”任务已完成`,
+        body: agentNotificationBody(kind, sessionTitle, variant),
       })
       if (!notification) {
         this.recordNotificationAudit(resource, provider, kind, "allowed")
@@ -1010,6 +1038,17 @@ function isQuestionTool(source: AgentProvider, toolName: string | undefined): bo
 
 function isActionNotification(type: string | undefined): boolean {
   return type === undefined || ["permission_prompt", "idle_prompt", "elicitation_dialog"].includes(type)
+}
+
+/** 通知正文：只出现 Agent 名、会话标题和状态，一句说清。 */
+function agentNotificationBody(
+  kind: AgentNotificationKind,
+  sessionTitle: string,
+  variant?: AgentNotificationVariant,
+): string {
+  if (kind === "completed") return `“${sessionTitle}”任务已完成`
+  if (variant === "idle") return `“${sessionTitle}”还在等你`
+  return `“${sessionTitle}”需要你的操作`
 }
 
 function sanitizeSessionTitle(value: string): string {

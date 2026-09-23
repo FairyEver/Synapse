@@ -136,6 +136,65 @@ describe("TerminalAgentNotificationService", () => {
     await fixture.service.stop()
   })
 
+  it("gives an idle agent its own wording instead of repeating the action prompt", async () => {
+    // CC 跑完约一分钟、你一直没理它时会自己发 idle_prompt。它和「需要你的操作」不是一回事：
+    // 一个是「还在等你」，一个是「正等你回答」。共用一句会让用户以为同一条通知弹了两次。
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "brick-lab",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    await postEvent(launch.env, { source: "claude", event: "Notification", notificationType: "idle_prompt" })
+
+    expect(fixture.notifications.map((notification) => notification.input)).toEqual([
+      { title: "Claude Code", body: "“brick-lab”还在等你" },
+    ])
+    // 改的是说法，不是语义：它仍然处于「等你」的等待态。
+    expect(fixture.service.getAgentStateView(sessionId)?.state).toBe("needs_input")
+    await fixture.service.stop()
+  })
+
+  it("treats OSC as a fallback only while no agent hook has reported", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const fallbackOnly = "2c8d1f04-6a3b-4c9e-9f27-5b8a1d0c3e77"
+    const hooked = "9e4b7a12-3d5c-4f80-b6a1-7c2e9d4f5a38"
+    const a = fixture.service.prepareSession({
+      sessionId: fallbackOnly,
+      title: "fallback",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+    const b = fixture.service.prepareSession({
+      sessionId: hooked,
+      title: "hooked",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    // 给 B 一条**不弹通知**的 hook 事件。这里不能用 `Stop`：那会占掉 `${sessionId}:completed`
+    // 的 2 秒去重额度，断言就会变成「去重生效」而不是「兜底已经闭嘴」。
+    await postEvent(b.env, { source: "claude", event: "UserPromptSubmit" })
+
+    fixture.service.handleOscNotification(fallbackOnly)
+    fixture.service.handleOscNotification(hooked)
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+
+    expect(fixture.notifications.map((notification) => notification.input.body))
+      .toEqual(["“fallback”任务已完成"])
+    await fixture.service.stop()
+  })
+
   it("counts the OSC fallback and the stop hook as the same completion", async () => {
     // 同一次完成可能两条路都到（hook 的 Stop 与程序自己发的 OSC 9），它们必须共用一次额度。
     const fixture = await createFixture()
