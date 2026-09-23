@@ -955,13 +955,15 @@ git commit -m "feat: 刚连上手机的分组命令列表随 sync 与打开终�
 ### Task 5: 服务端转发
 
 **Files:**
-- Modify: `server/src/live/live-desktop.gateway.ts:90` 附近（handler 接口）、`:765` 附近（分发）
+- Modify: `server/src/live/live-desktop.gateway.ts:90` 附近（handler 接口）、`:542-549`（**消息类型白名单**）、`:765` 附近（分发）
 - Modify: `server/src/mobile-live/mobile-live-relay.service.ts:89`（handler 装配）、`:252-255`（新方法）
 - Test: `server/src/mobile-live/mobile-live-relay.service.spec.ts`、`server/src/live/live-desktop.gateway.spec.ts`
 
 **Interfaces:**
 - Consumes: Task 1 的 `MobileGroupCommandsPayload` / `LIVE_MESSAGE_TYPES.mobileGroupCommands`
 - Produces: `LiveMobileRelayHandler.handleGroupCommands(userId: string, payload: MobileGroupCommandsPayload): void`、`MobileLiveRelayService.handleGroupCommands(userId, payload): void`
+
+> **这里有两处要改，不是一处。** `live-desktop.gateway.ts` 的消息处理是一个白名单（`:542-549`）**加**一个分发链（`:750-781`）：类型不在白名单里根本进不了分发，会掉到后面的 pong 分支被无声丢掉 —— 那段代码自己的注释就写着「A type missing from this list is not relayed at all… which is why every phone-side family has to be named here as well as in `handleMobileRelayMessage`」。只改分发链的话，测试与真机都会表现为「什么都没发生」，且没有任何日志。
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -1090,6 +1092,14 @@ Expected: FAIL —— `service.handleGroupCommands is not a function`。
         return
       }
 ```
+
+**还有那处白名单**（`:542-549`）—— 在 `mobileGitStatus` 那一行之后加一个分支，写法照它上面的八行：
+
+```ts
+        || message.type === LIVE_MESSAGE_TYPES.mobileGroupCommands
+```
+
+改完这两个地方都别再动：白名单决定消息能不能进分发，分发决定它交给谁。
 
 `server/src/mobile-live/mobile-live-relay.service.ts`：handler 装配里 `handleToolbar`（`:93`）之后加：
 
