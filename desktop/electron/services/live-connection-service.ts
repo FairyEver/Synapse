@@ -18,6 +18,7 @@ import { createMainLogger } from "./log-store"
 import type {
   MobileClipboardDraft,
   MobileGitStatusDraft,
+  MobileGroupCommandsDraft,
   MobileIntentHandler,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
@@ -487,6 +488,22 @@ export class LiveConnectionService {
     if (!clientInstanceId) return
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, {
+      desktopClientInstanceId: clientInstanceId,
+      ...draft,
+    }, this.envelopeMetadata()))
+  }
+
+  /**
+   * 电脑上那些配了启动命令的分组，发给它的手机。
+   *
+   * 没有身份就丢掉这条消息，理由与上面几条相同：手机按哪台电脑归档，说不清自己是谁的
+   * 一条只会在手机上落进「没有」。
+   */
+  async sendMobileGroupCommands(draft: MobileGroupCommandsDraft): Promise<void> {
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileGroupCommands, {
       desktopClientInstanceId: clientInstanceId,
       ...draft,
     }, this.envelopeMetadata()))

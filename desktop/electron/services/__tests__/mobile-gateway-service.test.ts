@@ -5,6 +5,7 @@ import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { isMobileSummaryPayload, MOBILE_FRAME_LIMITS } from "@synapse/shared"
 import type {
+  MobileGroupCommandsEntry,
   MobileIntent,
   MobileQuickPhrase,
   MobileTerminalFrame,
@@ -33,6 +34,7 @@ import type {
   MobileClipboardDraft,
   MobileGatewayTransport,
   MobileGitStatusDraft,
+  MobileGroupCommandsDraft,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
   MobileToolbarDraft,
@@ -132,6 +134,18 @@ class FakeTerminal {
   listMobileToolbarButtons(): readonly MobileToolbarButton[] {
     this.calls.push("listMobileToolbarButtons")
     return this.mobileToolbarButtons
+  }
+
+  /**
+   * 手机要的那份分组命令列表，由能力侧投影好。可变，好让用例改了之后看网关认不认。
+   */
+  mobileGroupCommands: readonly MobileGroupCommandsEntry[] = [
+    { groupId: "g1", commands: [{ id: "c1", name: "Claude" }] },
+  ]
+
+  listMobileGroupCommands(): readonly MobileGroupCommandsEntry[] {
+    this.calls.push("listMobileGroupCommands")
+    return this.mobileGroupCommands
   }
 
   listSessions(): FakeSession[] {
@@ -525,6 +539,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
   const quickPhrases: MobileQuickPhrasesDraft[] = []
   const clipboards: MobileClipboardDraft[] = []
   const gitStatuses: MobileGitStatusDraft[] = []
+  const groupCommands: MobileGroupCommandsDraft[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
     // The transport is handed the frame already serialized — the very bytes the uplink
@@ -543,6 +558,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
     sendQuickPhrases: (draft) => quickPhrases.push(draft),
     sendClipboard: (draft) => clipboards.push(draft),
     sendGitStatus: (draft) => gitStatuses.push(draft),
+    sendGroupCommands: (draft) => groupCommands.push(draft),
   }
   const audits: unknown[] = []
   const warns: { message: string; meta?: Record<string, unknown> }[] = []
@@ -675,7 +691,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits, toolbars,
     quickPhrases, quickPhraseItems, listQuickPhrases,
-    clipboards, clipboardEntries, listClipboard, gitStatuses, terminalGit,
+    clipboards, clipboardEntries, listClipboard, gitStatuses, groupCommands, terminalGit,
     permissionGuard, fileRelay, landings, discarded, progress, warns, infos,
     launches, createClaudeCodeConversation, agentGroups, agentProviders,
     listAgentConversationGroups, listAgentConversationProviders,
@@ -1962,6 +1978,117 @@ describe("MobileGatewayService", () => {
 
     expect(harness.summaries.length).toBeGreaterThan(summariesAfterSync)
     expect(harness.toolbars).toHaveLength(toolbarsAfterSync)
+  })
+
+  it("sends the group command list without anyone asking, and only when it changes", async () => {
+    /*
+     * 这条列表搭的是摘要那个 1 Hz 的 tick —— 终端事件发射器已经到了 Node 的监听器
+     * 上限，不许再挂监听器。于是「改了命令手机多久看到」就等于这个 tick 的周期，
+     * 而这一条同时是它的代价上限：什么都没变时一个字节都不发。
+     *
+     * 这个 tick 不会自己重来：`scheduleSummary` 是一次性的，真机上靠终端每输出一个
+     * chunk 的 `stateChanged` 重新武装（见「监听器预算」那组里同一条注释）。所以这里
+     * 照同样的方式把一个个 tick 造出来 —— 「什么都没变就一个字节都不发」这条断言，
+     * 只有在真的发生过 tick 时才说得通。
+     */
+    const harness = createHarness()
+    /** 一个 tick：终端输出一个 chunk，再走完这一秒。 */
+    const tick = async (): Promise<void> => {
+      harness.terminal.events.emit("stateChanged", { sessionId: "sess-1", changeTypes: ["output"] })
+      await harness.timers.advance(1_000)
+    }
+
+    await tick()
+
+    expect(harness.groupCommands).toHaveLength(1)
+    expect(harness.groupCommands[0]?.groups).toEqual([
+      { groupId: "g1", commands: [{ id: "c1", name: "Claude" }] },
+    ])
+
+    // 没有变化：接下来的 tick 一条都不发。
+    await tick()
+    await tick()
+    await tick()
+    expect(harness.groupCommands).toHaveLength(1)
+
+    // 电脑上改了命令，下一个 tick 就带出去 —— 指纹比的是内容，不是版本号。
+    harness.terminal.mobileGroupCommands = [
+      ...harness.terminal.mobileGroupCommands,
+      { groupId: "g2", commands: [{ id: "c2", name: "Codex" }] },
+    ]
+    await tick()
+
+    expect(harness.groupCommands).toHaveLength(2)
+    expect(harness.groupCommands.at(-1)?.groups.map((entry) => entry.groupId)).toEqual(["g1", "g2"])
+
+    // 一个分组都没配：发一份空列表，而不是沉默。沉默在手机上等于「这台电脑太旧」，
+    // 与「它就是没配」在界面上的表现虽然一样，但在协议上是两回事。
+    harness.terminal.mobileGroupCommands = []
+    await tick()
+    expect(harness.groupCommands.at(-1)?.groups).toEqual([])
+  })
+
+  it("keeps the group command fingerprint separate from the summary's", async () => {
+    // 摘要有输出时一秒一变，而分组命令只在用户改命令时变。共用一个指纹，等于每有一个
+    // 终端打出新行就重发一遍这份列表。
+    const harness = createHarness()
+    await harness.timers.advance(1_000)
+    const afterFirst = harness.groupCommands.length
+    const readsAfterFirst = harness.terminal.calls.filter((call) => call === "listMobileGroupCommands").length
+
+    // 真机上「有输出」是这两个事件一起发的：`data` 安排帧的 flush，`stateChanged`
+    // 重新武装摘要那一个 tick。少了后面这一个，下面的沉默只是因为根本没有 tick。
+    harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+    harness.terminal.events.emit("stateChanged", { sessionId: "sess-1", changeTypes: ["output"] })
+    await harness.timers.advance(3_000)
+
+    // 先证明那个 tick 真的来过，再断言它在分组命令上没有产生任何一条消息。
+    expect(harness.terminal.calls.filter((call) => call === "listMobileGroupCommands").length)
+      .toBeGreaterThan(readsAfterFirst)
+    expect(harness.groupCommands).toHaveLength(afterFirst)
+  })
+
+  it("drops whole commands, and then whole groups, when the list would not fit", async () => {
+    /*
+     * 上界是 64 KiB 减信封余量，真实账号远到不了（那要四百多条命令行）。这条用例要钉
+     * 的是裁剪的**规则**而不是它的触发条件：丢掉的是整条命令，绝不发半条；一个分组被
+     * 丢空就连它一起去掉 —— 不然手机那边会出现一个带箭头的空列表。
+     *
+     * 一份放到最大的列表是 128 个分组各带 64 条命令（约 1.2 MiB），所以这里用 20 个
+     * 这样的分组（约 195 KiB）就足以越过 63 KiB 的线，同时不让用例跑得太久。
+     */
+    const harness = createHarness()
+    const name = "n".repeat(MOBILE_FRAME_LIMITS.maxGroupCommandNameLength)
+    const commands = Array.from({ length: MOBILE_FRAME_LIMITS.maxGroupCommandsPerGroup }, (_value, index) => ({
+      id: `c${index}`,
+      name,
+    }))
+    harness.terminal.mobileGroupCommands = [
+      { groupId: "g-first", commands: [{ id: "keep", name: "Claude" }] },
+      ...Array.from({ length: 20 }, (_value, index) => ({ groupId: `g-big-${index}`, commands })),
+      { groupId: "g-last", commands: [{ id: "also-keep", name: "Codex" }] },
+    ]
+
+    await harness.timers.advance(1_000)
+
+    const sent = harness.groupCommands.at(-1)?.groups ?? []
+    const serialized = Buffer.byteLength(JSON.stringify(sent), "utf8")
+    expect(serialized).toBeLessThanOrEqual(
+      MOBILE_FRAME_LIMITS.maxGroupCommandsBytes - 1_024,
+    )
+    // 第一条命令留着；越过预算之后的一切都不发（尾部整段丢，与 `fitToolbarToBudget`
+    // 同一条规则）；一条命令要么整条在，要么不在。
+    expect(sent[0]).toEqual({ groupId: "g-first", commands: [{ id: "keep", name: "Claude" }] })
+    expect(sent.length).toBeGreaterThan(1)
+    expect(sent.length).toBeLessThan(21)
+    expect(sent.map((entry) => entry.groupId)).not.toContain("g-last")
+    for (const entry of sent) {
+      expect(entry.commands.length).toBeGreaterThan(0)
+      for (const command of entry.commands) {
+        expect(Object.keys(command)).toEqual(["id", "name"])
+        expect(command.name.length).toBeLessThanOrEqual(MOBILE_FRAME_LIMITS.maxGroupCommandNameLength)
+      }
+    }
   })
 
   /*

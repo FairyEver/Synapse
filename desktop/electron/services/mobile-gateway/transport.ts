@@ -1,6 +1,7 @@
 import type {
   MobileClipboardPayload,
   MobileGitStatusPayload,
+  MobileGroupCommandsPayload,
   MobileIntent,
   MobileIntentResult,
   MobileQuickPhrasesPayload,
@@ -23,6 +24,14 @@ export type MobileSummaryDraft = Omit<MobileSummaryPayload, "desktopClientInstan
  * be a second source of truth for an id the connection already owns.
  */
 export type MobileToolbarDraft = Omit<MobileToolbarPayload, "desktopClientInstanceId">
+
+/**
+ * 分组命令列表，减去电脑身份，理由与上面几条相同。
+ *
+ * 手机按哪台电脑归档一份列表，所以发送者必须在消息上；而这个网关不知道自己的 id ——
+ * 那是持有套接字的连接才知道的事。
+ */
+export type MobileGroupCommandsDraft = Omit<MobileGroupCommandsPayload, "desktopClientInstanceId">
 
 /** The 快捷输入 sentences, minus the identity, for the same reason. */
 export type MobileQuickPhrasesDraft = Omit<MobileQuickPhrasesPayload, "desktopClientInstanceId">
@@ -72,6 +81,14 @@ export type MobileGatewayTransport = {
    * waiting for the next one.
    */
   readonly sendToolbar: (draft: MobileToolbarDraft) => void
+  /**
+   * 分组里配了哪些启动命令，手机据此决定分组行上画不画箭头。
+   *
+   * 与工具栏同一条规则：整份快照，从不发增量 —— 手机用它替换自己那份，所以丢一条只
+   * 等于等下一个。与它分开是因为来源不同：这份说的是「新建面板里的分组」，那块界面
+   * 与工具栏上的按钮无关。
+   */
+  readonly sendGroupCommands: (draft: MobileGroupCommandsDraft) => void
   /**
    * The 快捷输入 sentences this computer keeps, for its phones to tap into a
    * composer.

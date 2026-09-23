@@ -1,6 +1,8 @@
 import { MOBILE_FRAME_LIMITS } from "@synapse/shared/mobile-live-constants"
 import type {
   MobileGitStatus,
+  MobileGroupCommand,
+  MobileGroupCommandsEntry,
   MobileIntent,
   MobileIntentResult,
   MobileModelTier,
@@ -87,6 +89,9 @@ export const MOBILE_AGENT_DIRECTORY_CACHE_MS = 15_000
  * budget and the socket underneath it — see `maxToolbarBytes`.
  */
 const TOOLBAR_ENVELOPE_ALLOWANCE_BYTES = 1_024
+
+/** 同 `TOOLBAR_ENVELOPE_ALLOWANCE_BYTES`：给信封与字段名留的余量。 */
+const GROUP_COMMANDS_ENVELOPE_ALLOWANCE_BYTES = 1_024
 
 /** The same slack, on the same terms, for the 快捷输入 payload. */
 const QUICK_PHRASES_ENVELOPE_ALLOWANCE_BYTES = 1_024
@@ -282,6 +287,15 @@ export class MobileGatewayService {
    */
   private toolbarRevision = 0
   private lastToolbarContent = ""
+  /**
+   * 分组命令列表的指纹，与上面那个分开。
+   *
+   * 分开的理由是它们的**变更时机**不同：按钮只在用户改工具栏时变，而这一份只在用户
+   * 改分组命令时变，两者互不相干。共用一个指纹会让任何一次工具栏编辑顺带重发一遍
+   * 分组命令，反之亦然。
+   */
+  private groupCommandsRevision = 0
+  private lastGroupCommandsContent = ""
   /**
    * Fingerprint of the last 快捷输入 list sent, kept apart from both of the above.
    *
@@ -919,6 +933,71 @@ export class MobileGatewayService {
     return kept
   }
 
+  /**
+   * Sends the group command list in the same shape as everything else here: a full
+   * snapshot, fingerprinted so an idle desktop produces no traffic.
+   *
+   * 骑在摘要那个 1 Hz 的 tick 上，而不是给命令的增删改挂监听器：终端事件发射器已经
+   * 到了 Node 的监听器上限，这张名单不许再长（见 `start()` 那条注释）。代价是一秒一次
+   * 的字符串比较，换来的是「电脑上改完命令，约一秒内手机就看到」。
+   */
+  private flushGroupCommands(): void {
+    const transport = this.transport
+    if (!transport) return
+    try {
+      const groups = this.fitGroupCommandsToBudget(this.terminal.listMobileGroupCommands())
+      // Compared without the revision, so an unchanged list produces nothing at all.
+      const serialized = JSON.stringify(groups)
+      if (serialized === this.lastGroupCommandsContent) return
+      this.lastGroupCommandsContent = serialized
+      this.groupCommandsRevision += 1
+      transport.sendGroupCommands({ revision: this.groupCommandsRevision, groups })
+    } catch (error) {
+      // 一份拿不到的分组命令列表，只意味着新建面板上的分组行没有箭头 —— 点一下照样
+      // 能建终端，那是这条路上真正要紧的部分。
+      this.logWarn("Mobile group command flush failed.", error)
+    }
+  }
+
+  /** Sends even when nothing changed, for a caller that has nothing yet. */
+  private resendGroupCommands(): void {
+    this.lastGroupCommandsContent = ""
+    this.flushGroupCommands()
+  }
+
+  /**
+   * 从尾部整条丢命令，直到这份列表放得下 `maxGroupCommandsBytes`。
+   *
+   * 丢整条而不是把一条命令截一半：半条命令在手机上是一条「本该在、却不在」的选项，
+   * 而它出现在哪个分组、叫什么名字都是确定的事实 —— 没有半个名字这种东西。
+   * 一个分组被丢空就连它一起去掉：留着它会在手机上画出一个点开是空列表的箭头。
+   *
+   * 第一条放不下的命令之后的一切都不发，与 `fitToolbarToBudget` 的 `break` 同一条
+   * 规则 —— 不做「跳过大的、塞进后面小的」这种聪明事：那会让被丢掉的东西取决于预算
+   * 还剩多少字节，而谁都不知道自己在列表的哪一段。
+   *
+   * 真实账号到不了这里（64 KiB 约合四百多条命令行），它存在是为了那种不是的账号：
+   * 宁可少几条命令，不可丢连接。
+   */
+  private fitGroupCommandsToBudget(
+    entries: readonly MobileGroupCommandsEntry[],
+  ): readonly MobileGroupCommandsEntry[] {
+    const budget = MOBILE_FRAME_LIMITS.maxGroupCommandsBytes - GROUP_COMMANDS_ENVELOPE_ALLOWANCE_BYTES
+    const kept: { groupId: string; commands: MobileGroupCommand[] }[] = []
+    for (const entry of entries) {
+      const target = { groupId: entry.groupId, commands: [] as MobileGroupCommand[] }
+      for (const command of entry.commands) {
+        target.commands.push(command)
+        if (Buffer.byteLength(JSON.stringify([...kept, target]), "utf8") <= budget) continue
+        target.commands.pop()
+        break
+      }
+      if (target.commands.length > 0) kept.push(target)
+      else break
+    }
+    return kept
+  }
+
   private async flushSummary(): Promise<void> {
     const transport = this.transport
     if (!transport) return
@@ -926,6 +1005,8 @@ export class MobileGatewayService {
     // event emitter is at Node's default limit of ten listeners and this list is not
     // allowed to grow. See the note on `start()`.
     this.flushToolbar()
+    // 同样骑在这个 tick 上，理由见 `flushToolbar` 与 `flushGitStatus`。
+    this.flushGroupCommands()
     // Piggy-backed on this tick rather than on a listener of its own — see `flushGitStatus`.
     void this.flushGitStatus()
     try {

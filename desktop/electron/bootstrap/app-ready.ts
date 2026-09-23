@@ -191,6 +191,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
         void liveConnectionService.sendMobileTransferProgress(payload)
       },
       sendToolbar: (draft) => void liveConnectionService.sendMobileToolbar(draft),
+      sendGroupCommands: (draft) => void liveConnectionService.sendMobileGroupCommands(draft),
       sendQuickPhrases: (draft) => void liveConnectionService.sendMobileQuickPhrases(draft),
       sendClipboard: (draft) => void liveConnectionService.sendMobileClipboard(draft),
       sendGitStatus: (draft) => void liveConnectionService.sendMobileGitStatus(draft),
