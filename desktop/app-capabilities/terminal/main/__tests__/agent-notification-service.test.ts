@@ -116,6 +116,47 @@ describe("TerminalAgentNotificationService", () => {
     await fixture.service.stop()
   })
 
+  it("raises one completion notification when the same stop is delivered twice", async () => {
+    // hook 被送达两次（wrapper 与 launcher 各注册一份、或同一份被读两遍）时不能弹两条。
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const launch = fixture.service.prepareSession({
+      sessionId: "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f",
+      title: "brick-lab",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    await postEvent(launch.env, { source: "claude", event: "Stop" })
+    await postEvent(launch.env, { source: "claude", event: "Stop" })
+    await postEvent(launch.env, { source: "codex", event: "Stop" })
+    expect(fixture.notifications).toHaveLength(1)
+    await fixture.service.stop()
+  })
+
+  it("counts the OSC fallback and the stop hook as the same completion", async () => {
+    // 同一次完成可能两条路都到（hook 的 Stop 与程序自己发的 OSC 9），它们必须共用一次额度。
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "brick-lab",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    await postEvent(launch.env, { source: "claude", event: "Stop" })
+    fixture.service.handleOscNotification(sessionId)
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+    expect(fixture.notifications).toHaveLength(1)
+    await fixture.service.stop()
+  })
+
   it("maps Claude questions and top-level completion but ignores subagent completion", async () => {
     const fixture = await createFixture()
     await fixture.service.start()
