@@ -93,8 +93,42 @@ struct RootView: View {
         }
     }
 
+    /// 底栏点的是「回这一屏」，不是「切到这一屏」。
+    ///
+    /// `TabView` 自己不做这件事：点当前选中的那一项，`selectedTab` 没有变化，栈也不动，
+    /// 于是停在「消息」的通知详情里、停在某个终端会话里点底栏，看上去像没反应。要的是
+    /// 系统那种语义——再点一次当前项，把这一条栈整个弹掉，回到这一屏的根。
+    ///
+    /// 重按没有「值变了」可以观察（`onChange` 收不到），唯一能收到这次点击的地方就是
+    /// 这条绑定的 setter：系统照常把选中的那一项写回来，写的还是同一个值。所以值变了
+    /// 就往 `selectedTab` 上落，值没变就是重按。
+    ///
+    /// 从别的 Tab 切回来不算重按，栈照旧留着——换 Tab 保留原来的位置是系统本来的语义，
+    /// 和重按是两件事。
+    private var tabSelection: Binding<Tab> {
+        Binding(
+            get: { selectedTab },
+            set: { tab in
+                if tab == selectedTab {
+                    popToRoot(tab)
+                } else {
+                    selectedTab = tab
+                }
+            }
+        )
+    }
+
+    private func popToRoot(_ tab: Tab) {
+        switch tab {
+        case .terminals: terminalPath = []
+        case .meetings: meetingPath = []
+        case .inbox: inboxPath = []
+        case .settings: settingsPath = []
+        }
+    }
+
     private var tabs: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             NavigationStack(path: $terminalPath) {
                 SessionListView(path: $terminalPath)
                     .navigationDestination(for: Route.self, destination: destination)
