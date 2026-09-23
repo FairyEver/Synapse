@@ -29,9 +29,10 @@ const bridgeState = vi.hoisted(() => ({
     updatedAt: "2026-08-08T00:00:00.000Z",
   } as SynapseTerminalGlobalLaunchSettings,
   agentNotifications: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "default",
     enabled: false,
+    notify: true,
     revision: 1,
     updatedAt: "2026-08-08T00:00:00.000Z",
   } as SynapseTerminalAgentNotificationSettings,
@@ -119,10 +120,13 @@ const terminalBridge = vi.hoisted(() => ({
     return bridgeState.globalLaunch
   }),
   getAgentNotificationSettings: vi.fn(async () => bridgeState.agentNotifications),
-  updateAgentNotificationSettings: vi.fn(async ({ enabled, expectedRevision }: { enabled: boolean; expectedRevision: number }) => {
+  updateAgentNotificationSettings: vi.fn(async (
+    { enabled, notify, expectedRevision }: { enabled?: boolean; notify?: boolean; expectedRevision: number },
+  ) => {
     bridgeState.agentNotifications = {
       ...bridgeState.agentNotifications,
-      enabled,
+      ...(enabled === undefined ? {} : { enabled }),
+      ...(notify === undefined ? {} : { notify }),
       revision: expectedRevision + 1,
       updatedAt: "2026-08-08T00:01:00.000Z",
     }
@@ -889,9 +893,10 @@ beforeEach(() => {
   window.localStorage.clear()
   bridgeState.globalLaunch = { revision: 1, updatedAt: "2026-08-08T00:00:00.000Z" }
   bridgeState.agentNotifications = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "default",
     enabled: false,
+    notify: true,
     revision: 1,
     updatedAt: "2026-08-08T00:00:00.000Z",
   }
@@ -1722,6 +1727,28 @@ describe("TerminalModule", () => {
 
     expect(terminalBridge.updateAgentNotificationSettings).toHaveBeenCalledWith({
       enabled: true,
+      expectedRevision: 1,
+    })
+  })
+
+  it("silences system notifications without turning the state recording off", async () => {
+    await renderEmbeddedModule()
+
+    await clickButton("设置")
+    await selectTab("通知")
+    const enableSwitch = document.querySelector<HTMLButtonElement>("#terminal-agent-notifications")
+    const notifySwitch = document.querySelector<HTMLButtonElement>("#terminal-agent-notifications-notify")
+    expect(notifySwitch).not.toBeNull()
+    // 子开关跟在总闸后面：总闸没开时它是禁用的。
+    expect(notifySwitch?.disabled).toBe(true)
+    await act(async () => enableSwitch?.click())
+    expect(notifySwitch?.disabled).toBe(false)
+    await act(async () => notifySwitch?.click())
+    await clickButton("保存")
+
+    expect(terminalBridge.updateAgentNotificationSettings).toHaveBeenCalledWith({
+      enabled: true,
+      notify: false,
       expectedRevision: 1,
     })
   })

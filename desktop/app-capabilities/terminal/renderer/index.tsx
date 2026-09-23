@@ -160,6 +160,7 @@ export function TerminalModule({
   const [globalLaunchSettings, setGlobalLaunchSettings] = useState<SynapseTerminalGlobalLaunchSettings | null>(null)
   const [agentNotificationSettings, setAgentNotificationSettings] = useState<SynapseTerminalAgentNotificationSettings | null>(null)
   const [agentNotificationsEnabledDraft, setAgentNotificationsEnabledDraft] = useState(false)
+  const [agentNotificationsNotifyDraft, setAgentNotificationsNotifyDraft] = useState(true)
   const [globalLaunchDraft, setGlobalLaunchDraft] = useState<SynapseTerminalLaunchLayer>({})
   const [terminalAppearanceSize, setTerminalAppearanceSize] = useState(readTerminalAppearanceSize)
   const [terminalAppearanceSizeDraft, setTerminalAppearanceSizeDraft] = useState(terminalAppearanceSize)
@@ -306,6 +307,7 @@ export function TerminalModule({
       JSON.stringify(globalLaunchDraft) !== JSON.stringify(globalLaunchSettings?.settings ?? {})
       || terminalAppearanceSizeDraft !== terminalAppearanceSize
       || agentNotificationsEnabledDraft !== agentNotificationSettings?.enabled
+      || agentNotificationsNotifyDraft !== agentNotificationSettings?.notify
     )
   const groupSettingsDirty = Boolean(groupSettingsTarget) && (
     groupSettingsName !== groupSettingsTarget?.name
@@ -530,6 +532,7 @@ export function TerminalModule({
       setGlobalLaunchDraft(launchSettings.settings ?? {})
       setAgentNotificationSettings(notificationSettings)
       setAgentNotificationsEnabledDraft(notificationSettings.enabled)
+      setAgentNotificationsNotifyDraft(notificationSettings.notify)
       setTerminalAppearanceSizeDraft(terminalAppearanceSize)
       setGlobalSettingsOpen(true)
     } catch (error) {
@@ -560,8 +563,11 @@ export function TerminalModule({
     try {
       const launchSettingsChanged = JSON.stringify(globalLaunchDraft)
         !== JSON.stringify(globalLaunchSettings.settings ?? {})
-      const notificationSettingsChanged = agentNotificationsEnabledDraft
+      const notificationEnabledChanged = agentNotificationsEnabledDraft
         !== agentNotificationSettings.enabled
+      const notificationNotifyChanged = agentNotificationsNotifyDraft
+        !== agentNotificationSettings.notify
+      const notificationSettingsChanged = notificationEnabledChanged || notificationNotifyChanged
       const [updatedLaunch, updatedNotifications] = await runTrackedOperation(
         { component: "terminal", eventKey: "terminal.settings.update" },
         () => Promise.all([
@@ -573,7 +579,8 @@ export function TerminalModule({
             : Promise.resolve(globalLaunchSettings),
           notificationSettingsChanged
             ? terminalBridge.agentNotifications.update({
-                enabled: agentNotificationsEnabledDraft,
+                ...(notificationEnabledChanged ? { enabled: agentNotificationsEnabledDraft } : {}),
+                ...(notificationNotifyChanged ? { notify: agentNotificationsNotifyDraft } : {}),
                 expectedRevision: agentNotificationSettings.revision,
               })
             : Promise.resolve(agentNotificationSettings),
@@ -595,6 +602,7 @@ export function TerminalModule({
         setGlobalLaunchDraft(launchSettings.settings ?? {})
         setAgentNotificationSettings(notificationSettings)
         setAgentNotificationsEnabledDraft(notificationSettings.enabled)
+        setAgentNotificationsNotifyDraft(notificationSettings.notify)
       } catch (reloadError) {
         logger.warn("Failed to reload terminal settings after save failure.", reloadError)
       }
@@ -608,6 +616,7 @@ export function TerminalModule({
   }, [
     agentNotificationSettings,
     agentNotificationsEnabledDraft,
+    agentNotificationsNotifyDraft,
     globalLaunchDraft,
     globalLaunchSettings,
     terminalAppearanceSizeDraft,
@@ -1905,6 +1914,8 @@ export function TerminalModule({
                   onAppearanceSizeChange={setTerminalAppearanceSizeDraft}
                   agentNotificationsEnabled={agentNotificationsEnabledDraft}
                   onAgentNotificationsEnabledChange={setAgentNotificationsEnabledDraft}
+                  agentNotificationsNotify={agentNotificationsNotifyDraft}
+                  onAgentNotificationsNotifyChange={setAgentNotificationsNotifyDraft}
                 />
               </ScrollArea>
             </DialogFrameBody>

@@ -140,7 +140,14 @@ function quoteShell(value) {
 
 function codexArgs(args) {
   const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "Stop", "Interrupt", "SessionEnd"]
-  const injected = ["--enable", "hooks"]
+  /*
+   * 打开 hooks 用的是 -c features.hooks=true，而不是等价的 --enable hooks：codex 拿 feature
+   * 名单校验 --enable，名单里没有的名字会让进程以 rc=1 拒绝启动（Unknown feature flag），
+   * 所以 feature 一旦被 codex 改名或移除，用户敲 codex 就起不来了（plugin_hooks 已经从名单里
+   * 移除过）。-c 是原始配置覆盖，未知键按 TOML 宽容处理；codex 自己声明两者等价
+   * （--enable <FEATURE> 等同 -c features.<name>=true），语义不变，但不会伤到用户的工具。
+   */
+  const injected = ["-c", "features.hooks=true"]
   for (const event of events) {
     const command = JSON.stringify(hookCommand("codex", event))
     injected.push("-c", "hooks." + event + "=[{ hooks = [{ type = \"command\", command = " + command + ", timeout = 5, async = true }] }]")

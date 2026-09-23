@@ -34,7 +34,10 @@ import {
   type TerminalAgentNotificationSettings,
   type TerminalAgentSessionRecord,
 } from "../../../../app-capabilities/terminal/shared/schema"
-import type { NamespaceSchema } from "../types"
+import type { JsonFileEnvelope } from "../backends/json"
+import { isEnvelopeShape } from "../envelope"
+import { migration } from "../migrations"
+import type { Migration, NamespaceSchema } from "../types"
 
 const terminalBlockManifestEntrySchema = z.object({
   schemaVersion: z.literal(1),
@@ -76,18 +79,96 @@ export type TerminalToolbarActionsEntry = z.infer<typeof terminalToolbarActionsE
 
 const noMigrations = [] as const
 
+/**
+ * v1 的通知设置：只有一颗总开关。
+ *
+ * v2 把它拆成「记录状态」与「弹系统通知」两颗，所以升级时补一个 `notify: true` —— 那正是
+ * 老记录里「打开开关就会弹通知」的既有行为，用户不会因为一次升级发现通知不弹了。
+ */
+export interface TerminalAgentNotificationSettingsEntryV1 extends Record<string, unknown> {
+  schemaVersion: 1
+  id: "default"
+  enabled: boolean
+  revision: number
+  updatedAt: string
+}
+
+export type TerminalAgentNotificationSettingsEntryV2 = TerminalAgentNotificationSettings
+
+const terminalAgentNotificationSettingsEntryV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.literal("default"),
+  enabled: z.boolean(),
+  revision: z.number().int().positive(),
+  updatedAt: z.string().datetime(),
+}).strict()
+
+function isTerminalAgentNotificationSettingsEntryV1(
+  value: unknown,
+): value is TerminalAgentNotificationSettingsEntryV1 {
+  return terminalAgentNotificationSettingsEntryV1Schema.safeParse(value).success
+}
+
+function migrateTerminalAgentNotificationSettingsEntryV1ToV2(
+  data: TerminalAgentNotificationSettingsEntryV1,
+): TerminalAgentNotificationSettingsEntryV2 {
+  return {
+    schemaVersion: 2,
+    id: "default",
+    enabled: data.enabled,
+    notify: true,
+    revision: data.revision,
+    updatedAt: data.updatedAt,
+  }
+}
+
+const terminalAgentNotificationSettingsMigrations: readonly Migration[] = [
+  migration<TerminalAgentNotificationSettingsEntryV1, TerminalAgentNotificationSettingsEntryV2>(
+    1,
+    2,
+    migrateTerminalAgentNotificationSettingsEntryV1ToV2,
+  ),
+]
+
+/**
+ * 老文件的读取升级。
+ *
+ * 这个命名空间没有 revive 入口时，`JsonNamespace` 只做信封形状检查，落盘的东西直接交给
+ * `validate`（`literal(2)` + `.strict()`）—— 那样一台机器上曾经开过通知的 v1 文件会让
+ * `getSingleton()` 抛 `InvalidNamespaceDataError`，而服务读设置没有兜底，等于把服务启动打挂。
+ */
+export function reviveTerminalAgentNotificationSettingsEnvelope(
+  raw: unknown,
+): JsonFileEnvelope<TerminalAgentNotificationSettingsEntryV2> | null {
+  if (!isEnvelopeShape<Record<string, unknown>>(raw)) return null
+  if (raw.schemaVersion === 2) return raw as JsonFileEnvelope<TerminalAgentNotificationSettingsEntryV2>
+
+  if (raw.schemaVersion === 1) {
+    const singleton = raw.singleton
+    if (singleton !== null && !isTerminalAgentNotificationSettingsEntryV1(singleton)) return null
+    return {
+      schemaVersion: 2,
+      singleton: singleton ? migrateTerminalAgentNotificationSettingsEntryV1ToV2(singleton) : null,
+      items: {},
+    }
+  }
+
+  return null
+}
+
 export const terminalAgentNotificationSettingsSchemaDefinition: NamespaceSchema<TerminalAgentNotificationSettings> = {
   name: "app.terminal.agent-notification-settings",
   backend: "json",
-  currentVersion: 1,
-  migrations: noMigrations,
+  currentVersion: 2,
+  migrations: terminalAgentNotificationSettingsMigrations,
   encrypted: false,
   validate: (value): value is TerminalAgentNotificationSettings =>
     terminalAgentNotificationSettingsSchema.safeParse(value).success,
   defaults: () => ({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "default",
     enabled: false,
+    notify: true,
     revision: 1,
     updatedAt: new Date(0).toISOString(),
   }),

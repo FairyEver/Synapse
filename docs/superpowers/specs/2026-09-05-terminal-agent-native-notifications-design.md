@@ -8,7 +8,9 @@ This is a Terminal-owned interactive notification feature. It is not a notificat
 
 ## Opt-in and launch boundary
 
-The setting is off by default, stored in `app.terminal.agent-notification-settings`, exposed only in Terminal's global settings, and applies only to newly created PTYs.
+The settings are off by default, stored in `app.terminal.agent-notification-settings`, exposed only in Terminal's global settings, and apply only to newly created PTYs.
+
+The single opt-in carries two switches. `enabled` is the injection boundary described below. `notify` only decides whether a mapped event raises a native notification; with it off, the session archive, the waiting-input attention state, and everything the sidebar, mobile, and MCP read from them stay exactly as they were. Splitting them changes no injection boundary — a session with notifications on and `notify` off is injected exactly like one that also pops. Records written before this split are upgraded on read with `notify: true`, which is what "the switch is on" used to mean.
 
 When enabled, Terminal prepends a private shim directory to the session PATH and re-prepends it after supported local shell profiles load. The shims wrap only session-starting invocations of `codex` and `claude`, find the real executable outside the shim directory, and preserve arguments, stdio, exit code, and signals. Aliases and shell functions such as `CX=codex` or `CC=claude` work when their final command lookup uses PATH.
 
@@ -17,6 +19,8 @@ Absolute executable paths, remote shells, containers, `env -i`, later explicit P
 ## Agent adapters
 
 Codex receives command Hooks through per-process configuration for session start, prompt submission, tool use, permission requests, stop, interrupt, and session end. Synapse never bypasses Codex Hook trust; the user must approve the stable Synapse Hook command when Codex asks.
+
+The Hook feature is switched on with `-c features.hooks=true` rather than the equivalent-looking `--enable hooks`. Codex validates `--enable` against its feature list and refuses to start (exit 1, `Unknown feature flag`) on a name it does not know, so a renamed or removed feature would take the user's own `codex` command down with it — `plugin_hooks` has already been removed from that list once. `-c` is a raw configuration override, tolerated when the key is unknown, and Codex documents the two as equivalent. Keep the `-c` form.
 
 Claude Code receives a temporary merged settings file containing equivalent Hooks, including notification and subagent events. Existing `--settings` JSON or files are deep-merged and user Hook arrays are preserved. If settings cannot be read or merged, Claude Code starts with the original arguments and Synapse skips notification Hooks for that process.
 
@@ -27,6 +31,8 @@ OSC 9, 99, and 777 remain a generic completion fallback. Hook and OSC events for
 The main process owns one ephemeral loopback HTTP listener registered through `NetworkServiceRegistry`. Each Terminal session receives a random bearer token bound server-side to its immutable `sessionId`. Requests must be loopback, use the exact path, stay within the body and rate limits, and match both token and session.
 
 Hook helpers may report only provider, event name, session id, tool name, notification type, and subagent identity fields. Prompt text, answers, tool arguments, terminal output, working directories, environment values, and transcripts must not cross this ingress or appear in logs, audit records, notifications, or persisted settings.
+
+The bearer token is a session capability, not a secret to be hidden. It exists because the listener is loopback-reachable by anything on the machine, including a browser page, and because events must not be forgeable across sessions; the token is bound server-side to exactly one `sessionId`. It is deliberately not a boundary against processes in the same terminal's process tree running as the same user — those can already do far worse than forge a notification, so moving the token out of the environment buys nothing and is not a goal.
 
 Filesystem writes, listener creation, and notification triggering pass through `PermissionGuard` and `AuditSink`. Runtime helpers contain no credential and are stored under Terminal's user-data directory with restrictive permissions.
 
@@ -40,4 +46,4 @@ On click, Synapse focuses the app and sends the existing Terminal System App ope
 
 ## Supported shells and platforms
 
-The integration is implemented for zsh, bash, fish, PowerShell, and cmd on Synapse's supported desktop platforms. Unknown shells receive only the initial PATH prepend. Platform support must be validated with unit or integration tests for wrapper resolution, argument preservation, settings merge, and exact-session navigation before release.
+The integration is implemented for zsh, bash, fish, PowerShell, and cmd on Synapse's supported desktop platforms. zsh startup files are redirected through `ZDOTDIR` and relayed back to the user's own files, including the login-shell-only ones (`zprofile`, `zlogin`, and `zlogout`); only the prompt-time OSC 7 hook is skipped for `zlogout`, which reports nothing on exit but must still run the user's own teardown. Unknown shells receive only the initial PATH prepend. Platform support must be validated with unit or integration tests for wrapper resolution, argument preservation, settings merge, and exact-session navigation before release.

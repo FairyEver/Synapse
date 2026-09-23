@@ -80,6 +80,42 @@ describe("TerminalAgentNotificationService", () => {
     await fixture.service.stop()
   })
 
+  it("keeps recording state and attention after the user silences system notifications", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "brick-lab",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+    // 默认跟随总闸：开了通知就该弹，所以下一条事件先证明这条链路本来是通的。
+    await postEvent(launch.env, { source: "codex", event: "Stop" })
+    expect(fixture.notifications).toHaveLength(1)
+
+    await fixture.service.updateSettings({ notify: false, expectedRevision: 2 })
+    await postEvent(launch.env, { source: "codex", event: "PermissionRequest" })
+    expect(fixture.notifications).toHaveLength(1)
+    // 静音的是「出声」，不是「记录」：侧栏标记与 agent 档案都必须照旧。
+    expect(fixture.attention.at(-1)).toEqual({
+      sessionId,
+      state: "waiting",
+      kind: "approval",
+      reason: "agent_permission_request",
+    })
+    expect(fixture.service.getAgentStateView(sessionId)?.state).toBe("needs_input")
+
+    // 正控用**同一个事件**把开关再翻回来：同一种 kind 在 2 秒去重窗内本来就不会再弹，
+    // 拿 `Stop` 复弹当正控会把「去重生效」误读成「开关坏了」。
+    await fixture.service.updateSettings({ notify: true, expectedRevision: 3 })
+    await postEvent(launch.env, { source: "codex", event: "PermissionRequest" })
+    expect(fixture.notifications).toHaveLength(2)
+    await fixture.service.stop()
+  })
+
   it("maps Claude questions and top-level completion but ignores subagent completion", async () => {
     const fixture = await createFixture()
     await fixture.service.start()
@@ -155,7 +191,7 @@ describe("TerminalAgentNotificationService", () => {
     )
     await writeFile(
       path.join(realBin, "codex"),
-      '#!/bin/sh\ncase " $* " in *" --enable hooks "*) printf real-codex-hooked;; *) printf real-codex;; esac',
+      '#!/bin/sh\ncase " $* " in *" -c features.hooks=true "*) printf real-codex-hooked;; *) printf real-codex;; esac',
       { encoding: "utf8", mode: 0o700 },
     )
     await writeFile(
@@ -489,6 +525,30 @@ describe("TerminalAgentNotificationService shell integration", () => {
     } finally {
       emulator.dispose()
     }
+    await fixture.service.stop()
+  })
+
+  it.runIf(process.platform !== "win32")("still runs the user's .zlogout when a login shell exits", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    const home = await mkdtemp(path.join(os.tmpdir(), "synapse-zlogout-home-"))
+    temporaryDirectories.push(home)
+    await writeFile(path.join(home, ".zlogout"), "printf 'user-zlogout\\n'\n", "utf8")
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "zlogout",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin:/bin", HOME: home },
+      defaultShellArgs: ["-l"],
+    })!
+    // `.zlogout` 只有登录 shell 退出时才读，而 `zsh -l -c` 不读它 —— `-i` 不能省，
+    // 否则这条用例在「转发是对的」和「转发整个漏掉」两种实现下都是绿的。
+    const result = spawnSync("/bin/zsh", ["-l", "-i", "-c", "exit"], {
+      env: isolatedShellEnvironment({ ...launch.env, HOME: home }),
+      cwd: home,
+      encoding: "utf8",
+    })
+    expect(result.stdout).toContain("user-zlogout")
     await fixture.service.stop()
   })
 

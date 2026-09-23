@@ -70,17 +70,33 @@ export const terminalGlobalLaunchSettingsSchema = z.object({
 }).strict()
 
 export const terminalAgentNotificationSettingsSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   id: z.literal("default"),
+  /**
+   * 总闸：要不要注入会话级 PATH shim 与官方 Hook。
+   *
+   * 关着就什么都没有 —— 连「跑到哪一步了」那份档案都不建，因为事件根本不会来。
+   */
   enabled: z.boolean(),
+  /**
+   * 状态照记，只是不弹系统通知。
+   *
+   * 与 `enabled` 分成两颗开关，是为了让「要侧栏/手机端的运行状态，但不想被系统横幅打扰」
+   * 成为一个能选出来的组合；它不改变注入边界，只决定最后一公里要不要出声。
+   */
+  notify: z.boolean(),
   revision: z.number().int().positive(),
   updatedAt: z.string().datetime(),
 }).strict()
 
 export const terminalUpdateAgentNotificationSettingsInputSchema = z.object({
-  enabled: z.boolean(),
+  enabled: z.boolean().optional(),
+  notify: z.boolean().optional(),
   expectedRevision: z.number().int().positive(),
-}).strict()
+}).strict().refine(
+  (value) => value.enabled !== undefined || value.notify !== undefined,
+  { message: "enabled 与 notify 至少要改一个。" },
+)
 
 /**
  * 一条 agent 会话档案的落盘形状。

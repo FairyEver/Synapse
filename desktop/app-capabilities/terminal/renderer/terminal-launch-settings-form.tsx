@@ -25,6 +25,8 @@ export function TerminalLaunchSettingsForm({
   onAppearanceSizeChange,
   agentNotificationsEnabled,
   onAgentNotificationsEnabledChange,
+  agentNotificationsNotify,
+  onAgentNotificationsNotifyChange,
 }: {
   readonly value: SynapseTerminalLaunchLayer
   readonly inheritedValue?: SynapseTerminalLaunchLayer
@@ -43,6 +45,8 @@ export function TerminalLaunchSettingsForm({
   readonly onAppearanceSizeChange?: (size: TerminalAppearanceSize) => void
   readonly agentNotificationsEnabled?: boolean
   readonly onAgentNotificationsEnabledChange?: (enabled: boolean) => void
+  readonly agentNotificationsNotify?: boolean
+  readonly onAgentNotificationsNotifyChange?: (notify: boolean) => void
 }) {
   const update = <K extends keyof SynapseTerminalLaunchLayer>(key: K, next: SynapseTerminalLaunchLayer[K]) => {
     const result = { ...value }
@@ -121,7 +125,7 @@ export function TerminalLaunchSettingsForm({
         </TabsContent>
       ) : null}
       {agentNotificationsEnabled !== undefined && onAgentNotificationsEnabledChange ? (
-        <TabsContent value="notifications" className="pt-3">
+        <TabsContent value="notifications" className="grid gap-4 pt-3">
           <Field orientation="horizontal" className="items-start justify-between gap-4">
             <FieldContent>
               <FieldLabel htmlFor="terminal-agent-notifications">Agent 原生通知</FieldLabel>
@@ -136,6 +140,21 @@ export function TerminalLaunchSettingsForm({
               onCheckedChange={onAgentNotificationsEnabledChange}
             />
           </Field>
+          {agentNotificationsNotify !== undefined && onAgentNotificationsNotifyChange ? (
+            <Field orientation="horizontal" className="items-start justify-between gap-4">
+              <FieldContent>
+                <FieldLabel htmlFor="terminal-agent-notifications-notify">弹系统通知</FieldLabel>
+                <FieldDescription>关闭后仍记录会话状态。</FieldDescription>
+              </FieldContent>
+              <Switch
+                id="terminal-agent-notifications-notify"
+                data-track="terminal-agent-notifications-notify"
+                disabled={!agentNotificationsEnabled}
+                checked={agentNotificationsNotify}
+                onCheckedChange={onAgentNotificationsNotifyChange}
+              />
+            </Field>
+          ) : null}
         </TabsContent>
       ) : null}
     </Tabs>

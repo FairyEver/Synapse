@@ -329,25 +329,33 @@ export class TerminalAgentNotificationService {
         details: { currentRevision: this.settings.revision },
       })
     }
-    if (input.enabled === this.settings.enabled) return this.settings
     const previous = this.settings
+    // 两颗开关都可以单独改，缺的那个保持原值。
+    const nextEnabled = input.enabled ?? previous.enabled
+    const nextNotify = input.notify ?? previous.notify
+    if (nextEnabled === previous.enabled && nextNotify === previous.notify) return previous
+    // 只有总闸的翻转才牵动运行时；`notify` 只是最后一公里要不要出声，落盘就够了。
+    const enabledChanged = nextEnabled !== previous.enabled
     const updated = {
-      ...this.settings,
-      enabled: input.enabled,
-      revision: this.settings.revision + 1,
+      ...previous,
+      enabled: nextEnabled,
+      notify: nextNotify,
+      revision: previous.revision + 1,
       updatedAt: new Date(this.now()).toISOString(),
     }
     await this.deps.settings.setSingleton(updated)
     try {
-      if (input.enabled) await this.enableRuntime()
-      else await this.stopIngress()
+      if (enabledChanged) {
+        if (nextEnabled) await this.enableRuntime()
+        else await this.stopIngress()
+      }
     } catch (error) {
       await this.deps.settings.setSingleton(previous)
-      if (input.enabled) await this.stopIngress()
+      if (nextEnabled) await this.stopIngress()
       throw error
     }
     this.settings = updated
-    if (!input.enabled) {
+    if (enabledChanged && !nextEnabled) {
       this.sessionsByToken.clear()
       this.sessionTokens.clear()
     }
@@ -378,6 +386,17 @@ export class TerminalAgentNotificationService {
     const originalPath = input.env.PATH ?? ""
     const env: Record<string, string> = { ...input.env }
     if (agentNotificationsActive && binding) {
+      /*
+       * token 是**会话能力**，不是需要藏起来的秘密，威胁模型就按这个来读。
+       *
+       * 它挡的是别的来源替这个会话伪造事件：环回端口本机谁都连得上，浏览器里的页面也够得着，
+       * 没有它就等于谁都能让 Synapse 凭空弹通知、改写侧栏状态。跨会话同样挡得住 —— token 在
+       * 服务端只绑定到这一个 sessionId。
+       *
+       * 它**不**挡同一终端进程树里、同一个 uid 的进程，那类进程读得到这组环境变量。这不是本
+       * 实现补得上的缺口：同一个用户下它们本来就能做比伪造一条通知重得多的事。所以别把 token
+       * 挪出环境变量、改成读文件 —— 换不来任何安全性，只会让注入更难懂。
+       */
       const token = randomUUID()
       const session: SessionBinding = {
         sessionId: input.sessionId,
@@ -714,6 +733,13 @@ export class TerminalAgentNotificationService {
     kind: AgentNotificationKind,
     provider: AgentProvider | "terminal",
   ): Promise<void> {
+    /*
+     * 「不弹系统通知」在这里短路。状态与 attention 在上游就已经更新完了，通知是整条链路唯一
+     * 出声的地方，所以关掉它不影响侧栏标记、手机端和 MCP 读到的运行状态。
+     *
+     * 放在权限检查与审计之前是有意的：没有要触发的通知，就不该留下一条通知审计。
+     */
+    if (!this.settings.notify) return
     if (this.isExactSessionFocused(session.sessionId)) return
     const key = `${session.sessionId}:${kind}`
     const previous = this.lastNotificationAt.get(key) ?? 0
@@ -873,9 +899,11 @@ type AgentEventPayload = {
 
 function defaultSettings(): TerminalAgentNotificationSettings {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "default",
     enabled: false,
+    // 默认跟随总闸：打开通知就该收到通知，想安静的人自己关掉这一颗。
+    notify: true,
     revision: 1,
     updatedAt: new Date(0).toISOString(),
   }
@@ -974,7 +1002,7 @@ const OSC7_REPORT_COMMAND = String.raw`printf '\033]7;file://%s\a' "$PWD"`
 /**
  * zsh 的上报钩子。
  *
- * 追加进四个启动文件（`.zshenv` / `.zprofile` / `.zshrc` / `.zlogin`）：用户自己的 `.zshrc`
+ * 追加进四个启动文件（`.zshenv` / `.zprofile` / `.zshrc` / `.zlogin`；只做转发的 `.zlogout` 不在其内）：用户自己的 `.zshrc`
  * 可能重置 `precmd_functions`，晚一点再 `add-zsh-hook` 一次能把它加回来。`add-zsh-hook`
  * 自身幂等（同一个函数名不会重复注册），所以重复 source 不会变成多次上报 ——
  * 钩子名必须固定，否则靠不住的就是这条幂等性。
@@ -1022,17 +1050,27 @@ function zshStartupFiles(): readonly (readonly [string, string])[] {
     ZSH_OSC7_HOOK,
     "",
   ].join("\n")
-  const remaining = [".zprofile", ".zshrc", ".zlogin"].map((name) => [name, [
+  const sourceOriginal = (name: string): readonly string[] => [
     `if [[ -n "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR" && -r "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR/${name}" ]]; then`,
     `  source "$SYNAPSE_TERMINAL_ORIGINAL_ZDOTDIR/${name}"`,
     `elif [[ -r "$HOME/${name}" ]]; then`,
     `  source "$HOME/${name}"`,
     "fi",
+  ]
+  const remaining = [".zprofile", ".zshrc", ".zlogin"].map((name) => [name, [
+    ...sourceOriginal(name),
     ZSH_SHIM_PATH_GUARD,
     ZSH_OSC7_HOOK,
     "",
   ].join("\n")] as const)
-  return [[".zshenv", zshEnv] as const, ...remaining]
+  /*
+   * `.zlogout` 只在登录 shell 退出时执行，PATH 前置和 OSC 7 上报在这里都没有意义，所以它跟
+   * 上面三个不一样：只转发用户自己的文件。它跟 `.zprofile` / `.zlogin` 一样是登录 shell 才有
+   * 的文件，既然那两个都转了，漏掉它就不是「不适用」而是遗漏 —— 后果是用户的收尾逻辑
+   * （清 ssh-agent、flush 历史之类）在 Synapse 终端里静默不执行。
+   */
+  const logout = [".zlogout", [...sourceOriginal(".zlogout"), ""].join("\n")] as const
+  return [[".zshenv", zshEnv] as const, ...remaining, logout]
 }
 
 function bashIntegrationScript(): string {

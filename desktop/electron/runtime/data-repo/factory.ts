@@ -9,6 +9,7 @@ import { DataRepositoryImpl } from "./repository"
 import {
   allSchemas,
   reviveSoundNotifierSettingsEnvelope,
+  reviveTerminalAgentNotificationSettingsEnvelope,
   reviveWorkflowParamPresetsEnvelope,
   reviveWorkflowsEnvelope,
 } from "./schemas"
@@ -177,9 +178,10 @@ function safeFileName(namespace: string): string {
   return namespace.replace(/[^a-zA-Z0-9_.-]/g, "_")
 }
 
-function jsonReviveEnvelopeFor(namespace: string) {
+export function jsonReviveEnvelopeFor(namespace: string) {
   if (namespace === "workflows") return reviveWorkflowsEnvelope
   if (namespace === "workflow.param-presets") return reviveWorkflowParamPresetsEnvelope
   if (namespace === "app.sound-notifier.settings") return reviveSoundNotifierSettingsEnvelope
+  if (namespace === "app.terminal.agent-notification-settings") return reviveTerminalAgentNotificationSettingsEnvelope
   return undefined
 }

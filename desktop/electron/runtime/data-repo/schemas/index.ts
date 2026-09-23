@@ -126,6 +126,7 @@ export {
   type UpdateInstallRecoveryPhase,
 } from "./update-install-recovery"
 export {
+  reviveTerminalAgentNotificationSettingsEnvelope,
   terminalAgentNotificationSettingsSchemaDefinition,
   terminalAgentSessionsSchemaDefinition,
   terminalBlocksSchema,
