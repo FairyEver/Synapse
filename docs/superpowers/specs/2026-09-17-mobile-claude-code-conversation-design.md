@@ -10,7 +10,7 @@
 
 ## 1. 背景：桌面端现在怎么做的
 
-桌面端有两个入口——侧边栏项目行上 `⌘+点击加号`，以及新建弹窗里的「创建终端cc对话」——最终落到同一个 IPC：
+桌面端有三个入口——侧边栏项目行上 `⌘+点击加号`、新建弹窗里的「创建终端cc对话」，以及终端里项目分组的加号按住 `⌘` 点击（Windows/Linux 为 Ctrl）——最终落到同一个 IPC：
 
 `app.agent.operation.create_claude_code_terminal`
 （`desktop/electron/modules/agent/ipc-claude-code-terminal.ts`）

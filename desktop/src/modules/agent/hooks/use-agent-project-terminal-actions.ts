@@ -3,6 +3,7 @@ import { toast } from "sonner"
 
 import { createRendererLogger } from "@/app-shell/logging"
 import { isMainAppWindow, requestOpenTerminalSession } from "@/app-shell/terminal-navigation"
+import { launchClaudeCodeTerminal } from "@/lib/claude-code-terminal-launch"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { ProviderModelSelection } from "@/types/provider-model"
 
@@ -64,30 +65,16 @@ function useAgentProjectTerminalActions() {
 
   const startClaudeCodeTerminal = useCallback(async (target: AgentClaudeCodeTerminalTarget): Promise<boolean> => {
     const bridge = requireSynapseBridge()
-    let sessionId: string
-    try {
-      const created = await bridge.agent.createClaudeCodeTerminal({
-        projectId: target.id,
-        providerId: target.selection.providerId,
-        modelTier: target.selection.modelTier,
-      })
-      sessionId = created.sessionId
-    } catch (rawError) {
-      logger.warn("Claude Code terminal creation failed.", {
-        boundary: "renderer.agent.claude-code-terminal.create",
-        projectId: target.id,
-        providerId: target.selection.providerId,
-        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
-        errorLength: errorMessageLength(rawError),
-      })
-      const reason = rawError instanceof Error ? rawError.message : ""
-      toast.error(reason.includes("内置 Claude Code runtime 缺失")
-        ? "内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。"
-        : "无法在终端中启动 Claude Code。")
+    const launched = await launchClaudeCodeTerminal({
+      projectId: target.id,
+      selection: target.selection,
+    })
+    if (!launched.ok) {
+      toast.error(launched.message)
       return false
     }
 
-    const openRequest = { requestId: createRequestId(), sessionId }
+    const openRequest = { requestId: createRequestId(), sessionId: launched.sessionId }
     if (isMainAppWindow()) {
       requestOpenTerminalSession(openRequest)
       return true
@@ -101,7 +88,7 @@ function useAgentProjectTerminalActions() {
       logger.warn("Claude Code terminal window open failed.", {
         boundary: "renderer.agent.claude-code-terminal.window",
         projectId: target.id,
-        sessionId,
+        sessionId: launched.sessionId,
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessageLength(rawError),
       })

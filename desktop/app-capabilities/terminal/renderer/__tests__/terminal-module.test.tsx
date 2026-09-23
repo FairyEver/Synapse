@@ -593,7 +593,26 @@ const toastState = vi.hoisted(() => ({
   success: vi.fn(),
 }))
 
+/**
+ * 启动 Claude Code 走的是 Agent 侧的 UI IPC，不是终端自己的桥：这里给它一份最小替身，
+ * 好让「⌘+加号」这条路能在终端测试里完整跑一遍。
+ */
+const claudeCodeState = vi.hoisted(() => ({
+  providers: [] as Array<Record<string, unknown>>,
+  defaultProviderModel: null as { providerId: string; modelTier: string } | null,
+  listAllProviders: vi.fn(),
+  createClaudeCodeTerminal: vi.fn(),
+  getConfig: vi.fn(),
+}))
+
 vi.mock("@/lib/electron-bridge", () => ({
+  requireSynapseBridge: () => ({
+    agent: {
+      listAllProviders: claudeCodeState.listAllProviders,
+      createClaudeCodeTerminal: claudeCodeState.createClaudeCodeTerminal,
+    },
+    config: { get: claudeCodeState.getConfig },
+  }),
   requireBridgeDomain: (domain: string) => {
     if (domain === "terminal") return terminalDomainCache.value ??= {
       agentNotifications: {
@@ -881,6 +900,16 @@ let roots: Root[] = []
 beforeEach(() => {
   setDocumentVisibility("visible")
   window.synapse = { platform: "darwin" } as typeof window.synapse
+  claudeCodeState.providers = []
+  claudeCodeState.defaultProviderModel = null
+  claudeCodeState.listAllProviders.mockReset()
+  claudeCodeState.listAllProviders.mockImplementation(async () => claudeCodeState.providers)
+  claudeCodeState.getConfig.mockReset()
+  claudeCodeState.getConfig.mockImplementation(async () => ({
+    agent: { defaultProviderModel: claudeCodeState.defaultProviderModel },
+  }))
+  claudeCodeState.createClaudeCodeTerminal.mockReset()
+  claudeCodeState.createClaudeCodeTerminal.mockImplementation(async () => ({ sessionId: "claude-session-1" }))
   voiceState.available = false
   voiceState.phase = "idle"
   voiceState.transcript = { stable: "", unstable: "", combined: "" }
@@ -2856,6 +2885,118 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("starts a Claude Code session in a project group on modifier click", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-project",
+      name: "项目:Synapse",
+      projectId: "project-synapse",
+    })]
+    claudeCodeState.providers = [terminalProvider({
+      id: "anthropic",
+      name: "Anthropic",
+      active: true,
+      sonnetModel: "claude-sonnet-4-5",
+    })]
+    const created = createSession({
+      id: "claude-session-1",
+      groupId: "group-project",
+      title: "Claude Code · Synapse",
+    })
+
+    await renderModule()
+    await modifierClickButtonByTitle("新建标签")
+
+    expect(claudeCodeState.createClaudeCodeTerminal).toHaveBeenCalledWith({
+      projectId: "project-synapse",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+    })
+    expect(terminalBridge.createSession).not.toHaveBeenCalled()
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: created.id })
+    expect(document.body.textContent).toContain("Claude Code · Synapse")
+  })
+
+  it("takes the configured default model before the active provider on modifier click", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-project",
+      name: "项目:Synapse",
+      projectId: "project-synapse",
+    })]
+    claudeCodeState.providers = [
+      terminalProvider({ id: "anthropic", name: "Anthropic", sonnetModel: "claude-sonnet-4-5" }),
+      terminalProvider({ id: "openrouter", name: "OpenRouter", active: true, opusModel: "claude-opus-4-1" }),
+    ]
+    claudeCodeState.defaultProviderModel = { providerId: "anthropic", modelTier: "sonnet" }
+    createSession({ id: "claude-session-1", groupId: "group-project", title: "Claude Code · Synapse" })
+
+    await renderModule()
+    await modifierClickButtonByTitle("新建标签", { ctrlKey: true })
+
+    expect(claudeCodeState.createClaudeCodeTerminal).toHaveBeenCalledWith({
+      projectId: "project-synapse",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+    })
+  })
+
+  it("keeps the plain new tab on a group that belongs to no project", async () => {
+    bridgeState.groups = [createGroup({ id: "group-mine", name: "部署" })]
+    claudeCodeState.providers = [terminalProvider({
+      id: "anthropic",
+      name: "Anthropic",
+      active: true,
+      sonnetModel: "claude-sonnet-4-5",
+    })]
+
+    await renderModule()
+    await modifierClickButtonByTitle("新建标签")
+
+    expect(claudeCodeState.createClaudeCodeTerminal).not.toHaveBeenCalled()
+    expect(terminalBridge.createSession).toHaveBeenCalledWith({
+      groupId: "group-mine",
+      cols: 80,
+      rows: 24,
+    })
+  })
+
+  it("says what is missing instead of opening a tab when no default model resolves", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-project",
+      name: "项目:Synapse",
+      projectId: "project-synapse",
+    })]
+
+    await renderModule()
+    await modifierClickButtonByTitle("新建标签")
+
+    expect(claudeCodeState.createClaudeCodeTerminal).not.toHaveBeenCalled()
+    expect(terminalBridge.createSession).not.toHaveBeenCalled()
+    expect(toastState.error).toHaveBeenCalledWith("没有可用的供应商模型，请先配置供应商。")
+  })
+
+  it("reports a missing bundled runtime when the Claude Code launch fails", async () => {
+    bridgeState.groups = [createGroup({
+      id: "group-project",
+      name: "项目:Synapse",
+      projectId: "project-synapse",
+    })]
+    claudeCodeState.providers = [terminalProvider({
+      id: "anthropic",
+      name: "Anthropic",
+      active: true,
+      sonnetModel: "claude-sonnet-4-5",
+    })]
+    claudeCodeState.createClaudeCodeTerminal.mockRejectedValueOnce(
+      new Error("内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。"),
+    )
+
+    await renderModule()
+    await modifierClickButtonByTitle("新建标签")
+
+    expect(terminalBridge.createSession).not.toHaveBeenCalled()
+    expect(toastState.error).toHaveBeenCalledWith("内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。")
+  })
+
   it("shows an error when creating a terminal from a group fails", async () => {
     bridgeState.groups = [createGroup({ id: "group-build", name: "构建" })]
     bridgeState.sessions = []
@@ -4653,6 +4794,23 @@ async function clickButtonByTitle(title: string): Promise<void> {
   })
 }
 
+/**
+ * 按住修饰键点一颗按钮。合成事件读的是 `metaKey` / `ctrlKey`，和真实点击同一条路。
+ */
+async function modifierClickButtonByTitle(
+  title: string,
+  init: MouseEventInit = { metaKey: true },
+): Promise<void> {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((item) => item.getAttribute("title") === title)
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true, ...init }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 async function clickSessionDelete(title: string): Promise<void> {
   const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="关闭终端：${title}"]`)
   await act(async () => {
@@ -4989,6 +5147,17 @@ async function dispatchTerminalPaneDragEvent(
     await Promise.resolve()
   })
   return event
+}
+
+/** 只喂 Agent 默认选型用得到的那几个字段：标识、名称、是否激活、各档位模型。 */
+function terminalProvider(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "provider-1",
+    name: "Provider 1",
+    category: "official",
+    apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+    ...overrides,
+  }
 }
 
 function createGroup(overrides: Partial<SynapseTerminalGroup> = {}): SynapseTerminalGroup {

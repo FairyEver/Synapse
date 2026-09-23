@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, LoaderCircle, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
@@ -68,7 +68,8 @@ import { SidebarContentLayout } from "../../../src/components/sidebar-content-la
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { useQuickInputItems } from "../../../src/hooks/use-quick-input-items"
-import { runTrackedOperation } from "../../../src/lib/ui-tracking"
+import { runTrackedOperation, startTrackedOperation } from "../../../src/lib/ui-tracking"
+import { launchClaudeCodeTerminal } from "../../../src/lib/claude-code-terminal-launch"
 import { getRendererPlatform } from "../../../src/lib/runtime-platform"
 import { readSidebarCollapsed, writeSidebarCollapsed } from "../../../src/lib/sidebar-layout-storage"
 import { cn } from "../../../src/lib/utils"
@@ -200,6 +201,7 @@ export function TerminalModule({
   const [commandSaving, setCommandSaving] = useState(false)
   const [commandDeletingId, setCommandDeletingId] = useState<string | null>(null)
   const [discardAction, setDiscardAction] = useState<(() => void) | null>(null)
+  const [claudeLaunchingGroupId, setClaudeLaunchingGroupId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
   const [mountedWorkspaceIds, setMountedWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
@@ -214,6 +216,8 @@ export function TerminalModule({
   const refreshRequestIdRef = useRef(0)
   const toolbarActionRefreshRequestIdRef = useRef(0)
   const workspaceMutationQueuesRef = useRef(new Map<string, Promise<void>>())
+  /** 按下的那一次还在路上：挡住同一颗加号上的第二次点击。 */
+  const claudeLaunchPendingRef = useRef(false)
 
   const activeWorkspace = useMemo(() => {
     if (!activeWorkspaceId) return workspaces[0] ?? null
@@ -411,24 +415,32 @@ export function TerminalModule({
     })
   }), [refreshCustomToolbarActions, refreshSessions, terminalBridge])
 
+  /**
+   * 把一条会话端到用户面前：补齐分组、会话与 workspace，选中它所在的 workspace，展开它那一行。
+   *
+   * 两个来源共用这一条：外部打开请求（深链接、Agent 侧栏点过来的），以及 ⌘+加号刚建好的
+   * Claude Code 会话——两者都是「已经存在的 sessionId，现在要让用户看见它」。
+   */
+  const revealSession = useCallback(async (sessionId: string, isCancelled?: () => boolean): Promise<void> => {
+    const [nextGroups, session, workspace] = await Promise.all([
+      terminalBridge.group.list(),
+      terminalBridge.session.get({ sessionId }),
+      terminalBridge.workspace.getForSession({ sessionId }),
+    ])
+    if (isCancelled?.()) return
+    setGroups(nextGroups)
+    setSessions((current) => mergeSession(current, session))
+    setWorkspaces((current) => mergeWorkspace(current, workspace))
+    setActiveWorkspaceId(workspace.id)
+    const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === session.id)
+    if (pane) setActivePaneIds((current) => ({ ...current, [workspace.id]: pane.paneId }))
+    setOpenGroupIds((current) => ({ ...current, [session.groupId]: true }))
+  }, [terminalBridge])
+
   useEffect(() => {
     if (!openRequest) return
     let cancelled = false
-    Promise.all([
-      terminalBridge.group.list(),
-      terminalBridge.session.get({ sessionId: openRequest.sessionId }),
-      terminalBridge.workspace.getForSession({ sessionId: openRequest.sessionId }),
-    ])
-      .then(([nextGroups, session, workspace]) => {
-        if (cancelled) return
-        setGroups(nextGroups)
-        setSessions((current) => mergeSession(current, session))
-        setWorkspaces((current) => mergeWorkspace(current, workspace))
-        setActiveWorkspaceId(workspace.id)
-        const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === session.id)
-        if (pane) setActivePaneIds((current) => ({ ...current, [workspace.id]: pane.paneId }))
-        setOpenGroupIds((current) => ({ ...current, [session.groupId]: true }))
-      })
+    revealSession(openRequest.sessionId, () => cancelled)
       .catch((error) => {
         if (cancelled) return
         logger.warn("Failed to focus requested terminal session.", error)
@@ -440,7 +452,7 @@ export function TerminalModule({
     return () => {
       cancelled = true
     }
-  }, [onOpenRequestConsumed, openRequest, terminalBridge])
+  }, [onOpenRequestConsumed, openRequest, revealSession])
 
   const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {
@@ -465,6 +477,45 @@ export function TerminalModule({
       toast.error("新建标签失败")
     }
   }, [terminalBridge])
+
+  /**
+   * 项目分组加号上的 ⌘+点击（Windows/Linux 为 Ctrl）：按默认模型在项目目录里起一条 Claude Code 会话。
+   *
+   * 只有项目分组有这条路——分组上带着 `projectId` 才有项目可落、才有默认模型可解析。会话由
+   * Agent 的能力创建（凭据只在主进程读），建好之后就地把它端出来，不再绕一次应用导航。
+   */
+  const launchClaudeCodeSession = useCallback(async (group: SynapseTerminalGroupSummary) => {
+    const projectId = group.projectId
+    if (!projectId || claudeLaunchPendingRef.current) return
+    claudeLaunchPendingRef.current = true
+    setClaudeLaunchingGroupId(group.id)
+    const finishTracking = startTrackedOperation({
+      component: "terminal",
+      eventKey: "terminal.session.create-claude-code",
+    })
+    try {
+      const launched = await launchClaudeCodeTerminal({ projectId })
+      if (!launched.ok) {
+        // 说清缺什么，但不建任何东西：用户按的是 ⌘，落一条普通标签会让人以为就是 Claude Code。
+        finishTracking("failure")
+        toast.error(launched.message)
+        return
+      }
+      await revealSession(launched.sessionId)
+      finishTracking("success")
+    } catch (error) {
+      finishTracking("failure")
+      logger.warn("Failed to reveal the newly created Claude Code session.", {
+        boundary: "renderer.terminal.claude-code-reveal",
+        projectId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+      toast.error("Claude Code 已启动，但无法打开它。")
+    } finally {
+      claudeLaunchPendingRef.current = false
+      setClaudeLaunchingGroupId(null)
+    }
+  }, [revealSession])
 
   const openRenameDialog = useCallback((workspace: SynapseTerminalWorkspace, returnFocus: HTMLElement) => {
     renameReturnFocusRef.current = returnFocus
@@ -1422,9 +1473,18 @@ export function TerminalModule({
         variant="ghost"
         size="icon-xs"
         title="新建标签"
-        onClick={() => { void createSession({ groupId: group.id }) }}
+        disabled={claudeLaunchingGroupId === group.id}
+        onClick={(event) => {
+          if ((event.metaKey || event.ctrlKey) && group.projectId) {
+            void launchClaudeCodeSession(group)
+            return
+          }
+          void createSession({ groupId: group.id })
+        }}
       >
-        <Plus className="size-3.5" />
+        {claudeLaunchingGroupId === group.id
+          ? <LoaderCircle className="size-3.5 animate-spin" />
+          : <Plus className="size-3.5" />}
         <span className="sr-only">新建标签</span>
       </Button>
       <DropdownMenu>
