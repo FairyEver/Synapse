@@ -20,7 +20,13 @@ describe("private Portal protocol dispatch", () => {
     expect(h.deps.dispatchAppAction).not.toHaveBeenCalled()
     expect(h.deps.handleAuthCallback).not.toHaveBeenCalled()
     expect(parseDeclaredAppDeepLink(raw)).not.toHaveProperty("capabilityId")
-    expect(CAPABILITY_DOMAINS.flatMap((domain) => domain.capabilities.map((capability) => capability.id)).filter((id) => id.includes("portal") || id.includes("connectors"))).toEqual([])
+    // extend.* 能力由扩展经 ExtensionPoint 注册：仅允许 MCP 来源、不派生 IPC，也不进入
+    // 应用深链声明（见 .claude/rules/api.md），拿不到 `capabilityId`。所以这条守的是
+    // 「Portal 连接器不走公开能力派发」，只看可经应用深链公开派发的域。
+    const publiclyDispatchableCapabilityIds = CAPABILITY_DOMAINS
+      .filter((domain) => domain.id !== "extend")
+      .flatMap((domain) => domain.capabilities.map((capability) => capability.id))
+    expect(publiclyDispatchableCapabilityIds.filter((id) => id.includes("portal") || id.includes("connectors"))).toEqual([])
     expect(h.deps.logger.warn).not.toHaveBeenCalled()
   })
   it("sanitizes failures before dialogs and logs, rejects undeclared/public aliases", async () => {

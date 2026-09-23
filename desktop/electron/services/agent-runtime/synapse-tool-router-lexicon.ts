@@ -20,6 +20,7 @@ export const EXEMPT_SEGMENTS: Readonly<Record<string, string>> = {
     + "（app_drive_item_list 必须压过 app_drive_file_version_list，由既有测试锁定），"
     + "再映射给 file 会把常见说法「云盘文件列表」带到版本列表上去。file 段由"
     + "content / version / upload / download 等更具体的名词承载。",
+  headless: "Portal Headless 是连接器代号，中文里不说「无头」；语义由 portal 与 credential 承载",
 }
 
 /**
@@ -53,6 +54,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["助手", "agent"],
   ["供应商", "provider"],
   ["设置", "settings"],
+  ["扩展", "extend"],
 
   // ---------------- 名词：drive ----------------
   ["文件", "item"],
@@ -154,6 +156,9 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["本地", "local"],
   ["内容", "content"],
   ["原始", "raw"],
+  ["门户", "portal"],
+  ["凭证", "credential"],
+  ["凭据", "credential"],
 
   // ---------------- 动词 ----------------
   ["列表", "list"],
