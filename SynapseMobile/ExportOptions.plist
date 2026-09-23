@@ -7,9 +7,11 @@
   the same step, so there is no Organizer click between archiving and the build
   showing up in TestFlight. Leave it on `export` when you only want the ipa.
 
-  Signing is left automatic on purpose: `signingStyle` is absent, which means
-  xcodebuild resolves the distribution certificate and profile through the
-  account signed into Xcode, the same way the Organizer would.
+  Signing is left automatic on purpose: `signingStyle` is absent, so xcodebuild
+  resolves the distribution certificate and profile itself. The credential it
+  resolves them with is the App Store Connect API key that
+  scripts/release-ios.sh passes on the command line -- not the Apple ID signed
+  into Xcode, which fails intermittently with "Failed to Use Accounts".
 -->
 <plist version="1.0">
 <dict>

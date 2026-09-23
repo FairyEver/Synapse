@@ -45,6 +45,29 @@ done
 
 mkdir -p "$BUILD_DIR"
 
+# The App Store Connect API key — the same credential asc.mjs uses.
+#
+# The export step has to have xcodebuild resolve an App Store distribution
+# profile, and there are two ways to let it. Automatic signing goes through the
+# Apple ID signed into Xcode: it works until it doesn't, and when it doesn't it
+# dies on "Failed to Use Accounts" with nothing in the message naming the
+# cause, then succeeds minutes later on a manual retry that passes the key
+# below. The key path has no such season, so it is the one this script uses.
+ENV_ASC="$PROJECT_DIR/.env.asc"
+if [ -f "$ENV_ASC" ]; then
+  set -a
+  . "$ENV_ASC"
+  set +a
+fi
+
+for credential in ASC_KEY_PATH ASC_KEY_ID ASC_ISSUER_ID; do
+  if [ -z "${!credential:-}" ]; then
+    echo "缺少 $credential：导出要用的 App Store Connect API Key 没配。" >&2
+    echo "从 SynapseMobile/env.asc.example 复制一份到 SynapseMobile/.env.asc 再把值补上。" >&2
+    exit 2
+  fi
+done
+
 # The highest number an archive on this working copy has been given. This is
 # the real record; build/ is gitignored, so it is per working copy, which is
 # what we want -- another checkout cannot know what this one has uploaded.
@@ -155,11 +178,10 @@ echo "SynapseMobile $MARKETING_VERSION ($BUILD_NUMBER)"
 echo
 
 # `-allowProvisioningUpdates` is what makes the export work without the
-# Organizer. Automatic signing creates the App Store distribution certificate
-# and profile through the account signed into Xcode; without the flag the
-# export dies with "No profiles for 'com.liy.SynapseMobile' were found" even
-# though archiving succeeded. Expect a one-time prompt the first time it runs
-# on a new machine.
+# Organizer: it lets xcodebuild create the App Store distribution profile
+# rather than dying on "No profiles for 'com.liy.SynapseMobile' were found"
+# after a successful archive. The credential it does that with is the API key
+# loaded at the top of this file.
 attempt=1
 while :; do
   record_build "$BUILD_NUMBER"
@@ -174,7 +196,10 @@ while :; do
          -archivePath "$ARCHIVE_PATH" \
          -exportOptionsPlist "$EXPORT_OPTIONS" \
          -exportPath "$BUILD_DIR/export" \
-         -allowProvisioningUpdates 2>&1 | tee "$UPLOAD_LOG" | tail -n 20; then
+         -allowProvisioningUpdates \
+         -authenticationKeyPath "$ASC_KEY_PATH" \
+         -authenticationKeyID "$ASC_KEY_ID" \
+         -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$UPLOAD_LOG" | tail -n 20; then
       echo
       echo "uploaded. processing takes 10-30 minutes; the build then appears in TestFlight."
       echo "reminder: the phone now talks to the production APNs gateway, so the server needs"
@@ -204,6 +229,9 @@ while :; do
     -exportOptionsPlist "$BUILD_DIR/ExportOptions.export.plist" \
     -exportPath "$BUILD_DIR/export" \
     -allowProvisioningUpdates \
+    -authenticationKeyPath "$ASC_KEY_PATH" \
+    -authenticationKeyID "$ASC_KEY_ID" \
+    -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
     | tail -n 20
   echo
   echo "ipa at $BUILD_DIR/export"
