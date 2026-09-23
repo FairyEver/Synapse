@@ -165,7 +165,7 @@ final class AgentConversationUITests: XCTestCase {
     /// 给分组配了快捷命令的电脑上，终端分组那一段会长出第二层：行右一个箭头，点进去是
     /// 命令列表，列表底部永远有一条「直接新建终端」。
     ///
-    /// 一条命令都没配的账号跑不了这个用例 —— 有没有配是用户自己的数据，测试造不出来，
+    /// 第一个分组没配快捷命令的账号跑不了这个用例 —— 有没有配是用户自己的数据，测试造不出来，
     /// 所以这里以跳过说明，而不是把电脑上的东西改掉。
     func testRunsASavedCommandFromThePanel() throws {
         let app = launch()
@@ -182,7 +182,7 @@ final class AgentConversationUITests: XCTestCase {
         // 要验的是另一条路，所以跳过并说清缺什么。
         let plain = app.buttons["terminal-group-command-none"]
         guard plain.waitForExistence(timeout: 10) else {
-            throw XCTSkip("这个账号的第一个分组没有配快捷命令；在电脑上给任意分组加一条命令后重跑")
+            throw XCTSkip("这个账号的第一个分组没有配快捷命令；在电脑上给第一个分组加一条命令后重跑")
         }
         capture(app, name: "06-group-command-list")
 
@@ -198,6 +198,16 @@ final class AgentConversationUITests: XCTestCase {
         XCTAssertTrue(
             app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 30),
             "点了命令没有落到终端上（命令：\(name)）"
+        )
+        // 面板还必须先于终端消失。只看终端出现是不够的：弹层背后的东西也在这棵树里
+        // （见 `testLeavesTheTerminalSegmentAlone` 里那条注释），「面板没关、终端在面板
+        // 后面跑起来了」会让上面那条断言照样变绿 —— 而这正是本用例唯一要钉住的危险。
+        //
+        // 用命令列表这一屏自己的标识符，而不是分段器：命令列表正压在根视图上时它一定在树里，
+        // 面板真的关掉时它一定不在。
+        XCTAssertFalse(
+            plain.waitForExistence(timeout: 10),
+            "点了命令面板没关（命令：\(name)）"
         )
     }
 
