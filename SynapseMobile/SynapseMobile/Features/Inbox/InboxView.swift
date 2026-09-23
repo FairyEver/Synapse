@@ -279,19 +279,23 @@ struct NotificationDetailView: View {
             if let item = model.notifications.items.first(where: { $0.id == id }) {
                 List {
                     Section {
-                        Text(item.title).font(.headline)
-                        if let group = item.group { Text(group).font(.caption).foregroundStyle(.secondary) }
-                        Text(item.body)
+                        message(item)
                     }
                     if (item.source == "terminal-attention" || item.source == "terminal-complete"), let target = item.targetId {
-                        Button("打开终端") {
-                            if let device = item.deviceId { model.selectDesktop(device) }
-                            NotificationRouter.shared.route(to: .terminal(sessionId: target, desktopClientInstanceId: item.deviceId ?? ""))
+                        Section {
+                            Button("打开终端") {
+                                if let device = item.deviceId { model.selectDesktop(device) }
+                                NotificationRouter.shared.route(to: .terminal(sessionId: target, desktopClientInstanceId: item.deviceId ?? ""))
+                            }
                         }
                     } else if item.source == "meeting-transcription", let target = item.targetId {
-                        Button("打开录音") { NotificationRouter.shared.route(to: .meeting(meetingId: target)) }
+                        Section {
+                            Button("打开录音") { NotificationRouter.shared.route(to: .meeting(meetingId: target)) }
+                        }
                     } else if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
-                        Button("打开链接") { openURL(url) }
+                        Section {
+                            Button("打开链接") { openURL(url) }
+                        }
                     }
                 }
             } else if loading {
@@ -305,5 +309,47 @@ struct NotificationDetailView: View {
             await model.readNotification(id)
             loading = false
         }
+    }
+
+    /// 一条消息。
+    ///
+    /// 标题、分组与时间、正文三样在**同一行里**，不是三行。它们原来各占一行，而 `List`
+    /// 会给每一行画一条分隔线：一条消息看上去像三条互不相干的记录躺在同一张卡上，中间
+    /// 那行孤零零的分组名尤其像走错了地方。一条消息长得像一条消息，靠的是它内部没有
+    /// 分隔线，不是里面的字长得一样。
+    ///
+    /// 分组名只有外部接口发来的消息才有，它和时间同行，因为两者回答的是同一类问题
+    /// ——这条属于谁、什么时候来的；正文回答的是另一个，所以另起一段。
+    private func message(_ item: SynapseNotification) -> some View {
+        let meta = NotificationText.meta(group: item.group, createdAt: item.createdAt)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(item.title)
+                .font(.headline)
+            if !meta.isEmpty {
+                Text(meta)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Text(item.body)
+                // 和元信息之间留出的这点空隙，是这一段里唯一一次「分开」的表达——详情页
+                // 里没有分隔线可用，靠的就是它。
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { copy(item.body) }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("轻点复制正文")
+        }
+    }
+
+    /// 复制正文。触感和提示条与录音详情页的「复制全文」一致：同一件事在两处给同一种
+    /// 反馈，人才不必分别学。
+    ///
+    /// 没有开 `.textSelection`：长按选中和单击整段复制抢的是同一个手势，两个都要的
+    /// 结果是两个都不好用。点下去就是整段。
+    private func copy(_ body: String) {
+        Haptics.success()
+        UIPasteboard.general.string = body
+        model.notice("已复制正文")
     }
 }

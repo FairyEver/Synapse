@@ -27,6 +27,10 @@ struct NotificationTextTests {
         NotificationText.timestamp(iso, now: now, calendar: calendar)
     }
 
+    private func meta(_ iso: String, group: String?, now: Date) -> String {
+        NotificationText.meta(group: group, createdAt: iso, now: now, calendar: calendar)
+    }
+
     @Test func todayKeepsOnlyTheClock() throws {
         // 六分钟前那一条不该把年月日一起写出来——它和现在只差六分钟。
         let now = try now()
@@ -72,5 +76,34 @@ struct NotificationTextTests {
         let now = Date()
         #expect(NotificationText.timestamp("", now: now, calendar: calendar) == "")
         #expect(NotificationText.timestamp("昨天", now: now, calendar: calendar) == "")
+    }
+
+    // MARK: - 详情页那一行「分组 · 时间」
+
+    /// 分组名只有外部接口发来的消息才有，它在列表里和标题并排。落到详情页它得自己找
+    /// 位置——而它和时间的回答是同一类问题（这条属于谁、什么时候来的），正文回答的是
+    /// 另一个（说了什么），所以两者同行，正文另起。
+    @Test func aGroupLeadsTheTimestampOnOneLine() throws {
+        let now = try now()
+        #expect(meta("2026-09-23T09:25:00.000Z", group: "测试", now: now) == "测试 · 17:25")
+    }
+
+    @Test func withoutAGroupOnlyTheTimestampIsWritten() throws {
+        let now = try now()
+        #expect(meta("2026-09-23T09:25:00.000Z", group: nil, now: now) == "17:25")
+    }
+
+    @Test func anEmptyGroupIsNotAGroup() throws {
+        // 服务端保证非空，但空串在这行上的表现是「 · 17:25」——一个悬空的分隔符，
+        // 和「 · 」什么区别都没有，不如当成没有分组。
+        let now = try now()
+        #expect(meta("2026-09-23T09:25:00.000Z", group: "", now: now) == "17:25")
+    }
+
+    @Test func anUnreadableTimestampLeavesNoDanglingSeparator() throws {
+        // 时间读不出来时不能留下「测试 ·」：那比少一半信息更像坏掉。
+        let now = try now()
+        #expect(meta("", group: "测试", now: now) == "测试")
+        #expect(meta("", group: nil, now: now) == "")
     }
 }

@@ -34,6 +34,27 @@ enum NotificationText {
         return day.string(from: date)
     }
 
+    /// 详情页那一行「分组 · 时间」。
+    ///
+    /// 分组名只有外部接口发来的消息才有。它在列表里跟标题并排，落到详情页就得自己
+    /// 找位置；把它和时间放同一行的理由是它们回答的是同一类问题——这条属于谁、什么
+    /// 时候来的——而正文回答的是另一个：说了什么。
+    ///
+    /// 两边都可能缺席，而一个悬空的分隔符（「测试 ·」或「 · 17:25」）比少一半信息
+    /// 更像坏掉，所以拼接按谁在场来定。
+    static func meta(
+        group: String?,
+        createdAt: String,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        let group = group ?? ""
+        let time = timestamp(createdAt, now: now, calendar: calendar)
+        if group.isEmpty { return time }
+        if time.isEmpty { return group }
+        return "\(group) · \(time)"
+    }
+
     /// 固定中文，理由和 `MeetingText.relativeTime` 是同一条：这个 App 的界面只有中文
     /// 一套文案，时间若跟着设备语言走，就会出现「周二」旁边写着 `5:25 PM` 的混搭。
     ///
