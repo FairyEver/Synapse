@@ -246,11 +246,24 @@ private struct WaitingSessionRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(session.attention.kind == "approval" ? "请求执行一个命令" : "正在等待你的回答")
+                Text(waitingReason)
                     .font(.subheadline)
                     .foregroundStyle(Theme.attention)
                     .lineLimit(2)
             }
+        }
+    }
+
+    /// 这一行为什么在「待处理」里。
+    ///
+    /// 「已经跑完、空闲着等你」和「真的举着一个问题等你」都是等待，但对着前一种用户
+    /// 没有任何可回答的东西。写成同一句，用户点进去会发现自己被喊来看一个并没有在问什么
+    /// 的终端——两种都要说清楚自己是哪一种。
+    private var waitingReason: String {
+        switch session.attention.kind {
+        case "approval": return "请求执行一个命令"
+        case "agent_idle": return "已经跑完，在等你"
+        default: return "正在等待你的回答"
         }
     }
 }

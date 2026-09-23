@@ -738,7 +738,7 @@ export class TerminalAgentNotificationService {
       this.applyAttention({
         sessionId: session.sessionId,
         state: "waiting",
-        kind: payload.notificationType === "permission_prompt" ? "approval" : "agent_question",
+        kind: attentionKindForNotification(payload.notificationType),
         reason: `agent_notification_${payload.notificationType ?? "unspecified"}`,
       })
       await this.notify(
@@ -1052,6 +1052,20 @@ function isQuestionTool(source: AgentProvider, toolName: string | undefined): bo
 
 function isActionNotification(type: string | undefined): boolean {
   return type === undefined || ["permission_prompt", "idle_prompt", "elicitation_dialog"].includes(type)
+}
+
+/**
+ * 同一个 `Notification` 进来的两种等待不是一回事。
+ *
+ * `idle_prompt` 是 Agent 跑完一轮、空闲着等你下一句（通知文案里的「还在等你」），其余是
+ * 它真的举着一个问题或一次审批举在那里（「需要你的操作」）。过去这里一律记成
+ * `agent_question`，于是手机「消息」的待处理行对着一个空闲的 Agent 也写「正在等待你的
+ * 回答」——用户点进去，终端里并没有在问什么。
+ */
+function attentionKindForNotification(type: string | undefined): TerminalAgentAttentionUpdate["kind"] {
+  if (type === "permission_prompt") return "approval"
+  if (type === "idle_prompt") return "agent_idle"
+  return "agent_question"
 }
 
 /** 通知正文：只出现 Agent 名、会话标题和状态，一句说清。 */

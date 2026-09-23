@@ -6,6 +6,14 @@ export const terminalAttentionStateSchema = z.enum(["waiting", "not_waiting", "u
 export const terminalAttentionKindSchema = z.enum([
   "shell_ready",
   "agent_question",
+  /**
+   * Agent 已经跑完一轮、空闲着等你的下一句，而不是举着一个问题或一次审批在等你。
+   *
+   * 两者都是 `waiting`，但对着前者用户没有任何可回答的东西——它们必须分得开，否则
+   * 手机「消息」的待处理行会对一个空闲的 Agent 写「正在等待你的回答」，点进去发现它
+   * 并没有在问什么。
+   */
+  "agent_idle",
   "approval",
   "password",
   "other_interaction",

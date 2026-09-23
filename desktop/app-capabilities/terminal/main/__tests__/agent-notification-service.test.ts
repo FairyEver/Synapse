@@ -158,6 +158,14 @@ describe("TerminalAgentNotificationService", () => {
     ])
     // 改的是说法，不是语义：它仍然处于「等你」的等待态。
     expect(fixture.service.getAgentStateView(sessionId)?.state).toBe("needs_input")
+    // 但等待的理由分得开：这一种是「跑完一轮、空闲着等你下一句」，不是「举着问题等你
+    // 回答」。通知的正文能分开，手机「消息」的待处理行也得能——它只读得到 kind。
+    expect(fixture.attention.at(-1)).toEqual({
+      sessionId,
+      state: "waiting",
+      kind: "agent_idle",
+      reason: "agent_notification_idle_prompt",
+    })
     await fixture.service.stop()
   })
 

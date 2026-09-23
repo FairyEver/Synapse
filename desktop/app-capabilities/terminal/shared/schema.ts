@@ -248,7 +248,7 @@ export const terminalSessionSchema = z.object({
   sizeRevision: z.number().int().positive().default(1),
   attention: z.object({
     state: z.enum(["waiting", "not_waiting", "unknown"]),
-    kind: z.enum(["shell_ready", "agent_question", "approval", "password", "other_interaction", "unknown"]),
+    kind: z.enum(["shell_ready", "agent_question", "agent_idle", "approval", "password", "other_interaction", "unknown"]),
     reason: z.string().min(1),
     confidence: z.number().min(0).max(1),
     detectedAt: z.string().min(1),

@@ -566,7 +566,12 @@ export interface MobileSummaryWorkspace {
 
 export interface MobileSummaryAttention {
   readonly state: "waiting" | "not_waiting" | "unknown"
-  readonly kind: "shell_ready" | "agent_question" | "approval" | "password" | "other_interaction" | "unknown"
+  /**
+   * `agent_idle` 是 Agent 跑完一轮、空闲着等下一句，其余等待是它真举着一个问题或一次
+   * 审批。手机「消息」的待处理行按它分开措辞，因此它是**必须被解码器认下**的取值：
+   * 漏在这里，收到这种等待的摘要会被整条判为非法。
+   */
+  readonly kind: "shell_ready" | "agent_question" | "agent_idle" | "approval" | "password" | "other_interaction" | "unknown"
 }
 
 export interface MobileSummarySession {
@@ -1717,8 +1722,9 @@ function isSummaryStatus(value: unknown): value is MobileSummarySession["status"
 function isSummaryAttention(value: unknown): value is MobileSummaryAttention {
   if (!isRecord(value)) return false
   if (value.state !== "waiting" && value.state !== "not_waiting" && value.state !== "unknown") return false
-  return value.kind === "shell_ready" || value.kind === "agent_question" || value.kind === "approval" ||
-    value.kind === "password" || value.kind === "other_interaction" || value.kind === "unknown"
+  return value.kind === "shell_ready" || value.kind === "agent_question" || value.kind === "agent_idle" ||
+    value.kind === "approval" || value.kind === "password" || value.kind === "other_interaction" ||
+    value.kind === "unknown"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
