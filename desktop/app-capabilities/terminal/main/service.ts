@@ -1,4 +1,4 @@
-import type { MobileToolbarButton } from "@synapse/shared" with { "resolution-mode": "import" }
+import type { MobileGroupCommandsEntry, MobileToolbarButton } from "@synapse/shared" with { "resolution-mode": "import" }
 import { createHash, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { chmodSync, existsSync, statSync } from "node:fs"
@@ -103,6 +103,7 @@ import {
 } from "./emulator"
 import type { TerminalAgentNotificationService } from "./agent-notification-service"
 import type { TerminalWorkingDirectoryProbe } from "./working-directory-probe"
+import { projectMobileGroupCommands } from "./mobile-group-commands"
 import { projectMobileToolbarButtons } from "./mobile-toolbar"
 import {
   applyTerminalSessionIdentity,
@@ -1431,6 +1432,16 @@ export function createTerminalService(deps: {
       platform: process.platform,
       keyBytes: KEY_BYTES,
     })
+  }
+
+  /**
+   * 手机要的那份分组命令列表 —— 只有配了命令的分组，只有 id 与名字。
+   *
+   * 与 `listMobileToolbarButtons` 同一个位置、同一个理由：手机能看见什么由这个能力
+   * 决定，网关不必知道终端的分组长什么样。
+   */
+  function listMobileGroupCommands(): readonly MobileGroupCommandsEntry[] {
+    return projectMobileGroupCommands(listGroups())
   }
 
   function getCustomToolbarAction(id: string): TerminalCustomToolbarAction {
@@ -3556,6 +3567,7 @@ export function createTerminalService(deps: {
     getGlobalLaunchSettings,
     listCustomToolbarActions,
     listMobileToolbarButtons,
+    listMobileGroupCommands,
     createCustomToolbarAction,
     updateCustomToolbarAction,
     deleteCustomToolbarAction,
