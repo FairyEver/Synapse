@@ -113,10 +113,12 @@ pnpm --filter @synapse/desktop run test
 
 ## 「静默发版」/「静默部署」
 
+GitHub 的 `CI` 和 `Release` 工作流仅接受手动 `workflow_dispatch`。日常推送和 PR 更新不触发它们；只有用户明确要求运行 CI、发版或静默发版时才启动相应工作流。发版时先运行 CI，成功后再运行 Release。
+
 用户说「静默发版」或「静默部署」时，这是一条完整指令，按顺序做完四件事，不要拆开问：
 
-1. 需要的话先把当前仓库的改动全部提交。发版命令自己会 `git add -A`（`bump-version-commit-push.mjs`），不先提交，未提交的东西会被安静地卷进那句 `chore: bump version` 里。**只提交，不要 push** —— 紧接着的发版命令会把它一起推上去；提前推会让 CI 和 Release 在旧版本号上各多跑一轮。
-2. 按 `synapse-release-publisher` skill 跑完整发版流程，**跳过第 11 节的企业微信通知**；第 0 节的 destination 校验只是为了让第 11 节能发出去，一并不做 —— 不发通知时，通知配置有问题不该拦下一次发版。
+1. 需要的话先把当前仓库的改动全部提交。发版命令自己会 `git add -A`（`bump-version-commit-push.mjs`），不先提交，未提交的东西会被安静地卷进那句 `chore: bump version` 里。**只提交，不要 push** —— 紧接着的发版命令会把它一起推上去。
+2. 按 `synapse-release-publisher` skill 跑完整发版流程：推送版本提交后显式启动 CI，CI 成功后才显式启动 Release；**跳过第 11 节的企业微信通知**。第 0 节的 destination 校验只是为了让第 11 节能发出去，一并不做 —— 不发通知时，通知配置有问题不该拦下一次发版。
 3. 发版成功后把最新 iOS 包传到 TestFlight：`pnpm mobile:release`。
 4. 最后执行服务器部署脚本：`bash deploy.sh`。
 

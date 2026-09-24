@@ -7,7 +7,7 @@ description: Use when working in the Synapse repository and the user asks to rel
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a versioned update notification with product notes and a one-click update entry. A release the user asked for as 「静默发版」/「静默部署」 runs the same loop without the notification and continues into TestFlight and a server deploy — see Silent Release.
+Run the Synapse release loop: commit and push a version bump, explicitly dispatch CI, dispatch Release only after CI succeeds, fix failures, repeat until both pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a versioned update notification with product notes and a one-click update entry. A release the user asked for as 「静默发版」/「静默部署」 runs the same loop without the notification and continues into TestFlight and a server deploy — see Silent Release.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
@@ -28,11 +28,13 @@ Use this skill only for release/publish commands in `/Users/liyang/Documents/cod
 - WeCom notification command: `node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs`
 - WeCom destination configuration: local ignored `.env` keys `SYNAPSE_RELEASE_WECOM_WEBHOOK_URL` and `SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL`
 
+CI and Release have only `workflow_dispatch` triggers. Ordinary pushes and PR updates start neither workflow. A user request to release or silently release authorizes the explicit CI and Release dispatches below; do not dispatch either workflow during ordinary development or merely because a push succeeded.
+
 The current Release workflow no longer stores installer binaries as GitHub Release assets. It builds platform artifacts as short-lived GitHub Actions artifacts, prepares `cdn-release/`, uploads installers, update metadata, `manifest.json`, and `release-body.md` to Tencent Cloud COS, refreshes/verifies CDN, then creates or edits the GitHub Release body in `FairyEver/SynapseAppRelease`. An empty GitHub `assets` array is expected and must not be treated as a release failure.
 
 ## Release Loop
 
-Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, `NOTIFICATION_NOTES_FILE`, and the most recent failure summary.
+Track the current loop number, latest `EXPECTED_TAG`, tested `HEAD_SHA`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, `NOTIFICATION_NOTES_FILE`, and the most recent failure summary.
 
 ### 0. Validate The Enterprise WeChat Destinations
 
@@ -81,19 +83,27 @@ EXPECTED_TAG="v${VERSION}"
 echo "本轮版本: $EXPECTED_TAG"
 ```
 
-### 3. Find This Push's Workflow Runs
+### 3. Dispatch CI For This Version
 
-Wait 5 seconds, then list recent push runs:
+After the version commit has been pushed, verify that local `HEAD` is the commit at remote `main`. Record it as `HEAD_SHA`; stop if the two differ rather than testing a different commit. Record the UTC dispatch time, then explicitly start CI:
 
 ```bash
-sleep 5
-gh run list --repo FairyEver/Synapse --event push --limit 4 \
-  --json databaseId,status,conclusion,headBranch,name,createdAt
+HEAD_SHA=$(git rev-parse HEAD)
+REMOTE_SHA=$(git ls-remote origin refs/heads/main | cut -f1)
+test "$HEAD_SHA" = "$REMOTE_SHA" || { echo "本地 HEAD 与远端 main 不一致"; exit 1; }
+CI_DISPATCHED_AFTER=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+gh workflow run ci.yml --repo FairyEver/Synapse --ref main
 ```
 
-Pick the newest runs named `CI` and `Release`, and record their `databaseId` values as `CI_RUN_ID` and `RELEASE_RUN_ID`.
+Use the run URL returned by `gh workflow run` when available. Otherwise poll the following list for up to 2 minutes and select a `workflow_dispatch` run for `HEAD_SHA` created after `CI_DISPATCHED_AFTER`. Record its `databaseId` as `CI_RUN_ID`; do not select an older run for the same commit:
 
-If the newest CI run is not `in_progress`, `queued`, or `pending`, wait 10 seconds and retry up to 3 times. If CI is still missing, report `CI 未被触发，请检查分支和触发条件` and stop.
+```bash
+gh run list --repo FairyEver/Synapse --workflow ci.yml \
+  --event workflow_dispatch --commit "$HEAD_SHA" --limit 20 \
+  --json databaseId,status,conclusion,headSha,createdAt,url
+```
+
+If no matching run appears, stop and report that manual CI dispatch did not produce a run. Do not start Release.
 
 ### 4. Watch CI
 
@@ -113,11 +123,7 @@ Then inspect the final CI result:
 gh run view "$CI_RUN_ID" --repo FairyEver/Synapse --json status,conclusion,jobs
 ```
 
-If `conclusion` is `success`, continue to Release. If `conclusion` is `failure`, cancel the same round's Release workflow if it is still running:
-
-```bash
-gh run cancel "$RELEASE_RUN_ID" --repo FairyEver/Synapse
-```
+If `conclusion` is `success`, continue to Release. On failure, collect CI logs and fix the cause; Release has not been dispatched yet.
 
 ### 5. Collect Failure Logs
 
@@ -148,13 +154,28 @@ pnpm --filter @synapse/desktop run test -- --run <test-file-path>
 
 Do not use `pnpm dlx vitest`.
 
-After fixing, run `pnpm bump:commit:push`, update `EXPECTED_TAG`, and return to workflow discovery. Stop after 10 total loops and report the last failure summary.
+After fixing, run `pnpm bump:commit:push`, update `EXPECTED_TAG`, and return to step 3 to dispatch CI for the new commit. Stop after 10 total loops and report the last failure summary.
 
 Pending release notes must remain unchanged while fixing CI or Release failures. Do not archive or clear `RELEASE_NOTES_PENDING.md` until a final target release succeeds and the GitHub Release body is updated successfully.
 
-### 7. Watch Release
+### 7. Dispatch And Watch Release
 
-After CI succeeds, watch the same round's Release workflow:
+After CI succeeds, verify remote `main` still equals the `HEAD_SHA` that passed CI. If another commit reached `main`, do not dispatch Release; inspect the new commit and run CI for that commit first. Record the UTC dispatch time, then explicitly start Release:
+
+```bash
+REMOTE_SHA=$(git ls-remote origin refs/heads/main | cut -f1)
+test "$HEAD_SHA" = "$REMOTE_SHA" || { echo "远端 main 已变化，需重新运行 CI"; exit 1; }
+RELEASE_DISPATCHED_AFTER=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+gh workflow run release.yml --repo FairyEver/Synapse --ref main
+```
+
+Use the returned run URL when available. Otherwise poll the following list for up to 2 minutes and select the `workflow_dispatch` run for `HEAD_SHA` created after `RELEASE_DISPATCHED_AFTER`. Record its `databaseId` as `RELEASE_RUN_ID`; stop if none appears. Then watch it:
+
+```bash
+gh run list --repo FairyEver/Synapse --workflow release.yml \
+  --event workflow_dispatch --commit "$HEAD_SHA" --limit 20 \
+  --json databaseId,status,conclusion,headSha,createdAt,url
+```
 
 ```bash
 gh run watch "$RELEASE_RUN_ID" --repo FairyEver/Synapse --exit-status
@@ -174,7 +195,7 @@ If Release fails, collect failed job logs with:
 gh run view "$RELEASE_RUN_ID" --repo FairyEver/Synapse --log --job="<JOB_ID>" 2>&1 | tail -200
 ```
 
-Analyze, fix, commit, and return to workflow discovery.
+Analyze, fix, commit, and return to step 3 to dispatch CI for the new commit.
 
 ### 8. Fetch CDN Download Links
 
@@ -298,16 +319,16 @@ After `gh release edit` succeeds:
    ## 技术调整
    ```
 
-5. Commit and push only the archive/reset files with a skip-CI message:
+5. Commit and push only the archive/reset files. This push does not dispatch CI or Release:
 
    ```bash
    cd /Users/liyang/Documents/code/github/Synapse
    git add RELEASE_NOTES_PENDING.md "docs/releases/$EXPECTED_TAG.md"
-   git commit -m "docs: consume release notes for $EXPECTED_TAG [skip ci]"
+   git commit -m "docs: consume release notes for $EXPECTED_TAG"
    git push
    ```
 
-This consume commit must happen after the package release succeeds. It must not be folded into the version bump commit that triggers the release. If archive, reset, commit, or push fails, report the exact state and do not claim the pending notes were consumed.
+This consume commit must happen after the package release succeeds. It must not be folded into the version bump commit that is checked and released. If archive, reset, commit, or push fails, report the exact state and do not claim the pending notes were consumed.
 
 If pending release notes were empty at release start, do not edit the Release body; keep the workflow-generated CDN body and say that no pending release notes were consumed.
 
@@ -377,7 +398,7 @@ Skip exactly two things from the loop above. Both exist only to get a notificati
 
 Everything else is unchanged: the version bump and push, the CI/Release loop, publishing the product notes into the GitHub Release body, archiving to `docs/releases/`, and opening the Release page.
 
-Before starting, commit whatever is outstanding in the repository — commit it only, do not push. `bump-version-commit-push.mjs` runs `git add -A` at the repo root and pushes what it finds, so anything left uncommitted is quietly folded into the `chore: bump version` commit instead of becoming a commit of its own; and pushing ahead of it would run CI and Release once more on the outgoing version.
+Before starting, commit whatever is outstanding in the repository — commit it only, do not push. `bump-version-commit-push.mjs` runs `git add -A` at the repo root and pushes what it finds, so anything left uncommitted is quietly folded into the `chore: bump version` commit instead of becoming a commit of its own. Ordinary pushes do not start CI or Release; the explicit dispatches in steps 3 and 7 do.
 
 After the release succeeds, two further steps belong to the same instruction:
 
