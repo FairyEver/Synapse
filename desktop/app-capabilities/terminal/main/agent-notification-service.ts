@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto"
-import { chmod, mkdir, stat, writeFile } from "node:fs/promises"
+import { chmod, mkdir, stat, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
@@ -48,19 +48,12 @@ const EVENT_PATH = "/terminal-agent-event"
 const MAX_BODY_BYTES = 16 * 1024
 const RATE_LIMIT_PER_MINUTE = 120
 const DEDUPLICATION_WINDOW_MS = 2_000
-/**
- * How often the archive asks whether the process it is watching still exists.
- *
- * This is the fallback that does not depend on hook delivery: an agent whose `Stop` or
- * `SessionEnd` never arrived still has to stop showing as running. Minutes apart, because
- * a terminal that lingers a few seconds too long in "工作中" costs nothing next to a timer
- * that wakes the main process for every running session every second.
- */
+/** How often the archive checks whether the process it is watching still exists. */
 const AGENT_SESSION_SWEEP_MS = 30_000
 /** A `working` this long with a transcript that stopped growing is not working. */
 const AGENT_TRANSCRIPT_STALE_MS = 10 * 60_000
 
-type AgentProvider = "codex" | "claude"
+type AgentProvider = "claude"
 type AgentNotificationKind = "needs_action" | "completed"
 /**
  * 同一个 kind 下需要不同说法的细分。
@@ -75,12 +68,8 @@ type SessionBinding = {
   readonly token: string
   title: string
   waiting: boolean
-  /**
-   * 这个会话的 agent 有没有真的通过自己的 hooks 报过事件。
-   *
-   * OSC 只是兜底，兜的是「主通道没搭上」——一旦 agent 自己在说话，它就没有立足之地了。
-   */
-  agentHookSeen: boolean
+  backgroundWorkPending: boolean
+  stopStatusUnknown: boolean
 }
 
 export type TerminalAgentLaunchIntegration = {
@@ -262,6 +251,8 @@ export class TerminalAgentNotificationService {
       ...(payload.agentSessionId ? { agentSessionId: payload.agentSessionId } : {}),
       ...(payload.transcriptPath ? { transcriptPath: payload.transcriptPath } : {}),
       ...(payload.agentPid === undefined ? {} : { pid: payload.agentPid }),
+      ...(payload.backgroundTaskCount === undefined ? {} : { backgroundTaskCount: payload.backgroundTaskCount }),
+      ...(payload.sessionCronCount === undefined ? {} : { sessionCronCount: payload.sessionCronCount }),
     }
     const update = reduceTerminalAgentEvent({ current, sessionId, event })
     if (update) this.commitAgentSessionUpdate(sessionId, update)
@@ -420,7 +411,8 @@ export class TerminalAgentNotificationService {
         token,
         title: input.title,
         waiting: false,
-        agentHookSeen: false,
+        backgroundWorkPending: false,
+        stopStatusUnknown: false,
       }
       this.sessionsByToken.set(token, session)
       this.sessionTokens.set(input.sessionId, token)
@@ -545,12 +537,6 @@ export class TerminalAgentNotificationService {
     this.activeSessionByWebContents.delete(webContentsId)
   }
 
-  handleOscNotification(sessionId: string): void {
-    const session = this.getSessionBinding(sessionId)
-    if (!session || session.agentHookSeen || session.waiting) return
-    void this.notify(session, "completed", "terminal")
-  }
-
   /**
    * 生成（或复用）shell 集成的运行时文件。
    *
@@ -600,14 +586,17 @@ export class TerminalAgentNotificationService {
           writeFile(path.join(zshDir, name), contents, { encoding: "utf8", mode: 0o600 })),
       ])
       const shimExtension = this.platform === "win32" ? ".cmd" : ""
-      await Promise.all((["codex", "claude"] as const).map(async (provider) => {
-        const shimPath = path.join(shimDir, `${provider}${shimExtension}`)
-        const contents = this.platform === "win32"
-          ? createTerminalAgentWindowsShim(provider)
-          : createTerminalAgentUnixShim(provider)
-        await writeFile(shimPath, contents, { encoding: "utf8", mode: 0o700 })
-        if (this.platform !== "win32") await chmod(shimPath, 0o700)
-      }))
+      const shimPath = path.join(shimDir, `claude${shimExtension}`)
+      const contents = this.platform === "win32"
+        ? createTerminalAgentWindowsShim()
+        : createTerminalAgentUnixShim()
+      await writeFile(shimPath, contents, { encoding: "utf8", mode: 0o700 })
+      if (this.platform !== "win32") await chmod(shimPath, 0o700)
+      try {
+        await unlink(path.join(shimDir, `codex${shimExtension}`))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      }
       this.recordInfrastructureAudit("fs.write", this.deps.runtimeDir, "allowed")
       return { shimDir, zshDir, wrapperPath, hookPath, bashRcPath }
     } catch (error) {
@@ -680,14 +669,9 @@ export class TerminalAgentNotificationService {
   }
 
   private async handleAgentEvent(session: SessionBinding, payload: AgentEventPayload): Promise<void> {
-    /*
-     * 从这一刻起，OSC 兜底对这个会话闭嘴：agent 自己在通过 hooks 说话，兜底没有立足之地。
-     *
-     * `AgentProcessStart` 不算数 —— 那是 wrapper 自己报的，只证明 shim 跑起来了，不证明 agent 的
-     * hooks 通得了（用户可能关掉了自己的 hooks，或者压根没信任 Codex Hook）。兜底要救的正是后一种。
-     */
-    if (payload.event !== "AgentProcessStart") session.agentHookSeen = true
     if (payload.agentId || payload.parentSessionId || payload.event === "SubagentStop") return
+    if (payload.event === "Notification" && payload.notificationType === "idle_prompt"
+      && (session.backgroundWorkPending || session.stopStatusUnknown)) return
     // 档案先于通知推进：通知是提示，档案是事实，而两者由同一批事件驱动。子 agent 的事件
     // 在两个地方都提前返回，父级状态不会被它带动。
     await this.applyAgentEvent(session.sessionId, payload)
@@ -712,7 +696,7 @@ export class TerminalAgentNotificationService {
       await this.notify(session, "needs_action", payload.source)
       return
     }
-    if (payload.event === "PreToolUse" && isQuestionTool(payload.source, payload.toolName)) {
+    if (payload.event === "PreToolUse" && isQuestionTool(payload.toolName)) {
       session.waiting = true
       this.applyAttention({
         sessionId: session.sessionId,
@@ -750,14 +734,17 @@ export class TerminalAgentNotificationService {
       return
     }
     if (payload.event === "Stop") {
+      session.backgroundWorkPending = (payload.backgroundTaskCount ?? 0) > 0 || (payload.sessionCronCount ?? 0) > 0
+      session.stopStatusUnknown = payload.backgroundTaskCount === undefined || payload.sessionCronCount === undefined
       if (session.waiting) return
       session.waiting = false
       this.applyAttention({
         sessionId: session.sessionId,
         state: "not_waiting",
         kind: "unknown",
-        reason: "agent_stopped",
+        reason: session.backgroundWorkPending ? "agent_background_work" : "agent_stopped",
       })
+      if (session.backgroundWorkPending || session.stopStatusUnknown) return
       await this.notify(session, "completed", payload.source)
       return
     }
@@ -789,7 +776,7 @@ export class TerminalAgentNotificationService {
   private async notify(
     session: SessionBinding,
     kind: AgentNotificationKind,
-    provider: AgentProvider | "terminal",
+    provider: AgentProvider,
     variant?: AgentNotificationVariant,
   ): Promise<void> {
     /*
@@ -829,7 +816,7 @@ export class TerminalAgentNotificationService {
       this.recordNotificationAudit(resource, provider, kind, "denied")
       return
     }
-    const title = provider === "codex" ? "Codex" : provider === "claude" ? "Claude Code" : "终端"
+    const title = "Claude Code"
     const sessionTitle = sanitizeSessionTitle(session.title)
     const body = agentNotificationBody(kind, sessionTitle, variant)
     if (kind === "completed") {
@@ -884,7 +871,7 @@ export class TerminalAgentNotificationService {
 
   private recordNotificationAudit(
     resource: string,
-    provider: AgentProvider | "terminal",
+    provider: AgentProvider,
     kind: AgentNotificationKind,
     outcome: "allowed" | "denied" | "failed",
   ): void {
@@ -967,6 +954,8 @@ type AgentEventPayload = {
   readonly transcriptPath?: string
   /** 这一任 agent 进程的 pid，由 wrapper 在 spawn 之后报上来。 */
   readonly agentPid?: number
+  readonly backgroundTaskCount?: number
+  readonly sessionCronCount?: number
 }
 
 function defaultSettings(): TerminalAgentNotificationSettings {
@@ -983,7 +972,7 @@ function defaultSettings(): TerminalAgentNotificationSettings {
 
 function parseAgentEvent(body: Buffer): AgentEventPayload {
   const value = JSON.parse(body.toString("utf8")) as Record<string, unknown>
-  if ((value.source !== "codex" && value.source !== "claude")
+  if (value.source !== "claude"
     || typeof value.event !== "string"
     || typeof value.sessionId !== "string") throw new Error("Invalid event")
   return {
@@ -998,11 +987,17 @@ function parseAgentEvent(body: Buffer): AgentEventPayload {
     // 路径只被 `stat`，所以给它一个够用又不会失控的长度上限。
     ...(typeof value.transcriptPath === "string" ? { transcriptPath: value.transcriptPath.slice(0, 4096) } : {}),
     ...(isPositiveInteger(value.agentPid) ? { agentPid: value.agentPid } : {}),
+    ...(isNonNegativeInteger(value.backgroundTaskCount) ? { backgroundTaskCount: value.backgroundTaskCount } : {}),
+    ...(isNonNegativeInteger(value.sessionCronCount) ? { sessionCronCount: value.sessionCronCount } : {}),
   }
 }
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
 }
 
 /**
@@ -1044,10 +1039,8 @@ function isLoopback(address: string | undefined): boolean {
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1"
 }
 
-function isQuestionTool(source: AgentProvider, toolName: string | undefined): boolean {
-  return source === "codex"
-    ? toolName === "request_user_input"
-    : toolName === "AskUserQuestion" || toolName === "ExitPlanMode"
+function isQuestionTool(toolName: string | undefined): boolean {
+  return toolName === "AskUserQuestion" || toolName === "ExitPlanMode"
 }
 
 function isActionNotification(type: string | undefined): boolean {
@@ -1074,7 +1067,7 @@ function agentNotificationBody(
   sessionTitle: string,
   variant?: AgentNotificationVariant,
 ): string {
-  if (kind === "completed") return `“${sessionTitle}”任务已完成`
+  if (kind === "completed") return `“${sessionTitle}”本轮回复结束`
   if (variant === "idle") return `“${sessionTitle}”还在等你`
   return `“${sessionTitle}”需要你的操作`
 }

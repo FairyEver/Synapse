@@ -1,8 +1,8 @@
-import { EventEmitter } from "node:events"
+import { EventEmitter, once } from "node:events"
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
@@ -63,14 +63,14 @@ describe("TerminalAgentNotificationService", () => {
 
     fixture.focusedWebContentsId.mockReturnValue(42)
     fixture.service.reportActiveSession(42, "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f")
-    await postEvent(launch!.env, { source: "codex", event: "PermissionRequest" })
+    await postEvent(launch!.env, { source: "claude", event: "PermissionRequest" })
     expect(fixture.notifications).toHaveLength(0)
 
     fixture.service.reportActiveSession(42, "92654f7a-2e77-4cb4-96cb-fb82583f167a")
-    await postEvent(launch!.env, { source: "codex", event: "PermissionRequest" })
+    await postEvent(launch!.env, { source: "claude", event: "PermissionRequest" })
     expect(fixture.notifications).toHaveLength(1)
     expect(fixture.notifications[0]?.input).toEqual({
-      title: "Codex",
+      title: "Claude Code",
       body: "“brick-lab”需要你的操作",
     })
 
@@ -93,11 +93,11 @@ describe("TerminalAgentNotificationService", () => {
       defaultShellArgs: ["-l"],
     })!
     // 默认跟随总闸：开了通知就该弹，所以下一条事件先证明这条链路本来是通的。
-    await postEvent(launch.env, { source: "codex", event: "Stop" })
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
     expect(fixture.notifications).toHaveLength(1)
 
     await fixture.service.updateSettings({ notify: false, expectedRevision: 2 })
-    await postEvent(launch.env, { source: "codex", event: "PermissionRequest" })
+    await postEvent(launch.env, { source: "claude", event: "PermissionRequest" })
     expect(fixture.notifications).toHaveLength(1)
     // 静音的是「出声」，不是「记录」：侧栏标记与 agent 档案都必须照旧。
     expect(fixture.attention.at(-1)).toEqual({
@@ -111,7 +111,7 @@ describe("TerminalAgentNotificationService", () => {
     // 正控用**同一个事件**把开关再翻回来：同一种 kind 在 2 秒去重窗内本来就不会再弹，
     // 拿 `Stop` 复弹当正控会把「去重生效」误读成「开关坏了」。
     await fixture.service.updateSettings({ notify: true, expectedRevision: 3 })
-    await postEvent(launch.env, { source: "codex", event: "PermissionRequest" })
+    await postEvent(launch.env, { source: "claude", event: "PermissionRequest" })
     expect(fixture.notifications).toHaveLength(2)
     await fixture.service.stop()
   })
@@ -129,10 +129,99 @@ describe("TerminalAgentNotificationService", () => {
       defaultShellArgs: ["-l"],
     })!
 
-    await postEvent(launch.env, { source: "claude", event: "Stop" })
-    await postEvent(launch.env, { source: "claude", event: "Stop" })
-    await postEvent(launch.env, { source: "codex", event: "Stop" })
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
     expect(fixture.notifications).toHaveLength(1)
+    await fixture.service.stop()
+  })
+
+  it("keeps Claude working and silent while background tasks or session crons remain", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "background",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    const hook = spawn(process.execPath, [launch.env.SYNAPSE_TERMINAL_AGENT_HOOK!, "claude", "Stop"], {
+      env: childEnvironment(launch.env),
+      stdio: ["pipe", "ignore", "pipe"],
+    })
+    hook.stdin.end(JSON.stringify({ background_tasks: [{ type: "shell", command: "private command" }], session_crons: [] }))
+    expect(await once(hook, "exit")).toEqual([0, null])
+    expect(fixture.service.getAgentStateView(sessionId)?.state).toBe("working")
+    expect(fixture.notifications).toHaveLength(0)
+    expect(fixture.attention.at(-1)?.reason).toBe("agent_background_work")
+
+    await postEvent(launch.env, { source: "claude", event: "Notification", notificationType: "idle_prompt" })
+    expect(fixture.notifications).toHaveLength(0)
+    expect(fixture.service.getAgentStateView(sessionId)?.state).toBe("working")
+
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 1 })
+    expect(fixture.notifications).toHaveLength(0)
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
+    expect(fixture.notifications.map((notification) => notification.input.body)).toEqual([
+      "“background”本轮回复结束",
+    ])
+    expect(fixture.service.getAgentStateView(sessionId)?.state).toBe("idle")
+    await fixture.service.stop()
+  })
+
+  it("does not infer completion when Claude omits background task fields", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "unknown",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    await postEvent(launch.env, { source: "claude", event: "Stop" })
+    expect(fixture.notifications).toHaveLength(0)
+    await postEvent(launch.env, { source: "claude", event: "Notification", notificationType: "idle_prompt" })
+    expect(fixture.notifications).toHaveLength(0)
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
+    expect(fixture.notifications).toHaveLength(1)
+    await fixture.service.stop()
+  })
+
+  it("removes an old Codex shim and rejects old Codex hook events", async () => {
+    const fixture = await createFixture()
+    const shimDir = path.join(fixture.runtimeDir, "bin")
+    await mkdir(shimDir)
+    const oldShim = path.join(shimDir, process.platform === "win32" ? "codex.cmd" : "codex")
+    await writeFile(oldShim, "old Codex shim", "utf8")
+    await fixture.service.start()
+    await expect(readFile(oldShim, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "codex",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+    const response = await fetch(launch.env.SYNAPSE_TERMINAL_AGENT_EVENT_URL!, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${launch.env.SYNAPSE_TERMINAL_AGENT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ source: "codex", event: "Stop", sessionId }),
+    })
+    expect(response.status).toBe(400)
+    expect(fixture.notifications).toHaveLength(0)
+    expect(fixture.service.getAgentStateView(sessionId)).toBeNull()
     await fixture.service.stop()
   })
 
@@ -169,61 +258,6 @@ describe("TerminalAgentNotificationService", () => {
     await fixture.service.stop()
   })
 
-  it("treats OSC as a fallback only while no agent hook has reported", async () => {
-    const fixture = await createFixture()
-    await fixture.service.start()
-    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
-    const fallbackOnly = "2c8d1f04-6a3b-4c9e-9f27-5b8a1d0c3e77"
-    const hooked = "9e4b7a12-3d5c-4f80-b6a1-7c2e9d4f5a38"
-    const a = fixture.service.prepareSession({
-      sessionId: fallbackOnly,
-      title: "fallback",
-      shell: "/bin/zsh",
-      env: { PATH: "/usr/bin" },
-      defaultShellArgs: ["-l"],
-    })!
-    const b = fixture.service.prepareSession({
-      sessionId: hooked,
-      title: "hooked",
-      shell: "/bin/zsh",
-      env: { PATH: "/usr/bin" },
-      defaultShellArgs: ["-l"],
-    })!
-
-    // 给 B 一条**不弹通知**的 hook 事件。这里不能用 `Stop`：那会占掉 `${sessionId}:completed`
-    // 的 2 秒去重额度，断言就会变成「去重生效」而不是「兜底已经闭嘴」。
-    await postEvent(b.env, { source: "claude", event: "UserPromptSubmit" })
-
-    fixture.service.handleOscNotification(fallbackOnly)
-    fixture.service.handleOscNotification(hooked)
-    await new Promise((resolve) => { setTimeout(resolve, 0) })
-
-    expect(fixture.notifications.map((notification) => notification.input.body))
-      .toEqual(["“fallback”任务已完成"])
-    await fixture.service.stop()
-  })
-
-  it("counts the OSC fallback and the stop hook as the same completion", async () => {
-    // 同一次完成可能两条路都到（hook 的 Stop 与程序自己发的 OSC 9），它们必须共用一次额度。
-    const fixture = await createFixture()
-    await fixture.service.start()
-    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
-    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
-    const launch = fixture.service.prepareSession({
-      sessionId,
-      title: "brick-lab",
-      shell: "/bin/zsh",
-      env: { PATH: "/usr/bin" },
-      defaultShellArgs: ["-l"],
-    })!
-
-    await postEvent(launch.env, { source: "claude", event: "Stop" })
-    fixture.service.handleOscNotification(sessionId)
-    await new Promise((resolve) => { setTimeout(resolve, 0) })
-    expect(fixture.notifications).toHaveLength(1)
-    await fixture.service.stop()
-  })
-
   it("maps Claude questions and top-level completion but ignores subagent completion", async () => {
     const fixture = await createFixture()
     await fixture.service.start()
@@ -238,13 +272,13 @@ describe("TerminalAgentNotificationService", () => {
 
     await postEvent(launch.env, { source: "claude", event: "PreToolUse", toolName: "AskUserQuestion" })
     await postEvent(launch.env, { source: "claude", event: "SubagentStop", agentId: "child" })
-    await postEvent(launch.env, { source: "claude", event: "Stop" })
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
     await postEvent(launch.env, { source: "claude", event: "UserPromptSubmit" })
-    await postEvent(launch.env, { source: "claude", event: "Stop" })
+    await postEvent(launch.env, { source: "claude", event: "Stop", backgroundTaskCount: 0, sessionCronCount: 0 })
 
     expect(fixture.notifications.map((notification) => notification.input)).toEqual([
       { title: "Claude Code", body: "“会话 名称”需要你的操作" },
-      { title: "Claude Code", body: "“会话 名称”任务已完成" },
+      { title: "Claude Code", body: "“会话 名称”本轮回复结束" },
     ])
     await fixture.service.stop()
   })
@@ -263,9 +297,9 @@ describe("TerminalAgentNotificationService", () => {
     })!
 
     await postEvent(launch.env, { source: "claude", event: "PreToolUse", toolName: "AskUserQuestion" })
-    await postEvent(launch.env, { source: "codex", event: "PermissionRequest" })
+    await postEvent(launch.env, { source: "claude", event: "PermissionRequest" })
     await postEvent(launch.env, { source: "claude", event: "Notification", notificationType: "permission_prompt" })
-    await postEvent(launch.env, { source: "codex", event: "Interrupt" })
+    await postEvent(launch.env, { source: "claude", event: "Interrupt" })
 
     expect(fixture.attention).toEqual([
       { sessionId, state: "waiting", kind: "agent_question", reason: "agent_question_tool" },
@@ -299,7 +333,7 @@ describe("TerminalAgentNotificationService", () => {
     )
     await writeFile(
       path.join(realBin, "codex"),
-      '#!/bin/sh\ncase " $* " in *" -c features.hooks=true "*) printf real-codex-hooked;; *) printf real-codex;; esac',
+      '#!/bin/sh\nprintf real-codex',
       { encoding: "utf8", mode: 0o700 },
     )
     await writeFile(
@@ -320,7 +354,7 @@ describe("TerminalAgentNotificationService", () => {
       encoding: "utf8",
     })
     expect(result.status).toBe(0)
-    expect(result.stdout).toBe("real-codex-hooked:real-claude-hooked")
+    expect(result.stdout).toBe("real-codex:real-claude-hooked")
     await fixture.service.stop()
   })
 
@@ -817,6 +851,7 @@ async function createFixture(options: { platform?: NodeJS.Platform; now?: () => 
   })
   return {
     service,
+    runtimeDir,
     notifications,
     attention,
     focusedWebContentsId,

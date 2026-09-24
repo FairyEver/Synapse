@@ -128,9 +128,9 @@ export function TerminalLaunchSettingsForm({
         <TabsContent value="notifications" className="grid gap-4 pt-3">
           <Field orientation="horizontal" className="items-start justify-between gap-4">
             <FieldContent>
-              <FieldLabel htmlFor="terminal-agent-notifications">Agent 原生通知</FieldLabel>
+              <FieldLabel htmlFor="terminal-agent-notifications">Claude Code 原生通知</FieldLabel>
               <FieldDescription>
-                仅对新建的会话生效。Codex 首次使用需在 /hooks 中信任 Synapse Hook。
+                仅对新建的会话生效。
               </FieldDescription>
             </FieldContent>
             <Switch

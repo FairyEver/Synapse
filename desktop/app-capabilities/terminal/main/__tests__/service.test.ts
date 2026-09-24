@@ -1853,7 +1853,6 @@ describe("TerminalService session state: tty and agent block", () => {
       renameSession: () => undefined,
       handleUserInput: () => undefined,
       unregisterSession: () => undefined,
-      handleOscNotification: () => undefined,
       getAgentStateView: () => view,
     } as unknown as Parameters<typeof createTerminalService>[0]["agentNotifications"]
   }

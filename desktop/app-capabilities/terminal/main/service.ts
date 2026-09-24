@@ -341,7 +341,7 @@ export function createTerminalService(deps: {
   readonly spawnPty?: (input: SpawnPtyInput) => PtyLike
   readonly logger?: TerminalServiceLogger
   readonly agentNotifications?: Pick<TerminalAgentNotificationService,
-    "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession" | "handleOscNotification"
+    "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession"
     | "getAgentStateView">
   /** shell 报不出目录时的兜底（自定义 shell、pwsh / cmd……）。没有就只靠 OSC 7。 */
   readonly workingDirectoryProbe?: TerminalWorkingDirectoryProbe
@@ -1041,7 +1041,6 @@ export function createTerminalService(deps: {
           events.emit("workingDirectoryChanged", { sessionId: session.id })
         }
       },
-      onNotification: () => deps.agentNotifications?.handleOscNotification(session.id),
     })
     const dataDisposable = child.onData((data) => {
       const current = sessions.get(session.id)

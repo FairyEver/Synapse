@@ -28,8 +28,8 @@ export type TerminalAgentSession = {
   readonly schemaVersion: 1
   readonly sessionId: string
   /**
-   * 跑的是哪个 agent。进程真的启动之前不知道：shim 是在那一刻才决定走 claude 还是 codex，
-   * 所以 `launching` 阶段的档案没有这一项。
+   * 跑的是哪个 agent。进程真的启动之前不知道，所以 `launching` 阶段的档案没有这一项。
+   * `codex` 仅保留用于读取旧档案；新会话不再注入 Codex Hook。
    */
   readonly agentKind?: TerminalAgentKind
   /**
@@ -83,6 +83,8 @@ export type TerminalAgentEvent = {
   readonly agentSessionId?: string
   readonly transcriptPath?: string
   readonly pid?: number
+  readonly backgroundTaskCount?: number
+  readonly sessionCronCount?: number
 }
 
 /**
@@ -309,6 +311,9 @@ function reduceState(event: TerminalAgentEvent): TerminalAgentState | null {
     case "Notification":
       return isActionNotification(event.notificationType) ? "needs_input" : null
     case "Stop":
+      return (event.backgroundTaskCount ?? 0) > 0 || (event.sessionCronCount ?? 0) > 0
+        ? "working"
+        : "idle"
     case "Interrupt":
       return "idle"
     case "SessionEnd":

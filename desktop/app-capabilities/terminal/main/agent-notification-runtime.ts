@@ -68,6 +68,8 @@ process.stdin.on("end", () => {
     agentSessionId: typeof payload.session_id === "string" ? payload.session_id : undefined,
     transcriptPath: typeof payload.transcript_path === "string" ? payload.transcript_path : undefined,
     agentPid: Number.parseInt(process.env.SYNAPSE_TERMINAL_AGENT_AGENT_PID || "", 10) || undefined,
+    backgroundTaskCount: Array.isArray(payload.background_tasks) ? payload.background_tasks.length : undefined,
+    sessionCronCount: Array.isArray(payload.session_crons) ? payload.session_crons.length : undefined,
   })
   if (!url || !token || !sessionId) return finish()
   try {
@@ -96,7 +98,6 @@ process.stdin.resume()
 function finish() {
   if (finished) return
   finished = true
-  if (source === "codex") process.stdout.write("{}")
 }
 `
 
@@ -117,8 +118,7 @@ if (!real) {
   process.exit(127)
 }
 
-if (disabled || !startsSession(provider, originalArgs)) launch(real, originalArgs)
-else if (provider === "codex") launch(real, codexArgs(originalArgs))
+if (provider !== "claude" || disabled || !startsSession(originalArgs)) launch(real, originalArgs)
 else launchClaude(real, originalArgs)
 
 function resolveExecutable(command) {
@@ -150,21 +150,8 @@ function samePath(left, right) {
   return process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right
 }
 
-function startsSession(kind, args) {
-  if (kind === "claude") {
-    return !args.some((arg) => ["--help", "-h", "--version", "-v"].includes(arg))
-  }
-  if (args.length === 0) return true
-  const nonSession = new Set(["review", "login", "logout", "mcp", "plugin", "mcp-server", "app-server", "completion", "update", "doctor", "sandbox", "debug", "apply", "archive", "delete", "unarchive", "cloud", "features", "help"])
-  const consumes = new Set(["-c", "--config", "-m", "--model", "-p", "--profile", "-C", "--cd", "--remote", "-a", "--ask-for-approval", "-s", "--sandbox", "--output-last-message", "--enable", "--disable"])
-  let skip = false
-  for (const arg of args) {
-    if (skip) { skip = false; continue }
-    if (["--help", "-h", "--version", "-V"].includes(arg)) return false
-    if (arg.startsWith("-")) { if (!arg.includes("=") && consumes.has(arg)) skip = true; continue }
-    return !nonSession.has(arg)
-  }
-  return true
+function startsSession(args) {
+  return !args.some((arg) => ["--help", "-h", "--version", "-v"].includes(arg))
 }
 
 function hookCommand(kind, event) {
@@ -176,23 +163,6 @@ function hookCommand(kind, event) {
 function quoteShell(value) {
   if (process.platform === "win32") return '"' + String(value).replace(/"/g, '""') + '"'
   return "'" + String(value).replace(/'/g, "'\\''") + "'"
-}
-
-function codexArgs(args) {
-  const events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "Stop", "Interrupt", "SessionEnd"]
-  /*
-   * 打开 hooks 用的是 -c features.hooks=true，而不是等价的 --enable hooks：codex 拿 feature
-   * 名单校验 --enable，名单里没有的名字会让进程以 rc=1 拒绝启动（Unknown feature flag），
-   * 所以 feature 一旦被 codex 改名或移除，用户敲 codex 就起不来了（plugin_hooks 已经从名单里
-   * 移除过）。-c 是原始配置覆盖，未知键按 TOML 宽容处理；codex 自己声明两者等价
-   * （--enable <FEATURE> 等同 -c features.<name>=true），语义不变，但不会伤到用户的工具。
-   */
-  const injected = ["-c", "features.hooks=true"]
-  for (const event of events) {
-    const command = JSON.stringify(hookCommand("codex", event))
-    injected.push("-c", "hooks." + event + "=[{ hooks = [{ type = \"command\", command = " + command + ", timeout = 5, async = true }] }]")
-  }
-  return injected.concat(args)
 }
 
 function launchClaude(realPath, args) {
@@ -261,7 +231,7 @@ function launch(realPath, args, cleanup) {
     env: { ...process.env, SYNAPSE_TERMINAL_AGENT_WRAPPER_ACTIVE: "1" },
     shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(realPath),
   })
-  if (child.pid) reportAgentProcessStarted(child.pid)
+  if (provider === "claude" && child.pid) reportAgentProcessStarted(child.pid)
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => {
     try { child.kill(signal) } catch { return }
   })
@@ -279,10 +249,10 @@ function launch(realPath, args, cleanup) {
 }
 `
 
-export function createTerminalAgentUnixShim(provider: "codex" | "claude"): string {
-  return `#!/bin/sh\nexec "$SYNAPSE_TERMINAL_AGENT_NODE" "$SYNAPSE_TERMINAL_AGENT_WRAPPER" ${provider} "$@"\n`
+export function createTerminalAgentUnixShim(): string {
+  return `#!/bin/sh\nexec "$SYNAPSE_TERMINAL_AGENT_NODE" "$SYNAPSE_TERMINAL_AGENT_WRAPPER" claude "$@"\n`
 }
 
-export function createTerminalAgentWindowsShim(provider: "codex" | "claude"): string {
-  return `@echo off\r\n"%SYNAPSE_TERMINAL_AGENT_NODE%" "%SYNAPSE_TERMINAL_AGENT_WRAPPER%" ${provider} %*\r\n`
+export function createTerminalAgentWindowsShim(): string {
+  return `@echo off\r\n"%SYNAPSE_TERMINAL_AGENT_NODE%" "%SYNAPSE_TERMINAL_AGENT_WRAPPER%" claude %*\r\n`
 }
