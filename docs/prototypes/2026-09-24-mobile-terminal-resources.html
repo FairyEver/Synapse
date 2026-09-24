@@ -25,36 +25,46 @@
         <span id="progress" class="ml-auto text-xs text-neutral-600 dark:text-neutral-300" aria-live="polite">0 / 5</span>
       </div>
 
-      <div class="relative flex h-[760px] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-neutral-300 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100" aria-label="Synapse Remote 终端">
-        <div class="flex h-10 shrink-0 items-center justify-between px-6 text-xs font-semibold">
-          <span>9:41</span><span aria-hidden="true">●●●  ▰</span>
+      <div class="relative flex aspect-[390/844] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-neutral-300 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100" aria-label="Synapse Remote 终端">
+        <div class="flex h-14 shrink-0 items-center justify-between px-6 text-sm font-semibold">
+          <span>2:51</span><span aria-hidden="true">▮▮▮  5G  ▰</span>
         </div>
 
-        <nav class="flex h-14 shrink-0 items-center gap-1 border-b border-neutral-200 px-2 dark:border-neutral-700" aria-label="会话顶栏">
-          <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100" aria-label="返回终端列表">‹</button>
-          <div class="min-w-0 flex-1 px-1">
-            <p class="truncate text-sm font-semibold">Claude Code · Synapse</p>
-            <p class="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-300"><span class="h-1.5 w-1.5 rounded-full bg-green-700 dark:bg-green-400" aria-hidden="true"></span>运行中</p>
+        <nav class="flex h-16 shrink-0 items-center gap-1 px-2" aria-label="会话顶栏">
+          <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-3xl hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100" aria-label="返回终端列表">‹</button>
+          <div class="min-w-0 flex-1 text-center">
+            <p class="truncate text-base font-semibold">Claude Code · Synapse</p>
+            <p class="flex items-center justify-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-300"><span class="h-1.5 w-1.5 rounded-full bg-green-700 dark:bg-green-400" aria-hidden="true"></span>main</p>
           </div>
-          <button id="resourceButton" type="button" hidden class="flex h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-sm font-medium hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100" aria-label="查看会话资源">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="14" height="17" rx="2"></rect><path d="M8 8h6M8 12h6M8 16h4M18 7h2v14H8"></path></svg>
-            <span>资源</span><span id="resourceCount" class="tabular-nums">0</span>
-          </button>
-          <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100" aria-label="更多操作">⋯</button>
+          <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-lg hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:focus-visible:outline-neutral-100" aria-label="更多操作">⋯</button>
         </nav>
 
-        <div class="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-200 px-3 dark:border-neutral-700" aria-label="快捷指令">
-          <button type="button" class="rounded-full bg-neutral-100 px-3 py-1 text-xs dark:bg-neutral-800">回车</button>
-          <button type="button" class="rounded-full bg-neutral-100 px-3 py-1 text-xs dark:bg-neutral-800">Ctrl+C</button>
-          <button type="button" class="rounded-full bg-neutral-100 px-3 py-1 text-xs dark:bg-neutral-800">/exit</button>
+        <div class="relative min-h-0 flex-1 bg-neutral-950">
+          <button id="resourceButton" type="button" hidden class="absolute inset-x-2 top-2 z-10 flex h-9 items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-3 text-left text-xs font-medium text-neutral-100 hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" aria-label="查看会话资源">
+            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="14" height="17" rx="2"></rect><path d="M8 8h6M8 12h6M8 16h4M18 7h2v14H8"></path></svg>
+            <span>Synapse 资源</span><span>×<span id="resourceCount" class="tabular-nums">0</span></span><span class="ml-auto text-neutral-400" aria-hidden="true">›</span>
+          </button>
+          <div id="terminalLog" class="h-full overflow-y-auto p-3 font-mono text-xs leading-5 text-neutral-100 whitespace-pre-wrap break-all" aria-label="终端输出" aria-live="polite">
+            <div class="flex items-start gap-3"><img class="h-12 w-12 shrink-0 object-contain" src="../../desktop/src/definitions/agent/claude-code/icon.png" alt=""><div class="min-w-0"><p><span class="font-semibold">Claude Code</span> <span class="text-neutral-400">v2.1.278</span></p><p class="text-neutral-400">deepseek-flash[1M] with high effort</p><p class="text-neutral-400">API Usage Billing</p><p class="text-neutral-400">~/Documents/code/github/Synapse</p></div></div>
+            <div class="mt-12 border-t border-neutral-600 pt-2">›</div>
+            <div class="mt-2 border-t border-neutral-600 pt-2"><span class="text-pink-400">▸▸ bypass permissions on</span> <span class="text-neutral-400">(shift+tab to cycle) · …</span></div>
+            <div class="text-right text-neutral-400">● high · /effort</div>
+          </div>
         </div>
 
-        <div id="terminalLog" class="min-h-0 flex-1 overflow-y-auto bg-neutral-950 p-3 font-mono text-xs leading-5 text-neutral-100 whitespace-pre-wrap break-all" aria-label="终端输出" aria-live="polite"><div>~/code/Synapse $ synapse agent</div><div>请生成一份文档并分享，再把链接发给我。</div><div class="text-neutral-400">正在生成…</div></div>
+        <div class="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-neutral-200 px-3 dark:border-neutral-700" aria-label="快捷指令">
+          <span class="shrink-0 text-2xl text-neutral-600 dark:text-neutral-300" aria-hidden="true">⌘</span>
+          <button type="button" class="shrink-0 rounded-xl bg-neutral-100 px-3 py-2 font-mono text-sm dark:bg-neutral-800">回车</button>
+          <button type="button" class="shrink-0 rounded-xl bg-neutral-100 px-3 py-2 font-mono text-sm dark:bg-neutral-800">Ctrl+C</button>
+          <button type="button" class="shrink-0 rounded-xl bg-neutral-100 px-3 py-2 font-mono text-sm dark:bg-neutral-800">/exit</button>
+          <span class="ml-auto shrink-0 text-lg text-neutral-600 dark:text-neutral-300" aria-hidden="true">⌃</span>
+        </div>
 
-        <div class="flex h-14 shrink-0 items-center gap-2 border-t border-neutral-200 px-3 dark:border-neutral-700">
-          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-sm dark:bg-neutral-800" aria-hidden="true">⌘</span>
-          <div class="flex h-9 min-w-0 flex-1 items-center rounded-full bg-neutral-100 px-3 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">输入命令</div>
-          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-200 text-sm dark:bg-neutral-700" aria-hidden="true">＋</span>
+        <div class="flex h-16 shrink-0 items-center gap-3 px-3">
+          <svg class="h-7 w-7 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"></path></svg>
+          <span class="min-w-0 flex-1 text-sm text-neutral-400">输入命令</span>
+          <span class="shrink-0 text-3xl" aria-hidden="true">＋</span>
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-400 text-xl text-white dark:bg-neutral-600" aria-hidden="true">↑</span>
         </div>
 
         <div id="sheetBackdrop" hidden class="absolute inset-0 z-10 bg-black/40" aria-hidden="true"></div>
@@ -122,6 +132,8 @@
     function updateControls() {
       document.querySelector('#resourceCount').textContent = String(detected.size);
       document.querySelector('#resourceButton').hidden = detected.size === 0;
+      document.querySelector('#resourceButton').setAttribute('aria-label', `查看 ${detected.size} 个会话资源`);
+      document.querySelector('#terminalLog').classList.toggle('pt-12', detected.size > 0);
       document.querySelector('#emptyState').hidden = detected.size > 0;
       document.querySelector('#showEmpty').hidden = detected.size > 0;
       document.querySelector('#progress').textContent = `${outputIndex} / ${output.length}`;
