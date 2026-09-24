@@ -22,7 +22,7 @@
         <button id="nextOutput" type="button" class="rounded-lg bg-neutral-950 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 dark:focus-visible:outline-white">下一段输出</button>
         <button id="playOutput" type="button" class="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100">播放全部</button>
         <button id="resetDemo" type="button" class="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100">重置</button>
-        <span id="progress" class="ml-auto text-xs text-neutral-600 dark:text-neutral-300" aria-live="polite">0 / 6</span>
+        <span id="progress" class="ml-auto text-xs text-neutral-600 dark:text-neutral-300" aria-live="polite">0 / 9</span>
       </div>
 
       <div class="relative flex aspect-[390/844] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-neutral-300 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100" aria-label="Synapse Remote 终端">
@@ -51,7 +51,7 @@
         <div id="resourceBar" hidden class="flex h-12 shrink-0 items-center border-b border-neutral-200 px-3 dark:border-neutral-700" aria-label="会话资源工具栏">
           <button id="resourceButton" type="button" hidden class="flex h-9 w-full items-center gap-2 rounded-xl bg-neutral-100 px-3 text-left text-sm font-medium hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:focus-visible:outline-neutral-100" aria-label="查看会话资源">
             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="14" height="17" rx="2"></rect><path d="M8 8h6M8 12h6M8 16h4M18 7h2v14H8"></path></svg>
-            <span>Synapse 资源</span><span>×<span id="resourceCount" class="tabular-nums">0</span></span><span class="ml-auto text-neutral-600 dark:text-neutral-300" aria-hidden="true">›</span>
+            <span>会话资源</span><span>×<span id="resourceCount" class="tabular-nums">0</span></span><span class="ml-auto text-neutral-600 dark:text-neutral-300" aria-hidden="true">›</span>
           </button>
         </div>
 
@@ -81,14 +81,9 @@
           </div>
 
           <div id="listView" class="min-h-0 flex-1 overflow-y-auto">
-            <div id="emptyState" class="flex h-full flex-col items-center justify-center gap-1 px-5 text-center"><p class="text-sm font-medium">暂无资源</p><p class="text-xs text-neutral-600 dark:text-neutral-300">终端输出分享链接后会显示在这里</p></div>
-            <div id="resourceList" role="list" aria-label="已识别的会话资源">
-              <button data-resource-row="document" type="button" hidden class="flex w-full items-center gap-3 border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-lg dark:bg-neutral-800" aria-hidden="true">▤</span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">2026 年跨设备协作与远程终端资源交付说明（评审稿）.md</span><span class="block text-xs text-neutral-600 dark:text-neutral-300">文档分享</span><span class="block truncate font-mono text-xs text-neutral-600 dark:text-neutral-300">synapse.d2.pub/share/shr_demo_doc</span></span><span class="text-neutral-500 dark:text-neutral-400" aria-hidden="true">›</span></button>
-              <button data-resource-row="folder" type="button" hidden class="flex w-full items-center gap-3 border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-lg dark:bg-neutral-800" aria-hidden="true">▣</span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">项目交付资料</span><span class="block text-xs text-neutral-600 dark:text-neutral-300">文件夹分享</span><span class="block truncate font-mono text-xs text-neutral-600 dark:text-neutral-300">synapse.d2.pub/share/shr_demo_folder</span></span><span class="text-neutral-500 dark:text-neutral-400" aria-hidden="true">›</span></button>
-              <button data-resource-row="site" type="button" hidden class="flex w-full items-center gap-3 border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-lg dark:bg-neutral-800" aria-hidden="true">◎</span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">交互演示站点</span><span class="block text-xs text-neutral-600 dark:text-neutral-300">站点</span><span class="block truncate font-mono text-xs text-neutral-600 dark:text-neutral-300">synapse.d2.pub/sites/site_demo_resource/</span></span><span class="text-neutral-500 dark:text-neutral-400" aria-hidden="true">›</span></button>
-              <button data-resource-row="image" type="button" hidden class="flex w-full items-center gap-3 border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-lg dark:bg-neutral-800" aria-hidden="true">▧</span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">synapse-icon.png</span><span class="block text-xs text-neutral-600 dark:text-neutral-300">图床图片</span><span class="block truncate font-mono text-xs text-neutral-600 dark:text-neutral-300">synapse.d2.pub/files/asset_demo_icon</span></span><span class="text-neutral-500 dark:text-neutral-400" aria-hidden="true">›</span></button>
-              <button data-resource-row="file" type="button" hidden class="flex w-full items-center gap-3 border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-lg dark:bg-neutral-800" aria-hidden="true">▤</span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">项目简报.pdf</span><span class="block text-xs text-neutral-600 dark:text-neutral-300">公开文件 · 下载</span><span class="block truncate font-mono text-xs text-neutral-600 dark:text-neutral-300">synapse.d2.pub/files/asset_demo_pdf</span></span><span class="text-neutral-500 dark:text-neutral-400" aria-hidden="true">›</span></button>
-            </div>
+            <div id="emptyState" class="flex h-full flex-col items-center justify-center gap-1 px-5 text-center"><p class="text-sm font-medium">暂无资源</p><p class="text-xs text-neutral-600 dark:text-neutral-300">终端输出 HTTP/HTTPS 链接后会显示在这里</p></div>
+            <div id="resourceList" role="list" aria-label="已识别的会话资源"></div>
+            <template id="resourceRowTemplate"><div role="listitem"><button type="button" class="flex w-full items-center gap-3 border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100"><span data-row-icon class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-200 text-lg dark:bg-neutral-800" aria-hidden="true"></span><span class="min-w-0 flex-1"><span data-row-name class="block truncate text-sm font-medium"></span><span data-row-type class="block text-xs text-neutral-600 dark:text-neutral-300"></span><span data-row-url class="block truncate font-mono text-xs text-neutral-600 dark:text-neutral-300"></span></span><span class="text-neutral-500 dark:text-neutral-400" aria-hidden="true">›</span></button></div></template>
           </div>
 
           <div id="detailView" hidden class="min-h-0 flex-1 overflow-y-auto px-4 py-5">
@@ -104,6 +99,8 @@
             <section data-preview="folder" hidden class="px-5 py-6"><h3 class="text-lg font-semibold">项目交付资料</h3><div class="mt-5 border-t border-neutral-200 dark:border-neutral-700"><div class="flex items-center justify-between border-b border-neutral-200 py-3 text-sm dark:border-neutral-700"><span>需求说明.md</span><span class="text-neutral-600 dark:text-neutral-300">文档</span></div><div class="flex items-center justify-between border-b border-neutral-200 py-3 text-sm dark:border-neutral-700"><span>页面设计.html</span><span class="text-neutral-600 dark:text-neutral-300">网页</span></div></div></section>
             <section data-preview="site" hidden class="px-5 py-6"><p class="text-xs text-neutral-600 dark:text-neutral-300">交互演示站点</p><h3 class="mt-3 text-2xl font-semibold tracking-tight">项目概览</h3><nav class="mt-5 flex gap-4 border-b border-neutral-200 pb-3 text-sm dark:border-neutral-700" aria-label="站点示例导航"><span>概览</span><span class="text-neutral-600 dark:text-neutral-300">文档</span><span class="text-neutral-600 dark:text-neutral-300">进度</span></nav><p class="mt-6 text-sm leading-6">需求说明、页面设计和图片素材</p></section>
             <section data-preview="image" hidden class="flex flex-col items-center gap-4 px-5 py-8"><img class="h-48 w-48 object-contain" src="../../desktop/src/assets/icon.png" alt="synapse-icon.png 图片预览"><p class="font-mono text-xs text-neutral-600 dark:text-neutral-300">synapse-icon.png</p></section>
+            <section data-preview="externalImage" hidden class="flex flex-col items-center gap-4 px-5 py-8"><img id="externalImageAsset" class="h-48 w-48 object-contain" src="../../desktop/src/definitions/agent/claude-code/icon.png" alt="外部图片预览"><p id="externalImageUnavailable" hidden class="text-sm text-neutral-600 dark:text-neutral-300">图片暂无法预览</p><p id="externalImageName" class="font-mono text-xs text-neutral-600 dark:text-neutral-300"></p></section>
+            <section data-preview="externalWeb" hidden class="px-5 py-6"><h3 id="externalWebTitle" class="break-all text-lg font-semibold"></h3><p id="externalWebPath" class="mt-4 break-all font-mono text-sm text-neutral-600 dark:text-neutral-300"></p></section>
           </div>
           <div id="previewActions" hidden class="flex shrink-0 gap-2 border-t border-neutral-200 bg-neutral-100 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900"><button id="copyPreviewLink" type="button" class="flex-1 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:focus-visible:outline-neutral-100">复制地址</button><button id="sharePreviewLink" type="button" class="flex-1 rounded-lg bg-neutral-950 px-3 py-2.5 text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-neutral-950 dark:bg-white dark:text-neutral-950 dark:focus-visible:outline-white">分享链接</button></div>
         </section>
@@ -123,19 +120,26 @@
 
   <script>
     const resources = [
-      { id: 'document', type: '文档分享', icon: '▤', name: '2026 年跨设备协作与远程终端资源交付说明（评审稿）.md', url: 'https://synapse.d2.pub/share/shr_demo_doc?source=remote-terminal&review=2026-09-24' },
-      { id: 'folder', type: '文件夹分享', icon: '▣', name: '项目交付资料', url: 'https://synapse.d2.pub/share/shr_demo_folder' },
-      { id: 'site', type: '站点', icon: '◎', name: '交互演示站点', url: 'https://synapse.d2.pub/sites/site_demo_resource/' },
-      { id: 'image', type: '图床图片', icon: '▧', name: 'synapse-icon.png', url: 'https://synapse.d2.pub/files/asset_demo_icon' },
-      { id: 'file', type: '公开文件 · 下载', icon: '▤', name: '项目简报.pdf', url: 'https://synapse.d2.pub/files/asset_demo_pdf' }
+      { id: 'document', kind: 'web', type: '文档分享', icon: '▤', name: '2026 年跨设备协作与远程终端资源交付说明（评审稿）.md', url: 'https://synapse.d2.pub/share/shr_demo_doc?source=remote-terminal&review=2026-09-24' },
+      { id: 'folder', kind: 'web', type: '文件夹分享', icon: '▣', name: '项目交付资料', url: 'https://synapse.d2.pub/share/shr_demo_folder' },
+      { id: 'site', kind: 'web', type: '站点', icon: '◎', name: '交互演示站点', url: 'https://synapse.d2.pub/sites/site_demo_resource/' },
+      { id: 'image', kind: 'image', type: '图床图片', icon: '▧', name: 'synapse-icon.png', url: 'https://synapse.d2.pub/files/asset_demo_icon' },
+      { id: 'file', kind: 'file', type: '公开文件 · 下载', icon: '▤', name: '项目简报.pdf', url: 'https://synapse.d2.pub/files/asset_demo_pdf', download: true },
+      { id: 'externalImage', kind: 'image', type: '图片', icon: '▧', name: 'claude-code-icon.png', url: 'https://images.example.org/assets/claude-code-icon.png?width=1200' },
+      { id: 'externalFile', kind: 'file', type: '文件链接', icon: '▤', name: 'guide.pdf', url: 'https://files.example.org/guide.pdf' }
     ];
+    const externalHttps = 'https://www.example.org/articles/remote-work?mode=full';
+    const externalHttp = 'http://legacy.example.org/help';
     const output = [
       `已创建文档：${resources[0].name}\n分享链接：${resources[0].url}`,
+      `参考网页：${externalHttps}\n旧版说明：${externalHttp}`,
+      `外部图片：${resources[5].url}`,
       `已整理文件夹：${resources[1].name}\n分享链接：${resources[1].url}`,
       `站点已发布：${resources[2].name}\n站点地址：${resources[2].url}`,
       `图片已上传到图床：${resources[3].name}\n图片地址：${resources[3].url}`,
+      `外部文件：${resources[6].url}`,
       `公开文件已上传：${resources[4].name}\n文件地址：${resources[4].url}`,
-      `再发一次文档链接：${resources[0].url}`
+      `重复链接：${resources[0].url}。 ${externalHttp}`
     ];
     const byUrl = new Map(resources.map(resource => [resource.url, resource]));
     const detected = new Set();
@@ -160,6 +164,37 @@
       document.querySelector('#playOutput').disabled = outputIndex === output.length;
     }
 
+    function isSynapseHost(hostname) {
+      return hostname === 'synapse.d2.pub' || hostname.endsWith('.synapse.d2.pub');
+    }
+
+    function describeResource(url) {
+      const known = byUrl.get(url.href);
+      if (known) return known;
+      const isSynapse = isSynapseHost(url.hostname);
+      const encodedFilename = url.pathname.split('/').pop() || '';
+      let filename;
+      try { filename = decodeURIComponent(encodedFilename); } catch { filename = encodedFilename; }
+      const isImage = /\.(?:png|jpe?g|gif|webp|avif|svg|heic)$/i.test(url.pathname);
+      const isFile = /\.(?:pdf|zip|docx?|xlsx?|pptx?|txt)$/i.test(url.pathname);
+      const kind = isImage ? 'image' : isFile ? 'file' : 'web';
+      const type = isSynapse && url.pathname.startsWith('/share/') ? '分享链接'
+        : isSynapse && url.pathname.startsWith('/sites/') ? '站点'
+        : isSynapse && url.pathname.startsWith('/files/') ? '资源链接'
+        : kind === 'image' ? '图片' : kind === 'file' ? '文件链接' : '网页';
+      return { id: 'generic', kind, type, icon: kind === 'image' ? '▧' : kind === 'file' ? '▤' : '◎', name: kind === 'web' ? url.hostname : filename || url.hostname, url: url.href };
+    }
+
+    function addResourceRow(resource) {
+      const row = document.querySelector('#resourceRowTemplate').content.firstElementChild.cloneNode(true);
+      row.querySelector('[data-row-icon]').textContent = resource.icon;
+      row.querySelector('[data-row-name]').textContent = resource.name;
+      row.querySelector('[data-row-type]').textContent = `${isSynapseHost(new URL(resource.url).hostname) ? 'Synapse · ' : ''}${resource.type}`;
+      row.querySelector('[data-row-url]').textContent = resource.url;
+      row.querySelector('button').addEventListener('click', () => resource.kind === 'file' ? openDetail(resource) : openPreview(resource));
+      document.querySelector('#resourceList').prepend(row);
+    }
+
     function appendOutput() {
       if (outputIndex === output.length) return;
       const chunk = output[outputIndex++];
@@ -170,15 +205,14 @@
       terminal.append(line);
       terminal.scrollTop = terminal.scrollHeight;
 
-      const urls = chunk.match(/https:\/\/synapse\.d2\.pub\/(?:share|sites|files)\/[^\s<>"']+/g) ?? [];
+      const urls = chunk.match(/https?:\/\/[^\s<>"'`]+/gi) ?? [];
       for (const rawUrl of urls) {
-        const url = rawUrl.replace(/[，。！？；,.!?;)]+$/, '');
-        const resource = byUrl.get(url);
-        if (!resource || detected.has(url)) continue;
-        detected.add(url);
-        const row = document.querySelector(`[data-resource-row="${resource.id}"]`);
-        row.hidden = false;
-        document.querySelector('#resourceList').prepend(row);
+        const cleaned = rawUrl.replace(/[，。！？；,.!?;)）\]}]+$/, '');
+        let url;
+        try { url = new URL(cleaned); } catch { continue; }
+        if (!['http:', 'https:'].includes(url.protocol) || detected.has(url.href)) continue;
+        detected.add(url.href);
+        addResourceRow(describeResource(url));
       }
       updateControls();
     }
@@ -198,7 +232,7 @@
       document.querySelector('#shareButton').hidden = nextView === 'list';
       document.querySelector('#sheetClose').hidden = nextView !== 'list';
       document.querySelector('#sheetGrabber').hidden = nextView !== 'list';
-      document.querySelector('#sheetTitle').textContent = nextView === 'list' ? '会话资源' : nextView === 'detail' ? '公开文件' : selected?.id === 'image' ? '图片预览' : '网页';
+      document.querySelector('#sheetTitle').textContent = nextView === 'list' ? '会话资源' : nextView === 'detail' ? '文件' : selected?.kind === 'image' ? '图片预览' : '网页';
       sheet.classList.remove('h-1/2', 'h-[90%]', 'h-full');
       sheet.classList.add(nextView === 'list' ? (expanded ? 'h-[90%]' : 'h-1/2') : 'h-full');
       if (nextView !== 'list') document.querySelector('#sheetBack').focus();
@@ -228,14 +262,26 @@
       document.querySelector('#detailType').textContent = resource.type;
       document.querySelector('#detailUrl').textContent = resource.url;
       document.querySelector('#copyLink').textContent = '复制链接';
-      document.querySelector('#openResource').textContent = '下载文件';
+      document.querySelector('#openResource').textContent = resource.download ? '下载文件' : '打开文件';
       showView('detail');
     }
 
     function openPreview(resource) {
       selected = resource;
       document.querySelector('#previewAddress').textContent = selected.url;
-      for (const preview of document.querySelectorAll('[data-preview]')) preview.hidden = preview.dataset.preview !== selected.id;
+      const previewKind = ['document', 'folder', 'site', 'image', 'externalImage'].includes(resource.id) ? resource.id : resource.kind === 'image' ? 'externalImage' : 'externalWeb';
+      for (const preview of document.querySelectorAll('[data-preview]')) preview.hidden = preview.dataset.preview !== previewKind;
+      if (previewKind === 'externalWeb') {
+        const url = new URL(resource.url);
+        document.querySelector('#externalWebTitle').textContent = url.hostname;
+        document.querySelector('#externalWebPath').textContent = `${url.pathname}${url.search}`;
+      }
+      if (previewKind === 'externalImage') {
+        const hasMock = resource.id === 'externalImage';
+        document.querySelector('#externalImageAsset').hidden = !hasMock;
+        document.querySelector('#externalImageUnavailable').hidden = hasMock;
+        document.querySelector('#externalImageName').textContent = resource.name;
+      }
       showView('preview');
     }
 
@@ -296,7 +342,7 @@
       outputIndex = 0;
       detected.clear();
       document.querySelector('#terminalLog').innerHTML = initialTerminal;
-      for (const row of document.querySelectorAll('[data-resource-row]')) row.hidden = true;
+      document.querySelector('#resourceList').replaceChildren();
       closeSheet();
       updateControls();
     });
@@ -323,13 +369,6 @@
         setTimeout(() => { ignoreGrabberClick = false; }, 0);
       }
     });
-    for (const row of document.querySelectorAll('[data-resource-row]')) {
-      row.addEventListener('click', () => {
-        const resource = resources.find(item => item.id === row.dataset.resourceRow);
-        if (resource.id === 'file') openDetail(resource);
-        else openPreview(resource);
-      });
-    }
     document.querySelector('#copyLink').addEventListener('click', event => copySelectedLink(event.currentTarget));
     document.querySelector('#copyPreviewLink').addEventListener('click', event => copySelectedLink(event.currentTarget));
     document.querySelector('#shareCopyLink').addEventListener('click', event => copySelectedLink(event.currentTarget));
@@ -339,8 +378,8 @@
     document.querySelector('#shareBackdrop').addEventListener('click', closeShareSheet);
     document.querySelector('#openResource').addEventListener('click', event => {
       const button = event.currentTarget;
-      button.textContent = '已发起下载';
-      setTimeout(() => { button.textContent = '下载文件'; }, 1500);
+      button.textContent = selected.download ? '已发起下载' : '已打开文件';
+      setTimeout(() => { button.textContent = selected.download ? '下载文件' : '打开文件'; }, 1500);
     });
     document.querySelector('#themeToggle').addEventListener('click', () => {
       const dark = document.documentElement.classList.toggle('dark');
