@@ -157,7 +157,7 @@ describe("server deployment configuration", () => {
     expect(compose).toContain("healthcheck:")
     expect(compose).toContain("http://127.0.0.1:3000/healthz")
     expect(compose).not.toContain("http://127.0.0.1:3001/healthz")
-    expect(compose).toContain("TRUST_PROXY: loopback")
+    expect(compose).toContain("TRUST_PROXY: ${TRUST_PROXY:-loopback}")
   })
 
   it("builds, isolates, health-checks, and rolls back the PDF renderer with the API", () => {
@@ -216,6 +216,16 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_set_header X-Forwarded-For $remote_addr")
     expect(nginx).not.toContain("Retry-After")
     expect(compose).not.toMatch(/\b(?:redis|valkey)\b/iu)
+  })
+
+  it("allows the browser Drive text edit body on owner and share routes", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const start = nginx.indexOf("location ~ ^/api/drive/browser/(?:owner/items/[^/]+|shares/[^/]+(?:/items/[^/]+)?)/content$")
+    expect(start).toBeGreaterThan(0)
+    const location = nginx.slice(start, nginx.indexOf("\n  }", start))
+    expect(location).toContain("client_max_body_size 110m")
+    expect(location).toContain("proxy_pass http://127.0.0.1:3001")
+    expect(readRepoFile("server/src/common/http-body-parser.ts")).toContain('driveTextEditJsonBodyLimit = "110mb"')
   })
 
   it("proxies Drive collaboration as a bounded WebSocket endpoint", () => {

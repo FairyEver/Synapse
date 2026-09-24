@@ -54,6 +54,11 @@ describe("DriveController", () => {
     resolvePublicShareAccess: vi.fn(),
     getOwnerConsoleRootBrowserSnapshot: vi.fn(),
     getOwnerBrowserSnapshot: vi.fn(),
+    updateOwnerFileText: vi.fn(),
+    inspectOwnerFileContent: vi.fn(),
+    readOwnerFileContentChunk: vi.fn(),
+    patchOwnerFileContent: vi.fn(),
+    updateShareFileText: vi.fn(),
     getShareBrowserSnapshot: vi.fn(),
     resolveOwnerRenderAccess: vi.fn(),
     resolveShareRenderAccess: vi.fn(),
@@ -151,6 +156,11 @@ describe("DriveController", () => {
     drive.resolvePublicShareAccess.mockReset()
     drive.getOwnerConsoleRootBrowserSnapshot.mockReset()
     drive.getOwnerBrowserSnapshot.mockReset()
+    drive.updateOwnerFileText.mockReset()
+    drive.inspectOwnerFileContent.mockReset()
+    drive.readOwnerFileContentChunk.mockReset()
+    drive.patchOwnerFileContent.mockReset()
+    drive.updateShareFileText.mockReset()
     drive.getShareBrowserSnapshot.mockReset()
     drive.resolveOwnerRenderAccess.mockReset()
     drive.resolveShareRenderAccess.mockReset()
@@ -221,6 +231,48 @@ describe("DriveController", () => {
 
   it("requires user auth for /api/drive/items", async () => {
     await request(app!.getHttpServer()).get("/api/drive/items").expect(401)
+  })
+
+  it("keeps browser whole-text PATCH routes alongside the Agent text routes", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController, DrivePublicController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: DrivePublicAssetService, useValue: publicAssets },
+        { provide: DriveAnnotationService, useValue: annotations },
+        { provide: DriveSiteService, useValue: sites },
+        { provide: DriveChangeLogService, useValue: changes },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
+    }).overrideGuard(UserAuthGuard).useValue({
+      canActivate: (context: { switchToHttp(): { getRequest(): { user?: { id: string } } } }) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      },
+    }).compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      const body = { contentType: "text", text: "# edited", baseVersionId: "version-1" }
+      drive.updateOwnerFileText.mockResolvedValue({ version: { id: "version-2" } })
+      drive.updateShareFileText.mockResolvedValue({ version: { id: "version-2" } })
+      drive.inspectOwnerFileContent.mockResolvedValue({ itemId: "item-1", versionId: "version-1", sizeBytes: 7 })
+      drive.readOwnerFileContentChunk.mockResolvedValue({ itemId: "item-1", versionId: "version-1", text: "# text", startByte: 0, endByte: 6, totalBytes: 6, nextCursor: null, endOfFile: true })
+      drive.patchOwnerFileContent.mockResolvedValue({ itemId: "item-1", versionId: "version-2", appliedCount: 1 })
+      await request(userApp.getHttpServer()).patch("/api/drive/browser/owner/items/item-1/content").send(body).expect(200)
+      await request(userApp.getHttpServer()).patch("/api/drive/browser/shares/share-1/content").send(body).expect(200)
+      await request(userApp.getHttpServer()).patch("/api/drive/browser/shares/share-1/items/item-1/content").send(body).expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/item-1/content/inspect").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/item-1/content/chunk?versionId=version-1").expect(200)
+      await request(userApp.getHttpServer()).post("/api/drive/browser/owner/items/item-1/content/patch").send({
+        baseVersionId: "version-1", idempotencyKey: "patch-key-123456", operations: [{ type: "append", text: "!" }],
+      }).expect(201)
+      expect(drive.updateOwnerFileText).toHaveBeenCalledWith("user-1", "item-1", body, expect.any(Object))
+      expect(drive.updateShareFileText).toHaveBeenCalledTimes(2)
+      expect(drive.patchOwnerFileContent).toHaveBeenCalledOnce()
+    } finally {
+      await userApp.close()
+    }
   })
 
   it("lists Drive changes for the authenticated user", async () => {

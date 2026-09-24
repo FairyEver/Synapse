@@ -325,6 +325,7 @@ function createService(source = "# Notes") {
       size: BigInt(Buffer.byteLength(source, "utf8")),
       contentType: "text/markdown",
     })),
+    getObjectRange: vi.fn(async () => ({ body: Buffer.from(source), totalSize: BigInt(Buffer.byteLength(source, "utf8")) })),
     deleteObject: vi.fn(),
   }
   const projections = {

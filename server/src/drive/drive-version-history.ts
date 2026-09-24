@@ -126,6 +126,7 @@ export async function listCleanupCandidateVersions(tx: VersionTx, input: {
   const protectedFilters: Prisma.DriveFileVersionWhereInput[] = [
     { isPinned: true },
     { openApiGrantEntries: { some: { grant: { leaseUntil: { gt: input.now } } } } },
+    { agentReadLeases: { some: { expiresAt: { gt: input.now } } } },
   ]
   if (input.currentStorageKey) protectedFilters.push({ storageKey: input.currentStorageKey })
   const protectedCount = await tx.driveFileVersion.count({
@@ -136,6 +137,7 @@ export async function listCleanupCandidateVersions(tx: VersionTx, input: {
     ...baseWhere,
     isPinned: false,
     openApiGrantEntries: { none: { grant: { leaseUntil: { gt: input.now } } } },
+    agentReadLeases: { none: { expiresAt: { gt: input.now } } },
     ...(input.currentStorageKey ? { storageKey: { not: input.currentStorageKey } } : {}),
   } satisfies Prisma.DriveFileVersionWhereInput
   const candidateSelect = { id: true, storageKey: true, size: true } satisfies Prisma.DriveFileVersionSelect

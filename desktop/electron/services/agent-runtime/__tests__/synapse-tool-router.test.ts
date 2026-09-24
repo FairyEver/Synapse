@@ -181,6 +181,25 @@ describe("Synapse tool router catalog", () => {
 })
 
 describe("Synapse tool router invocation", () => {
+  it("exposes only the new Drive text tools and rejects retired names", async () => {
+    const names = buildSynapseToolCatalog().map((entry) => entry.name)
+    expect(names).toEqual(expect.arrayContaining([
+      "app_drive_file_content_inspect",
+      "app_drive_file_content_read_chunk",
+      "app_drive_file_content_patch",
+    ]))
+    const execute = vi.fn()
+    for (const oldName of ["app_drive_file_content_read", "app_drive_file_content_write"]) {
+      expect(names).not.toContain(oldName)
+      const search = await searchSynapseTools({ query: oldName, domain: "drive" })
+      expect(search.tools.map((tool) => tool.name)).not.toContain(oldName)
+      const result = await invokeSynapseTool({ toolName: oldName }, execute)
+      expect(result.isError).toBe(true)
+      expect(result.content[0]?.text).toContain("Unknown tool")
+    }
+    expect(execute).not.toHaveBeenCalled()
+  })
+
   it("rejects unknown names without calling the executor", async () => {
     const execute = vi.fn()
 

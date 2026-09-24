@@ -2701,6 +2701,9 @@ describe("AccountService", () => {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
         if (String(url).endsWith("/drive/items/item-1") && method === "GET") return jsonResponse(driveItemDto)
         if (String(url).endsWith("/drive/browser/owner/items/item-1?surface=standalone")) return jsonResponse(previewSnapshot)
+        if (String(url).endsWith("/drive/browser/owner/items/item-1/content/inspect")) return jsonResponse({ itemId: "item-1", name: "report.html", kind: "html-source", sizeBytes: 17, versionId: "version-9", editable: true })
+        if (String(url).endsWith("/drive/browser/owner/items/item-1/content/chunk?versionId=version-9")) return jsonResponse({ itemId: "item-1", versionId: "version-9", text: "<h1>报告</h1>", startByte: 0, endByte: 17, totalBytes: 17, nextCursor: null, endOfFile: true })
+        if (String(url).endsWith("/drive/browser/owner/items/item-1/content/patch") && method === "POST") return jsonResponse({ itemId: "item-1", previousVersionId: "version-9", versionId: "version-10", sizeBytes: 18, appliedCount: 1, applied: [{ operationIndex: 0, startByte: 17, endByte: 18 }] })
         if (String(url).endsWith("/drive/items/item-1/versions?offset=10&limit=5")) {
           return jsonResponse({
             items: [fileVersion],
@@ -2733,15 +2736,9 @@ describe("AccountService", () => {
 
     await expect(service.getDriveItem("item-1")).resolves.toEqual(driveItemDto)
     await expect(service.getDriveItemPreview({ itemId: "item-1" })).resolves.toEqual(previewSnapshot)
-    await expect(service.readDriveFileContent({ itemId: "item-1", maxBytes: 8 })).resolves.toEqual({
-      itemId: "item-1",
-      name: "report.html",
-      kind: "html-source",
-      text: "<h1>报",
-      html: null,
-      truncated: true,
-      versionId: "version-9",
-    })
+    await expect(service.inspectDriveFileContent("item-1")).resolves.toMatchObject({ versionId: "version-9", sizeBytes: 17 })
+    await expect(service.readDriveFileContentChunk({ itemId: "item-1", versionId: "version-9" })).resolves.toMatchObject({ text: "<h1>报告</h1>", endOfFile: true })
+    await expect(service.patchDriveFileContent({ itemId: "item-1", baseVersionId: "version-9", idempotencyKey: "patch-key-123456", operations: [{ type: "append", text: "!" }] })).resolves.toMatchObject({ versionId: "version-10", appliedCount: 1 })
     await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
     await expect(service.listDriveFileVersions("item-1", { offset: 10, limit: 5 })).resolves.toEqual({
       items: [fileVersion],
@@ -2772,7 +2769,9 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/auth/me"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
-      { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/browser/owner/items/item-1/content/inspect"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/browser/owner/items/item-1/content/chunk?versionId=version-9"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/browser/owner/items/item-1/content/patch"), method: "POST", body: { baseVersionId: "version-9", idempotencyKey: "patch-key-123456", operations: [{ type: "append", text: "!" }] } },
       { url: expectedApiUrl("/drive/items/item-1/share"), method: "POST", body: shareSettings },
       { url: expectedApiUrl("/drive/items/item-1/versions?offset=10&limit=5"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/versions/version-1/download"), method: "GET", body: undefined },

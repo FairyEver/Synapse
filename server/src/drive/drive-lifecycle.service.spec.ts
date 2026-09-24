@@ -20,6 +20,7 @@ const storage: DriveStoragePort = {
   putObject: vi.fn(async () => undefined),
   copyObject: vi.fn(async () => undefined),
   getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
+  getObjectRange: vi.fn(async () => ({ body: Buffer.alloc(0), totalSize: 0n })),
   deleteObject: vi.fn(async () => undefined),
 }
 

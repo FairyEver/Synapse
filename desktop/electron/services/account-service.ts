@@ -34,7 +34,10 @@ import type {
   DriveBrowserSnapshotDto,
   DriveChangeListInput,
   DriveChangeListPageDto,
-  DriveFileContentUpdateResult,
+  DriveFileContentInspectResult,
+  DriveFileContentChunkResult,
+  DriveFileContentPatchInput,
+  DriveFileContentPatchResult,
   DriveFileVersionDto,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
@@ -316,16 +319,6 @@ function currentOwnerDriveDownloadUrl(itemId: string): string {
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/download`
 }
 
-type DriveFileContentReadResult = {
-  readonly itemId: string
-  readonly name: string
-  readonly kind: string
-  readonly text: string | null
-  readonly html: string | null
-  readonly truncated: boolean
-  readonly versionId: string | null
-}
-
 function isLocalApiBaseUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -604,42 +597,37 @@ export class AccountService {
     )
   }
 
-  async readDriveFileContent(input: {
-    readonly itemId: string
-    readonly maxBytes?: number
-  }): Promise<DriveFileContentReadResult> {
-    const snapshot = await this.getDriveItemPreview({ itemId: input.itemId, surface: "standalone" })
-    if (snapshot.current.type !== "file" || !snapshot.preview) {
-      throw new Error("该云盘条目没有可读取的文件预览内容。")
-    }
-    const text = limitUtf8Preview(snapshot.preview.text, input.maxBytes)
-    const html = limitUtf8Preview(snapshot.preview.html, input.maxBytes)
-    if (text.value === null && html.value === null) {
-      throw new Error("该文件不是可预览的小文本内容，请使用下载工具。")
-    }
-    return {
-      itemId: snapshot.current.id,
-      name: snapshot.current.name,
-      kind: snapshot.preview.kind,
-      text: text.value,
-      html: html.value,
-      truncated: snapshot.preview.truncated || text.truncated || html.truncated,
-      versionId: snapshot.edit?.currentVersionId ?? snapshot.collaboration?.checkpointVersionId ?? null,
-    }
+  async inspectDriveFileContent(itemId: string): Promise<DriveFileContentInspectResult> {
+    return this.getAuthenticatedJson<DriveFileContentInspectResult>(
+      `${apiBaseUrl()}/drive/browser/owner/items/${encodeURIComponent(itemId)}/content/inspect`,
+      "文件内容检查失败。",
+    )
   }
 
-  async writeDriveFileContent(input: {
+  async readDriveFileContentChunk(input: {
     readonly itemId: string
-    readonly text: string
-    readonly baseVersionId: string
-  }): Promise<{ readonly itemId: string; readonly versionId: string }> {
-    const result = await this.requestAuthenticatedJson<DriveFileContentUpdateResult>(
-      "PATCH",
-      `${apiBaseUrl()}/drive/browser/owner/items/${encodeURIComponent(input.itemId)}/content`,
-      { contentType: "text", text: input.text, baseVersionId: input.baseVersionId },
-      "文档内容保存失败。",
+    readonly versionId: string
+    readonly cursor?: string
+    readonly start?: "beginning" | "tail" | "around"
+    readonly anchorByte?: number
+  }): Promise<DriveFileContentChunkResult> {
+    const params = new URLSearchParams({ versionId: input.versionId })
+    if (input.cursor !== undefined) params.set("cursor", input.cursor)
+    if (input.start !== undefined) params.set("start", input.start)
+    if (input.anchorByte !== undefined) params.set("anchorByte", String(input.anchorByte))
+    return this.getAuthenticatedJson<DriveFileContentChunkResult>(
+      `${apiBaseUrl()}/drive/browser/owner/items/${encodeURIComponent(input.itemId)}/content/chunk?${params}`,
+      "文件分段读取失败。",
     )
-    return { itemId: result.item.id, versionId: result.version.id }
+  }
+
+  async patchDriveFileContent(input: { readonly itemId: string } & DriveFileContentPatchInput): Promise<DriveFileContentPatchResult> {
+    return this.requestAuthenticatedJson<DriveFileContentPatchResult>(
+      "POST",
+      `${apiBaseUrl()}/drive/browser/owner/items/${encodeURIComponent(input.itemId)}/content/patch`,
+      { baseVersionId: input.baseVersionId, idempotencyKey: input.idempotencyKey, operations: input.operations },
+      "文件补丁保存失败。",
+    )
   }
 
   async downloadDriveFile(input: {
@@ -2906,45 +2894,6 @@ function isSensitiveDriveManifestQueryKey(key: string): boolean {
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {
   if (Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) return headers
   return { ...headers, "Content-Length": String(sizeBytes) }
-}
-
-function limitUtf8Preview(value: string | null, maxBytes: number | undefined): { readonly value: string | null; readonly truncated: boolean } {
-  if (value === null || maxBytes === undefined) return { value, truncated: false }
-  validateUtf8MaxBytes(maxBytes)
-  const buffer = Buffer.from(value, "utf8")
-  if (buffer.byteLength <= maxBytes) return { value, truncated: false }
-  return {
-    value: buffer.subarray(0, safeUtf8PrefixLength(buffer, maxBytes)).toString("utf8"),
-    truncated: true,
-  }
-}
-
-function safeUtf8PrefixLength(bytes: Uint8Array, end: number): number {
-  if (end <= 0) return 0
-  let sequenceStart = end - 1
-  while (sequenceStart >= 0 && isUtf8ContinuationByte(bytes[sequenceStart] ?? 0)) {
-    sequenceStart -= 1
-  }
-  if (sequenceStart < 0) return 0
-  const expectedLength = utf8SequenceLength(bytes[sequenceStart] ?? 0)
-  if (expectedLength === 0) return sequenceStart
-  return end - sequenceStart >= expectedLength ? end : sequenceStart
-}
-
-function isUtf8ContinuationByte(byte: number): boolean {
-  return (byte & 0xc0) === 0x80
-}
-
-function utf8SequenceLength(byte: number): number {
-  if ((byte & 0x80) === 0) return 1
-  if ((byte & 0xe0) === 0xc0) return 2
-  if ((byte & 0xf0) === 0xe0) return 3
-  if ((byte & 0xf8) === 0xf0) return 4
-  return 0
-}
-
-function validateUtf8MaxBytes(maxBytes: number): void {
-  if (!Number.isFinite(maxBytes) || maxBytes < 0) throw new Error("maxBytes 必须是非负数字。")
 }
 
 class DriveDownloadMaxBytesExceededError extends Error {

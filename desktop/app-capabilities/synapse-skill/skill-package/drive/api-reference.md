@@ -40,11 +40,11 @@ Input:
 - `parentId` optional: target folder id. Omit or pass `null` for Drive root.
 - `name` optional: Drive display name; defaults to local basename.
 - `mimeType` optional.
-- `expectedVersionId` optional: version of the existing file these bytes are based on. Required when the upload would replace an existing Markdown or plain-text file; omit it for a new file, an HTML page, or a binary file. Take the value from `app_drive_file_content_read` or `app_drive_file_version_list`.
+- `expectedVersionId` optional: version of the existing file these bytes are based on. Required when the upload would replace an existing Markdown or plain-text file; omit it for a new file, an HTML page, or a binary file. Take the value from `app_drive_file_content_inspect` or `app_drive_file_version_list`.
 
-Replacing an existing Markdown or plain-text file without `expectedVersionId` is rejected before any byte is uploaded, and the error points at `app_drive_file_content_write`. When `expectedVersionId` is supplied and the file has moved on since that version, the upload fails with `DRIVE_FILE_CONTENT_STALE` and the current file is left untouched. Rebuilding a standalone HTML page and replacing it stays a plain overwrite.
+Replacing an existing Markdown or plain-text file without `expectedVersionId` is rejected before any byte is uploaded, and the error points at `app_drive_file_content_patch`. When `expectedVersionId` is supplied and the file has moved on since that version, the upload fails with `DRIVE_FILE_CONTENT_STALE` and the current file is left untouched. Rebuilding a standalone HTML page and replacing it stays a plain overwrite.
 
-To change the content of an existing document, use `app_drive_file_content_write` instead of building a local copy and uploading it.
+For local changes to an existing document, use `app_drive_file_content_patch`. Use upload with `expectedVersionId` only for an intentional full-file reconstruction from a fixed version.
 
 ### `app_drive_folder_upload`
 
@@ -123,42 +123,19 @@ For `.md` and `.markdown`, `preview.relativeImages` contains each supported rela
 
 For `.md`, the browser snapshot may also advertise browser-only realtime collaboration and include a Markdown projection used by the web comment UI. These fields do not create MCP collaboration, presence, comment, or anchor operations. MCP content changes remain explicit Drive versions and may replace the active browser collaboration Epoch.
 
-### `app_drive_file_content_read`
+### `app_drive_file_content_inspect`
 
-Read previewable small text content from a Drive file. Use download for binary, oversized, or non-previewable files.
+Read an owned saved text file's `itemId`, `name`, `kind`, UTF-8 `sizeBytes`, immutable `versionId`, and `editable` status without returning source text or browser preview. Input: `itemId`.
 
-Input:
+### `app_drive_file_content_read_chunk`
 
-- `itemId` required: Drive file item id.
-- `maxBytes` optional: maximum UTF-8 bytes to return.
+Read source text from a fixed saved version. Input: `itemId`, `versionId`, and optionally `start` (`beginning`, `tail`, `around`), `anchorByte`, or `cursor`. `around` requires a byte position returned by `patch.applied`; pass `nextCursor` unchanged to continue and omit `start`/`anchorByte` on continuation. Output includes `text`, `startByte`, `endByte`, `totalBytes`, `nextCursor`, and `endOfFile`. The response contains no rendered HTML. A tail or around block is not the full document even when `endOfFile` is true. On `DRIVE_FILE_READ_SNAPSHOT_EXPIRED`, inspect again.
 
-Output:
+### `app_drive_file_content_patch`
 
-- `text`: previewable text, or `null` when the file has none.
-- `html`: rendered HTML where the file kind provides it.
-- `truncated`: `true` when the returned text is a prefix of the file. Do not rewrite a file you only saw truncated.
-- `versionId`: the version this text came from. Pass it as `baseVersionId` to `app_drive_file_content_write`.
+Edit an existing owned Markdown, plain text, or HTML source file. Input: `itemId`, `baseVersionId`, a random `idempotencyKey`, and 1–10 ordered `operations`: `append {text}`, `insert_before`/`insert_after {target:{exact,prefix?,suffix?},text}`, or `replace_exact` with the same target and replacement text. Only `replace_exact` may use empty text for deletion. Added text totals at most 64 KiB; each exact target is at most 16 KiB and must identify one place in the full baseline. The response includes the new `versionId`, `sizeBytes`, and each operation's final `startByte`/`endByte`; it never returns the new body. Reuse a key only when retrying the identical request after an uncertain result.
 
-### `app_drive_file_content_write`
-
-Replace the text content of an existing Markdown, text, or HTML source file, on top of the version you read.
-
-Input:
-
-- `itemId` required: Drive file item id.
-- `text` required: complete new text content of the file.
-- `baseVersionId` required: the `versionId` returned by `app_drive_file_content_read` for the text this change was made on.
-
-Output:
-
-- `itemId`: the file that was updated.
-- `versionId`: the new version. Use it as the next `baseVersionId` when applying another change in the same turn.
-
-Limits:
-
-- Only existing owner Drive files of an editable text kind. New files use `app_drive_file_upload`.
-- The full text is replaced. Produce it from the text you read, not from an older copy.
-- If the file changed since `baseVersionId`, the call fails with `DRIVE_FILE_CONTENT_STALE` and the file keeps its newer content. Read it again, redo the change on the new text, and retry. Do not fall back to an unconditional upload.
+`DRIVE_FILE_CONTENT_STALE` requires fresh inspection and newly located operations; automatically retry at most once. `DRIVE_FILE_PATCH_TARGET_NOT_FOUND` and `DRIVE_FILE_PATCH_TARGET_AMBIGUOUS` require a corrected source anchor. `DRIVE_FILE_PATCH_OVERLAP` requires non-overlapping operations. `DRIVE_FILE_PATCH_TOO_BROAD` requires stopping a local edit; use fixed-version download and `file_upload(expectedVersionId)` only when the user's intended change truly requires a checked full-file reconstruction. `DRIVE_FILE_PATCH_IDEMPOTENCY_CONFLICT` requires a new key for a different logical edit.
 
 ### `app_drive_file_download_create`
 

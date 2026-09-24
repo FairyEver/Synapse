@@ -7,6 +7,7 @@ import type { PrismaService } from "../prisma/prisma.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { driveMarkdownImageResourceKey } from "./drive-markdown-projection"
 import { DriveService, type DriveMarkdownPdfSource } from "./drive.service"
+import type { DriveCollaborationService } from "./drive-collaboration.service"
 import type { DriveStoragePort } from "./drive-storage"
 
 const originalTestEnv = { ...process.env }
@@ -26,6 +27,7 @@ const storageMock: DriveStoragePort = {
   putObject: vi.fn(async () => undefined),
   copyObject: vi.fn(async () => undefined),
   getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
+  getObjectRange: vi.fn(async () => ({ body: Buffer.alloc(0), totalSize: 0n })),
   deleteObject: vi.fn(async () => undefined),
 }
 
@@ -49,6 +51,12 @@ function createDriveObjectStorage(
         size: BigInt(Buffer.byteLength(object.body)),
         contentType: object.contentType,
       }
+    }),
+    getObjectRange: vi.fn(async ({ key, start, endExclusive }) => {
+      const object = objects.get(key)
+      if (!object) throw new Error(`missing object: ${key}`)
+      const bytes = Buffer.from(object.body)
+      return { body: bytes.subarray(start, endExclusive), totalSize: BigInt(bytes.length) }
     }),
   }
 }
@@ -391,6 +399,143 @@ describe("DriveService", () => {
     expect((stale as ConflictException).getResponse()).toMatchObject({ code: "DRIVE_FILE_CONTENT_STALE" })
     const versions = await service.listFileVersions("user-1", file.id, { offset: 0, limit: 20 })
     expect(versions.items.find((version) => version.isCurrent)?.id).toBe(saved.version.id)
+  })
+
+  it("compares old preview with fixed-version chunks, then patches once with an idempotent retry", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      headObject: vi.fn(async (key) => ({ key, size: BigInt(Buffer.byteLength(objects.get(key)?.body ?? "# Title\nabc")), etag: "etag" })),
+      putObject: vi.fn(async ({ key, body, contentType }) => { objects.set(key, { body: body.toString("utf8"), contentType: contentType ?? "text/markdown" }) }),
+      deleteObject: vi.fn(async (key) => { objects.delete(key) }),
+    })
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", { parentId: null, name: "note.md", mimeType: "text/markdown" })
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: file.id } })
+    objects.set(item.storageKey, { body: "# Title\nabc", contentType: "text/markdown" })
+    const oldPreview = await service.getOwnerBrowserSnapshot({ userId: "user-1", itemId: file.id, surface: "standalone" })
+    const inspected = await service.inspectOwnerFileContent("user-1", file.id)
+    const first = await service.readOwnerFileContentChunk("user-1", file.id, { versionId: inspected.versionId })
+    expect(first.text).toBe(oldPreview.preview?.text)
+    expect(oldPreview.preview?.html).toContain("<h1")
+    expect(first).not.toHaveProperty("html")
+    const patchInput = { baseVersionId: inspected.versionId, idempotencyKey: "patch-key-123456", operations: [{ type: "insert_after" as const, target: { exact: "# Title" }, text: "\n新增" }] }
+    const patched = await service.patchOwnerFileContent("user-1", file.id, patchInput)
+    expect(patched.sizeBytes).toBe(Buffer.byteLength("# Title\n新增\nabc"))
+    const comparison = await createCompletedUpload(service, "user-1", { parentId: null, name: "comparison.md", mimeType: "text/markdown" })
+    const comparisonItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: comparison.id } })
+    objects.set(comparisonItem.storageKey, { body: "# Title\nabc", contentType: "text/markdown" })
+    const comparisonVersion = (await service.listFileVersions("user-1", comparison.id)).items[0]!
+    const oldWrite = await service.updateOwnerFileText("user-1", comparison.id, { contentType: "text", text: "# Title\n新增\nabc", baseVersionId: comparisonVersion.id })
+    expect(oldWrite.version.size).toBe(String(patched.sizeBytes))
+    expect((await service.getOwnerBrowserSnapshot({ userId: "user-1", itemId: comparison.id, surface: "standalone" })).preview?.text)
+      .toBe((await service.readOwnerFileContentChunk("user-1", file.id, { versionId: patched.versionId })).text)
+    expect(await service.patchOwnerFileContent("user-1", file.id, patchInput)).toEqual(patched)
+    await expect(service.patchOwnerFileContent("user-1", file.id, {
+      ...patchInput, operations: [{ type: "append", text: "不同内容" }],
+    })).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_FILE_PATCH_IDEMPOTENCY_CONFLICT" }) })
+    const around = await service.readOwnerFileContentChunk("user-1", file.id, { versionId: patched.versionId, start: "around", anchorByte: patched.applied[0]!.startByte })
+    expect(around.text).toContain("新增")
+    expect((await service.listFileVersions("user-1", file.id)).total).toBe(2)
+    const oldChunk = await service.readOwnerFileContentChunk("user-1", file.id, { versionId: inspected.versionId })
+    expect(oldChunk.text).toBe("# Title\nabc")
+    await expect(service.deleteFileVersion("user-1", file.id, inspected.versionId)).rejects.toThrow("版本正在被分段读取使用。")
+    await expect(service.patchOwnerFileContent("user-1", file.id, { ...patchInput, idempotencyKey: "patch-key-stale" })).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_FILE_CONTENT_STALE", currentVersionId: patched.versionId }) })
+  })
+
+  it("matches the browser source for 46 KiB Markdown by joining fixed-version chunks", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      putObject: vi.fn(async ({ key, body, contentType }) => { objects.set(key, { body: body.toString("utf8"), contentType: contentType ?? "text/markdown" }) }),
+    })
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", { parentId: null, name: "large.md", mimeType: "text/markdown" })
+    const baseVersion = (await service.listFileVersions("user-1", file.id)).items[0]!
+    const source = ("# 标题 😀\r\n\\\"quoted\\\"\n" + "x".repeat(91) + "\n").repeat(400)
+    expect(Buffer.byteLength(source)).toBeGreaterThan(46 * 1024)
+    await service.updateOwnerFileText("user-1", file.id, { contentType: "text", text: source, baseVersionId: baseVersion.id })
+    const preview = await service.getOwnerBrowserSnapshot({ userId: "user-1", itemId: file.id, surface: "standalone" })
+    const inspected = await service.inspectOwnerFileContent("user-1", file.id)
+    const chunks: Buffer[] = []
+    let cursor: string | undefined
+    let offset = 0
+    do {
+      const chunk = await service.readOwnerFileContentChunk("user-1", file.id, { versionId: inspected.versionId, ...(cursor ? { cursor } : {}) })
+      expect(chunk.startByte).toBe(offset)
+      expect(chunk).not.toHaveProperty("html")
+      chunks.push(Buffer.from(chunk.text))
+      offset = chunk.endByte
+      cursor = chunk.nextCursor ?? undefined
+    } while (cursor)
+    expect(inspected.sizeBytes).toBe(Buffer.byteLength(source))
+    expect(offset).toBe(inspected.sizeBytes)
+    expect(Buffer.concat(chunks).toString("utf8")).toBe(preview.preview?.text)
+  })
+
+  it("continues a 1 MiB immutable version and expires its cursor lease explicitly", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      putObject: vi.fn(async ({ key, body, contentType }) => { objects.set(key, { body: body.toString("utf8"), contentType: contentType ?? "text/plain" }) }),
+    })
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", { parentId: null, name: "large.txt", mimeType: "text/plain" })
+    const baseVersion = (await service.listFileVersions("user-1", file.id)).items[0]!
+    const text = "中😀\r\n".repeat(120_000)
+    await service.updateOwnerFileText("user-1", file.id, { contentType: "text", text, baseVersionId: baseVersion.id })
+    const inspected = await service.inspectOwnerFileContent("user-1", file.id)
+    expect(inspected.sizeBytes).toBeGreaterThan(1024 * 1024)
+    const first = await service.readOwnerFileContentChunk("user-1", file.id, { versionId: inspected.versionId })
+    const second = await service.readOwnerFileContentChunk("user-1", file.id, { versionId: inspected.versionId, cursor: first.nextCursor! })
+    expect(second.startByte).toBe(first.endByte)
+    await prisma.driveFileReadLease.updateMany({ where: { versionId: inspected.versionId }, data: { expiresAt: new Date(0) } })
+    await expect(service.readOwnerFileContentChunk("user-1", file.id, { versionId: inspected.versionId, cursor: second.nextCursor! }))
+      .rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_FILE_READ_SNAPSHOT_EXPIRED" }) })
+  })
+
+  it("keeps a collaboration checkpoint and resumes editing when it changes the patch baseline", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects, {
+      putObject: vi.fn(async ({ key, body, contentType }) => { objects.set(key, { body: body.toString("utf8"), contentType: contentType ?? "text/markdown" }) }),
+    })
+    let service: DriveService
+    let checkpointed = false
+    const collaboration = {
+      isEnabled: vi.fn(() => false),
+      prepareExternalChange: vi.fn(async (itemId: string) => {
+        if (checkpointed) return
+        checkpointed = true
+        const version = (await service.listFileVersions("user-1", itemId)).items[0]!
+        await service.updateOwnerFileText("user-1", itemId, { contentType: "text", text: "# 网页草稿", baseVersionId: version.id })
+      }),
+      resumeExternalChange: vi.fn(),
+      replaceEpochInTransaction: vi.fn(async () => null),
+      finalizeExternalChange: vi.fn(),
+    } as unknown as DriveCollaborationService
+    service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, undefined, undefined, collaboration)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", { parentId: null, name: "note.md", mimeType: "text/markdown" })
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: file.id } })
+    objects.set(item.storageKey, { body: "# Title\nabc", contentType: "text/markdown" })
+    const base = (await service.listFileVersions("user-1", file.id)).items[0]!
+    await expect(service.patchOwnerFileContent("user-1", file.id, {
+      baseVersionId: "old-version", idempotencyKey: "patch-key-old-base", operations: [{ type: "append", text: "补丁" }],
+    })).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_FILE_CONTENT_STALE" }) })
+    await expect(service.patchOwnerFileContent("user-1", file.id, {
+      baseVersionId: base.id, idempotencyKey: "patch-key-missing-anchor", operations: [{ type: "replace_exact", target: { exact: "不存在" }, text: "补丁" }],
+    })).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_FILE_PATCH_TARGET_NOT_FOUND" }) })
+    expect(collaboration.prepareExternalChange).not.toHaveBeenCalled()
+    await expect(service.patchOwnerFileContent("user-1", file.id, {
+      baseVersionId: base.id, idempotencyKey: "patch-key-checkpoint", operations: [{ type: "append", text: "补丁" }],
+    })).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_FILE_CONTENT_STALE" }) })
+    expect(collaboration.resumeExternalChange).toHaveBeenCalledWith(file.id)
+    expect((await service.getOwnerBrowserSnapshot({ userId: "user-1", itemId: file.id, surface: "standalone" })).preview?.text).toBe("# 网页草稿")
+    expect((await service.listFileVersions("user-1", file.id)).total).toBe(2)
   })
 
   it("records a content change when an upload is completed", async () => {
@@ -5025,6 +5170,8 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
   const shares = new Map<string, any>()
   const shareEditors = new Map<string, any>()
   const versions = new Map<string, any>()
+  const readLeases = new Map<string, any>()
+  const patchRequests = new Map<string, any>()
   const changes = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
@@ -5052,6 +5199,7 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
     }
   }
   const shareWhereRow = (share: any) => ({ ...share, item: items.get(share.itemId) ?? null })
+  const versionWhereRow = (version: any) => ({ ...version, agentReadLeases: [...readLeases.values()].filter((lease) => lease.versionId === version.id) })
 
   const prisma: any = {
     $transaction: async (input: any) => {
@@ -5063,6 +5211,8 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
           [shares, cloneMap(shares)],
           [shareEditors, cloneMap(shareEditors)],
           [versions, cloneMap(versions)],
+          [readLeases, cloneMap(readLeases)],
+          [patchRequests, cloneMap(patchRequests)],
           [changes, cloneMap(changes)],
         ] as const
         try {
@@ -5263,14 +5413,14 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
         return version
       },
       findFirst: async ({ where, select, orderBy }: any) => {
-        const version = orderRows([...versions.values()].filter((item) => matchesWhere(item, where ?? {})), orderBy)[0]
+        const version = orderRows([...versions.values()].filter((item) => matchesWhere(versionWhereRow(item), where ?? {})), orderBy)[0]
         if (!version) return null
         return select ? selectFields(version, select) : version
       },
       findMany: async (args: any = {}) => {
         const { where, select, orderBy, skip, take } = args
         const found = paginateRows(
-          orderRows([...versions.values()].filter((version) => matchesWhere(version, where ?? {})), orderBy),
+          orderRows([...versions.values()].filter((version) => matchesWhere(versionWhereRow(version), where ?? {})), orderBy),
           { skip, take },
         )
         return select ? found.map((version) => selectFields(version, select)) : found
@@ -5290,14 +5440,54 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
       updateMany: async ({ where, data }: any) => {
         let count = 0
         for (const version of versions.values()) {
-          if (matchesWhere(version, where)) {
+          if (matchesWhere(versionWhereRow(version), where)) {
             Object.assign(version, data)
             count += 1
           }
         }
         return { count }
       },
-      count: async ({ where }: any = {}) => [...versions.values()].filter((version) => matchesWhere(version, where ?? {})).length,
+      count: async ({ where }: any = {}) => [...versions.values()].filter((version) => matchesWhere(versionWhereRow(version), where ?? {})).length,
+    },
+    driveFileReadLease: {
+      create: async ({ data, select }: any) => {
+        const lease = { id: id("read-lease"), ...data, createdAt: now() }
+        readLeases.set(lease.id, lease)
+        return select ? selectFields(lease, select) : lease
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0
+        for (const lease of readLeases.values()) {
+          if (!matchesWhere({ ...lease, version: versions.get(lease.versionId) }, where)) continue
+          Object.assign(lease, data)
+          count++
+        }
+        return { count }
+      },
+      count: async ({ where }: any) => [...readLeases.values()].filter((lease) => matchesWhere(lease, where)).length,
+      deleteMany: async ({ where }: any) => {
+        let count = 0
+        for (const lease of readLeases.values()) if (matchesWhere(lease, where)) { readLeases.delete(lease.id); count++ }
+        return { count }
+      },
+    },
+    driveFilePatchRequest: {
+      create: async ({ data }: any) => {
+        const key = `${data.userId}:${data.itemId}:${data.idempotencyKey}`
+        if (patchRequests.has(key)) throw uniqueConstraintError(["userId", "itemId", "idempotencyKey"])
+        const record = { id: id("patch-request"), ...data, createdAt: now() }
+        patchRequests.set(key, record)
+        return record
+      },
+      findUnique: async ({ where }: any) => {
+        const key = where.userId_itemId_idempotencyKey
+        return patchRequests.get(`${key.userId}:${key.itemId}:${key.idempotencyKey}`) ?? null
+      },
+      deleteMany: async ({ where }: any) => {
+        let count = 0
+        for (const [key, record] of patchRequests) if (matchesWhere(record, where)) { patchRequests.delete(key); count++ }
+        return { count }
+      },
     },
     openApiDownloadGrantEntry: {
       count: async () => 0,
@@ -5404,6 +5594,7 @@ function matchesWhere(row: any, where: any): boolean {
     if (value && typeof value === "object" && "lt" in value) return row[key] < value.lt
     if (value && typeof value === "object" && "lte" in value) return row[key] <= value.lte
     if (value && typeof value === "object" && "contains" in value) return String(row[key]).toLowerCase().includes(String(value.contains).toLowerCase())
+    if (value && typeof value === "object" && !(value instanceof Date) && row[key] && typeof row[key] === "object") return matchesWhere(row[key], value)
     return row[key] === value
   })
 }

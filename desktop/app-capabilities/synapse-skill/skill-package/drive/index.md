@@ -17,8 +17,9 @@ Use these tools only for Synapse Drive:
 - `app_drive_item_move`
 - `app_drive_item_delete`
 - `app_drive_item_preview_get`
-- `app_drive_file_content_read`
-- `app_drive_file_content_write`
+- `app_drive_file_content_inspect`
+- `app_drive_file_content_read_chunk`
+- `app_drive_file_content_patch`
 - `app_drive_file_download_create`
 - `app_drive_file_version_list`
 - `app_drive_file_version_download_create`
@@ -75,7 +76,7 @@ Use these tools only for Synapse Drive:
 
 Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
 
-Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room, and MCP content writes go through the versioned file APIs: changing the body of an existing document uses `app_drive_file_content_write` on top of the version it was read from.
+Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room. Edits to an owned saved text file use `app_drive_file_content_patch` on its inspected version.
 
 Images pasted, dropped, or selected in the browser Markdown/MDX editor use a separate platform-owned `/object/<objectId>` store and do not consume user Drive quota. This browser-only convenience has no MCP upload, list, migration, or ownership tool. MCP uploads continue to follow the local Markdown, HTML, and explicit public-asset rules below.
 
@@ -253,18 +254,17 @@ Updating either route does not live-reload pages already open in a visitor's bro
 
 ## Editing An Existing Document
 
-Use this flow whenever the user asks to change, fix, update, or append to a document that already exists in Drive. Never rebuild it from a copy you produced earlier in the conversation.
+Use this flow whenever the user asks to change, fix, update, or append to a document that already exists in Drive.
 
 1. Resolve the item id. When the user gives a share or site URL, use the Drive Link tools to resolve it; when they name a file in their own Drive, resolve it with `app_drive_item_list` or `app_drive_item_tree_list`.
-2. Call `app_drive_file_content_read` for that item id. Keep `text` and `versionId` together: the text is the only valid base for the new content, and `versionId` is the only valid `baseVersionId`.
-   - When `truncated` is `true`, the read is not the whole document. Do not write it back. Download the file with `app_drive_file_download_create`, edit the local copy, and upload with `app_drive_file_upload` and `expectedVersionId` set to that `versionId`.
-3. Apply the user's change to that exact text and call `app_drive_file_content_write` with `itemId`, the full new `text`, and `baseVersionId`.
-4. If the call fails with `DRIVE_FILE_CONTENT_STALE`, or an upload fails the same way, the file was saved by someone else after your read. Read it again, redo the change on the new text, and write again. Report the retry to the user when the content differs from what you first saw.
-5. For several edits in one turn, chain them: each successful call returns the new `versionId`, which becomes the next `baseVersionId`.
+2. Call `app_drive_file_content_inspect`. For a known beginning or ending, read only the needed `app_drive_file_content_read_chunk` blocks. For a file at most 64 KiB that needs full reading, follow `nextCursor` until EOF and verify byte continuity from 0 to `totalBytes`. For a larger file needing full reading or an unknown section, use `app_drive_file_version_download_create` on the inspected `versionId` only when local processing and write permission are available; clean up a task-only temporary copy afterwards. If download is unavailable, read within the actual tool/context budget and report the range read rather than claim full coverage.
+3. Choose a unique source anchor and send the new text only through `app_drive_file_content_patch`. Combine known edits into one call. For append, inspect and optionally read `tail` first; patch appends verbatim without adding a newline.
+4. Check the returned `versionId`, `sizeBytes`, and `applied` positions. Read `tail` after append or `around` at an `applied.startByte`/`endByte` after a located edit to verify placement. Use the returned `versionId` for the next edit.
+5. On `DRIVE_FILE_CONTENT_STALE`, inspect the new version, reread and relocate anchors, then submit with a new idempotency key at most once. If it conflicts again, stop writing and report the unsaved edit. On ambiguous, missing, overlapping, or broad patches, fix the target or stop as the error requires; never split a broad edit to bypass the limit.
 
 Rules:
 
-- Editing an existing document is never done by uploading a local file built from an earlier copy, and never by calling `app_drive_file_upload` without `expectedVersionId`. That path is refused for Markdown and plain-text files precisely because it drops content someone saved in the meantime.
+- A local edit never uploads a copy built from an earlier version or calls `app_drive_file_upload` without `expectedVersionId`. For an intentional full-file reconstruction, download the fixed version, check the final size and diff against the user's intent, then upload with that version as `expectedVersionId`.
 - Creating a new document, replacing a standalone HTML page, replacing a binary file, or uploading a folder keeps using `app_drive_file_upload` / `app_drive_folder_upload`. HTML pages are rebuilt and replaced deliberately, so they are not part of the refusal.
 - A user's own edits made in the online editor are versions too. Preserve them: the user asked to keep their changes and get yours on top.
 
@@ -278,7 +278,7 @@ Rules:
    - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
    - Empty subdirectories inside the local folder are preserved in Drive.
 4. To open or preview an item for the owner, call `app_drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
-5. To read a small previewable text file, call `app_drive_file_content_read`. Use `app_drive_file_download_create` instead for binary, oversized, or non-previewable files.
+5. To read saved text, inspect then use `app_drive_file_content_read_chunk`; use the version download for large files needing local processing when available. Use `app_drive_file_download_create` for binary files.
 6. To save Drive content locally, call `app_drive_file_download_create` for a file, `app_drive_file_version_download_create` for a specific file version, or `app_drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
 7. If the user explicitly asks to upload to `公开素材`, upload to a `图床`, generate a `直链`, generate an `外链`, create a `public asset`, or create a `direct link`, call `app_drive_direct_link_upload`. These assets belong to the user, consume Drive quota, appear in the user's public-asset list, and are distinct from browser-editor `/object/` uploads. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, and allow duplicate names; every upload creates a new asset id and `/files/<assetId>` URL.
 8. If the user asks to replace an existing public asset, call `app_drive_direct_link_update` with `assetId` and `filePath`. The `/files/<assetId>` URL is preserved. Images can replace images, and documents can replace documents; the two categories cannot replace each other.
@@ -298,7 +298,7 @@ Rules:
    - Site tools return `password: null` and `urlWithPassword` equal to `url`; do not infer or reveal site passwords from tool results.
 12. If a folder needs to exist first, call `app_drive_folder_create`, then pass the returned folder id as `parentId`.
 13. To organize the user's Drive, call `app_drive_stats_get` and `app_drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
-14. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `app_drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
+14. Only read file content when necessary, and only for a small number of text-like candidates. Inspect before reading chunks. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
 15. Use `app_drive_folder_path_ensure` to create or reuse target category folders, then call `app_drive_reorganization_preview` with item ids and target folder ids. For moves back to Drive root, set `targetParentId` to `null`. Show the preview summary to the user before applying.
 16. Apply organization changes only with `app_drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
 17. For file history, call `app_drive_file_version_list` first. Use `app_drive_file_version_restore` only when the user wants that version to become current, `app_drive_file_version_delete` only for non-current, unpinned versions the user wants removed, and `app_drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup. Skip versions marked `deletePending` or shown as pending cleanup; they cannot be downloaded, restored, pinned, or deleted again until cleanup retry finishes. If a historical version is pinned/retained, call `app_drive_file_version_pin_update` with `isPinned: false` before deleting it. If delete returns `deletePending: true`, tell the user the version is marked for cleanup instead of fully removed.
@@ -327,7 +327,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 
 ## Common Requests
 
-- "改一下云盘上这份文档 / 在这份文档里加一段 / 把这份文档里的 X 改成 Y": apply **Editing An Existing Document**: read it with `app_drive_file_content_read`, change that text, write it back with `app_drive_file_content_write` and the returned `versionId`.
+- "改一下云盘上这份文档 / 在这份文档里加一段 / 把这份文档里的 X 改成 Y": apply **Editing An Existing Document** with inspect, relevant source chunks, and a version-checked patch.
 - "用 Synapse Skill 把这个 Markdown 上传到云盘": apply **Local Markdown Publishing Flow**; preserve and upload supported relative images before the Markdown, publish referenced local HTML separately, but do not share the Markdown itself.
 - "用 Synapse Skill 把这个 Markdown 上传到云盘并分享": apply **Local Markdown Publishing Flow**, then share the uploaded Markdown item separately.
 - "把这几个文件上传到云盘": apply **Upload Destination Selection** and place every ordinary Drive item in the automatically named shared folder.
@@ -351,7 +351,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "删除网页分享": call `app_drive_site_delete`.
 - "把这个目录传到云盘": apply **Upload Destination Selection**, then call `app_drive_folder_upload` so the Drive folder uses the local folder basename.
 - "打开/预览这个文件": call `app_drive_item_preview_get`.
-- "读取这个 Markdown": call `app_drive_file_content_read`.
+- "读取这个 Markdown": inspect, then follow `app_drive_file_content_read_chunk` cursors as needed.
 - "下载这个文件到本地": call `app_drive_file_download_create`.
 - "下载 v3 历史版本": call `app_drive_file_version_list`, then `app_drive_file_version_download_create` with the selected version id.
 - "恢复到上一个版本": call `app_drive_file_version_list`, then `app_drive_file_version_restore` with the selected version id.
@@ -368,7 +368,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "从回收站恢复": call `app_drive_item_restore`; include `kind` and `assetId` for `public_asset` trash rows.
 - "公开链接列表": call `app_drive_share_list`.
 - "看看云盘空间": call `app_drive_usage_get`.
-- "整理我的云盘": call `app_drive_stats_get`, `app_drive_item_tree_list`, optional small per-file `app_drive_file_content_read`, `app_drive_folder_path_ensure`, `app_drive_reorganization_preview`, then `app_drive_reorganization_apply` with the returned `planId`.
+- "整理我的云盘": call `app_drive_stats_get`, `app_drive_item_tree_list`, optional per-file inspect and relevant chunks, `app_drive_folder_path_ensure`, `app_drive_reorganization_preview`, then `app_drive_reorganization_apply` with the returned `planId`.
 - "分析这个云盘分享链接": call `app_drive_link_resolve`, then `app_drive_link_list` or `app_drive_link_read_text`.
 - "读取这个需求链接": call `app_drive_link_read_text`.
 - "读取并回复这个分享文档的评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_comment_create` with the selected thread or comment id.

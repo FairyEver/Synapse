@@ -888,6 +888,11 @@ function createStorageMemory(
         contentType: object.contentType ?? null,
       }
     }),
+    getObjectRange: vi.fn(async (input) => {
+      const object = objects.get(input.key)
+      if (!object) throw new Error("object not found")
+      return { body: object.body.subarray(input.start, input.endExclusive), totalSize: BigInt(object.body.length) }
+    }),
     deleteObject: vi.fn(async (key) => {
       objects.delete(key)
     }),

@@ -91,8 +91,9 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_item_move",
       "app_drive_item_delete",
       "app_drive_item_preview_get",
-      "app_drive_file_content_read",
-      "app_drive_file_content_write",
+      "app_drive_file_content_inspect",
+      "app_drive_file_content_read_chunk",
+      "app_drive_file_content_patch",
       "app_drive_file_download_create",
       "app_drive_file_version_list",
       "app_drive_file_version_download_create",
@@ -215,7 +216,7 @@ describe("createDriveCapabilityDispatcher", () => {
 
     expect(accountService.listDriveItemTree).toHaveBeenCalledWith({ parentId: null, offset: 5, limit: 10 })
     expect(accountService.ensureDriveFolderPath).toHaveBeenCalledWith({ parentId: null, segments: ["Work"] })
-    expect(accountService.readDriveFileContent).not.toHaveBeenCalled()
+    expect(accountService.readDriveFileContentChunk).not.toHaveBeenCalled()
   })
 
   it("previews and applies Drive reorganizations only through a generated plan id", async () => {
@@ -1208,64 +1209,59 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("returns preview snapshots and text content without creating shares", async () => {
+  it("returns browser preview separately from saved source text", async () => {
     const snapshot = drivePreviewSnapshot({
       preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", outline: null, truncated: false, imageUrl: null, visitUrl: null, relativeImages: [] },
     })
     const accountService = createAccountService({
       getDriveItemPreview: vi.fn(async () => snapshot),
-      readDriveFileContent: vi.fn(async () => ({
-        itemId: "item-1",
-        name: "note.md",
-        kind: "markdown",
-        text: "# Note",
-        html: "<h1>Note</h1>",
-        truncated: false,
-      })),
+      inspectDriveFileContent: vi.fn(async () => ({ itemId: "item-1", name: "note.md", kind: "markdown" as const, sizeBytes: 6, versionId: "version-1", editable: true })),
+      readDriveFileContentChunk: vi.fn(async () => ({ itemId: "item-1", versionId: "version-1", text: "# Note", startByte: 0, endByte: 6, totalBytes: 6, nextCursor: null, endOfFile: true })),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
     await expect(dispatcher.dispatch("app.drive.item_preview.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: snapshot })
-    await expect(dispatcher.dispatch("app.drive.file_content.read", { itemId: "item-1", maxBytes: 4096 }, { source: "mcp-stdio" }))
-      .resolves.toMatchObject({ ok: true, data: { text: "# Note", truncated: false } })
+    await expect(dispatcher.dispatch("app.drive.file_content.inspect", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { versionId: "version-1", sizeBytes: 6 } })
+    await expect(dispatcher.dispatch("app.drive.file_content.read_chunk", { itemId: "item-1", versionId: "version-1" }, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { text: "# Note", nextCursor: null } })
 
     expect(accountService.getDriveItemPreview).toHaveBeenCalledWith({ itemId: "item-1", surface: "standalone" })
-    expect(accountService.readDriveFileContent).toHaveBeenCalledWith({ itemId: "item-1", maxBytes: 4096 })
+    expect(accountService.readDriveFileContentChunk).toHaveBeenCalledWith({ itemId: "item-1", versionId: "version-1", cursor: undefined, start: undefined, anchorByte: undefined })
   })
 
-  it("writes document text on top of the version the caller read", async () => {
+  it("passes only local patch operations on top of a saved version", async () => {
     const accountService = createAccountService({
-      writeDriveFileContent: vi.fn(async () => ({ itemId: "item-1", versionId: "version-2" })),
+      patchDriveFileContent: vi.fn(async () => ({ itemId: "item-1", previousVersionId: "version-1", versionId: "version-2", sizeBytes: 12, appliedCount: 1, applied: [{ operationIndex: 0, startByte: 6, endByte: 12 }] })),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("app.drive.file_content.write", {
+    await expect(dispatcher.dispatch("app.drive.file_content.patch", {
       itemId: "item-1",
-      text: "# Note\n\nBody\n",
       baseVersionId: "version-1",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { itemId: "item-1", versionId: "version-2" } })
+      idempotencyKey: "patch-key-123456",
+      operations: [{ type: "append", text: "\nBody\n" }],
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true, data: { itemId: "item-1", versionId: "version-2" } })
 
-    // The document text is passed through verbatim; trimming would rewrite the file.
-    expect(accountService.writeDriveFileContent).toHaveBeenCalledWith({
+    expect(accountService.patchDriveFileContent).toHaveBeenCalledWith({
       itemId: "item-1",
-      text: "# Note\n\nBody\n",
       baseVersionId: "version-1",
+      idempotencyKey: "patch-key-123456",
+      operations: [{ type: "append", text: "\nBody\n" }],
     })
   })
 
-  it("requires a base version and text before writing document content", async () => {
+  it("requires a base version and operations before patching document content", async () => {
     const accountService = createAccountService()
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("app.drive.file_content.write", { itemId: "item-1", text: "body" }, { source: "mcp-stdio" }))
+    await expect(dispatcher.dispatch("app.drive.file_content.patch", { itemId: "item-1", idempotencyKey: "patch-key-123456", operations: [{ type: "append", text: "body" }] }, { source: "mcp-stdio" }))
       .rejects.toThrow("Missing or invalid 'baseVersionId'")
-    await expect(dispatcher.dispatch("app.drive.file_content.write", { itemId: "item-1", baseVersionId: "version-1" }, { source: "mcp-stdio" }))
-      .rejects.toThrow("Missing or invalid 'text'")
-    await expect(dispatcher.dispatch("app.drive.file_content.write", { itemId: "item-1", text: "  ", baseVersionId: "version-1" }, { source: "mcp-stdio" }))
-      .rejects.toThrow("Missing or invalid 'text'")
+    await expect(dispatcher.dispatch("app.drive.file_content.patch", { itemId: "item-1", baseVersionId: "version-1", idempotencyKey: "patch-key-123456" }, { source: "mcp-stdio" }))
+      .rejects.toThrow("operations must contain")
 
-    expect(accountService.writeDriveFileContent).not.toHaveBeenCalled()
+    expect(accountService.patchDriveFileContent).not.toHaveBeenCalled()
   })
 
   it("refuses to replace a document by upload without a declared base version", async () => {
@@ -1284,7 +1280,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
 
     await expect(dispatcher.dispatch("app.drive.file.upload", { filePath: "/tmp/note.md" }, { source: "mcp-stdio" }))
-      .rejects.toThrow("app_drive_file_content_write")
+      .rejects.toThrow("app_drive_file_content_patch")
 
     expect(accountService.cancelDriveUpload).toHaveBeenCalledWith("session-1")
     expect(accountService.completeDriveUpload).not.toHaveBeenCalled()
@@ -2518,8 +2514,9 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     previewDriveReorganization: vi.fn(),
     applyDriveReorganization: vi.fn(),
     getDriveItemPreview: vi.fn(),
-    readDriveFileContent: vi.fn(),
-    writeDriveFileContent: vi.fn(async () => ({ itemId: "item-1", versionId: "version-1" })),
+    inspectDriveFileContent: vi.fn(),
+    readDriveFileContentChunk: vi.fn(),
+    patchDriveFileContent: vi.fn(),
     downloadDriveFile: vi.fn(),
     listDriveFileVersions: vi.fn(),
     downloadDriveFileVersion: vi.fn(),

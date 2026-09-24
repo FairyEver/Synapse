@@ -122,8 +122,9 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.drive.item.move` | `app_drive_item_move` | `app.drive.item.move` | `driveItemMove` |
 | `app.drive.item.delete` | `app_drive_item_delete` | `app.drive.item.delete` | `driveItemDelete` |
 | `app.drive.item_preview.get` | `app_drive_item_preview_get` | `app.drive.item_preview.get` | `driveItemPreviewGet` |
-| `app.drive.file_content.read` | `app_drive_file_content_read` | `app.drive.file_content.read` | `driveFileContentRead` |
-| `app.drive.file_content.write` | `app_drive_file_content_write` | `app.drive.file_content.write` | `writeDriveFileContent` |
+| `app.drive.file_content.inspect` | `app_drive_file_content_inspect` | `app.drive.file_content.inspect` | `inspectDriveFileContent` |
+| `app.drive.file_content.read_chunk` | `app_drive_file_content_read_chunk` | `app.drive.file_content.read_chunk` | `readDriveFileContentChunk` |
+| `app.drive.file_content.patch` | `app_drive_file_content_patch` | `app.drive.file_content.patch` | `patchDriveFileContent` |
 | `app.drive.file_download.create` | `app_drive_file_download_create` | `app.drive.file_download.create` | `driveFileDownloadCreate` |
 | `app.drive.link.annotation.thread.list` | `app_drive_link_annotation_thread_list` | `app.drive.link.annotation.thread.list` | `driveLinkAnnotationThreadList` |
 | `app.drive.link.annotation.thread.create` | `app_drive_link_annotation_thread_create` | `app.drive.link.annotation.thread.create` | `driveLinkAnnotationThreadCreate` |

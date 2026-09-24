@@ -42,6 +42,7 @@ describe("drive-version-history", () => {
         OR: [
           { isPinned: true },
           { openApiGrantEntries: { some: { grant: { leaseUntil: { gt: new Date("2026-07-01T00:00:00.000Z") } } } } },
+          { agentReadLeases: { some: { expiresAt: { gt: new Date("2026-07-01T00:00:00.000Z") } } } },
           { storageKey: "storage-current" },
         ],
       },
@@ -52,6 +53,7 @@ describe("drive-version-history", () => {
         deletedAt: null,
         isPinned: false,
         openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date("2026-07-01T00:00:00.000Z") } } } },
+        agentReadLeases: { none: { expiresAt: { gt: new Date("2026-07-01T00:00:00.000Z") } } },
         storageKey: { not: "storage-current" },
         createdAt: { lt: expiredAt },
       },
@@ -64,6 +66,7 @@ describe("drive-version-history", () => {
         deletedAt: null,
         isPinned: false,
         openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date("2026-07-01T00:00:00.000Z") } } } },
+        agentReadLeases: { none: { expiresAt: { gt: new Date("2026-07-01T00:00:00.000Z") } } },
         storageKey: { not: "storage-current" },
       },
       select: { id: true, storageKey: true, size: true },

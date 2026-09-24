@@ -57,7 +57,8 @@ Existing Drive MCP tools operate on the current user's own Drive:
 
 ```text
 app_drive_item_list
-app_drive_file_content_read
+app_drive_file_content_inspect
+app_drive_file_content_read_chunk
 app_drive_file_download_create
 app_drive_share_create
 ...

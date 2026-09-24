@@ -31,7 +31,14 @@ export interface DriveStoragePort {
   putObject(input: { readonly key: string; readonly body: Buffer; readonly contentType?: string | null }): Promise<void>
   copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void>
   getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }>
+  getObjectRange(input: { readonly key: string; readonly start: number; readonly endExclusive: number }): Promise<{ readonly body: Buffer; readonly totalSize: bigint }>
   deleteObject(key: string): Promise<void>
+}
+
+function assertDriveRange(start: number, endExclusive: number, totalSize: bigint): void {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(endExclusive) || start < 0 || endExclusive <= start || BigInt(endExclusive) > totalSize) {
+    throw new RangeError("Invalid Drive object range.")
+  }
 }
 
 type LocalStorageToken = {
@@ -156,6 +163,19 @@ export class LocalDriveStorage implements DriveStoragePort {
       size: BigInt(info.size),
       contentType: this.contentTypes.get(input.key) ?? null,
     }
+  }
+
+  async getObjectRange(input: { readonly key: string; readonly start: number; readonly endExclusive: number }): Promise<{ readonly body: Buffer; readonly totalSize: bigint }> {
+    const objectPath = await this.requirePathForKey(input.key)
+    const info = await stat(objectPath)
+    assertDriveRange(input.start, input.endExclusive, BigInt(info.size))
+    const chunks: Buffer[] = []
+    for await (const chunk of createReadStream(objectPath, { start: input.start, end: input.endExclusive - 1 })) {
+      chunks.push(Buffer.from(chunk))
+    }
+    const body = Buffer.concat(chunks)
+    if (body.length !== input.endExclusive - input.start) throw new Error("Drive range read length mismatch.")
+    return { body, totalSize: BigInt(info.size) }
   }
 
   async acceptUpload(token: string, stream: NodeJS.ReadableStream): Promise<void> {
@@ -538,6 +558,36 @@ export class CosDriveStorage implements DriveStoragePort {
       size: parseContentLength(info.headers?.["content-length"]),
       contentType: info.headers?.["content-type"] ?? null,
     }
+  }
+
+  async getObjectRange(input: { readonly key: string; readonly start: number; readonly endExclusive: number }): Promise<{ readonly body: Buffer; readonly totalSize: bigint }> {
+    if (!Number.isSafeInteger(input.start) || !Number.isSafeInteger(input.endExclusive) || input.start < 0 || input.endExclusive <= input.start) {
+      throw new RangeError("Invalid Drive object range.")
+    }
+    const client = this.getClient()
+    const result = await new Promise<{ readonly body: Buffer; readonly headers: Record<string, string> }>((resolve, reject) => {
+      client.cos.getObject({
+        Bucket: client.bucket,
+        Region: client.region,
+        Key: input.key,
+        Range: `bytes=${input.start}-${input.endExclusive - 1}`,
+      }, (error, data) => {
+        if (error) return reject(error)
+        resolve({
+          body: Buffer.isBuffer(data.Body) ? data.Body : Buffer.from(data.Body ?? ""),
+          headers: data.headers ?? {},
+        })
+      })
+    })
+    const contentRange = result.headers["content-range"]
+    const match = /^bytes (\d+)-(\d+)\/(\d+)$/u.exec(contentRange ?? "")
+    if (!match || Number(match[1]) !== input.start || Number(match[2]) !== input.endExclusive - 1) {
+      throw new Error("Drive range response is invalid.")
+    }
+    const totalSize = BigInt(match[3]!)
+    assertDriveRange(input.start, input.endExclusive, totalSize)
+    if (result.body.length !== input.endExclusive - input.start) throw new Error("Drive range read length mismatch.")
+    return { body: result.body, totalSize }
   }
 
   private getSignedUrl(input: {

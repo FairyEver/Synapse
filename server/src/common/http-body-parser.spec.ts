@@ -39,6 +39,16 @@ class BodyParserTestController {
   receiveDriveText(@Body() body: { readonly text?: string }) {
     return { size: body.text?.length ?? 0 }
   }
+
+  @Patch("/api/drive/browser/shares/:shareId/content")
+  receiveSharedRootText(@Body() body: { readonly text?: string }) {
+    return { size: body.text?.length ?? 0 }
+  }
+
+  @Patch("/api/drive/browser/shares/:shareId/items/:itemId/content")
+  receiveSharedItemText(@Body() body: { readonly text?: string }) {
+    return { size: body.text?.length ?? 0 }
+  }
 }
 
 @Module({ controllers: [BodyParserTestController] })
@@ -96,11 +106,15 @@ describe("HTTP body parser configuration", () => {
     expect(response.body).toEqual({ size: value.length })
   })
 
-  it("accepts Drive text edits above the general JSON body limit", async () => {
+  it.each([
+    "/api/drive/browser/owner/items/item-1/content",
+    "/api/drive/browser/shares/share-1/content",
+    "/api/drive/browser/shares/share-1/items/item-1/content",
+  ])("accepts Drive text edits above the general JSON body limit on %s", async (path) => {
     const value = "x".repeat(2 * 1024 * 1024)
 
     const response = await request(app.getHttpServer())
-      .patch("/api/drive/browser/owner/items/item-1/content")
+      .patch(path)
       .set("content-type", "application/json")
       .send({ text: value })
       .expect(200)

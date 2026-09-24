@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional, PayloadTooLargeException, UnauthorizedException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import {
   type DriveBrowserAnnotationCapabilityDto,
@@ -26,6 +26,9 @@ import {
   type DriveFileVersionListInput,
   type DriveFileVersionListPageDto,
   type DriveFileContentUpdateResult,
+  type DriveFileContentInspectResult,
+  type DriveFileContentChunkResult,
+  type DriveFileContentPatchResult,
   type DriveFileTextUpdateInput,
   type DriveItemDto,
   type DriveItemListInput,
@@ -114,6 +117,8 @@ import {
   isValidDriveItemName,
 } from "./drive-token"
 import type { DriveStoragePort } from "./drive-storage"
+import { alignDriveUtf8Start, createDriveTextChunk, decodeDriveReadCursor } from "./drive-file-chunk"
+import { applyDriveFilePatch, DriveFilePatchError, type DriveFilePatchApplied, type DriveFilePatchInput } from "./drive-file-patch"
 import {
   buildConsoleDriveRootBreadcrumb,
   buildConsoleDriveRootItemDto,
@@ -152,6 +157,8 @@ type DrivePrismaClient = PrismaService | Prisma.TransactionClient
 
 const DRIVE_FOLDER_UPLOAD_TRANSACTION_MAX_WAIT_MS = 10_000
 const DRIVE_FOLDER_UPLOAD_TRANSACTION_TIMEOUT_MS = 30_000
+const DRIVE_AGENT_READ_LEASE_MS = 10 * 60_000
+const DRIVE_AGENT_PATCH_RECORD_MS = 24 * 60 * 60_000
 
 type DriveReorganizationPlan = {
   readonly userId: string
@@ -417,6 +424,15 @@ export class DriveService implements OnApplicationBootstrap {
     await this.backfillLegacyDriveAccessProtection()
   }
 
+  @Cron("0 * * * *")
+  async cleanupAgentFileToolRecords(): Promise<void> {
+    const now = new Date()
+    await Promise.all([
+      this.prisma.driveFileReadLease.deleteMany({ where: { expiresAt: { lte: now } } }),
+      this.prisma.driveFilePatchRequest.deleteMany({ where: { expiresAt: { lte: now } } }),
+    ])
+  }
+
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
     const page = await this.listItemsPage(userId, parentId, { offset: 0, limit: DRIVE_ITEM_LIST_DEFAULT_LIMIT })
     return [...page.items]
@@ -566,6 +582,154 @@ export class DriveService implements OnApplicationBootstrap {
     })
   }
 
+  async inspectOwnerFileContent(userId: string, itemId: string): Promise<DriveFileContentInspectResult> {
+    const { item, version } = await this.requireOwnerTextVersion(userId, itemId)
+    return {
+      itemId: item.id,
+      name: item.name,
+      kind: resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item)) as DriveFileContentInspectResult["kind"],
+      sizeBytes: Number(version.size),
+      versionId: version.id,
+      editable: true,
+    }
+  }
+
+  async readOwnerFileContentChunk(userId: string, itemId: string, input: {
+    readonly versionId: string
+    readonly cursor?: string
+    readonly start?: "beginning" | "tail" | "around"
+    readonly anchorByte?: number
+  }): Promise<DriveFileContentChunkResult> {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(item)
+    this.assertAgentEditableTextFile(item)
+    let cursor: ReturnType<typeof decodeDriveReadCursor> | null = null
+    if (input.cursor) {
+      try { cursor = decodeDriveReadCursor(input.cursor) }
+      catch { throw new BadRequestException({ code: "DRIVE_FILE_READ_CURSOR_INVALID", message: "读取游标无效，请重新检查文件。" }) }
+    }
+    if (cursor && (input.start !== undefined || input.anchorByte !== undefined)) throw new BadRequestException("游标续读不能同时指定起点或锚点。")
+    const mode = cursor ? "beginning" : input.start ?? "beginning"
+    const version = await this.prisma.driveFileVersion.findFirst({
+      where: { id: input.versionId, itemId, userId, deletedAt: null, deletePending: false },
+      select: { id: true, size: true, storageKey: true },
+    })
+    if (!version) throw driveReadSnapshotExpired()
+    const totalBytes = Number(version.size)
+    if (!Number.isSafeInteger(totalBytes) || totalBytes < 0) throw new BadRequestException("文件大小无效。")
+    if (mode === "around" && (!Number.isSafeInteger(input.anchorByte) || input.anchorByte! < 0 || input.anchorByte! > totalBytes)) {
+      throw new BadRequestException("around 需要补丁返回的有效 anchorByte。")
+    }
+    if (mode !== "around" && input.anchorByte !== undefined) throw new BadRequestException("只有 around 可以指定 anchorByte。")
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + DRIVE_AGENT_READ_LEASE_MS)
+    const lease = await this.prisma.$transaction(async (tx) => {
+      await lockDriveItemMutation(tx, itemId)
+      if (cursor) {
+        const updated = await tx.driveFileReadLease.updateMany({
+          where: { id: cursor.leaseId, userId, itemId, versionId: version.id, expiresAt: { gt: now }, version: { deletedAt: null, deletePending: false } },
+          data: { expiresAt },
+        })
+        if (updated.count !== 1) throw driveReadSnapshotExpired()
+        return { id: cursor.leaseId }
+      }
+      const active = await tx.driveFileVersion.findFirst({ where: { id: version.id, itemId, userId, deletedAt: null, deletePending: false }, select: { id: true } })
+      if (!active) throw driveReadSnapshotExpired()
+      return tx.driveFileReadLease.create({ data: { userId, itemId, versionId: version.id, expiresAt }, select: { id: true } })
+    })
+    const requestedStart = cursor?.offset ?? (mode === "tail" ? Math.max(0, totalBytes - 8192) : mode === "around" ? Math.max(0, input.anchorByte! - 256) : 0)
+    if (requestedStart > totalBytes) throw new BadRequestException("游标位置超出文件范围。")
+    const endExclusive = mode === "tail" ? totalBytes : Math.min(totalBytes, requestedStart + 8196)
+    let source: Buffer<ArrayBufferLike> = Buffer.alloc(0)
+    let sourceStartByte = requestedStart
+    if (requestedStart < endExclusive) {
+      const range = await this.storage.getObjectRange({ key: version.storageKey, start: requestedStart, endExclusive })
+      if (range.totalSize !== version.size || range.body.length !== endExclusive - requestedStart) throw driveReadSnapshotExpired()
+      const skipped = cursor ? 0 : alignDriveUtf8Start(range.body)
+      source = range.body.subarray(skipped)
+      sourceStartByte += skipped
+    }
+    return createDriveTextChunk({
+      itemId,
+      versionId: version.id,
+      leaseId: lease.id,
+      source,
+      sourceStartByte,
+      totalBytes,
+      mode,
+      ...(mode === "around" ? { anchorByte: input.anchorByte } : {}),
+    })
+  }
+
+  async patchOwnerFileContent(userId: string, itemId: string, input: DriveFilePatchInput, auditContext: DriveAuditContext = {}): Promise<DriveFileContentPatchResult> {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(item)
+    this.assertAgentEditableTextFile(item)
+    const requestHash = createHash("sha256").update(JSON.stringify({
+      baseVersionId: input.baseVersionId,
+      operations: input.operations.map((operation) => operation.type === "append"
+        ? [operation.type, operation.text]
+        : [operation.type, operation.target.exact, operation.target.prefix ?? "", operation.target.suffix ?? "", operation.text]),
+    })).digest("hex")
+    await this.prisma.driveFilePatchRequest.deleteMany({ where: { userId, itemId, idempotencyKey: input.idempotencyKey, expiresAt: { lte: new Date() } } })
+    const prior = await this.findDrivePatchResult(userId, itemId, input.idempotencyKey, requestHash)
+    if (prior) return prior
+    const current = await this.requireOwnerTextVersion(userId, itemId)
+    if (current.version.id !== input.baseVersionId) throw driveFileContentStaleConflict(current.version.id)
+    const source = await readDriveExactText(this.storage, current.version.storageKey, current.version.size)
+    let patch: ReturnType<typeof applyDriveFilePatch>
+    try {
+      patch = applyDriveFilePatch(source, input.operations)
+    } catch (error) {
+      if (error instanceof DriveFilePatchError) throw new BadRequestException({ code: error.code, message: error.message, ...error.details })
+      throw error
+    }
+    let result: DriveFileContentUpdateResult
+    try {
+      result = await this.commitTextFileChange({
+        ownerId: userId,
+        actorUserId: userId,
+        item,
+        input: { contentType: "text", text: patch.text, baseVersionId: input.baseVersionId },
+        auditContext,
+        auditAction: "drive.file.patch",
+        patchRecord: { idempotencyKey: input.idempotencyKey, requestHash, applied: patch.applied },
+      })
+    } catch (error) {
+      const committed = await this.findDrivePatchResult(userId, itemId, input.idempotencyKey, requestHash)
+      if (committed) return committed
+      throw error
+    }
+    return {
+      itemId,
+      previousVersionId: input.baseVersionId,
+      versionId: result.version.id,
+      sizeBytes: patch.sizeBytes,
+      appliedCount: patch.applied.length,
+      applied: patch.applied,
+    }
+  }
+
+  private async findDrivePatchResult(userId: string, itemId: string, idempotencyKey: string, requestHash: string): Promise<DriveFileContentPatchResult | null> {
+    const record = await this.prisma.driveFilePatchRequest.findUnique({ where: { userId_itemId_idempotencyKey: { userId, itemId, idempotencyKey } } })
+    if (!record || record.expiresAt <= new Date()) return null
+    if (record.requestHash !== requestHash) throw new ConflictException({ code: "DRIVE_FILE_PATCH_IDEMPOTENCY_CONFLICT", message: "同一幂等键对应不同补丁，请更换 key。" })
+    const applied = record.applied as DriveFilePatchApplied[]
+    return { itemId, previousVersionId: record.previousVersionId, versionId: record.versionId, sizeBytes: Number(record.sizeBytes), appliedCount: applied.length, applied }
+  }
+
+  private async requireOwnerTextVersion(userId: string, itemId: string) {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(item)
+    this.assertAgentEditableTextFile(item)
+    const version = await this.prisma.driveFileVersion.findFirst({
+      where: { itemId, userId, storageKey: item.storageKey!, deletedAt: null, deletePending: false },
+      select: { id: true, storageKey: true, size: true },
+    })
+    if (!version) throw new BadRequestException({ code: "DRIVE_FILE_CONTENT_NO_VERSION", message: "文件没有可读取的已保存版本。" })
+    return { item, version }
+  }
+
   async updateShareFileText(input: {
     readonly actorUserId: string
     readonly shareId: string
@@ -663,7 +827,9 @@ export class DriveService implements OnApplicationBootstrap {
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
     if (version.isPinned) throw new BadRequestException("请先取消保留后再删除历史版本。")
     const leaseCheckTime = new Date()
-    const claimed = await this.prisma.driveFileVersion.updateMany({
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      await lockDriveItemMutation(tx, item.id)
+      return tx.driveFileVersion.updateMany({
       where: {
         id: version.id,
         itemId: item.id,
@@ -672,14 +838,20 @@ export class DriveService implements OnApplicationBootstrap {
         deletePending: false,
         isPinned: false,
         openApiGrantEntries: { none: { grant: { leaseUntil: { gt: leaseCheckTime } } } },
+        agentReadLeases: { none: { expiresAt: { gt: leaseCheckTime } } },
       },
       data: { deletePending: true },
+      })
     })
     if (claimed.count === 0) {
+      const latest = await this.prisma.driveFileVersion.findUnique({ where: { id: version.id }, select: { deletePending: true, deletedAt: true } })
+      if (!latest || latest.deletePending || latest.deletedAt) throw new BadRequestException("历史版本正在清理中。")
       const activeGrantCount = await this.prisma.openApiDownloadGrantEntry.count({
         where: { driveFileVersionId: version.id, grant: { leaseUntil: { gt: leaseCheckTime } } },
       })
       if (activeGrantCount > 0) throw new BadRequestException("版本正在被临时下载使用。")
+      const activeReadCount = await this.prisma.driveFileReadLease.count({ where: { versionId: version.id, expiresAt: { gt: leaseCheckTime } } })
+      if (activeReadCount > 0) throw new BadRequestException("版本正在被分段读取使用。")
       return { ok: true, deletePending: true }
     }
     let deletePending = false
@@ -3014,17 +3186,29 @@ export class DriveService implements OnApplicationBootstrap {
     readonly auditAction: string
     readonly shareRecordId?: string
     readonly shareId?: string
+    readonly patchRecord?: { readonly idempotencyKey: string; readonly requestHash: string; readonly applied: readonly DriveFilePatchApplied[] }
   }): Promise<DriveFileContentUpdateResult> {
     if (input.input.contentType !== "text") throw new BadRequestException("编辑内容无效。")
     this.assertEditableTextFile(input.item)
     const body = Buffer.from(input.input.text, "utf8")
     const bodySize = BigInt(body.byteLength)
     if (bodySize > driveMaxFileBytes) throw new PayloadTooLargeException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
-    await this.collaboration?.prepareExternalChange(input.item.id)
-    const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
+    try {
+      await this.collaboration?.prepareExternalChange(input.item.id)
+    } catch (error) {
+      this.collaboration?.resumeExternalChange(input.item.id)
+      throw error
+    }
+    let currentVersionId: string | null
+    try {
+      currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
+    } catch (error) {
+      this.collaboration?.resumeExternalChange(input.item.id)
+      throw error
+    }
     if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
       this.collaboration?.resumeExternalChange(input.item.id)
-      throw driveFileContentStaleConflict()
+      throw driveFileContentStaleConflict(currentVersionId)
     }
 
     const nextVersionId = createDriveFileVersionId()
@@ -3048,7 +3232,7 @@ export class DriveService implements OnApplicationBootstrap {
           select: { id: true },
         })
         if (!transactionCurrentVersion || transactionCurrentVersion.id !== input.input.baseVersionId) {
-          throw driveFileContentStaleConflict()
+          throw driveFileContentStaleConflict(transactionCurrentVersion?.id)
         }
         await reserveDriveUsageBytes(tx, input.ownerId, bodySize)
         await updateDriveUsageAfterUploadCompletion(tx, input.ownerId, {
@@ -3094,6 +3278,21 @@ export class DriveService implements OnApplicationBootstrap {
         if (resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item)) === "markdown") {
           await this.hostedDocumentImages?.activateReferencedImages(tx, { sourceItemId: item.id, markdown: input.input.text })
         }
+        if (input.patchRecord) {
+          await tx.driveFilePatchRequest.create({
+            data: {
+              userId: input.ownerId,
+              itemId: item.id,
+              idempotencyKey: input.patchRecord.idempotencyKey,
+              requestHash: input.patchRecord.requestHash,
+              previousVersionId: input.input.baseVersionId,
+              versionId: version.id,
+              sizeBytes: bodySize,
+              applied: input.patchRecord.applied.map((entry) => ({ ...entry })),
+              expiresAt: new Date(Date.now() + DRIVE_AGENT_PATCH_RECORD_MS),
+            },
+          })
+        }
         return { item, version, collaborationEpoch }
       })
       committed = true
@@ -3131,6 +3330,11 @@ export class DriveService implements OnApplicationBootstrap {
     if (item.type !== DRIVE_ITEM_TYPE.file || !item.storageKey) throw new BadRequestException("目标不是文件。")
     const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
     if (!isDriveTextEditablePreviewKind(previewKind)) throw new BadRequestException("文件类型暂不支持编辑。")
+  }
+
+  private assertAgentEditableTextFile(item: DriveItemRecordWithStorage): void {
+    try { this.assertEditableTextFile(item) }
+    catch { throw new BadRequestException({ code: "DRIVE_FILE_CONTENT_UNSUPPORTED", message: "文件不是可编辑的 Markdown、纯文本或 HTML 源文件。" }) }
   }
 
   private assertDocumentImageUploadTarget(item: DriveItemRecordWithStorage): void {
@@ -4242,7 +4446,9 @@ export class DriveService implements OnApplicationBootstrap {
           now: new Date(),
         }))
       for (const version of candidates) {
-        const claimed = await this.prisma.driveFileVersion.updateMany({
+        const claimed = await this.prisma.$transaction(async (tx) => {
+          await lockDriveItemMutation(tx, item.id)
+          return tx.driveFileVersion.updateMany({
           where: {
             id: version.id,
             itemId: item.id,
@@ -4251,8 +4457,10 @@ export class DriveService implements OnApplicationBootstrap {
             deletePending: false,
             isPinned: false,
             openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date() } } } },
+            agentReadLeases: { none: { expiresAt: { gt: new Date() } } },
           },
           data: { deletePending: true },
+          })
         })
         if (claimed.count === 0) continue
         try {
@@ -4903,11 +5111,36 @@ function isUniqueConstraintError(error: unknown): boolean {
  * instead of replacing it. The message carries that instruction because MCP
  * surfaces only the message string to the agent.
  */
-function driveFileContentStaleConflict(): ConflictException {
+function driveFileContentStaleConflict(currentVersionId?: string | null): ConflictException {
   return new ConflictException({
     code: "DRIVE_FILE_CONTENT_STALE",
-    message: "文件已有新内容，请重新读取最新版本后再改。",
+    message: "文件已有新内容，请重新检查版本、重新定位后再提交。",
+    currentVersionId: currentVersionId ?? null,
   })
+}
+
+function driveReadSnapshotExpired(): ConflictException {
+  return new ConflictException({ code: "DRIVE_FILE_READ_SNAPSHOT_EXPIRED", message: "读取快照已过期，请重新检查文件版本。" })
+}
+
+async function readDriveExactText(storage: DriveStoragePort, key: string, expectedSize: bigint): Promise<string> {
+  if (expectedSize < 0n || expectedSize > driveMaxFileBytes) throw new PayloadTooLargeException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
+  const object = await storage.getObjectStream({ key })
+  if (object.size !== undefined && object.size !== expectedSize) throw driveReadSnapshotExpired()
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of object.stream as AsyncIterable<Buffer | string>) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    size += bytes.length
+    if (BigInt(size) > expectedSize) throw driveReadSnapshotExpired()
+    chunks.push(bytes)
+  }
+  if (BigInt(size) !== expectedSize) throw driveReadSnapshotExpired()
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size))
+  } catch {
+    throw new BadRequestException({ code: "DRIVE_FILE_TEXT_INVALID_UTF8", message: "文件不是有效的 UTF-8 文本。" })
+  }
 }
 
 async function lockDriveItemMutation(client: Prisma.TransactionClient, itemId: string): Promise<void> {

@@ -8,6 +8,10 @@ import type {
   DriveAccessSettingsUpdateInput,
   DriveBrowserSnapshotDto,
   DriveFileVersionDto,
+  DriveFileContentInspectResult,
+  DriveFileContentChunkResult,
+  DriveFileContentPatchInput,
+  DriveFileContentPatchResult,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
@@ -120,15 +124,9 @@ type DriveAccountServicePort = {
     readonly childrenOffset?: number
     readonly childrenLimit?: number
   }) => Promise<DriveBrowserSnapshotDto>
-  readonly readDriveFileContent: (input: {
-    readonly itemId: string
-    readonly maxBytes?: number
-  }) => Promise<unknown>
-  readonly writeDriveFileContent: (input: {
-    readonly itemId: string
-    readonly text: string
-    readonly baseVersionId: string
-  }) => Promise<{ readonly itemId: string; readonly versionId: string }>
+  readonly inspectDriveFileContent: (itemId: string) => Promise<DriveFileContentInspectResult>
+  readonly readDriveFileContentChunk: (input: { readonly itemId: string; readonly versionId: string; readonly cursor?: string; readonly start?: "beginning" | "tail" | "around"; readonly anchorByte?: number }) => Promise<DriveFileContentChunkResult>
+  readonly patchDriveFileContent: (input: { readonly itemId: string } & DriveFileContentPatchInput) => Promise<DriveFileContentPatchResult>
   readonly downloadDriveFile: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
   readonly listDriveFileVersions: (itemId: string, input?: DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
   readonly downloadDriveFileVersion: (input: {
@@ -315,21 +313,30 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               }),
             }
           })
-        case "app.drive.file_content.read":
+        case "app.drive.file_content.inspect":
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.readDriveFileContent({
+            data: await deps.accountService.inspectDriveFileContent(requireString(params, "itemId")),
+          }))
+        case "app.drive.file_content.read_chunk":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.readDriveFileContentChunk({
               itemId: requireString(params, "itemId"),
-              maxBytes: optionalNumber(params.maxBytes),
+              versionId: requireString(params, "versionId"),
+              cursor: optionalString(params.cursor),
+              start: optionalDriveReadStart(params.start),
+              anchorByte: optionalNumber(params.anchorByte),
             }),
           }))
-        case "app.drive.file_content.write":
+        case "app.drive.file_content.patch":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
-            data: await deps.accountService.writeDriveFileContent({
+            data: await deps.accountService.patchDriveFileContent({
               itemId: requireString(params, "itemId"),
-              text: requireDocumentText(params, "text"),
               baseVersionId: requireString(params, "baseVersionId"),
+              idempotencyKey: requireString(params, "idempotencyKey"),
+              operations: requireDrivePatchOperations(params.operations),
             }),
           }))
         case "app.drive.file_download.create":
@@ -719,7 +726,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
 }
 
 function describeUnbasedOverwrite(target: DriveUploadOverwriteTargetDto): string {
-  return `"${target.name}" already exists in the target folder (itemId: ${target.itemId}). To change an existing document, read it with app_drive_file_content_read and write it back with app_drive_file_content_write using the versionId that read returns. Pass expectedVersionId to app_drive_file_upload only when the bytes being uploaded were produced from that exact version.`
+  return `"${target.name}" already exists in the target folder (itemId: ${target.itemId}). For a local text edit, inspect it with app_drive_file_content_inspect and submit app_drive_file_content_patch using that versionId. Pass expectedVersionId to app_drive_file_upload only when full replacement bytes were produced from that exact version.`
 }
 
 async function uploadFile(
@@ -1470,14 +1477,6 @@ function requireString(params: Record<string, unknown>, key: string): string {
   return value.trim()
 }
 
-function requireDocumentText(params: Record<string, unknown>, key: string): string {
-  const value = params[key]
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`Missing or invalid '${key}': expected non-empty string`)
-  }
-  return value
-}
-
 function requireAbsoluteOutputPath(params: Record<string, unknown>): string {
   const outputPath = requireLocalPath(params, "outputPath")
   if (!path.isAbsolute(outputPath)) {
@@ -1658,6 +1657,32 @@ function optionalDrivePreviewSurface(value: unknown): "standalone" | "console" |
   if (value === undefined || value === null) return undefined
   if (value === "standalone" || value === "console") return value
   throw new Error("Expected surface to be standalone or console.")
+}
+
+function optionalDriveReadStart(value: unknown): "beginning" | "tail" | "around" | undefined {
+  if (value === undefined || value === null) return undefined
+  if (value === "beginning" || value === "tail" || value === "around") return value
+  throw new Error("Expected start to be beginning, tail, or around.")
+}
+
+function requireDrivePatchOperations(value: unknown): DriveFileContentPatchInput["operations"] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10) throw new Error("operations must contain 1 to 10 entries.")
+  let addedBytes = 0
+  return value.map((entry: unknown) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid patch operation.")
+    const operation = entry as Record<string, unknown>
+    if (typeof operation.text !== "string") throw new Error("Patch operation text must be a string.")
+    addedBytes += Buffer.byteLength(operation.text, "utf8")
+    if (addedBytes > 64 * 1024) throw new Error("Patch added text exceeds 64 KiB.")
+    if (operation.type === "append") return { type: "append", text: operation.text }
+    if (operation.type !== "insert_before" && operation.type !== "insert_after" && operation.type !== "replace_exact") throw new Error("Invalid patch operation type.")
+    if (!operation.target || typeof operation.target !== "object" || Array.isArray(operation.target)) throw new Error("Patch target is required.")
+    const target = operation.target as Record<string, unknown>
+    if (typeof target.exact !== "string" || target.exact.length === 0) throw new Error("Patch target exact text is required.")
+    if (typeof target.prefix !== "undefined" && typeof target.prefix !== "string") throw new Error("Patch target prefix must be a string.")
+    if (typeof target.suffix !== "undefined" && typeof target.suffix !== "string") throw new Error("Patch target suffix must be a string.")
+    return { type: operation.type, target: { exact: target.exact, ...(target.prefix === undefined ? {} : { prefix: target.prefix as string }), ...(target.suffix === undefined ? {} : { suffix: target.suffix as string }) }, text: operation.text }
+  })
 }
 
 function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublicLinksPageInput | undefined {

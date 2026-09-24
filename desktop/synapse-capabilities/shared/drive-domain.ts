@@ -17,8 +17,9 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
   { id: "app.drive.item.delete" as CapabilityId, title: "Delete item", description: "Move a Synapse Drive file or folder to Drive trash.", mutates: true, risk: "high" },
   { id: "app.drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
-  { id: "app.drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
-  { id: "app.drive.file_content.write" as CapabilityId, title: "Write file content", description: "Replace the text content of an existing text-like Synapse Drive file on top of the version the caller read.", mutates: true },
+  { id: "app.drive.file_content.inspect" as CapabilityId, title: "Inspect saved file content", description: "Get the saved text version and UTF-8 size without reading the body.", mutates: false },
+  { id: "app.drive.file_content.read_chunk" as CapabilityId, title: "Read saved file chunk", description: "Read only source text from an immutable saved version with a cursor.", mutates: false },
+  { id: "app.drive.file_content.patch" as CapabilityId, title: "Patch saved file content", description: "Apply a version-checked local text patch to an owned Drive file.", mutates: true },
   { id: "app.drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
   { id: "app.drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
   { id: "app.drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version that is not pending cleanup to a local path.", mutates: true },
@@ -195,7 +196,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_upload",
-      description: "Upload one local file to Synapse Drive once using server-prepared direct upload. This does not create persistent sync; when the user asks to sync, keep synchronized, or upload and sync, use drive_sync_binding_preview then drive_sync_binding_create instead. A same-name file in the target folder is replaced while preserving its item id and share links. To change the content of an existing Markdown or plain-text document, use drive_file_content_write instead: replacing one here requires expectedVersionId, which must be the version you read before producing the bytes. Standalone HTML pages and binary files stay plain overwrites. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload one local file to Synapse Drive once using server-prepared direct upload. This does not create persistent sync; when the user asks to sync, keep synchronized, or upload and sync, use drive_sync_binding_preview then drive_sync_binding_create instead. A same-name file in the target folder is replaced while preserving its item id and share links. For local edits to existing text use drive_file_content_patch. Full-file reconstruction requires expectedVersionId from drive_file_content_inspect. Standalone HTML pages and binary files stay plain overwrites. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -203,7 +204,7 @@ export function buildDriveTools(): McpToolDefinition[] {
           parentId: optionalParentId,
           name: stringField("Optional Drive display name. Defaults to the local file basename."),
           mimeType: stringField("Optional MIME type."),
-          expectedVersionId: stringField("Version of the existing file these bytes are based on. Required when the upload replaces an existing Markdown or plain-text file; take it from drive_file_content_read or drive_file_version_list. Omit for a new file, an HTML page, or a binary file."),
+          expectedVersionId: stringField("Version of the existing file these bytes are based on. Required when the upload replaces an existing Markdown or plain-text file; take it from drive_file_content_inspect or drive_file_version_list. Omit for a new file, an HTML page, or a binary file."),
         },
         required: ["filePath"],
       },
@@ -286,28 +287,49 @@ export function buildDriveTools(): McpToolDefinition[] {
       },
     },
     {
-      name: "drive_file_content_read",
-      description: "Read previewable small text content from a Drive file, such as text, Markdown, or HTML source. The result carries versionId, the current version of the text it just returned. Pass that value as baseVersionId to drive_file_content_write when changing this text so a newer save is not overwritten. Skip rewrites when the result is truncated. Binary, oversized, or non-previewable files should be downloaded with drive_file_download_create.",
+      name: "drive_file_content_inspect",
+      description: "Inspect an owned saved Markdown, plain text, or HTML source file. Returns the immutable versionId and UTF-8 sizeBytes without body or preview HTML. Use before read_chunk or patch.",
+      inputSchema: { type: "object", properties: { itemId: stringField("Owned Drive file item id.") }, required: ["itemId"] },
+    },
+    {
+      name: "drive_file_content_read_chunk",
+      description: "Read source text from a fixed saved version in bounded chunks. Start at beginning by default; tail reads only the last block; around requires a byte anchor returned by patch.applied. Pass nextCursor unchanged to continue, without start or anchorByte. Each call rechecks access. A block is not necessarily the full document. On DRIVE_FILE_READ_SNAPSHOT_EXPIRED inspect again.",
       inputSchema: {
         type: "object",
         properties: {
-          itemId: stringField("Drive file item id."),
-          maxBytes: { type: "number", description: "Optional maximum UTF-8 bytes to return from preview text." },
+          itemId: stringField("Owned Drive file item id."),
+          versionId: stringField("Saved immutable version from inspect or patch."),
+          cursor: stringField("Continuation cursor from the prior chunk; omit start and anchorByte when present."),
+          start: { type: "string", enum: ["beginning", "tail", "around"], description: "First chunk origin. Defaults to beginning." },
+          anchorByte: { type: "number", description: "For around only, use startByte or endByte from patch.applied." },
         },
-        required: ["itemId"],
+        required: ["itemId", "versionId"],
       },
     },
     {
-      name: "drive_file_content_write",
-      description: "Replace the text content of an existing Markdown, text, or HTML source file in Synapse Drive, on top of the version you read. This is the way to edit a document an existing file already holds: read it with drive_file_content_read first, apply your change to that exact text, then call this with the versionId the read returned. Prefer this over downloading, editing locally, and uploading. If the file changed since that version, the call fails with DRIVE_FILE_CONTENT_STALE instead of overwriting the newer content; read the file again, redo your change on the new text, and retry. Do not use this for new files, binary files, or content you only saw truncated.",
+      name: "drive_file_content_patch",
+      description: "Edit an owned saved text file with append, insert_before, insert_after, or replace_exact on baseVersionId. Supply a random idempotencyKey and reuse it only for retry of the identical request. Targets must uniquely match the complete base text; combine related edits. Conflicts require inspect and fresh anchors; retry at most once. Returns the new version and applied byte ranges, never the body. Do not split a DRIVE_FILE_PATCH_TOO_BROAD edit to bypass protection.",
       inputSchema: {
         type: "object",
         properties: {
-          itemId: stringField("Drive file item id to replace the content of."),
-          text: stringField("Complete new text content of the file."),
-          baseVersionId: stringField("Version the text above is based on, taken from drive_file_content_read versionId."),
+          itemId: stringField("Owned Drive file item id."),
+          baseVersionId: stringField("Saved versionId from inspect or previous patch."),
+          idempotencyKey: stringField("Random key for one logical edit; reuse for an uncertain retry."),
+          operations: {
+            type: "array", minItems: 1, maxItems: 10,
+            description: "Ordered patch operations. Added text is limited to 64 KiB. Non-append target.exact is limited to 16 KiB.",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["append", "insert_before", "insert_after", "replace_exact"] },
+                target: { type: "object", properties: { exact: stringField("Unique source text."), prefix: stringField("Optional immediate preceding text for disambiguation."), suffix: stringField("Optional immediate following text for disambiguation.") }, required: ["exact"] },
+                text: stringField("Text to add or replace with; empty only for replace_exact deletion."),
+              },
+              required: ["type", "text"],
+            },
+          },
         },
-        required: ["itemId", "text", "baseVersionId"],
+        required: ["itemId", "baseVersionId", "idempotencyKey", "operations"],
       },
     },
     {

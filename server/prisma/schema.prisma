@@ -730,11 +730,42 @@ model DriveFileVersion {
   contributors          DriveFileVersionContributor[]
   markdownProjection    DriveMarkdownProjection?
   openApiGrantEntries   OpenApiDownloadGrantEntry[]
+  agentReadLeases       DriveFileReadLease[]
 
   @@unique([itemId, versionNumber])
   @@index([itemId, deletedAt, versionNumber])
   @@index([userId, createdAt])
   @@index([deletePending])
+}
+
+model DriveFileReadLease {
+  id        String           @id @default(cuid())
+  userId    String
+  itemId    String
+  versionId String
+  version   DriveFileVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+
+  @@index([versionId, expiresAt])
+  @@index([expiresAt])
+}
+
+model DriveFilePatchRequest {
+  id                String   @id @default(cuid())
+  userId            String
+  itemId            String
+  idempotencyKey    String
+  requestHash       String
+  previousVersionId String
+  versionId         String
+  sizeBytes         BigInt
+  applied           Json
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+
+  @@unique([userId, itemId, idempotencyKey])
+  @@index([expiresAt])
 }
 
 model DriveAnnotationThread {

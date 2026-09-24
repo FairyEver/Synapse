@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -6,8 +6,9 @@ import { Readable } from "node:stream"
 import { Test } from "@nestjs/testing"
 
 const cosGetObjectUrlMock = vi.hoisted(() => vi.fn())
+const cosGetObjectMock = vi.hoisted(() => vi.fn())
 const cosConstructorMock = vi.hoisted(() => vi.fn(function MockCos() {
-  return { getObjectUrl: cosGetObjectUrlMock }
+  return { getObjectUrl: cosGetObjectUrlMock, getObject: cosGetObjectMock }
 }))
 
 vi.mock("cos-nodejs-sdk-v5", () => ({
@@ -22,6 +23,7 @@ afterEach(async () => {
   await Promise.all(roots.map((root) => rm(root, { force: true, recursive: true })))
   roots.length = 0
   cosGetObjectUrlMock.mockReset()
+  cosGetObjectMock.mockReset()
   cosConstructorMock.mockClear()
   vi.unstubAllEnvs()
 })
@@ -67,6 +69,28 @@ describe("LocalDriveStorage", () => {
 
     await expect(streamToText((await storage.getObjectStream({ key: "drive/item-1" })).stream)).resolves.toBe("hello")
     await expect(storage.headObject("drive/item-1")).resolves.toMatchObject({ key: "drive/item-1", size: 5n })
+  })
+
+  it("reads only the requested byte range and rejects a range beyond the object", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    await storage.putObject({ key: "drive/range", body: Buffer.from("甲😀乙"), contentType: "text/plain" })
+    await expect(storage.getObjectRange({ key: "drive/range", start: 3, endExclusive: 7 }))
+      .resolves.toMatchObject({ body: Buffer.from("😀"), totalSize: 10n })
+    await expect(storage.getObjectRange({ key: "drive/range", start: 3, endExclusive: 11 })).rejects.toThrow("Invalid Drive object range")
+  })
+
+  it("reads a small tail range from a sparse 100 MiB local object", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const key = "drive/large-range"
+    await storage.putObject({ key, body: Buffer.from("x"), contentType: "text/plain" })
+    await truncate(path.join(root, ".objects", Buffer.from(key).toString("base64url")), 100 * 1024 * 1024)
+    const result = await storage.getObjectRange({ key, start: 100 * 1024 * 1024 - 8, endExclusive: 100 * 1024 * 1024 })
+    expect(result.body).toHaveLength(8)
+    expect(result.totalSize).toBe(100n * 1024n * 1024n)
   })
 
   it("keeps putObject content types after storage restart", async () => {
@@ -355,6 +379,16 @@ describe("shouldUseCosDriveStorage", () => {
 })
 
 describe("CosDriveStorage", () => {
+  it("requires COS to return the exact requested range and total length", async () => {
+    stubServerEnv({ DRIVE_COS_SECRET_ID: "secret-id", DRIVE_COS_SECRET_KEY: "secret-key", DRIVE_COS_BUCKET: "drive-bucket", DRIVE_COS_REGION: "ap-shanghai" })
+    const storage = new CosDriveStorage()
+    cosGetObjectMock.mockImplementation((_params: unknown, callback: (error: unknown, data: unknown) => void) => callback(null, { Body: Buffer.from("abcd"), headers: { "content-range": "bytes 2-5/10" } }))
+    await expect(storage.getObjectRange({ key: "drive/range", start: 2, endExclusive: 6 }))
+      .resolves.toMatchObject({ body: Buffer.from("abcd"), totalSize: 10n })
+    expect(cosGetObjectMock).toHaveBeenCalledWith(expect.objectContaining({ Range: "bytes=2-5" }), expect.any(Function))
+    cosGetObjectMock.mockImplementation((_params: unknown, callback: (error: unknown, data: unknown) => void) => callback(null, { Body: Buffer.from("abc"), headers: { "content-range": "bytes 2-5/10" } }))
+    await expect(storage.getObjectRange({ key: "drive/range", start: 2, endExclusive: 6 })).rejects.toThrow("length mismatch")
+  })
   it("requests download urls with the original filename in content disposition", async () => {
     stubServerEnv({
       DRIVE_COS_SECRET_ID: "secret-id",

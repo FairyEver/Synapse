@@ -135,6 +135,27 @@ const driveFileTextUpdateSchema = z.object({
   text: z.string(),
   baseVersionId: z.string().min(1),
 }).strict()
+const driveFileChunkQuerySchema = z.object({
+  versionId: z.string().min(1),
+  cursor: z.string().min(1).max(512).optional(),
+  start: z.enum(["beginning", "tail", "around"]).optional(),
+  anchorByte: z.string().regex(/^\d+$/u).transform(Number).optional(),
+}).strict()
+const drivePatchTargetSchema = z.object({
+  exact: z.string().min(1),
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+}).strict()
+const driveFilePatchSchema = z.object({
+  baseVersionId: z.string().min(1),
+  idempotencyKey: z.string().min(8).max(128),
+  operations: z.array(z.discriminatedUnion("type", [
+    z.object({ type: z.literal("append"), text: z.string() }).strict(),
+    z.object({ type: z.literal("insert_before"), target: drivePatchTargetSchema, text: z.string() }).strict(),
+    z.object({ type: z.literal("insert_after"), target: drivePatchTargetSchema, text: z.string() }).strict(),
+    z.object({ type: z.literal("replace_exact"), target: drivePatchTargetSchema, text: z.string() }).strict(),
+  ])).min(1).max(10),
+}).strict()
 const driveLinkResolveSchema = z.object({
   url: z.string().url(),
   password: z.string().min(1).max(256).optional(),
@@ -791,6 +812,29 @@ export class DriveUserController {
   ) {
     const parsed = parseBody(driveFileTextUpdateSchema, body, "保存请求无效。")
     return this.drive.updateOwnerFileText(request.user!.id, itemId, parsed, driveAuditContext(request))
+  }
+
+  @Get("/browser/owner/items/:itemId/content/inspect")
+  inspectOwnerItemContent(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.inspectOwnerFileContent(request.user!.id, itemId)
+  }
+
+  @Get("/browser/owner/items/:itemId/content/chunk")
+  readOwnerItemContentChunk(
+    @Param("itemId") itemId: string,
+    @Query() query: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.readOwnerFileContentChunk(request.user!.id, itemId, parseBody(driveFileChunkQuerySchema, query, "分段读取参数无效。"))
+  }
+
+  @Post("/browser/owner/items/:itemId/content/patch")
+  patchOwnerItemContent(
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.patchOwnerFileContent(request.user!.id, itemId, parseBody(driveFilePatchSchema, body, "文件补丁无效。"), driveAuditContext(request))
   }
 
   @Post("/browser/owner/items/:itemId/collaboration/checkpoint")

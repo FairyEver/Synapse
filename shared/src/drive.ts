@@ -793,6 +793,45 @@ export interface DriveFileContentUpdateResult {
   readonly version: DriveFileVersionDto
 }
 
+export interface DriveFileContentInspectResult {
+  readonly itemId: string
+  readonly name: string
+  readonly kind: "markdown" | "text" | "html-source"
+  readonly sizeBytes: number
+  readonly versionId: string
+  readonly editable: boolean
+}
+
+export interface DriveFileContentChunkResult {
+  readonly itemId: string
+  readonly versionId: string
+  readonly text: string
+  readonly startByte: number
+  readonly endByte: number
+  readonly totalBytes: number
+  readonly nextCursor: string | null
+  readonly endOfFile: boolean
+}
+
+export interface DriveFileContentPatchResult {
+  readonly itemId: string
+  readonly previousVersionId: string
+  readonly versionId: string
+  readonly sizeBytes: number
+  readonly appliedCount: number
+  readonly applied: readonly { readonly operationIndex: number; readonly startByte: number; readonly endByte: number }[]
+}
+
+export type DriveFileContentPatchOperation =
+  | { readonly type: "append"; readonly text: string }
+  | { readonly type: "insert_before" | "insert_after" | "replace_exact"; readonly target: { readonly exact: string; readonly prefix?: string; readonly suffix?: string }; readonly text: string }
+
+export interface DriveFileContentPatchInput {
+  readonly baseVersionId: string
+  readonly idempotencyKey: string
+  readonly operations: readonly DriveFileContentPatchOperation[]
+}
+
 export interface DriveBrowserChildrenPageDto {
   readonly offset: number
   readonly limit: number
