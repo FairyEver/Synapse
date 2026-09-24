@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requestOpenTerminalSession } from "@/app-shell/terminal-navigation"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "@/generated/deployment-config.generated"
 import { getSynapseBridge, requireBridgeDomain } from "@/lib/electron-bridge"
 import type { SynapseNotification } from "@/types/notification-center"
 
@@ -102,6 +103,16 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     }
   }
 
+  const openApiGuide = async () => {
+    try {
+      const url = new URL("/document/open-api/guide/send-message", SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl)
+      await requireBridgeDomain("shell").openExternal(url.toString())
+    } catch (cause) {
+      logger.warn("Message API guide could not be opened.", { cause })
+      setError("无法打开 API 文档")
+    }
+  }
+
   const remove = async (item: SynapseNotification) => {
     try {
       await requireBridgeDomain("account").notifications.delete({ id: item.id })
@@ -149,7 +160,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   return {
     authenticated: state.status === "authenticated",
     open, filter, items, cursor, unread, selected, error,
-    changeOpen, changeFilter, openItem, navigate, remove, markAllRead, deleteAll, loadMore,
+    changeOpen, changeFilter, openItem, navigate, openApiGuide, remove, markAllRead, deleteAll, loadMore,
     closeDetail: () => setSelected(null),
   }
 }

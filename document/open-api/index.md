@@ -24,7 +24,7 @@ OpenAPI 3.1 契约由服务端提供：
 
 完整示例：[获取公共链接文件](/open-api/api/share-link-download)
 
-发送消息示例：[发送通知](/open-api/api/notification-send)。此接口需要单独的 `notification.send` 权限。
+发送消息步骤：[使用 API 发送消息](/open-api/guide/send-message)。此接口需要单独的 `notification.send` 权限。
 
 ## 创建 API 密钥
 

@@ -85,12 +85,26 @@ export default defineConfig({
       '/open-api/': [
         { text: '概览', link: '/open-api/' },
         {
+          text: '指南',
+          collapsed: false,
+          items: [
+            {
+              text: '使用 API 发送消息',
+              link: '/open-api/guide/send-message'
+            }
+          ]
+        },
+        {
           text: 'API',
           collapsed: false,
           items: [
             {
               text: '获取公共链接文件',
               link: '/open-api/api/share-link-download'
+            },
+            {
+              text: '发送通知',
+              link: '/open-api/api/notification-send'
             }
           ]
         }

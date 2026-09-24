@@ -20,7 +20,10 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
         </Button>
       </SheetTrigger>
       <SheetContent className="sm:max-w-md" onCloseAutoFocus={(event) => event.preventDefault()}>
-        <SheetHeader><SheetTitle>消息</SheetTitle></SheetHeader>
+        <SheetHeader className="flex-row items-center gap-2">
+          <SheetTitle>消息</SheetTitle>
+          <Button type="button" variant="ghost" size="sm" onClick={() => { void center.openApiGuide() }}>API</Button>
+        </SheetHeader>
         <div className="flex items-center justify-between gap-2 px-4">
           <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}>
             <TabsList>
