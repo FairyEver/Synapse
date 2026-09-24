@@ -1,10 +1,16 @@
 import { z } from "zod"
 import { NOTIFICATION_SEND_SCOPE, PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
+import { apiKeySecretPatternSource } from "../api-keys/api-key-token"
 
 export const OPEN_API_CONTRACT_BASE_PATH = "/api/open"
 export const OPEN_API_CONTRACT_PATH = "/openapi.json"
 export const OPEN_API_V1_BASE_PATH = "/api/open/v1"
 export const OPEN_API_DOWNLOADS_BASE_PATH = `${OPEN_API_V1_BASE_PATH}/downloads`
+const OPEN_API_NOTIFICATION_ROUTE = "/notifications"
+export const OPEN_API_NOTIFICATIONS_BASE_PATH = `${OPEN_API_V1_BASE_PATH}${OPEN_API_NOTIFICATION_ROUTE}`
+export const OPEN_API_NOTIFICATION_SEND_PATH = OPEN_API_NOTIFICATION_ROUTE
+export const OPEN_API_NOTIFICATION_KEY_SEND_PATH = `${OPEN_API_NOTIFICATION_ROUTE}/{key}`
+export const OPEN_API_NOTIFICATION_PATH_SEND_PATH = `${OPEN_API_NOTIFICATION_KEY_SEND_PATH}/{title}/{body}`
 export const OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH = "/drive/public-links/downloads"
 export const OPEN_API_LEGACY_SHARE_LINK_DOWNLOAD_PATH = "/drive/share-links/downloads"
 export const OPEN_API_DOWNLOAD_PATH = "/downloads/{grantId}"
@@ -13,6 +19,50 @@ export const OPEN_API_CREATE_DOWNLOAD_PATHS = [
   OPEN_API_LEGACY_SHARE_LINK_DOWNLOAD_PATH,
 ] as const
 
+/**
+ * 通知的三种发送形状共用同一份消息字段。
+ *
+ * 路径式把标题和正文放在 URL 段里、表单式和整体式放在请求体里，校验规则必须完全一致，
+ * 否则同一条消息会因为传参形状不同被区别对待。
+ */
+const notificationTitleSchema = z.string().trim().min(1).max(64)
+const notificationBodySchema = z.string().trim().min(1).max(512)
+const notificationGroupSchema = z.string().trim().min(1).max(64)
+/** 契约文档沿用 `pattern: "^https:"` 表达协议限制，`.regex()` 才能在 JSON Schema 里体现出来。 */
+const notificationUrlSchema = z.url().max(2048).regex(/^https:/u)
+const notificationLevelSchema = z.enum(["active", "passive", "timeSensitive"])
+const notificationKeySchema = z.string().regex(new RegExp(apiKeySecretPatternSource, "u"))
+
+/** 密钥不在请求体里的两种形状共用的消息字段。 */
+export const openApiNotificationMessageSchema = z.object({
+  title: notificationTitleSchema,
+  body: notificationBodySchema,
+  group: notificationGroupSchema.optional(),
+  url: notificationUrlSchema.optional(),
+  level: notificationLevelSchema.default("active"),
+}).strict()
+
+/** 整体式：密钥和消息放在同一个请求体里。 */
+export const openApiNotificationKeyedMessageSchema = openApiNotificationMessageSchema.extend({
+  key: notificationKeySchema,
+}).strict()
+
+/** 路径式：标题和正文是 URL 段。 */
+export const openApiNotificationPathSchema = z.object({
+  key: notificationKeySchema,
+  title: notificationTitleSchema,
+  body: notificationBodySchema,
+})
+
+/** 路径式只允许从 query 补充这三个字段；query 沿用项目里其余查询校验的宽松做法。 */
+export const openApiNotificationQuerySchema = z.object({
+  group: notificationGroupSchema.optional(),
+  url: notificationUrlSchema.optional(),
+  level: notificationLevelSchema.default("active"),
+})
+
+export type OpenApiNotificationMessage = z.infer<typeof openApiNotificationMessageSchema>
+
 export const createDownloadRequestSchema = z.object({
   url: z.string()
     .max(2048)
@@ -20,8 +70,19 @@ export const createDownloadRequestSchema = z.object({
     .describe("完整的同源 Synapse Drive 公共 URL，支持 /share、/sites 和 /files。"),
 }).strict()
 
-const generatedCreateDownloadRequestSchema = z.toJSONSchema(createDownloadRequestSchema)
-const { $schema: _jsonSchemaDialect, ...createDownloadRequestJsonSchema } = generatedCreateDownloadRequestSchema
+const notificationMessageJsonSchema = toContractJsonSchema(openApiNotificationMessageSchema, "input")
+const notificationKeyedMessageJsonSchema = toContractJsonSchema(openApiNotificationKeyedMessageSchema, "input")
+const createDownloadRequestJsonSchema = toContractJsonSchema(createDownloadRequestSchema, "output")
+
+/**
+ * 生成契约里的 JSON Schema。`io: "input"` 让带 `.default()` 的字段保持可选，
+ * 否则文档会把「可以省略、服务端给默认值」的字段写成必填。
+ */
+function toContractJsonSchema(schema: z.ZodType, io: "input" | "output"): Record<string, unknown> {
+  const generated = z.toJSONSchema(schema, { io }) as Record<string, unknown>
+  const { $schema: _dialect, ...rest } = generated
+  return rest
+}
 
 const requestIdHeader = {
   description: "用于定位本次请求的高熵标识。",
@@ -84,13 +145,53 @@ const createDownloadOperation = {
   },
 } as const
 
+const idempotencyKeyParameter = {
+  name: "Idempotency-Key",
+  in: "header",
+  required: false,
+  description: "同一密钥内 8–120 位去重键；重复请求返回同一条消息。",
+  schema: { type: "string", minLength: 8, maxLength: 120 },
+} as const
+
+/**
+ * 三种通知形状的凭证都随请求携带，而不是 `Authorization` 头，所以这些 operation
+ * 声明 `security: []`，由这个必需的路径/请求体参数承担鉴权。OpenAPI 3.1 的 apiKey
+ * security scheme 只允许 header、query、cookie，表达不了路径段里的密钥。
+ */
+const notificationKeyPathParameter = {
+  name: "key",
+  in: "path",
+  required: true,
+  description: "Console 创建的 Synapse API 密钥，须具备 notification.send 权限。",
+  schema: { type: "string", pattern: apiKeySecretPatternSource },
+} as const
+
+const notificationResponses = {
+  "201": {
+    description: "消息已保存。系统推送可能随后失败，消息仍可在消息中心查看。",
+    content: { "application/json": { schema: { $ref: "#/components/schemas/SendNotificationResponse" } } },
+  },
+  "400": errorResponse("请求字段、URL 或去重键无效（INVALID_REQUEST、INVALID_IDEMPOTENCY_KEY）。"),
+  "401": errorResponse("API 密钥无效（INVALID_API_KEY）。"),
+  "403": errorResponse("缺少 notification.send 权限（INSUFFICIENT_SCOPE）。"),
+  "429": errorResponse("请求频率超限（RATE_LIMITED）。"),
+} as const
+
+const notificationMessageRequestBody = {
+  required: true,
+  content: {
+    "application/json": { schema: { $ref: "#/components/schemas/SendNotificationRequest" } },
+    "application/x-www-form-urlencoded": { schema: { $ref: "#/components/schemas/SendNotificationRequest" } },
+  },
+} as const
+
 const OPEN_API_CONTRACT_DOCUMENT_BASE = {
   openapi: "3.1.0",
   jsonSchemaDialect: "https://json-schema.org/draft/2020-12/schema",
   info: {
     title: "Synapse Open API",
     version: "1.0.0",
-    description: "Synapse 面向服务端、CLI 和自动化客户端的开放接口。",
+    description: "Synapse 面向服务端、CLI 和自动化客户端的开放接口。通知接口的密钥随请求携带（请求体字段或 URL 路径段），因此这些 operation 不声明 security requirement；其余接口分别使用 Authorization 头和临时下载 token。",
   },
   servers: [{ url: OPEN_API_V1_BASE_PATH }],
   tags: [
@@ -101,22 +202,53 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
     },
   ],
   paths: {
-    "/notifications": {
+    [OPEN_API_NOTIFICATION_SEND_PATH]: {
       post: {
         tags: ["Notifications"],
-        summary: "发送通知",
+        summary: "发送通知（密钥在请求体）",
         operationId: "sendNotification",
-        security: [{ ApiKeyBearer: [] }],
+        security: [],
         "x-required-scope": NOTIFICATION_SEND_SCOPE,
-        parameters: [{ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string", minLength: 8, maxLength: 120 } }],
-        requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/SendNotificationRequest" } } } },
-        responses: {
-          "201": { description: "消息已保存。系统推送可能随后失败，消息仍可在消息中心查看。", content: { "application/json": { schema: { $ref: "#/components/schemas/SendNotificationResponse" } } } },
-          "400": errorResponse("请求体或去重键无效。"),
-          "401": errorResponse("API 密钥无效。"),
-          "403": errorResponse("缺少 notification.send 权限。"),
-          "429": errorResponse("请求频率超限。"),
+        description: "凭证是请求体里的 `key` 字段，不再接受 `Authorization` 头。",
+        parameters: [idempotencyKeyParameter],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/SendNotificationWithKeyRequest" } } },
         },
+        responses: notificationResponses,
+      },
+    },
+    [OPEN_API_NOTIFICATION_KEY_SEND_PATH]: {
+      post: {
+        tags: ["Notifications"],
+        summary: "发送通知（密钥在路径）",
+        operationId: "sendNotificationWithKeyInPath",
+        security: [],
+        "x-required-scope": NOTIFICATION_SEND_SCOPE,
+        description: "凭证是路径段里的 `key`，不再接受 `Authorization` 头。请求体接受 JSON 或表单编码。",
+        parameters: [notificationKeyPathParameter, idempotencyKeyParameter],
+        requestBody: notificationMessageRequestBody,
+        responses: notificationResponses,
+      },
+    },
+    [OPEN_API_NOTIFICATION_PATH_SEND_PATH]: {
+      get: {
+        tags: ["Notifications"],
+        summary: "发送通知（密钥、标题、正文都在 URL 里）",
+        operationId: "sendNotificationFromPath",
+        security: [],
+        "x-required-scope": NOTIFICATION_SEND_SCOPE,
+        description: "凭证是路径段里的 `key`，不再接受 `Authorization` 头。整条 URL 等同密钥：任何抓取它的链接预览、爬虫或浏览器预取都会真的发出通知。",
+        parameters: [
+          notificationKeyPathParameter,
+          { name: "title", in: "path", required: true, description: "标题。", schema: { type: "string", minLength: 1, maxLength: 64 } },
+          { name: "body", in: "path", required: true, description: "正文。", schema: { type: "string", minLength: 1, maxLength: 512 } },
+          { name: "group", in: "query", required: false, schema: { type: "string", minLength: 1, maxLength: 64 } },
+          { name: "url", in: "query", required: false, schema: { type: "string", format: "uri", maxLength: 2048, pattern: "^https:" } },
+          { name: "level", in: "query", required: false, schema: { type: "string", enum: ["active", "passive", "timeSensitive"], default: "active" } },
+          idempotencyKeyParameter,
+        ],
+        responses: notificationResponses,
       },
     },
     [OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH]: {
@@ -217,16 +349,8 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
       NoStore: noStoreHeader,
     },
     schemas: {
-      SendNotificationRequest: {
-        type: "object", required: ["title", "body"], additionalProperties: false,
-        properties: {
-          title: { type: "string", minLength: 1, maxLength: 64 },
-          body: { type: "string", minLength: 1, maxLength: 512 },
-          group: { type: "string", minLength: 1, maxLength: 64 },
-          url: { type: "string", format: "uri", maxLength: 2048, pattern: "^https://" },
-          level: { type: "string", enum: ["active", "passive", "timeSensitive"], default: "active" },
-        },
-      },
+      SendNotificationRequest: notificationMessageJsonSchema,
+      SendNotificationWithKeyRequest: notificationKeyedMessageJsonSchema,
       SendNotificationResponse: {
         type: "object", required: ["id", "createdAt"], additionalProperties: false,
         properties: { id: { type: "string" }, createdAt: { type: "string", format: "date-time" } },

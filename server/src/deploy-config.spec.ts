@@ -218,6 +218,21 @@ describe("server deployment configuration", () => {
     expect(compose).not.toMatch(/\b(?:redis|valkey)\b/iu)
   })
 
+  it("keeps the notification API key and message text out of access logs", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const location = nginx.match(/location \^~ \/api\/open\/v1\/notifications \{([\s\S]*?)\n  \}/u)?.[1]
+
+    expect(location).toBeDefined()
+    expect(location).toContain("access_log off")
+    expect(location).toContain("proxy_pass http://127.0.0.1:3001")
+
+    // 请求里的密钥和消息正文必须同时避开发送端和终端的日志：nginx 关 access_log，
+    // 应用侧跳过同一条前缀。三处改动必须一起存在，漏掉任何一处都会把内容写进磁盘。
+    expect(readRepoFile("server/src/app.module.ts")).toContain("pathname === OPEN_API_NOTIFICATIONS_BASE_PATH")
+    expect(readRepoFile("server/src/open-api/open-api-contract.ts"))
+      .toContain('const OPEN_API_NOTIFICATION_ROUTE = "/notifications"')
+  })
+
   it("allows the browser Drive text edit body on owner and share routes", () => {
     const nginx = readRepoFile("server/nginx.conf")
     const start = nginx.indexOf("location ~ ^/api/drive/browser/(?:owner/items/[^/]+|shares/[^/]+(?:/items/[^/]+)?)/content$")

@@ -5,10 +5,15 @@ import request from "supertest"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   OPEN_API_CREATE_DOWNLOAD_PATHS,
+  OPEN_API_NOTIFICATIONS_BASE_PATH,
+  OPEN_API_NOTIFICATION_KEY_SEND_PATH,
+  OPEN_API_NOTIFICATION_PATH_SEND_PATH,
+  OPEN_API_NOTIFICATION_SEND_PATH,
   OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH,
   createOpenApiContractDocument,
   createDownloadRequestSchema,
 } from "./open-api-contract"
+import { apiKeySecretPatternSource } from "../api-keys/api-key-token"
 import { OpenApiContractController } from "./open-api-contract.controller"
 
 describe("Open API machine-readable contract", () => {
@@ -70,6 +75,61 @@ describe("Open API machine-readable contract", () => {
       "/drive/public-links/downloads",
       "/drive/share-links/downloads",
     ])
+  })
+
+  it("describes the three notification send shapes without an Authorization header", () => {
+    const paths = contractDocument.paths
+    expect(OPEN_API_NOTIFICATIONS_BASE_PATH).toBe("/api/open/v1/notifications")
+    expect(OPEN_API_NOTIFICATION_SEND_PATH).toBe("/notifications")
+    expect(OPEN_API_NOTIFICATION_KEY_SEND_PATH).toBe("/notifications/{key}")
+    expect(OPEN_API_NOTIFICATION_PATH_SEND_PATH).toBe("/notifications/{key}/{title}/{body}")
+
+    const operations = [
+      paths[OPEN_API_NOTIFICATION_SEND_PATH].post,
+      paths[OPEN_API_NOTIFICATION_KEY_SEND_PATH].post,
+      paths[OPEN_API_NOTIFICATION_PATH_SEND_PATH].get,
+    ]
+    expect(operations.map((operation) => operation.operationId)).toEqual([
+      "sendNotification",
+      "sendNotificationWithKeyInPath",
+      "sendNotificationFromPath",
+    ])
+    for (const operation of operations) {
+      // 凭证是路径段或请求体里的 `key`；OpenAPI 3.1 的 apiKey scheme 表达不了路径段，
+      // 所以这里刻意不声明 security，由必需参数和 x-required-scope 承担。
+      expect(operation.security).toEqual([])
+      expect(operation["x-required-scope"]).toBe("notification.send")
+    }
+    // 路径式必须能从 query 补充分组、链接和级别。
+    expect(paths[OPEN_API_NOTIFICATION_PATH_SEND_PATH].get.parameters.map((parameter) => parameter.name))
+      .toEqual(["key", "title", "body", "group", "url", "level", "Idempotency-Key"])
+  })
+
+  it("accepts both JSON and form encoding for the message body", () => {
+    const content = contractDocument.paths[OPEN_API_NOTIFICATION_KEY_SEND_PATH].post.requestBody.content
+    expect(Object.keys(content).sort()).toEqual(["application/json", "application/x-www-form-urlencoded"])
+    expect(content["application/json"].schema).toEqual({ $ref: "#/components/schemas/SendNotificationRequest" })
+  })
+
+  it("generates the notification JSON schemas from the runtime Zod schemas", () => {
+    expect(contractDocument.components.schemas.SendNotificationRequest).toMatchObject({
+      type: "object",
+      required: ["title", "body"],
+      additionalProperties: false,
+      properties: {
+        title: { type: "string", minLength: 1, maxLength: 64 },
+        body: { type: "string", minLength: 1, maxLength: 512 },
+        group: { type: "string", minLength: 1, maxLength: 64 },
+        url: { type: "string", maxLength: 2048, pattern: "^https:" },
+        // `level` 有默认值，所以不进入 required。
+        level: { type: "string", default: "active" },
+      },
+    })
+    expect(contractDocument.components.schemas.SendNotificationWithKeyRequest).toMatchObject({
+      required: ["title", "body", "key"],
+      additionalProperties: false,
+      properties: { key: { type: "string", pattern: apiKeySecretPatternSource } },
+    })
   })
 
   it("shares the strict request schema with the JSON contract", () => {

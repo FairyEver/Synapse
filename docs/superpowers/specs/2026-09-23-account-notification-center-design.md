@@ -16,4 +16,6 @@
 
 `notification.send` 是独立 API 密钥权限。`POST /api/open/v1/notifications` 接收标题、正文、可选分组、HTTPS 链接和提醒级别，返回消息 ID。长度校验、每分钟 60 次限流和密钥范围内的 `Idempotency-Key` 去重在服务端执行。接口不兼容 Bark URL，也不支持图片、铃声、重要警告、持续响铃、复制动作、推送加密或多服务器。
 
+> **2026-09-24 修订：通知接口改用三种传参形状。** 下面这段是本节的原始设计，其中「只允许 `POST /api/open/v1/notifications`、不接受 `Authorization` 之外的凭证位置」已被取代；其余边界（不支持图片、铃声、重要警告、持续响铃、复制动作、推送加密、自定义 TTL、多服务器）继续有效。当前实现是 `POST /notifications`（密钥在请求体 `key`）、`POST /notifications/{key}`（密钥在路径段）和 `GET /notifications/{key}/{title}/{body}`（密钥与标题正文都在路径段），密钥随请求携带，三种形状都不接受 `Authorization` 头。长度校验、限流、`Idempotency-Key` 去重和返回结构不变。权威约束见 `docs/agents/module-boundaries.md` 的「Console 用户 API 秘钥」一节，机器契约见 `/api/open/openapi.json`。
+
 消息标题和正文以明文存于 Synapse 服务端，并可能出现在系统锁屏预览中。API 密钥与通知正文不得进入日志。System Notifier 正式触发仅在账号已登录且在线时尽力同步完整标题和正文；离线或未登录时仅本机显示且不补发。测试通知永远只显示在本机。其 MCP 与 Workflow 的成功返回语义不受云端同步结果影响。

@@ -46,6 +46,8 @@ Authorization: Bearer syn_sk_example000000000000000000000000000000000000
 
 Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 header。
 
+发送通知接口是例外：它的三种请求形状都把 API 密钥放在请求里（请求体的 `key` 字段或 URL 路径段），不接受这个 header，也不读取 cookie。
+
 ## 集成要求
 
 - API 密钥仅用于服务端、CLI 或自动化客户端。开放接口不提供浏览器跨域调用所需的 CORS。
@@ -57,6 +59,8 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|
-| `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | API 密钥与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
-| `sendNotification` | `POST` | `/notifications` | API 密钥与 `notification.send` | [发送通知](/open-api/api/notification-send) |
+| `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
+| `sendNotification` | `POST` | `/notifications` | 请求体 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#整体式) |
+| `sendNotificationWithKeyInPath` | `POST` | `/notifications/{key}` | 路径段 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#表单式) |
+| `sendNotificationFromPath` | `GET` | `/notifications/{key}/{title}/{body}` | 路径段 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#路径式) |
 | `downloadPublicLinkArtifact` | `GET` | `/downloads/{grantId}` | 创建接口返回的临时 token | [获取公共链接文件](/open-api/api/share-link-download#临时下载地址) |

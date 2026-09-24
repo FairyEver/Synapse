@@ -29,6 +29,7 @@ import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
 import { VoiceModule } from "./voice/voice.module"
+import { OPEN_API_NOTIFICATIONS_BASE_PATH } from "./open-api/open-api-contract"
 import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "./common/rate-limits"
 
 type RequestLogObject = {
@@ -36,6 +37,18 @@ type RequestLogObject = {
   readonly originalUrl?: unknown
   readonly url?: unknown
 } & Record<string, unknown>
+
+/**
+ * 这些路径的访问日志必须关闭：问题反馈直接读取原始请求体，通知接口把 API 密钥和消息
+ * 正文放在 URL 段或请求体里。日志同时落 pino-roll 文件和 nginx 访问日志，所以
+ * `server/nginx.conf` 里对应的 location 也要 `access_log off`。
+ */
+function hasSensitiveRequestUrl(url: string): boolean {
+  const pathname = url.split("?")[0] ?? ""
+  return pathname === "/api/problem-feedback"
+    || pathname === OPEN_API_NOTIFICATIONS_BASE_PATH
+    || pathname.startsWith(`${OPEN_API_NOTIFICATIONS_BASE_PATH}/`)
+}
 
 @Module({
   imports: [
@@ -49,7 +62,7 @@ type RequestLogObject = {
             const url = typeof candidate.originalUrl === "string"
               ? candidate.originalUrl
               : typeof candidate.url === "string" ? candidate.url : ""
-            return url.split("?")[0] === "/api/problem-feedback"
+            return hasSensitiveRequestUrl(url)
           },
         },
         redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret", 'req.headers["x-portal-token"]'],

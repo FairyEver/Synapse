@@ -3,20 +3,26 @@ import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
 import { z } from "zod"
 import { NOTIFICATION_SEND_SCOPE } from "../api-keys/api-key-capabilities"
+import type { OpenApiPrincipal } from "../api-keys/api-key.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { badRequestFromZodError } from "../common/zod-validation"
+import {
+  OPEN_API_NOTIFICATIONS_BASE_PATH,
+  openApiNotificationKeyedMessageSchema,
+  openApiNotificationMessageSchema,
+  openApiNotificationPathSchema,
+  openApiNotificationQuerySchema,
+  type OpenApiNotificationMessage,
+} from "../open-api/open-api-contract"
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
-import { OpenApiKeyGuard } from "../open-api/open-api-key.guard"
 import { OpenApiHttpError, requireOpenApiPrincipal, type OpenApiRequest } from "../open-api/open-api.types"
+import { NotificationApiKeyGuard } from "./notification-api-key.guard"
 import { NotificationService } from "./notification.service"
 
-const messageSchema = z.object({
-  title: z.string().trim().min(1).max(64),
-  body: z.string().trim().min(1).max(512),
-  group: z.string().trim().min(1).max(64).optional(),
-  url: z.url().max(2048).refine((value) => new URL(value).protocol === "https:").optional(),
-  level: z.enum(["active", "passive", "timeSensitive"]).default("active"),
-}).strict()
+const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
+
+/** 三种发送形状写入同一个账号的通知队列，共用同一档限流。 */
+const notificationThrottle = { default: { ttl: 60_000, limit: 60 } } as const
 
 const listSchema = z.object({
   cursor: z.string().min(1).max(120).optional(),
@@ -95,31 +101,88 @@ export class NotificationController {
   }
 }
 
-@Controller("/api/open/v1/notifications")
-@UseGuards(OpenApiKeyGuard)
+@Controller(OPEN_API_NOTIFICATIONS_BASE_PATH)
+@UseGuards(NotificationApiKeyGuard)
 @UseFilters(OpenApiExceptionFilter)
 export class OpenNotificationController {
   constructor(private readonly notifications: NotificationService) {}
 
+  /** 整体式：密钥和消息都放在请求体里。 */
   @Post()
   @HttpCode(201)
-  @Throttle({ default: { ttl: 60_000, limit: 60 } })
-  async create(@Req() request: OpenApiRequest, @Body() body: unknown, @Headers("idempotency-key") idempotencyKey?: string) {
-    const principal = requireOpenApiPrincipal(request)
-    if (!principal.scopes.includes(NOTIFICATION_SEND_SCOPE)) {
-      throw new OpenApiHttpError(403, "INSUFFICIENT_SCOPE", "API 密钥缺少发送通知权限。")
-    }
-    const parsed = messageSchema.safeParse(body)
-    if (!parsed.success) throw new OpenApiHttpError(400, "INVALID_REQUEST", "通知参数无效。")
-    if (idempotencyKey !== undefined && !/^[A-Za-z0-9_-]{8,120}$/u.test(idempotencyKey)) {
+  @Throttle(notificationThrottle)
+  async createWithKeyInBody(
+    @Req() request: OpenApiRequest,
+    @Body() body: unknown,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ) {
+    const principal = authorizeNotificationRequest(request)
+    const parsed = openApiNotificationKeyedMessageSchema.safeParse(body)
+    if (!parsed.success) throw invalidNotificationRequest()
+    const { key: _key, ...message } = parsed.data
+    return this.persist(principal, message, idempotencyKey)
+  }
+
+  /** 表单式：密钥是 URL 段，消息来自 JSON 或表单编码的请求体。 */
+  @Post(":key")
+  @HttpCode(201)
+  @Throttle(notificationThrottle)
+  async createWithKeyInPath(
+    @Req() request: OpenApiRequest,
+    @Body() body: unknown,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ) {
+    const principal = authorizeNotificationRequest(request)
+    const parsed = openApiNotificationMessageSchema.safeParse(body)
+    if (!parsed.success) throw invalidNotificationRequest()
+    return this.persist(principal, parsed.data, idempotencyKey)
+  }
+
+  /** 路径式：密钥、标题和正文都在 URL 段里，其余字段走 query。 */
+  @Get(":key/:title/:body")
+  @HttpCode(201)
+  @Throttle(notificationThrottle)
+  async createFromPath(
+    @Req() request: OpenApiRequest,
+    @Param() params: unknown,
+    @Query() query: unknown,
+    @Headers("idempotency-key") idempotencyKey?: string,
+  ) {
+    const principal = authorizeNotificationRequest(request)
+    const path = openApiNotificationPathSchema.safeParse(params)
+    const search = openApiNotificationQuerySchema.safeParse(query)
+    if (!path.success || !search.success) throw invalidNotificationRequest()
+    const { key: _key, ...pathMessage } = path.data
+    return this.persist(principal, { ...pathMessage, ...search.data }, idempotencyKey)
+  }
+
+  private async persist(
+    principal: OpenApiPrincipal,
+    message: OpenApiNotificationMessage,
+    idempotencyKey?: string,
+  ): Promise<{ readonly id: string; readonly createdAt: string }> {
+    if (idempotencyKey !== undefined && !idempotencyKeyPattern.test(idempotencyKey)) {
       throw new OpenApiHttpError(400, "INVALID_IDEMPOTENCY_KEY", "去重键无效。")
     }
     const item = await this.notifications.create({
-      ...parsed.data,
+      ...message,
       userId: principal.userId,
       source: "external",
       sourceKey: idempotencyKey ? `external:${principal.apiKeyId}:${idempotencyKey}` : undefined,
     })
     return { id: item.id, createdAt: item.createdAt.toISOString() }
   }
+}
+
+function invalidNotificationRequest(): OpenApiHttpError {
+  return new OpenApiHttpError(400, "INVALID_REQUEST", "通知参数无效。")
+}
+
+/** 密钥校验之后才能判断权限，401 与 403 都必须先于 400 返回。 */
+function authorizeNotificationRequest(request: OpenApiRequest): OpenApiPrincipal {
+  const principal = requireOpenApiPrincipal(request)
+  if (!principal.scopes.includes(NOTIFICATION_SEND_SCOPE)) {
+    throw new OpenApiHttpError(403, "INSUFFICIENT_SCOPE", "API 密钥缺少发送通知权限。")
+  }
+  return principal
 }

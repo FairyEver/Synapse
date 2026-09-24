@@ -104,7 +104,10 @@
 ## Console 用户 API 秘钥
 
 - 用户 API 秘钥只通过受登录保护的 `/api/console/api-keys` 管理；创建响应只展示一次完整秘钥，数据库只保存 SHA-256 摘要和可识别前缀，列表不得返回摘要或明文。
-- `notification.send` 是独立于 Drive 下载的权限，只允许通过 `POST /api/open/v1/notifications` 向密钥所属账号发消息；通知内容不进入访问日志。该接口不兼容 Bark URL。
+- `notification.send` 是独立于 Drive 下载的权限，只允许通过 `/api/open/v1/notifications` 的三种请求形状向密钥所属账号发消息：`POST /notifications`（密钥在请求体 `key`）、`POST /notifications/{key}`（密钥在路径段，消息在 JSON 或表单请求体）、`GET /notifications/{key}/{title}/{body}`（密钥和标题正文都在路径段）。密钥随请求携带，三种形状都不接受 `Authorization` 头，也不读取 cookie。
+- 三种形状共用同一份消息校验：标题 1–64 字符、正文 1–512 字符、分组 1–64 字符、`url` 仅 HTTPS 且不超过 2048 字符、`level` 只认 `active`/`passive`/`timeSensitive`。请求体 `.strict()`，出现未列出的字段返回 400；密钥格式与权限校验在 guard 里完成，401 与 403 先于 400 返回。
+- 密钥和消息内容都不得进入访问日志，这需要两处同时生效：应用侧 `app.module.ts` 的 `autoLogging` 跳过该前缀，`server/nginx.conf` 对应 location 设置 `access_log off`。只改一处等于把密钥和正文写进磁盘。`deploy-config.spec.ts` 会锁住这两处。
+- 该接口不支持图片、铃声、重要警告、持续响铃、复制动作、推送加密、自定义 TTL、多服务器、逗号分隔的多密钥和通知更新。
 - 查询、创建、重命名、权限更新和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，审计不得包含完整秘钥、摘要或可还原材料。
 - 密钥创建时必须显式选择非空开放 API scopes；已有未撤销密钥可以原地重命名、增删或清空 scopes，但不得通过该接口轮换密钥。首个 canonical scope `drive.public_link.download` 仅授权 `/api/open/v1/drive/public-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。旧 `drive.share_link.download` 与 `/api/open/v1/drive/share-links/downloads` 只作为已发布集成的兼容入口，不再用于新密钥或新文档。
 - 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/当前 scope/用户失效会阻止新的下载。

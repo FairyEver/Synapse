@@ -1,27 +1,73 @@
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController } from "./notification.controller"
 
-function controller(scopes: string[]) {
-  const service = { create: vi.fn(async () => ({ id: "message-1", createdAt: new Date("2026-09-23T08:00:00Z") })) }
+/** 与 `createApiKeySecret()` 同形状的固定密钥，避免测试夹具被密钥格式校验挡下。 */
+const exampleKey = `syn_sk_${"a".repeat(43)}`
+
+function controller(scopes: string[] = ["notification.send"]) {
+  const service = {
+    create: vi.fn(async (_input: Record<string, unknown>) => ({ id: "message-1", createdAt: new Date("2026-09-23T08:00:00Z") })),
+  }
   const request = { openApiPrincipal: { userId: "user-1", apiKeyId: "key-1", scopes } }
   return { controller: new OpenNotificationController(service as never), service, request }
 }
 
 describe("OpenNotificationController", () => {
-  it("requires an isolated notification.send scope", async () => {
-    const { controller: endpoint, request } = controller(["drive.public_link.download"])
-    await expect(endpoint.create(request as never, { title: "测试", body: "正文" })).rejects.toMatchObject({ statusCode: 403 })
+  it("sends with the key and message in one request body", async () => {
+    const { controller: endpoint, request, service } = controller()
+    await expect(endpoint.createWithKeyInBody(request as never, { key: exampleKey, title: "部署完成", body: "已更新" }))
+      .resolves.toEqual({ id: "message-1", createdAt: "2026-09-23T08:00:00.000Z" })
+    const created = service.create.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(created).toMatchObject({ title: "部署完成", body: "已更新", level: "active", source: "external" })
+    // 密钥只用于鉴权，不能跟着消息进入持久化。
+    expect(created).not.toHaveProperty("key")
   })
 
-  it("rejects non-HTTPS URLs and invalid retry keys", async () => {
-    const { controller: endpoint, request } = controller(["notification.send"])
-    await expect(endpoint.create(request as never, { title: "测试", body: "正文", url: "http://example.com" })).rejects.toMatchObject({ statusCode: 400 })
-    await expect(endpoint.create(request as never, { title: "测试", body: "正文" }, "short")).rejects.toMatchObject({ statusCode: 400 })
+  it("sends with the key in the path and the message in the body", async () => {
+    const { controller: endpoint, request, service } = controller()
+    await endpoint.createWithKeyInPath(request as never, { title: "部署完成", body: "已更新", group: "部署", level: "timeSensitive" })
+    expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ group: "部署", level: "timeSensitive" }))
+  })
+
+  it("sends from a URL alone, defaulting the level", async () => {
+    const { controller: endpoint, request, service } = controller()
+    await endpoint.createFromPath(request as never, { key: exampleKey, title: "部署完成", body: "已更新" }, {})
+    expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ title: "部署完成", body: "已更新", level: "active" }))
+  })
+
+  it("lets the URL query override the message fields it carries", async () => {
+    const { controller: endpoint, request, service } = controller()
+    await endpoint.createFromPath(
+      request as never,
+      { key: exampleKey, title: "部署完成", body: "已更新" },
+      { group: "部署", level: "passive", url: "https://example.com/releases" },
+    )
+    expect(service.create).toHaveBeenCalledWith(expect.objectContaining({
+      group: "部署",
+      level: "passive",
+      url: "https://example.com/releases",
+    }))
+  })
+
+  it("requires an isolated notification.send scope before validating input", async () => {
+    const { controller: endpoint, request } = controller(["drive.public_link.download"])
+    await expect(endpoint.createWithKeyInBody(request as never, { title: "" })).rejects.toMatchObject({ statusCode: 403 })
+  })
+
+  it("rejects non-HTTPS URLs, unknown fields, and invalid retry keys", async () => {
+    const { controller: endpoint, request } = controller()
+    const message = { title: "测试", body: "正文" }
+    await expect(endpoint.createWithKeyInBody(request as never, { ...message, key: exampleKey, url: "http://example.com" })).rejects.toMatchObject({ statusCode: 400 })
+    await expect(endpoint.createWithKeyInBody(request as never, { ...message, key: exampleKey, extra: 1 })).rejects.toMatchObject({ statusCode: 400 })
+    await expect(endpoint.createWithKeyInPath(request as never, { ...message, title: "x".repeat(65) })).rejects.toMatchObject({ statusCode: 400 })
+    await expect(endpoint.createWithKeyInPath(request as never, message, "short")).rejects.toMatchObject({ statusCode: 400 })
+    // `critical` 是外部推送服务的级别，Synapse 只认自己的三个值。
+    await expect(endpoint.createFromPath(request as never, { key: exampleKey, ...message }, { level: "critical" })).rejects.toMatchObject({ statusCode: 400 })
   })
 
   it("passes a key-specific idempotency identity to persistence", async () => {
-    const { controller: endpoint, request, service } = controller(["notification.send"])
-    await expect(endpoint.create(request as never, { title: "部署完成", body: "已更新" }, "deploy-001")).resolves.toEqual({ id: "message-1", createdAt: "2026-09-23T08:00:00.000Z" })
+    const { controller: endpoint, request, service } = controller()
+    await endpoint.createWithKeyInPath(request as never, { title: "部署完成", body: "已更新" }, "deploy-001")
     expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", sourceKey: "external:key-1:deploy-001" }))
   })
 })

@@ -2,7 +2,9 @@ import { createHash, randomBytes } from "node:crypto"
 
 const apiKeyPrefix = "syn_sk_"
 const visibleRandomCharacterCount = 8
-const apiKeySecretPattern = /^syn_sk_[A-Za-z0-9_-]{43}$/u
+/** 开放 API 契约用它把密钥形状写进文档，和这里的校验保持同一份定义。 */
+export const apiKeySecretPatternSource = `^${apiKeyPrefix}[A-Za-z0-9_-]{43}$`
+const apiKeySecretPattern = new RegExp(apiKeySecretPatternSource, "u")
 
 type RandomBytes = (size: number) => Buffer
 
