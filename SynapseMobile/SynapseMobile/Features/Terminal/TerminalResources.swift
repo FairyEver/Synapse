@@ -1,15 +1,7 @@
 import Foundation
 
 struct TerminalResource: Identifiable, Hashable {
-    enum Kind: Hashable {
-        case link
-        case webpage
-        case image
-        case file
-    }
-
     let url: URL
-    var kind: Kind = .link
 
     var id: String { url.absoluteString }
 
@@ -89,11 +81,6 @@ struct TerminalResourceCollector {
             }
         }
         return changed
-    }
-
-    mutating func setKind(_ kind: TerminalResource.Kind, for url: URL) {
-        guard let index = resources.firstIndex(where: { $0.url == url }) else { return }
-        resources[index].kind = kind
     }
 
     /// The text of the row at `start` with every row it continues into, or nil while one

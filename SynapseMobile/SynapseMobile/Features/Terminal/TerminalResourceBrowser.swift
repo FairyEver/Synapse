@@ -1,31 +1,6 @@
 import SafariServices
 import SwiftUI
 
-/// Decides what to do with a response by its type rather than by the URL's suffix.
-///
-/// Nothing here navigates a web view any more — the page is handed to
-/// `SFSafariViewController` below, which reports nothing back about what it loaded.
-/// It stays for now because `TerminalResource.Kind` stays, and this is what gives the
-/// kind its meaning; both go together in a later pass.
-enum TerminalResourceResponsePolicy {
-    enum Action: Equatable {
-        case show(TerminalResource.Kind)
-        case download(TerminalResource.Kind)
-    }
-
-    static func decide(mimeType: String?, contentDisposition: String?, canShow: Bool) -> Action {
-        let mime = mimeType?.lowercased() ?? ""
-        let kind: TerminalResource.Kind = mime.hasPrefix("image/") ? .image
-            : mime == "application/pdf" ? .file : .webpage
-        let attachment = contentDisposition?
-            .split(separator: ";", maxSplits: 1)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() == "attachment"
-        return attachment || !canShow ? .download(kind == .webpage ? .file : kind) : .show(kind)
-    }
-}
-
 /// Opens a sniffed link in the system browser.
 ///
 /// `SFSafariViewController` is the control the reader already knows from Safari, so

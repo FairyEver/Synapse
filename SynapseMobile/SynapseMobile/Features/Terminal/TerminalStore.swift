@@ -231,11 +231,6 @@ final class TerminalStore {
         renderRevision += 1
     }
 
-    func setResourceKind(_ kind: TerminalResource.Kind, for url: URL) {
-        resourceCollector.setKind(kind, for: url)
-        resources = resourceCollector.resources
-    }
-
     private func collectResources(in frame: MobileTerminalFrame) {
         // The column count goes along because a row the TUI wrapped itself is only
         // recognisable by having been filled to it — see `TerminalResourceCollector`.

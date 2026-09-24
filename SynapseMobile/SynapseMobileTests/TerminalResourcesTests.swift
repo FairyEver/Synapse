@@ -136,12 +136,4 @@ struct TerminalResourcesTests {
         #expect(second.resources.isEmpty)
     }
 
-    @Test func responseUsesHeadersRatherThanURLSuffix() {
-        let decide = TerminalResourceResponsePolicy.decide
-        #expect(decide("text/html", nil, true) == .show(.webpage))
-        #expect(decide("image/png", "inline; filename=a.png", true) == .show(.image))
-        #expect(decide("image/png", "attachment; filename=a", true) == .download(.image))
-        #expect(decide("application/pdf", nil, true) == .show(.file))
-        #expect(decide("application/octet-stream", nil, false) == .download(.file))
-    }
 }
