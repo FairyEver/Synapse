@@ -3247,6 +3247,36 @@ describe("TerminalModule", () => {
     expect(terminalBridge.writeSession).not.toHaveBeenCalled()
   })
 
+  it("copies a Windows selection with Ctrl+C and leaves Ctrl+C to the shell without a selection", async () => {
+    window.synapse = { ...window.synapse, platform: "win32" }
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderModule()
+    const xterm = xtermState.instances[0]!
+    const interrupt = new KeyboardEvent("keydown", { cancelable: true, ctrlKey: true, key: "c" })
+    expect(xterm.emitKeyEvent(interrupt)).toBe(true)
+    expect(interrupt.defaultPrevented).toBe(false)
+    expect(writeText).not.toHaveBeenCalled()
+
+    xterm.hasSelection.mockReturnValue(true)
+    xterm.getSelection.mockReturnValue("selected output")
+    const copy = new KeyboardEvent("keydown", { cancelable: true, ctrlKey: true, key: "c" })
+    await act(async () => {
+      expect(xterm.emitKeyEvent(copy)).toBe(false)
+      await Promise.resolve()
+    })
+
+    expect(copy.defaultPrevented).toBe(true)
+    expect(writeText).toHaveBeenCalledWith("selected output")
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
   it("pastes clipboard text through xterm with Cmd+V", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]

@@ -87,6 +87,18 @@ describe("terminal clipboard shortcuts", () => {
   })
 
   it.each([
+    ["Ctrl+C", { ctrlKey: true, key: "c" }],
+    ["Ctrl+Shift+C", { ctrlKey: true, shiftKey: true, key: "C" }],
+  ])("maps %s to copy on Windows", (_name, overrides) => {
+    expect(getTerminalClipboardShortcut({
+      ...SHIFT_ENTER_EVENT,
+      key: "",
+      shiftKey: false,
+      ...overrides,
+    }, "win32")).toBe("copy")
+  })
+
+  it.each([
     ["Ctrl+V on Windows", "win32", { ctrlKey: true, key: "v" }],
     ["Ctrl+V with a shifted letter on Windows", "win32", { ctrlKey: true, key: "V" }],
     ["Ctrl+Shift+V on Windows", "win32", { ctrlKey: true, shiftKey: true, key: "V" }],
@@ -107,9 +119,7 @@ describe("terminal clipboard shortcuts", () => {
     ["Cmd+Shift+C", "darwin", { metaKey: true, shiftKey: true, key: "c" }],
     ["Ctrl+Cmd+C", "darwin", { ctrlKey: true, metaKey: true, key: "c" }],
     ["IME Cmd+V", "darwin", { isComposing: true, metaKey: true, key: "v" }],
-    // The interrupt, not a copy key: a terminal on Windows and Linux keeps `Ctrl+C` for the shell.
-    ["Ctrl+C", "win32", { ctrlKey: true, key: "c" }],
-    ["Ctrl+Shift+C", "win32", { ctrlKey: true, shiftKey: true, key: "c" }],
+    // Linux keeps Ctrl+C for the shell.
     ["Ctrl+C", "linux", { ctrlKey: true, key: "c" }],
     // Inside the terminal, `Alt+V` and macOS `Ctrl+V` are the TUI's own paste-image keys.
     ["Alt+V", "win32", { altKey: true, key: "v" }],

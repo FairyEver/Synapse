@@ -37,10 +37,11 @@ export function getTerminalClipboardShortcut(
    * clipboard for images only, so a paste of text has to be typed into the PTY from here.
    * `Ctrl+Shift+V` is the same key for people who learned that one.
    *
-   * `Ctrl+C` is not the copy key and stays the shell's: inside a terminal it is the interrupt,
-   * and copying a selection keeps its own button.
+   * On Windows, `Ctrl+C` copies only when xterm has a selection. Otherwise the key stays
+   * the shell's interrupt. `Ctrl+Shift+C` also copies a selection.
    */
   if (!event.ctrlKey || event.metaKey) return null
+  if (platform === "win32" && key === "c") return "copy"
   return key === "v" ? "paste" : null
 }
 
