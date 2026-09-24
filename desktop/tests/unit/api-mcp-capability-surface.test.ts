@@ -151,7 +151,7 @@ describe("API and MCP capability surface", () => {
       .map((match) => [match[1], match[2]] as const)
 
     expect(documentedPairs).toEqual(retiredMcpToolNamePairs())
-    expect(documentedPairs).toHaveLength(146)
+    expect(documentedPairs).toHaveLength(147)
   })
 
   it("routes every registered capability to its owning domain dispatcher", async () => {

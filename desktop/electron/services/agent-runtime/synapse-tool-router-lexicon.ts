@@ -88,6 +88,8 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["落地", "materialize"],
   ["路径", "path"],
   ["打包", "zip"],
+  ["分块", "chunk"],
+  ["补丁", "patch"],
 
   // ---------------- 名词：terminal ----------------
   ["会话", "session"],
