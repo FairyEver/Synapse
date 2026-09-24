@@ -3,126 +3,137 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>Synapse iOS 终端桌面组件</title>
   <link rel="stylesheet" href="2026-09-24-ios-terminal-widgets.css">
 </head>
-<body class="min-h-screen bg-neutral-100 font-sans text-neutral-950 antialiased">
+<body class="min-h-screen bg-neutral-100 dark:bg-neutral-950 font-sans text-neutral-950 dark:text-neutral-100 antialiased">
   <main class="mx-auto max-w-6xl px-6 py-10 sm:px-10 sm:py-14">
-    <header class="flex flex-wrap items-end justify-between gap-6 border-b border-neutral-300 pb-8">
+    <header class="flex flex-wrap items-end justify-between gap-6 border-b border-neutral-300 dark:border-neutral-700 pb-8">
       <div>
-        <p class="text-sm font-semibold text-neutral-600">Synapse Remote · iOS</p>
+        <p class="text-sm font-semibold text-neutral-600 dark:text-neutral-300">Synapse Remote · iOS</p>
         <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">终端桌面组件</h1>
       </div>
-      <p class="max-w-md text-sm leading-6 text-neutral-600">小号处理待办，中号监看一条会话，大号掌握一台电脑的终端状态。</p>
+      <p class="max-w-md text-sm leading-6 text-neutral-600 dark:text-neutral-300">小号处理待办，中号监看一条会话，大号掌握一台电脑的终端状态。</p>
     </header>
 
     <section aria-label="组件预览" class="mt-12 grid items-start gap-12 lg:grid-cols-3 lg:gap-8">
       <article class="flex flex-col items-center gap-5 lg:items-start">
         <div class="flex w-full items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold">小号</h2>
-          <span class="text-xs text-neutral-500">立即处理</span>
+          <span class="text-xs text-neutral-500 dark:text-neutral-400">待处理快照</span>
         </div>
-        <div aria-label="小号终端组件，部署服务正在等待确认" class="flex h-[172px] w-[172px] flex-col rounded-[24px] bg-white p-4 text-neutral-950 ring-1 ring-neutral-200">
-          <div class="flex items-center gap-2 text-[12px] font-semibold text-amber-800">
-            <span class="h-2 w-2 rounded-full bg-amber-700" aria-hidden="true"></span>
+        <div aria-label="小号终端组件，部署服务正在等待确认" class="flex h-[172px] w-[172px] flex-col rounded-[24px] bg-white dark:bg-neutral-900 p-4 text-neutral-950 dark:text-neutral-100 ring-1 ring-neutral-200 dark:ring-neutral-700">
+          <div class="flex items-center gap-2 text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+            <span class="h-2 w-2 rounded-full bg-amber-700 dark:bg-amber-400" aria-hidden="true"></span>
             <span>等待确认</span>
           </div>
           <div class="mt-auto min-w-0">
-            <p class="text-[11px] text-neutral-600">需要你处理</p>
+            <p class="text-[11px] text-neutral-600 dark:text-neutral-300">需要你处理</p>
             <p class="mt-1 truncate text-[18px] font-semibold tracking-tight">部署服务</p>
           </div>
-          <div class="mt-3 flex items-center justify-between border-t border-neutral-200 pt-2 text-[11px] font-medium text-neutral-600">
+          <div class="mt-3 flex items-center justify-between border-t border-neutral-200 dark:border-neutral-700 pt-2 text-[11px] font-medium text-neutral-600 dark:text-neutral-300">
             <span class="truncate">MacBook Pro</span>
-            <span aria-hidden="true">↗</span>
+            <span>09:41 更新</span>
           </div>
         </div>
-        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">只回答“现在需要我做什么”；点按直达待处理会话。</p>
+        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600 dark:text-neutral-300">只显示最近一次刷新时的待处理会话；点按后在 App 中核对当前状态。</p>
       </article>
 
       <article class="flex flex-col items-center gap-5 lg:items-start">
         <div class="flex w-full items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold">中号</h2>
-          <span class="text-xs text-neutral-500">单会话监看</span>
+          <span class="text-xs text-neutral-500 dark:text-neutral-400">单会话监看</span>
         </div>
-        <div aria-label="中号终端组件，监看开发服务器的最近一行输出" class="flex h-[172px] w-[360px] max-w-full flex-col rounded-[24px] bg-neutral-950 p-4 text-neutral-100">
+        <div aria-label="中号终端组件，监看开发服务器的最近一行输出" class="flex h-[172px] w-[360px] max-w-full flex-col rounded-[24px] bg-white dark:bg-neutral-900 p-4 text-neutral-950 dark:text-neutral-100 ring-1 ring-neutral-200 dark:ring-neutral-700">
           <div class="flex items-center justify-between gap-3">
             <span class="min-w-0 truncate text-[15px] font-semibold">开发服务器</span>
-            <span class="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-neutral-300"><span class="h-2 w-2 rounded-full bg-green-500" aria-hidden="true"></span>运行中</span>
+            <span class="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-neutral-600 dark:text-neutral-300"><span class="h-2 w-2 rounded-full bg-green-700 dark:bg-green-400" aria-hidden="true"></span>运行中</span>
           </div>
-          <p class="mt-1 truncate font-mono text-[11px] text-neutral-400">~/code/dashboard · MacBook Pro</p>
+          <p class="mt-1 truncate font-mono text-[11px] text-neutral-600 dark:text-neutral-300">~/code/dashboard · MacBook Pro</p>
           <div class="mt-5 min-w-0">
-            <p class="text-[11px] text-neutral-400">最近输出</p>
-            <p class="mt-1 truncate font-mono text-[13px] text-neutral-100">ready in 312 ms</p>
+            <p class="text-[11px] text-neutral-600 dark:text-neutral-300">最近输出</p>
+            <p class="mt-1 truncate font-mono text-[13px] text-neutral-950 dark:text-neutral-100">ready in 312 ms</p>
           </div>
-          <div class="mt-auto flex items-center justify-between border-t border-neutral-700 pt-2 text-[11px] text-neutral-400">
+          <div class="mt-auto flex items-center justify-between border-t border-neutral-200 dark:border-neutral-700 pt-2 text-[11px] text-neutral-600 dark:text-neutral-300">
             <span>更新于 09:41</span>
-            <span class="font-medium text-neutral-100">打开会话 ↗</span>
+            <span class="font-medium text-neutral-950 dark:text-neutral-100">打开会话 ↗</span>
           </div>
         </div>
-        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">固定一条会话，查看最近输出快照；此图展示已开启输出预览的状态。</p>
+        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600 dark:text-neutral-300">固定一条会话，查看最近输出快照；此图展示已开启输出预览的状态。</p>
       </article>
 
       <article class="flex flex-col items-center gap-5 lg:items-start">
         <div class="flex w-full items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold">大号</h2>
-          <span class="text-xs text-neutral-500">整机概览</span>
+          <span class="text-xs text-neutral-500 dark:text-neutral-400">整机概览</span>
         </div>
-        <div aria-label="大号终端组件，显示一条待处理、两条运行中和一条空闲会话" class="flex h-[360px] w-[360px] max-w-full flex-col rounded-[24px] bg-white p-5 text-neutral-950 ring-1 ring-neutral-200">
+        <div aria-label="大号终端组件，显示一条待处理、两条运行中和一条已结束会话" class="flex h-[360px] w-[360px] max-w-full flex-col rounded-[24px] bg-white dark:bg-neutral-900 p-5 text-neutral-950 dark:text-neutral-100 ring-1 ring-neutral-200 dark:ring-neutral-700">
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="text-[19px] font-semibold tracking-tight">1 条需要处理</p>
-              <p class="mt-0.5 text-[11px] text-neutral-600">MacBook Pro</p>
+              <p class="mt-0.5 text-[11px] text-neutral-600 dark:text-neutral-300">MacBook Pro</p>
             </div>
-            <span class="flex items-center gap-1.5 text-[11px] font-medium text-neutral-600"><span class="h-2 w-2 rounded-full bg-green-700" aria-hidden="true"></span>在线</span>
+            <span class="flex items-center gap-1.5 text-[11px] font-medium text-neutral-600 dark:text-neutral-300"><span class="h-2 w-2 rounded-full bg-green-700 dark:bg-green-400" aria-hidden="true"></span>在线</span>
           </div>
-          <div class="mt-5 flex items-baseline justify-between border-b border-neutral-200 pb-2">
-            <p class="text-[12px] font-semibold text-amber-800">等待确认</p>
+          <div class="mt-5 flex items-baseline justify-between border-b border-neutral-200 dark:border-neutral-700 pb-2">
+            <p class="text-[12px] font-semibold text-amber-800 dark:text-amber-300">等待确认</p>
           </div>
           <div class="flex min-w-0 items-center justify-between gap-3 py-2">
             <p class="min-w-0 truncate text-[13px] font-semibold">部署服务</p>
-            <span class="shrink-0 text-[11px] text-neutral-600">~/code/synapse</span>
+            <span class="shrink-0 text-[11px] text-neutral-600 dark:text-neutral-300">~/code/synapse</span>
           </div>
 
-          <div class="mt-1 flex items-baseline justify-between border-b border-neutral-200 pb-2">
+          <div class="mt-1 flex items-baseline justify-between border-b border-neutral-200 dark:border-neutral-700 pb-2">
             <p class="text-[12px] font-semibold">运行中</p>
-            <span class="text-[11px] text-neutral-600">2 条</span>
+            <span class="text-[11px] text-neutral-600 dark:text-neutral-300">2 条</span>
           </div>
           <div class="flex min-w-0 items-center justify-between gap-3 py-2">
             <p class="min-w-0 truncate text-[13px] font-medium">开发服务器</p>
-            <span class="shrink-0 text-[11px] text-neutral-600">~/code/dashboard</span>
+            <span class="shrink-0 text-[11px] text-neutral-600 dark:text-neutral-300">~/code/dashboard</span>
           </div>
           <div class="flex min-w-0 items-center justify-between gap-3 pb-2">
             <p class="min-w-0 truncate text-[13px] font-medium">单元测试</p>
-            <span class="shrink-0 text-[11px] text-neutral-600">~/code/server</span>
+            <span class="shrink-0 text-[11px] text-neutral-600 dark:text-neutral-300">~/code/server</span>
           </div>
 
-          <div class="mt-1 flex items-baseline justify-between border-b border-neutral-200 pb-2">
-            <p class="text-[12px] font-semibold text-neutral-600">空闲</p>
-            <span class="text-[11px] text-neutral-600">1 条</span>
+          <div class="mt-1 flex items-baseline justify-between border-b border-neutral-200 dark:border-neutral-700 pb-2">
+            <p class="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">已结束</p>
+            <span class="text-[11px] text-neutral-600 dark:text-neutral-300">1 条</span>
           </div>
           <div class="flex min-w-0 items-center justify-between gap-3 py-2">
             <p class="min-w-0 truncate text-[13px] font-medium">日志查看</p>
-            <span class="shrink-0 text-[11px] text-neutral-600">~/logs</span>
+            <span class="shrink-0 text-[11px] text-neutral-600 dark:text-neutral-300">~/logs</span>
           </div>
 
-          <div class="mt-auto flex items-center justify-between pt-1 text-[11px] text-neutral-600">
+          <div class="mt-auto flex items-center justify-between pt-1 text-[11px] text-neutral-600 dark:text-neutral-300">
             <span>更新于 09:41</span>
-            <span class="font-medium text-neutral-950">查看全部 ↗</span>
+            <span class="font-medium text-neutral-950 dark:text-neutral-100">查看全部 ↗</span>
           </div>
         </div>
-        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">按待处理、运行中、空闲分组；点按会话或查看全部。</p>
+        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600 dark:text-neutral-300">按待处理、运行中、已结束分组；点按会话或查看全部。</p>
       </article>
     </section>
 
-    <section aria-labelledby="behavior-title" class="mt-14 border-t border-neutral-300 pt-8">
+    <section aria-labelledby="behavior-title" class="mt-14 border-t border-neutral-300 dark:border-neutral-700 pt-8">
       <h2 id="behavior-title" class="text-lg font-semibold">状态与交互</h2>
       <dl class="mt-5 grid gap-x-10 gap-y-5 text-sm sm:grid-cols-3">
-        <div><dt class="font-semibold">电脑离线</dt><dd class="mt-1 leading-6 text-neutral-600">显示电脑名称与“电脑不在线”，保留打开 App 入口。</dd></div>
-        <div><dt class="font-semibold">没有会话</dt><dd class="mt-1 leading-6 text-neutral-600">显示“没有正在运行的会话”，点按进入终端列表。</dd></div>
-        <div><dt class="font-semibold">隐私</dt><dd class="mt-1 leading-6 text-neutral-600">中号的最近输出需主动开启预览；小号和大号不展示终端内容。</dd></div>
+        <div><dt class="font-semibold">电脑离线</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">显示电脑名称与“电脑不在线”，保留打开 App 入口。</dd></div>
+        <div><dt class="font-semibold">没有会话</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">显示“没有正在运行的会话”，点按进入终端列表。</dd></div>
+        <div><dt class="font-semibold">隐私</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">中号的最近输出需主动开启预览；小号和大号不展示终端内容。</dd></div>
       </dl>
-      <p class="mt-7 text-xs leading-5 text-neutral-500">概念稿使用示例数据；实际刷新频率由 iOS 管理，组件内状态需要标明快照时间。</p>
+      <p class="mt-7 text-xs leading-5 text-neutral-500 dark:text-neutral-400">概念稿使用示例数据；状态为快照，实际刷新时机由 iOS 管理。</p>
+    </section>
+
+    <section aria-labelledby="feasibility-title" class="mt-10 border-t border-neutral-300 dark:border-neutral-700 pt-8">
+      <h2 id="feasibility-title" class="text-lg font-semibold">开发落地核对</h2>
+      <dl class="mt-5 grid gap-x-10 gap-y-5 text-sm sm:grid-cols-2">
+        <div><dt class="font-semibold">已有数据</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">终端摘要已有标题、状态、待处理类型、目录和最后一行输出；电脑名称与在线状态也已在 App 中使用。</dd></div>
+        <div><dt class="font-semibold">需要新增</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">在现有 WidgetBundle 注册三种主屏尺寸；App 与扩展通过 App Group 共享摘要快照。中号用 AppIntentConfiguration 选择会话和输出预览。</dd></div>
+        <div><dt class="font-semibold">刷新与跳转</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">App 收到新摘要后请求 WidgetKit 刷新；组件只读本地快照。通过 widgetURL／Link 传电脑和会话标识，由 RootView 验证登录与会话状态。</dd></div>
+        <div><dt class="font-semibold">快照边界</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">系统不保证实时刷新。快照过期时改显示“状态待更新”；共享数据不含凭据，最近输出默认不保存，登出时清除。</dd></div>
+        <div><dt class="font-semibold">系统外观</dt><dd class="mt-1 leading-6 text-neutral-600 dark:text-neutral-300">HTML 随系统浅色／深色切换。原生实现使用语义色、containerBackground(for: .widget) 和 widgetRenderingMode 适配着色外观。</dd></div>
+      </dl>
     </section>
   </main>
 </body>
