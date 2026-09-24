@@ -26,7 +26,7 @@ const contentCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.resource_repository.skill.get" as CapabilityId, title: "Get skill", description: "Get one Synapse Skill resource by id.", mutates: false },
   { id: "app.resource_repository.skill.create" as CapabilityId, title: "Create skill", description: "Create a Synapse Skill resource.", mutates: true },
   { id: "app.resource_repository.skill.update" as CapabilityId, title: "Update skill", description: "Update a Synapse Skill in the current writable Resource Repository.", mutates: true },
-  { id: "app.resource_repository.skill.delete" as CapabilityId, title: "Delete skill", description: "Delete a Synapse Skill created by the current repo profile.", mutates: true },
+  { id: "app.resource_repository.skill.delete" as CapabilityId, title: "Delete skill", description: "Delete a Synapse Skill in the current writable Resource Repository, including a Skill created by another repository profile.", mutates: true },
   { id: "app.resource_repository.prompt.list" as CapabilityId, title: "List prompts", description: "List Synapse Prompt resources.", mutates: false },
   { id: "app.resource_repository.prompt.get" as CapabilityId, title: "Get prompt", description: "Get one Synapse Prompt resource by id.", mutates: false },
   { id: "app.resource_repository.prompt.create" as CapabilityId, title: "Create prompt", description: "Create a Synapse Prompt resource.", mutates: true },
@@ -184,7 +184,10 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
 function deleteTool(type: ContentResourceType): McpToolDefinition {
   return {
     name: `content_${type}_delete`,
-    description: `Delete a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force delete is not supported.`,
+    description:
+      type === "skill"
+        ? `Delete a Synapse Skill in the current writable Resource Repository, including a Skill created by another repository profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Force delete is not supported.`
+        : `Delete a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force delete is not supported.`,
     inputSchema: {
       type: "object",
       properties: {
