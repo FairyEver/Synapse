@@ -106,7 +106,15 @@ struct TerminalGitPanel: View {
                     flow.path.append(.branches(.checkout))
                 }
                 LabeledContent("远端", value: TerminalGitPresentation.remoteLabel(status))
-                LabeledContent("同步", value: TerminalGitPresentation.syncLabel(status))
+                // 状态值也是同步入口；即使缓存显示一致，点它仍会先获取远端再同步。
+                TerminalGitActionRow(
+                    title: "同步",
+                    detail: TerminalGitPresentation.syncLabel(status),
+                    enabled: !flow.isBusy,
+                    identifier: "git-panel-sync"
+                ) {
+                    Task { await flow.sync(changeCount: status.changeCount, on: desk) }
+                }
                 LabeledContent("改动", value: TerminalGitPresentation.changeLabel(status))
             }
 
@@ -133,17 +141,6 @@ struct TerminalGitPanel: View {
                     Task { await flow.push(on: desk) }
                 }
 
-                // 同步总是可点：它没有「没什么可同步」这种状态需要禁用，而它失败时的
-                // 下一步（去提交）比一颗灰掉的按钮有用。只有一个例外：手上还有一个动作
-                // 在跑（见下面那行转圈），第二下会被按住 —— 一次推送按两下就是推两次。
-                TerminalGitActionRow(
-                    title: "同步",
-                    enabled: !flow.isBusy,
-                    identifier: "git-panel-sync"
-                ) {
-                    Task { await flow.sync(changeCount: status.changeCount, on: desk) }
-                }
-
                 TerminalGitActionRow(
                     title: "合并分支",
                     enabled: !flow.isBusy,
@@ -152,8 +149,6 @@ struct TerminalGitPanel: View {
                     flow.path.append(.merge)
                 }
 
-                // 排在这一段的最后：它是这一组里唯一一个「从远端拿东西回来」的动作，
-                // 前面四个都是对本地已有的东西动手。
                 TerminalGitActionRow(
                     title: "迁出远端分支",
                     enabled: !flow.isBusy,
@@ -173,10 +168,10 @@ struct TerminalGitPanel: View {
             }
         }
         .listStyle(.insetGrouped)
-        // 下拉重取状态：用户在电脑上 cd 到别处之后，下拉一下就能让面板跟上。
+        // 下拉获取远端引用并重算状态，才能发现其他电脑新推送的提交。
         .refreshable { await flow.refresh(on: desk) }
-        // 打开面板也问一次：第二行跟着摘要的心跳走，而这一页要的是**此刻**的目录与状态。
-        .task { await flow.refresh(on: desk) }
+        // 打开面板只读本地状态；访问远端由用户下拉或点「同步」触发。
+        .task { await flow.loadStatus(on: desk) }
     }
 
     /// 失败弹窗。

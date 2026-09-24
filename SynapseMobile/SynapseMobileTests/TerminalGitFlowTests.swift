@@ -271,6 +271,45 @@ struct TerminalGitFlowTests {
 
     // MARK: - 推送与同步
 
+    @Test func openingThePanelReadsLocalStatusWithoutFetching() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.accept()]
+
+        await flow.loadStatus(on: fake.desk)
+
+        #expect(fake.actions == ["status"])
+    }
+
+    @Test func pullingThePanelFetchesRemoteStatus() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.accept()]
+
+        await flow.refresh(on: fake.desk)
+
+        #expect(fake.actions == ["fetchRemotes"])
+        #expect(flow.failure == nil)
+    }
+
+    @Test func failedPanelRefreshStillReadsTheCurrentDirectoryAndExplainsTheFailure() async {
+        let (flow, fake) = makeFlow()
+        fake.answers = [fake.reject(message: "没法连接远端。"), fake.accept()]
+
+        await flow.refresh(on: fake.desk)
+
+        #expect(fake.actions == ["fetchRemotes", "status"])
+        #expect(flow.failure?.title == "刷新远端状态失败")
+        #expect(flow.failure?.message == "没法连接远端。")
+    }
+
+    @Test func panelRefreshDoesNotFetchDuringAnotherGitOperation() async {
+        let (flow, fake) = makeFlow()
+        flow.isBusy = true
+
+        await flow.refresh(on: fake.desk)
+
+        #expect(fake.sent.isEmpty)
+    }
+
     @Test func aRejectedPushOffersTheNextStep() async {
         let (flow, fake) = makeFlow()
         fake.answers = [fake.reject(message: "! [rejected] main -> main (non-fast-forward)")]

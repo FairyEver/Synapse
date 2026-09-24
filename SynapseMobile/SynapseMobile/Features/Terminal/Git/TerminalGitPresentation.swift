@@ -56,7 +56,7 @@ enum TerminalGitPresentation {
         if status.ahead > 0, status.behind > 0 { return "领先 \(status.ahead)，落后 \(status.behind)" }
         if status.ahead > 0 { return "领先 \(status.ahead) 个提交" }
         if status.behind > 0 { return "落后 \(status.behind) 个提交" }
-        return "已与远端一致"
+        return "与上次获取的远端一致"
     }
 
     /// 改动那一行。**只有数量**：手机端不接收文件清单（设计文档决策六）。

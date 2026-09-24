@@ -228,16 +228,38 @@ final class TerminalGitFlow: Identifiable {
 
     // MARK: - 读
 
-    /// 让电脑重算一次当前目录的状态。
+    /// 打开面板时让电脑重算一次当前目录的本地状态，不访问网络。
     ///
     /// 回答**不走结果信封**：手机端的状态永远以 `mobile.gitStatus` 为准，两个来源写同一
-    /// 件事迟早会分叉。所以这个动作要的只是「重算一次并推给我」—— 打开面板与下拉刷新
-    /// 都走它，用户在电脑上 `cd` 到别处之后，下拉一下就能让面板跟上。
-    func refresh(on desk: TerminalGitDesk) async {
+    /// 件事迟早会分叉。所以这个动作要的只是「重算一次并推给我」。
+    func loadStatus(on desk: TerminalGitDesk) async {
         _ = await desk.send(
             .git("status", sessionId: sessionId),
             AppConfiguration.gitLocalTimeout
         )
+    }
+
+    /// 下拉刷新先获取远端引用，再由电脑推送最新状态；失败时仍重取本地状态，
+    /// 以便用户在终端里切换目录后，面板能显示实际所在的仓库。
+    func refresh(on desk: TerminalGitDesk) async {
+        guard !isBusy else { return }
+        let result = await desk.send(
+            .git("fetchRemotes", sessionId: sessionId),
+            AppConfiguration.gitRemoteTimeout
+        )
+        guard let result else {
+            await loadStatus(on: desk)
+            failure = TerminalGitFailure(title: "刷新远端状态失败", message: Self.unansweredRetryable)
+            return
+        }
+        guard result.isAccepted else {
+            await loadStatus(on: desk)
+            failure = TerminalGitFailure(
+                title: "刷新远端状态失败",
+                message: result.message ?? "电脑没有完成这个操作。"
+            )
+            return
+        }
     }
 
     /// 列分支。**只列本地分支**；远端分支走「迁出远端分支」那一页。

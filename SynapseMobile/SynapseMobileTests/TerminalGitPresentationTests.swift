@@ -93,7 +93,7 @@ struct TerminalGitPresentationTests {
     @Test func thePanelSaysWhatTheComputerSaid() {
         #expect(TerminalGitPresentation.remoteLabel(status()) == "origin/main")
         #expect(TerminalGitPresentation.remoteLabel(status(upstream: nil)) == "未设置")
-        #expect(TerminalGitPresentation.syncLabel(status()) == "已与远端一致")
+        #expect(TerminalGitPresentation.syncLabel(status()) == "与上次获取的远端一致")
         #expect(TerminalGitPresentation.syncLabel(status(ahead: 2)) == "领先 2 个提交")
         #expect(TerminalGitPresentation.syncLabel(status(behind: 3)) == "落后 3 个提交")
         #expect(TerminalGitPresentation.syncLabel(status(ahead: 2, behind: 3)) == "领先 2，落后 3")
