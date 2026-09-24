@@ -1,8 +1,12 @@
-import Observation
-import QuickLook
+import SafariServices
 import SwiftUI
-import WebKit
 
+/// Decides what to do with a response by its type rather than by the URL's suffix.
+///
+/// Nothing here navigates a web view any more — the page is handed to
+/// `SFSafariViewController` below, which reports nothing back about what it loaded.
+/// It stays for now because `TerminalResource.Kind` stays, and this is what gives the
+/// kind its meaning; both go together in a later pass.
 enum TerminalResourceResponsePolicy {
     enum Action: Equatable {
         case show(TerminalResource.Kind)
@@ -22,167 +26,45 @@ enum TerminalResourceResponsePolicy {
     }
 }
 
-@MainActor
-@Observable
-final class TerminalResourceBrowserState {
-    enum Presentation: Equatable {
-        case loading
-        case downloading
-        case web
-        case downloaded(URL, TerminalResource.Kind)
-        case failed(String)
-    }
-
-    var presentation: Presentation = .loading
-    var displayedKind: TerminalResource.Kind = .link
-}
-
-struct TerminalResourceBrowser: UIViewRepresentable {
+/// Opens a sniffed link in the system browser.
+///
+/// `SFSafariViewController` is the control the reader already knows from Safari, so
+/// the page-settings menu, the loading bar, the share sheet and "open in Safari" all
+/// arrive with it, and they keep following whatever the system's browser chrome looks
+/// like — which nothing drawn by hand here would do.
+///
+/// Nothing about the page is reported back. The app used to read the response's MIME
+/// type and `Content-Disposition` while navigating, and hand anything that was not a
+/// webpage to its own downloader; a browser the app does not own cannot be watched
+/// that way, so attachments are the system's to handle now.
+struct TerminalResourceBrowser: UIViewControllerRepresentable {
     let url: URL
-    let state: TerminalResourceBrowserState
-    let onKind: (TerminalResource.Kind) -> Void
+    let onFinish: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(state: state, onKind: onKind) }
+    func makeCoordinator() -> Coordinator { Coordinator(onFinish: onFinish) }
 
-    func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView(frame: .zero)
-        webView.navigationDelegate = context.coordinator
-        webView.uiDelegate = context.coordinator
-        webView.allowsBackForwardNavigationGestures = true
-        webView.load(URLRequest(url: url))
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {}
-
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
-        private let state: TerminalResourceBrowserState
-        private let onKind: (TerminalResource.Kind) -> Void
-        private var downloadKind: TerminalResource.Kind = .file
-        private var destination: URL?
-
-        init(state: TerminalResourceBrowserState, onKind: @escaping (TerminalResource.Kind) -> Void) {
-            self.state = state
-            self.onKind = onKind
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            createWebViewWith configuration: WKWebViewConfiguration,
-            for navigationAction: WKNavigationAction,
-            windowFeatures: WKWindowFeatures
-        ) -> WKWebView? {
-            if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
-            return nil
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            decidePolicyFor navigationResponse: WKNavigationResponse,
-            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
-        ) {
-            guard navigationResponse.isForMainFrame else {
-                decisionHandler(.allow)
-                return
-            }
-            let response = navigationResponse.response
-            let headers = (response as? HTTPURLResponse)?.allHeaderFields
-            let disposition = headers?.first { "\($0.key)".caseInsensitiveCompare("Content-Disposition") == .orderedSame }
-                .map { "\($0.value)" }
-            switch TerminalResourceResponsePolicy.decide(
-                mimeType: response.mimeType,
-                contentDisposition: disposition,
-                canShow: navigationResponse.canShowMIMEType
-            ) {
-            case .show(let kind):
-                state.displayedKind = kind
-                state.presentation = .web
-                onKind(kind)
-                decisionHandler(.allow)
-            case .download(let kind):
-                downloadKind = kind
-                state.displayedKind = kind
-                state.presentation = .downloading
-                onKind(kind)
-                decisionHandler(.download)
-            }
-        }
-
-        func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-            download.delegate = self
-        }
-
-        func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-            download.delegate = self
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            guard state.presentation != .downloading else { return }
-            guard (error as NSError).code != NSURLErrorCancelled else { return }
-            state.presentation = .failed("网页无法打开")
-        }
-
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            guard state.presentation != .downloading else { return }
-            guard (error as NSError).code != NSURLErrorCancelled else { return }
-            state.presentation = .failed("网页无法打开")
-        }
-
-        func download(
-            _ download: WKDownload,
-            decideDestinationUsing response: URLResponse,
-            suggestedFilename: String,
-            completionHandler: @escaping (URL?) -> Void
-        ) {
-            let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("terminal-resources", isDirectory: true)
-                .appendingPathComponent(UUID().uuidString, isDirectory: true)
-            do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                let filename = (suggestedFilename as NSString).lastPathComponent
-                let safeName = filename.isEmpty || filename == "." || filename == ".." ? "download" : filename
-                let url = directory.appendingPathComponent(safeName)
-                destination = url
-                completionHandler(url)
-            } catch {
-                state.presentation = .failed("文件无法下载")
-                completionHandler(nil)
-            }
-        }
-
-        func downloadDidFinish(_ download: WKDownload) {
-            guard let destination else {
-                state.presentation = .failed("文件无法下载")
-                return
-            }
-            state.presentation = .downloaded(destination, downloadKind)
-        }
-
-        func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-            state.presentation = .failed("文件无法下载")
-        }
-    }
-}
-
-struct TerminalDownloadedPreview: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
-
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let controller = QLPreviewController()
-        controller.dataSource = context.coordinator
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let configuration = SFSafariViewController.Configuration()
+        configuration.entersReaderIfAvailable = false
+        let controller = SFSafariViewController(url: url, configuration: configuration)
+        // The page covers the resource list rather than being pushed into it, so ✕
+        // reads as "back to the list" where a chevron or "Done" would imply a stack.
+        controller.dismissButtonStyle = .close
+        controller.delegate = context.coordinator
         return controller
     }
 
-    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
+    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        let url: URL
-        init(url: URL) { self.url = url }
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
-        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
-            url as NSURL
+    final class Coordinator: NSObject, SFSafariViewControllerDelegate {
+        private let onFinish: () -> Void
+
+        init(onFinish: @escaping () -> Void) {
+            self.onFinish = onFinish
+        }
+
+        func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
+            onFinish()
         }
     }
 }
