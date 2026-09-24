@@ -1,6 +1,8 @@
 # Synapse Remote (iOS)
 
-用同一个 Synapse 账号在 iPhone 上查看和控制电脑上的终端。
+用同一个 Synapse 账号在 iPhone 或 iPad 上查看和控制电脑上的终端。
+
+iPadOS 的可缩放窗口使用系统自适应标签栏和列表 / 详情分栏；窗口变窄时自动折叠为单列。移动端新页面的布局要求见[移动端布局规则](../docs/agents/mobile-adaptive-layout.md)。
 
 主屏幕提供三种终端组件：小组件看待处理会话，中组件监看选定会话（最近输出需在组件设置中开启），大组件看当前电脑的会话概览。组件读取 App Group 中的只读摘要，点击后打开 App；状态超过 15 分钟未更新会提示待更新。WidgetKit 决定刷新时机，App 关闭后不会在后台持续连接终端。组件使用系统颜色，自动跟随浅色、深色与主屏幕着色模式。真机签名时，主 App 与 Widget 扩展的 App Group 均需开通 `group.com.liy.SynapseMobile`。
 

@@ -6,6 +6,7 @@ import SwiftUI
 /// 流水账，看得见就够，和电脑端的左栏一致。
 struct MeetingListView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Binding var selection: String?
     @State private var renameTarget: MeetingSummary?
     @State private var deleteTarget: MeetingSummary?
     /// 转写轮询。收尾完成时要重新起一轮，所以它是个能取消、能重起的任务，不是一条
@@ -14,11 +15,11 @@ struct MeetingListView: View {
 
     var body: some View {
         @Bindable var model = model
-        return List {
+        return List(selection: $selection) {
             if !model.meetings.meetings.isEmpty {
                 Section {
                     ForEach(model.meetings.meetings) { meeting in
-                        NavigationLink(value: Route.meeting(meeting.id)) {
+                        NavigationLink(value: meeting.id) {
                             row(meeting)
                         }
                         // 长按是 iOS 的上下文菜单：整行抬起来、其余模糊、玻璃按钮浮在
@@ -136,7 +137,10 @@ struct MeetingListView: View {
         ), presenting: deleteTarget) { meeting in
             Button("删除", role: .destructive) {
                 Haptics.warning()
-                Task { await model.deleteMeeting(meeting.id) }
+                Task {
+                    await model.deleteMeeting(meeting.id)
+                    if selection == meeting.id { selection = nil }
+                }
             }
             Button("取消", role: .cancel) {}
         } message: { meeting in

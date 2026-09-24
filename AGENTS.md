@@ -48,6 +48,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | 模型上下文、Provider 模型匹配、模型能力目录更新 | `docs/agents/model-capability-catalog.md` |
 | macOS 自动更新、ShipIt/Squirrel、`quitAndInstall`、更新退出与恢复 | `docs/superpowers/specs/2026-07-21-desktop-update-handoff-design.md` |
 | UI、样式、交互、产品文案 | `docs/agents/ui-and-product.md`、`.claude/rules/design.md`、`.claude/rules/ui-rules.md` |
+| iOS / iPadOS 页面、导航、弹窗、终端尺寸、移动端新功能 | `docs/agents/mobile-adaptive-layout.md` |
 | 后续规划 | `docs/agents/future-plans.md` |
 | System Notifier | `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md` |
 | Rule / Skill / Prompt 编辑器兼容 | `docs/reference/editor-integration-matrix.md` |
@@ -61,6 +62,13 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 - 使用当前 shadcn/Radix 组件、主题 token 和现有模块实现；禁止自定义颜色、hex/rgb/hsl、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和普通场景的内联样式。
 - UI 文案只保留必要标题、label、操作和空/错/加载状态；禁止功能介绍、实现解释、重复状态、营销文案和 AI 自称。
 - 写 UI 前必须检查 `desktop/components.json`、`desktop/src/styles/globals.css`、`desktop/src/components/ui/` 和当前模块实现。
+
+## iPhone 与 iPadOS 共用界面
+
+- `SynapseMobile/` 的每项用户可操作功能都必须同时考虑 iPhone 与 iPadOS 可缩放窗口；不得只把 iPhone 页面等比放大，或以设备型号代替窗口可用空间判断布局。
+- 有列表和详情的功能必须复用 `AdaptiveFeatureNavigation` 的选择与折叠模式：宽窗口列表、详情并排，紧凑窗口单列下钻；选中项和深链目标在旋转、窗口缩放、切 Tab 后保持一致。顶层功能导航使用系统自适应 Tab / Sidebar。
+- iPadOS 设置采用分类列表与详情；终端主画布按实际可用尺寸计算网格，窗口拖动中不得向桌面反复发送过渡尺寸。录音、消息和终端的现有业务状态不可因栏位折叠丢失。
+- 使用 SwiftUI 和系统控件、系统颜色、安全区与呈现方式；支持动态字体、VoiceOver、硬件键盘和指针。任何新的 iOS 页面都按 `docs/agents/mobile-adaptive-layout.md` 的宽窗、半窗、紧凑窗矩阵设计与验证。旧专题规格中的「不做 iPad 专门适配」仅代表当次范围，不再是后续功能的豁免。
 
 ## Phase 0 架构硬约束
 

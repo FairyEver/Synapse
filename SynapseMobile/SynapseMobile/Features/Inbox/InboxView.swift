@@ -13,10 +13,12 @@ import SwiftUI
 /// 那两屏没有这条带子，标题都好好的——标题比钉住重要，带子回到列表里。
 struct InboxView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Binding var selection: String?
+    let onOpenTerminal: (String) -> Void
     @State private var filter = "pending"
 
     var body: some View {
-        List {
+        List(selection: $selection) {
             if let error = model.notifications.error {
                 Section {
                     Text(error)
@@ -43,9 +45,17 @@ struct InboxView: View {
             Section {
                 if filter == "pending" {
                     ForEach(model.waitingSessions) { session in
-                        NavigationLink(value: Route.terminal(session.id)) {
-                            WaitingSessionRow(session: session)
+                        Button {
+                            onOpenTerminal(session.id)
+                        } label: {
+                            HStack {
+                                WaitingSessionRow(session: session)
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
                 } else {
                     ForEach(visibleItems) { item in
@@ -108,16 +118,17 @@ struct InboxView: View {
     }
 
     private func notificationRow(_ item: SynapseNotification) -> some View {
-        // `NavigationLink` 而不是 `Button`：它才是系统画披露指示、给按压高亮的那一个。
-        // 用 `.plain` 的按钮画不出这两样，于是开得进去的行看起来和一段静态文字一样
-        // ——「待处理」那一屏用的是链接、这一屏用的是按钮，一屏之内两种表现。
-        NavigationLink(value: Route.message(item.id)) {
+        // Detail rows use the split view's selection, keeping the list visible on iPad.
+        NavigationLink(value: item.id) {
             NotificationRow(item: item)
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 Haptics.warning()
-                Task { await model.deleteNotification(item.id) }
+                Task {
+                    await model.deleteNotification(item.id)
+                    if selection == item.id { selection = nil }
+                }
             } label: {
                 Label("删除", systemImage: "trash")
             }
@@ -298,6 +309,8 @@ struct NotificationDetailView: View {
                         }
                     }
                 }
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             } else if loading {
                 ProgressView()
             } else {

@@ -136,6 +136,7 @@ struct LoginView: View {
                     Spacer()
                     Spacer()
                 }
+                .frame(maxWidth: 520)
             }
         }
         // Without this the view rubber-bands on every portrait launch even though there

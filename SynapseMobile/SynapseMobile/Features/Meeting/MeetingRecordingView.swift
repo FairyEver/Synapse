@@ -22,6 +22,8 @@ struct MeetingRecordingView: View {
         .padding(.horizontal, 24)
         .padding(.top, 36)
         .padding(.bottom, 24)
+        .frame(maxWidth: 600)
+        .frame(maxWidth: .infinity)
         .presentationDragIndicator(.visible)
         // 收起不等于停下：这一屏只是个观察窗，录音在 App 模型上跑。
         .interactiveDismissDisabled(false)

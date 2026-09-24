@@ -9,7 +9,7 @@ import SwiftUI
 struct SessionListView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(TerminalDisplaySettings.self) private var display
-    @Binding var path: [Route]
+    @Binding var selection: String?
     @State private var showingNewSession = false
     @State private var showingClipboard = false
     @State private var renameTarget: MobileSummarySession?
@@ -19,7 +19,7 @@ struct SessionListView: View {
     @State private var searchText = ""
 
     var body: some View {
-        List {
+        List(selection: $selection) {
             // 设备行只在真的有一台电脑时才画。它要说的是「你在看哪一台」，没有电脑
             // 的时候它无话可说，却会把下面那句「电脑不在线」再重复一遍 —— 同一屏里
             // 同一句话出现两次，读起来像是这个应用坏了。
@@ -125,6 +125,7 @@ struct SessionListView: View {
                 // marks the moment the choice is made.
                 Haptics.warning()
                 model.delete(session.id)
+                if selection == session.id { selection = nil }
             }
         } message: { _ in
             Text("会先停止会话，未完成的任务会中断。")
@@ -222,7 +223,7 @@ struct SessionListView: View {
     /// to a question the reader never asked.
     private func openNewlyCreated(_ sessionId: String) {
         display.setMode(.phoneDriven, for: sessionId)
-        path.append(.terminal(sessionId))
+        selection = sessionId
     }
 
     private var ungroupedSessions: [MobileSummarySession] {
@@ -267,8 +268,7 @@ struct SessionListView: View {
 
     /// The computer being viewed — and, when there is anywhere to go, the switch.
     ///
-    /// A `Menu` rather than a screen: the app's `Route` has one case on purpose, for
-    /// cross-tab deep links, and choosing between two or three computers does not
+    /// A `Menu` rather than a screen: choosing between two or three computers does not
     /// deserve a navigation stack. It is only a control when there is something to
     /// switch to, so the chevron and the tap target appear exactly when they mean
     /// something — including the case they exist for, a phone left on a computer that
@@ -287,6 +287,7 @@ struct SessionListView: View {
                         ForEach(model.desktopSwitchTargets) { desktop in
                             Button {
                                 Haptics.select()
+                                selection = nil
                                 model.selectDesktop(desktop.clientInstanceId)
                             } label: {
                                 Text(model.desktopName(desktop.clientInstanceId))
@@ -429,7 +430,7 @@ struct SessionRow: View {
     /// supplies the system's press highlight for free. A `.plain` button draws
     /// neither, so the row looked like static text even though it opened something.
     var body: some View {
-        NavigationLink(value: Route.terminal(session.id)) {
+        NavigationLink(value: session.id) {
             HStack(alignment: .top, spacing: 11) {
                 Circle()
                     .fill(Theme.statusColor(isWaiting: session.attention.isWaiting, isRunning: session.isRunning))
@@ -506,4 +507,3 @@ extension MobileSummarySession {
         lastLine.isEmpty ? " " : lastLine
     }
 }
-

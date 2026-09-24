@@ -1267,6 +1267,9 @@ final class SynapseAppModel {
 
     func closeTerminal(_ sessionId: String) {
         clearTerminalMessages(for: sessionId)
+        // Switching computers already detached and forgot the old sessions.
+        // Their views may disappear one frame later; never send that detach to the new computer.
+        guard openSessions.contains(sessionId) else { return }
         guard let desktop = selectedDesktopClientInstanceId else { return }
         send(MobileIntentRequest(intentId: UUID().uuidString, kind: "detach", sessionId: sessionId),
              to: desktop)

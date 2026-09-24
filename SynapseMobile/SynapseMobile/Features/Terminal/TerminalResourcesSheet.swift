@@ -34,9 +34,8 @@ struct TerminalResourcesSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .fullScreenCover(item: $opened) { resource in
+        .sheet(item: $opened) { resource in
             TerminalResourceBrowser(url: resource.url) { opened = nil }
-                .ignoresSafeArea()
         }
     }
 }

@@ -8,8 +8,8 @@ import SwiftUI
 /// 什么纪要和逐字稿，它就是直接就是显示一段文字」。
 struct MeetingDetailView: View {
     @Environment(SynapseAppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     let meetingId: String
+    let onDeleted: () -> Void
 
     @State private var isRenaming = false
     @State private var draftTitle = ""
@@ -43,7 +43,7 @@ struct MeetingDetailView: View {
                     await model.deleteMeeting(meetingId)
                     model.playback.forget(meetingId: meetingId)
                     // 行已经没了，这一屏也就没有可返回的地方——自己退出去。
-                    dismiss()
+                    onDeleted()
                 }
             }
             Button("取消", role: .cancel) {}
@@ -100,6 +100,8 @@ struct MeetingDetailView: View {
     private func content(_ detail: MeetingDetail) -> some View {
         VStack(spacing: 0) {
             header(detail)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
             Picker("", selection: viewModeBinding(detail)) {
                 Text("语音").tag(MeetingStore.ViewMode.audio)
                 Text("文字").tag(MeetingStore.ViewMode.text)
@@ -107,6 +109,8 @@ struct MeetingDetailView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
 
             switch model.meetings.viewMode {
             case .audio:
@@ -182,6 +186,7 @@ private struct MeetingAudioPane: View {
     let detail: MeetingDetail
     /// 载入满 10 秒才给出的那个出口。
     @State private var showRetry = false
+    @State private var waveformWidth: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 20) {
@@ -199,6 +204,8 @@ private struct MeetingAudioPane: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 24)
+        .frame(maxWidth: 720)
+        .frame(maxWidth: .infinity)
         .task { await model.loadMeetingAudio(detail) }
         // 计时挂在一个会变的 key 上：换一条录音、或者按下「重试」，都从这个数重新起算。
         // `.task` 在这一屏消失时取消它，不需要另外收尾。
@@ -260,14 +267,15 @@ private struct MeetingAudioPane: View {
             .surfaceCard()
             .opacity(model.playback.isLoading ? 0.4 : 1)
             .contentShape(Rectangle())
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                waveformWidth = width
+            }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        // 宽度在 gesture 里拿不到，所以用整条卡片的宽度折算。拖到哪儿
-                        // 播到哪儿，松手不回弹。
-                        let width = UIScreen.main.bounds.width - 56
-                        guard width > 0 else { return }
-                        model.playback.seek(toFraction: Double(value.location.x / width))
+                        // A resizable iPad window cannot use the device screen width.
+                        guard waveformWidth > 0 else { return }
+                        model.playback.seek(toFraction: Double(value.location.x / waveformWidth))
                     }
             )
             .accessibilityIdentifier("playback-waveform")
@@ -403,6 +411,8 @@ private struct MeetingTextPane: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 96)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
             }
             copyCapsule
         }

@@ -1,12 +1,6 @@
 import SwiftUI
 import UserNotifications
 
-enum Route: Hashable {
-    case terminal(String)
-    case meeting(String)
-    case message(String)
-}
-
 struct RootView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
@@ -14,10 +8,10 @@ struct RootView: View {
     /// 开关做了，这一处漏了。
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab = Tab.terminals
-    @State private var terminalPath: [Route] = []
-    @State private var meetingPath: [Route] = []
-    @State private var inboxPath: [Route] = []
-    @State private var settingsPath: [Route] = []
+    @State private var terminalSelection: String?
+    @State private var meetingSelection: String?
+    @State private var inboxSelection: String?
+    @State private var settingsSelection: SettingsCategory?
     @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
 
     private enum Tab: Hashable {
@@ -78,7 +72,16 @@ struct RootView: View {
                 openPendingWidgetTarget()
             }
         }
-        .onChange(of: model.authState) { _, _ in openPendingWidgetTarget() }
+        .onChange(of: model.authState) { _, state in
+            if state == .signedOut {
+                terminalSelection = nil
+                meetingSelection = nil
+                inboxSelection = nil
+                settingsSelection = nil
+                selectedTab = .terminals
+            }
+            openPendingWidgetTarget()
+        }
         .onChange(of: model.summary?.revision) { _, _ in openPendingWidgetTarget() }
         .onChange(of: model.hasLiveTerminalSummary) { _, _ in openPendingWidgetTarget() }
         .onChange(of: model.onlineDesktopIds) { _, _ in openPendingWidgetTarget() }
@@ -103,17 +106,15 @@ struct RootView: View {
         }
     }
 
-    /// 底栏点的是「回这一屏」，不是「切到这一屏」。
+    /// Re-selecting a tab returns to that feature's list at every window width.
     ///
-    /// `TabView` 自己不做这件事：点当前选中的那一项，`selectedTab` 没有变化，栈也不动，
-    /// 于是停在「消息」的通知详情里、停在某个终端会话里点底栏，看上去像没反应。要的是
-    /// 系统那种语义——再点一次当前项，把这一条栈整个弹掉，回到这一屏的根。
+    /// `TabView` does not clear a split-view selection when tapping the current tab.
     ///
     /// 重按没有「值变了」可以观察（`onChange` 收不到），唯一能收到这次点击的地方就是
     /// 这条绑定的 setter：系统照常把选中的那一项写回来，写的还是同一个值。所以值变了
     /// 就往 `selectedTab` 上落，值没变就是重按。
     ///
-    /// 从别的 Tab 切回来不算重按，栈照旧留着——换 Tab 保留原来的位置是系统本来的语义，
+    /// 从别的 Tab 切回来不算重按，选中项照旧留着——换 Tab 保留原来的位置是系统本来的语义，
     /// 和重按是两件事。
     private var tabSelection: Binding<Tab> {
         Binding(
@@ -130,57 +131,62 @@ struct RootView: View {
 
     private func popToRoot(_ tab: Tab) {
         switch tab {
-        case .terminals: terminalPath = []
-        case .meetings: meetingPath = []
-        case .inbox: inboxPath = []
-        case .settings: settingsPath = []
+        case .terminals: terminalSelection = nil
+        case .meetings: meetingSelection = nil
+        case .inbox: inboxSelection = nil
+        case .settings: settingsSelection = nil
         }
     }
 
     private var tabs: some View {
         TabView(selection: tabSelection) {
-            NavigationStack(path: $terminalPath) {
-                SessionListView(path: $terminalPath)
-                    .navigationDestination(for: Route.self, destination: destination)
+            AdaptiveFeatureNavigation(
+                selection: $terminalSelection,
+                emptyTitle: "选择会话",
+                emptySymbol: "terminal"
+            ) {
+                SessionListView(selection: $terminalSelection)
+            } detail: { sessionId in
+                TerminalScreen(sessionId: sessionId) { terminalSelection = nil }
             }
             .tabItem { Label("终端", systemImage: "terminal") }
             .tag(Tab.terminals)
 
-            NavigationStack(path: $meetingPath) {
-                MeetingListView()
-                    .navigationDestination(for: Route.self, destination: destination)
+            AdaptiveFeatureNavigation(
+                selection: $meetingSelection,
+                emptyTitle: "选择录音",
+                emptySymbol: "waveform"
+            ) {
+                MeetingListView(selection: $meetingSelection)
+            } detail: { meetingId in
+                MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
             }
             .tabItem { Label("录音", systemImage: "waveform") }
             .tag(Tab.meetings)
 
-            NavigationStack(path: $inboxPath) {
-                // 不把 path 交给它：这一屏的行都是 `NavigationLink`，自己就会往栈上
-                // 追加。`inboxPath` 仍然绑在栈上，因为消息推送要把人直接送进详情。
-                InboxView()
-                    .navigationDestination(for: Route.self, destination: destination)
+            AdaptiveFeatureNavigation(
+                selection: $inboxSelection,
+                emptyTitle: "选择消息",
+                emptySymbol: "bell"
+            ) {
+                InboxView(selection: $inboxSelection) { sessionId in
+                    selectedTab = .terminals
+                    terminalSelection = sessionId
+                }
+            } detail: { id in
+                NotificationDetailView(id: id)
             }
             .tabItem { Label("消息", systemImage: "bell") }
             .badge(model.notifications.unreadCount)
             .tag(Tab.inbox)
 
-            NavigationStack(path: $settingsPath) {
-                SettingsView()
+            AdaptiveSettingsView(selection: $settingsSelection) {
+                terminalSelection = nil
             }
             .tabItem { Label("我的", systemImage: "person") }
             .tag(Tab.settings)
         }
-    }
-
-    @ViewBuilder
-    private func destination(_ route: Route) -> some View {
-        switch route {
-        case .terminal(let sessionId):
-            TerminalScreen(sessionId: sessionId)
-        case .meeting(let meetingId):
-            MeetingDetailView(meetingId: meetingId)
-        case .message(let id):
-            NotificationDetailView(id: id)
-        }
+        .tabViewStyle(.sidebarAdaptable)
     }
 
     /// Sends a notification tap straight to the terminal that needs attention.
@@ -193,33 +199,33 @@ struct RootView: View {
             // another one instead is the behaviour the switch exists to remove.
             model.selectDesktop(desktopClientInstanceId)
             selectedTab = .terminals
-            // Only when that computer can actually open it. Pushing the terminal anyway
+            // Only when that computer can actually open it. Selecting the terminal anyway
             // would show a screen with nothing in it and nothing to say; the list, whose
             // device row is now the way to switch, says what happened and what to do.
             if !model.viewedDesktopIsOffline {
-                terminalPath = [.terminal(sessionId)]
+                terminalSelection = sessionId
             }
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
             selectedTab = .meetings
-            meetingPath = [.meeting(meetingId)]
+            meetingSelection = meetingId
         case .message(let id):
             selectedTab = .inbox
             Task {
                 await model.reloadNotifications()
-                inboxPath = [.message(id)]
+                inboxSelection = id
             }
         case .newRecording:
             // 主屏长按图标那一条。先把人带到录音 Tab，再让录音页自己浮出来——否则
             // 用户看到的是一片别的界面盖着一张录音页，退出之后不知道自己回到了哪。
             selectedTab = .meetings
-            meetingPath = []
+            meetingSelection = nil
             model.isRecordingPresented = true
         case .liveRecording:
             // 锁屏那张卡。同样先落到录音 Tab，但**只在真的在录的时候**才把录音页浮
             // 出来：起新录音是 `.newRecording` 的事，这里只负责把人带到那一条跟前。
             selectedTab = .meetings
-            meetingPath = []
+            meetingSelection = nil
             if model.recording.isRecording {
                 model.isRecordingPresented = true
             } else {
@@ -234,7 +240,7 @@ struct RootView: View {
     private func openPendingWidgetTarget() {
         guard model.authState == .signedIn, let target = pendingWidgetTarget else { return }
         selectedTab = .terminals
-        terminalPath = []
+        terminalSelection = nil
         guard let desktopId = target.desktopId else {
             pendingWidgetTarget = nil
             return
@@ -254,7 +260,7 @@ struct RootView: View {
               let summary = model.summary,
               summary.desktopClientInstanceId == desktopId else { return }
         if summary.sessions.contains(where: { $0.id == sessionId }) {
-            terminalPath = [.terminal(sessionId)]
+            terminalSelection = sessionId
         }
         pendingWidgetTarget = nil
     }

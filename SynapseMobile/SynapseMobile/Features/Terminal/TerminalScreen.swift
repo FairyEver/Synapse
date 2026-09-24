@@ -6,19 +6,17 @@ import UIKit
 struct TerminalScreen: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(TerminalDisplaySettings.self) private var display
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// 「减弱动态效果」。录音面板浮上来那一下听它的：开着就只淡入，不做位移。
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// 屏幕是矮的那一种：iPhone 横屏。三条栏压成两条、键盘面板限高，都看它。
-    ///
-    /// 竖屏的 iPhone 与 iPad 都是 `.regular`，所以 iPad 一个字都不用改 —— 那条
-    /// 「iPad 不专门适配」的口径还立着。
+    /// Compact height keeps the terminal controls reachable in a short window.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// `verticalSizeClass` 的镜像，见 `isCompactHeight`。
     @State private var compactHeight = false
 
     let sessionId: String
+    let onClose: () -> Void
     @State private var draft = ""
     /// Follows the density in force for this session rather than being held as view
     /// state: it is a setting, and a copy here is how the two drift apart.
@@ -262,7 +260,7 @@ struct TerminalScreen: View {
 
     // MARK: - 三条栏的收放
 
-    /// 屏幕是矮的那一种。竖屏 iPhone 与 iPad 都是 `.regular`，所以这一条只对横屏成立。
+    /// The current window's height class, including an iPad window after resizing.
     ///
     /// **读的是镜像（`compactHeight`），不是环境本身。** 环境值在**定时任务里读不出当下**：
     /// `armChromeIdle` 起的那班岗捕获的是"上表那一刻"的视图值，而 `@Environment` 在捕获的
@@ -270,6 +268,8 @@ struct TerminalScreen: View {
     /// 前后上表，快照里还是竖屏，到点一读，结论就成了「竖屏不收栏」—— 表现是**横屏永远
     /// 不收栏**。镜像在环境变化时跟着更新，谁读它读到的都是当下。
     private var isCompactHeight: Bool { compactHeight }
+
+    private var usesSystemNavigationBar: Bool { horizontalSizeClass == .regular }
 
     /// 键盘面板把工具栏和输入栏顶掉了。
     ///
@@ -587,16 +587,22 @@ struct TerminalScreen: View {
         // here pins the colour scheme: a scene-level pin is inherited by the
         // screen that comes next, which is what made leaving the terminal flash
         // from dark to light.
-        .navigationBarBackButtonHidden(true)
+        .navigationTitle(session?.title ?? "会话")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(!usesSystemNavigationBar)
         // Hiding the navigation bar is what disables the system's edge-swipe back
         // gesture, so restoring it takes the gesture recogniser behind the bar —
         // a different mechanism from a view's own preferences, which the status
         // bar experiment showed are not forwarded.
         .background(InteractivePopGesture())
-        .toolbar(.hidden, for: .navigationBar)
-        // The terminal is the screen; a tab bar over a soft keyboard only
-        // costs vertical space and invites taps by accident.
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(usesSystemNavigationBar ? .visible : .hidden, for: .navigationBar)
+        // The phone keeps its immersive terminal, while a wide detail retains the tabs.
+        .toolbar(usesSystemNavigationBar ? .visible : .hidden, for: .tabBar)
+        .toolbar {
+            if usesSystemNavigationBar {
+                ToolbarItem(placement: .topBarTrailing) { moreMenu }
+            }
+        }
         .onAppear {
             model.openTerminal(sessionId)
             // 进终端这一条是后面所有终端记录的基线：没有它，那些 offset 与 inset
@@ -687,7 +693,7 @@ struct TerminalScreen: View {
         // 判据只能是「列表里没有」，不能是「不是运行中」：刚建出来的终端是先跳进来
         // 再等下一份列表的，那一瞬间它也「不是运行中」。
         .onChange(of: sessionIsGone) { _, gone in
-            if gone { dismiss() }
+            if gone { onClose() }
         }
         .onChange(of: voice.phase) { _, phase in
             // 录音中途断网、或者来电把这次录音打断：手指可能还按着，但这次已经录不
@@ -801,8 +807,9 @@ struct TerminalScreen: View {
             // the reader copies an item and sees nothing at all.
             .noticeOverlay(model)
         }
-        .sheet(isPresented: $resourcesPresented) {
+        .inspector(isPresented: $resourcesPresented) {
             TerminalResourcesSheet(store: store)
+                .inspectorColumnWidth(min: 280, ideal: 360, max: 440)
         }
         .sheet(item: $gitFlow) { flow in
             TerminalGitPanel(flow: flow)
@@ -1016,10 +1023,12 @@ struct TerminalScreen: View {
 
     // MARK: - Bars
 
-    /// 顶栏：竖屏是一条自己的行，横屏并进工具栏。
+    /// Compact windows keep the phone bars; a wide detail uses system navigation.
     @ViewBuilder
     private var topChrome: some View {
-        if isCompactHeight { compactBar } else { navigationBar }
+        if !usesSystemNavigationBar {
+            if isCompactHeight { compactBar } else { navigationBar }
+        }
     }
 
     private var navigationBar: some View {
@@ -1072,7 +1081,7 @@ struct TerminalScreen: View {
 
     private var backButton: some View {
         Button {
-            dismiss()
+            onClose()
         } label: {
             Image(systemName: "chevron.left")
                 .font(.system(size: 17, weight: .semibold))
