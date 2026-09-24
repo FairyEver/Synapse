@@ -176,6 +176,8 @@ export function buildSnapshotFrames(input: SnapshotFrameInput): MobileTerminalFr
 export function toLineWire(input: TerminalStyledLine): MobileLineWire {
   const text = truncateToBytes(input.text, MAX_LINE_WIRE_BYTES)
   const runs = toRunWire(input.runs, text.length)
+  const wrapFlags = (input.wrappedFromPrevious ? 1 : 0) | (input.wrappedToNext ? 2 : 0)
+  if (wrapFlags !== 0) return [text, runs ?? [], wrapFlags]
   return runs ? [text, runs] : [text]
 }
 
@@ -224,6 +226,7 @@ export function toWireColor(value: number): number {
 
 function lineCostBytes(wire: MobileLineWire): number {
   let cost = Buffer.byteLength(wire[0], "utf8") + LINE_WIRE_OVERHEAD_BYTES
+  if (wire.length === 3) cost += 5
   const runs = wire[1]
   if (runs) cost += runs.length * RUN_WIRE_OVERHEAD_BYTES
   return cost

@@ -200,6 +200,9 @@ describe("mobile live protocol", () => {
 
   it("accepts compact lines with and without style runs", () => {
     expect(isMobileTerminalFrame(frame({ lines: [["plain"], ["styled", [[0, 6, 2, -1, 1]]]] }))).toBe(true)
+    expect(isMobileTerminalFrame(frame({ lines: [["start", [], 2], ["end", [], 1]] }))).toBe(true)
+    expect(isMobileTerminalFrame(frame({ lines: [["bad", [], 4]] as unknown as MobileTerminalFrame["lines"] })))
+      .toBe(false)
   })
 
   it("rejects malformed frames", () => {

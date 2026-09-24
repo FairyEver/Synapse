@@ -113,10 +113,14 @@
 	<!--
 	  Narrow transport exception, not a blanket one: it permits cleartext only to
 	  hosts on the local network, which is what the simulator and a LAN development
-	  server need. Everything remote still requires TLS.
+	  server need. Remote API requests still require TLS.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<!-- Remote terminal output may contain arbitrary user-selected HTTP pages.
+		     This exception is confined to WKWebView; API requests still require TLS. -->
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>

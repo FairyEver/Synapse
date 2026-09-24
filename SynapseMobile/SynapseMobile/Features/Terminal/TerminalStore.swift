@@ -31,6 +31,8 @@ final class TerminalStore {
     /// Rows the collection view renders. Stable ids let the diffable data source
     /// tell an append from a rewrite without comparing text.
     private(set) var rows: [DisplayRow] = []
+    private(set) var resources: [TerminalResource] = []
+    private var resourceCollector = TerminalResourceCollector()
 
     /// Where the terminal's cursor sits on the rows this store renders.
     ///
@@ -121,6 +123,8 @@ final class TerminalStore {
     }
 
     func reset() {
+        resourceCollector = TerminalResourceCollector()
+        resources = []
         lines.removeAll()
         rows.removeAll()
         rowOffsetByLine.removeAll()
@@ -166,6 +170,7 @@ final class TerminalStore {
     func apply(_ frame: MobileTerminalFrame) {
         if frame.isHistory {
             applyHistory(frame)
+            collectResources(in: frame)
             renderRevision += 1
             return
         }
@@ -218,11 +223,21 @@ final class TerminalStore {
             highestLineIndex = voidFrom - 1
         }
 
+        collectResources(in: frame)
         rewrap(from: frame.from)
         trimToLimit()
         lastCursor = frame.cursor
         refreshCursorPosition()
         renderRevision += 1
+    }
+
+    func setResourceKind(_ kind: TerminalResource.Kind, for url: URL) {
+        resourceCollector.setKind(kind, for: url)
+        resources = resourceCollector.resources
+    }
+
+    private func collectResources(in frame: MobileTerminalFrame) {
+        if resourceCollector.accept(frame, lines: lines) { resources = resourceCollector.resources }
     }
 
     /// Cells one character occupies on the desktop's grid.

@@ -332,12 +332,16 @@ struct StyleRun: Hashable, Sendable {
 struct TerminalLine: Decodable {
     let text: String
     let runs: [StyleRun]
+    let wrapFlags: Int
+    var wrappedFromPrevious: Bool { wrapFlags & 1 != 0 }
+    var wrappedToNext: Bool { wrapFlags & 2 != 0 }
 
     init(from decoder: Decoder) throws {
         var container = try decoder.unkeyedContainer()
         text = (try? container.decode(String.self)) ?? ""
         if container.isAtEnd {
             runs = []
+            wrapFlags = 0
             return
         }
         let rawRuns = (try? container.decode([[Int]].self)) ?? []
@@ -351,6 +355,7 @@ struct TerminalLine: Decodable {
                 flags: values[4]
             )
         }
+        wrapFlags = (try? container.decode(Int.self)) ?? 0
     }
 }
 

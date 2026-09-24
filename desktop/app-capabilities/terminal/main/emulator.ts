@@ -36,6 +36,10 @@ export type TerminalStyledRun = {
 
 export type TerminalStyledLine = {
   readonly text: string
+  /** This physical row continues the preceding row in xterm's buffer. */
+  readonly wrappedFromPrevious?: true
+  /** The following physical row continues this one. */
+  readonly wrappedToNext?: true
   /** Absent when the whole line uses default styling, which is the common case. */
   readonly runs?: readonly TerminalStyledRun[]
 }
@@ -260,7 +264,7 @@ export function createTerminalCoreEmulator(input: {
     // wants one at all is this one, and it comes from the tracked DECTCEM state
     // rather than being assumed.
     for (let index = startIndex; index < totalLines; index += 1) {
-      lines.push(readStyledLine(buffer.getLine(index), scratch))
+      lines.push(readStyledLine(buffer.getLine(index), scratch, buffer.getLine(index + 1)?.isWrapped === true))
     }
     return {
       lines,
@@ -295,7 +299,7 @@ export function createTerminalCoreEmulator(input: {
     const scratch = buffer.getNullCell()
     const lines: TerminalStyledLine[] = []
     for (let index = startIndex; index < end; index += 1) {
-      lines.push(readStyledLine(buffer.getLine(index), scratch))
+      lines.push(readStyledLine(buffer.getLine(index), scratch, buffer.getLine(index + 1)?.isWrapped === true))
     }
     return { lines, startIndex }
   }
@@ -369,10 +373,19 @@ export function createTerminalCoreEmulator(input: {
   }
 }
 
-function readStyledLine(line: TerminalBufferLine | undefined, scratch: TerminalBufferCell): TerminalStyledLine {
+function readStyledLine(
+  line: TerminalBufferLine | undefined,
+  scratch: TerminalBufferCell,
+  wrappedToNext = false,
+): TerminalStyledLine {
   if (!line) return { text: "" }
+  const wrappedFromPrevious = line.isWrapped ? true as const : undefined
+  const wrap = {
+    ...(wrappedFromPrevious && { wrappedFromPrevious }),
+    ...(wrappedToNext && { wrappedToNext: true as const }),
+  }
   const end = trimmedCellCount(line, scratch)
-  if (end === 0) return { text: "" }
+  if (end === 0) return { text: "", ...wrap }
 
   let text = ""
   const runs: TerminalStyledRun[] = []
@@ -455,7 +468,7 @@ function readStyledLine(line: TerminalBufferLine | undefined, scratch: TerminalB
     text += chars
   }
   closeRun(text.length)
-  return runs.length > 0 ? { text, runs } : { text }
+  return runs.length > 0 ? { text, runs, ...wrap } : { text, ...wrap }
 }
 
 /**

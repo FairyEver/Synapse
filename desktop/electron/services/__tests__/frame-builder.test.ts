@@ -59,6 +59,18 @@ describe("terminal frame builder", () => {
     ])
   })
 
+  it("carries soft-wrap direction without changing plain line tuples", () => {
+    expect(toLineWire({ text: "https://example.com/", wrappedToNext: true })).toEqual([
+      "https://example.com/", [], 2,
+    ])
+    expect(toLineWire({ text: "path", wrappedFromPrevious: true })).toEqual(["path", [], 1])
+    expect(isMobileTerminalFrame(buildTerminalFrames({
+      ...base,
+      lines: [{ text: "a", wrappedToNext: true }, { text: "b", wrappedFromPrevious: true }],
+      total: 2,
+    })[0])).toBe(true)
+  })
+
   it("packs attributes into the flag bitfield", () => {
     expect(toWireFlags({
       start: 0,

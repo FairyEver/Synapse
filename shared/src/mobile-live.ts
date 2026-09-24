@@ -392,8 +392,13 @@ export const MOBILE_MESSAGE_TYPES = {
 /**
  * Compact line encoding. `runs` is omitted entirely for unstyled lines, which is
  * the overwhelming majority of log output and roughly halves the payload.
+ * Optional `wrapFlags`: bit 0 continues the previous physical row, bit 1
+ * continues into the next row. A wrapped unstyled row carries empty runs.
  */
-export type MobileLineWire = readonly [text: string] | readonly [text: string, runs: readonly MobileRunWire[]]
+export type MobileLineWire =
+  | readonly [text: string]
+  | readonly [text: string, runs: readonly MobileRunWire[]]
+  | readonly [text: string, runs: readonly MobileRunWire[], wrapFlags: number]
 
 /**
  * `[startOffset, length, foreground, background, flags]`.
@@ -1721,12 +1726,13 @@ function isCursor(value: unknown): value is MobileTerminalCursor {
 }
 
 function isLineWire(value: unknown): value is MobileLineWire {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 2) return false
+  if (!Array.isArray(value) || value.length === 0 || value.length > 3) return false
   if (typeof value[0] !== "string" || value[0].length > MOBILE_FRAME_LIMITS.maxLineLength) return false
   if (value.length === 1) return true
   const runs = value[1]
   if (!boundedArray(runs, MOBILE_FRAME_LIMITS.maxRunsPerLine)) return false
-  return (runs as readonly unknown[]).every(isRunWire)
+  return (runs as readonly unknown[]).every(isRunWire) &&
+    (value.length === 2 || (Number.isInteger(value[2]) && value[2] >= 1 && value[2] <= 3))
 }
 
 function isRunWire(value: unknown): value is MobileRunWire {
