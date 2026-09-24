@@ -22,7 +22,7 @@
         <button id="nextOutput" type="button" class="rounded-lg bg-neutral-950 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 dark:focus-visible:outline-white">下一段输出</button>
         <button id="playOutput" type="button" class="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100">播放全部</button>
         <button id="resetDemo" type="button" class="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:focus-visible:outline-neutral-100">重置</button>
-        <span id="progress" class="ml-auto text-xs text-neutral-600 dark:text-neutral-300" aria-live="polite">0 / 9</span>
+        <span id="progress" class="ml-auto text-xs text-neutral-600 dark:text-neutral-300" aria-live="polite">0 / 10</span>
       </div>
 
       <div class="relative flex aspect-[390/844] w-full max-w-sm flex-col overflow-hidden rounded-3xl border border-neutral-300 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100" aria-label="Synapse Remote 终端">
@@ -116,29 +116,31 @@
   </main>
 
   <script>
-    const resources = [
-      { id: 'document', kind: 'web', type: '文档分享', icon: '▤', name: '2026 年跨设备协作与远程终端资源交付说明（评审稿）.md', url: 'https://synapse.d2.pub/share/shr_demo_doc?source=remote-terminal&review=2026-09-24' },
-      { id: 'folder', kind: 'web', type: '文件夹分享', icon: '▣', name: '项目交付资料', url: 'https://synapse.d2.pub/share/shr_demo_folder' },
-      { id: 'site', kind: 'web', type: '站点', icon: '◎', name: '交互演示站点', url: 'https://synapse.d2.pub/sites/site_demo_resource/' },
-      { id: 'image', kind: 'image', type: '图床图片', icon: '▧', name: 'synapse-icon.png', url: 'https://synapse.d2.pub/files/asset_demo_icon' },
-      { id: 'file', kind: 'file', type: '公开文件 · 下载', icon: '▤', name: '项目简报.pdf', url: 'https://synapse.d2.pub/files/asset_demo_pdf', download: true },
-      { id: 'externalImage', kind: 'image', type: '图片', icon: '▧', name: 'claude-code-icon.png', url: 'https://images.example.org/assets/claude-code-icon.png?width=1200' },
-      { id: 'externalFile', kind: 'file', type: '文件链接', icon: '▤', name: 'guide.pdf', url: 'https://files.example.org/guide.pdf' }
+    const samples = [
+      { id: 'document', name: '2026 年跨设备协作与远程终端资源交付说明（评审稿）.md', url: 'https://synapse.d2.pub/share/shr_demo_doc?source=remote-terminal&review=2026-09-24', response: { contentType: 'text/html', contentDisposition: 'inline', canShowMimeType: true }, preview: 'document' },
+      { id: 'folder', name: '项目交付资料', url: 'https://synapse.d2.pub/share/shr_demo_folder', response: { contentType: 'text/html', contentDisposition: 'inline', canShowMimeType: true }, preview: 'folder' },
+      { id: 'site', name: '交互演示站点', url: 'https://synapse.d2.pub/sites/site_demo_resource/', response: { contentType: 'text/html', contentDisposition: 'inline', canShowMimeType: true }, preview: 'site' },
+      { id: 'image', name: 'synapse-icon.png', url: 'https://synapse.d2.pub/files/asset_demo_icon', response: { contentType: 'image/png', contentDisposition: 'inline', canShowMimeType: true }, preview: 'image' },
+      { id: 'file', name: '项目简报.pdf', url: 'https://synapse.d2.pub/files/asset_demo_pdf', response: { contentType: 'application/pdf', contentDisposition: 'attachment', canShowMimeType: true } },
+      { id: 'externalImagePage', name: 'photo.png', url: 'https://images.example.org/b/c/photo.png', response: { contentType: 'text/html', contentDisposition: 'inline', canShowMimeType: true }, preview: 'externalWeb' },
+      { id: 'externalFile', name: 'guide.pdf', url: 'https://files.example.org/guide.pdf', response: { contentType: 'application/pdf', contentDisposition: 'inline', canShowMimeType: true }, preview: 'externalWeb' },
+      { id: 'downloadedImage', name: 'claude-code-icon.png', url: 'https://cdn.example.org/assets/asset?id=123', response: { contentType: 'image/png', contentDisposition: 'attachment', canShowMimeType: false }, preview: 'externalImage' }
     ];
     const externalHttps = 'https://www.example.org/articles/remote-work?mode=full';
     const externalHttp = 'http://legacy.example.org/help';
     const output = [
-      `已创建文档：${resources[0].name}\n分享链接：${resources[0].url}`,
+      `已创建文档：${samples[0].name}\n分享链接：${samples[0].url}`,
       `参考网页：${externalHttps}\n旧版说明：${externalHttp}`,
-      `外部图片：${resources[5].url}`,
-      `已整理文件夹：${resources[1].name}\n分享链接：${resources[1].url}`,
-      `站点已发布：${resources[2].name}\n站点地址：${resources[2].url}`,
-      `图片已上传到图床：${resources[3].name}\n图片地址：${resources[3].url}`,
-      `外部文件：${resources[6].url}`,
-      `公开文件已上传：${resources[4].name}\n文件地址：${resources[4].url}`,
-      `重复链接：${resources[0].url}。 ${externalHttp}`
+      `外部地址：${samples[5].url}`,
+      `已整理文件夹：${samples[1].name}\n分享链接：${samples[1].url}`,
+      `站点已发布：${samples[2].name}\n站点地址：${samples[2].url}`,
+      `图片已上传到图床：${samples[3].name}\n图片地址：${samples[3].url}`,
+      `外部图片地址：${samples[7].url}`,
+      `外部文件：${samples[6].url}`,
+      `公开文件已上传：${samples[4].name}\n文件地址：${samples[4].url}`,
+      `重复链接：${samples[0].url}。 ${externalHttp}`
     ];
-    const byUrl = new Map(resources.map(resource => [resource.url, resource]));
+    const sampleByUrl = new Map(samples.map(sample => [sample.url, sample]));
     const detected = new Set();
     const initialTerminal = document.querySelector('#terminalLog').innerHTML;
     const sheet = document.querySelector('#resourceSheet');
@@ -160,34 +162,41 @@
       document.querySelector('#playOutput').disabled = outputIndex === output.length;
     }
 
-    function isSynapseHost(hostname) {
-      return hostname === 'synapse.d2.pub' || hostname.endsWith('.synapse.d2.pub');
+    function describeResource(url) {
+      const sample = sampleByUrl.get(url.href);
+      return { id: sample?.id ?? 'generic', name: sample?.name ?? url.hostname, url: url.href, response: sample?.response, preview: sample?.preview };
     }
 
-    function describeResource(url) {
-      const known = byUrl.get(url.href);
-      if (known) return known;
-      const isSynapse = isSynapseHost(url.hostname);
-      const encodedFilename = url.pathname.split('/').pop() || '';
-      let filename;
-      try { filename = decodeURIComponent(encodedFilename); } catch { filename = encodedFilename; }
-      const isImage = /\.(?:png|jpe?g|gif|webp|avif|svg|heic)$/i.test(url.pathname);
-      const isFile = /\.(?:pdf|zip|docx?|xlsx?|pptx?|txt)$/i.test(url.pathname);
-      const kind = isImage ? 'image' : isFile ? 'file' : 'web';
-      const type = isSynapse && url.pathname.startsWith('/share/') ? '分享链接'
-        : isSynapse && url.pathname.startsWith('/sites/') ? '站点'
-        : isSynapse && url.pathname.startsWith('/files/') ? '资源链接'
-        : kind === 'image' ? '图片' : kind === 'file' ? '文件链接' : '网页';
-      return { id: 'generic', kind, type, icon: kind === 'image' ? '▧' : kind === 'file' ? '▤' : '◎', name: kind === 'web' ? url.hostname : filename || url.hostname, url: url.href };
+    function classifyResponse(response) {
+      const contentType = response.contentType?.split(';')[0].trim().toLowerCase() ?? '';
+      const disposition = response.contentDisposition?.split(';')[0].trim().toLowerCase();
+      if (disposition === 'attachment') return contentType.startsWith('image/') ? 'imageDownload' : 'fileDownload';
+      if (response.canShowMimeType) return 'web';
+      return contentType.startsWith('image/') ? 'imageDownload' : 'fileDownload';
+    }
+
+    function openDetectedResource(resource, row) {
+      // The HTML demo supplies a mock response. The iOS implementation decides from the actual navigation response.
+      const response = resource.response ?? { contentType: 'text/html', contentDisposition: 'inline', canShowMimeType: true };
+      resource.handling = classifyResponse(response);
+      const contentType = response.contentType?.split(';')[0].trim().toLowerCase() ?? '';
+      const label = resource.handling === 'imageDownload' ? '图片 · 已下载'
+        : resource.handling === 'fileDownload' ? '文件 · 下载'
+        : contentType.startsWith('image/') ? '图片 · 网页显示'
+        : contentType === 'application/pdf' ? '文件 · 网页显示' : '网页';
+      row.querySelector('[data-row-type]').textContent = label;
+      row.querySelector('[data-row-icon]').textContent = resource.handling === 'imageDownload' ? '▧' : resource.handling === 'fileDownload' ? '▤' : '◎';
+      if (resource.handling === 'fileDownload') openDetail(resource);
+      else openPreview(resource);
     }
 
     function addResourceRow(resource) {
       const row = document.querySelector('#resourceRowTemplate').content.firstElementChild.cloneNode(true);
-      row.querySelector('[data-row-icon]').textContent = resource.icon;
+      row.querySelector('[data-row-icon]').textContent = '◎';
       row.querySelector('[data-row-name]').textContent = resource.name;
-      row.querySelector('[data-row-type]').textContent = `${isSynapseHost(new URL(resource.url).hostname) ? 'Synapse · ' : ''}${resource.type}`;
+      row.querySelector('[data-row-type]').textContent = '链接';
       row.querySelector('[data-row-url]').textContent = resource.url;
-      row.querySelector('button').addEventListener('click', () => resource.kind === 'file' ? openDetail(resource) : openPreview(resource));
+      row.querySelector('button').addEventListener('click', () => openDetectedResource(resource, row));
       document.querySelector('#resourceList').prepend(row);
     }
 
@@ -227,7 +236,7 @@
       document.querySelector('#shareButton').hidden = nextView === 'list';
       document.querySelector('#sheetClose').hidden = nextView !== 'list';
       document.querySelector('#sheetGrabber').hidden = nextView !== 'list';
-      document.querySelector('#sheetTitle').textContent = nextView === 'list' ? '会话资源' : nextView === 'detail' ? '文件' : selected?.kind === 'image' ? '图片预览' : '网页';
+      document.querySelector('#sheetTitle').textContent = nextView === 'list' ? '会话资源' : selected?.handling === 'imageDownload' ? '图片预览' : selected?.handling === 'fileDownload' ? '文件' : '网页';
       sheet.classList.remove('h-1/2', 'h-[90%]', 'h-full');
       sheet.classList.add(nextView === 'list' ? (expanded ? 'h-[90%]' : 'h-1/2') : 'h-full');
       if (nextView !== 'list') document.querySelector('#sheetBack').focus();
@@ -252,19 +261,19 @@
 
     function openDetail(resource) {
       selected = resource;
-      document.querySelector('#detailIcon').textContent = resource.icon;
+      document.querySelector('#detailIcon').textContent = '▤';
       document.querySelector('#detailName').textContent = resource.name;
-      document.querySelector('#detailType').textContent = resource.type;
+      document.querySelector('#detailType').textContent = '文件 · 下载';
       document.querySelector('#detailUrl').textContent = resource.url;
       document.querySelector('#copyLink').textContent = '复制链接';
-      document.querySelector('#openResource').textContent = resource.download ? '下载文件' : '打开文件';
+      document.querySelector('#openResource').textContent = '下载文件';
       showView('detail');
     }
 
     function openPreview(resource) {
       selected = resource;
       document.querySelector('#previewAddress').textContent = selected.url;
-      const previewKind = ['document', 'folder', 'site', 'image', 'externalImage'].includes(resource.id) ? resource.id : resource.kind === 'image' ? 'externalImage' : 'externalWeb';
+      const previewKind = resource.preview ?? (resource.handling === 'imageDownload' ? 'externalImage' : 'externalWeb');
       for (const preview of document.querySelectorAll('[data-preview]')) preview.hidden = preview.dataset.preview !== previewKind;
       if (previewKind === 'externalWeb') {
         const url = new URL(resource.url);
@@ -272,7 +281,7 @@
         document.querySelector('#externalWebPath').textContent = `${url.pathname}${url.search}`;
       }
       if (previewKind === 'externalImage') {
-        const hasMock = resource.id === 'externalImage';
+        const hasMock = resource.id === 'downloadedImage';
         document.querySelector('#externalImageAsset').hidden = !hasMock;
         document.querySelector('#externalImageUnavailable').hidden = hasMock;
         document.querySelector('#externalImageName').textContent = resource.name;
@@ -370,8 +379,8 @@
     document.querySelector('#shareBackdrop').addEventListener('click', closeShareSheet);
     document.querySelector('#openResource').addEventListener('click', event => {
       const button = event.currentTarget;
-      button.textContent = selected.download ? '已发起下载' : '已打开文件';
-      setTimeout(() => { button.textContent = selected.download ? '下载文件' : '打开文件'; }, 1500);
+      button.textContent = '已发起下载';
+      setTimeout(() => { button.textContent = '下载文件'; }, 1500);
     });
     document.querySelector('#themeToggle').addEventListener('click', () => {
       const dark = document.documentElement.classList.toggle('dark');
