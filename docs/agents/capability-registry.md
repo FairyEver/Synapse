@@ -13,7 +13,7 @@
 | MCP Capability / Tool | capability catalog、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
 | Extension Capability | 扩展贡献，通过 `extend.capabilities` ExtensionPoint 注册 | `desktop/extensions/shared/registry.ts` |
 | MCP 公开工具表面 | `tools/list` 载荷、`initialize` instructions | `desktop/electron/services/agent-runtime/synapse-tool-router.ts` |
-| Deep Link | 默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
+| Deep Link | 桌面端默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host。iOS 客户端路由独立计数 | 桌面：`desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts`；iOS：`SynapseMobile/SynapseMobile/Features/Root/RootView.swift` |
 
 Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `synapse://portal-headless-test/callback` 直接交给可信主进程。独立 `extend` domain 新增 1 个 capability / MCP 索引工具：`extend.portal-headless.credential.get` / `extend_portal_headless_credential_get`，仅允许 MCP 来源；不新增 System App、Dock、Workflow、Automation 或 Deep Link。系统 Skill 指南位于 `skill-package/extend/portal-headless/`，引导 AI 携带短期 SY 授权与 Portal 凭证直连 `/api/extend/portal-headless/*`。该测试 HTTP 扩展发布固定 SDK 的完整读写目录，但不改变 Synapse MCP capability/tool 数量；连接器凭据不属于 Secrets MCP 数据，正式环境尚未注册。
 
@@ -22,6 +22,8 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 账号消息中心是桌面全局壳层面板与 iOS「消息」Tab，未注册新的 System App、Dock、Workflow、Automation、MCP 或 Deep Link；下表数量不变。System Notifier 的既有能力在用户已登录且在线时同步正式触发内容到消息中心，测试通知仍仅本机显示。
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
+
+下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 2 条路由：`synapse://recording` 和 `synapse://terminal?desktop=<id>&session=<id>`；后者的 `desktop` / `session` 可省略，用于主屏幕组件进入终端列表或会话。它只解析当前仍在线且在实时摘要中存在的会话；会话已结束时回到列表，不承诺跨重启恢复。两条路由均由 iOS App 本地处理，桌面端不注册对应 action。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
@@ -64,7 +66,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
 - Terminal 的 49 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
 - Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 49。
-- Terminal 不注册任何 Deep Link：会话不跨重启（ADR 0215），带会话的链接在下一次启动时必然失效，所以没有可交付的链接形态。会话定位由 `app.terminal.session.open` 承担，只接受不可变 `sessionId` 并复用既有 System App 打开请求定位 workspace/pane；界面里的「复制引用」只产出纯文本的五行 `key=value`——`workspace_id` / `workspace_title` / `session_id` / `session_title` / `session_ref`，其中两个 title 是给人认出「这是哪一格」用的，不注册协议路由、不读取输出，也不新增应用页、Dock、Workflow 或 Automation 表面。
+- 桌面端 Terminal 不注册任何 Deep Link：会话不跨重启（ADR 0215），带会话的链接在下一次启动时必然失效，所以没有可交付的桌面端链接形态。会话定位由 `app.terminal.session.open` 承担，只接受不可变 `sessionId` 并复用既有 System App 打开请求定位 workspace/pane；界面里的「复制引用」只产出纯文本的五行 `key=value`——`workspace_id` / `workspace_title` / `session_id` / `session_title` / `session_ref`，其中两个 title 是给人认出「这是哪一格」用的，不注册桌面端协议路由、不读取输出，也不新增应用页、Dock、Workflow 或 Automation 表面。iOS 主屏幕组件的本地跳转见上方客户端路由说明。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
 - Terminal 项目分组的加号在按住 ⌘（Windows/Linux 为 Ctrl）时反过来复用 Agent 的 UI IPC，在项目目录里启动内置 Claude Code；它与 Agent 侧栏项目行上的同一个手势共用同一份渲染进程启动代码与默认模型解析，普通分组和普通点击不受影响。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
 - 手机端可通过 mobile gateway 新增的 `createAgentConversation` 意图，让电脑在自己的某个项目目录里启动内置 Claude Code，并把它作为普通终端会话回给手机；供应商凭据仍只在主进程读取与使用，手机不接触任何密钥。`mobile.summary` 随之多出两个可选区块——项目目录与供应商摘要（只含 id、名称、是否电脑默认、档位与四个档位解析后的模型名，不含 `baseUrl` 或任何凭据字段）——它们复用 `app.agent.group.list` 背后的同一份项目列表，不新增选项目录。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。

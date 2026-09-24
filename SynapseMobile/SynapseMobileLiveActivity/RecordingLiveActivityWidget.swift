@@ -3,15 +3,12 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// 录音住进系统的那一层。
-///
-/// 这里只画系统模板：计时、一枚停止键、一颗表明「在录」的红点。没有主屏 Widget，也没有
-/// 可配置项——扩展 target 是灵动岛、锁屏实时活动和控制中心控件唯一能待的地方，不是一处
-/// 顺带加东西的地方。
+/// System surfaces for recording and remote terminals share one WidgetKit extension.
 @main
-struct SynapseRecordingWidgetBundle: WidgetBundle {
+struct SynapseWidgetBundle: WidgetBundle {
     var body: some Widget {
         RecordingLiveActivityWidget()
+        TerminalHomeWidget()
         if #available(iOS 18.0, *) {
             RecordingControlWidget()
         }

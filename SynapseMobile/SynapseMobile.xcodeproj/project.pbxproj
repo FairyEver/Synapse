@@ -68,6 +68,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				SynapseMobileLiveActivity.entitlements,
 			);
 			target = B6D9FB0100000000000000A5 /* SynapseMobileLiveActivity */;
 		};
@@ -103,6 +104,11 @@
 		B6D9FB0100000000000000A3 /* SynapseMobileRecordingActivity */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SynapseMobileRecordingActivity;
+			sourceTree = "<group>";
+		};
+		B6D9FB0100000000000000C1 /* SynapseMobileTerminalWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SynapseMobileTerminalWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -144,6 +150,7 @@
 			children = (
 				B6D9EFE8305995CC003DF0A5 /* SynapseMobile */,
 				B6D9FB0100000000000000A3 /* SynapseMobileRecordingActivity */,
+				B6D9FB0100000000000000C1 /* SynapseMobileTerminalWidget */,
 				B6D9FB0100000000000000A2 /* SynapseMobileLiveActivity */,
 				B6D9EFF6305995CD003DF0A5 /* SynapseMobileTests */,
 				B6D9F000305995CD003DF0A5 /* SynapseMobileUITests */,
@@ -182,6 +189,7 @@
 			fileSystemSynchronizedGroups = (
 				B6D9EFE8305995CC003DF0A5 /* SynapseMobile */,
 				B6D9FB0100000000000000A3 /* SynapseMobileRecordingActivity */,
+				B6D9FB0100000000000000C1 /* SynapseMobileTerminalWidget */,
 			);
 			name = SynapseMobile;
 			packageProductDependencies = (
@@ -251,6 +259,7 @@
 			fileSystemSynchronizedGroups = (
 				B6D9FB0100000000000000A2 /* SynapseMobileLiveActivity */,
 				B6D9FB0100000000000000A3 /* SynapseMobileRecordingActivity */,
+				B6D9FB0100000000000000C1 /* SynapseMobileTerminalWidget */,
 			);
 			name = SynapseMobileLiveActivity;
 			packageProductDependencies = (
@@ -665,12 +674,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = SynapseMobileLiveActivity/SynapseMobileLiveActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U4JT7UKH9W;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SynapseMobileLiveActivity/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "录音";
+				INFOPLIST_KEY_CFBundleDisplayName = Synapse;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -695,12 +705,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = SynapseMobileLiveActivity/SynapseMobileLiveActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U4JT7UKH9W;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SynapseMobileLiveActivity/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "录音";
+				INFOPLIST_KEY_CFBundleDisplayName = Synapse;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

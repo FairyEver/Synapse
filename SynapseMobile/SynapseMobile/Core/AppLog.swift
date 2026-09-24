@@ -17,4 +17,6 @@ enum AppLog {
     static let voice = Logger(subsystem: subsystem, category: "voice")
     /// 录音：采集、分片上传、异常退出后的收尾。
     static let recording = Logger(subsystem: subsystem, category: "recording")
+    /// Home Screen terminal snapshots and WidgetKit reloads.
+    static let widget = Logger(subsystem: subsystem, category: "widget")
 }

@@ -18,6 +18,7 @@ struct RootView: View {
     @State private var meetingPath: [Route] = []
     @State private var inboxPath: [Route] = []
     @State private var settingsPath: [Route] = []
+    @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
 
     private enum Tab: Hashable {
         case terminals, meetings, inbox, settings
@@ -62,6 +63,7 @@ struct RootView: View {
             // A tap that launched the app parked its destination before any view
             // existed, so the change observer would never have fired.
             handleRoute(NotificationRouter.shared.consume())
+            openPendingWidgetTarget()
         }
         .onChange(of: NotificationRouter.shared.pending) { _, _ in
             handleRoute(NotificationRouter.shared.consume())
@@ -69,9 +71,17 @@ struct RootView: View {
         // 锁屏和灵动岛上那张卡被点开。走 URL 而不是 App Intent：卡片是「带我去看」
         // 的那一个，那两个按钮才是「替我做」。这是 Apple 给实时活动定的分工。
         .onOpenURL { url in
-            guard RecordingDeepLink.isOpenRecording(url) else { return }
-            handleRoute(.liveRecording)
+            if RecordingDeepLink.isOpenRecording(url) {
+                handleRoute(.liveRecording)
+            } else if let target = TerminalWidgetLink.target(from: url) {
+                pendingWidgetTarget = target
+                openPendingWidgetTarget()
+            }
         }
+        .onChange(of: model.authState) { _, _ in openPendingWidgetTarget() }
+        .onChange(of: model.summary?.revision) { _, _ in openPendingWidgetTarget() }
+        .onChange(of: model.hasLiveTerminalSummary) { _, _ in openPendingWidgetTarget() }
+        .onChange(of: model.onlineDesktopIds) { _, _ in openPendingWidgetTarget() }
         .onChange(of: scenePhase) { _, phase in
             // 会话标记是崩溃的第三种证据：进程被系统杀掉时不会留下任何遗言，
             // 而"文件末尾没有 sessionClose"就是它来过又走了的唯一痕迹。
@@ -219,5 +229,33 @@ struct RootView: View {
                 Task { await RecordingActivityHousekeeping.endOrphans() }
             }
         }
+    }
+
+    private func openPendingWidgetTarget() {
+        guard model.authState == .signedIn, let target = pendingWidgetTarget else { return }
+        selectedTab = .terminals
+        terminalPath = []
+        guard let desktopId = target.desktopId else {
+            pendingWidgetTarget = nil
+            return
+        }
+        if model.selectedDesktopClientInstanceId != desktopId {
+            model.selectDesktop(desktopId)
+        }
+        guard let sessionId = target.sessionId else {
+            pendingWidgetTarget = nil
+            return
+        }
+        guard !model.viewedDesktopIsOffline else {
+            pendingWidgetTarget = nil
+            return
+        }
+        guard model.hasLiveTerminalSummary,
+              let summary = model.summary,
+              summary.desktopClientInstanceId == desktopId else { return }
+        if summary.sessions.contains(where: { $0.id == sessionId }) {
+            terminalPath = [.terminal(sessionId)]
+        }
+        pendingWidgetTarget = nil
     }
 }

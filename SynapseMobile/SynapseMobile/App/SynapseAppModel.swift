@@ -23,6 +23,9 @@ final class SynapseAppModel {
     /// `ViewedDesktopPreference`.
     private(set) var selectedDesktopClientInstanceId: String?
     private(set) var summary: MobileSummaryPayload?
+    private let terminalWidgetPublisher = TerminalWidgetPublisher()
+    private var widgetHasLiveSummary = false
+    var hasLiveTerminalSummary: Bool { widgetHasLiveSummary && realtime.state.isConnected }
     private(set) var terminalStores: [String: TerminalStore] = [:]
     /// The buttons the last `mobile.toolbar` carried, and which computer sent them.
     /// See `TerminalToolbarState` for why one slot is enough.
@@ -411,6 +414,7 @@ final class SynapseAppModel {
             await startLiveSession()
         case .noCredentials:
             authState = .signedOut
+            terminalWidgetPublisher.clear()
         case .unreachable:
             // The credential is intact and only the server was unreachable. Showing
             // the login screen here would tell the user their account is gone when
@@ -470,6 +474,8 @@ final class SynapseAppModel {
         pendingHistory.removeAll()
         terminalMessages.removeAll()
         summary = nil
+        widgetHasLiveSummary = false
+        terminalWidgetPublisher.clear()
         gridClaims = GridClaimLedger()
         selectedDesktopClientInstanceId = nil
         // The remembered computer is account-scoped like everything else here: a
@@ -632,6 +638,9 @@ final class SynapseAppModel {
             // socket can actually carry them.
             realtime.connect()
         } else {
+            // A widget tap after backgrounding must wait for the next live summary,
+            // while the shared snapshot remains available until it becomes stale.
+            widgetHasLiveSummary = false
             realtime.disconnect()
         }
     }
@@ -676,6 +685,8 @@ final class SynapseAppModel {
             }
             guard payload.desktopClientInstanceId == self.selectedDesktopClientInstanceId else { return }
             self.summary = payload
+            self.widgetHasLiveSummary = true
+            self.publishTerminalWidgetSnapshot()
             self.pruneTerminalStores(keeping: Set(payload.sessions.map(\.id)))
             self.applyGridClaims(payload.sessions)
             // Only against a list the computer actually sent: an older desktop omits
@@ -913,6 +924,7 @@ final class SynapseAppModel {
     /// changes because they asked, so a computer going away leaves the phone where it
     /// is and the screen says why.
     private func applyPresence(_ clientInstanceIds: [String]) {
+        defer { publishTerminalWidgetSnapshot() }
         let knownNames = onlineDesktops.reduce(into: [String: String]()) { names, desktop in
             if let name = desktop.deviceName { names[desktop.clientInstanceId] = name }
         }
@@ -947,6 +959,7 @@ final class SynapseAppModel {
         // The computer being viewed went away. The list it sent describes a machine
         // that is not there, so it goes; the reader does not.
         summary = nil
+        widgetHasLiveSummary = false
         // A file the computer had begun fetching is not being fetched any more: it
         // died, or lost the network, partway through. It goes back to waiting rather
         // than staying in a state that claims progress that has stopped, and the
@@ -996,6 +1009,7 @@ final class SynapseAppModel {
     }
 
     func refreshDesktops() async {
+        defer { publishTerminalWidgetSnapshot() }
         do {
             onlineDesktops = try await apiClient.onlineDesktops()
             for desktop in onlineDesktops {
@@ -1051,6 +1065,8 @@ final class SynapseAppModel {
         viewedDesktops.view(clientInstanceId)
         // The previous computer's list, terminals and in-flight work belong to it.
         summary = nil
+        widgetHasLiveSummary = false
+        publishTerminalWidgetSnapshot()
         releaseViewing()
         Task { await refreshDesktops() }
     }
@@ -1109,6 +1125,45 @@ final class SynapseAppModel {
 
     var waitingSessions: [MobileSummarySession] {
         sessions.filter { $0.attention.isWaiting }
+    }
+
+    private func publishTerminalWidgetSnapshot() {
+        guard authState == .signedIn, let desktopId = selectedDesktopClientInstanceId else {
+            terminalWidgetPublisher.clear()
+            return
+        }
+        let online = onlineDesktopIds.contains(desktopId)
+        if !online {
+            terminalWidgetPublisher.publish(TerminalWidgetSnapshot(
+                capturedAt: .now,
+                desktopId: desktopId,
+                desktopName: desktopName(desktopId),
+                isOnline: false,
+                sessions: []
+            ))
+            return
+        }
+        guard widgetHasLiveSummary, let summary, summary.desktopClientInstanceId == desktopId else {
+            terminalWidgetPublisher.clear()
+            return
+        }
+        terminalWidgetPublisher.publish(TerminalWidgetSnapshot(
+            capturedAt: .now,
+            desktopId: desktopId,
+            desktopName: summary.desktopName,
+            isOnline: true,
+            sessions: summary.sessions.map {
+                TerminalWidgetSession(
+                    id: $0.id,
+                    title: $0.title,
+                    status: $0.status,
+                    attentionState: $0.attention.state,
+                    attentionKind: $0.attention.kind,
+                    cwd: $0.cwd,
+                    lastLine: $0.lastLine
+                )
+            }
+        ))
     }
 
     func groupName(_ groupId: String) -> String {
