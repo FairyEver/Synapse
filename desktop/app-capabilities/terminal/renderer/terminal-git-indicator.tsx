@@ -1,4 +1,4 @@
-import { GitBranch, RefreshCw } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "../../../src/components/ui/button"
@@ -21,15 +21,14 @@ export function TerminalGitIndicator({
   const syncLabel = `同步分支：${branch}`
 
   return (
-    <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" data-terminal-git-status>
-      <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="truncate" title={branch}>{branch}</span>
-      <span className="shrink-0" title="工作区状态">
-        {status.changeCount > 0 ? `${status.changeCount} 个未提交` : "无未提交"}
-      </span>
-      {status.hasConflicts ? <span className="shrink-0">有冲突</span> : null}
+    <div className="flex min-w-0 max-w-1/2 items-center gap-2 text-xs text-muted-foreground @max-[200px]:hidden" data-terminal-git-status>
+      <span className="min-w-0 truncate" title={branch}>{branch}</span>
+      {status.changeCount > 0 ? (
+        <span className="hidden shrink-0 @sm:inline" title="未提交行数变化">+{status.insertions} -{status.deletions}</span>
+      ) : null}
+      {status.hasConflicts ? <span className="hidden shrink-0 @sm:inline">有冲突</span> : null}
       {status.ahead > 0 || status.behind > 0 ? (
-        <span className="shrink-0" title="与上游分支的提交差异">
+        <span className="hidden shrink-0 @lg:inline" title="与上游分支的提交差异">
           {status.ahead > 0 ? `↑${status.ahead}` : ""}
           {status.behind > 0 ? `↓${status.behind}` : ""}
         </span>
@@ -42,6 +41,7 @@ export function TerminalGitIndicator({
         aria-label={syncLabel}
         title={syncLabel}
         data-track="terminal-pane-git-sync"
+        className="shrink-0"
         onClick={(event) => {
           event.stopPropagation()
           void sync().then((result) => {

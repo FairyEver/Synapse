@@ -20,7 +20,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Columns3, Copy, Folder, Link2, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
+import { Columns3, Copy, Folder, Link2, Maximize2, Minimize2, MoreHorizontal, Pencil, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
@@ -33,6 +33,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../../../src/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../src/components/ui/dropdown-menu"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { WorkspaceFileTree } from "../../../src/components/workspace-file-tree"
 import {
@@ -768,7 +774,7 @@ function TerminalPaneTitle({
 }) {
   return (
     <span
-      className="truncate text-xs font-medium text-foreground/75"
+      className="min-w-0 truncate text-xs font-medium text-foreground/75"
       data-track="terminal-pane-title"
       onClick={disabled ? undefined : () => {
         track({
@@ -1642,12 +1648,12 @@ function TerminalPane({
             onDragEnd={onPaneDragEnd}
             onDragStart={handlePaneDragStart}
             className={cn(
-              "flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
+              "@container flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
               remoteSized ? "cursor-default" : "cursor-grab",
               dragged && "cursor-grabbing",
             )}
           >
-            <div className="flex min-w-0 items-center gap-0.5">
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
               {workspaceTreeBridge ? <Button
                 ref={fileTreeTriggerRef}
                 type="button"
@@ -1681,6 +1687,42 @@ function TerminalPane({
               />
             </div>
             <div className="flex shrink-0 items-center">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label={`更多分屏操作：${session.title}`}
+                    title="更多分屏操作"
+                    className="hidden text-muted-foreground @max-xs:inline-flex"
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem disabled={equalizeDisabled || remoteSized} onSelect={() => { onActive(); onEqualize() }}>
+                    {equalizeActionLabel}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={maximizeDisabled || remoteSized} onSelect={() => { onActive(); onToggleMaximize() }}>
+                    {maximized ? "还原分屏" : "最大化分屏"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => { onActive(); onCopySessionReference(session.id) }}>
+                    复制引用
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => { onActive(); void copyTranscript() }}>
+                    复制全文
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={closePending || (closing && platform !== "darwin") || remoteSized}
+                    onSelect={() => onShortcut("close-pane")}
+                  >
+                    {closeActionLabel}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 type="button"
                 size="icon-xs"
@@ -1688,7 +1730,7 @@ function TerminalPane({
                 aria-label={`${equalizeActionLabel}：${session.title}`}
                 title={equalizeActionLabel}
                 data-track="terminal-pane-equalize"
-                className="text-muted-foreground"
+                className="text-muted-foreground @max-xs:hidden"
                 disabled={equalizeDisabled || remoteSized}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -1709,7 +1751,7 @@ function TerminalPane({
                 title={maximized ? "还原分屏" : "最大化分屏"}
                 aria-pressed={maximized}
                 data-track="terminal-pane-maximize"
-                className="text-muted-foreground"
+                className="text-muted-foreground @max-xs:hidden"
                 disabled={maximizeDisabled || remoteSized}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -1733,7 +1775,7 @@ function TerminalPane({
                 aria-label={`复制引用：${session.title}`}
                 title="复制引用"
                 data-track="terminal-pane-copy-reference"
-                className="text-muted-foreground"
+                className="text-muted-foreground @max-xs:hidden"
                 onClick={(event) => {
                   event.stopPropagation()
                   onActive()
@@ -1750,7 +1792,7 @@ function TerminalPane({
                 aria-label={`复制全文：${session.title}`}
                 title="复制全文"
                 data-track="terminal-pane-copy-transcript"
-                className="text-muted-foreground"
+                className="text-muted-foreground @max-xs:hidden"
                 onClick={(event) => {
                   event.stopPropagation()
                   onActive()
@@ -1766,7 +1808,7 @@ function TerminalPane({
                 variant="ghost"
                 aria-label={`${closeActionLabel}：${session.title}`}
                 title={closeActionLabel}
-                className="text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive @max-xs:hidden"
                 disabled={closePending || (closing && platform !== "darwin") || remoteSized}
                 onClick={(event) => {
                   event.stopPropagation()

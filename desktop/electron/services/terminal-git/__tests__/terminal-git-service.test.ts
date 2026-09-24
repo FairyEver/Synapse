@@ -141,6 +141,34 @@ describe("TerminalGitService · 读状态与分支", () => {
     })
   })
 
+  it("counts staged, unstaged, and untracked line changes for the pane header", async () => {
+    const repo = await createRepository()
+    const service = serviceWith(recordingRunner().runner)
+    const clean = await service.getSnapshot(repo)
+    expect(await service.getLineStats(clean)).toEqual({ insertions: 0, deletions: 0 })
+
+    await writeFile(path.join(repo, "a.txt"), "edited\nnew\n", "utf8")
+    git(repo, ["add", "a.txt"])
+    await writeFile(path.join(repo, "a.txt"), "edited\nnew\nthird\n", "utf8")
+    await writeFile(path.join(repo, "new.txt"), "first\nsecond", "utf8")
+
+    const dirty = await service.getSnapshot(repo)
+    expect(await service.getLineStats(dirty)).toEqual({ insertions: 5, deletions: 1 })
+  })
+
+  it("counts lines before a repository has its first commit", async () => {
+    const repo = await mkdtemp(path.join(os.tmpdir(), "synapse-terminal-git-unborn-"))
+    temporaryDirectories.push(repo)
+    git(repo, ["init", "-b", "main"])
+    await writeFile(path.join(repo, "staged.txt"), "one\ntwo\n", "utf8")
+    git(repo, ["add", "staged.txt"])
+    await writeFile(path.join(repo, "untracked.txt"), "three", "utf8")
+    const service = serviceWith(recordingRunner().runner)
+
+    expect(await service.getLineStats(await service.getSnapshot(repo)))
+      .toEqual({ insertions: 3, deletions: 0 })
+  })
+
   it("reports the same thing from a subdirectory as from the root", async () => {
     const repo = await createRepository()
     const sub = path.join(repo, "nested", "deeper")

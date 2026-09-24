@@ -6,7 +6,6 @@ import {
   type TerminalGitStatusReader,
 } from "./terminal-git-status"
 import { createTerminalGitWorkflow, type TerminalGitWorkflow } from "./terminal-git-workflow"
-import type { TerminalGitBranch, TerminalGitSnapshot } from "./terminal-git-types"
 
 export type { TerminalGitBranch, TerminalGitSnapshot } from "./terminal-git-types"
 
@@ -24,6 +23,7 @@ export type { TerminalGitBranch, TerminalGitSnapshot } from "./terminal-git-type
  */
 export type TerminalGitService = {
   readonly getSnapshot: TerminalGitStatusReader["getSnapshot"]
+  readonly getLineStats: TerminalGitStatusReader["getLineStats"]
   readonly isRepository: TerminalGitStatusReader["isRepository"]
   readonly listBranches: TerminalGitStatusReader["listBranches"]
   readonly listRemoteBranches: TerminalGitStatusReader["listRemoteBranches"]
@@ -56,6 +56,7 @@ export function createTerminalGitService(deps: {
 
   return {
     getSnapshot: status.getSnapshot,
+    getLineStats: status.getLineStats,
     isRepository: status.isRepository,
     listBranches: status.listBranches,
     listRemoteBranches: status.listRemoteBranches,

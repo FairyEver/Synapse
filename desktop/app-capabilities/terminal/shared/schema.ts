@@ -399,6 +399,8 @@ export const terminalGitStatusSchema = z.object({
   ahead: z.number().int().nonnegative(),
   behind: z.number().int().nonnegative(),
   changeCount: z.number().int().nonnegative(),
+  insertions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
   hasConflicts: z.boolean(),
 }).strict()
 

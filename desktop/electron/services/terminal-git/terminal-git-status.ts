@@ -1,3 +1,7 @@
+import { createReadStream } from "node:fs"
+import { lstat } from "node:fs/promises"
+import path from "node:path"
+
 import type { GitClientCommandRunner } from "../git-client/git-command-runner"
 import {
   createGitStatusPorcelainV2Parser,
@@ -6,6 +10,7 @@ import {
 import {
   emptySnapshot,
   type TerminalGitBranch,
+  type TerminalGitLineStats,
   type TerminalGitRemoteBranch,
   type TerminalGitSnapshot,
 } from "./terminal-git-types"
@@ -16,8 +21,31 @@ export type TerminalGitStatusReader = {
   /** 是不是 Git 仓库。任何写动作之前都先问它一句 —— 不是仓库就一行命令都不该再跑。 */
   isRepository(cwd: string): Promise<boolean>
   getSnapshot(cwd: string): Promise<TerminalGitSnapshot>
+  getLineStats(snapshot: TerminalGitSnapshot): Promise<TerminalGitLineStats>
   listBranches(cwd: string): Promise<readonly TerminalGitBranch[]>
   listRemoteBranches(cwd: string): Promise<readonly TerminalGitRemoteBranch[]>
+}
+
+function parseShortstat(output: string): TerminalGitLineStats {
+  return {
+    insertions: Number(output.match(/(\d+) insertions?\(\+\)/)?.[1] ?? 0),
+    deletions: Number(output.match(/(\d+) deletions?\(-\)/)?.[1] ?? 0),
+  }
+}
+
+async function countUntrackedLines(filePath: string): Promise<number> {
+  const stat = await lstat(filePath)
+  if (!stat.isFile()) return 0
+  let lines = 0
+  let lastByte = 10
+  let hasContent = false
+  for await (const chunk of createReadStream(filePath)) {
+    if (chunk.includes(0)) return 0 // Git reports binary files without line counts.
+    hasContent = true
+    for (const byte of chunk) if (byte === 10) lines += 1
+    lastByte = chunk[chunk.length - 1] ?? lastByte
+  }
+  return hasContent && lastByte !== 10 ? lines + 1 : lines
 }
 
 export function createTerminalGitStatusReader(deps: {
@@ -77,6 +105,47 @@ export function createTerminalGitStatusReader(deps: {
       hasConflicts: parsed.hasConflicts,
       changes: parsed.changes,
     }
+  }
+
+  async function getLineStats(snapshot: TerminalGitSnapshot): Promise<TerminalGitLineStats> {
+    if (!snapshot.isRepository || snapshot.changeCount === 0) return { insertions: 0, deletions: 0 }
+    const head = await deps.commandRunner.run({
+      cwd: snapshot.cwd,
+      args: ["rev-parse", "--verify", "HEAD"],
+      acceptedExitCodes: [0, 128],
+      logFailure: false,
+      operation: "terminal-git.status.head",
+      repoPath: snapshot.cwd,
+    })
+    const diffs = head.stdout.trim()
+      ? [["diff", "--no-ext-diff", "--shortstat", "HEAD", "--"]]
+      : [
+          ["diff", "--no-ext-diff", "--shortstat", "--cached", "--"],
+          ["diff", "--no-ext-diff", "--shortstat", "--"],
+        ]
+    let insertions = 0
+    let deletions = 0
+    for (const args of diffs) {
+      const result = await deps.commandRunner.run({
+        cwd: snapshot.cwd,
+        args,
+        logFailure: false,
+        operation: "terminal-git.status.line-stats",
+        repoPath: snapshot.cwd,
+      })
+      const stats = parseShortstat(result.stdout)
+      insertions += stats.insertions
+      deletions += stats.deletions
+    }
+    for (const change of snapshot.changes) {
+      if (change.status !== "untracked") continue
+      try {
+        insertions += await countUntrackedLines(path.resolve(snapshot.cwd, change.path))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      }
+    }
+    return { insertions, deletions }
   }
 
   async function shortHeadSha(cwd: string): Promise<string | null> {
@@ -166,7 +235,7 @@ export function createTerminalGitStatusReader(deps: {
         : left.remote.localeCompare(right.remote))
   }
 
-  return { isRepository, getSnapshot, listBranches, listRemoteBranches }
+  return { isRepository, getSnapshot, getLineStats, listBranches, listRemoteBranches }
 }
 
 /**

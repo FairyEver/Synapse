@@ -39,6 +39,11 @@ export type TerminalGitSnapshot = {
   readonly changes: readonly SynapseGitWorkingTreeChange[]
 }
 
+export type TerminalGitLineStats = {
+  readonly insertions: number
+  readonly deletions: number
+}
+
 /**
  * 合并冲突的结论。手机端只负责把 `summaryText` 复制走 ——
  * 它是一段给人（以及别的 Agent）读的完整说明，不是文件清单结构。

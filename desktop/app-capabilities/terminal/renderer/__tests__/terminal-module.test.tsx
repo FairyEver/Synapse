@@ -118,6 +118,8 @@ const terminalBridge = vi.hoisted(() => ({
     ahead: 0,
     behind: 0,
     changeCount: 0,
+    insertions: 0,
+    deletions: 0,
     hasConflicts: false,
   })),
   syncGit: vi.fn(async () => ({ ok: false as const, message: "当前目录里有未提交的改动。" })),
@@ -1379,6 +1381,29 @@ describe("TerminalModule", () => {
     ].join("\n"))
   })
 
+  it("keeps pane actions available in the narrow header menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+
+    await renderEmbeddedModule()
+
+    const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="更多分屏操作：开发终端"]')
+    expect(trigger).toBeTruthy()
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+    expect(["平分分屏", "最大化分屏", "复制引用", "复制全文", "关闭会话"].every((label) =>
+      Array.from(document.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+        .some((item) => item.textContent === label))).toBe(true)
+    await clickMenuItem("复制引用")
+    expect(writeText).toHaveBeenCalledOnce()
+  })
+
   /*
    * The title is the strip a hand grabs to drag a pane, so the menu is deliberately kept off it.
    * Double-click stays, because that is the direct gesture for renaming the thing the title names.
@@ -2559,6 +2584,8 @@ describe("TerminalModule", () => {
       ahead: 1,
       behind: 2,
       changeCount: 3,
+      insertions: 7,
+      deletions: 2,
       hasConflicts: false,
     }
 
@@ -2567,7 +2594,8 @@ describe("TerminalModule", () => {
     expect(document.querySelector("[data-terminal-git-status]")?.textContent)
       .toContain("feature/status")
     expect(document.querySelector("[data-terminal-git-status]")?.textContent)
-      .toContain("3 个未提交")
+      .toContain("+7 -2")
+    expect(document.querySelector("[data-terminal-git-status] .lucide-git-branch")).toBeNull()
     expect(document.querySelector("[data-terminal-git-status]")?.textContent)
       .toContain("↑1↓2")
     await clickButtonByAriaLabel("同步分支：feature/status")
@@ -2575,6 +2603,29 @@ describe("TerminalModule", () => {
       sessionId: "session-1",
       expectedCwd: "/repo/app",
     })
+  })
+
+  it("shows only the branch and sync action when the working tree is clean", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.gitStatus = {
+      cwd: "/repo/app",
+      isRepository: true,
+      branch: "main",
+      detachedSha: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      changeCount: 0,
+      insertions: 0,
+      deletions: 0,
+      hasConflicts: false,
+    }
+
+    await renderModule()
+
+    expect(document.querySelector("[data-terminal-git-status]")?.textContent).toBe("main")
+    expect(document.querySelector('[aria-label="同步分支：main"]')).toBeTruthy()
   })
 
   it("does not render session-level Agent control", async () => {
@@ -4393,6 +4444,16 @@ describe("TerminalModule", () => {
       .toBe(true)
     expect(document.querySelector<HTMLButtonElement>('button[aria-label="关闭会话：开发终端"]')?.disabled)
       .toBe(true)
+    const more = document.querySelector<HTMLButtonElement>('button[aria-label="更多分屏操作：开发终端"]')
+    await act(async () => {
+      more?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      more?.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+      more?.click()
+      await Promise.resolve()
+    })
+    expect(menuItemForText("关闭会话")?.hasAttribute("data-disabled")).toBe(true)
+    expect(menuItemForText("最大化分屏")?.hasAttribute("data-disabled")).toBe(true)
+    expect(menuItemForText("复制引用")?.hasAttribute("data-disabled")).toBe(false)
     // 标题还在，但双击重命名和右键菜单都收走了。
     const title = document.querySelector<HTMLElement>('[data-track="terminal-pane-title"]')
     expect(title?.textContent).toBe("开发终端")

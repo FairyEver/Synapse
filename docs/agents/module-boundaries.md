@@ -59,7 +59,7 @@
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane、`Cmd+R` 重命名当前会话；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane、`Ctrl+Shift+R` 重命名当前会话（`Ctrl+R` 归命令行的历史搜索）。`Cmd+R` 可用是因为应用菜单里没有「重新加载」：整页重载会丢掉未持久化的活动应用，界面回落成默认应用。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
 - Terminal pane 文件树允许按系统平台使用 `Cmd/Ctrl` 切换选择、`Shift` 连续选择，并把全部选中路径拖入当前 session；路径必须由文件树 scope 在主进程解析，按现有终端路径规则转义后写入，不得伪造成外部文件或新增 MCP 工具。
-- Terminal pane 的 Git 状态与同步始终按该 session 的实时工作目录执行，不能借用「代码仓库」登记信息；状态只给界面分支、未提交文件数及上游差异，同步沿用现有 Terminal Git 的快进规则，不在界面实现另一套 Git 命令。
+- Terminal pane 的 Git 状态与同步始终按该 session 的实时工作目录执行，不能借用「代码仓库」登记信息；状态只给界面分支、未提交文件数与增删行数及上游差异，同步沿用现有 Terminal Git 的快进规则，不在界面实现另一套 Git 命令。
 - Terminal 底部内置快捷命令由代码定义且只读；用户快捷命令是独立的应用级数据，只允许名称、单行输入内容和是否回车，通过 UI 私有 IPC 管理并加密存入 `app.terminal.toolbar-actions`。两者不得混存，也不得注册 MCP 工具。
 - 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
 - Terminal 启动时会为 `zsh` / `bash` / `fish` 注入一段 shell 集成，让 shell 每次画提示符前上报当前目录（OSC 7），**这部分不受任何开关门控**；只影响新 PTY，用户自己的启动文件照旧被 source。Claude Code 原生通知的会话级 PATH shim 与官方 Hook 仍是默认关闭的设置，启用后才注入；用户别名或函数最终按 PATH 调用 `claude` 时必须继续生效，`codex` 不再注入 Hook 或通知，旧 Codex shim 启动时清理。Synapse 自己拉起的 Claude Code（新建对话、项目分组按住 ⌘ 点击、手机端）走的是内置 runtime 的绝对路径，不经 PATH shim，改由启动器把**同一份** hooks 写进它自己生成的 settings；两条路写出的 hooks 必须逐字一致，也同受总闸门控，拿不到通知服务时按不带 hooks 启动、不得因此起不来。该设置有两颗开关：总闸 `enabled` 是注入边界，`notify` 只决定弹不弹系统通知 —— 关掉后者时注入、会话档案与等待输入标记一律不变，注入边界不随它移动；拆分前落盘的记录按 `notify: true` 升级，与「开关打开就会弹」的既有行为一致。绝对路径、远程 Shell、主动重置 PATH 或 `SYNAPSE_AGENT_NOTIFICATIONS_DISABLED=1` 不承诺接入 shell 集成，这些情况由按需探测 PTY 前台进程 cwd 的兜底接住。

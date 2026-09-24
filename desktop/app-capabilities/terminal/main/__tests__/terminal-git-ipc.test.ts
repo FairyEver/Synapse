@@ -20,6 +20,7 @@ function context(cwd = snapshot.cwd) {
   const terminal = { probeCurrentWorkingDirectory: vi.fn(async () => cwd) }
   const git = {
     getSnapshot: vi.fn(async () => snapshot),
+    getLineStats: vi.fn(async () => ({ insertions: 4, deletions: 2 })),
     sync: vi.fn(async () => ({ ok: true as const, value: snapshot })),
   }
   const ctx = {
@@ -34,7 +35,8 @@ describe("terminal Git UI IPC", () => {
     const status = await terminalGitMethods.getGitStatus.handler(ctx, { sessionId: "session-1" })
     expect(terminal.probeCurrentWorkingDirectory).toHaveBeenCalledWith("session-1")
     expect(git.getSnapshot).toHaveBeenCalledWith(snapshot.cwd)
-    expect(status).toEqual(expect.objectContaining({ branch: "main", changeCount: 3 }))
+    expect(status).toEqual(expect.objectContaining({ branch: "main", changeCount: 3, insertions: 4, deletions: 2 }))
+    expect(git.getLineStats).toHaveBeenCalledWith(snapshot)
     expect(status).not.toHaveProperty("changes")
   })
 
@@ -55,7 +57,7 @@ describe("terminal Git UI IPC", () => {
       expectedCwd: snapshot.cwd,
     })
     expect(git.sync).toHaveBeenCalledWith({ cwd: snapshot.cwd })
-    expect(result).toEqual({ ok: true, status: expect.objectContaining({ changeCount: 3 }) })
+    expect(result).toEqual({ ok: true, status: expect.objectContaining({ changeCount: 3, insertions: 4, deletions: 2 }) })
     if (result && typeof result === "object" && "status" in result) {
       expect(result.status).not.toHaveProperty("changes")
     }
