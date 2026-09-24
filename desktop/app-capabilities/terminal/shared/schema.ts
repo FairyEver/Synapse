@@ -390,6 +390,30 @@ export const terminalSessionIdInputSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
+export const terminalGitStatusSchema = z.object({
+  cwd: z.string().min(1),
+  isRepository: z.boolean(),
+  branch: z.string().nullable(),
+  detachedSha: z.string().nullable(),
+  upstream: z.string().nullable(),
+  ahead: z.number().int().nonnegative(),
+  behind: z.number().int().nonnegative(),
+  changeCount: z.number().int().nonnegative(),
+  hasConflicts: z.boolean(),
+}).strict()
+
+export const terminalGitSyncInputSchema = terminalSessionIdInputSchema.extend({
+  expectedCwd: z.string().min(1),
+}).strict()
+
+export const terminalGitSyncResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), status: terminalGitStatusSchema }).strict(),
+  z.object({ ok: z.literal(false), message: z.string().min(1) }).strict(),
+])
+
+export type TerminalGitStatus = z.infer<typeof terminalGitStatusSchema>
+export type TerminalGitSyncResult = z.infer<typeof terminalGitSyncResultSchema>
+
 export const terminalAttachSessionInputSchema = terminalSessionIdInputSchema
 
 export const terminalRenameSessionInputSchema = z.object({

@@ -609,6 +609,10 @@ const synapseBridge: SynapseBridge = {
         IPC_CHANNELS.terminal.workspaceTreeChanged,
       ),
     },
+    git: {
+      status: (input) => invoke(IPC_CHANNELS.terminal.getGitStatus)(input),
+      sync: (input) => invoke(IPC_CHANNELS.terminal.syncGit)(input),
+    },
     group: {
       list: () => invoke(IPC_CHANNELS.terminal.listGroups)(),
       get: (input) => invoke(IPC_CHANNELS.terminal.getGroup)(input),

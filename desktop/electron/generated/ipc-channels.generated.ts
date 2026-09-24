@@ -491,6 +491,8 @@ export const IPC_CHANNELS = {
     "listWorkspaceTree": "synapse:app:terminal:workspace_tree:list",
     "resolveWorkspaceTreePaths": "synapse:app:terminal:workspace_tree:resolve_paths",
     "closeWorkspaceTree": "synapse:app:terminal:workspace_tree:close",
+    "getGitStatus": "synapse:app:terminal:git:status",
+    "syncGit": "synapse:app:terminal:git:sync",
     "data": "synapse:app:terminal:operation:data",
     "sessionChanged": "synapse:app:terminal:operation:session_changed",
     "sessionDeleted": "synapse:app:terminal:operation:session_deleted",

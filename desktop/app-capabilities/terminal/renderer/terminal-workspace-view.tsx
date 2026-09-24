@@ -87,6 +87,7 @@ import {
   notifyTerminalAtlasRestructured,
   registerTerminalAtlasRepair,
 } from "./terminal-atlas-repair"
+import { TerminalGitIndicator } from "./terminal-git-indicator"
 
 /**
  * Width the viewport's scrollbar takes over the right edge of the screen.
@@ -1673,6 +1674,11 @@ function TerminalPane({
               >
                 <Folder className="size-3.5" />
               </Button> : null}
+              <TerminalGitIndicator
+                sessionId={session.id}
+                visible={visible && session.status === "running"}
+                disabled={remoteSized}
+              />
             </div>
             <div className="flex shrink-0 items-center">
               <Button

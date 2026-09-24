@@ -173,6 +173,7 @@ import type {
   SynapseTerminalWorkspace,
   SynapseTerminalWorkingDirectoryChangedEvent,
 } from "./terminal"
+import type { TerminalGitStatus, TerminalGitSyncResult } from "../../app-capabilities/terminal/shared/schema"
 import type {
   WorkspaceFileTreeChangedEvent,
   WorkspaceFileTreeDirectoryResult,
@@ -1253,6 +1254,10 @@ export type SynapseBridge = {
       resolve: (input: WorkspaceFileTreeResolvePathsInput) => Promise<WorkspaceFileTreeResolvePathsResult>
       close: (input: { scopeId: string }) => Promise<void>
       onChanged: (listener: (event: WorkspaceFileTreeChangedEvent) => void) => () => void
+    }
+    git: {
+      status: (input: { sessionId: string }) => Promise<TerminalGitStatus>
+      sync: (input: { sessionId: string; expectedCwd: string }) => Promise<TerminalGitSyncResult>
     }
     group: {
       list: () => Promise<SynapseTerminalGroupSummary[]>

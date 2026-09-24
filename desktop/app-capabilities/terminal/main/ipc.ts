@@ -8,6 +8,7 @@ import { createMainLogger } from "../../../electron/services/log-store"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import { materializeTerminalClipboardImage } from "./clipboard-image"
 import { terminalSessionReference } from "./session-reference"
+import { terminalGitMethods } from "./terminal-git-ipc"
 import type { TerminalService } from "./service"
 import {
   TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
@@ -568,6 +569,7 @@ export const terminalIpcModule: IpcModule = {
         resolveTerminalService(ctx).runStartupCommand(request),
     },
     ...terminalWorkspaceTreeMethods,
+    ...terminalGitMethods,
   },
   events: {
     data: {

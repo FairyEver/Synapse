@@ -22,6 +22,7 @@ import {
   writeWorkspaceFileTreeDrag,
 } from "../../../../src/lib/workspace-file-tree-drag"
 import { equalizeTerminalPaneGroup } from "../../shared/schema"
+import type { TerminalGitStatus } from "../../shared/schema"
 
 const bridgeState = vi.hoisted(() => ({
   globalLaunch: {
@@ -41,6 +42,7 @@ const bridgeState = vi.hoisted(() => ({
   sessions: [] as SynapseTerminalSession[],
   customToolbarActions: [] as SynapseTerminalCustomToolbarAction[],
   chunks: [] as SynapseTerminalOutputChunk[],
+  gitStatus: null as TerminalGitStatus | null,
   nextSeq: 0,
   dataListener: null as ((event: SynapseTerminalDataEvent) => void) | null,
   sessionChangedListener: null as ((session: SynapseTerminalSession) => void) | null,
@@ -107,6 +109,18 @@ const terminalBridge = vi.hoisted(() => ({
   revealEnvironmentValue: vi.fn(async () => null),
   copyEnvironmentValue: vi.fn(async () => undefined),
   materializeClipboardImage: vi.fn(async (): Promise<string | null> => null),
+  getGitStatus: vi.fn(async ({ sessionId }: { sessionId: string }) => bridgeState.gitStatus ?? ({
+    cwd: bridgeState.sessions.find((session) => session.id === sessionId)?.cwd ?? "/tmp",
+    isRepository: false,
+    branch: null,
+    detachedSha: null,
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    changeCount: 0,
+    hasConflicts: false,
+  })),
+  syncGit: vi.fn(async () => ({ ok: false as const, message: "当前目录里有未提交的改动。" })),
   getGlobalLaunchSettings: vi.fn(async () => bridgeState.globalLaunch),
   updateGlobalLaunchSettings: vi.fn(async ({ expectedRevision, settings }: {
     expectedRevision: number
@@ -690,6 +704,10 @@ vi.mock("@/lib/electron-bridge", () => ({
         close: terminalBridge.closeWorkspaceTree,
         onChanged: terminalBridge.onWorkspaceTreeChanged,
       },
+      git: {
+        status: terminalBridge.getGitStatus,
+        sync: terminalBridge.syncGit,
+      },
       operation: {
         onData: terminalBridge.onData,
         onSessionChanged: terminalBridge.onSessionChanged,
@@ -936,6 +954,7 @@ beforeEach(() => {
   quickInputState.items = []
   quickInputState.unsubscribe.mockClear()
   bridgeState.chunks = []
+  bridgeState.gitStatus = null
   bridgeState.nextSeq = 0
   bridgeState.dataListener = null
   bridgeState.sessionChangedListener = null
@@ -957,6 +976,8 @@ beforeEach(() => {
   terminalBridge.copyEnvironmentValue.mockClear()
   terminalBridge.materializeClipboardImage.mockReset()
   terminalBridge.materializeClipboardImage.mockResolvedValue(null)
+  terminalBridge.getGitStatus.mockClear()
+  terminalBridge.syncGit.mockClear()
   terminalBridge.getGlobalLaunchSettings.mockClear()
   terminalBridge.updateGlobalLaunchSettings.mockClear()
   terminalBridge.createGroup.mockClear()
@@ -2524,6 +2545,36 @@ describe("TerminalModule", () => {
       xtermFrame?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }))
     })
     expect(document.querySelector("[data-terminal-file-tree-overlay]")).toBeNull()
+  })
+
+  it("shows the current directory's Git branch and uncommitted count and syncs that directory", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.gitStatus = {
+      cwd: "/repo/app",
+      isRepository: true,
+      branch: "feature/status",
+      detachedSha: null,
+      upstream: "origin/feature/status",
+      ahead: 1,
+      behind: 2,
+      changeCount: 3,
+      hasConflicts: false,
+    }
+
+    await renderModule()
+
+    expect(document.querySelector("[data-terminal-git-status]")?.textContent)
+      .toContain("feature/status")
+    expect(document.querySelector("[data-terminal-git-status]")?.textContent)
+      .toContain("3 个未提交")
+    expect(document.querySelector("[data-terminal-git-status]")?.textContent)
+      .toContain("↑1↓2")
+    await clickButtonByAriaLabel("同步分支：feature/status")
+    expect(terminalBridge.syncGit).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      expectedCwd: "/repo/app",
+    })
   })
 
   it("does not render session-level Agent control", async () => {
