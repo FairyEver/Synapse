@@ -770,6 +770,7 @@ const synapseBridge: SynapseBridge = {
       read: invoke(IPC_CHANNELS.account.markNotificationRead),
       readAll: invoke(IPC_CHANNELS.account.markAllNotificationsRead),
       delete: invoke(IPC_CHANNELS.account.deleteNotification),
+      deleteAll: invoke(IPC_CHANNELS.account.deleteAllNotifications),
     },
   },
   drive: {

@@ -12,7 +12,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const { state } = useAccount()
   const userId = state.status === "authenticated" ? state.profile.user.id : null
   const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState<MessageFilter>("pending")
+  const [filter, setFilter] = useState<MessageFilter>("all")
   const [items, setItems] = useState<readonly SynapseNotification[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [unread, setUnread] = useState(0)
@@ -123,6 +123,17 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     }
   }
 
+  const deleteAll = async (scope: "all" | "pending") => {
+    try {
+      await requireBridgeDomain("account").notifications.deleteAll({ filter: scope })
+      setSelected(null)
+      await refresh()
+    } catch (cause) {
+      logger.warn("Messages could not be deleted.", { cause })
+      setError(scope === "pending" ? "忽略失败" : "清空失败")
+    }
+  }
+
   const loadMore = async () => {
     if (!cursor) return
     try {
@@ -138,7 +149,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   return {
     authenticated: state.status === "authenticated",
     open, filter, items, cursor, unread, selected, error,
-    changeOpen, changeFilter, openItem, navigate, remove, markAllRead, loadMore,
+    changeOpen, changeFilter, openItem, navigate, remove, markAllRead, deleteAll, loadMore,
     closeDetail: () => setSelected(null),
   }
 }

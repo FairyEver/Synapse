@@ -65,4 +65,20 @@ describe("NotificationService", () => {
     const cutoff = (prisma.userNotification.deleteMany.mock.calls[0]?.[0] as { where: { createdAt: { lt: Date } } }).where.createdAt.lt
     expect(Math.abs(Date.now() - cutoff.getTime() - 90 * 24 * 60 * 60 * 1000)).toBeLessThan(2_000)
   })
+
+  it("clears all messages and ignores only unresolved terminal attention", async () => {
+    const { service, prisma, desktops } = harness()
+    await service.deleteAll("user-1", "all")
+    await service.deleteAll("user-1", "pending")
+
+    expect(prisma.userNotification.updateMany).toHaveBeenNthCalledWith(1, {
+      where: { userId: "user-1", deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    })
+    expect(prisma.userNotification.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { userId: "user-1", deletedAt: null, source: "terminal-attention", resolvedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    })
+    expect(desktops.broadcastToUser).toHaveBeenCalledTimes(2)
+  })
 })

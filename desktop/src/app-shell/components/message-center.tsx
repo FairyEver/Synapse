@@ -24,12 +24,14 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
         <div className="flex items-center justify-between gap-2 px-4">
           <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}>
             <TabsList>
-              <TabsTrigger value="pending">待处理</TabsTrigger>
               <TabsTrigger value="all">全部</TabsTrigger>
               <TabsTrigger value="unread">未读</TabsTrigger>
+              <TabsTrigger value="pending">待处理</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button variant="ghost" size="sm" onClick={() => { void center.markAllRead() }}>全部已读</Button>
+          {center.filter === "all" && <Button variant="ghost" size="sm" onClick={() => { void center.deleteAll("all") }}>全部清空</Button>}
+          {center.filter === "unread" && <Button variant="ghost" size="sm" onClick={() => { void center.markAllRead() }}>全部已读</Button>}
+          {center.filter === "pending" && <Button variant="ghost" size="sm" onClick={() => { void center.deleteAll("pending") }}>全部忽略</Button>}
         </div>
         {center.error && <p role="alert" className="px-4 text-sm text-destructive">{center.error}</p>}
         <div className="min-h-0 flex-1 overflow-y-auto px-4">

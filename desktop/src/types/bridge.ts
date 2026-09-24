@@ -1408,6 +1408,7 @@ export type SynapseBridge = {
       read: (input: { id: string }) => Promise<{ ok: true }>
       readAll: () => Promise<{ ok: true }>
       delete: (input: { id: string }) => Promise<{ ok: true }>
+      deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>
     }
   }
   drive: {

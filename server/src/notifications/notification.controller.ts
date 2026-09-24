@@ -23,6 +23,8 @@ const listSchema = z.object({
   filter: z.enum(["all", "unread", "pending"]).optional(),
 })
 
+const deleteAllSchema = z.object({ filter: z.enum(["all", "pending"]) })
+
 const internalSchema = z.object({
   source: z.enum(["system-notifier", "terminal-complete"]),
   sourceKey: z.string().min(8).max(160).optional(),
@@ -75,6 +77,14 @@ export class NotificationController {
   @Patch(":id/read")
   async markRead(@Req() request: AuthedRequest, @Param("id") id: string) {
     await this.notifications.markRead(request.user.id, id)
+    return { ok: true }
+  }
+
+  @Delete()
+  async deleteAll(@Req() request: AuthedRequest, @Query() query: unknown) {
+    const parsed = deleteAllSchema.safeParse(query)
+    if (!parsed.success) throw badRequestFromZodError(parsed.error, "删除范围无效。")
+    await this.notifications.deleteAll(request.user.id, parsed.data.filter)
     return { ok: true }
   }
 

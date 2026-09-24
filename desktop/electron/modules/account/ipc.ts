@@ -78,6 +78,7 @@ const notificationListRequestSchema = z.object({
 })
 
 const notificationIdSchema = z.object({ id: z.string().min(1) })
+const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pending"]) })
 
 const driveItemSchema = z.object({
   id: z.string(),
@@ -1084,6 +1085,13 @@ export const accountIpcModule: IpcModule = {
       request: notificationIdSchema,
       response: z.object({ ok: z.literal(true) }),
       handler: async (_ctx, input) => accountService.deleteNotification(notificationIdSchema.parse(input).id),
+    },
+    deleteAllNotifications: {
+      kind: "invoke",
+      operationId: "app.account.notification.delete_all",
+      request: notificationDeleteAllRequestSchema,
+      response: z.object({ ok: z.literal(true) }),
+      handler: async (_ctx, input) => accountService.deleteAllNotifications(notificationDeleteAllRequestSchema.parse(input).filter),
     },
     listDriveItems: {
       kind: "invoke",

@@ -143,6 +143,18 @@ export class NotificationService implements OnModuleInit {
     this.publish(userId, id)
   }
 
+  async deleteAll(userId: string, filter: "all" | "pending"): Promise<void> {
+    await this.prisma.userNotification.updateMany({
+      where: {
+        userId,
+        deletedAt: null,
+        ...(filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
+      },
+      data: { deletedAt: new Date() },
+    })
+    this.publish(userId, "all")
+  }
+
   async resolveAttention(userId: string, deviceId: string, sessionId: string): Promise<void> {
     const result = await this.prisma.userNotification.updateMany({
       where: { userId, source: "terminal-attention", deviceId, targetId: sessionId, resolvedAt: null },

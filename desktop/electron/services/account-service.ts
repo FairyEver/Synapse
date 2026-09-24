@@ -516,6 +516,10 @@ export class AccountService {
     return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}`, undefined, "删除消息失败。")
   }
 
+  async deleteAllNotifications(filter: "all" | "pending") {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/notifications?filter=${filter}`, undefined, "删除消息失败。")
+  }
+
   async listSkillRepositories(): Promise<SkillRepositoryItemDto[]> {
     return this.getAuthenticatedJson<SkillRepositoryItemDto[]>(
       `${apiBaseUrl()}/skill-repositories/mine`,
