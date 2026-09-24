@@ -60,7 +60,7 @@ import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId, SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { SoundNotifierHost } from "../app-capabilities/sound-notifier/renderer/host"
-import { SynapseSkillUpdateDialogHost } from "../app-capabilities/synapse-skill/renderer/update-dialog"
+import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
 
 type ActiveAppId = SynapseSystemAppId
 type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
@@ -375,7 +375,7 @@ function MainApp() {
           progress={knowledgeBaseStorageMigration.progress}
           onCancel={knowledgeBaseStorageMigration.cancel}
         />
-        <SynapseSkillUpdateDialogHost
+        <SynapseSkillAutoUpdateHost
           enabled={!knowledgeBaseStorageMigration.progress.active && !repoOnboardingActive}
         />
       </AppShellLayout>
