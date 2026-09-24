@@ -100,7 +100,6 @@
             <section data-preview="externalImage" hidden class="flex flex-col items-center gap-4 px-5 py-8"><img id="externalImageAsset" class="h-48 w-48 object-contain" src="../../desktop/src/definitions/agent/claude-code/icon.png" alt="外部图片预览"><p id="externalImageUnavailable" hidden class="text-sm text-neutral-600 dark:text-neutral-300">图片暂无法预览</p><p id="externalImageName" class="font-mono text-xs text-neutral-600 dark:text-neutral-300"></p></section>
             <section data-preview="externalWeb" hidden class="px-5 py-6"><h3 id="externalWebTitle" class="break-all text-lg font-semibold"></h3><p id="externalWebPath" class="mt-4 break-all font-mono text-sm text-neutral-600 dark:text-neutral-300"></p></section>
           </div>
-          <div id="previewActions" hidden class="flex shrink-0 gap-2 border-t border-neutral-200 bg-neutral-100 px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900"><button id="copyPreviewLink" type="button" class="flex-1 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-neutral-900 dark:border-neutral-700 dark:focus-visible:outline-neutral-100">复制地址</button><button id="sharePreviewLink" type="button" class="flex-1 rounded-lg bg-neutral-950 px-3 py-2.5 text-sm font-medium text-white focus-visible:outline-2 focus-visible:outline-neutral-950 dark:bg-white dark:text-neutral-950 dark:focus-visible:outline-white">分享链接</button></div>
         </section>
 
         <div id="shareBackdrop" hidden class="absolute inset-0 z-30 bg-black/40" aria-hidden="true"></div>
@@ -224,7 +223,6 @@
       document.querySelector('#listView').hidden = nextView !== 'list';
       document.querySelector('#detailView').hidden = nextView !== 'detail';
       document.querySelector('#previewView').hidden = nextView !== 'preview';
-      document.querySelector('#previewActions').hidden = nextView !== 'preview';
       document.querySelector('#sheetBack').hidden = nextView === 'list';
       document.querySelector('#shareButton').hidden = nextView === 'list';
       document.querySelector('#sheetClose').hidden = nextView !== 'list';
@@ -298,8 +296,7 @@
         field.remove();
       }
       button.textContent = copied ? '已复制' : '复制失败';
-      const defaultLabel = button.id === 'copyPreviewLink' ? '复制地址' : '复制链接';
-      setTimeout(() => { button.textContent = defaultLabel; }, 1500);
+      setTimeout(() => { button.textContent = '复制链接'; }, 1500);
     }
 
     function openShareSheet() {
@@ -367,10 +364,8 @@
       }
     });
     document.querySelector('#copyLink').addEventListener('click', event => copySelectedLink(event.currentTarget));
-    document.querySelector('#copyPreviewLink').addEventListener('click', event => copySelectedLink(event.currentTarget));
     document.querySelector('#shareCopyLink').addEventListener('click', event => copySelectedLink(event.currentTarget));
     document.querySelector('#shareButton').addEventListener('click', openShareSheet);
-    document.querySelector('#sharePreviewLink').addEventListener('click', openShareSheet);
     document.querySelector('#shareClose').addEventListener('click', closeShareSheet);
     document.querySelector('#shareBackdrop').addEventListener('click', closeShareSheet);
     document.querySelector('#openResource').addEventListener('click', event => {
