@@ -28,6 +28,15 @@ describe("user profile shared helpers", () => {
     expect(() => normalizeUserNickname("李\u0000阳")).toThrow("昵称不能包含控制字符。")
   })
 
+  it("rejects the invisible format characters that reorder a row", () => {
+    // U+202E 是右到左覆盖：它后面的文字会反过来显示，足以让一行冒充另一个名字。
+    expect(() => normalizeUserNickname("ada\u202Elovelace")).toThrow("昵称不能包含控制字符。")
+    expect(() => normalizeUserNickname("ada\u200Elovelace")).toThrow("昵称不能包含控制字符。")
+    expect(() => normalizeUserNickname("ada\u00ADlovelace")).toThrow("昵称不能包含控制字符。")
+    // 组合重音符号不是格式字符，昵称里留着它。
+    expect(normalizeUserNickname("Am\u00E9lie")).toBe("Am\u00E9lie")
+  })
+
   it("builds the default nickname from a handle by code point truncation", () => {
     expect(buildDefaultUserNickname("liyang")).toBe("liyang")
     expect(buildDefaultUserNickname("h".repeat(userNicknameMaxLength + 6))).toBe("h".repeat(userNicknameMaxLength))

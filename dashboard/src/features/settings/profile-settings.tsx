@@ -105,8 +105,12 @@ export function ProfileSettings() {
     trimmedHandle !== data.user.handle
 
   const trimmedNickname = nickname.trim()
-  const nicknameError = getNicknameError(trimmedNickname)
-  const isNicknameInvalid = nicknameError !== null
+  // 输入框还是空的（例如刚打开页面、昵称还没从服务端读回来）时不报错，与用户名一致：
+  // 空值只让保存按钮不可用，等读者真的填过什么再谈对错。
+  const nicknameError = nickname === '' ? null : getNicknameError(trimmedNickname)
+  const isNicknameInvalid =
+    trimmedNickname.length === 0 ||
+    nicknameError !== null
   const nicknameChanged =
     trimmedNickname !== data.user.nickname
 

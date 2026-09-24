@@ -83,7 +83,7 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications' \
 | `400` | 字段超长、`url` 不是 HTTPS、请求体出现未列出的字段，或去重键无效 |
 | `401` | API 密钥无效或缺失 |
 | `403` | 密钥缺少 `notification.send` 权限 |
-| `405` | 用 `HEAD` 等非 `GET` 方法访问路径式地址 |
+| `405` | 用 `HEAD` 探测路径式地址（其它非 `GET` 方法返回 `404`） |
 | `429` | 超过每分钟 60 次的请求限制 |
 
 三种形状共用一个请求额度。

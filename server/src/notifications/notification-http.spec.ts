@@ -208,4 +208,18 @@ describe("notification send over HTTP", () => {
       await app.close()
     }
   })
+
+  it("answers other methods on the URL shape with 404 rather than sending", async () => {
+    const { app, created } = await appWith()
+    try {
+      // 只有 `HEAD` 会落进 `@Get` 的处理器（所以上面单测 405）；其余方法没有路由，
+      // 由路由表按 404 回答。文档里的 405 只承诺 `HEAD`，这里把另一半钉住。
+      await request(app.getHttpServer())
+        .post(`/api/open/v1/notifications/${exampleKey}/${encodeURIComponent("标题")}/${encodeURIComponent("正文")}`)
+        .expect(404)
+      expect(created).not.toHaveBeenCalled()
+    } finally {
+      await app.close()
+    }
+  })
 })

@@ -1593,7 +1593,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         refreshSelection()
     }
 
-    private func endSelection(at point: CGPoint) {
+    private func endSelection(at point: CGPoint, presentingMenu: Bool) {
         collectionView.isScrollEnabled = true
         selectionOverlay.endLoupe()
         DiagnosticLog.record(.terminalSelection, [
@@ -1603,9 +1603,9 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         ])
 
         // A press that never moved has still taken the token under the finger, and the
-        // menu is what a long press is for. The guard is left for a row with nothing on
-        // it, where there is no token to take and so nothing to offer.
-        guard let selection, !selection.isEmpty else {
+        // menu is what a long press is for. Only a press that ended normally asks for it:
+        // an interrupted one (`cancelled`, `failed`) took nothing the reader meant to take.
+        guard presentingMenu, let selection, !selection.isEmpty else {
             clearSelection()
             return
         }
@@ -1622,8 +1622,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // spent half a second saying what they meant, and reversing that on the
             // next movement would take the selection away mid-drag.
             extendSelection(to: point)
-        case .ended, .cancelled, .failed:
-            endSelection(at: point)
+        case .ended:
+            endSelection(at: point, presentingMenu: true)
+        case .cancelled, .failed:
+            endSelection(at: point, presentingMenu: false)
         default:
             break
         }
@@ -1741,11 +1743,18 @@ extension TerminalCollectionView: UIEditMenuInteractionDelegate {
 
     private func selectAllRows() {
         guard let lastIndex = appliedRows.indices.last else { return }
-        let lastColumn = max(0, appliedRows[lastIndex].text.count - 1)
+        // A selection counts columns in cells, so the last column of the last row is its
+        // cell count minus one. Counting characters would leave the tail of any row
+        // holding wide characters outside the selection — half of a line of Chinese.
+        let lastRow = appliedRows[lastIndex].text
+        let lastColumn = max(0, TerminalSelection.cellCount(Array(lastRow)) - 1)
         selection = TerminalSelection(
             anchor: TerminalSelection.Position(row: 0, column: 0),
             head: TerminalSelection.Position(row: lastIndex, column: lastColumn)
         )
+        // All rows replaced whatever a press had taken, so the next drag extends this
+        // selection instead of snapping back to the old token.
+        selectionToken = nil
         refreshSelection()
     }
 }

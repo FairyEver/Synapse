@@ -137,6 +137,18 @@ describe('ProfileSettings', () => {
     expect(document.body.textContent).toContain('昵称不能为空。')
   })
 
+  it('keeps a cleared nickname silent while the save button stays disabled', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-nickname'))
+
+    await inputValue(inputById('user-nickname'), '')
+
+    expect(saveButton().disabled).toBe(true)
+    expect(document.body.textContent).not.toContain('昵称不能为空。')
+  })
+
   it('blocks nicknames over the shared limit by code point', async () => {
     mockedDashboardApi.getMe.mockResolvedValue(profile())
 

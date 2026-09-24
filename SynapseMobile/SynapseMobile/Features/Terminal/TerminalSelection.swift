@@ -147,7 +147,10 @@ struct TerminalSelection: Equatable {
         characters[..<character].reduce(0) { $0 + TerminalStore.cellWidth(of: $1) }
     }
 
-    private static func cellCount(_ characters: [Character]) -> Int {
+    /// How many cells a row of text covers — the columns a selection on it can name.
+    /// A caller with only the text in hand needs this to say "the whole row", and a
+    /// character count is not it: one CJK character is two cells.
+    static func cellCount(_ characters: [Character]) -> Int {
         characters.reduce(0) { $0 + TerminalStore.cellWidth(of: $1) }
     }
 }

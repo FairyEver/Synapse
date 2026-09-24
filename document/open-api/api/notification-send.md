@@ -36,7 +36,7 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications/syn_sk_...' \
 ## 路径式
 
 ```bash
-curl --request GET '{{APP_PUBLIC_URL}}/api/open/v1/notifications/syn_sk_.../%E9%83%A8%E7%BD%B2%E5%AE%8C%E6%88%90?group=部署&level=active'
+curl --request GET '{{APP_PUBLIC_URL}}/api/open/v1/notifications/syn_sk_.../%E9%83%A8%E7%BD%B2%E5%AE%8C%E6%88%90?group=%E9%83%A8%E7%BD%B2&level=active'
 ```
 
 标题和正文是 URL 路径段，必须 URL 编码；`group`、`url` 和 `level` 只能通过 query 传。这条形状不需要请求头，也不需要请求体。
@@ -78,7 +78,7 @@ curl --request GET '{{APP_PUBLIC_URL}}/api/open/v1/notifications/syn_sk_.../%E9%
 | `400` | 字段超长、`url` 不是 HTTPS、出现未列出的字段，或去重键无效 |
 | `401` | API 密钥无效或缺失 |
 | `403` | 密钥缺少 `notification.send` 权限 |
-| `405` | 用 `HEAD` 等非 `GET` 方法访问路径式地址 |
+| `405` | 用 `HEAD` 探测路径式地址（其它非 `GET` 方法返回 `404`） |
 | `429` | 超过每分钟 60 次的请求限制 |
 
 三种形状共用一个额度：每分钟最多接受 60 次请求。消息先入库再投递，推送失败不影响历史查看。历史保留 90 天，账号设备间同步已读与删除状态。标题和正文以明文存于 Synapse 服务端，并可能显示在系统通知预览中；访问日志不记录密钥和消息内容。
