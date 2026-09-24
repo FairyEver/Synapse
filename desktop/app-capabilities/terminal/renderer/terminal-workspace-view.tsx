@@ -1469,7 +1469,7 @@ function TerminalPane({
       toast.error("拖拽路径不可用")
       return
     }
-    const input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath))
+    const input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath), platform, session.shell)
     void runTrackedOperation(
       { component: "terminal", eventKey },
       () => writeTerminalInputChunks({
@@ -1480,7 +1480,7 @@ function TerminalPane({
       logger.error("Failed to write dropped terminal paths.", error)
       toast.error("写入终端失败")
     })
-  }, [session.id, terminalBridge])
+  }, [platform, session.id, session.shell, terminalBridge])
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (isTerminalPaneDrag(event)) {
@@ -1999,8 +1999,15 @@ function isValidDroppedTerminalPath(path: string | null): path is string {
   return typeof path === "string" && path.length > 0 && !/[\r\n]/.test(path)
 }
 
-function formatDroppedTerminalPaths(paths: readonly string[]): string {
-  return `${paths.map(escapeTerminalPath).join(" ")} `
+function formatDroppedTerminalPaths(paths: readonly string[], platform: string | undefined, shell: string): string {
+  const shellName = platform === "win32" ? shell.split(/[\\/]/).pop()?.toLowerCase() : undefined
+  return `${paths.map((path) => {
+    if (shellName === "cmd" || shellName === "cmd.exe") return `"${path}"`
+    if (shellName === "powershell" || shellName === "powershell.exe" || shellName === "pwsh" || shellName === "pwsh.exe") {
+      return `'${path.replaceAll("'", "''")}'`
+    }
+    return escapeTerminalPath(path)
+  }).join(" ")} `
 }
 
 function escapeTerminalPath(path: string): string {

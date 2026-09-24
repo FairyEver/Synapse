@@ -4002,6 +4002,22 @@ describe("TerminalModule", () => {
     })
   })
 
+  it.each([
+    ["cmd", "C:\\Windows\\System32\\cmd.exe", "C:\\Users\\Li Yang\\report & notes.txt", '"C:\\Users\\Li Yang\\report & notes.txt" '],
+    ["PowerShell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "C:\\Users\\O'Neil\\report $final.txt", "'C:\\Users\\O''Neil\\report $final.txt' "],
+    ["Git Bash", "C:\\Program Files\\Git\\bin\\bash.exe", "/c/Users/Li Yang/report.txt", "/c/Users/Li\\ Yang/report.txt "],
+  ])("inserts a dragged path for Windows %s without changing its shell syntax", async (_name, shell, filePath, expected) => {
+    window.synapse = { ...window.synapse, platform: "win32" }
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端", shell })]
+    const file = createDroppedFile("report.txt", filePath)
+
+    await renderModule()
+    await dispatchTerminalDragEvent("drop", [file])
+
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({ sessionId: "session-1", data: expected })
+  })
+
   it("inserts selected file-tree paths and shows drop feedback", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
