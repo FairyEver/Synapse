@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Req, UseGuards } from "@nestjs/common"
+import { normalizeUserNickname } from "@synapse/shared"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
@@ -6,8 +7,18 @@ import { badRequestFromZodError } from "../common/zod-validation"
 
 const updateMeSchema = z.object({
   handle: z.string().trim().min(1).max(64).optional(),
+  nickname: z.string().trim().superRefine((value, ctx) => {
+    try {
+      normalizeUserNickname(value)
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "昵称无效。",
+      })
+    }
+  }).optional(),
 }).strict().refine(
-  (value) => value.handle !== undefined,
+  (value) => value.handle !== undefined || value.nickname !== undefined,
   "Profile update request is empty.",
 )
 

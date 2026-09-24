@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { BadRequestException, Logger, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Prisma } from "@prisma/client"
+import { userNicknameMaxLength } from "@synapse/shared"
 import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "./password"
 import { hashToken } from "./token"
@@ -627,6 +628,7 @@ describe("UserAuthService", () => {
       data: {
         email: "u@example.com",
         handle: "li-yang",
+        nickname: "li-yang",
         passwordHash: expect.any(String),
       },
       select: {
@@ -661,6 +663,7 @@ describe("UserAuthService", () => {
         data: {
           email: "u@example.com",
           handle: "liyang",
+          nickname: "liyang",
           passwordHash: expect.any(String),
         },
         select: {
@@ -1315,11 +1318,12 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       handle: "ada",
+      nickname: "Ada L.",
     })
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
-      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada" },
+      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada", nickname: "Ada L." },
     }
 
     await expect(service.getMe("user-1")).resolves.toEqual(expected)
@@ -1331,6 +1335,7 @@ describe("UserAuthService", () => {
         email: true,
         status: true,
         handle: true,
+        nickname: true,
       },
     })
   })
@@ -1342,6 +1347,7 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       handle: "old-name",
+      nickname: "Old Name",
     })
     prisma.__tx.userHandleRedirect.findUnique.mockResolvedValue(null)
     prisma.__tx.user.update.mockResolvedValue({
@@ -1349,6 +1355,7 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       handle: "new-name",
+      nickname: "Old Name",
     })
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
@@ -1361,6 +1368,7 @@ describe("UserAuthService", () => {
         email: "u@example.com",
         status: "active",
         handle: "new-name",
+        nickname: "Old Name",
       },
     })
 
@@ -1381,6 +1389,7 @@ describe("UserAuthService", () => {
         email: true,
         status: true,
         handle: true,
+        nickname: true,
       },
     })
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -1391,6 +1400,82 @@ describe("UserAuthService", () => {
       detail: { fields: ["handle"] },
       ipAddress: "203.0.113.81",
     })
+  })
+
+  it("updates the nickname without touching handle identity rules", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      handle: "liyang",
+      nickname: "liyang",
+    })
+    prisma.__tx.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      handle: "liyang",
+      nickname: "李 阳",
+    })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.updateMyProfile("user-1", {
+      nickname: " 李 阳 ",
+    }, "203.0.113.82")).resolves.toEqual({
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+        handle: "liyang",
+        nickname: "李 阳",
+      },
+    })
+
+    expect(prisma.__tx.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { nickname: "李 阳" },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        handle: true,
+        nickname: true,
+      },
+    })
+    expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()
+    expect(prisma.__tx.user.findUnique).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.profile.update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { fields: ["nickname"] },
+      ipAddress: "203.0.113.82",
+    })
+  })
+
+  it("rejects nicknames that break the shared nickname rules", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      handle: "liyang",
+      nickname: "liyang",
+    })
+    const service = createService(prisma)
+
+    const tooLong = service.updateMyProfile("user-1", { nickname: "名".repeat(userNicknameMaxLength + 1) })
+    await expect(tooLong).rejects.toThrow(BadRequestException)
+    await expect(tooLong).rejects.toThrow("昵称不能超过 24 个字符。")
+
+    const blank = service.updateMyProfile("user-1", { nickname: "   " })
+    await expect(blank).rejects.toThrow(BadRequestException)
+    await expect(blank).rejects.toThrow("昵称不能为空。")
+
+    expect(prisma.__tx.user.update).not.toHaveBeenCalled()
   })
 
   it("rejects handles reserved by another user", async () => {
@@ -1472,12 +1557,14 @@ describe("UserAuthService", () => {
       email: "u@example.com",
       status: "active",
       handle: "grace",
+      nickname: "Grace",
     })
     prisma.__tx.user.update.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
       handle: "grace-hopper",
+      nickname: "Grace",
     })
     const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
     const service = createService(prisma, auditLog)
@@ -1491,6 +1578,7 @@ describe("UserAuthService", () => {
           email: "u@example.com",
           status: "active",
           handle: "grace-hopper",
+          nickname: "Grace",
         },
       })
 

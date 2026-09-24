@@ -15,7 +15,9 @@ import {
   DESKTOP_CLIENT_ID,
   DESKTOP_PKCE_CHALLENGE_METHOD,
   DESKTOP_REDIRECT_URI,
+  buildDefaultUserNickname,
   normalizeUserHandle,
+  normalizeUserNickname,
 } from "@synapse/shared"
 import { AuditLogService, auditActors } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
@@ -48,7 +50,7 @@ export interface UserRegistrationResult {
 }
 
 export interface UserMeResponse {
-  readonly user: Pick<User, "id" | "email" | "status" | "handle">
+  readonly user: Pick<User, "id" | "email" | "status" | "handle" | "nickname">
 }
 
 export type PasswordResetValidationResult =
@@ -148,13 +150,21 @@ function isUsablePasswordResetRecord(
   return Boolean(record && !record.usedAt && record.expiresAt > now && record.user.status === "active")
 }
 
-function normalizeProfileHandle(value: string): string {
+function toProfileBadRequest(normalize: () => string): string {
   try {
-    return normalizeUserHandle(value)
+    return normalize()
   } catch (error) {
     if (error instanceof Error) throw new BadRequestException(error.message)
     throw error
   }
+}
+
+function normalizeProfileHandle(value: string): string {
+  return toProfileBadRequest(() => normalizeUserHandle(value))
+}
+
+function normalizeProfileNickname(value: string): string {
+  return toProfileBadRequest(() => normalizeUserNickname(value))
 }
 
 function toUserMeResponse(user: {
@@ -162,6 +172,7 @@ function toUserMeResponse(user: {
   readonly email: string
   readonly status: User["status"]
   readonly handle: string
+  readonly nickname: string
 }): UserMeResponse {
   return {
     user: {
@@ -169,6 +180,7 @@ function toUserMeResponse(user: {
       email: user.email,
       status: user.status,
       handle: user.handle,
+      nickname: user.nickname,
     },
   }
 }
@@ -209,6 +221,7 @@ export class UserAuthService {
           data: {
             email,
             handle,
+            nickname: buildDefaultUserNickname(handle),
             passwordHash: await hashPassword(input.password),
           },
           select: {
@@ -695,6 +708,7 @@ export class UserAuthService {
         email: true,
         status: true,
         handle: true,
+        nickname: true,
       },
     })
 
@@ -703,13 +717,13 @@ export class UserAuthService {
 
   async updateMyProfile(
     userId: string,
-    input: { readonly handle?: string },
+    input: { readonly handle?: string; readonly nickname?: string },
     ipAddress = "system",
   ): Promise<UserMeResponse> {
-    if (input.handle === undefined) {
+    if (input.handle === undefined && input.nickname === undefined) {
       throw new BadRequestException("profile update is empty.")
     }
-    const auditFields = ["handle"]
+    const auditFields: string[] = []
 
     const user = await this.prisma.$transaction(async (tx) => {
       const current = await tx.user.findUniqueOrThrow({
@@ -719,6 +733,7 @@ export class UserAuthService {
           email: true,
           status: true,
           handle: true,
+          nickname: true,
         },
       })
       const data: Prisma.UserUpdateInput = {}
@@ -748,6 +763,15 @@ export class UserAuthService {
             })
           }
           data.handle = nextHandle
+          auditFields.push("handle")
+        }
+      }
+
+      if (input.nickname !== undefined) {
+        const nextNickname = normalizeProfileNickname(input.nickname)
+        if (nextNickname !== current.nickname) {
+          data.nickname = nextNickname
+          auditFields.push("nickname")
         }
       }
 
@@ -760,6 +784,7 @@ export class UserAuthService {
             email: true,
             status: true,
             handle: true,
+            nickname: true,
           },
         })
       } catch (error) {
