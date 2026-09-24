@@ -19,7 +19,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
           {center.unread > 0 && <Badge variant="secondary">{center.unread > 99 ? "99+" : center.unread}</Badge>}
         </Button>
       </SheetTrigger>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="sm:max-w-md" onCloseAutoFocus={(event) => event.preventDefault()}>
         <SheetHeader><SheetTitle>消息</SheetTitle></SheetHeader>
         <div className="flex items-center justify-between gap-2 px-4">
           <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}>
