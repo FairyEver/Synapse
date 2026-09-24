@@ -1648,12 +1648,6 @@ function TerminalPane({
             )}
           >
             <div className="flex min-w-0 items-center gap-0.5">
-              <TerminalPaneTitle
-                disabled={remoteSized}
-                onActive={onActive}
-                onRename={() => onRenameSession(session.id, paneRootRef.current)}
-                title={session.title}
-              />
               {workspaceTreeBridge ? <Button
                 ref={fileTreeTriggerRef}
                 type="button"
@@ -1674,6 +1668,12 @@ function TerminalPane({
               >
                 <Folder className="size-3.5" />
               </Button> : null}
+              <TerminalPaneTitle
+                disabled={remoteSized}
+                onActive={onActive}
+                onRename={() => onRenameSession(session.id, paneRootRef.current)}
+                title={session.title}
+              />
               <TerminalGitIndicator
                 sessionId={session.id}
                 visible={visible && session.status === "running"}
