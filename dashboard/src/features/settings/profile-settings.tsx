@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   normalizeUserHandle,
+  normalizeUserNickname,
   userHandleMaxLength,
 } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -30,11 +31,21 @@ function getHandleError(value: string): HandleError | null {
   }
 }
 
+function getNicknameError(value: string): string | null {
+  try {
+    normalizeUserNickname(value)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : '昵称无效。'
+  }
+}
+
 export function ProfileSettings() {
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const setAuthUser = useAuthStore((state) => state.auth.setUser)
   const [handle, setHandle] = useState('')
+  const [nickname, setNickname] = useState('')
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-me'],
     queryFn: dashboardApi.getMe,
@@ -59,6 +70,7 @@ export function ProfileSettings() {
   useEffect(() => {
     if (data) {
       setHandle(data.user.handle ?? '')
+      setNickname(data.user.nickname ?? '')
     }
   }, [data])
 
@@ -86,17 +98,27 @@ export function ProfileSettings() {
 
   const trimmedHandle = handle.trim().toLowerCase()
   const handleError = getHandleError(trimmedHandle)
-  const isInvalid =
+  const isHandleInvalid =
     trimmedHandle.length === 0 ||
     handleError !== null
-  const hasChanged =
+  const handleChanged =
     trimmedHandle !== data.user.handle
+
+  const trimmedNickname = nickname.trim()
+  const nicknameError = getNicknameError(trimmedNickname)
+  const isNicknameInvalid = nicknameError !== null
+  const nicknameChanged =
+    trimmedNickname !== data.user.nickname
+
+  const isInvalid = isHandleInvalid || isNicknameInvalid
+  const hasChanged = handleChanged || nicknameChanged
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isInvalid || !hasChanged) return
     updateProfile.mutate({
-      handle: trimmedHandle,
+      ...(handleChanged ? { handle: trimmedHandle } : {}),
+      ...(nicknameChanged ? { nickname: trimmedNickname } : {}),
     })
   }
 
@@ -139,6 +161,17 @@ export function ProfileSettings() {
               ) : null}
               {handleError === 'unavailable' ? (
                 <p className='text-sm text-destructive'>该用户名不可用。</p>
+              ) : null}
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='user-nickname'>昵称</Label>
+              <Input
+                id='user-nickname'
+                value={nickname}
+                onChange={(event) => setNickname(event.target.value)}
+              />
+              {nicknameError ? (
+                <p className='text-sm text-destructive'>{nicknameError}</p>
               ) : null}
             </div>
             <Button

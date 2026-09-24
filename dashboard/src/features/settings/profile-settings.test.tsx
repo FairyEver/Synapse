@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { userNicknameMaxLength } from '@synapse/shared'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -75,14 +76,77 @@ describe('ProfileSettings', () => {
     expect(document.body.textContent).toContain('只能使用小写字母、数字和连字符，并以字母或数字开头和结尾。')
   })
 
-  it('does not render a nickname field', async () => {
+  it('renders the saved nickname', async () => {
     mockedDashboardApi.getMe.mockResolvedValue(profile())
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-nickname'))
+
+    expect(inputById('user-nickname').value).toBe('liyang')
+  })
+
+  it('saves a nickname change', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+    mockedDashboardApi.updateMe.mockResolvedValue(profile({
+      user: { ...profile().user, nickname: '李 阳' },
+    }))
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-nickname'))
+
+    await inputValue(inputById('user-nickname'), ' 李 阳 ')
+    await click(saveButton())
+
+    await waitFor(() => {
+      expect(mockedDashboardApi.updateMe.mock.calls[0]?.[0]).toEqual({
+        nickname: '李 阳',
+      })
+    })
+  })
+
+  it('submits the username and nickname together when both change', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+    mockedDashboardApi.updateMe.mockResolvedValue(profile({
+      user: { ...profile().user, handle: 'new-name', nickname: '李 阳' },
+    }))
 
     renderProfileSettings()
     await waitFor(() => inputById('user-handle'))
 
-    expect(document.getElementById('display-name')).toBeNull()
-    expect(document.body.textContent).not.toContain('昵称')
+    await inputValue(inputById('user-handle'), 'New-Name')
+    await inputValue(inputById('user-nickname'), '李 阳')
+    await click(saveButton())
+
+    await waitFor(() => {
+      expect(mockedDashboardApi.updateMe.mock.calls[0]?.[0]).toEqual({
+        handle: 'new-name',
+        nickname: '李 阳',
+      })
+    })
+  })
+
+  it('blocks an empty nickname', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-nickname'))
+
+    await inputValue(inputById('user-nickname'), '   ')
+
+    expect(saveButton().disabled).toBe(true)
+    expect(document.body.textContent).toContain('昵称不能为空。')
+  })
+
+  it('blocks nicknames over the shared limit by code point', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-nickname'))
+
+    await inputValue(inputById('user-nickname'), '名'.repeat(userNicknameMaxLength + 1))
+
+    expect(saveButton().disabled).toBe(true)
+    expect(document.body.textContent).toContain('昵称不能超过 24 个字符。')
   })
 
   it('blocks reserved route handles', async () => {
@@ -143,6 +207,7 @@ function profile(overrides: Partial<Awaited<ReturnType<typeof dashboardApi.getMe
       email: 'u@example.test',
       status: 'active' as const,
       handle: 'liyang',
+      nickname: 'liyang',
     },
     ...overrides,
   }

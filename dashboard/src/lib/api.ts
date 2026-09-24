@@ -312,6 +312,7 @@ export type DashboardMe = {
     email: string
     status: 'active' | 'disabled'
     handle: string
+    nickname: string
   }
 }
 
@@ -852,7 +853,7 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${consoleApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${consoleApiBasePath}/me`),
-  updateMe: (input: { handle: string }) =>
+  updateMe: (input: { handle?: string; nickname?: string }) =>
     request<DashboardMe>(`${consoleApiBasePath}/me`, {
       method: 'PATCH',
       body: JSON.stringify(input),
