@@ -315,6 +315,7 @@ describe("UpdateService", () => {
 
     const downloadingState = await updateService.downloadUpdate()
 
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
     expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
     expect(downloadingState.status).toBe("downloading")
     expect(downloadingState.downloadPercent).toBe(0)
@@ -325,7 +326,7 @@ describe("UpdateService", () => {
     const { updateService } = await importUpdateService()
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     await updateService.cancelDownload()
 
     expect(updateService.getState()).toEqual(expect.objectContaining({
@@ -490,13 +491,12 @@ describe("UpdateService", () => {
     expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
-  it("refreshes stale update metadata before starting a download", async () => {
+  it("refreshes update metadata before downloading even within the polling interval", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"))
     const { updateService } = await importUpdateService()
 
     await updateService.checkForUpdates()
-    await vi.advanceTimersByTimeAsync(10 * 60_000)
     updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
       updaterMock.autoUpdater.emit("checking-for-update")
       updaterMock.autoUpdater.emit("update-available", {
@@ -518,6 +518,39 @@ describe("UpdateService", () => {
       releaseVersion: "0.2.33",
       status: "downloading",
     }))
+  })
+
+  it("does not download an old release when the fresh check finds no update", async () => {
+    const { updateService } = await importUpdateService()
+
+    await updateService.checkForUpdates()
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-not-available", { version: "0.2.32" })
+      return {
+        isUpdateAvailable: false,
+        updateInfo: { version: "0.2.32" },
+        versionInfo: { version: "0.2.32" },
+      }
+    })
+
+    const state = await updateService.downloadUpdate()
+
+    expect(state.status).toBe("not-available")
+    expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
+  })
+
+  it("does not download an old release when the fresh check fails", async () => {
+    const { updateService } = await importUpdateService()
+
+    await updateService.checkForUpdates()
+    updaterMock.autoUpdater.checkForUpdates.mockRejectedValueOnce(new Error("metadata unavailable"))
+
+    const state = await updateService.downloadUpdate()
+
+    expect(state.status).toBe("error")
+    expect(state.error).toBe("检查更新失败，请稍后再试。")
+    expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
   })
 
   it("invalidates available update metadata after download failure", async () => {
@@ -655,7 +688,7 @@ describe("UpdateService", () => {
     resolveAutoCheck?.()
     const state = await downloadRequest
 
-    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
     expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
     expect(state).toEqual(expect.objectContaining({
       releaseVersion: "0.2.32",
@@ -775,7 +808,7 @@ describe("UpdateService", () => {
     }
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
@@ -836,7 +869,7 @@ describe("UpdateService", () => {
     }
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
@@ -878,7 +911,7 @@ describe("UpdateService", () => {
     }
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
@@ -905,7 +938,7 @@ describe("UpdateService", () => {
     const beforeInstallQuit = vi.fn(() => false)
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
@@ -935,7 +968,7 @@ describe("UpdateService", () => {
     }
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     updaterMock.autoUpdater.emit("update-downloaded", {
       version: "0.2.32",
       downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",

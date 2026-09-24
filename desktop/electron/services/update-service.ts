@@ -819,35 +819,32 @@ class UpdateService {
       return this.getState()
     }
 
-    let updateInfo = this.availableUpdateInfo
-    if (this.state.status !== "available" || !updateInfo) {
+    const previousUpdateInfo = this.availableUpdateInfo
+    if (this.state.status !== "available" || !previousUpdateInfo) {
       throw new Error("没有可下载的新版本，请先检查更新。")
     }
 
-    if (this.isAvailableUpdateMetadataStale()) {
-      const previousVersion = updateInfo.version
-      const refreshFlowId = this.beginUpdateFlow("manual")
-      this.availableUpdateInfo = null
+    const refreshFlowId = this.beginUpdateFlow("manual")
+    this.availableUpdateInfo = null
 
-      let refreshResult: UpdateCheckResult | null
-      try {
-        refreshResult = await autoUpdater.checkForUpdates()
-      } catch (error) {
-        if (this.isManualUpdateFlow(refreshFlowId)) {
-          this.handleError(error, refreshFlowId)
-        }
-        return this.getState()
+    let refreshResult: UpdateCheckResult | null
+    try {
+      refreshResult = await autoUpdater.checkForUpdates()
+    } catch (error) {
+      if (this.isManualUpdateFlow(refreshFlowId)) {
+        this.handleError(error, refreshFlowId)
       }
-
-      updateInfo = this.availableUpdateInfo ?? refreshResult?.updateInfo ?? null
-      if (this.state.status !== "available" || !updateInfo) {
-        return this.getState()
-      }
-      logger.info("Refreshed stale update metadata before download.", {
-        previousVersion,
-        refreshedVersion: updateInfo.version,
-      })
+      return this.getState()
     }
+
+    const updateInfo = this.availableUpdateInfo ?? refreshResult?.updateInfo ?? null
+    if (this.state.status !== "available" || !updateInfo) {
+      return this.getState()
+    }
+    logger.info("Refreshed update metadata before download.", {
+      previousVersion: previousUpdateInfo.version,
+      refreshedVersion: updateInfo.version,
+    })
 
     const flowId = this.beginUpdateFlow("manual")
     void this.downloadLatestUpdate(updateInfo, flowId).catch((error) => {
