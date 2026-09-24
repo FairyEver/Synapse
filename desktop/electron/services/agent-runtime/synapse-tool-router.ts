@@ -312,6 +312,9 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
   const limit = normalizeLimit(input.limit)
 
   const exact = catalogByName.get(query)
+  const exactChinesePhrase = containsHan(query) && [...query].length >= 4
+    ? catalog.filter((entry) => (!domain || entry.domain === domain) && entry.description.includes(query))
+    : []
   const aliasTokens = lexiconTokens(query)
   const queryTokens = [
     ...tokenizeSearchText(query).filter((token) => (
@@ -344,6 +347,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
 
   const entries = dedupeTools([
     ...(exact && (!domain || exact.domain === domain) ? [exact] : []),
+    ...exactChinesePhrase,
     ...ranked,
   ]).slice(0, limit)
 

@@ -31,7 +31,7 @@ export interface BeforeQuitDeps {
   readonly isAllowedToQuit: () => boolean
 }
 
-export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
+export function attachBeforeQuitHandler(deps: BeforeQuitDeps): { requestRemoteRestart: () => void } {
   updateService.setInstallQuitHandlers({
     canQuit: () => {
       if (shouldBlockKnowledgeBaseStorageMigrationQuit(deps.knowledgeBaseStorageMigration)) {
@@ -101,6 +101,24 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
       pendingPushFlowRunning = false
     })
   })
+
+  return {
+    requestRemoteRestart: () => {
+      if (updateService.isInstallHandoffPending()) {
+        throw new Error("正在交接更新安装，暂时无法重启。")
+      }
+      if (shouldBlockKnowledgeBaseStorageMigrationQuit(deps.knowledgeBaseStorageMigration)) {
+        deps.knowledgeBaseStorageMigration.focusDialog()
+        throw new Error("知识库存储迁移正在进行，暂时无法重启。")
+      }
+      // The user's remote restart request chooses "continue exit" for pending
+      // pushes. Their persisted queue is untouched; the normal allowed-quit path
+      // still stops services and flushes logs, without showing a local dialog.
+      app.relaunch()
+      deps.setAllowQuit(true)
+      app.quit()
+    },
+  }
 }
 
 function shouldBlockKnowledgeBaseStorageMigrationQuit(

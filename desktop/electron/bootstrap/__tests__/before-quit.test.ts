@@ -4,6 +4,7 @@ const electronMock = vi.hoisted(() => {
   const app = {
     on: vi.fn(),
     quit: vi.fn(),
+    relaunch: vi.fn(),
   }
 
   return {
@@ -119,6 +120,48 @@ describe("attachBeforeQuitHandler", () => {
     expect(canQuit).toBe(false)
     expect(allowQuit).toBe(false)
     expect(storageMigration.focusDialog).toHaveBeenCalled()
+  })
+
+  it("fully relaunches remotely without prompting for pending pushes", async () => {
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    let allowQuit = false
+    const stopAll = vi.fn(async () => {})
+    const controller = attachBeforeQuitHandler({
+      state: { current: null },
+      registry: { stopAll } as never,
+      setAllowQuit: (value) => { allowQuit = value },
+      isAllowedToQuit: () => allowQuit,
+    })
+
+    controller.requestRemoteRestart()
+    expect(electronMock.app.relaunch).toHaveBeenCalledTimes(1)
+    expect(electronMock.app.quit).toHaveBeenCalledTimes(1)
+    expect(allowQuit).toBe(true)
+    expect(electronMock.showMessageBox).not.toHaveBeenCalled()
+
+    const beforeQuitHandler = electronMock.app.on.mock.calls.find(
+      ([eventName]) => eventName === "before-quit",
+    )?.[1] as (event: { preventDefault: () => void }) => Promise<void>
+    await beforeQuitHandler({ preventDefault: vi.fn() })
+    expect(stopAll).toHaveBeenCalledTimes(1)
+    expect(electronMock.showMessageBox).not.toHaveBeenCalled()
+  })
+
+  it("blocks a remote restart during knowledge base storage migration", async () => {
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const migration = { isActive: () => true, focusDialog: vi.fn() }
+    const controller = attachBeforeQuitHandler({
+      state: { current: null },
+      registry: { stopAll: vi.fn() } as never,
+      knowledgeBaseStorageMigration: migration,
+      setAllowQuit: vi.fn(),
+      isAllowedToQuit: () => false,
+    })
+
+    expect(() => controller.requestRemoteRestart()).toThrow("知识库存储迁移")
+    expect(electronMock.app.relaunch).not.toHaveBeenCalled()
+    expect(electronMock.app.quit).not.toHaveBeenCalled()
+    expect(migration.focusDialog).toHaveBeenCalledTimes(1)
   })
 
   it("holds native app quit until ShipIt startup verification completes", async () => {

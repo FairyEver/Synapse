@@ -14,12 +14,14 @@ import { PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID } from "./problem-feedback/shared
 import { JSON_REPAIR_CAPABILITY_ID } from "./json-repair/shared/capability"
 import { AGENT_CONVERSATION_CAPABILITY_IDS } from "./agent/shared/capability"
 import { ACCOUNT_CAPABILITY_IDS } from "./account/shared/capability"
+import { DESKTOP_CONTROL_CAPABILITY_IDS } from "./desktop-control/shared/capability"
 
 type AppCapabilitySubDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
 }
 
 const accountCapabilityIds = new Set<string>(ACCOUNT_CAPABILITY_IDS)
+const desktopControlCapabilityIds = new Set<string>(DESKTOP_CONTROL_CAPABILITY_IDS)
 const secretsCapabilityIds = new Set<string>(SECRETS_CAPABILITY_IDS)
 const htmlGeneratorCapabilityIds = new Set<string>(HTML_GENERATOR_CAPABILITY_IDS)
 const agentConversationCapabilityIds = new Set<string>(AGENT_CONVERSATION_CAPABILITY_IDS)
@@ -28,6 +30,7 @@ export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
 export function createAppCapabilityDispatcher(deps: {
   readonly account: AppCapabilitySubDispatcher
+  readonly desktopControl?: AppCapabilitySubDispatcher
   readonly agentConversation: AppCapabilitySubDispatcher
   readonly textExtractor: AppCapabilitySubDispatcher
   readonly documentTemplate: AppCapabilitySubDispatcher
@@ -44,6 +47,10 @@ export function createAppCapabilityDispatcher(deps: {
     async dispatch(action, params, context) {
       if (accountCapabilityIds.has(action)) {
         return deps.account.dispatch(action, params, context)
+      }
+      if (desktopControlCapabilityIds.has(action)) {
+        if (!deps.desktopControl) throw new Error("Desktop control dispatcher is not configured")
+        return deps.desktopControl.dispatch(action, params, context)
       }
       if (agentConversationCapabilityIds.has(action)) {
         return deps.agentConversation.dispatch(action, params, context)

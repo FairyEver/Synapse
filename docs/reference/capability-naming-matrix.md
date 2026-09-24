@@ -2,6 +2,8 @@
 
 Built-in capability ids use `app.<namespace>.<resource>.<action>`. The local HTTP API uses the same canonical id in the top-level `action` field. Extensions use `extend.<extension-slug>.<resource>.<action>` and MCP index names `extend_*`; hyphens and dots become underscores. The public MCP surface remains `search` / `invoke`. The retired prefixes below are not aliases and calls using them fail with `Unknown tool`.
 
+Desktop control uses four canonical public MCP names: `app_update_state_get` for `app.update.state.get`, `app_update_check` for `app.update.check.execute`, `app_update_run` for `app.update.install.execute`, and `app_desktop_restart` for `app.desktop.restart.execute`. The last three are intentional short primary names, not aliases; the local HTTP action remains the full capability id.
+
 Portal Headless contributes `extend.portal-headless.credential.get` / `extend_portal_headless_credential_get` through the extension registry. It only accepts MCP sources and has no IPC, preload bridge or generic local HTTP credential endpoint. AI business requests go directly to `/api/extend/portal-headless/*` on the SY backend.
 
 | Retired MCP prefix | Current MCP prefix | Removed tools |

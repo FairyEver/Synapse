@@ -302,13 +302,22 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     })
   }
 
-  attachBeforeQuitHandler({
+  const quitControl = attachBeforeQuitHandler({
     state: deps.mainWindowState,
     registry,
     knowledgeBaseStorageMigration,
     setAllowQuit: deps.setAllowAppQuit,
     isAllowedToQuit: deps.isAppQuitting,
   })
+  try {
+    registry.get<CoreDatabaseService>("core.database").desktopControl.setRestartHandler(
+      quitControl.requestRemoteRestart,
+    )
+  } catch (error) {
+    logger.warn("Remote desktop restart is unavailable.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
 
   void registry.startBackground()
     .then((backgroundResult) => {

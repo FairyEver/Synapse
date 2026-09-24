@@ -15,6 +15,8 @@
 
 ## 2. 已确认的产品边界
 
+后续增加的本机 Synapse MCP `app_update_check` / `app_update_run` / `app_desktop_restart` 是独立的 Agent 控制入口，不经过公开网页或 `synapse://update`。Agent 明确接到用户的更新或重启指令后，主进程通过权限、审计和现有更新安装交接执行；此入口不放宽下文对裸更新深链与短时凭证的限制。MCP 返回“已接纳”不表示安装或重启已完成，远程客户端需重新连接后核对版本与进程启动标识。
+
 ### 2.1 必须支持
 
 - 对外只分享稳定 HTTPS 地址 `https://synapse.d2.pub/desktop/update`。

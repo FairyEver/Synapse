@@ -97,8 +97,44 @@ import {
   AGENT_CONVERSATION_MCP_TOOL_ACTIONS,
 } from "../../app-capabilities/agent/shared/capability"
 import { buildAgentConversationMcpTools } from "../../app-capabilities/agent/shared/mcp-tools"
+import {
+  DESKTOP_RESTART_CAPABILITY_ID,
+  DESKTOP_RESTART_MCP_TOOL_NAME,
+  UPDATE_CHECK_CAPABILITY_ID,
+  UPDATE_CHECK_MCP_TOOL_NAME,
+  UPDATE_RUN_CAPABILITY_ID,
+  UPDATE_RUN_MCP_TOOL_NAME,
+  UPDATE_STATE_GET_CAPABILITY_ID,
+  UPDATE_STATE_GET_MCP_TOOL_NAME,
+} from "../../app-capabilities/desktop-control/shared/capability"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
+  {
+    id: UPDATE_STATE_GET_CAPABILITY_ID,
+    title: "Get desktop update state",
+    description: "Read this computer's Synapse Desktop update state and process start identity.",
+    mutates: false,
+  },
+  {
+    id: UPDATE_CHECK_CAPABILITY_ID,
+    title: "Check desktop updates",
+    description: "Check for a Synapse Desktop update on this computer.",
+    mutates: false,
+  },
+  {
+    id: UPDATE_RUN_CAPABILITY_ID,
+    title: "Update Synapse Desktop",
+    description: "Check, download, install, and restart Synapse Desktop on this computer when an update is available.",
+    mutates: true,
+    risk: "high",
+  },
+  {
+    id: DESKTOP_RESTART_CAPABILITY_ID,
+    title: "Restart Synapse Desktop",
+    description: "Fully quit and relaunch the Synapse Desktop process on this computer.",
+    mutates: true,
+    risk: "high",
+  },
   {
     id: ACCOUNT_STATE_GET_CAPABILITY_ID,
     title: "Get account state",
@@ -234,6 +270,10 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
+  [UPDATE_STATE_GET_MCP_TOOL_NAME]: UPDATE_STATE_GET_CAPABILITY_ID,
+  [UPDATE_CHECK_MCP_TOOL_NAME]: UPDATE_CHECK_CAPABILITY_ID,
+  [UPDATE_RUN_MCP_TOOL_NAME]: UPDATE_RUN_CAPABILITY_ID,
+  [DESKTOP_RESTART_MCP_TOOL_NAME]: DESKTOP_RESTART_CAPABILITY_ID,
   [ACCOUNT_STATE_GET_MCP_TOOL_NAME]: ACCOUNT_STATE_GET_CAPABILITY_ID,
   [ACCOUNT_LOGIN_START_MCP_TOOL_NAME]: ACCOUNT_LOGIN_START_CAPABILITY_ID,
   ...AGENT_CONVERSATION_MCP_TOOL_ACTIONS,
@@ -277,6 +317,26 @@ const strictEmptyInputSchema = {
 }
 export function buildAppTools(): McpToolDefinition[] {
   return [
+    {
+      name: UPDATE_STATE_GET_MCP_TOOL_NAME,
+      description: "Read the current Synapse Desktop version, update status, last check time, process bootId and startedAt, and remote operation state on this computer. After a remote restart, reconnect and compare bootId; after an update, also compare currentVersion. Chinese intent: 检查 sy 更新, 更新状态, 重启后状态.",
+      inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: UPDATE_CHECK_MCP_TOOL_NAME,
+      description: "Check this computer's Synapse Desktop for updates now. Returns the update state; an active check or download and an already downloaded update are preserved. Packaged macOS and Windows only. Chinese intent: 帮我检查一下更新, 检查 sy 桌面端更新.",
+      inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: UPDATE_RUN_MCP_TOOL_NAME,
+      description: "Start a background Synapse Desktop update on this computer: check, download, install, and restart when available. Returns accepted and operationId before installation; it does not mean completed. The current Agent/Terminal tasks may be interrupted. Reconnect and query app_update_state_get to verify the version. Packaged macOS and Windows only. Chinese intent: 帮我更新, 更新 sy 桌面端.",
+      inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: DESKTOP_RESTART_MCP_TOOL_NAME,
+      description: "Fully quit and relaunch the Synapse Desktop process on this computer, even when there is no update. Returns accepted and operationId before the process exits; the current Agent/Terminal tasks will end. Pending repository pushes are preserved without a local confirmation dialog. Reconnect and compare bootId through app_update_state_get. Chinese intent: 帮我重启, 重启 sy 桌面端.",
+      inputSchema: strictEmptyInputSchema,
+    },
     {
       name: ACCOUNT_STATE_GET_MCP_TOOL_NAME,
       description: "Read the signed-in Synapse account state on this computer. Call it before starting a login to see whether anyone is signed in, and after starting one to find out when the sign-in has completed. Returns `status` (`unauthenticated`, `authenticating`, `authenticated`, or `error`); an `authenticated` state also carries `connectivity`, and `offline` there means the session is intact but the server is unreachable.",

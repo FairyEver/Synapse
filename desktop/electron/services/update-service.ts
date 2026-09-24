@@ -141,6 +141,7 @@ function toNullablePositiveNumber(value: number | null | undefined): number | nu
 
 class UpdateService {
   private initialized = false
+  private readonly stateListeners = new Set<(state: SynapseAppUpdateState) => void>()
   private state: SynapseAppUpdateState = createBaseState()
   private downloadCancellationToken: CancellationToken | null = null
   private isCancellingDownload = false
@@ -736,7 +737,7 @@ class UpdateService {
     })
   }
 
-  async checkForUpdates(): Promise<SynapseAppUpdateState> {
+  async checkForUpdates(options: { refreshAvailable?: boolean } = {}): Promise<SynapseAppUpdateState> {
     this.initialize()
 
     if (!isUpdateSupportedInCurrentEnvironment()) {
@@ -749,7 +750,7 @@ class UpdateService {
 
     if (
       this.state.status === "checking"
-      || this.state.status === "available"
+      || (this.state.status === "available" && !options.refreshAvailable)
       || this.state.status === "downloading"
       || this.state.status === "downloaded"
       || this.activeUpdateMode !== null
@@ -1117,12 +1118,25 @@ class UpdateService {
 
     const nextState = cloneState(this.state)
 
+    for (const listener of this.stateListeners) {
+      try {
+        listener(nextState)
+      } catch (error) {
+        logger.error("Update state listener failed.", error)
+      }
+    }
+
     if (this.windowManager) {
       this.windowManager.broadcast(
         UPDATE_CHANNELS.stateChanged,
         nextState,
       )
     }
+  }
+
+  subscribeState(listener: (state: SynapseAppUpdateState) => void): () => void {
+    this.stateListeners.add(listener)
+    return () => this.stateListeners.delete(listener)
   }
 
   startAutoCheck(): void {

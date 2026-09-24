@@ -322,6 +322,17 @@ describe("UpdateService", () => {
     expect(downloadingState.message).toBe("正在下载更新...")
   })
 
+  it("refreshes an already available update only for an explicit fresh check", async () => {
+    const { updateService } = await importUpdateService()
+    await updateService.checkForUpdates()
+    await updateService.checkForUpdates()
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+
+    await updateService.checkForUpdates({ refreshAvailable: true })
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
+    expect(updateService.getState().status).toBe("available")
+  })
+
   it("keeps stale cancellation events from clearing a new manual update flow", async () => {
     const { updateService } = await importUpdateService()
 

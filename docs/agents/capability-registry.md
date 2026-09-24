@@ -31,6 +31,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Connectors | 是 | 否 | — | — | — | 1 个私有授权回调 |
 | Clipboard | 否 | 否 | 2 | — | — | — |
+| Desktop Update / Restart | 否 | 否 | — | — | 4 | — |
 | Document Template | 否 | 否 | 1 | — | 1 | — |
 | File Opener | 否 | 否 | 1 | — | 1 | `open` |
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
@@ -53,6 +54,8 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 | Screenshot | 否 | 否 | — | — | — | — |
 
 固定例外：
+
+- Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。
 
 - Agent Conversation inspect 的既有 `beforeIndex` 现在支持任意有效记录边界，默认 50 条、最多 100 条及既有字节限制不变；超大单轮分多页返回，`toolUseId` 跨页保留，不新增工具，Agent Conversation 仍为 11 项。调用方按返回的 `nextBeforeIndex` 翻页，不再假定用户轮次边界。
 - Agent SDK 原生 compact 与私有文件检查点是既有执行器内部行为，不新增 capability、MCP、Workflow、Automation 或 Deep Link；compact 后继续使用同一 conversation/turn，Provider 或 SDK 异常沿用普通失败投影，公开 Agent Conversation 工具仍为 11 个。
@@ -119,7 +122,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 83 | 79 |
+| `app` | 87 | 83 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -129,11 +132,11 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `content` | 16 | 16 |
 | `drive` | 65 | 65 |
 | `extend` | 1 | 1 |
-| 合计 | 249 | 245 |
+| 合计 | 253 | 249 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 245 个工具（244 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 249 个工具（248 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

@@ -67,6 +67,18 @@ describe("Synapse tool router catalog", () => {
     await expect(searchSynapseTools({ query: "数据库表", domain: "database", limit: 3 })).resolves.toEqual(chinese)
   })
 
+  it("finds the three remote desktop update intents in Chinese", async () => {
+    const phrases = [
+      ["帮我检查一下更新", "app_update_check"],
+      ["帮我更新", "app_update_run"],
+      ["帮我重启", "app_desktop_restart"],
+    ] as const
+    for (const [query, name] of phrases) {
+      const result = searchMatches(await searchSynapseTools({ query, domain: "app", limit: 5 }))
+      expect(result.tools.map((tool) => tool.name)).toContain(name)
+    }
+  })
+
   it("prioritizes the general Drive item listing for a natural-language file list query", async () => {
     const english = await searchSynapseTools({ query: "list files drive", domain: "drive", limit: 3 })
     const chinese = await searchSynapseTools({ query: "查看云盘文件列表", limit: 3 })

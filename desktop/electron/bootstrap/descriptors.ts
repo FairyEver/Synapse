@@ -35,6 +35,8 @@ import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { createAccountCapabilityDispatcher } from "../../app-capabilities/account/main/dispatcher"
+import { createDesktopControlDispatcher } from "../../app-capabilities/desktop-control/main/dispatcher"
+import { DesktopControlService } from "../../app-capabilities/desktop-control/main/service"
 import { createAgentConversationCapabilityDispatcher } from "../../app-capabilities/agent/main/dispatcher"
 import { AgentConversationControlService } from "../../app-capabilities/agent/main/control-service"
 import { AgentConversationNavigationService } from "../../app-capabilities/agent/main/service"
@@ -1530,7 +1532,11 @@ function resolveWorkflowOutput(
  * Status: degraded — SPEC §4 mapping. If the database fails the app still
  * runs without CLI/MCP.
  */
-export type CoreDatabaseService = { readonly initialized: true; readonly actionRouter: SynapseActionRouter }
+export type CoreDatabaseService = {
+  readonly initialized: true
+  readonly actionRouter: SynapseActionRouter
+  readonly desktopControl: DesktopControlService
+}
 
 export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   id: "core.database",
@@ -1761,8 +1767,22 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
     const accountDispatcher = createAccountCapabilityDispatcher({ service: accountService })
+    const desktopControl = new DesktopControlService({
+      update: updateService,
+      permissionGuard,
+      auditSink,
+      logger: createMainLogger("capability.desktop-control"),
+      isUpdateReady: () => {
+        try {
+          return ctx.registry.get<typeof updateService>("core.update") === updateService
+        } catch {
+          return false
+        }
+      },
+    })
     const appDispatcher = createAppCapabilityDispatcher({
       account: accountDispatcher,
+      desktopControl: createDesktopControlDispatcher(desktopControl),
       agentConversation: agentConversationDispatcher,
       textExtractor: textExtractorDispatcher,
       documentTemplate: documentTemplateDispatcher,
@@ -1806,7 +1826,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter, { permissionGuard, auditSink })
-    return { initialized: true, actionRouter }
+    return { initialized: true, actionRouter, desktopControl }
   },
   async stop() {
     await shutdownDatabase()

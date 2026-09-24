@@ -8,6 +8,17 @@ Terminal is one of those apps: its tools are `app_terminal_*` and belong to this
 
 When an App capability is configured as a node inside a Workflow, use `workflow/index.md` instead. The Workflow guide owns node schemas, reserved bindings, graph edges, layout, definition validation, and run behavior. Do not read both guides merely because a Workflow node is backed by an App capability.
 
+## Synapse Desktop Updates and Restart
+
+The phrases “帮我检查一下更新”, “帮我更新”, and “帮我重启” refer to **this computer's Synapse Desktop app**, including when the request comes from an iPhone controlling an Agent on this computer. They do not mean updating a repository, restarting a terminal, or reloading a window.
+
+- Check for updates -> `app_update_check`; read `status`, `currentVersion`, `releaseVersion`, `lastCheckedAt`, and `error` from its result. An in-progress download or downloaded update is preserved.
+- Update -> first read `app_update_state_get` to record `bootId` and `currentVersion`, then call `app_update_run` once. It checks, downloads, installs, and restarts when a version is available. `accepted` means the main process accepted the request, not that installation completed. Repeated requests for the same active operation return the same `operationId`.
+- Restart -> first read `app_update_state_get` to record `bootId`, then call `app_desktop_restart`. This fully quits and relaunches Synapse even when no update exists. Pending repository changes remain queued; remote restart does not wait for the desktop's local confirmation dialog.
+- Before calling update or restart, tell the user that current Agent, Terminal, and other running tasks will be interrupted. The user's explicit instruction to perform the action is authorization; do not ask for a second confirmation.
+- The current Agent or terminal can disappear as Synapse exits. Do not claim completion from an `accepted` response or treat disconnection as success. After the phone reconnects, use `app_update_state_get` in a new session: changed `bootId` confirms a new process; for an update also compare `currentVersion`. If the same process remains, inspect `remoteOperation.phase` and `remoteOperation.error`.
+- Update checks and installation require a packaged macOS or Windows app. Report `unsupported`, errors, and blocked exits without using shell commands or a bare update Deep Link as a fallback. The first release of these tools must already be installed on the computer before they can be used.
+
 ## Account Sign-in
 
 Use `app_account_state_get` and `app_account_login_start` when the account may not be signed in — the desktop client went offline, or another Synapse call reports that it needs a signed-in account. Signing in is a self-service action here: the browser already holds the session, so this is something to complete on the user's behalf rather than hand back to them.

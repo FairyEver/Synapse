@@ -2,6 +2,16 @@
 
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
 
+## Desktop update and restart tools
+
+All four tools take an empty object. `app_update_state_get` returns the existing updater fields (`currentVersion`, `releaseVersion`, `status`, `message`, `error`, download progress, `lastCheckedAt`, `canCheck`, `installRecovery`) plus `bootId`, `startedAt`, and `remoteOperation: { id, kind, phase, error } | null`. `bootId` changes on a full process restart. `remoteOperation` is process-local; it cannot prove success after that process exits.
+
+- `app_update_check` performs a fresh check when safe and returns the same state shape. If a check, download, installed download, or recovery flow is already active, it returns the current state without discarding that work. `unsupported` means this is not a packaged macOS or Windows build.
+- `app_update_run` returns `{ accepted: true, operationId, phase }` after the desktop main process accepts the request. It checks, downloads, and installs in the background; no available update ends the operation without restarting. A repeated call during the same update returns the same ID. A concurrent restart conflicts. Check `remoteOperation` for failure while still connected, or compare version and boot ID after reconnecting.
+- `app_desktop_restart` returns `{ accepted: true, operationId, phase }` before a full quit and relaunch. A repeated call during the same restart returns the same ID. A concurrent update conflicts. Unsynced repository changes are retained for later push without a local desktop dialog.
+
+Installation still uses the desktop updater's native handoff and recovery checks. A failed macOS handoff leaves the running process in place and exposes the failure in `remoteOperation.error`; it must not be reported as a successful restart.
+
 ## `app_account_state_get`
 
 Read the signed-in account state of the desktop application.

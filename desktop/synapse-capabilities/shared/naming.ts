@@ -113,6 +113,11 @@ export function getCapabilityAction(id: CapabilityId): CapabilityAction {
 }
 
 export function capabilityIdToMcpTool(id: CapabilityId): string {
+  // Desktop control uses the short phrases people issue to the Agent. These
+  // are the canonical public names, not compatibility aliases.
+  if (id === "app.update.check.execute") return "app_update_check"
+  if (id === "app.update.install.execute") return "app_update_run"
+  if (id === "app.desktop.restart.execute") return "app_desktop_restart"
   return id.replaceAll(".", "_").replaceAll("-", "_")
 }
 
