@@ -36,6 +36,9 @@ model User {
   id                             String                          @id @default(cuid())
   email                          String                          @unique
   handle                         String                          @unique @db.VarChar(64)
+  /// 用户自填的展示昵称，只在控制台个人资料和桌面端账号区显示。
+  /// 不参与公开身份与 URL（那部分是 handle），允许重复，注册时默认取 handle。
+  nickname                       String                          @db.VarChar(24)
   adminNote                      String?                         @db.VarChar(500)
   passwordHash                   String
   passwordChangedAt              DateTime?
