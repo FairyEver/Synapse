@@ -135,6 +135,9 @@ archive() {
     -archivePath "$ARCHIVE_PATH" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     -allowProvisioningUpdates \
+    -authenticationKeyPath "$ASC_KEY_PATH" \
+    -authenticationKeyID "$ASC_KEY_ID" \
+    -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
     | tail -n 20
 }
 
