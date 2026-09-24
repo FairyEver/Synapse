@@ -23,7 +23,7 @@ function canManageRepositoryContentLifecycle(
   item: ContentOwnershipFields,
   currentUserId: string | null,
 ): boolean {
-  return isContentCreator(item, currentUserId)
+  return item.type === "skill" || isContentCreator(item, currentUserId)
 }
 
 export {

@@ -55,12 +55,12 @@ function contentItem(id: string, title: string): SynapseContentMeta {
 }
 
 describe("content mutation helpers", () => {
-  it("restricts every deletion lifecycle to its creator", () => {
+  it("opens the Skill deletion lifecycle to any repository profile and keeps Rule lifecycle creator-only", () => {
     const skill = { ...contentItem("skill-1", "Skill"), type: "skill" as const }
     const rule = contentItem("rule-1", "Rule")
 
     expect(canManageContentDeletion(skill, "user")).toBe(true)
-    expect(canManageContentDeletion(skill, "other-user")).toBe(false)
+    expect(canManageContentDeletion(skill, "other-user")).toBe(true)
     expect(canManageContentDeletion(rule, "user")).toBe(true)
     expect(canManageContentDeletion(rule, "other-user")).toBe(false)
   })

@@ -24,6 +24,7 @@ describe("Content capability domain", () => {
     const tools = new Map(buildContentTools().map((tool) => [tool.name, tool]))
     const create = tools.get("app_resource_repository_skill_create")
     const update = tools.get("app_resource_repository_skill_update")
+    const deleteSkill = tools.get("app_resource_repository_skill_delete")
 
     expect(create?.inputSchema.required).toBeUndefined()
     expect(create?.inputSchema).not.toHaveProperty("anyOf")
@@ -51,6 +52,9 @@ describe("Content capability domain", () => {
     expect(update?.description).toContain("sourceDirectoryPath")
     expect(update?.description).toContain("including a Skill created by another repository profile")
     expect(update?.description).not.toContain("skill created by the current repo profile")
+    expect(deleteSkill?.description).toContain("including a Skill created by another repository profile")
+    expect(deleteSkill?.description).not.toContain("created by the current repo profile")
+    expect(tools.get("app_resource_repository_rule_delete")?.description).toContain("created by the current repo profile")
   })
 
   it("exposes rule and skill name constraints in create schemas", () => {

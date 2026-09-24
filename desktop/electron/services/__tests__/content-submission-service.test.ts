@@ -310,11 +310,16 @@ describe("contentSubmissionService", () => {
   })
 
   it.each([
-    ["deleteContent", "deleteContent", "删除"],
-    ["restoreContent", "restoreContent", "恢复"],
-    ["purgeContent", "purgeContent", "永久删除"],
-  ] as const)("rejects %s for a Skill created by another user", async (serviceMethod, writerMethod, actionLabel) => {
+    ["deleteContent", "deleteContent"],
+    ["restoreContent", "restoreContent"],
+    ["purgeContent", "purgeContent"],
+  ] as const)("allows a collaborator to use %s on a Skill created by another user", async (serviceMethod, writerMethod) => {
     const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.repositoryStore.getRepositoryState.mockResolvedValue({
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
       createdBy: "other-user",
       deleted: true,
@@ -322,14 +327,23 @@ describe("contentSubmissionService", () => {
       modifiedAt: "2026-05-20T12:00:00.000Z",
       modifiedByDisplayName: "Other User",
     })
+    mocks.contentWriteService[writerMethod].mockResolvedValueOnce({
+      gitPaths: ["/repo/skills/skill-1"],
+      id: "skill-1",
+      latestHistoryDirname: "history-2",
+      modifiedAt: "2026-05-20T12:01:00.000Z",
+      title: "Skill",
+      transaction: createWriteTransactionMock(),
+      type: "skill",
+    })
 
     await expect(contentSubmissionService[serviceMethod]({
       id: "skill-1",
       type: "skill",
       baseHistoryDirname: "history-1",
-    } as never)).rejects.toThrow(`只有创建者可以${actionLabel} Skill。`)
+    } as never)).resolves.toMatchObject({ status: "saved" })
 
-    expect(mocks.contentWriteService[writerMethod]).not.toHaveBeenCalled()
+    expect(mocks.contentWriteService[writerMethod]).toHaveBeenCalled()
   })
 
   it.each([

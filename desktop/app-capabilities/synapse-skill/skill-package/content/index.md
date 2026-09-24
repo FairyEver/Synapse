@@ -26,7 +26,7 @@ Do not use this domain file for database records, Automation schedules/items, wo
 
 Skills in the current writable Resource Repository are collaboratively editable. Any repository profile that can write the active repository may update an existing Skill, including a Skill created by another profile. The original `createdBy` remains unchanged and the new version records the current profile as its modifier.
 
-Only the original creator may delete a Skill. Rule and Prompt updates and deletes also remain limited to their original creator. These Resource Repository rules do not change Cloud Skill Repository ownership.
+Any repository profile that can write the active repository may also delete a Skill, including a Skill created by another profile; restore and permanent deletion in the Resource Repository follow the same rule. Rule and Prompt updates and deletes remain limited to their original creator. These Resource Repository rules do not change Cloud Skill Repository ownership.
 
 Do not pass `force`; Resource Repository MCP does not support force update or force delete.
 

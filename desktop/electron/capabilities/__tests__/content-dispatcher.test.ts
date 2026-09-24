@@ -698,7 +698,7 @@ describe("content capability dispatcher", () => {
     expect(deps.contentWriter.updateContent).not.toHaveBeenCalled()
   })
 
-  it("rejects deleting a Skill created by another user", async () => {
+  it("allows deleting a Skill created by another repository profile", async () => {
     const deps = createDeps({
       detail: contentDetail({ createdBy: "other-user", id: "skill-1", type: "skill" }),
     })
@@ -707,7 +707,26 @@ describe("content capability dispatcher", () => {
     await expect(dispatcher.dispatch("app.resource_repository.skill.delete", {
       id: "skill-1",
       baseHistoryDirname: "20260521000000Z__user__abc123",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(deps.contentWriter.deleteContent).toHaveBeenCalledWith({
+      type: "skill",
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+    })
+  })
+
+  it.each(["rule", "prompt"] as const)("rejects deleting a %s created by another user", async (contentType) => {
+    const deps = createDeps({
+      detail: contentDetail({ createdBy: "other-user", type: contentType }),
+    })
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch(`app.resource_repository.${contentType}.delete`, {
+      id: `${contentType}-1`,
+      baseHistoryDirname: "20260521000000Z__user__abc123",
     }, { source: "mcp-stdio" })).rejects.toThrow(ContentCapabilityError)
+
     expect(deps.contentWriter.deleteContent).not.toHaveBeenCalled()
   })
 

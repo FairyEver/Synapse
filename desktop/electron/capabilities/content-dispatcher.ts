@@ -14,7 +14,10 @@ import type {
   SynapseUpdateContentRequest,
   SynapseUpdateContentPayload,
 } from "../../src/types/content"
-import { isContentCreator } from "../../src/lib/content-ownership"
+import {
+  canManageRepositoryContentLifecycle,
+  canUpdateRepositoryContent,
+} from "../../src/lib/content-ownership"
 import type { EventBus } from "../runtime/event-bus"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { ContentCapabilityError } from "../services/content-capability-errors"
@@ -326,7 +329,7 @@ async function updateContent(
   const id = requireTrimmedString(params.id, "id")
   const currentDetail = contentType === "skill"
     ? await deps.contentReader.getDetail(contentType, id)
-    : await assertOwnedByCurrentUser(deps, contentType, id)
+    : await assertContentOwnershipAllowed(deps, contentType, id, "update")
 
   const merged = await mergeSkillSourceParams(deps, contentType, params, currentDetail, security)
   const payload = normalizeUpdateContentParams(contentType, merged.params)
@@ -356,7 +359,7 @@ async function deleteContent(
   params: ContentToolParams,
 ): Promise<DispatchResult> {
   const payload = normalizeDeleteContentParams(contentType, params)
-  await assertOwnedByCurrentUser(deps, contentType, payload.id)
+  await assertContentOwnershipAllowed(deps, contentType, payload.id, "lifecycle")
 
   const result = await deps.contentWriter.deleteContent(payload)
   assertNoMutationConflict(result)
@@ -512,17 +515,22 @@ async function applyIconImageBytes(
   payload.iconImageBytes = iconImageBytes
 }
 
-async function assertOwnedByCurrentUser(
+async function assertContentOwnershipAllowed(
   deps: ContentCapabilityDispatcherDeps,
   contentType: SynapseContentType,
   contentId: string,
+  scope: "update" | "lifecycle",
 ): Promise<SynapseContentDetail> {
   const [identity, detail] = await Promise.all([
     deps.resolveCurrentIdentity(),
     deps.contentReader.getDetail(contentType, contentId),
   ])
 
-  if (!isContentCreator(detail, identity.userId)) {
+  const allowed = scope === "update"
+    ? canUpdateRepositoryContent(detail, identity.userId)
+    : canManageRepositoryContentLifecycle(detail, identity.userId)
+
+  if (!allowed) {
     throw new ContentCapabilityError("CONTENT_FORBIDDEN", "只能更新或删除自己发布的资源。", {
       details: {
         contentId,

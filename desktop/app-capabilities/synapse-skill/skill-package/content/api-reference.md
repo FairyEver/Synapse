@@ -140,7 +140,7 @@ A successful mutation may first create a local repository version while remote s
 }
 ```
 
-Deletes are rejected unless the current repository profile created the resource. For Skills, the same creator-only rule also applies to restore and permanent deletion in the Resource Repository UI.
+Rule and Prompt deletes are rejected unless the current repository profile created the resource. Skills are collaborative: any writable repository profile may delete one, including a Skill created by another profile, and restore and permanent deletion in the Resource Repository follow the same rule.
 
 ## Image Icons
 
