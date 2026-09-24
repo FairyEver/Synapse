@@ -252,19 +252,26 @@ Identify the existing public identity before uploading. Resolve a provided `/sha
 
 Updating either route does not live-reload pages already open in a visitor's browser. Tell the user that no new link is needed, but visitors must refresh or reopen the page. Public site HTML revalidates on refresh; unchanged CSS, JavaScript, image, or font URLs may remain cached for up to five minutes. Password-protected site assets are not stored in the browser cache.
 
+## Reading A Saved Document
+
+1. Call `app_drive_file_content_inspect` first. Use its `versionId` for baseline reads and downloads; do not switch silently to a newer version.
+2. When only the beginning or end is needed, read the relevant `app_drive_file_content_read_chunk` blocks. For a file at most 64 KiB that needs full reading, follow `nextCursor` to `endOfFile=true` and verify the byte ranges are continuous from 0 to `totalBytes`.
+3. For a file over 64 KiB that needs full reading or a search for an unknown section, first check whether local processing and write permission are available. If they are, call `app_drive_file_version_download_create` with the inspected `versionId`, then search or process the fixed local copy by section. Do not stream the whole file through `read_chunk` merely to repeat the same search or transformation locally. The 64 KiB threshold selects the default reading path; it is not a server file-size limit.
+4. If the fixed-version download is unavailable or permission is denied, continue with `read_chunk` only within the actual tool and context budget. Report the byte range read unless it covers the entire file. Clean up task-only local copies when finished.
+
 ## Editing An Existing Document
 
 Use this flow whenever the user asks to change, fix, update, or append to a document that already exists in Drive.
 
 1. Resolve the item id. When the user gives a share or site URL, use the Drive Link tools to resolve it; when they name a file in their own Drive, resolve it with `app_drive_item_list` or `app_drive_item_tree_list`.
-2. Call `app_drive_file_content_inspect`. For a known beginning or ending, read only the needed `app_drive_file_content_read_chunk` blocks. For a file at most 64 KiB that needs full reading, follow `nextCursor` until EOF and verify byte continuity from 0 to `totalBytes`. For a larger file needing full reading or an unknown section, use `app_drive_file_version_download_create` on the inspected `versionId` only when local processing and write permission are available; clean up a task-only temporary copy afterwards. If download is unavailable, read within the actual tool/context budget and report the range read rather than claim full coverage.
-3. Choose a unique source anchor and send the new text only through `app_drive_file_content_patch`. Combine known edits into one call. For append, inspect and optionally read `tail` first; patch appends verbatim without adding a newline.
+2. Follow **Reading A Saved Document** to inspect the current version and read only the source needed for this edit.
+3. For a local edit, choose a unique source anchor and send the new text only through `app_drive_file_content_patch`. Combine known edits into one call. For append, inspect and optionally read `tail` first; patch appends verbatim without adding a newline. Use the full-file reconstruction rule below only when the user intends changes across the whole file or local operations cannot express them.
 4. Check the returned `versionId`, `sizeBytes`, and `applied` positions. Read `tail` after append or `around` at an `applied.startByte`/`endByte` after a located edit to verify placement. Use the returned `versionId` for the next edit.
 5. On `DRIVE_FILE_CONTENT_STALE`, inspect the new version, reread and relocate anchors, then submit with a new idempotency key at most once. If it conflicts again, stop writing and report the unsaved edit. On ambiguous, missing, overlapping, or broad patches, fix the target or stop as the error requires; never split a broad edit to bypass the limit.
 
 Rules:
 
-- A local edit never uploads a copy built from an earlier version or calls `app_drive_file_upload` without `expectedVersionId`. For an intentional full-file reconstruction, download the fixed version, check the final size and diff against the user's intent, then upload with that version as `expectedVersionId`.
+- A local edit never uploads a copy built from an earlier version or calls `app_drive_file_upload` without `expectedVersionId`. For an intentional full-file reconstruction, download the fixed version, check the final size and diff against the user's intent, then upload with that version as `expectedVersionId`. After upload, inspect again and verify that the version changed and `sizeBytes` matches the local result. Download that new fixed version and compare its bytes or hash with the local result before reporting exact content verification. A version list alone confirms a new version exists, not that its content matches. If readback is unavailable, report the limited verification instead of claiming a byte-for-byte match.
 - Creating a new document, replacing a standalone HTML page, replacing a binary file, or uploading a folder keeps using `app_drive_file_upload` / `app_drive_folder_upload`. HTML pages are rebuilt and replaced deliberately, so they are not part of the refusal.
 - A user's own edits made in the online editor are versions too. Preserve them: the user asked to keep their changes and get yours on top.
 
@@ -278,7 +285,7 @@ Rules:
    - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
    - Empty subdirectories inside the local folder are preserved in Drive.
 4. To open or preview an item for the owner, call `app_drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
-5. To read saved text, inspect then use `app_drive_file_content_read_chunk`; use the version download for large files needing local processing when available. Use `app_drive_file_download_create` for binary files.
+5. To read saved text, follow **Reading A Saved Document**. Use `app_drive_file_download_create` for binary files.
 6. To save Drive content locally, call `app_drive_file_download_create` for a file, `app_drive_file_version_download_create` for a specific file version, or `app_drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
 7. If the user explicitly asks to upload to `公开素材`, upload to a `图床`, generate a `直链`, generate an `外链`, create a `public asset`, or create a `direct link`, call `app_drive_direct_link_upload`. These assets belong to the user, consume Drive quota, appear in the user's public-asset list, and are distinct from browser-editor `/object/` uploads. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, and allow duplicate names; every upload creates a new asset id and `/files/<assetId>` URL.
 8. If the user asks to replace an existing public asset, call `app_drive_direct_link_update` with `assetId` and `filePath`. The `/files/<assetId>` URL is preserved. Images can replace images, and documents can replace documents; the two categories cannot replace each other.

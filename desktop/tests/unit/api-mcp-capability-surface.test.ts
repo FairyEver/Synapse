@@ -240,6 +240,21 @@ describe("API and MCP capability surface", () => {
     }
   })
 
+  it("keeps the Drive Skill's large-file read and full-rebuild verification paths explicit", () => {
+    const guide = readRepoFile("app-capabilities/synapse-skill/skill-package/drive/index.md")
+    const reading = guide.split("## Reading A Saved Document\n", 2)[1]?.split("## Editing An Existing Document", 1)[0]
+    const editing = guide.split("## Editing An Existing Document\n", 2)[1]?.split("## Default Flow", 1)[0]
+
+    expect(reading).toContain("`app_drive_file_content_inspect` first")
+    expect(reading).toContain("For a file over 64 KiB")
+    expect(reading).toContain("`app_drive_file_version_download_create` with the inspected `versionId`")
+    expect(reading).toContain("If the fixed-version download is unavailable or permission is denied")
+    expect(editing).toContain("upload with that version as `expectedVersionId`")
+    expect(editing).toContain("After upload, inspect again")
+    expect(editing).toContain("compare its bytes or hash with the local result")
+    expect(editing).toContain("A version list alone confirms a new version exists, not that its content matches")
+  })
+
   it("documents the Agent conversation deep link without a shell or content-reading fallback", () => {
     const skill = readRepoFile("app-capabilities/synapse-skill/skill-package/SKILL.md")
     const appGuide = readRepoFile("app-capabilities/synapse-skill/skill-package/app/index.md")
