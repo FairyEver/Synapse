@@ -237,7 +237,11 @@ final class TerminalStore {
     }
 
     private func collectResources(in frame: MobileTerminalFrame) {
-        if resourceCollector.accept(frame, lines: lines) { resources = resourceCollector.resources }
+        // The column count goes along because a row the TUI wrapped itself is only
+        // recognisable by having been filled to it — see `TerminalResourceCollector`.
+        if resourceCollector.accept(frame, lines: lines, columns: columns) {
+            resources = resourceCollector.resources
+        }
     }
 
     /// Cells one character occupies on the desktop's grid.

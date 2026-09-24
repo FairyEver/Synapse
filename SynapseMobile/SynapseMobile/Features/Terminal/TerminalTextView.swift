@@ -1460,6 +1460,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// It lives here rather than in the store because it is a fact about what is on
     /// screen — a row index means nothing to a buffer that keeps re-wrapping.
     private var selection: TerminalSelection?
+    /// The token the long press that started this selection took. The drag that follows
+    /// moves the far end of this rather than the near one, so it is kept until the
+    /// selection is dropped.
+    private var selectionToken: TerminalSelection?
     private let selectionOverlay = TerminalSelectionOverlay()
     /// The edit menu currently up, kept so it can be torn down when it closes.
     private var editMenu: UIEditMenuInteraction?
@@ -1477,6 +1481,13 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // is still selecting that row's last character, not nothing.
         let column = max(0, Int(offset / advance))
         return TerminalSelection.Position(row: indexPath.item, column: column)
+    }
+
+    /// What a row is showing, for the arithmetic a gesture needs before it can name a
+    /// cell. Straight from the rows on screen, which is what the reader touched.
+    private func rowText(at row: Int) -> String {
+        guard appliedRows.indices.contains(row) else { return "" }
+        return appliedRows[row].text
     }
 
     /// The cell a position points at, in this view's coordinates.
@@ -1527,15 +1538,21 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private func clearSelection() {
         guard selection != nil else { return }
         selection = nil
+        selectionToken = nil
         refreshSelection()
     }
 
     /// Starts a selection at a point, with the loupe already up.
     private func beginSelection(at point: CGPoint) {
         guard let position = gridPosition(at: point) else { return }
-        selection = TerminalSelection(at: position)
-        // Nothing is selected yet, so the reader is about to drag: scrolling must
-        // not answer the same finger.
+        // The press takes the token under the finger rather than the one empty cell
+        // there. A long press has to show what it took before the drag begins — a
+        // selection of nothing reads as a gesture that did not work — and it is what
+        // the drag afterwards extends.
+        let taken = TerminalSelection.token(at: position, in: rowText(at: position.row))
+        selection = taken
+        selectionToken = taken
+        // The reader is about to drag, so scrolling must not answer the same finger.
         collectionView.isScrollEnabled = false
         // 这一行是"滚不动"的第四个成因：长按半秒以上、漂移不超过十点，拖动就变成了
         // 扩选而不是滚动，而屏幕上只多了一小块选中色。
@@ -1557,7 +1574,14 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private func extendSelection(to point: CGPoint) {
         guard var current = selection, let position = gridPosition(at: point) else { return }
         let previous = current.end
-        current.extend(to: position)
+        if let token = selectionToken {
+            // The token the press took stays whole and the drag moves the end on the far
+            // side of it. Extending the near end instead would delete the token as soon
+            // as the finger came back over it.
+            current = TerminalSelection.dragging(token, to: position)
+        } else {
+            current.extend(to: position)
+        }
         selection = current
 
         // One tick per row or column crossed, which is the feedback that makes a
@@ -1578,8 +1602,9 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             .init(.longPressState, .bool(selection.map { !$0.isEmpty } ?? false)),
         ])
 
-        // A press that never moved is how the reader meant to scroll, or to put the
-        // keyboard away. Offering to copy one character would be a misread.
+        // A press that never moved has still taken the token under the finger, and the
+        // menu is what a long press is for. The guard is left for a row with nothing on
+        // it, where there is no token to take and so nothing to offer.
         guard let selection, !selection.isEmpty else {
             clearSelection()
             return

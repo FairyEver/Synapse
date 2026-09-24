@@ -95,6 +95,48 @@ struct TerminalSelectionTests {
         #expect(pastTheEnd.lines(from: rows) == [""])
     }
 
+    /// A wide character is two cells and one character. The ends are cells, so the
+    /// slice has to be taken on the characters those cells land on — otherwise
+    /// everything after the first Chinese character comes back shifted.
+    @Test func extractionLandsOnTheCharactersTheCellsCover() {
+        let rows = ["说明 https://example.org/a"]
+        // 说明 takes four cells and the space one, so the URL runs over cells 5...25.
+        let selection = selection(from: position(0, 5), to: position(0, 25))
+
+        #expect(selection.lines(from: rows) == ["https://example.org/a"])
+    }
+
+    /// A long press takes the token under the finger — the path, the URL, the flag,
+    /// whatever sits between whitespace. This is the one place the terminal's grid does
+    /// have a word to snap to, and taking it is what gives the press something to show.
+    @Test func aLongPressTakesTheTokenUnderIt() {
+        let row = "说明 https://example.org/a 之后"
+
+        #expect(TerminalSelection.token(at: position(0, 10), in: row).lines(from: [row])
+            == ["https://example.org/a"])
+        // The space sits on cell 4, between 说明's four cells and the URL's.
+        // Whitespace is not a token. The whole row is the only other answer that does
+        // not leave the reader holding one character.
+        #expect(TerminalSelection.token(at: position(0, 4), in: row).lines(from: [row])
+            == ["说明 https://example.org/a 之后"])
+    }
+
+    /// Dragging moves whichever end is on the far side of the token, so pulling back
+    /// across it extends the other way instead of deleting what the press took.
+    @Test func draggingKeepsTheTokenItStartedFrom() {
+        let row = "aa bbbb cc"
+        let token = TerminalSelection.token(at: position(0, 4), in: row)
+        #expect(token.lines(from: [row]) == ["bbbb"])
+
+        #expect(TerminalSelection.dragging(token, to: position(0, 9)).lines(from: [row])
+            == ["bbbb cc"])
+        #expect(TerminalSelection.dragging(token, to: position(0, 0)).lines(from: [row])
+            == ["aa bbbb"])
+        // Inside the token nothing moves: it was taken whole and stays whole.
+        #expect(TerminalSelection.dragging(token, to: position(0, 5)).lines(from: [row])
+            == ["bbbb"])
+    }
+
     /// Extending keeps the end the gesture started from, which is what makes a
     /// drag that reverses direction shrink the selection instead of moving it.
     @Test func extendingKeepsTheStartingEnd() {
