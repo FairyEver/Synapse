@@ -1,5 +1,7 @@
 import "reflect-metadata"
+import { APP_GUARD } from "@nestjs/core"
 import { Test } from "@nestjs/testing"
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { PinoLogger } from "nestjs-pino"
 import request from "supertest"
 import { describe, expect, it, vi } from "vitest"
@@ -137,6 +139,60 @@ describe("notification send over HTTP", () => {
     } finally {
       await app.close()
       await scoped.app.close()
+    }
+  })
+
+  it("burns one shared rate limit budget across the three shapes", async () => {
+    const created = vi.fn(async () => ({ id: "message-1", createdAt }))
+    const moduleRef = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot([{ name: "default", ttl: 60_000, limit: 60 }])],
+      controllers: [OpenNotificationController],
+      providers: [
+        { provide: NotificationService, useValue: { create: created } },
+        {
+          provide: ApiKeyService,
+          useValue: {
+            verifyOpenApiSecret: vi.fn(async () => ({ userId: "user-1", apiKeyId: "key-1", scopes: ["notification.send"] })),
+            touchLastUsed: vi.fn(async () => undefined),
+          },
+        },
+        { provide: PinoLogger, useValue: { error: vi.fn() } },
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+        OpenApiExceptionFilter,
+      ],
+    }).compile()
+    const app = moduleRef.createNestApplication()
+    await app.init()
+    try {
+      const server = app.getHttpServer()
+      const url = `/api/open/v1/notifications/${exampleKey}/${encodeURIComponent("部署完成")}/${encodeURIComponent("已更新")}`
+      for (let sent = 0; sent < 60; sent += 1) {
+        await request(server).get(url).expect(201)
+      }
+      // 额度是三种形状共用的，所以换一种形状发出的第 61 次同样被拒。
+      const blocked = await request(server)
+        .post(`/api/open/v1/notifications/${exampleKey}`)
+        .send({ title: "部署完成", body: "已更新" })
+        .expect(429)
+      expect(blocked.body.error.code).toBe("RATE_LIMITED")
+      expect(created).toHaveBeenCalledTimes(60)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("refuses HEAD probes on the URL shape without creating a message", async () => {
+    const { app, created } = await appWith()
+    try {
+      // Express 把 HEAD 也交给 @Get 的处理器；链接预览和邮件安全网关正是用它探地址。
+      // HEAD 响应按规范不带 body，所以只断言状态码、错误信封的请求头和没有落库。
+      const response = await request(app.getHttpServer())
+        .head(`/api/open/v1/notifications/${exampleKey}/${encodeURIComponent("部署完成")}/${encodeURIComponent("已更新")}`)
+        .expect(405)
+      expect(response.headers["x-request-id"]).toMatch(/^req_/u)
+      expect(created).not.toHaveBeenCalled()
+    } finally {
+      await app.close()
     }
   })
 

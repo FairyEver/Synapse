@@ -45,7 +45,7 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications' \
 curl --request GET '{{APP_PUBLIC_URL}}/api/open/v1/notifications/syn_sk_.../%E9%83%A8%E7%BD%B2%E5%AE%8C%E6%88%90?level=active'
 ```
 
-标题和正文是 URL 路径段，必须 URL 编码。这条形状用 `GET` 写入数据，且整条 URL 等同密钥：任何抓取它的链接预览、爬虫或浏览器预取都会真的发出通知。按密钥保管它。
+标题和正文是 URL 路径段，必须 URL 编码。这条形状只接受 `GET`：`HEAD` 等探测性请求返回 `405`，不会发出通知。`GET` 会写入数据，且整条 URL 等同密钥：任何真正抓取它的链接预览、爬虫或浏览器预取都会发出通知。按密钥保管它。
 
 ## 设置分组、链接和提醒级别
 
@@ -83,7 +83,10 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications' \
 | `400` | 字段超长、`url` 不是 HTTPS、请求体出现未列出的字段，或去重键无效 |
 | `401` | API 密钥无效或缺失 |
 | `403` | 密钥缺少 `notification.send` 权限 |
+| `405` | 用 `HEAD` 等非 `GET` 方法访问路径式地址 |
 | `429` | 超过每分钟 60 次的请求限制 |
+
+三种形状共用一个请求额度。
 
 API 密钥仅用于服务端、CLI 或自动化客户端。不要将其写入浏览器代码、公开仓库或日志。消息标题与正文以明文保存在 Synapse 服务端，也可能出现在锁屏预览中。
 

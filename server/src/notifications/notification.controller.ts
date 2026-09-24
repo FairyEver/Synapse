@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, Post, Query, Req, UseFilters, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, Post, Query, Req, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
+import { createHash } from "node:crypto"
 import { z } from "zod"
 import { NOTIFICATION_SEND_SCOPE } from "../api-keys/api-key-capabilities"
 import type { OpenApiPrincipal } from "../api-keys/api-key.service"
@@ -21,8 +22,19 @@ import { NotificationService } from "./notification.service"
 
 const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
 
-/** 三种发送形状写入同一个账号的通知队列，共用同一档限流。 */
-const notificationThrottle = { default: { ttl: 60_000, limit: 60 } } as const
+/**
+ * 三种发送形状写入同一个账号的通知队列，共用一个限流桶。
+ *
+ * `ThrottlerGuard` 默认把 handler 名算进键里，三个路由各占一份额度，会把承诺的
+ * 每分钟 60 次放大成三倍；这里去掉 handler 名，键只剩控制器名和来源标识。
+ */
+export function notificationThrottleKey(context: ExecutionContext, tracker: string, name: string): string {
+  return createHash("sha256").update(`${context.getClass().name}-${name}-${tracker}`).digest("hex")
+}
+
+const notificationThrottle = {
+  default: { ttl: 60_000, limit: 60, generateKey: notificationThrottleKey },
+} as const
 
 const listSchema = z.object({
   cursor: z.string().min(1).max(120).optional(),
@@ -148,6 +160,11 @@ export class OpenNotificationController {
     @Query() query: unknown,
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
+    // Express 把 HEAD 也交给这个处理器。链接预览、爬虫和邮件安全网关正是用 HEAD 探测
+    // 地址，它们不该让手机响，所以 HEAD 不触发通知。
+    if (request.method === "HEAD") {
+      throw new OpenApiHttpError(405, "METHOD_NOT_ALLOWED", "该地址只接受 GET 请求。")
+    }
     const principal = authorizeNotificationRequest(request)
     const path = openApiNotificationPathSchema.safeParse(params)
     const search = openApiNotificationQuerySchema.safeParse(query)

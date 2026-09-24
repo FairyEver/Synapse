@@ -1,5 +1,7 @@
+import type { ExecutionContext } from "@nestjs/common"
+import { THROTTLER_KEY_GENERATOR } from "@nestjs/throttler/dist/throttler.constants"
 import { describe, expect, it, vi } from "vitest"
-import { NotificationController, OpenNotificationController } from "./notification.controller"
+import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
 
 /** 与 `createApiKeySecret()` 同形状的固定密钥，避免测试夹具被密钥格式校验挡下。 */
 const exampleKey = `syn_sk_${"a".repeat(43)}`
@@ -69,6 +71,39 @@ describe("OpenNotificationController", () => {
     const { controller: endpoint, request, service } = controller()
     await endpoint.createWithKeyInPath(request as never, { title: "部署完成", body: "已更新" }, "deploy-001")
     expect(service.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", sourceKey: "external:key-1:deploy-001" }))
+  })
+
+  it("refuses HEAD probes on the URL shape without sending anything", async () => {
+    const { controller: endpoint, request, service } = controller()
+    const head = { ...request, method: "HEAD" }
+    await expect(endpoint.createFromPath(head as never, { key: exampleKey, title: "标题", body: "正文" }, {}))
+      .rejects.toMatchObject({ statusCode: 405, code: "METHOD_NOT_ALLOWED" })
+    expect(service.create).not.toHaveBeenCalled()
+  })
+})
+
+describe("notification throttle key", () => {
+  const context = { getClass: () => OpenNotificationController } as never as ExecutionContext
+
+  it("ignores the handler so the three send shapes share one bucket", () => {
+    // ThrottlerGuard 默认的键会带上 handler 名，三个路由各占一份额度。
+    expect(notificationThrottleKey(context, "203.0.113.7", "default")).toBe(
+      notificationThrottleKey(context, "203.0.113.7", "default"),
+    )
+    expect(notificationThrottleKey(context, "203.0.113.7", "default")).not.toBe(
+      notificationThrottleKey(context, "198.51.100.9", "default"),
+    )
+  })
+
+  it("is what all three send shapes declare", () => {
+    // 用库自己的常量读元数据，避免和 ThrottlerGuard 读取的键名各写一份。
+    const metadataKey = `${THROTTLER_KEY_GENERATOR}default`
+    for (const handler of ["createWithKeyInBody", "createWithKeyInPath", "createFromPath"]) {
+      expect(
+        Reflect.getMetadata(metadataKey, OpenNotificationController.prototype[handler as never]),
+        handler,
+      ).toBe(notificationThrottleKey)
+    }
   })
 })
 

@@ -177,6 +177,15 @@ const notificationResponses = {
   "429": errorResponse("请求频率超限（RATE_LIMITED）。"),
 } as const
 
+/**
+ * 路径式由 `@Get` 注册，Express 会把 HEAD 也交给它。HEAD 探测不该触发一条真的推送，
+ * 所以这条形状显式拒绝非 GET，其余形状的其它方法由路由表返回 404。
+ */
+const notificationPathResponses = {
+  ...notificationResponses,
+  "405": errorResponse("非 GET 请求（METHOD_NOT_ALLOWED）。"),
+} as const
+
 const notificationMessageRequestBody = {
   required: true,
   content: {
@@ -238,7 +247,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
         operationId: "sendNotificationFromPath",
         security: [],
         "x-required-scope": NOTIFICATION_SEND_SCOPE,
-        description: "凭证是路径段里的 `key`，不再接受 `Authorization` 头。整条 URL 等同密钥：任何抓取它的链接预览、爬虫或浏览器预取都会真的发出通知。",
+        description: "凭证是路径段里的 `key`，不再接受 `Authorization` 头。整条 URL 等同密钥：任何抓取它的链接预览、爬虫或浏览器预取都会真的发出通知。只接受 GET；HEAD 等其它方法在探测场景下会被拒绝，不触发通知。",
         parameters: [
           notificationKeyPathParameter,
           { name: "title", in: "path", required: true, description: "标题。", schema: { type: "string", minLength: 1, maxLength: 64 } },
@@ -248,7 +257,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
           { name: "level", in: "query", required: false, schema: { type: "string", enum: ["active", "passive", "timeSensitive"], default: "active" } },
           idempotencyKeyParameter,
         ],
-        responses: notificationResponses,
+        responses: notificationPathResponses,
       },
     },
     [OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH]: {
@@ -425,6 +434,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
                   "INVALID_REQUEST",
                   "INVALID_IDEMPOTENCY_KEY",
                   "RATE_LIMITED",
+                  "METHOD_NOT_ALLOWED",
                   "INVALID_API_KEY",
                   "INSUFFICIENT_SCOPE",
                   "LINK_PASSWORD_REQUIRED_OR_INVALID",
