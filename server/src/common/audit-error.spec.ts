@@ -1,7 +1,35 @@
 import { describe, expect, it } from "vitest"
+import { createApiKeySecret } from "../api-keys/api-key-token"
 import { formatAuditError, redactSensitiveLogText } from "./audit-error"
 
 describe("formatAuditError", () => {
+  it("redacts a Synapse API key wherever it appears in a bare path", () => {
+    // 用真实生成的密钥：密钥格式一旦变化，这条测试就会失败。
+    const secret = createApiKeySecret()
+    const output = formatAuditError(new Error(
+      `GET /api/open/v1/notifications/${secret}/部署完成/生产环境已更新 failed`,
+    ))
+
+    expect(output).not.toContain(secret)
+    // 后 43 位是随机部分，单独断言避免只打码掉前缀。
+    expect(output).not.toContain(secret.slice("syn_sk_".length))
+    expect(output).toContain("[REDACTED]")
+  })
+
+  it("redacts a key-shaped run longer than a real key instead of leaving its tail readable", () => {
+    const output = redactSensitiveLogText(`key=${`syn_sk_${"A".repeat(80)}`}`)
+
+    expect(output).not.toContain("A".repeat(40))
+    expect(output).toContain("[REDACTED]")
+  })
+
+  it("still redacts a key inside a JSON field named key", () => {
+    const output = redactSensitiveLogText(`{"key":"${createApiKeySecret()}","title":"部署完成"}`)
+
+    expect(output).not.toContain("syn_sk_")
+    expect(output).toContain('"title":"部署完成"')
+  })
+
   it("redacts token key variants in assignments and JSON fields", () => {
     const output = formatAuditError(new Error([
       "accessToken=access-secret",
