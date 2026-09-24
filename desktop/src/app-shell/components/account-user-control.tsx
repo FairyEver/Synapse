@@ -23,14 +23,16 @@ type AccountUserControlProps = {
 const logger = createRendererLogger("account-user-control")
 const toolbarButtonClassName = "h-9 px-3 has-data-[icon=inline-start]:pl-3 has-data-[icon=inline-end]:pr-3"
 
-function getHandle(state: SynapseAccountState): string | null {
+function getAccountDisplayName(state: SynapseAccountState): string | null {
   if (state.status !== "authenticated") return null
+  const nickname = state.profile.user.nickname?.trim()
+  if (nickname) return nickname
   const handle = state.profile.user.handle.trim()
   return handle ? handle : null
 }
 
 function getAccountTitle(state: SynapseAccountState): string {
-  if (state.status === "authenticated") return getHandle(state) ?? state.profile.user.email
+  if (state.status === "authenticated") return getAccountDisplayName(state) ?? state.profile.user.email
   if (state.status === "authenticating") return "登录中"
   return "未登录"
 }
@@ -200,7 +202,7 @@ function AccountUserControl({
         <DropdownMenuItem className="h-auto py-2" onSelect={handleOpenDashboard}>
           <div className="flex min-w-0 flex-col gap-1">
             <span className="truncate text-sm font-medium">{getAccountTitle(state)}</span>
-            {getHandle(state) ? (
+            {getAccountDisplayName(state) ? (
               <span className="truncate text-xs text-muted-foreground">{state.profile.user.email}</span>
             ) : null}
           </div>

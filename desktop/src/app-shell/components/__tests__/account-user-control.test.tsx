@@ -16,6 +16,7 @@ function createAuthenticatedState(): Extract<SynapseAccountState, { status: "aut
         email: "user@example.com",
         status: "active",
         handle: "ada",
+        nickname: "ada",
       },
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
@@ -40,6 +41,7 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
         email: "user@example.com",
         status: "active",
         handle: "ada",
+        nickname: "ada",
       },
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
@@ -131,7 +133,23 @@ function renderActions() {
 }
 
 describe("AccountUserControl", () => {
-  it("shows handle as the panel title and email as detail", () => {
+  it("shows the nickname as the panel title and email as detail", () => {
+    accountState.current = createAuthenticatedState()
+    if (accountState.current.status !== "authenticated") throw new Error("expected authenticated state")
+    accountState.current.profile.user.nickname = "李 阳"
+
+    const container = renderControl("panel")
+
+    expect(container.textContent).toContain("李 阳")
+    expect(container.textContent).toContain("user@example.com")
+    expect(container.textContent).not.toContain("ada")
+  })
+
+  it("falls back to the handle when the synced profile has no nickname", () => {
+    accountState.current = createAuthenticatedState()
+    if (accountState.current.status !== "authenticated") throw new Error("expected authenticated state")
+    delete accountState.current.profile.user.nickname
+
     const container = renderControl("panel")
 
     expect(container.textContent).toContain("ada")

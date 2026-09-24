@@ -19,6 +19,8 @@ const accountUserSchema = z.object({
   email: z.string(),
   handle: z.string(),
   status: z.enum(["active", "disabled"]),
+  /// 可选：旧版本落盘或缓存的 profile 里没有这个字段，解析失败会让整份账号状态不可用。
+  nickname: z.string().optional(),
 })
 
 const accountProfileSchema = z.object({

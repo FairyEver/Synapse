@@ -200,6 +200,39 @@ describe("accountIpcModule", () => {
           status: "authenticated",
           connectivity: "online",
           profile: {
+            user: { id: "u1", email: "u@example.com", handle: "ada", status: "active", nickname: "Ada L." },
+            syncedAt: "2026-05-28T00:00:00.000Z",
+          },
+        },
+      },
+      timestamp: "2026-05-28T00:00:00.000Z",
+    })
+
+    expect(parsed).toMatchObject({
+      payload: {
+        state: {
+          status: "authenticated",
+          profile: {
+            user: {
+              handle: "ada",
+              nickname: "Ada L.",
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it("accepts cached account profiles saved before nicknames existed", () => {
+    const parsed = accountIpcModule.events.stateChanged.payload.parse({
+      domain: "account",
+      type: "account.stateChanged",
+      payload: {
+        state: {
+          status: "authenticated",
+          connectivity: "offline",
+          offlineReason: "server_unavailable",
+          profile: {
             user: { id: "u1", email: "u@example.com", handle: "ada", status: "active" },
             syncedAt: "2026-05-28T00:00:00.000Z",
           },

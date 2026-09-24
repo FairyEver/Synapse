@@ -3,6 +3,8 @@ export type SynapseAccountUser = {
   email: string
   handle: string
   status: "active" | "disabled"
+  /// 服务器返回的展示昵称。旧版本缓存下来的 profile 没有这个字段，渲染时回退到 handle。
+  nickname?: string
 }
 
 export type SynapseAccountProfile = {
