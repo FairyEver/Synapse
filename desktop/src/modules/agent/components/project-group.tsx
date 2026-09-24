@@ -1,7 +1,5 @@
 import { useRef, useState } from "react"
 import {
-  ArrowDown,
-  ArrowUp,
   EllipsisVertical,
   Folder,
   FolderOpen,
@@ -259,7 +257,6 @@ function ProjectGroup({
                       disabled={!canMoveUp}
                       onSelect={() => onMove("up")}
                     >
-                      <ArrowUp />
                       上移
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -267,7 +264,6 @@ function ProjectGroup({
                       disabled={!canMoveDown}
                       onSelect={() => onMove("down")}
                     >
-                      <ArrowDown />
                       下移
                     </DropdownMenuItem>
                   </>
