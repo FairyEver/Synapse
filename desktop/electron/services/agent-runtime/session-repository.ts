@@ -37,7 +37,6 @@ export interface CreateAgentSessionInput {
   readonly providerId?: string
   readonly mode?: string
   readonly modelTier?: string
-  readonly experimentalSynapseToolRouterEnabled?: boolean
   readonly connectorIds?: readonly string[]
   readonly figmaDesktopMcpEnabled?: boolean
   readonly expectedMcpServerNames?: readonly string[]
@@ -85,7 +84,6 @@ export class AgentSessionRepository {
   async getOrCreateActive(
     message: AgentMessage,
     creationConfig?: {
-      readonly experimentalSynapseToolRouterEnabled?: boolean
       readonly connectorIds?: readonly string[]
       readonly figmaDesktopMcpEnabled?: boolean
       readonly expectedMcpServerNames?: readonly string[]
@@ -123,7 +121,6 @@ export class AgentSessionRepository {
       resumePolicy: "resume",
       agentType: message.agentType,
       providerId: message.providerId,
-      experimentalSynapseToolRouterEnabled: creationConfig?.experimentalSynapseToolRouterEnabled,
       connectorIds: creationConfig?.connectorIds,
       figmaDesktopMcpEnabled: creationConfig?.figmaDesktopMcpEnabled,
       expectedMcpServerNames: creationConfig?.expectedMcpServerNames
@@ -172,7 +169,6 @@ export class AgentSessionRepository {
       agentConfig: input.mode
         || input.modelTier
         || input.mainThreadPersonaSnapshot
-        || input.experimentalSynapseToolRouterEnabled !== undefined
         || input.connectorIds !== undefined
         || input.figmaDesktopMcpEnabled !== undefined
         || input.expectedMcpServerNames !== undefined
@@ -184,9 +180,6 @@ export class AgentSessionRepository {
                   activeMainThreadPersonaId: input.mainThreadPersonaSnapshot.id,
                   activeMainThreadPersonaSnapshot: input.mainThreadPersonaSnapshot,
                 }
-              : {}),
-            ...(input.experimentalSynapseToolRouterEnabled !== undefined
-              ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
               : {}),
             ...(input.connectorIds !== undefined
               ? { connectorIds: [...new Set(input.connectorIds)] }
@@ -279,16 +272,12 @@ export class AgentSessionRepository {
       providerId: input.providerId,
       agentConfig: input.mode
         || input.modelTier
-        || input.experimentalSynapseToolRouterEnabled !== undefined
         || input.connectorIds !== undefined
         || input.figmaDesktopMcpEnabled !== undefined
         || input.expectedMcpServerNames !== undefined
         ? {
             ...(input.mode ? { mode: input.mode } : {}),
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
-            ...(input.experimentalSynapseToolRouterEnabled !== undefined
-              ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
-              : {}),
             ...(input.connectorIds !== undefined
               ? { connectorIds: [...new Set(input.connectorIds)] }
               : {}),

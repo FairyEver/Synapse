@@ -705,11 +705,11 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     ).toBe(true)
     expect(
       conversationsSchema.validate({
-        id: "conv-router-enabled",
+        id: "conv-legacy-router-disabled",
         schemaVersion: 1,
         projectId: "project-1",
         sessionKey: "local:renderer",
-        agentConfig: { experimentalSynapseToolRouterEnabled: true },
+        agentConfig: { experimentalSynapseToolRouterEnabled: false },
         history: [],
         active: true,
         createdAt: "2026-08-25T00:00:00.000Z",
@@ -718,7 +718,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     ).toBe(true)
     expect(
       conversationsSchema.validate({
-        id: "conv-router-invalid",
+        id: "conv-legacy-router-value",
         schemaVersion: 1,
         projectId: "project-1",
         sessionKey: "local:renderer",
@@ -728,7 +728,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-08-25T00:00:00.000Z",
         updatedAt: "2026-08-25T00:00:00.000Z",
       }),
-    ).toBe(false)
+    ).toBe(true)
     expect(
       conversationsSchema.validate({
         id: "conv-1",

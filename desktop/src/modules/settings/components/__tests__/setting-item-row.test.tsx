@@ -93,9 +93,9 @@ function renderSettingItemRow(props: {
 
 function createToggleSettingItem(): SettingItem {
   return {
-    key: "agent.experimentalSynapseToolRouterEnabled",
-    label: "Synapse MCP 工具按需加载",
-    description: "只在需要时加载 Synapse MCP 工具。",
+    key: "experimental.sample",
+    label: "测试开关",
+    description: "测试说明。",
     category: "experimental",
     type: "toggle",
     defaultValue: false,

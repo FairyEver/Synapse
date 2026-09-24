@@ -11,10 +11,7 @@ import {
   Settings2,
   Shield,
 } from "lucide-react"
-import {
-  DEFAULT_GLOBAL_CONFIG,
-  DEFAULT_AGENT_GLOBAL_CONFIG,
-} from "@/constants/defaults"
+import { DEFAULT_GLOBAL_CONFIG } from "@/constants/defaults"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
 
@@ -119,15 +116,6 @@ const settingsItems: SettingItem[] = [
     category: "projects",
     type: "list",
     defaultValue: DEFAULT_GLOBAL_CONFIG.projects,
-    scope: "global",
-  },
-  {
-    key: "agent.experimentalSynapseToolRouterEnabled",
-    label: "Synapse MCP 工具按需加载",
-    description: "只在需要时加载 Synapse MCP 工具，减少上下文占用；新会话启动会稍慢。",
-    category: "experimental",
-    type: "toggle",
-    defaultValue: DEFAULT_AGENT_GLOBAL_CONFIG.experimentalSynapseToolRouterEnabled,
     scope: "global",
   },
 ]

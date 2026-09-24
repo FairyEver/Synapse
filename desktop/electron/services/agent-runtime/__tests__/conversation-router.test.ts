@@ -2975,26 +2975,6 @@ describe("ConversationRouter", () => {
     })
   })
 
-  it("snapshots the experimental tool router setting for new conversations only", async () => {
-    let enabled = true
-    const { conversations, router } = createRouter({
-      loadExperimentalSynapseToolRouterEnabled: () => enabled,
-      sessions: [
-        new ScriptedSession([{ type: "result", content: "first", done: true }]),
-        new ScriptedSession([{ type: "result", content: "second", done: true }]),
-        new ScriptedSession([{ type: "result", content: "third", done: true }]),
-      ],
-    })
-
-    const first = await router.send(baseMessage("first"))
-    enabled = false
-    await router.send(baseMessage("same conversation"))
-    const second = await router.sendNewSession(baseMessage("new conversation"), "New")
-
-    expect((await conversations.get(first.conversationId))?.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(true)
-    expect((await conversations.get(second.conversationId))?.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(false)
-  })
-
   it("snapshots enabled connector ids for new conversations only", async () => {
     let connectorIds: readonly string[] = ["figma", "figma"]
     const { conversations, router } = createRouter({
@@ -3552,7 +3532,6 @@ function createRouter(input: {
   readonly afterTurn?: ConversationRouterDeps["afterTurn"]
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
-  readonly loadExperimentalSynapseToolRouterEnabled?: ConversationRouterDeps["loadExperimentalSynapseToolRouterEnabled"]
   readonly loadEnabledConnectorIds?: ConversationRouterDeps["loadEnabledConnectorIds"]
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
@@ -3612,7 +3591,6 @@ function createRouter(input: {
       prepareMessage: input.prepareMessage,
       afterTurn: input.afterTurn,
       getUsagePriceRules: () => input.priceRules ?? [],
-      loadExperimentalSynapseToolRouterEnabled: input.loadExperimentalSynapseToolRouterEnabled,
       loadEnabledConnectorIds: input.loadEnabledConnectorIds,
     },
     repository,

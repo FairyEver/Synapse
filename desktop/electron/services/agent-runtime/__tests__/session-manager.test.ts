@@ -972,7 +972,7 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("enables the tool router only for snapshotted third-party conversations", async () => {
+  it("ignores the retired switch in third-party conversations", async () => {
     const createSession = vi.fn(() => new FakeLiveSession())
     const executeSynapseTool = vi.fn()
     const manager = new SessionManager({
@@ -999,8 +999,8 @@ describe("SessionManager", () => {
       conversation: {
         ...baseConversation(),
         providerId: "bailian",
-        agentConfig: { experimentalSynapseToolRouterEnabled: true },
-      },
+        agentConfig: { experimentalSynapseToolRouterEnabled: false },
+      } as ConversationEntryV1,
       message: baseMessage("default"),
     })
 
@@ -1047,7 +1047,6 @@ describe("SessionManager", () => {
     const conversation = {
       ...baseConversation(),
       providerId: "bailian",
-      agentConfig: { experimentalSynapseToolRouterEnabled: true },
     }
 
     await manager.getOrCreateSession({
@@ -1081,7 +1080,7 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("defaults legacy third-party conversations to the router while preserving official endpoints", async () => {
+  it("routes third-party conversations while preserving official endpoints", async () => {
     const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
     const executeSynapseTool = vi.fn()
     const baseDeps = {
@@ -1121,7 +1120,6 @@ describe("SessionManager", () => {
       conversation: {
         ...baseConversation(),
         id: "official",
-        agentConfig: { experimentalSynapseToolRouterEnabled: true },
       },
       message: baseMessage("default"),
     })
@@ -1140,7 +1138,6 @@ describe("SessionManager", () => {
       conversation: {
         ...baseConversation(),
         id: "official-provider",
-        agentConfig: { experimentalSynapseToolRouterEnabled: true },
       },
       message: baseMessage("default"),
     })
@@ -1172,7 +1169,6 @@ describe("SessionManager", () => {
     })
     const conversation = {
       ...baseConversation(),
-      agentConfig: { experimentalSynapseToolRouterEnabled: true },
     }
     const state = manager.stateForConversation("conversation-1", baseMessage("default"))
 

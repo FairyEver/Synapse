@@ -162,7 +162,6 @@ export interface AgentRuntimeServiceDeps {
   readonly agentArtifactStore?: AgentArtifactStore
   readonly attachmentStagingService?: AttachmentStagingService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
-  readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
   readonly loadEnabledConnectorIds?: () => readonly string[] | Promise<readonly string[]>
   readonly executeSynapseTool?: SessionManagerDeps["executeSynapseTool"]
   readonly eventBus?: ScopedEventBus
@@ -346,7 +345,6 @@ export class AgentRuntimeService {
         attachmentStagingService: deps.attachmentStagingService,
         fileCheckpoints: this.fileCheckpoints,
         getUsagePriceRules: deps.getUsagePriceRules,
-        loadExperimentalSynapseToolRouterEnabled: () => this.loadExperimentalSynapseToolRouterEnabled(),
         loadEnabledConnectorIds: () => this.loadEnabledConnectorIds(),
         now: deps.now,
         permissionGuard: deps.permissionGuard,
@@ -1448,22 +1446,9 @@ export class AgentRuntimeService {
       ...input,
       providerId,
       modelTier,
-      experimentalSynapseToolRouterEnabled: await this.loadExperimentalSynapseToolRouterEnabled(),
       connectorIds: await this.loadEnabledConnectorIds(),
       mainThreadPersonaSnapshot,
     })
-  }
-
-  private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
-    try {
-      return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) !== false
-    } catch (error) {
-      this.deps.logger?.warn("Failed to load the experimental Synapse tool router setting; using the safe default.", {
-        projectId: this.deps.projectId,
-        ...errorLogMeta(error),
-      })
-      return false
-    }
   }
 
   private async loadEnabledConnectorIds(): Promise<readonly string[]> {

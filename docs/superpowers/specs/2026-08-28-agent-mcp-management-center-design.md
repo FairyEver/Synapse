@@ -45,7 +45,7 @@
 - `AgentContextUsageTracker` 当前把 `getContextUsage()` 收敛为会话总 token，丢弃了 `mcpTools` 的逐工具明细。
 - `AgentWorkspaceShell` 已提供会话级、主窗口/独立窗口共用的辅助面板，是本功能的最低正确 UI 宿主。
 - 系统设置中的 `McpSettingsPanel` 只显示 Synapse 本地 HTTP MCP Server 和外部客户端注册，不能承载上游会话 MCP。
-- 第三方 Provider 的 Synapse MCP 按需加载实验会先 discovery，再用 `strictMcpConfig` 重建有效 MCP，并注入 `synapse-tool-router`。动态 MCP 集合必须与这层基础集合合并，不能调用 `setMcpServers({})` 误删重建后的 Server。
+- 第三方 Provider 的 Synapse MCP 进程内路由会先 discovery，再用 `strictMcpConfig` 重建有效 MCP，并注入 `synapse-tool-router`。动态 MCP 集合必须与这层基础集合合并，不能调用 `setMcpServers({})` 误删重建后的 Server。
 - live session 会被关闭、重建或因空闲回收。会话内临时 MCP 状态不能只挂在某一个 Query 实例上。
 
 ## 3. 官方契约形成的产品约束

@@ -12,7 +12,6 @@ import {
 describe("Synapse config Agent defaults", () => {
   it("defaults new Agent conversations to default permission mode", () => {
     expect(createDefaultConfig().agent.defaultPermissionMode).toBe("default")
-    expect(createDefaultConfig().agent.experimentalSynapseToolRouterEnabled).toBe(true)
     expect(createDefaultConfig().agent.recentSlashSkills).toEqual([])
     expect(createDefaultConfig().agent.allowedWriteDirectories).toEqual([])
   })
@@ -25,7 +24,6 @@ describe("Synapse config Agent defaults", () => {
     })
 
     expect(config.agent.defaultPermissionMode).toBe("default")
-    expect(config.agent.experimentalSynapseToolRouterEnabled).toBe(true)
     expect(config.agent.allowedWriteDirectories).toEqual([])
   })
 
@@ -40,22 +38,15 @@ describe("Synapse config Agent defaults", () => {
     expect(config.agent.allowedWriteDirectories).toEqual(["/tmp"])
   })
 
-  it("only enables the experimental Synapse tool router for an explicit boolean true", () => {
-    const enabled = sanitizeSynapseConfig({
+  it("ignores the retired tool router setting in existing configs", () => {
+    const config = sanitizeSynapseConfig({
       activeRepoUuid: null,
       repositories: [],
       global: { themeMode: "light", projects: [] },
-      agent: { experimentalSynapseToolRouterEnabled: true },
-    })
-    const invalid = sanitizeSynapseConfig({
-      activeRepoUuid: null,
-      repositories: [],
-      global: { themeMode: "light", projects: [] },
-      agent: { experimentalSynapseToolRouterEnabled: "true" },
+      agent: { experimentalSynapseToolRouterEnabled: false },
     })
 
-    expect(enabled.agent.experimentalSynapseToolRouterEnabled).toBe(true)
-    expect(invalid.agent.experimentalSynapseToolRouterEnabled).toBe(false)
+    expect(config.agent).not.toHaveProperty("experimentalSynapseToolRouterEnabled")
   })
 
   it("normalizes Agent defaultPermissionMode only when it is supported", () => {
