@@ -14,125 +14,104 @@
         <p class="text-sm font-semibold text-neutral-600">Synapse Remote · iOS</p>
         <h1 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">终端桌面组件</h1>
       </div>
-      <p class="max-w-md text-sm leading-6 text-neutral-600">三种尺寸对应三个问题：哪条会话需要我、当前有哪些终端、选定电脑的整体状态。</p>
+      <p class="max-w-md text-sm leading-6 text-neutral-600">小号处理待办，中号监看一条会话，大号掌握一台电脑的终端状态。</p>
     </header>
 
     <section aria-label="组件预览" class="mt-12 grid items-start gap-12 lg:grid-cols-3 lg:gap-8">
       <article class="flex flex-col items-center gap-5 lg:items-start">
         <div class="flex w-full items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold">小号</h2>
-          <span class="text-xs text-neutral-500">单条待处理会话</span>
+          <span class="text-xs text-neutral-500">立即处理</span>
         </div>
         <div aria-label="小号终端组件，部署服务正在等待确认" class="flex h-[172px] w-[172px] flex-col rounded-[24px] bg-white p-4 text-neutral-950 ring-1 ring-neutral-200">
-          <div class="flex items-center justify-between">
-            <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-900 font-mono text-sm font-semibold text-white" aria-hidden="true">&gt;_</span>
+          <div class="flex items-center gap-2 text-[12px] font-semibold text-amber-800">
             <span class="h-2 w-2 rounded-full bg-amber-700" aria-hidden="true"></span>
+            <span>等待确认</span>
           </div>
           <div class="mt-auto min-w-0">
-            <p class="truncate text-[13px] font-medium text-neutral-600">部署服务</p>
-            <p class="mt-1 text-[15px] font-semibold">等待确认</p>
+            <p class="text-[11px] text-neutral-600">需要你处理</p>
+            <p class="mt-1 truncate text-[18px] font-semibold tracking-tight">部署服务</p>
           </div>
           <div class="mt-3 flex items-center justify-between border-t border-neutral-200 pt-2 text-[11px] font-medium text-neutral-600">
             <span class="truncate">MacBook Pro</span>
             <span aria-hidden="true">↗</span>
           </div>
         </div>
-        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">优先显示最需要处理的一条；点按进入对应终端。</p>
+        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">只回答“现在需要我做什么”；点按直达待处理会话。</p>
       </article>
 
       <article class="flex flex-col items-center gap-5 lg:items-start">
         <div class="flex w-full items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold">中号</h2>
-          <span class="text-xs text-neutral-500">两条重点会话</span>
+          <span class="text-xs text-neutral-500">单会话监看</span>
         </div>
-        <div aria-label="中号终端组件，显示两条会话" class="flex h-[172px] w-[360px] max-w-full flex-col rounded-[24px] bg-white p-4 text-neutral-950 ring-1 ring-neutral-200">
+        <div aria-label="中号终端组件，监看开发服务器的最近一行输出" class="flex h-[172px] w-[360px] max-w-full flex-col rounded-[24px] bg-neutral-950 p-4 text-neutral-100">
           <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-900 font-mono text-sm font-semibold text-white" aria-hidden="true">&gt;_</span>
-              <span class="text-[14px] font-semibold">终端</span>
-            </div>
-            <span class="truncate text-[11px] text-neutral-600">MacBook Pro</span>
+            <span class="min-w-0 truncate text-[15px] font-semibold">开发服务器</span>
+            <span class="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-neutral-300"><span class="h-2 w-2 rounded-full bg-green-500" aria-hidden="true"></span>运行中</span>
           </div>
-          <div class="mt-3 flex min-w-0 items-center gap-3 border-t border-neutral-200 pt-3">
-            <span class="h-2 w-2 shrink-0 rounded-full bg-amber-700" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-semibold">部署服务</p>
-              <p class="truncate font-mono text-[11px] text-neutral-600">~/code/synapse</p>
-            </div>
-            <span class="shrink-0 text-[11px] font-semibold text-amber-800">等待确认</span>
+          <p class="mt-1 truncate font-mono text-[11px] text-neutral-400">~/code/dashboard · MacBook Pro</p>
+          <div class="mt-5 min-w-0">
+            <p class="text-[11px] text-neutral-400">最近输出</p>
+            <p class="mt-1 truncate font-mono text-[13px] text-neutral-100">ready in 312 ms</p>
           </div>
-          <div class="mt-2 flex min-w-0 items-center gap-3">
-            <span class="h-2 w-2 shrink-0 rounded-full bg-green-700" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-semibold">开发服务器</p>
-              <p class="truncate font-mono text-[11px] text-neutral-600">~/code/dashboard</p>
-            </div>
-            <span class="shrink-0 text-[11px] text-neutral-600">运行中</span>
+          <div class="mt-auto flex items-center justify-between border-t border-neutral-700 pt-2 text-[11px] text-neutral-400">
+            <span>更新于 09:41</span>
+            <span class="font-medium text-neutral-100">打开会话 ↗</span>
           </div>
         </div>
-        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">待处理置顶，其余按最近活动排序；点按会话进入对应终端。</p>
+        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">固定一条会话，查看最近输出快照；此图展示已开启输出预览的状态。</p>
       </article>
 
       <article class="flex flex-col items-center gap-5 lg:items-start">
         <div class="flex w-full items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold">大号</h2>
-          <span class="text-xs text-neutral-500">一台电脑的终端概览</span>
+          <span class="text-xs text-neutral-500">整机概览</span>
         </div>
-        <div aria-label="大号终端组件，显示电脑状态和四条会话" class="flex h-[360px] w-[360px] max-w-full flex-col rounded-[24px] bg-white p-5 text-neutral-950 ring-1 ring-neutral-200">
+        <div aria-label="大号终端组件，显示一条待处理、两条运行中和一条空闲会话" class="flex h-[360px] w-[360px] max-w-full flex-col rounded-[24px] bg-white p-5 text-neutral-950 ring-1 ring-neutral-200">
           <div class="flex items-start justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-900 font-mono text-base font-semibold text-white" aria-hidden="true">&gt;_</span>
-              <div>
-                <p class="text-[15px] font-semibold leading-5">终端</p>
-                <p class="text-[11px] leading-4 text-neutral-600">MacBook Pro</p>
-              </div>
+            <div>
+              <p class="text-[19px] font-semibold tracking-tight">1 条需要处理</p>
+              <p class="mt-0.5 text-[11px] text-neutral-600">MacBook Pro</p>
             </div>
             <span class="flex items-center gap-1.5 text-[11px] font-medium text-neutral-600"><span class="h-2 w-2 rounded-full bg-green-700" aria-hidden="true"></span>在线</span>
           </div>
-
           <div class="mt-5 flex items-baseline justify-between border-b border-neutral-200 pb-2">
-            <p class="text-[13px] font-semibold">会话</p>
-            <p class="text-[11px] text-neutral-600">1 条待处理</p>
+            <p class="text-[12px] font-semibold text-amber-800">等待确认</p>
+          </div>
+          <div class="flex min-w-0 items-center justify-between gap-3 py-2">
+            <p class="min-w-0 truncate text-[13px] font-semibold">部署服务</p>
+            <span class="shrink-0 text-[11px] text-neutral-600">~/code/synapse</span>
           </div>
 
-          <div class="flex min-w-0 items-center gap-3 border-b border-neutral-200 py-3">
-            <span class="h-2 w-2 shrink-0 rounded-full bg-amber-700" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-semibold">部署服务</p>
-              <p class="truncate font-mono text-[11px] text-neutral-600">~/code/synapse</p>
-            </div>
-            <span class="shrink-0 text-[11px] font-semibold text-amber-800">等待确认</span>
+          <div class="mt-1 flex items-baseline justify-between border-b border-neutral-200 pb-2">
+            <p class="text-[12px] font-semibold">运行中</p>
+            <span class="text-[11px] text-neutral-600">2 条</span>
           </div>
-          <div class="flex min-w-0 items-center gap-3 border-b border-neutral-200 py-3">
-            <span class="h-2 w-2 shrink-0 rounded-full bg-green-700" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-semibold">开发服务器</p>
-              <p class="truncate font-mono text-[11px] text-neutral-600">~/code/dashboard</p>
-            </div>
-            <span class="shrink-0 text-[11px] text-neutral-600">运行中</span>
+          <div class="flex min-w-0 items-center justify-between gap-3 py-2">
+            <p class="min-w-0 truncate text-[13px] font-medium">开发服务器</p>
+            <span class="shrink-0 text-[11px] text-neutral-600">~/code/dashboard</span>
           </div>
-          <div class="flex min-w-0 items-center gap-3 border-b border-neutral-200 py-3">
-            <span class="h-2 w-2 shrink-0 rounded-full bg-green-700" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-semibold">单元测试</p>
-              <p class="truncate font-mono text-[11px] text-neutral-600">~/code/server</p>
-            </div>
-            <span class="shrink-0 text-[11px] text-neutral-600">运行中</span>
+          <div class="flex min-w-0 items-center justify-between gap-3 pb-2">
+            <p class="min-w-0 truncate text-[13px] font-medium">单元测试</p>
+            <span class="shrink-0 text-[11px] text-neutral-600">~/code/server</span>
           </div>
-          <div class="flex min-w-0 items-center gap-3 py-3">
-            <span class="h-2 w-2 shrink-0 rounded-full bg-neutral-500" aria-hidden="true"></span>
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-[13px] font-semibold">日志查看</p>
-              <p class="truncate font-mono text-[11px] text-neutral-600">~/logs</p>
-            </div>
-            <span class="shrink-0 text-[11px] text-neutral-600">空闲</span>
+
+          <div class="mt-1 flex items-baseline justify-between border-b border-neutral-200 pb-2">
+            <p class="text-[12px] font-semibold text-neutral-600">空闲</p>
+            <span class="text-[11px] text-neutral-600">1 条</span>
           </div>
+          <div class="flex min-w-0 items-center justify-between gap-3 py-2">
+            <p class="min-w-0 truncate text-[13px] font-medium">日志查看</p>
+            <span class="shrink-0 text-[11px] text-neutral-600">~/logs</span>
+          </div>
+
           <div class="mt-auto flex items-center justify-between pt-1 text-[11px] text-neutral-600">
             <span>更新于 09:41</span>
-            <span class="font-medium text-neutral-950">打开终端 ↗</span>
+            <span class="font-medium text-neutral-950">查看全部 ↗</span>
           </div>
         </div>
-        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">固定到用户选定的电脑；显示状态快照，点按行进入对应终端。</p>
+        <p class="w-full max-w-xs text-sm leading-6 text-neutral-600">按待处理、运行中、空闲分组；点按会话或查看全部。</p>
       </article>
     </section>
 
@@ -141,7 +120,7 @@
       <dl class="mt-5 grid gap-x-10 gap-y-5 text-sm sm:grid-cols-3">
         <div><dt class="font-semibold">电脑离线</dt><dd class="mt-1 leading-6 text-neutral-600">显示电脑名称与“电脑不在线”，保留打开 App 入口。</dd></div>
         <div><dt class="font-semibold">没有会话</dt><dd class="mt-1 leading-6 text-neutral-600">显示“没有正在运行的会话”，点按进入终端列表。</dd></div>
-        <div><dt class="font-semibold">隐私</dt><dd class="mt-1 leading-6 text-neutral-600">主屏不显示终端输出、命令内容和权限请求详情。</dd></div>
+        <div><dt class="font-semibold">隐私</dt><dd class="mt-1 leading-6 text-neutral-600">中号的最近输出需主动开启预览；小号和大号不展示终端内容。</dd></div>
       </dl>
       <p class="mt-7 text-xs leading-5 text-neutral-500">概念稿使用示例数据；实际刷新频率由 iOS 管理，组件内状态需要标明快照时间。</p>
     </section>
