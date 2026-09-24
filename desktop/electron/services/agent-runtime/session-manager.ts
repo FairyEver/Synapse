@@ -314,8 +314,7 @@ export class SessionManager {
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
     const contextWindowMatches = input.state.contextWindowConfigurationValue
       === env.CLAUDE_CODE_MAX_CONTEXT_TOKENS
-    const synapseToolRouterEnabled = input.conversation.agentConfig?.experimentalSynapseToolRouterEnabled !== false
-      && isThirdPartyAnthropicCompatibleProvider(provider, env.ANTHROPIC_BASE_URL)
+    const synapseToolRouterEnabled = isThirdPartyAnthropicCompatibleProvider(provider, env.ANTHROPIC_BASE_URL)
       && Boolean(this.deps.executeSynapseTool)
     const synapseToolRouterMatches = input.state.synapseToolRouterEnabled === synapseToolRouterEnabled
     const sdkSettings = resolveProviderSdkSettings(provider, env)

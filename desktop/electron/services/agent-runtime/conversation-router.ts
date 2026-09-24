@@ -112,7 +112,6 @@ export interface ConversationRouterDeps {
   readonly attachmentStagingService?: AttachmentStagingService
   readonly fileCheckpoints?: AgentFileCheckpointService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
-  readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
   readonly loadEnabledConnectorIds?: () => readonly string[] | Promise<readonly string[]>
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
@@ -477,7 +476,6 @@ export class ConversationRouter {
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
-    const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
     const connectorIds = await this.loadEnabledConnectorIds()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
@@ -489,7 +487,6 @@ export class ConversationRouter {
       providerId,
       mode: message.modeOverride,
       modelTier: message.modelTier,
-      experimentalSynapseToolRouterEnabled,
       connectorIds,
       name,
       userMeta: userMetaFromMessage(message),
@@ -516,7 +513,6 @@ export class ConversationRouter {
 
     const ac = new AbortController()
     const providerId = await this.resolveNewConversationProviderId(message)
-    const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
     const connectorIds = await this.loadEnabledConnectorIds()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
@@ -528,7 +524,6 @@ export class ConversationRouter {
       providerId,
       mode: message.modeOverride,
       modelTier: message.modelTier,
-      experimentalSynapseToolRouterEnabled,
       connectorIds,
       name,
       userMeta: userMetaFromMessage(message),
@@ -1905,16 +1900,11 @@ export class ConversationRouter {
       return this.repository.getOrCreateActive(message)
     }
     const providerId = await this.resolveNewConversationProviderId(message)
-    const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
     const connectorIds = await this.loadEnabledConnectorIds()
     return this.repository.getOrCreateActive(
       { ...message, providerId },
-      { experimentalSynapseToolRouterEnabled, connectorIds },
+      { connectorIds },
     )
-  }
-
-  private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
-    return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) !== false
   }
 
   private async loadEnabledConnectorIds(): Promise<readonly string[]> {

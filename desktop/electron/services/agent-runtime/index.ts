@@ -291,9 +291,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         agentArtifactStore,
         attachmentStagingService,
         getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
-        loadExperimentalSynapseToolRouterEnabled: async () => (
-          configService ? (await configService.load()).agent.experimentalSynapseToolRouterEnabled : true
-        ),
         executeSynapseTool: async (toolName, args, context) => {
           const action = MCP_TOOL_ACTIONS[toolName]
           const domain = getMcpToolDomainId(toolName)

@@ -1,6 +1,6 @@
 # Agent Synapse MCP 工具按需加载设计
 
-> Superseded note: `search`/`invoke` 已从进程内实验升级为 `/mcp` 的**唯一**公开工具表面。本文件中「`/mcp`、Claude Code 注册、公开工具名、schema 与 225/223 能力数量不变」以及「两个 router 工具只存在于 Agent SDK 进程内会话」的描述已失效；权威现状见 `docs/agents/capability-registry.md` 与 `docs/agents/agent-runtime-security.md`。进程内注入流程本身仍然有效。
+> Superseded note: `search`/`invoke` 已从进程内实验升级为 `/mcp` 的**唯一**公开工具表面；设置中的实验开关也已退役，第三方端点固定使用进程内 router。本文件中旧开关、会话快照及公开工具表面的描述已失效；权威现状见 `docs/agents/capability-registry.md` 与 `docs/agents/agent-runtime-security.md`。进程内注入流程本身仍然有效。
 >
 > 中文检索范围另有更新：下方「内部协议」一节中「中文常用的云盘、文件和列表词汇映射到规范索引词，不为单个模型维护别名」的表述已被 `docs/superpowers/specs/2026-09-22-synapse-tool-router-chinese-search-lexicon-design.md` 取代 —— 中文支持从 7 条别名扩展为覆盖全部工具名段的中文词表。
 
@@ -10,9 +10,9 @@
 
 ## 产品边界
 
-- 系统设置“实验功能”下提供“Synapse MCP 工具按需加载”，默认开启，异常配置归一化为关闭，缺省配置使用默认开启。
-- 开关只在新建对话时写入 `agentConfig.experimentalSynapseToolRouterEnabled`；缺少字段的旧对话按默认开启处理，显式 false 继续关闭。
-- 实际模式由对话快照与 Provider 端点共同决定。Anthropic 官方端点不启用；第三方端点启用。对话内切换 Provider 时重新创建 live session 并重新计算。
+- 系统设置保留“实验功能”分类，但不再提供 Synapse MCP 工具开关。
+- 新对话不再写入 router 开关快照；已有快照不影响实际模式。
+- 实际模式由 Provider 端点决定。Anthropic 官方端点不启用；第三方端点启用。对话内切换 Provider 时重新创建 live session 并重新计算。
 - `/mcp`、Claude Code 注册、公开工具名、schema 与 225/223 能力数量不变。两个 router 工具只存在于 Agent SDK 进程内会话。
 
 ## 启动流程
@@ -41,8 +41,7 @@
 
 ## 验证
 
-- 配置默认值、异常归一化、IPC 往返与设置保存。
-- 对话快照、旧对话兼容、第三方/官方端点与 Provider 切换。
+- 旧配置和旧对话快照兼容、第三方/官方端点与 Provider 切换。
 - discovery 不读取真实 prompt、strict MCP 重建、其它 MCP 保留及所有安全回退。
 - 223 工具索引、精确/中英文/domain/schema 搜索、稳定排序、限制与空结果。
 - invoke 未知工具、参数、取消、公共 MCP 结果一致性、权限模式、Persona/子 Agent、事件投影与一次性回退。

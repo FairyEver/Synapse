@@ -231,7 +231,6 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "bypassPermissions",
           defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
-          experimentalSynapseToolRouterEnabled: true,
           recentSlashSkills: ["review-code", "openai-docs", "third"],
           allowedWriteDirectories: [],
         },
@@ -310,11 +309,12 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
-  it("ignores legacy Agent conversation rollover prompt thresholds when importing a backup", async () => {
+  it("ignores retired Agent settings when importing a backup", async () => {
     const filePath = await writeBackupFile({}, {
       agent: {
         defaultPermissionMode: "default",
         defaultProviderModel: null,
+        experimentalSynapseToolRouterEnabled: false,
         conversationRolloverPrompt: {
           costThresholdCny: 12.5,
           tokenThreshold: 8_000_000,
@@ -329,7 +329,6 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
-          experimentalSynapseToolRouterEnabled: true,
           recentSlashSkills: [],
           allowedWriteDirectories: [],
         },
@@ -358,7 +357,6 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
-          experimentalSynapseToolRouterEnabled: true,
           recentSlashSkills: [],
           allowedWriteDirectories: [],
         },

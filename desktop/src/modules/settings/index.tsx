@@ -299,6 +299,10 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
           </SettingsGroup>
         ) : null}
 
+        {isReady && activeCategory === "experimental" && regularItems.length === 0 ? (
+          <p className="text-sm text-muted-foreground">暂无实验功能</p>
+        ) : null}
+
         {isReady && activeCategory === "account" && accountUiVisible ? <AccountPanel /> : null}
 
         {isReady && activeCategory === "general" ? <DeviceNamePanel /> : null}

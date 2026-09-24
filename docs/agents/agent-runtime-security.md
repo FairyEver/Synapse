@@ -66,8 +66,8 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 
 - Agent 分组查询与新建对话分别使用 `agent.conversation.read` / `agent.conversation.control` 权限、既有客户端限流与无正文审计。新建只接受默认分组、已配置项目或已有对话所属的可用分组，不接受任意工作目录、来源、permission mode 或继承旧对话身份；普通身份与模型/权限默认值由主进程确定。幂等键作用域为客户端和创建操作，并复用进程内有界 10 分钟缓存；已创建成功后的界面刷新失败不能触发重复创建。
 
-- “Synapse MCP 工具按需加载”默认开启，仅用于非 Anthropic 官方端点；保留用户/会话显式关闭的选择，缺少快照的旧对话使用默认按需模式。Anthropic 官方端点继续使用 SDK 原生工具模式；对话切换 Provider/端点时按快照与端点重新计算，不读取当前全局开关改写旧对话。
-- 实验会话必须先用正常 `settingSources` 做一次不消费用户 prompt、不发送模型请求的 MCP discovery，再以 `strictMcpConfig: true` 重建其它可序列化 MCP，移除 `synapse-mcp` 并注入进程内 `synapse-tool-router`。不得用 `disallowedTools`、运行时 toggle 或同名 server 覆盖模拟隔离。该 router 模块同时是 `/mcp` 公开表面的实现来源，两条路径共用同一份工具定义与 instructions，不得各自维护一份。
+- 第三方 Anthropic-compatible 端点固定使用进程内 Synapse 工具 router；Anthropic 官方端点继续使用 SDK 原生工具模式。旧全局配置与对话快照中的实验开关不再生效；对话切换 Provider/端点时重新计算模式。
+- 第三方会话必须先用正常 `settingSources` 做一次不消费用户 prompt、不发送模型请求的 MCP discovery，再以 `strictMcpConfig: true` 重建其它可序列化 MCP，移除 `synapse-mcp` 并注入进程内 `synapse-tool-router`。不得用 `disallowedTools`、运行时 toggle 或同名 server 覆盖模拟隔离。该 router 模块同时是 `/mcp` 公开表面的实现来源，两条路径共用同一份工具定义与 instructions，不得各自维护一份。
 - 路由模式中任何异常都不得回退完整 MCP：可选连接器缺失、失败、待授权或 pending 超时，只排除该连接器并保留路由器及其它可重建 MCP；不可重建的可选配置也只排除该项。discovery 整体失败、重名、显式原始 Synapse 权限规则、policy helper、Synapse server 工具策略或路由器创建失败时，使用 `strictMcpConfig: true` 和空 MCP 集合，保留受现有权限限制的内置工具，不能绕过原权限策略。诊断仅记录名称、安全 reason 与状态，禁止配置、header、env 或凭据正文。
 - `search` 与 `invoke` 是所有 MCP 客户端的**仅有两个**公开工具；内置 Agent 会话与 `/mcp` 共用同一实现、同一份工具定义和同一 instructions。`search` 只读且可自动允许；`invoke` 必须把原始 Synapse 工具名和参数投影回 Persona、子 Agent allowlist、permission mode、权限卡片、toolUse/toolResult、history 与导出，并以 `toolUseId` 关联。底层执行仍走同一 action router、`PermissionGuard`、`AuditSink` 和公共 MCP 结果归一化。两个表面都必须随 `initialize` 返回说明两段式调用流程的 instructions；新增第三个公开工具必须先修订本条。
 - 自动注册/清理 Synapse MCP 时移除旧 server：`synapse-data`、`synapse-database`、`synapse-services`，以及旧权限 allowlist 工具名；不得自动新增 `mcp__synapse-mcp__*` allowlist。
