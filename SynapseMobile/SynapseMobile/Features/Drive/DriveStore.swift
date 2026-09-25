@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 // MARK: - 排序
 
@@ -240,6 +241,214 @@ enum DrivePath {
     }
 }
 
+// MARK: - 回收站
+
+/// 一条回收站条目恢复时该走哪条接口。
+///
+/// 服务端把两种条目放在同一份列表里（条目自己的 `kind`），恢复却是两条路：普通项走
+/// `/drive/items/:id/restore`，公开素材走 `/drive/public-assets/:assetId/restore`。
+/// 分流放在这里而不是每个调用点：挑错的后果是「看着恢复了、其实没有」——这两条路走错的
+/// 表现都是 404，和「服务端没有这个能力」长得一样。
+enum DriveTrashRestore: Equatable {
+    /// 普通项。`itemId` 就是条目自己的 `id`：列表里那一行本来就是一条 `DriveItem`。
+    case item(itemId: String)
+    case publicAsset(assetId: String)
+
+    /// 这一条恢复不了时给用户的那句话。
+    ///
+    /// 只在服务端说它是公开素材、却没给 `assetId`（DTO 里那个字段是可选的）时才会用到。
+    static let unresolvedReason = "这一项暂时无法恢复，请稍后重试。"
+
+    /// 条目 → 该调的接口；`nil` 表示这一条恢复不了。
+    static func target(for entry: DriveTrashEntry) -> DriveTrashRestore? {
+        guard entry.isPublicAsset else { return .item(itemId: entry.id) }
+        // 拿条目 id 去走公开素材那条路只会得到 404，本地拼不出正确的路径时不如直说。
+        guard let assetId = entry.assetId, !assetId.isEmpty else { return nil }
+        return .publicAsset(assetId: assetId)
+    }
+}
+
+// MARK: - 分享
+
+/// 分享表单里的四项。
+///
+/// 服务端把请求里的设置**叠在**已有那条分享之上（`drive.service.ts` 的
+/// `resolveShareAccessSettingsBase`）：没发过去的键保持原样。所以只有用户真的动过的那些
+/// 才该发出去——把没动过的也发一遍，密码那一项会被重算一次，于是「带密码的链接」换了
+/// 一个地址，而用户什么都没改。
+///
+/// `defaults` 是 Spec §4.5 里表单打开时的样子，逐项与服务端自己的默认值
+/// （`DRIVE_DEFAULT_ACCESS_SETTINGS`）相同，所以新分享的「动过」是相对同一套值比的。
+struct DriveShareForm: Equatable {
+    var expiry: DriveExpiry
+    var passwordEnabled: Bool
+    var accessMode: DriveAccessMode
+    var editorEmails: [String]
+
+    static let defaults = DriveShareForm(
+        expiry: .forever,
+        passwordEnabled: false,
+        accessMode: .linkRead,
+        editorEmails: []
+    )
+
+    /// 相对 `initial` 动过的那些 → 请求体。
+    ///
+    /// 一个都没动时回来的是**空体**，而服务端把空体当成「没给设置」
+    /// （`parseAccessSettings` 把空对象当 `undefined`）——正好是「复用已有那条，别动它的
+    /// 设置」。
+    ///
+    /// `initial` 是参数而不是写死 `defaults`：表单打开时该按这一项**当前**的样子填
+    /// （已有的那一条带着密码与有效期），否则用户什么都没改，发出去的却是「把密码关掉」。
+    func settings(changedFrom initial: DriveShareForm) -> APIClient.DriveShareSettings {
+        var settings = APIClient.DriveShareSettings()
+        if expiry != initial.expiry { settings.expiresIn = expiry }
+        if passwordEnabled != initial.passwordEnabled { settings.passwordEnabled = passwordEnabled }
+        if accessMode != initial.accessMode { settings.accessMode = accessMode }
+        // 邮箱只在「指定邮箱可编辑」这一档有意义：别的档位上服务端会把它清空
+        // （`normalizeDriveAccessSettings`），发过去只是白搭。反过来，选中那一档却带着空
+        // 名单会被服务端拒（「请至少添加一个可编辑用户。」），所以表单在那一档上不该允许
+        // 空名单提交。
+        if accessMode == .specifiedUsersEdit, editorEmails != initial.editorEmails {
+            settings.editorEmails = editorEmails
+        }
+        return settings
+    }
+}
+
+extension APIClient.DriveShareSettings {
+    /// 一个字段都没有。
+    ///
+    /// 空体与服务端嘴里的「没给设置」是一回事（见 `DriveShareForm.settings(changedFrom:)`），
+    /// 所以本机也就没有理由为它多打一次请求。
+    var isEmpty: Bool {
+        passwordEnabled == nil && expiresIn == nil && accessMode == nil && editorEmails == nil
+    }
+}
+
+extension DriveShare {
+    /// 分享列表里那一条 → 结果页要的形状。
+    ///
+    /// `enabled` 一律为真：服务端的分享列表只给还活着的那几条（`enabled: true` 且没过期），
+    /// 所以列表里出现的就是能用的。
+    init(listItem: DriveShareListItem) {
+        self.init(
+            id: listItem.id,
+            shareId: listItem.shareId,
+            itemId: listItem.itemId,
+            enabled: true,
+            url: listItem.url,
+            urlWithPassword: listItem.urlWithPassword,
+            passwordEnabled: listItem.passwordEnabled,
+            password: listItem.password,
+            expiresAt: listItem.expiresAt,
+            accessMode: listItem.accessMode,
+            editorEmails: listItem.editorEmails,
+            createdAt: listItem.createdAt
+        )
+    }
+}
+
+/// 这一次分享要怎么做。
+///
+/// 「已有活跃分享时不重复创建」就落在这里：本机手里有那一条（分享列表里那一条带着链接、
+/// 带密码链接与密码）**而且用户什么都没改**时，连请求都不必发——服务端那条只会在不带
+/// 设置去的时候复用它（`drive.service.ts` 的 `reusedExisting`），而带设置去就是把它更新
+/// 掉，那种情况本机说不出结果，只能走一次请求。
+enum DriveSharePlan {
+    /// 用本机已经知道的那一条，不发请求。
+    case useExisting(DriveShare)
+    /// 发一次请求。带设置是更新，空体是让服务端复用或新建。
+    case request(APIClient.DriveShareSettings)
+
+    static func of(
+        itemId: String,
+        known: [DriveShareListItem],
+        settings: APIClient.DriveShareSettings
+    ) -> DriveSharePlan {
+        if settings.isEmpty, let existing = existing(forItemId: itemId, in: known) {
+            return .useExisting(existing)
+        }
+        return .request(settings)
+    }
+
+    /// 这一项已有的那一条活跃分享（本机知道的话）。
+    ///
+    /// 比的是 `itemId`：`id` 与 `shareId` 是分享自己的两个编号，与项无关。服务端对同一项
+    /// 只留一条活跃分享，所以取第一条就够。
+    static func existing(forItemId itemId: String, in known: [DriveShareListItem]) -> DriveShare? {
+        known.first { $0.itemId == itemId }.map(DriveShare.init(listItem:))
+    }
+}
+
+/// 分享一项的结果。
+///
+/// 三态而不是一个 `DriveShare?`：结果页上有一句话只在复用的时候出现（「链接未变」，
+/// Spec §4.5），而失败要能带上服务端给的那句话——两种都装不进 `nil` 里。
+enum DriveShareOutcome {
+    /// 这一项本来没有分享，这次新建了一条。
+    case created(DriveShare)
+    /// 本来就有那一条，链接没变。
+    case reused(DriveShare)
+    /// 没成。`reason` 是给用户看的一句话。
+    case failed(reason: String)
+
+    /// 成了的话，结果页要的那一条。
+    var share: DriveShare? {
+        switch self {
+        case .created(let share), .reused(let share): return share
+        case .failed: return nil
+        }
+    }
+}
+
+// MARK: - 公开素材的直链
+
+/// 公开素材的直链。
+///
+/// 服务端在 `DrivePublicAsset.url` 里给的就是这一条（`buildDrivePublicAssetUrl`），它按
+/// 产品的公开站点地址（`APP_PUBLIC_URL`）拼，是权威的那一条。这里拼的是**兜底**：旧服务端
+/// 不给 `url` 时，本机按自己连的源站拼一条，总好过让「拷贝直链」拷到空串。
+enum DrivePublicAssetLink {
+    /// 服务端那条路由：`drive.controller.ts` 的 `@Get("/files/:assetId")`。
+    static let pathPrefix = "/files"
+
+    /// `{origin}/files/{assetId}`。
+    ///
+    /// `origin` 是参数而不是在这里读 `AppConfiguration`：与 `DriveRoute.download` 同一个
+    /// 理由——那个键会被并行测试改写，纯函数不去读它，断言才是密闭的。
+    static func url(assetId: String, origin: URL) -> String {
+        origin.absoluteString + pathPrefix + "/" + escaped(assetId)
+    }
+
+    /// 一条素材给用户的那条直链。
+    static func directLink(for asset: DrivePublicAsset, origin: URL) -> String {
+        let given = asset.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        return given.isEmpty ? url(assetId: asset.assetId, origin: origin) : given
+    }
+
+    /// 路径段里的编码：与 `DriveRoute` 里那一句同一条规则。
+    private static func escaped(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
+    }
+}
+
+// MARK: - 搜索词
+
+/// 搜索词的归一。
+///
+/// 空串、纯空白与 `nil` 都是「没有搜索词」：`?search=` 是白拼一个参数（服务端自己也会把
+/// 它当成没给），而本机「这一份列表是搜什么搜出来的」也会因此多出两种写法——恢复一条
+/// 之后那次重取就可能带着一个空搜索词去。
+enum DriveSearchTerm {
+    static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+}
+
 // MARK: - Store
 
 /// 云盘的浏览状态与文件夹操作。
@@ -275,6 +484,38 @@ final class DriveStore {
     ///
     /// 与 `PathIntent` 是同一条标准：`await` 之后才准落地，落地前先确认说的还是同一层。
     private var layerGeneration = 0
+
+    // MARK: 账号级的那几屏
+
+    /// 回收站。
+    private(set) var trash: [DriveTrashEntry] = []
+    /// 回收站里一共有多少条。列表末尾那一行「回收站」的副标题「N 项」用它：列表是分页的，
+    /// 而这一页的条数说明不了总数。
+    private(set) var trashTotal = 0
+    private(set) var trashLoading = false
+    private(set) var trashErrorMessage: String?
+
+    private(set) var shares: [DriveShareListItem] = []
+    private(set) var sharesLoading = false
+    private(set) var sharesErrorMessage: String?
+
+    private(set) var assets: [DrivePublicAsset] = []
+    private(set) var assetsLoading = false
+    private(set) var assetsErrorMessage: String?
+
+    /// 用量。拉不到时是 `nil`，列表最底下那一行这次不显示。
+    private(set) var usage: DriveUsage?
+
+    /// 现在这一份回收站是搜什么搜出来的。恢复一条之后要带着同一个词重取，否则用户恢复
+    /// 一项，搜索结果就被整个重置成「全部」了。
+    private var trashSearch: String?
+
+    /// 账号代次：退出登录时 +1。
+    ///
+    /// 回收站 / 分享 / 公开素材 / 用量都不是「一层」，它们的失效条件只有「换了个账号」这一
+    /// 条，所以不跟 `layerGeneration` 共用——那个每下一层文件夹就 +1，会让一次正在飞的
+    /// 回收站查询被一次无关的导航作废。
+    private var accountGeneration = 0
 
     /// 本地视图偏好（Spec §2.3）：服务端不接受排序参数，排序发生在已加载的这一段上。
     private(set) var sortKey: DriveSortKey
@@ -553,6 +794,239 @@ final class DriveStore {
         await reload(using: client)
     }
 
+    // MARK: - 回收站
+
+    /// 回收站一页。
+    ///
+    /// `search` 走服务端：本地筛只能筛到已经加载的那几十条，而搜索要的是整个回收站
+    /// （服务端的 `search` 还匹配原路径与素材 id）。
+    func loadTrash(search: String? = nil, using client: APIClient) async {
+        let term = DriveSearchTerm.normalized(search)
+        let account = accountGeneration
+        // 这一次查询「认」哪一份结果：搜索词是这次这个，账号也还是原来那个。词是会连着
+        // 变的（`.searchable` 每敲一下都可能发一次），而两次请求回来的顺序不保证——不认的话
+        // 屏幕上会出现上一个词的结果。
+        trashSearch = term
+        trashLoading = true
+        do {
+            let page = try await client.driveTrash(search: term)
+            // 作废的这一趟连 `trashLoading` 都不动：飞着的那一次才是现在该等的那一次。
+            guard isCurrentTrash(term, account: account) else { return }
+            trash = page.items
+            trashTotal = page.total
+            trashErrorMessage = nil
+            trashLoading = false
+        } catch {
+            guard isCurrentTrash(term, account: account) else { return }
+            trashErrorMessage = DriveText.errorMessage(error)
+            trashLoading = false
+        }
+    }
+
+    /// 恢复一条。普通项与公开素材是两条接口，走哪条由条目自己定（`DriveTrashRestore`）。
+    ///
+    /// 这一屏不动 `current`：恢复的是一项回到它原来的位置，而浏览那一层的列表由它自己
+    /// 下拉或回来时刷新——两个屏不共享一次请求。
+    @discardableResult
+    func restoreTrashEntry(_ entry: DriveTrashEntry, using client: APIClient) async -> DriveBatchOutcome {
+        let outcome = await DriveBatchOutcome.collecting([entry]) { entry in
+            guard let target = DriveTrashRestore.target(for: entry) else {
+                return DriveBatchOutcome.Failure(name: entry.name, reason: DriveTrashRestore.unresolvedReason)
+            }
+            do {
+                switch target {
+                case .item(let itemId):
+                    try await client.driveRestoreItem(itemId: itemId)
+                case .publicAsset(let assetId):
+                    _ = try await client.driveRestorePublicAsset(assetId: assetId)
+                }
+                return nil
+            } catch {
+                return DriveBatchOutcome.Failure(name: entry.name, reason: DriveText.errorMessage(error))
+            }
+        }
+        // 成了才重取：恢复的那一条要从这一页里消失，而「还剩多少」是服务端说了算。
+        if outcome.succeeded > 0 { await loadTrash(search: trashSearch, using: client) }
+        return outcome
+    }
+
+    /// 从回收站里移掉一条。用户看不见「彻底删除」，这一步之后字节由服务端按自己的节奏回收。
+    @discardableResult
+    func purgeTrashEntry(_ entry: DriveTrashEntry, using client: APIClient) async -> DriveBatchOutcome {
+        let outcome = await DriveBatchOutcome.collecting([entry]) { entry in
+            do {
+                try await client.driveHideTrashItem(id: entry.id)
+                return nil
+            } catch {
+                return DriveBatchOutcome.Failure(name: entry.name, reason: DriveText.errorMessage(error))
+            }
+        }
+        if outcome.succeeded > 0 { await loadTrash(search: trashSearch, using: client) }
+        return outcome
+    }
+
+    private func isCurrentTrash(_ term: String?, account: Int) -> Bool {
+        term == trashSearch && account == accountGeneration
+    }
+
+    // MARK: - 分享
+
+    /// 分享列表。服务端只给还活着的那些（`enabled: true` 且没过期），所以每一行都还能点开。
+    func loadShares(using client: APIClient) async {
+        let account = accountGeneration
+        sharesLoading = true
+        defer { sharesLoading = false }
+        do {
+            let page = try await client.driveShares()
+            guard account == accountGeneration else { return }
+            shares = page.items
+            sharesErrorMessage = nil
+        } catch {
+            guard account == accountGeneration else { return }
+            sharesErrorMessage = DriveText.errorMessage(error)
+        }
+    }
+
+    /// 这一项已有的那一条活跃分享（本机知道的话）。详情页据此多一行「分享」。
+    func existingShare(forItemId itemId: String) -> DriveShare? {
+        DriveSharePlan.existing(forItemId: itemId, in: shares)
+    }
+
+    /// 分享一项。
+    ///
+    /// 已有那一条、而且用户什么都没改时**不发请求**，直接把本机手里那条给结果页
+    /// （`DriveSharePlan`）。本机不知道的那一种「已有」（只知道浏览行上的 `shareUrl`、
+    /// 手里没有链接）仍然走一次请求：服务端会把那一条更新（或复用）掉，回来的还是同一个
+    /// 地址。这一趟不往本机存东西，所以没有账号代次要认。
+    func share(
+        item: DriveBrowserItem,
+        settings: APIClient.DriveShareSettings,
+        using client: APIClient
+    ) async -> DriveShareOutcome {
+        switch DriveSharePlan.of(itemId: item.id, known: shares, settings: settings) {
+        case .useExisting(let existing):
+            return .reused(existing)
+
+        case .request(let body):
+            // 本来就有吗：`shareUrl` 是服务端按这一项的 `shareId` 给的，非空就是有；
+            // 分享列表里那一条也算。结果页据此决定要不要说「链接未变」。
+            let hadShare = item.shareUrl?.isEmpty == false
+                || DriveSharePlan.existing(forItemId: item.id, in: shares) != nil
+            do {
+                let share = try await client.driveCreateShare(itemId: item.id, settings: body)
+                return hadShare ? .reused(share) : .created(share)
+            } catch {
+                return .failed(reason: DriveText.errorMessage(error))
+            }
+        }
+    }
+
+    /// 关掉一条分享。链接立刻失效，记录还在。
+    @discardableResult
+    func disableShare(_ share: DriveShareListItem, using client: APIClient) async -> DriveBatchOutcome {
+        let outcome = await DriveBatchOutcome.collecting([share]) { share in
+            do {
+                try await client.driveDisableShare(id: share.id)
+                return nil
+            } catch {
+                return DriveBatchOutcome.Failure(
+                    name: share.itemName,
+                    reason: DriveText.errorMessage(error)
+                )
+            }
+        }
+        if outcome.succeeded > 0 { await loadShares(using: client) }
+        return outcome
+    }
+
+    // MARK: - 公开素材
+
+    /// 公开素材。它是平铺的一页，没有文件夹。
+    func loadAssets(using client: APIClient) async {
+        let account = accountGeneration
+        assetsLoading = true
+        defer { assetsLoading = false }
+        do {
+            let page = try await client.drivePublicAssets()
+            guard account == accountGeneration else { return }
+            assets = page.items
+            assetsErrorMessage = nil
+        } catch {
+            guard account == accountGeneration else { return }
+            assetsErrorMessage = DriveText.errorMessage(error)
+        }
+    }
+
+    /// 一条素材给用户的那条直链（服务端给了就用它的，没给才自己拼）。
+    func directLink(for asset: DrivePublicAsset, origin: URL = AppConfiguration.apiOrigin) -> String {
+        DrivePublicAssetLink.directLink(for: asset, origin: origin)
+    }
+
+    /// 改名。公开素材是平铺的、允许重名，所以这一条只动它自己。
+    ///
+    /// 接口回来的是改完之后的那**一条完整素材**（`url`、访问次数都在），就地换掉就行，
+    /// 不像云盘里的项那样只能重取整页。
+    @discardableResult
+    func renameAsset(
+        _ asset: DrivePublicAsset,
+        to name: String,
+        using client: APIClient
+    ) async -> DriveBatchOutcome {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return DriveBatchOutcome(succeeded: 0, failures: []) }
+
+        let outcome = await DriveBatchOutcome.collecting([asset]) { asset in
+            do {
+                let updated = try await client.driveRenamePublicAsset(assetId: asset.assetId, name: trimmed)
+                replaceAsset(updated)
+                return nil
+            } catch {
+                return DriveBatchOutcome.Failure(name: asset.name, reason: DriveText.errorMessage(error))
+            }
+        }
+        return outcome
+    }
+
+    /// 移入回收站。直链当下就不可用，素材还在回收站里等恢复。
+    @discardableResult
+    func trashAsset(_ asset: DrivePublicAsset, using client: APIClient) async -> DriveBatchOutcome {
+        let outcome = await DriveBatchOutcome.collecting([asset]) { asset in
+            do {
+                _ = try await client.driveTrashPublicAsset(assetId: asset.assetId)
+                return nil
+            } catch {
+                return DriveBatchOutcome.Failure(name: asset.name, reason: DriveText.errorMessage(error))
+            }
+        }
+        // 进了回收站就不再属于这一页，就地去掉（回收站那一屏下次进去自己会重取）。
+        if outcome.succeeded > 0 { assets.removeAll { $0.assetId == asset.assetId } }
+        return outcome
+    }
+
+    /// 改名之后就地换掉那一条：列表按 `assetId` 认行，`itemId` 会随删除重建而变。
+    private func replaceAsset(_ asset: DrivePublicAsset) {
+        guard let index = assets.firstIndex(where: { $0.assetId == asset.assetId }) else { return }
+        assets[index] = asset
+    }
+
+    // MARK: - 用量
+
+    /// 用量。
+    ///
+    /// 拉失败不弹错：它只喂列表最底下那一行「已用 X / Y」，为它盖一层错误提示挡住整张列表
+    /// 不划算——记进日志，那一行这一次不显示。
+    func loadUsage(using client: APIClient) async {
+        let account = accountGeneration
+        do {
+            let value = try await client.driveUsage()
+            guard account == accountGeneration else { return }
+            usage = value
+        } catch {
+            guard account == accountGeneration else { return }
+            AppLog.drive.warning("drive usage unavailable: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// 退出登录时清干净：下一个账号不该看到上一个账号的文件名与目录结构。
     ///
     /// 排序偏好不清：它是这台手机上的视图偏好，不属于任何一个账号。
@@ -564,5 +1038,21 @@ final class DriveStore {
         loadingMore = false
         // 在飞的那些请求回来时不能把上一个账号的列表重新填进 `current`。
         layerGeneration += 1
+
+        // 回收站、分享、公开素材与用量同样是账号级的东西：漏掉哪一个，下一个账号就会看到
+        // 上一个人的回收站、分享链接与直链。
+        accountGeneration += 1
+        trash = []
+        trashTotal = 0
+        trashLoading = false
+        trashErrorMessage = nil
+        trashSearch = nil
+        shares = []
+        sharesLoading = false
+        sharesErrorMessage = nil
+        assets = []
+        assetsLoading = false
+        assetsErrorMessage = nil
+        usage = nil
     }
 }

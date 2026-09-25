@@ -19,4 +19,6 @@ enum AppLog {
     static let recording = Logger(subsystem: subsystem, category: "recording")
     /// Home Screen terminal snapshots and WidgetKit reloads.
     static let widget = Logger(subsystem: subsystem, category: "widget")
+    /// 云盘：没有出错位置可以放的那些失败（用量这类只喂一行字的数据）。
+    static let drive = Logger(subsystem: subsystem, category: "drive")
 }

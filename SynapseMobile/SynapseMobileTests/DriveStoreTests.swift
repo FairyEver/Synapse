@@ -2,7 +2,8 @@ import Foundation
 import Testing
 @testable import SynapseMobile
 
-/// 云盘浏览状态里那些能单独拿出来判的东西：排序、批量结果、路径栈。
+/// 云盘那几个屏里能单独拿出来判的东西：排序、批量结果、路径栈、回收站恢复分流、
+/// 分享请求体与复用判定、公开素材直链。
 ///
 /// `DriveStore` 自己不在测试里：它的网络方法收的是 `APIClient`（actor），没有协议就注入
 /// 不了假的，而本仓 `MeetingStore` 同样没有单测。会算错的部分都抽成了这个文件上面那些
@@ -243,5 +244,234 @@ struct DriveStoreTests {
         let nothing = DriveBatchOutcome(succeeded: 0, failures: [])
         #expect(nothing.isEmpty)
         #expect(!nothing.isComplete)
+    }
+
+    // MARK: - 回收站
+
+    private func trashEntry(
+        _ id: String,
+        kind: String = "normal",
+        assetId: String? = nil,
+        name: String = "报告.md"
+    ) -> DriveTrashEntry {
+        DriveTrashEntry(
+            id: id,
+            kind: kind,
+            name: name,
+            type: .file,
+            size: "1024",
+            mimeType: "text/markdown",
+            originalPath: "/项目文档",
+            assetId: assetId,
+            trashedAt: "2026-09-24T02:11:00.000Z"
+        )
+    }
+
+    @Test func restoringSendsEachKindToItsOwnRoute() {
+        // 回收站那一份列表里混着两类条目，恢复却是两条接口。走错的表现是 404，与「服务端
+        // 没有这个能力」分不开，所以分流必须钉在这里。
+        #expect(DriveTrashRestore.target(for: trashEntry("itm_1")) == .item(itemId: "itm_1"))
+        #expect(DriveTrashRestore.target(for: trashEntry("itm_2", kind: "public_asset", assetId: "ast_1"))
+            == .publicAsset(assetId: "ast_1"))
+        // 普通项走的是它自己的 `id`：列表里那一行本来就是一条 DriveItem。
+        #expect(DriveTrashRestore.target(for: trashEntry("itm_3")) == .item(itemId: "itm_3"))
+        // 说是公开素材却没给 `assetId`（DTO 里那个字段是可选的）：本地拼不出那条路径，
+        // 说它恢复不了，而不是发一个注定 404 的请求。
+        #expect(DriveTrashRestore.target(for: trashEntry("itm_4", kind: "public_asset")) == nil)
+        #expect(DriveTrashRestore.target(for: trashEntry("itm_5", kind: "public_asset", assetId: "")) == nil)
+    }
+
+    // MARK: - 分享
+
+    private func shareListItem(
+        _ id: String,
+        itemId: String = "itm_1",
+        itemName: String = "报告.md"
+    ) -> DriveShareListItem {
+        DriveShareListItem(
+            id: id,
+            shareId: id,
+            itemId: itemId,
+            itemName: itemName,
+            itemType: .file,
+            sourceDeleted: false,
+            url: "https://synapse.d2.pub/s/\(id)",
+            urlWithPassword: "https://synapse.d2.pub/s/\(id)?password=pw",
+            passwordEnabled: true,
+            password: "pw",
+            expiresAt: nil,
+            accessMode: .linkRead,
+            editorEmails: [],
+            createdAt: "2026-09-24T02:11:00.000Z"
+        )
+    }
+
+    /// 请求体编成 JSON 之后的样子。断言的是**真正发出去的那几个键**——空体与服务端嘴里的
+    /// 「没给设置」是一回事，所以键在不在比字段的值更关键。
+    private func shareBody(_ settings: APIClient.DriveShareSettings) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(settings)
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+
+    @Test func theShareResultCarriesCopyableLinks() {
+        // 结果页上那三行「拷贝」取的直接就是这几个字符串（Spec §4.5）。映射少带一个字段，
+        // 「拷贝」就拷到空的东西。
+        let share = DriveShare(listItem: shareListItem("shr_1"))
+        #expect(share.url == "https://synapse.d2.pub/s/shr_1")
+        #expect(share.urlWithPassword == "https://synapse.d2.pub/s/shr_1?password=pw")
+        #expect(share.password == "pw")
+        #expect(share.shareId == "shr_1")
+        #expect(share.itemId == "itm_1")
+        #expect(share.accessMode == .linkRead)
+        // 服务端的分享列表只给还活着的那几条（`enabled: true` 且没过期），所以从列表里
+        // 出来的这一条一定是开着的。
+        #expect(share.enabled)
+    }
+
+    @Test func anExistingShareIsReusedInsteadOfCreatedAgain() {
+        let known = [shareListItem("shr_1")]
+
+        // 用户什么都没改，本机手里就有那一条：不发请求，直接用。
+        switch DriveSharePlan.of(itemId: "itm_1", known: known, settings: APIClient.DriveShareSettings()) {
+        case .useExisting(let existing):
+            #expect(existing.url == "https://synapse.d2.pub/s/shr_1")
+        case .request:
+            Issue.record("已有那一条时不该再发一次创建请求")
+        }
+
+        // 改过设置就得发：带设置去的那一次在服务端是「更新」，本机说不出更新完是什么样。
+        var changed = DriveShareForm.defaults
+        changed.expiry = .sevenDays
+        switch DriveSharePlan.of(
+            itemId: "itm_1",
+            known: known,
+            settings: changed.settings(changedFrom: .defaults)
+        ) {
+        case .useExisting:
+            Issue.record("改过设置时应当发请求")
+        case .request(let body):
+            #expect(body.expiresIn == .sevenDays)
+        }
+
+        // 本机不知道这一项有分享（分享列表还没拉过）：照样发一次——服务端会复用那一条，
+        // 回来的链接不变，多花的只是一次请求。
+        switch DriveSharePlan.of(itemId: "itm_1", known: [], settings: APIClient.DriveShareSettings()) {
+        case .useExisting:
+            Issue.record("本机不知道时应当发请求")
+        case .request:
+            break
+        }
+
+        // 别项的分享不算它的：判据是 `itemId`，不是列表里有没有东西。
+        #expect(DriveSharePlan.existing(forItemId: "itm_9", in: known) == nil)
+    }
+
+    @Test func theShareBodyOnlyCarriesWhatTheUserChanged() throws {
+        // 服务端把请求里的设置**叠在**已有那条分享之上（`resolveShareAccessSettingsBase`），
+        // 没发过去的键保持原样。所以没动过的键不能发：密码那一项发过去会被重算一次，
+        // 「带密码的链接」换了地址，而用户什么都没改。
+        let initial = DriveShareForm.defaults
+
+        // 一项都没动：空体。服务端把空体当成「没给设置」，正好是复用那一条路。
+        #expect(try shareBody(initial.settings(changedFrom: initial)).isEmpty)
+
+        var expiry = initial
+        expiry.expiry = .thirtyDays
+        let expiryBody = try shareBody(expiry.settings(changedFrom: initial))
+        #expect(expiryBody.keys.sorted() == ["expiresIn"])
+        #expect(expiryBody["expiresIn"] as? String == "30d")
+
+        // 打开密码：只发这一项。
+        var passwordOn = initial
+        passwordOn.passwordEnabled = true
+        let onBody = try shareBody(passwordOn.settings(changedFrom: initial))
+        #expect(onBody.keys.sorted() == ["passwordEnabled"])
+        #expect(onBody["passwordEnabled"] as? Bool == true)
+
+        // 关掉密码时 `false` 得**跟着键一起发**：服务端把「没这个键」读成「别动它」，
+        // 少发一个键，本来设了密码的那条分享会继续带着密码。
+        var passwordOff = passwordOn
+        passwordOff.passwordEnabled = false
+        let offBody = try shareBody(passwordOff.settings(changedFrom: passwordOn))
+        #expect(offBody.keys.sorted() == ["passwordEnabled"])
+        #expect(offBody["passwordEnabled"] as? Bool == false)
+
+        var mode = initial
+        mode.accessMode = .linkEdit
+        #expect(try shareBody(mode.settings(changedFrom: initial))["accessMode"] as? String == "link_edit")
+
+        // 指定邮箱可编辑：名单一起发。
+        var specified = initial
+        specified.accessMode = .specifiedUsersEdit
+        specified.editorEmails = ["a@b.com"]
+        let specifiedBody = try shareBody(specified.settings(changedFrom: initial))
+        #expect(specifiedBody.keys.sorted() == ["accessMode", "editorEmails"])
+        #expect(specifiedBody["editorEmails"] as? [String] == ["a@b.com"])
+
+        // 别的档位上服务端会把名单清空（`normalizeDriveAccessSettings`），所以发它只是白搭。
+        var emailsOnly = initial
+        emailsOnly.editorEmails = ["a@b.com"]
+        #expect(try shareBody(emailsOnly.settings(changedFrom: initial)).isEmpty)
+
+        // 表单是照已有那条的当前样子打开的：这时「什么都没动」同样该发空体，
+        // 而不是把「永久 / 密码关 / 仅阅读」这套默认值盖上去。
+        let existing = DriveShareForm(
+            expiry: .oneYear,
+            passwordEnabled: true,
+            accessMode: .specifiedUsersEdit,
+            editorEmails: ["a@b.com"]
+        )
+        #expect(try shareBody(existing.settings(changedFrom: existing)).isEmpty)
+    }
+
+    // MARK: - 公开素材直链
+
+    private func publicAsset(_ assetId: String, url: String = "https://synapse.d2.pub/files/ast_1") -> DrivePublicAsset {
+        DrivePublicAsset(
+            assetId: assetId,
+            itemId: "itm_\(assetId)",
+            name: "\(assetId).png",
+            size: "2048",
+            mimeType: "image/png",
+            url: url,
+            lifecycleStatus: "active",
+            accessCount: "3",
+            responseBytes: "6144",
+            lastAccessedAt: nil,
+            createdAt: "2026-09-24T02:11:00.000Z",
+            updatedAt: "2026-09-24T02:11:00.000Z"
+        )
+    }
+
+    @Test func publicAssetLinksPointAtTheFilesRoute() {
+        // 直链挂在 `/files/:assetId` 上，不在 `/api` 前缀下。
+        #expect(DrivePublicAssetLink.url(assetId: "ast_1", origin: URL(string: "https://synapse.d2.pub")!)
+            == "https://synapse.d2.pub/files/ast_1")
+        #expect(DrivePublicAssetLink.url(assetId: "ast_2", origin: URL(string: "http://localhost:3000")!)
+            == "http://localhost:3000/files/ast_2")
+
+        // 服务端给了 `url` 就用它的：那一条按产品的公开站点地址拼，与手机连的是哪个源站
+        // 无关——这正是「直链」该有的样子。
+        #expect(DrivePublicAssetLink.directLink(
+            for: publicAsset("ast_1"),
+            origin: URL(string: "https://other.test")!
+        ) == "https://synapse.d2.pub/files/ast_1")
+
+        // 没给（旧服务端）才自己拼一条兜底：「拷贝直链」不该拷到空串。
+        #expect(DrivePublicAssetLink.directLink(
+            for: publicAsset("ast_3", url: "  "),
+            origin: URL(string: "https://other.test")!
+        ) == "https://other.test/files/ast_3")
+    }
+
+    // MARK: - 搜索词
+
+    @Test func blankSearchIsNotASearchTerm() {
+        // 空串与纯空白都是「没有搜索词」：`?search=` 是白拼一个参数，而本机「这一份列表是
+        // 搜什么搜出来的」多出两种写法之后，恢复一条再重取就可能带着一个空词去。
+        #expect(DriveSearchTerm.normalized(nil) == nil)
+        #expect(DriveSearchTerm.normalized("") == nil)
+        #expect(DriveSearchTerm.normalized("   ") == nil)
+        #expect(DriveSearchTerm.normalized(" 报告 ") == "报告")
     }
 }
