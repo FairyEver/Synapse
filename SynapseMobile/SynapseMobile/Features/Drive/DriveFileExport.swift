@@ -382,11 +382,13 @@ final class DriveFileExport {
 /// 系统分享面板。
 ///
 /// 自己写一份，不去够 `DiagnosticLogView` 里那个：那个是 `private`，跨文件拿不到。
+/// 名字里不带 sheet：`DriveShareSheet` 是「分享这一项」那张表单与结果页
+/// （`DriveShareSheet.swift`），它跟这里这个系统面板是两件事。
 /// 「存储到文件」就在面板里，所以导出不需要第二个按钮（Spec §5.4）。
 ///
 /// 收起由调用方的 `.sheet(onDismiss:)` 接：面板自己那个 `completionWithItemsHandler`
 /// 只在它被 present 出来时保证会到，嵌在 sheet 里时不保证。
-struct DriveShareSheet: UIViewControllerRepresentable {
+struct DriveActivityView: UIViewControllerRepresentable {
     let items: [URL]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {

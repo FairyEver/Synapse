@@ -185,7 +185,7 @@ struct DrivePreviewPane: View {
         // 分享那一层挂在这里，QuickLook 那一层挂在里面。两片 sheet 挂在同一个视图上
         // 只有一片会出来，而且出来的可能是错的那一片。
         .sheet(item: $export.shareRequest, onDismiss: { export.finishSharing() }) { request in
-            DriveShareSheet(items: request.files)
+            DriveActivityView(items: request.files)
         }
         .alert(
             confirmationTitle,

@@ -687,6 +687,54 @@ final class SynapseAppModel {
         try await apiClient.downloadDriveItem(itemId: itemId, to: destination, onProgress: onProgress)
     }
 
+    /// 一层文件夹的快照，`itemId` 为 nil 是根。
+    ///
+    /// 对话框族（重命名 / 移动 / 分享 / 简介）里只有它不走 `DriveStore`：移动目标选择器
+    /// 自己取数，借 store 的话每下一层都会把用户正看着的那一层挪走。底下那几条变更反而
+    /// 必须走 store —— 它们要的是「改完把当前这一层重取一次」这套浏览状态
+    /// （`reloadAfterChange`），那不是视图能替它做的。
+    func driveSnapshot(
+        itemId: String?,
+        childrenOffset: Int? = nil
+    ) async throws -> DriveBrowserSnapshot {
+        if let itemId {
+            return try await apiClient.driveItemSnapshot(itemId: itemId, childrenOffset: childrenOffset)
+        }
+        return try await apiClient.driveRootSnapshot(childrenOffset: childrenOffset)
+    }
+
+    @discardableResult
+    func driveCreateFolder(name: String) async -> DriveBatchOutcome {
+        await drive.createFolder(name: name, using: apiClient)
+    }
+
+    @discardableResult
+    func driveRename(item: DriveBrowserItem, to name: String) async -> DriveBatchOutcome {
+        await drive.rename(item: item, to: name, using: apiClient)
+    }
+
+    @discardableResult
+    func driveMove(_ items: [DriveBrowserItem], to parentId: String?) async -> DriveBatchOutcome {
+        await drive.move(items, to: parentId, using: apiClient)
+    }
+
+    /// 分享一项。三态：新建 / 沿用原来那条 / 失败。
+    func driveShare(
+        item: DriveBrowserItem,
+        settings: APIClient.DriveShareSettings
+    ) async -> DriveShareOutcome {
+        await drive.share(item: item, settings: settings, using: apiClient)
+    }
+
+    /// 拉一次分享列表。
+    ///
+    /// 分享那一层打开时要先看这一项有没有现成的分享：本机知道的话连请求都不必发
+    /// （`DriveSharePlan` 的复用快路）。失败不往上抛，落进 `drive.sharesErrorMessage`——
+    /// 拉不到分享列表不影响那一层能做的事，下面几条判据还在。
+    func driveLoadShares() async {
+        await drive.loadShares(using: apiClient)
+    }
+
     func handleScenePhase(_ isActive: Bool) {
         guard authState == .signedIn else { return }
         if isActive {
