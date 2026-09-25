@@ -34,7 +34,7 @@ export const systemNotifierNodeExecutor: NodeExecutor<SystemNotifierNodeConfig> 
       const service = input.runtimeDeps?.resolveService?.<SystemNotifierService>(
         SYSTEM_NOTIFIER_SERVICE_ID,
       )
-      if (!service) throw new Error("系统通知能力不可用")
+      if (!service) throw new Error("通知能力不可用")
 
       const result = service.trigger(validation.data, {
         source: "workflow",
@@ -54,7 +54,7 @@ export const systemNotifierNodeExecutor: NodeExecutor<SystemNotifierNodeConfig> 
       return {
         status: "failed",
         output: "",
-        error: "系统通知节点执行失败",
+        error: "通知节点执行失败",
         durationMs: Date.now() - startedAt,
       }
     }
@@ -69,7 +69,7 @@ function cancelled(startedAt: number): NodeExecutionResult {
   return {
     status: "cancelled",
     output: "",
-    error: "系统通知已取消",
+    error: "通知已取消",
     durationMs: Date.now() - startedAt,
   }
 }

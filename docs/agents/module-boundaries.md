@@ -92,7 +92,8 @@
 ### Notifier
 
 - 账号消息中心的存储、投递、保留期和隐私边界见 `docs/superpowers/specs/2026-09-23-account-notification-center-design.md`。业务模块只提供安全摘要与目标 ID，消息中心负责历史与跨端状态。
-- Sound Notifier 是声音能力包，不是 System App。
+- Sound Notifier 是声音能力包，不是 System App；它只在运行 Synapse 的这台电脑上发声，不承担跨端触达。
+- System Notifier 是「通知用户」的能力，一次触发有两个出口：这台电脑的原生通知，以及账号消息中心（登录且在线时进消息中心并随 APNs 到手机）。前者受 `enabled` / `silent` 控制，后者受 `syncToAccount` 控制，两者互不门控；账号那一路走桌面登录态，不得改用用户的开放 API 密钥，也不得为其新增开放接口。
 - System Notifier 的完整权威规格是 `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`。修改前必须完整阅读，不得以本摘要代替。
 
 ## MCP

@@ -2,9 +2,18 @@
 
 ## Goal
 
-System Notifier is a desktop-only system app and capability that triggers the current computer's native system notification. It provides one stable MCP tool and one Workflow node while keeping platform differences, notification permission state, and Electron delivery failures behind a fire-and-forget boundary.
+System Notifier is a desktop system app and capability that notifies the user. It provides one stable MCP tool and one Workflow node while keeping platform differences, notification permission state, and Electron delivery failures behind a fire-and-forget boundary.
 
-It is a generic, one-way, non-interactive notifier. The account-level message center now owns cloud history for accepted formal triggers when the user is signed in and online. The trigger remains fire-and-forget and is not a reliable delivery queue or callback framework. Existing interactive notifications such as Update Service navigation remain owned by their business modules.
+One accepted trigger has two independent destinations:
+
+- the native system notification of the computer running Synapse, and
+- the account message center, which the server also pushes to the account's registered phones when the desktop is signed in and online.
+
+The account destination travels on the desktop's existing authenticated login, so it needs no user API key and never goes through the open API. This is what lets an Agent or a Workflow reach a user who is away from the computer.
+
+It is a generic, one-way, non-interactive notifier. The account-level message center owns cloud history for accepted formal triggers when the user is signed in and online. The trigger remains fire-and-forget and is not a reliable delivery queue or callback framework. Existing interactive notifications such as Update Service navigation remain owned by their business modules.
+
+> **2026-09-25 修订：触发改为「通知用户」。** 此前这一能力只描述为「当前电脑的原生通知」，账号消息中心同步是文档尾部追加的一次尽力而为；现在两条出口都是正式语义，且不再互相门控。随之而来的三处变化见「Settings」「Core processing」和「System App」：设置升到 v2 并新增 `syncToAccount`，本机通知不再决定账号那一路是否发送，卡片多一颗开关。稳定身份、公开输入 `{ title, body }`、fire-and-forget 成功语义、限流与审计边界全部不变。
 
 ## Stable identities
 
@@ -59,11 +68,11 @@ For each valid call the service:
 
 1. Attempts one content-free audit record.
 2. Reads the current immutable settings snapshot synchronously.
-3. For a normal call, returns fixed success without touching the limiter when settings are unavailable or notifications are disabled.
-4. For a test call, skips only the enabled check and uses the current silent value or `false` when unavailable.
+3. For a normal call, resolves two independent switches from that snapshot: `enabled` for the native destination and `syncToAccount` for the account destination. An unavailable snapshot fails closed, and a call with both destinations off returns fixed success without touching the limiter.
+4. For a test call, shows locally regardless of `enabled`, uses the current silent value or `false` when unavailable, and never syncs.
 5. Atomically acquires one identity-bucket and one global-bucket token.
-6. Invokes the adapter once when both tokens are available.
-7. Starts a best-effort account message-center sync for formal calls only when signed in and online; the test button never syncs.
+6. Invokes the adapter once when both tokens are available and the native destination is on.
+7. Starts a best-effort account message-center sync when the account destination is on; the sync itself decides whether it can run, since it needs a signed-in, online desktop and a currently running service.
 8. Returns fixed success immediately.
 
 The core service has no persistent queue, retry, delayed delivery, crash recovery, replay, idempotency key, content deduplication, or cancellation handle. The separate message center assigns an ID and retains successful online syncs for 90 days. Offline or unauthenticated calls only show locally and are never backfilled. Workflow cancellation is honored before interpolation and again after validation immediately before core acceptance. Cancellation after acceptance cannot revoke the attempt or fixed success.
@@ -83,10 +92,14 @@ The adapter installs no `show`, `failed`, `click`, `close`, `reply`, or `action`
 The only persisted record is the optional singleton:
 
 ```ts
-{ schemaVersion: 1, enabled: boolean, silent: boolean }
+{ schemaVersion: 2, enabled: boolean, silent: boolean, syncToAccount: boolean }
 ```
 
-No record uses in-memory defaults `{ enabled: true, silent: false }` without seeding storage. Startup corruption or the absence of any valid read marks the snapshot unavailable and normal triggers fail closed. A transient later read failure preserves the last valid snapshot but returns a load error to the App. `settings.get` and `settings.update` share one serial storage channel; triggers do not enter it. Update rereads the latest stored singleton, rejects corrupt or unreadable data instead of repairing it, writes a complete value, and replaces the snapshot only after persistence succeeds.
+`enabled` and `silent` describe the native notification on this computer. `syncToAccount` describes the account message-center destination. They do not gate each other: turning local notifications off is how a user who is away from the computer keeps the machine quiet without losing phone delivery.
+
+Storage reads revive the v1 singleton (`{ schemaVersion: 1, enabled, silent }`) as v2 with `syncToAccount` set to the old `enabled`. That is what the old record effectively did, so an upgrade neither starts notifying a user who had switched notifications off nor silently drops the account path for one who had them on. The namespace declares the v1 → v2 migration and a JSON envelope reviver, matching `app.terminal.agent-notification-settings`.
+
+No record uses in-memory defaults `{ enabled: true, silent: false, syncToAccount: true }` without seeding storage. Startup corruption or the absence of any valid read marks the snapshot unavailable and normal triggers fail closed. A transient later read failure preserves the last valid snapshot but returns a load error to the App. `settings.get` and `settings.update` share one serial storage channel; triggers do not enter it. Update rereads the latest stored singleton, rejects corrupt or unreadable data instead of repairing it, writes a complete value, and replaces the snapshot only after persistence succeeds.
 
 The App IPC surface is exactly:
 
@@ -117,14 +130,15 @@ System Notifier uses the existing single-instance system-app window. It is launc
 
 The centered single card contains only:
 
-- “启用通知” Switch
-- “静音通知” Switch
+- “本机通知” Switch (`enabled`)
+- “静音通知” Switch (`silent`)
+- “同步到手机” Switch (`syncToAccount`)
 - Outline “发送测试通知” button
 
-Switches auto-save. Saving disables controls; failure rolls back and displays only “保存失败”; success is silent. Loading uses Skeleton and load failure uses Alert with retry. The test button keeps the same label, is disabled with `aria-busy` only while its IPC Promise is pending, and displays no success state. A definite IPC failure displays only “无法发起测试，请重试”. Testing remains available when enabled is false and uses fixed content `{ title: "System Notifier", body: "这是一条测试通知" }`.
+Switches auto-save. Saving disables controls; failure rolls back and displays only “保存失败”; success is silent. Loading uses Skeleton and load failure uses Alert with retry. The test button keeps the same label, is disabled with `aria-busy` only while its IPC Promise is pending, and displays no success state. A definite IPC failure displays only “无法发起测试，请重试”. Testing remains available when local notifications are off and uses fixed content `{ title: "System Notifier", body: "这是一条测试通知" }`; a test never reaches the account message center.
 
 ## Workflow and rollout
 
-The Workflow node persists `title`, `body`, and shared `VariableBinding[]`. It uses two PromptEditors and one VariableBindingEditor, supports existing `{{name}}` and `{{$name}}` syntax through a no-content-log interpolation path, and shares the public input validator after interpolation. Its primary output is `{"success":true}` and structured output is `{ success: true }`. Its share contract requires `app.system_notifier.notification.trigger >= 1.0.0` and declares no additional resources, models, projects, sensitive paths, or high-risk permissions.
+The Workflow node persists `title`, `body`, and shared `VariableBinding[]`. It uses two PromptEditors and one VariableBindingEditor, supports existing `{{name}}` and `{{$name}}` syntax through a no-content-log interpolation path, and shares the public input validator after interpolation. Its primary output is `{"success":true}` and structured output is `{ success: true }`. Its share contract requires `app.system_notifier.notification.trigger >= 1.0.0` and declares no additional resources, models, projects, sensitive paths, or high-risk permissions. The palette label is “发送通知”; the node type stays `system_notifier_notification_trigger`.
 
-Adding the node advanced the Workflow document schema from `2.5.0` to `2.6.0` with an empty migration and current fixture. Workflow share package format remains `4.0.0`. Account sync was added later through the message center without changing the public MCP or Workflow success response.
+Adding the node advanced the Workflow document schema from `2.5.0` to `2.6.0` with an empty migration and current fixture. Workflow share package format remains `4.0.0`. Account sync was added later through the message center without changing the public MCP or Workflow success response; the 2026-09-25 revision promoted that sync to an independently switched destination and left both response contracts untouched.

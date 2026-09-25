@@ -40,7 +40,7 @@ export function SystemNotifierNodeCard({
       <div className="mb-1.5 flex items-center gap-2">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-          {name || "系统通知"}
+          {name || "发送通知"}
         </span>
         {nodeId ? <CopyIdButton id={nodeId} kind="node" /> : null}
         {status === "running" && timer ? (

@@ -90,4 +90,10 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications' \
 
 API 密钥仅用于服务端、CLI 或自动化客户端。不要将其写入浏览器代码、公开仓库或日志。消息标题与正文以明文保存在 Synapse 服务端，也可能出现在锁屏预览中。
 
+## 不需要密钥的场景
+
+在 Claude Code、Codex 等编辑器里让 AI 通知你时，不需要创建 API 密钥。这类客户端通过 Synapse MCP 调用 `app_system_notifier_notification_trigger`，消息走桌面端已登录的账号发送，进入同一个消息中心并推送到同一批设备。用户在 System Notifier 里可以分别关闭本机通知与账号同步。
+
+API 密钥适用于没有桌面端登录态的调用方：服务端任务、CI、其它机器上的脚本和第三方集成。
+
 了解更多：[发送通知 API 参考](/open-api/api/notification-send)、[OpenAPI 3.1 契约]({{APP_PUBLIC_URL}}/api/open/openapi.json)。

@@ -210,8 +210,8 @@ const appCapabilities: readonly CapabilityDefinition[] = [
   },
   {
     id: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
-    title: "Trigger system notification",
-    description: "Trigger a one-way native system notification on the local computer.",
+    title: "Notify the user",
+    description: "Notify the user: a native notification on this computer and, when the desktop is signed in and online, the same message in the account message center and on the user's registered phones.",
     mutates: false,
   },
   {
@@ -516,7 +516,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
-      description: "Trigger one native system notification only when the user explicitly asks to be notified or has an active standing notification instruction. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
+      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it only when the user explicitly asks to be notified at this point or has an active standing notification instruction. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
       inputSchema: {
         type: "object",
         properties: {

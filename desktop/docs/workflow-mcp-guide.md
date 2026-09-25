@@ -217,9 +217,9 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 
 不需要 provider 或项目。`text` 是非空模板，支持 `{{变量名}}` 或 `{{$变量名}}`；`variables` 提供显式绑定。插值后输入必须是非空、有效 Unicode 且不超过 128 KiB。主输出是完整、已验证可解析的 JSON 文本，结构化输出为 `{ json }`。修复结果仍是不可信数据，不会自动按业务 Schema 校验或净化。
 
-### system_notifier_notification_trigger — 系统通知节点
+### system_notifier_notification_trigger — 发送通知节点
 
-不需要 provider 或项目。`title` 与 `body` 都是非空单行模板，共用 `variables`；插值后不得有首尾空白，分别最多 64 和 256 个 Unicode code point。接受后主输出为 `{"success":true}`，结构化输出为 `{ success: true }`，只表示通知请求已被系统接受，不保证实际显示或送达，也不得据此自动重试。
+不需要 provider 或项目。`title` 与 `body` 都是非空单行模板，共用 `variables`；插值后不得有首尾空白，分别最多 64 和 256 个 Unicode code point。通知发给用户：运行 Synapse 的这台电脑弹原生通知，桌面端已登录且在线时同一条消息还会进账号消息中心并推到用户手机，不需要 API 密钥。接受后主输出为 `{"success":true}`，结构化输出为 `{ success: true }`，只表示通知请求已被系统接受，不保证实际显示或送达，也不得据此自动重试。
 
 ### clipboard_text_write — 剪贴板写入节点
 

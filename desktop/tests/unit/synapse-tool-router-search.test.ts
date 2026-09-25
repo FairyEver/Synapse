@@ -57,6 +57,8 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "新建一个 Agent 对话", expect: "app_agent_conversation_create" },
   { intent: "Agent 对话能用哪些供应商和模型", expect: "app_agent_provider_list" },
   { intent: "让 Agent 把当前这一轮停下", expect: "app_agent_turn_stop" },
+  // 与相邻的 sound notifier 是一对易混：「通知我」要走通知，不是在这台电脑上响一声
+  { intent: "活干完了通知我一声", expect: "app_system_notifier_notification_trigger" },
 
   // ---- 其余 domain (13)：只证明没被完全挤出 ----
   { intent: "数据库里有哪些表", expect: "app_database_table_list" },

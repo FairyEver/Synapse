@@ -295,7 +295,7 @@ describe("App capability domain", () => {
     expect(() => assertCanonicalCapabilityId(SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID)).not.toThrow()
     expect(APP_DOMAIN.capabilities).toContainEqual({
       id: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
-      title: "Trigger system notification",
+      title: "Notify the user",
       description: expect.any(String),
       mutates: false,
     })
@@ -313,6 +313,8 @@ describe("App capability domain", () => {
         },
       },
     })
+    expect(tool?.description).toContain("account message center")
+    expect(tool?.description).toContain("without any API key")
     expect(tool?.description).toContain("does not mean the notification was delivered or displayed")
   })
 

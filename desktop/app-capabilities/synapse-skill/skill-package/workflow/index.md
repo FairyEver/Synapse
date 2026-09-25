@@ -275,12 +275,13 @@ Use **json_repair_text_repair** when the Workflow author explicitly wants repair
 
 ## System Notification Node
 
-Use **system_notifier_notification_trigger** when the Workflow author explicitly wants a native system notification.
+Use **system_notifier_notification_trigger** when the Workflow author explicitly wants to notify the user: the computer running Synapse shows a native notification, and when the desktop app is signed in and online the same message also enters the account message center and is pushed to the user's phones.
 
 - Config is exactly `title`, `body`, and shared `variables`. Both templates support `{{name}}` and `{{$name}}`.
 - Bind every referenced variable explicitly. Binding or interpolation failure happens before notification acceptance and fails the node without notifying.
 - After interpolation, title and body use the same strict single-line, no-edge-whitespace, 64/256-Unicode-code-point contract as the direct App tool.
 - Success returns primary output `{"success":true}` and structured output `{ success: true }`. This means the valid request was accepted; it does not prove delivery or display.
+- The node carries no API key: the account copy travels on the desktop login. Two user settings gate the two destinations independently, so an accepted run may reach only one of them.
 - Do not add platform options, retries, notification ids, idempotency keys, or delivery checks. Each accepted run is an independent event.
 - The direct-Agent proactive notification rules in `app/index.md` do not limit an explicitly configured Workflow node.
 

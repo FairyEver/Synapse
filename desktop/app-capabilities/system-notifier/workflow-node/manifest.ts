@@ -12,7 +12,7 @@ import {
 
 export const systemNotifierNodeManifest: NodeManifest<SystemNotifierNodeConfig> = {
   type: SYSTEM_NOTIFIER_WORKFLOW_NODE_TYPE,
-  title: "系统通知",
+  title: "发送通知",
   icon: Bell,
   color: "bg-primary/10",
   defaultConfig: {
@@ -25,7 +25,7 @@ export const systemNotifierNodeManifest: NodeManifest<SystemNotifierNodeConfig> 
     outputs: [{ id: "out", label: "结果" }],
   },
   cardSummary: (config) => ({
-    title: "系统通知",
+    title: "发送通知",
     subtitle: config.title || "未设置标题",
   }),
   configFields: [

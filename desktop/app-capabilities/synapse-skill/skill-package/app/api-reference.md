@@ -273,7 +273,7 @@ Output:
 
 ## `app_system_notifier_notification_trigger`
 
-Trigger one native system notification on the current computer with fire-and-forget semantics.
+Notify the user with fire-and-forget semantics. The computer running Synapse shows a native notification, and when the desktop app is signed in and online the same message also enters the account message center and is pushed to the user's registered phones. The account copy travels on the desktop login, so no API key or open API call is needed.
 
 Input:
 
@@ -286,7 +286,7 @@ Output:
 
 - `{ success: true }`
 
-The fixed success result means only that a valid call crossed the System Notifier acceptance point. Synapse may suppress the native attempt because notifications are disabled, settings are unavailable, the process-local rate limit is reached, Electron notifications are unsupported, system permission is off, or construction or `show()` failed synchronously. None of those states are exposed to the caller, and success never proves delivery or display.
+The fixed success result means only that a valid call crossed the System Notifier acceptance point. Two user settings gate the destinations independently: the local native attempt is suppressed when this computer's notifications are off, when settings are unavailable, when the process-local rate limit is reached, when Electron notifications are unsupported, when system permission is off, or when construction or `show()` failed synchronously. The account copy is skipped when the user turned syncing off, when the desktop is signed out or offline, or when the same rate limit is reached, and it is never backfilled later. None of those states are exposed to the caller, and success never proves delivery or display.
 
 Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, or `body`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, or `unknown_field`). The error never returns the rejected value, a snippet, or its actual length.
 

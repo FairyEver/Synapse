@@ -163,6 +163,7 @@ Use `app_sound_notifier_sound_play` when the user asks to play a local sound rem
 
 Rules:
 
+- This only plays on the computer running Synapse. To reach the user on their other devices, use System Notifier instead.
 - Choose `eventType` by situation: `message` for ordinary updates, `input-required` when user input or confirmation is needed, `success` for normal completion, `long-running-complete` for builds/tests/installs or other long tasks, and `error` for failures or blockers.
 - Use legacy `presetId` only when the user explicitly asks for a specific preset id.
 - Use `repeatCount` and `intervalMs` when the user asks to be reminded multiple times or after a specific spacing.
@@ -170,15 +171,18 @@ Rules:
 
 ## System Notifier
 
-Use `app_system_notifier_notification_trigger` only when the user currently and explicitly asks for a native system notification, or when an existing standing instruction clearly covers the event.
+Use `app_system_notifier_notification_trigger` to notify the user. The computer that runs Synapse shows a native notification, and when the desktop app is signed in and online the same message also enters the account message center and is pushed to the user's registered phones. No API key, open API call, or extra setup is involved: the desktop login carries it.
+
+Use it when the user explicitly asks to be notified at some point, or when an existing standing instruction covers the event — "跑完通知我", "构建完叫我一声", "出错了告诉我". When the user is away from the computer, or is controlling this session remotely, this is the way to reach them; Sound Notifier only rings the computer.
 
 Rules:
 
 - Do not notify merely because an ordinary reply, light task, wait state, or error has completed.
 - Call the tool once for each agreed event. Do not retry because delivery or display cannot be confirmed.
 - Pass exactly one non-empty, single-line `title` and `body` with no leading or trailing whitespace. The title limit is 64 Unicode code points and the body limit is 256.
-- Keep Token values, passwords, verification codes, private keys, complete local paths, and other lock-screen-sensitive content out of both fields.
+- Keep Token values, passwords, verification codes, private keys, complete local paths, and other lock-screen-sensitive content out of both fields. The account copy is stored in plain text on the server and can appear on a lock screen.
 - `{ success: true }` means Synapse accepted the fire-and-forget request. It does not mean a notification was sent, delivered, displayed, clicked, or read.
+- Two user settings gate the two destinations independently and are invisible to you: this computer's native notification, and the account copy. Signed-in-and-online is required for the account copy, and it is never backfilled later.
 - Do not add platform-specific notification fields, caller identity fields, a notification id, an idempotency key, or a retry loop.
 - These proactive-call rules apply to direct Agent tool use. A Workflow author who explicitly places a System Notifier node has already chosen that node's notification behavior.
 
