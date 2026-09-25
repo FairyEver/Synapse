@@ -8,7 +8,6 @@ import SwiftUI
 /// gives it a line of its own even when it has nothing to put there.
 struct SessionListView: View {
     @Environment(SynapseAppModel.self) private var model
-    @Environment(TerminalDisplaySettings.self) private var display
     @Binding var selection: String?
     /// 打开一个手机刚刚让电脑建出来的终端。
     ///
@@ -89,34 +88,9 @@ struct SessionListView: View {
             }
         }
         .refreshable { await model.refreshDesktops() }
-        .sheet(isPresented: $showingNewSession) {
-            NewSessionSheet(
-                onCreated: { groupId in
-                    Task {
-                        if let created = await model.createSession(groupId: groupId) {
-                            openNewlyCreated(created)
-                        }
-                    }
-                },
-                onCommandLaunched: { groupId, commandId in
-                    // 与普通终端落的是同一屏：在协议上它就是同一个东西 —— 一个终端，
-                    // 附带一条启动命令。失败落 banner（见 `performReturningSession`），
-                    // 与建普通终端今天的行为一致。
-                    Task {
-                        if let created = await model.launchCommand(groupId: groupId, commandId: commandId) {
-                            openNewlyCreated(created)
-                        }
-                    }
-                },
-                onConversationStarted: { sessionId in
-                    // The computer made this terminal at the phone's request, so the
-                    // phone sizes it — the same landing as creating a plain terminal,
-                    // because on the wire it is the same thing: a terminal, with a
-                    // command that happens to be Claude Code.
-                    openNewlyCreated(sessionId)
-                }
-            )
-        }
+        // 装配在 `NewSessionPresentation` 里：主页的功能清单打开的是同一个界面、同一套回调
+        // —— 包括那个容易漏的 `setMode(.phoneDriven)`。
+        .newSessionSheet(isPresented: $showingNewSession, onOpenCreated: onOpenCreated)
         .sheet(item: $renameTarget) { session in
             RenameSessionSheet(title: session.title) { newName in
                 Haptics.commit()
@@ -233,17 +207,6 @@ struct SessionListView: View {
     /// the dialog — the presenting value drives both.
     private var isDeleting: Binding<Bool> {
         Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
-    }
-
-    /// Lands on a terminal the phone just made.
-    ///
-    /// The terminal was born at this phone's shape — the desktop's own fit is
-    /// suppressed from the moment it exists — so the phone shows it the way it made
-    /// it. Shrinking the computer's grid down to fit would be the other mode's answer
-    /// to a question the reader never asked.
-    private func openNewlyCreated(_ sessionId: String) {
-        display.setMode(.phoneDriven, for: sessionId)
-        onOpenCreated(sessionId)
     }
 
     private var ungroupedSessions: [MobileSummarySession] {
