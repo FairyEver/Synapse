@@ -1,0 +1,2457 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>云盘 · iOS 端设计规格与演示</title>
+<style>
+/* ============================================================
+   设计令牌
+   下面这些色值是 iOS 系统色，不是自定义品牌色。Swift 侧对应
+   Color(uiColor: .systemBlue) 等；HTML 里只能以十六进制表达。
+   ============================================================ */
+:root{
+  --ink:#000; --paper:#fff;
+  --doc-bg:#f2f2f7; --card:#fff; --card2:#f9f9fb;
+  --label:#000; --label2:rgba(60,60,67,.6); --label3:rgba(60,60,67,.3);
+  --sep:rgba(60,60,67,.29); --sep2:rgba(60,60,67,.14);
+  --fill:rgba(120,120,128,.12); --fill2:rgba(120,120,128,.2);
+  --bar:rgba(249,249,249,.94);
+  --shadow:0 1px 2px rgba(0,0,0,.05);
+  /* iOS 系统色 */
+  --blue:#007AFF; --red:#FF3B30; --green:#34C759; --orange:#FF9500;
+  --purple:#AF52DE; --indigo:#5856D6; --pink:#FF2D55; --teal:#30B0C7; --gray:#8E8E93;
+  --attention:#995c00; --attention-fill:#fcf5e6;
+}
+html[data-appearance="dark"]{
+  --ink:#fff; --paper:#000;
+  --doc-bg:#000; --card:#1c1c1e; --card2:#2c2c2e;
+  --label:#fff; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
+  --sep:rgba(84,84,88,.65); --sep2:rgba(84,84,88,.4);
+  --fill:rgba(120,120,128,.24); --fill2:rgba(120,120,128,.32);
+  --bar:rgba(30,30,30,.94);
+  --shadow:none;
+  --blue:#0A84FF; --red:#FF453A; --green:#30D158; --orange:#FF9F0A;
+  --purple:#BF5AF2; --indigo:#5E5CE6; --pink:#FF375F; --teal:#40C8E0; --gray:#98989D;
+  --attention:#f2a640; --attention-fill:#47361a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{margin:0;background:#e9e9ee;color:#111;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+html[data-appearance="dark"] body{background:#101012;color:#eee}
+h1,h2,h3,h4{line-height:1.3;margin:0}
+a{color:var(--blue)}
+code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}
+code{background:var(--fill);padding:1px 5px;border-radius:5px;word-break:break-all}
+
+/* ---------- 顶部条 ---------- */
+.topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px;
+  height:52px;padding:0 18px;background:var(--bar);border-bottom:.5px solid var(--sep);
+  backdrop-filter:saturate(180%) blur(20px)}
+.topbar .brand{font-weight:600;font-size:14px;line-height:1.2}
+.topbar .brand small{display:block;font-weight:400;font-size:11px;color:var(--label2)}
+.topbar nav{display:flex;gap:2px;margin-left:auto;background:var(--fill);border-radius:9px;padding:2px}
+.topbar nav a,.topbar button.chip2{font-size:13px;font-weight:500;padding:5px 12px;border-radius:7px;
+  color:var(--label2);text-decoration:none;border:0;background:transparent;cursor:pointer;display:block}
+.topbar nav a.on{background:var(--card);color:var(--label);font-weight:600;box-shadow:var(--shadow)}
+.topbar .ctl{display:flex;gap:6px;align-items:center}
+.topbar .ctl button{border:0;background:var(--fill);color:var(--label);font-size:12.5px;
+  padding:6px 11px;border-radius:8px;cursor:pointer;font-weight:500;font-family:inherit}
+.topbar .ctl button.on{background:var(--blue);color:#fff}
+
+/* ---------- 布局 ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 90px}
+.doc{max-width:860px;margin:0 auto}
+.hero{padding:46px 0 26px;border-bottom:1px solid var(--sep)}
+.hero h1{font-size:32px;letter-spacing:-.5px}
+.hero p.lede{font-size:16px;color:var(--label2);margin:12px 0 0;max-width:680px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.hero .meta span{font-size:12.5px;color:var(--label2);background:var(--fill);padding:4px 10px;border-radius:20px}
+
+section.doc-sec{padding:38px 0 0;scroll-margin-top:66px}
+section.doc-sec > h2{font-size:22px;letter-spacing:-.3px;padding-bottom:10px;border-bottom:1px solid var(--sep2)}
+section.doc-sec > h2 .num{color:var(--label3);font-weight:600;margin-right:8px;font-variant-numeric:tabular-nums}
+section.doc-sec h3{font-size:16px;margin:26px 0 8px}
+section.doc-sec h4{font-size:14px;margin:20px 0 6px;color:var(--label2)}
+section.doc-sec p{margin:10px 0}
+section.doc-sec ul,section.doc-sec ol{margin:10px 0;padding-left:22px}
+section.doc-sec li{margin:5px 0}
+hr.sep{border:0;border-top:1px solid var(--sep2);margin:28px 0}
+
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;
+  background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 0 0 .5px var(--sep2)}
+th,td{text-align:left;padding:9px 12px;border-bottom:.5px solid var(--sep2);vertical-align:top}
+th{background:var(--card2);font-size:12.5px;font-weight:600;color:var(--label2);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.yes{color:var(--green);font-weight:600;white-space:nowrap}
+td.no{color:var(--red);font-weight:600;white-space:nowrap}
+td.warn{color:var(--orange);font-weight:600;white-space:nowrap}
+
+.callout{background:var(--card);border-left:3px solid var(--blue);border-radius:0 10px 10px 0;
+  padding:12px 16px;margin:16px 0;font-size:13.5px}
+.callout.warnbox{border-left-color:var(--orange)}
+.callout.okbox{border-left-color:var(--green)}
+.callout b{display:block;margin-bottom:2px}
+.diagram{background:var(--card);border-radius:12px;padding:16px 18px;margin:16px 0;overflow-x:auto}
+.diagram pre{margin:0;font-size:12.5px;line-height:1.65;color:var(--label)}
+
+/* ---------- 演示区 ---------- */
+.demo-head{padding:38px 0 6px;scroll-margin-top:66px}
+.demo-head h2{font-size:22px;letter-spacing:-.3px}
+.demo-head p{color:var(--label2);margin:10px 0 0;max-width:760px}
+.demo-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:20px 0 6px}
+.demo-ctl .lab{font-size:12px;color:var(--label2);margin-right:2px}
+.demo-ctl button{border:0;background:var(--fill);color:var(--label);font-size:13px;
+  padding:7px 13px;border-radius:9px;cursor:pointer;font-weight:500;font-family:inherit}
+.demo-ctl button.on{background:var(--blue);color:#fff}
+.demo-ctl .divider{width:1px;height:22px;background:var(--sep);margin:0 6px}
+
+.demo-grid{display:flex;gap:28px;align-items:flex-start;justify-content:center;
+  padding:12px 0 40px;flex-wrap:wrap}
+.stage{display:flex;justify-content:center;flex:none}
+.side{flex:1 1 260px;max-width:330px;position:sticky;top:74px}
+.side .box{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:14px;
+  box-shadow:0 0 0 .5px var(--sep2)}
+.side .box h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--label2)}
+.side .box p{margin:0;font-size:13px;color:var(--label)}
+.side .box ul{margin:6px 0 0;padding-left:18px;font-size:13px}
+.side .box li{margin:3px 0;color:var(--label2)}
+.side .legend{font-size:12.5px;color:var(--label2)}
+.side .legend b{color:var(--label);font-weight:600}
+
+/* ---------- 设备外壳 ---------- */
+.device{background:var(--doc-bg);position:relative;overflow:hidden;display:flex;flex-direction:column;
+  transitions:none}
+.device.iphone{width:390px;height:844px;border-radius:52px;
+  box-shadow:0 0 0 11px #1b1b1d,0 0 0 13px #34343a,0 30px 70px rgba(0,0,0,.35)}
+.device.iphone::after{content:"";position:absolute;top:11px;left:50%;transform:translateX(-50%);
+  width:112px;height:30px;border-radius:20px;background:#000;z-index:60;pointer-events:none}
+.device.ipad{width:960px;height:700px;max-width:100%;border-radius:22px;
+  box-shadow:0 0 0 10px #1b1b1d,0 0 0 12px #34343a,0 30px 70px rgba(0,0,0,.35)}
+.device.ipad::after{display:none}
+
+/* 状态栏 */
+.statusbar{height:54px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 28px 8px;font-size:14px;font-weight:600;color:var(--label);
+  background:var(--bar);position:relative;z-index:20}
+.device.ipad .statusbar{height:34px;padding:0 20px 6px;font-size:13px}
+.statusbar .right{display:flex;gap:5px;align-items:center}
+
+/* 导航栏 */
+.navbar{flex:none;min-height:44px;display:flex;align-items:center;gap:2px;padding:2px 8px;
+  background:var(--bar);border-bottom:.5px solid var(--sep);position:relative;z-index:18}
+.navbar .tit{font-size:16px;font-weight:600;color:var(--label);flex:1;min-width:0;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
+.navbar .nl,.navbar .nr{display:flex;align-items:center;gap:2px;flex:none;min-width:64px}
+.navbar .nr{justify-content:flex-end}
+.navbar button{border:0;background:transparent;color:var(--blue);cursor:pointer;font-family:inherit;
+  font-size:15px;padding:6px 6px;border-radius:8px;display:flex;align-items:center;gap:3px;line-height:1}
+.navbar button:active{opacity:.5}
+.navbar .big{font-size:20px;font-weight:500;padding:6px 8px}
+.navbar .big .t{font-size:15px;font-weight:400}
+.navbar button svg{width:21px;height:21px;display:block}
+.navbar button .big svg{width:23px;height:23px}
+
+/* 大标题 */
+.largetitle{flex:none;background:var(--doc-bg);padding:0 20px 6px;position:relative;z-index:14}
+.largetitle h2{font-size:30px;font-weight:700;letter-spacing:-.6px;color:var(--label);line-height:1.15}
+.largetitle .sub{font-size:12.5px;color:var(--label2);margin-top:2px}
+
+/* 面包屑 */
+.crumbs{flex:none;display:flex;gap:0;align-items:center;overflow-x:auto;padding:0 16px 8px;
+  background:var(--doc-bg);scrollbar-width:none;position:relative;z-index:13}
+.crumbs::-webkit-scrollbar{display:none}
+.crumbs button{border:0;background:transparent;color:var(--blue);font-family:inherit;
+  font-size:13px;padding:4px 2px;cursor:pointer;white-space:nowrap;flex:none}
+.crumbs .sp{color:var(--label3);font-size:13px;flex:none;padding:0 5px}
+.crumbs .last{color:var(--label2);font-weight:600}
+.crumbs svg{width:10px;height:10px;flex:none;display:block;color:var(--label3)}
+
+/* 滚动内容 */
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;background:var(--doc-bg);position:relative;
+  -webkit-overflow-scrolling:touch}
+.screen::-webkit-scrollbar{width:0}
+
+/* 列表 */
+.list{margin:0;padding:0;list-style:none}
+.group{background:var(--card);margin:0 16px 18px;border-radius:11px;overflow:hidden}
+.group.flush{margin-top:0}
+.group .gh{font-size:12.5px;color:var(--label2);padding:0 32px 6px;text-transform:none}
+.row{position:relative;border-bottom:.5px solid var(--sep2);overflow:hidden}
+.group .row:last-child{border-bottom:0}
+.row-actions{position:absolute;inset:0 0 0 auto;width:86px;display:flex;align-items:stretch}
+.row-actions button{border:0;flex:1;background:var(--red);color:#fff;font-family:inherit;
+  font-size:14px;font-weight:500;cursor:pointer}
+.row-content{position:relative;background:var(--card);display:flex;align-items:center;gap:11px;
+  padding:9px 14px 9px 16px;min-height:52px;cursor:pointer;z-index:2;
+  transition:transform .22s cubic-bezier(.32,.72,0,1)}
+.row-content:active{background:var(--fill)}
+.row.open .row-content{transform:translateX(-86px)}
+.ic{flex:none;width:29px;height:29px;display:grid;place-items:center}
+.ic svg{width:29px;height:29px;display:block}
+.row .tx{flex:1;min-width:0}
+.row .nm{font-size:15.5px;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .sub{font-size:12.5px;color:var(--label2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;margin-top:1px}
+.row .chev{flex:none;color:var(--label3);display:grid;place-items:center;width:12px}
+.row .chev svg{width:12px;height:12px}
+.row .lock{flex:none;color:var(--label2);display:grid;place-items:center}
+.row .lock svg{width:13px;height:13px}
+.row-more{flex:none;width:26px;height:26px;border:0;background:transparent;color:var(--label2);
+  cursor:pointer;display:none;place-items:center;border-radius:50%;padding:0}
+.row-more svg{width:17px;height:17px}
+@media (hover:hover){.row-content:hover .row-more{display:grid}}
+.row-more:hover{background:var(--fill)}
+
+/* 选择圈 */
+.check{flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--label3);
+  display:grid;place-items:center;margin-right:1px}
+.check.on{background:var(--blue);border-color:var(--blue)}
+.check svg{width:13px;height:13px;color:#fff;opacity:0}
+.check.on svg{opacity:1}
+
+/* 滑动提示（演示用） */
+.hintbar{font-size:11.5px;color:var(--label2);text-align:center;padding:6px 20px 2px}
+
+/* 空态 */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:54px 30px;text-align:center;color:var(--label2);gap:8px}
+.empty .eic svg{width:44px;height:44px;color:var(--label3)}
+.empty .et{font-size:17px;font-weight:600;color:var(--label)}
+.empty .es{font-size:13.5px;max-width:250px;line-height:1.5}
+
+/* 上传条 */
+.upcard{background:var(--card);margin:0 16px 18px;border-radius:11px;overflow:hidden}
+.up{display:flex;align-items:center;gap:11px;padding:10px 16px;border-bottom:.5px solid var(--sep2)}
+.up:last-child{border-bottom:0}
+.up .tx{flex:1;min-width:0}
+.up .nm{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.up .bar{height:3px;border-radius:2px;background:var(--fill2);margin-top:6px;overflow:hidden}
+.up .bar i{display:block;height:100%;background:var(--blue);transition:width .3s linear}
+.up .pc{font-size:12px;color:var(--label2);font-variant-numeric:tabular-nums;flex:none}
+
+/* 底部工具条 */
+.tabbar{flex:none;display:flex;border-top:.5px solid var(--sep);background:var(--bar);
+  padding:6px 0 22px;position:relative;z-index:20}
+.device.ipad .tabbar{padding:6px 0 10px}
+.tabbar .tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  border:0;background:transparent;cursor:pointer;font-family:inherit;color:var(--label3);
+  font-size:10.5px;padding:3px 0}
+.tabbar .tb svg{width:25px;height:25px}
+.tabbar .tb.on{color:var(--blue)}
+
+/* 编辑模式底部条 */
+.editbar{flex:none;display:flex;align-items:center;gap:8px;padding:9px 14px;
+  border-top:.5px solid var(--sep);background:var(--bar);position:relative;z-index:20}
+.editbar .cnt{font-size:13px;color:var(--label2);margin-right:auto}
+.editbar .cnt b{color:var(--label);font-weight:600}
+.editbar button{border:0;background:transparent;color:var(--blue);font-family:inherit;
+  font-size:14px;cursor:pointer;padding:7px 9px;border-radius:8px;display:grid;place-items:center;gap:2px}
+.editbar button svg{width:21px;height:21px}
+.editbar button:disabled{color:var(--label3);cursor:default}
+.editbar button.danger{color:var(--red)}
+
+/* 浮层 */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.34);z-index:70;opacity:0;
+  transition:opacity .2s;pointer-events:none}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:80;background:var(--card);
+  border-radius:14px 14px 0 0;transform:translateY(102%);transition:transform .3s cubic-bezier(.32,.72,0,1);
+  padding-bottom:22px;max-height:88%;overflow-y:auto}
+.device.ipad .sheet{width:420px;left:50%;margin-left:-210px;bottom:auto;top:50%;
+  transform:translate(-50%,-46%) scale(.94);opacity:0;border-radius:14px;
+  transition:transform .22s,opacity .22s;padding-bottom:12px}
+.sheet.on{transform:translateY(0)}
+.device.ipad .sheet.on{transform:translate(-50%,-50%) scale(1);opacity:1}
+.sheet h3{margin:0;font-size:17px;font-weight:600;text-align:center;padding:17px 20px 4px;color:var(--label)}
+.sheet .sh{font-size:12.5px;color:var(--label2);text-align:center;padding:0 24px 10px;line-height:1.45}
+.sheet .grab{width:36px;height:5px;border-radius:3px;background:var(--fill2);margin:8px auto -6px}
+.device.ipad .sheet .grab{display:none}
+.sheet .sec{background:var(--card2);margin:0 14px 12px;border-radius:10px;overflow:hidden}
+.sheet .li{display:flex;align-items:center;gap:12px;padding:12px 15px;
+  border-bottom:.5px solid var(--sep2);font-size:15.5px;color:var(--label);cursor:pointer;
+  font-family:inherit;background:transparent;border-left:0;border-right:0;border-top:0;width:100%;
+  text-align:left}
+.sheet .sec .li:last-child{border-bottom:0}
+.sheet .li:active{background:var(--fill)}
+.sheet .li svg{width:20px;height:20px;flex:none;color:var(--blue)}
+.sheet .li .t{flex:1;min-width:0}
+.sheet .li .v{font-size:14px;color:var(--label2);flex:none;max-width:150px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.sheet .li.destructive{color:var(--red)}
+.sheet .li.destructive svg{color:var(--red)}
+.sheet .li.nav::after{content:"";flex:none;width:8px;height:8px;border-right:1.6px solid var(--label3);
+  border-bottom:1.6px solid var(--label3);transform:rotate(-45deg);margin-left:2px}
+.sheet .btns{padding:0 14px;display:flex;flex-direction:column;gap:8px}
+.sheet .big-btn{border:0;background:var(--blue);color:#fff;font-family:inherit;font-size:16px;
+  font-weight:600;padding:13px;border-radius:11px;cursor:pointer;width:100%}
+.sheet .big-btn.sec2{background:var(--fill);color:var(--label)}
+.sheet .big-btn:disabled{opacity:.35;cursor:default}
+.sheet .note{font-size:12px;color:var(--label2);text-align:center;padding:8px 22px 0;line-height:1.45}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin:0 14px 12px}
+.seg button{flex:1;border:0;background:transparent;font-family:inherit;font-size:13px;
+  font-weight:500;padding:7px 4px;border-radius:7px;color:var(--label2);cursor:pointer}
+.seg button.on{background:var(--card);color:var(--label);font-weight:600;box-shadow:var(--shadow)}
+.field{display:flex;align-items:center;gap:10px;background:var(--card2);margin:0 14px 12px;
+  border-radius:10px;padding:10px 15px}
+.field label{font-size:15px;color:var(--label);flex:none}
+.field input{flex:1;border:0;background:transparent;font-family:inherit;font-size:15.5px;
+  color:var(--label);outline:none;text-align:right;min-width:0}
+.linkbox{display:flex;gap:8px;align-items:center;background:var(--card2);margin:0 14px 10px;
+  border-radius:10px;padding:11px 13px}
+.linkbox span{flex:1;min-width:0;font-size:12.5px;color:var(--blue);word-break:break-all;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.4}
+.toast{position:absolute;left:50%;bottom:104px;transform:translate(-50%,14px);z-index:90;
+  background:rgba(30,30,32,.94);color:#fff;font-size:13.5px;padding:10px 18px;border-radius:20px;
+  opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:82%;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* iPad 分栏 */
+.split{flex:1;display:flex;min-height:0;background:var(--doc-bg)}
+.split .col-list{width:360px;flex:none;display:flex;flex-direction:column;
+  border-right:.5px solid var(--sep);background:var(--doc-bg)}
+.split .col-detail{flex:1;display:flex;flex-direction:column;background:var(--card);min-width:0}
+.split .col-list .navbar,.split .col-list .largetitle,.split .col-list .crumbs{background:var(--doc-bg)}
+.preview-pane{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:34px;gap:16px;text-align:center;overflow-y:auto}
+.preview-pane .pname{font-size:17px;font-weight:600;color:var(--label)}
+.preview-pane .pmeta{font-size:13px;color:var(--label2)}
+.preview-pane .pbody{width:100%;max-width:520px;text-align:left;background:var(--card2);
+  border-radius:10px;padding:18px 20px;font-size:13.5px;line-height:1.75;color:var(--label);
+  overflow:auto;max-height:420px;white-space:pre-wrap}
+.pimg{width:190px;height:190px;border-radius:14px;background:var(--fill);
+  display:grid;place-items:center;color:var(--label3);flex:none}
+.pimg svg{width:62%;height:62%;display:block}
+.preview-pane .actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.preview-pane .actions button{border:0;background:var(--fill);color:var(--blue);font-family:inherit;
+  font-size:14px;font-weight:500;padding:10px 18px;border-radius:10px;cursor:pointer}
+
+/* 文档里的代码块 */
+pre.code{background:var(--card);border-radius:12px;padding:16px 18px;overflow-x:auto;
+  font-size:12.5px;line-height:1.65;margin:14px 0;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.matrix td:first-child{font-weight:600;white-space:nowrap}
+@media (max-width:1080px){
+  .device.ipad{width:100%;height:620px}
+  .split .col-list{width:300px}
+}
+@media (max-width:720px){
+  .wrap{padding:0 14px 60px}
+  .device.iphone{width:100%;height:calc(100svh - 52px);min-height:520px;border-radius:0;box-shadow:none}
+  .device.iphone::after{display:none}
+  .device.ipad{height:560px;border-radius:14px;box-shadow:0 0 0 6px #1b1b1d,0 0 0 7px #34343a}
+  .side{position:static;max-width:none}
+  .split .col-list{width:100%;border-right:0}
+  .split .col-detail{display:none}
+  .hero h1{font-size:25px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">云盘 · iOS 端<small>设计规格与可交互演示 · 2026-09-25</small></div>
+  <nav>
+    <a href="#doc" class="js-jump on">设计文档</a>
+    <a href="#demo" class="js-jump">演示</a>
+  </nav>
+  <div class="ctl">
+    <button id="btn-iphone" class="on">iPhone</button>
+    <button id="btn-ipad">iPad</button>
+    <button id="btn-appearance">深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ============================================================
+     设计文档
+     ============================================================ -->
+<div class="doc">
+<div class="hero">
+  <h1>把云盘搬到手机上</h1>
+  <p class="lede">底栏不加格。云盘从「主页 → 功能 → 云盘」进入，进去以后是一套「文件」App
+  形态的层级浏览器：文件夹下钻、面包屑回跳、长按菜单、左滑删除、多选、预签名直传、系统分享。
+  除本地同步之外的云端文件能力，在手机上都能用。</p>
+  <div class="meta">
+    <span>范围 <code>SynapseMobile/SynapseMobile/Features/Drive/</code></span>
+    <span>服务端不改动</span>
+    <span>复用现有上传通道</span>
+    <span>iPhone 与 iPadOS 共用一套逻辑</span>
+  </div>
+</div>
+
+<!-- ---------- 0 ---------- -->
+<section class="doc-sec" id="s0">
+<h2><span class="num">0</span>一句话结论</h2>
+<div class="callout okbox">
+  <b>云盘是「主页」这一格的一页，不是第四个 tab。</b>
+  手机端底栏被规则固定在三个位置（<code>docs/agents/mobile-adaptive-layout.md:8</code>），
+  新能力一律进「主页 → 功能」。云盘进的是那张功能清单。
+</div>
+<p>进去之后，云盘是一个 <b>Files 式层级浏览器</b>：一切围绕「我现在在哪个文件夹」展开，
+而不是围绕「我选中了哪一项」。服务端已经有现成的浏览器快照接口
+（<code>GET /api/drive/browser/owner/root</code> 与 <code>/items/:itemId</code>），
+一次请求就带回「当前项 + 面包屑 + 子项分页 + 可下载性」，是给移动端量身定做的形状。</p>
+</section>
+
+<!-- ---------- 1 ---------- -->
+<section class="doc-sec" id="s1">
+<h2><span class="num">1</span>为什么不是「列表 → 详情」</h2>
+<p>仓库规则要求「列表 → 详情」类功能接入 <code>AdaptiveFeatureNavigation</code>，并允许在
+不用它时于设计文档中说明理由（<code>docs/agents/mobile-adaptive-layout.md:36</code>）。云盘是那个例外，理由有三条：</p>
+<ol>
+  <li><b>云盘的主交互是下钻，不是选中。</b><code>AdaptiveFeatureNavigation</code> 的模型是
+  「一份选中 ID 同时驱动宽窗并排与紧凑窗下钻」。文件树里「点文件夹」和「点文件」是两个不同的
+  动作：前者换掉整个列表，后者打开一份伴随内容。硬塞进一个 <code>selection</code> 会让
+  <code>NavigationSplitView</code> 的折叠语义和列表自己的下钻栈争抢同一个返回手势。</li>
+  <li><b>iPadOS 上「文件」App 的形状是浏览列 + 预览列，不是列表 + 详情。</b>浏览列自己还要能
+  往下走。这是 <code>NavigationSplitView</code> 的 sidebar 里带一层 <code>NavigationStack</code>，
+  而 <code>AdaptiveFeatureNavigation</code> 不接受自定义列结构。</li>
+  <li><b>预览不是目的。</b>录音那种「列表 → 详情」里，详情是终点；云盘里预览是顺手看一眼，
+  看完还要继续往下翻。它值得在宽窗占一列，但不值得让导航为此改形状。</li>
+</ol>
+<p>代价是云盘要自带一层 <code>NavigationSplitView</code> 外壳。这笔账换来的是：紧凑窗下
+只有一条导航栈（文件夹下钻和文件预览都走它），宽窗下左边浏览、右边预览，折叠与展开不重置
+当前位置。这是本设计里唯一必须实测的一处，见 <a href="#s11">§11</a>。</p>
+</section>
+
+<!-- ---------- 2 ---------- -->
+<section class="doc-sec" id="s2">
+<h2><span class="num">2</span>范围与取舍</h2>
+<p>桌面端的云盘由三层构成：<b>浏览器</b>（列表 / 上传 / 下载 / 新建 / 改名 / 移动 / 删除 / 预览 / 简介）、
+<b>分享层</b>（分享链接、网页分享、公开素材）、<b>同步层</b>（本地文件夹绑定、冲突解决）。
+手机端的取舍按这三层划分。</p>
+
+<h3>2.1 做的</h3>
+<table>
+<thead><tr><th>能力</th><th>手机端形态</th><th>依据</th></tr></thead>
+<tbody>
+<tr><td>入口</td><td>主页 → 功能 → 「云盘」一行</td><td>底栏不加格</td></tr>
+<tr><td>浏览</td><td>根与任意文件夹下钻、面包屑、分页加载、下拉刷新</td><td>浏览器快照接口已具备</td></tr>
+<tr><td>排序</td><td>文件夹优先 + 名称 / 日期 / 大小 / 种类，偏好本地持久化</td><td>服务端无排序参数，见 §2.3</td></tr>
+<tr><td>上传</td><td>文件（多选）/ 照片 / 拍照，预签名直传 + 进度 + 同名覆盖确认</td><td>上传通道手机端已有</td></tr>
+<tr><td>下载与导出</td><td>文件与文件夹（服务端自动打包 zip）走系统分享面板</td><td>「存储到文件」是分享面板的一个动作</td></tr>
+<tr><td>组织</td><td>新建文件夹、重命名、移动到、删除到回收站</td><td>四个 PATCH / POST / DELETE 接口</td></tr>
+<tr><td>回收站</td><td>列表、搜索、恢复到原路径、从回收站移除</td><td><code>/drive/trash</code> 族</td></tr>
+<tr><td>预览</td><td>图片 / PDF / Office 走 QuickLook；文本与 Markdown 原生渲染</td><td>系统能力，无需服务端转换</td></tr>
+<tr><td>分享</td><td>创建（有效期 / 密码 / 访问权限）、复制链接、停止分享、已有分享列表</td><td><code>/drive/items/:id/share</code> 族</td></tr>
+<tr><td>公开素材</td><td>直链列表、上传图片与文档、复制直链、重命名、删除、恢复</td><td>手机拍照 → 直链是真实场景</td></tr>
+<tr><td>多选</td><td>移动、导出、删除</td><td>「文件」App 的核心操作</td></tr>
+<tr><td>显示简介</td><td>类型、大小、修改时间、路径、分享状态</td><td>列表里显示不下的都在这里</td></tr>
+<tr><td>用量</td><td>列表底部一行「已用 / 配额」</td><td><code>GET /api/drive/usage</code></td></tr>
+<tr><td>iPadOS</td><td>宽窗浏览列 + 预览列并排；拖入文件上传；键盘快捷键</td><td>窗口自适应规则</td></tr>
+</tbody>
+</table>
+
+<h3>2.2 不做的</h3>
+<table>
+<thead><tr><th>能力</th><th>不做的理由</th></tr></thead>
+<tbody>
+<tr><td class="no">本地同步 / 绑定 / 镜像 / 挂载</td>
+<td>用户已明确排除。另外这一层的前提是「本地有一个稳定路径」，iOS 沙盒里没有与桌面端
+<code>~/Documents/项目</code> 等价的东西，绑定的另一端无处安放。</td></tr>
+<tr><td class="no">文件夹上传（整棵子树）</td>
+<td>iOS 的文档选择器没有自然的「选一个文件夹」入口；服务端的文件夹上传上限是 1000 文件 /
+12 层，这样的长任务在移动网络上不可控。多文件上传已经覆盖真实需求。</td></tr>
+<tr><td class="no">网页分享（Site）创建与管理</td>
+<td>Site 的工作流是「在电脑上备好一套静态产物，再发布出去」。手机上既没有产物目录，
+也无法在千文件级别的预检里做决策。分享链接已覆盖绝大多数分享需求。</td></tr>
+<tr><td class="no">版本历史</td>
+<td>桌面端的<b>界面里也没有</b>这个入口（只有 MCP 有）。服务端版本是全量拷贝，
+逐个下载到手机的流量代价与收益不成比例。</td></tr>
+<tr><td class="no">在线编辑</td>
+<td>桌面端界面同样没有内嵌编辑器。改文件属于「在电脑上或浏览器里做的事」，
+手机端只读预览。</td></tr>
+<tr><td class="no">云盘搜索</td>
+<td>服务端 <code>GET /api/drive/items</code> 没有 <code>search</code> 参数；唯一支持全量的
+<code>/items/tree</code> 是递归整棵树。做「只搜当前已加载那一页」的搜索是假的，会在
+用户以为搜了全盘的时候漏掉东西。等服务端补上搜索参数再做，见 §11。</td></tr>
+<tr><td class="no">网格 / 缩略图视图</td>
+<td>服务端没有缩略图端点。网格视图只能画类型图标，那不是「文件」App 的网格，
+只是一个更大的列表。补上缩略图端点后才有意义。</td></tr>
+<tr><td class="no">文件复制</td>
+<td>服务端没有 copy 接口，桌面端也没有这个功能。</td></tr>
+<tr><td class="no">后台续传</td>
+<td>上传地址有效期 15 分钟，而后台 <code>URLSession</code> 需要一套可持久化的任务队列与
+URL 续签。本期做前台上传 + 进度 + 失败重试，把「切后台就断」如实告诉用户。</td></tr>
+<tr><td class="no">离线缓存 / 收藏 / 最近 / 标签</td>
+<td>服务端没有对应的数据模型。造一个本地的「收藏」会与桌面端分叉。</td></tr>
+<tr><td class="no">新增深链</td>
+<td><code>docs/agents/capability-registry.md</code> 规定 iOS 深链计数保持不变。</td></tr>
+</tbody>
+</table>
+
+<h3>2.3 排序为什么放在本地</h3>
+<p>服务端列表的排序是写死的 <code>[type asc, createdAt desc]</code>，不接受参数。手机端因此
+在<b>已加载的范围内</b>排序。这与分页配合时会有一个诚实的边界：加载第 2 页后，第 1 页里
+按新排序本该靠前的项不会自己浮上来。</p>
+<p>处理方式：<b>把排序做成视图偏好而不是数据查询</b>，并在加载更多时保持同一份排序函数作用
+于追加后的完整数组。默认值「文件夹在前 + 名称升序」与服务端的自然顺序一致，所以默认状态下
+不会出现这个偏差；用户主动切成「按大小」时偏差才可能出现在跨页处。这一条写进 §11 的待办：
+服务端加上 <code>sort</code> / <code>order</code> 参数后改为服务端排序。</p>
+</section>
+
+<!-- ---------- 3 ---------- -->
+<section class="doc-sec" id="s3">
+<h2><span class="num">3</span>信息架构</h2>
+<div class="diagram"><pre>主页（底栏第一格）
+ ├─ 待处理卡
+ ├─ 右上角：电脑切换 + 铃铛
+ └─ 功能
+     ├─ 录音 ─────────────→ 这一格的一页
+     ├─ <b>云盘 ─────────────→ 这一格的一页</b>
+     ├─ 新建会话 ───────────→ 弹出 NewSessionSheet
+     └─ 剪贴板历史 ─────────→ 推入主页栈
+
+云盘（替换主页这一格的内容，不推入任何 NavigationStack）
+ ├─ 浏览列 ─ 当前文件夹 / 面包屑 / 工具栏
+ │   ├─ 点文件夹 → 下钻一层（浏览列自己的 NavigationStack）
+ │   ├─ 点文件   → 宽窗：右侧预览列；紧凑窗：推入预览页
+ │   └─ 长按行   → 预览 / 分享 / 重命名 / 移到 / 导出 / 简介 / 删除
+ ├─ 预览列（仅宽窗）
+ ├─ 回收站        ← 列表底部入口
+ ├─ 分享管理      ← 工具栏「···」菜单
+ ├─ 公开素材直链  ← 列表底部入口
+ └─ 显示简介      ← 行菜单</pre></div>
+
+<div class="callout warnbox">
+  <b>「这一格的一页」是有先例的，不是新发明。</b>
+  录音已经是这个形状（<code>RootView.homeTab</code> 里 <code>homePath.last == .recordings</code>
+  就换掉整格内容）。原因是同一个：内部带 <code>NavigationSplitView</code> 的页面推入栈里会出现
+  两条导航栏，上面那条只剩返回键，标题和操作掉到下面那条，中间空出一条标题带。
+  云盘照抄这个处理，见 §7.4。
+</div>
+
+<p>底部两个入口（回收站 / 公开素材）放在列表末尾而不是工具栏里：它们是<b>位置</b>不是动作，
+与「文件」App 把「最近删除」放在列表末尾是同一个道理；工具栏留给「新建文件夹」这类真正的动作。</p>
+</section>
+
+<!-- ---------- 4 ---------- -->
+<section class="doc-sec" id="s4">
+<h2><span class="num">4</span>逐屏规格</h2>
+
+<h3>4.1 入口 · 主页功能行</h3>
+<p>在「录音」与「新建会话」之间插一行，副标题「服务端上的文件」，不带右侧值（用量太长，
+放进去会把这一行撑成两行），恒可用（云盘是纯服务端能力，与「有没有电脑在线」无关）。</p>
+<table>
+<thead><tr><th>行</th><th>副标题</th><th>右侧值</th><th>点击</th><th>可用性</th></tr></thead>
+<tbody>
+<tr><td>录音</td><td>会议录音、转写与回听</td><td>录音条数</td><td>换这一格为录音页</td><td>恒可用</td></tr>
+<tr><td><b>云盘</b></td><td>服务端上的文件</td><td>—</td><td>换这一格为云盘</td><td>恒可用</td></tr>
+<tr><td>新建会话</td><td>在当前电脑上开一个终端</td><td>—</td><td>弹出 sheet</td><td>无电脑时置灰</td></tr>
+<tr><td>剪贴板历史</td><td>这台电脑上复制过的内容</td><td>—</td><td>推入主页栈</td><td>恒可用</td></tr>
+</tbody>
+</table>
+
+<h3>4.2 云盘主屏</h3>
+<p>自上而下：<b>大标题</b>「云盘」→ <b>面包屑</b>（深度 ≥ 2 时出现）→ <b>内容列表</b> → <b>底部入口</b>。</p>
+<ul>
+  <li><b>导航栏</b>：左「返回主页」（紧凑窗）；标题居中显示当前文件夹名；右「···」菜单
+  （新建文件夹 / 上传文件 / 排序 / 选择 / 全部刷新）。</li>
+  <li><b>面包屑</b>是一行可横向滚动的按钮，点任意一级直接跳过去。深度 0 和 1 不显示——
+  只有一层时它就是重复的标题。</li>
+  <li><b>列表</b>：文件夹在前，然后按当前排序。行高 52pt（≥ 44pt 命中区），
+  左图标 29pt，名称一行，副标题一行（文件=大小 · 修改时间；文件夹=修改时间）。</li>
+  <li><b>上传中</b>的项作为一个独立分组显示在列表顶部：文件名 + 进度条 + 百分比 +
+  取消按钮。与「文件」App 把进行中的操作顶到最上面一致。</li>
+  <li><b>列表末尾</b>两个入口行：回收站（副标题「N 项」，为 0 时不显示值）、公开素材。</li>
+  <li><b>列表最底部</b>一行用量：「已用 1.24 GB / 5 GB」，右对齐、次要色、不可点。</li>
+  <li><b>滚动到底部</b>自动加载下一页；已加载完且还有更多时显示「载入更多」按钮兜底。</li>
+</ul>
+
+<h3>4.3 图标与行的取值</h3>
+<p>桌面端只分「文件 / 文件夹」两种图标，手机端必须更细——这是「文件」App 观感的一大半。
+规则是：文件夹用系统蓝的实心文件夹；文件用「一页纸 + 扩展名角标」，底色按种类取 iOS 系统色。</p>
+<table>
+<thead><tr><th>种类</th><th>角标</th><th>底色</th><th>Swift 侧</th></tr></thead>
+<tbody>
+<tr><td>PDF</td><td>PDF</td><td>系统红</td><td><code>Color(uiColor: .systemRed)</code></td></tr>
+<tr><td>图片</td><td>PNG / JPG …</td><td>系统紫</td><td><code>.systemPurple</code></td></tr>
+<tr><td>视频</td><td>MP4 / MOV</td><td>系统靛蓝</td><td><code>.systemIndigo</code></td></tr>
+<tr><td>音频</td><td>MP3 / M4A</td><td>系统粉</td><td><code>.systemPink</code></td></tr>
+<tr><td>压缩包</td><td>ZIP / DMG</td><td>系统灰</td><td><code>.systemGray</code></td></tr>
+<tr><td>文档</td><td>DOCX / MD</td><td>系统蓝</td><td><code>.systemBlue</code></td></tr>
+<tr><td>表格</td><td>XLSX / CSV</td><td>系统绿</td><td><code>.systemGreen</code></td></tr>
+<tr><td>演示</td><td>PPTX</td><td>系统橙</td><td><code>.systemOrange</code></td></tr>
+<tr><td>代码 / 配置</td><td>JSON / SH …</td><td>系统灰</td><td><code>.systemGray</code></td></tr>
+<tr><td>未知</td><td>—</td><td>系统灰</td><td><code>.systemGray</code></td></tr>
+</tbody>
+</table>
+<p>「已分享」用行尾一个 <code>link</code> 符号表示，判据是浏览器快照里的
+<code>shareUrl</code> 非空——只在服务端已经知道这一项有活跃分享时出现，不做二次查询。</p>
+
+<h3>4.4 预览</h3>
+<table>
+<thead><tr><th>服务端 previewKind</th><th>手机端做法</th></tr></thead>
+<tbody>
+<tr><td><code>image</code></td><td>下载到临时文件，本地渲染并支持双指缩放</td></tr>
+<tr><td><code>text</code> / <code>markdown</code></td><td><code>content/inspect</code> 拿版本，
+<code>content/chunk</code> 按需读；Markdown 用 <code>AttributedString(markdown:)</code> 渲染</td></tr>
+<tr><td><code>html-source</code></td><td>按纯文本显示源码（不执行、不渲染网页）</td></tr>
+<tr><td><code>download-only</code></td><td>PDF 与 Office 下载到临时目录后交给 QuickLook；
+其余显示「此格式无法预览」+ 导出按钮</td></tr>
+</tbody>
+</table>
+<p>文本预览有 64 KiB 的分段阈值：超过就只读开头，并在底部显示一行「已显示前 N KB」。
+预览页底部固定一条动作栏：分享 / 导出 / 简介。</p>
+
+<h3>4.5 分享</h3>
+<p>表单三段：<b>有效期</b>（3 天 / 7 天 / 30 天 / 1 年 / 永久，默认永久）、<b>密码</b>（开关，
+默认关）、<b>访问权限</b>（仅阅读 / 登录后可编辑 / 指定邮箱可编辑，默认仅阅读）。</p>
+<p>创建成功后弹结果页，两行链接各自带「拷贝」：<b>链接</b>与<b>带密码链接</b>；密码本身
+单独一行可拷贝。已有活跃分享时不再重复创建，直接进结果页并提示「链接未变」。</p>
+<p>指定邮箱可编辑是唯一需要输入的地方，用一个逗号分隔的多行输入框，提交前按逗号 / 空格 /
+换行切分并去重。</p>
+
+<h3>4.6 回收站</h3>
+<p>列表按「移入时间」倒序，行副标题显示「原路径 · 移入时间」——恢复时要知道它会回到哪去。
+两个动作：恢复到原路径、从回收站移除（后者不可撤销，红色，二次确认）。公开素材的回收站
+条目用同一份列表，只是恢复走另一条接口。</p>
+
+<h3>4.7 公开素材（直链）</h3>
+<p>它是人可读的扁平列表（服务端规定公开素材是平铺的、允许重名），所以不做文件夹。
+行副标题显示「访问 N 次 · 最近访问时间」。工具栏的 ＋ 走与云盘上传同一套通道，
+只是 prepare 换成 <code>/public-assets/uploads/prepare</code>。上传后直接给出
+<code>/files/&lt;assetId&gt;</code> 直链。</p>
+
+<h3>4.8 显示简介</h3>
+<p>一个 sheet，五行：名称、种类（带扩展名）、大小、修改时间、位置（完整路径，可长按拷贝）。
+有活跃分享时追加一行「分享」→ 点进去到分享结果页。</p>
+</section>
+
+<!-- ---------- 5 ---------- -->
+<section class="doc-sec" id="s5">
+<h2><span class="num">5</span>交互规格</h2>
+
+<h3>5.1 手势与菜单</h3>
+<table>
+<thead><tr><th>手势</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>轻点文件夹行</td><td>下钻一层。面包屑追加一级，标题换成该文件夹名</td></tr>
+<tr><td>轻点文件行</td><td>宽窗：右侧预览列换成它；紧凑窗：推入预览页</td></tr>
+<tr><td>长按任意行</td><td>上下文菜单：预览 / 分享 / 重命名 / 移到 / 导出 / 显示简介 / 删除</td></tr>
+<tr><td>左滑行</td><td>揭示「删除」（系统红）；滑到底自动触发需二次确认</td></tr>
+<tr><td>右滑行</td><td>揭示「分享」，直接进分享表单</td></tr>
+<tr><td>下拉</td><td>刷新当前文件夹</td></tr>
+<tr><td>滚到底</td><td>加载下一页</td></tr>
+<tr><td>长按空白处（iPadOS）</td><td>进入多选</td></tr>
+</tbody>
+</table>
+<p>目录为空时不显示右滑分享；文件夹不提供「导出」以外的编辑动作时，菜单项按可用性置灰而不是隐藏——
+隐藏会让菜单位置随内容跳动。</p>
+
+<h3>5.2 多选</h3>
+<p>工具栏「选择」进入编辑模式。行的左侧出现选择圈，底部换成一条工具条：左侧计数
+（「已选 3 项」）+ 右三个动作 <b>移动 / 导出 / 删除</b>（未选任何项时全部置灰）。
+导航栏左侧变成「完成」，右上「全选 / 取消全选」。</p>
+<p>服务端没有批量接口，批量动作逐个调用单条接口并<b>逐项报告结果</b>：成功的从列表移除，
+失败的保留选中并在 notice 里汇总「3 项删除成功，1 项失败」。不做「全部成功才生效」的原子语义——
+那会让一次网络抖动把 20 个已经成功的操作回滚掉。</p>
+
+<h3>5.3 上传</h3>
+<ol>
+  <li>选来源：<b>文件</b>（系统文档选择器，可多选）、<b>照片</b>、<b>拍照</b>。
+  三个 picker 已经存在（<code>Features/Terminal/TerminalFilePicker.swift</code>），直接复用。</li>
+  <li>每个文件：<code>POST /api/drive/uploads/prepare</code> → 拿到预签名 PUT 地址 →
+  <code>FileUploader</code> 上传并回报进度 → <code>POST /uploads/:sessionId/complete</code>。</li>
+  <li>同名处理：prepare 的响应里带 <code>overwrite</code> 字段。非空时先确认
+  「已存在同名文件，上传将覆盖它」，确认后带 <code>expectedItemId</code> 重发 prepare。
+  字段缺失（旧服务端）时按「未知」处理，不阻断。</li>
+  <li>并发上限 2 个，避免在移动网络上互相抢带宽。任一项失败可单独重试，
+  不重试其他已成功的项。</li>
+  <li>取消：调 <code>/uploads/:sessionId/cancel</code> 释放预留的配额。</li>
+</ol>
+<div class="callout warnbox">
+  <b>切到后台会断。</b>上传地址 15 分钟过期，且本期不用后台 <code>URLSession</code>。
+  离开 App 超过系统给的后台执行窗口后，进行中的上传会失败并停在列表里等重试。
+  这一条必须写进 <code>RELEASE_NOTES_PENDING.md</code>。
+</div>
+
+<h3>5.4 下载与导出</h3>
+<p>只有一个动作：<b>系统分享面板</b>。「存储到文件」是面板里的一个动作，所以不需要单独做一个
+导出按钮。单个文件与多选都走同一条路：先把字节下到临时目录，再把文件 URL 交给面板。</p>
+<div class="callout warnbox">
+  <b>下载必须自己带 Bearer，不能把 URL 交给系统。</b>
+  owner 下载路由是 <code>GET /drive/items/:id/download</code>，在 <code>/api</code> 前缀之外，
+  且需要 <code>Authorization</code> 头。所以不能交给 <code>AsyncImage</code>、
+  <code>QuickLook</code> 的远程模式或 <code>SFSafariViewController</code>——
+  它们加不了自定义头。先用 <code>URLSession</code> + header 下到临时文件，之后一切都用本地文件。
+</div>
+<p>文件夹走同一个路由，服务端自动打包成 zip 返回。是否提供这个动作看浏览器快照的
+<code>canZip</code>；下载前用行内提示说明「文件夹会打包下载」，避免用户以为要等很久却没反馈。</p>
+
+<h3>5.5 状态与错误</h3>
+<table>
+<thead><tr><th>情况</th><th>呈现</th></tr></thead>
+<tbody>
+<tr><td>首次加载</td><td>系统列表占位（<code>redacted</code>），不用转圈盖住整屏</td></tr>
+<tr><td>文件夹为空</td><td><code>ContentUnavailableView</code>「文件夹为空」</td></tr>
+<tr><td>回收站为空</td><td>「回收站是空的」</td></tr>
+<tr><td>网络不可用</td><td>内容区「无法连接，检查网络后重试」+ 重试按钮；底部 notice 说一次就够，不重复</td></tr>
+<tr><td>配额不足</td><td>读服务端错误体翻译成中文，附一句「在云盘网页版可以查看用量」</td></tr>
+<tr><td>401</td><td>走现有 <code>APIClient</code> 的刷新重试；刷新失败则退回登录页</td></tr>
+<tr><td>单项操作失败</td><td>底部 notice，文案带失败项名与原因；列表不乐观更新，失败即回到原状</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ---------- 6 ---------- -->
+<section class="doc-sec" id="s6">
+<h2><span class="num">6</span>接口映射</h2>
+<p>手机端<b>不需要新增任何服务端接口</b>。下表是移动端函数与服务端路由的对应关系；
+「已有」表示 <code>APIClient.swift</code> 里已经存在（终端文件接力在用）。</p>
+<table>
+<thead><tr><th>能力</th><th>方法</th><th>服务端路由</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td>根快照</td><td>GET</td><td><code>/api/drive/browser/owner/root?childrenOffset&amp;childrenLimit</code></td><td>新增</td></tr>
+<tr><td>文件夹快照</td><td>GET</td><td><code>/api/drive/browser/owner/items/:id?surface=console&amp;…</code></td><td>新增</td></tr>
+<tr><td>预留上传</td><td>POST</td><td><code>/api/drive/uploads/prepare</code></td><td>已有</td></tr>
+<tr><td>上传字节</td><td>PUT</td><td><code>upload.url</code>（COS 预签名 / 本地 token）</td><td>已有</td></tr>
+<tr><td>完成上传</td><td>POST</td><td><code>/api/drive/uploads/:sessionId/complete</code></td><td>已有</td></tr>
+<tr><td>取消上传</td><td>POST</td><td><code>/api/drive/uploads/:sessionId/cancel</code></td><td>已有</td></tr>
+<tr><td>彻底删除</td><td>DELETE</td><td><code>/api/drive/items/:id/permanent</code></td><td>已有</td></tr>
+<tr><td>新建文件夹</td><td>POST</td><td><code>/api/drive/folders</code></td><td>新增</td></tr>
+<tr><td>重命名</td><td>PATCH</td><td><code>/api/drive/items/:id</code> body <code>{name}</code></td><td>新增</td></tr>
+<tr><td>移动到</td><td>PATCH</td><td><code>/api/drive/items/:id</code> body <code>{parentId}</code></td><td>新增</td></tr>
+<tr><td>删除到回收站</td><td>DELETE</td><td><code>/api/drive/items/:id</code></td><td>新增</td></tr>
+<tr><td>下载 / 导出</td><td>GET</td><td><code>/drive/items/:itemId/download</code> <b>（无 /api 前缀）</b></td><td>新增</td></tr>
+<tr><td>回收站列表</td><td>GET</td><td><code>/api/drive/trash?offset&amp;limit&amp;search</code></td><td>新增</td></tr>
+<tr><td>恢复</td><td>POST</td><td><code>/api/drive/items/:id/restore</code></td><td>新增</td></tr>
+<tr><td>从回收站移除</td><td>DELETE</td><td><code>/api/drive/trash/:id</code></td><td>新增</td></tr>
+<tr><td>创建分享</td><td>POST</td><td><code>/api/drive/items/:id/share</code></td><td>新增</td></tr>
+<tr><td>分享列表</td><td>GET</td><td><code>/api/drive/shares?offset&amp;limit</code></td><td>新增</td></tr>
+<tr><td>停止分享</td><td>DELETE</td><td><code>/api/drive/shares/:id</code></td><td>新增</td></tr>
+<tr><td>文本检查</td><td>GET</td><td><code>/api/drive/browser/owner/items/:id/content/inspect</code></td><td>新增</td></tr>
+<tr><td>文本分段读</td><td>GET</td><td><code>/api/drive/browser/owner/items/:id/content/chunk</code></td><td>新增</td></tr>
+<tr><td>用量</td><td>GET</td><td><code>/api/drive/usage</code></td><td>新增</td></tr>
+<tr><td>直链列表</td><td>GET</td><td><code>/api/drive/public-assets?offset&amp;limit&amp;search</code></td><td>新增</td></tr>
+<tr><td>直链上传</td><td>POST</td><td><code>/api/drive/public-assets/uploads/prepare</code> → PUT → <code>/complete</code></td><td>新增</td></tr>
+<tr><td>直链重命名</td><td>PATCH</td><td><code>/api/drive/public-assets/:assetId</code></td><td>新增</td></tr>
+<tr><td>直链删除</td><td>DELETE</td><td><code>/api/drive/public-assets/:assetId</code></td><td>新增</td></tr>
+<tr><td>直链恢复</td><td>POST</td><td><code>/api/drive/public-assets/:assetId/restore</code></td><td>新增</td></tr>
+</tbody>
+</table>
+<p>合计：新增 19 个移动端 endpoint，复用已有 4 个。列表接口一律走 <code>offset</code> /
+<code>limit</code> 分页，用响应里的 <code>hasMore</code> / <code>nextOffset</code> 续页，每页 50。</p>
+</section>
+
+<!-- ---------- 7 ---------- -->
+<section class="doc-sec" id="s7">
+<h2><span class="num">7</span>技术落地</h2>
+
+<h3>7.1 文件清单</h3>
+<pre class="code">SynapseMobile/SynapseMobile/Features/Drive/
+├── DriveModels.swift            DTO 与枚举，镜像 shared/src/drive.ts 的子集
+├── DriveText.swift              纯函数：字节格式化、日期、种类判定、图标、错误文案
+├── DriveStore.swift             @MainActor @Observable：浏览 / 回收站 / 分享 / 直链 / 用量
+├── DriveUploader.swift          prepare → FileUploader → complete，进度、重试、取消
+├── DriveBrowserView.swift       云盘外壳：NavigationSplitView + 面包屑 + 工具栏
+├── DriveBrowserList.swift       列表、行、多选、上下文菜单、滑动作、加载更多
+├── DrivePreviewPane.swift       图片 / 文本 / Markdown / QuickLook / 下载后打开
+├── DriveItemInfoView.swift      显示简介
+├── DriveMoveTargetPicker.swift  移动目标文件夹选择（可下钻的一棵树）
+├── DriveShareSheet.swift        分享表单 + 结果页
+├── DriveTrashView.swift         回收站
+└── DrivePublicAssetsView.swift  公开素材直链</pre>
+<p>另外三处接线：<code>APIClient.swift</code> 加一个 <code>// MARK: - Drive</code> 段；
+<code>SynapseAppModel.swift</code> 加 <code>let drive = DriveStore()</code> 与透传方法；
+<code>HomeView.swift</code> 加一行 <code>row(...)</code>。工程用文件系统同步目录，
+新文件放进目录即被收录，不需要碰 <code>project.pbxproj</code>。</p>
+
+<h3>7.2 分层</h3>
+<p>照录音模块的范式：<b>Models</b>（<code>Decodable</code> 结构体 + <code>DriveText</code> 纯函数）→
+<b>Store</b>（<code>@MainActor @Observable</code>，方法显式收 <code>using client: APIClient</code>）→
+<b>View</b>（列表 / 预览 / sheet）。网络由 <code>SynapseAppModel</code> 透传，不新建第二套连接。
+错误统一走 <code>model.notice(...)</code>，破坏性操作走视图内 <code>.alert</code>。</p>
+<p><b>不用</b> <code>UIDevice.userInterfaceIdiom</code> 判断宽窄——用
+<code>@Environment(\.horizontalSizeClass)</code>，这是布局规则明确允许的判据之一。</p>
+
+<h3>7.3 六个必须知道的坑</h3>
+<table>
+<thead><tr><th>坑</th><th>说明与处理</th></tr></thead>
+<tbody>
+<tr><td class="warn">下载路由不在 <code>/api</code> 下</td>
+<td><code>AppConfiguration.apiBaseURL</code> 是 <code>https://synapse.d2.pub/api</code>，
+而下载是 <code>https://synapse.d2.pub/drive/items/:id/download</code>。需要新增
+<code>apiOrigin</code>（去掉尾部 <code>/api</code>），照 <code>liveMobileURL</code> 的既有做法。</td></tr>
+<tr><td class="warn">Bearer 进不了 URL</td>
+<td>下载与预览必须用 <code>URLSession</code> + <code>Authorization</code> 头下到临时文件。
+参考 <code>APIClient.downloadMeetingAudio(from:to:)</code> 的既有实现。</td></tr>
+<tr><td class="warn"><code>size</code> 是字符串</td>
+<td>服务端是大整数，DTO 里是 <code>string</code>。解码成 <code>Int</code> 会在大文件上崩，
+用 <code>Int64(size)</code> 并在失败时回落为 nil。</td></tr>
+<tr><td class="warn">上传地址 15 分钟过期</td>
+<td>PUT 收到 401/403 时重新 <code>prepare</code> 一次再传，不要直接报失败。重试只做一次。</td></tr>
+<tr><td class="warn"><code>overwrite</code> 字段可能缺失</td>
+<td>旧服务端不返回它。缺失 = 未知，不阻断上传、不弹覆盖确认。</td></tr>
+<tr><td class="warn">紧凑窗下的嵌套折叠</td>
+<td><code>NavigationSplitView</code> 的 sidebar 里有一层 <code>NavigationStack</code>，
+紧凑窗折叠后两者共用一个栈。这是本设计唯一必须实测的一处，见 §11。</td></tr>
+</tbody>
+</table>
+
+<h3>7.4 <code>RootView</code> 的最小改动</h3>
+<p>现在 <code>homeTab</code> 用 <code>homePath.last == .recordings</code> 一个布尔量决定
+「换这一格内容」还是「走栈」。云盘加入后它变成两个判据。最小改动是把这一段收敛成一个
+「这一格当前该显示哪一页」的 switch：</p>
+<pre class="code">enum HomeRoute: Hashable { case recordings, clipboard, drive }
+
+@ViewBuilder
+private var homeTab: some View {
+    switch homePath.last {
+    case .recordings: recordingsPage
+    case .drive:      drivePage          // 与 recordingsPage 同构：整格归它所有
+    default:
+        NavigationStack(path: $homePath) { HomeView(...) .navigationDestination(...) }
+    }
+}</pre>
+<p>云盘页自带「返回主页」按钮（落在浏览列那条栏上，与「···」同一行），行为与录音页一致：
+调 <code>popToRoot(.home)</code>。切页动画的触发量也要从单个布尔量改成
+「当前是不是功能页」，否则推入剪贴板历史那一下会被这条动画接管。</p>
+</section>
+
+<!-- ---------- 8 ---------- -->
+<section class="doc-sec" id="s8">
+<h2><span class="num">8</span>自适应矩阵</h2>
+<table class="matrix">
+<thead><tr><th>窗口</th><th>结构</th><th>主要操作入口</th></tr></thead>
+<tbody>
+<tr><td>iPhone 竖屏</td><td>单列：大标题 → 面包屑 → 列表；底部三格 tab 可见</td><td>工具栏「···」；行长按；左滑；下拉刷新</td></tr>
+<tr><td>iPhone 横屏</td><td>同竖屏，列表更宽，副标题不再截断</td><td>同上；工具栏两项并排</td></tr>
+<tr><td>iPadOS 全屏横</td><td>浏览列 360pt + 预览列自适应；顶部 tab 转侧边栏</td><td>预览列自带分享 / 导出 / 简介</td></tr>
+<tr><td>iPadOS 全屏竖</td><td>同横屏，预览列变窄但保留</td><td>同上</td></tr>
+<tr><td>iPadOS 半窗</td><td>折叠为单列，点文件推入预览页</td><td>浏览列工具栏 + 返回键</td></tr>
+<tr><td>iPadOS 1/3 窗</td><td>折叠为单列；面包屑改为横向滚动</td><td>同上</td></tr>
+<tr><td>iPadOS 浮窗</td><td>同 1/3 窗；底部 tab 转回底栏</td><td>同上</td></tr>
+</tbody>
+</table>
+<p>折叠与展开<b>不重置</b>：当前文件夹、面包屑、滚动位置、多选集合、上传进度都保留。
+由 <code>NavigationSplitView</code> 的 <code>preferredCompactColumn</code> 与列表自己的
+<code>NavigationStack</code> path 共同保证。转屏、切 Tab 后回来仍在原来的文件夹。</p>
+<p>另外三项一起检查：<b>动态字体</b>（行高随字号长，副标题在超大字号下折行）、
+<b>VoiceOver</b>（行读「文件夹 项目文档，已分享」/「文件 报告.xlsx，312 KB，9 月 22 日」）、
+<b>指针与键盘</b>（iPadOS 上 <kbd>⌘R</kbd> 刷新、<kbd>⌘A</kbd> 全选、方向键移动选中、
+<kbd>⌘⌫</kbd> 删除）。</p>
+</section>
+
+<!-- ---------- 9 ---------- -->
+<section class="doc-sec" id="s9">
+<h2><span class="num">9</span>阶段划分</h2>
+<table>
+<thead><tr><th>阶段</th><th>内容</th><th>完成判据</th></tr></thead>
+<tbody>
+<tr><td><b>一 · 看得见</b></td><td>入口、浏览下钻、面包屑、分页、下拉刷新、排序、图标与行、
+空/错/加载态、预览（QuickLook + 文本与 Markdown）、下载导出、用量</td>
+<td>能在手机上完整翻遍云盘、打开任意文件、把文件存到「文件」App</td></tr>
+<tr><td><b>二 · 改得动</b></td><td>新建文件夹、重命名、移动到、删除到回收站、回收站三个动作</td>
+<td>不看电脑也能整理云盘</td></tr>
+<tr><td><b>三 · 传得进、分享得出</b></td><td>上传（文件 / 照片 / 拍照，进度、重试、覆盖确认）、
+分享表单与结果页、分享管理列表、显示简介</td>
+<td>手机上拍的东西能进云盘，云盘的东西能一键发出去</td></tr>
+<tr><td><b>四 · 打磨</b></td><td>多选、公开素材直链、iPadOS 并排与拖入、键盘快捷键</td>
+<td>iPadOS 上与「文件」App 的操作手感对齐</td></tr>
+</tbody>
+</table>
+<p>阶段一和二是「云盘能在手机上用」的底线；三是「手机特有的价值」（拍照直传）；
+四才是观感对齐。每一阶段各自可发布，不改服务端。</p>
+</section>
+
+<!-- ---------- 10 ---------- -->
+<section class="doc-sec" id="s10">
+<h2><span class="num">10</span>测试与验收</h2>
+<h3>10.1 单元测试（<code>SynapseMobileTests</code>）</h3>
+<ul>
+  <li>DTO 解码：<code>DriveBrowserSnapshotDto</code> 的完整样例；<code>size</code> 为
+  超大字符串；<code>childrenPage</code> 缺失；<code>overwrite</code> 缺失。</li>
+  <li><code>DriveText</code>：字节格式化边界（0 / 999 / 1000 / 1.5 GB）、日期相对文案、
+  扩展名 → 种类的映射表逐项、超长扩展名截断。</li>
+  <li>排序：文件夹优先不变、四种排序键、升降序、中文名称用
+  <code>localizedStandardCompare</code>（「第 2 章」排在「第 10 章」前面）。</li>
+  <li><code>DriveUploader</code>：进度合并、单项失败不影响其他项、取消调 cancel、
+  PUT 403 后重 prepare 一次就放弃。</li>
+  <li>路径拼接：<code>apiOrigin</code> 从 <code>apiBaseURL</code> 派生的正确性，
+  含尾斜杠与自定义基址两种输入。</li>
+</ul>
+<h3>10.2 行为验证（<code>SynapseMobileUITests</code>）</h3>
+<ol>
+  <li>主页 → 云盘 → 下钻三层 → 面包屑回跳到第二层 → 返回主页，位置与滚动保持。</li>
+  <li>长按行 → 重命名 → 列表出现新名字；再重命名回原名（避免污染测试账号）。</li>
+  <li>新建文件夹 → 删除它 → 回收站里能看到 → 恢复 → 回到原位置。</li>
+  <li>左滑删除一条 → 二次确认 → 消失；回收站里出现，原路径正确。</li>
+  <li>多选两项 → 移动到一个文件夹 → 目标文件夹里能看到。</li>
+  <li>分享一个文件 → 结果页出现 <code>/share/</code> 链接 → 停止分享 → 行尾的分享标记消失。</li>
+  <li>上传一个测试文件 → 进度到 100% → 列表出现它 → 下载导出到「文件」App。</li>
+  <li>断网（<code>Network Link Conditioner</code>）下进入云盘 → 错误态与重试可用；恢复网络后重试成功。</li>
+  <li>窗口：iPhone 竖 / 横、iPadOS 全屏横 / 竖、半窗、1/3 窗、浮窗全走一遍，
+  确认折叠与展开不重置当前文件夹与多选。</li>
+</ol>
+<h3>10.3 环境</h3>
+<p>模拟器构建 + 既有 UI 测试命令，<b>不启动用户正在用的桌面应用</b>。
+生产代码不新增裸 <code>print</code>（照 <code>console.log</code> 的对应纪律）。</p>
+</section>
+
+<!-- ---------- 11 ---------- -->
+<section class="doc-sec" id="s11">
+<h2><span class="num">11</span>风险与待实测</h2>
+<table>
+<thead><tr><th>风险</th><th>影响</th><th>应对</th></tr></thead>
+<tbody>
+<tr><td><b>紧凑窗下 sidebar 与内层栈的折叠关系</b></td>
+<td>可能出现两条导航栏，或返回手势把用户带回错误的层级</td>
+<td>模拟器上实测 iPhone 竖 / 横与 iPadOS 半窗、1/3 窗。不成立就回退：
+紧凑窗下不叠 <code>NavigationSplitView</code>，直接用单列 <code>NavigationStack</code>，
+预览改成 sheet。两列并排只在 regular 宽度下启用</td></tr>
+<tr><td>跨页排序的偏差</td>
+<td>用户切「按大小」后，第 2 页加载时第 1 页顺序不重排</td>
+<td>默认排序与服务端一致所以不触发；文档写明；服务端补 <code>sort</code> 参数后改为服务端排序</td></tr>
+<tr><td>竖屏下预览列丢失</td>
+<td>iPadOS 竖屏 + 半窗时右侧空间不足</td>
+<td>宽度阈值保守取值（预览列 < 320pt 就折叠），宁可多折叠一次</td></tr>
+<tr><td>大文件预览的等待</td>
+<td>几百 MB 的文件下载后才能看，用户以为卡住</td>
+<td>预览前显示已下载字节与进度，可取消；超过 50 MB 先问一句</td></tr>
+<tr><td>上传中断的挫败</td>
+<td>切后台失败没有任何预见</td>
+<td>上传开始时就写清「离开 App 会中断」；失败项留在列表里可重试；写进待发布说明</td></tr>
+<tr><td>云盘入口的可发现性</td>
+<td>主页功能行从 3 行变 4 行，云盘排在第二</td>
+<td>副标题「服务端上的文件」明确它的范围；不置灰，保证任何时候都能进</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <b>后续可做（本期不做，已论证）</b>
+  云盘搜索（等服务端 <code>items</code> 加 <code>search</code> 参数）、网格与缩略图视图
+  （等缩略图端点）、版本历史（等桌面端界面先有入口）、网页分享 Site 管理、
+  后台续传（需要可持久化的上传任务队列）。
+</div>
+</section>
+</div><!-- /doc -->
+
+<!-- ============================================================
+     演示
+     ============================================================ -->
+<div class="demo-head" id="demo">
+  <h2>可交互演示</h2>
+  <p>下面是同一份设计跑在设备壳里的样子。<b>用鼠标点就是用手指点</b>：
+  点文件夹下钻、点面包屑回跳、长按行（或点行尾的 ⌄⌄）出菜单、左滑出删除、
+  工具栏「···」里有新建文件夹和上传、列表末尾有回收站和公开素材。
+  右上角可以切成 iPad 看宽窗的浏览列 + 预览列。</p>
+</div>
+
+<div class="demo-ctl">
+  <span class="lab">跳到</span>
+  <button data-jump="home">主页入口</button>
+  <button data-jump="browser" class="on">云盘</button>
+  <button data-jump="trash">回收站</button>
+  <button data-jump="assets">公开素材</button>
+  <button data-jump="shares">分享管理</button>
+  <span class="divider"></span>
+  <button id="btn-reset">重置演示</button>
+</div>
+
+<div class="demo-grid">
+  <div class="stage">
+    <div class="device iphone" id="device">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="right">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M12 20.5 8.4 16.6a5.1 5.1 0 0 1 7.2 0zM5.6 13.5a9.1 9.1 0 0 1 12.8 0l-1.7 1.8a6.7 6.7 0 0 0-9.4 0zM2.7 10.4a13.2 13.2 0 0 1 18.6 0l-1.7 1.8a10.8 10.8 0 0 0-15.2 0z"/></svg>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M2 8h17v8H2zm18 2.6h1.4v3H20z" opacity=".5"/><path d="M3.5 9.5h14v5h-14z"/></svg>
+        </span>
+      </div>
+      <div id="screen-host" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+      <div id="overlay-host"></div>
+    </div>
+  </div>
+
+  <aside class="side">
+    <div class="box">
+      <h4>这一屏在说什么</h4>
+      <p id="note">—</p>
+    </div>
+    <div class="box">
+      <h4>怎么试</h4>
+      <ul id="hints"></ul>
+    </div>
+    <div class="box">
+      <h4>颜色口径</h4>
+      <p class="legend">这个原型里的蓝、红、绿、紫……全部是 <b>iOS 系统色</b>。
+      Swift 侧写成 <code>Color(uiColor: .systemBlue)</code>，
+      不引入任何自定义品牌色（布局规则第 22 条）。</p>
+    </div>
+  </aside>
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+"use strict";
+
+/* ============================================================
+   系统色（与 CSS 的 :root 保持一致）
+   ============================================================ */
+const C = {
+  blue:"#007AFF", red:"#FF3B30", green:"#34C759", orange:"#FF9500",
+  purple:"#AF52DE", indigo:"#5856D6", pink:"#FF2D55", teal:"#30B0C7",
+  gray:"#8E8E93", folder:"#007AFF"
+};
+
+/* ============================================================
+   图形
+   ============================================================ */
+const G = {
+  folder:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 7.2A2.2 2.2 0 0 1 5.2 5h3.3c.6 0 1.16.24 1.57.66l.86.9c.28.3.67.46 1.07.46h6.8A2.2 2.2 0 0 1 21 9.22v7.58A2.2 2.2 0 0 1 18.8 19H5.2A2.2 2.2 0 0 1 3 16.8z"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
+  moreCircle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9.2"/><circle cx="7.6" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="16.4" cy="12" r="1.35" fill="currentColor" stroke="none"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15M9.5 6.5V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v1.5"/><path d="M6.5 6.5 7.5 19a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12.5"/><path d="M10.5 10v6M13.5 10v6"/></svg>',
+  share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5V3.5M8.4 6.6 12 3l3.6 3.6"/><path d="M6 11.5H5A1.5 1.5 0 0 0 3.5 13v6.5A1.5 1.5 0 0 0 5 21h14a1.5 1.5 0 0 0 1.5-1.5V13A1.5 1.5 0 0 0 19 11.5h-1"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L20 8a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M15.5 6.5 18.5 9.5"/></svg>',
+  moveTo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.2A2.2 2.2 0 0 1 5.2 5h3c.6 0 1.16.24 1.57.66l.86.9c.28.3.67.46 1.07.46H21v7.78A2.2 2.2 0 0 1 18.8 19H5.2A2.2 2.2 0 0 1 3 16.8z"/><path d="M13 15.5 15.5 13 13 10.5M15.2 13h-5"/></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11.6M8.4 11.6l3.6 3.6 3.6-3.6"/><path d="M4 17.5v1A2 2 0 0 0 6 20.5h12a2 2 0 0 0 2-2v-1"/></svg>',
+  info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v6" stroke-linecap="round"/><circle cx="12" cy="7.7" r="1.15" fill="currentColor" stroke="none"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 7"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13.8a3.6 3.6 0 0 0 5.2 0l2.9-2.9a3.7 3.7 0 0 0-5.2-5.2l-1 1"/><path d="M14 10.2a3.6 3.6 0 0 0-5.2 0l-2.9 2.9a3.7 3.7 0 0 0 5.2 5.2l1-1"/></svg>',
+  folderBadge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.2A2.2 2.2 0 0 1 5.2 5h3c.6 0 1.16.24 1.57.66l.86.9c.28.3.67.46 1.07.46h6.8A2.2 2.2 0 0 1 21 9.22v7.58A2.2 2.2 0 0 1 18.8 19H5.2A2.2 2.2 0 0 1 3 16.8z"/><path d="M12 14.4v-4M10 12.4h4"/></svg>',
+  sort:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20V4.5M4 7.5 7 4.5l3 3"/><path d="M17 4v15.5M14 16.5l3 3 3-3"/></svg>',
+  upDown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10 12 6l4 4M8 14l4 4 4-4"/></svg>',
+  selectAll:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="6.5" r="3"/><circle cx="6.5" cy="17.5" r="3"/><path d="M12 6.5h9M12 17.5h9"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5V11a6 6 0 0 0-12 0v5.5L4.5 18.5h15z"/><path d="M10 21h4"/></svg>',
+  house:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.4 12 4l8 6.4V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z"/></svg>',
+  terminal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="4" width="18.4" height="16" rx="2.6"/><path d="m7 9.5 2.6 2.5L7 14.5M12.5 15h4.5"/></svg>',
+  person:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8.2" r="3.7"/><path d="M4.6 20.2a7.5 7.5 0 0 1 14.8 0"/></svg>',
+  photo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.4"/><circle cx="8.6" cy="10" r="1.6"/><path d="m3.6 17.6 4.7-4.4 3.3 3 3.2-2.8 5.7 5"/></svg>',
+  waveform:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 10v4M8 6.5v11M12 9v6M16 4.5v15M20 10v4"/></svg>',
+  docPlain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h7.5L19 9v11.5H6z"/><path d="M13.5 3.5V9H19"/><path d="M9 13h6M9 16.5h4"/></svg>',
+  zip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.2A2.2 2.2 0 0 1 6.2 5h3c.6 0 1.16.24 1.57.66l.86.9c.28.3.67.46 1.07.46h5.3A2.2 2.2 0 0 1 20 9.22v7.58A2.2 2.2 0 0 1 17.8 19H6.2A2.2 2.2 0 0 1 4 16.8z"/><path d="M10.6 11h1.6v1.6h-1.6zM12.2 12.6h1.6V14.2h-1.6z" fill="currentColor" stroke="none"/></svg>'
+};
+
+/* 文件页图标：一页纸 + 扩展名角标（iOS 无缩略图时的画法） */
+function pageIcon(ext, color){
+  const e = (ext || "").slice(0, 4);
+  const fs = e.length > 3 ? 5.2 : 6.4;
+  return '<svg viewBox="0 0 24 24">'
+    + '<path d="M5.6 2.8h8.2L19.6 8.6v12.6H5.6z" fill="var(--card)" stroke="' + color
+    + '" stroke-width="1.3" stroke-linejoin="round"/>'
+    + '<path d="M13.8 2.8v5.8h5.8" fill="none" stroke="' + color
+    + '" stroke-width="1.3" stroke-linejoin="round"/>'
+    + '<text x="12.6" y="17.4" text-anchor="middle" font-size="' + fs
+    + '" font-weight="700" font-family="-apple-system,SF Pro Text,sans-serif" fill="'
+    + color + '">' + e + '</text></svg>';
+}
+
+/* ============================================================
+   数据
+   ============================================================ */
+const KIND = {
+  pdf:  {c:C.red,    label:"PDF"},
+  png:  {c:C.purple, label:"PNG"}, jpg:{c:C.purple,label:"JPG"}, jpeg:{c:C.purple,label:"JPEG"},
+  heic: {c:C.purple, label:"HEIC"}, gif:{c:C.purple,label:"GIF"}, webp:{c:C.purple,label:"WEBP"},
+  mp4:  {c:C.indigo, label:"MP4"}, mov:{c:C.indigo,label:"MOV"},
+  mp3:  {c:C.pink,   label:"MP3"}, m4a:{c:C.pink,  label:"M4A"},
+  zip:  {c:C.gray,   label:"ZIP"}, dmg:{c:C.gray,  label:"DMG"},
+  doc:  {c:C.blue,   label:"DOC"}, docx:{c:C.blue, label:"DOCX"},
+  md:   {c:C.blue,   label:"MD"},  txt:{c:C.blue,  label:"TXT"},
+  xls:  {c:C.green,  label:"XLS"}, xlsx:{c:C.green,label:"XLSX"}, csv:{c:C.green,label:"CSV"},
+  ppt:  {c:C.orange, label:"PPT"}, pptx:{c:C.orange,label:"PPTX"},
+  json: {c:C.gray,   label:"JSON"}, sh:{c:C.gray,  label:"SH"}, yml:{c:C.gray,label:"YML"},
+  ts:   {c:C.gray,   label:"TS"},  js:{c:C.gray,   label:"JS"}, swift:{c:C.gray,label:"SWIFT"}
+};
+const MD = {c:C.blue, label:"MD"};
+
+function extOf(name){
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(i+1).toLowerCase() : "";
+}
+function kindOf(it){
+  if (it.type === "folder") return {c:C.folder, label:"", folder:true};
+  const k = KIND[extOf(it.name)];
+  return k || {c:C.gray, label:extOf(it.name).toUpperCase() || "FILE"};
+}
+function iconOf(it){
+  if (it.type === "folder") return '<span style="color:' + C.folder + '">' + G.folder + '</span>';
+  const k = kindOf(it);
+  return pageIcon(k.label, k.c);
+}
+
+let SEQ = 0;
+const uid = () => "n" + (++SEQ);
+function mk(parent, type, name, size, updated, shared){
+  return {id: uid(), parent: parent, type: type, name: name, size: size || 0,
+          updated: updated, shared: !!shared};
+}
+
+function seed(){
+  const t = [];
+  const root = [ {id:"root-f1", parent:null, type:"folder", name:"项目文档",
+                  updated:"2026-09-24T18:20:00", shared:true},
+                 {id:"root-f2", parent:null, type:"folder", name:"设计稿",
+                  updated:"2026-09-23T09:05:00"},
+                 {id:"root-f3", parent:null, type:"folder", name:"交付物",
+                  updated:"2026-09-20T14:00:00"} ];
+  t.push(...root);
+  t.push({id:"r-1", parent:null, type:"file", name:"报告-2026Q3.xlsx", size:319488,
+          updated:"2026-09-22T11:30:00", shared:true});
+  t.push({id:"r-2", parent:null, type:"file", name:"build.zip", size:47395840,
+          updated:"2026-09-21T16:45:00"});
+  t.push({id:"r-3", parent:null, type:"file", name:"演示视频.mp4", size:220200960,
+          updated:"2026-09-18T10:00:00"});
+  t.push({id:"r-4", parent:null, type:"file", name:"config.json", size:1229,
+          updated:"2026-09-25T08:10:00"});
+
+  t.push({id:"d1-1", parent:"root-f1", type:"folder", name:"会议纪要",
+          updated:"2026-09-24T20:30:00"});
+  t.push({id:"d1-2", parent:"root-f1", type:"folder", name:"合同",
+          updated:"2026-09-12T09:00:00"});
+  t.push({id:"d1-3", parent:"root-f1", type:"file", name:"需求规格.md", size:25088,
+          updated:"2026-09-24T18:20:00"});
+  t.push({id:"d1-4", parent:"root-f1", type:"file", name:"架构设计.pdf", size:1887436,
+          updated:"2026-09-23T15:40:00"});
+  t.push({id:"d1-5", parent:"root-f1", type:"file", name:"预算表.xlsx", size:77824,
+          updated:"2026-09-15T10:10:00"});
+
+  t.push({id:"d11-1", parent:"d1-1", type:"file", name:"2026-09-18 评审.md", size:6144,
+          updated:"2026-09-18T19:00:00"});
+  t.push({id:"d11-2", parent:"d1-1", type:"file", name:"2026-09-24 复盘.md", size:9216,
+          updated:"2026-09-24T20:30:00"});
+
+  t.push({id:"d12-1", parent:"d1-2", type:"file", name:"服务协议.docx", size:65536,
+          updated:"2026-09-12T09:00:00"});
+
+  t.push({id:"d2-1", parent:"root-f2", type:"file", name:"首页.png", size:1048576,
+          updated:"2026-09-23T09:05:00"});
+  t.push({id:"d2-2", parent:"root-f2", type:"file", name:"终端.png", size:943718,
+          updated:"2026-09-23T09:06:00"});
+  t.push({id:"d2-3", parent:"root-f2", type:"file", name:"云盘.png", size:1179648,
+          updated:"2026-09-23T09:07:00"});
+  t.push({id:"d2-4", parent:"root-f2", type:"file", name:"图标规范.pdf", size:5242880,
+          updated:"2026-09-19T16:20:00"});
+
+  t.push({id:"d3-1", parent:"root-f3", type:"file", name:"Synapse-1.0.31.dmg", size:134217728,
+          updated:"2026-09-20T14:00:00"});
+  t.push({id:"d3-2", parent:"root-f3", type:"file", name:"发布说明.md", size:4096,
+          updated:"2026-09-20T13:50:00"});
+  return t;
+}
+
+function seedTrash(){
+  return [
+    {id:"tr-1", kind:"normal", type:"file", name:"旧版首页.png", size:2228224,
+     originalPath:"设计稿/旧版首页.png", trashedAt:"2026-09-19T10:00:00"},
+    {id:"tr-2", kind:"normal", type:"folder", name:"草稿", size:0,
+     originalPath:"草稿", trashedAt:"2026-09-15T09:00:00"},
+    {id:"tr-3", kind:"public_asset", type:"file", name:"头像-旧.png", size:51200,
+     originalPath:"公开素材", assetId:"ast_5KQ8M2XT", trashedAt:"2026-09-11T14:30:00"}
+  ];
+}
+function seedAssets(){
+  return [
+    {id:"ast_7F3KQ2M9XT", name:"分享头图.png", size:512000, accessCount:42,
+     lastAccessedAt:"2026-09-25T08:12:00"},
+    {id:"ast_4M8WQ2N7XP", name:"活动海报.jpg", size:1887436, accessCount:317,
+     lastAccessedAt:"2026-09-24T21:40:00"},
+    {id:"ast_9Q2XT5KM3N", name:"使用手册.pdf", size:2359296, accessCount:8,
+     lastAccessedAt:"2026-09-20T11:05:00"}
+  ];
+}
+function seedShares(){
+  return [
+    {shareId:"shr_7K3M9QW2XPRTVH5NB8DFG4CLYZ6JA2EU", itemId:"r-1",
+     itemName:"报告-2026Q3.xlsx", accessMode:"link_read", passwordEnabled:false,
+     expiresAt:null, enabled:true},
+    {shareId:"shr_2M8XQ4NT7WPKVH5RB3DFG6CLYZ9JA2EU", itemId:"root-f1",
+     itemName:"项目文档", accessMode:"link_edit", passwordEnabled:true,
+     expiresAt:"2026-10-02T00:00:00", enabled:true}
+  ];
+}
+
+/* ============================================================
+   状态
+   ============================================================ */
+let items, trash, assets, shares, uploads;
+
+const st = {
+  view: "browser",       // home | browser | trash | assets | shares
+  path: [],              // 文件夹 id 栈
+  sort: "name",
+  asc: true,
+  editing: false,
+  sel: new Set(),
+  sheet: null,           // {kind, data}
+  device: "iphone",
+  picked: null,
+  toasts: 0
+};
+
+function reset(){
+  items = seed(); trash = seedTrash(); assets = seedAssets(); shares = seedShares();
+  uploads = [];
+  st.view = "browser"; st.path = []; st.sort = "name"; st.asc = true;
+  st.editing = false; st.sel = new Set(); st.sheet = null; st.picked = null;
+  render();
+}
+function resetAll(){
+  reset();
+  st.view = "home";
+  render();
+}
+
+const now0 = () => Math.min(new Date(), new Date()).getTime();
+
+/* ============================================================
+   纯函数
+   ============================================================ */
+function fmtBytes(n){
+  n = Number(n) || 0;
+  if (n < 1000) return n + " 字节";
+  const u = ["KB","MB","GB","TB"];
+  let i = -1, v = n;
+  while (v >= 1000 && i < u.length - 1){ v /= 1000; i++; }
+  let s = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+  // 只在小数点上剥尾零。直接 replace(/0+$/) 会把 220 变成 22、100 变成 1。
+  if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
+  return s + " " + u[i];
+}
+function fmtDate(iso){
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const today = new Date(2026, 8, 25);
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return "今天 " + fmtTime(d);
+  if (diff === 1) return "昨天 " + fmtTime(d);
+  if (diff === 2) return "前天 " + fmtTime(d);
+  const y = d.getFullYear() === 2026 ? "" : d.getFullYear() + "年";
+  return y + (d.getMonth()+1) + "月" + d.getDate() + "日";
+}
+function fmtTime(d){
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+function childrenOf(id){
+  return items.filter(function(i){ return i.parent === (id || null); });
+}
+function findItem(id){
+  for (var i=0;i<items.length;i++) if (items[i].id === id) return items[i];
+  return null;
+}
+function pathOf(id){
+  const out = [];
+  let cur = findItem(id);
+  while (cur){ out.unshift(cur); cur = findItem(cur.parent); }
+  return out;
+}
+function sortKey(it){
+  if (st.sort === "size") return Number(it.size) || 0;
+  if (st.sort === "date") return new Date(it.updated).getTime();
+  if (st.sort === "kind") return (kindOf(it).label || "") + " " + it.name;
+  return it.name;
+}
+function sorted(list){
+  const dir = st.asc ? 1 : -1;
+  return list.slice().sort(function(a,b){
+    if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+    const ka = sortKey(a), kb = sortKey(b);
+    let r;
+    if (typeof ka === "number") r = ka - kb;
+    else r = ka.localeCompare(kb, "zh-Hans-CN", {numeric:true});
+    if (r === 0) r = a.name.localeCompare(b.name, "zh-Hans-CN", {numeric:true});
+    return r * dir;
+  });
+}
+function shareOf(itemId){
+  for (var i=0;i<shares.length;i++) if (shares[i].itemId === itemId) return shares[i];
+  return null;
+}
+function currentFolder(){
+  return st.path.length ? findItem(st.path[st.path.length-1]) : null;
+}
+function currentTitle(){
+  const f = currentFolder();
+  return f ? f.name : "云盘";
+}
+const SORT_LABEL = {name:"名称", date:"修改日期", size:"大小", kind:"种类"};
+
+/* ============================================================
+   渲染
+   ============================================================ */
+const host = document.getElementById("screen-host");
+const ovHost = document.getElementById("overlay-host");
+
+function rowHTML(it){
+  const k = kindOf(it);
+  const sel = st.sel.has(it.id);
+  const sub = it.type === "folder"
+    ? fmtDate(it.updated)
+    : fmtBytes(it.size) + " · " + fmtDate(it.updated);
+  const sh = shareOf(it.id);
+  return '<li class="row" data-id="' + it.id + '">'
+    + '<div class="row-actions"><button data-act="ask-delete" data-id="' + it.id + '">删除</button></div>'
+    + '<div class="row-content" data-act="row" data-id="' + it.id + '">'
+    + (st.editing ? '<span class="check' + (sel ? " on" : "") + '" data-act="toggle" data-id="'
+        + it.id + '">' + G.check + '</span>' : '')
+    + '<span class="ic">' + iconOf(it) + '</span>'
+    + '<span class="tx"><span class="nm">' + esc(it.name) + '</span>'
+    + '<span class="sub">' + sub + '</span></span>'
+    + (sh ? '<span class="lock" title="已分享">' + G.link + '</span>' : '')
+    + (it.type === "folder"
+        ? '<span class="chev">' + G.chev + '</span>'
+        : '<span class="chev" style="visibility:hidden">' + G.chev + '</span>')
+    + (st.editing ? '' : '<button class="row-more" data-act="menu" data-id="' + it.id
+        + '" aria-label="更多">' + G.more + '</button>')
+    + '</div></li>';
+}
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c];
+  });
+}
+
+function navHTML(){
+  const deep = st.path.length >= 1;
+  return '<div class="navbar">'
+    + '<div class="nl">'
+    + (deep
+        ? '<button data-act="up" aria-label="返回">' + backGlyph() + '</button>'
+        : '<button data-act="to-home"><span class="big">' + G.back + '</span></button>')
+    + '</div>'
+    + '<div class="tit">' + esc(currentTitle()) + '</div>'
+    + '<div class="nr">'
+    + '<button data-act="menu-toolbar" aria-label="更多">' + G.moreCircle + '</button>'
+    + '</div></div>';
+}
+function backGlyph(){
+  return '<span class="big">' + G.back + '</span>';
+}
+function crumbsHTML(){
+  if (st.path.length < 2) return "";
+  const chain = st.path.map(findItem).filter(Boolean);
+  let h = '<div class="crumbs"><button data-act="go-root">云盘</button>';
+  chain.forEach(function(it, i){
+    h += '<span class="sp">' + G.chev + '</span>';
+    h += i === chain.length-1
+      ? '<span class="last">' + esc(it.name) + '</span>'
+      : '<button data-act="go" data-id="' + it.id + '">' + esc(it.name) + '</button>';
+  });
+  return h + '</div>';
+}
+
+function uploadsHTML(){
+  if (!uploads.length) return "";
+  let h = '<div class="upcard">';
+  uploads.forEach(function(u){
+    const done = u.progress >= 1;
+    h += '<div class="up">'
+      + '<span class="ic">' + pageIcon(u.ext, kindOf({type:"file",name:u.name}).c) + '</span>'
+      + '<span class="tx"><span class="nm">' + esc(u.name) + '</span>'
+      + '<span class="bar"><i style="width:' + Math.round(u.progress*100) + '%'
+      + (done ? ";background:var(--green)" : "") + '"></i></span></span>'
+      + '<span class="pc">' + (done ? "完成" : Math.round(u.progress*100) + "%") + '</span>'
+      + (done ? '' : '<button class="row-more" style="display:grid" data-act="cancel-up" data-id="'
+          + u.id + '">' + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>' + '</button>')
+      + '</div>';
+  });
+  return h + '</div>';
+}
+
+function browserHTML(){
+  const list = sorted(childrenOf(st.path.length ? st.path[st.path.length-1] : null));
+  const isRoot = st.path.length === 0;
+  let h = navHTML();
+
+  if (!isRoot || st.path.length === 0){
+    h += '<div class="largetitle"><h2>' + esc(currentTitle()) + '</h2>'
+       + '<div class="sub">' + list.length + ' 项 · 按' + SORT_LABEL[st.sort]
+       + (st.asc ? "升序" : "降序") + '</div></div>';
+  }
+  h += crumbsHTML();
+
+  h += '<div class="screen">';
+  h += uploadsHTML();
+
+  if (!list.length){
+    h += '<div class="empty"><span class="eic">' + G.docPlain + '</span>'
+       + '<span class="et">文件夹为空</span>'
+       + '<span class="es">点右上角的「···」上传文件或新建文件夹</span></div>';
+  } else {
+    h += '<ul class="group">' + list.map(rowHTML).join("") + '</ul>';
+  }
+
+  if (isRoot){
+    h += '<ul class="group">'
+      + '<li class="row"><div class="row-content" data-act="to-trash">'
+      + '<span class="ic" style="color:' + C.gray + '">' + G.trash + '</span>'
+      + '<span class="tx"><span class="nm">回收站</span>'
+      + '<span class="sub">' + (trash.length ? trash.length + " 项" : "什么都没有") + '</span></span>'
+      + '<span class="chev">' + G.chev + '</span></div></li>'
+      + '<li class="row"><div class="row-content" data-act="to-assets">'
+      + '<span class="ic" style="color:' + C.blue + '">' + G.link + '</span>'
+      + '<span class="tx"><span class="nm">公开素材</span>'
+      + '<span class="sub">拿到就能直接用的图片与文档直链</span></span>'
+      + '<span class="chev">' + G.chev + '</span></div></li>'
+      + '</ul>'
+      + '<div style="text-align:center;font-size:12.5px;color:var(--label2);padding:2px 20px 26px">'
+      + '已用 1.24 GB / 5 GB</div>';
+  } else {
+    h += '<div style="height:22px"></div>';
+  }
+  h += '</div>';
+
+  if (st.editing){
+    const n = st.sel.size;
+    h += '<div class="editbar">'
+      + '<span class="cnt">已选 <b>' + n + '</b> 项</span>'
+      + '<button data-act="sel-move" ' + (n?"":"disabled") + ' title="移动到">' + G.moveTo + '</button>'
+      + '<button data-act="sel-export" ' + (n?"":"disabled") + ' title="导出">' + G.download + '</button>'
+      + '<button class="danger" data-act="sel-delete" ' + (n?"":"disabled") + ' title="删除">' + G.trash + '</button>'
+      + '</div>';
+  } else {
+    h += tabbarHTML();
+  }
+  return h;
+}
+
+function tabbarHTML(){
+  return '<div class="tabbar">'
+    + '<button class="tb" data-act="to-home">' + G.house + '<span>主页</span></button>'
+    + '<button class="tb on" data-act="noop">' + G.terminal + '<span>终端</span></button>'
+    + '<button class="tb" data-act="noop">' + G.person + '<span>我的</span></button>'
+    + '</div>';
+}
+
+function homeHTML(){
+  const rows = [
+    {t:"录音", s:"会议录音、转写与回听", v:"12 条", act:"noop", ic:G.waveform},
+    {t:"云盘", s:"服务端上的文件", v:"", act:"to-drive", ic:G.folderBadge},
+    {t:"新建会话", s:"在当前电脑上开一个终端", v:"", act:"noop", ic:G.plus},
+    {t:"剪贴板历史", s:"这台电脑上复制过的内容", v:"", act:"noop", ic:G.docPlain}
+  ];
+  let h = '<div class="navbar"><div class="nl"></div>'
+    + '<div class="tit"></div><div class="nr">'
+    + '<button data-act="noop" style="color:var(--label)">' + G.upDown + '</button>'
+    + '<button data-act="noop" style="color:var(--label);position:relative">' + G.bell
+    + '<span style="position:absolute;top:-1px;right:-4px;background:var(--red);color:#fff;'
+    + 'font-size:10px;font-weight:700;line-height:1;padding:3px 5px;border-radius:9px">3</span>'
+    + '</button></div></div>';
+  h += '<div class="largetitle"><h2>主页</h2></div>';
+  h += '<div class="screen">';
+  h += '<div style="font-size:12.5px;color:var(--label2);padding:4px 32px 7px">功能</div>';
+  h += '<div class="group" style="margin-top:0">';
+  rows.forEach(function(r){
+    h += '<li class="row"><div class="row-content" data-act="' + r.act + '">'
+      + '<span class="ic" style="color:' + (r.t === "云盘" ? C.blue : "var(--label2)") + '">'
+      + r.ic + '</span>'
+      + '<span class="tx"><span class="nm">' + r.t + '</span>'
+      + '<span class="sub">' + r.s + '</span></span>'
+      + (r.v ? '<span style="font-size:14px;color:var(--label2)">' + r.v + '</span>' : '')
+      + '<span class="chev">' + G.chev + '</span></div></li>';
+  });
+  h += '</div>';
+  h += '<div style="height:22px"></div>';
+  h += '</div>';
+  h += tabbarHTML();
+  return h;
+}
+
+function trashHTML(){
+  let h = '<div class="navbar"><div class="nl"><button data-act="to-drive">'
+    + backGlyph() + '</button></div><div class="tit">回收站</div>'
+    + '<div class="nr"><button data-act="noop">' + G.moreCircle + '</button></div></div>';
+  h += '<div class="largetitle"><h2>回收站</h2>'
+    + '<div class="sub">' + trash.length + ' 项 · 恢复后回到原来的位置</div></div>';
+  h += '<div class="screen">';
+  if (!trash.length){
+    h += '<div class="empty"><span class="eic">' + G.trash + '</span>'
+      + '<span class="et">回收站是空的</span></div>';
+  } else {
+    h += '<ul class="group">';
+    trash.forEach(function(t){
+      h += '<li class="row"><div class="row-content" data-act="trash-row" data-id="' + t.id + '">'
+        + '<span class="ic">' + (t.type === "folder"
+            ? '<span style="color:' + C.folder + '">' + G.folder + '</span>'
+            : pageIcon(kindOf(t).label, kindOf(t).c)) + '</span>'
+        + '<span class="tx"><span class="nm">' + esc(t.name) + '</span>'
+        + '<span class="sub">' + esc(t.originalPath) + ' · ' + fmtDate(t.trashedAt) + '</span></span>'
+        + '<span class="chev" style="visibility:hidden">' + G.chev + '</span></div></li>';
+    });
+    h += '</ul><div style="height:22px"></div>';
+  }
+  h += '</div>';
+  h += tabbarHTML();
+  return h;
+}
+
+function assetsHTML(){
+  let h = '<div class="navbar"><div class="nl"><button data-act="to-drive">'
+    + backGlyph() + '</button></div><div class="tit">公开素材</div>'
+    + '<div class="nr"><button data-act="noop" style="color:var(--blue)">' + G.plus + '</button></div></div>';
+  h += '<div class="largetitle"><h2>公开素材</h2>'
+    + '<div class="sub">' + assets.length + ' 个直链 · 访问不消耗登录态</div></div>';
+  h += '<div class="screen">';
+  if (!assets.length){
+    h += '<div class="empty"><span class="eic">' + G.link + '</span>'
+      + '<span class="et">还没有公开素材</span></div>';
+  } else {
+    h += '<ul class="group">';
+    assets.forEach(function(a){
+      h += '<li class="row"><div class="row-content" data-act="asset-row" data-id="' + a.id + '">'
+        + '<span class="ic">' + pageIcon(kindOf(a).label, kindOf(a).c) + '</span>'
+        + '<span class="tx"><span class="nm">' + esc(a.name) + '</span>'
+        + '<span class="sub">访问 ' + a.accessCount + ' 次 · ' + fmtDate(a.lastAccessedAt) + '</span></span>'
+        + '<span class="chev" style="visibility:hidden">' + G.chev + '</span></div></li>';
+    });
+    h += '</ul><div style="height:22px"></div>';
+  }
+  h += '</div>';
+  h += tabbarHTML();
+  return h;
+}
+
+function sharesHTML(){
+  const list = shares.filter(function(s){ return s.enabled; });
+  let h = '<div class="navbar"><div class="nl"><button data-act="to-drive">'
+    + backGlyph() + '</button></div><div class="tit">分享管理</div>'
+    + '<div class="nr"><button data-act="noop">' + G.moreCircle + '</button></div></div>';
+  h += '<div class="largetitle"><h2>分享管理</h2>'
+    + '<div class="sub">' + list.length + ' 个进行中的分享</div></div>';
+  h += '<div class="screen">';
+  if (!list.length){
+    h += '<div class="empty"><span class="eic">' + G.link + '</span>'
+      + '<span class="et">没有进行中的分享</span>'
+      + '<span class="es">长按任意文件可以创建分享链接</span></div>';
+  } else {
+    h += '<ul class="group">';
+    list.forEach(function(s){
+      const mode = {link_read:"仅阅读", link_edit:"登录后可编辑",
+                    specified_users_edit:"指定邮箱可编辑"}[s.accessMode];
+      const exp = s.expiresAt ? "有效期至 " + fmtDate(s.expiresAt) : "永久有效";
+      h += '<li class="row"><div class="row-content" data-act="share-row" data-id="' + s.shareId + '">'
+        + '<span class="ic" style="color:' + C.blue + '">' + G.link + '</span>'
+        + '<span class="tx"><span class="nm">' + esc(s.itemName) + '</span>'
+        + '<span class="sub">' + mode + ' · ' + exp + (s.passwordEnabled ? " · 有密码" : "") + '</span></span>'
+        + '<span class="chev">' + G.chev + '</span></div></li>';
+    });
+    h += '</ul><div style="height:22px"></div>';
+  }
+  h += '</div>';
+  h += tabbarHTML();
+  return h;
+}
+
+/* ---------- iPad: 浏览列 + 预览列 ---------- */
+function splitHTML(){
+  const listContent = browserHTML();
+  // 拆掉 tabbar，左右两列各自管理
+  const withoutTab = listContent.replace(/<div class="tabbar">[\s\S]*?<\/div>$/, "");
+  const sel = st.picked ? findItem(st.picked) : null;
+  return '<div class="split">'
+    + '<div class="col-list">' + withoutTab + '</div>'
+    + '<div class="col-detail">' + previewPaneHTML(sel) + '</div>'
+    + '</div>';
+}
+
+function previewPaneHTML(it){
+  if (!it){
+    return '<div class="preview-pane"><span class="pimg">' + G.docPlain + '</span>'
+      + '<span class="pname">选择一项来预览</span>'
+      + '<span class="pmeta">左侧是云盘，这里是它的伴随面板</span></div>';
+  }
+  if (it.type === "folder"){
+    return '<div class="preview-pane">'
+      + '<span class="pimg" style="background:transparent;width:120px;height:120px;color:'
+      + C.folder + '">' + G.folder + '</span>'
+      + '<span class="pname">' + esc(it.name) + '</span>'
+      + '<span class="pmeta">文件夹 · ' + childrenOf(it.id).length + ' 项 · '
+      + fmtDate(it.updated) + '</span>'
+      + '<div class="actions"><button data-act="open-folder" data-id="' + it.id
+      + '">打开</button><button data-act="ask-rename" data-id="' + it.id + '">重命名</button></div></div>';
+  }
+  const k = kindOf(it), e = extOf(it.name);
+  const body = previewBody(it, e);
+  return '<div class="preview-pane">'
+    + '<span class="pimg" style="' + (body.img ? "" : "background:transparent") + '">'
+    + (body.img ? G.photo : pageIcon(k.label, k.c)) + '</span>'
+    + '<span class="pname">' + esc(it.name) + '</span>'
+    + '<span class="pmeta">' + fmtBytes(it.size) + ' · 修改于 ' + fmtDate(it.updated) + '</span>'
+    + (body.html ? '<div class="pbody">' + body.html + '</div>' : '')
+    + '<div class="actions">'
+    + '<button data-act="ask-share" data-id="' + it.id + '">分享</button>'
+    + '<button data-act="ask-export" data-id="' + it.id + '">导出</button>'
+    + '<button data-act="ask-info" data-id="' + it.id + '">简介</button>'
+    + '</div></div>';
+}
+
+const TEXT_SAMPLE = {
+  md: "# 需求规格\n\n"
+    + "## 一、范围\n\n"
+    + "把桌面端的云盘搬到 iPhone 与 iPadOS。除本地同步之外，云端文件能力都要可用。\n\n"
+    + "## 二、形态\n\n"
+    + "1. 入口是「主页 → 功能 → 云盘」，底栏不加格。\n"
+    + "2. 进去以后是「文件」App 那样的层级浏览器。\n"
+    + "3. 预览是伴随面板，不是终点。\n\n"
+    + "## 三、不做\n\n"
+    + "- 本地同步与绑定\n- 文件夹整棵上传\n- 网页分享管理\n- 全盘搜索\n\n"
+    + "> 排序在本地做，因为服务端列表没有排序参数。\n",
+  json: '{\n'
+    + '  "apiBaseURL": "https://synapse.d2.pub/api",\n'
+    + '  "drive": {\n'
+    + '    "itemsPerPage": 50,\n'
+    + '    "uploadConcurrency": 2,\n'
+    + '    "downloadRoute": "/drive/items/:id/download",\n'
+    + '    "note": "下载路由不在 /api 前缀下"\n'
+    + '  }\n}\n'
+};
+
+function previewBody(it, e){
+  if (["png","jpg","jpeg","heic","gif","webp"].indexOf(e) >= 0) return {img:true};
+  if (e === "md") return {html: esc(TEXT_SAMPLE.md)};
+  if (e === "json") return {html: esc(TEXT_SAMPLE.json)};
+  if (e === "txt") return {html: esc("（纯文本预览）\n\n文本与 Markdown 走 content/chunk 按需读取，"
+    + "超过 64 KiB 时只读开头并在底部说明已显示的范围。")};
+  if (e === "pdf") return {html: '<div style="text-align:center;color:var(--label2);'
+    + 'padding:26px 0">PDF 下载到临时文件后交给 QuickLook 显示</div>'};
+  if (["docx","xlsx","pptx"].indexOf(e) >= 0) return {html:
+    '<div style="text-align:center;color:var(--label2);padding:26px 0">'
+    + 'Office 文档同样交给 QuickLook —— iOS 自带查看，不需要服务端转换</div>'};
+  if (e === "zip" || e === "dmg") return {html:
+    '<div style="text-align:center;color:var(--label2);padding:26px 0">'
+    + '这个格式不能预览，用「导出」拿到本机再打开</div>'};
+  if (e === "mp4" || e === "mov") return {html:
+    '<div style="text-align:center;color:var(--label2);padding:26px 0">'
+    + '视频下载到临时文件后用 AVPlayer 播放</div>'};
+  return {html:'<div style="text-align:center;color:var(--label2);padding:26px 0">'
+    + '下载到临时文件后交给系统处理</div>'};
+}
+
+/* ============================================================
+   浮层
+   ============================================================ */
+function sheetHTML(){
+  const s = st.sheet;
+  if (!s) return "";
+  let inner = "";
+  if (s.kind === "menu"){
+    const it = findItem(s.data.id);
+    if (!it) return "";
+    inner = '<h3>' + esc(it.name) + '</h3>'
+      + '<div class="sh">' + (it.type === "folder" ? "文件夹" : kindOf(it).label + " 文件")
+      + ' · ' + (it.type === "folder" ? childrenOf(it.id).length + " 项" : fmtBytes(it.size)) + '</div>'
+      + '<div class="sec">'
+      + (it.type === "file"
+          ? li("ask-preview", it.id, G.eye, "预览") : li("open-folder", it.id, G.folder, "打开"))
+      + li("ask-share", it.id, G.link, shareOf(it.id) ? "分享（已分享）" : "分享")
+      + li("ask-rename", it.id, G.pencil, "重命名")
+      + li("ask-move", it.id, G.moveTo, "移动到")
+      + (it.type === "file" ? li("ask-export", it.id, G.download, "导出") : "")
+      + li("ask-info", it.id, G.info, "显示简介")
+      + '</div>'
+      + '<div class="sec"><button class="li destructive" data-act="ask-delete" data-id="'
+      + it.id + '">' + G.trash + '<span class="t">删除</span></button></div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "toolbar"){
+    inner = '<div class="grab"></div><h3>云盘</h3>'
+      + '<div class="sec">'
+      + li("ask-newfolder", "", G.folderBadge, "新建文件夹")
+      + li("ask-upload", "", G.plus, "上传文件")
+      + '</div>'
+      + '<div class="sec">'
+      + li("ask-sort", "", G.sort, "排序方式", SORT_LABEL[st.sort] + (st.asc ? " ↑" : " ↓"))
+      + li("ask-select", "", G.selectAll, st.editing ? "退出选择" : "选择")
+      + li("to-shares", "", G.link, "分享管理", shares.filter(function(x){return x.enabled}).length + " 个")
+      + '</div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "sort"){
+    inner = '<div class="grab"></div><h3>排序方式</h3>'
+      + '<div class="sec">'
+      + ["name","date","size","kind"].map(function(k){
+          return '<button class="li" data-act="set-sort" data-id="' + k + '">'
+            + '<span class="t">' + SORT_LABEL[k] + '</span>'
+            + (st.sort === k ? '<span class="v" style="color:var(--blue)">' + G.check + '</span>' : '')
+            + '</button>';
+        }).join("")
+      + '</div>'
+      + '<div class="sec">'
+      + '<button class="li" data-act="set-dir" data-id="asc"><span class="t">升序</span>'
+      + (st.asc ? '<span class="v" style="color:var(--blue)">' + G.check + '</span>' : '') + '</button>'
+      + '<button class="li" data-act="set-dir" data-id="desc"><span class="t">降序</span>'
+      + (st.asc ? '' : '<span class="v" style="color:var(--blue)">' + G.check + '</span>') + '</button>'
+      + '</div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">完成</button></div>';
+  }
+  else if (s.kind === "rename" || s.kind === "newfolder"){
+    const isNew = s.kind === "newfolder";
+    inner = '<div class="grab"></div>'
+      + '<h3>' + (isNew ? "新建文件夹" : "重命名") + '</h3>'
+      + '<div class="sh">' + (isNew ? "建在「" + esc(currentTitle()) + "」里" : "只改名字，内容不动") + '</div>'
+      + '<div class="field"><label>名称</label>'
+      + '<input id="name-input" value="' + esc(isNew ? "未命名文件夹" : s.data.name)
+      + '" autocomplete="off"></div>'
+      + '<div class="btns"><button class="big-btn" data-act="do-rename">'
+      + (isNew ? "创建" : "保存") + '</button>'
+      + '<button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "move"){
+    const chain = s.data.path || [];
+    const list = sorted(childrenOf(chain.length ? chain[chain.length-1] : null))
+      .filter(function(i){ return i.type === "folder" && i.id !== s.data.id; });
+    inner = '<div class="grab"></div><h3>移动到</h3>'
+      + '<div class="sh">' + esc(chain.length ? findItem(chain[chain.length-1]).name : "云盘")
+      + ' · 选中的 ' + (s.data.ids ? s.data.ids.length : 1) + ' 项会放到这里</div>'
+      + '<div class="sec">';
+    if (chain.length){
+      inner += '<button class="li" data-act="move-up">' + G.back
+        + '<span class="t">上一层</span></button>';
+    }
+    if (!list.length){
+      inner += '<div class="li" style="color:var(--label2);cursor:default">'
+        + '<span class="t">这里没有子文件夹</span></div>';
+    } else {
+      list.forEach(function(f){
+        inner += '<button class="li" data-act="move-into" data-id="' + f.id + '">'
+          + '<span style="color:' + C.folder + '">' + G.folder + '</span>'
+          + '<span class="t">' + esc(f.name) + '</span>' + G.chev + '</button>';
+      });
+    }
+    inner += '</div><div class="btns">'
+      + '<button class="big-btn" data-act="move-here">移到这一层</button>'
+      + '<button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "share"){
+    const f = s.form;
+    inner = '<div class="grab"></div><h3>分享</h3>'
+      + '<div class="sh">' + esc(s.data.name) + '</div>'
+      + '<div style="font-size:12.5px;color:var(--label2);padding:0 20px 6px">有效期</div>'
+      + '<div class="seg">' + ["3d","7d","30d","1y","forever"].map(function(k){
+          return '<button data-act="set-exp" data-id="' + k + '"'
+            + (f.expiresIn === k ? ' class="on"' : '') + '>'
+            + ({'3d':"3 天",'7d':"7 天",'30d':"30 天",'1y':"1 年",'forever':"永久"}[k])
+            + '</button>';
+        }).join("") + '</div>'
+      + '<div style="font-size:12.5px;color:var(--label2);padding:0 20px 6px">访问权限</div>'
+      + '<div class="seg">'
+      + '<button data-act="set-mode" data-id="link_read"' + (f.accessMode === "link_read" ? ' class="on"' : '') + '>仅阅读</button>'
+      + '<button data-act="set-mode" data-id="link_edit"' + (f.accessMode === "link_edit" ? ' class="on"' : '') + '>登录后可编辑</button>'
+      + '</div>'
+      + '<div class="sec"><button class="li" data-act="toggle-pwd">'
+      + '<span class="t">密码保护</span>'
+      + '<span class="v" style="color:' + (f.passwordEnabled ? "var(--blue)" : "var(--label2)") + '">'
+      + (f.passwordEnabled ? "开" : "关") + '</span></button></div>'
+      + '<div class="btns"><button class="big-btn" data-act="do-share">创建分享链接</button>'
+      + '<button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "shareResult"){
+    const sh = s.data.share;
+    inner = '<div class="grab"></div><h3>链接已就绪</h3>'
+      + '<div class="sh">' + esc(sh.itemName) + ' · '
+      + ({link_read:"仅阅读",link_edit:"登录后可编辑",specified_users_edit:"指定邮箱可编辑"}[sh.accessMode])
+      + ' · ' + (sh.expiresAt ? "有效期至 " + fmtDate(sh.expiresAt) : "永久有效") + '</div>'
+      + '<div class="linkbox"><span>' + esc(s.data.url) + '</span>'
+      + '<button class="row-more" style="display:grid" data-act="copy" data-id="url" title="拷贝">'
+      + '<span style="color:var(--blue);display:grid;place-items:center;width:20px;height:20px">' + G.docPlain + '</span></button></div>';
+    if (sh.passwordEnabled){
+      inner += '<div class="linkbox"><span>' + esc(s.data.urlPwd) + '</span>'
+        + '<button class="row-more" style="display:grid" data-act="copy" data-id="urlPwd" title="拷贝">'
+        + '<span style="color:var(--blue);display:grid;place-items:center;width:20px;height:20px">' + G.docPlain + '</span></button></div>'
+        + '<div class="field"><label>密码</label>'
+        + '<input value="' + esc(s.data.password) + '" readonly></div>';
+    }
+    inner += '<div class="note">分享链接指向云盘上的这个文件，会跟着它变。</div>'
+      + '<div class="btns" style="margin-top:10px">'
+      + '<button class="big-btn" data-act="copy-all">拷贝链接</button>'
+      + (shareOf(sh.itemId)
+          ? '<button class="big-btn sec2" data-act="stop-share">停止分享</button>' : '')
+      + '<button class="big-btn sec2" data-act="close-sheet">完成</button></div>';
+  }
+  else if (s.kind === "info"){
+    const it = s.data.it, sh = shareOf(it.id);
+    const kv = [
+      ["名称", it.name],
+      ["种类", it.type === "folder" ? "文件夹" : (kindOf(it).label + " 文件")],
+      ["大小", it.type === "folder" ? "—" : fmtBytes(it.size)],
+      ["修改时间", fmtDate(it.updated)],
+      ["位置", "云盘" + (pathOf(it.parent).map(function(x){return "/" + x.name;}).join("") || "/")]
+    ];
+    inner = '<div class="grab"></div><h3>简介</h3>'
+      + '<div class="sec">' + kv.map(function(p){
+          return '<div class="li" style="cursor:default"><span class="t">' + p[0] + '</span>'
+            + '<span class="v" style="max-width:200px">' + esc(p[1]) + '</span></div>';
+        }).join("")
+      + (sh ? '<button class="li" data-act="ask-share" data-id="' + it.id + '">'
+          + '<span class="t">分享</span><span class="v" style="color:var(--blue)">已开启</span></button>'
+          : '')
+      + '</div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">完成</button></div>';
+  }
+  else if (s.kind === "preview"){
+    const it = s.data.it;
+    const k = kindOf(it), e = extOf(it.name), b = previewBody(it, e);
+    inner = '<div class="grab"></div><h3 style="font-size:15px">' + esc(it.name) + '</h3>'
+      + '<div class="sh">' + fmtBytes(it.size) + ' · 修改于 ' + fmtDate(it.updated) + '</div>'
+      + '<div style="margin:0 14px 12px;border-radius:10px;background:var(--card2);'
+      + 'display:grid;place-items:center;padding:22px;min-height:150px">';
+    inner += b.img
+      ? '<span class="pimg" style="width:150px;height:150px">' + G.photo + '</span>'
+      : '<span style="width:74px;height:74px">' + pageIcon(k.label, k.c) + '</span>';
+    inner += '</div>';
+    if (b.html){
+      inner += '<div style="margin:0 14px 12px;border-radius:10px;background:var(--card2);'
+        + 'padding:16px;max-height:230px;overflow:auto;font-size:13px;line-height:1.7;'
+        + 'white-space:pre-wrap">' + b.html + '</div>';
+    }
+    inner += '<div class="btns">'
+      + '<button class="big-btn" data-act="ask-share" data-id="' + it.id + '">分享</button>'
+      + '<button class="big-btn sec2" data-act="ask-export" data-id="' + it.id + '">导出</button>'
+      + '<button class="big-btn sec2" data-act="close-sheet">关闭</button></div>';
+  }
+  else if (s.kind === "upload"){
+    inner = '<div class="grab"></div><h3>上传</h3>'
+      + '<div class="sh">传到「' + esc(currentTitle()) + '」· 离开 App 会中断</div>'
+      + '<div class="sec">'
+      + li("up-file", "", G.docPlain, "文件", "可多选")
+      + li("up-photo", "", G.photo, "照片", "相册")
+      + li("up-camera", "", G.photo, "拍照", "相机")
+      + '</div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "confirm"){
+    inner = '<div class="grab"></div><h3>' + esc(s.data.title) + '</h3>'
+      + '<div class="sh">' + s.data.desc + '</div>'
+      + '<div class="btns"><button class="big-btn" style="background:' + C.red + '" data-act="'
+      + s.data.confirm + '">' + esc(s.data.ok) + '</button>'
+      + '<button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "assetMenu"){
+    const a = assets.filter(function(x){ return x.id === s.data.id; })[0];
+    if (!a) return "";
+    inner = '<h3>' + esc(a.name) + '</h3>'
+      + '<div class="sh">' + fmtBytes(a.size) + ' · 访问 ' + a.accessCount + ' 次</div>'
+      + '<div class="linkbox"><span>' + esc("https://synapse.d2.pub/files/" + a.id) + '</span>'
+      + '<button class="row-more" style="display:grid" data-act="copy" data-id="asset">'
+      + '<span style="color:var(--blue);display:grid;place-items:center;width:20px;height:20px">' + G.docPlain + '</span></button></div>'
+      + '<div class="sec">'
+      + li("asset-rename", a.id, G.pencil, "重命名")
+      + '</div>'
+      + '<div class="sec"><button class="li destructive" data-act="asset-delete" data-id="'
+      + a.id + '">' + G.trash + '<span class="t">删除</span></button></div>'
+      + '<div class="btns"><button class="big-btn" data-act="copy" data-id="asset">拷贝直链</button>'
+      + '<button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "trashMenu"){
+    const t = trash.filter(function(x){ return x.id === s.data.id; })[0];
+    if (!t) return "";
+    inner = '<h3>' + esc(t.name) + '</h3>'
+      + '<div class="sh">原位置：' + esc(t.originalPath) + '</div>'
+      + '<div class="sec">'
+      + li("trash-restore", t.id, G.back, "恢复")
+      + '</div>'
+      + '<div class="sec"><button class="li destructive" data-act="ask-purge" data-id="' + t.id
+      + '">' + G.trash + '<span class="t">从回收站移除</span></button></div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  else if (s.kind === "shareRowMenu"){
+    const sh = shares.filter(function(x){ return x.shareId === s.data.shareId; })[0];
+    if (!sh) return "";
+    inner = '<h3>' + esc(sh.itemName) + '</h3>'
+      + '<div class="sh">' + (sh.expiresAt ? "有效期至 " + fmtDate(sh.expiresAt) : "永久有效")
+      + (sh.passwordEnabled ? " · 有密码" : "") + '</div>'
+      + '<div class="sec">'
+      + li("share-copy", sh.shareId, G.docPlain, "拷贝链接")
+      + '</div>'
+      + '<div class="sec"><button class="li destructive" data-act="stop-share-row" data-id="'
+      + sh.shareId + '">' + G.link + '<span class="t">停止分享</span></button></div>'
+      + '<div class="btns"><button class="big-btn sec2" data-act="close-sheet">取消</button></div>';
+  }
+  return '<div class="scrim on" data-act="close-sheet"></div>'
+    + '<div class="sheet on">' + inner + '</div>';
+}
+function li(act, id, icon, title, value){
+  return '<button class="li" data-act="' + act + '" data-id="' + (id || "") + '">'
+    + icon + '<span class="t">' + title + '</span>'
+    + (value ? '<span class="v">' + value + '</span>' : '') + '</button>';
+}
+
+/* ============================================================
+   渲染入口
+   ============================================================ */
+const NOTES = {
+  home: "云盘是主页「功能」里的第二行，与录音并排。底栏仍然只有三格 —— 这是布局规则第 8 条的硬约束，所以新能力只能长在这里。",
+  browser: "云盘主屏。文件夹在前，然后按当前排序。行副标题是「大小 · 修改时间」，行尾的链接符号表示这一项已经有活跃分享。列表末尾两个入口是「位置」不是动作，所以放在列表里；工具栏留给真正的动作。",
+  trash: "回收站。行副标题是「原路径 · 移入时间」—— 恢复时要先知道它会回到哪去。",
+  assets: "公开素材是平铺的（服务端规定允许重名、不建层级），行副标题给的是访问次数与最近访问时间。",
+  shares: "分享管理。行副标题把三种访问权限与有效期写全，因为那正是用户要分辨的东西。"
+};
+const HINTS = {
+  home: ["点「云盘」进入", "底栏三格固定不变"],
+  browser: ["点文件夹下钻，点面包屑回跳", "点行尾 ⌄⌄ 或长按出菜单",
+            "左滑一行出「删除」", "右上「···」里有新建文件夹、上传、排序、选择",
+            "列表末尾进回收站与公开素材"],
+  trash: ["点一行出「恢复 / 从回收站移除」"],
+  assets: ["点一行看直链与重命名、删除"],
+  shares: ["点一行可以拷贝链接或停止分享"]
+};
+
+function render(){
+  document.getElementById("screen-host").innerHTML =
+    st.view === "home" ? homeHTML()
+    : st.view === "trash" ? trashHTML()
+    : st.view === "assets" ? assetsHTML()
+    : st.view === "shares" ? sharesHTML()
+    : (st.device === "ipad" ? splitHTML() : browserHTML());
+  ovHost.innerHTML = sheetHTML();
+  const note = NOTES[st.view] || "";
+  document.getElementById("note").textContent =
+    st.sheet ? sheetNote() : note;
+  const hints = st.sheet ? ["浮层打开时其余界面不可点", "点浮层外或「取消」收起"]
+                         : (HINTS[st.view] || []);
+  document.getElementById("hints").innerHTML =
+    hints.map(function(x){ return "<li>" + x + "</li>"; }).join("");
+  const inp = document.getElementById("name-input");
+  if (inp){ inp.focus(); inp.select(); }
+}
+function sheetNote(){
+  const k = st.sheet.kind;
+  return {
+    menu: "长按行的上下文菜单。动作按可用性置灰而不是隐藏 —— 隐藏会让菜单位置随内容跳动。",
+    toolbar: "工具栏「···」。三个动作 + 三个开关。分享管理放在这里是因为它不是「位置」而是对分享集合的管理。",
+    sort: "排序是本地视图偏好，服务端列表没有排序参数。默认「名称升序」与服务端的自然顺序一致。",
+    rename: "重命名。只改名字，内容与版本不动。",
+    newfolder: "新建文件夹。建在当前这一层。",
+    move: "移动目标选择器。可以一层层走下去，底部「移到这一层」确认当前层。",
+    share: "分享设置。三段：有效期、访问权限、密码。只传用户显式改过的设置，其余交给服务端默认值。",
+    shareResult: "结果页给出两条链接：普通链接与带密码链接。已有分享时不会重复创建。",
+    info: "显示简介。列表里放不下的都在这里，位置一栏给完整路径。",
+    preview: "紧凑窗下预览是一页（宽窗下它在右边那一列）。文本与 Markdown 原生渲染，其余交给 QuickLook。",
+    upload: "三个来源与终端文件接力用的是同一套 picker。上传是预签名直传，不经过 Synapse 服务器中转。",
+    confirm: "破坏性操作一律二次确认。",
+    assetMenu: "公开素材的直链。它是扁平的，允许重名，每次上传都会得到一个新的 assetId。",
+    trashMenu: "回收站条目的两个动作。移除是不可撤销的，所以要红字。",
+    shareRowMenu: "分享管理里的一条。停止分享不会删除文件本身。"
+  }[k] || "";
+}
+
+/* ============================================================
+   行为
+   ============================================================ */
+function toast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.getElementById("device").appendChild(t);
+  requestAnimationFrame(function(){ t.classList.add("on"); });
+  setTimeout(function(){
+    t.classList.remove("on");
+    setTimeout(function(){ t.remove(); }, 240);
+  }, 1700);
+}
+/// `form` 提到顶层：渲染函数读 `s.form`，事件处理读 `st.sheet.form`，
+/// 两处都从同一个位置取，省得分享表单里的每次点击都要先钻进 data。
+function open(kind, data){
+  st.sheet = {kind:kind, data:data, form: data ? data.form : undefined};
+  render();
+}
+function close(){ st.sheet = null; render(); }
+function after250(){ }
+
+const SHARE_EXP_DAYS = {'3d':3,'7d':7,'30d':30,'1y':365,'forever':null};
+const SHARE_CHARS = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
+function makeShareId(){
+  let s = "shr_";
+  for (let i=0;i<32;i++) s += SHARE_CHARS[Math.floor(Math.random()*SHARE_CHARS.length)];
+  return s;
+}
+function makePassword(){
+  let s = "";
+  for (let i=0;i<8;i++) s += SHARE_CHARS[Math.floor(Math.random()*SHARE_CHARS.length)];
+  return s;
+}
+function shareUrl(shareId){ return "https://synapse.d2.pub/share/" + shareId; }
+
+function selectFor(id){
+  if (st.editing){
+    if (st.sel.has(id)) st.sel.delete(id); else st.sel.add(id);
+    render(); return;
+  }
+  const it = findItem(id);
+  if (!it) return;
+  if (it.type === "folder"){
+    st.path.push(it.id);
+    st.editing = false; st.sel = new Set();
+    st.picked = null;          // 下钻后预览列的选中项不再属于这一层
+    render(); return;
+  }
+  st.picked = it.id;
+  if (st.device === "ipad"){ render(); }
+  else { open("preview", {it: it}); }
+}
+
+function startUpload(name){
+  const u = {id: "u" + (++SEQ), name: name, progress: 0,
+             ext: extOf(name)};
+  uploads.push(u);
+  const target = st.path.length ? st.path[st.path.length-1] : null;
+  const it = {id: uid(), parent: target, type: "file", name: name,
+              size: 262144 + Math.floor(Math.random()*2000000),
+              updated: "2026-09-25T09:41:00"};
+  items.push(it);
+  render();
+  const timer = setInterval(function(){
+    u.progress = Math.min(1, u.progress + 0.06 + Math.random()*0.1);
+    if (u.progress >= 1){
+      clearInterval(timer);
+      setTimeout(function(){
+        uploads = uploads.filter(function(x){ return x.id !== u.id; });
+        render();
+        toast("已上传 " + name);
+      }, 550);
+    }
+    render();
+  }, 210);
+  return u;
+}
+
+function handle(act, id){
+  const it = id && id.indexOf("shr_") !== 0 && findItem(id);
+
+  switch(act){
+    case "noop": return;
+
+    /* 导航 */
+    case "to-home":  st.view = "home"; st.sheet = null; render(); return;
+    case "to-drive": st.view = "browser"; st.path = []; st.sheet = null;
+                     st.editing = false; st.sel = new Set(); st.picked = null; render(); return;
+    case "to-trash": st.view = "trash"; st.sheet = null; render(); return;
+    case "to-assets":st.view = "assets"; st.sheet = null; render(); return;
+    case "to-shares":st.view = "shares"; st.sheet = null; render(); return;
+    case "up":       st.path.pop(); st.picked = null;
+                     st.editing = false; st.sel = new Set(); render(); return;
+    case "go-root":  st.path = []; st.picked = null;
+                     st.editing = false; st.sel = new Set(); render(); return;
+    case "go":       {
+      const i = st.path.indexOf(id);
+      if (i >= 0) st.path = st.path.slice(0, i+1);
+      st.picked = null;
+      st.editing = false; st.sel = new Set(); render(); return;
+    }
+    case "row":      selectFor(id); return;
+    case "toggle":   selectFor(id); return;
+    case "open-folder": {
+      st.sheet = null; st.path.push(id); st.picked = null; render(); return;
+    }
+    case "menu":     open("menu", {id:id}); return;
+    case "menu-toolbar": open("toolbar", {}); return;
+    case "close-sheet": close(); return;
+
+    /* 排序 */
+    case "ask-sort": open("sort", {}); return;
+    case "set-sort": st.sort = id; st.sheet = null; render(); return;
+    case "set-dir":  st.asc = (id === "asc"); st.sheet = null; render(); return;
+
+    /* 选择 */
+    case "ask-select": {
+      st.editing = !st.editing; st.sel = new Set(); st.sheet = null; render(); return;
+    }
+
+    /* 新建 / 重命名 */
+    case "ask-newfolder": open("newfolder", {}); return;
+    case "ask-rename":    open("rename", {id:id, name: (findItem(id)||{}).name}); return;
+    case "do-rename": {
+      const inp = document.getElementById("name-input");
+      const v = (inp && inp.value.trim()) || "";
+      if (!v){ toast("名称不能为空"); return; }
+      if (st.sheet.kind === "newfolder"){
+        const parent = st.path.length ? st.path[st.path.length-1] : null;
+        items.push({id: uid(), parent: parent, type: "folder", name: v,
+                    size: 0, updated: "2026-09-25T09:41:00"});
+        close(); render(); toast("已创建「" + v + "」");
+      } else {
+        const t = findItem(st.sheet.data.id);
+        if (t){ t.name = v; t.updated = "2026-09-25T09:41:00"; }
+        close(); render(); toast("已重命名");
+      }
+      return;
+    }
+
+    /* 移动 */
+    case "ask-move":
+      open("move", {id:id, ids: st.sel.size ? Array.from(st.sel) : [id], path: []});
+      return;
+    case "move-into": {
+      st.sheet.data.path = st.sheet.data.path.concat([id]);
+      render(); return;
+    }
+    case "move-up": st.sheet.data.path.pop(); render(); return;
+    case "move-here": {
+      const d = st.sheet.data;
+      const targetParent = d.path.length ? d.path[d.path.length-1] : null;
+      const ids = d.ids;
+      let moved = 0;
+      ids.forEach(function(x){
+        if (x === targetParent) return;
+        const t = findItem(x);
+        if (!t || t.type === "folder" && isAncestor(x, targetParent)) return;
+        t.parent = targetParent; t.updated = "2026-09-25T09:41:00"; moved++;
+      });
+      close(); st.editing = false; st.sel = new Set(); render();
+      toast("已移动 " + moved + " 项");
+      return;
+    }
+
+    /* 删除 */
+    case "ask-delete":
+      open("confirm", {id:id, title:"删除这项？", ok:"删除",
+        desc:"「" + esc((findItem(id)||{}).name || "") + "」会移到回收站，分享链接同时失效。",
+        confirm:"do-delete"});
+      return;
+    case "do-delete": {
+      const t = findItem(st.sheet.data.id);
+      if (t){
+        const kids = subtree(t.id);
+        kids.forEach(function(k){
+          const sh = shareOf(k.id);
+          if (sh) sh.enabled = false;
+          trash.push({id: "tr-" + (++SEQ), kind:"normal", type: k.type, name: k.name,
+            size: k.size, originalPath: pathText(k), trashedAt: "2026-09-25T09:41:00"});
+        });
+        items = items.filter(function(x){ return kids.indexOf(x) < 0; });
+        st.picked = null;
+      }
+      close(); render(); toast("已移到回收站");
+      return;
+    }
+    case "sel-delete": {
+      const n = st.sel.size;
+      // 先把所有要走的 id 收齐再动手：选中的既有文件夹又有它里面的东西时，
+      // 一边删一边算子树会漏掉后面那些。
+      const doomed = [];
+      st.sel.forEach(function(x){
+        subtree(x).forEach(function(k){ if (doomed.indexOf(k.id) < 0) doomed.push(k.id); });
+      });
+      doomed.forEach(function(x){
+        const k = findItem(x);
+        if (!k) return;
+        const sh = shareOf(k.id);
+        if (sh) sh.enabled = false;
+        trash.push({id: "tr-" + (++SEQ), kind:"normal", type:k.type, name:k.name,
+          size:k.size, originalPath: pathText(k), trashedAt:"2026-09-25T09:41:00"});
+      });
+      items = items.filter(function(y){ return doomed.indexOf(y.id) < 0; });
+      st.picked = null;
+      st.editing = false; st.sel = new Set(); render();
+      toast("已删除 " + n + " 项");
+      return;
+    }
+    case "sel-move":
+      open("move", {id: Array.from(st.sel)[0], ids: Array.from(st.sel), path: []});
+      return;
+    case "sel-export": {
+      const n = st.sel.size;
+      st.editing = false; st.sel = new Set(); render();
+      toast("已导出 " + n + " 项到「文件」");
+      return;
+    }
+    case "ask-export": {
+      const t = findItem(id);
+      close();
+      toast(t && t.type === "folder"
+        ? "服务端打包 zip 后交给分享面板"
+        : "下载完成后交给分享面板");
+      return;
+    }
+
+    /* 分享 */
+    case "ask-share": {
+      const t = findItem(id);
+      const exist = shareOf(id);
+      if (exist){
+        close();
+        setTimeout(function(){
+          open("shareResult", {share: exist, url: shareUrl(exist.shareId),
+            urlPwd: shareUrl(exist.shareId) + "?password=K7M2QX9T", password:"K7M2QX9T"});
+        }, 60);
+        return;
+      }
+      open("share", {id:id, name:t.name,
+        form:{expiresIn:"forever", accessMode:"link_read", passwordEnabled:false}});
+      return;
+    }
+    /* 下面四个只可能从「分享」那张表单里发出；带守卫是为了让误触发变成无事发生，
+       而不是一次崩溃。 */
+    case "set-exp":
+      if (!st.sheet || !st.sheet.form) return;
+      st.sheet.form.expiresIn = id; render(); return;
+    case "set-mode":
+      if (!st.sheet || !st.sheet.form) return;
+      st.sheet.form.accessMode = id; render(); return;
+    case "toggle-pwd":
+      if (!st.sheet || !st.sheet.form) return;
+      st.sheet.form.passwordEnabled = !st.sheet.form.passwordEnabled; render(); return;
+    case "do-share": {
+      if (!st.sheet || !st.sheet.data || !st.sheet.form) return;
+      const d = st.sheet.data, f = st.sheet.form;
+      const t = findItem(d.id);
+      const days = SHARE_EXP_DAYS[f.expiresIn];
+      const sh = {shareId: makeShareId(), itemId: d.id, itemName: t.name,
+        accessMode: f.accessMode, passwordEnabled: f.passwordEnabled,
+        expiresAt: days ? "2026-10-25T00:00:00" : null, enabled: true};
+      shares.push(sh);
+      const pw = makePassword();
+      st.sheet = null;
+      render();
+      setTimeout(function(){
+        open("shareResult", {share: sh, url: shareUrl(sh.shareId),
+          urlPwd: shareUrl(sh.shareId) + "?password=" + pw, password: pw});
+      }, 60);
+      return;
+    }
+    case "stop-share": {
+      const sh = st.sheet.data.share;
+      sh.enabled = false;
+      close(); render(); toast("已停止分享");
+      return;
+    }
+    case "stop-share-row": {
+      shares.forEach(function(s){ if (s.shareId === id) s.enabled = false; });
+      close(); render(); toast("已停止分享");
+      return;
+    }
+    case "share-copy": {
+      close(); toast("链接已拷贝");
+      return;
+    }
+    case "copy": case "copy-all": {
+      const d = st.sheet && st.sheet.data;
+      const val = id === "asset"
+        ? ("https://synapse.d2.pub/files/" + (d ? d.id : ""))
+        : (id === "urlPwd" ? d.urlPwd : d.url);
+      copyText(val || "");
+      toast("已拷贝到剪贴板");
+      return;
+    }
+
+    /* 简介 */
+    case "ask-info": open("info", {it: it}); return;
+
+    /* 预览 */
+    case "ask-preview": open("preview", {it: it}); return;
+
+    /* 上传 */
+    case "ask-upload": open("upload", {}); return;
+    case "up-file":   close(); startUpload("设计规范-v3.pdf"); return;
+    case "up-photo":  close(); startUpload("IMG_2481.HEIC"); return;
+    case "up-camera": close(); startUpload("IMG_2482.JPG"); return;
+    case "cancel-up": {
+      uploads = uploads.filter(function(x){ return x.id !== id; });
+      render(); toast("已取消上传，配额已释放");
+      return;
+    }
+
+    /* 回收站 */
+    case "trash-row": open("trashMenu", {id:id}); return;
+    case "trash-restore": {
+      const t = trash.filter(function(x){ return x.id === id; })[0];
+      if (t){
+        const parts = t.originalPath.split("/");
+        const nm = parts.pop();
+        let parent = null;
+        if (parts.length){
+          const f = items.filter(function(x){
+            return x.type === "folder" && x.name === parts[parts.length-1];
+          })[0];
+          parent = f ? f.id : null;
+        }
+        items.push({id: uid(), parent: parent, type: t.type, name: nm,
+          size: t.size, updated: "2026-09-25T09:41:00"});
+        trash = trash.filter(function(x){ return x.id !== id; });
+      }
+      close(); render(); toast("已恢复到原位置");
+      return;
+    }
+    case "ask-purge":
+      open("confirm", {id:id, title:"从回收站移除？", ok:"移除",
+        desc:"移除后这一项不再出现在回收站里，此操作不可撤销。", confirm:"do-purge"});
+      return;
+    case "do-purge": {
+      trash = trash.filter(function(x){ return x.id !== st.sheet.data.id; });
+      close(); render(); toast("已从回收站移除");
+      return;
+    }
+
+    /* 公开素材 */
+    case "asset-row": open("assetMenu", {id:id}); return;
+    case "asset-rename": {
+      const a = assets.filter(function(x){ return x.id === id; })[0];
+      if (a) a.name = a.name.replace(/\.(\w+)$/, "-v2.$1");
+      close(); render(); toast("已重命名");
+      return;
+    }
+    case "asset-delete": {
+      const a = assets.filter(function(x){ return x.id === id; })[0];
+      if (a){
+        trash.push({id:"tr-"+(++SEQ), kind:"public_asset", type:"file", name:a.name,
+          size:a.size, originalPath:"公开素材", assetId:a.id,
+          trashedAt:"2026-09-25T09:41:00"});
+        assets = assets.filter(function(x){ return x.id !== id; });
+      }
+      close(); render(); toast("已移到回收站");
+      return;
+    }
+  }
+}
+
+function subtree(id){
+  const out = [id];
+  for (let i=0;i<out.length;i++){
+    items.forEach(function(x){ if (x.parent === out[i] && out.indexOf(x.id) < 0) out.push(x.id); });
+  }
+  return out.map(function(x){ return findItem(x); }).filter(Boolean);
+}
+function isAncestor(maybeAncestor, node){
+  let cur = findItem(node);
+  while (cur){ if (cur.id === maybeAncestor) return true; cur = findItem(cur.parent); }
+  return false;
+}
+function pathText(it){
+  const p = pathOf(it.parent).map(function(x){ return x.name; });
+  return (p.length ? p.join("/") + "/" : "") + it.name;
+}
+function copyText(s){
+  try{
+    const ta = document.createElement("textarea");
+    ta.value = s; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }catch(e){ /* 演示用，忽略 */ }
+}
+
+/* ---------- 事件 ---------- */
+document.getElementById("device").addEventListener("click", function(e){
+  const row = e.target.closest(".row");
+  if (row && row.classList.contains("open") && !e.target.closest("[data-act='ask-delete']")){
+    row.classList.remove("open"); return;
+  }
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  handle(el.dataset.act, el.dataset.id || "");
+});
+
+/* 长按出菜单 */
+(function(){
+  let timer = null, moved = false;
+  const dev = document.getElementById("device");
+  dev.addEventListener("pointerdown", function(e){
+    const content = e.target.closest(".row-content");
+    if (!content || st.editing) return;
+    const id = content.dataset.id;
+    moved = false;
+    timer = setTimeout(function(){
+      timer = null;
+      if (!moved) open("menu", {id:id});
+    }, 480);
+  });
+  dev.addEventListener("pointermove", function(e){
+    if (e.movementX || e.movementY) moved = true;
+    if (moved && timer){ clearTimeout(timer); timer = null; }
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(function(ev){
+    dev.addEventListener(ev, function(){
+      if (timer){ clearTimeout(timer); timer = null; }
+    });
+  });
+})();
+
+/* 右键 = 同一个上下文菜单（桌面浏览器的习惯路径） */
+document.getElementById("device").addEventListener("contextmenu", function(e){
+  const content = e.target.closest(".row-content");
+  if (!content || st.editing) return;
+  e.preventDefault();
+  open("menu", {id: content.dataset.id});
+});
+
+/* 左滑 */
+(function(){
+  const dev = document.getElementById("device");
+  let cur = null, startX = 0, dx = 0, active = false;
+  dev.addEventListener("pointerdown", function(e){
+    const content = e.target.closest(".row-content");
+    if (!content || st.editing) return;
+    const row = content.parentElement;
+    if (!row.querySelector(".row-actions")) return;
+    if (row.classList.contains("open")) return;
+    cur = row; startX = e.clientX; dx = 0; active = true;
+  });
+  dev.addEventListener("pointermove", function(e){
+    if (!active || !cur) return;
+    dx = e.clientX - startX;
+    if (dx < 0 && dx > -110){
+      cur.querySelector(".row-content").style.transition = "none";
+      cur.querySelector(".row-content").style.transform = "translateX(" + dx + "px)";
+    }
+  });
+  function end(){
+    if (!active || !cur) return;
+    const content = cur.querySelector(".row-content");
+    content.style.transition = "";
+    content.style.transform = "";
+    if (dx < -56) cur.classList.add("open");
+    cur = null; active = false; dx = 0;
+  }
+  dev.addEventListener("pointerup", end);
+  dev.addEventListener("pointercancel", end);
+  dev.addEventListener("pointerleave", end);
+})();
+
+/* ---------- 顶部控制 ---------- */
+function setDevice(d){
+  st.device = d;
+  const dev = document.getElementById("device");
+  dev.className = "device " + d;
+  document.getElementById("btn-iphone").classList.toggle("on", d === "iphone");
+  document.getElementById("btn-ipad").classList.toggle("on", d === "ipad");
+  render();
+}
+document.getElementById("btn-iphone").onclick = function(){ setDevice("iphone"); };
+document.getElementById("btn-ipad").onclick = function(){ setDevice("ipad"); };
+document.getElementById("btn-reset").onclick = function(){ resetAll(); };
+
+document.getElementById("btn-appearance").onclick = function(){
+  const cur = document.documentElement.getAttribute("data-appearance");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-appearance", next);
+  this.textContent = next === "dark" ? "浅色" : "深色";
+  this.classList.toggle("on", next === "dark");
+};
+
+document.querySelectorAll("[data-jump]").forEach(function(b){
+  b.onclick = function(){
+    const v = b.dataset.jump;
+    document.querySelectorAll("[data-jump]").forEach(function(x){ x.classList.remove("on"); });
+    b.classList.add("on");
+    st.sheet = null; st.editing = false; st.sel = new Set();
+    if (v === "home") st.view = "home";
+    else if (v === "browser"){ st.view = "browser"; st.path = []; }
+    else st.view = v;
+    render();
+  };
+});
+
+document.querySelectorAll(".js-jump").forEach(function(a){
+  a.onclick = function(){
+    document.querySelectorAll(".js-jump").forEach(function(x){ x.classList.remove("on"); });
+    a.classList.add("on");
+  };
+});
+
+/* 初始化 */
+resetAll();
+</script>
+</body>
+</html>
