@@ -365,6 +365,13 @@ final class SynapseAppModel {
     let meetings = MeetingStore()
     let notifications = NotificationStore()
 
+    /// 云盘。
+    ///
+    /// 与录音一样直连服务端，不经过任何一台电脑；它也不是「电脑的远程视图」，所以不挂在
+    /// `terminalStores` 那一套里。浏览状态、排序偏好都在 `DriveStore` 上，从 Task 6 起的
+    /// 每一屏都从这里取数据。
+    let drive = DriveStore()
+
     /// 正在录的那一条。
     ///
     /// 挂在模型上而不是录音页上，因为它比那一屏活得久：录音页收起之后它还要继续录，
@@ -519,6 +526,8 @@ final class SynapseAppModel {
         gitStatus.reset()
         // 录音是另一个账号的东西，换人之后不该还留在内存里。
         meetings.clear()
+        // 云盘同理，而且它连着的是一整棵目录：换个人登进来不该看到上一个人的文件夹名。
+        drive.clear()
         // 正在录的那条也是。录着的时候退出登录，本机那份音频留在盘上等下次启动收尾——
         // 但那个账号已经登不上了，收尾会失败，文件也就一直躺着。
         if recording.isRecording { recording.cancel() }
