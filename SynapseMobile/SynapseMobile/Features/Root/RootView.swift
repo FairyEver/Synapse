@@ -4,14 +4,23 @@ import UserNotifications
 struct RootView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    /// 通知里带外链的那一种要交回给系统去开。
+    @Environment(\.openURL) private var openURL
     /// 胶囊的浮出与收起是纯装饰，别的地方（`NoticeBar`、终端那几条栏）都已经照这个
     /// 开关做了，这一处漏了。
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedTab = Tab.terminals
+    @State private var selectedTab = Tab.home
     @State private var terminalSelection: String?
+    /// 主页那一路的栈，和它记着的录音选择。
+    ///
+    /// 两样都归主页 —— 录音列表住在主页里。而**栈本身放在这里**：推送、Widget 和主屏
+    /// 快捷方式带来的深链要能把主页直接推到某一屏上，那些请求不是从主页里发出来的。
+    @State private var homePath: [HomeRoute] = []
     @State private var meetingSelection: String?
-    @State private var inboxSelection: String?
     @State private var settingsSelection: SettingsCategory?
+    /// 通知面板。它挂在根上，因为有两个入口打开的是同一个面板：主页右上角的铃铛，
+    /// 和「我的 → 通知」。
+    @State private var showingNotifications = false
     @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
     /// 一个还没能判定的打开终端请求。
     ///
@@ -20,8 +29,12 @@ struct RootView: View {
     /// 等下一份列表到了再判 —— 丢掉它就等于把用户点的那一下当作没发生。
     @State private var pendingTerminalOpen: PendingTerminalOpen?
 
+    /// 底栏的三格，并且**从此不再增加**。
+    ///
+    /// 位置是稀缺资源，功能不是：新能力一律进「主页 → 功能」，见
+    /// `docs/agents/mobile-adaptive-layout.md`。
     private enum Tab: Hashable {
-        case terminals, meetings, inbox, settings
+        case home, terminals, settings
     }
 
     var body: some View {
@@ -81,13 +94,14 @@ struct RootView: View {
         .onChange(of: model.authState) { _, state in
             if state == .signedOut {
                 terminalSelection = nil
+                homePath = []
                 meetingSelection = nil
-                inboxSelection = nil
                 settingsSelection = nil
+                showingNotifications = false
                 // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
                 // 哪台电脑都无从谈起。
                 pendingTerminalOpen = nil
-                selectedTab = .terminals
+                selectedTab = .home
             }
             resolveExternalTerminalRequests()
         }
@@ -155,19 +169,35 @@ struct RootView: View {
 
     private func popToRoot(_ tab: Tab) {
         switch tab {
+        case .home:
+            // 回到主页的顶上：栈清空，那一路记着的录音选择也一并作废。
+            homePath = []
+            meetingSelection = nil
         case .terminals:
             terminalSelection = nil
             // 「回到这一屏的列表」把等着的那个打开请求也一并作废：人已经往下走了，
             // 再把他拽进一个终端页不是他要的。
             pendingTerminalOpen = nil
-        case .meetings: meetingSelection = nil
-        case .inbox: inboxSelection = nil
         case .settings: settingsSelection = nil
         }
     }
 
     private var tabs: some View {
         TabView(selection: tabSelection) {
+            HomeView(
+                path: $homePath,
+                meetingSelection: $meetingSelection,
+                onOpenTerminal: { requestTerminal($0, from: .homePending) },
+                onOpenCreated: openNewlyCreatedFromHome,
+                onOpenNotifications: { showingNotifications = true }
+            )
+            .tabItem { Label("主页", systemImage: "house") }
+            // 未读角标也落在这一格上：铃铛只在主页里看得见，而人在别的屏上时同样该知道
+            // 有人在等。这是全应用唯一一处不跟着 `Theme.attention` 走的提示 —— 系统 tab
+            // 角标由 iOS 自己着色，改不了。
+            .badge(model.notifications.unreadCount)
+            .tag(Tab.home)
+
             AdaptiveFeatureNavigation(
                 selection: terminalEntry,
                 emptyTitle: "选择会话",
@@ -182,36 +212,6 @@ struct RootView: View {
             .tabItem { Label("终端", systemImage: "terminal") }
             .tag(Tab.terminals)
 
-            AdaptiveFeatureNavigation(
-                selection: $meetingSelection,
-                emptyTitle: "选择录音",
-                emptySymbol: "waveform"
-            ) {
-                MeetingListView(selection: $meetingSelection)
-            } detail: { meetingId in
-                MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
-            }
-            .tabItem { Label("录音", systemImage: "waveform") }
-            .tag(Tab.meetings)
-
-            AdaptiveFeatureNavigation(
-                selection: $inboxSelection,
-                emptyTitle: "选择消息",
-                emptySymbol: "bell"
-            ) {
-                InboxView(selection: $inboxSelection) { sessionId in
-                    selectedTab = .terminals
-                    // 走同一道闸门：待处理那一行是从列表上取的，本来就在，但它可能在
-                    // 「这一行画出来」和「手指落下去」之间结束掉。
-                    requestTerminal(sessionId, from: .inboxRecord)
-                }
-            } detail: { id in
-                NotificationDetailView(id: id)
-            }
-            .tabItem { Label("消息", systemImage: "bell") }
-            .badge(model.notifications.unreadCount)
-            .tag(Tab.inbox)
-
             AdaptiveSettingsView(selection: $settingsSelection) {
                 terminalSelection = nil
             }
@@ -219,6 +219,22 @@ struct RootView: View {
             .tag(Tab.settings)
         }
         .tabViewStyle(.sidebarAdaptable)
+        .sheet(isPresented: $showingNotifications) {
+            NotificationPanel(
+                onOpen: { open($0, from: .inboxRecord) },
+                onOpenTerminal: openPendingSession
+            )
+        }
+    }
+
+    /// 从通知面板的「待处理」那一段进终端。
+    ///
+    /// 和主页那张卡是同一条路、同一份数据（实时会话列表），所以也走同一道闸门：那一行可能
+    /// 在「画出来」和「手指落下去」之间结束掉。
+    private func openPendingSession(_ sessionId: String) {
+        showingNotifications = false
+        selectedTab = .terminals
+        requestTerminal(sessionId, from: .homePending)
     }
 
     /// Sends a notification tap straight to the terminal that needs attention.
@@ -243,25 +259,18 @@ struct RootView: View {
             }
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
-            selectedTab = .meetings
-            meetingSelection = meetingId
+            openRecording(meetingId)
         case .message(let id):
-            selectedTab = .inbox
-            Task {
-                await model.reloadNotifications()
-                inboxSelection = id
-            }
+            openNotification(id)
         case .newRecording:
-            // 主屏长按图标那一条。先把人带到录音 Tab，再让录音页自己浮出来——否则
+            // 主屏长按图标那一条。先把人带到录音列表，再让录音页自己浮出来——否则
             // 用户看到的是一片别的界面盖着一张录音页，退出之后不知道自己回到了哪。
-            selectedTab = .meetings
-            meetingSelection = nil
+            openRecording(nil)
             model.isRecordingPresented = true
         case .liveRecording:
-            // 锁屏那张卡。同样先落到录音 Tab，但**只在真的在录的时候**才把录音页浮
+            // 锁屏那张卡。同样先落到录音列表，但**只在真的在录的时候**才把录音页浮
             // 出来：起新录音是 `.newRecording` 的事，这里只负责把人带到那一条跟前。
-            selectedTab = .meetings
-            meetingSelection = nil
+            openRecording(nil)
             if model.recording.isRecording {
                 model.isRecordingPresented = true
             } else {
@@ -270,6 +279,58 @@ struct RootView: View {
                 // 那条已经不作数的活动收掉，不凭空起一条新的。
                 Task { await RecordingActivityHousekeeping.endOrphans() }
             }
+        }
+    }
+
+    /// 把人送到主页 → 录音列表，落在某一条录音上（`nil` 就是落在列表上）。
+    ///
+    /// 深链里所有「看录音」的落点都从这一个函数过：录音不在底栏上了，它在主页的栈里，
+    /// 而栈是由根视图拿着的那一条 `homePath`。
+    private func openRecording(_ meetingId: String?) {
+        selectedTab = .home
+        meetingSelection = meetingId
+        homePath = [.meetings]
+    }
+
+    /// 一条通知被点开，但只有它的 id。
+    ///
+    /// 先把记录捞回来，再按它自己的目标去 —— 冷启动时本地一条通知都没有，而那条记录
+    /// 就在服务端。捞不到（被删了、或者换了账号）就把人送到通知面板：这条记录已经不在
+    /// 了，让他自己看一眼现在有什么，好过落在一块说不出话的空屏上。
+    private func openNotification(_ id: String) {
+        Task {
+            await model.reloadNotifications()
+            guard let item = model.notifications.items.first(where: { $0.id == id }) else {
+                selectedTab = .home
+                showingNotifications = true
+                return
+            }
+            open(item, from: .pushNotification)
+        }
+    }
+
+    /// 一条通知把它的人带去哪里。
+    ///
+    /// 通知的价值在「带你去哪」，所以这里读的是**这条通知自己的目标**，而不是某个
+    /// 「消息」的位置。面板里点一行、推送点开，走的都是这一个函数。
+    private func open(_ item: SynapseNotification, from origin: TerminalOpenOrigin) {
+        showingNotifications = false
+        // 打开即已读：它已经把人带到了要去的地方，再留一个未读点没有意义。
+        Task { await model.readNotification(item.id) }
+
+        if item.source == "terminal-attention" || item.source == "terminal-complete",
+           let target = item.targetId {
+            // Naming a computer is the record saying which one it means, so this is
+            // honoured even when that computer is not reachable —— 和推送那条路同一个姿势。
+            if let device = item.deviceId { model.selectDesktop(device) }
+            selectedTab = .terminals
+            if !model.viewedDesktopIsOffline {
+                requestTerminal(target, on: item.deviceId, from: origin)
+            }
+        } else if item.source == "meeting-transcription", let target = item.targetId {
+            openRecording(target)
+        } else if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
+            openURL(url)
         }
     }
 
@@ -342,6 +403,16 @@ struct RootView: View {
     private func openFreshTerminal(_ sessionId: String) {
         pendingTerminalOpen = nil
         terminalSelection = sessionId
+    }
+
+    /// 主页上刚建出来的那个终端。
+    ///
+    /// 和终端那一页建出来的是同一样东西，只是按下按钮的那一屏不在终端里 —— 所以要先把人
+    /// 带到终端那一格，再打开它。不切的话，用户会停在自己刚建出终端的那个清单上，而终端
+    /// 在另一格里。
+    private func openNewlyCreatedFromHome(_ sessionId: String) {
+        selectedTab = .terminals
+        openFreshTerminal(sessionId)
     }
 
     /// 判定那个还没能判定的请求。列表、连接、登录态任一变一次都会走这里。

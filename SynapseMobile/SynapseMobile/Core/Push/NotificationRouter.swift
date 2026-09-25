@@ -57,8 +57,8 @@ final class NotificationRouter {
 
 /// 一次「打开终端」请求是从哪条路来的。
 ///
-/// 手机上有五条路能进终端页（见 `TerminalOpenability`），而**只有会话列表那一行是当场取
-/// 会话号的**：另外四条带的都是某一刻记下来的号，那条会话后来结束、被删都不会让那份记录
+/// 手机上有六条路能进终端页（见 `TerminalOpenability`），而**只有会话列表那一行是当场取
+/// 会话号的**：另外五条带的都是某一刻记下来的号，那条会话后来结束、被删都不会让那份记录
 /// 失效。于是判据拒绝一次请求时，「是哪条路在问」就成了排查里唯一还没有答案的那一格 ——
 /// 它区分的是「一条旧通知 / 旧记录 / 小组件快照在问一个已经结束的会话」（上一版设计里
 /// 预料到的事，文案本身没说错），与「会话列表这条路自己出了问题」（判据或列表有缺陷，
@@ -72,14 +72,20 @@ enum TerminalOpenOrigin: String, Equatable, Sendable {
     case sessionList
     /// 点了一条推送通知。
     case pushNotification
-    /// 「消息」里一条记录上的「打开终端」。
+    /// 通知面板里点了一条记录。
     case inboxRecord
     /// 桌面小组件的一行。它带的是快照那一刻的会话号，本来就可能已经旧了。
     case homeWidget
     /// 上一份列表还没到时排下的那个请求，现在轮到它了。
     case queuedRequest
+    /// 主页那张「有会话在等你」的卡片。
+    ///
+    /// 和 `inboxRecord` 分开记，是因为两者的数据来源根本不同：这一条读的是**实时的会话
+    /// 列表**（和会话列表那一行同源、同一次刷新），而通知面板里那条来自一条某一刻写下的
+    /// 记录。判据拒绝时，前者几乎一定是这个人手快，后者才是设计里预料到的旧记录。
+    case homePending
 
-    /// 记录里用哪个标签。五个入口各有自己的词：混成一个，就分不出「列表这条路出了问题」
+    /// 记录里用哪个标签。每个入口各有自己的词：混成一个，就分不出「列表这条路出了问题」
     /// 和「一条旧记录在问」——而这正是这条记录要回答的那一件事。
     var diagnosticFlag: DiagnosticFlag {
         switch self {
@@ -88,6 +94,7 @@ enum TerminalOpenOrigin: String, Equatable, Sendable {
         case .inboxRecord: .inboxRecord
         case .homeWidget: .homeWidget
         case .queuedRequest: .queuedRequest
+        case .homePending: .homePending
         }
     }
 }

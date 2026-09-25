@@ -44,7 +44,7 @@ final class NotificationStore {
             unreadCount = try await client.notificationUnreadCount()
             error = nil
         } catch {
-            self.error = "消息加载失败"
+            self.error = "通知加载失败"
         }
     }
 
@@ -63,7 +63,7 @@ final class NotificationStore {
         do {
             let item = try await client.notification(id)
             items.insert(item, at: 0)
-        } catch { self.error = "消息已失效" }
+        } catch { self.error = "通知已失效" }
     }
 
     func loadMore(using client: APIClient) async {

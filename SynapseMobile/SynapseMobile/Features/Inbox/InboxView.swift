@@ -1,6 +1,10 @@
 import SwiftUI
 
-/// 消息。
+/// 通知面板。
+///
+/// 它是一个**覆盖层，不是底栏的一个位置**：从主页右上角的铃铛打开，点一条就按它自己的
+/// 目标去（会话、录音、外链），面板同时关掉。所以这一屏没有详情页 —— 一条通知的价值在
+/// 「带你去哪」，不在读它的全文；正文进到行里。
 ///
 /// 筛选栏是列表里**自己一段**：这一行清了底色，于是它不成卡片，只在页面底色上占一条
 /// 带子，和下面那张卡片之间隔着这条带子自己的留白。分段控件切换的是这一屏的**子视图**
@@ -13,12 +17,14 @@ import SwiftUI
 /// 那两屏没有这条带子，标题都好好的——标题比钉住重要，带子回到列表里。
 struct InboxView: View {
     @Environment(SynapseAppModel.self) private var model
-    @Binding var selection: String?
+    /// 点了一条通知：按它自己的目标去。关掉面板是宿主的事 —— 这一屏不知道自己是被
+    /// 谁、以什么方式画出来的。
+    let onOpen: (SynapseNotification) -> Void
     let onOpenTerminal: (String) -> Void
     @State private var filter = "pending"
 
     var body: some View {
-        List(selection: $selection) {
+        List {
             if let error = model.notifications.error {
                 Section {
                     Text(error)
@@ -78,7 +84,7 @@ struct InboxView: View {
             if filter == "pending" { await model.refreshDesktops() }
             else { await model.reloadNotifications(filter: filter) }
         }
-        .navigationTitle("消息")
+        .navigationTitle("通知")
         .toolbar {
             if filter != "pending" {
                 Button("全部已读") { Task { await model.readAllNotifications() } }
@@ -118,17 +124,18 @@ struct InboxView: View {
     }
 
     private func notificationRow(_ item: SynapseNotification) -> some View {
-        // Detail rows use the split view's selection, keeping the list visible on iPad.
-        NavigationLink(value: item.id) {
+        // 行不是 `NavigationLink`：点它是**离开这一屏**，去这条通知记着的那个地方，
+        // 而不是往栈里再推一层。没有详情页可推，见这一屏的文档注释。
+        Button {
+            onOpen(item)
+        } label: {
             NotificationRow(item: item)
         }
+        .buttonStyle(.plain)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 Haptics.warning()
-                Task {
-                    await model.deleteNotification(item.id)
-                    if selection == item.id { selection = nil }
-                }
+                Task { await model.deleteNotification(item.id) }
             } label: {
                 Label("删除", systemImage: "trash")
             }
@@ -168,7 +175,7 @@ struct InboxView: View {
                 ProgressView()
             } else {
                 ContentUnavailableView(
-                    filter == "unread" ? "暂无未读消息" : "暂无消息",
+                    filter == "unread" ? "暂无未读通知" : "暂无通知",
                     systemImage: "bell"
                 )
             }
@@ -276,97 +283,5 @@ private struct WaitingSessionRow: View {
         case "agent_idle": return "已经跑完，在等你"
         default: return "正在等待你的回答"
         }
-    }
-}
-
-struct NotificationDetailView: View {
-    @Environment(SynapseAppModel.self) private var model
-    @Environment(\.openURL) private var openURL
-    @State private var loading = true
-    let id: String
-
-    var body: some View {
-        Group {
-            if let item = model.notifications.items.first(where: { $0.id == id }) {
-                List {
-                    Section {
-                        message(item)
-                    }
-                    if (item.source == "terminal-attention" || item.source == "terminal-complete"), let target = item.targetId {
-                        Section {
-                            Button("打开终端") {
-                                if let device = item.deviceId { model.selectDesktop(device) }
-                                NotificationRouter.shared.route(to: .terminal(
-                                    sessionId: target,
-                                    desktopClientInstanceId: item.deviceId ?? "",
-                                    entry: .inboxRecord
-                                ))
-                            }
-                        }
-                    } else if item.source == "meeting-transcription", let target = item.targetId {
-                        Section {
-                            Button("打开录音") { NotificationRouter.shared.route(to: .meeting(meetingId: target)) }
-                        }
-                    } else if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
-                        Section {
-                            Button("打开链接") { openURL(url) }
-                        }
-                    }
-                }
-                .frame(maxWidth: 760)
-                .frame(maxWidth: .infinity)
-            } else if loading {
-                ProgressView()
-            } else {
-                ContentUnavailableView("消息已失效", systemImage: "bell.slash")
-            }
-        }
-        .navigationTitle("消息")
-        .task {
-            await model.readNotification(id)
-            loading = false
-        }
-    }
-
-    /// 一条消息。
-    ///
-    /// 标题、分组与时间、正文三样在**同一行里**，不是三行。它们原来各占一行，而 `List`
-    /// 会给每一行画一条分隔线：一条消息看上去像三条互不相干的记录躺在同一张卡上，中间
-    /// 那行孤零零的分组名尤其像走错了地方。一条消息长得像一条消息，靠的是它内部没有
-    /// 分隔线，不是里面的字长得一样。
-    ///
-    /// 分组名只有外部接口发来的消息才有，它和时间同行，因为两者回答的是同一类问题
-    /// ——这条属于谁、什么时候来的；正文回答的是另一个，所以另起一段。
-    private func message(_ item: SynapseNotification) -> some View {
-        let meta = NotificationText.meta(group: item.group, createdAt: item.createdAt)
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(item.title)
-                .font(.headline)
-            if !meta.isEmpty {
-                Text(meta)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Text(item.body)
-                // 和元信息之间留出的这点空隙，是这一段里唯一一次「分开」的表达——详情页
-                // 里没有分隔线可用，靠的就是它。
-                .padding(.top, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { copy(item.body) }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("轻点复制正文")
-        }
-    }
-
-    /// 复制正文。触感和提示条与录音详情页的「复制全文」一致：同一件事在两处给同一种
-    /// 反馈，人才不必分别学。
-    ///
-    /// 没有开 `.textSelection`：长按选中和单击整段复制抢的是同一个手势，两个都要的
-    /// 结果是两个都不好用。点下去就是整段。
-    private func copy(_ body: String) {
-        Haptics.success()
-        UIPasteboard.general.string = body
-        model.notice("已复制正文")
     }
 }
