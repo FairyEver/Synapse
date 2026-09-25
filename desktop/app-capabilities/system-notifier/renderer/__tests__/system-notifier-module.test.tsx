@@ -6,12 +6,12 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const bridge = vi.hoisted(() => ({
-  get: vi.fn(async () => ({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })),
-  update: vi.fn(async (patch: { enabled?: boolean; silent?: boolean; syncToAccount?: boolean }) => ({
-    schemaVersion: 2,
-    enabled: patch.enabled ?? true,
+  get: vi.fn(async () => ({ schemaVersion: 3, localEnabled: true, silent: false, sendEnabled: true })),
+  update: vi.fn(async (patch: { localEnabled?: boolean; silent?: boolean; sendEnabled?: boolean }) => ({
+    schemaVersion: 3,
+    localEnabled: patch.localEnabled ?? true,
     silent: patch.silent ?? false,
-    syncToAccount: patch.syncToAccount ?? true,
+    sendEnabled: patch.sendEnabled ?? true,
   })),
   test: vi.fn(async () => ({ success: true })),
 }))
@@ -40,12 +40,12 @@ beforeEach(() => {
   bridge.get.mockClear()
   bridge.update.mockClear()
   bridge.test.mockClear()
-  bridge.get.mockResolvedValue({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })
+  bridge.get.mockResolvedValue({ schemaVersion: 3, localEnabled: true, silent: false, sendEnabled: true })
   bridge.update.mockImplementation(async (patch) => ({
-    schemaVersion: 2,
-    enabled: patch.enabled ?? true,
+    schemaVersion: 3,
+    localEnabled: patch.localEnabled ?? true,
     silent: patch.silent ?? false,
-    syncToAccount: patch.syncToAccount ?? true,
+    sendEnabled: patch.sendEnabled ?? true,
   }))
   bridge.test.mockResolvedValue({ success: true })
 })
@@ -69,19 +69,19 @@ describe("SystemNotifierModule", () => {
 
   it("auto-saves a switch and shows no success feedback", async () => {
     await renderModule()
-    const enabled = document.querySelector("#system-notifier-enabled") as HTMLButtonElement
+    const enabled = document.querySelector("#system-notifier-local") as HTMLButtonElement
     await act(async () => {
       enabled.click()
       await Promise.resolve()
     })
-    expect(bridge.update).toHaveBeenCalledWith({ enabled: false })
+    expect(bridge.update).toHaveBeenCalledWith({ localEnabled: false })
     expect(document.body.textContent).not.toContain("保存成功")
   })
 
   it("rolls back a failed save and shows only the required error", async () => {
     bridge.update.mockRejectedValueOnce(new Error("raw persistence detail"))
     await renderModule()
-    const enabled = document.querySelector("#system-notifier-enabled") as HTMLButtonElement
+    const enabled = document.querySelector("#system-notifier-local") as HTMLButtonElement
     expect(enabled.getAttribute("data-state")).toBe("checked")
 
     await act(async () => {
@@ -95,10 +95,10 @@ describe("SystemNotifierModule", () => {
   })
 
   it("disables settings and testing only while a save is pending", async () => {
-    const pending = deferred<{ schemaVersion: 2; enabled: boolean; silent: boolean; syncToAccount: boolean }>()
+    const pending = deferred<{ schemaVersion: 3; localEnabled: boolean; silent: boolean; sendEnabled: boolean }>()
     bridge.update.mockReturnValueOnce(pending.promise)
     await renderModule()
-    const enabled = document.querySelector("#system-notifier-enabled") as HTMLButtonElement
+    const enabled = document.querySelector("#system-notifier-local") as HTMLButtonElement
     const silent = document.querySelector("#system-notifier-silent") as HTMLButtonElement
     const testButton = findButton("发送测试通知")
 
@@ -111,7 +111,7 @@ describe("SystemNotifierModule", () => {
     expect(testButton.disabled).toBe(true)
 
     await act(async () => {
-      pending.resolve({ schemaVersion: 2, enabled: false, silent: false, syncToAccount: true })
+      pending.resolve({ schemaVersion: 3, localEnabled: false, silent: false, sendEnabled: true })
       await pending.promise
     })
     expect(enabled.disabled).toBe(false)
@@ -152,7 +152,7 @@ describe("SystemNotifierModule", () => {
     bridge.test.mockReturnValueOnce(pending.promise)
     await renderModule()
     const button = findButton("发送测试通知")
-    const enabled = document.querySelector("#system-notifier-enabled") as HTMLButtonElement
+    const enabled = document.querySelector("#system-notifier-local") as HTMLButtonElement
 
     await act(async () => {
       button.click()

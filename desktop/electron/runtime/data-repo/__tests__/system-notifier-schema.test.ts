@@ -8,7 +8,7 @@ import { jsonReviveEnvelopeFor } from "../factory"
 import {
   reviveSystemNotifierSettingsEnvelope,
   systemNotifierSettingsSchemaDefinition,
-  type SystemNotifierSettingsEntryV2,
+  type SystemNotifierSettingsEntryV3,
 } from "../schemas"
 
 const tempDir = () => mkdtemp(path.join(tmpdir(), "synapse-system-notifier-"))
@@ -18,7 +18,7 @@ async function readSingleton(singleton: unknown, schemaVersion: number) {
   const file = path.join(dir, "app.system-notifier.settings.json")
   try {
     await writeFile(file, JSON.stringify({ schemaVersion, singleton, items: {} }), "utf8")
-    const namespace = new JsonNamespace<SystemNotifierSettingsEntryV2>({
+    const namespace = new JsonNamespace<SystemNotifierSettingsEntryV3>({
       name: systemNotifierSettingsSchemaDefinition.name,
       schemaVersion: systemNotifierSettingsSchemaDefinition.currentVersion,
       backend: "json",
@@ -33,33 +33,45 @@ async function readSingleton(singleton: unknown, schemaVersion: number) {
 }
 
 describe("system notifier settings schema", () => {
-  it("revives a v1 singleton that had notifications on as account sync on", async () => {
+  it("revives a v1 singleton that had notifications on into both switches on", async () => {
     await expect(readSingleton({ schemaVersion: 1, enabled: true, silent: true }, 1)).resolves.toEqual({
-      schemaVersion: 2,
-      enabled: true,
+      schemaVersion: 3,
+      sendEnabled: true,
+      localEnabled: true,
       silent: true,
-      syncToAccount: true,
     })
   })
 
-  it("revives a v1 singleton that had notifications off as account sync off", async () => {
+  it("revives a v1 singleton that had notifications off into both switches off", async () => {
     await expect(readSingleton({ schemaVersion: 1, enabled: false, silent: false }, 1)).resolves.toEqual({
-      schemaVersion: 2,
-      enabled: false,
+      schemaVersion: 3,
+      sendEnabled: false,
+      localEnabled: false,
       silent: false,
-      syncToAccount: false,
     })
   })
 
-  it("passes a v2 singleton through unchanged", async () => {
+  it("carries a v2 singleton's values into the v3 field names", async () => {
     await expect(readSingleton(
-      { schemaVersion: 2, enabled: false, silent: false, syncToAccount: true },
+      { schemaVersion: 2, enabled: false, silent: true, syncToAccount: true },
       2,
     )).resolves.toEqual({
-      schemaVersion: 2,
-      enabled: false,
+      schemaVersion: 3,
+      sendEnabled: true,
+      localEnabled: false,
+      silent: true,
+    })
+  })
+
+  it("passes a v3 singleton through unchanged", async () => {
+    await expect(readSingleton(
+      { schemaVersion: 3, sendEnabled: false, localEnabled: true, silent: false },
+      3,
+    )).resolves.toEqual({
+      schemaVersion: 3,
+      sendEnabled: false,
+      localEnabled: true,
       silent: false,
-      syncToAccount: true,
     })
   })
 

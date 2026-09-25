@@ -215,7 +215,7 @@ import type {
   SecretItemEntryV1,
   SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
-  SystemNotifierSettingsEntryV2,
+  SystemNotifierSettingsEntryV3,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -853,7 +853,7 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
     const service = ctx.registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID)
     const settings = optionalSystemNotifierPort(
       () => ctx.registry.get<DataRepository>("core.data-repository")
-        .namespace<SystemNotifierSettingsEntryV2>(SYSTEM_NOTIFIER_SETTINGS_NAMESPACE),
+        .namespace<SystemNotifierSettingsEntryV3>(SYSTEM_NOTIFIER_SETTINGS_NAMESPACE),
     )
     const adapter = createElectronSystemNotificationAdapter(
       Notification,

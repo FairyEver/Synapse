@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
-import type { SystemNotifierSettingsEntryV2 } from "../../../../electron/runtime/data-repo/schemas/system-notifier"
+import type { SystemNotifierSettingsEntryV3 } from "../../../../electron/runtime/data-repo/schemas/system-notifier"
 import {
   SystemNotifierService,
   type SystemNotifierDegradedReason,
@@ -15,23 +15,23 @@ const context = {
   runId: "run",
   nodeId: "node",
 }
-const enabledSettings = {
-  schemaVersion: 2,
-  enabled: true,
+const activeSettings = {
+  schemaVersion: 3,
+  localEnabled: true,
   silent: false,
-  syncToAccount: true,
+  sendEnabled: true,
 } as const
 
-function settingsNamespace(initial: SystemNotifierSettingsEntryV2 | null) {
+function settingsNamespace(initial: SystemNotifierSettingsEntryV3 | null) {
   let current = initial
   return {
     port: {
       name: "app.system-notifier.settings",
-      schemaVersion: 2,
+      schemaVersion: 3,
       backend: "json",
       getSingleton: vi.fn(async () => current),
-      setSingleton: vi.fn(async (value: SystemNotifierSettingsEntryV2) => { current = value }),
-    } as unknown as DataNamespace<SystemNotifierSettingsEntryV2>,
+      setSingleton: vi.fn(async (value: SystemNotifierSettingsEntryV3) => { current = value }),
+    } as unknown as DataNamespace<SystemNotifierSettingsEntryV3>,
     current: () => current,
   }
 }
@@ -45,7 +45,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("SystemNotifierService", () => {
   it("sends one account message per accepted call and never sends a test", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const sync = vi.fn(async () => "sent" as const)
     const show = vi.fn()
     const service = new SystemNotifierService(logger())
@@ -56,7 +56,7 @@ describe("SystemNotifierService", () => {
     expect(sync).toHaveBeenCalledWith(input)
     expect(show).not.toHaveBeenCalled()
 
-    await service.updateSettings({ syncToAccount: false })
+    await service.updateSettings({ sendEnabled: false })
     service.trigger(input, { ...context, identityKey: "send-off" })
     await flush()
     expect(sync).toHaveBeenCalledTimes(1)
@@ -67,7 +67,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("keeps sending to the account while local notifications are off", async () => {
-    const settings = settingsNamespace({ ...enabledSettings, enabled: false })
+    const settings = settingsNamespace({ ...activeSettings, localEnabled: false })
     const show = vi.fn()
     const sync = vi.fn(async () => "sent" as const)
     const service = new SystemNotifierService(logger())
@@ -80,7 +80,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("shows nothing locally when the message cannot be sent", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const show = vi.fn()
     const service = new SystemNotifierService(logger())
     await service.initialize({ settings: settings.port, adapter: { kind: "electron", show } })
@@ -92,7 +92,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("keeps a failed send on the fixed success surface without showing anything", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const show = vi.fn()
     const logs = logger()
     const service = new SystemNotifierService(logs)
@@ -115,7 +115,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("records one fixed diagnostic when the call is switched off or the settings are unreadable", async () => {
-    const disabled = settingsNamespace({ ...enabledSettings, syncToAccount: false })
+    const disabled = settingsNamespace({ ...activeSettings, sendEnabled: false })
     const disabledLogs = logger()
     const switchedOff = new SystemNotifierService(disabledLogs)
     await switchedOff.initialize({
@@ -131,7 +131,7 @@ describe("SystemNotifierService", () => {
       count: 1,
     })
 
-    const unavailable = settingsNamespace({ schemaVersion: 2, enabled: true } as never)
+    const unavailable = settingsNamespace({ schemaVersion: 3, localEnabled: true } as never)
     const unavailableLogs = logger()
     // 读数失败时初始化那条诊断会先落一次，把时钟推过聚合窗口才能看到本次调用那条。
     const unavailableNow = vi.fn().mockReturnValueOnce(0).mockReturnValue(60_000)
@@ -152,7 +152,7 @@ describe("SystemNotifierService", () => {
 
   it("names every way the platform could not send", async () => {
     for (const reason of ["offline", "not_signed_in"] as const) {
-      const settings = settingsNamespace({ ...enabledSettings })
+      const settings = settingsNamespace({ ...activeSettings })
       const logs = logger()
       const service = new SystemNotifierService(logs)
       await service.initialize({
@@ -172,7 +172,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("presents an incoming account message only while local notifications are on", async () => {
-    const settings = settingsNamespace({ ...enabledSettings, silent: true })
+    const settings = settingsNamespace({ ...activeSettings, silent: true })
     const show = vi.fn()
     const service = new SystemNotifierService(logger())
     await service.initialize({ settings: settings.port, adapter: { kind: "electron", show } })
@@ -180,7 +180,7 @@ describe("SystemNotifierService", () => {
     service.presentAccountNotification(input)
     expect(show).toHaveBeenCalledWith({ ...input, silent: true })
 
-    await service.updateSettings({ enabled: false })
+    await service.updateSettings({ localEnabled: false })
     service.presentAccountNotification(input)
     expect(show).toHaveBeenCalledTimes(1)
   })
@@ -203,7 +203,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("audits accepted calls without content and preserves fixed success", async () => {
-    const settings = settingsNamespace({ ...enabledSettings, silent: true })
+    const settings = settingsNamespace({ ...activeSettings, silent: true })
     const record = vi.fn()
     const service = new SystemNotifierService(logger())
     await service.initialize({
@@ -237,7 +237,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("does not touch the limiter when sending is off while the test stays available", async () => {
-    const settings = settingsNamespace({ ...enabledSettings, silent: true, syncToAccount: false })
+    const settings = settingsNamespace({ ...activeSettings, silent: true, sendEnabled: false })
     const show = vi.fn()
     const sync = vi.fn(async () => "sent" as const)
     const service = new SystemNotifierService(logger())
@@ -260,7 +260,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("fails closed on invalid settings while a test uses default silent", async () => {
-    const settings = settingsNamespace({ schemaVersion: 2, enabled: true } as never)
+    const settings = settingsNamespace({ schemaVersion: 3, localEnabled: true } as never)
     const show = vi.fn()
     const sync = vi.fn(async () => "sent" as const)
     const service = new SystemNotifierService(logger())
@@ -312,7 +312,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("keeps fixed success across audit and adapter synchronous exceptions", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const logs = logger()
     const service = new SystemNotifierService(logs)
     await service.initialize({
@@ -333,7 +333,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("keeps rate-limit suppression caller-invisible while auditing every accepted call", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const sync = vi.fn(async () => "sent" as const)
     const record = vi.fn()
     const service = new SystemNotifierService(logger())
@@ -351,7 +351,7 @@ describe("SystemNotifierService", () => {
   })
 
   it("keeps a no-op degraded adapter on the fixed success surface", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const service = new SystemNotifierService(logger())
     await service.initialize({
       settings: settings.port,
@@ -370,26 +370,26 @@ describe("SystemNotifierService", () => {
     const service = new SystemNotifierService(logger())
     await service.initialize({ settings: settings.port })
     await expect(service.updateSettings({ silent: true })).resolves.toEqual({
-      schemaVersion: 2,
-      enabled: true,
+      schemaVersion: 3,
+      localEnabled: true,
       silent: true,
-      syncToAccount: true,
+      sendEnabled: true,
     })
-    expect(settings.current()).toEqual({ schemaVersion: 2, enabled: true, silent: true, syncToAccount: true })
+    expect(settings.current()).toEqual({ schemaVersion: 3, localEnabled: true, silent: true, sendEnabled: true })
     await expect(service.getSettings()).resolves.toEqual(settings.current())
   })
 
   it("preserves the previous snapshot when persistence fails", async () => {
-    const settings = settingsNamespace({ ...enabledSettings })
+    const settings = settingsNamespace({ ...activeSettings })
     const service = new SystemNotifierService(logger())
     await service.initialize({ settings: settings.port })
     vi.mocked(settings.port.setSingleton).mockRejectedValueOnce(new Error("raw persistence detail"))
-    await expect(service.updateSettings({ syncToAccount: false })).rejects.toThrow()
-    await expect(service.getSettings()).resolves.toEqual({ ...enabledSettings })
+    await expect(service.updateSettings({ sendEnabled: false })).rejects.toThrow()
+    await expect(service.getSettings()).resolves.toEqual({ ...activeSettings })
   })
 
   it("preserves the last valid snapshot when a later settings read fails", async () => {
-    const settings = settingsNamespace({ ...enabledSettings, silent: true })
+    const settings = settingsNamespace({ ...activeSettings, silent: true })
     const show = vi.fn()
     const service = new SystemNotifierService(logger())
     await service.initialize({

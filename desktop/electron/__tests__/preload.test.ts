@@ -1686,7 +1686,7 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
 
     await bridge.systemNotifier.settings.get()
-    await bridge.systemNotifier.settings.update({ enabled: false, silent: true })
+    await bridge.systemNotifier.settings.update({ localEnabled: false, silent: true })
     await bridge.systemNotifier.notification.test()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
@@ -1697,7 +1697,7 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
       "synapse:app:system_notifier:settings:update",
-      { enabled: false, silent: true },
+      { localEnabled: false, silent: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       3,

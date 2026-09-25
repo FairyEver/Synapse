@@ -23,9 +23,9 @@ describe("systemNotifierIpcModule", () => {
     expect(systemNotifierIpcModule.methods.getSettings.request.safeParse({}).success).toBe(true)
     expect(systemNotifierIpcModule.methods.getSettings.request.safeParse({ extra: true }).success)
       .toBe(false)
-    expect(systemNotifierIpcModule.methods.updateSettings.request.safeParse({ enabled: false }).success)
+    expect(systemNotifierIpcModule.methods.updateSettings.request.safeParse({ localEnabled: false }).success)
       .toBe(true)
-    expect(systemNotifierIpcModule.methods.updateSettings.request.safeParse({ syncToAccount: false }).success)
+    expect(systemNotifierIpcModule.methods.updateSettings.request.safeParse({ sendEnabled: false }).success)
       .toBe(true)
     expect(systemNotifierIpcModule.methods.updateSettings.request.safeParse({}).success).toBe(false)
     expect(systemNotifierIpcModule.methods.updateSettings.request.safeParse({ silent: true, extra: 1 }).success)
@@ -34,8 +34,8 @@ describe("systemNotifierIpcModule", () => {
 
   it("delegates settings and fixed test content to the shared service", async () => {
     const service = {
-      getSettings: vi.fn(async () => ({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })),
-      updateSettings: vi.fn(async () => ({ schemaVersion: 2, enabled: false, silent: true, syncToAccount: true })),
+      getSettings: vi.fn(async () => ({ schemaVersion: 3, localEnabled: true, silent: false, sendEnabled: true })),
+      updateSettings: vi.fn(async () => ({ schemaVersion: 3, localEnabled: false, silent: true, sendEnabled: true })),
       presentTestNotification: vi.fn(() => ({ success: true })),
     }
     const context = {
@@ -47,11 +47,11 @@ describe("systemNotifierIpcModule", () => {
     } satisfies IpcHandlerContext
 
     await expect(systemNotifierIpcModule.methods.getSettings.handler(context, {}))
-      .resolves.toEqual({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })
+      .resolves.toEqual({ schemaVersion: 3, localEnabled: true, silent: false, sendEnabled: true })
     await expect(systemNotifierIpcModule.methods.updateSettings.handler(context, {
-      enabled: false,
+      localEnabled: false,
       silent: true,
-    })).resolves.toEqual({ schemaVersion: 2, enabled: false, silent: true, syncToAccount: true })
+    })).resolves.toEqual({ schemaVersion: 3, localEnabled: false, silent: true, sendEnabled: true })
     expect(systemNotifierIpcModule.methods.testNotification.handler(context, {}))
       .toEqual({ success: true })
     expect(service.presentTestNotification).toHaveBeenCalledTimes(1)

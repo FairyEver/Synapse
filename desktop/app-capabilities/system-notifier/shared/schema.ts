@@ -41,35 +41,35 @@ export const systemNotificationResultSchema = z.object({
 }).strict()
 
 /**
- * 通知只有一条路，三颗开关分别描述它和它的呈现：
+ * 通知只有一条路，三颗开关分别描述它和它的呈现，字段名就是它门控的那件事：
  *
- * - `syncToAccount` 是**发送总闸**：关掉就不发，哪儿都不会有；
- * - `enabled` / `silent` 描述**这台电脑**收到账号消息时的原生呈现（弹不弹、响不响）。
+ * - `sendEnabled` 是**发送总闸**：关掉就不发，哪儿都不会有；
+ * - `localEnabled` / `silent` 描述**这台电脑**收到账号消息时的原生呈现（弹不弹、响不响）。
  *   它们不门控发送：人在外面时把本机通知关掉，手机照样收得到。
  */
 export const systemNotifierSettingsSchema = z.object({
-  schemaVersion: z.literal(2),
-  enabled: z.boolean(),
+  schemaVersion: z.literal(3),
+  sendEnabled: z.boolean(),
+  localEnabled: z.boolean(),
   silent: z.boolean(),
-  syncToAccount: z.boolean(),
 }).strict()
 
 export const systemNotifierSettingsPatchSchema = z.object({
-  enabled: z.boolean().optional(),
+  sendEnabled: z.boolean().optional(),
+  localEnabled: z.boolean().optional(),
   silent: z.boolean().optional(),
-  syncToAccount: z.boolean().optional(),
 }).strict().refine(
-  (value) => value.enabled !== undefined || value.silent !== undefined || value.syncToAccount !== undefined,
+  (value) => value.sendEnabled !== undefined || value.localEnabled !== undefined || value.silent !== undefined,
   { message: "At least one settings field is required." },
 )
 
 export const strictEmptyObjectSchema = z.object({}).strict()
 
 export const defaultSystemNotifierSettings = Object.freeze({
-  schemaVersion: 2,
-  enabled: true,
+  schemaVersion: 3,
+  sendEnabled: true,
+  localEnabled: true,
   silent: false,
-  syncToAccount: true,
 }) satisfies SystemNotifierSettings
 
 export const systemNotifierTestNotification = Object.freeze({

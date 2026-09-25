@@ -119,7 +119,7 @@ export {
   reviveSystemNotifierSettingsEnvelope,
   systemNotifierSettingsSchemaDefinition,
   type SystemNotifierSettingsEntryV1,
-  type SystemNotifierSettingsEntryV2,
+  type SystemNotifierSettingsEntryV3,
 } from "./system-notifier"
 export {
   updateInstallRecoverySchema,

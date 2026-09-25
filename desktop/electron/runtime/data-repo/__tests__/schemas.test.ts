@@ -494,14 +494,14 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(false)
     expect(systemNotifierSettingsSchemaDefinition.validate({
-      schemaVersion: 2,
-      enabled: true,
+      schemaVersion: 3,
+      sendEnabled: true,
+      localEnabled: true,
       silent: false,
-      syncToAccount: true,
     })).toBe(true)
     expect(systemNotifierSettingsSchemaDefinition.validate({
-      schemaVersion: 2,
-      enabled: true,
+      schemaVersion: 3,
+      localEnabled: true,
       silent: false,
     })).toBe(false)
     expect(

@@ -2,7 +2,7 @@ import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { DesktopNotificationOutcome } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { ActorIdentity, AuditSink } from "../../../electron/runtime/security"
 import type { StructuredLogger } from "../../../electron/runtime/service-registry"
-import type { SystemNotifierSettingsEntryV2 } from "../../../electron/runtime/data-repo/schemas/system-notifier"
+import type { SystemNotifierSettingsEntryV3 } from "../../../electron/runtime/data-repo/schemas/system-notifier"
 import {
   SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
 } from "../shared/capability"
@@ -58,7 +58,7 @@ export interface SystemNotifierTriggerContext {
 }
 
 export interface SystemNotifierServicePorts {
-  readonly settings?: DataNamespace<SystemNotifierSettingsEntryV2>
+  readonly settings?: DataNamespace<SystemNotifierSettingsEntryV3>
   readonly auditSink?: AuditSink
   readonly adapter?: SystemNotificationAdapter
   /**
@@ -92,7 +92,7 @@ export class SystemNotifierSettingsUnavailableError extends Error {
 }
 
 export class SystemNotifierService {
-  private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV2>
+  private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV3>
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
   private sync?: (input: SystemNotificationInput) => Promise<DesktopNotificationOutcome>
@@ -142,7 +142,7 @@ export class SystemNotifierService {
       this.diagnostics.record("notification_sync", "settings_unavailable")
       return { success: true }
     }
-    if (!settings.syncToAccount) {
+    if (!settings.sendEnabled) {
       this.diagnostics.record("notification_sync", "disabled")
       return { success: true }
     }
@@ -175,12 +175,12 @@ export class SystemNotifierService {
   /**
    * 这台电脑收到一条账号消息时的原生呈现，由实时连接在收到广播并取回消息后调用。
    *
-   * 本机通知关着、或设置读不出来时都不弹：`enabled` / `silent` 描述的就是这台电脑的呈现，
-   * 这是触发之后这台电脑唯一会弹原生通知的地方。
+   * 本机通知关着、或设置读不出来时都不弹：`localEnabled` / `silent` 描述的就是这台电脑的
+   * 呈现，这是触发之后这台电脑唯一会弹原生通知的地方。
    */
   presentAccountNotification(input: SystemNotificationInput): void {
     const settings = this.snapshot
-    if (settings?.enabled !== true) return
+    if (settings?.localEnabled !== true) return
     this.show({ ...input, silent: settings.silent })
   }
 
@@ -216,7 +216,7 @@ export class SystemNotifierService {
   getSettings(): Promise<SystemNotifierSettings> {
     return this.runSettingsOperation(async () => {
       const port = this.requireSettingsPort()
-      let stored: SystemNotifierSettingsEntryV2 | null
+      let stored: SystemNotifierSettingsEntryV3 | null
       try {
         stored = await port.getSingleton()
       } catch {
@@ -239,7 +239,7 @@ export class SystemNotifierService {
     return this.runSettingsOperation(async () => {
       const patch = systemNotifierSettingsPatchSchema.parse(patchInput)
       const port = this.requireSettingsPort()
-      let stored: SystemNotifierSettingsEntryV2 | null
+      let stored: SystemNotifierSettingsEntryV3 | null
       try {
         stored = await port.getSingleton()
       } catch {
@@ -290,7 +290,7 @@ export class SystemNotifierService {
     }
   }
 
-  private requireSettingsPort(): DataNamespace<SystemNotifierSettingsEntryV2> {
+  private requireSettingsPort(): DataNamespace<SystemNotifierSettingsEntryV3> {
     if (!this.settingsPort) {
       this.markSettingsUnavailable("repository_unavailable")
       throw new SystemNotifierSettingsUnavailableError()
