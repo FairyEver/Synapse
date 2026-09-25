@@ -9,6 +9,8 @@ import {
   defaultSystemNotifierSettings,
   systemNotifierSettingsPatchSchema,
   systemNotifierSettingsSchema,
+  systemNotifierTestNotification,
+  validateSystemNotificationInput,
   type SystemNotificationInput,
   type SystemNotificationResult,
   type SystemNotifierSettings,
@@ -48,15 +50,25 @@ export interface SystemNotifierTriggerContext {
   readonly workflowId?: string
   readonly runId?: string
   readonly nodeId?: string
-  readonly bypassEnabled?: boolean
 }
 
 export interface SystemNotifierServicePorts {
   readonly settings?: DataNamespace<SystemNotifierSettingsEntryV2>
   readonly auditSink?: AuditSink
   readonly adapter?: SystemNotificationAdapter
-  readonly sync?: (input: SystemNotificationInput) => Promise<void>
+  /**
+   * 把通知发到账号消息中心。返回这条消息**是否真的建出来了**：未登录、离线、端口缺失时返回
+   * false，请求失败时抛错。触发方据此决定要不要在本机兜底弹一次。
+   */
+  readonly sync?: (input: SystemNotificationInput) => Promise<boolean>
 }
+
+/** 「发送测试通知」用的固定 UI 身份，与任何触发来源都不共用配额。 */
+const SYSTEM_APP_TEST_CONTEXT = {
+  source: "system-app-test",
+  actor: { kind: "user", id: "system-app:system-notifier" },
+  identityKey: "system-app-test\u0000system-notifier",
+} as const satisfies SystemNotifierTriggerContext
 
 export interface SystemNotifierHealth {
   readonly status: "healthy" | "degraded"
@@ -79,7 +91,7 @@ export class SystemNotifierService {
   private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV2>
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
-  private sync?: (input: SystemNotificationInput) => Promise<void>
+  private sync?: (input: SystemNotificationInput) => Promise<boolean>
   private snapshot: Readonly<SystemNotifierSettings> | null = null
   private hasValidSnapshot = false
   private settingsQueue: Promise<void> = Promise.resolve()
@@ -112,38 +124,86 @@ export class SystemNotifierService {
     await this.loadInitialSettings()
   }
 
+  /**
+   * 一次触发只做一件事：把通知发到账号消息中心。
+   *
+   * 本机弹窗不在这里 —— 它由「收到那条消息」这件事产生（`live-connection-service` 的回显
+   * 分支调 `presentAccountNotification`），发起的那台电脑和别的电脑走的是同一条路。
+   * 只有消息根本没发出去时（未登录、离线、请求失败）才在本机直接兜底弹一次。
+   */
   trigger(input: SystemNotificationInput, context: SystemNotifierTriggerContext): SystemNotificationResult {
     this.recordAudit(input, context)
     const settings = this.snapshot
-    if (!context.bypassEnabled && !settings) return { success: true }
-
-    // 两个出口各自门控：本机弹窗看 `enabled`，账号消息中心看 `syncToAccount`。关掉本机通知
-    // 只是为了这台机器别响，不代表用户不想在手机上收到；反过来也一样。
-    const showLocally = context.bypassEnabled === true || settings?.enabled === true
-    const syncToAccount = context.bypassEnabled !== true && settings?.syncToAccount === true
-    if (!showLocally && !syncToAccount) return { success: true }
+    if (!settings) return { success: true }
+    if (!settings.syncToAccount) return { success: true }
 
     if (!this.limiter.acquire(context.identityKey)) {
       this.diagnostics.record("rate_limit", "suppressed")
       return { success: true }
     }
 
-    if (showLocally) {
-      try {
-        this.adapter.show({
-          ...input,
-          silent: settings?.silent ?? defaultSystemNotifierSettings.silent,
-        })
-      } catch {
-        this.diagnostics.record("notification_show", "synchronous_exception")
-      }
-    }
-    if (syncToAccount) {
-      void this.sync?.(input).catch(() => {
-        this.diagnostics.record("notification_sync", "sync_failed")
-      })
-    }
+    void this.sendToAccount(input).then((sent) => {
+      if (!sent) this.showLocally(input)
+    })
     return { success: true }
+  }
+
+  /**
+   * 这台电脑收到一条账号消息时的原生呈现，由实时连接在收到广播并取回消息后调用。
+   *
+   * 本机通知关着、或设置读不出来时都不弹：`enabled` / `silent` 描述的就是这台电脑的呈现，
+   * 触发路径不再有第二条自己弹的分支。
+   */
+  presentAccountNotification(input: SystemNotificationInput): void {
+    const settings = this.snapshot
+    if (settings?.enabled !== true) return
+    this.show({ ...input, silent: settings.silent })
+  }
+
+  /**
+   * 「发送测试通知」：只看本机，绝不发到账号消息中心。
+   *
+   * 与本机通知开关无关 —— 关着的时候仍然要能试出来系统权限、unsupported 这类问题；
+   * 静音值沿用设置，读不出来时用默认值。
+   */
+  presentTestNotification(): SystemNotificationResult {
+    const validation = validateSystemNotificationInput(systemNotifierTestNotification)
+    if (!validation.ok) throw new Error("System notifier test input invariant failed.")
+    this.recordAudit(validation.data, SYSTEM_APP_TEST_CONTEXT)
+    if (!this.limiter.acquire(SYSTEM_APP_TEST_CONTEXT.identityKey)) {
+      this.diagnostics.record("rate_limit", "suppressed")
+      return { success: true }
+    }
+    this.show({
+      ...validation.data,
+      silent: this.snapshot?.silent ?? defaultSystemNotifierSettings.silent,
+    })
+    return { success: true }
+  }
+
+  /** 消息没发出去时的本机兜底。本机通知关着就不弹。 */
+  private showLocally(input: SystemNotificationInput): void {
+    const settings = this.snapshot
+    if (settings?.enabled !== true) return
+    this.show({ ...input, silent: settings.silent })
+  }
+
+  private async sendToAccount(input: SystemNotificationInput): Promise<boolean> {
+    if (!this.sync) return false
+    try {
+      return await this.sync(input)
+    } catch {
+      this.diagnostics.record("notification_sync", "sync_failed")
+      return false
+    }
+  }
+
+  private show(input: SystemNotificationInput & { readonly silent: boolean }): void {
+    try {
+      this.adapter.show(input)
+    } catch {
+      this.diagnostics.record("notification_show", "synchronous_exception")
+    }
   }
 
   getSettings(): Promise<SystemNotifierSettings> {

@@ -861,11 +861,13 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
     )
     await service.initialize({
       settings,
+      // 不带 `deviceId`：这条消息不属于「某台机器的本机通知」，它属于账号。带上它反而会让
+      // 发起的那台电脑在回显时把自己挡掉（`live-connection-service` 用它做本机去重），
+      // 于是不得不在触发路径上再弹一次 —— 触发路径只负责发，本机弹窗由收到消息产生。
       sync: (input) => accountService.createInternalNotification({
         source: "system-notifier",
         title: input.title,
         body: input.body,
-        deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
       }),
       auditSink: optionalSystemNotifierPort(
         () => ctx.registry.get<AuditSink>("core.audit-sink"),
@@ -2088,14 +2090,17 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
       openTerminalSession: (sessionId) => systemAppWindows.open("terminal", {
         terminalOpenRequest: { requestId: randomUUID(), sessionId },
       }),
-      syncCompletion: (input) => accountService.createInternalNotification({
-        source: "terminal-complete",
-        sourceKey: input.sourceKey,
-        title: input.title,
-        body: input.body,
-        targetId: input.sessionId,
-        deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
-      }),
+      // 终端完成事件不看发送结果：它自己的本机通知已经弹过了，这条只负责让账号里留下记录。
+      syncCompletion: async (input) => {
+        await accountService.createInternalNotification({
+          source: "terminal-complete",
+          sourceKey: input.sourceKey,
+          title: input.title,
+          body: input.body,
+          targetId: input.sessionId,
+          deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
+        })
+      },
       setSessionAttention: (update) => ctx.registry
         .get<TerminalService>("core.terminal")
         .applyAgentAttention(update),

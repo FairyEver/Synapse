@@ -41,12 +41,11 @@ export const systemNotificationResultSchema = z.object({
 }).strict()
 
 /**
- * 一次正式触发有两个出口，各自可关：
+ * 通知只有一个出发口，三颗开关分别描述它和它的呈现：
  *
- * - `enabled` / `silent` 只描述**这台电脑**上的原生通知；
- * - `syncToAccount` 描述**账号消息中心**那一路，登录且在线时同一条消息会进消息中心，
- *   并随 APNs 推到用户已注册的手机上。两台机器（在电脑前 vs 人在外面）要的常常不是
- *   同一件事，所以两颗开关不互相门控。
+ * - `syncToAccount` 是**发送总闸**：关掉就不发，哪儿都不会有；
+ * - `enabled` / `silent` 描述**这台电脑**收到消息时的原生呈现（弹不弹、响不响）。
+ *   它们不门控发送：人在外面时把本机通知关掉，手机照样收得到。
  */
 export const systemNotifierSettingsSchema = z.object({
   schemaVersion: z.literal(2),

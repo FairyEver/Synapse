@@ -58,9 +58,9 @@ afterEach(() => {
 describe("SystemNotifierModule", () => {
   it("renders only three settings and the unchanged test button label", async () => {
     await renderModule()
+    expect(document.body.textContent).toContain("发送通知")
     expect(document.body.textContent).toContain("本机通知")
     expect(document.body.textContent).toContain("静音通知")
-    expect(document.body.textContent).toContain("同步到手机")
     expect(findButton("发送测试通知")).toBeInstanceOf(HTMLButtonElement)
     expect(document.body.textContent).not.toContain("通知历史")
     expect(document.body.textContent).not.toContain("权限状态")

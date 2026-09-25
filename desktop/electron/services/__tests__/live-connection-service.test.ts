@@ -18,6 +18,14 @@ vi.mock("electron", () => ({
   },
 }))
 
+/** 呈现端口现在由 System Notifier 提供，这里只记录它被要求呈现了什么。 */
+const presented = vi.hoisted(() => ({ calls: [] as { title: string; body: string }[] }))
+const presenter = {
+  present(input: { readonly title: string; readonly body: string }) {
+    presented.calls.push(input)
+  },
+}
+
 vi.mock("node:os", () => ({
   default: {
     hostname: () => "MacBook",
@@ -198,6 +206,7 @@ function representativeFrames(): readonly MobileTerminalFrame[] {
 describe("LiveConnectionService", () => {
   it("refreshes the message center and suppresses a second native alert on the originating desktop", async () => {
     nativeNotificationShow.mockClear()
+    presented.calls.length = 0
     const socket = new FakeSocket()
     const getNotification = vi.fn(async (id: string) => ({
       id, title: "完成", body: "已完成", level: "active", readAt: null,
@@ -212,6 +221,7 @@ describe("LiveConnectionService", () => {
       createSocket: vi.fn(() => socket as never),
     })
     service.setEventBus(eventBus as never)
+    service.setNotificationPresenter(presenter)
     await connectAndWelcome(service, socket)
     for (const notificationId of ["local", "remote"]) {
       socket.emit("message", JSON.stringify(createLiveEnvelope(
@@ -220,12 +230,40 @@ describe("LiveConnectionService", () => {
       )))
     }
     await waitForCondition(() => getNotification.mock.calls.length === 2)
-    expect(nativeNotificationShow).toHaveBeenCalledTimes(1)
+    // 呈现交给端口，这里自己不再 new Notification。
+    await waitForCondition(() => presented.calls.length === 1)
+    expect(presented.calls).toEqual([{ title: "完成", body: "已完成" }])
+    expect(nativeNotificationShow).not.toHaveBeenCalled()
     expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       domain: "account", type: "account.notificationChanged", payload: { notificationId: "remote" },
     }))
     service.close()
   })
+  it("stays quiet when no notification presenter is wired", async () => {
+    nativeNotificationShow.mockClear()
+    presented.calls.length = 0
+    const socket = new FakeSocket()
+    const getNotification = vi.fn(async (id: string) => ({
+      id, title: "完成", body: "已完成", level: "active", readAt: null,
+      deviceId: null,
+      createdAt: new Date().toISOString(),
+    }))
+    const service = new LiveConnectionService({
+      accountService: { ...createAccountService(), getNotification } as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+    })
+    await connectAndWelcome(service, socket)
+    socket.emit("message", JSON.stringify(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.notificationChanged, { notificationId: "remote" },
+      { id: "change-remote", sentAt: new Date().toISOString() },
+    )))
+    await waitForCondition(() => getNotification.mock.calls.length === 1)
+    expect(presented.calls).toEqual([])
+    expect(nativeNotificationShow).not.toHaveBeenCalled()
+    service.close()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })

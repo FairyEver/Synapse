@@ -36,7 +36,7 @@ describe("systemNotifierIpcModule", () => {
     const service = {
       getSettings: vi.fn(async () => ({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })),
       updateSettings: vi.fn(async () => ({ schemaVersion: 2, enabled: false, silent: true, syncToAccount: true })),
-      trigger: vi.fn(() => ({ success: true })),
+      presentTestNotification: vi.fn(() => ({ success: true })),
     }
     const context = {
       moduleId: "systemNotifier",
@@ -54,12 +54,6 @@ describe("systemNotifierIpcModule", () => {
     })).resolves.toEqual({ schemaVersion: 2, enabled: false, silent: true, syncToAccount: true })
     expect(systemNotifierIpcModule.methods.testNotification.handler(context, {}))
       .toEqual({ success: true })
-    expect(service.trigger).toHaveBeenCalledWith(
-      { title: "System Notifier", body: "这是一条测试通知" },
-      expect.objectContaining({
-        source: "system-app-test",
-        bypassEnabled: true,
-      }),
-    )
+    expect(service.presentTestNotification).toHaveBeenCalledTimes(1)
   })
 })

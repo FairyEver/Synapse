@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => {
   const permissionGuard = {}
   const synapseSkillService = {}
   const windowManager = {}
+  const systemNotifierService = {
+    presentAccountNotification: vi.fn(),
+  }
   const registry = {
     get: vi.fn((id: string) => {
       if (id === "core.event-bus") return eventBus
@@ -19,6 +22,7 @@ const mocks = vi.hoisted(() => {
       if (id === "core.audit-sink") return auditSink
       if (id === "core.permission-guard") return permissionGuard
       if (id === "core.synapse-skill") return synapseSkillService
+      if (id === "core.system-notifier") return systemNotifierService
       if (id === "core.window-manager") return windowManager
       if (id === "knowledge-base.storage-migration-service") return {}
       throw new Error(`Unknown service: ${id}`)
@@ -56,6 +60,7 @@ const mocks = vi.hoisted(() => {
       handleAccountState: vi.fn(),
       setEventBus: vi.fn(),
       setWebhookDeliveryHandler: vi.fn(),
+      setNotificationPresenter: vi.fn(),
     },
     logger,
     logStore: {
@@ -65,6 +70,7 @@ const mocks = vi.hoisted(() => {
     registerMeetingAudioProtocol: vi.fn(),
     registry,
     synapseSkillService,
+    systemNotifierService,
     windowManager,
   }
 })
@@ -167,6 +173,24 @@ describe("initializeReadyApp", () => {
     expect(mocks.installApplicationMenu).toHaveBeenCalledOnce()
     expect(mocks.registry.get).toHaveBeenCalledWith("core.synapse-skill")
     expect(mocks.registry.startBackground).toHaveBeenCalledOnce()
+  })
+
+  it("hands the desktop notification presenter to System Notifier", async () => {
+    await initializeReadyApp({
+      focusOrCreateMainWindow: vi.fn(),
+      isAppQuitting: () => false,
+      mainWindowState: { current: null },
+      setAllowAppQuit: vi.fn(),
+      setWindowManager: vi.fn(),
+      startProtocolHandling: vi.fn(async () => 0),
+    })
+
+    // 账号消息到了之后怎么弹，归 System Notifier：它拿着「本机通知 / 静音」设置和 adapter。
+    const wired = mocks.liveConnectionService.setNotificationPresenter.mock.calls[0]?.[0]
+    expect(wired).toBeDefined()
+    wired.present({ title: "标题", body: "正文" })
+    expect(mocks.systemNotifierService.presentAccountNotification)
+      .toHaveBeenCalledWith({ title: "标题", body: "正文" })
   })
 
   it("skips the normal main window before routing a cold-start install protocol URL", async () => {

@@ -37,6 +37,8 @@ import {
   ClipboardSyncService,
   CLIPBOARD_SYNC_SERVICE_ID,
 } from "../services/clipboard-sync-service"
+import type { SystemNotifierService } from "../../app-capabilities/system-notifier/main/service"
+import { SYSTEM_NOTIFIER_SERVICE_ID } from "../../app-capabilities/system-notifier/shared/capability"
 
 const logger = createMainLogger("bootstrap.app-ready")
 
@@ -158,6 +160,18 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     liveConnectionService.setMeetingTranscriptionHandler(new LiveMeetingTranscriptionHandler({ eventBus }))
   } catch (error) {
     logger.warn("Live meeting transcription handler not installed.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
+  try {
+    // 账号消息到了之后怎么呈现给这台电脑，归 System Notifier：它持有「本机通知 / 静音」
+    // 设置和 Electron adapter，实时连接只负责在收到消息时喊一声。
+    const systemNotifier = registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID)
+    liveConnectionService.setNotificationPresenter({
+      present: (input) => systemNotifier.presentAccountNotification(input),
+    })
+  } catch (error) {
+    logger.warn("Account notification presenter not installed.", {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }

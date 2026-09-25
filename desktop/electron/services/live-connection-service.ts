@@ -1,5 +1,5 @@
 import os from "node:os"
-import { app, Notification } from "electron"
+import { app } from "electron"
 import WebSocket from "ws"
 import type {
   MobileIntentResult,
@@ -75,6 +75,12 @@ type LiveConnectionServiceDeps = {
   readonly deviceName?: () => string
   readonly webhookDeliveryHandler?: Pick<LiveWebhookDeliveryHandler, "handle">
   readonly meetingTranscriptionHandler?: Pick<LiveMeetingTranscriptionHandler, "handle">
+  readonly notificationPresenter?: AccountNotificationPresenter
+}
+
+/** 收到一条账号消息时，把它的原生呈现交给谁。 */
+export type AccountNotificationPresenter = {
+  present(input: { readonly title: string; readonly body: string }): void
 }
 
 export class LiveConnectionService {
@@ -91,6 +97,7 @@ export class LiveConnectionService {
   private readonly deviceName: () => string
   private webhookDeliveryHandler: Pick<LiveWebhookDeliveryHandler, "handle"> | null
   private meetingTranscriptionHandler: Pick<LiveMeetingTranscriptionHandler, "handle"> | null
+  private notificationPresenter: AccountNotificationPresenter | null
   private mobileIntentHandler: MobileIntentHandler | null = null
   private sharedProtocol: Awaited<typeof liveProtocolPromise> | null = null
   private eventBus: EventBus | null = null
@@ -140,10 +147,15 @@ export class LiveConnectionService {
     this.deviceName = deps.deviceName ?? (() => os.hostname())
     this.webhookDeliveryHandler = deps.webhookDeliveryHandler ?? null
     this.meetingTranscriptionHandler = deps.meetingTranscriptionHandler ?? null
+    this.notificationPresenter = deps.notificationPresenter ?? null
   }
 
   setEventBus(eventBus: EventBus): void {
     this.eventBus = eventBus
+  }
+
+  setNotificationPresenter(presenter: AccountNotificationPresenter): void {
+    this.notificationPresenter = presenter
   }
 
   setWebhookDeliveryHandler(handler: Pick<LiveWebhookDeliveryHandler, "handle">): void {
@@ -395,7 +407,9 @@ export class LiveConnectionService {
         void this.accountService.getNotification(notificationId).then((item) => {
           if (item.readAt || item.level === "passive" || item.deviceId === clientInstanceId) return
           if (Date.now() - new Date(item.createdAt).getTime() > 30_000) return
-          if (Notification.isSupported()) new Notification({ title: item.title, body: item.body }).show()
+          // 呈现归 System Notifier：它持有这台电脑的「本机通知 / 静音」设置与 Electron adapter。
+          // 端口没接上时这里安静跳过，不再自己 new 一个 Notification。
+          this.notificationPresenter?.present({ title: item.title, body: item.body })
         }).catch((error: unknown) => {
           logger.warn("Notification could not be loaded after live event.", this.liveErrorMetadata(error))
         })

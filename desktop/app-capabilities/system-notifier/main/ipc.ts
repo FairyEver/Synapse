@@ -4,8 +4,6 @@ import {
   systemNotificationResultSchema,
   systemNotifierSettingsPatchSchema,
   systemNotifierSettingsSchema,
-  systemNotifierTestNotification,
-  validateSystemNotificationInput,
 } from "../shared/schema"
 import { SYSTEM_NOTIFIER_SERVICE_ID } from "../shared/capability"
 import type { SystemNotifierService } from "./service"
@@ -41,16 +39,7 @@ export const systemNotifierIpcModule: IpcModule = {
       kind: "invoke",
       request: strictEmptyObjectSchema,
       response: systemNotificationResultSchema,
-      handler: (ctx) => {
-        const validation = validateSystemNotificationInput(systemNotifierTestNotification)
-        if (!validation.ok) throw new Error("System notifier test input invariant failed.")
-        return resolveSystemNotifierService(ctx).trigger(validation.data, {
-          source: "system-app-test",
-          actor: { kind: "user", id: "system-app:system-notifier" },
-          identityKey: "system-app-test\u0000system-notifier",
-          bypassEnabled: true,
-        })
-      },
+      handler: (ctx) => resolveSystemNotifierService(ctx).presentTestNotification(),
     },
   },
   events: {},
