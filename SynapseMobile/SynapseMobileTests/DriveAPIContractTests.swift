@@ -90,11 +90,18 @@ struct DriveAPIContractTests {
     /// 服务端把它注册在 `@Controller()` 的绝对路径上，多一个前缀就是 404 —— 而 404 与
     /// 「服务端没这个能力」长得一样。`DriveModelsTests` 里那份服务端响应样例里的
     /// `downloadUrl` 也是这个形状（`https://<origin>/drive/items/…/download`）。
-    @Test func theDownloadRouteIsNotUnderTheAPIPrefix() {
-        let download = APIClient.driveDownloadURL(itemId: "itm_1")
-        #expect(download.path == "/drive/items/itm_1/download")
-        #expect(!download.absoluteString.contains("/api/"))
-        #expect(download.absoluteString.hasSuffix("/drive/items/itm_1/download"))
+    ///
+    /// 源站是**传进去**的，不走 `driveDownloadURL`：那条路会读 `UserDefaults` 里的基址，
+    /// 而 `AppConfigurationTests` 在并行用例里会改写它（有一例正是 `…/apiary`）。
+    /// 断言一个会被别人同时改的输入，挂了也说不清是谁的问题。`apiOrigin` 自己的派生
+    /// 由 `AppConfigurationTests` 覆盖，这里只负责「接上那条路由之后是什么样」。
+    @Test func theDownloadRouteIsNotUnderTheAPIPrefix() throws {
+        let origin = try #require(URL(string: "https://synapse.d2.pub"))
+        let download = APIClient.DriveRoute.download(itemId: "itm_1", origin: origin)
+
+        #expect(download == "https://synapse.d2.pub/drive/items/itm_1/download")
+        #expect(!download.contains("/api/"))
+        #expect(try #require(URL(string: download)).path == "/drive/items/itm_1/download")
     }
 
     // MARK: - id 的编码

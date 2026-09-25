@@ -731,10 +731,14 @@ actor APIClient {
                 + queryString(items)
         }
 
-        /// 这条**不在** `/api` 前缀下（服务端把它注册在 `@Controller()` 上），所以整条路径
-        /// 由调用方拼到 `AppConfiguration.apiOrigin` 上。
-        static func download(itemId: String) -> String {
-            "/drive/items/\(escapedPathComponent(itemId))/download"
+        /// 这条**不在** `/api` 前缀下（服务端把它注册在 `@Controller()` 上），所以要拼到源站上，
+        /// 而不是 `apiBaseURL` 上。
+        ///
+        /// 源站是**参数**而不是在这里读 `AppConfiguration`：`DriveRoute` 里全是纯函数，
+        /// 契约测试断言的「源站 + 这条路径」才不会从 `UserDefaults` 取值 —— 那个键在并行测试里
+        /// 会被 `AppConfigurationTests` 改写（其中一例正是 `…/apiary`），断言跟着飘就没有意义了。
+        static func download(itemId: String, origin: URL) -> String {
+            origin.absoluteString + "/drive/items/\(escapedPathComponent(itemId))/download"
         }
 
         /// 一页的两个参数。没给的那个不拼进去：服务端把「没给」当成它自己的默认值，
@@ -1011,15 +1015,13 @@ actor APIClient {
 
     // MARK: 下载
 
-    /// 下载一项的绝对地址。
+    /// 下载一项的绝对地址：源站（`apiOrigin`，没有 `/api` 那一段）+ 路由。
     ///
-    /// 拼的是 `apiOrigin` 而不是 `apiBaseURL`：这条路由不在 `/api` 前缀下。
-    /// 是 `static`，因为它只做字符串拼接、不碰任何状态，契约测试要断言的正是这一串。
+    /// 是 `static`，因为它只做字符串拼接、不碰任何状态。
     static func driveDownloadURL(itemId: String) -> URL {
-        let origin = AppConfiguration.apiOrigin.absoluteString
         // 到不了落空：origin 由 `apiBaseURL` 派生（那里已经保证有 host），
         // 路径段也全部编码过。所以这一串一定解析得出来。
-        return URL(string: origin + DriveRoute.download(itemId: itemId))!
+        URL(string: DriveRoute.download(itemId: itemId, origin: AppConfiguration.apiOrigin))!
     }
 
     /// 把一项下到本机，落在 `destination`。
