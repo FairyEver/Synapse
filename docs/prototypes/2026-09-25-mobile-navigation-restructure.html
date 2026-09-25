@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Synapse iOS 导航改版原型</title>
+<style>
+:root{
+  --ink:#000; --paper:#fff; --grouped-bg:#f2f2f7; --card:#fff;
+  --label:#000; --label2:rgba(60,60,67,.6); --label3:rgba(60,60,67,.3);
+  --sep:rgba(60,60,67,.29); --fill:rgba(120,120,128,.12); --fill2:rgba(120,120,128,.2);
+  --attention:#995c00; --attention-fill:#fcf5e6; --attention-ring:rgba(153,92,0,.35);
+  --running:#1c8a4f; --failure:#c7362e;
+  --terminal-bg:#101012; --terminal-fg:#e6e6e9; --terminal-bar:#17171a;
+  --terminal-chip:#26262b; --terminal-chip-fg:#d0d0d4; --terminal-line:#2a2a2e;
+  --bar:rgba(249,249,249,.94); --shadow:0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme:dark){ :root{
+    --ink:#fff; --paper:#000; --grouped-bg:#000; --card:#1c1c1e;
+    --label:#fff; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
+    --sep:rgba(84,84,88,.65); --fill:rgba(120,120,128,.24); --fill2:rgba(120,120,128,.32);
+    --attention:#f2a640; --attention-fill:#47361a; --attention-ring:rgba(242,166,64,.3);
+    --failure:#ff7366; --bar:rgba(30,30,30,.94); --shadow:none;
+} }
+html[data-appearance="dark"]{
+    --ink:#fff; --paper:#000; --grouped-bg:#000; --card:#1c1c1e;
+    --label:#fff; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
+    --sep:rgba(84,84,88,.65); --fill:rgba(120,120,128,.24); --fill2:rgba(120,120,128,.32);
+    --attention:#f2a640; --attention-fill:#47361a; --attention-ring:rgba(242,166,64,.3);
+    --failure:#ff7366; --bar:rgba(30,30,30,.94); --shadow:none;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  background:#e9e9ee;color:#111;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+@media (prefers-color-scheme:dark){body{background:#151517;color:#eee}}
+svg{display:block}
+label{cursor:pointer;-webkit-user-select:none;user-select:none}
+
+/* 所有控制用的 input：视觉隐藏 */
+body > input.vh, .app > input.vh{position:absolute;width:1px;height:1px;opacity:0;margin:0;
+  padding:0;border:0;pointer-events:none}
+
+/* ---------- 顶栏 ---------- */
+.chrome{display:flex;gap:10px;align-items:center;height:50px;padding:0 14px;background:var(--bar);
+  border-bottom:.5px solid var(--sep);color:var(--label);position:relative;z-index:5}
+.chrome .brand{font-size:14px;font-weight:600;margin-right:auto;line-height:1.2}
+.chrome .brand small{display:block;font-weight:400;font-size:11px;color:var(--label2)}
+.chrome .seg{display:flex;background:var(--fill);border-radius:9px;padding:2px}
+.chrome .seg span{font-size:13px;font-weight:500;padding:5px 12px;border-radius:7px;color:var(--label2);display:block}
+.chrome .seg span.on{background:var(--card);box-shadow:var(--shadow);font-weight:600;color:var(--label)}
+.chrome .darkbtn{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;
+  background:var(--fill);color:var(--label);margin-left:8px}
+
+/* ---------- 手机 ---------- */
+.stage{display:flex;justify-content:center;padding:26px 16px 60px}
+.app{width:390px;height:844px;background:var(--grouped-bg);border-radius:52px;position:relative;
+  overflow:hidden;box-shadow:0 0 0 11px #1b1b1d,0 0 0 13px #34343a,0 30px 70px rgba(0,0,0,.35);
+  display:flex;flex-direction:column}
+.app::after{content:"";position:absolute;top:11px;left:50%;transform:translateX(-50%);width:112px;
+  height:30px;border-radius:20px;background:#000;z-index:60;pointer-events:none}
+@media (max-width:600px){
+  .stage{padding:0}
+  .app{width:100%;height:calc(100svh - 50px);border-radius:0;box-shadow:none;min-height:440px}
+  .app::after{display:none}
+  .statusbar{height:30px;font-size:13px;padding-bottom:4px}
+}
+
+/* ---------- 状态栏 ---------- */
+.statusbar{height:54px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 30px 7px;font-size:14px;font-weight:600;color:var(--label);position:relative;z-index:20}
+.statusbar .right{display:flex;gap:5px;align-items:center}
+.statusbar svg{height:11px;width:auto}
+
+/* ---------- 屏幕 ---------- */
+.viewport{flex:1;position:relative;overflow:hidden;min-height:0}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--grouped-bg);overflow:hidden}
+.screen.dark{background:var(--terminal-bg)}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0}
+.scroll::-webkit-scrollbar{width:0}
+.fill{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+
+.navbar{flex:none;display:flex;align-items:center;min-height:44px;padding:0 8px;background:var(--bar);
+  border-bottom:.5px solid var(--sep);position:relative;z-index:10}
+.navbar.large{align-items:center;min-height:46px;border-bottom-color:transparent;background:transparent}
+.navbar.large .trailing{padding-top:2px}
+.navbar.dark{background:var(--terminal-bg);border-bottom-color:var(--terminal-line)}
+.navbar.dark .title,.navbar.dark .plain{color:var(--terminal-fg)}
+.navbar .ltitle{font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--label);padding:0 8px;
+  line-height:1.15;flex:1}
+.navbar .title{font-size:17px;font-weight:600;color:var(--label);flex:1;text-align:center;
+  position:absolute;left:0;right:0;pointer-events:none}
+.navbar .back{display:flex;align-items:center;gap:2px;color:var(--ink);font-size:17px;
+  padding:8px 10px 8px 2px;flex:none;z-index:2}
+.navbar.dark .back{color:var(--terminal-fg)}
+.navbar .back svg{width:11px;height:19px}
+.trailing{margin-left:auto;display:flex;align-items:center;gap:16px;padding-right:8px;z-index:2}
+.plain{font-size:17px;color:var(--ink);padding:4px 0;display:block}
+.plain.thin{font-size:15px}
+.dim-action{opacity:.45}
+
+/* ---------- 列表 ---------- */
+.list{padding:0 0 24px}
+.lt{padding:0 16px 2px}
+.lt h1{margin:0;font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--label);line-height:1.15}
+.group{margin:0 16px}
+.card{background:var(--card);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-height:44px;padding:9px 16px;position:relative;
+  color:var(--label);font-size:17px;width:100%;text-align:left}
+.row.static{cursor:default}
+.row .sep{position:absolute;left:57px;right:0;bottom:0;height:.5px;background:var(--sep)}
+.row.noicon .sep{left:16px}
+.row:last-child .sep{display:none}
+.tile{width:29px;height:29px;border-radius:7px;flex:none;display:grid;place-items:center;
+  background:var(--fill);color:var(--label)}
+.tile svg{width:18px;height:18px}
+.tile.amber{background:var(--attention-fill);color:var(--attention)}
+.row .body{flex:1;min-width:0}
+.row .t{font-size:17px;color:var(--label);line-height:1.25;display:block}
+.row .t.tx{font-size:15px;line-height:1.62;font-weight:400}
+.row .t.mono{font-family:ui-monospace,Menlo,monospace;font-size:14.5px}
+.row .s{font-size:13px;color:var(--label2);line-height:1.32;margin-top:2px;display:block}
+.row.muted .t{color:var(--label2)}
+.row.muted .tile{opacity:.55}
+.row.notif-dim .t,.row.notif-dim .s{color:var(--label2)}
+.val{font-size:17px;color:var(--label2);max-width:48%;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;flex:none}
+.chev{color:var(--label3);flex:none}
+.chev svg{width:8px;height:13px}
+.dot{width:8px;height:8px;border-radius:4px;flex:none}
+.sechead{font-size:13px;color:var(--label2);padding:26px 16px 6px;display:block}
+.secfoot{font-size:13px;color:var(--label2);padding:7px 16px 0;line-height:1.45;display:block}
+
+.attention{margin:8px 16px 0;background:var(--attention-fill);border-radius:12px;padding:13px 16px;
+  display:flex;align-items:center;gap:12px;width:calc(100% - 32px)}
+.attention .pulse{width:9px;height:9px;border-radius:5px;background:var(--attention);flex:none;
+  animation:pulse 2.2s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 var(--attention-ring)}
+  70%{box-shadow:0 0 0 10px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}
+@media (prefers-reduced-motion:reduce){.attention .pulse{animation:none}}
+.attention .txt{flex:1;min-width:0}
+.attention .n{font-size:16px;font-weight:600;color:var(--attention);line-height:1.25;display:block}
+.attention .d{font-size:13px;color:var(--attention);opacity:.85;margin-top:2px;display:block}
+.attention .chev{color:var(--attention);opacity:.6}
+
+.bell{color:var(--ink);padding:9px 5px;display:grid;place-items:center;position:relative}
+.bell svg{width:22px;height:22px}
+.badge{position:absolute;top:1px;right:-4px;min-width:16px;height:16px;border-radius:8px;
+  background:var(--attention);color:var(--attention-fill);font-size:10px;font-weight:700;
+  display:grid;place-items:center;padding:0 4px;box-sizing:content-box;outline:2px solid var(--bar)}
+
+.tabbar{flex:none;display:flex;padding:7px 0 18px;background:var(--bar);
+  border-top:.5px solid var(--sep);position:relative;z-index:30}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:1px 0;color:var(--label2)}
+.tab .ti{position:relative;display:grid;place-items:center}
+.tab .ti svg{width:25px;height:25px}
+.tab .tl{font-size:10px;font-weight:500}
+.dotbadge{position:absolute;top:-1px;right:-2px;width:9px;height:9px;border-radius:5px;
+  background:var(--attention);outline:1.5px solid var(--bar)}
+
+.segment-wrap{padding:10px 16px 0}
+.segment{display:flex;background:var(--fill);border-radius:9px;padding:2px}
+.segment label{flex:1;text-align:center;font-size:13px;font-weight:500;color:var(--label);
+  padding:6px 0;border-radius:7px}
+.nseg-panel,.mtab-panel{display:none}
+
+.switch{width:51px;height:31px;border-radius:16px;background:var(--fill2);flex:none;position:relative}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;
+  background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s}
+
+.term{flex:1;min-height:0;overflow:auto;padding:10px 12px;background:var(--terminal-bg);
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12.5px;line-height:1.5;
+  color:var(--terminal-fg);white-space:pre-wrap;word-break:break-word}
+.term .p{color:#3fb950}.term .c{color:#58a6ff}.term .d{color:#6e7681}.term .y{color:#d29922}
+.term .cursor{background:#e6e6e9;color:#101012;animation:blink 1.1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+.termbar{flex:none;display:flex;gap:8px;padding:8px 10px 10px;background:var(--terminal-bar);
+  border-top:.5px solid var(--terminal-line);align-items:center;overflow-x:auto}
+.termbar::-webkit-scrollbar{height:0}
+.chip{flex:none;font-size:12.5px;padding:6px 12px;border-radius:14px;background:var(--terminal-chip);
+  color:var(--terminal-chip-fg);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip svg{width:13px;height:13px}
+.chip.amber{background:#3a2c10;color:var(--attention)}
+.chip.pri{background:#e6e6e9;color:#101012;font-weight:600}
+
+/* ---------- 说明文档 ---------- */
+.doc{display:none;max-width:840px;margin:0 auto;padding:6px 20px 110px;color:var(--label2)}
+.doc h2{font-size:21px;margin:38px 0 12px;letter-spacing:-.01em;color:var(--label)}
+.doc h2:first-child{margin-top:20px}
+.doc h3{font-size:16px;margin:24px 0 8px;color:var(--label)}
+.doc p,.doc li{font-size:14.5px;line-height:1.72}
+.doc p{margin:0 0 12px}
+.doc ul{margin:0 0 12px;padding-left:20px}
+.doc li{margin:6px 0}
+.doc strong{color:var(--label);font-weight:600}
+.doc code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:var(--fill);
+  padding:2px 5px;border-radius:5px;color:var(--label)}
+.doc .lead{font-size:16.5px;color:var(--label);line-height:1.68}
+.doc table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:13.5px;
+  background:var(--card);border-radius:12px;overflow:hidden}
+.doc th,.doc td{text-align:left;padding:10px 12px;border-bottom:.5px solid var(--sep);
+  vertical-align:top;color:var(--label2)}
+.doc tr:last-child td{border-bottom:0}
+.doc th{color:var(--label);font-weight:600;font-size:13px;white-space:nowrap}
+.doc .box{background:var(--card);border-radius:12px;padding:15px 17px;margin:16px 0}
+.doc .box p:last-child{margin-bottom:0}
+.doc .warn{background:var(--attention-fill)}
+.doc .warn p,.doc .warn li,.doc .warn td,.doc .warn strong{color:var(--attention)}
+pre.ia{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.65;background:var(--card);
+  border-radius:12px;padding:16px;overflow-x:auto;color:var(--label);margin:14px 0 20px}
+pre.ia .old{color:var(--failure)}pre.ia .new{color:var(--running)}pre.ia .dim{color:var(--label2)}
+
+/* ===== 可见性规则（由生成器按屏幕表产出）===== */
+#scr-home:checked ~ .viewport #s-home{display:flex}
+#scr-notifications:checked ~ .viewport #s-notifications{display:flex}
+#scr-fe-rec:checked ~ .viewport #s-fe-rec{display:flex}
+#scr-fe-rec-det:checked ~ .viewport #s-fe-rec-det{display:flex}
+#scr-fe-new:checked ~ .viewport #s-fe-new{display:flex}
+#scr-fe-clip:checked ~ .viewport #s-fe-clip{display:flex}
+#scr-terminal:checked ~ .viewport #s-terminal{display:flex}
+#scr-desktops:checked ~ .viewport #s-desktops{display:flex}
+#scr-term-det:checked ~ .viewport #s-term-det{display:flex}
+#scr-me:checked ~ .viewport #s-me{display:flex}
+#scr-me-account:checked ~ .viewport #s-me-account{display:flex}
+#scr-me-devices:checked ~ .viewport #s-me-devices{display:flex}
+#scr-me-terminal:checked ~ .viewport #s-me-terminal{display:flex}
+#scr-me-recording:checked ~ .viewport #s-me-recording{display:flex}
+#scr-me-notifications:checked ~ .viewport #s-me-notifications{display:flex}
+#scr-me-diag:checked ~ .viewport #s-me-diag{display:flex}
+#scr-me-diag-log:checked ~ .viewport #s-me-diag-log{display:flex}
+#scr-me-about:checked ~ .viewport #s-me-about{display:flex}
+#scr-term-det:checked ~ .viewport{background:var(--terminal-bg)}
+#scr-term-det:checked ~ .viewport #s-term-det{background:var(--terminal-bg)}
+#scr-term-det:checked ~ .tabbar{display:none}
+#scr-home:checked ~ .tabbar .tab-home,#scr-notifications:checked ~ .tabbar .tab-home,#scr-fe-rec:checked ~ .tabbar .tab-home,#scr-fe-rec-det:checked ~ .tabbar .tab-home,#scr-fe-new:checked ~ .tabbar .tab-home,#scr-fe-clip:checked ~ .tabbar .tab-home{color:var(--ink)}
+#scr-terminal:checked ~ .tabbar .tab-terminal,#scr-desktops:checked ~ .tabbar .tab-terminal,#scr-term-det:checked ~ .tabbar .tab-terminal{color:var(--ink)}
+#scr-me:checked ~ .tabbar .tab-me,#scr-me-account:checked ~ .tabbar .tab-me,#scr-me-devices:checked ~ .tabbar .tab-me,#scr-me-terminal:checked ~ .tabbar .tab-me,#scr-me-recording:checked ~ .tabbar .tab-me,#scr-me-notifications:checked ~ .tabbar .tab-me,#scr-me-diag:checked ~ .tabbar .tab-me,#scr-me-diag-log:checked ~ .tabbar .tab-me,#scr-me-about:checked ~ .tabbar .tab-me{color:var(--ink)}
+#nseg-pending:checked ~ .viewport #nseg-p{display:block}
+#nseg-pending:checked ~ .viewport .segment label[for="nseg-pending"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#nseg-unread:checked ~ .viewport #nseg-u{display:block}
+#nseg-unread:checked ~ .viewport .segment label[for="nseg-unread"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#nseg-all:checked ~ .viewport #nseg-a{display:block}
+#nseg-all:checked ~ .viewport .segment label[for="nseg-all"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#mtab-text:checked ~ .viewport #mtab-p-text{display:block}
+#mtab-text:checked ~ .viewport .segment label[for="mtab-text"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#mtab-audio:checked ~ .viewport #mtab-p-audio{display:block}
+#mtab-audio:checked ~ .viewport .segment label[for="mtab-audio"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#den-compact:checked ~ .viewport .segment label[for="den-compact"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#den-normal:checked ~ .viewport .segment label[for="den-normal"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#den-loose:checked ~ .viewport .segment label[for="den-loose"]{background:var(--card);box-shadow:var(--shadow);font-weight:600}
+#dsk-d1:checked ~ .viewport .dname[data-d="d1"]{display:inline}
+#dsk-d1:checked ~ .viewport .cur[data-d="d1"]{display:inline-flex}
+#dsk-d2:checked ~ .viewport .st[data-d="d1"]{display:inline-flex}
+#dsk-d3:checked ~ .viewport .st[data-d="d1"]{display:inline-flex}
+#dsk-d2:checked ~ .viewport .dname[data-d="d2"]{display:inline}
+#dsk-d2:checked ~ .viewport .cur[data-d="d2"]{display:inline-flex}
+#dsk-d1:checked ~ .viewport .st[data-d="d2"]{display:inline-flex}
+#dsk-d3:checked ~ .viewport .st[data-d="d2"]{display:inline-flex}
+#dsk-d3:checked ~ .viewport .dname[data-d="d3"]{display:inline}
+#dsk-d3:checked ~ .viewport .cur[data-d="d3"]{display:inline-flex}
+#dsk-d1:checked ~ .viewport .st[data-d="d3"]{display:inline-flex}
+#dsk-d2:checked ~ .viewport .st[data-d="d3"]{display:inline-flex}
+.dname,.cur,.stat{display:none}
+.stat{align-items:center;gap:6px;flex:none}
+.stat .val{color:var(--label);max-width:none}
+#sw-diag:checked ~ .viewport #swvis-diag{background:#34c759}
+#sw-diag:checked ~ .viewport #swvis-diag::after{transform:translateX(20px)}
+#sw-content:checked ~ .viewport #swvis-content{background:#34c759}
+#sw-content:checked ~ .viewport #swvis-content::after{transform:translateX(20px)}
+#read-all:checked ~ .viewport .notif-unread .dot{display:none}
+#read-all:checked ~ .viewport .notif-unread .t{color:var(--label2)}
+#read-all:checked ~ .viewport .notif-unread .s{color:var(--label3)}
+#read-all:checked ~ .viewport .bell-badge{display:none}
+#read-all:checked ~ .tabbar .dotbadge{display:none}
+#view-doc:checked ~ .stage{display:none}
+#view-doc:checked ~ .doc{display:block}
+#view-doc:checked ~ .chrome .seg span[data-v="proto"]{background:none;box-shadow:none;font-weight:500;color:var(--label2)}
+#view-doc:checked ~ .chrome .seg span[data-v="doc"]{background:var(--card);box-shadow:var(--shadow);font-weight:600;color:var(--label)}
+#mode-dark:checked ~ .stage .app,#mode-dark:checked ~ .chrome,#mode-dark:checked ~ .doc{
+    --ink:#fff; --paper:#000; --grouped-bg:#000; --card:#1c1c1e;
+    --label:#fff; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
+    --sep:rgba(84,84,88,.65); --fill:rgba(120,120,128,.24); --fill2:rgba(120,120,128,.32);
+    --attention:#f2a640; --attention-fill:#47361a; --attention-ring:rgba(242,166,64,.3);
+    --failure:#ff7366; --bar:rgba(30,30,30,.94); --shadow:none;
+}
+#mode-dark:checked ~ body{background:#151517}
+</style>
+</head>
+<body>
+<input class="vh" type="radio" name="view" id="view-proto" checked>
+<input class="vh" type="radio" name="view" id="view-doc">
+<input class="vh" type="checkbox" id="mode-dark">
+
+<div class="chrome">
+  <div class="brand">Synapse iOS<small>导航改版原型</small></div>
+  <div class="seg">
+    <label for="view-proto"><span data-v="proto" class="on">原型</span></label>
+    <label for="view-doc"><span data-v="doc">说明</span></label>
+  </div>
+  <label class="darkbtn" for="mode-dark" title="深色外观">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+         stroke-width="1.9"><circle cx="12" cy="12" r="9"/>
+      <path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>
+  </label>
+</div>
+
+<div class="stage">
+  <div class="app">
+<input class="vh" type="radio" name="scr" id="scr-home" checked>
+<input class="vh" type="radio" name="scr" id="scr-notifications">
+<input class="vh" type="radio" name="scr" id="scr-fe-rec">
+<input class="vh" type="radio" name="scr" id="scr-fe-rec-det">
+<input class="vh" type="radio" name="scr" id="scr-fe-new">
+<input class="vh" type="radio" name="scr" id="scr-fe-clip">
+<input class="vh" type="radio" name="scr" id="scr-terminal">
+<input class="vh" type="radio" name="scr" id="scr-desktops">
+<input class="vh" type="radio" name="scr" id="scr-term-det">
+<input class="vh" type="radio" name="scr" id="scr-me">
+<input class="vh" type="radio" name="scr" id="scr-me-account">
+<input class="vh" type="radio" name="scr" id="scr-me-devices">
+<input class="vh" type="radio" name="scr" id="scr-me-terminal">
+<input class="vh" type="radio" name="scr" id="scr-me-recording">
+<input class="vh" type="radio" name="scr" id="scr-me-notifications">
+<input class="vh" type="radio" name="scr" id="scr-me-diag">
+<input class="vh" type="radio" name="scr" id="scr-me-diag-log">
+<input class="vh" type="radio" name="scr" id="scr-me-about">
+<input class="vh" type="radio" name="nseg" id="nseg-pending" checked>
+<input class="vh" type="radio" name="nseg" id="nseg-unread">
+<input class="vh" type="radio" name="nseg" id="nseg-all">
+<input class="vh" type="radio" name="mtab" id="mtab-text" checked>
+<input class="vh" type="radio" name="mtab" id="mtab-audio">
+<input class="vh" type="radio" name="den" id="den-compact">
+<input class="vh" type="radio" name="den" id="den-normal" checked>
+<input class="vh" type="radio" name="den" id="den-loose">
+<input class="vh" type="radio" name="dsk" id="dsk-d1" checked>
+<input class="vh" type="radio" name="dsk" id="dsk-d2">
+<input class="vh" type="radio" name="dsk" id="dsk-d3">
+<input class="vh" type="checkbox" id="sw-diag" checked>
+<input class="vh" type="checkbox" id="sw-content">
+<input class="vh" type="checkbox" id="read-all">
+<div class="statusbar"><span>9:41</span><span class="right"><svg viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="4.6" y="5.6" width="3" height="6.4" rx="1"/><rect x="9.2" y="3" width="3" height="9" rx="1"/><rect x="13.8" y="0" width="3" height="12" rx="1"/></svg><svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 10.4 5.9 8.3a3 3 0 0 1 4.2 0L8 10.4Zm0-5.1a6 6 0 0 0-4.2 1.7L2.4 5.6a8 8 0 0 1 11.2 0l-1.4 1.4A6 6 0 0 0 8 5.3Z"/></svg><svg viewBox="0 0 25 12" fill="none" stroke="currentColor" stroke-width="1"><rect x=".5" y=".5" width="21" height="11" rx="3"/><rect x="2" y="2" width="18" height="8" rx="1.8" fill="currentColor" stroke="none"/><path d="M23.4 4.2v3.6" stroke-linecap="round"/></svg></span></div>
+    <div class="viewport">
+<div class="screen" id="s-home"><div class="navbar large"><span class="trailing"><label class="bell" for="scr-notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.1a5.5 5.5 0 0 0-5.5 5.5v3.2L4.9 15.5h14.2l-1.6-3.7V8.6A5.5 5.5 0 0 0 12 3.1Z"/><path d="M9.9 18.5a2.2 2.2 0 0 0 4.2 0"/></svg><span class="badge bell-badge">3</span></label></span></div><div class="scroll"><div class="lt"><h1>主页</h1></div><div class="list"><label class="attention" for="scr-term-det"><span class="pulse"></span><span class="txt"><span class="n">1 个会话在等你</span><span class="d">终端有输出，需要你回复</span></span><span class="chev" style="color:var(--attention);opacity:.6"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label><div class="sechead">功能</div><div class="group"><div class="card"><label class="row" for="scr-fe-rec"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="2.7" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.1a6.4 6.4 0 0 0 12.8 0M12 17.5V21"/></svg></span><span class="body"><span class="t">录音</span><span class="s">会议录音、转写与回听</span></span><span class="val">2 条</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-fe-new"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="body"><span class="t">新建会话</span><span class="s">在当前电脑上开一个终端</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-fe-clip"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4.2" width="12" height="16.6" rx="2.4"/><path d="M9.2 4.2a1.6 1.6 0 0 1 1.6-1.4h2.4a1.6 1.6 0 0 1 1.6 1.4"/><path d="M9.4 11h5.2M9.4 14.6h3.4"/></svg></span><span class="body"><span class="t">剪贴板历史</span><span class="s">这台电脑上复制过的内容</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div class="sechead">即将支持</div><div class="group"><div class="card"><div class="row muted static"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.4 18.6h9.3a4.3 4.3 0 0 0 .6-8.5 5.7 5.7 0 0 0-11 1.2 3.7 3.7 0 0 0 1.1 7.3Z"/></svg></span><span class="body"><span class="t">云盘</span><span class="s">文件上传、分享与同步</span></span><span class="sep"></span></div><div class="row muted static"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.3 2.7 5.3 13.5h5.3l-.9 7.8 8-10.8h-5.3z"/></svg></span><span class="body"><span class="t">自动化</span><span class="s">定时任务与运行历史</span></span><span class="sep"></span></div><div class="row muted static"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.3 3.6 7.4 12 11.5l8.4-4.1z"/><path d="M3.6 12 12 16.1 20.4 12"/><path d="M3.6 16.4 12 20.5l8.4-4.1"/></svg></span><span class="body"><span class="t">内容库</span><span class="s">Rule、Skill 与 Prompt</span></span><span class="sep"></span></div><div class="row muted static"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.1" rx="7.4" ry="3"/><path d="M4.6 6.1v11.8c0 1.66 3.31 3 7.4 3s7.4-1.34 7.4-3V6.1"/><path d="M4.6 11.9c0 1.66 3.31 3 7.4 3s7.4-1.34 7.4-3"/></svg></span><span class="body"><span class="t">数据库</span><span class="s">表与数据记录</span></span></div></div></div><div class="secfoot">桌面端已有的能力，按同一套结构陆续接进这一页。原型里列出它们，是为了展示这个结构在功能变多之后长什么样。</div><div style="height:14px"></div></div></div></div>
+<div class="screen" id="s-notifications"><div class="navbar static"><label class="back" for="scr-home"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>主页</span></label><span class="title">通知</span><span class="trailing"><label class="plain thin" for="read-all">全部已读</label></span></div><div class="scroll"><div class="segment-wrap"><div class="segment"><label for="nseg-pending">待处理</label><label for="nseg-unread">未读</label><label for="nseg-all">全部</label></div></div><div class="nseg-panel" id="nseg-p"><div class="group"><div class="card"><label class="row notif-unread" for="scr-term-det"><span class="tile amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 12.3h3.9l2.1-6.1 3.2 12 2.4-7.3 1.6 3.4h5.2"/></svg></span><span class="body"><span class="t">api-server 在等你回复</span><span class="s">数据库没起来，终端在问是否启动 docker compose。<br>3 分钟前</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label></div></div></div><div class="nseg-panel" id="nseg-u"><div class="group"><div class="card"><label class="row notif-unread" for="scr-term-det"><span class="tile amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 12.3h3.9l2.1-6.1 3.2 12 2.4-7.3 1.6 3.4h5.2"/></svg></span><span class="body"><span class="t">api-server 在等你回复</span><span class="s">数据库没起来，终端在问是否启动 docker compose。<br>3 分钟前</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row noicon notif-unread" for="scr-fe-rec-det"><span class="body"><span class="t">转写完成</span><span class="s">「周会 · 产品评审」的语音转写已完成，可以查看文字稿了。<br>1 小时前</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row noicon notif-unread" for="scr-terminal"><span class="body"><span class="t">会话已结束</span><span class="s">web · vite 已在 MacBook Pro 14 上退出，退出码 0。<br>今天 09:40</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label></div></div></div><div class="nseg-panel" id="nseg-a"><div class="group"><div class="card"><label class="row notif-unread" for="scr-term-det"><span class="tile amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 12.3h3.9l2.1-6.1 3.2 12 2.4-7.3 1.6 3.4h5.2"/></svg></span><span class="body"><span class="t">api-server 在等你回复</span><span class="s">数据库没起来，终端在问是否启动 docker compose。<br>3 分钟前</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row noicon notif-unread" for="scr-fe-rec-det"><span class="body"><span class="t">转写完成</span><span class="s">「周会 · 产品评审」的语音转写已完成，可以查看文字稿了。<br>1 小时前</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row noicon notif-unread" for="scr-terminal"><span class="body"><span class="t">会话已结束</span><span class="s">web · vite 已在 MacBook Pro 14 上退出，退出码 0。<br>今天 09:40</span></span><span class="dot" style="background:var(--attention)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row noicon muted" for="scr-term-det"><span class="body"><span class="t">新设备登录</span><span class="s">「Mac mini · 工作室」已登录到你的账号。<br>昨天 20:11</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label></div></div></div></div></div>
+<div class="screen" id="s-fe-rec"><div class="navbar static"><label class="back" for="scr-home"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>主页</span></label><span class="title">录音</span><span class="trailing"><span class="plain thin dim-action">开始录音</span></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><label class="row" for="scr-fe-rec-det"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="2.7" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.1a6.4 6.4 0 0 0 12.8 0M12 17.5V21"/></svg></span><span class="body"><span class="t">周会 · 产品评审</span><span class="s">今天 10:30 · 42:18</span></span><span class="val">语音 · 文字</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-fe-rec-det"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="2.7" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.1a6.4 6.4 0 0 0 12.8 0M12 17.5V21"/></svg></span><span class="body"><span class="t">与客户沟通记录</span><span class="s">昨天 16:05 · 18:44</span></span><span class="val">语音 · 文字</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-fe-rec-det"><span class="tile amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="2.7" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.1a6.4 6.4 0 0 0 12.8 0M12 17.5V21"/></svg></span><span class="body"><span class="t">需求讨论</span><span class="s">周一 09:12 · 07:02</span></span><span class="val"><span style="color:var(--attention);font-weight:600">转写中</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label></div></div><div class="secfoot">录音与转写在服务端，不依赖任何一台电脑。</div></div></div>
+<div class="screen" id="s-fe-rec-det"><div class="navbar static"><label class="back" for="scr-fe-rec"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>录音</span></label><span class="title">周会 · 产品评审</span><span class="trailing"><span class="plain thin dim-action">分享</span></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><div class="row noicon static" style="display:block;padding:12px 16px"><div class="segment"><label for="mtab-text">文字</label><label for="mtab-audio">语音</label></div></div></div></div><div class="sechead">今天 10:30 · 42:18</div><div class="mtab-panel" id="mtab-p-text"><div class="group"><div class="card"><div class="row noicon static" style="display:block;padding:12px 16px"><span class="s" style="margin:0 0 6px">00:00</span><span class="t tx">今天我们主要过一下这一版的产品范围，先把终端和录音这两条线的边界定下来。</span></div><div class="row noicon static" style="display:block;padding:12px 16px"><span class="s" style="margin:0 0 6px">00:18</span><span class="t tx">终端只负责控制电脑上的会话，录音不绑定任何一台电脑，转写在服务端做。</span></div></div></div></div><div class="mtab-panel" id="mtab-p-audio"><div class="group"><div class="card"><div class="row noicon static" style="display:block;padding:16px"><span class="t">播放器占位</span><span class="s">音频在云端，点开时现签地址流式拉取。</span></div></div></div></div><div style="height:14px"></div></div></div>
+<div class="screen" id="s-fe-new"><div class="navbar static"><label class="back" for="scr-home"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>主页</span></label><span class="title">新建会话</span><span class="trailing"><span class="plain thin dim-action">创建</span></span></div><div class="scroll"><div class="sechead">电脑</div><div class="group"><div class="card"><div class="row static"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t"><span class="dname" data-d="d1">MacBook Pro 14</span><span class="dname" data-d="d2">Mac mini · 工作室</span><span class="dname" data-d="d3">MacBook Air</span></span></span><span class="dot" style="background:var(--running)"></span><span class="sep"></span></div></div></div><div class="sechead">目录</div><div class="group"><div class="card"><div class="row noicon static"><span class="body"><span class="t mono">~/code/api-server</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t mono">~/code/web</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></div></div></div><div class="sechead">Agent</div><div class="group"><div class="card"><div class="row noicon static"><span class="body"><span class="t">Claude Code</span><span class="s">默认</span></span><span class="val">Sonnet</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></div></div></div><div class="secfoot">电脑离线时这一页的「创建」不可用。终端列表右上角的 ＋ 是同一件事的快捷方式。</div></div></div>
+<div class="screen" id="s-fe-clip"><div class="navbar static"><label class="back" for="scr-home"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>主页</span></label><span class="title">剪贴板历史</span><span class="trailing"></span></div><div class="scroll"><div class="sechead"><span class="dname" data-d="d1">MacBook Pro 14</span><span class="dname" data-d="d2">Mac mini · 工作室</span><span class="dname" data-d="d3">MacBook Air</span></div><div class="group"><div class="card"><div class="row noicon static"><span class="body"><span class="t mono">pnpm --filter @synapse/desktop run test</span><span class="s">2 分钟前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t mono">https://synapse.d2.pub/share/9f3c</span><span class="s">18 分钟前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">周会纪要草稿</span><span class="s">今天 10:52</span></span></div></div></div><div class="secfoot">按电脑分开保存。它在「功能」里，因为它不绑定任何一个终端会话。</div></div></div>
+<div class="screen" id="s-terminal"><div class="navbar large"><span class="trailing"><label class="plain thin" for="scr-desktops">切换电脑</label></span></div><div class="scroll"><div class="lt"><h1>终端</h1></div><div class="sechead">当前电脑</div><div class="group"><div class="card"><label class="row" for="scr-desktops"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t"><span class="dname" data-d="d1">MacBook Pro 14</span><span class="dname" data-d="d2">Mac mini · 工作室</span><span class="dname" data-d="d3">MacBook Air</span></span></span><span class="dot" style="background:var(--running)"></span><span class="val">已连接</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label></div></div><div class="sechead">会话</div><div class="group"><div class="card"><label class="row" for="scr-term-det"><span class="tile amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.2" width="18.8" height="15.6" rx="3"/><path d="M7.2 9.6 9.9 12.3 7.2 15M12.6 15.2h4.2"/></svg></span><span class="body"><span class="t">api-server</span><span class="s">等待输入</span></span><span class="val"><span style="color:var(--attention);font-weight:600">等待输入</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-term-det"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.2" width="18.8" height="15.6" rx="3"/><path d="M7.2 9.6 9.9 12.3 7.2 15M12.6 15.2h4.2"/></svg></span><span class="body"><span class="t">web · vite</span><span class="s">运行中</span></span><span class="val">2 分钟前</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-term-det"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.2" width="18.8" height="15.6" rx="3"/><path d="M7.2 9.6 9.9 12.3 7.2 15M12.6 15.2h4.2"/></svg></span><span class="body"><span class="t">docs</span><span class="s">空闲</span></span><span class="val">1 小时前</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label></div></div><div class="secfoot">一次只控制一台电脑。终端会话页会隐藏底栏，用左上角返回退出。</div><div style="height:14px"></div></div></div>
+<div class="screen" id="s-desktops"><div class="navbar static"><label class="back" for="scr-terminal"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>终端</span></label><span class="title">选择电脑</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><label class="row" for="dsk-d1"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">MacBook Pro 14</span></span><span class="stat st" data-d="d1"><span class="dot" style="background:var(--running)"></span><span class="val">在线</span></span><span class="stat cur" data-d="d1"><span class="dot" style="background:var(--running)"></span><span class="val">当前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="dsk-d2"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">Mac mini · 工作室</span></span><span class="stat st" data-d="d2"><span class="dot" style="background:var(--running)"></span><span class="val">在线</span></span><span class="stat cur" data-d="d2"><span class="dot" style="background:var(--running)"></span><span class="val">当前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="dsk-d3"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">MacBook Air</span></span><span class="stat st" data-d="d3"><span class="dot" style="background:var(--label3)"></span><span class="val">离线</span></span><span class="stat cur" data-d="d3"><span class="dot" style="background:var(--running)"></span><span class="val">当前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div class="secfoot">一次只能控制一台电脑。切换电脑会断开上一台上的终端会话。</div></div></div>
+<div class="screen" id="s-term-det"><div class="navbar static dark"><label class="back" for="scr-terminal"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>终端</span></label><span class="title">api-server</span><span class="trailing"><span class="plain thin">结束</span></span></div><div class="fill"><div class="term"><span class="d">$ pnpm dev</span>
+<span class="d">  ready in 412ms</span>
+<span class="p">✓ listening on http://localhost:3000</span>
+<span class="d">  12:04:18  GET /api/health     200</span>
+<span class="d">  12:04:31  POST /api/auth/login  500</span>
+<span class="y">⚠ UnhandledRejection: ECONNREFUSED 127.0.0.1:5432</span>
+<span class="c">? 数据库没起来，要我先启动 docker compose 吗 (y/N) </span><span class="cursor"> </span></div><div class="termbar"><span class="chip amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 22 20.4H2z"/><path d="M12 10.2v4.4M12 17.6h.01"/></svg>等待输入</span><span class="chip">⏎ Enter</span><span class="chip">Tab</span><span class="chip">Esc</span><span class="chip">↑</span><span class="chip">↓</span><span class="chip pri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="2.7" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.1a6.4 6.4 0 0 0 12.8 0M12 17.5V21"/></svg>按住说话</span></div></div></div>
+<div class="screen" id="s-me"><div class="navbar large"><span class="trailing"></span></div><div class="scroll"><div class="lt"><h1>我的</h1></div><div class="list"><div class="group" style="margin-top:8px"><div class="card"><label class="row" for="scr-me-account"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="9.9" r="3.1"/><path d="M6.2 18.8a6.1 6.1 0 0 1 11.6 0"/></svg></span><span class="body"><span class="t">账号</span></span><span class="val">liy</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-me-devices"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">电脑</span></span><span class="val"><span class="dname" data-d="d1">MacBook Pro 14</span><span class="dname" data-d="d2">Mac mini · 工作室</span><span class="dname" data-d="d3">MacBook Air</span></span><span class="dot" style="background:var(--running)"></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div class="group" style="margin-top:22px"><div class="card"><label class="row" for="scr-me-terminal"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="6.3" width="19.2" height="11.4" rx="2.2"/><path d="M6.2 10h.01M9.6 10h.01M13 10h.01M16.4 10h.01M8.2 14.2h7.6"/></svg></span><span class="body"><span class="t">终端</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-me-recording"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9.2" y="2.7" width="5.6" height="10.6" rx="2.8"/><path d="M5.6 11.1a6.4 6.4 0 0 0 12.8 0M12 17.5V21"/></svg></span><span class="body"><span class="t">录音</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-me-notifications"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.1a5.5 5.5 0 0 0-5.5 5.5v3.2L4.9 15.5h14.2l-1.6-3.7V8.6A5.5 5.5 0 0 0 12 3.1Z"/><path d="M9.9 18.5a2.2 2.2 0 0 0 4.2 0"/></svg></span><span class="body"><span class="t">通知</span></span><span class="val">3 条未读</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div class="group" style="margin-top:22px"><div class="card"><label class="row" for="scr-me-diag"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 12.3h3.9l2.1-6.1 3.2 12 2.4-7.3 1.6 3.4h5.2"/></svg></span><span class="body"><span class="t">诊断</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="scr-me-about"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.3"/><path d="M12 11v5.5M12 7.8h.01"/></svg></span><span class="body"><span class="t">关于</span></span><span class="val">1.0.29</span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div style="height:14px"></div></div></div></div>
+<div class="screen" id="s-me-account"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">账号</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><div class="row noicon static"><span class="body"><span class="t">昵称</span></span><span class="val">liy</span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">邮箱</span></span><span class="val">liyang@d2.pub</span></div></div></div><div class="secfoot">账号信息在桌面端的设置里修改。</div><div class="group" style="margin-top:30px"><div class="card"><div class="row noicon static"><span class="body"><span class="t"><span style="color:var(--failure)">退出登录</span></span></span></div></div></div><div class="secfoot">本机保存的登录信息会被清除，终端控制将失效。</div></div></div>
+<div class="screen" id="s-me-devices"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">电脑</span><span class="trailing"></span></div><div class="scroll"><div class="sechead">已连接的电脑</div><div class="group"><div class="card"><label class="row" for="dsk-d1"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">MacBook Pro 14</span></span><span class="stat st" data-d="d1"><span class="dot" style="background:var(--running)"></span><span class="val">在线</span></span><span class="stat cur" data-d="d1"><span class="dot" style="background:var(--running)"></span><span class="val">当前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="dsk-d2"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">Mac mini · 工作室</span></span><span class="stat st" data-d="d2"><span class="dot" style="background:var(--running)"></span><span class="val">在线</span></span><span class="stat cur" data-d="d2"><span class="dot" style="background:var(--running)"></span><span class="val">当前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><label class="row" for="dsk-d3"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.1" width="18.8" height="12.2" rx="2"/><path d="M8.6 20h6.8M12 16.3V20"/></svg></span><span class="body"><span class="t">MacBook Air</span></span><span class="stat st" data-d="d3"><span class="dot" style="background:var(--label3)"></span><span class="val">离线</span></span><span class="stat cur" data-d="d3"><span class="dot" style="background:var(--running)"></span><span class="val">当前</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div class="secfoot">一次只能控制一台电脑。切换电脑会断开上一台上的终端会话。</div></div></div>
+<div class="screen" id="s-me-terminal"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">终端</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><div class="row noicon static" style="display:block;padding:12px 16px 14px"><span class="t" style="margin-bottom:10px">显示密度</span><div class="segment"><label for="den-compact">紧凑</label><label for="den-normal">正常</label><label for="den-loose">稀疏</label></div></div></div></div><div class="secfoot">只在「手机驱动」模式下生效：由画布宽度决定列数时，密度决定字号与行距。桌面驱动模式下由电脑的列数决定。</div><div style="height:16px"></div><div class="secfoot">每个会话自己的「显示模式」和本会话密度仍然在终端会话页的 ⋯ 菜单里，那是会话级的临时覆盖，不放在这里。</div></div></div>
+<div class="screen" id="s-me-recording"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">录音</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><div class="row noicon static"><span class="body"><span class="t">麦克风</span></span><span class="val">已允许</span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">在系统设置中打开</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></div></div></div><div class="secfoot">录音与转写都在服务端处理，不依赖任何一台电脑，本机没有需要调整的选项。</div></div></div>
+<div class="screen" id="s-me-notifications"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">通知</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><div class="row noicon static"><span class="body"><span class="t">系统通知</span></span><span class="val">已允许</span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">在系统设置中打开</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></div></div></div><div class="secfoot">关掉系统通知不影响任何功能：应用内的通知中心、待处理提示和图标角标都照常工作。</div><div class="sechead">在应用内</div><div class="group"><div class="card"><label class="row notif-unread" for="scr-notifications"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.1a5.5 5.5 0 0 0-5.5 5.5v3.2L4.9 15.5h14.2l-1.6-3.7V8.6A5.5 5.5 0 0 0 12 3.1Z"/><path d="M9.9 18.5a2.2 2.2 0 0 0 4.2 0"/></svg></span><span class="body"><span class="t">通知中心</span><span class="s">3 条未读 · 1 个待处理</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></label><div class="row static"><span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.3"/><path d="M12 11v5.5M12 7.8h.01"/></svg></span><span class="body"><span class="t">图标角标</span><span class="s">显示未读条数</span></span></div></div></div></div></div>
+<div class="screen" id="s-me-diag"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">诊断</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><label class="row noicon" for="sw-diag"><span class="body"><span class="t">记录诊断日志</span></span><span class="switch" id="swvis-diag"></span><span class="sep"></span></label><label class="row noicon" for="scr-me-diag-log"><span class="body"><span class="t">诊断日志</span><span class="s">最近 3 天 · 2.1 MB · 6 个文件</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></label></div></div><div class="secfoot">记录崩溃、网络与终端交互的元数据。关掉只停止记录，不会删除已有日志。</div></div></div>
+<div class="screen" id="s-me-diag-log"><div class="navbar static"><label class="back" for="scr-me-diag"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>诊断</span></label><span class="title">诊断日志</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><label class="row noicon" for="sw-content"><span class="body"><span class="t">记录终端屏幕内容</span><span class="s">关闭时只有终端交互记录</span></span><span class="switch" id="swvis-content"></span></label></div></div><div class="sechead">当前日志</div><div class="group"><div class="card"><div class="row noicon static"><span class="body"><span class="t">时间范围</span></span><span class="val">09-22 09:12 起</span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">占用</span></span><span class="val">2.1 MB</span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">已丢弃</span></span><span class="val">0 条</span></div></div></div><div class="secfoot">日志只在本机写入，不会自动上传。</div><div class="group" style="margin-top:26px"><div class="card"><div class="row noicon static"><span class="body"><span class="t">导出并分享</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t"><span style="color:var(--failure)">删除全部日志</span></span></span></div></div></div></div></div>
+<div class="screen" id="s-me-about"><div class="navbar static"><label class="back" for="scr-me"><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 1.6 2 9.5l7.2 7.9"/></svg><span>我的</span></label><span class="title">关于</span><span class="trailing"></span></div><div class="scroll"><div class="group" style="margin-top:10px"><div class="card"><div class="row noicon static"><span class="body"><span class="t">版本</span></span><span class="val">1.0.29 (295)</span></div></div></div><div class="secfoot">版本号原本挤在终端页顶栏的第二行；现在它和构建号在这里，终端顶栏那一行可以去掉。</div><div class="group" style="margin-top:30px"><div class="card"><div class="row noicon static"><span class="body"><span class="t">问题反馈</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span><span class="sep"></span></div><div class="row noicon static"><span class="body"><span class="t">开源许可</span></span><span class="chev"><svg viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 1.5 6.2 6.5 1.6 11.5"/></svg></span></div></div></div></div></div>
+    </div>
+    <nav class="tabbar"><label class="tab tab-home" for="scr-home"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 10.3 12 3.5l8.6 6.8V20a1 1 0 0 1-1 1h-4.7v-6.2H9.1V21H4.4a1 1 0 0 1-1-1z"/></svg><span class="dotbadge"></span></span><span class="tl">主页</span></label><label class="tab tab-terminal" for="scr-terminal"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="4.2" width="18.8" height="15.6" rx="3"/><path d="M7.2 9.6 9.9 12.3 7.2 15M12.6 15.2h4.2"/></svg></span><span class="tl">终端</span></label><label class="tab tab-me" for="scr-me"><span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="9.9" r="3.1"/><path d="M6.2 18.8a6.1 6.1 0 0 1 11.6 0"/></svg></span><span class="tl">我的</span></label></nav>
+  </div>
+</div>
+
+<div class="doc"><h2>一句话结论</h2>
+<p class="lead">底栏从 <strong>终端 / 录音 / 消息 / 我的</strong> 收敛为 <strong>主页 / 终端 / 我的</strong> 三个位置，并且<strong>从此不再增加</strong>。新增能力一律进入「主页 → 功能」；通知从底栏移到主页右上角的铃铛。</p>
+
+<h2>为什么改</h2>
+<pre class="ia"><span class="old">旧：终端 │ 录音 │ 消息 │ 我的      ← 4 个槽位，已被单点功能占满</span>
+<span class="new">新：主页 │ 终端 │ 我的            ← 3 个槽位，永久固定</span>
+
+<span class="new">主页</span>
+<span class="dim"> ├─ 待处理卡（只在真有会话卡住时出现）────→ 终端 · 那个会话
+ ├─ 通知铃铛（右上角，带未读角标）────────→ 通知面板
+ └─ 功能
+     ├─ 录音 ─────────────────────────────→ 录音列表 → 录音详情
+     ├─ 新建会话 ─────────────────────────→ 表单
+     ├─ 剪贴板历史 ───────────────────────→ 列表
+     └─（云盘 / 自动化 / 内容库 / 数据库…按同一结构陆续接入）</span>
+
+<span class="new">终端</span>
+<span class="dim"> └─ 当前电脑 → 会话列表 → 终端画布（隐藏底栏的沉浸工作区）</span>
+
+<span class="new">我的</span>
+<span class="dim"> ├─ 账号 │ 电脑
+ ├─ 终端 │ 录音 │ 通知
+ └─ 诊断 │ 关于</span></pre>
+
+<p>旧结构的三个问题：</p>
+<ul>
+<li><strong>底栏槽位被单点功能占死。</strong>iOS 的 TabView 最多五个、舒适区三到四个。录音和消息各占一格之后，云盘、自动化、内容库、数据库这些桌面端已经存在的能力就没有位置了——要么挤进「我的」，要么再开一个 tab，两种都只会让底栏继续膨胀。</li>
+<li><strong>「消息」占着最贵的位置，做的是中转站的活。</strong>通知的意义是「带你去某个地方」，它本身不是目的地。用户来这里不是为了读消息，而是为了点进去处理会话或看转写。</li>
+<li><strong>「我的」是平铺的杂物间。</strong>账号、显示密度、已连接的电脑、诊断四段直接铺在一屏，每加一个设置就长一行，没有分类。</li>
+</ul>
+
+<h2>三个位置的固定含义</h2>
+<table>
+<tr><th>位置</th><th>含义</th><th>放什么</th></tr>
+<tr><td><strong>主页</strong></td><td>中枢：所有入口，以及「有没有人需要你」</td><td>功能清单、待处理、通知面板</td></tr>
+<tr><td><strong>终端</strong></td><td>工作现场：控制电脑上的会话</td><td>电脑切换、会话列表、终端画布</td></tr>
+<tr><td><strong>我的</strong></td><td>配置：账号与本机行为</td><td>分类列表，点进去才是具体设置</td></tr>
+</table>
+<p>关于「终端固定在左侧」：终端排在第二格，但它<strong>永远在同一位置、永远不被折叠进别的入口、一键直达、进入后占满整屏（隐藏底栏）</strong>——这是「固定」的实质。把主页放在第一格，是为了让通知有一个不属于任何业务的常驻落点，也正是您提出的方向。真机行为不做特殊处理：冷启动落主页，从后台恢复保持上次的 tab（TabView 的默认行为）。</p>
+
+<h2>关键决策</h2>
+<table>
+<tr><th>决策</th><th>理由</th></tr>
+<tr><td><strong>底栏永远三个，不再增加</strong></td><td>位置是稀缺资源，功能不是。这条要写进规则文档，否则下次又会为一个新功能开一格。</td></tr>
+<tr><td><strong>通知不占 tab，改为右上角铃铛 + 通知面板</strong></td><td>它是覆盖层，不是目的地。面板里点一条就<strong>直接去往目标</strong>（会话或录音）——比「消息 tab → 列表 → 详情 → 再跳转」少两步。</td></tr>
+<tr><td><strong>通知详情不再单独成页</strong></td><td>正文进到行里显示。通知的价值在「带你去哪」，不在「读它的全文」。现有的 <code>NotificationDetailView</code> 可以删掉。</td></tr>
+<tr><td><strong>常驻性由三处共同承担</strong></td><td>① 主页右上角常驻铃铛；② <strong>主页 tab 上的琥珀小圆点</strong>（在任何一屏都能看见有未读）；③ 已有的系统推送与 App 图标角标。所以「不占底栏」不等于「找不到」。</td></tr>
+<tr><td><strong>角标用琥珀，不用系统红</strong></td><td>沿用 <code>Theme.attention</code>：全应用只有一个「有人需要你」的颜色。会话行的「等待输入」和铃铛角标是同一件事的两种呈现。这条可以否决——想回到 iOS 惯用的红色，把两处改成 <code>Color(.systemRed)</code> 即可。</td></tr>
+<tr><td><strong>「我的」外层只放分类，值放二级页</strong></td><td>按您的要求。例外只有两行：<strong>账号</strong>显示昵称、<strong>电脑</strong>显示当前电脑名 + 在线圆点。这两个值是「你现在处在什么状态」，不是「一个可以调的设置」，一眼可见比点进去再退出来有用。不想要的话去掉这两个值即可。</td></tr>
+<tr><td><strong>主页的「待处理」卡只在真有会话卡住时出现</strong></td><td>没有内容就不占位置。它和终端会话行上的琥珀徽章是同一份数据，不引入第二套状态。</td></tr>
+<tr><td><strong>剪贴板历史从终端挪进「功能」</strong></td><td>它现在挂在终端列表的设备行上。它不绑定任何会话、可以独立进入，属于「功能」；挪出来之后终端那一页也干净了——设备行加会话，不再混着别的东西。它仍然是<strong>按电脑分开</strong>的，这一点在页面里写清楚了。这条是否采纳由您定，不采纳就是留在终端页、功能里少一项。</td></tr>
+<tr><td><strong>「即将支持」分组明确标注</strong></td><td>原型里列出桌面端已有、移动端待接入的四项，是为了展示结构在功能变多后长什么样，不是假装已经可用。真实实现时这一组不存在，直到对应能力上线。</td></tr>
+</table>
+
+<h2>「我的」的分组</h2>
+<pre class="ia">账号  ── 昵称、邮箱、退出登录
+电脑  ── 已连接的电脑（单选当前）、离线状态
+终端  ── 显示密度（紧凑 / 正常 / 稀疏）
+录音  ── 麦克风权限
+通知  ── 系统通知权限、通知中心入口、图标角标
+诊断  ── 记录诊断日志 → 诊断日志（记录终端屏幕内容、时间范围、占用、导出、删除全部）
+关于  ── 版本与构建号、问题反馈、开源许可</pre>
+<p>七个分类，与 iOS「设置」同构：图标 + 名称 + 右侧值 + 箭头，点进去才是二级页；诊断下面还再有一层日志页，共三层。</p>
+<p>其中<strong>终端</strong>和<strong>录音</strong>眼下各只有一项设置——这是分类结构的代价，也是它的用处：这两个分类将来会长出东西，现在就把位置留好，好过将来重新组织页面。若您觉得「显示密度」不值得多点一次，把它提回外层一行即可，其余分类不受影响。</p>
+
+<h2>需要落地的技术要点</h2>
+<h3>1. Tab 枚举</h3>
+<p><code>RootView.swift</code> 的 <code>Tab</code> 从 <code>terminals, meetings, inbox, settings</code> 收敛为 <code>home, terminals, settings</code>，<code>selectedTab</code> 默认值改为 <code>.home</code>。重按回列表的 <code>tabSelection</code> / <code>popToRoot</code> 逻辑照旧，只是枚举变短。</p>
+
+<h3>2. 深链路由必须整体改</h3>
+<p><code>handleRoute</code> 现在会写 <code>selectedTab = .meetings / .inbox</code>，这些落点全部改走主页：</p>
+<ul>
+<li><code>.meeting(id)</code> → <code>selectedTab = .home</code>，主页栈推入「录音列表 → 该录音」。</li>
+<li><code>.message(id)</code> → 先 <code>reloadNotifications()</code>，再<strong>按这条通知自己的 target 决定去哪</strong>，不再进入一个「消息」位置。</li>
+<li><code>.terminal(...)</code>、<code>.newRecording</code>、<code>.liveRecording</code>、Widget 链接 → 终端相关的落点不变，只是不再有 <code>.inbox</code> 兜底。</li>
+</ul>
+<p><code>docs/agents/mobile-adaptive-layout.md</code> 里「通知、Widget 与其他深链要设置功能、电脑和条目三层目标」这条继续有效，只是「功能」的含义从底栏 tab 变成了主页栈里的位置。</p>
+
+<h3>3. 主页需要一个自己的导航栈</h3>
+<p>主页现在是「列表 + 可下钻」，要接 <code>AdaptiveFeatureNavigation</code> 同一套模式：宽窗左列表右详情，紧凑窗单列下钻。录音列表 → 录音详情是标准列表详情，直接复用现有的 <code>MeetingListView</code> / <code>MeetingDetailView</code>，不新写一套。</p>
+<p>嵌套深度为 <code>主页 → 录音列表 → 录音详情</code> 三层。iPadOS 上不要为此再叠一个 <code>NavigationSplitView</code>：主页 tab 用 <code>NavigationStack</code> 推入录音列表，列表详情仍交给 <code>AdaptiveFeatureNavigation</code> 处理宽窗并排。</p>
+
+<h3>4. 通知面板</h3>
+<p>用 <code>.sheet</code> 承载现有 <code>InboxView</code> 的内容（原型里为了不依赖脚本做成了推入的一屏，效果一样），保留「待处理 / 未读 / 全部」分段与「全部已读」。行点击后先 dismiss，再按 target 路由。<code>NotificationRouter</code> 的 target 解析逻辑可以直接复用。</p>
+
+<h3>5. iPadOS</h3>
+<p><code>TabView(.sidebarAdaptable)</code> 不变，三个 tab 在侧边栏里就是三项。「我的」宽窗用分类列表 + 右侧内容——这正是 <code>AdaptiveSettingsView</code> 已经在做的事，只需把 <code>SettingsCategory</code> 从四个扩到七个。</p>
+
+<h3>6. 需要同步更新的位置</h3>
+<ul>
+<li><code>docs/agents/mobile-adaptive-layout.md</code>：顶层导航从「终端 / 录音 / 消息 / 我的」改为「主页 / 终端 / 我的」，并补上「底栏不新增槽位、新功能进主页功能清单」这条硬规则。</li>
+<li><code>docs/agents/capability-registry.md</code> 的 Deep Link 行：iOS 路由计数与入口说明。</li>
+<li><code>SynapseMobile/README.md</code> 的导航结构一节。</li>
+<li><code>AGENTS.md</code> 与移动端专题规格里所有提到「消息 tab」「录音 tab」的地方。</li>
+<li><code>RELEASE_NOTES_PENDING.md</code>：底栏结构变化属于用户可感知变化，必须记录。</li>
+</ul>
+
+<h2>功能增长时会发生什么</h2>
+<p>这是本次改版唯一真正要买到的东西。假设半年后再加云盘、自动化、内容库、数据库、密钥、用量监控六项：</p>
+<table>
+<tr><th></th><th>旧结构</th><th>新结构</th></tr>
+<tr><td>底栏</td><td>已经满了，只能塞进「我的」，或把某个功能降级</td><td>仍然是三个，一个字都不动</td></tr>
+<tr><td>新功能落点</td><td>没有定义，每次都要重新讨论</td><td>主页 → 功能，按分组插一行</td></tr>
+<tr><td>用户学习成本</td><td>每次动底栏，肌肉记忆作废</td><td>位置恒定，只有清单在变长</td></tr>
+</table>
+<p>功能超过十二项左右时，「功能」页需要加搜索框和「常用」置顶；在那之前分组列表就够了。这个阈值不必现在决定。</p>
+
+<h2>不在此次范围内</h2>
+<ul>
+<li>不改终端的画布、键盘、语音输入与网格上报逻辑。</li>
+<li>不改录音的会话生命周期，也不增加纪要、发言人等已取消的产品层级。</li>
+<li>不改主机名、权限模型与任何服务端协议。</li>
+<li>「功能」清单的分组名（记录 / 工具 / 数据…）留到真实功能齐备时再定——现在只有三项可放，过早分组是空的。</li>
+</ul>
+
+<h2>顺带发现的两处不一致</h2>
+<div class="box">
+<p><strong>① 版本号的位置。</strong>现在挤在终端页顶栏第二行的「状态 · 版本号」，横屏时还要让位。「关于」页收下它之后，终端顶栏那一行可以去掉，会话画布多出一行高度。</p>
+<p><strong>② <code>AppConfiguration.swift</code> 的注释与实现不符。</strong>该文件注释写「API Base URL 在设置里选择」，但代码里没有任何对应界面，只能靠启动参数或 <code>-SynapseAPIBaseURL</code> 改。这是一个独立的、与本次改版无关的既有问题，列在这里供您决定是否单独处理——本原型没有为它加设置项。</p>
+</div>
+
+<h2>关于这个原型本身</h2>
+<div class="box warn">
+<p><strong>它不含一行 JavaScript。</strong>您第一次打开时看到空白页，原因有两个：我漏掉了初始渲染调用，而且分享页的查看器是否执行脚本本身就不确定。所以这一版改成纯 CSS 驱动——导航用 radio + label，可见性用 <code>:checked</code> 选择器。任何能显示 CSS 的地方它都能用，包括微信、钉钉、飞书里的内置浏览器。</p>
+<p><strong>代价：</strong>只有「状态」类交互是可点的——切 tab、进出功能、二级页、通知分段、录音「文字 / 语音」、电脑单选、几个开关、全部已读。真正需要写入数据的动作（创建会话、开始录音、导出日志、退出登录）在原型里是死的，按下去没有反应。这是原型，不是可以用的版本。</p>
+</div>
+
+<div class="box warn">
+<p><strong>需要您拍板的两点</strong></p>
+<p>① <strong>角标颜色</strong>：沿用琥珀（推荐，与「等待输入」同一语义），还是回到系统红？</p>
+<p>② <strong>「电脑」和「账号」两行在外层直接显示值</strong>：这是对您「值放二级页」要求的一处例外，因为它们反映的是状态而不是设置。要严格只有分类名的话，去掉这两个值即可，其余不受影响。</p>
+<p>另有一项请一并定：<strong>剪贴板历史是否从终端挪进「功能」</strong>（见上面的决策表）。</p>
+</div>
+</div>
+
+</body>
+</html>
