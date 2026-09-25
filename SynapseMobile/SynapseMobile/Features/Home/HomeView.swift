@@ -90,6 +90,7 @@ struct HomeView: View {
             ClipboardList(
                 entries: model.activeClipboardEntries,
                 title: "剪贴板",
+                desktopName: nil,
                 onCopy: { model.copyClipboardEntry($0) },
                 onClear: { model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId) }
             )

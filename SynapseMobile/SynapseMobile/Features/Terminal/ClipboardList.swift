@@ -17,6 +17,12 @@ struct ClipboardList: View {
     /// owns the bar: it has a `NavigationStack` of its own around this list, and the
     /// toolbar item below merges into that bar rather than one drawn here.
     let title: String?
+    /// 列表头上那台电脑的名字。`nil` 不画头。
+    ///
+    /// 剪贴板是按电脑分桶的，而主页那一页不显示电脑选择器 —— 头里这个名字是读者唯一能
+    /// 看出「现在读的是哪一台的」的地方。终端快捷面板那一份传 `nil`：面板本来就在某台
+    /// 电脑的一个会话里，不必再问是哪一台。
+    let desktopName: String?
     /// Puts one entry on this phone's clipboard.
     let onCopy: (MobileClipboardEntry) -> Void
     /// Empties this computer's list. Called only once the reader has confirmed.
@@ -87,8 +93,16 @@ struct ClipboardList: View {
 
     private var list: some View {
         List {
-            ForEach(entries) { entry in
-                row(entry)
+            // 一行不落地包在 `Section` 里，是因为头只能挂在 Section 上。`desktopName`
+            // 为 `nil` 时这个 header 是空视图，系统不画那一条 —— 面板那一份的渲染不变。
+            Section {
+                ForEach(entries) { entry in
+                    row(entry)
+                }
+            } header: {
+                if let desktopName {
+                    Text(desktopName)
+                }
             }
         }
         .listStyle(.insetGrouped)

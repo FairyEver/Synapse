@@ -192,6 +192,7 @@ struct TerminalShortcutPanel: View {
         ClipboardList(
             entries: clipboardEntries,
             title: nil,
+            desktopName: nil,
             onCopy: onCopyClipboard,
             onClear: onClearClipboard,
         )
