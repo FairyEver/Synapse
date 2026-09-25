@@ -30,12 +30,14 @@ struct HomeView: View {
             Section {
                 row(
                     title: "录音",
+                    subtitle: "会议录音、转写与回听",
                     symbol: "waveform",
                     value: recordingCount,
                     action: onOpenRecordings
                 )
                 row(
                     title: "新建会话",
+                    subtitle: "在当前电脑上开一个终端",
                     symbol: "plus",
                     value: nil,
                     action: onNewSession
@@ -43,6 +45,7 @@ struct HomeView: View {
                 .disabled(newSessionUnavailable)
                 row(
                     title: "剪贴板历史",
+                    subtitle: "这台电脑上复制过的内容",
                     symbol: "doc.on.clipboard",
                     value: nil,
                     action: onOpenClipboard
@@ -135,6 +138,7 @@ struct HomeView: View {
 
     private func row(
         title: String,
+        subtitle: String,
         symbol: String,
         value: String?,
         action: @escaping () -> Void
@@ -145,7 +149,12 @@ struct HomeView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .frame(width: 22)
-                Text(title)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer(minLength: 8)
                 if let value {
                     Text(value)

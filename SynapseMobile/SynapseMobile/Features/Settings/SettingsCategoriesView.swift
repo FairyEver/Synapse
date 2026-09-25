@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 「我的」的外层：只有分类，值放二级页。
 ///
@@ -11,6 +12,8 @@ import SwiftUI
 struct SettingsCategoriesView: View {
     @Environment(SynapseAppModel.self) private var model
     @Binding var selection: SettingsCategory?
+    /// 录音那个分类外层显示的是权限状态，与它二级页里那一行同一个读法。
+    @State private var microphone: PermissionRow.State = .undetermined
 
     var body: some View {
         List(selection: $selection) {
@@ -20,7 +23,7 @@ struct SettingsCategoriesView: View {
             }
             Section {
                 row(.terminal, value: nil)
-                row(.recording, value: nil)
+                row(.recording, value: microphone.label)
                 row(.notifications, value: unreadValue)
             }
             Section {
@@ -30,6 +33,20 @@ struct SettingsCategoriesView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle("我的")
+        .task { microphone = Self.currentMicrophoneState() }
+        // 用户可能在系统设置里改过。回到前台要重新读一次，否则这一行会一直停在
+        // 上次进这一页时看到的样子。
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            microphone = Self.currentMicrophoneState()
+        }
+    }
+
+    private static func currentMicrophoneState() -> PermissionRow.State {
+        switch MeetingPermission.microphone {
+        case .granted: .granted
+        case .denied: .denied
+        case .undetermined: .undetermined
+        }
     }
 
     private var desktopValue: String? {
