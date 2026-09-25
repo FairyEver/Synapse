@@ -4,6 +4,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import { JsonNamespace } from "../backends/json"
+import { jsonReviveEnvelopeFor } from "../factory"
 import {
   reviveSystemNotifierSettingsEnvelope,
   systemNotifierSettingsSchemaDefinition,
@@ -60,5 +61,11 @@ describe("system notifier settings schema", () => {
       silent: false,
       syncToAccount: true,
     })
+  })
+
+  // 升级函数存在还不够：它得挂在这个命名空间的名字上，否则老文件在真正读取时照样炸。
+  it("is wired to the namespace the repository actually reads", () => {
+    expect(jsonReviveEnvelopeFor("app.system-notifier.settings"))
+      .toBe(reviveSystemNotifierSettingsEnvelope)
   })
 })
