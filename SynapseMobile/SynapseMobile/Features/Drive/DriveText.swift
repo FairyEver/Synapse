@@ -57,16 +57,29 @@ enum DriveText {
             unit += 1
         }
 
-        // 三位数不留小数（220 MB 而不是 220.2 MB），两位留一位，一位留两位。
-        let format = scaled >= 100 ? "%.0f" : scaled >= 10 ? "%.1f" : "%.2f"
-        var text = String(format: format, scaled)
+        var text = formatted(scaled)
+        // 三位数取整到 1000 就进位：「999_500 字节」显示成「1000 KB」是用户看得见的错，
+        // 「文件」App 在这个位置给的是「1 MB」。已经到最后一个单位时没得进，保持原样。
+        if text == "1000", unit < units.count - 1 {
+            unit += 1
+            text = formatted(scaled / 1000)
+        }
+        return "\(text) \(units[unit])"
+    }
+
+    /// 一个已经落到某个单位上的数 → 不带单位的文字。
+    ///
+    /// 三位数不留小数（220 MB 而不是 220.2 MB），两位留一位，一位留两位。
+    private static func formatted(_ value: Double) -> String {
+        let format = value >= 100 ? "%.0f" : value >= 10 ? "%.1f" : "%.2f"
+        var text = String(format: format, value)
         // 只在有小数点时剥尾零。三位数取整之后是无条件剥不得的：那样 220 会变成 22、
         // 100 会变成 1（原型里踩过这条）。
         if text.contains(".") {
             while text.hasSuffix("0") { text.removeLast() }
             if text.hasSuffix(".") { text.removeLast() }
         }
-        return "\(text) \(units[unit])"
+        return text
     }
 
     // MARK: - 时间

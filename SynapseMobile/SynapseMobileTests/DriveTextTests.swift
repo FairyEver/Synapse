@@ -41,6 +41,15 @@ struct DriveTextTests {
         #expect(DriveText.bytes("134217728") == "134 MB")
     }
 
+    @Test func bytesCarriesIntoTheNextUnitWhenRoundingReachesOneThousand() {
+        // 「999_500 字节」取整到三位数就是「1000 KB」，那是用户看得见的错。取整到 1000
+        // 就进位，「文件」App 在这个位置给的也是「1 MB」。999_499 到不了 1000，不动。
+        #expect(DriveText.bytes("999500") == "1 MB")
+        #expect(DriveText.bytes("999999") == "1 MB")
+        #expect(DriveText.bytes("999995000") == "1 GB")
+        #expect(DriveText.bytes("999499") == "999 KB")
+    }
+
     @Test func bytesTreatsUnreadableSizesAsZero() {
         // 读不出来宁可显示 0 字节，也不该让整行空着或者崩掉。
         #expect(DriveText.bytes("") == "0 字节")
