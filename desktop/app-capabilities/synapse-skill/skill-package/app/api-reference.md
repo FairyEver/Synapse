@@ -273,7 +273,7 @@ Output:
 
 ## `app_system_notifier_notification_trigger`
 
-Notify the user with fire-and-forget semantics. The computer running Synapse shows a native notification, and when the desktop app is signed in and online the same message also enters the account message center and is pushed to the user's registered phones. The account copy travels on the desktop login, so no API key or open API call is needed.
+Notify the user with fire-and-forget semantics. The call writes one message into the user's account; Synapse then delivers it to every signed-in desktop of that account and pushes it to the user's registered phones. It travels on the desktop login, so no API key or open API call is needed.
 
 Input:
 
@@ -286,7 +286,7 @@ Output:
 
 - `{ success: true }`
 
-The fixed success result means only that a valid call crossed the System Notifier acceptance point. Two user settings gate the destinations independently: the local native attempt is suppressed when this computer's notifications are off, when settings are unavailable, when the process-local rate limit is reached, when Electron notifications are unsupported, when system permission is off, or when construction or `show()` failed synchronously. The account copy is skipped when the user turned syncing off, when the desktop is signed out or offline, or when the same rate limit is reached, and it is never backfilled later. None of those states are exposed to the caller, and success never proves delivery or display.
+The fixed success result means only that a valid call crossed the System Notifier acceptance point. The message is not created when the user turned sending off, when the desktop is signed out or offline, when the process-local rate limit is reached, or when the request failed. Except for the rate limit, all of those cases fall back to one local native notification on the computer that called, which is itself suppressed when this computer's notifications are off, when settings are unavailable, when Electron notifications are unsupported, when system permission is off, or when construction or `show()` failed synchronously. A successfully created message is never shown by the caller's own path: each machine shows it when the delivery reaches it, subject to its own local settings. Nothing that was not sent is backfilled later. None of those states are exposed to the caller, and success never proves delivery or display.
 
 Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, or `body`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, or `unknown_field`). The error never returns the rejected value, a snippet, or its actual length.
 

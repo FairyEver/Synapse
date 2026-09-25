@@ -170,7 +170,7 @@ After interpolation, the shared validator requires a non-blank, well-formed stri
 
 ### system_notifier_notification_trigger
 
-Notifies the user with fire-and-forget semantics: a native notification on the computer running Synapse, plus an account message center copy that reaches the user's phones when the desktop app is signed in and online. No provider or project is needed and no API key is involved. Config fields:
+Notifies the user with fire-and-forget semantics: it writes one message into the user's account, which Synapse delivers to every signed-in desktop and to the user's phones. No provider or project is needed and no API key is involved. Config fields:
 
 - `title` (string) — non-empty title template with optional `{{variable}}` or `{{$variable}}` placeholders
 - `body` (string) — non-empty body template using the same variable bindings

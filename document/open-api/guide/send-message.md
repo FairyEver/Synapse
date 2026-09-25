@@ -92,7 +92,7 @@ API 密钥仅用于服务端、CLI 或自动化客户端。不要将其写入浏
 
 ## 不需要密钥的场景
 
-在 Claude Code、Codex 等编辑器里让 AI 通知你时，不需要创建 API 密钥。这类客户端通过 Synapse MCP 调用 `app_system_notifier_notification_trigger`，消息走桌面端已登录的账号发送，进入同一个消息中心并推送到同一批设备。用户在 System Notifier 里可以分别关闭本机通知与账号同步。
+在 Claude Code、Codex 等编辑器里让 AI 通知你时，不需要创建 API 密钥。这类客户端通过 Synapse MCP 调用 `app_system_notifier_notification_trigger`，消息走桌面端已登录的账号发送，进入同一个消息中心并推送到同一批设备。用户在 System Notifier 里可以关掉发送（完全不发）、关掉本机通知（这台电脑收到时不弹）、或只保留静音。
 
 API 密钥适用于没有桌面端登录态的调用方：服务端任务、CI、其它机器上的脚本和第三方集成。
 

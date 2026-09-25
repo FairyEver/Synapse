@@ -55,7 +55,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 
 固定例外：
 
-- System Notifier 的注册表面不变（1 个 MCP 工具、1 个 Workflow 节点），它现在是「通知用户」这一个能力：运行 Synapse 的这台电脑弹原生通知，桌面端已登录且在线时同一条消息还进账号消息中心并随 APNs 推到用户手机。账号那一路走桌面登录态，不需要用户新建 API 密钥，也不经过开放 API。两个出口在 System Notifier 应用里各自开关（本机通知 / 同步到手机），关掉任一出口不影响另一个；两个都关或设置不可读时不发送。测试通知仅本机显示且永不同步，成功响应仍不承诺送达或显示。
+- System Notifier 的注册表面不变（1 个 MCP 工具、1 个 Workflow 节点），它是「通知用户」这一个能力：一次触发只把消息写进账号消息中心，服务端再投递给该账号所有在线桌面（包括发起的那台）并随 APNs 推到用户手机。走桌面登录态，不需要用户新建 API 密钥，也不经过开放 API。System Notifier 同时负责这台电脑的原生呈现：实时连接收到账号消息后交给它，按「本机通知 / 静音通知」开关决定弹不弹、静不静音；「发送通知」开关是发送总闸，关掉则完全不发。发不出去（未登录 / 离线 / 请求失败）时在发起的那台电脑本机兜底弹一次，成功则不会重复弹。测试通知仅本机显示且永不发送，成功响应仍不承诺送达或显示。
 
 - Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。
 
