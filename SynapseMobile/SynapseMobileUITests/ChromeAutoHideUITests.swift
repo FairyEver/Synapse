@@ -368,6 +368,7 @@ final class ChromeAutoHideUITests: XCTestCase {
     }
 
     private func signIn(_ app: XCUIApplication) {
+        defer { enterTerminalTab(app) }
         let emailField = app.textFields.firstMatch
         let tabs = app.tabBars.firstMatch
 
@@ -406,4 +407,17 @@ final class ChromeAutoHideUITests: XCTestCase {
     private func settle(seconds: TimeInterval) {
         Thread.sleep(forTimeInterval: seconds)
     }
+
+    /// 底栏三格之后冷启动落在主页，而这一份用例要的是终端列表。
+    ///
+    /// 挂在 `signIn` 的 `defer` 里，是因为那个函数有不止一条返回路径（会话已经恢复时
+    /// 直接返回），而每一条之后人都需要在终端那一格上。
+    private func enterTerminalTab(_ app: XCUIApplication) {
+        let tabs = app.tabBars.firstMatch
+        guard tabs.exists else { return }
+        let terminals = tabs.buttons.element(boundBy: 1)
+        guard terminals.exists else { return }
+        terminals.tap()
+    }
+
 }

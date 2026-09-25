@@ -353,8 +353,8 @@ final class TerminalGitUITests: XCTestCase {
 
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 25), "没有标签栏")
-        // 终端是第一个标签页。
-        tabs.buttons.element(boundBy: 0).tap()
+        // 终端是第二个标签页（主页占了第一个）。
+        tabs.buttons.element(boundBy: 1).tap()
         selectAnOnlineDesktop(in: app)
 
         // 现建一个终端，而不是点列表里现成的那一行：列表的第 0 行是「正在看的那台电脑」

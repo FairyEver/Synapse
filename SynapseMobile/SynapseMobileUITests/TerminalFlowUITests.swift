@@ -39,9 +39,55 @@ final class TerminalFlowUITests: XCTestCase {
         "-SynapseChromeIdleSeconds", "3600",
     ]
 
+    /// 底栏的下标。三格之后主页占了 0，终端从 0 挪到 1。
+    ///
+    /// 用下标而不是按标签找，是因为**角标会改写它所在那一格的 accessibility label**
+    /// ——「主页」带着未读数时 `buttons["主页"]` 会时灵时不灵。这一条理由下面那段注释里
+    /// 原来就有，换成一个有名字的常量只是让它不必每次移动都逐个改数字。
+    private enum TabIndex {
+        static let home = 0
+        static let terminals = 1
+        static let settings = 2
+    }
+
     override func setUpWithError() throws {
         try XCTSkipIf(email.isEmpty || password.isEmpty, "SYNAPSE_TEST_EMAIL and SYNAPSE_TEST_PASSWORD are required")
         continueAfterFailure = false
+    }
+
+    /// 底栏结构与「不新增槽位」这条硬规则。
+    ///
+    /// 一条**会失败的**用例，而不是一条描述现状的用例：底栏从四格变三格是设计上要买的东西，
+    /// 下一个人加第四个 tab 时，这里要红。
+    func testBottomBarHasExactlyThreeTabsAndHomeIsTheDefault() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+
+        signIn(app)
+
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 20), "the bottom bar never appeared")
+
+        // 数量先于位置：位置错了还能一眼看出，少一格或多一格不会。
+        XCTAssertEqual(tabs.buttons.count, 3, "the bottom bar must stay at three tabs")
+
+        // 第一格是主页。按前缀比而不是相等：主页那一格带着未读角标时，系统会把角标写进
+        // 它的 accessibility label。
+        XCTAssertTrue(
+            tabs.buttons.element(boundBy: TabIndex.home).label.hasPrefix("主页"),
+            "the first tab is not the home page"
+        )
+
+        tabs.buttons.element(boundBy: TabIndex.home).tap()
+
+        // 三件功能都在。
+        XCTAssertTrue(app.buttons["home-feature-录音"].exists, "the recordings entry is missing")
+        XCTAssertTrue(app.buttons["home-feature-新建会话"].exists, "the new-session entry is missing")
+        XCTAssertTrue(app.buttons["home-feature-剪贴板历史"].exists, "the clipboard entry is missing")
+
+        // 铃铛是通知的唯一常驻入口。
+        XCTAssertTrue(app.buttons["home-notifications"].exists, "the home page has no bell")
     }
 
     func testSignInBrowseSessionsAndOpenTerminal() throws {
@@ -60,23 +106,29 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["api-logs"].exists, "third session missing")
         XCTAssertTrue(app.staticTexts["等待确认"].exists, "attention badge missing from the list")
 
-        // The inbox is where a locked-out Agent surfaces. Tabs are addressed by
-        // index because a badge rewrites the accessibility label of the tab it sits on.
+        // A locked-out Agent surfaces on the home page's attention card, and the
+        // notifications panel is one tap further in. Tabs are addressed by index
+        // because a badge rewrites the accessibility label of the tab it sits on —
+        // which is now the home tab, since it carries the unread count.
         //
-        // The order is 终端 / 录音 / 需要我 / 我的 — `RootView`'s `TabView`, in that
-        // order. 录音 was inserted at 1 by the recording feature and left this index
-        // pointing at the wrong tab, which is why the number is spelled out here rather
-        // than left to be inferred: the next tab moves every number below it.
+        // The order is 主页 / 终端 / 我的 — `RootView`'s `TabView`, in that order.
         let tabs = app.tabBars.firstMatch
-        tabs.buttons.element(boundBy: 2).tap()
-        capture(app, name: "02-inbox")
+        tabs.buttons.element(boundBy: TabIndex.home).tap()
+        XCTAssertTrue(
+            app.buttons["home-attention"].waitForExistence(timeout: 8),
+            "the home page did not report a waiting session"
+        )
+        app.buttons["home-notifications"].tap()
+        capture(app, name: "02-notifications")
         XCTAssertTrue(
             app.staticTexts["claude-code"].waitForExistence(timeout: 8),
-            "inbox did not show the waiting session"
+            "the notifications panel did not show the waiting session"
         )
-        XCTAssertTrue(app.staticTexts["请求执行一个命令"].exists, "inbox lost the waiting reason")
+        XCTAssertTrue(app.staticTexts["请求执行一个命令"].exists, "the panel lost the waiting reason")
+        // 面板是覆盖层，关掉它才回到刚才那一屏。
+        app.buttons["完成"].tap()
 
-        tabs.buttons.element(boundBy: 0).tap()
+        tabs.buttons.element(boundBy: TabIndex.terminals).tap()
         app.staticTexts["claude-code"].tap()
 
         // The collection view is not an `otherElement`; match on any element type
@@ -185,8 +237,8 @@ final class TerminalFlowUITests: XCTestCase {
     /// 我的 is account, desktops, and sign-out — nothing else.
     ///
     /// The lock and server blocks were removed rather than hidden, so this checks
-    /// the page and not just the code behind it.
-    func testSettingsListsOnlyAccountDesktopsAndSignOut() throws {
+    /// 「我的」是分类列表加二级下钻：七个分类在外层，点进去才是设置。
+    func testSettingsCategoriesLeadToTheirPages() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
@@ -194,16 +246,26 @@ final class TerminalFlowUITests: XCTestCase {
 
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 25), "no tab bar")
-        // 我的 — index 3 since 录音 took 1. See the note on the inbox tab above.
-        tabs.buttons.element(boundBy: 3).tap()
+        // 我的 — 三格之后它是最后一格。
+        tabs.buttons.element(boundBy: TabIndex.settings).tap()
 
-        XCTAssertTrue(app.staticTexts["账号"].waitForExistence(timeout: 10), "settings never opened")
-        XCTAssertTrue(app.staticTexts["已连接的电脑"].exists, "the desktops section is missing")
+        // 七个分类都在外层。
+        for category in ["account", "desktops", "terminal", "recording", "notifications", "diagnostics", "about"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["settings-category-\(category)"].waitForExistence(timeout: 10),
+                "the \(category) category is missing"
+            )
+        }
+        capture(app, name: "08-settings")
+
+        // 账号那一页：邮箱与退出登录。
+        app.descendants(matching: .any)["settings-category-account"].tap()
+        XCTAssertTrue(app.staticTexts["邮箱"].waitForExistence(timeout: 8), "the account page never opened")
         XCTAssertTrue(app.buttons["退出登录"].exists, "sign-out is missing")
 
         XCTAssertFalse(app.staticTexts["安全"].exists, "the removed security section is still listed")
         XCTAssertFalse(app.staticTexts["服务器"].exists, "the removed server section is still listed")
-        capture(app, name: "08-settings")
+        capture(app, name: "09-settings-account")
     }
 
     /// A phone opened before any computer was online must notice one signing in.
@@ -2133,6 +2195,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// already signed in — which is itself worth not fighting, since it is the
     /// behaviour a real user gets.
     private func signIn(_ app: XCUIApplication) {
+        defer { enterTerminalTab(app) }
         let emailField = app.textFields.firstMatch
         let tabs = app.tabBars.firstMatch
 
@@ -2232,4 +2295,18 @@ final class TerminalFlowUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+
+    /// 底栏三格之后冷启动落在主页，而这个文件里的用例绝大多数要的是终端列表。
+    ///
+    /// 挂在 `signIn` 的 `defer` 里，是因为那个函数有不止一条返回路径（会话已经恢复时
+    /// 直接返回），而每一条之后人都需要在终端那一格上。要留在主页或去别处的用例，自己
+    /// 再切一次即可。
+    private func enterTerminalTab(_ app: XCUIApplication) {
+        let tabs = app.tabBars.firstMatch
+        guard tabs.exists else { return }
+        let terminals = tabs.buttons.element(boundBy: TabIndex.terminals)
+        guard terminals.exists else { return }
+        terminals.tap()
+    }
+
 }
