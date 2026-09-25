@@ -4,8 +4,6 @@ import UserNotifications
 struct RootView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
-    /// 通知里带外链的那一种要交回给系统去开。
-    @Environment(\.openURL) private var openURL
     /// 胶囊的浮出与收起是纯装饰，别的地方（`NoticeBar`、终端那几条栏）都已经照这个
     /// 开关做了，这一处漏了。
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -20,7 +18,9 @@ struct RootView: View {
     @State private var settingsSelection: SettingsCategory?
     /// 通知面板。它挂在根上，因为有两个入口打开的是同一个面板：主页右上角的铃铛，
     /// 和「我的 → 通知」。
-    @State private var showingNotifications = false
+    @State private var isNotificationPanelPresented = false
+    /// 会话创建那张 sheet。同样挂在根上：主页那一行与终端列表右上角的 ＋ 打开的是同一个。
+    @State private var isNewSessionPresented = false
     /// 「我的 → 通知」里那一个开关。关掉只是不往 App 图标上写数字，别的都不受影响。
     @AppStorage(NotificationBadgePreference.key) private var badgeEnabled = true
     @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
@@ -99,7 +99,8 @@ struct RootView: View {
                 homePath = []
                 meetingSelection = nil
                 settingsSelection = nil
-                showingNotifications = false
+                isNotificationPanelPresented = false
+                isNewSessionPresented = false
                 // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
                 // 哪台电脑都无从谈起。
                 pendingTerminalOpen = nil
@@ -180,17 +181,39 @@ struct RootView: View {
 
     private var tabs: some View {
         TabView(selection: tabSelection) {
-            HomeView(
-                path: $homePath,
-                meetingSelection: $meetingSelection,
-                onOpenTerminal: { requestTerminal($0, from: .homePending) },
-                onOpenCreated: openNewlyCreatedFromHome,
-                onOpenNotifications: { showingNotifications = true }
-            )
+            // 主页有自己的一条栈，因为它是「列表 + 可下钻」：功能清单 → 录音列表 →
+            // 录音详情。推入的 `AdaptiveFeatureNavigation` 自己就是一个
+            // `NavigationSplitView`，所以 iPadOS 宽窗下录音仍然并排 —— 不要再为它
+            // 外面套一层分栏，那会变成系统侧边栏 + 列表 + 详情三列。
+            NavigationStack(path: $homePath) {
+                HomeView(
+                    onOpenNotifications: { isNotificationPanelPresented = true },
+                    onOpenRecordings: { homePath.append(.recordings) },
+                    onOpenClipboard: { homePath.append(.clipboard) },
+                    onNewSession: { isNewSessionPresented = true },
+                    onOpenWaitingSession: openWaitingSession
+                )
+                .navigationDestination(for: HomeRoute.self) { route in
+                    switch route {
+                    case .recordings:
+                        AdaptiveFeatureNavigation(
+                            selection: $meetingSelection,
+                            emptyTitle: "选择录音",
+                            emptySymbol: "waveform"
+                        ) {
+                            MeetingListView(selection: $meetingSelection)
+                        } detail: { meetingId in
+                            MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
+                        }
+                    case .clipboard:
+                        ClipboardHistoryView()
+                    }
+                }
+            }
             .tabItem { Label("主页", systemImage: "house") }
-            // 未读角标也落在这一格上：铃铛只在主页里看得见，而人在别的屏上时同样该知道
-            // 有人在等。这是全应用唯一一处不跟着 `Theme.attention` 走的提示 —— 系统 tab
-            // 角标由 iOS 自己着色，改不了。
+            // 系统角标，颜色不改。SwiftUI 的 `TabView` 没有自定义 tab 角标颜色的 API，
+            // 桥接 `UITabBarItem` 只在 iPhone 底栏生效、iPadOS 侧边栏做不到同色。
+            // 「有人需要你」的琥珀色由主页里那枚铃铛自绘承担。
             .badge(model.notifications.unreadCount)
             .tag(Tab.home)
 
@@ -210,25 +233,23 @@ struct RootView: View {
 
             AdaptiveSettingsView(selection: $settingsSelection) {
                 terminalSelection = nil
+            } onOpenNotificationCenter: {
+                isNotificationPanelPresented = true
             }
             .tabItem { Label("我的", systemImage: "person") }
             .tag(Tab.settings)
         }
         .tabViewStyle(.sidebarAdaptable)
-        .sheet(isPresented: $showingNotifications) {
-            NotificationPanel(
-                onOpen: { open($0, from: .inboxRecord) },
-                onOpenTerminal: openPendingSession
-            )
+        .sheet(isPresented: $isNotificationPanelPresented) {
+            NotificationPanel(onOpenTerminal: openWaitingSession)
         }
+        .newSessionSheet(isPresented: $isNewSessionPresented, onOpenCreated: openNewlyCreatedFromHome)
     }
 
-    /// 从通知面板的「待处理」那一段进终端。
+    /// 从主页那张待处理卡进一个会话。
     ///
-    /// 和主页那张卡是同一条路、同一份数据（实时会话列表），所以也走同一道闸门：那一行可能
-    /// 在「画出来」和「手指落下去」之间结束掉。
-    private func openPendingSession(_ sessionId: String) {
-        showingNotifications = false
+    /// 走 `requestTerminal` 同一道闸门：那条会话可能在卡片画出来与手指落下去之间结束掉。
+    private func openWaitingSession(_ sessionId: String) {
         selectedTab = .terminals
         requestTerminal(sessionId, from: .homePending)
     }
@@ -301,48 +322,32 @@ struct RootView: View {
     private func openRecording(_ meetingId: String?) {
         selectedTab = .home
         meetingSelection = meetingId
-        homePath = [.meetings]
+        homePath = [.recordings]
     }
 
     /// 一条通知被点开，但只有它的 id。
     ///
-    /// 先把记录捞回来，再按它自己的目标去 —— 冷启动时本地一条通知都没有，而那条记录
-    /// 就在服务端。捞不到（被删了、或者换了账号）就把人送到通知面板：这条记录已经不在
-    /// 了，让他自己看一眼现在有什么，好过落在一块说不出话的空屏上。
+    /// 先拉一次列表再判：一条通知记着的是「它完成那一轮时」的会话 id，那条会话后来
+    /// 结束了、被删了都不会让这条记录失效，所以这个 id 今天还指不指得动要当场问一次。
+    /// 列表到达之后才解析，是因为 `deviceId` / `targetId` 都在通知自己身上，
+    /// 而解析要用的 `model.notifications.items` 也在这一刻才更新。
     private func openNotification(_ id: String) {
         Task {
             await model.reloadNotifications()
             guard let item = model.notifications.items.first(where: { $0.id == id }) else {
-                selectedTab = .home
-                showingNotifications = true
+                // 拉回来却没有这一条（已过期、已在别处删掉）。打开面板，让人自己看
+                // 手上到底还有什么 —— 比什么都不做要好。
+                isNotificationPanelPresented = true
                 return
             }
-            open(item, from: .pushNotification)
-        }
-    }
-
-    /// 一条通知把它的人带去哪里。
-    ///
-    /// 通知的价值在「带你去哪」，所以这里读的是**这条通知自己的目标**，而不是某个
-    /// 「消息」的位置。面板里点一行、推送点开，走的都是这一个函数。
-    private func open(_ item: SynapseNotification, from origin: TerminalOpenOrigin) {
-        showingNotifications = false
-        // 打开即已读：它已经把人带到了要去的地方，再留一个未读点没有意义。
-        Task { await model.readNotification(item.id) }
-
-        if item.source == "terminal-attention" || item.source == "terminal-complete",
-           let target = item.targetId {
-            // Naming a computer is the record saying which one it means, so this is
-            // honoured even when that computer is not reachable —— 和推送那条路同一个姿势。
-            if let device = item.deviceId { model.selectDesktop(device) }
-            selectedTab = .terminals
-            if !model.viewedDesktopIsOffline {
-                requestTerminal(target, on: item.deviceId, from: origin)
+            await model.readNotification(item.id)
+            switch NotificationDestination.resolve(item) {
+            case .route(let destination):
+                handleRoute(destination)
+            case .externalURL, .none:
+                // 没有应用内的去处。打开面板让人读它自己。
+                isNotificationPanelPresented = true
             }
-        } else if item.source == "meeting-transcription", let target = item.targetId {
-            openRecording(target)
-        } else if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
-            openURL(url)
         }
     }
 

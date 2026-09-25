@@ -13,7 +13,7 @@ struct SettingsView: View {
     init(
         category: SettingsCategory,
         onSelectDesktop: @escaping () -> Void,
-        onOpenNotificationCenter: @escaping () -> Void = {}
+        onOpenNotificationCenter: @escaping () -> Void
     ) {
         self.category = category
         self.onSelectDesktop = onSelectDesktop

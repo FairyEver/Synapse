@@ -1,247 +1,163 @@
 import SwiftUI
 
-/// 主页里可以推入的东西。
+/// 主页：所有入口，以及「有没有人需要你」。
 ///
-/// 只有一项，而且**应该一直很少**：功能清单上的每一项都推一屏出去，主页本身
-/// 就退化成了目录套目录。见 `docs/agents/mobile-adaptive-layout.md`。
-enum HomeRoute: Hashable {
-    case meetings
-}
-
-/// 主页。
+/// 它是本次导航改版的落点 —— 底栏不再为每一个功能开一格，新能力一律进这里的「功能」清单，
+/// 所以这一页会长，而底栏永远是三格。
 ///
-/// 底栏的第一个位置，也是**功能的唯一入口**：底栏不再为单个功能开格子，新增能力一律
-/// 进这一页的清单。这条是硬规则，写在 `docs/agents/mobile-adaptive-layout.md` 里。
+/// 顶上那张待处理卡只在真有会话卡住时出现。它和终端列表行上的琥珀徽章读的是同一份
+/// `waitingSessions`，不引入第二套状态；没有内容就不占位置。
 ///
-/// 这一页还承担两件不属于任何业务的事：
-/// - **通知**：右上角常驻铃铛，点开是通知面板。它不占底栏位置，因为它是覆盖层而不是
-///   目的地 —— 点一条就直接去往目标，比「进一个 tab、找到那一条、再跳」少两步。
-/// - **待处理**：真有会话卡住时才出现的一张卡。没有内容就不占位置，数据与终端会话行上的
-///   琥珀徽章同源，不引第二套状态。
+/// 这一页**不自带 `NavigationStack`**：栈由 `RootView` 拿着（`homePath`），因为深链要能把
+/// 主页直接推到某一屏上，而那些请求不是从这一页里发出来的。
 struct HomeView: View {
     @Environment(SynapseAppModel.self) private var model
-    @Environment(TerminalDisplaySettings.self) private var display
 
-    @Binding var path: [HomeRoute]
-    @Binding var meetingSelection: String?
-    /// 打开一个终端。主页的待处理卡走这条。
-    let onOpenTerminal: (String) -> Void
-    /// 打开一个**手机刚让电脑建出来**的终端。功能清单里的「新建会话」走这条。
-    let onOpenCreated: (String) -> Void
-    /// 打开通知面板。面板由根视图承载：「我的 → 通知」要打开的是同一个。
     let onOpenNotifications: () -> Void
-
-    @State private var showingNewSession = false
-    @State private var showingClipboard = false
+    let onOpenRecordings: () -> Void
+    let onOpenClipboard: () -> Void
+    let onNewSession: () -> Void
+    /// 打开一个正卡着等人的会话。参数是会话 id。
+    let onOpenWaitingSession: (String) -> Void
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                if let session = model.waitingSessions.first {
-                    Section {
-                        pendingCard(session, count: model.waitingSessions.count)
-                    }
-                }
-
-                Section("功能") {
-                    Button {
-                        Haptics.select()
-                        path.append(.meetings)
-                    } label: {
-                        featureLabel(symbol: "waveform", title: "录音")
-                    }
-
-                    Button {
-                        Haptics.select()
-                        showingNewSession = true
-                    } label: {
-                        featureLabel(symbol: "plus", title: "新建会话")
-                    }
-                    // 和终端那一页的加号同一个判据：没有电脑在下边，这张表单打开的是
-                    // 一份已经不在了的清单，它建出来的东西也会被一台没听说过它的电脑拒绝。
-                    .disabled(model.selectedDesktopClientInstanceId == nil || model.viewedDesktopIsOffline)
-
-                    Button {
-                        Haptics.select()
-                        showingClipboard = true
-                    } label: {
-                        featureLabel(symbol: "doc.on.clipboard", title: "剪贴板历史")
-                    }
-                }
+        List {
+            if !model.waitingSessions.isEmpty {
+                Section { attentionCard }
+                    .listSectionSpacing(.compact)
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle("主页")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { bellButton }
+
+            Section {
+                row(
+                    title: "录音",
+                    symbol: "waveform",
+                    value: recordingCount,
+                    action: onOpenRecordings
+                )
+                row(
+                    title: "新建会话",
+                    symbol: "plus",
+                    value: nil,
+                    action: onNewSession
+                )
+                .disabled(newSessionUnavailable)
+                row(
+                    title: "剪贴板历史",
+                    symbol: "doc.on.clipboard",
+                    value: nil,
+                    action: onOpenClipboard
+                )
+            } header: {
+                Text("功能")
             }
-            .navigationDestination(for: HomeRoute.self) { route in
-                switch route {
-                case .meetings: meetings
-                }
-            }
-            .noticeOverlay(model)
         }
-        .sheet(isPresented: $showingNewSession) {
-            newSessionSheet
-        }
-        .sheet(isPresented: $showingClipboard) {
-            // 列表本身没变，只是入口从终端列表的设备行挪到了这里（见 `ClipboardList`：
-            // 同一份列表也出现在终端面板里）。
-            ClipboardList(
-                entries: model.activeClipboardEntries,
-                title: "剪贴板",
-                desktopName: nil,
-                onCopy: { model.copyClipboardEntry($0) },
-                onClear: { model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId) }
-            )
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            // 列表把它的确认以提示条的形式举起来，而这张表盖住了主页自带的那一层 ——
-            // 所以它得自己带一层，否则复制一条会什么都不说。
-            .noticeOverlay(model)
+        .listStyle(.insetGrouped)
+        .navigationTitle("主页")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { bell }
         }
     }
 
-    /// 通知的入口。
-    ///
-    /// 常驻，没有未读也画 —— 它是这一屏的一个固定位置，不是「有消息时才出现的东西」。
-    /// 未读角标用 `Theme.attention`：全应用只有这一个「有人需要你」的颜色，
-    /// 会话行上的「等待输入」和这里是同一件事的两种呈现。
-    private var bellButton: some View {
-        Button {
-            Haptics.select()
-            onOpenNotifications()
-        } label: {
+    /// 常驻的那一枚铃铛。角标用 `Theme.attention` —— 全应用只有这一个颜色说
+    /// 「有人需要你」，与会话行的「等待输入」徽章同色同义。
+    private var bell: some View {
+        Button(action: onOpenNotifications) {
             Image(systemName: "bell")
                 .overlay(alignment: .topTrailing) {
                     if model.notifications.unreadCount > 0 {
-                        unreadBadge
+                        Text("\(model.notifications.unreadCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Theme.attentionFill)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Theme.attention, in: Capsule())
+                            .offset(x: 6, y: -4)
                     }
                 }
         }
-        .accessibilityLabel("通知")
-        .accessibilityValue(
-            model.notifications.unreadCount > 0 ? "\(model.notifications.unreadCount) 条未读" : "没有未读"
-        )
         .accessibilityIdentifier("home-notifications")
+        .accessibilityLabel(
+            model.notifications.unreadCount > 0
+                ? "通知，\(model.notifications.unreadCount) 条未读"
+                : "通知"
+        )
     }
 
-    private var unreadBadge: some View {
-        Text(badgeText)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.paper)
-            .padding(.horizontal, 4.5)
-            .padding(.vertical, 1)
-            .background(Theme.attention, in: Capsule())
-            // 压在铃铛本体的右上方：铃铛画在导航栏那一条里，角标要探出去一点才不遮住它。
-            .offset(x: 9, y: -7)
-            .accessibilityHidden(true)
-    }
-
-    /// 超过两位数就不再涨了 —— 角标是「有多少事」的信号，不是计数器，而三位数会把
-    /// 铃铛整个盖住。
-    private var badgeText: String {
-        let count = model.notifications.unreadCount
-        return count > 99 ? "99+" : "\(count)"
-    }
-
-    /// 待处理卡。
+    /// 「N 个会话在等你」。
     ///
-    /// 只有真有会话卡住时才在，而且点它就进那一屏 —— 这一行存在的全部意义是
-    /// 「有人需要你，从这里去」，所以它读的是实时会话列表，不是消息记录。
-    private func pendingCard(_ session: MobileSummarySession, count: Int) -> some View {
+    /// 一条时直接进那个会话；多条时打开通知面板的「待处理」段 —— 卡片上写着 N，
+    /// 却只把人送进其中一个，另外几个就藏起来了。
+    private var attentionCard: some View {
         Button {
-            Haptics.select()
-            onOpenTerminal(session.id)
+            let waiting = model.waitingSessions
+            if waiting.count == 1, let only = waiting.first {
+                onOpenWaitingSession(only.id)
+            } else {
+                onOpenNotifications()
+            }
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Circle()
                     .fill(Theme.attention)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(count == 1 ? "1 个会话在等你" : "\(count) 个会话在等你")
-                        .font(.subheadline.weight(.semibold))
+                    Text("\(model.waitingSessions.count) 个会话在等你")
+                        .font(.headline)
                         .foregroundStyle(Theme.attention)
-                    Text(session.title)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    Text("终端有输出，需要你回复")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.attention)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.attention)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 2)
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Theme.attentionFill)
+        .accessibilityIdentifier("home-attention")
+    }
+
+    /// 录音条数。为 0 时不显示值 —— 一个写着「0 条」的入口是在报告空，不是在报告有什么。
+    private var recordingCount: String? {
+        let count = model.meetings.meetings.count
+        return count > 0 ? "\(count) 条" : nil
+    }
+
+    /// 与终端列表右上角那个 ＋ 同一条判据：电脑不在，建出来的东西会被一台没听说过它的
+    /// 电脑拒绝。
+    private var newSessionUnavailable: Bool {
+        model.selectedDesktopClientInstanceId == nil || model.viewedDesktopIsOffline
+    }
+
+    private func row(
+        title: String,
+        symbol: String,
+        value: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22)
+                Text(title)
+                Spacer(minLength: 8)
+                if let value {
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("home-pending")
-    }
-
-    /// 功能清单里的一行。
-    ///
-    /// 箭头自己画：这一页的行有的是 `Button`（打开一张表），有的是推入下一屏，而系统只为
-    /// 后者画箭头 —— 混在一起会长出两种形状的行。
-    private func featureLabel(symbol: String, title: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 16))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-            Text(title)
-            Spacer(minLength: 8)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .contentShape(Rectangle())
-    }
-
-    /// 录音列表与详情。
-    ///
-    /// 直接复用终端和录音两层本来就在用的那一套：宽窗并排、紧凑窗下钻，录音详情不新写。
-    /// 主页这一层是 `NavigationStack`，再往里那层列表详情仍归 `AdaptiveFeatureNavigation`
-    /// —— iPad 上**不要**为了这一屏再叠一个 `NavigationSplitView`。
-    private var meetings: some View {
-        AdaptiveFeatureNavigation(
-            selection: $meetingSelection,
-            emptyTitle: "选择录音",
-            emptySymbol: "waveform"
-        ) {
-            MeetingListView(selection: $meetingSelection)
-        } detail: { meetingId in
-            MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
-        }
-    }
-
-    private var newSessionSheet: some View {
-        NewSessionSheet(
-            onCreated: { groupId in
-                Task {
-                    if let created = await model.createSession(groupId: groupId) {
-                        openNewlyCreated(created)
-                    }
-                }
-            },
-            onCommandLaunched: { groupId, commandId in
-                Task {
-                    if let created = await model.launchCommand(groupId: groupId, commandId: commandId) {
-                        openNewlyCreated(created)
-                    }
-                }
-            },
-            onConversationStarted: { sessionId in
-                openNewlyCreated(sessionId)
-            }
-        )
-    }
-
-    /// 落在一个刚刚建出来的终端上。
-    ///
-    /// 与终端那一页同一个姿势：这条终端是**照着这部手机的形状生出来的**，所以手机按自己
-    /// 量到的格数显示它。见 `SessionListView.openNewlyCreated`。
-    private func openNewlyCreated(_ sessionId: String) {
-        display.setMode(.phoneDriven, for: sessionId)
-        onOpenCreated(sessionId)
+        .accessibilityIdentifier("home-feature-\(title)")
     }
 }

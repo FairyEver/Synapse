@@ -43,6 +43,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 struct AdaptiveSettingsView: View {
     @Binding var selection: SettingsCategory?
     let onSelectDesktop: () -> Void
+    /// 打开通知面板。「我的 → 通知」里那一行要用。
+    let onOpenNotificationCenter: () -> Void
 
     var body: some View {
         AdaptiveFeatureNavigation(
@@ -53,7 +55,11 @@ struct AdaptiveSettingsView: View {
             SettingsCategoriesView(selection: $selection)
         } detail: { category in
             NavigationStack {
-                SettingsView(category: category, onSelectDesktop: onSelectDesktop)
+                SettingsView(
+                    category: category,
+                    onSelectDesktop: onSelectDesktop,
+                    onOpenNotificationCenter: onOpenNotificationCenter
+                )
             }
         }
     }

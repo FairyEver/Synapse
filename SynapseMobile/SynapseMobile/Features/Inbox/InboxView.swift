@@ -17,10 +17,10 @@ import SwiftUI
 /// 那两屏没有这条带子，标题都好好的——标题比钉住重要，带子回到列表里。
 struct InboxView: View {
     @Environment(SynapseAppModel.self) private var model
-    /// 点了一条通知：按它自己的目标去。关掉面板是宿主的事 —— 这一屏不知道自己是被
-    /// 谁、以什么方式画出来的。
-    let onOpen: (SynapseNotification) -> Void
+    /// 「待处理」段里的行打开一个终端会话。那一段读的不是通知记录，是实时会话列表。
     let onOpenTerminal: (String) -> Void
+    /// 一条通知被点了。去向由调用方决定 —— 列表自己不做路由。
+    let onOpen: (SynapseNotification) -> Void
     @State private var filter = "pending"
 
     var body: some View {
@@ -84,7 +84,7 @@ struct InboxView: View {
             if filter == "pending" { await model.refreshDesktops() }
             else { await model.reloadNotifications(filter: filter) }
         }
-        .navigationTitle("通知")
+        // 标题由宿主给：面板那一层画的是「通知」，而这一屏不知道自己是被谁画出来的。
         .toolbar {
             if filter != "pending" {
                 Button("全部已读") { Task { await model.readAllNotifications() } }
