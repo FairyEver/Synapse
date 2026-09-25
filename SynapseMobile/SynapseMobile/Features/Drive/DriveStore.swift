@@ -385,10 +385,14 @@ enum DriveSharePlan {
 ///
 /// 三态而不是一个 `DriveShare?`：结果页上有一句话只在复用的时候出现（「链接未变」，
 /// Spec §4.5），而失败要能带上服务端给的那句话——两种都装不进 `nil` 里。
+///
+/// 「复用」说的是**地址**还是原来那一条，不是「密码也没变」：带设置的一次请求是更新，
+/// 服务端在 `passwordEnabled: true` 被显式发出时会重算密码，`urlWithPassword` 与 `password`
+/// 都会变，只有裸地址不变（`buildDriveShareUrl` 只从 `shareId` 拼）。
 enum DriveShareOutcome {
-    /// 这一项本来没有分享，这次新建了一条。
+    /// 这一项本来没有分享，或者这一趟换了一条：结果页拿到的是新地址。
     case created(DriveShare)
-    /// 本来就有那一条，链接没变。
+    /// 还是原来那条链接（同一个 `shareId`）。
     case reused(DriveShare)
     /// 没成。`reason` 是给用户看的一句话。
     case failed(reason: String)
@@ -399,6 +403,44 @@ enum DriveShareOutcome {
         case .created(let share), .reused(let share): return share
         case .failed: return nil
         }
+    }
+
+    /// 请求回来之后归态：这一趟拿到的还是原来那条链接吗。
+    ///
+    /// 判据是 `shareId`，两个旧判据都不成立：
+    /// - **不能用地址字符串**。浏览行上那个 `shareUrl` 不是公开链接，是站内路径
+    ///   `/share/{shareId}`（`buildShareDriveBrowserUrl`），而服务端给的 `url` 带
+    ///   `APP_PUBLIC_URL`：两者永远不相等。
+    /// - **不能用「本来有没有一条」**。判据只能取调用方手里那份浏览行的快照，而它只在刷新时
+    ///   才更新：先停用一条再分享同一项时服务端是**新建**（新的 `shareId`、新的地址），
+    ///   本机那份却还停在「有分享」上，于是会把新地址说成「链接未变」——用户拿到的链接
+    ///   与屏幕上那句话正好相反。比 `shareId` 就没有这个缝：它变了就是变了。
+    ///
+    /// `previousShareId` 为 nil（本机完全不知道这一项有分享）时按新建算。
+    static func resolving(_ share: DriveShare, previousShareId: String?) -> DriveShareOutcome {
+        guard let previousShareId, !previousShareId.isEmpty, previousShareId == share.shareId else {
+            return .created(share)
+        }
+        return .reused(share)
+    }
+}
+
+/// 浏览行上那个 `shareUrl` 与分享本身的关系。
+///
+/// `DriveBrowserItem.shareUrl` 是**站内路径**而不是公开链接：自己网盘里那一行是
+/// `/share/{shareId}`（`buildShareDriveBrowserUrl`），在别人的分享里浏览时还会带上项目
+/// （`/share/{shareId}/items/...`）。能与服务端那条分享对上的只有里面的 `shareId`。
+enum DriveShareLink {
+    /// 站内分享路径的前缀：`DRIVE_SHARE_BROWSER_PATH_PREFIX` 是 `/share`。
+    static let pathPrefix = "/share/"
+
+    /// 从站内路径里取出 `shareId`；不是分享路径（或没有）就给 nil。
+    static func shareId(inBrowserPath path: String?) -> String? {
+        guard let path, !path.isEmpty, let range = path.range(of: pathPrefix) else { return nil }
+        let rest = path[range.upperBound...]
+        // 到下一个分隔符为止：`/share/{shareId}` 与 `/share/{shareId}/items/{itemId}` 都要。
+        let id = rest.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+        return id.isEmpty ? nil : String(id)
     }
 }
 
@@ -523,6 +565,13 @@ final class DriveStore {
 
     private static let sortKeyDefaultsKey = "SynapseDriveSortKey"
     private static let sortAscendingDefaultsKey = "SynapseDriveSortAscending"
+
+    /// 回收站 / 分享 / 公开素材一次要多少条。
+    ///
+    /// 服务端的默认值是 20、上限是 100（`drive.service.ts`）：不传就只有 20 条，而回收站那行
+    /// 会照实说「N 项」、列表却只有 20 行，另外两个是静默截断。超过 100 条时手机端只看得到
+    /// 前 100 条（桌面端可以看全）——本期的已知上限，不做「加载更多」。
+    private static let pageLimit = 100
 
     init() {
         let defaults = UserDefaults.standard
@@ -809,7 +858,7 @@ final class DriveStore {
         trashSearch = term
         trashLoading = true
         do {
-            let page = try await client.driveTrash(search: term)
+            let page = try await client.driveTrash(limit: Self.pageLimit, search: term)
             // 作废的这一趟连 `trashLoading` 都不动：飞着的那一次才是现在该等的那一次。
             guard isCurrentTrash(term, account: account) else { return }
             trash = page.items
@@ -877,7 +926,7 @@ final class DriveStore {
         sharesLoading = true
         defer { sharesLoading = false }
         do {
-            let page = try await client.driveShares()
+            let page = try await client.driveShares(limit: Self.pageLimit)
             guard account == accountGeneration else { return }
             shares = page.items
             sharesErrorMessage = nil
@@ -897,7 +946,7 @@ final class DriveStore {
     /// 已有那一条、而且用户什么都没改时**不发请求**，直接把本机手里那条给结果页
     /// （`DriveSharePlan`）。本机不知道的那一种「已有」（只知道浏览行上的 `shareUrl`、
     /// 手里没有链接）仍然走一次请求：服务端会把那一条更新（或复用）掉，回来的还是同一个
-    /// 地址。这一趟不往本机存东西，所以没有账号代次要认。
+    /// 地址。
     func share(
         item: DriveBrowserItem,
         settings: APIClient.DriveShareSettings,
@@ -908,17 +957,43 @@ final class DriveStore {
             return .reused(existing)
 
         case .request(let body):
-            // 本来就有吗：`shareUrl` 是服务端按这一项的 `shareId` 给的，非空就是有；
-            // 分享列表里那一条也算。结果页据此决定要不要说「链接未变」。
-            let hadShare = item.shareUrl?.isEmpty == false
-                || DriveSharePlan.existing(forItemId: item.id, in: shares) != nil
+            // 发请求之前先记下本机知道的那个编号，发完了可能就没了（见下面那句 `forgetShare`）。
+            let previousShareId = knownShareId(for: item)
+            let account = accountGeneration
             do {
                 let share = try await client.driveCreateShare(itemId: item.id, settings: body)
-                return hadShare ? .reused(share) : .created(share)
+                // 本机存的那一条从现在起不再是服务端那一条：带设置的一次请求是**更新**，
+                // 服务端按新设置重算了密码（`passwordEnabled: true` 时），而本机那份还是旧的
+                // （`urlWithPassword`、`password` 都过期）。留着它，复用快路
+                // （`DriveSharePlan.useExisting`）下次就会把已经失效的密码当现行值给结果页——
+                // 用户拷走的是一条打不开的带密码链接。
+                //
+                // 去掉而不是就地重建那一行：`DriveShare` 装不下列表行才有的 `itemName`、
+                // `itemType`、`sourceDeleted`。下次自然会走一次请求，服务端复用那一条
+                // 并发回新鲜值。
+                if account == accountGeneration { forgetShare(forItemId: item.id) }
+                return DriveShareOutcome.resolving(share, previousShareId: previousShareId)
             } catch {
                 return .failed(reason: DriveText.errorMessage(error))
             }
         }
+    }
+
+    /// 这一项此前那条分享的编号：分享列表里那一行有就用它的，否则从浏览行那个站内路径里取。
+    ///
+    /// 两个来源都要，是因为分享列表未必拉过（详情页直接点进来），而浏览行的 `shareUrl`
+    /// 是唯一还能看出「这一项已经被分享过」的地方。
+    private func knownShareId(for item: DriveBrowserItem) -> String? {
+        if let local = DriveSharePlan.existing(forItemId: item.id, in: shares) { return local.shareId }
+        return DriveShareLink.shareId(inBrowserPath: item.shareUrl)
+    }
+
+    /// 本机记住的那条分享已经不是服务端那一条了，删掉它。
+    ///
+    /// 只删一项的那一行：别的项的分享没有被这次请求动过，`shares` 那一页也还是有效的
+    /// （与 `disableShare` 之后的整页重取不同，这里没有别的行会变）。
+    private func forgetShare(forItemId itemId: String) {
+        shares.removeAll { $0.itemId == itemId }
     }
 
     /// 关掉一条分享。链接立刻失效，记录还在。
@@ -947,7 +1022,7 @@ final class DriveStore {
         assetsLoading = true
         defer { assetsLoading = false }
         do {
-            let page = try await client.drivePublicAssets()
+            let page = try await client.drivePublicAssets(limit: Self.pageLimit)
             guard account == accountGeneration else { return }
             assets = page.items
             assetsErrorMessage = nil

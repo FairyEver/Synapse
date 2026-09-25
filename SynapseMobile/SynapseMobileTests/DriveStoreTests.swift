@@ -3,7 +3,7 @@ import Testing
 @testable import SynapseMobile
 
 /// 云盘那几个屏里能单独拿出来判的东西：排序、批量结果、路径栈、回收站恢复分流、
-/// 分享请求体与复用判定、公开素材直链。
+/// 分享请求体、复用判定与链接变没变、公开素材直链、搜索词归一。
 ///
 /// `DriveStore` 自己不在测试里：它的网络方法收的是 `APIClient`（actor），没有协议就注入
 /// 不了假的，而本仓 `MeetingStore` 同样没有单测。会算错的部分都抽成了这个文件上面那些
@@ -286,7 +286,8 @@ struct DriveStoreTests {
     private func shareListItem(
         _ id: String,
         itemId: String = "itm_1",
-        itemName: String = "报告.md"
+        itemName: String = "报告.md",
+        password: String = "pw"
     ) -> DriveShareListItem {
         DriveShareListItem(
             id: id,
@@ -296,14 +297,21 @@ struct DriveStoreTests {
             itemType: .file,
             sourceDeleted: false,
             url: "https://synapse.d2.pub/s/\(id)",
-            urlWithPassword: "https://synapse.d2.pub/s/\(id)?password=pw",
+            urlWithPassword: "https://synapse.d2.pub/s/\(id)?password=\(password)",
             passwordEnabled: true,
-            password: "pw",
+            password: password,
             expiresAt: nil,
             accessMode: .linkRead,
             editorEmails: [],
             createdAt: "2026-09-24T02:11:00.000Z"
         )
+    }
+
+    /// 三态里是不是「链接未变」。`DriveShareOutcome` 没有 `Equatable`（它装的是整条分享），
+    /// 所以断言从这一条路走。
+    private func isReused(_ outcome: DriveShareOutcome) -> Bool {
+        if case .reused = outcome { return true }
+        return false
     }
 
     /// 请求体编成 JSON 之后的样子。断言的是**真正发出去的那几个键**——空体与服务端嘴里的
@@ -366,6 +374,58 @@ struct DriveStoreTests {
         #expect(DriveSharePlan.existing(forItemId: "itm_9", in: known) == nil)
     }
 
+    @Test func theReuseVerdictFollowsTheShareId() {
+        let before = DriveShare(listItem: shareListItem("shr_1"))
+
+        // 还是同一个编号：结果页要说「链接未变」。
+        #expect(isReused(DriveShareOutcome.resolving(before, previousShareId: "shr_1")))
+
+        // 带设置的那一次在服务端是**更新**，`passwordEnabled: true` 被显式发出时密码会被
+        // 重算，`urlWithPassword` 与 `password` 都换，而 `shareId` 不变（`buildDriveShareUrl`
+        // 只从它拼地址）——「链接未变」说的是地址，不是密码。
+        let recalculated = DriveShare(listItem: shareListItem("shr_1", password: "pw2"))
+        #expect(isReused(DriveShareOutcome.resolving(recalculated, previousShareId: "shr_1")))
+        switch DriveShareOutcome.resolving(recalculated, previousShareId: "shr_1") {
+        case .reused(let share):
+            // 结果页上「拷贝密码」拷的是这一份，旧的那个已经不好使了。
+            #expect(share.password == "pw2")
+        case .created, .failed:
+            Issue.record("同一个 shareId 时应当说链接未变")
+        }
+
+        // 先停用再分享同一项：服务端是**新建**（新的 shareId、新的地址），而本机手里那份
+        // 浏览行快照还停在「有分享」上。只看「本来有没有一条」会说「链接未变」——用户据此
+        // 以为链接还是老的那条，实际拿到的是一条全新的地址。比编号就没有这个缝。
+        let fresh = DriveShare(listItem: shareListItem("shr_2"))
+        #expect(!isReused(DriveShareOutcome.resolving(fresh, previousShareId: before.shareId)))
+        switch DriveShareOutcome.resolving(fresh, previousShareId: before.shareId) {
+        case .created(let share):
+            #expect(share.shareId == "shr_2")
+        case .reused, .failed:
+            Issue.record("换了 shareId 时不该说链接未变")
+        }
+
+        // 本机完全不知道这一项有分享（分享列表没拉过、浏览行也说是 nil）时按新建算；
+        // 空串（浏览行给了个空字符串）与「没有」同等看待。
+        #expect(!isReused(DriveShareOutcome.resolving(before, previousShareId: nil)))
+        #expect(!isReused(DriveShareOutcome.resolving(before, previousShareId: "")))
+    }
+
+    @Test func browseRowsCarryAShareIdNotAPublicLink() {
+        // 浏览行上那个 `shareUrl` 是**站内路径**（`buildShareDriveBrowserUrl`），不是公开链接，
+        // 而服务端给的 `url` 带 `APP_PUBLIC_URL`：两个字符串永远不相等，能对上的只有编号。
+        #expect(DriveShareLink.shareId(inBrowserPath: "/share/shr_1") == "shr_1")
+        // 在别人的分享里浏览时，路径上还带着项目那一段。
+        #expect(DriveShareLink.shareId(inBrowserPath: "/share/shr_1/items/itm_2") == "shr_1")
+        #expect(DriveShareLink.shareId(inBrowserPath: "/share/shr_1?from=list") == "shr_1")
+
+        // 没分享过的那一行是 nil，路径里也没有 `/share/` 那一段。
+        #expect(DriveShareLink.shareId(inBrowserPath: nil) == nil)
+        #expect(DriveShareLink.shareId(inBrowserPath: "") == nil)
+        #expect(DriveShareLink.shareId(inBrowserPath: "/console/drive/itm_1") == nil)
+        #expect(DriveShareLink.shareId(inBrowserPath: "/share/") == nil)
+    }
+
     @Test func theShareBodyOnlyCarriesWhatTheUserChanged() throws {
         // 服务端把请求里的设置**叠在**已有那条分享之上（`resolveShareAccessSettingsBase`），
         // 没发过去的键保持原样。所以没动过的键不能发：密码那一项发过去会被重算一次，
@@ -413,14 +473,22 @@ struct DriveStoreTests {
         emailsOnly.editorEmails = ["a@b.com"]
         #expect(try shareBody(emailsOnly.settings(changedFrom: initial)).isEmpty)
 
-        // 表单是照已有那条的当前样子打开的：这时「什么都没动」同样该发空体，
-        // 而不是把「永久 / 密码关 / 仅阅读」这套默认值盖上去。
+        // 表单是照已有那条的当前样子打开的，所以「什么都没动」的基线是它自己：拿它和默认值
+        // 比，四项就都是「动过」的，一个都不能少发——把某一项漏掉（或整条空体发出去），
+        // 服务端会把这项留在原档上，用户看到的是自己没动过的设置变回去了。
         let existing = DriveShareForm(
             expiry: .oneYear,
             passwordEnabled: true,
             accessMode: .specifiedUsersEdit,
             editorEmails: ["a@b.com"]
         )
+        let fullBody = try shareBody(existing.settings(changedFrom: .defaults))
+        #expect(fullBody.keys.sorted() == ["accessMode", "editorEmails", "expiresIn", "passwordEnabled"])
+        #expect(fullBody["accessMode"] as? String == "specified_users_edit")
+        #expect(fullBody["editorEmails"] as? [String] == ["a@b.com"])
+        #expect(fullBody["passwordEnabled"] as? Bool == true)
+
+        // 同一套值拿它自己当基线才是空体——那正是「打开已有分享、什么都没动」的那一次。
         #expect(try shareBody(existing.settings(changedFrom: existing)).isEmpty)
     }
 
