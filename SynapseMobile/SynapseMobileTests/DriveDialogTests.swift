@@ -235,6 +235,29 @@ struct DriveDialogTests {
         #expect(DriveShareEditors.parse("a@x.com") == .ready(["a@x.com"]))
     }
 
+    @Test func semicolonsSplitToo() {
+        // 分号与逗号同一类：`a@x.com;` 里那个 `;` 既不是空白也不是 `@`，服务端那条正则收得下。
+        #expect(
+            DriveShareEditors.parse("a@x.com;b@x.com；c@x.com")
+                == .ready(["a@x.com", "b@x.com", "c@x.com"])
+        )
+        #expect(DriveShareEditors.parse("a@x.com；") == .ready(["a@x.com"]))
+    }
+
+    @Test func theListHintOnlyAppearsOnTheTierThatNeedsOne() {
+        // 别的档位上这一页没有邮箱输入框，说一句「请至少填一个邮箱。」就是在指一件这一页上
+        // 没有的操作——默认档位就是「仅阅读」，一打开就会撞上。
+        #expect(DriveShareEditors.hint(text: "", mode: .linkRead) == nil)
+        #expect(DriveShareEditors.hint(text: "", mode: .linkEdit) == nil)
+        #expect(DriveShareEditors.hint(text: "", mode: .specifiedUsersEdit) == "请至少填一个邮箱。")
+        #expect(
+            DriveShareEditors.hint(text: "abc", mode: .specifiedUsersEdit)
+                == "「abc」不是邮箱地址。"
+        )
+        // 名单没问题就不说。
+        #expect(DriveShareEditors.hint(text: "a@x.com", mode: .specifiedUsersEdit) == nil)
+    }
+
     @Test func nothingTypedIsEmpty() {
         #expect(DriveShareEditors.parse("") == .empty)
         // 只有分隔符也是空：这些都不能当成「一段地址」发出去。

@@ -68,8 +68,10 @@ enum DriveShareEditors {
     /// 切分用的那些字符。
     ///
     /// `.whitespacesAndNewlines` 里已经有全角空格（U+3000 属于 `Zs`）与各种换行，不必单列；
-    /// 剩下三个是中文输入法下当分隔符用的标点。
-    private static let separators = CharacterSet(charactersIn: ",，、")
+    /// 剩下的都是中文输入法下当分隔符用的标点。分号半角全角都在里面，理由与逗号一样：
+    /// `a@x.com;` 与 `a@x.com；` 里那个分隔符既不是 `\s` 也不是 `@`，服务端那条正则收得下，
+    /// 存下来的又是一条谁也对不上的地址。
+    private static let separators = CharacterSet(charactersIn: ",，、;；")
         .union(.whitespacesAndNewlines)
 
     /// 与 `normalizeDriveShareEditorEmail` 同一条正则，逐字照搬。
@@ -114,6 +116,28 @@ enum DriveShareEditors {
     static func isValid(_ email: String) -> Bool {
         guard !email.isEmpty, email.utf16.count <= 320 else { return false }
         return email.range(of: emailPattern, options: .regularExpression) != nil
+    }
+
+    /// 这一档要不要邮箱名单。
+    ///
+    /// 输入框出不出现、页脚说不说那句话、能不能提交、发不发 `editorEmails`，四处**都只看这
+    /// 一个判据**：原来四处各写一遍 `== .specifiedUsersEdit`，页脚那一处漏了门控，于是在
+    /// 默认的「仅阅读」档位上也会要求填邮箱——而屏幕上根本没有那个输入框。
+    static func needsList(_ mode: DriveAccessMode) -> Bool {
+        mode == .specifiedUsersEdit
+    }
+
+    /// 输入框下面那句话。这一档不要名单、或者名单没问题时是 `nil`（不说）。
+    ///
+    /// 单独抽出来是给测试用的：门控漏掉的那一次，纯逻辑全对，错只错在「没看档位」——
+    /// 这种错在这条判据之外测不出来。
+    static func hint(text: String, mode: DriveAccessMode) -> String? {
+        guard needsList(mode) else { return nil }
+        switch parse(text) {
+        case .ready: return nil
+        case .empty: return "请至少填一个邮箱。"
+        case .invalid(let token): return "「\(token)」不是邮箱地址。"
+        }
     }
 }
 
@@ -273,8 +297,12 @@ struct DriveShareSheet: View {
                         .tag(DriveAccessMode.specifiedUsersEdit)
                 }
                 .pickerStyle(.menu)
+                // 不隐藏标签，这一行左边就是 Picker 自己那个「访问权限」，而上一行是同一个词
+                // 的 Section header——四个字挨着出现两遍。有效期那一栏上面没有 header，
+                // 所以那边不隐藏。
+                .labelsHidden()
                 // 名单只有这一档要有，这一栏也只在选中它时出现。
-                if form.accessMode == .specifiedUsersEdit {
+                if DriveShareEditors.needsList(form.accessMode) {
                     TextField("邮箱，用逗号或换行分隔", text: $editorText, axis: .vertical)
                         .lineLimit(2...5)
                         .textInputAutocapitalization(.never)
@@ -287,7 +315,8 @@ struct DriveShareSheet: View {
                 Text("访问权限")
             } footer: {
                 // 名单不对时的那一句，只在这儿说：这一页上只有这里知道是哪一段不对。
-                if let message = editorsMessage {
+                // 档位不对（这一页没有那一栏）或名单没问题时都不说，由 `hint` 一处判。
+                if let message = DriveShareEditors.hint(text: editorText, mode: form.accessMode) {
                     Text(message)
                 }
             }
@@ -378,16 +407,7 @@ struct DriveShareSheet: View {
     /// 「创建」能不能按。只有「指定邮箱可编辑」这一档会挡住它：那一档要一份非空、每条都像
     /// 邮箱的名单（服务端会拒空名单），而这里能比服务端早一步说清是哪一段不对。
     private var canSubmit: Bool {
-        form.accessMode != .specifiedUsersEdit || parsedEditors != nil
-    }
-
-    /// 名单不对时的那一句。对了就不说。
-    private var editorsMessage: String? {
-        switch DriveShareEditors.parse(editorText) {
-        case .ready: return nil
-        case .empty: return "请至少填一个邮箱。"
-        case .invalid(let token): return "「\(token)」不是邮箱地址。"
-        }
+        !DriveShareEditors.needsList(form.accessMode) || parsedEditors != nil
     }
 
     /// 这一趟要发出去的设置。
@@ -396,7 +416,7 @@ struct DriveShareSheet: View {
     /// 而这一档的名单正是用户刚敲进去的东西。
     private var requestSettings: APIClient.DriveShareSettings {
         var snapshot = form
-        if form.accessMode == .specifiedUsersEdit { snapshot.editorEmails = parsedEditors ?? [] }
+        if DriveShareEditors.needsList(form.accessMode) { snapshot.editorEmails = parsedEditors ?? [] }
         return snapshot.settings(changedFrom: .defaults)
     }
 
