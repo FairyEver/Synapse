@@ -201,7 +201,8 @@ struct RootView: View {
                         onOpenRecordings: { openRecording(nil) },
                         onOpenClipboard: { homePath.append(.clipboard) },
                         onNewSession: { isNewSessionPresented = true },
-                        onOpenWaitingSession: openWaitingSession
+                        onOpenWaitingSession: openWaitingSession,
+                        onSwitchComputer: switchComputer
                     )
                     .navigationDestination(for: HomeRoute.self) { route in
                         switch route {
@@ -293,6 +294,19 @@ struct RootView: View {
     private func openWaitingSession(_ sessionId: String) {
         selectedTab = .terminals
         requestTerminal(sessionId, from: .homePending)
+    }
+
+    /// 主页顶栏换了一台电脑。
+    ///
+    /// 先清掉终端那一格的选择：那条选择是按会话 id 记住的，而会话 id 只对签发它的那台电脑
+    /// 成立。留着它，人切到终端那一格就会落进一个属于上一台电脑的终端页。清空永远成立，不
+    /// 需要过闸门 —— 与 `popToRoot(.terminals)` 是同一条理由、同一个动作，那里也是这么做的。
+    ///
+    /// 那个还在等判定的打开请求不必在这里清：`resolvePendingTerminalOpen` 自己会认名字，
+    /// 换了电脑它就不算数了。
+    private func switchComputer(_ clientInstanceId: String) {
+        terminalSelection = nil
+        model.selectDesktop(clientInstanceId)
     }
 
     /// 写作 App 图标角标的数字。

@@ -19,6 +19,12 @@ struct HomeView: View {
     let onNewSession: () -> Void
     /// 打开一个正卡着等人的会话。参数是会话 id。
     let onOpenWaitingSession: (String) -> Void
+    /// 换到另一台电脑。参数是电脑的 `clientInstanceId`。
+    ///
+    /// 交给 `RootView` 而不是这一页自己调 `selectDesktop`，是因为换电脑**不止**换这一页的
+    /// 上下文：终端那一格的选择，以及一个还在等判定的打开请求，都指向前一台电脑的会话。
+    /// 清掉它们要碰的是那一格的导航状态，不是这一页的东西。
+    let onSwitchComputer: (String) -> Void
 
     var body: some View {
         List {
@@ -57,8 +63,58 @@ struct HomeView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("主页")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { bell }
+            // 切换器在铃铛左边，也就是这一页右上角空着的那一格。两枚装进同一个
+            // `ToolbarItemGroup`，是为了让这个先后由这一行字定下来，而不是由系统对同一个
+            // placement 上多项的排布规则定下来。
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                desktopSwitcher
+                bell
+            }
         }
+    }
+
+    /// 这台手机在哪一台电脑上，以及 —— 有地方可去的时候 —— 怎么换过去。
+    ///
+    /// 终端页的设备行回答的是同一个问题，用的是同一份词汇和同一个 `selectDesktop`；这里
+    /// 是那件事在主页的快捷方式（spec §4.3：功能是目录，终端页上保留同一件事的快捷方式）。
+    /// 放这里是因为主页那两行文案都在引用「当前这台电脑」——「在当前电脑上开一个终端」
+    /// 「这台电脑上复制过的内容」—— 而这一页在此之前从没说出过它是哪一台。
+    ///
+    /// 用 `Menu` 而不是一屏：在两三台电脑之间挑一个不值得开一层导航。只有真别处可去时它才
+    /// 是控件，箭头和命中区才出现；这包括它存在的那个理由 —— 一台进了离线状态的电脑，那
+    /// 另一台是唯一的出路。
+    @ViewBuilder
+    private var desktopSwitcher: some View {
+        if model.desktopSwitchTargets.isEmpty {
+            desktopIdentity
+        } else {
+            Menu {
+                ForEach(model.desktopSwitchTargets) { desktop in
+                    Button {
+                        Haptics.select()
+                        onSwitchComputer(desktop.clientInstanceId)
+                    } label: {
+                        Text(model.desktopName(desktop.clientInstanceId))
+                    }
+                    .accessibilityIdentifier("home-switch-computer-option-\(desktop.clientInstanceId)")
+                }
+            } label: {
+                desktopIdentity
+            }
+            // 和终端页那一枚用不同的 id：屏幕上同时存在两个 `switch-computer` 会让无障碍
+            // 和 UI 测试都读到不确定的那一个。
+            .accessibilityIdentifier("home-switch-computer")
+            .accessibilityHint("切换到其它电脑")
+        }
+    }
+
+    /// 画法与判据在 `DesktopIdentityLabel`，和终端页设备行是同一份。
+    private var desktopIdentity: some View {
+        DesktopIdentityLabel(
+            name: model.selectedDesktopClientInstanceId.map(model.desktopName),
+            isOnline: model.connectivity == .online,
+            showsSwitchAffordance: !model.desktopSwitchTargets.isEmpty
+        )
     }
 
     /// 常驻的那一枚铃铛。

@@ -133,6 +133,42 @@ final class ComputerSwitchUITests: XCTestCase {
 
     // MARK: -
 
+    /// 主页顶栏上那一枚切换器，是同一件事的第二个入口。
+    ///
+    /// 它和终端页的设备行共用 `selectDesktop`，但落点比那一处多一步：切换时还要清掉终端那一
+    /// 格已经记住的选择（会话 id 只对签发它的那台电脑成立）。所以这里除了顶栏的名字，也断言
+    /// 位置 —— 它必须在铃铛左边，那才是它有资格待的地方。
+    func testTheHomeToolbarSwitchesComputers() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        enterHomeTab(app)
+
+        let switchControl = app.buttons["home-switch-computer"]
+        XCTAssertTrue(switchControl.waitForExistence(timeout: 25), "主页顶栏没有电脑切换器")
+
+        let bell = app.buttons["home-notifications"]
+        XCTAssertTrue(bell.exists, "主页顶栏的铃铛不见了")
+        XCTAssertLessThan(switchControl.frame.midX, bell.frame.midX, "切换器没有落在铃铛左边")
+
+        let startedOn = try XCTUnwrap(homeToolbarComputer(app), "主页顶栏没说出在哪台电脑上")
+        let target = startedOn == desktopA ? desktopB : desktopA
+
+        switchControl.tap()
+        let option = app.buttons[target]
+        XCTAssertTrue(option.waitForExistence(timeout: 8), "另一台电脑没有被列出：\(target)")
+        option.tap()
+
+        XCTAssertTrue(
+            waitForHomeToolbar(app, naming: target, timeout: 20),
+            "主页顶栏换过电脑之后还写着 \(homeToolbarComputer(app) ?? "什么都没有")"
+        )
+        capture(app, name: "03-home-switched-\(target)")
+    }
+
+    // MARK: -
+
     /// Which computer the device row is naming.
     ///
     /// Read off the control that wraps the row — its label is the row's own text — rather
@@ -244,6 +280,43 @@ final class ComputerSwitchUITests: XCTestCase {
         let terminals = tabs.buttons.element(boundBy: 1)
         guard terminals.exists else { return }
         terminals.tap()
+    }
+
+    /// 底栏第一格。`signIn` 收尾时人停在终端那一格，而主页那一条要的是主页。
+    private func enterHomeTab(_ app: XCUIApplication) {
+        let tabs = app.tabBars.firstMatch
+        guard tabs.exists else { return }
+        let home = tabs.buttons.element(boundBy: 0)
+        guard home.exists else { return }
+        home.tap()
+    }
+
+    /// 主页顶栏在说哪一台电脑。
+    ///
+    /// 和 `deviceRowComputer` 同一套读法，为的是同一个理由：去屏幕上找「任何写着这个名字
+    /// 的文字」，也会命中刚刚展开的菜单里的那一项，而那会把手机报成它不在的地方。
+    private func homeToolbarComputer(_ app: XCUIApplication) -> String? {
+        let control = app.buttons["home-switch-computer"]
+        if control.exists {
+            for candidate in [desktopA, desktopB] where control.label.hasPrefix(candidate) {
+                return candidate
+            }
+            return nil
+        }
+        // Not a control: only one computer, so the toolbar is plain text.
+        for candidate in [desktopA, desktopB] where app.staticTexts[candidate].exists {
+            return candidate
+        }
+        return nil
+    }
+
+    private func waitForHomeToolbar(_ app: XCUIApplication, naming name: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if homeToolbarComputer(app) == name { return true }
+            usleep(300_000)
+        }
+        return false
     }
 
 }

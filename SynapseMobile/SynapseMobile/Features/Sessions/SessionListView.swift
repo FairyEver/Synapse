@@ -292,27 +292,15 @@ struct SessionListView: View {
     }
 
     /// Which computer is being viewed, and — when there is anywhere to go — the switch.
+    ///
+    /// 画法与判据在 `DesktopIdentityLabel`，和主页顶栏上那一枚是同一份 —— 同一个问题
+    /// 不该有两份会各自过时的答案。
     private var deviceIdentity: some View {
-        HStack(spacing: 8) {
-            Circle()
-                // Green only when a computer is actually reachable. A list that is
-                // empty because it could not be fetched is not a computer that is
-                // online, and the dot must not claim otherwise.
-                .fill(model.connectivity == .online ? Theme.running : Color.secondary)
-                .frame(width: 7, height: 7)
-            // The name comes from the model rather than from `summary` alone: a
-            // computer that has gone away no longer sends the list its name rode on,
-            // and that is exactly when the reader most needs to know which one it was.
-            Text(model.selectedDesktopClientInstanceId.map(model.desktopName) ?? "未连接电脑")
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-            if !model.desktopSwitchTargets.isEmpty {
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .contentShape(Rectangle())
+        DesktopIdentityLabel(
+            name: model.selectedDesktopClientInstanceId.map(model.desktopName),
+            isOnline: model.connectivity == .online,
+            showsSwitchAffordance: !model.desktopSwitchTargets.isEmpty
+        )
     }
 
     /// The computer being viewed is not reachable and at least one other is.
