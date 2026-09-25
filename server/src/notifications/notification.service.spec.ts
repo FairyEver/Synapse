@@ -66,6 +66,44 @@ describe("NotificationService", () => {
     expect(Math.abs(Date.now() - cutoff.getTime() - 90 * 24 * 60 * 60 * 1000)).toBeLessThan(2_000)
   })
 
+  it("withdraws the open-terminal handle for a session that is gone", async () => {
+    // 会话结束之后，它留下的那条「打开终端」不再指向任何东西。清的是 `targetId`，不是
+    // 删记录：那条消息说的是「那一轮跑完了」，这件事发生过，历史要留着。
+    const { service, prisma, desktops } = harness()
+    await service.invalidateTerminalTarget("user-1", "desktop-1", "session-1")
+
+    expect(prisma.userNotification.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        deviceId: "desktop-1",
+        targetId: "session-1",
+        source: { in: ["terminal-attention", "terminal-complete"] },
+        deletedAt: null,
+      },
+      data: { targetId: null, resolvedAt: expect.any(Date) },
+    })
+    expect(desktops.broadcastToUser).toHaveBeenCalledOnce()
+  })
+
+  it("leaves the handle alone when a session merely stops waiting", async () => {
+    // 会话还在、只是不再等人回答 —— 那时「打开终端」照样打得开。所以这一条只放下待处理
+    // 标记，不碰句柄。两件事在这里分岔，分岔的理由是同一个：句柄作不作废，取决于那条
+    // 会话还在不在。
+    const { service, prisma } = harness()
+    await service.resolveAttention("user-1", "desktop-1", "session-1")
+
+    expect(prisma.userNotification.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        source: "terminal-attention",
+        deviceId: "desktop-1",
+        targetId: "session-1",
+        resolvedAt: null,
+      },
+      data: { resolvedAt: expect.any(Date) },
+    })
+  })
+
   it("clears all messages and ignores only unresolved terminal attention", async () => {
     const { service, prisma, desktops } = harness()
     await service.deleteAll("user-1", "all")

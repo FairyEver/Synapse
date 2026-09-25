@@ -163,6 +163,35 @@ export class NotificationService implements OnModuleInit {
     if (result.count) this.publish(userId, "all")
   }
 
+  /**
+   * 这条会话结束了，它留下的那些「打开终端」就不再指向任何东西。
+   *
+   * 与 `resolveAttention` 是两件事，虽然两者都可能因为「这条会话不在了」被调用：
+   *
+   * - `resolveAttention` 说的是**待处理解除了**。会话还活着，只是不再等人回答，而那条通知
+   *   留在原地照样打得到它的终端 —— 所以它只动 `resolvedAt`；
+   * - 这一条说的是**这个句柄作废了**。会话没了，`targetId` 指的地方不存在了。所以要清掉它：
+   *   手机那一边「打开终端」是按 `targetId` **有没有**来画的（`InboxView` 的详情页），清掉
+   *   它，那个按下去只会得到「该终端已结束。」的按钮自己就消失了。只置 `resolvedAt` 不够 ——
+   *   `terminal-complete` 根本不带那个语义，详情页也从不读它，按钮照样画得出来。
+   *
+   * 记录本身留着。它是一条「那一轮跑完了」的消息，这件事发生过；只是它附带的那次跳转已经
+   * 无处可去 —— 按不动的按钮比没有按钮更糟。
+   */
+  async invalidateTerminalTarget(userId: string, deviceId: string, sessionId: string): Promise<void> {
+    const result = await this.prisma.userNotification.updateMany({
+      where: {
+        userId,
+        deviceId,
+        targetId: sessionId,
+        source: { in: ["terminal-attention", "terminal-complete"] },
+        deletedAt: null,
+      },
+      data: { targetId: null, resolvedAt: new Date() },
+    })
+    if (result.count) this.publish(userId, "all")
+  }
+
   private publish(userId: string, notificationId: string): void {
     const event = createLiveEnvelope(LIVE_MESSAGE_TYPES.notificationChanged, { notificationId }, {
       id: randomUUID(), sentAt: new Date().toISOString(),

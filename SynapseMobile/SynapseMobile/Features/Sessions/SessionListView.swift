@@ -10,6 +10,12 @@ struct SessionListView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(TerminalDisplaySettings.self) private var display
     @Binding var selection: String?
+    /// 打开一个手机刚刚让电脑建出来的终端。
+    ///
+    /// 与 `selection` 分开，是因为它与 `selection` 是两件事：写 `selection` 是「用户挑了
+    /// 哪一行」，一行一行都要先问过那道闸门（那条会话还开不开得开）；而这里的 id 是电脑刚
+    /// 亲口回给我们的，它一定存在，闸门问不出任何有用的东西 —— 问出来的只有「列表还没跟上」。
+    let onOpenCreated: (String) -> Void
     @State private var showingNewSession = false
     @State private var showingClipboard = false
     @State private var renameTarget: MobileSummarySession?
@@ -223,7 +229,7 @@ struct SessionListView: View {
     /// to a question the reader never asked.
     private func openNewlyCreated(_ sessionId: String) {
         display.setMode(.phoneDriven, for: sessionId)
-        selection = sessionId
+        onOpenCreated(sessionId)
     }
 
     private var ungroupedSessions: [MobileSummarySession] {

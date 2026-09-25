@@ -62,7 +62,10 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   private readonly attentionByUser = new Map<string, Map<string, Map<string, string>>>()
   private fanout: MobileLiveFanout | null = null
-  private notifications: Pick<NotificationService, "create" | "resolveAttention"> | null = null
+  private notifications: Pick<
+    NotificationService,
+    "create" | "resolveAttention" | "invalidateTerminalTarget"
+  > | null = null
 
   constructor(
     private readonly desktopGateway: LiveDesktopGateway,
@@ -78,7 +81,9 @@ export class MobileLiveRelayService implements OnModuleInit {
     this.fanout = fanout
   }
 
-  setNotificationSink(sink: Pick<NotificationService, "create" | "resolveAttention">): void {
+  setNotificationSink(
+    sink: Pick<NotificationService, "create" | "resolveAttention" | "invalidateTerminalTarget">,
+  ): void {
     this.notifications = sink
   }
 
@@ -140,7 +145,18 @@ export class MobileLiveRelayService implements OnModuleInit {
     for (const sessionId of sessions.keys()) {
       if (!present.has(sessionId)) {
         sessions.delete(sessionId)
-        void this.notifications?.resolveAttention(userId, payload.desktopClientInstanceId, sessionId)
+        // 这条会话不只是「不再等待」—— 它不存在了。所以清掉的是那个句柄，而不是只把
+        // 待处理标记放下：`targetId` 指的地方已经没了，而手机那一边「打开终端」正是按
+        // `targetId` 有没有来画的。只 resolve 的话按钮照旧画得出来，点下去只会得到一句
+        // 「该终端已结束。」
+        //
+        // 这条同时覆盖了原来那次 `resolveAttention`：它置的 `resolvedAt` 这个新方法也置，
+        // 而且顺手把 `terminal-complete` 一起带上 —— 那一种从来不看 `resolvedAt`。
+        void this.notifications?.invalidateTerminalTarget(
+          userId,
+          payload.desktopClientInstanceId,
+          sessionId,
+        )
       }
     }
   }

@@ -244,6 +244,17 @@ export class MobileIntentExecutor {
         // phone: this terminal cannot be opened. Asking by exception would have made
         // the first case an unexplained failure instead of this sentence.
         if (!session || (session.status !== "running" && session.status !== "stopping")) {
+          // 这条拒绝在别处**完全不留痕**：手机那边只得到一个空的拒绝结果，之后既不推
+          // 窗口也不推历史，没有租约变动，终端服务也根本不知道有人来过。于是「手机点了
+          // 一个已经不存在的终端」在电脑这一侧是一段绝对的空白 —— 一次真实的排查里，
+          // 这段空白让一条本来五分钟能定位的线索花了两个小时。`lifecycle` 是全部价值
+          // 所在：`missing` 与 `ended` 指向完全不同的两种成因（手机存着一个过期的 id，
+          // 还是这个终端刚刚结束）。
+          this.deps.logger.info("Mobile attach refused for a terminal that is not running.", {
+            sessionId: intent.sessionId,
+            lifecycle: session?.status ?? "missing",
+            mobileClientInstanceId,
+          })
           return {
             intentId: intent.intentId,
             outcome: "rejected",

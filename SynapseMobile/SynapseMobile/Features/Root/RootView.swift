@@ -13,6 +13,12 @@ struct RootView: View {
     @State private var inboxSelection: String?
     @State private var settingsSelection: SettingsCategory?
     @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
+    /// 一个还没能判定的打开终端请求。
+    ///
+    /// 只在一种情况下存在：请求带来了一个会话 id，而**当下没有一份属于那台电脑的列表**可问
+    /// （刚冷启动、刚切过电脑）。那不是「这个终端没有了」，是什么都还不知道，所以要留住它，
+    /// 等下一份列表到了再判 —— 丢掉它就等于把用户点的那一下当作没发生。
+    @State private var pendingTerminalOpen: PendingTerminalOpen?
 
     private enum Tab: Hashable {
         case terminals, meetings, inbox, settings
@@ -57,7 +63,7 @@ struct RootView: View {
             // A tap that launched the app parked its destination before any view
             // existed, so the change observer would never have fired.
             handleRoute(NotificationRouter.shared.consume())
-            openPendingWidgetTarget()
+            resolveExternalTerminalRequests()
         }
         .onChange(of: NotificationRouter.shared.pending) { _, _ in
             handleRoute(NotificationRouter.shared.consume())
@@ -78,13 +84,16 @@ struct RootView: View {
                 meetingSelection = nil
                 inboxSelection = nil
                 settingsSelection = nil
+                // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
+                // 哪台电脑都无从谈起。
+                pendingTerminalOpen = nil
                 selectedTab = .terminals
             }
-            openPendingWidgetTarget()
+            resolveExternalTerminalRequests()
         }
-        .onChange(of: model.summary?.revision) { _, _ in openPendingWidgetTarget() }
-        .onChange(of: model.hasLiveTerminalSummary) { _, _ in openPendingWidgetTarget() }
-        .onChange(of: model.onlineDesktopIds) { _, _ in openPendingWidgetTarget() }
+        .onChange(of: model.summary?.revision) { _, _ in resolveExternalTerminalRequests() }
+        .onChange(of: model.hasLiveTerminalSummary) { _, _ in resolveExternalTerminalRequests() }
+        .onChange(of: model.onlineDesktopIds) { _, _ in resolveExternalTerminalRequests() }
         .onChange(of: scenePhase) { _, phase in
             // 会话标记是崩溃的第三种证据：进程被系统杀掉时不会留下任何遗言，
             // 而"文件末尾没有 sessionClose"就是它来过又走了的唯一痕迹。
@@ -104,6 +113,21 @@ struct RootView: View {
                 try? await UNUserNotificationCenter.current().setBadgeCount(badge)
             }
         }
+    }
+
+    /// 会话列表写给导航的那条选择：读的是真相，写的是请求。
+    ///
+    /// 读和写必须分开 —— 列表要能如实画出「现在开着哪一个」，而**要开哪一个**得先过闸门。
+    /// 列表和 `NavigationSplitView` 都只认一条绑定，所以闸门就装在这条绑定的 setter 上：
+    /// 用户点行写进来的那个选择，从这里过。（另外四条路 —— 待处理行、消息里的记录、推送
+    /// 通知、桌面小组件 —— 不经过绑定，它们各自调 `requestTerminal`，同一个判据。）
+    ///
+    /// 退回列表（`nil`）不经过判据：清空永远成立。
+    private var terminalEntry: Binding<String?> {
+        Binding(
+            get: { terminalSelection },
+            set: { requestTerminal($0) }
+        )
     }
 
     /// Re-selecting a tab returns to that feature's list at every window width.
@@ -131,7 +155,11 @@ struct RootView: View {
 
     private func popToRoot(_ tab: Tab) {
         switch tab {
-        case .terminals: terminalSelection = nil
+        case .terminals:
+            terminalSelection = nil
+            // 「回到这一屏的列表」把等着的那个打开请求也一并作废：人已经往下走了，
+            // 再把他拽进一个终端页不是他要的。
+            pendingTerminalOpen = nil
         case .meetings: meetingSelection = nil
         case .inbox: inboxSelection = nil
         case .settings: settingsSelection = nil
@@ -141,11 +169,13 @@ struct RootView: View {
     private var tabs: some View {
         TabView(selection: tabSelection) {
             AdaptiveFeatureNavigation(
-                selection: $terminalSelection,
+                selection: terminalEntry,
                 emptyTitle: "选择会话",
                 emptySymbol: "terminal"
             ) {
-                SessionListView(selection: $terminalSelection)
+                // 两个入口分开给：`selection` 是「用户挑了哪一个」，每一步都要过闸门；
+                // `onOpenCreated` 是「电脑刚把这条终端交给我们」，它不必过。
+                SessionListView(selection: terminalEntry, onOpenCreated: openFreshTerminal)
             } detail: { sessionId in
                 TerminalScreen(sessionId: sessionId) { terminalSelection = nil }
             }
@@ -171,7 +201,9 @@ struct RootView: View {
             ) {
                 InboxView(selection: $inboxSelection) { sessionId in
                     selectedTab = .terminals
-                    terminalSelection = sessionId
+                    // 走同一道闸门：待处理那一行是从列表上取的，本来就在，但它可能在
+                    // 「这一行画出来」和「手指落下去」之间结束掉。
+                    requestTerminal(sessionId)
                 }
             } detail: { id in
                 NotificationDetailView(id: id)
@@ -202,8 +234,12 @@ struct RootView: View {
             // Only when that computer can actually open it. Selecting the terminal anyway
             // would show a screen with nothing in it and nothing to say; the list, whose
             // device row is now the way to switch, says what happened and what to do.
+            //
+            // 「能打开」现在是两个条件，不是一个：那台电脑在线，**而且**它的列表里还有这个
+            // 会话。一条通知记着的是「它完成那一轮时」的会话 id，那条会话后来结束了、被删了
+            // 都不会让这条记录失效，所以这个 id 的存在必须当场再问一次。
             if !model.viewedDesktopIsOffline {
-                terminalSelection = sessionId
+                requestTerminal(sessionId, on: desktopClientInstanceId)
             }
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
@@ -237,6 +273,78 @@ struct RootView: View {
         }
     }
 
+    /// 进终端页的唯一入口，连同它唯一的判据。
+    ///
+    /// 会话列表里的行、「消息」里的待处理行、「消息」里一条记录上的「打开终端」、推送通知、
+    /// 桌面小组件 —— 五条路都落在这里，所以「这个终端还开不开得开」这个问题只回答一次。
+    ///
+    /// 判据是**电脑送来的那份列表里还有没有它**（见 `TerminalOpenability`）。这不是保守，
+    /// 是唯一说得通的一条：另外三条路带来的 id 都来自某个更早的时刻，而那一刻可能早就过去了。
+    /// 旧的写法是直接进终端页 —— 于是手机把人送进一块空画布，画布上只有电脑回的那句
+    /// 「该终端已结束。」，而返回的路要人自己找。
+    private func requestTerminal(_ sessionId: String?, on desktopClientInstanceId: String? = nil) {
+        guard let sessionId else {
+            terminalSelection = nil
+            pendingTerminalOpen = nil
+            return
+        }
+        switch model.terminalOpenability(sessionId, on: desktopClientInstanceId) {
+        case .openable:
+            pendingTerminalOpen = nil
+            terminalSelection = sessionId
+        case .ended:
+            pendingTerminalOpen = nil
+            // 不当着人的面开一块空白：就地说明为什么没进去。
+            //
+            // 与电脑那条拒绝同一个语气（电脑回的是「该终端已结束。」，落在手机上就是一条
+            // 拒绝），因为这就是同一件事被两个地方说出来 —— 只是这一次那个人还没有被送进
+            // 一块空画布里去听它。
+            model.notice("这个会话已经结束了。", tone: .failure)
+        case .unknown:
+            // 列表还没到。留到下一份列表，别把人这一下丢掉。
+            pendingTerminalOpen = PendingTerminalOpen(
+                sessionId: sessionId,
+                desktopClientInstanceId: desktopClientInstanceId
+            )
+        }
+    }
+
+    /// 打开一个**手机自己刚让电脑建出来**的终端。
+    ///
+    /// 它不经过判据，而且这是对的：那个 id 是电脑亲口回给手机的（`create` / `launchCommand`
+    /// 的结果，或者「开始对话」的结果），它一定存在 —— 不存在的可能性不在这一条路上。
+    ///
+    /// 反过来才危险：这类终端出现在列表上要等下一份 summary 到达，而那一瞬间「列表里没有
+    /// 它」是**列表还没跟上**。拿判据去问，用户按下「开始对话」得到的第一句话会是
+    /// 「这个会话已经结束了」。
+    private func openFreshTerminal(_ sessionId: String) {
+        pendingTerminalOpen = nil
+        terminalSelection = sessionId
+    }
+
+    /// 判定那个还没能判定的请求。列表、连接、登录态任一变一次都会走这里。
+    private func resolvePendingTerminalOpen() {
+        guard let pending = pendingTerminalOpen else { return }
+        // 换过电脑就不算数了。手机端按会话 id 记住的东西都只对签发它的那台电脑成立，
+        // 而这一类最容易出事的正是「等下一次」的东西：等到了、电脑却已经不是那台了，
+        // 就会打到一个没听说过这个终端的电脑上。
+        if let named = pending.desktopClientInstanceId,
+           named != model.selectedDesktopClientInstanceId {
+            pendingTerminalOpen = nil
+            return
+        }
+        requestTerminal(pending.sessionId, on: pending.desktopClientInstanceId)
+    }
+
+    /// 所有「来自手机外面」的打开请求都在这一个入口里收口。
+    ///
+    /// 两件事被排在同一个函数里，是因为它们要等的是同一批事件：一份属于那台电脑的列表、
+    /// 一次连接建立、一次登录态变化。分开写就有两处要各自记得挂这四条 `onChange`。
+    private func resolveExternalTerminalRequests() {
+        resolvePendingTerminalOpen()
+        openPendingWidgetTarget()
+    }
+
     private func openPendingWidgetTarget() {
         guard model.authState == .signedIn, let target = pendingWidgetTarget else { return }
         selectedTab = .terminals
@@ -259,9 +367,19 @@ struct RootView: View {
         guard model.hasLiveTerminalSummary,
               let summary = model.summary,
               summary.desktopClientInstanceId == desktopId else { return }
-        if summary.sessions.contains(where: { $0.id == sessionId }) {
-            terminalSelection = sessionId
-        }
+        // 判据和通知那条路是同一条，只是这里多一个前置条件：列表必须是**刚从那台电脑的
+        // 连接上收到的**。小组件的快照可以躺很久，而拿一份陈旧的列表去判，每一条都会读成
+        // 「它还在」—— 那正是这道闸门要挡的东西。
+        requestTerminal(sessionId, on: desktopId)
         pendingWidgetTarget = nil
     }
+}
+
+/// 一个带来了会话 id、却还没有一份列表可问的打开请求。
+///
+/// `desktopClientInstanceId` 是请求自己记着的那台电脑，不是「现在看着的那台」：一条通知
+/// 说的是「这条会话在**那台**电脑上」，等列表也要等那台的那一份。
+private struct PendingTerminalOpen: Equatable {
+    let sessionId: String
+    let desktopClientInstanceId: String?
 }

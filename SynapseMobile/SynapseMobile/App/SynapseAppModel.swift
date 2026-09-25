@@ -1181,6 +1181,21 @@ final class SynapseAppModel {
         sessions.first { $0.id == sessionId }
     }
 
+    /// 这个终端还开不开得开。规则全在 `TerminalOpenability` 里，这里只把那份列表递过去。
+    ///
+    /// `desktopClientInstanceId` 不给就是「手机正看着的那台」——列表里的行、待处理里的行
+    /// 都是从那台电脑的列表上取下来的，问的就是它。给出来的是那条通知自己记着的那台。
+    func terminalOpenability(
+        _ sessionId: String,
+        on desktopClientInstanceId: String? = nil
+    ) -> TerminalOpenability {
+        TerminalOpenability.resolve(
+            sessionId: sessionId,
+            desktopClientInstanceId: desktopClientInstanceId ?? selectedDesktopClientInstanceId,
+            summary: summary
+        )
+    }
+
     /// Forgets everything about terminals the computer no longer lists.
     ///
     /// The list is the whole truth — the computer sends every session it has, not a

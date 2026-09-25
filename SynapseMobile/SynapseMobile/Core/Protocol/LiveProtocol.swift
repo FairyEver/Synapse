@@ -179,6 +179,15 @@ struct MobileSummarySession: Decodable, Identifiable, Hashable {
     let gridOwnerId: String?
 
     var isRunning: Bool { status == "running" }
+    /// 这台电脑现在还愿不愿意打开它。
+    ///
+    /// 与电脑那条 `attach` 的门槛是同一个门槛：它接受 `running` 与 `stopping`，其余
+    /// （`ended` / `failed` / `lost`）一律回「该终端已结束。」。两边判据不一致的地方，就是
+    /// 上一次那块黑屏长出来的地方 —— 手机按自己的判据进去了，电脑按自己的判据拒绝，中间
+    /// 那段空白由用户承担。所以这一条**故意**与
+    /// `desktop/electron/services/mobile-gateway/intent-executor.ts` 的 `attach` 分支
+    /// 保持一致，改一边必须改另一边。
+    var canBeOpened: Bool { status == "running" || status == "stopping" }
     /// 这个终端是什么时候开的，用来算「运行了多久」。
     ///
     /// 读法必须是 `parseWireTimestamp`：桌面端那一头是 `new Date().toISOString()`，
