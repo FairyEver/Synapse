@@ -473,6 +473,14 @@ final class SynapseAppModel {
         }
     }
 
+    /// 提交一条问题反馈。
+    ///
+    /// 走 `apiClient` 而不是让视图自己拿到它：视图不该知道网络层长什么样。这一页只在
+    /// 登录之后的「我的」里可达，所以那个客户端一定已经建好了。
+    func submitProblemFeedback(_ content: String) async -> ProblemFeedbackOutcome {
+        await apiClient.submitProblemFeedback(content: content)
+    }
+
     func signOut() async {
         stopKeepAlive()
         realtime.disconnect(reason: .unauthenticated)
