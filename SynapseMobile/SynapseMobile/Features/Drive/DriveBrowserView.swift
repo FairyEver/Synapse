@@ -58,6 +58,26 @@ struct DriveBrowserView: View {
     /// 已经先写好了，比不出变化）。初始值 0 对得上 `path` 的初始值：这一屏进来就停在根层。
     @State private var lastDepth = 0
 
+    /// 分栏现在摆几列。
+    ///
+    /// 常规宽度下得**明说要两列**，不能留给默认的 `.automatic`：这一屏活在 `.sidebarAdaptable`
+    /// 的 `TabView` 的一格里，默认值在 iPad 上会把浏览列整列收起来 —— 2026-09-25 在
+    /// iPad Pro 13 英寸（iPadOS 18）实测，进去只看得到预览列那句「选择一项来预览」，
+    /// 浏览列与栏上那枚「返回主页」都不在屏上，展开侧边栏出来的是 App 自己那三个 Tab，
+    /// 于是这一屏在 iPad 上没有文件、也没路可回。紧凑宽度照旧 `.automatic`（折成一列，
+    /// 由分栏自己决定停在哪一列）。
+    ///
+    /// 而且**不能把它存在 `@State` 里**：存了的话，系统在 iPad 上转过屏、切过标签之后再按
+    /// `.automatic` 摆一次时，我们那位「已经写进去了」不算变化 —— 同一个值再写一次不触发
+    /// 重算，收起来的浏览列就回不来（2026-09-25 实测：iPad 竖屏进云盘、下钻、转横屏，
+    /// 列表整列消失，只剩「选择一项来预览」，屏上也没有路把它叫回来）。这里给的是**算出来的
+    /// 常量**：每次重绘都按当下的宽度重新摆，系统收不动它。
+    private var columnVisibility: NavigationSplitViewVisibility {
+        isCompact ? .automatic : .doubleColumn
+    }
+    /// 栈顶上一次是哪一格。判「是不是刚从一张整屏的列表页退回来」用它，见 `layerChanged`。
+    @State private var lastRoute: DriveRoute?
+
     /// 浏览列栈上的一格。
     private enum DriveRoute: Hashable {
         case folder(DriveBrowserItem)
@@ -105,7 +125,7 @@ struct DriveBrowserView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: .constant(columnVisibility)) {
             browse
         } detail: {
             previewPane
@@ -117,7 +137,9 @@ struct DriveBrowserView: View {
         .onChange(of: sizeClass) { _, new in widthChanged(new) }
         .onChange(of: editing) { _, on in if !on { picked = [] } }
         .onChange(of: model.driveUploader.items) { _, items in uploadsChanged(items) }
-        .task { await enter() }
+        .task {
+            await enter()
+        }
         .noticeOverlay(model)
     }
 
@@ -174,7 +196,13 @@ struct DriveBrowserView: View {
                 breadcrumbs
             }
             countLine(layer)
-            DriveBrowserList(layer: layer, editing: $editing, picked: $picked, actions: actions)
+            DriveBrowserList(
+                layer: layer,
+                editing: $editing,
+                picked: $picked,
+                actions: actions,
+                isCompact: isCompact
+            )
                 .safeAreaInset(edge: .bottom) { sharingProgress }
         }
         .navigationTitle(title(layer))
@@ -566,10 +594,34 @@ struct DriveBrowserView: View {
             editing = false
             picked = []
         }
+        // 从三张整屏的列表页退回来时，把这一层重取一次。
+        //
+        // 它们改的正是浏览层要显示的东西：回收站里恢复或彻底删除会改这一层的行，分享管理里
+        // 停用分享会改行尾那枚 `link` 角标。那几个页面是**推入**的、不是 sheet，所以
+        // `sheetDismissed` 那套（只在动过分享时重取）覆盖不到它们 —— 不补这一趟，用户恢复
+        // 一个文件、返回，看不见它，要下拉一次才出现，看起来像操作没生效。
+        //
+        // 这里是**无条件**重取，不判「动没动过」：那几屏拿不到回调，而判错一次的代价是用户
+        // 以为操作没生效；多打的那一趟 GET 只在他真的走过这三屏时发生。三屏自己那些动作
+        // （恢复 / 彻底删除 / 停用分享）在 `DriveStore` 里已经各自重取过自己那一份。
+        if Self.isManagementRoute(lastRoute), !Self.isManagementRoute(routes.last) {
+            Task { await model.driveReload() }
+        }
+        lastRoute = routes.last
         // store 那一趟另判：`driveJump` 只有真差着层时才值得发（下钻那一趟已经把它推到位了，
         // 再跳一次就是白多打一趟请求）。
         guard depth != model.drive.path.count else { return }
         Task { await model.driveJump(to: depth) }
+    }
+
+    /// 栈上这一格是不是那三张「整屏的列表页」（回收站 / 公开素材 / 分享管理）。
+    ///
+    /// 它们与文件夹页不同：自己取数、不动 `model.drive.path`，所以「从它们退回来」要单独认。
+    private static func isManagementRoute(_ route: DriveRoute?) -> Bool {
+        switch route {
+        case .trash, .assets, .shares: return true
+        case .folder, .preview, .none: return false
+        }
     }
 
     // MARK: - 窗口变宽了
@@ -577,6 +629,7 @@ struct DriveBrowserView: View {
     /// 从紧凑转到常规：栈上那一页预览在分栏里没有位置（它只属于单列），换成详情列里的选择。
     ///
     /// 不处理的话会同时出现两处预览：侧栏那一列里推着一页预览，右边详情列还画着另一样东西。
+    /// 窗口宽度变了：换分栏的列数，并把紧凑窗里那一页预览收进详情列。
     private func widthChanged(_ sizeClass: UserInterfaceSizeClass?) {
         guard sizeClass != .compact else { return }
         guard case .preview(let item)? = path.last else { return }
@@ -685,8 +738,20 @@ struct DriveBrowserView: View {
     /// 三件都要：这一层的快照（列表）、用量（最底下那一行）、回收站条数（「N 项」）。
     /// 依次发而不是并发：三条都落在同一份 `DriveStore` 状态上，而列表那一趟是用户等着的
     /// 那一条，先让它落地。
+    ///
+    /// **进屏先把 store 扳回根层。** 这一屏是「主页那一格的一页」，`path` 每次进来都是空的
+    /// （见那个属性的注释：这一屏进来就停在根层），而 `DriveStore.path` 挂在 model 上、
+    /// 活得比这一屏长 —— 上一次钻到哪一层会原样留到这一次。两边差着层时列表按
+    /// `layer.isCurrent` 判成「不是这一层」，于是整页画成占位：返回主页再进云盘，看到的
+    /// 是一片空白，下拉与重试也回不来（它们取的是 store 那一层，越取越不对）。
+    /// 所以两者必须在进屏这一刻对齐，而不只是在栈变化时对齐（`layerChanged`）。
     private func enter() async {
-        await model.driveReload()
+        if model.drive.path.isEmpty {
+            await model.driveReload()
+        } else {
+            // `jump` 自己会取根层那一份，不必再 `reload` 一次。
+            await model.driveJump(to: 0)
+        }
         await model.driveLoadUsage()
         await model.driveLoadTrash(search: nil)
     }

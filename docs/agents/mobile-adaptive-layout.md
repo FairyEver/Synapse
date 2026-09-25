@@ -7,7 +7,7 @@
 - 顶层「主页 / 终端 / 我的」使用系统 `TabView` 的自适应呈现：iPhone 为底部标签，iPadOS 可显示顶部标签或侧边栏。不要自行画一套与系统并行的全局导航。
 - **底栏永远三格，不因任何理由增加第四个。** 新增能力一律进「主页 → 功能」清单：位置是稀缺资源，功能不是。功能超过十二项左右时给「功能」加搜索与「常用」置顶，而不是开新槽位。
 - 有「列表 → 详情」的功能以 `Features/Root/AdaptiveFeatureNavigation.swift` 为入口，使用同一份选中 ID 驱动宽窗口并排详情和紧凑窗口下钻。列表用 `List(selection:)` 与 `NavigationLink(value:)`，右侧详情只显示当前选中对象。宽窗不推走列表，窄窗必须有明确返回路径。
-- 自带 `AdaptiveFeatureNavigation` 的功能页（当前是主页里的录音）是**它所在那一格的一页**，不推入任何 `NavigationStack`：分栏自己带一条导航栏，推进栈里屏幕上会出现两条栏——上面那条只剩系统的返回键，标题和操作落在下面那条，中间空出一条标题带，宽窗的并排详情也一并消失（iPhone 与 iPadOS 都是这个形状）。返回上一级由该页自己的一枚返回键承担，落在列表那一条栏上，和它的操作同一行。
+- 自带 `AdaptiveFeatureNavigation` 的功能页（当前是主页里的录音与云盘）是**它所在那一格的一页**，不推入任何 `NavigationStack`：分栏自己带一条导航栏，推进栈里屏幕上会出现两条栏——上面那条只剩系统的返回键，标题和操作落在下面那条，中间空出一条标题带，宽窗的并排详情也一并消失（iPhone 与 iPadOS 都是这个形状）。返回上一级由该页自己的一枚返回键承担，落在列表那一条栏上，和它的操作同一行。云盘那一屏自己带 `NavigationSplitView`（列表 + 预览），同样整格摆出来；它的文件夹下钻、回收站、公开素材与分享管理都在它自己那条栈上，与主页的栈无关。**格子里的分栏在 iPadOS 上要把列显式摆出来**（`columnVisibility` 在宽窗下设 `.doubleColumn`）：`.automatic` 下系统会把浏览列收起来，只剩详情列那块占位。**列里读到的 `horizontalSizeClass` 是列自己的、不是窗口的**（iPad 全屏下全屏宽度仍是 `compact`），判窗口宽窄要用窗口那一层的值往下传。宽窗下分栏列里的 `List` **不要挂 `.refreshable`**：整格换页时那条下拉刷新的拆解会和辅助功能对导航栏的查询撞在一起，`AttributeGraph` 断言失败、App 直接 `SIGABRT`（堆栈落在 `ListRepresentable.dismantleViewProvider` → `UIScrollView _setRefreshControl:` → `UINavigationBar layoutSubviews` → `_UIHostingView.accessibilityElementCount`）。2026-09-25 在 iPad Pro 13 英寸全屏宽度下实测：只在辅助功能正查控件树时出现（XCUITest 与 VoiceOver 都算），摘掉那条下拉刷新之后逐层退、面包屑退、从回收站退都不崩；给换页加不加动画与它无关。
 - 功能间切换保留各自选中项。再次点当前功能回到该功能列表。通知、Widget 与其他深链要设置功能、电脑和条目三层目标；不得仅修改某个 `NavigationStack` 的 path，造成 iPad 右栏不更新。
 - 同一功能的列表行、数据源、操作和详情在 iPhone 与 iPadOS 共用。只允许呈现容器随空间变化，不维护两套业务逻辑或网络状态。
 - 登录退出清除场景选择。被删除、结束或不再属于当前电脑的对象应清除选择并回到列表；网络暂时未返回列表时不得误判终端已结束。

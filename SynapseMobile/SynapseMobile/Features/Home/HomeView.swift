@@ -15,6 +15,7 @@ struct HomeView: View {
 
     let onOpenNotifications: () -> Void
     let onOpenRecordings: () -> Void
+    let onOpenDrive: () -> Void
     let onOpenClipboard: () -> Void
     let onNewSession: () -> Void
     /// 打开一个正卡着等人的会话。参数是会话 id。
@@ -40,6 +41,13 @@ struct HomeView: View {
                     symbol: "waveform",
                     value: recordingCount,
                     action: onOpenRecordings
+                )
+                row(
+                    title: "云盘",
+                    subtitle: "服务端上的文件",
+                    symbol: "internaldrive",
+                    value: nil,
+                    action: onOpenDrive
                 )
                 row(
                     title: "新建会话",

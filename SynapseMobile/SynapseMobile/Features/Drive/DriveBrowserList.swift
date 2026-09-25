@@ -237,6 +237,15 @@ struct DriveBrowserList: View {
     @Binding var picked: Set<String>
     let actions: DriveBrowserActions
 
+    /// 窗口是不是紧凑的。**由调用方给，不在这里读 `horizontalSizeClass`。**
+    ///
+    /// 这一条列表住在分栏的浏览列里，而列里读到的是那一列自己的宽度类别，不是窗口的：
+    /// 2026-09-25 在 iPad 全屏下拿「这条下拉刷新挂不挂」当探针量过 —— 同一个开关，读这里
+    /// 环境值的那一版**没能**把下拉刷新摘掉（列里读到的是 `compact`），改成由调用方
+    /// （`DriveBrowserView`，它读的是窗口那一层）传进来才摘掉。只用来判下拉刷新挂不挂，
+    /// 见 `refreshableIfCompact`。
+    let isCompact: Bool
+
     @Environment(SynapseAppModel.self) private var model
 
     /// 等用户点头的那一项覆盖（只有文本文档会走到这里，见 `requestOverwrite`）。
@@ -267,7 +276,7 @@ struct DriveBrowserList: View {
             }
         }
         .listStyle(.insetGrouped)
-        .refreshable { await model.driveReload() }
+        .refreshableIfCompact(isCompact) { await model.driveReload() }
         .safeAreaInset(edge: .bottom) {
             if editing { selectionBar }
         }
@@ -689,5 +698,31 @@ struct DriveBrowserList: View {
     private func tappableLabel(_ title: String) -> some View {
         Text(title)
             .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+    }
+}
+
+private extension View {
+    /// 紧凑宽度下才挂下拉刷新。
+    ///
+    /// **常规宽度（iPad 全屏 / 分栏并排）下不挂。** 那会儿这一屏是分栏的浏览列，钻过文件夹
+    /// 之后那条栏上还挂着面包屑；从这一格换回主页时，整棵分栏子树会一起拆掉，拆到这条列表
+    /// 的下拉刷新时 `AttributeGraph` 断言失败、App 当场 `SIGABRT`——只在辅助功能正查控件树
+    /// 时出现（XCUITest 与 VoiceOver 都算），去掉这一条下拉刷新之后逐层退、面包屑退、
+    /// 从回收站退都不崩。完整堆栈与逐种试过的改法见
+    /// `.superpowers/sdd/2026-09-25-mobile-drive/task-10-report.md`。
+    ///
+    /// 丢掉的只是 iPad 上「往下拉一把」这个手势：进屏、传完文件、分享改动过、从回收站那几屏
+    /// 回来都已经各自重取，这一层失败态还另有一枚「重试」。紧凑宽度（iPhone、iPad 半窗）
+    /// 一点没变。
+    @ViewBuilder
+    func refreshableIfCompact(
+        _ isCompact: Bool,
+        action: @escaping @Sendable () async -> Void
+    ) -> some View {
+        if isCompact {
+            refreshable(action: action)
+        } else {
+            self
+        }
     }
 }

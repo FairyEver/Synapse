@@ -181,24 +181,30 @@ struct RootView: View {
 
     /// 主页那一格。
     ///
-    /// 这一格有「功能清单 → 录音」两层，但**录音不是主页栈里的一层**：录音页自带
-    /// `AdaptiveFeatureNavigation`，那是一个 `NavigationSplitView`，而分栏自己带一条导航栏。
-    /// 把分栏推进主页的栈里，屏幕上会同时出现两条栏——上面那条只剩系统的返回键，标题和
-    /// 加号落在下面那条，中间空出整整一条标题带（2026-09-25 真机截图；iPhone 与 iPadOS
-    /// 都是这个形状，宽窗下并排的详情列也一并没了）。所以录音是**这一格的一页**：进它时
-    /// 换掉的是这一格的内容，不是往栈里推一层，返回走录音页自己那枚返回键。
+    /// 这一格有「功能清单 → 功能页」两层，而**功能页不是主页栈里的一层**：录音页与云盘页
+    /// 各自带一个 `NavigationSplitView`（录音那份是 `AdaptiveFeatureNavigation`），而分栏
+    /// 自己带一条导航栏。把分栏推进主页的栈里，屏幕上会同时出现两条栏——上面那条只剩系统的
+    /// 返回键，标题和加号落在下面那条，中间空出整整一条标题带（2026-09-25 真机截图；iPhone
+    /// 与 iPadOS 都是这个形状，宽窗下并排的详情列也一并没了）。所以它们是**这一格的一页**：
+    /// 进它时换掉的是这一格的内容，不是往栈里推一层，返回走那一页自己那枚返回键。
     ///
-    /// 剪贴板历史照旧留在栈里：它是一条普通页，推进去只有一条栏，没有这个问题。
+    /// 这一条 path 因此有两种读法，`homePage` 把它们分开：栈上那一层（剪贴板历史）和
+    /// 「这一格现在归谁」。剪贴板历史照旧留在栈里：它是一条普通页，推进去只有一条栏，
+    /// 没有这个问题。
     @ViewBuilder
     private var homeTab: some View {
         Group {
-            if homePath.last == .recordings {
+            switch homePage {
+            case .recordings:
                 recordingsPage
-            } else {
+            case .drive:
+                drivePage
+            case .clipboard, .none:
                 NavigationStack(path: $homePath) {
                     HomeView(
                         onOpenNotifications: { isNotificationPanelPresented = true },
                         onOpenRecordings: { openRecording(nil) },
+                        onOpenDrive: { openDrive() },
                         onOpenClipboard: { homePath.append(.clipboard) },
                         onNewSession: { isNewSessionPresented = true },
                         onOpenWaitingSession: openWaitingSession,
@@ -208,8 +214,8 @@ struct RootView: View {
                         switch route {
                         case .clipboard:
                             ClipboardHistoryView()
-                        case .recordings:
-                            // 走不到这一支：录音换的是这一格的内容，不是往栈里推（见上）。
+                        case .recordings, .drive:
+                            // 走不到这一支：功能页换的是这一格的内容，不是往栈里推（见上）。
                             // 留着它只为让这个 switch 对 `HomeRoute` 保持穷尽。
                             EmptyView()
                         }
@@ -217,10 +223,32 @@ struct RootView: View {
                 }
             }
         }
-        // 换页那一下给一层淡入淡出，别硬切；减弱动态效果时不加。
-        // 盯的是「录音页在不在」这一个布尔值：盯 `homePath` 的话，推剪贴板历史那一下
-        // 也会被这条动画接管，把系统的推入换成淡入。
-        .animation(reduceMotion ? nil : .snappy, value: homePath.last == .recordings)
+        // 换页那一下给一层淡入，别硬切；减弱动态效果时不加。
+        //
+        // 盯的是「现在是不是一个功能页」这一件事，不是某一个功能：盯 `homePath` 的话，
+        // 推剪贴板历史那一下也会被这条动画接管，把系统的推入换成淡入；盯单个功能的话，
+        // 以后每加一个功能页都要记得回来改这一条，漏的那一次就是同一处毛病。
+        //
+        // **只用 `.animation(value:)` 这一种写法。** 2026-09-25 在 iPad 全屏宽度下试过给它
+        // 配上 `.transition`（进场、退场、`.asymmetric` 各种组合）：换页时拆掉的是一整棵
+        // 分栏子树，辅助功能同时又在查导航栏，极容易踩到 SwiftUI 的一个重入缺陷
+        // （`AttributeGraph` 断言失败 → `SIGABRT`）。**注意那条缺陷不是动画引出来的** ——
+        // 不给动画、换成硬切，照样能踩到；省掉 `transition` 只是少一份风险。完整结论与
+        // 触发条件见 `.superpowers/sdd/2026-09-25-mobile-drive/task-10-report.md`。
+        .animation(reduceMotion ? nil : .snappy, value: homePage != nil)
+    }
+
+    /// 这一格现在被哪个功能页占着；没有功能页时是 `nil`（这一格画的是主页那张清单）。
+    ///
+    /// 从这一条 path 上读，是因为进功能页的入口都往它上面写（深链走 `openRecording`，
+    /// 主页那一行走 `openDrive`）：「这一格归谁」和 path 是同一件事的两种读法，分开存
+    /// 两份就会分叉。
+    private var homePage: HomeRoute? {
+        switch homePath.last {
+        case .recordings: return .recordings
+        case .drive: return .drive
+        case .clipboard, .none: return nil
+        }
     }
 
     /// 录音页：列表 + 详情，宽窗并排、紧凑窗下钻，整页归这一格所有（见 `homeTab`）。
@@ -247,6 +275,14 @@ struct RootView: View {
         } detail: { meetingId in
             MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
         }
+    }
+
+    /// 云盘页：和录音页同构，整页归这一格所有（见 `homeTab`）。
+    ///
+    /// 它自己带分栏（列表 + 预览）与那枚「返回主页」，所以这里只把它摆出来，**不放进任何
+    /// `NavigationStack`** —— 进去以后文件夹下钻、回收站、分享管理都在它自己那条栈上。
+    private var drivePage: some View {
+        DriveBrowserView(onExit: { popToRoot(.home) })
     }
 
     private var tabs: some View {
@@ -378,6 +414,15 @@ struct RootView: View {
         selectedTab = .home
         meetingSelection = meetingId
         homePath = [.recordings]
+    }
+
+    /// 把人送到主页那一格 → 云盘。
+    ///
+    /// 与 `openRecording` 同一件事：云盘同样是「这一格的一页」，落点由同一条 `homePath`
+    /// 指认，只是它没有要选中的条目——进去就停在根层（`DriveBrowserView.enter`）。
+    private func openDrive() {
+        selectedTab = .home
+        homePath = [.drive]
     }
 
     /// 一条通知被点开，但只有它的 id。
