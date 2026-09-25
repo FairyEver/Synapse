@@ -756,6 +756,68 @@ final class SynapseAppModel {
         await drive.loadShares(using: apiClient)
     }
 
+    // MARK: - 云盘：回收站 / 公开素材 / 分享列表
+
+    /// 回收站、公开素材、分享管理那三屏的取数与动作。
+    ///
+    /// 与上面几条同一条理由：`apiClient` 是私有的，视图拿不到网络层。全是薄透传 ——
+    /// 那三屏的分页、加载标志与错误都留在 `DriveStore` 里（`trash` / `assets` / `shares`）。
+    /// 这三份列表**只取首页**：`DriveStore.pageLimit` 是服务端的上限 100，超过 100 条时
+    /// 手机端只看得到前 100 条，桌面端可以看全。
+
+    func driveLoadTrash(search: String?) async {
+        await drive.loadTrash(search: search, using: apiClient)
+    }
+
+    @discardableResult
+    func driveRestoreTrashEntry(_ entry: DriveTrashEntry) async -> DriveBatchOutcome {
+        await drive.restoreTrashEntry(entry, using: apiClient)
+    }
+
+    @discardableResult
+    func drivePurgeTrashEntry(_ entry: DriveTrashEntry) async -> DriveBatchOutcome {
+        await drive.purgeTrashEntry(entry, using: apiClient)
+    }
+
+    func driveLoadAssets() async {
+        await drive.loadAssets(using: apiClient)
+    }
+
+    /// 传一条公开素材：prepare → 字节 → complete，回来的就是那条直链本身。
+    ///
+    /// prepare / complete 走 `public-assets/uploads/...`，与云盘的 `DriveUploader` 那条队列
+    /// **不是同一条路由**；字节走 `FileUploader`（目标是预签名地址，不带 bearer）。
+    /// 这里不做队列：公开素材一次一个文件，那套队列的重试、取消与并发上限换不来什么。
+    func driveUploadPublicAsset(_ file: PickedFile) async throws -> DrivePublicAsset {
+        let ticket = try await apiClient.drivePreparePublicAssetUpload(
+            name: file.name,
+            size: file.size,
+            mimeType: file.mimeType
+        )
+        try await uploader.upload(
+            fileURL: file.url,
+            to: ticket.upload.url,
+            headers: ticket.upload.headers,
+            onProgress: { _ in }
+        )
+        return try await apiClient.driveCompletePublicAssetUpload(sessionId: ticket.sessionId)
+    }
+
+    @discardableResult
+    func driveRenameAsset(_ asset: DrivePublicAsset, to name: String) async -> DriveBatchOutcome {
+        await drive.renameAsset(asset, to: name, using: apiClient)
+    }
+
+    @discardableResult
+    func driveTrashAsset(_ asset: DrivePublicAsset) async -> DriveBatchOutcome {
+        await drive.trashAsset(asset, using: apiClient)
+    }
+
+    @discardableResult
+    func driveDisableShare(_ share: DriveShareListItem) async -> DriveBatchOutcome {
+        await drive.disableShare(share, using: apiClient)
+    }
+
     func handleScenePhase(_ isActive: Bool) {
         guard authState == .signedIn else { return }
         if isActive {

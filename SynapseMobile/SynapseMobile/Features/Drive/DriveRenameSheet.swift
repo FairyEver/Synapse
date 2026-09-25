@@ -17,27 +17,30 @@ enum DriveRenameInput {
     }
 }
 
-/// 新建文件夹与重命名共用的一张。
+/// 新建文件夹、云盘项改名与公开素材改名共用的一张。
 ///
-/// 两件事只差三处：标题、确认键上的字、输入框里预填什么。做成一件事带一个 `Purpose`，
-/// 而不是两张长得一样的 sheet —— 本仓已经吃过「同一件事在两处两种样子」的账。
+/// 三件事只差三处：标题、确认键上的字、输入框里预填什么。做成一件事带一个 `Purpose`，
+/// 而不是三张长得一样的 sheet —— 本仓已经吃过「同一件事在两处两种样子」的账。
 struct DriveRenameSheet: View {
     /// 这一张在做哪一件事。
     enum Purpose: Equatable {
         case createFolder
         case rename(DriveBrowserItem)
+        /// 公开素材改名。它也是「改一个名字」，所以共用这一张 —— 只是那一项不是云盘里的
+        /// 节点（`DrivePublicAsset`），改完接口会把整条素材原样还回来。
+        case renameAsset(DrivePublicAsset)
 
         var title: String {
             switch self {
             case .createFolder: return "新建文件夹"
-            case .rename: return "重命名"
+            case .rename, .renameAsset: return "重命名"
             }
         }
 
         var confirmTitle: String {
             switch self {
             case .createFolder: return "创建"
-            case .rename: return "保存"
+            case .rename, .renameAsset: return "保存"
             }
         }
 
@@ -49,6 +52,7 @@ struct DriveRenameSheet: View {
             switch self {
             case .createFolder: return "未命名文件夹"
             case .rename(let item): return item.name
+            case .renameAsset(let asset): return asset.name
             }
         }
 
@@ -56,7 +60,7 @@ struct DriveRenameSheet: View {
         var actionLabel: String {
             switch self {
             case .createFolder: return "创建"
-            case .rename: return "重命名"
+            case .rename, .renameAsset: return "重命名"
             }
         }
     }
@@ -146,6 +150,8 @@ struct DriveRenameSheet: View {
             return await model.driveCreateFolder(name: name)
         case .rename(let item):
             return await model.driveRename(item: item, to: name)
+        case .renameAsset(let asset):
+            return await model.driveRenameAsset(asset, to: name)
         }
     }
 }
