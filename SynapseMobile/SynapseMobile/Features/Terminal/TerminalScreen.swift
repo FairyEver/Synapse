@@ -1113,16 +1113,17 @@ struct TerminalScreen: View {
                     Circle()
                         .fill(statusColor)
                         .frame(width: 6, height: 6)
-                    // 这一行现在是两种东西二选一：会话状态，或者当前目录的 Git 那一行。
-                    // 合成一句话而不是让视图各判一次，是因为「还没收到回答」与「不是仓库」
-                    // 在这里必须长得一模一样、而与「是仓库」必须不同 —— 判据只有
-                    // `TerminalGitPresentation` 那一处。
+                    // 这一行现在是两种东西二选一：会话状态加版本号（现状），或者当前目录的
+                    // Git 那一行。合成一句话而不是让视图各判一次，是因为「还没收到回答」与
+                    // 「不是仓库」在这里必须长得一模一样、而与「是仓库」必须不同 ——
+                    // 判据只有 `TerminalGitPresentation` 那一处。
                     //
-                    // 版本号不在这条线上了：它搬去了「我的 → 关于」。它是报问题时要引用的
-                    // 号，该待在一个为查资料而来的地方，而不是压在会话画布抬头这一行上。
+                    // 版本文本是**让位**给分支的，不是被删掉：版本号是报问题时引用的号，
+                    // 不是抬头要看的东西，而终端目录不是仓库时它照旧显示。
                     //
                     // One line always so a narrow phone truncates this row instead of
-                    // wrapping it — a wrap would cost the terminal a row.
+                    // wrapping it — a wrap would cost the terminal a row, which is the
+                    // same reason the version text was put on this line in the first place.
                     Text(secondLine)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -1139,7 +1140,7 @@ struct TerminalScreen: View {
     private var secondLine: String {
         TerminalGitPresentation.secondLine(
             model.gitStatus(for: sessionId),
-            otherwise: statusLabel
+            otherwise: "\(statusLabel) · \(AppVersion.label)"
         )
     }
 

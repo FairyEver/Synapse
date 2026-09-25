@@ -208,11 +208,9 @@ struct RootView: View {
             .tabItem { Label("终端", systemImage: "terminal") }
             .tag(Tab.terminals)
 
-            AdaptiveSettingsView(
-                selection: $settingsSelection,
-                onSelectDesktop: { terminalSelection = nil },
-                onOpenNotifications: { showingNotifications = true }
-            )
+            AdaptiveSettingsView(selection: $settingsSelection) {
+                terminalSelection = nil
+            }
             .tabItem { Label("我的", systemImage: "person") }
             .tag(Tab.settings)
         }
