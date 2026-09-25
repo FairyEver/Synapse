@@ -43,7 +43,7 @@ struct ClipboardList: View {
             if let title {
                 // 标题与它唯一的动作属于导航栏。系统给弹窗顶部留了一条拖条的带子，导
                 // 航栏画在那条带子下面；上一版是压在弹窗最顶上的一个手写 `HStack`，
-                // 「剪切板」「清空」和拖条挤在同一条 5pt 高的横带里，字还顶着弹窗的
+                // 「剪贴板」「清空」和拖条挤在同一条 5pt 高的横带里，字还顶着弹窗的
                 // 上圆角 —— 放大截图能量到：字的墨迹顶边距弹窗顶边 4pt，拖条占
                 // 2.3–7pt，两者重叠了 3pt。系统的弹窗里没有一处长这样。
                 //
@@ -66,7 +66,7 @@ struct ClipboardList: View {
                 }
             }
         }
-        .alert("清空剪切板记录？", isPresented: $confirmingClear) {
+        .alert("清空剪贴板记录？", isPresented: $confirmingClear) {
             Button("取消", role: .cancel) {}
             // 破坏性样式：这一步在手机上是不可撤销的，而它清掉的正是读者可能还要用的东西。
             Button("清空", role: .destructive) { onClear() }

@@ -1832,7 +1832,7 @@ final class TerminalFlowUITests: XCTestCase {
         let segment = app.segmentedControls["shortcut-panel-segment"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
 
-        segment.buttons["剪切板"].tap()
+        segment.buttons["剪贴板"].tap()
         let first = app.staticTexts["clipboard-row-clip-single-\(clipboardRunId)-1"]
         XCTAssertTrue(first.waitForExistence(timeout: 15), "the computer's copied text never appeared")
         capture(app, name: "24-clipboard-segment")
@@ -1881,7 +1881,7 @@ final class TerminalFlowUITests: XCTestCase {
         app.buttons["toolbar-all"].tap()
         let segment = app.segmentedControls["shortcut-panel-segment"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
-        segment.buttons["剪切板"].tap()
+        segment.buttons["剪贴板"].tap()
 
         let eye = app.buttons["clipboard-preview-clip-eye-\(clipboardRunId)-2"]
         XCTAssertTrue(eye.waitForExistence(timeout: 15), "the eye is missing")
@@ -1926,7 +1926,7 @@ final class TerminalFlowUITests: XCTestCase {
         app.buttons["toolbar-all"].tap()
         let segment = app.segmentedControls["shortcut-panel-segment"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
-        segment.buttons["剪切板"].tap()
+        segment.buttons["剪贴板"].tap()
         XCTAssertTrue(
             app.staticTexts["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
             "the list never filled, so clearing it would prove nothing"

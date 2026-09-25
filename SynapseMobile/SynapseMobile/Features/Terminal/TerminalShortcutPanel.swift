@@ -15,7 +15,7 @@ enum ShortcutPanelSegment: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .clipboard: return "剪切板"
+        case .clipboard: return "剪贴板"
         case .commands: return "自定义命令"
         case .phrases: return "快捷输入"
         }
@@ -109,7 +109,7 @@ struct TerminalShortcutPanel: View {
 
     var body: some View {
         // 导航栏是这个面板自己带的，因为「清空」这类作用于整段列表的动作，iOS 只给了
-        // 工具栏这一个位置。它由剪切板那一段并进来（见 `ClipboardList`），所以栏本身
+        // 工具栏这一个位置。它由剪贴板那一段并进来（见 `ClipboardList`），所以栏本身
         // 画在这里。
         NavigationStack { panel }
             // The sheet's own base is the grouped grey, and it is set out here rather than
@@ -152,13 +152,13 @@ struct TerminalShortcutPanel: View {
             //
             // 一、它是这一整张弹窗的导航方式，系统里同类的东西都长在栏上；
             // 二、栏在**没有工具项时会自己收起来**。上一版把分段器留在栏下面，于是只有
-            // 剪切板那一段有「清空」这一项、另外两段是空的 —— 切过去时整条栏塌掉，分段
+            // 剪贴板那一段有「清空」这一项、另外两段是空的 —— 切过去时整条栏塌掉，分段
             // 器和列表一起上跳 67pt，还贴到拖条上。分段器常驻，栏就常驻。
             //
             // 摆中间是量过的结果，不是随手写的：`.topBarLeading` 拿不到宽度，三个标签
             // 会被压成一小块（只剩「剪」字和几个竖条）。居中要付的代价是，系统在**剩下
             // 的空间**里居中，于是「清空」在不在场上，分段器会左右挪 40pt —— 三段里只
-            // 有剪切板那一段有它，切换时会看到这一下。
+            // 有剪贴板那一段有它，切换时会看到这一下。
             ToolbarItem(placement: .principal) { picker }
         }
     }
@@ -178,7 +178,7 @@ struct TerminalShortcutPanel: View {
         .accessibilityIdentifier("shortcut-panel-segment")
     }
 
-    // MARK: - 剪切板
+    // MARK: - 剪贴板
 
     /// What the reader copied on this computer, for them to copy again here.
     ///
@@ -276,7 +276,7 @@ struct TerminalShortcutPanel: View {
         // separator's inset — rather than a set of numbers written out to imitate it.
         .listStyle(.insetGrouped)
         // 只有「电脑答过、但它没有」才叫空。电脑根本没答过（`phrases == nil`）不是空，
-        // 是不知道——那种情况这一段压根不会被画出来，`shown` 会落到剪切板那一段。
+        // 是不知道——那种情况这一段压根不会被画出来，`shown` 会落到剪贴板那一段。
         .overlay {
             if let phrases, phrases.isEmpty {
                 ContentUnavailableView {
@@ -320,7 +320,7 @@ struct TerminalShortcutPanel: View {
                     .font(.system(size: 19))
                     .foregroundStyle(.secondary)
                     .frame(width: 30, height: 30)
-                    // 同剪切板那一枚：画 30×30，点 44×44。
+                    // 同剪贴板那一枚：画 30×30，点 44×44。
                     .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
                     .contentShape(Rectangle())
             }

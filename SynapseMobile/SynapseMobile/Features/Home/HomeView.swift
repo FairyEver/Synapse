@@ -32,6 +32,7 @@ struct HomeView: View {
     let onOpenNotifications: () -> Void
 
     @State private var showingNewSession = false
+    @State private var showingClipboard = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -59,6 +60,13 @@ struct HomeView: View {
                     // 和终端那一页的加号同一个判据：没有电脑在下边，这张表单打开的是
                     // 一份已经不在了的清单，它建出来的东西也会被一台没听说过它的电脑拒绝。
                     .disabled(model.selectedDesktopClientInstanceId == nil || model.viewedDesktopIsOffline)
+
+                    Button {
+                        Haptics.select()
+                        showingClipboard = true
+                    } label: {
+                        featureLabel(symbol: "doc.on.clipboard", title: "剪贴板历史")
+                    }
                 }
             }
             .listStyle(.insetGrouped)
@@ -75,6 +83,21 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showingNewSession) {
             newSessionSheet
+        }
+        .sheet(isPresented: $showingClipboard) {
+            // 列表本身没变，只是入口从终端列表的设备行挪到了这里（见 `ClipboardList`：
+            // 同一份列表也出现在终端面板里）。
+            ClipboardList(
+                entries: model.activeClipboardEntries,
+                title: "剪贴板",
+                onCopy: { model.copyClipboardEntry($0) },
+                onClear: { model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId) }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            // 列表把它的确认以提示条的形式举起来，而这张表盖住了主页自带的那一层 ——
+            // 所以它得自己带一层，否则复制一条会什么都不说。
+            .noticeOverlay(model)
         }
     }
 

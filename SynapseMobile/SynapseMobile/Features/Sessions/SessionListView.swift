@@ -17,7 +17,6 @@ struct SessionListView: View {
     /// 亲口回给我们的，它一定存在，闸门问不出任何有用的东西 —— 问出来的只有「列表还没跟上」。
     let onOpenCreated: (String) -> Void
     @State private var showingNewSession = false
-    @State private var showingClipboard = false
     @State private var renameTarget: MobileSummarySession?
     @State private var deleteTarget: MobileSummarySession?
     /// Tabs the user has closed. Absent means open, so the default needs no state.
@@ -294,13 +293,12 @@ struct SessionListView: View {
     /// switch to, so the chevron and the tap target appear exactly when they mean
     /// something — including the case they exist for, a phone left on a computer that
     /// has gone away, where the one other computer is the only way out.
+    ///
+    /// 剪贴板按钮本来在这一行的另一端，现在它和另外两件不绑定会话的事一起在主页的
+    /// 功能清单里 —— 那一页回答的是「我能做什么」，而这一行只是「我现在在哪一台上」。
     private var deviceSection: some View {
         Section {
             HStack(spacing: 8) {
-                // The switch menu wraps only the identity, not the whole row. The
-                // clipboard button sits at the other end of the same row and takes its
-                // own taps: inside the menu's label they would open the menu instead,
-                // and the reader would never reach the list.
                 if model.desktopSwitchTargets.isEmpty {
                     deviceIdentity
                 } else {
@@ -326,24 +324,7 @@ struct SessionListView: View {
                 Text(model.connectivity.label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                clipboardButton
             }
-        }
-        .sheet(isPresented: $showingClipboard) {
-            // Titled, unlike the segment of the terminal's panel: nothing else on this
-            // sheet says what it is.
-            ClipboardList(
-                entries: model.activeClipboardEntries,
-                title: "剪切板",
-                onCopy: { model.copyClipboardEntry($0) },
-                onClear: { model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId) }
-            )
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            // The list raises its confirmation as a notice, and this sheet covers the
-            // overlay the session list already carries — so the sheet needs one of its
-            // own or copying an item would say nothing at all.
-            .noticeOverlay(model)
         }
     }
 
@@ -369,30 +350,6 @@ struct SessionListView: View {
             }
         }
         .contentShape(Rectangle())
-    }
-
-    /// Opens the reader's list of what they copied on the computer being viewed.
-    ///
-    /// Here rather than in the toolbar because the clipboard belongs to a computer, and
-    /// this row is the only place on this screen that names one. It is drawn whenever
-    /// the device row is — a computer that is unreachable still has a list worth
-    /// reading, which is the whole reason that list is kept on the phone.
-    private var clipboardButton: some View {
-        Button {
-            Haptics.select()
-            showingClipboard = true
-        } label: {
-            Image(systemName: "doc.on.clipboard")
-                .font(.system(size: 17))
-                .frame(width: 30, height: 30)
-                // 画 30×30，点 44×44。它和同一行的那台电脑名字只隔着 8pt，按 30 的框
-                // 算就是在赌用户不会点偏——而点偏的那个是切换电脑。
-                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("剪切板")
-        .accessibilityIdentifier("device-clipboard")
     }
 
     /// The computer being viewed is not reachable and at least one other is.

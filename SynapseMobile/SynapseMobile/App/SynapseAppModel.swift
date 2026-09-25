@@ -503,7 +503,7 @@ final class SynapseAppModel {
         NotificationRouter.shared.discard()
         // Those are another account's computers' sentences, and nothing here persists.
         quickPhrases.reset()
-        // 剪切板与上面两样不同，它是**落盘**的：不清掉，下一个人登进来会在面板里看到
+        // 剪贴板与上面两样不同，它是**落盘**的：不清掉，下一个人登进来会在面板里看到
         // 上一个人复制过的正文。这是本机第一份「内容属于账号、文件留在机器上」的数据。
         clipboard.clearAll()
         // 仓库状态同理，而且它连着电脑上的目录路径：换个人登进来不该看到上一个人
