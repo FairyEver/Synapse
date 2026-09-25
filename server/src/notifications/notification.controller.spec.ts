@@ -118,4 +118,34 @@ describe("NotificationController", () => {
     await expect(endpoint.deleteAll(request as never, { filter: "unread" })).rejects.toMatchObject({ status: 400 })
     expect(service.deleteAll).toHaveBeenCalledOnce()
   })
+
+  it("writes desktop-owned sources to the caller's own queue", async () => {
+    for (const source of ["system-notifier", "terminal-complete"] as const) {
+      const service = { create: vi.fn(async () => ({ id: "message-1" })) }
+      const endpoint = new NotificationController(service as never)
+      const request = { user: { id: "user-1" } }
+
+      await expect(endpoint.createFromDesktop(request as never, { source, title: "标题", body: "正文" }))
+        .resolves.toEqual({ id: "message-1" })
+      expect(service.create).toHaveBeenCalledWith({ source, title: "标题", body: "正文", userId: "user-1" })
+    }
+  })
+
+  it("refuses sources the desktop does not own", async () => {
+    const service = { create: vi.fn(async () => ({ id: "message-1" })) }
+    const endpoint = new NotificationController(service as never)
+    const request = { user: { id: "user-1" } }
+
+    for (const source of ["external", "terminal-attention", "meeting-transcription"]) {
+      await expect(endpoint.createFromDesktop(request as never, { source, title: "标题", body: "正文" }))
+        .rejects.toMatchObject({ status: 400 })
+    }
+    expect(service.create).not.toHaveBeenCalled()
+  })
+
+  it("keeps the legacy path on the same handler", () => {
+    // 已发布的桌面构建仍在打 /internal，它必须和新名字落在同一个处理器上。
+    expect(Reflect.getMetadata("path", NotificationController.prototype.createFromDesktop))
+      .toEqual(["desktop", "internal"])
+  })
 })

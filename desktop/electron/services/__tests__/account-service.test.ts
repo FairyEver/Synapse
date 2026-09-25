@@ -191,6 +191,8 @@ describe("AccountService", () => {
     await expect(service.createInternalNotification({
       source: "system-notifier", title: "标题", body: "正文",
     })).resolves.toBe("sent")
+    expect(fetch.mock.calls.map(([url]) => String(url)).some((url) => url.endsWith("/notifications/desktop")))
+      .toBe(true)
   })
 
   it("starts login by persisting an attempt and opening the browser", async () => {

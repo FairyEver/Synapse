@@ -493,7 +493,7 @@ export class AccountService {
   }): Promise<DesktopNotificationOutcome> {
     if (this.state.status !== "authenticated") return "not_signed_in"
     if (this.state.connectivity !== "online") return "offline"
-    await this.requestAuthenticatedJson<{ id: string }>("POST", `${apiBaseUrl()}/notifications/internal`, input, "通知同步失败。")
+    await this.requestAuthenticatedJson<{ id: string }>("POST", `${apiBaseUrl()}/notifications/desktop`, input, "通知同步失败。")
     return "sent"
   }
 

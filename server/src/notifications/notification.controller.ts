@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
 import { createHash } from "node:crypto"
 import { z } from "zod"
+import { DESKTOP_NOTIFICATION_SOURCES } from "@synapse/shared"
 import { NOTIFICATION_SEND_SCOPE } from "../api-keys/api-key-capabilities"
 import type { OpenApiPrincipal } from "../api-keys/api-key.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
@@ -43,8 +44,8 @@ const listSchema = z.object({
 
 const deleteAllSchema = z.object({ filter: z.enum(["all", "pending"]) })
 
-const internalSchema = z.object({
-  source: z.enum(["system-notifier", "terminal-complete"]),
+const desktopWriteSchema = z.object({
+  source: z.enum(DESKTOP_NOTIFICATION_SOURCES),
   sourceKey: z.string().min(8).max(160).optional(),
   title: z.string().trim().min(1).max(64),
   body: z.string().trim().min(1).max(512),
@@ -59,9 +60,17 @@ type AuthedRequest = Request & { readonly user: { readonly id: string } }
 export class NotificationController {
   constructor(private readonly notifications: NotificationService) {}
 
-  @Post("internal")
-  async createInternal(@Req() request: AuthedRequest, @Body() body: unknown) {
-    const parsed = internalSchema.safeParse(body)
+  /**
+   * 桌面端写自己账号的通知队列。
+   *
+   * 路径 `/desktop` 说的是授权范围：这条入口只吃桌面登录态，且只吃桌面自己拥有的 source
+   * （见 shared 的 `DESKTOP_NOTIFICATION_SOURCES`）——外部消息、终端待处理、录音转写这些
+   * 服务端自有来源在这里一律 400，桌面不能冒充。`/internal` 是它从前叫的名字，已发布的桌面
+   * 构建仍在用，保留为兼容入口，两者行为完全一致。
+   */
+  @Post(["desktop", "internal"])
+  async createFromDesktop(@Req() request: AuthedRequest, @Body() body: unknown) {
+    const parsed = desktopWriteSchema.safeParse(body)
     if (!parsed.success) throw badRequestFromZodError(parsed.error, "通知参数无效。")
     const item = await this.notifications.create({ ...parsed.data, userId: request.user.id })
     return { id: item.id }
