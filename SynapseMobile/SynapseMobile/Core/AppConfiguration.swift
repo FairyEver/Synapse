@@ -69,6 +69,30 @@ enum AppConfiguration {
         return components.url!
     }
 
+    /// 同一个服务器的地址，但没有 `/api` 这一段 —— 不在 API 前缀下的那些路由挂在这里。
+    ///
+    /// 目前只有一条：文件下载 `GET /drive/items/:itemId/download`。它在服务端注册在
+    /// `@Controller()` 的绝对路径上（`drive.controller.ts`），前面加上 `/api` 只会得到
+    /// 一个 404 —— 而 404 与「服务端没有这个能力」长得一模一样。所以这里按
+    /// `liveMobileURL` 的做法从 `apiBaseURL` 派生出源站，拼错也只错在这一处。
+    static var apiOrigin: URL {
+        guard var components = URLComponents(url: apiBaseURL, resolvingAgainstBaseURL: false) else {
+            return apiBaseURL
+        }
+        // 逐段比对而不是 `replacingOccurrences(of: "/api", …)`：后者会把 `/apiary`
+        // 这样一个只是恰好以 /api 开头的目录名一起截掉。
+        let apiSegment = "/api"
+        var path = components.path
+        while path.hasSuffix("/") { path.removeLast() }
+        if path.hasSuffix(apiSegment) { path.removeLast(apiSegment.count) }
+        // 源站不以斜杠结尾：调用方是拿它和一条以 `/` 开头的路径相接的。
+        while path.hasSuffix("/") { path.removeLast() }
+        components.path = path
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? apiBaseURL
+    }
+
     /// Kept above the phone server's 45s stale threshold; the desktop uses 20s.
     static let heartbeatInterval: TimeInterval = 20
     static let requestTimeout: TimeInterval = 20

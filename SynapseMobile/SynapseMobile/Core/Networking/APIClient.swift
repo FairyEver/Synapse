@@ -59,6 +59,27 @@ actor APIClient {
     /// unreachable host had still not returned after five minutes.
     private static let requestResourceTimeout: TimeInterval = 30
 
+    /// 传字节用的会话（云盘的下载）。
+    ///
+    /// 与 REST 那个**不能共用**：REST 的资源超时是 30 秒（`requestResourceTimeout`），那是给
+    /// 一次请求-响应的总时长定的上限。而下载是一整段几十兆、最多上百兆（`DRIVE_MAX_FILE_BYTES`）
+    /// 的传输，30 秒到点就断 —— 一个 100 MB 的文件要在 30 秒内下完，等于要求 27 Mbit/s 的稳定
+    /// 带宽。这里的上限只用来兜住「彻底卡死」，单包间隔仍然按 `AppConfiguration.requestTimeout`
+    /// 算（20 秒没动静就是一个坏连接）。
+    ///
+    /// `waitsForConnectivity = false`：这是用户按下去、正看着进度条的那个动作。没有网络路径时
+    /// 应该立刻说「网络不可用」，而不是让进度条停在那儿等十分钟 —— REST 那一边等是应该的，
+    /// 那是后台请求，而它那 30 秒的上限正好也是这个用意。
+    ///
+    /// 第一次真的下载时才建：不碰云盘的会话不必多一个 URLSession。
+    private lazy var downloadSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = AppConfiguration.requestTimeout
+        configuration.timeoutIntervalForResource = 600
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
     init(tokens: TokenStore, onCredentialsChanged: @escaping @Sendable () -> Void) {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = AppConfiguration.requestTimeout
@@ -541,6 +562,13 @@ actor APIClient {
         let sessionId: String
         let item: DriveItem
         let upload: Destination
+        /// 目标位置已经有一个同名文件时由服务端给出。
+        ///
+        /// 服务端确实把它放在 prepare 响应的**顶层**（`drive.service.ts` 的
+        /// `DriveUploadPrepareResult`），不是嵌在 `item` 里。旧服务端整个键都不返回，
+        /// 所以它是可选的：缺失 = **未知**，解码不能因此失败，调用方按「未知」处理
+        /// （不弹确认、直接传）。
+        let overwrite: DriveUploadOverwriteTarget?
     }
 
     /// Reserves a place in the drive for a file the phone is about to upload.
@@ -548,16 +576,34 @@ actor APIClient {
     /// `size` is a decimal string because the server's schema says so, and the
     /// declared size is checked against the object that arrives — a file whose real
     /// size disagrees is refused at completion rather than stored.
-    func prepareDriveUpload(name: String, size: Int64, mimeType: String?) async throws -> DriveUploadTicket {
+    ///
+    /// `parentId` 是落到哪个文件夹，nil 是根；`expectedItemId` 是「确认覆盖那个已经存在的
+    /// 文件」——服务端拿它核对目标在 prepare 到 complete 之间没有被换掉。两者都有默认值：
+    /// 终端文件接力那条路只传前三个参数。
+    func prepareDriveUpload(
+        name: String,
+        size: Int64,
+        mimeType: String?,
+        parentId: String? = nil,
+        expectedItemId: String? = nil
+    ) async throws -> DriveUploadTicket {
         struct Body: Encodable {
             let name: String
             let size: String
             let mimeType: String?
+            let parentId: String?
+            let expectedItemId: String?
         }
         return try await send(
             path: "/drive/uploads/prepare",
             method: "POST",
-            body: Body(name: name, size: String(size), mimeType: mimeType)
+            body: Body(
+                name: name,
+                size: String(size),
+                mimeType: mimeType,
+                parentId: parentId,
+                expectedItemId: expectedItemId
+            )
         )
     }
 
@@ -582,8 +628,460 @@ actor APIClient {
         let _: EmptyResponse = try await send(path: "/drive/items/\(escaped(itemId))/permanent", method: "DELETE")
     }
 
-    private func escaped(_ value: String) -> String {
+    /// 路径段里的 id 一律按 URL 路径规则编码。
+    ///
+    /// 规则只写一遍：下面 `DriveRoute` 里的路径是纯字符串拼出来的，`static` 才够得着它。
+    private static func escapedPathComponent(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
+    }
+
+    private func escaped(_ value: String) -> String {
+        Self.escapedPathComponent(value)
+    }
+
+    // MARK: - Drive
+
+    /// 云盘各条路由的路径。
+    ///
+    /// 单独抽出来是给契约测试用的：路径写在方法体里就只能靠一次真请求去验，而拼错在真请求上
+    /// 表现成 404 —— 与「服务端没有这个能力」分不开。方法发出去的和测试断言的是同一个函数，
+    /// 钉住的就是真正发出去的那一条，不是它的副本。
+    ///
+    /// id 一律在这里过 `escapedPathComponent`：调用方传原始值，编码不可能被漏掉。
+    enum DriveRoute {
+        /// 控制台那一套浏览接口。另一档 `standalone` 回来的是公开页的地址，
+        /// 手机端要的是同一批 id、同一套权限的这一档。
+        static let consoleSurface = "console"
+
+        static func root(childrenOffset: Int?, childrenLimit: Int?) -> String {
+            "/drive/browser/owner/root"
+                + queryString(childrenItems(childrenOffset: childrenOffset, childrenLimit: childrenLimit))
+        }
+
+        static func itemSnapshot(itemId: String, childrenOffset: Int?, childrenLimit: Int?) -> String {
+            let items = [URLQueryItem(name: "surface", value: consoleSurface)]
+                + childrenItems(childrenOffset: childrenOffset, childrenLimit: childrenLimit)
+            return "/drive/browser/owner/items/\(escapedPathComponent(itemId))" + queryString(items)
+        }
+
+        static let createFolder = "/drive/folders"
+
+        /// 改名、移动、移入回收站共用这一条，动作由方法与请求体决定。
+        static func item(itemId: String) -> String {
+            "/drive/items/\(escapedPathComponent(itemId))"
+        }
+
+        static func restoreItem(itemId: String) -> String {
+            "/drive/items/\(escapedPathComponent(itemId))/restore"
+        }
+
+        static func share(itemId: String) -> String {
+            "/drive/items/\(escapedPathComponent(itemId))/share"
+        }
+
+        static func trash(offset: Int?, limit: Int?, search: String?) -> String {
+            "/drive/trash"
+                + queryString(pageItems(offset: offset, limit: limit) + searchItem(search))
+        }
+
+        static func hideTrashItem(id: String) -> String {
+            "/drive/trash/\(escapedPathComponent(id))"
+        }
+
+        static func shares(offset: Int?, limit: Int?) -> String {
+            "/drive/shares" + queryString(pageItems(offset: offset, limit: limit))
+        }
+
+        static func disableShare(id: String) -> String {
+            "/drive/shares/\(escapedPathComponent(id))"
+        }
+
+        static let usage = "/drive/usage"
+
+        static func publicAssets(offset: Int?, limit: Int?, search: String?) -> String {
+            "/drive/public-assets"
+                + queryString(pageItems(offset: offset, limit: limit) + searchItem(search))
+        }
+
+        static let preparePublicAssetUpload = "/drive/public-assets/uploads/prepare"
+
+        static func completePublicAssetUpload(sessionId: String) -> String {
+            "/drive/public-assets/uploads/\(escapedPathComponent(sessionId))/complete"
+        }
+
+        /// 改名与移入回收站共用这一条。
+        static func publicAsset(assetId: String) -> String {
+            "/drive/public-assets/\(escapedPathComponent(assetId))"
+        }
+
+        static func restorePublicAsset(assetId: String) -> String {
+            "/drive/public-assets/\(escapedPathComponent(assetId))/restore"
+        }
+
+        static func contentInspect(itemId: String) -> String {
+            "/drive/browser/owner/items/\(escapedPathComponent(itemId))/content/inspect"
+        }
+
+        static func contentChunk(itemId: String, versionId: String, cursor: String?) -> String {
+            let items = [
+                URLQueryItem(name: "versionId", value: versionId),
+                URLQueryItem(name: "cursor", value: cursor),
+            ]
+            return "/drive/browser/owner/items/\(escapedPathComponent(itemId))/content/chunk"
+                + queryString(items)
+        }
+
+        /// 这条**不在** `/api` 前缀下（服务端把它注册在 `@Controller()` 上），所以整条路径
+        /// 由调用方拼到 `AppConfiguration.apiOrigin` 上。
+        static func download(itemId: String) -> String {
+            "/drive/items/\(escapedPathComponent(itemId))/download"
+        }
+
+        /// 一页的两个参数。没给的那个不拼进去：服务端把「没给」当成它自己的默认值，
+        /// 而拼一个空串（`?offset=&limit=`）会被参数校验挡下来。
+        private static func pageItems(offset: Int?, limit: Int?) -> [URLQueryItem] {
+            [
+                URLQueryItem(name: "offset", value: offset.map(String.init)),
+                URLQueryItem(name: "limit", value: limit.map(String.init)),
+            ]
+        }
+
+        /// 浏览接口那两个参数叫 `childrenOffset`/`childrenLimit`，与列表页的 `offset`/`limit` 不同名。
+        private static func childrenItems(childrenOffset: Int?, childrenLimit: Int?) -> [URLQueryItem] {
+            [
+                URLQueryItem(name: "childrenOffset", value: childrenOffset.map(String.init)),
+                URLQueryItem(name: "childrenLimit", value: childrenLimit.map(String.init)),
+            ]
+        }
+
+        private static func searchItem(_ search: String?) -> [URLQueryItem] {
+            [URLQueryItem(name: "search", value: search)]
+        }
+
+        /// `?a=1&b=2`；一个参数都没有时是空串。
+        private static func queryString(_ items: [URLQueryItem]) -> String {
+            let present = items.filter { $0.value != nil }
+            guard !present.isEmpty else { return "" }
+            var components = URLComponents()
+            components.queryItems = present
+            guard let encoded = components.percentEncodedQuery else { return "" }
+            return "?" + encoded
+        }
+    }
+
+    /// `PATCH /drive/items/:id` 的两种请求体。
+    ///
+    /// 服务端按「体里有没有 `name`」分流，而两条 schema 都是 `.strict()`：改名必须只带
+    /// `name`，多带一个 `parentId` 会被整条拒掉。
+    ///
+    /// 移动则必须**显式**带 `parentId`（可空但不可缺，`moveSchema` 里没有 `.optional()`）：
+    /// 缺了这个键，「移到根目录」会被判成「移动请求无效」。JSONEncoder 默认会把值为 nil 的
+    /// 键省掉，所以这里自己写 `encode(to:)` 把它发成 `null`。
+    struct DriveRenameBody: Encodable {
+        let name: String
+    }
+
+    struct DriveMoveBody: Encodable {
+        let parentId: String?
+
+        enum CodingKeys: String, CodingKey { case parentId }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(parentId, forKey: .parentId)
+        }
+    }
+
+    /// 创建分享时要告诉服务端的三件事（外加一个指定邮箱名单）。
+    ///
+    /// 字段名就是服务端 `driveAccessSettingsSchema` 里的名字，而 nil 的字段根本不会发出去：
+    /// 「没说要什么」与「要永久有效」是两件事，前者由服务端拿它自己的默认值定。
+    struct DriveShareSettings: Encodable {
+        var passwordEnabled: Bool?
+        /// `expiresIn` 的取值就是 `DriveExpiry` 的原始值。
+        var expiresIn: DriveExpiry?
+        var accessMode: DriveAccessMode?
+        /// 只有 `specifiedUsersEdit` 用得上。
+        var editorEmails: [String]?
+
+        init(
+            passwordEnabled: Bool? = nil,
+            expiresIn: DriveExpiry? = nil,
+            accessMode: DriveAccessMode? = nil,
+            editorEmails: [String]? = nil
+        ) {
+            self.passwordEnabled = passwordEnabled
+            self.expiresIn = expiresIn
+            self.accessMode = accessMode
+            self.editorEmails = editorEmails
+        }
+    }
+
+    // MARK: 浏览
+
+    /// 根那一层的快照。根是服务端合成的一项，两个参数只作用于子项那一页。
+    func driveRootSnapshot(
+        childrenOffset: Int? = nil,
+        childrenLimit: Int? = nil
+    ) async throws -> DriveBrowserSnapshot {
+        try await send(
+            path: DriveRoute.root(childrenOffset: childrenOffset, childrenLimit: childrenLimit),
+            method: "GET"
+        )
+    }
+
+    /// 任意一项那一层的快照（文件夹给子项，文件给它的预览）。
+    func driveItemSnapshot(
+        itemId: String,
+        childrenOffset: Int? = nil,
+        childrenLimit: Int? = nil
+    ) async throws -> DriveBrowserSnapshot {
+        try await send(
+            path: DriveRoute.itemSnapshot(
+                itemId: itemId,
+                childrenOffset: childrenOffset,
+                childrenLimit: childrenLimit
+            ),
+            method: "GET"
+        )
+    }
+
+    // MARK: 项
+
+    /// 新建文件夹，`parentId` 为 nil 时建在根下。
+    ///
+    /// 服务端回来的是 `DriveItemDto`，它没有 `previewKind`/`browserUrl`，接不上
+    /// `DriveBrowserItem`；而调用方建完都要重取当前层，所以这里只取「成没成」。
+    func driveCreateFolder(parentId: String?, name: String) async throws {
+        struct Body: Encodable {
+            let parentId: String?
+            let name: String
+        }
+        let _: EmptyResponse = try await send(
+            path: DriveRoute.createFolder,
+            method: "POST",
+            body: Body(parentId: parentId, name: name)
+        )
+    }
+
+    func driveRenameItem(itemId: String, name: String) async throws {
+        let _: EmptyResponse = try await send(
+            path: DriveRoute.item(itemId: itemId),
+            method: "PATCH",
+            body: DriveRenameBody(name: name)
+        )
+    }
+
+    /// 移动，`parentId` 为 nil 时移到根下。
+    func driveMoveItem(itemId: String, parentId: String?) async throws {
+        let _: EmptyResponse = try await send(
+            path: DriveRoute.item(itemId: itemId),
+            method: "PATCH",
+            body: DriveMoveBody(parentId: parentId)
+        )
+    }
+
+    /// 移入回收站。字节还在，恢复走 `driveRestoreItem`。
+    func driveTrashItem(itemId: String) async throws {
+        let _: EmptyResponse = try await send(path: DriveRoute.item(itemId: itemId), method: "DELETE")
+    }
+
+    // MARK: 回收站
+
+    func driveTrash(offset: Int? = nil, limit: Int? = nil, search: String? = nil) async throws -> DriveTrashPage {
+        try await send(
+            path: DriveRoute.trash(offset: offset, limit: limit, search: search),
+            method: "GET"
+        )
+    }
+
+    /// 把普通项从回收站恢复回原处。
+    ///
+    /// 公开素材的条目是**另一条接口**（`driveRestorePublicAsset`），判据在条目自己的
+    /// `isPublicAsset` 上 —— 两条路的差别只有这一处，所以走哪条由调用方按那个字段选。
+    func driveRestoreItem(itemId: String) async throws {
+        let _: EmptyResponse = try await send(
+            path: DriveRoute.restoreItem(itemId: itemId),
+            method: "POST"
+        )
+    }
+
+    /// 从回收站里移掉。用户看不见它有「彻底删除」，这一步之后字节才由服务端按自己的节奏回收。
+    func driveHideTrashItem(id: String) async throws {
+        let _: EmptyResponse = try await send(path: DriveRoute.hideTrashItem(id: id), method: "DELETE")
+    }
+
+    func driveRestorePublicAsset(assetId: String) async throws -> DrivePublicAsset {
+        try await send(path: DriveRoute.restorePublicAsset(assetId: assetId), method: "POST")
+    }
+
+    // MARK: 分享
+
+    /// 创建分享，或改一项已有分享的访问设置。
+    ///
+    /// 服务端对同一项只会有一条活跃分享：已经有的时候这次请求是把那条**更新**掉，
+    /// 不会多出一条链接。于是调用方不必先查再建 —— 但这也意味着「改设置」和「建分享」
+    /// 是同一个请求，传进来的三个字段就是链接最终的样子。
+    func driveCreateShare(itemId: String, settings: DriveShareSettings) async throws -> DriveShare {
+        try await send(path: DriveRoute.share(itemId: itemId), method: "POST", body: settings)
+    }
+
+    func driveShares(offset: Int? = nil, limit: Int? = nil) async throws -> DriveSharePage {
+        try await send(path: DriveRoute.shares(offset: offset, limit: limit), method: "GET")
+    }
+
+    /// 关掉一条分享。链接立刻失效，记录还在。
+    func driveDisableShare(id: String) async throws {
+        let _: EmptyResponse = try await send(path: DriveRoute.disableShare(id: id), method: "DELETE")
+    }
+
+    // MARK: 用量
+
+    func driveUsage() async throws -> DriveUsage {
+        try await send(path: DriveRoute.usage, method: "GET")
+    }
+
+    // MARK: 公开素材
+
+    func drivePublicAssets(
+        offset: Int? = nil,
+        limit: Int? = nil,
+        search: String? = nil
+    ) async throws -> DrivePublicAssetPage {
+        try await send(
+            path: DriveRoute.publicAssets(offset: offset, limit: limit, search: search),
+            method: "GET"
+        )
+    }
+
+    /// 公开素材的上传：与云盘里那套是同一个形状（预签名 PUT + complete），只是
+    /// prepare 与 complete 换成 `public-assets` 那两条，回来的成品是一条直链。
+    func drivePreparePublicAssetUpload(name: String, size: Int64, mimeType: String?) async throws -> DriveUploadTicket {
+        struct Body: Encodable {
+            let name: String
+            let size: String
+            let mimeType: String?
+        }
+        return try await send(
+            path: DriveRoute.preparePublicAssetUpload,
+            method: "POST",
+            body: Body(name: name, size: String(size), mimeType: mimeType)
+        )
+    }
+
+    /// 完成之后拿到的就是那条直链本身（`url`）。
+    func driveCompletePublicAssetUpload(sessionId: String) async throws -> DrivePublicAsset {
+        try await send(path: DriveRoute.completePublicAssetUpload(sessionId: sessionId), method: "POST")
+    }
+
+    func driveRenamePublicAsset(assetId: String, name: String) async throws -> DrivePublicAsset {
+        try await send(
+            path: DriveRoute.publicAsset(assetId: assetId),
+            method: "PATCH",
+            body: DriveRenameBody(name: name)
+        )
+    }
+
+    /// 移入回收站。直链当下就不可用，素材还在回收站里等恢复。
+    func driveTrashPublicAsset(assetId: String) async throws -> DrivePublicAsset {
+        try await send(path: DriveRoute.publicAsset(assetId: assetId), method: "DELETE")
+    }
+
+    // MARK: 文本内容
+
+    /// 文本文件的检查结果：拿 `versionId` 去分段读。
+    func driveContentInspect(itemId: String) async throws -> DriveContentInspect {
+        try await send(path: DriveRoute.contentInspect(itemId: itemId), method: "GET")
+    }
+
+    /// 读一段。`cursor` 为 nil 时从头读。
+    ///
+    /// `versionId` 必须是刚检查出来的那一个：换过一次的内容在服务端是另一个版本，
+    /// 拿旧版本号读会被判成「快照过期」，而不是悄悄给你一段旧字节。
+    func driveContentChunk(
+        itemId: String,
+        versionId: String,
+        cursor: String? = nil
+    ) async throws -> DriveContentChunk {
+        try await send(
+            path: DriveRoute.contentChunk(itemId: itemId, versionId: versionId, cursor: cursor),
+            method: "GET"
+        )
+    }
+
+    // MARK: 下载
+
+    /// 下载一项的绝对地址。
+    ///
+    /// 拼的是 `apiOrigin` 而不是 `apiBaseURL`：这条路由不在 `/api` 前缀下。
+    /// 是 `static`，因为它只做字符串拼接、不碰任何状态，契约测试要断言的正是这一串。
+    static func driveDownloadURL(itemId: String) -> URL {
+        let origin = AppConfiguration.apiOrigin.absoluteString
+        // 到不了落空：origin 由 `apiBaseURL` 派生（那里已经保证有 host），
+        // 路径段也全部编码过。所以这一串一定解析得出来。
+        return URL(string: origin + DriveRoute.download(itemId: itemId))!
+    }
+
+    /// 把一项下到本机，落在 `destination`。
+    ///
+    /// 走 `URLSession.download` 而不是 `send`：这是一段字节，不是 JSON。与
+    /// `downloadMeetingAudio` 那条不同的是**这条路要带账号令牌** —— 音频那条的地址是
+    /// 服务端现签的，凭据已经在地址里；这一条靠 `Authorization` 头认人。
+    ///
+    /// 令牌只放头里，绝不放查询串：地址会被写进日志、被中间设备看到，头不会。
+    ///
+    /// 落盘必须在这里当场做完：`download` 给的那个临时文件在这个方法返回之后随时会被系统
+    /// 收走，而一个几百兆的文件重下一次不是能接受的代价。
+    func downloadDriveItem(
+        itemId: String,
+        to destination: URL,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        // 令牌先换成可用的。这条路没有 `perform` 那种「401 之后刷新一次再重试」的兜底
+        // ——它不走 `perform`——所以快过期的令牌要在发请求前就换掉，否则会白下一次。
+        if accessToken == nil || accessTokenIsStale {
+            switch await refreshAccessTokenOutcome() {
+            case .success:
+                break
+            case .failure(.rejected):
+                throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。")
+            case .failure(.unreachable):
+                throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
+            }
+        }
+        guard let token = accessToken else {
+            throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。")
+        }
+
+        var request = URLRequest(url: Self.driveDownloadURL(itemId: itemId))
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let temporary: URL
+        let response: URLResponse
+        do {
+            (temporary, response) = try await downloadSession.download(
+                for: request,
+                delegate: DriveDownloadProgressObserver(onProgress: onProgress)
+            )
+        } catch {
+            AppLog.network.warning("drive download failed to reach the server: \(error.localizedDescription, privacy: .public)")
+            throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
+        }
+
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            // 状态码只进日志，不进给用户看的那句话：403 与 500 对用户是同一件事
+            // （这次没下下来），而排查要靠日志里那个数字。
+            AppLog.network.warning("drive download was refused with status \(http.statusCode)")
+            throw APIError(status: http.statusCode, code: nil, message: "文件没能下载下来。")
+        }
+
+        try? FileManager.default.removeItem(at: destination)
+        do {
+            try FileManager.default.moveItem(at: temporary, to: destination)
+        } catch {
+            AppLog.network.error("drive download could not be stored: \(error.localizedDescription, privacy: .public)")
+            throw APIError(status: 0, code: nil, message: "文件没能存到本机。")
+        }
     }
 
     // MARK: - Transport
@@ -869,3 +1367,27 @@ struct TokenPair: Decodable {
 }
 
 struct EmptyResponse: Decodable {}
+
+/// 云盘下载的进度。
+///
+/// 只活在一次下载里 —— 这正是进度回调能按调用传、而不必按键挂在共享 delegate 上的原因。
+/// 与 `FileUploader` 里那个同一个写法，只是回调的方向相反。
+private final class DriveDownloadProgressObserver: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        // 长度未知时（服务端没给 Content-Length）这里是 -1，报一个不是任何东西的分数没有意义。
+        guard totalBytesExpectedToWrite > 0 else { return }
+        onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+    }
+}

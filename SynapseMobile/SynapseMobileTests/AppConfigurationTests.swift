@@ -63,6 +63,34 @@ struct AppConfigurationTests {
         }
     }
 
+    /// 不在 `/api` 前缀下的那些路由（云盘的下载）挂在这个地址上。
+    @Test func derivesTheOriginWithoutTheAPISegment() {
+        withBaseURL("https://synapse.d2.pub/api") {
+            #expect(AppConfiguration.apiOrigin.absoluteString == "https://synapse.d2.pub")
+        }
+        withBaseURL("http://localhost:3000/api") {
+            #expect(AppConfiguration.apiOrigin.absoluteString == "http://localhost:3000")
+        }
+        // 没有 `/api` 段：原样还回来。
+        withBaseURL("https://synapse.d2.pub") {
+            #expect(AppConfiguration.apiOrigin.absoluteString == "https://synapse.d2.pub")
+        }
+        // 尾斜杠不影响结果 —— 源站不能以斜杠结尾，调用方是拿它和一条以 `/` 开头的路径相接的。
+        withBaseURL("https://synapse.d2.pub/api/") {
+            #expect(AppConfiguration.apiOrigin.absoluteString == "https://synapse.d2.pub")
+        }
+        withBaseURL("https://synapse.d2.pub/") {
+            #expect(AppConfiguration.apiOrigin.absoluteString == "https://synapse.d2.pub")
+        }
+    }
+
+    /// 只是恰好以 `/api` 开头的目录名不能被当成那个前缀截掉。
+    @Test func keepsAPathThatOnlyStartsWithTheAPISegment() {
+        withBaseURL("https://synapse.d2.pub/apiary") {
+            #expect(AppConfiguration.apiOrigin.absoluteString == "https://synapse.d2.pub/apiary")
+        }
+    }
+
     /// No override at all, which is every installed build.
     @Test func usesTheHostedServerWhenNothingWasSet() {
         withBaseURL("") {
