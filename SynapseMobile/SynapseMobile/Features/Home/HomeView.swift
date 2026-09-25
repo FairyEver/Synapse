@@ -71,9 +71,24 @@ struct HomeView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("主页")
         .toolbar {
-            // 切换器在铃铛左边，也就是这一页右上角空着的那一格。两枚装进同一个
-            // `ToolbarItemGroup`，是为了让这个先后由这一行字定下来，而不是由系统对同一个
-            // placement 上多项的排布规则定下来。
+            homeToolbar
+        }
+    }
+
+    /// 顶栏那两枚：先切换器，后铃铛。
+    ///
+    /// 声明顺序定下两者的先后。分开声明定下的是它们**各是各的**：iOS 26 会把同一个
+    /// placement 上的项并进同一块共享背景 —— 两枚互不相干的控件挤进一个胶囊里，看起来
+    /// 就是一枚。`ToolbarSpacer(.fixed)` 是系统给的分家方式：它把两侧分成各自一组，各拿
+    /// 各的背景，于是又变回两枚按钮。iOS 18 上没有这层共享背景，两枚本来就分开画，那一支
+    /// 保持原样（`ToolbarItemGroup` 是那里定住先后最直接的写法）。
+    @ToolbarContentBuilder
+    private var homeToolbar: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarTrailing) { desktopSwitcher }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            ToolbarItem(placement: .topBarTrailing) { bell }
+        } else {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 desktopSwitcher
                 bell
