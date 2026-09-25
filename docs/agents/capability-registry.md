@@ -19,7 +19,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 
 ## `desktop/app-capabilities` 产品表面
 
-账号消息中心是桌面全局壳层面板与 iOS「消息」Tab，未注册新的 System App、Dock、Workflow、Automation、MCP 或 Deep Link；下表数量不变。System Notifier 的既有能力在用户已登录且在线时同步正式触发内容到消息中心，测试通知仍仅本机显示。
+账号消息中心是桌面全局壳层面板与 iOS 主页右上角铃铛打开的通知面板，未注册新的 System App、Dock、Workflow、Automation、MCP 或 Deep Link；下表数量不变。System Notifier 的既有能力在用户已登录且在线时同步正式触发内容到消息中心，测试通知仍仅本机显示。
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
