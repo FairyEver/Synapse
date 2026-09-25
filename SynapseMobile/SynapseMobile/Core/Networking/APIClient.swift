@@ -692,8 +692,18 @@ actor APIClient {
             "/drive/shares" + queryString(pageItems(offset: offset, limit: limit))
         }
 
-        static func disableShare(id: String) -> String {
+        /// 一条分享记录。`GET` 读它（`driveShareRecord(id:)`），`DELETE` 停用它
+        /// （`disableShare(id:)`）——路径是同一条，动作由方法决定。
+        ///
+        /// 两个编号都收：服务端按 `OR: [{ id }, { shareId }]` 找（`drive.service.ts` 的
+        /// `getShare`），所以调用方随手边有哪个就用哪个。浏览行上那个站内路径里带着的是
+        /// `shareId`，分享列表里那行带着的是 `id`。
+        static func shareRecord(id: String) -> String {
             "/drive/shares/\(escapedPathComponent(id))"
+        }
+
+        static func disableShare(id: String) -> String {
+            shareRecord(id: id)
         }
 
         static let usage = "/drive/usage"
@@ -932,6 +942,19 @@ actor APIClient {
 
     func driveShares(offset: Int? = nil, limit: Int? = nil) async throws -> DriveSharePage {
         try await send(path: DriveRoute.shares(offset: offset, limit: limit), method: "GET")
+    }
+
+    /// 读一条分享。**是读**：不新建、不改设置、不续期。
+    ///
+    /// `id` 与 `shareId` 都收。服务端只给「还活着」的那一条（`enabled: true` 且没过期，
+    /// 见 `drive.service.ts` 的 `getShare`），所以已经停用或已过期的那一条回来的是 404 ——
+    /// 调用方拿这个 404 当「现在没有能用的分享」，而不是当失败。
+    ///
+    /// 回来的类型是列表行而不是 `DriveShare`：这一条路由给的就是 `DriveShareListItemDto`
+    /// （与 `GET /drive/shares` 的行同一个形状，`toDriveShareListItemDto`），它没有 `enabled`
+    /// 那个字段——`DriveShare.enabled` 非可选，直接解到那边会缺键。
+    func driveShareRecord(id: String) async throws -> DriveShareListItem {
+        try await send(path: DriveRoute.shareRecord(id: id), method: "GET")
     }
 
     /// 关掉一条分享。链接立刻失效，记录还在。

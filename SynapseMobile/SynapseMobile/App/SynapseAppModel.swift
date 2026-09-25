@@ -726,6 +726,27 @@ final class SynapseAppModel {
         await drive.share(item: item, settings: settings, using: apiClient)
     }
 
+    /// 读这一项已有的那一条分享（`shareId` 或 `id` 都行）。
+    ///
+    /// 分享那一层打开时拿浏览行上那枚角标里的 `shareId` 来读一次，看这一项是不是已经有分享。
+    /// 这是**读**：服务端这条路由只查不改（`drive.service.ts` 的 `getShare`），不会新建、
+    /// 不会改设置、也不会把过期的那条续期。
+    ///
+    /// 这条读替掉的是一次**空体 POST**「探一下」——那不是探，是写：没有活跃分享时它会
+    /// **建**一条（服务端默认值：仅阅读 + 永久 + 无密码），停用过的那条会变成新建、过期过的
+    /// 那条会被悄悄续成默认有效期（`drive.service.ts` 的 `reusedExisting` 与
+    /// `!share || settings !== undefined || existingExpired`）。用户按的是「分享」，什么都没
+    /// 说就可能多一条公开链接出来。
+    ///
+    /// 404 是 `missing`（这一项现在没有能用的分享）而不是失败，见 `DriveShareLookup`。
+    func driveShareRecord(id: String) async -> DriveShareLookup {
+        do {
+            return .found(DriveShare(listItem: try await apiClient.driveShareRecord(id: id)))
+        } catch {
+            return DriveShareLookup.of(error)
+        }
+    }
+
     /// 拉一次分享列表。
     ///
     /// 分享那一层打开时要先看这一项有没有现成的分享：本机知道的话连请求都不必发
