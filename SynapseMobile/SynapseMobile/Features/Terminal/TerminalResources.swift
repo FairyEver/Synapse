@@ -33,6 +33,13 @@ struct TerminalResource: Identifiable, Hashable {
 /// the flags are silent the shape speaks: the row a token was cut in was filled to the
 /// grid's last column, and the row below opens with the hanging indent and the rest of
 /// the URL.
+///
+/// An address that only means something on the desktop is not collected at all. A dev
+/// server announces itself as `http://localhost:5173` and the API next to it as
+/// `http://127.0.0.1:3000`; on the phone both of those are the phone, so a tap opens a
+/// page that never loads. The row would sit in the list looking exactly like a real
+/// resource, which is worse than not being there: the list is only worth reading if
+/// everything on it can be opened.
 struct TerminalResourceCollector {
     private static let pattern = try! NSRegularExpression(pattern: #"https?://[^\s<>"'`]+"#, options: .caseInsensitive)
     private static let trailing = CharacterSet(charactersIn: "，。！？；、,.!?;)）]}>")
@@ -167,8 +174,28 @@ struct TerminalResourceCollector {
             let candidate = String(text[matchRange]).trimmingCharacters(in: trailing)
             guard let url = URL(string: candidate),
                   let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
-                  let host = url.host, !host.isEmpty else { return nil }
+                  let host = url.host, !host.isEmpty,
+                  !isLocalOnly(host) else { return nil }
             return url
         }
+    }
+
+    /// Whether the host points at the machine that printed it rather than at anything a
+    /// phone could reach.
+    private static func isLocalOnly(_ host: String) -> Bool {
+        var name = host.lowercased()
+        // `::` is the unspecified address, and `[::ffff:127.0.0.1]` is `127.0.0.1` in
+        // another spelling — Foundation hands the second one back in the longer form.
+        // `::1` is loopback and is left for the check below.
+        if name == "::" { return true }
+        if name.hasPrefix("::ffff:") { name = String(name.dropFirst("::ffff:".count)) }
+        if name == "localhost" || name.hasSuffix(".localhost") { return true }
+        if name == "::1" { return true }
+        // The whole of 127.0.0.0/8 is loopback, not just the one address people type.
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        if parts.count == 4, parts[0] == "127" { return true }
+        // 0.0.0.0 is a listen-on-everything address: a server that prints it is saying
+        // where it bound, not where it can be opened from.
+        return name == "0.0.0.0"
     }
 }

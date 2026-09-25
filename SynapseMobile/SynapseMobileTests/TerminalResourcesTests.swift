@@ -128,6 +128,55 @@ struct TerminalResourcesTests {
         ])
     }
 
+    // MARK: - Addresses only the desktop can reach
+
+    /// A dev server announces itself as `http://localhost:5173` and the API beside it as
+    /// `http://127.0.0.1:3000`. On the phone those are the phone: the row would look
+    /// exactly like a resource and never open, so it is not offered at all.
+    @Test func leavesOutHostsOnlyTheDesktopCanReach() throws {
+        let store = TerminalStore()
+        store.apply(frame([
+            try line("本地 http://127.0.0.1:8787/__reset"),
+            try line("开发 http://localhost:5173/ 和 http://0.0.0.0:3000/"),
+            try line("回环 http://127.0.0.2:8080/x http://[::1]:9090/y"),
+        ], kind: "reset"))
+        #expect(store.resources.isEmpty)
+    }
+
+    /// The same addresses in the spellings Foundation hands back for a bracketed host,
+    /// and the subdomain form people use to keep several local sites apart.
+    @Test func leavesOutLocalHostsInTheirOtherSpellings() throws {
+        let store = TerminalStore()
+        store.apply(frame([
+            try line("http://[::ffff:127.0.0.1]:8787/__reset http://app.localhost:3000/x"),
+        ], kind: "reset"))
+        #expect(store.resources.isEmpty)
+    }
+
+    /// Skipping them must not cost a real link on the same screen.
+    @Test func stillCollectsTheReachableLinkBesideALocalOne() throws {
+        let store = TerminalStore()
+        store.apply(frame([
+            try line("本地 http://127.0.0.1:8787/__reset"),
+            try line("分享 https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR"),
+            try line("本地 http://localhost:8787/__reset"),
+        ], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == [
+            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR",
+        ])
+    }
+
+    /// A local address the TUI cut in half is put back together before it is judged, so
+    /// neither half reaches the list as a broken link of its own.
+    @Test func joinsALocalAddressBeforeLeavingItOut() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        store.apply(frame([try line("  http://127.0.0.1:8787/" + String(repeating: "a", count: 29))], kind: "reset", total: 2))
+        #expect(store.resources.isEmpty)
+        store.apply(frame([try line("  bbbbcccc")], from: 1, total: 2))
+        #expect(store.resources.isEmpty)
+    }
+
     @Test func historyAndSessionsStaySeparate() throws {
         let first = TerminalStore()
         let second = TerminalStore()
