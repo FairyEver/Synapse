@@ -151,7 +151,8 @@ enum HomeRoute: Hashable { case recordings, clipboard }
 - **录音列表 / 详情一行不改**，直接用现有 `MeetingListView` / `MeetingDetailView`（`Features/Meeting/MeetingListView.swift:7-9`、`MeetingDetailView.swift:9-12`）。`MeetingListView` 自带右上角 ＋（`model.isRecordingPresented = true`）和它自己的录音 sheet，照样工作。
 - **剪贴板历史**用现有 `ClipboardList`，数据走现有的 `model.activeClipboardEntries` / `copyClipboardEntry` / `clearClipboardHistory(for:)`（`App/SynapseAppModel.swift:1482,1487,1497`）。它内部自己弹出预览 sheet（`ClipboardList.swift:81-85`），不用动。
   - **入口条件放宽了**：终端页那个剪贴板按钮只在有电脑在线时才存在（它挂在设备行上，`SessionListView.swift:314`）；主页功能里这一行**恒在**。无电脑或离线时照常进入，列表显示既有空态「还没有可粘贴的内容」。剪贴板历史是本机落盘的，离线读得到（`Features/Terminal/ClipboardHistoryStore.swift:28-33`），不新增离线专用文案。
-  - **它仍然按电脑分桶**，切电脑就是切列表。这一点要在页面上说清楚。
+  - **它仍然按电脑分桶**，切电脑就是切列表。这一页不显示电脑选择器，所以列表头上要有当前电脑的名字——它是读者唯一能看出「现在读的是哪一台的」的地方。为此给 `ClipboardList` 加一个可选的 `desktopName`，非空时渲染成 `Section` 的表头；终端快捷面板那一份传 `nil`（面板本来就在某台电脑的一个会话里），渲染不变。
+  - **不给页面加解释性文案。** 不写「按电脑分开保存」这类说明实现的话——切换电脑时列表跟着换，这件事本身已经说了它属于哪一台。
 - 嵌套深度：`主页 → 录音列表 → 录音详情` 三层，与 `docs/agents/mobile-adaptive-layout.md` 的三层目标一致。
 
 **iPadOS 上不要为此再叠一个 `NavigationSplitView`。** 主页栈里推入的 `AdaptiveFeatureNavigation` 已经是 `NavigationSplitView`；外层再套一个会让系统侧边栏、列表、详情变成三列而详情挤没。
@@ -348,7 +349,7 @@ private enum Tab: Hashable { case home, terminals, settings }
 | `SynapseMobileUITests/TerminalFlowUITests.swift:198` | 索引 3 = 我的 | 越界 |
 | `SynapseMobileUITests/TerminalGitUITests.swift:357` | 索引 0 = 终端 | 主页 |
 
-**全部改成按标签查找**（`app.tabBars.buttons["终端"]`），不再依赖索引。`TerminalFlowUITests.swift:63-69` 那段「顺序是终端/录音/需要我/我的」的注释同时过时，一并改正。
+**修正索引，但不要改成按标签查找。** `TerminalFlowUITests.swift:63-69` 那条注释写明了这里为什么用索引：「a badge rewrites the accessibility label of the tab it sits on」——底栏主页那一格从此就带着未读数角标，用 `buttons["主页"]` 去找会随未读数变化而时灵时不灵。索引留着，数字改正，并抽成有名字的常量（`home = 0` / `terminals = 1` / `settings = 2`），免得下一次移动 tab 又要逐个改数字。那段过时的顺序注释同时改正。
 
 ### 10.2 要补的行为验证
 
