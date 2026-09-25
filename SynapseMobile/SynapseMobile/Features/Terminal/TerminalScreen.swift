@@ -134,8 +134,8 @@ struct TerminalScreen: View {
         model.summary != nil && session == nil
     }
 
-    /// The buttons the computer under this terminal offers, or the built-in fallback
-    /// when it is too old to have said. See `SynapseAppModel.activeToolbarButtons`.
+    /// This phone's own front row, then the commands the computer under this terminal
+    /// holds. See `SynapseAppModel.activeToolbarButtons`.
     private var buttons: [MobileToolbarButton] { model.activeToolbarButtons }
 
     /// Files on their way to the computer from this terminal, and the ones that

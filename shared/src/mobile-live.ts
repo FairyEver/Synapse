@@ -729,12 +729,18 @@ export interface MobileToolbarPayload {
   readonly desktopClientInstanceId: string
   readonly revision: number
   /**
-   * The whole list, in the desktop's own order, built-ins first.
+   * The commands the user wrote on this computer, in the desktop's own order.
+   *
+   * Only the user's entries travel. Each end draws its own front row — the keys a
+   * phone needs are not the keys a computer needs, since a phone has no keyboard to
+   * press them on — so this list is the whole of what the two ends share. The computer
+   * side of it is `main/mobile-toolbar.ts` in the terminal capability.
    *
    * Empty is a legitimate value and is *not* the same as absent: an empty list says
-   * this computer has no buttons, while a phone that has never received this message
-   * falls back to its own built-ins. Those are different answers to "what can I
-   * press", and a desktop is allowed to give the first one.
+   * the user has configured nothing here, while a phone that has never received this
+   * message has nothing of the user's to show. The two are different answers to "what
+   * did the user set up", and a desktop is allowed to give the first one — neither
+   * leaves the bar empty, because the front row is the phone's own.
    */
   readonly buttons: readonly MobileToolbarButton[]
 }

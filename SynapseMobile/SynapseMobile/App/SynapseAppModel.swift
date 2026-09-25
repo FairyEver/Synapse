@@ -1448,11 +1448,11 @@ final class SynapseAppModel {
 
     /// The buttons shown under the terminal for the computer being viewed.
     ///
-    /// A computer that has sent `mobile.toolbar` decides this completely — including
-    /// by sending an empty list, which means it has no buttons. Only a computer that
-    /// has never sent one falls back, and that is a computer too old to know about
-    /// this message: without the fallback its phone would show an empty bar and, with
-    /// no keyboard of its own, nothing could be confirmed in a TUI at all.
+    /// This phone's own front row, then the commands the computer holds. Only the
+    /// second half is the computer's, and it decides it completely — including by
+    /// sending an empty list, which means the user has configured nothing there. The
+    /// front row is drawn either way, so the bar is never empty: with no keyboard of
+    /// its own, a phone with nothing to press could not answer a TUI at all.
     var activeToolbarButtons: [MobileToolbarButton] {
         toolbar.buttons(forSelected: selectedDesktopClientInstanceId)
     }

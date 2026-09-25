@@ -18,6 +18,13 @@ struct TerminalToolbarTests {
         try? JSONDecoder().decode(MobileToolbarPayload.self, from: Data(json.utf8))
     }
 
+    /// The front row's ids, in the order the bar draws them.
+    ///
+    /// Almost every expectation below is "the phone's own keys, then whatever the
+    /// computer said", so the first half is written once here rather than seven times
+    /// — where a change to it would be seven chances to forget one.
+    private var frontRowIds: [String] { TerminalToolbarState.frontRow.map(\.id) }
+
     @Test func decodesAWholeToolbarInOrder() throws {
         let payload = try #require(decode("""
         {
@@ -141,43 +148,61 @@ struct TerminalToolbarTests {
         // An empty identity is not rejected here — the wire's own validator requires a
         // non-empty one, so this is a defence rather than a rule the phone can state
         // alone. What it must not do is match a real computer, which it cannot: no
-        // selected computer has an empty id, so this list is shown for nobody.
+        // selected computer has an empty id, so none of these commands is shown for
+        // anybody. The front row is drawn regardless, being nobody's but the phone's.
         var state = TerminalToolbarState()
         state.adopt(MobileToolbarPayload(
             desktopClientInstanceId: "", revision: 1,
             buttons: [MobileToolbarButton(id: "c1", label: "部署", group: .custom,
                                           action: .text("pnpm deploy", pressEnter: true))]
         ))
-        #expect(state.buttons(forSelected: "desktop-1").map(\.id)
-            == ["enter", "interrupt", "slash-exit", "slash-clear"])
+        #expect(state.buttons(forSelected: "desktop-1").map(\.id) == frontRowIds)
     }
 
     // MARK: - What the bar shows
 
-    @Test func aComputerThatHasNeverSaidAnythingGetsTheFallback() {
-        // An older desktop does not know this message exists. Showing an empty bar for it
-        // would leave the phone unable to confirm anything in a TUI, which is the whole
-        // reason return is in the fallback.
-        #expect(TerminalToolbarState().buttons(forSelected: "desktop-1").map(\.id)
-            == ["enter", "interrupt", "slash-exit", "slash-clear"])
-        #expect(TerminalToolbarState().buttons(forSelected: nil).map(\.id)
-            == ["enter", "interrupt", "slash-exit", "slash-clear"])
+    @Test func aComputerThatHasNeverSaidAnythingStillLeavesTheBarUsable() {
+        // An older desktop may never send this message, and one that has nothing
+        // configured sends it with an empty list. Neither leaves a bar that cannot
+        // confirm anything in a TUI: the front row is the phone's own.
+        #expect(TerminalToolbarState().buttons(forSelected: "desktop-1").map(\.id) == frontRowIds)
+        #expect(TerminalToolbarState().buttons(forSelected: nil).map(\.id) == frontRowIds)
     }
 
-    @Test func anEmptyListIsAnAnswerAndIsNotTheFallback() {
+    @Test func anEmptyListMeansNoCommandsOfTheUsersAndNothingMore() {
         /*
-         * The distinction the whole state exists for. A computer that has sent this
-         * message has said what it has, and "nothing" is a thing it can say. Falling back
-         * here would invent four buttons the user did not configure — and pressing one
-         * would run a command on a computer that never offered it.
+         * A computer that has sent this message has said what it has, and "nothing" is a
+         * thing it can say. Inventing a command from it would run something on a computer
+         * that never offered one — which is why the front row is not invented: it is the
+         * phone's own, and it is drawn whether or not a computer has spoken.
          */
         var state = TerminalToolbarState()
         state.adopt(MobileToolbarPayload(desktopClientInstanceId: "desktop-1", revision: 1, buttons: []))
 
-        #expect(state.buttons(forSelected: "desktop-1").isEmpty)
-        // And a computer that has not answered still gets its fallback, in the same state.
-        #expect(state.buttons(forSelected: "desktop-2").map(\.id)
-            == ["enter", "interrupt", "slash-exit", "slash-clear"])
+        #expect(state.buttons(forSelected: "desktop-1").map(\.id) == frontRowIds)
+        // And one that has not answered looks the same, having nothing of its own to add.
+        #expect(state.buttons(forSelected: "desktop-2").map(\.id) == frontRowIds)
+    }
+
+    @Test func aComputersOwnFrontRowIsNotDrawnASecondTime() {
+        /*
+         * A computer from before the split still sends its built-ins. Those are its front
+         * row, and this phone has its own; drawing both would put two returns and two
+         * `Ctrl+C`s side by side, with only one of each being the one the user learned.
+         * The group is what separates them: everything a computer sends today is
+         * `custom`, so anything else in the list is its own front row arriving late.
+         */
+        var state = TerminalToolbarState()
+        state.adopt(MobileToolbarPayload(desktopClientInstanceId: "desktop-1", revision: 1, buttons: [
+            MobileToolbarButton(id: "enter", label: "回车", group: .key, action: .key(.enter)),
+            MobileToolbarButton(id: "interrupt", label: "Ctrl+C", group: .key, action: .key(.controlC)),
+            MobileToolbarButton(id: "slash-exit", label: "/exit", group: .command,
+                                action: .text("/exit", pressEnter: true)),
+            MobileToolbarButton(id: "c1", label: "部署", group: .custom,
+                                action: .text("pnpm deploy", pressEnter: true)),
+        ]))
+
+        #expect(state.buttons(forSelected: "desktop-1").map(\.id) == frontRowIds + ["c1"])
     }
 
     @Test func whatOneComputerSaysIsNotShownForAnother() {
@@ -189,14 +214,14 @@ struct TerminalToolbarTests {
                                           action: .text("pnpm deploy", pressEnter: true))]
         ))
 
-        #expect(state.buttons(forSelected: "desktop-1").map(\.id) == ["c1"])
-        #expect(state.buttons(forSelected: "desktop-2").map(\.id)
-            == ["enter", "interrupt", "slash-exit", "slash-clear"])
+        #expect(state.buttons(forSelected: "desktop-1").map(\.id) == frontRowIds + ["c1"])
+        #expect(state.buttons(forSelected: "desktop-2").map(\.id) == frontRowIds)
     }
 
     @Test func aLaterMessageReplacesTheWholeList() {
-        // The message is a snapshot, not a delta. A button the user deleted on the
-        // computer has to disappear here, which is only true if nothing is merged.
+        // The message is a snapshot, not a delta. A command the user deleted on the
+        // computer has to disappear here, which is only true if nothing is merged. The
+        // front row is not part of that list and is not replaced by it.
         var state = TerminalToolbarState()
         state.adopt(MobileToolbarPayload(desktopClientInstanceId: "d", revision: 1, buttons: [
             MobileToolbarButton(id: "old", label: "旧", group: .custom, action: .text("old", pressEnter: true)),
@@ -206,7 +231,7 @@ struct TerminalToolbarTests {
             MobileToolbarButton(id: "keep", label: "留", group: .custom, action: .text("keep", pressEnter: true)),
         ]))
 
-        #expect(state.buttons(forSelected: "d").map(\.id) == ["keep"])
+        #expect(state.buttons(forSelected: "d").map(\.id) == frontRowIds + ["keep"])
     }
 
     @Test func signingOutForgetsThem() {
@@ -216,8 +241,12 @@ struct TerminalToolbarTests {
         ]))
         state.reset()
 
-        #expect(state.buttons(forSelected: "d").map(\.id)
-            == ["enter", "interrupt", "slash-exit", "slash-clear"])
+        // The commands go, because they are another account's computers'. The front row
+        // stays: it belongs to the phone, and signing out does not unteach it how to
+        // press return.
+        #expect(state.buttons(forSelected: "d").map(\.id) == frontRowIds)
+        #expect(state.buttons(forSelected: "d").map(\.group)
+            == [.key, .key, .key, .key, .key, .command, .command])
     }
 
     // MARK: - Pressing one
@@ -271,22 +300,52 @@ struct TerminalToolbarTests {
         #expect(MobileToolbarAction.text("lsof -i :3001", pressEnter: false).submitsLine == false)
     }
 
-    @Test func everyFallbackButtonIsOneTheComputerWouldRecognise() {
-        // The fallback stands in for a computer that cannot describe itself, so it has to
-        // be made only of things such a computer can still do: keys it can encode and
-        // commands it will run. `Clear` is absent because it never reaches the terminal.
-        for button in TerminalToolbarState.fallback {
-            switch button.action {
-            case .key(let key):
-                #expect(key != .controlL, "the fallback must not be a second clear")
-            case .text(let text, _):
+    @Test func theFrontRowIsWhatAPhoneNeedsToAnswerATUI() {
+        // The row is written on this side, so nothing else would catch a typo in it: an
+        // id is a string, and the key a button names is only checked when it is pressed.
+        // This pins what is in it, in the order the bar draws it.
+        #expect(TerminalToolbarState.frontRow.map(\.id)
+            == ["arrow-up", "arrow-down", "tab", "enter", "interrupt", "slash-exit", "slash-clear"])
+        #expect(TerminalToolbarState.frontRow.map(\.label)
+            == ["↑", "↓", "Tab", "回车", "Ctrl+C", "/exit", "/clear"])
+        // What each one sends, spelled the way it goes on the wire: a key name, or a
+        // command's text and whether pressing it runs the command or only types it.
+        // This is the half a typo would change without changing anything visible.
+        #expect(TerminalToolbarState.frontRow.map(\.wireForm) == [
+            "key ArrowUp", "key ArrowDown", "key Tab", "key Enter", "key Ctrl+C",
+            "text /exit runs", "text /clear runs",
+        ])
+        // The rest is what the wire needs of any button it carries: a name to press it by
+        // and text that is neither empty nor a lie about pressing return.
+        for button in TerminalToolbarState.frontRow {
+            #expect(!button.id.isEmpty)
+            #expect(!button.label.isEmpty)
+            if case .key(let key) = button.action {
+                // `Ctrl+L` is the computer's own clear, which never reaches a terminal;
+                // the phone's clear is the command that follows, not a key.
+                #expect(key != .controlL)
+            }
+            if case .text(let text, _) = button.action {
                 #expect(!text.isEmpty)
                 #expect(!text.contains("\n"))
             }
-            #expect(!button.id.isEmpty)
-            #expect(!button.label.isEmpty)
         }
-        #expect(TerminalToolbarState.fallback.contains { $0.id == "enter" },
+        #expect(TerminalToolbarState.frontRow.map(\.wireForm).contains("key Enter"),
                 "a phone without return cannot confirm anything in a TUI")
+    }
+}
+
+/// How a button spells itself on the wire, for the one test that pins the front row.
+///
+/// Spelled out rather than compared as `MobileToolbarAction`s: that conformance is main
+/// actor-isolated, and using it from a nonisolated context warns today and is an error in
+/// the Swift 6 language mode. A string is also closer to what the assertion is about —
+/// these names are what the computer looks up in its byte table.
+private extension MobileToolbarButton {
+    var wireForm: String {
+        switch action {
+        case .key(let key): return "key \(key.rawValue)"
+        case .text(let text, let pressEnter): return "text \(text) \(pressEnter ? "runs" : "types")"
+        }
     }
 }

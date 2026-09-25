@@ -1,13 +1,14 @@
 import type { TerminalSession } from "./schema"
 
 /**
- * The built-in buttons every terminal window shows, and the rules for resolving one.
+ * The built-in buttons the terminal window shows, and the rules for resolving one.
  *
- * They live in `shared/` rather than beside the renderer that draws them because the
- * main process has to read the same list: a phone is shown these buttons too, and the
- * projection that produces them runs where the socket does. Keeping one definition is
- * the point — two lists would let the phone run something the computer's own toolbar
- * does not offer, which is exactly the drift this feature exists to avoid.
+ * Only the desktop's own toolbar reads this now. It used to be projected to a phone as
+ * well — which is why it lives in `shared/` rather than beside the renderer that draws
+ * it — and that stopped when the phone's bar grew a front row of its own. A phone needs
+ * arrows and `Tab` where a computer has a keyboard for them, so the two ends no longer
+ * share this list; the only buttons that travel are the ones the user wrote. See
+ * `main/mobile-toolbar.ts`.
  */
 
 export type TerminalToolbarPlatform = "darwin" | "win32" | "linux"

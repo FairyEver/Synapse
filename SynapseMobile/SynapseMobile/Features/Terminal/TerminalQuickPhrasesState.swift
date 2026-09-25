@@ -14,14 +14,14 @@ import Foundation
 /// Collapsing the last two is the mistake worth naming: an older computer would be
 /// shown an empty list under a segment control that says the feature exists, and the
 /// user reads that as their own configuration having gone missing. The rule is
-/// `TerminalToolbarState`'s own — the computer that sent the message decides
-/// completely, and only a computer that never sent one gets a fallback.
+/// `TerminalToolbarState`'s own — the computer that sent the message decides its list
+/// completely, and a computer that never sent one has nothing of the user's to show.
 ///
-/// `nil` is *not* a fallback here, and that is the one place this differs from the
-/// toolbar: there are no built-in sentences to stand in with. The bar falls back to
-/// four buttons because a phone with an empty bar cannot confirm anything in a TUI;
-/// a sentence is the user's own words, and inventing one would type words they never
-/// wrote into a composer they are about to send from.
+/// `nil` is *not* a fallback here, and that is where this parts company with the
+/// toolbar: there are no built-in sentences to stand in with. The bar leans on keys the
+/// phone keeps in its own code, because a phone with an empty bar cannot confirm
+/// anything in a TUI; a sentence is the user's own words, and inventing one would type
+/// words they never wrote into a composer they are about to send from.
 struct TerminalQuickPhrasesState: Equatable {
     private var phrases: [MobileQuickPhrase] = []
     private var ownerDesktopClientInstanceId: String?

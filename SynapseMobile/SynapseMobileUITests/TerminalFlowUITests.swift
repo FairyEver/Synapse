@@ -174,11 +174,11 @@ final class TerminalFlowUITests: XCTestCase {
         // No gate to open: opening the terminal is enough to type into it.
         XCTAssertFalse(app.buttons["解锁输入"].exists, "the removed read-only gate is still on screen")
 
-        // The bar is the computer's own toolbar, mirrored — not this phone's fixed keys.
-        // The return key is the one that must be here: without it a TUI cannot be
-        // answered at all, since the input field sends text and an empty send is not a
-        // message the protocol can carry.
-        XCTAssertTrue(app.buttons["toolbar-enter"].exists, "the mirrored toolbar has no return key")
+        // The bar leads with the phone's own keys and carries the computer's commands
+        // behind them. The return key is the one that must be here: without it a TUI
+        // cannot be answered at all, since the input field sends text and an empty send
+        // is not a message the protocol can carry.
+        XCTAssertTrue(app.buttons["toolbar-enter"].exists, "the bar has no return key")
         XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "the bar has no way into the keyboard panel")
 
         // The keys that left this bar are behind the keyboard button, in the panel.
@@ -198,9 +198,9 @@ final class TerminalFlowUITests: XCTestCase {
             "the command never reached the desktop"
         )
 
-        // Answering the prompt is a key press. Return is the computer's own built-in,
-        // mirrored onto this bar — which is why it is here at all, and why it is
-        // addressed by the computer's id for it rather than by a label this phone chose.
+        // Answering the prompt is a key press. Return leads the front row this phone
+        // keeps in its own code, which is where it lives now that the computer no longer
+        // sends it — and it is addressed by an id this side owns.
         //
         // 先收键盘：那一条栏在打字的时候是让位的（`toolbarStandDown`）—— 手在系统键盘上
         // 的时候，眼前那一行指令按不到，也帮不上忙。点一下画布把它叫回来，这也是它
@@ -644,13 +644,13 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "16-toolbar-command-keeps-the-keyboard-down")
     }
 
-    /// The bar under the terminal is the computer's own, and the keys that left it are
-    /// behind the keyboard button.
+    /// The bar under the terminal is the phone's own front row and the computer's
+    /// commands, and the keys that left it are behind the keyboard button.
     ///
-    /// Both halves are the feature. The bar shows what the computer offers — its
-    /// built-ins and the user's own commands, with `Clear` absent because it never
-    /// reaches the terminal — and the panel is where the arrows, Tab and Escape went
-    /// when the ten fixed keys stopped being drawn here.
+    /// Both halves are the feature. The front row is written on the phone — arrows, Tab,
+    /// return, the interrupt and the two slash commands — and behind it come the commands
+    /// the user wrote on their computer, whose own `Clear` is absent because it never
+    /// reaches the terminal. The panel is where the rest of the keys live.
     func testToolbarMirrorsTheComputerAndTheKeyboardPanelSendsKeys() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
@@ -676,18 +676,22 @@ final class TerminalFlowUITests: XCTestCase {
         let terminal = app.descendants(matching: .any)["terminal.text"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
 
-        // The mock's own list: two built-ins, two slash commands, two of its own.
+        // The mock sends six buttons. Four of them are its built-ins — the computer's own
+        // front row, which it no longer sends and which this phone draws for itself. So
+        // all six ids are on the bar: the four from this side, and the mock's two.
         for id in ["toolbar-enter", "toolbar-interrupt", "toolbar-slash-exit", "toolbar-slash-clear",
                    "toolbar-mock-deploy", "toolbar-mock-port"] {
             XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 10), "the bar is missing \(id)")
         }
-        // Not projected: it clears the desktop's own renderer and never reaches the
+        // Not sent at all: it clears the desktop's own renderer and never reaches the
         // terminal, so drawing it here would promise something that cannot happen.
-        XCTAssertFalse(app.buttons["toolbar-clear"].exists, "Clear was projected onto the phone")
-        // Read-only: managing the commands belongs to the computer.
+        XCTAssertFalse(app.buttons["toolbar-clear"].exists, "Clear was drawn on the phone")
+        // The two fixed keys at the ends, the phone's own seven, and the two of the
+        // mock's six that the user wrote. Read-only either way: managing the commands
+        // belongs to the computer, and the front row to the phone's own build.
         XCTAssertEqual(
-            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'toolbar-'")).count, 8,
-            "the bar has an unexpected number of buttons (8 = two fixed keys + 6 commands)"
+            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'toolbar-'")).count, 11,
+            "the bar has an unexpected number of buttons (11 = two fixed keys + the phone's 7 + 2 commands)"
         )
         capture(app, name: "10-toolbar-mirrored")
 
@@ -704,8 +708,8 @@ final class TerminalFlowUITests: XCTestCase {
 
         // A button that runs its command: the computer echoes it, and the echo is proof
         // the press crossed the socket rather than being drawn and dropped. The user's
-        // own commands sit past the built-ins, so the bar is scrolled first — the same
-        // gesture a user makes, and the reason the bar scrolls at all.
+        // own commands sit past the phone's front row, so the bar is scrolled first —
+        // the same gesture a user makes, and the reason the bar scrolls at all.
         let bar = app.scrollViews["toolbar-scroll"]
         XCTAssertTrue(bar.exists, "the toolbar is not a scroll view")
         bar.swipeLeft()
@@ -1255,18 +1259,17 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "16-greyed-out-with-no-computer")
     }
 
-    /// A computer that cannot describe its buttons gets the phone's own built-ins.
+    /// A computer with nothing of the user's to show still leaves a bar that works.
     ///
-    /// "I have no buttons" and "I am too old to say" arrive at the phone as the same
-    /// state — no list has been adopted — and it must not answer them the same way. An
-    /// empty bar is correct for the first and would be a dead end for the second: with
-    /// no keyboard of its own, a phone with no return key cannot confirm anything in a
-    /// TUI, including the approval prompts Claude Code waits on.
+    /// The front row is the phone's own and is drawn whatever the computer says, so this
+    /// bar is the ordinary one minus its commands. What is being pinned is that it is
+    /// never empty: with no keyboard of its own, a phone with no return key cannot
+    /// confirm anything in a TUI, including the approval prompts Claude Code waits on.
     ///
     /// Needs a computer that genuinely does not send the message, so it is skipped
     /// unless the run is set up for one — a mock desktop started with `--no-toolbar`.
-    /// Asserting it by reading the fallback constant would only prove the constant
-    /// exists, not that the bar ever reaches for it.
+    /// Asserting it by reading the front-row constant would only prove the constant
+    /// exists, not that the bar ever draws it.
     func testAnOldComputerStillGetsAUsableBar() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["SYNAPSE_TEST_OLD_DESKTOP"] == "1",
@@ -1292,20 +1295,20 @@ final class TerminalFlowUITests: XCTestCase {
         // Long enough that a list which was going to arrive would have.
         XCTAssertTrue(app.buttons["toolbar-enter"].waitForExistence(timeout: 15), "no return key: a TUI cannot be confirmed")
         for id in ["toolbar-interrupt", "toolbar-slash-exit", "toolbar-slash-clear"] {
-            XCTAssertTrue(app.buttons[id].exists, "the fallback bar is missing \(id)")
+            XCTAssertTrue(app.buttons[id].exists, "the bar is missing \(id)")
         }
         XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "the keyboard button is the phone's own and must stay")
-        // The assertion that makes this test mean anything. The four built-ins are also
-        // what a computer that *can* describe itself sends, so checking only for them
-        // passes either way. `mock-deploy` is a command this mock owns and the fallback
-        // has never heard of, so its absence is what says nothing was received — and if
-        // that computer ever did send a list, this test fails rather than quietly
-        // passing for the wrong reason.
+        // The assertion that makes this test mean anything. The front row's ids are on
+        // the bar whether or not a computer has spoken, so checking only for them passes
+        // either way. `mock-deploy` is a command this mock owns and this phone has never
+        // heard of, so its absence is what says nothing was received — and if that
+        // computer ever did send a list, this test fails rather than quietly passing for
+        // the wrong reason.
         XCTAssertFalse(
             app.buttons["toolbar-mock-deploy"].exists,
-            "the computer sent its own list after all — this test proves nothing about the fallback"
+            "the computer sent its own list after all — this test proves nothing about the empty case"
         )
-        capture(app, name: "15-old-desktop-fallback")
+        capture(app, name: "15-computer-with-no-commands")
     }
 
     /// What the computer offers follows the user's edits.
@@ -1357,17 +1360,19 @@ final class TerminalFlowUITests: XCTestCase {
             "the phone is still showing the old wording: \(app.buttons["toolbar-fresh"].label)"
         )
 
-        // Deleted, leaving a computer that has said it has nothing — which is an empty
-        // bar, not the built-in fallback. The fallback is for a computer that cannot
-        // describe itself at all, and inventing four buttons here would offer commands
-        // this computer never had.
+        // Deleted, leaving a computer that has said it has nothing of the user's — which
+        // empties the commands and nothing else. Inventing a command here would offer one
+        // this computer never had; the front row is not invented, and stays.
         try setMockToolbar([])
         XCTAssertTrue(
             app.buttons["toolbar-fresh"].waitForNonExistence(timeout: 15),
             "a command deleted on the computer is still on the phone"
         )
         XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "the keyboard button is not this phone's own and must stay")
-        XCTAssertFalse(app.buttons["toolbar-enter"].exists, "an empty list fell back to invented buttons")
+        XCTAssertTrue(
+            app.buttons["toolbar-enter"].waitForExistence(timeout: 15),
+            "the phone's own front row went missing when the computer had nothing to say"
+        )
         capture(app, name: "14-toolbar-empty")
 
         // Left how it was found: the mock outlives this test, and the ones after it
@@ -1686,9 +1691,10 @@ final class TerminalFlowUITests: XCTestCase {
 
     /// A computer whose owner has added nothing of their own says so.
     ///
-    /// The common case, and the one this segment is named for. With nothing but the
-    /// built-ins — which live on the bar, one swipe away — this segment has nothing to
-    /// show, and saying that in place beats an empty card with no explanation.
+    /// The common case, and the one this segment is named for. With nothing the user
+    /// wrote — the mock's built-ins are the phone's own keys, which live on the bar one
+    /// swipe away — this segment has nothing to show, and saying that in place beats an
+    /// empty card with no explanation.
     func testThePanelSaysWhenThereAreNoCustomCommands() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments

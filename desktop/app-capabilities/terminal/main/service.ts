@@ -1415,22 +1415,19 @@ export function createTerminalService(deps: {
   }
 
   /**
-   * The buttons a phone is shown for this computer: the built-ins followed by the
-   * user's own, in the order the desktop draws them.
+   * The buttons a phone is shown for this computer: the user's own entries, in the
+   * order the desktop lists them.
+   *
+   * The computer's built-ins are deliberately absent. Each end draws its own front
+   * row — the phone's is not the computer's, and the reasoning is in `mobile-toolbar.ts`
+   * — so the only list the two share is the one the user authored.
    *
    * Read by the mobile gateway, which runs in this process. Deliberately not an IPC
    * operation and not a capability: nothing outside the desktop asks for it, so it
    * would only widen the surface the app advertises.
-   *
-   * The platform is this process's own, not a caller's: which built-ins exist is a
-   * fact about the computer, not about who is asking.
    */
   function listMobileToolbarButtons(): readonly MobileToolbarButton[] {
-    return projectMobileToolbarButtons({
-      custom: listCustomToolbarActions(),
-      platform: process.platform,
-      keyBytes: KEY_BYTES,
-    })
+    return projectMobileToolbarButtons(listCustomToolbarActions())
   }
 
   /**

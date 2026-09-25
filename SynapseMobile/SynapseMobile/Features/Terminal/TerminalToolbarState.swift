@@ -1,54 +1,78 @@
 import Foundation
 
-/// Which buttons the accessory bar shows, and for which computer.
+/// Which buttons the accessory bar shows.
 ///
-/// The one question this has to answer is the one a missing message makes ambiguous:
-/// "this computer has no buttons" and "this computer is too old to say" are different
-/// answers, and a phone that confuses them shows an empty bar in the second case — which,
-/// with no keyboard of its own, means a TUI cannot be confirmed at all.
+/// The bar is two lists, and only the second one is anybody else's.
 ///
-/// So the rule is: a computer that has sent `mobile.toolbar` decides this completely,
-/// including by sending an empty list, and only a computer that has never sent one falls
-/// back. A single slot is enough to say that, because the message carries its own sender
-/// and the question is always about the computer currently being viewed.
+/// The **front row** is this phone's own, written here rather than sent, because a
+/// phone's front row is not a computer's: it needs arrows and `Tab` where a computer
+/// has a keyboard for them. Deriving it from the computer meant every key the phone
+/// needed was first something the computer had to be taught.
+///
+/// Behind it come the **commands the user wrote on their computer** — the only buttons
+/// that cross the wire. A computer that has sent `mobile.toolbar` decides that list
+/// completely, including by sending an empty one; a computer that has never sent one
+/// has nothing of the user's to show. Either way the bar is never empty, which is the
+/// property that matters: a phone with no keyboard of its own and an empty bar cannot
+/// answer a TUI at all.
 struct TerminalToolbarState: Equatable {
-    private var buttons: [MobileToolbarButton] = []
+    private var custom: [MobileToolbarButton] = []
     private var ownerDesktopClientInstanceId: String?
 
     /// Adopted whatever computer sent it, rather than dropped when it is not the one on
     /// screen: a `sync` goes to whichever computer is selected, so a message for another
     /// one is an earlier answer arriving late, not an error. Holding it costs a slot and
     /// saves a round trip if the user switches back.
+    ///
+    /// Only the user's own entries are kept. Everything a computer sends today is
+    /// `custom`, but a computer from before this split sends its built-ins too — its own
+    /// front row, which this phone draws for itself. Keeping them would draw return,
+    /// `Ctrl+C` and the two slash commands twice.
     mutating func adopt(_ payload: MobileToolbarPayload) {
-        buttons = payload.buttons
+        custom = payload.buttons.filter { $0.group == .custom }
         ownerDesktopClientInstanceId = payload.desktopClientInstanceId
     }
 
     /// Cleared on sign-out: these are another account's computers' commands.
+    ///
+    /// The front row is deliberately left alone — it belongs to the phone rather than
+    /// to the account, and signing out does not unteach it how to press return.
     mutating func reset() {
-        buttons = []
+        custom = []
         ownerDesktopClientInstanceId = nil
     }
 
     func buttons(forSelected desktopClientInstanceId: String?) -> [MobileToolbarButton] {
         guard let desktopClientInstanceId,
               ownerDesktopClientInstanceId == desktopClientInstanceId
-        else { return Self.fallback }
-        return buttons
+        else { return Self.frontRow }
+        return Self.frontRow + custom
     }
 
-    /// What the bar shows for a computer that cannot describe its own buttons.
+    /// The keys this phone keeps in its own code, in the order the bar draws them.
     ///
-    /// The desktop's built-ins minus `Clear`, which clears the desktop's own renderer and
-    /// never reaches the terminal — drawn here it would appear to do nothing, because the
-    /// next frame would paint the cleared lines straight back.
+    /// Arrows and `Tab` lead because they are what a TUI's option list is answered with,
+    /// then `回车` to commit the answer, then the interrupt and the two slash commands.
+    /// They are here rather than only on the keyboard panel because choosing an option
+    /// is the commonest thing a user does in a terminal on a phone, and that choice
+    /// should not cost a panel opening first.
     ///
-    /// 「回车」 is in here although an older computer has no such button. It is harmless
-    /// there, and a phone without it cannot answer anything.
-    static let fallback: [MobileToolbarButton] = [
+    /// `Ctrl+C` and the slash commands keep the ids they had when a computer sent them,
+    /// so the tests that press them keep finding them. They are the phone's own now:
+    /// the computer defines its front row for itself, and this is ours.
+    static let frontRow: [MobileToolbarButton] = [
+        MobileToolbarButton(id: "arrow-up", label: "↑", group: .key, action: .key(.arrowUp)),
+        MobileToolbarButton(id: "arrow-down", label: "↓", group: .key, action: .key(.arrowDown)),
+        MobileToolbarButton(id: "tab", label: "Tab", group: .key, action: .key(.tab)),
         MobileToolbarButton(id: "enter", label: "回车", group: .key, action: .key(.enter)),
         MobileToolbarButton(id: "interrupt", label: "Ctrl+C", group: .key, action: .key(.controlC)),
-        MobileToolbarButton(id: "slash-exit", label: "/exit", group: .command, action: .text("/exit", pressEnter: true)),
-        MobileToolbarButton(id: "slash-clear", label: "/clear", group: .command, action: .text("/clear", pressEnter: true)),
+        MobileToolbarButton(
+            id: "slash-exit", label: "/exit", group: .command,
+            action: .text("/exit", pressEnter: true)
+        ),
+        MobileToolbarButton(
+            id: "slash-clear", label: "/clear", group: .command,
+            action: .text("/clear", pressEnter: true)
+        ),
     ]
 }
