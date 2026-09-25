@@ -28,6 +28,8 @@ import type {
 } from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
+  DesktopNotificationOutcome,
+  DesktopNotificationSource,
   DriveAnnotationCommentDto,
   DriveAnnotationThreadDto,
   DriveAccessSettingsUpdateInput,
@@ -475,17 +477,24 @@ export class AccountService {
     )
   }
 
-  /** 把一条消息写进账号消息中心。未登录或离线时不发；请求本身失败时抛错。 */
+  /**
+   * 把一条消息写进账号消息中心。
+   *
+   * 返回它**为什么没写进去**，好让调用方留下可查的痕迹：未登录与离线都不发，请求本身失败时
+   * 抛错。`sent` 只表示服务端接受了这条消息，不表示任何设备已经显示它。
+   */
   async createInternalNotification(input: {
-    source: "system-notifier" | "terminal-complete"
+    source: DesktopNotificationSource
     sourceKey?: string
     title: string
     body: string
     targetId?: string
     deviceId?: string
-  }): Promise<void> {
-    if (this.state.status !== "authenticated" || this.state.connectivity !== "online") return
+  }): Promise<DesktopNotificationOutcome> {
+    if (this.state.status !== "authenticated") return "not_signed_in"
+    if (this.state.connectivity !== "online") return "offline"
     await this.requestAuthenticatedJson<{ id: string }>("POST", `${apiBaseUrl()}/notifications/internal`, input, "通知同步失败。")
+    return "sent"
   }
 
   async getNotification(id: string) {

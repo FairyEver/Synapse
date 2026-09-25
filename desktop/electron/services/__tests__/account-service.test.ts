@@ -156,6 +156,43 @@ describe("AccountService", () => {
     vi.useRealTimers()
   })
 
+  it("reports why a desktop notification was not written", async () => {
+    const signedOut = await createTestAccountService()
+    await expect(signedOut.service.createInternalNotification({
+      source: "system-notifier", title: "标题", body: "正文",
+    })).resolves.toBe("not_signed_in")
+
+    const offline = await createTestAccountService({
+      fetch: vi.fn(async () => { throw new Error("connect ECONNREFUSED") }) as typeof fetch,
+    })
+    await offline.namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await expect(offline.service.refreshFromStorage())
+      .resolves.toMatchObject({ status: "authenticated", connectivity: "offline" })
+    await expect(offline.service.createInternalNotification({
+      source: "system-notifier", title: "标题", body: "正文",
+    })).resolves.toBe("offline")
+  })
+
+  it("reports sent after the account accepts a desktop notification", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
+      }
+      if (String(url).includes("/notifications/")) return jsonResponse({ id: "message-1" })
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as unknown as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await service.refreshFromStorage()
+
+    await expect(service.createInternalNotification({
+      source: "system-notifier", title: "标题", body: "正文",
+    })).resolves.toBe("sent")
+  })
+
   it("starts login by persisting an attempt and opening the browser", async () => {
     const { namespace, openExternal, service } = await createTestAccountService()
     const result = await service.startLogin()
