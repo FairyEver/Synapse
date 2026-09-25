@@ -34,6 +34,10 @@ struct DriveUploaderTests {
         var putError: Error = APIError(status: 403, code: "expired", message: "上传地址已过期，请重试。")
         /// PUT 卡住不走。取消与后台那两条用例要在「正在传」的当口动手。
         var holdPuts = false
+        /// prepare 卡到这一趟被取消为止才把票交回来。
+        var holdsPrepareUntilCancelled = false
+        /// 放掉一条预留时卡到这一趟被取消为止（重签之前放旧预留那一下）。
+        var holdsReleaseUntilCancelled = false
         /// 每一次 PUT 报的分数，按会话名给。乱序到达也照原样报。
         var fractions: [String: [Double]] = [:]
         /// PUT 里要做点别的。
@@ -73,6 +77,7 @@ struct DriveUploaderTests {
             prepareCounts[name] = attempt
             let sessionId = "s\(attempt)-\(name)"
             itemIds[sessionId] = "item-\(name)"
+            if holdsPrepareUntilCancelled { await waitForCancellation() }
             return APIClient.DriveUploadTicket(
                 sessionId: sessionId,
                 item: APIClient.DriveItem(id: "item-\(name)", name: name, size: String(size)),
@@ -121,6 +126,20 @@ struct DriveUploaderTests {
 
         func cancel(sessionId: String) async throws {
             released.append(sessionId)
+            if holdsReleaseUntilCancelled { await waitForCancellation() }
+        }
+
+        /// 停在这里，直到**这一趟上传**被取消。
+        ///
+        /// 用 `try?` 吞掉 `CancellationError`，所以等待本身不理会取消：真实世界里用户按了
+        /// 取消，那个请求的响应照样会回来。要的正是「票已经在手上、这一趟却已经取消」那一
+        /// 瞬——它才是「预留被漏掉」和「同一条会话被放两次」两个窗口的入口。
+        private func waitForCancellation() async {
+            // 有上界：等不到就往下走，让后面那条断言自己去失败，而不是把测试挂在这里。
+            for _ in 0..<400 {
+                if Task.isCancelled { return }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
         }
     }
 
@@ -284,6 +303,46 @@ struct DriveUploaderTests {
         // 剩下的两项还卡在 PUT 上（那一趟本来就是「一直不走」）；把它们也收掉，
         // 免得测试结束之后还有任务在跑。
         for item in uploader.items { await uploader.cancel(item.id) }
+    }
+
+    /// prepare 还在飞的时候取消：票回来时这一趟已经取消了，它占的那条预留也得放掉。
+    ///
+    /// 「点了上传马上又不要了」正好落在这个窗口里：票是不带取消语义回来的（服务端那一步
+    /// 已经建了会话、按声明大小记了账），拿到票却因为已经取消直接 return 的话，`cancel`
+    /// 从 `sessions` 里读不到它，就只能等服务端十五分钟的过期清扫。
+    @Test func cancelDuringPrepareReleasesTheReservationItNeverUsed() async throws {
+        let server = FakeDrive()
+        server.holdsPrepareUntilCancelled = true
+        let uploader = uploader(server)
+
+        uploader.enqueue(files: [file("a.md")], parentId: "folder-1", using: client)
+        await waitUntil { server.prepares.count == 1 }
+        let item = try #require(uploader.items.first)
+
+        // prepare 要等到这一趟被取消才把票交回来，所以这一句返回时正是「票到手、已取消」。
+        await uploader.cancel(item.id)
+
+        #expect(server.released == ["s1-a.md"])
+        #expect(server.delivered.isEmpty)
+        #expect(uploader.items.isEmpty)
+    }
+
+    /// 取消落在「重签」窗口里：旧那条预留已经放掉了，不能再放第二次。
+    @Test func cancelDuringResignDoesNotReleaseTheSameSessionTwice() async throws {
+        let server = FakeDrive()
+        server.failingSessions = ["s1-a.md"]
+        server.holdsReleaseUntilCancelled = true
+        let uploader = uploader(server)
+
+        uploader.enqueue(files: [file("a.md")], parentId: nil, using: client)
+        // 已经在放旧预留了（403 之后重签之前那一下）。
+        await waitUntil { server.released.count == 1 }
+        let item = try #require(uploader.items.first)
+
+        await uploader.cancel(item.id)
+
+        #expect(server.released == ["s1-a.md"])
+        #expect(uploader.items.isEmpty)
     }
 
     // MARK: - 上传地址过期

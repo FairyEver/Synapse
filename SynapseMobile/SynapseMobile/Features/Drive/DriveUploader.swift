@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import os
 import UIKit
 
@@ -85,6 +86,11 @@ struct DriveUploadItem: Identifiable, Equatable {
 ///
 /// 队列、进度与覆盖确认都在这里，视图只读 `items`：一项上传的全部过程（排队、要进度、
 /// 暂停、失败、传完）都发生在同一个地方，界面上那一行就是它的一个切面。
+///
+/// `@Observable` 是那句「视图只读 `items`」成立的前提：上传那一组要看着进度条往前走、
+/// 看着某一项从「上传中」变成「待确认覆盖」。普通 class 的 `private(set) var` 改动不会
+/// 触发 SwiftUI 重绘，症状是进度行安安静静地不刷新。
+@Observable
 @MainActor
 final class DriveUploader {
     /// 同时最多几项在传。
@@ -120,7 +126,9 @@ final class DriveUploader {
     /// 判据是「这一趟在途中切成后台过」，不是「现在在不在后台」：失败的回调常常要等
     /// App 回到前台才轮得到执行，那时它看起来已经在前台了。
     private var leftAppAt: ContinuousClock.Instant?
-    private var backgroundObserver: NSObjectProtocol?
+    /// 观察者凭据不是界面状态，也**必须**是存储属性：`deinit` 不是 main actor 上的，
+    /// 而 `@Observable` 会把普通属性换成 main actor 隔离的取值器，那里读不到。
+    @ObservationIgnored private var backgroundObserver: NSObjectProtocol?
 
     init(
         transport: DriveUploadTransport? = nil,
@@ -261,19 +269,24 @@ final class DriveUploader {
             fail(id, message(for: error, since: startedAt))
             return
         }
+        // 票一到手就登记，**之后**才看取消：`cancel(_:)` 是照 `sessions` 找会话的，先 return
+        // 的话这张票再没人知道，而服务端那一步已经建了会话、按声明大小把配额记上了账——
+        // 那份预留只能等十五分钟的过期清扫。取消检查与登记之间的顺序是这里唯一要紧的事。
+        sessions[id] = ticket.sessionId
         guard !Task.isCancelled else { return }
 
         // 第一次 prepare（没带覆盖授权）而服务端说目标位置已经有同名文件：先停下来问一句。
         // 它给的那条预留随后作废——确认之后要重新 prepare，这一条用不上了，占着配额不放
-        // 就只有等服务端的过期清扫。
+        // 就只有等服务端的过期清扫。放掉之前先从 `sessions` 里摘掉，免得 `cancel` 拿着一条
+        // 已经放掉的会话再放一次。
         if expectedItemId == nil, let target = ticket.overwrite {
+            sessions[id] = nil
             await release(ticket.sessionId)
             guard !Task.isCancelled else { return }
             setState(id, .awaitingOverwrite(target))
             return
         }
 
-        sessions[id] = ticket.sessionId
         guard let delivered = await transfer(
             id, file: file, first: ticket,
             parentId: parentId, expectedItemId: expectedItemId, startedAt: startedAt
@@ -281,11 +294,16 @@ final class DriveUploader {
 
         do {
             let uploaded = try await transport.complete(delivered.sessionId)
-            guard !Task.isCancelled else { return }
+            // 会话已经变成云盘里那个文件了，`sessions` 里不该再留着它：取消要是正好落在
+            // 这一刻，`cancel` 会拿一条已经用掉的会话去放配额（服务端只回一句「上传会话
+            // 不存在」，但那条「没放掉」的预警日志是假的）。
             sessions[id] = nil
+            guard !Task.isCancelled else { return }
             setState(id, .completed(itemId: uploaded.id))
         } catch {
             guard !Task.isCancelled else { return }
+            // 这里留着 `sessions` 不动：complete 被取消时服务端到底收没收到这条请求是不定的，
+            // 留给 `cancel` 去试一次，真还活着的那条预留才有机会被放掉。
             await release(delivered.sessionId)
             sessions[id] = nil
             fail(id, message(for: error, since: startedAt))
@@ -322,13 +340,17 @@ final class DriveUploader {
             } catch {
                 guard !Task.isCancelled else { return nil }
                 guard !resigned, Self.isExpiredUploadAddress(error) else {
-                    await release(ticket.sessionId)
+                    // 同样先摘掉再放（见重签那一段）：`cancel` 不该拿着一条已经放掉的会话
+                    // 再放一次。
                     sessions[id] = nil
+                    await release(ticket.sessionId)
                     fail(id, message(for: error, since: startedAt))
                     return nil
                 }
                 resigned = true
-                // 这一条预留连地址一起作废了：换一条新的，旧的放掉。
+                // 这一条预留连地址一起作废了：换一条新的，旧的放掉。先摘掉 `sessions` 再放：
+                // 取消要是正好落在这一小段里，`cancel` 不该拿着一条已经放掉的会话再放一次。
+                sessions[id] = nil
                 await release(ticket.sessionId)
                 guard !Task.isCancelled else { return nil }
                 do {
