@@ -281,7 +281,7 @@ Use **system_notifier_notification_trigger** when the Workflow author explicitly
 - Bind every referenced variable explicitly. Binding or interpolation failure happens before notification acceptance and fails the node without notifying.
 - After interpolation, title and body use the same strict single-line, no-edge-whitespace, 64/256-Unicode-code-point contract as the direct App tool.
 - Success returns primary output `{"success":true}` and structured output `{ success: true }`. This means the valid request was accepted; it does not prove delivery or display.
-- The node carries no API key: the message travels on the desktop login. Sending needs a signed-in, online desktop, and the user's send switch can be off; when the message cannot be created, Synapse falls back to one local notification on the computer that ran the Workflow.
+- The node carries no API key: the message travels on the desktop login. Sending needs a signed-in, online desktop, and the user's send switch can be off; when the message cannot be created, nothing happens and nothing is backfilled.
 - Do not add platform options, retries, notification ids, idempotency keys, or delivery checks. Each accepted run is an independent event.
 - The direct-Agent proactive notification rules in `app/index.md` do not limit an explicitly configured Workflow node.
 

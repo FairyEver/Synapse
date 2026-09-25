@@ -16,7 +16,7 @@ It is a generic, one-way, non-interactive notifier. The account-level message ce
 
 > **2026-09-25 修订（二）：只剩发送一条路。** 第一次修订之后，一次触发同时做两件事——自己弹本机原生通知，再发一条账号消息——而发送时带着本机 `deviceId`，正好把「收到广播后再弹」这条既有回显路径（`live-connection-service` 的 `notification.changed` 分支按 `deviceId === clientInstanceId` 去重）挡掉了。两条路径互相知道对方存在，才需要那套「本机已弹就不再弹」的约定。
 >
-> 现在触发只负责发送，本机弹窗由「收到那条消息」产生：发送不带 `deviceId`，发起的那台电脑和账号下其他电脑走同一条路；实时连接不再自己构造 `Notification`，改调 `presentAccountNotification`。`syncToAccount` 因而是**发送总闸**，`enabled` / `silent` 描述这台电脑收到消息时的呈现。发送根本没有发生时（未登录、离线、请求失败）仍在本机兜底弹一次，见「Core processing」。第二次修订仍不改稳定身份、公开契约、成功语义、限流与审计边界。
+> 现在触发只负责发送，本机弹窗由「收到那条消息」产生：发送不带 `deviceId`，发起的那台电脑和账号下其他电脑走同一条路；实时连接不再自己构造 `Notification`，改调 `presentAccountNotification`。`syncToAccount` 因而是**发送总闸**，`enabled` / `silent` 描述这台电脑收到消息时的呈现。**发不出去就是发不出去**：未登录或离线时账号里不会有这条消息，本机也不会另弹一条。第二次修订仍不改稳定身份、公开契约、成功语义、限流与审计边界。
 
 ## Stable identities
 
@@ -71,17 +71,16 @@ For each valid call the service:
 
 1. Attempts one content-free audit record.
 2. Reads the current immutable settings snapshot synchronously. An unavailable snapshot fails closed.
-3. Returns fixed success without touching the limiter when `syncToAccount` is off: that switch is the send gate, so an accepted call that is switched off sends nothing and shows nothing.
+3. Returns fixed success without touching the limiter when `syncToAccount` is off: that switch is the send gate, so an accepted call that is switched off sends nothing.
 4. Atomically acquires one identity-bucket and one global-bucket token.
-5. Sends the message to the account message center. The send reports whether the message was actually created: a signed-out or offline desktop returns "not created", and a failed request throws.
-6. Falls back to one local native notification only when the message was not created, and only when `enabled` is on. A created message is never shown locally by the trigger path.
-7. Returns fixed success immediately.
+5. Sends the message to the account message center. A signed-out or offline desktop sends nothing; a failed request is recorded as one diagnostic.
+6. Returns fixed success immediately. The trigger path constructs no notification and shows nothing.
 
-The local fallback exists for the case the single path cannot cover: with nothing in the account there is nothing to receive, so the one computer that asked for the notification still shows it. It cannot double-fire on a successful send. A rare race — the server created the message but the response was lost — can produce both the fallback and the received copy; that is inside the accepted fire-and-forget boundary.
+A send that cannot happen produces nothing at all: with no message in the account there is nothing for any device to receive, and the computer that asked shows nothing either. Running the caller already implies a running, signed-in desktop with a live connection, so this is a boundary the product accepts rather than a case to compensate for. Nothing is queued, backfilled, or retried.
 
 A test call never enters this path. `presentTestNotification` validates the fixed content, audits it under the fixed system-app identity, acquires one limiter token, and shows locally regardless of `enabled`, using the current silent value or `false` when unavailable. It never sends.
 
-Incoming account messages take a separate entry point. `presentAccountNotification({ title, body })` is called by the live connection for every account message that passes its own message-level filters, and shows it when `enabled` is on, with the current `silent` value. It does not consume limiter tokens: the send side already bounds the rate.
+Incoming account messages take a separate entry point. `presentAccountNotification({ title, body })` is called by the live connection for every account message that passes its own message-level filters, and shows it when `enabled` is on, with the current `silent` value. It does not consume limiter tokens: the send side already bounds the rate. This is the only place the trigger's own message can come back as a native notification on the computer that asked.
 
 The core service has no persistent queue, retry, delayed delivery, crash recovery, replay, idempotency key, content deduplication, or cancellation handle. The separate message center assigns an ID and retains successful online sends for 90 days. Workflow cancellation is honored before interpolation and again after validation immediately before core acceptance. Cancellation after acceptance cannot revoke the attempt or fixed success.
 
@@ -105,7 +104,7 @@ The only persisted record is the optional singleton:
 { schemaVersion: 2, enabled: boolean, silent: boolean, syncToAccount: boolean }
 ```
 
-`syncToAccount` is the send gate. `enabled` and `silent` describe how this computer presents account messages: whether a native notification appears at all — for an incoming message, and for the local fallback — and whether it makes a sound. The presentation switches do not gate sending, so a user who is away from the computer can keep the machine quiet without losing phone delivery.
+`syncToAccount` is the send gate. `enabled` and `silent` describe how this computer presents incoming account messages: whether a native notification appears at all, and whether it makes a sound. The presentation switches do not gate sending, so a user who is away from the computer can keep the machine quiet without losing phone delivery.
 
 Storage reads revive the v1 singleton (`{ schemaVersion: 1, enabled, silent }`) as v2 with `syncToAccount` set to the old `enabled`. That is what the old record effectively did, so an upgrade never starts sending for a user who had switched notifications off. The namespace declares the v1 → v2 migration and a JSON envelope reviver, matching `app.terminal.agent-notification-settings`.
 
@@ -132,7 +131,7 @@ MCP identity uses trusted source, client, controller, and actor context in the f
 
 Every valid accepted call attempts one audit event with action `notification.trigger`, resource `app.system_notifier.notification.trigger`, outcome `allowed`, trusted actor, source, title/body code-point lengths, and the applicable trusted MCP or Workflow identifiers. The system-app test attempts the same audit under its fixed UI actor. Notification content is not recorded in audit or logs. When the send succeeds, the complete title and body are stored in plaintext in the account's server-side message history and may appear in another device's lock-screen preview. Presenting an incoming account message writes no audit event of its own; that message's own creation was audited where it was created. Audit failure is not retried.
 
-A send that did not create a message records one `notification_sync` diagnostic: `sync_failed` when the request threw, and no diagnostic at all for the signed-out or offline case, which returns "not created" without throwing.
+A send whose request threw records one `notification_sync` / `sync_failed` diagnostic. The signed-out or offline case sends nothing and records nothing: it is a normal no-op, not a failure.
 
 The `core.system-notifier` logger accepts only fixed stages and reasons plus aggregated counts. It never records raw errors, stacks, notification content, or identity keys. Health exposes only `healthy` or `degraded` with fixed reasons and is not surfaced through MCP, Workflow, or the App UI.
 
