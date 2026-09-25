@@ -372,6 +372,13 @@ final class SynapseAppModel {
     /// 每一屏都从这里取数据。
     let drive = DriveStore()
 
+    /// 云盘的上传队列。
+    ///
+    /// 挂在模型上而不是浏览那一屏上：队列比那一屏活得久 —— 用户选完文件可以退出去看别的，
+    /// 回来时进度、失败与「待确认覆盖」还都在（Spec §5.3 的那一组上传行）。视图只读
+    /// `items`，队列自己管并发、重试与覆盖确认。
+    let driveUploader = DriveUploader()
+
     /// 正在录的那一条。
     ///
     /// 挂在模型上而不是录音页上，因为它比那一屏活得久：录音页收起之后它还要继续录，
@@ -754,6 +761,77 @@ final class SynapseAppModel {
     /// 拉不到分享列表不影响那一层能做的事，下面几条判据还在。
     func driveLoadShares() async {
         await drive.loadShares(using: apiClient)
+    }
+
+    // MARK: - 云盘：浏览与上传
+
+    /// 浏览那几条。
+    ///
+    /// 与上面几条同一条理由（`apiClient` 是私有的），但它们**必须进 `DriveStore`** ——
+    /// 现在在哪一层、加载标志、错误行、层的代次都只在 store 上有一份，浏览那一屏自己再接
+    /// 一遍网络层就会多出第二份「我在哪」的事实。所以这里全是薄透传，一行到一个 store 方法。
+
+    /// 重取当前这一层。进屏、下拉刷新、以及任何一次变更之后都走它。
+    func driveReload() async {
+        await drive.reload(using: apiClient)
+    }
+
+    /// 续页。列表滚到最后一行时叫它。
+    func driveLoadMore() async {
+        await drive.loadMore(using: apiClient)
+    }
+
+    /// 下钻到一个文件夹。传进来的是文件时 store 什么都不改（文件点开是预览，不是一层）。
+    func driveOpen(itemId: String) async {
+        await drive.open(itemId: itemId, using: apiClient)
+    }
+
+    /// 回上一级。
+    func driveUp() async {
+        await drive.up(using: apiClient)
+    }
+
+    /// 面包屑跳转：第 0 级是「云盘」。
+    func driveJump(to index: Int) async {
+        await drive.jump(to: index, using: apiClient)
+    }
+
+    /// 用量。它只喂列表最底下那一行，失败只记日志（`DriveStore.loadUsage`）。
+    func driveLoadUsage() async {
+        await drive.loadUsage(using: apiClient)
+    }
+
+    /// 把选中的几项移入回收站。可恢复，所以不二次确认（与公开素材那一屏同一条）。
+    @discardableResult
+    func driveTrashItems(_ items: [DriveBrowserItem]) async -> DriveBatchOutcome {
+        await drive.trash(items, using: apiClient)
+    }
+
+    /// 上传那一组：入队、覆盖确认、重试、取消、从这一组里拿掉。
+    ///
+    /// 队列在 `driveUploader` 上（见那里的说明），这几条只是把它接到网络上：视图不碰
+    /// `apiClient`，也不该自己起一条上传通路。
+
+    func driveEnqueueUploads(_ files: [PickedFile], parentId: String?) {
+        driveUploader.enqueue(files: files, parentId: parentId, using: apiClient)
+    }
+
+    /// 用户点头覆盖那个同名文件。队列里那一项这才开始传。
+    func driveConfirmUploadOverwrite(_ id: String) {
+        driveUploader.confirmOverwrite(id)
+    }
+
+    func driveRetryUpload(_ id: String) {
+        driveUploader.retry(id)
+    }
+
+    func driveCancelUpload(_ id: String) async {
+        await driveUploader.cancel(id)
+    }
+
+    /// 从这一组里拿掉（传完了、或者用户不想要这一条了）。
+    func driveDismissUpload(_ id: String) {
+        driveUploader.dismiss(id)
     }
 
     // MARK: - 云盘：回收站 / 公开素材 / 分享列表
