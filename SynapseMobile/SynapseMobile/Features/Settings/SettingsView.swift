@@ -10,7 +10,7 @@ struct SettingsView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(TerminalDisplaySettings.self) private var display
     @Environment(\.openURL) private var openURL
-    @AppStorage(BadgePreference.key) private var iconBadge = true
+    @AppStorage(NotificationBadgePreference.key) private var iconBadge = true
     @State private var showingSignOut = false
     @State private var microphone: MeetingMicrophonePermission = .undetermined
     /// `nil` 就是还没问到 —— 权限查询是异步的，而一个还没问到的答案不该先画一句

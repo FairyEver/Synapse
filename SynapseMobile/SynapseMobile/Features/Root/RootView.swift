@@ -22,7 +22,7 @@ struct RootView: View {
     /// 和「我的 → 通知」。
     @State private var showingNotifications = false
     /// 「我的 → 通知」里那一个开关。关掉只是不往 App 图标上写数字，别的都不受影响。
-    @AppStorage(BadgePreference.key) private var iconBadge = true
+    @AppStorage(NotificationBadgePreference.key) private var badgeEnabled = true
     @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
     /// 一个还没能判定的打开终端请求。
     ///
@@ -119,8 +119,10 @@ struct RootView: View {
             )
             model.handleScenePhase(phase == .active)
         }
-        .onChange(of: model.notifications.unreadCount) { _, _ in updateIconBadge() }
-        .onChange(of: iconBadge) { _, _ in updateIconBadge() }
+        .onChange(of: model.notifications.unreadCount) { _, count in writeBadge(unreadCount: count) }
+        .onChange(of: badgeEnabled) { _, _ in
+            writeBadge(unreadCount: model.notifications.unreadCount)
+        }
     }
 
     /// 会话列表写给导航的那条选择：读的是真相，写的是请求。
@@ -233,7 +235,7 @@ struct RootView: View {
         requestTerminal(sessionId, from: .homePending)
     }
 
-    /// 把未读数写到 App 图标上。
+    /// 写作 App 图标角标的数字。
     ///
     /// 开关关掉时写 0 —— 也就是把已经画上去的数字擦掉，而不是什么都不做：什么都不做的话，
     /// 关掉它的那一刻角标还挂在那儿。
@@ -242,10 +244,10 @@ struct RootView: View {
     /// notifications at all. This app treats push as best effort — everything works
     /// without it — so a refusal is not an error worth surfacing, and there is no UI
     /// here to surface it in anyway.
-    private func updateIconBadge() {
-        let count = iconBadge ? model.notifications.unreadCount : 0
+    private func writeBadge(unreadCount: Int) {
+        let badge = NotificationBadgePreference.badgeCount(unreadCount: unreadCount)
         Task {
-            try? await UNUserNotificationCenter.current().setBadgeCount(count)
+            try? await UNUserNotificationCenter.current().setBadgeCount(badge)
         }
     }
 
