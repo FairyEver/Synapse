@@ -182,7 +182,7 @@ Rules:
 - Pass exactly one non-empty, single-line `title` and `body` with no leading or trailing whitespace. The title limit is 64 Unicode code points and the body limit is 256.
 - Keep Token values, passwords, verification codes, private keys, complete local paths, and other lock-screen-sensitive content out of both fields. The message is stored in plain text on the server and can appear on a lock screen.
 - `{ success: true }` means Synapse accepted the fire-and-forget request. It does not mean the message was created, delivered, displayed, clicked, or read.
-- User settings are invisible to you. The send switch can be off, in which case nothing happens anywhere. Sending needs a signed-in, online desktop; when it cannot happen, nothing happens at all and nothing is backfilled later. Each machine also decides for itself whether to show account messages as native notifications.
+- User settings are invisible to you. The send switch can be off, in which case nothing happens anywhere. Sending needs a signed-in, online desktop; when it cannot happen, nothing happens at all and nothing is backfilled later. Each machine also decides for itself whether to show account messages as native notifications. A call that sent nothing is indistinguishable from a successful one on your side: Synapse records why in its local diagnostics, so never assert that the user received anything.
 - Do not add platform-specific notification fields, caller identity fields, a notification id, an idempotency key, or a retry loop.
 - These proactive-call rules apply to direct Agent tool use. A Workflow author who explicitly places a System Notifier node has already chosen that node's notification behavior.
 

@@ -18,6 +18,12 @@ It is a generic, one-way, non-interactive notifier. The account-level message ce
 >
 > 现在触发只负责发送，本机弹窗由「收到那条消息」产生：发送不带 `deviceId`，发起的那台电脑和账号下其他电脑走同一条路；实时连接不再自己构造 `Notification`，改调 `presentAccountNotification`。`syncToAccount` 因而是**发送总闸**，`enabled` / `silent` 描述这台电脑收到消息时的呈现。**发不出去就是发不出去**：未登录或离线时账号里不会有这条消息，本机也不会另弹一条。第二次修订仍不改稳定身份、公开契约、成功语义、限流与审计边界。
 
+> **2026-09-25 修订（三）：三处「名不副实」的修正。**
+>
+> 1. **没发出去不再无声无息。** 发送被关掉、设置读不出来、未登录、离线这四种情况以前只回固定成功、不留任何痕迹，用户问「AI 说通知我了但我没收到」时无从查起。现在每一次「已接受但没有发出」的调用都记一条 `notification_sync` 固定诊断，reason ∈ {`disabled`, `settings_unavailable`, `not_signed_in`, `offline`, `sync_failed`}。成功响应不因此改变：调用方仍然分不出「发了」和「没发」，能分出的是本地诊断。
+> 2. **写入入口按授权范围改名。** 桌面写自己账号队列的入口是 `POST /api/notifications/desktop`：路径说的就是它只吃桌面登录态、只吃桌面自己拥有的 source。`/api/notifications/internal` 是它从前叫的名字，已发布的桌面构建仍在用，保留为行为完全一致的兼容入口。source 表由 `@synapse/shared` 的 `DESKTOP_NOTIFICATION_SOURCES` 单一来源派生，服务端校验与桌面请求入参不可能漂移。
+> 3. **设置升 v3，字段名对上它门控的东西。** `enabled` / `syncToAccount` 改名 `localEnabled` / `sendEnabled`；迁移只搬值不改语义（v2 的 `enabled` → `localEnabled`、`syncToAccount` → `sendEnabled`；v1 那颗总开关同时喂给两个新字段）。界面标签不变。
+
 ## Stable identities
 
 - App ID: `system-notifier`
@@ -70,17 +76,19 @@ The core service is a main-process singleton registered independently of DataRep
 For each valid call the service:
 
 1. Attempts one content-free audit record.
-2. Reads the current immutable settings snapshot synchronously. An unavailable snapshot fails closed.
-3. Returns fixed success without touching the limiter when `syncToAccount` is off: that switch is the send gate, so an accepted call that is switched off sends nothing.
+2. Reads the current immutable settings snapshot synchronously. An unavailable snapshot fails closed and records one `notification_sync` / `settings_unavailable` diagnostic.
+3. Returns fixed success without touching the limiter when `sendEnabled` is off, recording one `notification_sync` / `disabled` diagnostic: that switch is the send gate, so an accepted call that is switched off sends nothing.
 4. Atomically acquires one identity-bucket and one global-bucket token.
-5. Sends the message to the account message center. A signed-out or offline desktop sends nothing; a failed request is recorded as one diagnostic.
+5. Sends the message to the account message center. A signed-out or offline desktop sends nothing and each records its own `notification_sync` diagnostic (`not_signed_in` / `offline`); a failed request records `sync_failed`.
 6. Returns fixed success immediately. The trigger path constructs no notification and shows nothing.
 
 A send that cannot happen produces nothing at all: with no message in the account there is nothing for any device to receive, and the computer that asked shows nothing either. Running the caller already implies a running, signed-in desktop with a live connection, so this is a boundary the product accepts rather than a case to compensate for. Nothing is queued, backfilled, or retried.
 
-A test call never enters this path. `presentTestNotification` validates the fixed content, audits it under the fixed system-app identity, acquires one limiter token, and shows locally regardless of `enabled`, using the current silent value or `false` when unavailable. It never sends.
+The diagnostics are the answer to "the Agent said it notified me and nothing arrived". They are aggregated counts on fixed stages and reasons, carry no content or raw errors, and are never returned to the caller: the public result keeps its fixed success for every one of those cases.
 
-Incoming account messages take a separate entry point. `presentAccountNotification({ title, body })` is called by the live connection for every account message that passes its own message-level filters, and shows it when `enabled` is on, with the current `silent` value. It does not consume limiter tokens: the send side already bounds the rate. This is the only place the trigger's own message can come back as a native notification on the computer that asked.
+A test call never enters this path. `presentTestNotification` validates the fixed content, audits it under the fixed system-app identity, acquires one limiter token, and shows locally regardless of `localEnabled`, using the current silent value or `false` when unavailable. It never sends.
+
+Incoming account messages take a separate entry point. `presentAccountNotification({ title, body })` is called by the live connection for every account message that passes its own message-level filters, and shows it when `localEnabled` is on, with the current `silent` value. It does not consume limiter tokens: the send side already bounds the rate. This is the only place the trigger's own message can come back as a native notification on the computer that asked.
 
 The core service has no persistent queue, retry, delayed delivery, crash recovery, replay, idempotency key, content deduplication, or cancellation handle. The separate message center assigns an ID and retains successful online sends for 90 days. Workflow cancellation is honored before interpolation and again after validation immediately before core acceptance. Cancellation after acceptance cannot revoke the attempt or fixed success.
 
@@ -101,14 +109,14 @@ The adapter is the only place a native notification is constructed for account m
 The only persisted record is the optional singleton:
 
 ```ts
-{ schemaVersion: 2, enabled: boolean, silent: boolean, syncToAccount: boolean }
+{ schemaVersion: 3, sendEnabled: boolean, localEnabled: boolean, silent: boolean }
 ```
 
-`syncToAccount` is the send gate. `enabled` and `silent` describe how this computer presents incoming account messages: whether a native notification appears at all, and whether it makes a sound. The presentation switches do not gate sending, so a user who is away from the computer can keep the machine quiet without losing phone delivery.
+`sendEnabled` is the send gate. `localEnabled` and `silent` describe how this computer presents incoming account messages: whether a native notification appears at all, and whether it makes a sound. The presentation switches do not gate sending, so a user who is away from the computer can keep the machine quiet without losing phone delivery.
 
-Storage reads revive the v1 singleton (`{ schemaVersion: 1, enabled, silent }`) as v2 with `syncToAccount` set to the old `enabled`. That is what the old record effectively did, so an upgrade never starts sending for a user who had switched notifications off. The namespace declares the v1 → v2 migration and a JSON envelope reviver, matching `app.terminal.agent-notification-settings`.
+Storage reads revive older singletons into v3 with the values carried across unchanged: v2's `enabled` → `localEnabled` and `syncToAccount` → `sendEnabled`; v1's single switch fed both, which is what that record effectively did, so an upgrade never starts sending for a user who had switched notifications off. The namespace declares the 1 → 2 and 2 → 3 migrations plus a JSON envelope reviver handling all three versions, matching `app.terminal.agent-notification-settings`.
 
-No record uses in-memory defaults `{ enabled: true, silent: false, syncToAccount: true }` without seeding storage. Startup corruption or the absence of any valid read marks the snapshot unavailable and normal triggers fail closed. A transient later read failure preserves the last valid snapshot but returns a load error to the App. `settings.get` and `settings.update` share one serial storage channel; triggers do not enter it. Update rereads the latest stored singleton, rejects corrupt or unreadable data instead of repairing it, writes a complete value, and replaces the snapshot only after persistence succeeds.
+No record uses in-memory defaults `{ sendEnabled: true, localEnabled: true, silent: false }` without seeding storage. Startup corruption or the absence of any valid read marks the snapshot unavailable and normal triggers fail closed. A transient later read failure preserves the last valid snapshot but returns a load error to the App. `settings.get` and `settings.update` share one serial storage channel; triggers do not enter it. Update rereads the latest stored singleton, rejects corrupt or unreadable data instead of repairing it, writes a complete value, and replaces the snapshot only after persistence succeeds.
 
 The App IPC surface is exactly:
 
@@ -141,8 +149,8 @@ System Notifier uses the existing single-instance system-app window. It is launc
 
 The centered single card contains only:
 
-- “发送通知” Switch (`syncToAccount`)
-- “本机通知” Switch (`enabled`)
+- “发送通知” Switch (`sendEnabled`)
+- “本机通知” Switch (`localEnabled`)
 - “静音通知” Switch (`silent`)
 - Outline “发送测试通知” button
 

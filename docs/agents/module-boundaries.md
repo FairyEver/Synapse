@@ -93,7 +93,7 @@
 
 - 账号消息中心的存储、投递、保留期和隐私边界见 `docs/superpowers/specs/2026-09-23-account-notification-center-design.md`。业务模块只提供安全摘要与目标 ID，消息中心负责历史与跨端状态。
 - Sound Notifier 是声音能力包，不是 System App；它只在运行 Synapse 的这台电脑上发声，不承担跨端触达。
-- System Notifier 是「通知用户」的能力，一次触发只有一个动作：把消息写进账号消息中心，由服务端投递给该账号所有在线桌面（含发起的那台）与手机。它同时拥有这台电脑的原生呈现，是账号消息构造 Electron `Notification` 的唯一位置：实时连接不得自己 new，只把收到的标题与正文交给它。设置里 `syncToAccount` 是发送总闸，`enabled` / `silent` 描述本机呈现，两组互不门控；发不出去就什么都不发生，不得为未登录或离线补一条本机通知。消息走桌面登录态，不得改用用户的开放 API 密钥，也不得为其新增开放接口。
+- System Notifier 是「通知用户」的能力，一次触发只有一个动作：把消息写进账号消息中心（桌面端走 `POST /api/notifications/desktop`，它只吃桌面登录态与桌面自有 source，`/internal` 只为已发布构建保留），由服务端投递给该账号所有在线桌面（含发起的那台）与手机。它同时拥有这台电脑的原生呈现，是账号消息构造 Electron `Notification` 的唯一位置：实时连接不得自己 new，只把收到的标题与正文交给它。设置里 `sendEnabled` 是发送总闸，`localEnabled` / `silent` 描述本机呈现，两组互不门控；发不出去就什么都不发生，不得为未登录或离线补一条本机通知，但每一次没发出去都要留下固定诊断（`notification_sync`），否则「AI 说通知了我却没收到」无从查起。消息走桌面登录态，不得改用用户的开放 API 密钥，也不得为其新增开放接口。
 - System Notifier 的完整权威规格是 `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`。修改前必须完整阅读，不得以本摘要代替。
 
 ## MCP
