@@ -249,6 +249,38 @@ struct DriveBrowserTests {
         )
     }
 
+    // MARK: - 失败的那几项留下来
+
+    /// 部分失败时选择要恢复成**失败的那几项**（Spec §5.2「成功的从列表移除，失败的保留选中」）：
+    /// 它们还在列表里，选择留给它们，用户再按一次就是重试。
+    ///
+    /// 断言里特意放两个同名项：名字恢复不了选择，只有 id 能。
+    @Test func onlyTheFailedItemsKeepTheirSelection() {
+        let outcome = DriveBatchOutcome(
+            succeeded: 1,
+            failures: [
+                .init(itemId: "b", name: "报告.pdf", reason: "网络不可用，请稍后重试。"),
+                .init(itemId: "c", name: "报告.pdf", reason: "这一项不在你的云盘里。"),
+            ]
+        )
+        #expect(outcome.failedItemIds == ["b", "c"])
+    }
+
+    /// 全成时那一批一个都不留：选择照旧被清掉（用户按完「删除」不该还剩着东西）。
+    @Test func aFullSuccessLeavesNothingSelected() {
+        #expect(DriveBatchOutcome(succeeded: 3, failures: []).failedItemIds.isEmpty)
+    }
+
+    /// 对象不是云盘项的那几种批次（新建文件夹、分享）没有 id 可给：收出来是空集，
+    /// 而不是把列表里某一行瞎选上。
+    @Test func aFailureWithoutAnIdSelectsNothing() {
+        let outcome = DriveBatchOutcome(
+            succeeded: 0,
+            failures: [.init(name: "日记", reason: "网络不可用，请稍后重试。")]
+        )
+        #expect(outcome.failedItemIds.isEmpty)
+    }
+
     // MARK: - 一页
 
     /// 上传落到哪儿认的是它：根层给 nil —— 服务端把根当成「没有父级」，而 `"root"` 在它

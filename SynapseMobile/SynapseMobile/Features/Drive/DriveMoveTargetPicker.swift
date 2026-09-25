@@ -47,8 +47,10 @@ struct DriveMoveTargetPicker: View {
     let items: [DriveBrowserItem]
     /// 从哪一层开始：浏览层现在这一层（`DriveStore.path`，根层是空数组）。
     let from: [DriveBrowserItem]
-    /// 真的移动过了。多选那一批要据此清掉选择 —— 那几项已经不在这一层了。
-    let onMoved: () -> Void
+    /// 移动这一趟有结果了。多选那一批要据此重新定选择：移走了的那几项不在这一层了，
+    /// 没移成的那几项还在（Spec §5.2「成功的从列表移除，失败的保留选中」），
+    /// 所以参数要带出来，调用方才能把选择**留给失败的那几项**而不是一律清空。
+    let onMoved: (DriveBatchOutcome) -> Void
 
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -66,7 +68,7 @@ struct DriveMoveTargetPicker: View {
     init(
         items: [DriveBrowserItem],
         from: [DriveBrowserItem],
-        onMoved: @escaping () -> Void
+        onMoved: @escaping (DriveBatchOutcome) -> Void
     ) {
         self.items = items
         self.from = from
@@ -297,13 +299,13 @@ struct DriveMoveTargetPicker: View {
             let outcome = await model.driveMove(items, to: target)
             moving = false
             guard let notice = outcome.noticeText("移动") else {
-                onMoved()
+                onMoved(outcome)
                 dismiss()
                 return
             }
             model.notice(notice, tone: .failure)
             if outcome.succeeded > 0 {
-                onMoved()
+                onMoved(outcome)
                 dismiss()
             }
         }

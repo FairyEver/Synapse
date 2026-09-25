@@ -409,6 +409,7 @@ struct DriveBrowserView: View {
     private var actions: DriveBrowserActions {
         DriveBrowserActions(
             busy: busy,
+            exporting: exporting,
             open: { open($0) },
             rename: { sheet = .rename($0) },
             move: { sheet = .move($0) },
@@ -482,9 +483,20 @@ struct DriveBrowserView: View {
     /// 走 `DriveFileExport`：它自己决定要不要先问一句（超过 50 MB），下完把一组 URL 交给
     /// 系统面板。多选那一批导完就退出编辑模式 —— 那一批的事办完了，选择留着只会让用户
     /// 再按一次「完成」。
+    ///
+    /// **有一批还在下时不再发起第二批**：行菜单的「导出」与底部工具条的「导出」是两颗按钮，
+    /// 但这一屏只有一个 `share` 槽，第二趟会在 `download` 里把在飞的那一趟取消掉 —— 用户
+    /// 看不到第二颗按钮与第一趟是同一件事，只会看到进度行自己没了。两颗按钮同样按
+    /// `exporting` 置灰，所以这道守卫在界面上是看得见的，不是一个闷掉的手势。
     private func exportItems(_ items: [DriveBrowserItem]) {
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty, !busy, !exporting else { return }
         export.download(items, purpose: .share, using: model)
+    }
+
+    /// 这一屏正在下一批导出（进度行还在）。下完交给面板时 `progress` 就空了，那一趟不再算
+    /// 「在飞」——面板开着的时候这一屏被盖住，没有第二颗按钮可按。
+    private var exporting: Bool {
+        export.share.progress != nil
     }
 
     /// 移入回收站。
@@ -492,12 +504,16 @@ struct DriveBrowserView: View {
     /// 可恢复，所以不二次确认（与公开素材那一屏同一条：不可撤销的那一下才问一句，
     /// 而回收站正是为了「删错了还能回来」）。失败的那几条由 `noticeText` 说清原因，
     /// 全成时不说话 —— 列表已经变了。
+    ///
+    /// 选择恢复成**失败的那几项**，不是清空（Spec §5.2「成功的从列表移除，失败的保留选中」）：
+    /// 失败的那几项还在列表里，把选择留给它们，用户再按一次「删除」就是重试，不必回到列表里
+    /// 把它们一个个重新找出来。全成时这个集合本来就是空的，选择照旧被清掉。
     private func remove(_ items: [DriveBrowserItem]) async {
         guard !items.isEmpty, !busy else { return }
         busy = true
         let outcome = await model.driveTrashItems(items)
         busy = false
-        picked = []
+        picked = outcome.failedItemIds
         if let notice = outcome.noticeText("删除") {
             model.notice(notice, tone: .failure)
         }
@@ -516,8 +532,6 @@ struct DriveBrowserView: View {
         } else {
             preview = nil
         }
-        editing = false
-        picked = []
         // 三个整屏的列表页不是一层文件夹：它们各自取数，store 的层不动。栈退回它们下面时
         // 也要把 store 扳回对应那一层（否则退回浏览页会看到上一层的列表）。
         let depth = routes.prefix { route in
@@ -525,7 +539,14 @@ struct DriveBrowserView: View {
             return false
         }
         .count
+        // 编辑模式与多选是**这一层的事**，所以只在层真的变了时清。
+        //
+        // 宽度跨过 compact/regular 阈值时这条也会跑（`widthChanged` 把那页预览从栈上摘掉，
+        // 栈一变就走到这里），但那不是「用户离开了这一层」：`docs/agents/mobile-adaptive-layout.md`
+        // 写着折叠与展开不能重置选择。放在 `guard` 后面，宽度那一趟就碰不到它。
         guard depth != model.drive.path.count else { return }
+        editing = false
+        picked = []
         Task { await model.driveJump(to: depth) }
     }
 
@@ -553,9 +574,11 @@ struct DriveBrowserView: View {
             DriveRenameSheet(purpose: .rename(item), parentName: model.drive.title)
         case .move(let items):
             // 从这一层开始往下找目标（`from` 传的正是 store 的 path）。
-            DriveMoveTargetPicker(items: items, from: model.drive.path) {
-                // 那几项已经不在这一层了，选择跟着清掉。
-                picked = []
+            DriveMoveTargetPicker(items: items, from: model.drive.path) { outcome in
+                // 移走了的那几项已经不在这一层了，选择只留给**没移成**的那几项：
+                // 它们还在列表里，用户再按一次「移动」就是重试（Spec §5.2）。全成时
+                // 这个集合是空的，选择照旧被清掉。
+                picked = outcome.failedItemIds
             }
         case .share(let item):
             DriveShareSheet(item: item) { shareChanged = true }

@@ -207,6 +207,9 @@ enum DriveUsageRow {
 struct DriveBrowserActions {
     /// 有一件事在办。办的时候改名 / 移动到 / 删除一起置灰，免得两件事撞在同一层上。
     let busy: Bool
+    /// 有一批导出正在下。只置灰「导出」那一项：这一屏只有一个 `share` 槽，第二趟会把
+    /// 在飞的那一趟取消掉，而下这一批不碰这一层的任何一行，其余动作不必跟着停。
+    let exporting: Bool
     let open: (DriveBrowserItem) -> Void
     let rename: (DriveBrowserItem) -> Void
     let move: ([DriveBrowserItem]) -> Void
@@ -423,7 +426,7 @@ struct DriveBrowserList: View {
         } label: {
             Label("导出", systemImage: "square.and.arrow.down")
         }
-        .disabled(actions.busy || !DriveBrowserRow.canExport(item))
+        .disabled(actions.busy || actions.exporting || !DriveBrowserRow.canExport(item))
 
         Button {
             actions.info(item)
@@ -634,7 +637,7 @@ struct DriveBrowserList: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 8)
             barButton("移动") { actions.move(selected) }
-            barButton("导出") { actions.export(selected) }
+            barButton("导出", disabled: actions.exporting) { actions.export(selected) }
             barButton("删除") { actions.trash(selected) }
         }
         .padding(.horizontal, 16)
@@ -642,14 +645,18 @@ struct DriveBrowserList: View {
         .background(.bar)
     }
 
-    private func barButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func barButton(
+        _ title: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Text(title)
                 .frame(minHeight: Metrics.minimumTapTarget)
                 .padding(.horizontal, 6)
         }
         .buttonStyle(.bordered)
-        .disabled(picked.isEmpty)
+        .disabled(picked.isEmpty || disabled)
     }
 
     private var selected: [DriveBrowserItem] {

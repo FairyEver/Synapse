@@ -111,8 +111,21 @@ enum DriveSort {
 struct DriveBatchOutcome: Equatable {
     /// 一项为什么没成。`name` 是用户看得到的那一行，`reason` 是给用户看的一句话。
     struct Failure: Equatable, Hashable {
+        /// 这一项在云盘里的 id；批次的对象不是云盘项时是 nil。
+        ///
+        /// 删除 / 移动 / 重命名这几种批次的对象是列表里的行，它们给这个 id，因为调用方要拿
+        /// 它把**失败的那几项恢复成选中**（Spec §5.2：「成功的从列表移除，失败的保留选中」）。
+        /// 只靠 `name` 恢复不了：同名的那两项分不出来，而选中状态认的正是 id。
+        /// 新建文件夹、分享、回收站条目、公开素材都不是云盘项，给 nil。
+        let itemId: String?
         let name: String
         let reason: String
+
+        init(itemId: String? = nil, name: String, reason: String) {
+            self.itemId = itemId
+            self.name = name
+            self.reason = reason
+        }
     }
 
     let succeeded: Int
@@ -120,6 +133,14 @@ struct DriveBatchOutcome: Equatable {
 
     var failed: Int { failures.count }
     var total: Int { succeeded + failures.count }
+
+    /// 没成的那几项在列表里的 id。
+    ///
+    /// 调用方用它把选择恢复成「刚好是失败的那几项」，好让用户直接再按一次（Spec §5.2）。
+    /// 对象不是云盘项的那几种批次收不出任何 id，给出来的就是空集。
+    var failedItemIds: Set<String> {
+        Set(failures.compactMap(\.itemId))
+    }
 
     /// 一项都没做（没选中任何项）。这种批次不该弹提示：按钮在没选中时本来就是置灰的。
     var isEmpty: Bool { total == 0 }
@@ -809,7 +830,11 @@ final class DriveStore {
                 try await client.driveRenameItem(itemId: item.id, name: trimmed)
                 return nil
             } catch {
-                return DriveBatchOutcome.Failure(name: item.name, reason: DriveText.errorMessage(error))
+                return DriveBatchOutcome.Failure(
+                    itemId: item.id,
+                    name: item.name,
+                    reason: DriveText.errorMessage(error)
+                )
             }
         }
         await reloadAfterChange(outcome, using: client)
@@ -828,6 +853,7 @@ final class DriveStore {
         let outcome = await DriveBatchOutcome.collecting(items) { item in
             guard DrivePath.canMove(itemId: item.id, into: parentId, path: path) else {
                 return DriveBatchOutcome.Failure(
+                    itemId: item.id,
                     name: item.name,
                     reason: DrivePath.intoOwnDescendantReason
                 )
@@ -836,7 +862,11 @@ final class DriveStore {
                 try await client.driveMoveItem(itemId: item.id, parentId: parentId)
                 return nil
             } catch {
-                return DriveBatchOutcome.Failure(name: item.name, reason: DriveText.errorMessage(error))
+                return DriveBatchOutcome.Failure(
+                    itemId: item.id,
+                    name: item.name,
+                    reason: DriveText.errorMessage(error)
+                )
             }
         }
         await reloadAfterChange(outcome, using: client)
@@ -851,7 +881,11 @@ final class DriveStore {
                 try await client.driveTrashItem(itemId: item.id)
                 return nil
             } catch {
-                return DriveBatchOutcome.Failure(name: item.name, reason: DriveText.errorMessage(error))
+                return DriveBatchOutcome.Failure(
+                    itemId: item.id,
+                    name: item.name,
+                    reason: DriveText.errorMessage(error)
+                )
             }
         }
         await reloadAfterChange(outcome, using: client)
