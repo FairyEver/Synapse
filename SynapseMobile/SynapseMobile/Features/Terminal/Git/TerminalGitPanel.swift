@@ -41,7 +41,9 @@ struct TerminalGitPanel: View {
                 TerminalGitConflictSheet(conflict: conflict) { flow.dismissConflict() }
                     // 冲突页是盖在面板上的第二层弹窗，面板自己的提示条在它下面 ——
                     // 而「已复制」正是这一页唯一的结果，看不见就等于没发生。
-                    .noticeOverlay(model)
+                    //
+                    // 这一层说的也是 `flow` 那一个终端，所以同样按它筛。
+                    .noticeOverlay(model, forSession: flow.sessionId)
             }
     }
 

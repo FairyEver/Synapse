@@ -146,9 +146,18 @@ final class SynapseAppModel {
     /// replaces its text and restarts its clock instead of stacking a duplicate, which is
     /// what a reconnect loop or the same rejection arriving twice actually needs. It
     /// defaults to the text, so an identical sentence never queues behind itself either.
-    func notice(_ text: String, tone: NoticeTone = .info, id: String? = nil) {
+    ///
+    /// `sessionId` 只在**这条说的是某个终端**时给（见 `Notice.sessionId`）。给了这条就只
+    /// 画在那个终端（以及没有归属的地方）上；同一个 id 落在两个会话上会互相顶掉，所以
+    /// 带会话的消息要把它编进 id。
+    func notice(
+        _ text: String,
+        tone: NoticeTone = .info,
+        id: String? = nil,
+        sessionId: String? = nil
+    ) {
         let key = id ?? "text:\(text)"
-        for dropped in notices.post(text, tone: tone, id: key) {
+        for dropped in notices.post(text, tone: tone, id: key, sessionId: sessionId) {
             cancelNoticeTimer(dropped)
         }
         syncNoticeTimers()

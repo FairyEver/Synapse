@@ -134,6 +134,63 @@ struct NoticeQueueTests {
         #expect(queue.armed.isEmpty)
     }
 
+    // MARK: - 一条消息说的是哪个会话
+
+    /// 一句「这个会话已经结束了。」说的是**被点的那个**会话，不是当时屏幕上的那个。
+    ///
+    /// 五条进终端的路里只有列表那一行是当场取的 id，其余四条（通知、消息里的记录、桌面
+    /// 小组件、等下一份列表的挂起请求）带来的都是某一刻记下的 id —— 它们被拒绝时，人很
+    /// 可能已经站在另一个会话里了。画在那里，读者只会读成「我正在用的这个结束了」。
+    @Test func aSessionScopedNoticeIsNotDrawnOnAnotherTerminalsCanvas() {
+        var queue = NoticeQueue()
+        queue.post("这个会话已经结束了。", tone: .failure, id: "terminal.ended.a", sessionId: "a")
+        queue.post("已复制。", tone: .success, id: "copy")
+
+        // 站在会话 b 的画布上：只有那条不点名归属的话要被画出来。
+        #expect(queue.armed(forSession: "b").map(\.id) == ["copy"])
+    }
+
+    /// 而它自己的会话、以及**不点名**的那一屏（会话列表列的就是所有会话，这句话正是它该
+    /// 说的）照旧画它。
+    @Test func aSessionScopedNoticeIsDrawnOnItsOwnScreenAndOnTheList() {
+        var queue = NoticeQueue()
+        queue.post("这个会话已经结束了。", tone: .failure, id: "terminal.ended.a", sessionId: "a")
+
+        #expect(queue.armed(forSession: "a").map(\.id) == ["terminal.ended.a"])
+        #expect(queue.armed(forSession: nil).map(\.id) == ["terminal.ended.a"])
+    }
+
+    /// 与某个会话无关的话（复制成功、电脑离线……）哪儿都该画。
+    @Test func anUnscopedNoticeIsDrawnEverywhere() {
+        var queue = NoticeQueue()
+        queue.post("电脑离线，命令没有发送。", tone: .failure, id: "write.rejected")
+
+        #expect(queue.armed(forSession: "a").map(\.id) == ["write.rejected"])
+        #expect(queue.armed(forSession: nil).map(\.id) == ["write.rejected"])
+    }
+
+    /// 同一个 id 是「同一条消息的又一次到达」，所以**说的是谁**也跟着换。
+    ///
+    /// 留下来的话，这条落到一个它根本不认识的终端上时照样会被画出来 —— 正好是要防的那件事。
+    @Test func rePostingUnderTheSameIdMovesTheSessionToo() {
+        var queue = NoticeQueue()
+        queue.post("这个会话已经结束了。", tone: .failure, id: "terminal.ended", sessionId: "a")
+        queue.post("这个会话已经结束了。", tone: .failure, id: "terminal.ended", sessionId: "b")
+
+        #expect(queue.armed(forSession: "a").isEmpty)
+        #expect(queue.armed(forSession: "b").map(\.id) == ["terminal.ended"])
+    }
+
+    /// 被筛掉的那条**仍然在队列里**：换个屏幕（回到列表）它就该出现，时钟也照走。
+    @Test func filteringIsAboutTheScreenNotTheQueue() {
+        var queue = NoticeQueue()
+        queue.post("这个会话已经结束了。", tone: .failure, id: "terminal.ended.a", sessionId: "a")
+
+        #expect(queue.armed(forSession: "b").isEmpty)
+        #expect(queue.notices.count == 1)
+        #expect(queue.armed.map(\.id) == ["terminal.ended.a"])
+    }
+
     // MARK: - Durations
 
     /// The desktop's own numbers, so the same event does not linger longer on the phone

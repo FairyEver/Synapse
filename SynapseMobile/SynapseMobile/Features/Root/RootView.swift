@@ -299,7 +299,20 @@ struct RootView: View {
             // 与电脑那条拒绝同一个语气（电脑回的是「该终端已结束。」，落在手机上就是一条
             // 拒绝），因为这就是同一件事被两个地方说出来 —— 只是这一次那个人还没有被送进
             // 一块空画布里去听它。
-            model.notice("这个会话已经结束了。", tone: .failure)
+            //
+            // 这句话是**关于 `sessionId` 这个会话的**，所以带上它：五条路里只有会话列表
+            // 那一行是当场取的 id，通知、消息里的记录、桌面小组件和等下一份列表的挂起请求
+            // 带来的都是某一刻记下的 id —— 那次拒绝发生时，人很可能已经站在**另一个**会话里
+            // 了。不带归属的话，这句「这个会话已经结束了。」就会画在那个好好的会话的画布上，
+            // 读起来正是「我正在用的这个结束了」。见 `Notice.sessionId`。
+            //
+            // id 里带上会话：同一个 id 在队列里只有一条，两个会话各自被拒绝时不该互相顶掉。
+            model.notice(
+                "这个会话已经结束了。",
+                tone: .failure,
+                id: "terminal.ended.\(sessionId)",
+                sessionId: sessionId
+            )
         case .unknown:
             // 列表还没到。留到下一份列表，别把人这一下丢掉。
             pendingTerminalOpen = PendingTerminalOpen(

@@ -190,10 +190,15 @@ extension View {
     /// form — and the tab bar is not a safe area inset at the root, so a single root-level
     /// overlay would sit on top of it. Anchoring each screen to its own bottom needs no
     /// measurement of anyone else's chrome and cannot drift when one of them changes.
-    func noticeOverlay(_ model: SynapseAppModel) -> some View {
+    ///
+    /// `forSession` 只在**这一屏说的是某个终端**时给（终端的画布传它自己的 id）。给了就
+    /// 只画属于那个终端和没有归属的那几条 —— 拒绝一次打开的句子说的是被点的那个会话，
+    /// 画在另一个会话头上就成了一句谎话。列表不给，因为它列的就是所有会话，那句话正是
+    /// 它该说的。见 `Notice.sessionId`。
+    func noticeOverlay(_ model: SynapseAppModel, forSession sessionId: String? = nil) -> some View {
         overlay(alignment: .bottom) {
             NoticeStack(
-                notices: model.notices.armed,
+                notices: model.notices.armed(forSession: sessionId),
                 onDismiss: { model.dismissNotice($0) },
                 onHold: { model.holdNotice($0) },
                 onRelease: { model.resumeNotice($0) }

@@ -805,7 +805,10 @@ struct TerminalScreen: View {
             // already carries is behind it — and the clipboard segment's whole
             // confirmation is a notice, raised while the panel stays open. Without this
             // the reader copies an item and sees nothing at all.
-            .noticeOverlay(model)
+            //
+            // 这一屏盖的是**某个会话**，所以它也照那个会话筛：面板浮在上面时，拒绝另一条
+            // 会话的句子照样不该出现在这里。
+            .noticeOverlay(model, forSession: sessionId)
         }
         .inspector(isPresented: $resourcesPresented) {
             TerminalResourcesSheet(store: store)
@@ -815,7 +818,7 @@ struct TerminalScreen: View {
             TerminalGitPanel(flow: flow)
                 // 面板盖在这一页上，这一页自己的提示条就在它下面 —— 而面板里每个动作的
                 // 结果都是一句提示。少了这一条，用户按了「推送」什么也看不到。
-                .noticeOverlay(model)
+                .noticeOverlay(model, forSession: sessionId)
         }
         .sheet(isPresented: $showingDocumentPicker) {
             DocumentPicker(
@@ -896,7 +899,12 @@ struct TerminalScreen: View {
             // an inset for a reason particular to this screen: a reserved strip would
             // change `visibleRows`, which is reported to the desktop as a grid size, and a
             // one-second notice would resize the PTY twice.
-            .noticeOverlay(model)
+            //
+            // 照样按会话筛。这一屏是这句话最危险的地方：拒绝一次打开请求说的可能是**另一个**
+            // 会话（通知、消息记录、手机自己刚建的那个、等下一份列表的挂起请求带来的 id），
+            // 而画在这里，读者只会读成「我正在用的这个结束了」—— 一块好好的画布上被通知
+            // 一句它自己的死讯。见 `Notice.sessionId`。
+            .noticeOverlay(model, forSession: sessionId)
             TerminalMessageList(
                 messages: terminalMessages,
                 onDismiss: { model.dismissTerminalMessage($0) }
