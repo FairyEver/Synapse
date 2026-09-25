@@ -5,7 +5,8 @@ import Testing
 /// 预览与导出里能单独拿出来判的那几条：走哪条路、文本读到哪停、什么时候先问一句、
 /// 落地那一份叫什么。
 ///
-/// 都是纯函数——不读 `UserDefaults`、不碰网络、不起视图，所以这些断言是密闭的。
+/// 都是纯判据——不读 `UserDefaults`、不碰网络、不起视图，所以这些断言是密闭的（问系统
+/// 那两条会往自己的临时目录里放两个空文件，用完删掉）。
 /// `DrivePreviewContent` 与 `DriveFileExport` 的网络那一半不在这里：它们收的是
 /// `APIClient`（actor），没有协议就注入不了假的，与本仓 `DriveStore` 的处理一致。
 @MainActor
@@ -23,20 +24,72 @@ struct DrivePreviewTests {
         #expect(DrivePreviewRoute.route(kind: .htmlSource, name: "页面.html") == .text(.htmlSource))
     }
 
-    @Test func officeAndPDFGoToQuickLook() {
+    @Test func officeAndPDFAreWorthDownloading() {
         #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "报告.pdf") == .quickLook)
         #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "文档.docx") == .quickLook)
         #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "表格.xlsx") == .quickLook)
         #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "胶片.pptx") == .quickLook)
     }
 
-    @Test func everythingElseIsOnlyExportable() {
-        // 压缩包、音视频、代码，iOS 自己都打不开：硬交给 QuickLook 只会弹一片空白。
+    @Test func mediaAndTextishFilesAreWorthDownloadingToo() {
+        // 系统自己有这些的查看器（`canPreview` 对它们都答 true，实测），所以原先那张只认
+        // PDF/Office 的表把它们漏掉了：mp4/mov 与所有音频都被判成「这个格式无法预览」。
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "视频.mp4") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "影片.mov") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "录音.mp3") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "音频.m4a") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "数据.csv") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "说明.rtf") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "讲稿.key") == .quickLook)
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "配置.json") == .quickLook)
+    }
+
+    @Test func archivesAndUnknownsAreNotWorthTheTraffic() {
+        // 压缩包与磁盘映像不花这个流量：为看一个 zip 的文件列表下几十兆没有道理，而磁盘
+        // 映像在 iOS 上系统打不开。判不出类型的一个也不猜——那正是流量最可能白花的一档。
         #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "归档.zip") == .unavailable)
-        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "视频.mp4") == .unavailable)
-        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "配置.json") == .unavailable)
-        // 没有扩展名的一个也不猜。
+        #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "映像.dmg") == .unavailable)
         #expect(DrivePreviewRoute.route(kind: .downloadOnly, name: "未知") == .unavailable)
+    }
+
+    // MARK: - 下完之后问系统
+
+    /// 一个空的临时目录，用例自己收尾。
+    private func scratchDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DrivePreviewTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    @Test func theSystemJudgementNeedsTheBytesOnDisk() throws {
+        // 这一步钉的是整套两步判据的前提：`canPreview` 对**还不存在**的地址一律答 false
+        // （17 种扩展名实测全 false），所以「下之前先问系统来决定下不下」这条路不存在，
+        // 粗筛只能自己做；下完之后它才认，而且认的是扩展名推出来的类型、不是内容。
+        let directory = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let file = directory.appendingPathComponent("报告.pdf")
+        #expect(!DrivePreviewRoute.quickLookCanPreview(file))
+        // 空文件也认：看的是类型，不是能不能解析出内容。
+        try Data().write(to: file)
+        #expect(DrivePreviewRoute.quickLookCanPreview(file))
+    }
+
+    @Test func theSystemJudgementCanRefuseSomethingThatExists() throws {
+        // 以系统为准的另一半：文件在盘上也可能打不开，那时落到「这个格式无法预览 + 导出」。
+        // 这两个扩展名是实测答 false 的——若哪天苹果开始支持它们，改这里的断言即可，
+        // 要问系统这件事本身不变。
+        let directory = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let diskImage = directory.appendingPathComponent("备份.dmg")
+        try Data().write(to: diskImage)
+        #expect(!DrivePreviewRoute.quickLookCanPreview(diskImage))
+
+        let extensionless = directory.appendingPathComponent("未知")
+        try Data().write(to: extensionless)
+        #expect(!DrivePreviewRoute.quickLookCanPreview(extensionless))
     }
 
     // MARK: - 读多少

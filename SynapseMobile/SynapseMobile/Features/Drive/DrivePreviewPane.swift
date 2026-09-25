@@ -1,10 +1,18 @@
+import QuickLook
 import SwiftUI
 import UIKit
 
 /// 一项文件该走哪条预览路线（Spec §4.4）。
 ///
-/// 判据只有服务端给的那一个 `previewKind`，外加一个扩展名——`download-only` 这一档
-/// 服务端不分格式，能不能交给 QuickLook 得自己看。纯函数，边界钉在 `DrivePreviewTests`。
+/// 判据只有服务端给的那一个 `previewKind`，外加下载前后各一次判断：
+///
+/// 1. **下之前**只回答「值不值得为预览花这个流量」。这一步没法交给系统——`canPreview` 对
+///    **还不存在**的地址一律答 false（2026-09-25 在 iOS 模拟器上实测：17 种扩展名全
+///    false），所以「先问系统再决定下不下」这条路不存在，只能按大类粗筛。粗筛用的是
+///    `DriveText.kind` 那张既有的表，不另写一份扩展名表。
+/// 2. **下之后**问系统，见 `quickLookCanPreview`。以它的回答为准。
+///
+/// 纯函数，边界钉在 `DrivePreviewTests`。
 enum DrivePreviewRoute: Equatable {
     case image
     /// 文本、Markdown、HTML 源码。三种读法一样，只是画法不同，所以带着种类。
@@ -21,15 +29,38 @@ enum DrivePreviewRoute: Equatable {
         case .text, .markdown, .htmlSource:
             return .text(kind)
         case .downloadOnly:
-            // PDF 与 Office 系统自己就能看（iOS 自带查看，不需要服务端转换）；压缩包、
-            // 音视频、磁盘映像这些它打不开，硬交给它只会弹一片空白。
-            switch DriveText.kind(of: name) {
-            case .pdf, .document, .spreadsheet, .presentation:
-                return .quickLook
-            default:
-                return .unavailable
-            }
+            // 这一档服务端不分格式（不是图片/文本/Markdown/HTML 的全在这里），所以能不能看
+            // 得自己判。粗筛只分「值得下」与「不值得下」，第二步由系统说了算。
+            return worthDownloading(name) ? .quickLook : .unavailable
         }
+    }
+
+    /// 这一项值不值得下下来交给系统试一次。
+    ///
+    /// 系统能打开的东西比原先那张表宽得多：音视频、`.csv`/`.rtf`/`.key` 这些系统自己都有
+    /// 查看器（实测 `canPreview` 对这些都答 true），所以媒体、PDF、Office、文本类都值得
+    /// 花这个流量。
+    ///
+    /// 压缩包与磁盘映像不值当：`canPreview` 其实能列出一个 zip 的内容（实测 true），但为看
+    /// 一个文件列表下几十兆没有道理，而磁盘映像系统在 iOS 上根本打不开。判不出类型的一个
+    /// 也不猜——那正是流量最可能白花的一档。
+    private static func worthDownloading(_ name: String) -> Bool {
+        switch DriveText.kind(of: name) {
+        case .pdf, .image, .video, .audio, .document, .spreadsheet, .presentation, .code:
+            return true
+        case .archive, .unknown:
+            return false
+        }
+    }
+
+    /// 系统自己的判据：QuickLook 打不打得开这一份**已经在本机**的文件。
+    ///
+    /// 比任何扩展名表都准——被改名的文件、苹果以后才支持的格式，表都覆盖不了。它认的是
+    /// 扩展名推出来的类型、不是内容（实测：空文件叫 `.zip` 也答 true，一个 PNG 改名
+    /// `.zip` 也答 true），也**必须**文件真的在盘上（地址不存在一律 false），所以它只能在
+    /// 下完之后问。
+    static func quickLookCanPreview(_ url: URL) -> Bool {
+        QLPreviewController.canPreview(url as NSURL)
     }
 }
 
@@ -182,8 +213,10 @@ struct DrivePreviewPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .safeAreaInset(edge: .bottom) { actions(item) }
-        .task(id: item.id) { await begin(item) }
-        .onChange(of: export.staged) { _, staged in
+        // 整个值当身份，不只是 id：改了名、换了版本之后名字要重算、字节要重下，而同一项
+        // 反复重画不该再触发一次（`DriveBrowserItem` 可比）。
+        .task(id: item) { await begin(item) }
+        .onChange(of: export.preview.staged) { _, staged in
             presentQuickLook(item, staged)
         }
         .onDisappear {
@@ -222,9 +255,9 @@ struct DrivePreviewPane: View {
 
     @ViewBuilder
     private func preview(_ item: DriveBrowserItem) -> some View {
-        // 下载中的样子只有一个地方画，见下面 `downloading`：预览与导出用的是同一个
-        // 字节通路，进度也只有一个。
-        if let progress = export.progress {
+        // 这一列只画预览那一趟的进度：导出那一趟的进度挂在动作栏上面（见 `sharing`），
+        // 两趟各占各的地方，同时进行也不会互相盖掉。
+        if let progress = export.preview.progress {
             downloading(progress)
         } else if item.isFolder {
             folder(item)
@@ -240,21 +273,38 @@ struct DrivePreviewPane: View {
                 text(kind, item: item)
             case .quickLook:
                 if let file = previewFile(item) {
-                    // 自动打开过一次之后就剩这一颗按钮：收起系统预览器不该等于再也不能
-                    // 打开它，而字节已经在盘上，按一下不该重新下一次。
-                    Button("预览") { quickLook = QuickLookRequest(url: file) }
+                    if DrivePreviewRoute.quickLookCanPreview(file) {
+                        // 自动打开过一次之后就剩这一颗按钮：收起系统预览器不该等于再也
+                        // 不能打开它，而字节已经在盘上，按一下不该重新下一次。
+                        Button { quickLook = QuickLookRequest(url: file) } label: {
+                            tappableLabel("预览")
+                        }
                         .buttonStyle(.bordered)
-                        .frame(minHeight: Metrics.minimumTapTarget)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        // 粗筛放它下来的，系统说打不开——以系统为准。落在这里的是粗筛没料到
+                        // 的那几种（磁盘映像、没有扩展名的、苹果以后不认的格式）。
+                        unavailable(item)
+                    }
                 } else {
                     awaitingBytes(item)
                 }
             case .unavailable:
-                ContentUnavailableView {
-                    Label("这个格式无法预览", systemImage: "eye.slash")
-                } actions: {
-                    Button("导出") { exportNow(item) }
-                }
+                unavailable(item)
+            }
+        }
+    }
+
+    /// 系统打不开，本机就只有导出这一条路。
+    ///
+    /// 动作栏上也有一颗「导出」，这一颗是给「预览列一片空白、用户不知道能做什么」的那个
+    /// 处境用的：空态里能直接动手，不用去找底部那一排。
+    private func unavailable(_ item: DriveBrowserItem) -> some View {
+        ContentUnavailableView {
+            Label("这个格式无法预览", systemImage: "eye.slash")
+        } actions: {
+            Button { exportNow(item) } label: {
+                tappableLabel("导出")
             }
         }
     }
@@ -267,7 +317,9 @@ struct DrivePreviewPane: View {
         ContentUnavailableView {
             Label("还没有下载到本机", systemImage: "arrow.down.circle")
         } actions: {
-            Button("下载") { downloadBytes(item) }
+            Button { downloadBytes(item) } label: {
+                tappableLabel("下载")
+            }
         }
     }
 
@@ -284,9 +336,10 @@ struct DrivePreviewPane: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Button("取消") { export.cancel() }
-                .buttonStyle(.bordered)
-                .frame(minHeight: Metrics.minimumTapTarget)
+            Button { export.cancel(.preview) } label: {
+                tappableLabel("取消")
+            }
+            .buttonStyle(.bordered)
         }
         .padding(.horizontal, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -316,8 +369,10 @@ struct DrivePreviewPane: View {
             ContentUnavailableView {
                 Label(message, systemImage: "exclamationmark.triangle")
             } actions: {
-                Button("重试") { Task { await content.load(item, using: model) } }
-                    .buttonStyle(.bordered)
+                Button { Task { await content.load(item, using: model) } } label: {
+                    tappableLabel("重试")
+                }
+                .buttonStyle(.bordered)
             }
         case .ready(let body, let note):
             ScrollView {
@@ -348,26 +403,63 @@ struct DrivePreviewPane: View {
     }
 
     private func actions(_ item: DriveBrowserItem) -> some View {
-        HStack(spacing: 8) {
-            barButton("分享") { onShare(item) }
-            barButton("导出") { exportNow(item) }
-            barButton("简介") { onInfo(item) }
+        VStack(spacing: 0) {
+            // 导出那一趟的进度挂在这一排上面：它不该占住预览列，而它在跑的时候用户还要
+            // 接着看现在这一项（两趟的进度各是各的，可以同时看得见）。
+            if let progress = export.share.progress {
+                Divider()
+                sharing(progress)
+            }
+            HStack(spacing: 8) {
+                barButton("分享") { onShare(item) }
+                barButton("导出") { exportNow(item) }
+                barButton("简介") { onInfo(item) }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
         .background(.bar)
     }
 
+    /// 导出那一趟在做什么。
+    private func sharing(_ progress: DriveFileExport.Download) -> some View {
+        HStack(spacing: 12) {
+            if let fraction = progress.fraction {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+            } else {
+                ProgressView()
+            }
+            Text(progress.name)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Button { export.cancel(.share) } label: {
+                tappableLabel("取消")
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
     /// 一颗够得着的按钮。
-    ///
-    /// 最小高度加在 label 上而不是按钮外面：加在外面只是把按钮摆在一块 44pt 高的
-    /// 空地中间，按到边上不算数。
     private func barButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget)
         }
         .buttonStyle(.bordered)
+    }
+
+    /// 按钮上的字，连着它该有的可点面积。
+    ///
+    /// 最小尺寸加在 label 上而不是按钮外面：加在外面只是把按钮摆在一块 44pt 高的空地
+    /// 中间，按到边缘不算数——`Metrics.minimumTapTarget` 要的是**可点区域**。宽度也要
+    /// 一份：两个汉字大约 34pt，不带内边距的按钮比 44pt 窄。
+    private func tappableLabel(_ title: String) -> some View {
+        Text(title)
+            .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
     }
 
     // MARK: - 一件事
@@ -378,7 +470,7 @@ struct DrivePreviewPane: View {
 
     /// 这一项落到本机的那一份，还没有就是 nil。
     private func previewFile(_ item: DriveBrowserItem) -> URL? {
-        guard let staged = export.staged, staged.purpose == .preview else { return nil }
+        guard let staged = export.preview.staged else { return nil }
         // 核对是这一项的：上一项下完的字节不该画到这一项上。
         guard staged.itemIds.contains(item.id) else { return nil }
         return staged.files.first
@@ -409,11 +501,14 @@ struct DrivePreviewPane: View {
 
     /// 字节一落地就把系统预览器打开。
     ///
-    /// 只认「预览这一趟」下完的那一批，所以自己按的「导出」不会顺手弹出一个预览器；
-    /// 而离开这一屏、换一项都不会再触发（`staged` 那时已经不是这一项的了）。
+    /// 只看预览那一趟下完的那一批：导出那一趟落地时不该顺手弹出一个预览器（用户在动作栏
+    /// 上按的是导出）。离开这一屏、换一项都不会再触发（那一份已经不是这一项的了）。
     private func presentQuickLook(_ item: DriveBrowserItem, _ staged: DriveFileExport.Staged?) {
-        guard let staged, staged.purpose == .preview, !staged.files.isEmpty else { return }
+        guard let staged, !staged.files.isEmpty else { return }
         guard staged.itemIds.contains(item.id), route(item) == .quickLook else { return }
+        // 系统打不开就别弹：粗筛把它放进来了，这里以系统的回答为准，弹一片空白不如留在
+        // 「这个格式无法预览」那一屏上。
+        guard DrivePreviewRoute.quickLookCanPreview(staged.files[0]) else { return }
         quickLook = QuickLookRequest(url: staged.files[0])
     }
 
