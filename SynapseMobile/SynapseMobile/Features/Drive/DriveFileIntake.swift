@@ -85,8 +85,8 @@ enum DriveFileIntake {
     /// 删掉这一趟落在临时目录里的那份拷贝。
     ///
     /// 谁落下谁删：`land` 与 `write` 往 `temporaryDirectory` 里放的东西（一条最大 100 MB）
-    /// 在这里之外的唯一删除点是 `DriveUploader.discard` —— 而那条队列眼下没有 App 调用点。
-    /// 用完不删就随上传次数累积在盘上。
+    /// 在这里之外的另一个删除点是 `DriveUploader.discard`（用户把一项从上传列表里拿掉时走
+    /// 它；那条队列由 `DriveBrowserView.enqueue` 接上）。用完不删就随上传次数累积在盘上。
     ///
     /// 只有落在本 App 临时目录里的才删（与 `DriveUploader.discard` 同一条守卫）：文件 App
     /// 那条路交回来的是别的 App 或 iCloud 里的东西，删掉就是删用户的文件。

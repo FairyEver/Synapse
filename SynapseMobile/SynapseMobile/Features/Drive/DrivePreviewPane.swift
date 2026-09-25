@@ -1,3 +1,4 @@
+import ImageIO
 import QuickLook
 import SwiftUI
 import UIKit
@@ -541,7 +542,9 @@ struct DriveZoomableImage: UIViewRepresentable {
     let label: String
 
     func makeUIView(context: Context) -> UIScrollView {
-        let scrollView = UIScrollView()
+        // 自己那个子类：它会在尺寸变化时说一声，好让这张图按**这块地方**需要的像素数解一版。
+        // `makeUIView` 这一刻视图还没参与布局，量不到尺寸（见 `DriveImageScrollView`）。
+        let scrollView = DriveImageScrollView()
         scrollView.delegate = context.coordinator
         scrollView.minimumZoomScale = 1
         scrollView.maximumZoomScale = 8
@@ -549,7 +552,8 @@ struct DriveZoomableImage: UIViewRepresentable {
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.backgroundColor = .clear
 
-        let imageView = UIImageView(image: UIImage(contentsOfFile: url.path))
+        // 先不装图：尺寸还不知道，而解错尺寸正是这一处原来最大的开销（见 `DriveImageFile`）。
+        let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFit
         imageView.isUserInteractionEnabled = true
         imageView.isAccessibilityElement = true
@@ -575,28 +579,67 @@ struct DriveZoomableImage: UIViewRepresentable {
         doubleTap.numberOfTapsRequired = 2
         scrollView.addGestureRecognizer(doubleTap)
 
-        context.coordinator.imageView = imageView
+        let coordinator = context.coordinator
+        coordinator.imageView = imageView
+        coordinator.scrollView = scrollView
+        scrollView.onLayout = { [weak coordinator] in coordinator?.loadImage() }
         return scrollView
     }
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
-        guard context.coordinator.url != url, let imageView = context.coordinator.imageView else { return }
-        context.coordinator.url = url
-        imageView.image = UIImage(contentsOfFile: url.path)
-        imageView.accessibilityLabel = label
+        let coordinator = context.coordinator
+        // 名字每次都同步：VoiceOver 读的是它，而它与 url 不一定同时变。
+        coordinator.label = label
+        coordinator.imageView?.accessibilityLabel = label
+        guard coordinator.url != url else { return }
+        // 换了项：上一份是按另一张图解的，作废重来；缩放也跟着归位。
+        coordinator.show(url: url)
         scrollView.setZoomScale(1, animated: false)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(url: url)
+        Coordinator(url: url, label: label)
     }
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
         var url: URL
+        var label: String
         weak var imageView: UIImageView?
+        weak var scrollView: UIScrollView?
+        /// 上一次按哪块尺寸解的。尺寸变了要重解（iPad 分屏拖动、转屏），不然屏幕上是一张
+        /// 被拉大的小图；先记后解，解不出来（坏文件、系统不认的格式）也不每次布局都重试。
+        private var decodedFor: CGSize?
 
-        init(url: URL) {
+        init(url: URL, label: String) {
             self.url = url
+            self.label = label
+        }
+
+        /// 换一张图，并立刻按当前尺寸解一版。
+        func show(url newURL: URL) {
+            url = newURL
+            decodedFor = nil
+            loadImage()
+        }
+
+        /// 按**现在这块地方**需要的像素数解一版，装到那张图上。
+        ///
+        /// 目标只有一处来源：这张图实际占的那块地方（滚动视图的尺寸）乘屏幕倍率。它在这里
+        /// 最多铺满这一块地方，别处用不到更多像素。
+        ///
+        /// 触发点有两个：滚动视图的 `layoutSubviews`（`makeUIView` 那一刻还没有尺寸），
+        /// 与换图时的 `show`。
+        func loadImage() {
+            guard let scrollView, let imageView else { return }
+            let size = scrollView.bounds.size
+            guard size.width > 0, size.height > 0, size != decodedFor else { return }
+            decodedFor = size
+            // 倍率读不到就按 1 算：屏幕上会略软一点，但尺寸不会解错（见 `DriveImageFile`，
+            // 它只缩不放）。
+            let displayScale = scrollView.traitCollection.displayScale
+            let maxPixelSize = max(size.width, size.height) * (displayScale > 0 ? displayScale : 1)
+            imageView.image = DriveImageFile.image(at: url, maxPixelSize: maxPixelSize)
+            imageView.accessibilityLabel = label
         }
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
@@ -608,5 +651,58 @@ struct DriveZoomableImage: UIViewRepresentable {
             let zoomedIn = scrollView.zoomScale > scrollView.minimumZoomScale
             scrollView.setZoomScale(zoomedIn ? scrollView.minimumZoomScale : 3, animated: true)
         }
+    }
+}
+
+/// 一个知道自己在屏幕上有多大、并且会说的滚动视图。
+///
+/// 降采样要知道「这块地方有多少像素」，而 `makeUIView` 那一刻视图还没参与布局（尺寸是零），
+/// `updateUIView` 也不保证在第一帧之前量到真尺寸。`layoutSubviews` 是唯一稳的那个时机，
+/// 所以在这里挂一下。只在尺寸真的变了时才说，免得每次布局都重解一版。
+private final class DriveImageScrollView: UIScrollView {
+    var onLayout: (() -> Void)?
+    private var lastSize: CGSize = .zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.size != lastSize else { return }
+        lastSize = bounds.size
+        onLayout?()
+    }
+}
+
+/// 从盘上那张图里解出一份**够屏幕上那块地方用**的位图。
+///
+/// `UIImage(contentsOfFile:)` 会把整幅位图解进内存：一张 12000×9000 的照片按 4 字节一像素
+/// 算是 400 MB 上下，而屏幕上那块地方连它的百分之一都用不到 —— 解码还发生在主线程上，
+/// 于是打开一张大照片就是一次可感的卡顿加一次内存尖峰，超大图会 OOM。
+///
+/// `CGImageSourceCreateThumbnailAtIndex` 让 ImageIO 在**解码时**就按目标尺寸出图（JPEG
+/// 这类还能顺带用上 DCT 缩放），峰值内存与耗时跟着目标走，不再跟着文件大小走。
+private enum DriveImageFile {
+    /// `url` 那张图解成最长边不超过 `maxPixelSize` 像素的位图；解不出来给 nil。
+    ///
+    /// 只缩不放：源图比目标小的时候 ImageIO 给回原尺寸。
+    static func image(at url: URL, maxPixelSize: CGFloat) -> UIImage? {
+        guard maxPixelSize > 1 else { return nil }
+        guard let source = CGImageSourceCreateWithURL(
+            url as CFURL,
+            // 只要缩略图那一步，原图别顺手也留在缓存里。
+            [kCGImageSourceShouldCache: false] as CFDictionary
+        ) else { return nil }
+
+        let options: [CFString: Any] = [
+            // 源图没有内嵌缩略图时也照样缩：相册里那几张多数没有。
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            // 尊重 EXIF 方向：竖着拍的照片不该躺下。
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            // 在这一步就解完，别把解压推到大图第一次画的时候（那时又在主线程上）。
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 }

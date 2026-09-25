@@ -573,6 +573,20 @@ final class DriveStore {
     /// 与 `PathIntent` 是同一条标准：`await` 之后才准落地，落地前先确认说的还是同一层。
     private var layerGeneration = 0
 
+    /// 取一层快照的那个动作。生产环境是 `nil`，转发给调用方传进来的 `client`。
+    ///
+    /// 存在的唯一理由是让测试能驱动交错：`layerGeneration` 拦的是「`await` 回来时层已经
+    /// 换了」，而那要求那一趟请求**停在半路**；真实的 `APIClient` 是 actor、没有协议、
+    /// 也没有 `URLProtocol` 桩，停不下来 —— 于是这个计数器和它那四条守卫一直没人钉。
+    ///
+    /// 缝只开在「取快照」这一个动作上（`fetch(itemId:childrenOffset:using:)`）：
+    /// `load` / `loadMore` / `clear` 里的判据与落地顺序一个字都不动。换掉的是被等的那个
+    /// 动作，不是判据本身 —— 否则测的就不是这份代码了。
+    ///
+    /// `@ObservationIgnored`：它是测试的接线口，不参与界面。
+    @ObservationIgnored
+    var snapshotFetcher: ((_ itemId: String?, _ childrenOffset: Int?) async throws -> DriveBrowserSnapshot)?
+
     // MARK: 账号级的那几屏
 
     /// 回收站。
@@ -614,9 +628,12 @@ final class DriveStore {
 
     /// 回收站 / 分享 / 公开素材一次要多少条。
     ///
-    /// 服务端的默认值是 20、上限是 100（`drive.service.ts`）：不传就只有 20 条，而回收站那行
-    /// 会照实说「N 项」、列表却只有 20 行，另外两个是静默截断。超过 100 条时手机端只看得到
-    /// 前 100 条（桌面端可以看全）——本期的已知上限，不做「加载更多」。
+    /// 三个接口各有各的默认值与上限，不传就是那个默认值：回收站 50 / 200
+    /// （`drive-lifecycle.service.ts`）、公开素材 50 / 200（`drive-public-asset.service.ts`）、
+    /// 分享 20 / 100（`drive.service.ts` 的 `normalizeDrivePublicLinksPage`）。**不传**的话
+    /// 回收站那行会照实说「N 项」、列表却只有 50 行，另外两个是静默截断。100 是三个上限里
+    /// 最小的那个（分享），也就是三处都收得下的最大值。超过 100 条时手机端只看得到前 100 条
+    /// （桌面端可以看全）——本期的已知上限，不做「加载更多」。
     private static let pageLimit = 100
 
     init() {
@@ -657,7 +674,16 @@ final class DriveStore {
         return current.current.id
     }
 
-    var hasMore: Bool { current?.childrenPage?.hasMore == true }
+    /// 这一层还有下一页要取吗。
+    ///
+    /// `hasMore` 与 `nextOffset` 都要看：服务端的契约是「`hasMore` 为真必带 `nextOffset`」
+    /// （`buildDriveBrowserChildrenPage`），但列表末行的 `.onAppear` 每次出现都会问一遍
+    /// （`DriveBrowserList.loadMoreIfNeeded`），只认 `hasMore` 的话，服务端万一给了个不一致
+    /// 的组合，这里就会反复放行一次什么都做不了的续页 —— 没有网络、没有转圈，只是空转。
+    var hasMore: Bool {
+        guard let page = current?.childrenPage else { return false }
+        return page.hasMore && page.nextOffset != nil
+    }
 
     // MARK: - 排序偏好
 
@@ -790,6 +816,10 @@ final class DriveStore {
         childrenOffset: Int?,
         using client: APIClient
     ) async throws -> DriveBrowserSnapshot {
+        // 测试装了接线口就走它（见 `snapshotFetcher`）；生产环境这里永远是 nil。
+        if let snapshotFetcher {
+            return try await snapshotFetcher(itemId, childrenOffset)
+        }
         if let itemId {
             return try await client.driveItemSnapshot(itemId: itemId, childrenOffset: childrenOffset)
         }
@@ -802,9 +832,17 @@ final class DriveStore {
     ///
     /// 每个动作都返回「成了几项 / 哪几项没成」：新建只有一项，但汇总的形状与多选的那些
     /// 一致，调用方处理提示的那段代码就只有一份。
+    ///
+    /// 名字先 trim、空的就当没发生：与 `rename` 同一条（那边也是这两下），也是本层自己的
+    /// 兜底 —— sheet 的确认键在空名字时本来就置灰，这里不编一句话去说它，也不发一个必定
+    /// 被拒的请求。两处判据只有一份说法的意义在于：哪天别的入口（比如以后的桌面端快捷
+    /// 指令）直接调这个方法，行为不该不一样。
     @discardableResult
     func createFolder(name: String, using client: APIClient) async -> DriveBatchOutcome {
-        let outcome = await DriveBatchOutcome.collecting([name]) { name in
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return DriveBatchOutcome(succeeded: 0, failures: []) }
+
+        let outcome = await DriveBatchOutcome.collecting([trimmed]) { name in
             do {
                 try await client.driveCreateFolder(parentId: folderId, name: name)
                 return nil

@@ -3,13 +3,22 @@ import Testing
 @testable import SynapseMobile
 
 /// 云盘那几个屏里能单独拿出来判的东西：排序、批量结果、路径栈、回收站恢复分流、
-/// 分享请求体、复用判定与链接变没变、公开素材直链、搜索词归一、取消与真失败的区分。
+/// 分享请求体、复用判定与链接变没变、公开素材直链、搜索词归一、取消与真失败的区分，
+/// 以及 `DriveStore` 的层代次守卫。
 ///
-/// `DriveStore` 自己不在测试里：它的网络方法收的是 `APIClient`（actor），没有协议就注入
-/// 不了假的，而本仓 `MeetingStore` 同样没有单测。会算错的部分都抽成了这个文件上面那些
-/// 纯函数——它们按参数收排序偏好、不读 `UserDefaults`，所以这些断言是密闭的。
+/// 会算错的部分大多抽成了这个文件下面那些纯函数——它们按参数收排序偏好、不读
+/// `UserDefaults`，所以那些断言是密闭的。**层代次那一条抽不出来**：它拦的是「`await`
+/// 回来时层已经换了」，要判它就得让一趟请求真的停在半路，于是 `DriveStore` 留了一个
+/// `snapshotFetcher` 接线口（见那边的注释），测试从这里驱动交错。
 @MainActor
 struct DriveStoreTests {
+    /// `reload` 那几个方法的签名要一个 `APIClient`；下面这批用例整套取快照都注入了、
+    /// 一次网络都不会发，所以它只是签名上的占位。
+    private let client = APIClient(
+        tokens: TokenStore(service: "com.liy.SynapseMobile.tests.drive-store"),
+        onCredentialsChanged: {}
+    )
+
     private func item(
         _ id: String,
         _ name: String,
@@ -577,5 +586,180 @@ struct DriveStoreTests {
         )
         // 超时的 `URLError` 不是取消：它是真的没读到。
         #expect(!DriveRequestCancellation.covers(URLError(.timedOut), taskCancelled: false))
+    }
+
+    // MARK: - 层代次
+
+    /// 续页在飞 → 下钻落地 → 续页返回。
+    ///
+    /// 那一次返回**不许**覆写已经换掉的那一层。不管的话回来的是「上一层的首页 + 上一层的
+    /// 第二页」，而 `path` 与面包屑说的是新那一层：标题说 B、列表显示 A。比看着别扭更糟的
+    /// 是 `folderId` 这时解析成上一层，接着的新建、改名、移动、删除会全落在**另一个文件夹**上。
+    ///
+    /// 这条走的是 `DriveStore` 自己 —— 排序那些纯函数判不了它，因为要判的正是「等待中途被
+    /// 换掉」这一瞬（见 `snapshotFetcher`）。
+    @Test func aPageThatArrivesAfterTheLayerChangedDoesNotLand() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+
+        let root = snapshot(
+            id: "root",
+            name: "网盘",
+            children: [item("f1", "上一层的文件.md")],
+            page: DriveChildrenPage(offset: 0, limit: 1, hasMore: true, nextOffset: 1)
+        )
+        let docs = snapshot(
+            id: "d1",
+            name: "docs",
+            children: [item("f2", "这一层的文件.md")]
+        )
+        let rootSecondPage = snapshot(
+            id: "root",
+            name: "网盘",
+            children: [item("f3", "上一层的第二页.md")],
+            page: DriveChildrenPage(offset: 1, limit: 1, hasMore: false, nextOffset: nil)
+        )
+
+        store.snapshotFetcher = { itemId, childrenOffset in
+            // 续页那一趟：停在这里，等测试放行。
+            if childrenOffset != nil {
+                await gate.hold()
+                return rootSecondPage
+            }
+            return itemId == "d1" ? docs : root
+        }
+
+        await store.reload(using: client)
+        #expect(store.current?.current.id == "root")
+        #expect(store.hasMore)
+
+        let continuation = Task { await store.loadMore(using: client) }
+        await gate.waitUntilHeld()
+
+        // 续页还在飞的时候，人点进了 docs。
+        await store.open(itemId: "d1", using: client)
+        #expect(store.current?.current.id == "d1")
+        #expect(store.path.map(\.id) == ["d1"])
+        #expect(store.folderId == "d1")
+
+        // 现在放行那一趟续页。
+        await gate.release()
+        await continuation.value
+
+        #expect(
+            store.current?.current.id == "d1",
+            "续页属于上一层，不能把已经换掉的那一层写回去"
+        )
+        #expect(
+            store.visibleChildren.map(\.id) == ["f2"],
+            "落地的那一页只属于上一层，一行都不该接上来"
+        )
+        #expect(store.folderId == "d1", "落在哪一层决定后续操作落在哪个文件夹上")
+    }
+
+    /// 反面：层没换的时候续页要照常接上。
+    ///
+    /// 少了这一条，把守卫写成「永远丢掉」也能让上面那条过。
+    @Test func aPageStillLandsWhileTheLayerStandsStill() async {
+        let store = DriveStore()
+        let first = snapshot(
+            id: "d1",
+            name: "docs",
+            children: [item("f1", "第一页.md")],
+            page: DriveChildrenPage(offset: 0, limit: 1, hasMore: true, nextOffset: 1)
+        )
+        let second = snapshot(
+            id: "d1",
+            name: "docs",
+            children: [item("f2", "第二页.md")],
+            page: DriveChildrenPage(offset: 1, limit: 1, hasMore: false, nextOffset: nil)
+        )
+
+        store.snapshotFetcher = { _, childrenOffset in
+            childrenOffset == nil ? first : second
+        }
+
+        await store.open(itemId: "d1", using: client)
+        #expect(store.visibleChildren.map(\.id) == ["f1"])
+        #expect(store.hasMore)
+
+        await store.loadMore(using: client)
+
+        // 用集合而不是数组：排序偏好落在 `UserDefaults` 上，而这一个键是会被别的用例
+        // （乃至 UI 测试里用户点的那两下）改写的。这里要判的是「两页都在」，不是顺序。
+        #expect(Set(store.visibleChildren.map(\.id)) == ["f1", "f2"], "同一层里续页要接上")
+        #expect(!store.hasMore)
+    }
+
+    /// 末行反复出现时不该空转：`hasMore` 为真而 `nextOffset` 不在，就当作没有下一页。
+    ///
+    /// 服务端的契约是「`hasMore` 为真必带 `nextOffset`」，但列表末行的 `.onAppear` 每次
+    /// 出现都会问一遍，判据少看一个字段就是一轮没有网络、也没有转圈的空转。
+    @Test func aMissingNextOffsetMeansThereIsNoNextPage() async {
+        let store = DriveStore()
+        // 服务端不该给成这样；真给成这样时别放行续页。
+        let inconsistent = snapshot(
+            id: "d1",
+            name: "docs",
+            children: [item("f1", "只有这一页.md")],
+            page: DriveChildrenPage(offset: 0, limit: 1, hasMore: true, nextOffset: nil)
+        )
+        store.snapshotFetcher = { _, _ in inconsistent }
+
+        await store.open(itemId: "d1", using: client)
+
+        #expect(store.current?.childrenPage?.hasMore == true, "服务端说的还是原样留着")
+        #expect(!store.hasMore, "没有 nextOffset 就没有下一页可续")
+    }
+
+    // MARK: - 造数据
+
+    private func snapshot(
+        id: String,
+        name: String,
+        children: [DriveBrowserItem],
+        page: DriveChildrenPage? = nil
+    ) -> DriveBrowserSnapshot {
+        DriveBrowserSnapshot(
+            current: item(id, name, folder: true),
+            breadcrumbs: [DriveBreadcrumb(id: "root", name: "网盘", browserUrl: "")],
+            children: children,
+            childrenPage: page,
+            preview: nil,
+            canDownload: true,
+            canZip: false
+        )
+    }
+}
+
+/// 让一趟「取快照」停在半路的闸门。
+///
+/// 需要它是因为要判的那一瞬本身就是「请求在飞」：真实的 `APIClient` 是 actor、没有协议、
+/// 也没有 `URLProtocol` 桩，停不下来。
+private actor DriveFetchGate {
+    private var held = false
+    private var released = false
+    private var heldWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// 那一趟走到这里就停住，直到 `release()`。
+    func hold() async {
+        held = true
+        heldWaiters.forEach { $0.resume() }
+        heldWaiters.removeAll()
+        guard !released else { return }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    /// 等它真的停进来了 —— 否则「下钻」可能抢在续页出发之前落地，测的就不是交错。
+    func waitUntilHeld() async {
+        guard !held else { return }
+        await withCheckedContinuation { heldWaiters.append($0) }
+    }
+
+    func release() {
+        released = true
+        releaseWaiters.forEach { $0.resume() }
+        releaseWaiters.removeAll()
     }
 }

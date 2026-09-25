@@ -228,7 +228,7 @@ struct DriveShareSheet: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("创建", action: submit)
                     // 名单不对时连请求都不发：服务端那句「可编辑用户邮箱无效。」不会说是哪一段
-                    // 不对，而这里是能说出那一段的地方（见 `editorsMessage`）。
+                    // 不对，而页脚那一句（`DriveShareEditors.hint`）说得出来是哪一段。
                     .disabled(submitting || !canSubmit)
             }
         case .result:
@@ -297,8 +297,8 @@ struct DriveShareSheet: View {
                         .tag(DriveAccessMode.specifiedUsersEdit)
                 }
                 .pickerStyle(.menu)
-                // 不隐藏标签，这一行左边就是 Picker 自己那个「访问权限」，而上一行是同一个词
-                // 的 Section header——四个字挨着出现两遍。有效期那一栏上面没有 header，
+                // 隐藏这一行的标签：Picker 自己会写一个「访问权限」，而上面那一栏的 Section
+                // header 正是同一个词——四个字挨着出现两遍。有效期那一栏上面没有 header，
                 // 所以那边不隐藏。
                 .labelsHidden()
                 // 名单只有这一档要有，这一栏也只在选中它时出现。
@@ -474,7 +474,9 @@ struct DriveShareSheet: View {
         switch outcome {
         case .failed(let reason):
             model.notice(reason, tone: .failure)
-            if case .form = phase { return }
+            // 留在表单上。这一趟只可能从 `.form` 出发（`submit` 由那一页的按钮触发），所以
+            // 这一行通常是把同一个值再写一遍；它留着是为了把意图写明白 —— 失败不该把用户
+            // 刚选的那几项丢掉。
             phase = .form
         case .created, .reused:
             phase = .result(outcome)
