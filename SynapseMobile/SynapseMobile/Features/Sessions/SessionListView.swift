@@ -213,6 +213,21 @@ struct SessionListView: View {
             }
             .tint(Color(uiColor: .systemGray))
         }
+        // **这一行的选中值就是它的会话号**，显式写死。
+        //
+        // 不写这一条，`List(selection:)` 会退回它自己的行标识 —— 而这里那个标识是
+        // `SessionListBlock.id`，一个**复合串**（`"session:<uuid>"` / `"tab:<uuid>"`，
+        // 前缀是为了让「一个终端」和「一个标签页」不撞号）。于是点一次会发出**两个**
+        // 打开请求：一个带着那个复合串，一个带着 `NavigationLink` 的真会话号。前者谁都不认识，
+        // 判据只能答「这个会话已经结束了。」—— 而它说的是**你刚点进去的那个会话**，因为那个
+        // 串就是从它身上拼出来的。手机上表现为：震一下、底部多一条红提示，然后照常进去。
+        //
+        // 加判据之前，同一个假串被直接拿去开终端，于是打开一个不存在的会话 —— 那正是上一轮
+        // 那个「从列表点进去纯黑、从通知点进去正常」。判据把黑屏换成了一句错话，根没动。
+        //
+        // 对照：`InboxView` 那条列表从来不出这个问题，因为它的 `ForEach` 标识（`item.id`）与
+        // 行的 `NavigationLink(value:)` 恰好是同一个值，退回也退到对的地方去。
+        .tag(session.id)
     }
 
     /// The alert dismisses by resetting its target, so clearing it is what closes
