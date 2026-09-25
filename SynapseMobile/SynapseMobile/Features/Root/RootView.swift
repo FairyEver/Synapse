@@ -21,6 +21,8 @@ struct RootView: View {
     /// 通知面板。它挂在根上，因为有两个入口打开的是同一个面板：主页右上角的铃铛，
     /// 和「我的 → 通知」。
     @State private var showingNotifications = false
+    /// 「我的 → 通知」里那一个开关。关掉只是不往 App 图标上写数字，别的都不受影响。
+    @AppStorage(BadgePreference.key) private var iconBadge = true
     @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
     /// 一个还没能判定的打开终端请求。
     ///
@@ -117,16 +119,8 @@ struct RootView: View {
             )
             model.handleScenePhase(phase == .active)
         }
-        .onChange(of: model.notifications.unreadCount) { _, count in
-            let badge = count
-            Task {
-                // Setting the badge needs no permission, but it does need the user to
-                // have granted notifications at all. This app treats push as best
-                // effort — everything works without it — so a refusal is not an error
-                // worth surfacing, and there is no UI here to surface it in anyway.
-                try? await UNUserNotificationCenter.current().setBadgeCount(badge)
-            }
-        }
+        .onChange(of: model.notifications.unreadCount) { _, _ in updateIconBadge() }
+        .onChange(of: iconBadge) { _, _ in updateIconBadge() }
     }
 
     /// 会话列表写给导航的那条选择：读的是真相，写的是请求。
@@ -212,9 +206,11 @@ struct RootView: View {
             .tabItem { Label("终端", systemImage: "terminal") }
             .tag(Tab.terminals)
 
-            AdaptiveSettingsView(selection: $settingsSelection) {
-                terminalSelection = nil
-            }
+            AdaptiveSettingsView(
+                selection: $settingsSelection,
+                onSelectDesktop: { terminalSelection = nil },
+                onOpenNotifications: { showingNotifications = true }
+            )
             .tabItem { Label("我的", systemImage: "person") }
             .tag(Tab.settings)
         }
@@ -235,6 +231,22 @@ struct RootView: View {
         showingNotifications = false
         selectedTab = .terminals
         requestTerminal(sessionId, from: .homePending)
+    }
+
+    /// 把未读数写到 App 图标上。
+    ///
+    /// 开关关掉时写 0 —— 也就是把已经画上去的数字擦掉，而不是什么都不做：什么都不做的话，
+    /// 关掉它的那一刻角标还挂在那儿。
+    ///
+    /// Setting the badge needs no permission, but it does need the user to have granted
+    /// notifications at all. This app treats push as best effort — everything works
+    /// without it — so a refusal is not an error worth surfacing, and there is no UI
+    /// here to surface it in anyway.
+    private func updateIconBadge() {
+        let count = iconBadge ? model.notifications.unreadCount : 0
+        Task {
+            try? await UNUserNotificationCenter.current().setBadgeCount(count)
+        }
     }
 
     /// Sends a notification tap straight to the terminal that needs attention.
