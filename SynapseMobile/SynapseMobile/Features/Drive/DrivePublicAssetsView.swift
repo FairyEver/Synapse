@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -231,9 +232,7 @@ struct DrivePublicAssetsView: View {
                 selectionLimit: 1,
                 onPicked: { results in
                     sheet = nil
-                    Task {
-                        await upload(await DriveFileIntake.prepare(results: results))
-                    }
+                    Task { await upload(results: results) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -242,9 +241,7 @@ struct DrivePublicAssetsView: View {
             DocumentPicker(
                 onPicked: { urls in
                     sheet = nil
-                    Task {
-                        await upload(DriveFileIntake.prepare(documentURLs: urls))
-                    }
+                    Task { await upload(documentURLs: urls) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -273,16 +270,42 @@ struct DrivePublicAssetsView: View {
         model.notice("已复制直链", tone: .success, id: "drive.asset.copied")
     }
 
-    /// 传一批。
+    /// 相册选中的一批。
     ///
-    /// **选中之后、起飞之前先按大小拦一道**：`PHPickerResult` / `NSItemProvider` 都不暴露
-    /// 字节数（要拿得走相册权限那条路，而 picker 这条路的设计恰恰是不申请权限），所以只能
-    /// 在文件落到磁盘之后量。超限的那一个不发给服务端 —— 让它拒的话，用户等到传完才知道。
-    private func upload(_ files: [PickedFile]) async {
-        guard !uploading, !files.isEmpty else { return }
+    /// **在飞标志在落地之前就置位。** `DriveFileIntake.prepare` 要往临时目录里拷一份最大
+    /// 100 MB 的东西，可能好几秒，而工具栏那颗 ＋ 只在 `uploading` 时换成转圈 —— 晚置位的话
+    /// 这几秒里再点一次 ＋ 会落在 `guard !uploading` 上被静默丢掉（用户选了文件、什么都没
+    /// 发生），或者两批交错跑完、后一批把前一批的直链盖掉。
+    private func upload(results: [PHPickerResult]) async {
+        guard !uploading else { return }
+        uploading = true
+        defer { uploading = false }
+        await deliver(await DriveFileIntake.prepare(results: results))
+    }
+
+    /// 文件 App 选中的一批。
+    private func upload(documentURLs: [URL]) async {
+        guard !uploading else { return }
+        uploading = true
+        defer { uploading = false }
+        await deliver(DriveFileIntake.prepare(documentURLs: documentURLs))
+    }
+
+    /// 已经落到磁盘上的一批：先按大小拦一道，再一条条发。
+    ///
+    /// **起飞之前按大小拦一道**：`PHPickerResult` / `NSItemProvider` 都不暴露字节数（要拿得走
+    /// 相册权限那条路，而 picker 这条路的设计恰恰是不申请权限），所以只能在文件落到磁盘之后
+    /// 量。超限的那一个不发给服务端 —— 让它拒的话，用户等到传完才知道。
+    ///
+    /// 空的一批（落地就失败了）什么都不说：`DriveFileIntake` 已经把原因写进日志，而这一屏
+    /// 没有可做的事 —— 编一句「没能读取」出来只会让用户再试一次同样会失败的操作。
+    private func deliver(_ files: [PickedFile]) async {
+        guard !files.isEmpty else { return }
         var accepted: [PickedFile] = []
         for file in files {
             guard file.size <= Int64(AppConfiguration.relayMaxFileBytes) else {
+                // 不发出去的那一份也是本机刚落下的拷贝，一样要删（否则它比超限的文件活得久）。
+                DriveFileIntake.discard(file)
                 // 说法与接力那一套逐字相同（`PickRejection.tooLarge`）：同一条上限在两处
                 // 不该有两种措辞。
                 model.notice(
@@ -293,15 +316,15 @@ struct DrivePublicAssetsView: View {
             }
             accepted.append(file)
         }
+        // 到这儿 accepted 为空只可能是「一批全被拦了」：每一条都已经各自说过原因（上面那句），
+        // 所以这里只是不再往下走。
         guard !accepted.isEmpty else { return }
 
-        uploading = true
         var links: [String] = []
         for file in accepted {
             // 一条失败不影响后面的：失败的那一条说清是哪一条、为什么（见 `send`）。
             if let link = await send(file) { links.append(link) }
         }
-        uploading = false
         // 传完重取：新素材要出现在列表里。成了的那几条由 `uploadedLinks` 把直链摆出来。
         await model.driveLoadAssets()
         uploadedLinks = links
@@ -312,6 +335,9 @@ struct DrivePublicAssetsView: View {
     /// 这一条不走 `DriveUploader` 那套队列：prepare / complete 是**另一条路由**
     /// （`public-assets/uploads/...`），而且公开素材一次就一个文件 —— 那套队列的重试、
     /// 取消、并发上限在这里换不来什么。字节走 `FileUploader`（目标是预签名地址，不带 bearer）。
+    ///
+    /// 队列丢下的两项收尾（失败即释放服务端预留、用完删掉本机那份临时拷贝）落在
+    /// `SynapseAppModel.driveUploadPublicAsset` 里：视图这里只管「这一条成没成」。
     private func send(_ file: PickedFile) async -> String? {
         do {
             let asset = try await model.driveUploadPublicAsset(file)

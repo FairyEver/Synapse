@@ -3,7 +3,7 @@ import Testing
 @testable import SynapseMobile
 
 /// 云盘那几个屏里能单独拿出来判的东西：排序、批量结果、路径栈、回收站恢复分流、
-/// 分享请求体、复用判定与链接变没变、公开素材直链、搜索词归一。
+/// 分享请求体、复用判定与链接变没变、公开素材直链、搜索词归一、取消与真失败的区分。
 ///
 /// `DriveStore` 自己不在测试里：它的网络方法收的是 `APIClient`（actor），没有协议就注入
 /// 不了假的，而本仓 `MeetingStore` 同样没有单测。会算错的部分都抽成了这个文件上面那些
@@ -541,5 +541,41 @@ struct DriveStoreTests {
         #expect(DriveSearchTerm.normalized("") == nil)
         #expect(DriveSearchTerm.normalized("   ") == nil)
         #expect(DriveSearchTerm.normalized(" 报告 ") == "报告")
+    }
+
+    // MARK: - 取消
+
+    @Test func aCancelledRequestIsNotAFailure() {
+        // 用户在请求飞着时退出这一屏：`.task` 取消这一趟，而搜索词与账号的守卫**通过**
+        // （词没变、账号没变），不认取消就会写下一行「网络不可用」，下次进来先看到它。
+        #expect(DriveRequestCancellation.covers(CancellationError(), taskCancelled: false))
+        #expect(DriveRequestCancellation.covers(URLError(.cancelled), taskCancelled: false))
+        // 关键的那条：URLSession 的取消在 `APIClient.perform` 里已经塌成「网络不可用」的
+        // `APIError`，从错误本身认不出来 —— 只能靠外层任务的取消状态。
+        #expect(
+            DriveRequestCancellation.covers(
+                APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。"),
+                taskCancelled: true
+            )
+        )
+    }
+
+    @Test func aRealFailureStillSpeaks() {
+        // 反面：真的网络错误（任务没被取消）必须照旧说出来，否则这一屏会一直空着，
+        // 而用户以为回收站里什么都没有。
+        #expect(
+            !DriveRequestCancellation.covers(
+                APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。"),
+                taskCancelled: false
+            )
+        )
+        #expect(
+            !DriveRequestCancellation.covers(
+                APIError(status: 500, code: nil, message: "服务器开小差了。"),
+                taskCancelled: false
+            )
+        )
+        // 超时的 `URLError` 不是取消：它是真的没读到。
+        #expect(!DriveRequestCancellation.covers(URLError(.timedOut), taskCancelled: false))
     }
 }

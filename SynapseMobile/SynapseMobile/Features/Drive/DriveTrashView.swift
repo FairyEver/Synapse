@@ -85,6 +85,12 @@ struct DriveTrashView: View {
         // 所以只有真的换了词才重取；连着敲的几次由 store 自己按「这一份结果是不是这个词的」
         // 认领（`isCurrentTrash`），先回来的旧词结果落不了地。
         .task(id: DriveSearchTerm.normalized(searchText)) {
+            // 停一下再发：`searchable` 的词是连着变的，每敲一个字发一次请求只换来一串
+            // 会被下一个词作废的响应与一串 loading 翻转，而结果只对停下来之后的那个词有意义。
+            // 250ms 是打字间隔的量级；这一觉被取消就说明词又变了（或者用户退出了这一屏），
+            // 那一趟本来就不该发。
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
             await model.driveLoadTrash(search: searchText)
         }
         .refreshable {

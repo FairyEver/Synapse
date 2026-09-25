@@ -491,6 +491,31 @@ enum DriveSearchTerm {
     }
 }
 
+// MARK: - 取消
+
+/// 这一趟取数是不是被取消的。
+///
+/// 取消**不是**失败，不该写进用户看得见的那一行错误里。视图的 `.task` 在用户退出这一屏时
+/// 会取消这一趟，而这时那一次的搜索词/账号守卫**是通过的**（词没变、账号没变）—— 不认取消
+/// 的话，下次进这一屏会先看到一行红的「网络不可用」，直到下一次拉取成功才清掉。
+///
+/// 两条路都要认：
+///
+/// - 直接抛出来的 `CancellationError`（`Task.sleep` 那类）；
+/// - URLSession 在任务被取消时抛的 `URLError.cancelled` —— 而它在 `APIClient.perform` 里
+///   已经塌成 `status: 0` 的「网络不可用」，从错误本身再也认不出来，所以还要看
+///   `Task.isCancelled`（取消是从外层任务一路带下来的，同一个上下文里读得到）。
+///
+/// 纯判据，不读任何本机状态。
+enum DriveRequestCancellation {
+    static func covers(_ error: Error, taskCancelled: Bool) -> Bool {
+        if taskCancelled { return true }
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
+    }
+}
+
 // MARK: - Store
 
 /// 云盘的浏览状态与文件夹操作。
@@ -867,6 +892,9 @@ final class DriveStore {
             trashLoading = false
         } catch {
             guard isCurrentTrash(term, account: account) else { return }
+            // 这一趟被取消（用户退出这一屏、或者搜索词又变了）就什么都不说：取消不是这一
+            // 屏读不到东西。`trashLoading` 也不动 —— 该等的那一次是后一趟。
+            guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             trashErrorMessage = DriveText.errorMessage(error)
             trashLoading = false
         }
@@ -932,6 +960,8 @@ final class DriveStore {
             sharesErrorMessage = nil
         } catch {
             guard account == accountGeneration else { return }
+            // 与回收站同一条：退出这一屏时被取消的那一趟不写错误行。
+            guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             sharesErrorMessage = DriveText.errorMessage(error)
         }
     }
@@ -1028,6 +1058,8 @@ final class DriveStore {
             assetsErrorMessage = nil
         } catch {
             guard account == accountGeneration else { return }
+            // 与回收站同一条：退出这一屏时被取消的那一趟不写错误行。
+            guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             assetsErrorMessage = DriveText.errorMessage(error)
         }
     }

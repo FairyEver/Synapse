@@ -788,19 +788,36 @@ final class SynapseAppModel {
     /// prepare / complete 走 `public-assets/uploads/...`，与云盘的 `DriveUploader` 那条队列
     /// **不是同一条路由**；字节走 `FileUploader`（目标是预签名地址，不带 bearer）。
     /// 这里不做队列：公开素材一次一个文件，那套队列的重试、取消与并发上限换不来什么。
+    ///
+    /// 但那条队列的两项收尾职责不能跟着丢，都落在这儿（视图只递进来一个 `PickedFile`，
+    /// 「这一趟结束了」只有这里知道）：
+    ///
+    /// - **失败即释放预留。** prepare 已经在服务端按声明大小记了 `reservedBytes`，PUT 或
+    ///   complete 抛出去之后不释放，那份额度只能等服务端十五分钟的过期清扫（同
+    ///   `uploadAndDeliver` 的失败分支）。
+    /// - **那份临时拷贝用完就删。** 谁落下谁删（`DriveFileIntake.discard`）：成功失败都一样 ——
+    ///   队列里的失败项是留着重试的，而这一屏没有重试入口，留着那份最大 100 MB 的拷贝只是
+    ///   占盘。
     func driveUploadPublicAsset(_ file: PickedFile) async throws -> DrivePublicAsset {
+        defer { DriveFileIntake.discard(file) }
         let ticket = try await apiClient.drivePreparePublicAssetUpload(
             name: file.name,
             size: file.size,
             mimeType: file.mimeType
         )
-        try await uploader.upload(
-            fileURL: file.url,
-            to: ticket.upload.url,
-            headers: ticket.upload.headers,
-            onProgress: { _ in }
-        )
-        return try await apiClient.driveCompletePublicAssetUpload(sessionId: ticket.sessionId)
+        do {
+            try await uploader.upload(
+                fileURL: file.url,
+                to: ticket.upload.url,
+                headers: ticket.upload.headers,
+                onProgress: { _ in }
+            )
+            return try await apiClient.driveCompletePublicAssetUpload(sessionId: ticket.sessionId)
+        } catch {
+            // 取消失败不再往上抛别的东西：这一趟已经在报错的路上，那个原因才是要对用户说的。
+            try? await apiClient.cancelPublicAssetUpload(sessionId: ticket.sessionId)
+            throw error
+        }
     }
 
     @discardableResult

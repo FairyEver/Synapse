@@ -719,6 +719,11 @@ actor APIClient {
             "/drive/public-assets/uploads/\(escapedPathComponent(sessionId))/complete"
         }
 
+        /// Releases a public-asset reservation whose bytes never arrived.
+        static func cancelPublicAssetUpload(sessionId: String) -> String {
+            "/drive/public-assets/uploads/\(escapedPathComponent(sessionId))/cancel"
+        }
+
         /// 改名与移入回收站共用这一条。
         static func publicAsset(assetId: String) -> String {
             "/drive/public-assets/\(escapedPathComponent(assetId))"
@@ -999,6 +1004,18 @@ actor APIClient {
     /// 完成之后拿到的就是那条直链本身（`url`）。
     func driveCompletePublicAssetUpload(sessionId: String) async throws -> DrivePublicAsset {
         try await send(path: DriveRoute.completePublicAssetUpload(sessionId: sessionId), method: "POST")
+    }
+
+    /// 释放一条公开素材的预留：字节没到，或者已经不要了。
+    ///
+    /// 与 `cancelDriveUpload` 是两条路由：那个放的是云盘上传的会话，这个放的是
+    /// `public-assets` 那一套。prepare 已经按声明大小在服务端记了额度，不释放就只剩
+    /// 等它自己十五分钟的过期清扫。
+    func cancelPublicAssetUpload(sessionId: String) async throws {
+        let _: EmptyResponse = try await send(
+            path: DriveRoute.cancelPublicAssetUpload(sessionId: sessionId),
+            method: "POST"
+        )
     }
 
     func driveRenamePublicAsset(assetId: String, name: String) async throws -> DrivePublicAsset {

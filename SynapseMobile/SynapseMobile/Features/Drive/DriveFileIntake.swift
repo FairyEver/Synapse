@@ -80,6 +80,21 @@ enum DriveFileIntake {
         }
     }
 
+    // MARK: - 收拾
+
+    /// 删掉这一趟落在临时目录里的那份拷贝。
+    ///
+    /// 谁落下谁删：`land` 与 `write` 往 `temporaryDirectory` 里放的东西（一条最大 100 MB）
+    /// 在这里之外的唯一删除点是 `DriveUploader.discard` —— 而那条队列眼下没有 App 调用点。
+    /// 用完不删就随上传次数累积在盘上。
+    ///
+    /// 只有落在本 App 临时目录里的才删（与 `DriveUploader.discard` 同一条守卫）：文件 App
+    /// 那条路交回来的是别的 App 或 iCloud 里的东西，删掉就是删用户的文件。
+    static func discard(_ file: PickedFile) {
+        guard file.url.path.hasPrefix(FileManager.default.temporaryDirectory.path) else { return }
+        try? FileManager.default.removeItem(at: file.url)
+    }
+
     // MARK: - 取名
 
     /// picker 交回来的名字 → 云盘里那个名字。
