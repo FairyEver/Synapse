@@ -50,12 +50,7 @@ struct AdaptiveSettingsView: View {
             emptyTitle: "选择设置",
             emptySymbol: "gearshape"
         ) {
-            List(SettingsCategory.allCases, selection: $selection) { category in
-                NavigationLink(value: category) {
-                    Label(category.title, systemImage: category.symbol)
-                }
-            }
-            .navigationTitle("我的")
+            SettingsCategoriesView(selection: $selection)
         } detail: { category in
             NavigationStack {
                 SettingsView(category: category, onSelectDesktop: onSelectDesktop)
