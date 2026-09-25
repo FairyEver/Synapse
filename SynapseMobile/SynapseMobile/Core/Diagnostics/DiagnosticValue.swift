@@ -135,6 +135,17 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     /// 认不出的方法。HTTP 方法在 `APIClient` 里是字面量，加一个没见过的走这里。
     case other
 
+    // MARK: 打开终端的入口
+    /// 手机上有五条路能进终端页，而**只有会话列表那一行是当场取会话号的**（见
+    /// `TerminalOpenability`）。判据拒绝一次请求时，「是哪条路在问」是这条记录的全部价值：
+    /// 它区分的是「一条旧通知 / 旧记录 / 小组件快照在问一个已经结束的会话」（上一版设计里
+    /// 预料到的事），与「会话列表这条路自己出了问题」（判据或列表有缺陷，另一件事）。
+    case sessionList
+    case pushNotification
+    case inboxRecord
+    case homeWidget
+    case queuedRequest
+
     // MARK: 触发原因
     case contentGrew
     case insetChanged

@@ -296,7 +296,11 @@ struct NotificationDetailView: View {
                         Section {
                             Button("打开终端") {
                                 if let device = item.deviceId { model.selectDesktop(device) }
-                                NotificationRouter.shared.route(to: .terminal(sessionId: target, desktopClientInstanceId: item.deviceId ?? ""))
+                                NotificationRouter.shared.route(to: .terminal(
+                                    sessionId: target,
+                                    desktopClientInstanceId: item.deviceId ?? "",
+                                    entry: .inboxRecord
+                                ))
                             }
                         }
                     } else if item.source == "meeting-transcription", let target = item.targetId {

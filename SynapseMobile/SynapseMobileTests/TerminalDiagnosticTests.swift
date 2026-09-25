@@ -138,6 +138,62 @@ struct TerminalDiagnosticTests {
         #expect(text.contains("followGrab"), "跟随最新输出没有留下痕迹")
     }
 
+    /// 一次没能进去的打开请求必须留下记录，连同**是谁在问**。
+    ///
+    /// 这条记录为一个具体的坑而存在：手机上有五条路能进终端页，而只有会话列表那一行是
+    /// 当场取会话号的，另外四条带的都是某一刻记下来的号。它们的请求被拒绝时，那句
+    /// 「这个会话已经结束了。」会被画在**另一个**会话的画布上 —— 而「是哪条路在问」
+    /// 当时在手机上完全没有记录，排查只能推到「不是正在看着的那个会话」，再往前就没了。
+    @Test func aRefusedOpenRecordsWhichEntryAsked() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        DiagnosticLog.useSinkForTesting(sink)
+        defer { DiagnosticLog.useSinkForTesting(nil) }
+
+        let fields = try #require(SynapseAppModel.terminalOpenRecordFields(
+            sessionId: "11111111-2222-3333-4444-555555555555",
+            decision: .ended,
+            origin: .inboxRecord
+        ))
+        DiagnosticLog.record(.terminalLifecycle, fields)
+        sink.flushForTesting()
+
+        let text = written(in: directory)
+        #expect(text.contains("term.lifecycle"), "拒绝打开没有留下记录")
+        #expect(text.contains("outcome=rejected"))
+        #expect(text.contains("entry=inboxRecord"), "记录里没有说清是哪条路在问")
+        #expect(text.contains("session=s"), "记录里没有那个被点名的会话")
+    }
+
+    /// 正常打开不记。
+    ///
+    /// 每一次点行都留一条的话，它要回答的那一格就淹在噪声里了 —— 这条记录值的只有
+    /// 「为什么没进去」。
+    @Test func aNormalOpenIsNotRecorded() {
+        #expect(SynapseAppModel.terminalOpenRecordFields(
+            sessionId: "s",
+            decision: .openable,
+            origin: .sessionList
+        ) == nil)
+    }
+
+    /// 五个入口各有自己的词。
+    ///
+    /// 混成一个就分不出「会话列表这条路自己出了问题」（判据或列表有缺陷）与「一条旧记录
+    /// 在问一个已经结束的会话」（上一版设计里预料到的事）—— 而这两件事的修法完全不同。
+    @Test func everyEntryHasItsOwnWord() {
+        let origins: [TerminalOpenOrigin] = [
+            .sessionList, .pushNotification, .inboxRecord, .homeWidget, .queuedRequest,
+        ]
+        let words = Set(origins.map(\.diagnosticFlag.rawValue))
+
+        #expect(words.count == origins.count, "有两个入口在日志里是同一个词")
+        #expect(origins.map(\.diagnosticFlag).contains(.sessionList), "列表这个入口没有自己的词")
+    }
+
     /// 滑行那条路也要留下痕迹。
     ///
     /// 上面那条走的是「插不了值」的回落路径（视图没有窗口），而生产上走的是滑行：

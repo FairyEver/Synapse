@@ -100,7 +100,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // wants to look before deciding.
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
             NotificationRouter.shared.route(
-                to: .terminal(sessionId: sessionId, desktopClientInstanceId: desktopClientInstanceId)
+                to: .terminal(
+                    sessionId: sessionId,
+                    desktopClientInstanceId: desktopClientInstanceId,
+                    entry: .pushNotification
+                )
             )
             return
         }

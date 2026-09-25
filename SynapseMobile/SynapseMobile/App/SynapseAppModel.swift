@@ -1205,6 +1205,45 @@ final class SynapseAppModel {
         )
     }
 
+    /// 记下一次「打开终端」的判定。
+    ///
+    /// 这条记录为一个具体的坑而存在：手机上有五条路能进终端页，只有会话列表那一行是当场取
+    /// 会话号的，另外四条带的都是**某一刻记下来的号**。它们的请求被拒绝时人会看到一句
+    /// 「这个会话已经结束了。」，而那句话当时被画在**另一个**会话的画布上（提示条没有归属，
+    /// 见 `Notice.sessionId`）。修是修好了，但「是哪条路在问」在手机上**完全没有记录** ——
+    /// 排查只能靠排除法推到「不是正在看着的那个会话」，再往前就没了。
+    ///
+    /// 所以这里记两样：那个被点名的会话（别名）与问它的那条路。
+    func recordTerminalOpen(
+        _ sessionId: String,
+        decision: TerminalOpenability,
+        from origin: TerminalOpenOrigin
+    ) {
+        guard let fields = Self.terminalOpenRecordFields(
+            sessionId: sessionId,
+            decision: decision,
+            origin: origin
+        ) else { return }
+        DiagnosticLog.record(.terminalLifecycle, fields)
+    }
+
+    /// 上面那条记录长什么样；`nil` 就是「不记」。
+    ///
+    /// 静态、纯函数：这条记录正是排查里唯一缺的那一格，它自己必须能被单测钉住，而
+    /// `SynapseAppModel` 在测试里造不出来（它要网络、要存储、要一个登录的人）。
+    nonisolated static func terminalOpenRecordFields(
+        sessionId: String,
+        decision: TerminalOpenability,
+        origin: TerminalOpenOrigin
+    ) -> [DiagnosticEntry]? {
+        guard let outcome = decision.diagnosticFlag else { return nil }
+        return [
+            .init(.session, DiagnosticLog.alias(.session, sessionId)),
+            .init(.outcome, .flag(outcome)),
+            .init(.entry, .flag(origin.diagnosticFlag)),
+        ]
+    }
+
     /// Forgets everything about terminals the computer no longer lists.
     ///
     /// The list is the whole truth — the computer sends every session it has, not a

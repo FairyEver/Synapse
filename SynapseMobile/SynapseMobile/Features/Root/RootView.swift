@@ -126,7 +126,7 @@ struct RootView: View {
     private var terminalEntry: Binding<String?> {
         Binding(
             get: { terminalSelection },
-            set: { requestTerminal($0) }
+            set: { requestTerminal($0, from: .sessionList) }
         )
     }
 
@@ -203,7 +203,7 @@ struct RootView: View {
                     selectedTab = .terminals
                     // 走同一道闸门：待处理那一行是从列表上取的，本来就在，但它可能在
                     // 「这一行画出来」和「手指落下去」之间结束掉。
-                    requestTerminal(sessionId)
+                    requestTerminal(sessionId, from: .inboxRecord)
                 }
             } detail: { id in
                 NotificationDetailView(id: id)
@@ -225,7 +225,7 @@ struct RootView: View {
     private func handleRoute(_ destination: NotificationRouter.Destination?) {
         guard let destination else { return }
         switch destination {
-        case .terminal(let sessionId, let desktopClientInstanceId):
+        case .terminal(let sessionId, let desktopClientInstanceId, let entry):
             // Naming a computer is the reader saying which one they mean, so this is
             // honoured even when that computer is not reachable — landing them on
             // another one instead is the behaviour the switch exists to remove.
@@ -239,7 +239,7 @@ struct RootView: View {
             // 会话。一条通知记着的是「它完成那一轮时」的会话 id，那条会话后来结束了、被删了
             // 都不会让这条记录失效，所以这个 id 的存在必须当场再问一次。
             if !model.viewedDesktopIsOffline {
-                requestTerminal(sessionId, on: desktopClientInstanceId)
+                requestTerminal(sessionId, on: desktopClientInstanceId, from: entry)
             }
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
@@ -282,13 +282,22 @@ struct RootView: View {
     /// 是唯一说得通的一条：另外三条路带来的 id 都来自某个更早的时刻，而那一刻可能早就过去了。
     /// 旧的写法是直接进终端页 —— 于是手机把人送进一块空画布，画布上只有电脑回的那句
     /// 「该终端已结束。」，而返回的路要人自己找。
-    private func requestTerminal(_ sessionId: String?, on desktopClientInstanceId: String? = nil) {
+    private func requestTerminal(
+        _ sessionId: String?,
+        on desktopClientInstanceId: String? = nil,
+        from origin: TerminalOpenOrigin
+    ) {
         guard let sessionId else {
             terminalSelection = nil
             pendingTerminalOpen = nil
             return
         }
-        switch model.terminalOpenability(sessionId, on: desktopClientInstanceId) {
+        let decision = model.terminalOpenability(sessionId, on: desktopClientInstanceId)
+        // 没能进去的两种在这里各留一条记录，连同**是谁在问**一起（见 `TerminalOpenOrigin`）。
+        // 它排在这个 switch 之前而不是某个分支里，是因为下面那个 `.unknown` 会把请求排进
+        // 队列、过几秒才轮到 —— 那一刻「谁在问」已经不在栈上了，只能由这里带过去。
+        model.recordTerminalOpen(sessionId, decision: decision, from: origin)
+        switch decision {
         case .openable:
             pendingTerminalOpen = nil
             terminalSelection = sessionId
@@ -346,7 +355,9 @@ struct RootView: View {
             pendingTerminalOpen = nil
             return
         }
-        requestTerminal(pending.sessionId, on: pending.desktopClientInstanceId)
+        // 排队时是谁点的，到这一刻已经不在栈上了 —— 那个来源在排进队列时就记过一次
+        // （见 `requestTerminal`），这里只说明「现在轮到它了」。
+        requestTerminal(pending.sessionId, on: pending.desktopClientInstanceId, from: .queuedRequest)
     }
 
     /// 所有「来自手机外面」的打开请求都在这一个入口里收口。
@@ -383,7 +394,7 @@ struct RootView: View {
         // 判据和通知那条路是同一条，只是这里多一个前置条件：列表必须是**刚从那台电脑的
         // 连接上收到的**。小组件的快照可以躺很久，而拿一份陈旧的列表去判，每一条都会读成
         // 「它还在」—— 那正是这道闸门要挡的东西。
-        requestTerminal(sessionId, on: desktopId)
+        requestTerminal(sessionId, on: desktopId, from: .homeWidget)
         pendingWidgetTarget = nil
     }
 }

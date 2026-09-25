@@ -32,6 +32,19 @@ enum TerminalOpenability: Equatable {
     /// 变成一串「这个会话已经结束了」。
     case unknown
 
+    /// 这个结论在诊断日志里怎么写；`nil` 就是「不记」。
+    ///
+    /// `openable` 没有词，因为正常打开那一下人自己看得见、不需要日志；而「被拒绝」与
+    /// 「还不知道」正是「为什么没进去」的全部价值所在 —— 一次真实的排查里，缺的就是这一格。
+    /// 见 `SynapseAppModel.recordTerminalOpen`。
+    var diagnosticFlag: DiagnosticFlag? {
+        switch self {
+        case .openable: nil
+        case .ended: .rejected
+        case .unknown: .unknown
+        }
+    }
+
     static func resolve(
         sessionId: String,
         desktopClientInstanceId: String?,
