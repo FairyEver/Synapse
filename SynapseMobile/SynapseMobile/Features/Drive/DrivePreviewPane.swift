@@ -606,9 +606,22 @@ struct DriveZoomableImage: UIViewRepresentable {
         var label: String
         weak var imageView: UIImageView?
         weak var scrollView: UIScrollView?
-        /// 上一次按哪块尺寸解的。尺寸变了要重解（iPad 分屏拖动、转屏），不然屏幕上是一张
-        /// 被拉大的小图；先记后解，解不出来（坏文件、系统不认的格式）也不每次布局都重试。
-        private var decodedFor: CGSize?
+        /// 解到哪一步：上一次是按哪块地方、哪个屏幕倍率解的。两样里任一样变了都要重解 ——
+        /// 尺寸变了是 iPad 分屏拖动与转屏，不然屏幕上是一张被拉大的小图；倍率变了是把窗口从
+        /// 3x 屏挪到 2x 屏（外接显示器、Stage Manager），那一下尺寸可以一点不动，只按尺寸记
+        /// 就会一直画着按 3x 解的那一份，在 2x 屏上偏软一档。先记后解，解不出来（坏文件、
+        /// 系统不认的格式）也不每次布局都重试。
+        private var decodedFor: DecodeTarget?
+
+        /// 一次解码是按「哪儿」解的：那块地方的尺寸，加上当时的屏幕倍率。
+        ///
+        /// 两个维度缺一不可：`maxPixelSize` 由这两样算出来，所以缓存键也得是这两样，
+        /// 少了倍率就会出现「尺寸一样、倍率变了」时拿着旧的那一份接着用（见 `decodedFor`）。
+        private struct DecodeTarget: Equatable {
+            let size: CGSize
+            /// 已归一：读不到倍率时按 1 算，与算 `maxPixelSize` 时用的是同一个值。
+            let displayScale: CGFloat
+        }
 
         init(url: URL, label: String) {
             self.url = url
@@ -622,22 +635,42 @@ struct DriveZoomableImage: UIViewRepresentable {
             loadImage()
         }
 
-        /// 按**现在这块地方**需要的像素数解一版，装到那张图上。
+        /// 降采样目标在「这块地方 × 屏幕倍率」之上再乘的余量。
         ///
-        /// 目标只有一处来源：这张图实际占的那块地方（滚动视图的尺寸）乘屏幕倍率。它在这里
-        /// 最多铺满这一块地方，别处用不到更多像素。
+        /// 只按 1x 屏上尺寸解是不够的：双击会把这张图放大到 3 倍（见 `doubleTapped`），
+        /// 而放大之后要看的就是 3 倍于 1x 的像素 —— 拿按 1x 解的那一份拉大 3 倍，画面就是
+        /// 一层糊。1200 万像素的照片恰好是人会去放大看的东西，所以这不是理论问题。
         ///
-        /// 触发点有两个：滚动视图的 `layoutSubviews`（`makeUIView` 那一刻还没有尺寸），
-        /// 与换图时的 `show`。
+        /// 为什么取 3：这张图 1x 时铺开的长边不会超过滚动视图的长边（`scaleAspectFit`，
+        /// 只会往里缩），所以「这块地方的长边 × 3」覆盖的一定是 3 倍下要用的像素 —— 竖着
+        /// 的这块地方里，越窄的图（正方的、横的）实际铺开得越小，3 倍是那个通用上界，取
+        /// 2 会在竖构图的照片上短一截。捏合最多能到 8 倍，那一档多高的倍数都填不满，不做。
+        ///
+        /// 代价由源图兜住：`DriveImageFile` 只缩不放，源图比目标小的时候 ImageIO 给回原尺寸，
+        /// 所以这里多要的那一截只在源图**比目标还大**时才真的解出来。以 iPhone 上 3x 屏、
+        /// 这块地方长边 650 点上下算，目标最长边 5850 像素：一亿像素的照片由此从 400 MB 上下
+        /// 落到 100 MB 上下，而 1200 万像素的照片解出来就是源图自己的那些像素（4032 像素）
+        /// —— 想要 3 倍下不软，本来也少不了它们。
+        private static let zoomHeadroom: CGFloat = 3
+
+        /// 按**现在这块地方、这个倍率**需要的像素数解一版，装到那张图上。
+        ///
+        /// 目标只有一处来源：这张图实际占的那块地方（滚动视图的尺寸）乘屏幕倍率，再乘
+        /// `zoomHeadroom` 留出放大那一档。这块地方之外用不到更多像素。
+        ///
+        /// 触发点：滚动视图的 `layoutSubviews`（`makeUIView` 那一刻还没有尺寸），换图时的
+        /// `show`，以及那块地方或倍率变了之后的又一次 `layoutSubviews`。
         func loadImage() {
             guard let scrollView, let imageView else { return }
             let size = scrollView.bounds.size
-            guard size.width > 0, size.height > 0, size != decodedFor else { return }
-            decodedFor = size
+            guard size.width > 0, size.height > 0 else { return }
             // 倍率读不到就按 1 算：屏幕上会略软一点，但尺寸不会解错（见 `DriveImageFile`，
             // 它只缩不放）。
             let displayScale = scrollView.traitCollection.displayScale
-            let maxPixelSize = max(size.width, size.height) * (displayScale > 0 ? displayScale : 1)
+            let target = DecodeTarget(size: size, displayScale: displayScale > 0 ? displayScale : 1)
+            guard target != decodedFor else { return }
+            decodedFor = target
+            let maxPixelSize = max(size.width, size.height) * target.displayScale * Self.zoomHeadroom
             imageView.image = DriveImageFile.image(at: url, maxPixelSize: maxPixelSize)
             imageView.accessibilityLabel = label
         }
@@ -658,15 +691,21 @@ struct DriveZoomableImage: UIViewRepresentable {
 ///
 /// 降采样要知道「这块地方有多少像素」，而 `makeUIView` 那一刻视图还没参与布局（尺寸是零），
 /// `updateUIView` 也不保证在第一帧之前量到真尺寸。`layoutSubviews` 是唯一稳的那个时机，
-/// 所以在这里挂一下。只在尺寸真的变了时才说，免得每次布局都重解一版。
+/// 所以在这里挂一下。只在真要重解时才说，免得每次布局都重解一版。
 private final class DriveImageScrollView: UIScrollView {
     var onLayout: (() -> Void)?
+    /// 上一次说过的那块地方。判据与 `Coordinator.decodedFor` 一样是两样：倍率也要看 ——
+    /// 窗口从 3x 屏挪到 2x 屏时尺寸可以一点不变，只比尺寸就永远不再说一声，画面上会一直
+    /// 留着按 3x 解的那一份。
     private var lastSize: CGSize = .zero
+    private var lastDisplayScale: CGFloat = 0
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard bounds.size != lastSize else { return }
+        let displayScale = traitCollection.displayScale
+        guard bounds.size != lastSize || displayScale != lastDisplayScale else { return }
         lastSize = bounds.size
+        lastDisplayScale = displayScale
         onLayout?()
     }
 }
