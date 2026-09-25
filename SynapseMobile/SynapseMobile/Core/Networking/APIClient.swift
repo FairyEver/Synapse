@@ -15,6 +15,14 @@ struct APIError: Error, LocalizedError {
     let status: Int
     let code: String?
     let message: String
+    /// 错误响应体的原文。
+    ///
+    /// 绝大多数调用方只看 `status` 与 `code`，但问题反馈的 `PRIVACY_RISK` 把命中的风险
+    /// 类别放在 `data.category` 里，而那是决定要说哪一句话的唯一依据 —— 只留 code 的话，
+    /// 六种风险会塌成同一句「包含隐私风险」。
+    ///
+    /// 有默认值，所以既有的三参构造点一个都不用改。
+    var payload: Data? = nil
 
     var errorDescription: String? { message }
 
@@ -654,6 +662,51 @@ actor APIClient {
         onCredentialsChanged()
     }
 
+    /// 提交一条问题反馈。
+    ///
+    /// `authenticated: false`：这个接口是公开的，服务端只看来源 IP，不看账号。带令牌不但
+    /// 没用，还会让「未登录时能不能反馈」凭空多出一种情况。
+    ///
+    /// 不在这里做隐私预校验。服务端持有一份权威校验（`@synapse/shared` 的
+    /// `validateProblemFeedbackInput`，约一百行正则），把它抄到 Swift 里就是第二份会漂移的
+    /// 实现 —— 而结果是按服务端说的算，第二份只会在两边不一致时先把人挡下来。
+    func submitProblemFeedback(content: String) async -> ProblemFeedbackOutcome {
+        struct Body: Encodable { let content: String }
+        struct Ack: Decodable { let success: Bool? }
+
+        do {
+            let _: Ack = try await send(
+                path: "/problem-feedback",
+                method: "POST",
+                body: Body(content: content),
+                authenticated: false
+            )
+            return .submitted
+        } catch let error as APIError {
+            // 传输层的失败（`status == 0`）：请求可能已经出去了。
+            guard !error.isTransport else { return .unknown }
+            switch error.status {
+            case 400: return .rejected
+            case 422: return .privacyRisk(category: Self.privacyCategory(from: error.payload))
+            case 429: return .rateLimited
+            case 503: return .notSubmitted
+            default: return .unknown
+            }
+        } catch {
+            return .unknown
+        }
+    }
+
+    /// 从 422 的响应体里取出 `data.category`。
+    private static func privacyCategory(from payload: Data?) -> String? {
+        struct RiskBody: Decodable {
+            struct Payload: Decodable { let category: String? }
+            let data: Payload?
+        }
+        guard let payload else { return nil }
+        return try? JSONDecoder().decode(RiskBody.self, from: payload).data?.category
+    }
+
     private func send<Response: Decodable>(
         path: String,
         method: String,
@@ -806,7 +859,7 @@ actor APIClient {
         }
         let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
         let message = body?.message ?? body?.error ?? "请求失败（\(status)）。"
-        return APIError(status: status, code: body?.code, message: message)
+        return APIError(status: status, code: body?.code, message: message, payload: data)
     }
 }
 
