@@ -701,19 +701,33 @@ struct DriveBrowserList: View {
     }
 }
 
-private extension View {
+extension View {
     /// 紧凑宽度下才挂下拉刷新。
     ///
-    /// **常规宽度（iPad 全屏 / 分栏并排）下不挂。** 那会儿这一屏是分栏的浏览列，钻过文件夹
-    /// 之后那条栏上还挂着面包屑；从这一格换回主页时，整棵分栏子树会一起拆掉，拆到这条列表
-    /// 的下拉刷新时 `AttributeGraph` 断言失败、App 当场 `SIGABRT`——只在辅助功能正查控件树
-    /// 时出现（XCUITest 与 VoiceOver 都算），去掉这一条下拉刷新之后逐层退、面包屑退、
-    /// 从回收站退都不崩。完整堆栈与逐种试过的改法见
-    /// `.superpowers/sdd/2026-09-25-mobile-drive/task-10-report.md`。
+    /// **常规宽度（iPad 全屏、分栏并排）下不挂 —— 分栏浏览列上那四条列表都不挂。**
+    /// 这一条是崩溃规避，不是取舍喜好：从这一格换回主页时整棵分栏子树会一起拆掉，拆到某条
+    /// 列表的下拉刷新时会和**辅助功能正在查导航栏**撞在一起，`AttributeGraph` 断言失败、
+    /// App 当场 `SIGABRT`。崩溃栈（2026-09-25，iPad Pro 13 英寸全屏）：
+    /// `AG::precondition_failure` ← `AnyStyleModifier.makeReusable` ← `PlaceholderInfo.makeItem`
+    /// ← `ListRepresentable.dismantleViewProvider` ← `UIScrollView _setRefreshControl:`
+    /// ← `UINavigationBar layoutSubviews` ← `_UINavigationBarVisualProviderModernIOSAccessibility`
+    /// ← `accessibilityElementCount` ← `_UIHostingView.uiKitAccessibilityElements`。只在有辅助
+    /// 功能客户端时出现（XCUITest 与 VoiceOver 都会 —— 真实用户不会在拆页那一帧里查控件树，
+    /// 但 VoiceOver 用户会），所以按会崩处理。
+    ///
+    /// **触发条件没有定死，所以四条一起挂上门禁。** 逐种试过的改法（每一趟的崩溃附件都在
+    /// 当次的验收记录里）：给换页配 `.transition`（进场 / 退场 / `.asymmetric` 六种组合）
+    /// 6/6 崩；完全不给动画、换硬切 2/2 崩（**动画不是原因**）；把换页推迟一帧等拆解完
+    /// 3/3 仍崩；只在浏览列里读 `horizontalSizeClass` 判宽窄 5/5 仍崩 —— 最后这一条说明了
+    /// **列里读到的 `horizontalSizeClass` 是列自己的、不是窗口的**（iPad 全屏下那一列读到的
+    /// 仍是 `compact`，下拉刷新照挂），改成由 `DriveBrowserView` 把窗口那一层的宽窄传进来才
+    /// 归零。但同样是这套形状，崩溃**不是必然**：从回收站那一屏退回主页时，回收站那条
+    /// `List` 也挂着下拉刷新，那一趟没崩（`DriveAcceptanceUITests.test10`）。所以这里不赌
+    /// 「哪几条安全」——回收站、公开素材、分享管理这三屏推入同一个 `NavigationStack`、都在
+    /// 宽窗下住在同一个浏览列里，四条按同一条规则办。
     ///
     /// 丢掉的只是 iPad 上「往下拉一把」这个手势：进屏、传完文件、分享改动过、从回收站那几屏
-    /// 回来都已经各自重取，这一层失败态还另有一枚「重试」。紧凑宽度（iPhone、iPad 半窗）
-    /// 一点没变。
+    /// 回来都已经各自重取，失败态还另有「重试」。紧凑宽度（iPhone、iPad 半窗）一点没变。
     @ViewBuilder
     func refreshableIfCompact(
         _ isCompact: Bool,

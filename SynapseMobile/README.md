@@ -119,6 +119,35 @@ xcodebuild test-without-building -xctestrun <…>.xctestrun \
 node server/test/mobile-relay-smoke.mjs   # 桌面与手机双向路由、离线答复、断开信号
 ```
 
+### 云盘端到端
+
+`SynapseMobileUITests/DriveAcceptanceUITests.swift` 走主页「云盘」那一行进去的整条链路：
+下钻与面包屑、改名、新建 → 删除 → 回收站 → 恢复、多选移动与部分失败、建分享与停止分享、
+上传、转屏后不丢当前文件夹与多选、`UIDocumentPicker` 的落点、「功能页不推入任何栈」的
+结构判据。它不需要真账号：对面是 `server/test/mock-drive-server.mjs`，一个内存里的假网关
+（云盘那一棵树 + 一个不验签的登录）。下面两条都在仓库根目录执行：
+
+```bash
+node server/test/mock-drive-server.mjs 8787
+
+xcodebuild test -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:SynapseMobileUITests/DriveAcceptanceUITests -parallel-testing-enabled NO
+```
+
+替身没起来时整套 `XCTSkip`（判据是它自己那条 `/__reset` 探得到探不到），不算失败。地址默认
+`http://127.0.0.1:8787/api`，可用 `SYNAPSE_TEST_DRIVE_BASE_URL` 换。上传与 picker 落点那两条
+还要先在模拟器的「文件」里放一份样例文件，放法与它们在 iPad 上跑不过的原因都写在用例文件的
+头注释里。
+
+它替的是整个服务端，所以有两处它证明不了：登录不验签（任何凭据都能过），预览与下载的字节是
+写死的。拿它验「这一屏拿到答复之后做得对不对」，不要拿它验「答复本身对不对」。
+
+还有一格是这套用例**够不到**的：iPadOS 半窗 / 三分之一窗。`simctl`、Stage Manager 与
+XCUITest 都改不了模拟器的窗口尺寸，所以窗口矩阵只有 iPhone 竖 ↔ 横、iPad 全屏竖 ↔ 横
+实测过，`regular → compact` 的运行时转场没有证据（缺口与判据的边界记在
+`docs/agents/mobile-adaptive-layout.md`）。
+
 ## 推送（可选，但这是核心场景）
 
 没有推送时 App 完全可用，只是需要你主动打开才能看到等待中的请求。要启用锁屏批准：

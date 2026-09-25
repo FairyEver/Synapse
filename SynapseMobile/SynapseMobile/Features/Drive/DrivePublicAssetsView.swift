@@ -29,6 +29,12 @@ enum DrivePublicAssetRow {
 /// 调用方把它**推入**一个已有的 `NavigationStack`（它是列表底部那两个「位置」入口之一）：
 /// 本视图不带自己的 `NavigationStack`。
 struct DrivePublicAssetsView: View {
+    /// 窗口有多宽（由调用方从**窗口那一层**传下来，不是这里自己读的）。
+    ///
+    /// 只用来判这一条列表要不要挂下拉刷新，理由见 `refreshableIfCompact`：列里读到的
+    /// `horizontalSizeClass` 是列自己的，读它会判错。
+    let isCompact: Bool
+
     @Environment(SynapseAppModel.self) private var model
 
     /// 正在选文件 / 正在改名的那一张。两件事共用一片 sheet：同一个视图上挂两片 `.sheet`
@@ -69,7 +75,9 @@ struct DrivePublicAssetsView: View {
     var body: some View {
         List {
             if let error = model.drive.assetsErrorMessage {
-                // 与回收站那一屏同一条：失败说成一行，不叠空态，重试就是下拉。
+                // 与回收站那一屏同一条：失败说成一行，不叠空态，重试就是下拉
+                // （紧凑宽度下；宽窗下这条下拉刷新不挂，见 `refreshableIfCompact`，那时离开这一屏
+                // 再进来的 `.task` 就是重试）。
                 Section {
                     Text(error)
                         .font(.footnote)
@@ -119,7 +127,7 @@ struct DrivePublicAssetsView: View {
         .task {
             await model.driveLoadAssets()
         }
-        .refreshable {
+        .refreshableIfCompact(isCompact) {
             await model.driveLoadAssets()
         }
         .sheet(item: $sheet) { sheet in

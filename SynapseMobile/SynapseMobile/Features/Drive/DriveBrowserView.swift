@@ -225,15 +225,19 @@ struct DriveBrowserView: View {
             )
             .navigationBarTitleDisplayMode(.inline)
         case .trash:
-            // 三张整屏的列表页（Task 9）：无参、从环境取 model、自带标题与 `.noticeOverlay`，
+            // 三张整屏的列表页（Task 9）：从环境取 model、自带标题与 `.noticeOverlay`，
             // 所以这里只把它们推上栈，不再包一层 List，也不再挂一份 overlay。
-            DriveTrashView()
+            //
+            // 宽窄必须由这里传（它们住在这条分栏的浏览列里，自己读到的
+            // `horizontalSizeClass` 是列自己的，见 `refreshableIfCompact`）：这一个值决定
+            // 它们那条下拉刷新挂不挂。
+            DriveTrashView(isCompact: isCompact)
                 .environment(model)
         case .assets:
-            DrivePublicAssetsView()
+            DrivePublicAssetsView(isCompact: isCompact)
                 .environment(model)
         case .shares:
-            DriveShareListView()
+            DriveShareListView(isCompact: isCompact)
                 .environment(model)
         }
     }

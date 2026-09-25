@@ -233,8 +233,9 @@ struct RootView: View {
         // 配上 `.transition`（进场、退场、`.asymmetric` 各种组合）：换页时拆掉的是一整棵
         // 分栏子树，辅助功能同时又在查导航栏，极容易踩到 SwiftUI 的一个重入缺陷
         // （`AttributeGraph` 断言失败 → `SIGABRT`）。**注意那条缺陷不是动画引出来的** ——
-        // 不给动画、换成硬切，照样能踩到；省掉 `transition` 只是少一份风险。完整结论与
-        // 触发条件见 `.superpowers/sdd/2026-09-25-mobile-drive/task-10-report.md`。
+        // 不给动画、换成硬切，2/2 照样踩到；把换页推迟一帧等拆解完，3/3 也照样。省掉
+        // `transition` 只是少一份风险。堆栈、逐种试过的改法与「触发条件至今没定死」那件事
+        // 写在 `docs/agents/mobile-adaptive-layout.md` 的导航结构那一节。
         .animation(reduceMotion ? nil : .snappy, value: homePage != nil)
     }
 

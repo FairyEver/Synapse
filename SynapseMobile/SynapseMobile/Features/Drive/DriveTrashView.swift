@@ -34,6 +34,12 @@ enum DriveTrashRow {
 /// 调用方把它**推入**一个已有的 `NavigationStack`（它是列表底部那两个「位置」入口之一，
 /// 不是一张 sheet）：本视图不带自己的 `NavigationStack`。
 struct DriveTrashView: View {
+    /// 窗口有多宽（由调用方从**窗口那一层**传下来，不是这里自己读的）。
+    ///
+    /// 只用来判这一条列表要不要挂下拉刷新，理由见 `refreshableIfCompact`：列里读到的
+    /// `horizontalSizeClass` 是列自己的，读它会判错。
+    let isCompact: Bool
+
     @Environment(SynapseAppModel.self) private var model
 
     /// 搜索框里的原文。归一之后的词才是发给服务端的那个，它也是这一屏取数的 id —— 敲一个
@@ -63,7 +69,9 @@ struct DriveTrashView: View {
         }
         .listStyle(.insetGrouped)
         // 状态画在列表**上面**而不是列表里的一行：`ContentUnavailableView` 要的是整块内容区，
-        // 而留在 `List` 上也让空态与失败态下照旧能下拉刷新（那里就是「重试」）。
+        // 而留在 `List` 上也让空态与失败态下照旧能下拉刷新（紧凑宽度下，那里就是「重试」）。
+        // 宽窗下这条下拉刷新不挂（见 `refreshableIfCompact`，崩溃规避），那时重试的路是
+        // 离开这一屏再进来 —— `.task` 会重取一次。
         .overlay {
             if model.drive.trash.isEmpty {
                 if model.drive.trashLoading {
@@ -93,7 +101,7 @@ struct DriveTrashView: View {
             guard !Task.isCancelled else { return }
             await model.driveLoadTrash(search: searchText)
         }
-        .refreshable {
+        .refreshableIfCompact(isCompact) {
             await model.driveLoadTrash(search: searchText)
         }
         .alert(
