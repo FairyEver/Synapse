@@ -174,7 +174,7 @@ describe("AccountService", () => {
   })
 
   it("reports sent after the account accepts a desktop notification", async () => {
-    const fetch = vi.fn(async (url: string) => {
+    const fetch = vi.fn(async (url: unknown) => {
       if (String(url).endsWith("/auth/refresh")) {
         return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
       }

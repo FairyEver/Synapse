@@ -1,4 +1,5 @@
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
+import type { DesktopNotificationOutcome } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { ActorIdentity, AuditSink } from "../../../electron/runtime/security"
 import type { StructuredLogger } from "../../../electron/runtime/service-registry"
 import type { SystemNotifierSettingsEntryV2 } from "../../../electron/runtime/data-repo/schemas/system-notifier"
@@ -38,6 +39,10 @@ type SystemNotifierLogReason =
   | "invalid_record"
   | "sink_unavailable"
   | "record_failed"
+  | "disabled"
+  | "settings_unavailable"
+  | "not_signed_in"
+  | "offline"
   | "sync_failed"
   | "suppressed"
 
@@ -57,10 +62,9 @@ export interface SystemNotifierServicePorts {
   readonly auditSink?: AuditSink
   readonly adapter?: SystemNotificationAdapter
   /**
-   * 把通知发到账号消息中心。未登录或离线时它安静地不发，请求失败时抛错；触发方两者都不管，
-   * 只留一条诊断。
+   * 把通知发到账号消息中心。返回它为什么没发出去（未登录、离线）或已经发出；请求失败抛错。
    */
-  readonly sync?: (input: SystemNotificationInput) => Promise<void>
+  readonly sync?: (input: SystemNotificationInput) => Promise<DesktopNotificationOutcome>
 }
 
 /** 「发送测试通知」用的固定 UI 身份，与任何触发来源都不共用配额。 */
@@ -91,7 +95,7 @@ export class SystemNotifierService {
   private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV2>
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
-  private sync?: (input: SystemNotificationInput) => Promise<void>
+  private sync?: (input: SystemNotificationInput) => Promise<DesktopNotificationOutcome>
   private snapshot: Readonly<SystemNotifierSettings> | null = null
   private hasValidSnapshot = false
   private settingsQueue: Promise<void> = Promise.resolve()
@@ -134,18 +138,38 @@ export class SystemNotifierService {
   trigger(input: SystemNotificationInput, context: SystemNotifierTriggerContext): SystemNotificationResult {
     this.recordAudit(input, context)
     const settings = this.snapshot
-    if (!settings) return { success: true }
-    if (!settings.syncToAccount) return { success: true }
+    if (!settings) {
+      this.diagnostics.record("notification_sync", "settings_unavailable")
+      return { success: true }
+    }
+    if (!settings.syncToAccount) {
+      this.diagnostics.record("notification_sync", "disabled")
+      return { success: true }
+    }
 
     if (!this.limiter.acquire(context.identityKey)) {
       this.diagnostics.record("rate_limit", "suppressed")
       return { success: true }
     }
 
-    void this.sync?.(input).catch(() => {
-      this.diagnostics.record("notification_sync", "sync_failed")
-    })
+    void this.sendToAccount(input)
     return { success: true }
+  }
+
+  /**
+   * 发出去了就结束；没发出去的每一个原因都留一条固定诊断。
+   *
+   * 成功响应不因此改变——调用方仍然分不出「发了」和「没发」，那是这条能力的设计。能分出的
+   * 是本地诊断：用户问「AI 说通知我了但我没收到」时，这里能答出是哪一种。
+   */
+  private async sendToAccount(input: SystemNotificationInput): Promise<void> {
+    if (!this.sync) return
+    try {
+      const outcome = await this.sync(input)
+      if (outcome !== "sent") this.diagnostics.record("notification_sync", outcome)
+    } catch {
+      this.diagnostics.record("notification_sync", "sync_failed")
+    }
   }
 
   /**

@@ -2090,14 +2090,17 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
       openTerminalSession: (sessionId) => systemAppWindows.open("terminal", {
         terminalOpenRequest: { requestId: randomUUID(), sessionId },
       }),
-      syncCompletion: (input) => accountService.createInternalNotification({
-        source: "terminal-complete",
-        sourceKey: input.sourceKey,
-        title: input.title,
-        body: input.body,
-        targetId: input.sessionId,
-        deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
-      }),
+      // 终端完成事件不看发送结果：它自己的本机通知已经弹过了，这条只负责让账号里留下记录。
+      syncCompletion: async (input) => {
+        await accountService.createInternalNotification({
+          source: "terminal-complete",
+          sourceKey: input.sourceKey,
+          title: input.title,
+          body: input.body,
+          targetId: input.sessionId,
+          deviceId: liveConnectionService.getState().clientInstanceId ?? undefined,
+        })
+      },
       setSessionAttention: (update) => ctx.registry
         .get<TerminalService>("core.terminal")
         .applyAgentAttention(update),
