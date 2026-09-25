@@ -179,38 +179,79 @@ struct RootView: View {
         }
     }
 
-    private var tabs: some View {
-        TabView(selection: tabSelection) {
-            // 主页有自己的一条栈，因为它是「列表 + 可下钻」：功能清单 → 录音列表 →
-            // 录音详情。推入的 `AdaptiveFeatureNavigation` 自己就是一个
-            // `NavigationSplitView`，所以 iPadOS 宽窗下录音仍然并排 —— 不要再为它
-            // 外面套一层分栏，那会变成系统侧边栏 + 列表 + 详情三列。
-            NavigationStack(path: $homePath) {
-                HomeView(
-                    onOpenNotifications: { isNotificationPanelPresented = true },
-                    onOpenRecordings: { homePath.append(.recordings) },
-                    onOpenClipboard: { homePath.append(.clipboard) },
-                    onNewSession: { isNewSessionPresented = true },
-                    onOpenWaitingSession: openWaitingSession
-                )
-                .navigationDestination(for: HomeRoute.self) { route in
-                    switch route {
-                    case .recordings:
-                        AdaptiveFeatureNavigation(
-                            selection: $meetingSelection,
-                            emptyTitle: "选择录音",
-                            emptySymbol: "waveform"
-                        ) {
-                            MeetingListView(selection: $meetingSelection)
-                        } detail: { meetingId in
-                            MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
+    /// 主页那一格。
+    ///
+    /// 这一格有「功能清单 → 录音」两层，但**录音不是主页栈里的一层**：录音页自带
+    /// `AdaptiveFeatureNavigation`，那是一个 `NavigationSplitView`，而分栏自己带一条导航栏。
+    /// 把分栏推进主页的栈里，屏幕上会同时出现两条栏——上面那条只剩系统的返回键，标题和
+    /// 加号落在下面那条，中间空出整整一条标题带（2026-09-25 真机截图；iPhone 与 iPadOS
+    /// 都是这个形状，宽窗下并排的详情列也一并没了）。所以录音是**这一格的一页**：进它时
+    /// 换掉的是这一格的内容，不是往栈里推一层，返回走录音页自己那枚返回键。
+    ///
+    /// 剪贴板历史照旧留在栈里：它是一条普通页，推进去只有一条栏，没有这个问题。
+    @ViewBuilder
+    private var homeTab: some View {
+        Group {
+            if homePath.last == .recordings {
+                recordingsPage
+            } else {
+                NavigationStack(path: $homePath) {
+                    HomeView(
+                        onOpenNotifications: { isNotificationPanelPresented = true },
+                        onOpenRecordings: { openRecording(nil) },
+                        onOpenClipboard: { homePath.append(.clipboard) },
+                        onNewSession: { isNewSessionPresented = true },
+                        onOpenWaitingSession: openWaitingSession
+                    )
+                    .navigationDestination(for: HomeRoute.self) { route in
+                        switch route {
+                        case .clipboard:
+                            ClipboardHistoryView()
+                        case .recordings:
+                            // 走不到这一支：录音换的是这一格的内容，不是往栈里推（见上）。
+                            // 留着它只为让这个 switch 对 `HomeRoute` 保持穷尽。
+                            EmptyView()
                         }
-                    case .clipboard:
-                        ClipboardHistoryView()
                     }
                 }
             }
-            .tabItem { Label("主页", systemImage: "house") }
+        }
+        // 换页那一下给一层淡入淡出，别硬切；减弱动态效果时不加。
+        // 盯的是「录音页在不在」这一个布尔值：盯 `homePath` 的话，推剪贴板历史那一下
+        // 也会被这条动画接管，把系统的推入换成淡入。
+        .animation(reduceMotion ? nil : .snappy, value: homePath.last == .recordings)
+    }
+
+    /// 录音页：列表 + 详情，宽窗并排、紧凑窗下钻，整页归这一格所有（见 `homeTab`）。
+    ///
+    /// 返回主页那枚键由这一页自己带，落在分栏列表那一条栏上——和加号同一行。
+    private var recordingsPage: some View {
+        AdaptiveFeatureNavigation(
+            selection: $meetingSelection,
+            emptyTitle: "选择录音",
+            emptySymbol: "waveform"
+        ) {
+            MeetingListView(selection: $meetingSelection)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            popToRoot(.home)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .accessibilityLabel("主页")
+                        .accessibilityIdentifier("recordings-back-home")
+                    }
+                }
+        } detail: { meetingId in
+            MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
+        }
+    }
+
+    private var tabs: some View {
+        TabView(selection: tabSelection) {
+            homeTab
+                .tabItem { Label("主页", systemImage: "house") }
             // 系统角标，颜色不改。SwiftUI 的 `TabView` 没有自定义 tab 角标颜色的 API，
             // 桥接 `UITabBarItem` 只在 iPhone 底栏生效、iPadOS 侧边栏做不到同色。
             // 「有人需要你」的琥珀色由主页里那枚铃铛自绘承担。
@@ -315,10 +356,10 @@ struct RootView: View {
         }
     }
 
-    /// 把人送到主页 → 录音列表，落在某一条录音上（`nil` 就是落在列表上）。
+    /// 把人送到主页那一格 → 录音列表，落在某一条录音上（`nil` 就是落在列表上）。
     ///
-    /// 深链里所有「看录音」的落点都从这一个函数过：录音不在底栏上了，它在主页的栈里，
-    /// 而栈是由根视图拿着的那一条 `homePath`。
+    /// 深链里所有「看录音」的落点都从这一个函数过：录音不在底栏上了，它是主页那一格的
+    /// 一页，而那一页由根视图拿着的那一条 `homePath` 指认（见 `homeTab`）。
     private func openRecording(_ meetingId: String?) {
         selectedTab = .home
         meetingSelection = meetingId

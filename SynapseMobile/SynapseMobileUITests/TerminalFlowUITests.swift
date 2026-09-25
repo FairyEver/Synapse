@@ -90,6 +90,34 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home-notifications"].exists, "the home page has no bell")
     }
 
+    /// 录音页那两枚键（返回主页、加号）必须在同一行。
+    ///
+    /// 这一页自带 `AdaptiveFeatureNavigation`，而分栏自己带一条导航栏。它一度是主页栈里推入
+    /// 的一层，于是屏幕上同时出现两条栏：上面那条只剩系统的返回键，标题和加号落在下面那条，
+    /// 中间空出整整一条标题带（2026-09-25 真机截图，iPhone 与 iPadOS 同形）。两枚键的竖直
+    /// 中心差着整整一条栏，量得出来，所以这条用例量它 —— 再次被推进栈里就会红。
+    func testRecordingsPageKeepsItsTwoButtonsOnOneRow() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+
+        signIn(app)
+
+        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
+        app.buttons["home-feature-录音"].tap()
+
+        let back = app.buttons["recordings-back-home"]
+        let add = app.buttons["new-recording"]
+        XCTAssertTrue(back.waitForExistence(timeout: 15), "录音页没有返回主页那枚键")
+        XCTAssertTrue(add.exists, "录音页没有加号")
+        XCTAssertEqual(
+            back.frame.midY,
+            add.frame.midY,
+            accuracy: 12,
+            "录音页的返回键和加号不在同一行：这一页又成了主页栈里推入的一层"
+        )
+    }
+
     func testSignInBrowseSessionsAndOpenTerminal() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
