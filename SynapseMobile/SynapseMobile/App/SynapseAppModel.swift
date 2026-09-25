@@ -657,6 +657,36 @@ final class SynapseAppModel {
         await playback.retry(using: apiClient)
     }
 
+    // MARK: - 云盘
+
+    /// 预览与导出要的那三条。
+    ///
+    /// 薄透传，理由与上面几条一样：`apiClient` 是私有的，视图拿不到网络层。它们不进
+    /// `DriveStore` —— 读一段文本、下一份字节都不改浏览状态（`DriveStore` 收
+    /// `using client:` 的那套是给它自己的浏览方法的）。浏览那几条透传由 Task 6 补在这一段里。
+
+    func driveContentInspect(itemId: String) async throws -> DriveContentInspect {
+        try await apiClient.driveContentInspect(itemId: itemId)
+    }
+
+    func driveContentChunk(
+        itemId: String,
+        versionId: String,
+        cursor: String? = nil
+    ) async throws -> DriveContentChunk {
+        try await apiClient.driveContentChunk(itemId: itemId, versionId: versionId, cursor: cursor)
+    }
+
+    /// 下一份字节到本机。进度从别的线程推过来，接的人自己回主线程（见
+    /// `DriveFileExport.run`）。
+    func downloadDriveItem(
+        itemId: String,
+        to destination: URL,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        try await apiClient.downloadDriveItem(itemId: itemId, to: destination, onProgress: onProgress)
+    }
+
     func handleScenePhase(_ isActive: Bool) {
         guard authState == .signedIn else { return }
         if isActive {
