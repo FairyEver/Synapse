@@ -13,6 +13,16 @@ describe("drive token helpers", () => {
     expect(createDriveShareId()).toMatch(/^shr_[A-Za-z0-9_-]{32,}$/u)
   })
 
+  it("creates share ids without look-alike characters", () => {
+    // 无歧义字母表：没有 I/L/O/U，长度仍是 32。少一个字符的链接会 404，
+    // 而这两个字符正是被读错的那一对。
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const id = createDriveShareId()
+      expect(id).toMatch(/^shr_[0-9A-HJKMNP-TV-Z]{32}$/u)
+      expect(id).toHaveLength(36)
+    }
+  })
+
   it("creates fixed-length public asset ids", () => {
     expect(createDrivePublicAssetId()).toMatch(/^asset_[0-9A-Za-z]{32}$/u)
     expect(createDrivePublicAssetId()).toHaveLength(38)
@@ -20,6 +30,14 @@ describe("drive token helpers", () => {
 
   it("creates URL-safe Drive site ids", () => {
     expect(createDriveSiteId()).toMatch(/^site_[A-Za-z0-9_-]{32,}$/u)
+  })
+
+  it("creates Drive site ids without look-alike characters", () => {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const id = createDriveSiteId()
+      expect(id).toMatch(/^site_[0-9A-HJKMNP-TV-Z]{32}$/u)
+      expect(id).toHaveLength(37)
+    }
   })
 
   it("builds storage keys from server item ids", () => {
