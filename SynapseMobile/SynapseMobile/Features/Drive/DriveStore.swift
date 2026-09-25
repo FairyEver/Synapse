@@ -266,6 +266,16 @@ final class DriveStore {
     private(set) var loadingMore = false
     private(set) var errorMessage: String?
 
+    /// 层代次：一层被换掉（下钻、返回、跳转、刷新落地）或者被清空（退出登录）就 +1。
+    ///
+    /// 每个请求取的都是「出发时那一层」的数据，而 `await` 回来时用户可能已经去了别处：
+    /// 滚到底触发的续页还没回来，人就点进了另一个文件夹。这一页要是不管不顾地接上去，
+    /// 标题与面包屑（来自 `path`）说 B、列表显示 A——而且比看着别扭更糟的是 `folderId`
+    /// 这时解析成 A，接着的新建、改名、移动、删除会全落在**另一个文件夹**上。
+    ///
+    /// 与 `PathIntent` 是同一条标准：`await` 之后才准落地，落地前先确认说的还是同一层。
+    private var layerGeneration = 0
+
     /// 本地视图偏好（Spec §2.3）：服务端不接受排序参数，排序发生在已加载的这一段上。
     private(set) var sortKey: DriveSortKey
     private(set) var sortAscending: Bool
@@ -365,10 +375,15 @@ final class DriveStore {
               let offset = page.nextOffset
         else { return }
 
+        // 出发时是哪一层：`loading` 挡得住两次导航撞在一起，挡不住「续页 + 下钻」。
+        let generation = layerGeneration
         loadingMore = true
         defer { loadingMore = false }
         do {
             let next = try await fetch(itemId: folderId, childrenOffset: offset, using: client)
+            // 这期间层换了（人点进了别的文件夹、回了上一级、退出了登录）：这一页属于
+            // 上一层，接上去就成了一份张冠李戴的列表，丢掉它。
+            guard generation == layerGeneration else { return }
             // 只接子项那一页。`current` / `breadcrumbs` / `preview` 是这一层的元信息，
             // 续页不会让它们变——它们说的是「这一层是什么」，不是「这一页有哪些行」。
             current = DriveBrowserSnapshot(
@@ -382,6 +397,8 @@ final class DriveStore {
             )
             errorMessage = nil
         } catch {
+            // 一次作废的请求失败了也不该在已经换过的这一层上留一句报错。
+            guard generation == layerGeneration else { return }
             errorMessage = DriveText.errorMessage(error)
         }
     }
@@ -404,8 +421,13 @@ final class DriveStore {
         loading = true
         defer { loading = false }
 
+        // `loading` 挡得住两次导航，挡不住「请求在飞的时候被清空」（退出登录）。
+        let generation = layerGeneration
         do {
             let snapshot = try await fetch(itemId: itemId, childrenOffset: nil, using: client)
+            // 这一趟出发之后层已经被清掉或换掉了：它的数据属于上一个账号 / 上一层，
+            // 落下去只会把 `path` 与 `current` 拆成两半。
+            guard generation == layerGeneration else { return }
             switch intent {
             case .push:
                 guard snapshot.current.isFolder else {
@@ -419,7 +441,10 @@ final class DriveStore {
             }
             current = snapshot
             errorMessage = nil
+            // 层换完了：还在飞的那些续页从这一刻起都不再属于现在这一层。
+            layerGeneration += 1
         } catch {
+            guard generation == layerGeneration else { return }
             errorMessage = DriveText.errorMessage(error)
         }
     }
@@ -537,5 +562,7 @@ final class DriveStore {
         errorMessage = nil
         loading = false
         loadingMore = false
+        // 在飞的那些请求回来时不能把上一个账号的列表重新填进 `current`。
+        layerGeneration += 1
     }
 }
