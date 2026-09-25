@@ -52,6 +52,11 @@ struct DriveBrowserView: View {
     @State private var seenUploads: Set<String> = []
     /// 上一次栈变化是不是「窗口变宽、把预览那一页换成详情列」那一趟，见 `layerChanged`。
     @State private var keepingPreview = false
+    /// 栈上一次量出来的文件夹深度。
+    ///
+    /// `layerChanged` 判「层变没变」用的是它，而不是 store 的 `path.count`（后者在下钻时
+    /// 已经先写好了，比不出变化）。初始值 0 对得上 `path` 的初始值：这一屏进来就停在根层。
+    @State private var lastDepth = 0
 
     /// 浏览列栈上的一格。
     private enum DriveRoute: Hashable {
@@ -461,6 +466,11 @@ struct DriveBrowserView: View {
     /// 先让 store 走一趟再推栈：store 说它没进去（这一项已经不是文件夹了、请求失败了）
     /// 就不推 —— 栈上多一格空页面比这一次没反应更糟。推栈之后 `layerChanged` 会把
     /// 多选与预览清掉。
+    ///
+    /// **注意这里的写入次序**：store 的路径是在 `path.append` **之前**写好的，所以栈变的
+    /// 那一刻 `model.drive.path.count` 已经等于新的深度了。`layerChanged` 判「层变没变」
+    /// 因此不能拿 `depth` 与 `model.drive.path.count` 比 —— 那样这一次下钻会被当成没变化，
+    /// 见那里的注释。
     private func drill(into item: DriveBrowserItem) async {
         guard !busy else { return }
         busy = true
@@ -541,12 +551,24 @@ struct DriveBrowserView: View {
         .count
         // 编辑模式与多选是**这一层的事**，所以只在层真的变了时清。
         //
+        // 「层变了」只能跟**上一次的深度**比，不能跟 `model.drive.path.count` 比：下钻时
+        // `drill` 先把 store 推下去、再 `path.append`，所以栈变的那一刻两边的深度已经相等了
+        // ——拿它们比会把「往前下一层」误判成没变化。那不只是少清一次状态：编辑态下经长按
+        // 菜单的「打开」进文件夹是会发生的（那颗键只按 `busy` 置灰），回来时选择圈停在上一层
+        // 的那几项上，工具条按 `picked.count` 说「已选 N 项」，而按钮作用的对象是过滤后
+        // 的空集 —— 一串看起来能用、按下去什么都不发生的键。
+        //
         // 宽度跨过 compact/regular 阈值时这条也会跑（`widthChanged` 把那页预览从栈上摘掉，
-        // 栈一变就走到这里），但那不是「用户离开了这一层」：`docs/agents/mobile-adaptive-layout.md`
-        // 写着折叠与展开不能重置选择。放在 `guard` 后面，宽度那一趟就碰不到它。
+        // 栈一变就走到这里），但文件夹深度没变，所以仍然提前返回：那不是「用户离开了这一层」，
+        // 而 `docs/agents/mobile-adaptive-layout.md` 写着折叠与展开不能重置选择。
+        if depth != lastDepth {
+            lastDepth = depth
+            editing = false
+            picked = []
+        }
+        // store 那一趟另判：`driveJump` 只有真差着层时才值得发（下钻那一趟已经把它推到位了，
+        // 再跳一次就是白多打一趟请求）。
         guard depth != model.drive.path.count else { return }
-        editing = false
-        picked = []
         Task { await model.driveJump(to: depth) }
     }
 
