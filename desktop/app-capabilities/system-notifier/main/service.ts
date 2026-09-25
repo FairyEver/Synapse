@@ -1,7 +1,7 @@
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { ActorIdentity, AuditSink } from "../../../electron/runtime/security"
 import type { StructuredLogger } from "../../../electron/runtime/service-registry"
-import type { SystemNotifierSettingsEntryV1 } from "../../../electron/runtime/data-repo/schemas/system-notifier"
+import type { SystemNotifierSettingsEntryV2 } from "../../../electron/runtime/data-repo/schemas/system-notifier"
 import {
   SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
 } from "../shared/capability"
@@ -25,6 +25,7 @@ import { SystemNotifierRateLimiter } from "./rate-limiter"
 type SystemNotifierLogStage =
   | "settings_read"
   | "audit_record"
+  | "notification_sync"
   | SystemNotifierFailureStage
   | "rate_limit"
 
@@ -35,6 +36,7 @@ type SystemNotifierLogReason =
   | "invalid_record"
   | "sink_unavailable"
   | "record_failed"
+  | "sync_failed"
   | "suppressed"
 
 export interface SystemNotifierTriggerContext {
@@ -50,7 +52,7 @@ export interface SystemNotifierTriggerContext {
 }
 
 export interface SystemNotifierServicePorts {
-  readonly settings?: DataNamespace<SystemNotifierSettingsEntryV1>
+  readonly settings?: DataNamespace<SystemNotifierSettingsEntryV2>
   readonly auditSink?: AuditSink
   readonly adapter?: SystemNotificationAdapter
   readonly sync?: (input: SystemNotificationInput) => Promise<void>
@@ -74,7 +76,7 @@ export class SystemNotifierSettingsUnavailableError extends Error {
 }
 
 export class SystemNotifierService {
-  private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV1>
+  private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV2>
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
   private sync?: (input: SystemNotificationInput) => Promise<void>
@@ -113,24 +115,32 @@ export class SystemNotifierService {
   trigger(input: SystemNotificationInput, context: SystemNotifierTriggerContext): SystemNotificationResult {
     this.recordAudit(input, context)
     const settings = this.snapshot
-    if (!context.bypassEnabled && (!settings || !settings.enabled)) return { success: true }
+    if (!context.bypassEnabled && !settings) return { success: true }
+
+    // 两个出口各自门控：本机弹窗看 `enabled`，账号消息中心看 `syncToAccount`。关掉本机通知
+    // 只是为了这台机器别响，不代表用户不想在手机上收到；反过来也一样。
+    const showLocally = context.bypassEnabled === true || settings?.enabled === true
+    const syncToAccount = context.bypassEnabled !== true && settings?.syncToAccount === true
+    if (!showLocally && !syncToAccount) return { success: true }
 
     if (!this.limiter.acquire(context.identityKey)) {
       this.diagnostics.record("rate_limit", "suppressed")
       return { success: true }
     }
 
-    try {
-      this.adapter.show({
-        ...input,
-        silent: settings?.silent ?? defaultSystemNotifierSettings.silent,
-      })
-    } catch {
-      this.diagnostics.record("notification_show", "synchronous_exception")
-    }
-    if (!context.bypassEnabled) {
-      void this.sync?.(input).catch(() => {
+    if (showLocally) {
+      try {
+        this.adapter.show({
+          ...input,
+          silent: settings?.silent ?? defaultSystemNotifierSettings.silent,
+        })
+      } catch {
         this.diagnostics.record("notification_show", "synchronous_exception")
+      }
+    }
+    if (syncToAccount) {
+      void this.sync?.(input).catch(() => {
+        this.diagnostics.record("notification_sync", "sync_failed")
       })
     }
     return { success: true }
@@ -139,7 +149,7 @@ export class SystemNotifierService {
   getSettings(): Promise<SystemNotifierSettings> {
     return this.runSettingsOperation(async () => {
       const port = this.requireSettingsPort()
-      let stored: SystemNotifierSettingsEntryV1 | null
+      let stored: SystemNotifierSettingsEntryV2 | null
       try {
         stored = await port.getSingleton()
       } catch {
@@ -162,7 +172,7 @@ export class SystemNotifierService {
     return this.runSettingsOperation(async () => {
       const patch = systemNotifierSettingsPatchSchema.parse(patchInput)
       const port = this.requireSettingsPort()
-      let stored: SystemNotifierSettingsEntryV1 | null
+      let stored: SystemNotifierSettingsEntryV2 | null
       try {
         stored = await port.getSingleton()
       } catch {
@@ -213,7 +223,7 @@ export class SystemNotifierService {
     }
   }
 
-  private requireSettingsPort(): DataNamespace<SystemNotifierSettingsEntryV1> {
+  private requireSettingsPort(): DataNamespace<SystemNotifierSettingsEntryV2> {
     if (!this.settingsPort) {
       this.markSettingsUnavailable("repository_unavailable")
       throw new SystemNotifierSettingsUnavailableError()

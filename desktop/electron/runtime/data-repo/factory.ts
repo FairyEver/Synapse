@@ -9,6 +9,7 @@ import { DataRepositoryImpl } from "./repository"
 import {
   allSchemas,
   reviveSoundNotifierSettingsEnvelope,
+  reviveSystemNotifierSettingsEnvelope,
   reviveTerminalAgentNotificationSettingsEnvelope,
   reviveWorkflowParamPresetsEnvelope,
   reviveWorkflowsEnvelope,
@@ -182,6 +183,7 @@ export function jsonReviveEnvelopeFor(namespace: string) {
   if (namespace === "workflows") return reviveWorkflowsEnvelope
   if (namespace === "workflow.param-presets") return reviveWorkflowParamPresetsEnvelope
   if (namespace === "app.sound-notifier.settings") return reviveSoundNotifierSettingsEnvelope
+  if (namespace === "app.system-notifier.settings") return reviveSystemNotifierSettingsEnvelope
   if (namespace === "app.terminal.agent-notification-settings") return reviveTerminalAgentNotificationSettingsEnvelope
   return undefined
 }

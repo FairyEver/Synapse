@@ -116,8 +116,10 @@ export {
   type SoundNotifierSettingsEntryV3,
 } from "./sound-notifier"
 export {
+  reviveSystemNotifierSettingsEnvelope,
   systemNotifierSettingsSchemaDefinition,
   type SystemNotifierSettingsEntryV1,
+  type SystemNotifierSettingsEntryV2,
 } from "./system-notifier"
 export {
   updateInstallRecoverySchema,

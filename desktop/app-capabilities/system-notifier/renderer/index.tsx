@@ -110,7 +110,7 @@ export function SystemNotifierModule() {
             <CardContent className="grid gap-4 p-4 sm:p-5">
               <SettingRow
                 id="system-notifier-enabled"
-                label="启用通知"
+                label="本机通知"
                 checked={settings.enabled}
                 disabled={saving}
                 onCheckedChange={(enabled) => void updateSettings({ enabled })}
@@ -121,6 +121,13 @@ export function SystemNotifierModule() {
                 checked={settings.silent}
                 disabled={saving}
                 onCheckedChange={(silent) => void updateSettings({ silent })}
+              />
+              <SettingRow
+                id="system-notifier-sync-to-account"
+                label="同步到手机"
+                checked={settings.syncToAccount}
+                disabled={saving}
+                onCheckedChange={(syncToAccount) => void updateSettings({ syncToAccount })}
               />
               <Button
                 data-track="system-notifier.notification.test"
@@ -174,6 +181,7 @@ function SystemNotifierSkeleton() {
   return (
     <Card className="w-full rounded-lg py-0">
       <CardContent className="grid gap-4 p-4 sm:p-5">
+        <Skeleton className="h-6 w-full" />
         <Skeleton className="h-6 w-full" />
         <Skeleton className="h-6 w-full" />
         <Skeleton className="h-9 w-full" />

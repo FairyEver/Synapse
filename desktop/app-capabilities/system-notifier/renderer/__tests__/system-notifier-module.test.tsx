@@ -6,11 +6,12 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const bridge = vi.hoisted(() => ({
-  get: vi.fn(async () => ({ schemaVersion: 1, enabled: true, silent: false })),
-  update: vi.fn(async (patch: { enabled?: boolean; silent?: boolean }) => ({
-    schemaVersion: 1,
+  get: vi.fn(async () => ({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })),
+  update: vi.fn(async (patch: { enabled?: boolean; silent?: boolean; syncToAccount?: boolean }) => ({
+    schemaVersion: 2,
     enabled: patch.enabled ?? true,
     silent: patch.silent ?? false,
+    syncToAccount: patch.syncToAccount ?? true,
   })),
   test: vi.fn(async () => ({ success: true })),
 }))
@@ -39,11 +40,12 @@ beforeEach(() => {
   bridge.get.mockClear()
   bridge.update.mockClear()
   bridge.test.mockClear()
-  bridge.get.mockResolvedValue({ schemaVersion: 1, enabled: true, silent: false })
+  bridge.get.mockResolvedValue({ schemaVersion: 2, enabled: true, silent: false, syncToAccount: true })
   bridge.update.mockImplementation(async (patch) => ({
-    schemaVersion: 1,
+    schemaVersion: 2,
     enabled: patch.enabled ?? true,
     silent: patch.silent ?? false,
+    syncToAccount: patch.syncToAccount ?? true,
   }))
   bridge.test.mockResolvedValue({ success: true })
 })
@@ -54,10 +56,11 @@ afterEach(() => {
 })
 
 describe("SystemNotifierModule", () => {
-  it("renders only two settings and the unchanged test button label", async () => {
+  it("renders only three settings and the unchanged test button label", async () => {
     await renderModule()
-    expect(document.body.textContent).toContain("启用通知")
+    expect(document.body.textContent).toContain("本机通知")
     expect(document.body.textContent).toContain("静音通知")
+    expect(document.body.textContent).toContain("同步到手机")
     expect(findButton("发送测试通知")).toBeInstanceOf(HTMLButtonElement)
     expect(document.body.textContent).not.toContain("通知历史")
     expect(document.body.textContent).not.toContain("权限状态")
@@ -92,7 +95,7 @@ describe("SystemNotifierModule", () => {
   })
 
   it("disables settings and testing only while a save is pending", async () => {
-    const pending = deferred<{ schemaVersion: 1; enabled: boolean; silent: boolean }>()
+    const pending = deferred<{ schemaVersion: 2; enabled: boolean; silent: boolean; syncToAccount: boolean }>()
     bridge.update.mockReturnValueOnce(pending.promise)
     await renderModule()
     const enabled = document.querySelector("#system-notifier-enabled") as HTMLButtonElement
@@ -108,7 +111,7 @@ describe("SystemNotifierModule", () => {
     expect(testButton.disabled).toBe(true)
 
     await act(async () => {
-      pending.resolve({ schemaVersion: 1, enabled: false, silent: false })
+      pending.resolve({ schemaVersion: 2, enabled: false, silent: false, syncToAccount: true })
       await pending.promise
     })
     expect(enabled.disabled).toBe(false)
@@ -127,7 +130,7 @@ describe("SystemNotifierModule", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("启用通知")
+    expect(document.body.textContent).toContain("本机通知")
     expect(bridge.get).toHaveBeenCalledTimes(2)
   })
 

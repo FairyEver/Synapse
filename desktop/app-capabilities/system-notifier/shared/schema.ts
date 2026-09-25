@@ -40,25 +40,37 @@ export const systemNotificationResultSchema = z.object({
   success: z.literal(true),
 }).strict()
 
+/**
+ * 一次正式触发有两个出口，各自可关：
+ *
+ * - `enabled` / `silent` 只描述**这台电脑**上的原生通知；
+ * - `syncToAccount` 描述**账号消息中心**那一路，登录且在线时同一条消息会进消息中心，
+ *   并随 APNs 推到用户已注册的手机上。两台机器（在电脑前 vs 人在外面）要的常常不是
+ *   同一件事，所以两颗开关不互相门控。
+ */
 export const systemNotifierSettingsSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   enabled: z.boolean(),
   silent: z.boolean(),
+  syncToAccount: z.boolean(),
 }).strict()
 
 export const systemNotifierSettingsPatchSchema = z.object({
   enabled: z.boolean().optional(),
   silent: z.boolean().optional(),
-}).strict().refine((value) => value.enabled !== undefined || value.silent !== undefined, {
-  message: "At least one settings field is required.",
-})
+  syncToAccount: z.boolean().optional(),
+}).strict().refine(
+  (value) => value.enabled !== undefined || value.silent !== undefined || value.syncToAccount !== undefined,
+  { message: "At least one settings field is required." },
+)
 
 export const strictEmptyObjectSchema = z.object({}).strict()
 
 export const defaultSystemNotifierSettings = Object.freeze({
-  schemaVersion: 1,
+  schemaVersion: 2,
   enabled: true,
   silent: false,
+  syncToAccount: true,
 }) satisfies SystemNotifierSettings
 
 export const systemNotifierTestNotification = Object.freeze({

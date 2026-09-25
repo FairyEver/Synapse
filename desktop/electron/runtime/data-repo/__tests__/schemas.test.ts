@@ -494,13 +494,15 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(false)
     expect(systemNotifierSettingsSchemaDefinition.validate({
-      schemaVersion: 1,
+      schemaVersion: 2,
       enabled: true,
       silent: false,
+      syncToAccount: true,
     })).toBe(true)
     expect(systemNotifierSettingsSchemaDefinition.validate({
-      schemaVersion: 1,
+      schemaVersion: 2,
       enabled: true,
+      silent: false,
     })).toBe(false)
     expect(
       driveSyncBindingsSchema.validate({
