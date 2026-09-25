@@ -412,6 +412,30 @@ final class MeetingRecordingSession {
         }
     }
 
+    /// 收尾失败之后拿本机那条待收尾记录怎么办。
+    ///
+    /// 只有一件事能让这条路**永久放弃**：服务端说它不认识这条录音（404）。
+    ///
+    /// 那是服务端那次分块上传被中止清掉的结果（`cleanupStaleUploads` 每天清掉超过 24 小时
+    /// 还没收尾的），于是这次收尾**永远不可能成功** —— 而本机那条记录在界面上根本不出现
+    /// （没收尾的录音进不了列表），所以它会一直留着、每次开机重试一遍、每次都失败，谁也
+    /// 发现不了。设计文档 §6.7 把它记成了一条「已知代价」，但那里写的是「用户下次打开手机
+    /// App 就会正常收尾」—— 超过 24 小时之后这一句就不成立了，这一格是漏的。
+    ///
+    /// 其余一切都还是「下次再试」：网络断了、超时、5xx、解码失败 —— 本机的残片还在，等
+    /// 网络回来就收得完。**这条区分是这段代码的全部要害**，所以它单独成一个函数，由测试钉住。
+    nonisolated enum RecoveryOutcome: Equatable {
+        case retryLater
+        case giveUp
+    }
+
+    /// 纯函数，不碰任何状态 —— 所以是 `nonisolated`：这条规则必须能被单测在没有主 actor 的
+    /// 地方直接问一次。
+    nonisolated static func recoveryOutcome(for error: Error) -> RecoveryOutcome {
+        guard let apiError = error as? APIError else { return .retryLater }
+        return apiError.status == 404 ? .giveUp : .retryLater
+    }
+
     private func finalize(_ record: PendingMeetingRecording, using client: APIClient) async {
         guard let fileURL = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId) else {
             PendingMeetingRecordingStore.remove(recordingId: record.recordingId)
@@ -458,9 +482,20 @@ final class MeetingRecordingSession {
             // 同样归入缓存：这条也是刚录完的，回听要秒开。
             keepRecordedAudio(record, peaks: encodedPeaks)
         } catch {
-            AppLog.recording.warning(
-                "recovering a recording failed, it stays pending: \(error.localizedDescription, privacy: .public)"
-            )
+            switch Self.recoveryOutcome(for: error) {
+            case .giveUp:
+                // 服务端已经没有这条录音了（见 `recoveryOutcome`）：这次收尾不可能成功，
+                // 本机这份残片也就永远送不出去 —— 它从没进过列表，用户没见过它，留着只
+                // 占地方。与「取消」那条路一样收干净，不留缓存条目。
+                AppLog.recording.warning(
+                    "the server no longer has this recording; discarding the local residue."
+                )
+                discardLocalFiles(record.recordingId)
+            case .retryLater:
+                AppLog.recording.warning(
+                    "recovering a recording failed, it stays pending: \(error.localizedDescription, privacy: .public)"
+                )
+            }
         }
     }
 
