@@ -15,7 +15,7 @@
 - **底栏永远是三格，不因任何理由增加第四个。** 新增能力一律进「主页 → 功能」（spec §3.1）。
 - **新建的 Swift 文件不需要改 `project.pbxproj`。** 工程用的是 `PBXFileSystemSynchronizedRootGroup`（`SynapseMobile/SynapseMobile.xcodeproj/project.pbxproj:77-114`），放进 `SynapseMobile/SynapseMobile/` 或 `SynapseMobile/SynapseMobileTests/` 目录即被自动纳入。
 - **版本号同时留在两处。** 「关于」页新增一行，`Features/Terminal/TerminalScreen.swift:1131-1137` 的终端顶栏第二行**一个字不动**。
-- **底栏未读角标用系统 `.badge`，不改颜色。** 不桥接 `UITabBarItem`，不做琥珀小圆点。琥珀 `Theme.attention` 只用于主页铃铛上自绘的角标。
+- **未读角标只有一种颜色：系统红。** 底栏用系统 `.badge`，不改颜色、不桥接 `UITabBarItem`；主页铃铛上自绘的那一枚也用 `Color(uiColor: .systemRed)` 配白字——两处读的是同一个数字，颜色不一致会被读成两套计数。琥珀 `Theme.attention` 只留给「有人在等你回话」（会话行的「等待输入」徽章、主页的待处理卡）。
 - **不改**：终端画布 / 键盘 / 语音输入 / 网格上报（`Features/Terminal/TerminalScreen.swift` 除 `moreMenu` 引用点外不动）、录音会话生命周期、主机名与权限模型、任何服务端协议、`docs/agents/capability-registry.md:26` 的 iOS 两条深链路由（本改版不新增路由）。
 - **不做**：开源许可页、「即将支持」分组、「功能」清单的分组、`SynapseMobile/README.md` 之外的文档站文案。
 - 生产代码禁止 `print` 当日志；错误必须带上下文抛出或落到 `model.notice`。
@@ -1781,8 +1781,14 @@ struct HomeView: View {
         }
     }
 
-    /// 常驻的那一枚铃铛。角标用 `Theme.attention` —— 全应用只有这一个颜色说
-    /// 「有人需要你」，与会话行的「等待输入」徽章同色同义。
+    /// 常驻的那一枚铃铛。
+    ///
+    /// 角标用系统红，不跟 `Theme.attention`：底栏主页那一格的未读数由系统 `.badge`
+    /// 画，也是这个红，两处读的是同一个数字，颜色不一致就会像两套计数。红在这里只
+    /// 表示「有未读」，不表示出错；琥珀仍然只留给「有人在等你回话」。
+    ///
+    /// 角标挑在铃铛框的右上角外，所以**这一层不能被裁剪**：以后给这个按钮加背景或
+    /// 圆角时不要顺手加 `clipShape`，那会把角标切掉一半。
     private var bell: some View {
         Button(action: onOpenNotifications) {
             Image(systemName: "bell")
@@ -1790,11 +1796,11 @@ struct HomeView: View {
                     if model.notifications.unreadCount > 0 {
                         Text("\(model.notifications.unreadCount)")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Theme.attentionFill)
+                            .foregroundStyle(Color.white)
                             .padding(.horizontal, 4)
                             .frame(minWidth: 16, minHeight: 16)
-                            .background(Theme.attention, in: Capsule())
-                            .offset(x: 6, y: -4)
+                            .background(Color(uiColor: .systemRed), in: Capsule())
+                            .offset(x: 9, y: -8)
                     }
                 }
         }

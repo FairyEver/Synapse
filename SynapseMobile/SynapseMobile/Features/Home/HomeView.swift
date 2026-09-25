@@ -61,8 +61,14 @@ struct HomeView: View {
         }
     }
 
-    /// 常驻的那一枚铃铛。角标用 `Theme.attention` —— 全应用只有这一个颜色说
-    /// 「有人需要你」，与会话行的「等待输入」徽章同色同义。
+    /// 常驻的那一枚铃铛。
+    ///
+    /// 角标用系统红，不跟 `Theme.attention`：底栏主页那一格的未读数由系统 `.badge`
+    /// 画，也是这个红，两处读的是同一个数字，颜色不一致就会像两套计数。红在这里只
+    /// 表示「有未读」，不表示出错；琥珀仍然只留给「有人在等你回话」。
+    ///
+    /// 角标挑在铃铛框的右上角外，所以**这一层不能被裁剪**：以后给这个按钮加背景或
+    /// 圆角时不要顺手加 `clipShape`，那会把角标切掉一半。
     private var bell: some View {
         Button(action: onOpenNotifications) {
             Image(systemName: "bell")
@@ -70,11 +76,11 @@ struct HomeView: View {
                     if model.notifications.unreadCount > 0 {
                         Text("\(model.notifications.unreadCount)")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Theme.attentionFill)
+                            .foregroundStyle(Color.white)
                             .padding(.horizontal, 4)
                             .frame(minWidth: 16, minHeight: 16)
-                            .background(Theme.attention, in: Capsule())
-                            .offset(x: 6, y: -4)
+                            .background(Color(uiColor: .systemRed), in: Capsule())
+                            .offset(x: 9, y: -8)
                     }
                 }
         }
