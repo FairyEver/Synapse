@@ -475,10 +475,7 @@ export class AccountService {
     )
   }
 
-  /**
-   * 把一条消息写进账号消息中心。返回它**是否真的建出来了**：未登录或离线时不发，返回 false；
-   * 请求本身失败时抛错。调用方据此决定要不要在本机兜底。
-   */
+  /** 把一条消息写进账号消息中心。未登录或离线时不发；请求本身失败时抛错。 */
   async createInternalNotification(input: {
     source: "system-notifier" | "terminal-complete"
     sourceKey?: string
@@ -486,10 +483,9 @@ export class AccountService {
     body: string
     targetId?: string
     deviceId?: string
-  }): Promise<boolean> {
-    if (this.state.status !== "authenticated" || this.state.connectivity !== "online") return false
+  }): Promise<void> {
+    if (this.state.status !== "authenticated" || this.state.connectivity !== "online") return
     await this.requestAuthenticatedJson<{ id: string }>("POST", `${apiBaseUrl()}/notifications/internal`, input, "通知同步失败。")
-    return true
   }
 
   async getNotification(id: string) {

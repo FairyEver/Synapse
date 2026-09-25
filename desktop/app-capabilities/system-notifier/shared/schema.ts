@@ -41,10 +41,10 @@ export const systemNotificationResultSchema = z.object({
 }).strict()
 
 /**
- * 通知只有一个出发口，三颗开关分别描述它和它的呈现：
+ * 通知只有一条路，三颗开关分别描述它和它的呈现：
  *
  * - `syncToAccount` 是**发送总闸**：关掉就不发，哪儿都不会有；
- * - `enabled` / `silent` 描述**这台电脑**收到消息时的原生呈现（弹不弹、响不响）。
+ * - `enabled` / `silent` 描述**这台电脑**收到账号消息时的原生呈现（弹不弹、响不响）。
  *   它们不门控发送：人在外面时把本机通知关掉，手机照样收得到。
  */
 export const systemNotifierSettingsSchema = z.object({

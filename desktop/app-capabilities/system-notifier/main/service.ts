@@ -57,10 +57,10 @@ export interface SystemNotifierServicePorts {
   readonly auditSink?: AuditSink
   readonly adapter?: SystemNotificationAdapter
   /**
-   * 把通知发到账号消息中心。返回这条消息**是否真的建出来了**：未登录、离线、端口缺失时返回
-   * false，请求失败时抛错。触发方据此决定要不要在本机兜底弹一次。
+   * 把通知发到账号消息中心。未登录或离线时它安静地不发，请求失败时抛错；触发方两者都不管，
+   * 只留一条诊断。
    */
-  readonly sync?: (input: SystemNotificationInput) => Promise<boolean>
+  readonly sync?: (input: SystemNotificationInput) => Promise<void>
 }
 
 /** 「发送测试通知」用的固定 UI 身份，与任何触发来源都不共用配额。 */
@@ -91,7 +91,7 @@ export class SystemNotifierService {
   private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV2>
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
-  private sync?: (input: SystemNotificationInput) => Promise<boolean>
+  private sync?: (input: SystemNotificationInput) => Promise<void>
   private snapshot: Readonly<SystemNotifierSettings> | null = null
   private hasValidSnapshot = false
   private settingsQueue: Promise<void> = Promise.resolve()
@@ -127,9 +127,9 @@ export class SystemNotifierService {
   /**
    * 一次触发只做一件事：把通知发到账号消息中心。
    *
-   * 本机弹窗不在这里 —— 它由「收到那条消息」这件事产生（`live-connection-service` 的回显
-   * 分支调 `presentAccountNotification`），发起的那台电脑和别的电脑走的是同一条路。
-   * 只有消息根本没发出去时（未登录、离线、请求失败）才在本机直接兜底弹一次。
+   * 本机弹窗不在这里 —— 它由「收到那条消息」这件事产生（`live-connection-service` 调
+   * `presentAccountNotification`），发起的那台电脑和别的电脑走的是同一条路。发不出去就是
+   * 发不出去：未登录或离线时账号里不会有这条消息，也就没有任何设备会显示它。
    */
   trigger(input: SystemNotificationInput, context: SystemNotifierTriggerContext): SystemNotificationResult {
     this.recordAudit(input, context)
@@ -142,8 +142,8 @@ export class SystemNotifierService {
       return { success: true }
     }
 
-    void this.sendToAccount(input).then((sent) => {
-      if (!sent) this.showLocally(input)
+    void this.sync?.(input).catch(() => {
+      this.diagnostics.record("notification_sync", "sync_failed")
     })
     return { success: true }
   }
@@ -152,7 +152,7 @@ export class SystemNotifierService {
    * 这台电脑收到一条账号消息时的原生呈现，由实时连接在收到广播并取回消息后调用。
    *
    * 本机通知关着、或设置读不出来时都不弹：`enabled` / `silent` 描述的就是这台电脑的呈现，
-   * 触发路径不再有第二条自己弹的分支。
+   * 这是触发之后这台电脑唯一会弹原生通知的地方。
    */
   presentAccountNotification(input: SystemNotificationInput): void {
     const settings = this.snapshot
@@ -179,23 +179,6 @@ export class SystemNotifierService {
       silent: this.snapshot?.silent ?? defaultSystemNotifierSettings.silent,
     })
     return { success: true }
-  }
-
-  /** 消息没发出去时的本机兜底。本机通知关着就不弹。 */
-  private showLocally(input: SystemNotificationInput): void {
-    const settings = this.snapshot
-    if (settings?.enabled !== true) return
-    this.show({ ...input, silent: settings.silent })
-  }
-
-  private async sendToAccount(input: SystemNotificationInput): Promise<boolean> {
-    if (!this.sync) return false
-    try {
-      return await this.sync(input)
-    } catch {
-      this.diagnostics.record("notification_sync", "sync_failed")
-      return false
-    }
   }
 
   private show(input: SystemNotificationInput & { readonly silent: boolean }): void {
