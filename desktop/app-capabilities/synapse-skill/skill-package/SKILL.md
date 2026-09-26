@@ -37,7 +37,7 @@ If the task spans multiple domains, handle each part in order and read each rele
 
 If the user message contains `sss`, treat it as Synapse Services Shortcut. Infer the real domain from surrounding intent. Do not default to Database just because `sss` appears.
 
-If the user message contains `PH`, read it as Portal Headless and route to `extend/index.md`. The same abbreviation covers both the Portal business extension and the local `extend/portal-headless/` SDK, so `用 PH 查一下…` and `改一下 PH` name the same target. Resolve it from context, and keep the literal meaning of `PH` only when the surrounding text clearly points elsewhere; ask one short clarifying question if it stays ambiguous.
+If the user message contains `PH`, read it as Portal Headless and route to `extend/index.md`. It is a convenience alias for the two-word name, not a separate concept: the same letters cover both the Portal business extension and the local `extend/portal-headless/` SDK, so `用 PH 查一下…` and `改一下 PH` name the same target. A meaning that the current project, repository, or folder defines for `PH` outranks this alias. Otherwise keep the literal meaning only when the surrounding text clearly points elsewhere, and ask one short clarifying question if it stays ambiguous.
 
 For scheduled-task, scheduler, cron, interval, enable/disable, run-history, or runtime-state requests, use the current Automation domain. Legacy `scheduler_*` MCP tools are retired and are not supported aliases.
 

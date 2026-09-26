@@ -1,6 +1,6 @@
 # Portal Headless
 
-`PH` is this extension: when the user or the calling agent writes `PH`, they mean Portal Headless and its SDK, not a literal two-letter token.
+`PH` is the user's shorthand for this extension's two-word name: it means Portal Headless and its SDK, not a literal two-letter token. Treat it that way unless the current project, repository, or folder defines `PH` as something else.
 
 ## Reaching Synapse tools
 
