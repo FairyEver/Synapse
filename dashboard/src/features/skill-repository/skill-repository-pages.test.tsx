@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { DirectionProvider } from '@/context/direction-provider'
 import { LayoutProvider } from '@/context/layout-provider'
-import { ThemeProvider } from '@/context/theme-provider'
 import { SkillRepositoryDetailPage } from './skill-repository-detail-page'
 import { SkillRepositoryExplorePage } from './skill-repository-explore-page'
 import { SkillRepositoryListPage } from './skill-repository-list-page'
@@ -184,13 +183,11 @@ function render(element: ReactNode) {
   root = createRoot(host)
   act(() => {
     root?.render(
-      <ThemeProvider>
-        <DirectionProvider>
-          <LayoutProvider>
-            <SidebarProvider>{element}</SidebarProvider>
-          </LayoutProvider>
-        </DirectionProvider>
-      </ThemeProvider>
+      <DirectionProvider>
+        <LayoutProvider>
+          <SidebarProvider>{element}</SidebarProvider>
+        </LayoutProvider>
+      </DirectionProvider>
     )
   })
 }

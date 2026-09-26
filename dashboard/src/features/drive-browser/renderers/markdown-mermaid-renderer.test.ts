@@ -41,7 +41,7 @@ describe('drive markdown Mermaid renderer', () => {
     const root = markdownRoot('<pre><code class="language-ts">const ok = true</code></pre>')
     const loadMermaid = vi.fn(async () => mermaidApi())
 
-    await renderDriveMermaidDiagrams({ root, resolvedTheme: 'light', loadMermaid })
+    await renderDriveMermaidDiagrams({ root, loadMermaid })
 
     expect(loadMermaid).not.toHaveBeenCalled()
     expect(root.querySelector('[data-drive-mermaid-diagram="true"]')).toBeNull()
@@ -56,7 +56,7 @@ describe('drive markdown Mermaid renderer', () => {
     const mermaid = mermaidApi()
     const loadMermaid = vi.fn(async () => mermaid)
 
-    await renderDriveMermaidDiagrams({ root, resolvedTheme: 'light', loadMermaid })
+    await renderDriveMermaidDiagrams({ root, loadMermaid })
 
     expect(loadMermaid).toHaveBeenCalledTimes(1)
     expect(mermaid.render).toHaveBeenCalledTimes(3)
@@ -98,8 +98,7 @@ describe('drive markdown Mermaid renderer', () => {
 
     await renderDriveMermaidDiagrams({
       root,
-      resolvedTheme: 'light',
-      loadMermaid: async () => mermaid,
+            loadMermaid: async () => mermaid,
     })
 
     expect(root.querySelector('[data-drive-mermaid-error="true"]')?.textContent).toBe('无法渲染流程图，已显示源码。')
@@ -116,7 +115,7 @@ describe('drive markdown Mermaid renderer', () => {
       })),
     })
 
-    await renderDriveMermaidDiagrams({ root, resolvedTheme: 'light', loadMermaid: async () => mermaid })
+    await renderDriveMermaidDiagrams({ root, loadMermaid: async () => mermaid })
 
     const figure = root.querySelector('figure')
     const rendered = root.querySelector('[data-drive-mermaid-rendered="true"]')
@@ -135,8 +134,7 @@ describe('drive markdown Mermaid renderer', () => {
 
     await renderDriveMermaidDiagrams({
       root,
-      resolvedTheme: 'light',
-      loadMermaid: async () => { throw new Error('chunk unavailable') },
+            loadMermaid: async () => { throw new Error('chunk unavailable') },
     })
 
     expect(root.querySelector('[data-drive-mermaid-error="true"]')?.textContent).toBe('无法渲染流程图，已显示源码。')
@@ -154,8 +152,7 @@ describe('drive markdown Mermaid renderer', () => {
     const controller = new AbortController()
     const renderPromise = renderDriveMermaidDiagrams({
       root,
-      resolvedTheme: 'light',
-      signal: controller.signal,
+            signal: controller.signal,
       loadMermaid: async () => mermaid,
     })
     await vi.waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(1))
@@ -168,21 +165,21 @@ describe('drive markdown Mermaid renderer', () => {
     expect(root.querySelector('pre')?.classList.contains('hidden')).toBe(false)
   })
 
-  it('restores source before a theme rerender and uses the dark token configuration', async () => {
+  it('restores source before a rerender and uses the token configuration', async () => {
     const root = markdownRoot(mermaidBlock('flowchart TB\nA --> B'))
     const mermaid = mermaidApi()
     const loadMermaid = vi.fn(async () => mermaid)
-    await renderDriveMermaidDiagrams({ root, resolvedTheme: 'light', loadMermaid })
+    await renderDriveMermaidDiagrams({ root, loadMermaid })
 
     restoreDriveMermaidDiagrams(root)
     expect(root.querySelector('[data-drive-mermaid-diagram="true"]')).toBeNull()
     expect(root.querySelector('pre')?.classList.contains('hidden')).toBe(false)
-    await renderDriveMermaidDiagrams({ root, resolvedTheme: 'dark', loadMermaid })
+    await renderDriveMermaidDiagrams({ root, loadMermaid })
 
     expect(root.querySelectorAll('[data-drive-mermaid-diagram="true"]')).toHaveLength(1)
     expect(mermaid.initialize).toHaveBeenLastCalledWith(expect.objectContaining({
       theme: 'base',
-      themeVariables: expect.objectContaining({ darkMode: true }),
+      themeVariables: expect.objectContaining({ background: expect.any(String) }),
     }))
   })
 
@@ -190,8 +187,8 @@ describe('drive markdown Mermaid renderer', () => {
     vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null)
     const root = markdownRoot('')
 
-    expect(createDriveMermaidConfig(root, 'dark')).toMatchObject({ theme: 'dark' })
-    expect(createDriveMermaidConfig(root, 'dark').themeVariables).toBeUndefined()
+    expect(createDriveMermaidConfig(root)).toMatchObject({ theme: 'neutral' })
+    expect(createDriveMermaidConfig(root).themeVariables).toBeUndefined()
   })
 })
 

@@ -10,7 +10,6 @@ import { normalizeAdminRedirect } from '@/lib/admin-redirect'
 import { useAdminAuthStore } from '@/stores/admin-auth-store'
 import { DirectionProvider } from '@/context/direction-provider'
 import { FontProvider } from '@/context/font-provider'
-import { ThemeProvider } from '@/context/theme-provider'
 import { shouldRetryAdminQuery } from '@/lib/admin-query-retry'
 
 const queryClient = new QueryClient({
@@ -39,7 +38,7 @@ async function bootstrap() {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider><FontProvider><DirectionProvider><RouterProvider router={adminRouter} /></DirectionProvider></FontProvider></ThemeProvider>
+        <FontProvider><DirectionProvider><RouterProvider router={adminRouter} /></DirectionProvider></FontProvider>
       </QueryClientProvider>
     </StrictMode>
   )

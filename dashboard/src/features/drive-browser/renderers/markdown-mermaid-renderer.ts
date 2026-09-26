@@ -1,13 +1,10 @@
 import type { Mermaid, MermaidConfig } from 'mermaid'
 
-export type DriveMermaidResolvedTheme = 'light' | 'dark'
-
 type DriveMermaidApi = Pick<Mermaid, 'initialize' | 'render'>
 type DriveMermaidLoader = () => Promise<DriveMermaidApi>
 
 type RenderDriveMermaidDiagramsInput = {
   readonly root: HTMLElement
-  readonly resolvedTheme: DriveMermaidResolvedTheme
   readonly signal?: AbortSignal
   readonly loadMermaid?: DriveMermaidLoader
 }
@@ -45,7 +42,6 @@ let mermaidRenderQueue: Promise<void> = Promise.resolve()
 
 export async function renderDriveMermaidDiagrams({
   root,
-  resolvedTheme,
   signal,
   loadMermaid = loadMermaidModule,
 }: RenderDriveMermaidDiagramsInput): Promise<void> {
@@ -66,7 +62,7 @@ export async function renderDriveMermaidDiagrams({
     return
   }
   if (signal?.aborted) return
-  const config = createDriveMermaidConfig(root, resolvedTheme)
+  const config = createDriveMermaidConfig(root)
 
   for (const code of codeBlocks) {
     if (signal?.aborted) return
@@ -101,11 +97,8 @@ export function restoreDriveMermaidDiagrams(root: HTMLElement): void {
   root.querySelectorAll<HTMLElement>(MERMAID_ERROR_SELECTOR).forEach((error) => error.remove())
 }
 
-export function createDriveMermaidConfig(
-  root: HTMLElement,
-  resolvedTheme: DriveMermaidResolvedTheme,
-): MermaidConfig {
-  const themeVariables = resolveMermaidThemeVariables(root, resolvedTheme)
+export function createDriveMermaidConfig(root: HTMLElement): MermaidConfig {
+  const themeVariables = resolveMermaidThemeVariables(root)
   return {
     startOnLoad: false,
     securityLevel: 'strict',
@@ -113,7 +106,7 @@ export function createDriveMermaidConfig(
     secure: MERMAID_SECURE_CONFIG_KEYS,
     htmlLabels: false,
     fontFamily: root.ownerDocument.defaultView?.getComputedStyle(root.ownerDocument.body).fontFamily || undefined,
-    theme: themeVariables ? 'base' : resolvedTheme === 'dark' ? 'dark' : 'neutral',
+    theme: themeVariables ? 'base' : 'neutral',
     ...(themeVariables ? { themeVariables } : {}),
     flowchart: {
       htmlLabels: false,
@@ -125,10 +118,7 @@ export function createDriveMermaidConfig(
   }
 }
 
-function resolveMermaidThemeVariables(
-  root: HTMLElement,
-  resolvedTheme: DriveMermaidResolvedTheme,
-): Record<string, string | boolean> | null {
+function resolveMermaidThemeVariables(root: HTMLElement): Record<string, string | boolean> | null {
   const document = root.ownerDocument
   const view = document.defaultView
   if (!view) return null
@@ -149,7 +139,6 @@ function resolveMermaidThemeVariables(
   }
   const color = (token: typeof MERMAID_THEME_TOKENS[number]) => colors.get(token)!
   return {
-    darkMode: resolvedTheme === 'dark',
     background: color('--background'),
     primaryColor: color('--muted'),
     primaryTextColor: color('--foreground'),

@@ -8,13 +8,9 @@ import { IconLayoutFull } from '@/assets/custom/icon-layout-full'
 import { IconSidebarFloating } from '@/assets/custom/icon-sidebar-floating'
 import { IconSidebarInset } from '@/assets/custom/icon-sidebar-inset'
 import { IconSidebarSidebar } from '@/assets/custom/icon-sidebar-sidebar'
-import { IconThemeDark } from '@/assets/custom/icon-theme-dark'
-import { IconThemeLight } from '@/assets/custom/icon-theme-light'
-import { IconThemeSystem } from '@/assets/custom/icon-theme-system'
 import { cn } from '@/lib/utils'
 import { useDirection } from '@/context/direction-provider'
 import { type Collapsible, useLayout } from '@/context/layout-provider'
-import { useTheme } from '@/context/theme-provider'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -30,13 +26,11 @@ import { useSidebar } from './ui/sidebar'
 export function ConfigDrawer() {
   const { setOpen } = useSidebar()
   const { resetDir } = useDirection()
-  const { resetTheme } = useTheme()
   const { resetLayout } = useLayout()
 
   const handleReset = () => {
     setOpen(true)
     resetDir()
-    resetTheme()
     resetLayout()
   }
 
@@ -46,7 +40,7 @@ export function ConfigDrawer() {
         <Button
           size='icon'
           variant='ghost'
-          aria-label='打开主题设置'
+          aria-label='打开外观设置'
           className='rounded-full'
         >
           <Settings aria-hidden='true' />
@@ -54,11 +48,10 @@ export function ConfigDrawer() {
       </SheetTrigger>
       <SheetContent className='flex flex-col'>
         <SheetHeader className='pb-0 text-start'>
-          <SheetTitle>主题设置</SheetTitle>
+          <SheetTitle>外观设置</SheetTitle>
           <SheetDescription>调整外观和布局偏好。</SheetDescription>
         </SheetHeader>
         <div className='space-y-6 overflow-y-auto px-4 pb-8'>
-          <ThemeConfig />
           <SidebarConfig />
           <LayoutConfig />
           <DirConfig />
@@ -117,14 +110,12 @@ function SectionTitle({
 
 function RadioGroupItem({
   item,
-  isTheme = false,
 }: {
   item: {
     value: string
     label: string
     icon: (props: SVGProps<SVGSVGElement>) => React.ReactElement
   }
-  isTheme?: boolean
 }) {
   return (
     <Item
@@ -152,10 +143,7 @@ function RadioGroupItem({
           aria-hidden='true'
         />
         <item.icon
-          className={cn(
-            !isTheme &&
-              'fill-primary stroke-primary group-data-[state=unchecked]:fill-muted-foreground group-data-[state=unchecked]:stroke-muted-foreground'
-          )}
+          className='fill-primary stroke-primary group-data-[state=unchecked]:fill-muted-foreground group-data-[state=unchecked]:stroke-muted-foreground'
           aria-hidden='true'
         />
       </div>
@@ -167,50 +155,6 @@ function RadioGroupItem({
         {item.label}
       </div>
     </Item>
-  )
-}
-
-function ThemeConfig() {
-  const { defaultTheme, theme, setTheme } = useTheme()
-  return (
-    <div>
-      <SectionTitle
-        title='主题'
-        showReset={theme !== defaultTheme}
-        onReset={() => setTheme(defaultTheme)}
-        resetAriaLabel='将主题偏好重置为默认值'
-      />
-      <Radio
-        value={theme}
-        onValueChange={setTheme}
-        className='grid w-full max-w-md grid-cols-3 gap-4'
-        aria-label='选择主题偏好'
-        aria-describedby='theme-description'
-      >
-        {[
-          {
-            value: 'system',
-            label: '跟随系统',
-            icon: IconThemeSystem,
-          },
-          {
-            value: 'light',
-            label: '浅色',
-            icon: IconThemeLight,
-          },
-          {
-            value: 'dark',
-            label: '深色',
-            icon: IconThemeDark,
-          },
-        ].map((item) => (
-          <RadioGroupItem key={item.value} item={item} isTheme />
-        ))}
-      </Radio>
-      <div id='theme-description' className='sr-only'>
-        在跟随系统、浅色和深色之间选择
-      </div>
-    </div>
   )
 }
 

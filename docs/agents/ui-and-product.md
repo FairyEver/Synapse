@@ -15,6 +15,9 @@
 
 - 优先级：现有业务组合 → `desktop/src/components/ui/` → 官方 shadcn 组件 → 模块内薄组合 → 最后才是自定义 primitive。
 - 使用 `bg-background`、`text-foreground`、`bg-card`、`border-border`、`bg-muted` 等主题 token。
+- **服务端网页端（dashboard）只有浅色一种外观**：不引入 `.dark` token、`dark:` 变体、`prefers-color-scheme` 分支或主题切换入口。
+  深色模式不在这个界面的产品范围内——它承载的功能太广，第三方渲染面（Markdown、代码编辑器、弹层、原生控件）逐处适配不划算。
+  桌面应用（`desktop/`）、手机端和文档站的深色外观各自独立，不受此条约束。
 - 禁止 hex/rgb/hsl、自定义颜色、Tailwind 任意颜色值、品牌硬编码、装饰性渐变、glow、彩虹文字、emoji heading 和页面级独立视觉语言。
 - 优先使用 preset 的字体、radius、border、shadow、focus ring；不要用 arbitrary values 重做组件视觉。
 - Tailwind 主要处理布局、间距、尺寸、响应式、overflow 和简单排版；不要用它重写按钮、输入框、卡片、对话框或 tabs。

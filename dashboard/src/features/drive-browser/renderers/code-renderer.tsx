@@ -3,7 +3,6 @@ import Editor, { type OnMount } from '@monaco-editor/react'
 import type { DriveBrowserCollaborationCapabilityDto, DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveCollaborationJoinContext } from '@synapse/shared'
 import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useTheme } from '@/context/theme-provider'
 import { createBrowserUuid } from '@/lib/browser-compat'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
@@ -39,7 +38,6 @@ export function DriveCodeRenderer({
   readonly collaborationContext?: DriveCollaborationJoinContext
 }) {
   const language = getCodeEditorLanguage(current.name)
-  const { resolvedTheme } = useTheme()
   const initialText = preview.text ?? ''
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
@@ -332,7 +330,6 @@ export function DriveCodeRenderer({
           <Editor
             height='100%'
             language={language}
-            theme={resolvedTheme === 'dark' ? 'vs-dark' : 'light'}
             value={collaborationEnabled ? undefined : value}
             defaultValue={collaborationEnabled ? initialText : undefined}
             onMount={handleEditorMount}

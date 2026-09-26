@@ -22,7 +22,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { useTheme } from '@/context/theme-provider'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import { createBrowserUuid } from '@/lib/browser-compat'
 import { cn } from '@/lib/utils'
@@ -145,7 +144,6 @@ function DriveMarkdownBody({
   const commentsTouchedRef = useRef(false)
   const layoutMode = useFilePreviewLayoutMode()
   const isCompact = layoutMode === 'compact'
-  const { resolvedTheme } = useTheme()
   const outlineItems = useMemo(() => flattenDriveDocumentOutline(outline), [outline])
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = isDriveCommentableMarkdownItem(current)
@@ -238,12 +236,12 @@ function DriveMarkdownBody({
     const root = bodyRef.current
     if (!root) return
     const controller = new AbortController()
-    void renderDriveMermaidDiagrams({ root, resolvedTheme, signal: controller.signal })
+    void renderDriveMermaidDiagrams({ root, signal: controller.signal })
     return () => {
       controller.abort()
       restoreDriveMermaidDiagrams(root)
     }
-  }, [annotated.html, isCompact, resolvedTheme])
+  }, [annotated.html, isCompact])
 
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
@@ -878,12 +876,12 @@ function DriveMarkdownBody({
                   data-drive-annotation-overlay-kind={rect.kind}
                   data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
                   className={cn(
-                    'absolute mix-blend-multiply dark:mix-blend-screen',
+                    'absolute mix-blend-multiply',
                     rect.kind === 'pending'
-                      ? 'bg-amber-200/60 ring-1 ring-amber-400/80 dark:bg-amber-800/45 dark:ring-amber-500/80'
+                      ? 'bg-amber-200/60 ring-1 ring-amber-400/80'
                       : rect.threadId === activeThreadId
-                        ? 'bg-amber-300/80 ring-2 ring-amber-500/90 dark:bg-amber-700/55 dark:ring-amber-400/90'
-                        : 'bg-amber-200/45 dark:bg-amber-800/30'
+                        ? 'bg-amber-300/80 ring-2 ring-amber-500/90'
+                        : 'bg-amber-200/45'
                   )}
                   style={{
                     top: rect.top,

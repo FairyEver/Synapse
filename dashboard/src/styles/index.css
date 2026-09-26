@@ -4,11 +4,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
-@import './github-markdown-dark.css';
 
 @source '../../../ui/src';
-
-@custom-variant dark (&:is(.dark *));
 
 @layer base {
   * {

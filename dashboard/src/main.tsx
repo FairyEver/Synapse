@@ -6,7 +6,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRouter, RouterProvider } from '@tanstack/react-router'
 import { DirectionProvider } from '@/context/direction-provider'
 import { FontProvider } from '@/context/font-provider'
-import { ThemeProvider } from '@/context/theme-provider'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardApi, subscribeAuthExpired } from '@/lib/api'
 import { normalizeDashboardRedirect } from '@/lib/dashboard-redirect'
@@ -53,13 +52,11 @@ async function bootstrap() {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <FontProvider>
-            <DirectionProvider>
-              <RouterProvider router={dashboardRouter} />
-            </DirectionProvider>
-          </FontProvider>
-        </ThemeProvider>
+        <FontProvider>
+          <DirectionProvider>
+            <RouterProvider router={dashboardRouter} />
+          </DirectionProvider>
+        </FontProvider>
       </QueryClientProvider>
     </StrictMode>
   )

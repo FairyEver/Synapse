@@ -1439,7 +1439,6 @@ describe('DriveMarkdownRenderer', () => {
     const overlay = threadOverlay('thread-1')
     expect(overlay).not.toBeNull()
     expect(overlay?.className).toContain('mix-blend-multiply')
-    expect(overlay?.className).toContain('dark:mix-blend-screen')
     expect(overlay?.className).toContain('bg-amber-200/45')
     expect(document.querySelector('[data-drive-annotation-thread-id]')).toBeNull()
 

@@ -330,10 +330,10 @@ export function DriveDocumentEditorCommentsFrame({
                 key={rect.key}
                 {...{ [dataAttributes.overlayThreadId]: rect.threadId }}
                 className={cn(
-                  'absolute mix-blend-multiply dark:mix-blend-screen',
+                  'absolute mix-blend-multiply',
                   rect.threadId === comments.activeThreadId
-                    ? 'bg-amber-300/80 ring-2 ring-amber-500/90 dark:bg-amber-700/55 dark:ring-amber-400/90'
-                    : 'bg-amber-200/45 dark:bg-amber-800/30'
+                    ? 'bg-amber-300/80 ring-2 ring-amber-500/90'
+                    : 'bg-amber-200/45'
                 )}
                 style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
               />
