@@ -94,11 +94,36 @@
 
 ---
 
+## ⚠️ 不在这张表里的东西：**未做 ≠ 不做**
+
+这张表只装**已经决定不做**的端点。**「还没做」不是「不做」**——把待办写进本表等于永久把它藏起来，
+以后没人会再去碰它。
+
+判据是**当初那句话的语气**：
+
+| 原话 | 属于 | 处置 |
+| --- | --- | --- |
+| 「不做」「不覆盖」「不照抄」「永不开放」 + 给出理由 | **排除** | 进本表 |
+| 「仍未覆盖」「尚未覆盖」「没做」「本轮只做读」 | **待办** | **不进本表**，按缺口排期 |
+
+2026-09-26 我在这一点上错过一次：`study-teacher.ts:52` 的原话是「讲师主体的后续 `.lay` 保存、编辑、
+删除以及讲师类型页的增删改**仍未覆盖**」——那是状态不是决定，我却把这 7 条当成「明确不做」放进了排除口径，
+并在状态记录里写成「正在补齐」。**代价**：如果照那样登记，剩下 5 条会从所有待办里消失。
+是子代理在交付报告里把原文顶回来才发现（`src/capabilities/study-teacher.ts` 文件头现在写着
+「它们仍然是**缺口**，不要当成已做」）。
+
+**复核一条排除时，先回去读它当初的原话。**
+
+---
+
 ## 状态记录
 
-- **2026-09-26**：本表建立，共 1 条敏感类 + 7 类全量候选 + 5 条取舍。
-  同日的缺口盘点（70 条真缺口）**排除本表条目后**成立。
-- `.lay` 写入口（`/manage/study/insertTeacherLevel.lay`、`updateTeacherLevel.lay`、
-  `deleteTeacherLevel.lay`、`addProfessorStudy.lay`、`updateProfessorStudy.lay`、
-  `updateProfessor.lay`、`/study/base/studyteacher` 删除）**曾**记在 `study-teacher.ts:52` 的「仍未覆盖」，
-  **2026-09-26 起正在补齐**，因此**不在**本表。落地后该注释要一并改掉。
+- **2026-09-26**：本表建立。真正的排除是 **1 条敏感类 + 7 类全量候选 + 5 条取舍**，
+  其余一度被我按「明确不做」统计的条目经复核属于**待办**（见上）。
+- 同日的缺口盘点：真缺口 **65 条**（原报 70 条，复核可达性后删 5 条——晨/月课堂的学习记录子页
+  **用户到不了**、奖励导入页**从不发**那条组织树）；另有 **6 条**本来被我误归为「不做」的
+  讲师写入口属于**待办**：`updateTeacherLevelStatus.lay`、`deleteTeacherLevel.lay`、
+  `addProfessorStudy.lay`、`updateProfessorStudy.lay`、`updateProfessor.lay`、
+  `DELETE /study/base/studyteacher`。
+- `.lay` 写入口的落地进度：`insertTeacherLevel.lay` / `updateTeacherLevel.lay` **2026-09-26 已补**
+  （能力 `study-teacher-level-save`）；其余仍待办，**不在本表**。
