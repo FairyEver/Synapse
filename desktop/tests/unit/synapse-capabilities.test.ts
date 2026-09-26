@@ -31,7 +31,6 @@ import {
   SECRETS_MCP_TOOL_NAMES,
 } from "../../app-capabilities/secrets/shared/capability"
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
-import { SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME } from "../../app-capabilities/sound-notifier/shared/capability"
 import { SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME } from "../../app-capabilities/system-notifier/shared/capability"
 import { PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME } from "../../app-capabilities/problem-feedback/shared/capability"
 import {
@@ -128,7 +127,6 @@ describe("App capability domain", () => {
       HTML_GENERATOR_EJS_MCP_TOOL_NAME,
       HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME,
       ...TERMINAL_CAPABILITY_CATALOG.map((capability) => capability.toolName),
-      SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
       SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
       PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME,
       JSON_REPAIR_MCP_TOOL_NAME,

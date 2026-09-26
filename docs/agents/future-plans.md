@@ -12,7 +12,7 @@
 
 ## Notifier
 
-Sound Notifier 与 System Notifier 已有明确当前边界，不属于本文件的未启动规划。System Notifier V1 的权威规格位于：
+System Notifier 已有明确当前边界，不属于本文件的未启动规划。System Notifier V1 的权威规格位于：
 
 - `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`
 

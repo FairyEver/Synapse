@@ -485,7 +485,7 @@ describe("SynapseSkillService", () => {
     const domainGuides = [automationIndex, contentIndex, databaseIndex, terminalIndex, workflowIndex].join("\n")
 
     expect(skillRoot).toContain("Terminal")
-    expect(skillRoot).toContain("Sound Notifier")
+    expect(skillRoot).toContain("System Notifier")
     expect(skillRoot).toContain("Terminal sessions")
     expect(domainGuides).not.toContain("synapse-skill/content.md")
     expect(domainGuides).not.toContain("files/<domain>/index.md")

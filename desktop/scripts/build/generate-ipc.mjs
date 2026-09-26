@@ -75,7 +75,6 @@ const MODULE_SOURCES = [
   { id: "secrets", importPath: "app-capabilities/secrets/main/ipc.ts" },
   { id: "agentPersonas", importPath: "app-capabilities/agent-personas/main/ipc.ts" },
   { id: "driveSync", importPath: "electron/modules/drive-sync/ipc.ts" },
-  { id: "soundNotifier", importPath: "app-capabilities/sound-notifier/main/ipc.ts" },
   { id: "voice", importPath: "app-capabilities/voice/main/ipc.ts" },
   { id: "meeting", importPath: "electron/modules/meeting/ipc.ts" },
   { id: "systemNotifier", importPath: "app-capabilities/system-notifier/main/ipc.ts" },

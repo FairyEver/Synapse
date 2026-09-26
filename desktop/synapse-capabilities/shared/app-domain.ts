@@ -25,10 +25,6 @@ import {
 } from "../../app-capabilities/secrets/shared/capability"
 import { SECRET_NAME_REGEX } from "../../app-capabilities/secrets/shared/schema"
 import {
-  SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
-  SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
-} from "../../app-capabilities/sound-notifier/shared/capability"
-import {
   SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
   SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
 } from "../../app-capabilities/system-notifier/shared/capability"
@@ -36,16 +32,6 @@ import {
   SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
   SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS,
 } from "../../app-capabilities/system-notifier/shared/schema"
-import {
-  SOUND_NOTIFIER_DEFAULT_INTERVAL_MS,
-  SOUND_NOTIFIER_DEFAULT_REPEAT_COUNT,
-  SOUND_NOTIFIER_EVENT_TYPES,
-  SOUND_NOTIFIER_MAX_INTERVAL_MS,
-  SOUND_NOTIFIER_MAX_REPEAT_COUNT,
-  SOUND_NOTIFIER_MIN_INTERVAL_MS,
-  SOUND_NOTIFIER_MIN_REPEAT_COUNT,
-  SOUND_NOTIFIER_PRESET_IDS,
-} from "../../app-capabilities/sound-notifier/shared/defaults"
 import {
   ACCOUNT_LOGIN_START_CAPABILITY_ID,
   ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
@@ -203,12 +189,6 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     risk: item.risk,
   })),
   {
-    id: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
-    title: "Play sound",
-    description: "Play a semantic Sound Notifier reminder on the local computer.",
-    mutates: false,
-  },
-  {
     id: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
     title: "Notify the user",
     description: "Notify the user: a native notification on this computer and, when the desktop is signed in and online, the same message in the account message center and on the user's registered phones.",
@@ -285,7 +265,6 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [HTML_GENERATOR_EJS_MCP_TOOL_NAME]: HTML_GENERATOR_EJS_CAPABILITY_ID,
   [HTML_GENERATOR_EJS_FILE_MCP_TOOL_NAME]: HTML_GENERATOR_EJS_FILE_CAPABILITY_ID,
   ...TERMINAL_MCP_TOOL_ACTIONS,
-  [SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]: SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
   [SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME]: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
   [PROBLEM_FEEDBACK_SUBMIT_MCP_TOOL_NAME]: PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID,
   [JSON_REPAIR_MCP_TOOL_NAME]: JSON_REPAIR_CAPABILITY_ID,
@@ -482,38 +461,6 @@ export function buildAppTools(): McpToolDefinition[] {
       },
     },
     ...buildTerminalMcpTools(),
-    {
-      name: SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
-      description: "Play a short local Sound Notifier reminder on this computer only. It never reaches the user's other devices: when the user wants to be reached rather than rung, use System Notifier instead. Prefer eventType so the sound matches the reminder situation. Chinese intent: 响一声, 放个提示音, 播个声音提醒.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          eventType: {
-            type: "string",
-            enum: SOUND_NOTIFIER_EVENT_TYPES,
-            description: "Reminder event type: message, input-required, success, long-running-complete, or error. Defaults to message.",
-          },
-          presetId: {
-            type: "string",
-            enum: SOUND_NOTIFIER_PRESET_IDS,
-            description: "legacy sound preset id. Prefer eventType. Do not pass both eventType and presetId.",
-          },
-          repeatCount: {
-            type: "integer",
-            minimum: SOUND_NOTIFIER_MIN_REPEAT_COUNT,
-            maximum: SOUND_NOTIFIER_MAX_REPEAT_COUNT,
-            description: `Optional repeat count for this reminder. Defaults to ${SOUND_NOTIFIER_DEFAULT_REPEAT_COUNT}.`,
-          },
-          intervalMs: {
-            type: "integer",
-            minimum: SOUND_NOTIFIER_MIN_INTERVAL_MS,
-            maximum: SOUND_NOTIFIER_MAX_INTERVAL_MS,
-            description: `Optional start-to-start interval in milliseconds between repeated plays. Defaults to ${SOUND_NOTIFIER_DEFAULT_INTERVAL_MS}.`,
-          },
-        },
-        additionalProperties: false,
-      },
-    },
     {
       name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
       description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",

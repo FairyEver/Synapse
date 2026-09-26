@@ -129,7 +129,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.script-runtime",
         "core.secrets",
         "core.side-channel",
-        "core.sound-notifier",
         "core.synapse-skill",
         "core.system-app-window",
         "core.system-notifier",
@@ -238,7 +237,6 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("terminal.git-service")?.dependsOn).toEqual(["git.command-runner"])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("git.operation-coordinator")?.dependsOn).toEqual(["core.event-bus"])
-    expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])
     expect(byId.get("core.system-notifier")?.dependsOn).toEqual([])
     expect(byId.get("core.system-notifier.integration")?.dependsOn).toEqual([
       "core.system-notifier",
@@ -394,7 +392,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.terminal",
       "core.system-app-window",
-      "core.sound-notifier",
       "core.voice",
       "core.system-notifier.integration",
       "core.problem-feedback",
@@ -506,58 +503,5 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.window-manager",
       "provider",
     ].sort())
-  })
-
-  it("broadcasts sound notifier playback requests without requiring prior IPC calls", async () => {
-    const { coreSoundNotifierDescriptor } = await import("../descriptors")
-    const broadcast = vi.fn(() => 1)
-    const namespace = {
-      name: "memory",
-      schemaVersion: 3,
-      backend: "json",
-      getSingleton: vi.fn(async () => null),
-      setSingleton: vi.fn(),
-      clearSingleton: vi.fn(),
-      list: vi.fn(async () => []),
-      count: vi.fn(async () => 0),
-      get: vi.fn(async () => null),
-      upsert: vi.fn(),
-      remove: vi.fn(),
-      onChange: vi.fn(() => () => {}),
-    }
-    const context = {
-      registry: {
-        get(id: string) {
-          if (id === "core.data-repository") {
-            return { namespace: vi.fn(() => namespace) }
-          }
-          if (id === "core.window-manager") {
-            return { broadcast }
-          }
-          throw new Error(id)
-        },
-      },
-      logger: {
-        child: vi.fn(() => ({
-          warn: vi.fn(),
-          error: vi.fn(),
-          info: vi.fn(),
-          debug: vi.fn(),
-        })),
-      },
-    }
-
-    const service = await coreSoundNotifierDescriptor.create(context as never)
-    await service.play({ eventType: "success" })
-
-    expect(broadcast).toHaveBeenCalledWith(
-      "synapse:app:sound_notifier:operation:play_requested",
-      {
-        eventType: "success",
-        presetId: "done",
-        repeatCount: 1,
-        intervalMs: 1000,
-      },
-    )
   })
 })

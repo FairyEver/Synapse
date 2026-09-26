@@ -31,7 +31,6 @@ function createMcpPath(state: SynapseAccountState) {
     textExtractor: unused,
     documentTemplate: unused,
     secrets: unused,
-    soundNotifier: unused,
     systemNotifier: unused,
     fileOpener: unused,
     textFileWriter: unused,

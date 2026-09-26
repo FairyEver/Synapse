@@ -404,14 +404,6 @@ export const IPC_CHANNELS = {
     "chooseLocalPath": "synapse:app:drive_sync:local_path:choose",
     "changed": "synapse:app:drive_sync:operation:changed",
   },
-  "soundNotifier": {
-    "getSettings": "synapse:app:sound_notifier:settings:get",
-    "updateSettings": "synapse:app:sound_notifier:settings:update",
-    "play": "synapse:app:sound_notifier:sound:play",
-    "preview": "synapse:app:sound_notifier:sound:preview",
-    "changed": "synapse:app:sound_notifier:operation:changed",
-    "playRequested": "synapse:app:sound_notifier:operation:play_requested",
-  },
   "voice": {
     "getStatus": "synapse:app:voice:status:get",
     "signSession": "synapse:app:voice:session:sign",

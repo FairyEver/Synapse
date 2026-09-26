@@ -67,10 +67,6 @@ import {
   createTextExtractorService,
   type TextExtractorService,
 } from "../../app-capabilities/text-extractor/main/service"
-import { createSoundNotifierCapabilityDispatcher } from "../../app-capabilities/sound-notifier/main/dispatcher"
-import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
-import { createSoundNotifierService, type SoundNotifierService } from "../../app-capabilities/sound-notifier/main/service"
-import { SOUND_NOTIFIER_SETTINGS_NAMESPACE } from "../../app-capabilities/sound-notifier/shared/capability"
 import { createElectronSystemNotificationAdapter } from "../../app-capabilities/system-notifier/main/adapter"
 import { createSystemNotifierCapabilityDispatcher } from "../../app-capabilities/system-notifier/main/dispatcher"
 import { SystemNotifierService } from "../../app-capabilities/system-notifier/main/service"
@@ -214,7 +210,6 @@ import type {
   QuickInputSettingsEntryV1,
   SecretItemEntryV1,
   SecretSettingsEntryV1,
-  SoundNotifierSettingsEntryV3,
   SystemNotifierSettingsEntryV3,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
@@ -779,36 +774,6 @@ export const coreAgentPersonasDescriptor: ServiceDescriptor<AgentPersonaService>
       account: accountService,
       logger: ctx.logger.child("agent-personas"),
     })
-  },
-}
-
-export const coreSoundNotifierDescriptor: ServiceDescriptor<SoundNotifierService> = {
-  id: "core.sound-notifier",
-  criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.window-manager"],
-  create(ctx) {
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
-    const logger = ctx.logger.child("sound-notifier")
-    const service = createSoundNotifierService({
-      settings: dataRepository.namespace<SoundNotifierSettingsEntryV3>(SOUND_NOTIFIER_SETTINGS_NAMESPACE),
-      logger,
-    })
-
-    service.events.on("changed", (payload) => {
-      windowManager.broadcast(ipcOperationIdToChannel(soundNotifierIpcModule.events.changed.operationId), payload)
-    })
-    service.events.on("playRequested", (payload, delivery) => {
-      const sent = windowManager.broadcast(ipcOperationIdToChannel(soundNotifierIpcModule.events.playRequested.operationId), payload)
-      delivery.recipientCount = sent
-      if (sent === 0) {
-        logger.warn("Sound notifier playback request had no renderer window.", {
-          eventType: payload.eventType,
-          presetId: payload.presetId,
-        })
-      }
-    })
-    return service
   },
 }
 
@@ -1558,7 +1523,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     "core.audit-sink",
     "core.terminal",
     SYSTEM_APP_WINDOW_SERVICE_ID,
-    "core.sound-notifier",
     "core.voice",
     SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
     PROBLEM_FEEDBACK_SERVICE_ID,
@@ -1750,9 +1714,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
           .open("terminal", { terminalOpenRequest: { requestId: randomUUID(), sessionId } })
       },
     })
-    const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
-      service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),
-    })
     const systemNotifierDispatcher = createSystemNotifierCapabilityDispatcher({
       service: ctx.registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID),
     })
@@ -1789,7 +1750,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       textExtractor: textExtractorDispatcher,
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
-      soundNotifier: soundNotifierDispatcher,
       systemNotifier: systemNotifierDispatcher,
       problemFeedback: problemFeedbackDispatcher,
       jsonRepair: jsonRepairDispatcher,

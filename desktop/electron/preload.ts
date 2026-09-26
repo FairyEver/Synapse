@@ -547,20 +547,6 @@ const synapseBridge: SynapseBridge = {
       ),
     },
   },
-  soundNotifier: {
-    settings: {
-      get: () => invoke(IPC_CHANNELS.soundNotifier.getSettings)(),
-      update: (input) => invoke(IPC_CHANNELS.soundNotifier.updateSettings)(input),
-    },
-    sound: {
-      play: (input = {}) => invoke(IPC_CHANNELS.soundNotifier.play)(input),
-      preview: (input = {}) => invoke(IPC_CHANNELS.soundNotifier.preview)(input),
-    },
-    operation: {
-      onChanged: createRawPayloadSubscription(subscribe, IPC_CHANNELS.soundNotifier.changed),
-      onPlayRequested: createRawPayloadSubscription(subscribe, IPC_CHANNELS.soundNotifier.playRequested),
-    },
-  },
   systemNotifier: {
     settings: {
       get: () => invoke(IPC_CHANNELS.systemNotifier.getSettings)({}),

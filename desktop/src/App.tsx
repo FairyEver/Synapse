@@ -59,7 +59,6 @@ import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transi
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId, SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
-import { SoundNotifierHost } from "../app-capabilities/sound-notifier/renderer/host"
 import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
 
 type ActiveAppId = SynapseSystemAppId
@@ -323,7 +322,6 @@ function MainApp() {
 
   return (
     <IdentityGate>
-      <SoundNotifierHost />
       <AppShellLayout
         leading={<AppShellUpdateIndicator />}
         dock={

@@ -1640,48 +1640,6 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ id: 7, automatic: true })
   })
 
-  it("maps Sound Notifier bridge methods to sound notifier IPC channels", async () => {
-    const bridge = await loadPreloadBridge()
-
-    await bridge.soundNotifier.settings.get()
-    await bridge.soundNotifier.settings.update({})
-    await bridge.soundNotifier.sound.play({ presetId: "done", repeatCount: 3 })
-    await bridge.soundNotifier.sound.preview({ eventType: "input-required", intervalMs: 1500 })
-    bridge.soundNotifier.operation.onChanged(vi.fn())
-    bridge.soundNotifier.operation.onPlayRequested(vi.fn())
-
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      1,
-      "synapse:app:sound_notifier:settings:get",
-      undefined,
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      2,
-      "synapse:app:sound_notifier:settings:update",
-      {},
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      3,
-      "synapse:app:sound_notifier:sound:play",
-      { presetId: "done", repeatCount: 3 },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
-      4,
-      "synapse:app:sound_notifier:sound:preview",
-      { eventType: "input-required", intervalMs: 1500 },
-    )
-    expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
-      1,
-      "synapse:app:sound_notifier:operation:changed",
-      expect.any(Function),
-    )
-    expect(electronMock.ipcRenderer.on).toHaveBeenNthCalledWith(
-      2,
-      "synapse:app:sound_notifier:operation:play_requested",
-      expect.any(Function),
-    )
-  })
-
   it("maps the three System Notifier bridge methods without exposing events or an arbitrary trigger", async () => {
     const bridge = await loadPreloadBridge()
 

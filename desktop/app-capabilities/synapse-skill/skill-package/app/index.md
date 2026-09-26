@@ -157,28 +157,15 @@ Rules:
 - Do not rewrite or enrich JSON data before calling the tool. Pass the user data as-is.
 - Do not repeat large JSON payloads or secret-looking values in the final answer.
 
-## Sound Notifier
-
-Use `app_sound_notifier_sound_play` when the user asks for a sound here — 「响一声」「放个提示音」「在这台电脑上提醒我」 — or when the current task needs the attention of someone sitting at this computer.
-
-Rules:
-
-- This only plays on the computer running Synapse. To reach the user on their other devices, use System Notifier instead.
-- Choose `eventType` by situation: `message` for ordinary updates, `input-required` when user input or confirmation is needed, `success` for normal completion, `long-running-complete` for builds/tests/installs or other long tasks, and `error` for failures or blockers.
-- Use legacy `presetId` only when the user explicitly asks for a specific preset id.
-- Use `repeatCount` and `intervalMs` when the user asks to be reminded multiple times or after a specific spacing.
-- Do not call this repeatedly in a loop. One multi-reminder request should use one call with `repeatCount`.
-
 ## System Notifier
 
 Use `app_system_notifier_notification_trigger` to notify the user. It writes one message into the user's account, and Synapse delivers that message to every desktop the account is signed in on and to the user's phones. No API key, open API call, or extra setup is involved: the desktop login carries it.
 
-Use it when the user explicitly asks to be notified at some point, or when an existing standing instruction covers the event. The request usually arrives without the words 通知 or notify: 「提醒我」「到点提醒我」「完事提醒我一声」「给我手机发消息」「推到我手机上」「构建完叫我一声」「出错了告诉我」 all mean this call, and so does any ask for a message to reach the user's phone or another device while they are away. When the user is away from the computer, or is controlling this session remotely, this is the way to reach them; Sound Notifier only rings the computer.
+Use it when the user explicitly asks to be notified at some point, or when an existing standing instruction covers the event. The request usually arrives without the words 通知 or notify: 「提醒我」「到点提醒我」「完事提醒我一声」「给我手机发消息」「推到我手机上」「构建完叫我一声」「出错了告诉我」 all mean this call, and so does any ask for a message to reach the user's phone or another device while they are away. When the user is away from the computer, or is controlling this session remotely, this is the way to reach them.
 
 Pick the channel by what the user said, not by what is easiest to call:
 
-- 提醒 / 通知 / 推送 / 手机 / 别的设备, with no mention of sound or of this computer -> this tool. It is the only one that reaches the user's other devices.
-- 响一声 / 提示音 / 在这台电脑上 -> Sound Notifier. That one rings this computer and goes no further.
+- 提醒 / 通知 / 推送 / 手机 / 别的设备 -> this tool. It is the only one that reaches the user's other devices, and it is the only notification capability: there is no separate local-only sound tool.
 - 给某个 Agent 对话发消息 -> `app_agent_message_send`. That writes into a conversation; it does not reach the user.
 - 每天 / 到点自动做什么 -> Automation. A one-off notification is not a scheduled item.
 

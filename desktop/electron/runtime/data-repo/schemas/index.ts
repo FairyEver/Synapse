@@ -109,13 +109,6 @@ export {
   type AgentFileCheckpointStatusV1,
 } from "./agent-file-checkpoints"
 export {
-  reviveSoundNotifierSettingsEnvelope,
-  soundNotifierSettingsSchemaDefinition,
-  type SoundNotifierSettingsEntryV1,
-  type SoundNotifierSettingsEntryV2,
-  type SoundNotifierSettingsEntryV3,
-} from "./sound-notifier"
-export {
   reviveSystemNotifierSettingsEnvelope,
   systemNotifierSettingsSchemaDefinition,
   type SystemNotifierSettingsEntryV1,
@@ -243,7 +236,6 @@ import { secretsItemsSchema, secretsSettingsSchema } from "./secrets"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { agentFileCheckpointsSchema } from "./agent-file-checkpoints"
-import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import { systemNotifierSettingsSchemaDefinition } from "./system-notifier"
 import { updateInstallRecoverySchema } from "./update-install-recovery"
 import {
@@ -319,7 +311,6 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaRemoteCacheSchema,
   agentFileCheckpointsSchema,
   agentTaskProgressSchema,
-  soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,
   terminalAgentNotificationSettingsSchemaDefinition,

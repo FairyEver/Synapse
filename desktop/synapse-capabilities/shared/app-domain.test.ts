@@ -7,10 +7,6 @@ import {
   TERMINAL_SESSION_RESIZE_CAPABILITY_ID,
 } from "../../app-capabilities/terminal/shared/capability"
 import {
-  SOUND_NOTIFIER_PLAY_CAPABILITY_ID,
-  SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
-} from "../../app-capabilities/sound-notifier/shared/capability"
-import {
   SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
   SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
 } from "../../app-capabilities/system-notifier/shared/capability"
@@ -268,30 +264,6 @@ describe("App capability domain", () => {
       required: ["groupId", "expectedLaunchRevision", "settings", "idempotencyKey"],
       additionalProperties: false,
     })
-  })
-
-  it("registers Sound Notifier MCP play tool", () => {
-    expect(() => assertCanonicalCapabilityId(SOUND_NOTIFIER_PLAY_CAPABILITY_ID)).not.toThrow()
-    expect(APP_DOMAIN.capabilities.map((capability) => capability.id)).toContain(SOUND_NOTIFIER_PLAY_CAPABILITY_ID)
-    expect(APP_MCP_TOOL_ACTIONS[SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME]).toBe(SOUND_NOTIFIER_PLAY_CAPABILITY_ID)
-    expect(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema)
-      .toMatchObject({
-        type: "object",
-        properties: {
-          eventType: expect.objectContaining({ enum: expect.arrayContaining(["message", "input-required"]) }),
-          presetId: expect.objectContaining({ enum: expect.arrayContaining(["soft-chime", "done"]) }),
-          repeatCount: expect.objectContaining({ minimum: 1, maximum: 10 }),
-          intervalMs: expect.objectContaining({ minimum: 100, maximum: 60000 }),
-        },
-        additionalProperties: false,
-      })
-    expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
-      .not.toContain("volume")
-    expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
-      .toContain("legacy")
-    // 这条只在本机响，必须自己说清边界，否则「提醒我」会被它抢走
-    expect(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.description)
-      .toContain("use System Notifier instead")
   })
 
   it("registers the stable System Notifier trigger contract", () => {

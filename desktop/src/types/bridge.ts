@@ -104,14 +104,6 @@ import type {
   SynapseAgentPersonaUpdateInput,
 } from "./agent-persona"
 import type {
-  SynapseSoundNotifierChangedEvent,
-  SynapseSoundNotifierPlayInput,
-  SynapseSoundNotifierPlayRequestedEvent,
-  SynapseSoundNotifierPlayResult,
-  SynapseSoundNotifierSettings,
-  SynapseSoundNotifierSettingsPatch,
-} from "./sound-notifier"
-import type {
   SynapseVoiceSessionSignInput,
   SynapseVoiceSignedSession,
   SynapseVoiceStatus,
@@ -1194,20 +1186,6 @@ export type SynapseBridge = {
     audio: {
       ensure: (input: { meetingId: string }) => Promise<SynapseMeetingAudioEnsureResult>
       onReady: (listener: (event: SynapseMeetingAudioReadyEvent) => void) => () => void
-    }
-  }
-  soundNotifier: {
-    settings: {
-      get: () => Promise<SynapseSoundNotifierSettings>
-      update: (input: SynapseSoundNotifierSettingsPatch) => Promise<SynapseSoundNotifierSettings>
-    }
-    sound: {
-      play: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
-      preview: (input?: SynapseSoundNotifierPlayInput) => Promise<SynapseSoundNotifierPlayResult>
-    }
-    operation: {
-      onChanged: (listener: (event: SynapseSoundNotifierChangedEvent) => void) => () => void
-      onPlayRequested: (listener: (event: SynapseSoundNotifierPlayRequestedEvent) => void) => () => void
     }
   }
   systemNotifier: {

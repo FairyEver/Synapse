@@ -43,7 +43,6 @@ import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
 import { connectorsIpcModule } from "../../app-capabilities/connectors/main/ipc"
 import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
-import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { voiceIpcModule } from "../../app-capabilities/voice/main/ipc"
 import { systemNotifierIpcModule } from "../../app-capabilities/system-notifier/main/ipc"
 import { jsonRepairIpcModule } from "../../app-capabilities/json-repair/main/ipc"
@@ -98,7 +97,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(secretsIpcModule, ctx)
   registry.register(skillUninstallerIpcModule, ctx)
   registry.register(agentPersonasIpcModule, ctx)
-  registry.register(soundNotifierIpcModule, ctx)
   registry.register(voiceIpcModule, ctx)
   registry.register(systemNotifierIpcModule, ctx)
   registry.register(jsonRepairIpcModule, ctx)
@@ -150,7 +148,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   secretsIpcModule,
   skillUninstallerIpcModule,
   agentPersonasIpcModule,
-  soundNotifierIpcModule,
   voiceIpcModule,
   systemNotifierIpcModule,
   jsonRepairIpcModule,

@@ -250,32 +250,11 @@ Output:
 - `size`: generated file size in bytes.
 - `generatedAt`: ISO timestamp.
 
-## `app_sound_notifier_sound_play`
-
-Play a short Sound Notifier reminder on the local computer.
-
-Input:
-
-- `eventType` optional: one of `message`, `input-required`, `success`, `long-running-complete`, or `error`. Defaults to `message`.
-- `presetId` optional: legacy preset id, one of `soft-chime`, `done`, `attention`, `error`, or `long-done`. Prefer `eventType`.
-- `repeatCount` optional: integer from `1` to `10`. Defaults to `1`.
-- `intervalMs` optional: integer from `100` to `60000`. Defaults to `1000`. It is the start-to-start interval between repeated plays.
-
-Do not pass both `eventType` and `presetId`.
-
-Output:
-
-- `played`: whether a sound was queued for playback.
-- `eventType`: reminder type selected for this request.
-- `presetId`: preset that was selected for this request.
-- `repeatCount`: repeat count used for this request.
-- `intervalMs`: interval used for this request.
-
 ## `app_system_notifier_notification_trigger`
 
 Notify the user with fire-and-forget semantics. The call writes one message into the user's account; Synapse then delivers it to every signed-in desktop of that account and pushes it to the user's registered phones. It travels on the desktop login, so no API key or open API call is needed.
 
-Reach for it when the user asks to be notified or reminded — now or at a later point, when something finishes, or on their phone or another device; such a request counts even when the user never names this tool. `Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上.` A request for this computer to ring instead (响一声, 提示音, 本机提醒) belongs to `app_sound_notifier_sound_play`, which never leaves this computer.
+Reach for it when the user asks to be notified or reminded — now or at a later point, when something finishes, or on their phone or another device; such a request counts even when the user never names this tool. `Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上.` It is the only notification capability; there is no separate local-only sound tool.
 
 Input:
 

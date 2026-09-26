@@ -5,7 +5,6 @@ import {
 } from "./text-extractor/shared/capability"
 import { DOCUMENT_TEMPLATE_CAPABILITY_ID } from "./document-template/shared/capability"
 import { SECRETS_CAPABILITY_IDS } from "./secrets/shared/capability"
-import { SOUND_NOTIFIER_PLAY_CAPABILITY_ID } from "./sound-notifier/shared/capability"
 import { SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID } from "./system-notifier/shared/capability"
 import { FILE_OPENER_CAPABILITY_ID } from "./file-opener/shared/capability"
 import { TEXT_FILE_WRITER_CAPABILITY_ID } from "./text-file-writer/shared/capability"
@@ -35,7 +34,6 @@ export function createAppCapabilityDispatcher(deps: {
   readonly textExtractor: AppCapabilitySubDispatcher
   readonly documentTemplate: AppCapabilitySubDispatcher
   readonly secrets?: AppCapabilitySubDispatcher
-  readonly soundNotifier: AppCapabilitySubDispatcher
   readonly systemNotifier: AppCapabilitySubDispatcher
   readonly fileOpener: AppCapabilitySubDispatcher
   readonly textFileWriter: AppCapabilitySubDispatcher
@@ -63,9 +61,6 @@ export function createAppCapabilityDispatcher(deps: {
       }
       if (action === DOCUMENT_TEMPLATE_CAPABILITY_ID) {
         return deps.documentTemplate.dispatch(action, params, context)
-      }
-      if (action === SOUND_NOTIFIER_PLAY_CAPABILITY_ID) {
-        return deps.soundNotifier.dispatch(action, params, context)
       }
       if (action === SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID) {
         return deps.systemNotifier.dispatch(action, params, context)

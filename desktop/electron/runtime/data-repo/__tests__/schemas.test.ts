@@ -39,7 +39,6 @@ import {
   secretsItemsSchema,
   secretsSchema,
   secretsSettingsSchema,
-  soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,
   runMigrations,
@@ -100,7 +99,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.quick-input.settings",
         "app.secrets.items",
         "app.secrets.settings",
-        "app.sound-notifier.settings",
         "app.system-notifier.settings",
         "app.terminal.agent-notification-settings",
         "app.terminal.agent-sessions",
@@ -197,7 +195,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
     expect(quickInputItemsSchema.backend).toBe("sqlite")
     expect(quickInputSettingsSchema.backend).toBe("json")
-    expect(soundNotifierSettingsSchemaDefinition.backend).toBe("json")
     expect(systemNotifierSettingsSchemaDefinition.backend).toBe("json")
     expect(updateInstallRecoverySchema.backend).toBe("json")
     expect(driveSyncBindingsSchema.backend).toBe("sqlite")
@@ -482,17 +479,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       sortOrder: 0,
     })).toBe(false)
     expect(quickInputSettingsSchema.validate({ schemaVersion: 1 })).toBe(false)
-    expect(
-      soundNotifierSettingsSchemaDefinition.validate({
-        schemaVersion: 3,
-      }),
-    ).toBe(true)
-    expect(
-      soundNotifierSettingsSchemaDefinition.validate({
-        schemaVersion: 3,
-        volume: 70,
-      }),
-    ).toBe(false)
     expect(systemNotifierSettingsSchemaDefinition.validate({
       schemaVersion: 3,
       sendEnabled: true,
@@ -1028,41 +1014,4 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(conversationsSchema.validate({ ...baseConversation, titleSource: "inferred" })).toBe(false)
   })
 
-  it("migrates Sound Notifier settings from v1 default preset settings to v3 empty settings", async () => {
-    const migrated = await runMigrations({
-      currentVersion: 1,
-      targetVersion: soundNotifierSettingsSchemaDefinition.currentVersion,
-      migrations: soundNotifierSettingsSchemaDefinition.migrations,
-      namespace: soundNotifierSettingsSchemaDefinition.name,
-      data: {
-        schemaVersion: 1,
-        enabled: false,
-        selectedPresetId: "done",
-        volume: 42,
-      },
-    })
-
-    expect(migrated).toEqual({
-      schemaVersion: 3,
-    })
-    expect(soundNotifierSettingsSchemaDefinition.validate(migrated)).toBe(true)
-  })
-
-  it("migrates Sound Notifier settings from v2 volume settings to v3 empty settings", async () => {
-    const migrated = await runMigrations({
-      currentVersion: 2,
-      targetVersion: soundNotifierSettingsSchemaDefinition.currentVersion,
-      migrations: soundNotifierSettingsSchemaDefinition.migrations,
-      namespace: soundNotifierSettingsSchemaDefinition.name,
-      data: {
-        schemaVersion: 2,
-        volume: 42,
-      },
-    })
-
-    expect(migrated).toEqual({
-      schemaVersion: 3,
-    })
-    expect(soundNotifierSettingsSchemaDefinition.validate(migrated)).toBe(true)
-  })
 })
