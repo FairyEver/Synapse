@@ -1,5 +1,5 @@
 {
-  "说明": "手工维护的路线图。它回答的是「这条链上有哪些环节已经建成」，与自动统计的页面覆盖数是两回事——后者由 tools/generate/report.mjs 从生成物算出来，前者只有人能判断。改这里的每一条时，请同时改 evidence 指向的东西。",
+  "说明": "手工维护的路线图。它回答的是「这条链上有哪些环节已经建成」，与自动统计的页面覆盖数是两回事——页面覆盖度报告已随文档链移除，本文件现在只剩人能判断的部分。改这里的每一条时，请同时改 evidence 指向的东西。",
   "更新方式": "状态变更时改 status 与 evidence；不要只改 status 而不留证据。",
   "阶段": [
     {
@@ -74,7 +74,7 @@
         {
           "项": "OpenAPI 规格与文档生成",
           "status": "done",
-          "evidence": "tools/generate/openapi.mjs → generated/openapi.json（Redocly 校验通过）+ api-docs.html"
+          "evidence": "【2026-09-26 已移除：该环节与其生成物已删除，理由见 README「接口信息从哪里看」】tools/generate/openapi.mjs → generated/openapi.json（Redocly 校验通过）+ api-docs.html"
         },
         {
           "项": "覆盖与进度报告",
@@ -227,9 +227,9 @@
           "evidence": "2026-09-20 实测：手工加一个能力必须同时改四处，否则测试红——`src/capabilities/index.ts`（唯一来源）、`src/index.ts`（单用户门面）、`src/server.ts`（多用户门面）、`src/capabilities/invoke.ts`（绑定表），外加重跑 `tools/generate/derive-aliases.mjs`（它扫 `src/capabilities/` 目录，新能力文件会让 `src/catalog/aliases.derived.ts` 过期）。`test/attendance-archive-sheet.test.ts` 与 `test/invoke-capabilities.test.ts` 各有两条断言强制「能力 ↔ 绑定表 ↔ 门面」一一对应。**这与下面那条「把批量生成的能力接线进 SDK」不是一回事**：那条讲的是批量能力怎么进绑定表，这条是逐页工作的必需项"
         },
         {
-          "项": "生成物重建链真的会跑（`pnpm docs` 的两个洞 + 一处时间戳判据）",
+          "项": "【2026-09-26 已移除：该环节与其生成物已删除，理由见 README「接口信息从哪里看」】生成物重建链真的会跑（`pnpm docs` 的两个洞 + 一处时间戳判据）",
           "status": "done",
-          "evidence": "2026-09-20 过夜实测三处：① **`pnpm docs` 是空转**——pnpm 把它当成内建的 `docs`（打开包文档）命令，零输出、exit 0，整条链一次都不跑；`.githooks/pre-commit` 用的就是它，所以那句「✓ 生成物已重建」此前是假的（生成的永远只有上一版）。已改成 `pnpm run docs`。② 换对命令后当场暴露 **50 条 redocly lint 错误**（`no-enum-type-mismatch`）：`tools/generate/openapi.mjs` 对 kind=enum 一律写 `type: string`，而枚举值可能是数字（组织类型 1/2、发布状态 0/1）。改成**从取值推类型**（值类型不齐时不钉 type），29 个能力 validate 通过。50 条里 36 条是 assignment 时代就埋下的，不是新增页面引入的。③ **改正后又踩到 conventions 第 23 条**：`batch-capabilities.mjs` 把 `page-catalog.json` 的 `generatedAt` 时间戳写进产物当新鲜度判据，于是「有人重跑了一次 pnpm generate」就会让 `test/batch-capabilities.test.ts` 变红——钩子修好之前它一直没被引爆。改成对**除 generatedAt 外**的目录内容取哈希（`catalogContentHash`），并把那条锁着缺陷的断言换成更严的反证式断言（产物**不得**包含目录的 generatedAt；已实测改坏会红）"
+          "evidence": "【2026-09-26 已移除：该环节与其生成物已删除，理由见 README「接口信息从哪里看」】2026-09-20 过夜实测三处：① **`pnpm docs` 是空转**——pnpm 把它当成内建的 `docs`（打开包文档）命令，零输出、exit 0，整条链一次都不跑；`.githooks/pre-commit` 用的就是它，所以那句「✓ 生成物已重建」此前是假的（生成的永远只有上一版）。已改成 `pnpm run docs`。② 换对命令后当场暴露 **50 条 redocly lint 错误**（`no-enum-type-mismatch`）：`tools/generate/openapi.mjs` 对 kind=enum 一律写 `type: string`，而枚举值可能是数字（组织类型 1/2、发布状态 0/1）。改成**从取值推类型**（值类型不齐时不钉 type），29 个能力 validate 通过。50 条里 36 条是 assignment 时代就埋下的，不是新增页面引入的。③ **改正后又踩到 conventions 第 23 条**：`batch-capabilities.mjs` 把 `page-catalog.json` 的 `generatedAt` 时间戳写进产物当新鲜度判据，于是「有人重跑了一次 pnpm generate」就会让 `test/batch-capabilities.test.ts` 变红——钩子修好之前它一直没被引爆。改成对**除 generatedAt 外**的目录内容取哈希（`catalogContentHash`），并把那条锁着缺陷的断言换成更严的反证式断言（产物**不得**包含目录的 generatedAt；已实测改坏会红）"
         },
         {
           "项": "把批量生成的能力接线进 SDK",
@@ -301,12 +301,12 @@
         {
           "项": "生成物漂移门禁（生成物与提交版本不一致就让构建失败）",
           "status": "done",
-          "evidence": "tools/generate/drift-check.mjs（pnpm docs:drift）；比对时归一化掉 generatedAt，否则永远红"
+          "evidence": "【2026-09-26 已移除：该环节与其生成物已删除，理由见 README「接口信息从哪里看」】tools/generate/drift-check.mjs（pnpm docs:drift）；比对时归一化掉 generatedAt，否则永远红"
         },
         {
           "项": "看门狗（改动落地就重生成报告）",
           "status": "done",
-          "evidence": "tools/generate/watch.mjs（pnpm report:watch）；实测能检测改动、无自激、出错能恢复"
+          "evidence": "【2026-09-26 已移除：该环节与其生成物已删除，理由见 README「接口信息从哪里看」】tools/generate/watch.mjs（pnpm report:watch）；实测能检测改动、无自激、出错能恢复"
         }
       ]
     },

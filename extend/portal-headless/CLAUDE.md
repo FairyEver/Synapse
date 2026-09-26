@@ -12,7 +12,7 @@
 | 写代码（任何改动） | `docs/conventions.md`（硬约束，**违反其中任何一条都会以不显眼的方式出错**） |
 | 新增或修改能力、参数、返回数据、AI 说明 | `docs/ai-description-contract.md`（固定格式、逐字段语义、路径/映射语法、标准样例与检查要求） |
 | 调用这个 SDK | `docs/usage.md`（用例；每个用例都有测试钉住） |
-| 知道现在做到哪了、下一步做什么 | `pnpm next` 与 `pnpm report` 的产出，见下 |
+| 知道现在做到哪了、下一步做什么 | `pnpm next` 的产出，见下 |
 | 做某个具体页面 | `docs/pages/<页面>.md`（该页的四件套记录） |
 | 抓浏览器基准 | `tools/baseline/README.md`（含 antd 日期选择器等难点的可复用配方） |
 
@@ -26,7 +26,6 @@
 pnpm next            # 下一批该做的页面（默认 5 个）
 pnpm next --why      # 顺带打印队列规则与跳过清单
 pnpm next --domain finance
-pnpm report          # 更新覆盖与进度报告
 ```
 
 - **页面覆盖状态是推导的**，不是手工记的：页面只要有任一能力指向它（`capability.pagePath === menuPath`）就计入覆盖。
@@ -163,18 +162,20 @@ pnpm typecheck
 pnpm ai:check          # 构建后检查 AI 描述结构与可验证引用
 pnpm ai:check:complete # 另检查缺口、参数覆盖、返回说明与写入效果
 pnpm next              # 下一步做什么
-pnpm docs              # 重建 OpenAPI 规格 / 静态文档 / 覆盖报告
-pnpm docs:check        # 漂移门禁：生成物与 HEAD 不一致就失败（CI 用）
-pnpm report:watch      # 看门狗：改动落地就重生成报告
+pnpm generate          # 从 Portal 前端源码重建 generated/ 的三个运行时资源
 pnpm smoke:meeting-room / smoke:prepare / smoke:submit   # 对真实测试环境的冒烟
 ```
 
-改了 `src/`、`docs/plan.json`、`docs/roadmap.json` 或 `tools/generate/` 时，
-提交前**手动**跑 `pnpm docs` 重建生成物并把结果一并提交。
+本包只保留三个**运行时资源**生成物——`generated/page-catalog.json`、
+`generated/module-type-rules.json`、`generated/portal-scope.json`，
+由 `pnpm generate` 从 Portal 前端源码重建。改了 `src/`、`docs/plan.json`
+或 `tools/generate/` 时需要重跑，并把结果一并提交。
 
-本包迁入 Synapse monorepo 后不再自带 git 钩子：原 `.githooks/pre-commit`
-（含它的并行安全闸与 `docs:check` 拦截）已随迁移移除，`pnpm hooks:install` 也随之删除。
-没有钩子替你重建，生成物过期不会再自动暴露——`pnpm docs:check` 仍可手动当漂移门禁用。
+2026-09-26 删除了整套文档生成链（OpenAPI 规格、api-docs 静态页、覆盖与进度报告、
+范围审计、漂移门禁）以及依赖它们的三个测试。理由是这些产物面向人读，而本包只服务
+AI 调用——需要接口信息时直接问 SDK（`catalog.recommend` / `catalog.describe`），
+不必再维护一份会过期的大文件。原 `.githooks/pre-commit`（含它的并行安全闸）
+此前已随迁入 monorepo 移除。
 
 ## 环境
 

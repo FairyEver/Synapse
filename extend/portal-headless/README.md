@@ -25,8 +25,7 @@ Portal 前端（`CodeReview_Projects_Js` 的 `app/portal`）的**服务端无头
 
 ```bash
 pnpm install
-pnpm generate      # 从 Portal 源码生成 generated/*.json
-pnpm docs          # 全链路：build → generate → openapi → lint → html → report → 漂移门禁
+pnpm generate      # 从 Portal 源码生成 generated/ 的三个运行时资源
 pnpm typecheck
 pnpm test
 pnpm build
@@ -182,68 +181,32 @@ smoke/
   拦截器闭包读的就是那份 config。多用户要靠 `createPortalServer` 的「一份会话一份请求函数」，
   而不是给单次请求传凭据。
 
-## 文档与 API 工具
+## 接口信息从哪里看
 
-一条命令跑完整条链：
+**本包不再生成 OpenAPI 规格、静态 API 文档和覆盖报告。** 2026-09-26 移除了这套文档链：
+这些产物面向人读，而本包只服务 AI 调用，且 `api-docs.html` 已经长到 50 MB 并会继续长。
 
-```bash
-pnpm docs
+需要接口信息时直接问 SDK：
+
+```js
+sdk.catalog.recommend('帮我订个会议室')       // 话术 → 候选能力（带可解释的理由）
+sdk.catalog.describe('meeting-room-usage')   // 即 -llm：怎么调 / 参数契约 / 返回 / 下一步
 ```
 
-它依次做：`build` → `generate`（页面清单）→ `openapi`（规格）→ `docs:lint`（Redocly 严格规则）
-→ `docs:html`（静态文档）→ `report`（覆盖与进度）→ `docs:drift`（漂移门禁）。
+`describe` 返回的就是调用方需要的完整契约（参数、返回字段语义、消费步骤、完成与失败判据、
+边界），比一份会过期的大文件更可靠——它随代码一起变，不会分叉。
 
-单独跑其中一步：
+`generated/` 只保留三个**运行时资源**：`page-catalog.json`、`module-type-rules.json`、
+`portal-scope.json`，由 `pnpm generate` 从 Portal 前端源码重建。
 
-```bash
-pnpm generate && pnpm report   # 只要覆盖与进度报告
-pnpm docs:lint                 # 只校验规格
-pnpm docs:drift                # 只查漂移（CI 里用 --strict 连报告一起比）
-```
+## 进度看哪里
 
-两条路线，服务两个不同的读者：
-
-| 路线 | 给谁看 | 命令 | 产物 |
-| --- | --- | --- | --- |
-| **能力目录 → OpenAPI 3.1** | 调用方 / AI / Postman / Swagger UI | `pnpm openapi` | `generated/openapi.json`（规格）+ `generated/api-docs.html`（自包含静态文档，双击即开） |
-| **覆盖与进度报告** | 你 / 团队 / AI | `pnpm report` | `generated/coverage.md` + `generated/coverage.html`（分布条形图 + 路线图） |
-| **TypeScript 参考** | 写代码的人 | `pnpm dlx typedoc --entryPoints src/index.ts --out docs/api` | 静态 HTML 参考站 |
-
-**OpenAPI 那条是本项目的主推**：SDK 的 API 面不在 TypeScript 类型上（只有十几个导出），
-而在**能力目录**里——而能力定义本来就带参数契约（`name` / `kind` / `required` / `description`），
-天然能映射成 OpenAPI。所以这份规格是**自动生成**的，不是手写的。
-阶段 ④ 要给 SY 后端设计路由前缀时，它就是那个契约的草稿。
-
-规格里除了常规字段，还带了几个项目特有的扩展：
-
-- `x-portal-page` —— 这个能力绑定的页面上下文（决定 module-type）
-- `x-write` —— 是否写操作
-- `x-llm-tool` —— 对应的 `-llm` 工具 ID（D14 的下钻协议）
-- `x-param-kind` —— 参数类型（`search`/`tree` 是长选项，必须先要关键字，见 D6）
-- `x-next-steps` —— 拿到结果之后可以往哪走
-
-凭据模型也写进了规格的 `securitySchemes`，不是只为了让 lint 过——它把 D1 选的凭据形态
-（会话 token 而非私人令牌、`tenant-id` 必须显式传）固化进了契约。
-
-**规则在 `redocly.yaml`**：在 recommended 之上收紧了 operationId / description / 4xx / security 等
-与「能生成 SDK、能被人读懂」直接相关的几条。当前规格通过这些规则（`pnpm docs:lint`）。
-
-**漂移门禁**（`pnpm docs:drift`）：生成物与 HEAD 不一致就失败，防止文档与代码悄悄分叉。
-比对时会归一化掉 `generatedAt` 这类每次生成都变的字段——不这么做门禁永远红，等于没有。
-（这个缺陷是门禁第一次运行时被它自己抓出来的。）
-
-## 进度与分布看哪里
-
-`generated/coverage.html` —— 双击即开，包含：
-
-- **总览**：页面总数、已实现能力数、能推出 module-type 的比例
-- **方法与进度（路线图）**：这条链上每个环节建成了没有，以及没建成的卡在哪。
-  来源是手工维护的 `docs/roadmap.json`——「有哪些环节已经建成」只有人能判断，
-  而页面覆盖数是自动统计的，两者是两回事
-- **分布**：按业务域、按页面形态、按 module-type
+`docs/roadmap.json` —— 手工维护的路线图：「有哪些环节已经建成」只有人能判断，
+页面覆盖数是自动统计的，两者是两回事。页面覆盖率报告（原 `generated/coverage.html`）
+已随文档链一起移除。
 
 口径提醒：页面覆盖率低是**符合阶段预期的**（阶段① 是验证方法 + 跑通一条业务线，不是铺量），
-真正说明进度的是路线图那一节。
+真正说明进度的是路线图。
 
 ## 基准回归怎么加一个新页面
 

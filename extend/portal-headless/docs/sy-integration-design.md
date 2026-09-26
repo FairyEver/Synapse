@@ -8,6 +8,11 @@
 | SY 侧依据 | `/Users/liyang/Documents/code/github/Synapse`（**只读**）：`server/src/**`、`desktop/**`、`docs/agents/**`、`docs/superpowers/specs/**`、`document/open-api/index.md`、`CLAUDE.md` |
 | 状态 | 待评审。第 7 节列出**必须由用户拍板**的 10 条；除这 10 条外，本文的其余判断都有落点，可直接派单 |
 
+**2026-09-26 变更**：本包已移除整套文档生成链（`generated/openapi.json`、`api-docs.html`、
+覆盖与进度报告、范围审计、漂移门禁）。本文中把 `generated/openapi.json` 当作「能力契约来源」、
+或把 `tools/generate/drift-check.mjs` 当作「漂移门禁」的段落，请按此变更重新评估——能力契约
+现在只能由运行时的 `catalog.describe()` 提供，不再有静态规格文件可比对。
+
 **标注约定**
 
 - 【读码】有 SY 侧或本仓库的文件行号，可直接核对。

@@ -194,5 +194,5 @@ if (flag('--why')) {
 line('做完一个页面之后：')
 line('  · 能力定义进 src/capabilities/')
 line('  · 四件套记到 docs/pages/')
-line('  · 跑 pnpm docs 重建规格与报告')
+line('  · 改了能力定义就跑 pnpm generate 重建 generated/ 的运行时资源')
 line('  · 页面只要有能力指向它，pnpm next 就会自动把它算作已完成')
