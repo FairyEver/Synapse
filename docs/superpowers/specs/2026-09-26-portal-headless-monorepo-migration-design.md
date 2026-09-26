@@ -155,6 +155,7 @@ pnpm --filter @synapse/portal-headless run build && pnpm --filter @synapse/share
 
 - `docs/integrations/portal-headless-extension.md` 的「SDK 如何进入后端」章节（第 21–33 行）需整体重写。这是**唯一确认描述了供应方式**（vendor / tarball / 软链 / Docker 复制顺序）的位置。
 - 其余引用 `portal-headless` 名字的文档——`portal-headless-test-delivery.md`、`portal-headless-test.md`、`portal-headless-gui-acceptance.md`、`portal-headless-test-web-prompt.md`、`docs/agents/capability-registry.md`、`module-boundaries.md`、`workflow-and-capabilities.md`、`docs/reference/capability-naming-matrix.md`——只需核查是否含供应方式表述；仅提及能力名或连接器名的不改，避免无谓diff。
+- `docs/agents/repository-guide.md` 的包列表与目录树、以及 `AGENTS.md` 的「项目与代码位置」清单需补上新子包。新增工作区包属于「仓库结构」变更，按根 `AGENTS.md` 的文档路由表属必改项，实施时确认了这两处此前未列入本清单。
 - `RELEASE_NOTES_PENDING.md` 记录本次供应链与打包方式变更（属「打包或发版风险」）。
 
 ### 10. 硬编码路径
@@ -206,11 +207,22 @@ Docker 构建必须在本地实跑一次，它同时覆盖 deps / build / produc
 | `pnpm --filter @synapse/server run typecheck` | 通过 |
 | server 集成测试 `portal-headless.spec.ts` | 13 passed |
 | workspace 软链与 import 解析 | 软链指向 `../../../extend/portal-headless`；`import.meta.resolve` 解析到 `extend/portal-headless/dist/index.js` |
-| `docker build -f server/Dockerfile .` | **未完成** |
+| `docker build -f server/Dockerfile .` | 通过（deps / build / production 三阶段） |
+| 容器内 SDK 加载（生产镜像） | 通过：软链解析正确、三个运行时资源在位、目录加载出 1026 页面 / 2576 能力 |
 
-**Docker 构建未验证。** 本机无法访问 `docker.io` 拉取 `node:22-alpine` 基础镜像（`dial tcp 157.240.7.5:443: i/o timeout`），本地也没有该镜像缓存，因此 deps / build / production 三阶段的改动只经过了静态核对（COPY 源路径存在性、软链指向、`dist` 对 `generated/` 的实际读取点），没有经过一次真实构建。
+**Docker 首次构建失败，重启 daemon 后通过。** 首次尝试因本机无法访问 `docker.io` 拉取 `node:22-alpine` 而失败（`dial tcp 157.240.7.5:443: i/o timeout`）。macOS 系统代理已指向 `127.0.0.1:7890`，但 Docker Desktop 的 `ProxyHTTPMode` 为 `system` 时需重启 daemon 才会重新读取系统代理；重启后基础镜像拉取成功，构建通过。
 
-这是本次唯一未闭环的验证项，需要在能访问 docker.io 的环境补做。其中 production 阶段尤其无法用静态检查替代——workspace 软链正是在该阶段解析。
+构建通过只证明 COPY 路径正确，真正的风险在 production 阶段的软链解析，因此补做了容器内加载验证：
+
+    $ docker run --rm -w /app/server <image> node --input-type=module -e "..."
+    入口解析: extend/portal-headless/dist/index.js
+    软链是否穿过 workspace 边界: 是 (符号链接解析成功)
+      generated/page-catalog.json: 存在
+      generated/module-type-rules.json: 存在
+      generated/portal-scope.json: 存在
+    目录加载: pages=1026 capabilities=2576
+
+`server/node_modules/@synapse/portal-headless` 在生产镜像里正确解析到 `extend/portal-headless/dist/index.js`，三个运行时资源（含一度被漏掉的 `portal-scope.json`）都在位，目录实际加载出 1026 个页面与 2576 个能力——SDK 在镜像内不只是「能 import」，而是能正常工作。
 
 ## 风险
 

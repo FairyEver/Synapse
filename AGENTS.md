@@ -27,6 +27,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用，技术�
 - 共享 renderer helper / 类型：`desktop/src/lib/`、`desktop/src/types/`
 - 文档站：`document/`
 - 服务端：`server/`
+- Portal Headless SDK：`extend/portal-headless/`（server 的运行时依赖）
 
 Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问特权能力。文件系统、Git、安装、下载、dialog、updater 和 OS 逻辑属于 Electron 主进程。
 

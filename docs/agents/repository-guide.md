@@ -6,7 +6,7 @@
 
 - Electron 41 + Vite 8 + React 19 + TypeScript 6。
 - shadcn/ui（`radix-nova`）+ Tailwind CSS 4。
-- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
+- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`、`@synapse/portal-headless`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
 
 ```text
@@ -24,6 +24,7 @@ desktop/
 document/               # VitePress 文档站
 server/                 # 服务端与管理后台
 pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
+extend/portal-headless/ # Portal 服务端无头 SDK，server 的运行时依赖
 ```
 
 新增 renderer 业务模块必须放在 `desktop/src/modules/`。创建目录前先检查现有模块，不得引入 `desktop/src/features/` 等并行架构。`desktop/src/App.tsx` 只负责 app-shell 组合和顶层编排。
