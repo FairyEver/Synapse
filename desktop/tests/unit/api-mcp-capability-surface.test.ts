@@ -297,6 +297,25 @@ describe("API and MCP capability surface", () => {
     expect(workflowApi).toContain("### json_repair_text_repair")
   })
 
+  it("routes the colloquial notify and remind requests to the System Notifier with its channel boundaries", () => {
+    const skill = readRepoFile("app-capabilities/synapse-skill/skill-package/SKILL.md")
+    const appGuide = readRepoFile("app-capabilities/synapse-skill/skill-package/app/index.md")
+    const appApi = readRepoFile("app-capabilities/synapse-skill/skill-package/app/api-reference.md")
+
+    // 用户不会说「通知」两个字：提醒 / 推送 / 手机 都得落在同一条能力上
+    expect(skill).toContain("reaching the user through System Notifier (提醒、通知、推到手机)")
+    expect(appGuide).toContain("「提醒我」「到点提醒我」「完事提醒我一声」「给我手机发消息」「推到我手机上」")
+    // 三个易混邻居各有一条边界，缺一条就会有说法被抢走
+    expect(appGuide).toContain("It is the only one that reaches the user's other devices")
+    expect(appGuide).toContain("响一声 / 提示音 / 在这台电脑上 -> Sound Notifier")
+    expect(appGuide).toContain("给某个 Agent 对话发消息 -> `app_agent_message_send`")
+    expect(appGuide).toContain("每天 / 到点自动做什么 -> Automation")
+    // 会话内的延时：等到了再调一次，不能提前发占位
+    expect(appGuide).toContain("wait for that moment and then call once")
+    expect(appApi).toContain("Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上")
+    expect(appApi).toContain("belongs to `app_sound_notifier_sound_play`")
+  })
+
   it("marks historical superpowers docs before mentioning retired Synapse CLI entrypoints", () => {
     const superpowersDocs = [
       ...readMarkdownFiles(new URL("../docs/superpowers/specs/", repoRoot), "specs"),

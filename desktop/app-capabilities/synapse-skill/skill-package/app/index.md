@@ -159,7 +159,7 @@ Rules:
 
 ## Sound Notifier
 
-Use `app_sound_notifier_sound_play` when the user asks to play a local sound reminder, remind them with sound, or notify them that an Agent or command needs attention.
+Use `app_sound_notifier_sound_play` when the user asks for a sound here — 「响一声」「放个提示音」「在这台电脑上提醒我」 — or when the current task needs the attention of someone sitting at this computer.
 
 Rules:
 
@@ -173,7 +173,16 @@ Rules:
 
 Use `app_system_notifier_notification_trigger` to notify the user. It writes one message into the user's account, and Synapse delivers that message to every desktop the account is signed in on and to the user's phones. No API key, open API call, or extra setup is involved: the desktop login carries it.
 
-Use it when the user explicitly asks to be notified at some point, or when an existing standing instruction covers the event — "跑完通知我", "构建完叫我一声", "出错了告诉我". When the user is away from the computer, or is controlling this session remotely, this is the way to reach them; Sound Notifier only rings the computer.
+Use it when the user explicitly asks to be notified at some point, or when an existing standing instruction covers the event. The request usually arrives without the words 通知 or notify: 「提醒我」「到点提醒我」「完事提醒我一声」「给我手机发消息」「推到我手机上」「构建完叫我一声」「出错了告诉我」 all mean this call, and so does any ask for a message to reach the user's phone or another device while they are away. When the user is away from the computer, or is controlling this session remotely, this is the way to reach them; Sound Notifier only rings the computer.
+
+Pick the channel by what the user said, not by what is easiest to call:
+
+- 提醒 / 通知 / 推送 / 手机 / 别的设备, with no mention of sound or of this computer -> this tool. It is the only one that reaches the user's other devices.
+- 响一声 / 提示音 / 在这台电脑上 -> Sound Notifier. That one rings this computer and goes no further.
+- 给某个 Agent 对话发消息 -> `app_agent_message_send`. That writes into a conversation; it does not reach the user.
+- 每天 / 到点自动做什么 -> Automation. A one-off notification is not a scheduled item.
+
+For a delay inside this session — "30 秒后提醒我", "等它跑完提醒我" — wait for that moment and then call once. Do not send a placeholder earlier, and do not promise delivery.
 
 Rules:
 

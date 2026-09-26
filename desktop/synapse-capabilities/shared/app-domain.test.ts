@@ -289,6 +289,9 @@ describe("App capability domain", () => {
       .not.toContain("volume")
     expect(JSON.stringify(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.inputSchema))
       .toContain("legacy")
+    // 这条只在本机响，必须自己说清边界，否则「提醒我」会被它抢走
+    expect(buildAppTools().find((tool) => tool.name === SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME)?.description)
+      .toContain("use System Notifier instead")
   })
 
   it("registers the stable System Notifier trigger contract", () => {
@@ -316,6 +319,11 @@ describe("App capability domain", () => {
     expect(tool?.description).toContain("account message center")
     expect(tool?.description).toContain("without any API key")
     expect(tool?.description).toContain("does not mean the notification was delivered or displayed")
+    // 这段中文不是注释：描述字段进 Fuse 索引，口语说法靠它才搜得到（见
+    // tests/unit/synapse-tool-router-search.test.ts 的提醒/推送几条）。删了会变红。
+    expect(tool?.description).toContain("notified or reminded now or at a later point")
+    expect(tool?.description)
+      .toContain("Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上")
   })
 
   it("registers the high-risk problem feedback submission contract", () => {

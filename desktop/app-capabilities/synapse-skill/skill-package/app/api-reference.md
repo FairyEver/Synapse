@@ -275,6 +275,8 @@ Output:
 
 Notify the user with fire-and-forget semantics. The call writes one message into the user's account; Synapse then delivers it to every signed-in desktop of that account and pushes it to the user's registered phones. It travels on the desktop login, so no API key or open API call is needed.
 
+Reach for it when the user asks to be notified or reminded — now or at a later point, when something finishes, or on their phone or another device; such a request counts even when the user never names this tool. `Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上.` A request for this computer to ring instead (响一声, 提示音, 本机提醒) belongs to `app_sound_notifier_sound_play`, which never leaves this computer.
+
 Input:
 
 - `title` required: non-empty single-line string, exactly equal to its trimmed value, at most 64 Unicode code points.

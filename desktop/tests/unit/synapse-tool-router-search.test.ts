@@ -59,6 +59,20 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "让 Agent 把当前这一轮停下", expect: "app_agent_turn_stop" },
   // 与相邻的 sound notifier 是一对易混：「通知我」要走通知，不是在这台电脑上响一声
   { intent: "活干完了通知我一声", expect: "app_system_notifier_notification_trigger" },
+  // 同一件事的口语说法：不写「通知」两个字，也得落到同一条能力上。
+  // 「什么时候」这类时间状语不进词表，正是它们最容易把整句带空的地方。
+  // 两条腿各管一段：工具描述里的中文触发短语会被 Fuse 直接模糊命中
+  // （「推到我手机上」在描述里就有原话）；描述里没有的说法靠词表锚定
+  // （「提醒」「响一声」「提示音」）。任一条腿丢了，下面都会变红。
+  { intent: "半小时后提醒我", expect: "app_system_notifier_notification_trigger" },
+  { intent: "你什么时候提醒我一下", expect: "app_system_notifier_notification_trigger" },
+  { intent: "干完给我手机发条消息", expect: "app_system_notifier_notification_trigger" },
+  { intent: "完事给我推送一下", expect: "app_system_notifier_notification_trigger" },
+  { intent: "构建完叫我一声", expect: "app_system_notifier_notification_trigger" },
+  { intent: "结果推到我手机上", expect: "app_system_notifier_notification_trigger" },
+  // 反向：说了「响一声」「提示音」就是本机那条，不能被上面几条挤走
+  { intent: "跑完在这台电脑上响一声", expect: "app_sound_notifier_sound_play" },
+  { intent: "播个提示音", expect: "app_sound_notifier_sound_play" },
 
   // ---- 其余 domain (13)：只证明没被完全挤出 ----
   { intent: "数据库里有哪些表", expect: "app_database_table_list" },
@@ -114,6 +128,10 @@ export const ENGLISH_CORPUS: readonly { readonly intent: string; readonly expect
   { intent: "list workflows", expect: "app_workflow_definition_list" },
   { intent: "list scheduled automation items", expect: "app_automation_item_list" },
   { intent: "list workspace tabs", expect: "app_terminal_workspace_list" },
+  // 英文只有这种最短形式能过：Fuse 把整句当一个串比，描述字段权重 0.15，
+  // 句子一长就整体跌出 0.42 阈值。英文长句（"notify me when the build finishes"）
+  // 当前返回空集，是检索机制的既有边界，不是这条能力的触发问题。
+  { intent: "notify me", expect: "app_system_notifier_notification_trigger" },
 ]
 
 async function topToolNames(intent: string): Promise<readonly string[]> {

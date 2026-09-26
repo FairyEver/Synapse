@@ -150,7 +150,21 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["权限", "permission"],
   ["通知", "notifier"],
   ["通知", "notification"],
+  // 口语里「找我」的说法不止「通知」一种。「提醒」「推送」都指同一条能力：能到手机上
+  // 的是 System Notifier，不是只在本机响一声的 Sound Notifier。排在「通知」之后，
+  // 「通知」仍是这两个 token 的反查首选词。
+  ["提醒", "notifier"],
+  ["提醒", "notification"],
+  ["推送", "notification"],
+  // 「叫我一声」是同类说法里唯一不含「提醒 / 通知 / 推送」的，index.md 一直拿它举例，
+  // 但检索层不认，那句话就只是写给 AI 看的空话。
+  ["叫我一声", "notifier"],
+  ["叫我一声", "notification"],
   ["声音", "sound"],
+  // 本机响铃那条的锚定词。少了它们，像「跑完在这台电脑上响一声」这种整句里没有任何
+  // 词表命中的说法，汉字会整体作废，连空集都会出现（有别名时汉字不再参与匹配）。
+  ["响一声", "sound"],
+  ["提示音", "sound"],
   ["系统", "system"],
   ["问题", "problem"],
   ["反馈", "feedback"],

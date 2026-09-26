@@ -484,7 +484,7 @@ export function buildAppTools(): McpToolDefinition[] {
     ...buildTerminalMcpTools(),
     {
       name: SOUND_NOTIFIER_PLAY_MCP_TOOL_NAME,
-      description: "Play a short local Sound Notifier reminder. Prefer eventType so the sound matches the reminder situation.",
+      description: "Play a short local Sound Notifier reminder on this computer only. It never reaches the user's other devices: when the user wants to be reached rather than rung, use System Notifier instead. Prefer eventType so the sound matches the reminder situation. Chinese intent: 响一声, 放个提示音, 播个声音提醒.",
       inputSchema: {
         type: "object",
         properties: {
@@ -516,7 +516,7 @@ export function buildAppTools(): McpToolDefinition[] {
     },
     {
       name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
-      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it only when the user explicitly asks to be notified at this point or has an active standing notification instruction. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
+      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
       inputSchema: {
         type: "object",
         properties: {
