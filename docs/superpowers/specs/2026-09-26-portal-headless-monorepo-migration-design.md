@@ -196,6 +196,22 @@ docker build -f server/Dockerfile .
 
 Docker 构建必须在本地实跑一次，它同时覆盖 deps / build / production 三阶段的 COPY 与软链解析。
 
+## 验证结果（2026-09-26 实施后实测）
+
+| 项目 | 结果 |
+|---|---|
+| `pnpm --filter @synapse/portal-headless run test` | 312 passed (312)；4331 passed / 31 skipped / 21 todo —— **与迁移前基线逐数字一致** |
+| `pnpm --filter @synapse/portal-headless run build`（TS 6.0.2） | 通过，零错误 |
+| `pnpm --filter @synapse/server run check:portal-sdk` | 通过（收窄后的门禁） |
+| `pnpm --filter @synapse/server run typecheck` | 通过 |
+| server 集成测试 `portal-headless.spec.ts` | 13 passed |
+| workspace 软链与 import 解析 | 软链指向 `../../../extend/portal-headless`；`import.meta.resolve` 解析到 `extend/portal-headless/dist/index.js` |
+| `docker build -f server/Dockerfile .` | **未完成** |
+
+**Docker 构建未验证。** 本机无法访问 `docker.io` 拉取 `node:22-alpine` 基础镜像（`dial tcp 157.240.7.5:443: i/o timeout`），本地也没有该镜像缓存，因此 deps / build / production 三阶段的改动只经过了静态核对（COPY 源路径存在性、软链指向、`dist` 对 `generated/` 的实际读取点），没有经过一次真实构建。
+
+这是本次唯一未闭环的验证项，需要在能访问 docker.io 的环境补做。其中 production 阶段尤其无法用静态检查替代——workspace 软链正是在该阶段解析。
+
 ## 风险
 
 | 风险 | 缓解 |
