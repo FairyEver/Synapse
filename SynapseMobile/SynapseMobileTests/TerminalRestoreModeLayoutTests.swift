@@ -750,4 +750,19 @@ struct TerminalRestoreModeLayoutTests {
 
         #expect(!view.isFollowingPerFrame, "静下来之后驱动器还在按刷新率转")
     }
+
+    /// 放大的画布不许画到画布区外面去。
+    ///
+    /// 放大是往整块画布上叠一个围绕中心的 `scale`，所以只要倍率过了 1，画布在四条边上就
+    /// **一定**各自多出一截：那对偏移上限算的是"多出来多少"，它管的是别露出缝。视图不裁剪
+    /// 的话这一截照画不误，于是顶栏（排在画布前面）与底部输入栏（排在后面）里只有上面看得
+    /// 见 —— 读者看到的是一行终端字压在顶栏和状态栏上，底部却一切正常。
+    ///
+    /// 钉的是让溢出露不出来的那一句。放大之后的帧断言够不着：`zoom` 与画布那层视图都是私有
+    /// 的，`UIPinchGestureRecognizer` 的 scale 也不接受外部驱动。
+    @Test func theMagnifiedCanvasCannotDrawOutsideThePane() {
+        let (view, _) = terminal(columns: 80, rows: 24)
+
+        #expect(view.clipsToBounds, "画布溢出会盖到顶栏与状态栏上")
+    }
 }

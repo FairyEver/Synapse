@@ -268,6 +268,14 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
+        // 放大的画布必须被这块画布区裁掉。
+        //
+        // 放大是往整块画布上叠一个围绕中心的 `scale`，所以只要倍率过了 1，画布在四条边上
+        // **一定**各自多出一截 —— `applyCanvasTransform` 里那对偏移上限算的正是"多出来
+        // 多少"，但它管的是别露出缝，不管别画出去。没有这一句，那一截照画不误：这一页的
+        // 顶栏排在画布前面、底部那条输入栏排在后面，于是超出的一行终端字压在顶栏与状态栏
+        // 上，而底部看不出异样。
+        clipsToBounds = true
         buildCollectionView()
     }
 
