@@ -46,6 +46,7 @@ describe("update intent HTTP API", () => {
     process.env = {
       ...previousEnv,
       NODE_ENV: "production",
+      TRUST_PROXY: "loopback",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-user-secret-user-secret",

@@ -7,7 +7,9 @@ import { PortalHeadlessController } from "./portal-headless.controller"
 
 vi.mock("../../config/env", () => ({ loadEnv: () => ({ userAccessJwtSecret: "synthetic-sy-test-secret-not-real" }) }))
 let sdk: PortalSdk
-beforeAll(async () => { sdk = await import("@synapse/portal-headless") })
+// 这个包有 17 MB 编译产物，冷加载要数百毫秒；全量并行跑时 CPU 被占满会更慢，
+// 默认的 10 秒 hook 超时会偶发性地判它失败。放宽到 30 秒，避免误报。
+beforeAll(async () => { sdk = await import("@synapse/portal-headless") }, 30_000)
 const identity = { owner: "owner-one", credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
 function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]> } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []

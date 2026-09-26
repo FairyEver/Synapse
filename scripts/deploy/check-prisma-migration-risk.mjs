@@ -144,17 +144,19 @@ for (const risk of risks) {
   console.error(`${risk.location}: ${risk.label}: ${risk.sql}`)
 }
 
-if (process.env.STRICT_MIGRATION_RISK_SCAN === "1") {
-  console.error("Risk scan policy: failing because STRICT_MIGRATION_RISK_SCAN=1.")
-  process.exit(1)
-}
-
-console.error("Risk scan policy: continuing by default.")
-console.error("Set STRICT_MIGRATION_RISK_SCAN=1 to fail on risks.")
-
+// 默认严格：检测到风险迁移就失败。
+//
+// 原来这里是默认放行、要显式设 STRICT_MIGRATION_RISK_SCAN=1 才失败。那个默认是错的：
+// 部署流程里虽然会在临时库上预演迁移，但危险迁移（DROP COLUMN / SET NOT NULL 等）
+// 在小库上跑通，不代表线上大表执行没风险——预演只能证明语法和依赖可行，
+// 证明不了锁表时长与数据丢失。安全的方向是失败，而不是继续。
+//
+// ALLOW_RISKY_MIGRATIONS=1 是有意保留的例外出口，用之前必须逐条看过上面的风险清单。
 if (process.env.ALLOW_RISKY_MIGRATIONS === "1") {
-  console.error("ALLOW_RISKY_MIGRATIONS=1 is no longer required; risky migrations continue by default.")
+  console.error("Risk scan policy: continuing because ALLOW_RISKY_MIGRATIONS=1.")
   process.exit(0)
 }
 
-process.exit(0)
+console.error("Risk scan policy: failing on risky migrations.")
+console.error("Review each risk above, then set ALLOW_RISKY_MIGRATIONS=1 only to override deliberately.")
+process.exit(1)

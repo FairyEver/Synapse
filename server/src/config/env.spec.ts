@@ -39,6 +39,7 @@ describe("loadEnv", () => {
       PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
       PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
       PLATFORM_MEDIA_COS_REGION: "ap-beijing",
+      TRUST_PROXY: "loopback",
       PORT: "3000",
     })
 
@@ -52,7 +53,7 @@ describe("loadEnv", () => {
     expect(env.driveLocalRoot).toBe("/app/data/drive")
     expect(env.driveCollaborationEnabled).toBe(false)
     expect(isSkillRepositoryCosConfigured(env)).toBe(true)
-    expect(env.trustProxy).toBe(false)
+    expect(env.trustProxy).toBe("loopback")
   })
 
   it("parses the Drive collaboration feature flag", () => {
@@ -200,6 +201,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        TRUST_PROXY: "loopback",
         ...productionPdfEnv,
         ...platformMediaCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
@@ -237,6 +239,7 @@ describe("loadEnv", () => {
   it("allows production Drive storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      TRUST_PROXY: "loopback",
       ...productionPdfEnv,
       ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
@@ -262,6 +265,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        TRUST_PROXY: "loopback",
         ...productionPdfEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
@@ -276,6 +280,7 @@ describe("loadEnv", () => {
   it("allows production Skill Repository storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      TRUST_PROXY: "loopback",
       ...productionPdfEnv,
       ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
@@ -307,6 +312,34 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...baseEnv, TRUST_PROXY: "true" }).trustProxy).toBe(true)
     expect(loadEnv({ ...baseEnv, TRUST_PROXY: "1" }).trustProxy).toBe(1)
     expect(loadEnv({ ...baseEnv, TRUST_PROXY: "loopback,uniquelocal" }).trustProxy).toBe("loopback,uniquelocal")
+  })
+
+  it("requires an explicit TRUST_PROXY in production", () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      ...productionPdfEnv,
+      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
+      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
+      APP_PUBLIC_URL: "https://synapse.test",
+      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+      ...platformMediaCosEnv,
+    }
+
+    // 忘了配：退回 false，反向代理后面所有客户端共用一个限流桶，且完全静默。
+    expect(() => loadEnv({ ...productionEnv })).toThrow("TRUST_PROXY")
+
+    // true：信任任意 X-Forwarded-For，客户端可以伪造 IP 绕过限流。
+    expect(() => loadEnv({ ...productionEnv, TRUST_PROXY: "true" })).toThrow("TRUST_PROXY")
+
+    // 显式选择「不信任代理」是合法的——服务直接对外时那才是对的取值。
+    expect(loadEnv({ ...productionEnv, TRUST_PROXY: "off" }).trustProxy).toBe(false)
+    expect(loadEnv({ ...productionEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2)
   })
 
   it("rejects missing user access jwt secret", () => {
@@ -394,6 +427,7 @@ describe("loadEnv", () => {
   it("requires Platform Media COS in production", () => {
     expect(() => loadEnv({
       NODE_ENV: "production",
+      TRUST_PROXY: "loopback",
       ...productionPdfEnv,
       DATABASE_URL: baseEnv.DATABASE_URL,
       ADMIN_ACCESS_SECRET: baseEnv.ADMIN_ACCESS_SECRET,

@@ -214,6 +214,21 @@ const envSchema = z
   })
   .refine((env) => {
     if (env.NODE_ENV !== "production") return true
+    // 生产环境必须**显式**配置 TRUST_PROXY。两种错法都会让限流静默失效：
+    //   不配置 → 退回 false，在反向代理后面所有请求的 socket 地址都是代理本身，
+    //            于是全部客户端共用一个限流桶；
+    //   true   → 信任任意 X-Forwarded-For，客户端可以伪造 IP 绕过限流。
+    // 显式配成 false/0/off 是允许的——服务直接对外、前面没有代理时，那才是对的取值。
+    // 这里要拦住的是「忘了配」，不是「选了 false」。
+    const raw = env.TRUST_PROXY?.trim()
+    if (!raw) return false
+    return parseTrustProxySetting(raw) !== true
+  }, {
+    path: ["TRUST_PROXY"],
+    message: "TRUST_PROXY must be set explicitly in production (for example \"loopback\"); leaving it unset silently breaks rate limiting, and \"true\" lets clients forge their address",
+  })
+  .refine((env) => {
+    if (env.NODE_ENV !== "production") return true
     const hasSkillRepositoryCos = !!(env.SKILL_REPOSITORY_COS_SECRET_ID && env.SKILL_REPOSITORY_COS_SECRET_KEY && env.SKILL_REPOSITORY_COS_BUCKET && env.SKILL_REPOSITORY_COS_REGION)
     return hasSkillRepositoryCos
   }, {

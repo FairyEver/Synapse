@@ -52,12 +52,17 @@ describe("server dev scripts", () => {
   it("keeps one workspace server quit entrypoint for the backend stack", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
-    expect(workspacePackage.scripts?.["quit:server"]).toContain(
-      "node scripts/dev/quit-processes.mjs dev:server",
-    )
-    expect(workspacePackage.scripts?.["quit:server"]).toContain(
-      "docker compose --env-file server/.env.local -f server/compose.yml -f server/compose.dev.yml down",
-    )
+    // 入口是一层薄封装：停止逻辑在 quit-server.mjs 里，它先停 dev:server 的进程，
+    // 再 down 掉本地 compose 栈。断言委托关系而不只是字符串，避免入口改名后
+    // 测试仍然通过、实际却不再停任何东西。
+    expect(workspacePackage.scripts?.["quit:server"]).toBe("node scripts/dev/quit-server.mjs")
+
+    const quitServer = readFileSync(join(process.cwd(), "../scripts/dev/quit-server.mjs"), "utf8")
+    expect(quitServer).toContain("quit-processes.mjs")
+    expect(quitServer).toContain('"dev:server"')
+    expect(quitServer).toContain("docker")
+    expect(quitServer).toContain("down")
+
     expect(workspacePackage.scripts?.["quit:docker"]).toBeUndefined()
   })
 })

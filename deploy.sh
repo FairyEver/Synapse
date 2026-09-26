@@ -2,7 +2,9 @@
 # 本机运行：打包代码并上传到服务器
 set -euo pipefail
 
-SERVER="root@120.53.17.64"
+# 生产服务器地址。可用环境变量覆盖，便于部署到别的目标或先在本机演练一遍；
+# 默认值保持现状，不改变现有用法。
+SERVER="${SYNAPSE_DEPLOY_SERVER:-root@120.53.17.64}"
 REMOTE_DIR="/www/wwwroot/synapse"
 LOCAL_ENV_FILE="server/.env.server"
 REMOTE_ENV_FILE="$REMOTE_DIR/server/.env"
@@ -248,7 +250,6 @@ REMOTE_SCRIPT
 
 scan_pending_migrations() {
   env ALLOW_RISKY_MIGRATIONS="${ALLOW_RISKY_MIGRATIONS:-}" \
-    STRICT_MIGRATION_RISK_SCAN="${STRICT_MIGRATION_RISK_SCAN:-}" \
     node scripts/deploy/check-prisma-migration-risk.mjs \
       --migrations-dir server/prisma/migrations \
       --applied-file "$APPLIED_MIGRATIONS_FILE"
