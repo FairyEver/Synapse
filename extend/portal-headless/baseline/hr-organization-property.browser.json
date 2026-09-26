@@ -1,0 +1,62 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn",
+  "pagePath": "/dashboard/org/org-propType/list",
+  "evidence": "真实PC：按唯一名称新建临时记录179，精确名称回查唯一且status=1；作废后页面按钮变为启用；再次启用后页面按钮恢复为作废。受控清理前确认敏感配置免短信，仅为清理调用页面已注释的DELETE，随后精确名称回查0。测试记录已清理；DELETE不是发布能力。凭据未记录。",
+  "headers": {
+    "present": [
+      "tenant-id",
+      "token",
+      "Accept-Language",
+      "module-type"
+    ],
+    "module-type": "11",
+    "credentials": "not-recorded"
+  },
+  "requests": [
+    {
+      "action": "list",
+      "method": "GET",
+      "url": "/admin-api/hr/org/organizationProperty/page?order=&orderField=&name=&pageNo=1&pageSize=20",
+      "body": null
+    },
+    {
+      "action": "create",
+      "method": "POST",
+      "url": "/admin-api/hr/org/organizationProperty/save",
+      "bodyShape": [
+        "name",
+        "remark",
+        "code"
+      ]
+    },
+    {
+      "action": "deactivate",
+      "method": "POST",
+      "url": "/admin-api/hr/org/organizationProperty/updateStatus",
+      "body": {
+        "id": 179,
+        "status": 0
+      }
+    },
+    {
+      "action": "enable",
+      "method": "POST",
+      "url": "/admin-api/hr/org/organizationProperty/updateStatus",
+      "body": {
+        "id": 179,
+        "status": 1
+      }
+    }
+  ],
+  "cleanup": {
+    "publishedCapability": false,
+    "method": "DELETE",
+    "url": "/admin-api/hr/org/organizationProperty",
+    "body": [
+      "179"
+    ],
+    "precondition": "受控脚本读取 sensitive/info，verificationRequired=false",
+    "verification": "精确名称回查0"
+  }
+}

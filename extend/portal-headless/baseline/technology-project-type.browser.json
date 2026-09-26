@@ -1,0 +1,37 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn/portal.html#/",
+  "pagePath": "/dashboard/technology/setting/project-type/list",
+  "portalRepo": {
+    "branch": "test/portal/main",
+    "commit": "d3cf56bdc76c73c5eb9252be84b9b39b3900b48e",
+    "note": "The local checkout was behind origin by 2 commits because the authorized pull could not complete."
+  },
+  "ui": {
+    "reachable": true,
+    "initialRows": 0,
+    "filters": ["编码", "名称", "项目大类"],
+    "pagination": true,
+    "actions": ["新增", "编辑", "删除"],
+    "formFields": ["类型编码", "编号缩写", "类型名称", "项目大类", "适用角色", "状态", "排序", "备注"],
+    "notPresent": ["独立详情", "独立启停", "导入", "导出", "打印", "上传", "下载"]
+  },
+  "requests": [
+    {
+      "trigger": "page-load",
+      "method": "GET",
+      "path": "/admin-api/technology/setting/project-type/page",
+      "preflightHttpStatus": 200,
+      "httpStatus": 200,
+      "businessResult": "resource-not-found",
+      "businessMessage": "请求资源不存在: No static resource admin-api/technology/setting/project-type/page.",
+      "result": "Transport succeeded, but the standard Portal envelope/interceptor reported a business failure. No successful list payload was observed."
+    }
+  ],
+  "notExecuted": [
+    "create",
+    "update",
+    "delete"
+  ],
+  "redaction": "No credential, cookie, token, tenant identifier, user identifier, or business record was recorded."
+}

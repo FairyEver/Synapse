@@ -1,10 +1,11 @@
-import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
-const manifest = JSON.parse(await readFile(new URL('../vendor/portal-headless.manifest.json', import.meta.url), 'utf8'))
-const archive = await readFile(new URL(`../vendor/${manifest.file}`, import.meta.url))
-if (createHash('sha256').update(archive).digest('hex') !== manifest.sha256) throw new Error('Portal SDK archive checksum mismatch')
-const entry = import.meta.resolve('portal-headless')
+// The SDK is a workspace package now, so there is no archive to checksum and no
+// upstream source commit to pin: the repository commit that contains this script
+// is the same commit that contains the SDK source. What remains worth guarding is
+// that the built entry actually loads and still exposes the runtime resources and
+// read-only contracts the server depends on.
+const entry = import.meta.resolve('@synapse/portal-headless')
 const sdk = await import(entry)
 const server = sdk.createPortalServer({ baseUrl: 'https://invalid.example' })
 for (const id of ['meeting-room-usage', 'perf-year-agreement-list', 'base-dict-get']) {
@@ -13,11 +14,7 @@ for (const id of ['meeting-room-usage', 'perf-year-agreement-list', 'base-dict-g
 }
 if (server.catalog.index.pages.length === 0) throw new Error('SDK page catalog missing')
 const packageRoot = new URL('../', new URL(entry))
-const metadata = JSON.parse(await readFile(new URL('package.json', packageRoot), 'utf8'))
-if (metadata.version !== manifest.version || metadata.synapseSdkSource?.commit !== manifest.sourceCommit) {
-  throw new Error('Installed SDK does not match the source manifest')
-}
 const rules = JSON.parse(await readFile(new URL('generated/module-type-rules.json', packageRoot), 'utf8'))
 if (!rules || Object.keys(rules).length === 0) throw new Error('SDK module-type rules missing')
 server.sessions.clear()
-process.stdout.write(`Portal SDK ${manifest.version}: archive and installed runtime resources verified\n`)
+process.stdout.write('Portal SDK: built entry and runtime resources verified\n')

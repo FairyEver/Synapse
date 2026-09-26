@@ -1,0 +1,1030 @@
+{
+  "来源": "测试环境真值。**请求列表**来自浏览器抓包（bsk + tools/baseline/install-hook.js，2026-09-21 在 https://webtest01.wodecorp.cn 上打开差旅费表单页；token 头在页面内已被脱敏为 <redacted>）；**各接口的响应值**由 smoke/with-portal-token.sh 直接打测试后端取得。两份都是\"真实环境实测\"，不是推断，也不是从调查文档抄的。",
+  "抓取时间": "2026-09-21",
+  "环境": {
+    "门户": "https://webtest01.wodecorp.cn/portal.html#/",
+    "后端": "https://biz-api-test.wodecorp.cn",
+    "租户": "1"
+  },
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=internal_transportation_expense_request_form&bpmMode=edit&formCustomCreatePath=simple/finance/form/003",
+  "请求": [
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "/admin-api/bpm/process-definition/get?key=internal_transportation_expense_request_form&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      }
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "/admin-api/org/organization/getTree?includeFinanceAttr=1&includeVirtual=true&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      }
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "/admin-api/finance/area/tree?_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 3
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "/admin-api/finance/project/options?keyword=&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      }
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "/admin-api/finance/payment-slip-person/fee-item-options?sourceKey=finance_travel&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      }
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "/admin-api/system/user/simple-page?pageNo=1..9&pageSize=500",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "说明": "「查看审批流程」预览组件无关键字拉全量人员（9 页 × 500）—— 这正是设计 D6 / H35 说的长选项拉取，无头不照抄"
+    }
+  ],
+  "请求头里没有 module-type": "★ 上面每一条的 headers 都只有 tenant-id / token / Accept-Language / Accept，**没有 module-type** ——与 generated/module-type-rules.json 的推断一致（表单页与「我的流程」页一条规则都匹配不到）。注意同一次抓包里 **财务首页**的请求（/finance/home-card/**）是**带** module-type 的，说明这不是\"抓包漏了头\"，而是这两类页面的真实差别。",
+  "流程定义": {
+    "id": "a2494457-a11d-11f1-b11b-0050568340ed",
+    "version": 16,
+    "name": "差旅费支出申请表",
+    "key": "internal_transportation_expense_request_form",
+    "category": "finance_process",
+    "suspensionState": 1,
+    "formType": null,
+    "formId": null,
+    "formName": null,
+    "formConf": null,
+    "formFields": null,
+    "baseUrl": null,
+    "formCustomCreatePath": null,
+    "startUserSelectTasks": [],
+    "bpmnXmlLength": 13842
+  },
+  "BPMN 的 10 个 userTask": [
+    {
+      "id": "Activity_1dyupgj",
+      "name": "分公司总经理",
+      "candidateStrategy": 60,
+      "candidateParam": "org:target|type:4|post:572"
+    },
+    {
+      "id": "Activity_0nl8v6n",
+      "name": "财务经理",
+      "candidateStrategy": 60,
+      "candidateParam": "org:target|type:4|post:513"
+    },
+    {
+      "id": "Activity_1ae5nf1",
+      "name": "单元负责人",
+      "candidateStrategy": 60,
+      "candidateParam": "${targetUnitDirectorIds}"
+    },
+    {
+      "id": "Activity_0hpwjd9",
+      "name": "课题负责人",
+      "candidateStrategy": 60,
+      "candidateParam": "${课题负责人}"
+    },
+    {
+      "id": "Activity_11i20q2",
+      "name": "支出专员类岗位签批",
+      "candidateStrategy": 60,
+      "candidateParam": "org:target|type:7|post:515,516,517,523"
+    },
+    {
+      "id": "Activity_0wfmg8p",
+      "name": "部门负责人",
+      "candidateStrategy": 60,
+      "candidateParam": "${targetOrgDirectorIds}"
+    },
+    {
+      "id": "Activity_0jf6pxa",
+      "name": "沃德股份副总裁、沃德博创执行董事",
+      "candidateStrategy": 22,
+      "candidateParam": "648"
+    },
+    {
+      "id": "Activity_14di1n7",
+      "name": "财务副部长",
+      "candidateStrategy": 60,
+      "candidateParam": "org:target|type:4|post:505"
+    },
+    {
+      "id": "Activity_12154r7",
+      "name": "沃德股份副总裁、沃德博创执行董事",
+      "candidateStrategy": 22,
+      "candidateParam": "648"
+    },
+    {
+      "id": "Activity_0mtikts",
+      "name": "财务副部长",
+      "candidateStrategy": 60,
+      "candidateParam": "org:target|type:4|post:505"
+    }
+  ],
+  "费用项目候选": [
+    {
+      "value": 1,
+      "label": "差旅费"
+    }
+  ],
+  "出行方式字典": [
+    {
+      "label": "飞机",
+      "value": 1
+    },
+    {
+      "label": "高铁",
+      "value": 2
+    },
+    {
+      "label": "火车",
+      "value": 3
+    },
+    {
+      "label": "轮船",
+      "value": 4
+    },
+    {
+      "label": "长途客车",
+      "value": 5
+    },
+    {
+      "label": "公共交通",
+      "value": 6
+    },
+    {
+      "label": "出租车/网约车",
+      "value": 7
+    },
+    {
+      "label": "公车",
+      "value": 8
+    },
+    {
+      "label": "自驾",
+      "value": 9
+    }
+  ],
+  "资金来源字典": [
+    {
+      "label": "自筹资金",
+      "value": 1
+    },
+    {
+      "label": "财政资金",
+      "value": 2
+    }
+  ],
+  "项目类型字典": [
+    {
+      "label": "生物技术类",
+      "value": 1
+    },
+    {
+      "label": "信息技术类",
+      "value": 2
+    },
+    {
+      "label": "工程类",
+      "value": 3
+    }
+  ],
+  "项目属性字典": [
+    {
+      "label": "自主开发项目",
+      "value": 1
+    },
+    {
+      "label": "外部科研项目",
+      "value": 2
+    },
+    {
+      "label": "受托开发项目",
+      "value": 3
+    }
+  ],
+  "收款方类型字典": [
+    {
+      "label": "个人",
+      "value": 1
+    },
+    {
+      "label": "公司",
+      "value": 2
+    },
+    {
+      "label": "银行",
+      "value": 3
+    }
+  ],
+  "项目候选": [
+    {
+      "id": 7,
+      "projectName": "采购计划管理项目",
+      "projectCode": "CG-JHGL0001",
+      "projectType": 3,
+      "projectAttribute": 2,
+      "companyId": 218,
+      "companyName": "石家庄公司"
+    },
+    {
+      "id": 6,
+      "projectName": "采购准入管理项目",
+      "projectCode": "CG-ZRGL0001",
+      "projectType": 2,
+      "projectAttribute": 1,
+      "companyId": null,
+      "companyName": ""
+    },
+    {
+      "id": 5,
+      "projectName": "生产稳产模块项目",
+      "projectCode": "SC-WC0001",
+      "projectType": 3,
+      "projectAttribute": 2,
+      "companyId": null,
+      "companyName": ""
+    },
+    {
+      "id": 4,
+      "projectName": "生产高产模块项目",
+      "projectCode": "SC-GC0001",
+      "projectType": 1,
+      "projectAttribute": 1,
+      "companyId": 216,
+      "companyName": "湖北公司"
+    },
+    {
+      "id": 3,
+      "projectName": "生产运输管理模块项目",
+      "projectCode": "SC-YSGL0001",
+      "projectType": 3,
+      "projectAttribute": 3,
+      "companyId": 216,
+      "companyName": "湖北公司"
+    },
+    {
+      "id": 2,
+      "projectName": "财务系统收入管理模块项目",
+      "projectCode": "CW-SRGL0001",
+      "projectType": 3,
+      "projectAttribute": 3,
+      "companyId": 218,
+      "companyName": "石家庄公司"
+    },
+    {
+      "id": 1,
+      "projectName": "财务系统支出管理模块项目",
+      "projectCode": "CW-ZCGL0001",
+      "projectType": 2,
+      "projectAttribute": 1,
+      "companyId": 218,
+      "companyName": "石家庄公司"
+    }
+  ],
+  "组织树样本": {
+    "顶层": 1,
+    "全树节点数": 1565,
+    "可选节点数": 1109,
+    "样本": [
+      {
+        "id": "34",
+        "name": "沃德辰龙",
+        "depth": 0,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙"
+      },
+      {
+        "id": "35",
+        "name": "华都峪口",
+        "depth": 1,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口"
+      },
+      {
+        "id": "43",
+        "name": "北京育种",
+        "depth": 2,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种"
+      },
+      {
+        "id": "45",
+        "name": "北镇德营公司",
+        "depth": 3,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司"
+      },
+      {
+        "id": "1436",
+        "name": "采购办",
+        "depth": 4,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-采购办"
+      },
+      {
+        "id": "1437",
+        "name": "北镇德营管理部",
+        "depth": 5,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-采购办-北镇德营管理部"
+      },
+      {
+        "id": "1473",
+        "name": "北镇副产品销售大区",
+        "depth": 4,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-北镇副产品销售大区"
+      },
+      {
+        "id": "1503",
+        "name": "副产品销售组",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-北镇副产品销售大区-副产品销售组"
+      },
+      {
+        "id": "2440",
+        "name": "京孵5厅",
+        "depth": 4,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-京孵5厅"
+      },
+      {
+        "id": "47",
+        "name": "孵化厅",
+        "depth": 5,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-京孵5厅-孵化厅"
+      },
+      {
+        "id": "208",
+        "name": "断喙组",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-京孵5厅-断喙组"
+      },
+      {
+        "id": "212",
+        "name": "后勤",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-京孵5厅-后勤"
+      },
+      {
+        "id": "2441",
+        "name": "东北运输",
+        "depth": 4,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-东北运输"
+      },
+      {
+        "id": "210",
+        "name": "运雏车队",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-东北运输-运雏车队"
+      },
+      {
+        "id": "211",
+        "name": "车队后勤",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-东北运输-车队后勤"
+      },
+      {
+        "id": "2449",
+        "name": "北镇职能",
+        "depth": 4,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-北镇职能"
+      },
+      {
+        "id": "209",
+        "name": "管理",
+        "depth": 5,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-北镇职能-管理"
+      },
+      {
+        "id": "214",
+        "name": "不在岗",
+        "depth": 5,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-北镇职能-不在岗"
+      },
+      {
+        "id": "108",
+        "name": "北京公司",
+        "depth": 3,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司"
+      },
+      {
+        "id": "109",
+        "name": "北京职能",
+        "depth": 4,
+        "selectable": false,
+        "financialCostCenter": 0,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能"
+      },
+      {
+        "id": "129",
+        "name": "总经办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-总经办"
+      },
+      {
+        "id": "130",
+        "name": "财务办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-财务办"
+      },
+      {
+        "id": "131",
+        "name": "经营层",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-经营层"
+      },
+      {
+        "id": "465",
+        "name": "大学生",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-大学生"
+      },
+      {
+        "id": "1203",
+        "name": "后勤办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-后勤办"
+      },
+      {
+        "id": "1219",
+        "name": "总经理",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-总经理"
+      },
+      {
+        "id": "1434",
+        "name": "采购办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-采购办"
+      },
+      {
+        "id": "1435",
+        "name": "北京公司采购组110",
+        "depth": 6,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-采购办-北京公司采购组110"
+      },
+      {
+        "id": "71264",
+        "name": "@#$%^&*",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-@#$%^&*"
+      },
+      {
+        "id": "71265",
+        "name": "测试成本中心CI0908a",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-测试成本中心CI0908a"
+      }
+    ],
+    "可选样本": [
+      {
+        "id": "1503",
+        "name": "副产品销售组",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-北镇副产品销售大区-副产品销售组"
+      },
+      {
+        "id": "208",
+        "name": "断喙组",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-京孵5厅-断喙组"
+      },
+      {
+        "id": "212",
+        "name": "后勤",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-京孵5厅-后勤"
+      },
+      {
+        "id": "210",
+        "name": "运雏车队",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-东北运输-运雏车队"
+      },
+      {
+        "id": "211",
+        "name": "车队后勤",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北镇德营公司-东北运输-车队后勤"
+      },
+      {
+        "id": "129",
+        "name": "总经办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-总经办"
+      },
+      {
+        "id": "130",
+        "name": "财务办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-财务办"
+      },
+      {
+        "id": "131",
+        "name": "经营层",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-经营层"
+      },
+      {
+        "id": "465",
+        "name": "大学生",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-大学生"
+      },
+      {
+        "id": "1203",
+        "name": "后勤办",
+        "depth": 5,
+        "selectable": true,
+        "financialCostCenter": 1,
+        "fullPath": "沃德辰龙-华都峪口-北京育种-北京公司-北京职能-后勤办"
+      }
+    ]
+  },
+  "博创系组织": {
+    "说明": "「组织选择」只让选成本中心；项目费用那条分支还要求组织属于沃德博创体系。这两条的交叉才是可达集合",
+    "路径含博创的节点数": 19,
+    "其中可选的": 13,
+    "可选样本": [
+      {
+        "id": "100",
+        "name": "保障中心",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-保障中心"
+      },
+      {
+        "id": "101",
+        "name": "设计中心1236",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-设计中心1236"
+      },
+      {
+        "id": "102",
+        "name": "开发中心",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-开发中心"
+      },
+      {
+        "id": "103",
+        "name": "数据中心",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-数据中心"
+      },
+      {
+        "id": "106",
+        "name": "视觉中心",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-视觉中心"
+      },
+      {
+        "id": "1119",
+        "name": "综合办公室",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-综合办公室"
+      },
+      {
+        "id": "1121",
+        "name": "财务中心",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-财务中心"
+      },
+      {
+        "id": "71267",
+        "name": "！@##¥",
+        "fullPath": "沃德辰龙-沃德博创-沃德博创-系统研发-财务中心-！@##¥"
+      }
+    ]
+  },
+  "地区树样本": {
+    "顶层": 34,
+    "样本": [
+      {
+        "id": "110000",
+        "name": "北京市",
+        "depth": 0
+      },
+      {
+        "id": "110100",
+        "name": "北京市",
+        "depth": 1
+      },
+      {
+        "id": "120000",
+        "name": "天津市",
+        "depth": 0
+      },
+      {
+        "id": "120100",
+        "name": "天津市",
+        "depth": 1
+      },
+      {
+        "id": "130000",
+        "name": "河北省",
+        "depth": 0
+      },
+      {
+        "id": "130100",
+        "name": "石家庄市",
+        "depth": 1
+      },
+      {
+        "id": "130200",
+        "name": "唐山市",
+        "depth": 1
+      },
+      {
+        "id": "130300",
+        "name": "秦皇岛市",
+        "depth": 1
+      },
+      {
+        "id": "130400",
+        "name": "邯郸市",
+        "depth": 1
+      },
+      {
+        "id": "130500",
+        "name": "邢台市",
+        "depth": 1
+      },
+      {
+        "id": "130600",
+        "name": "保定市",
+        "depth": 1
+      },
+      {
+        "id": "130700",
+        "name": "张家口市",
+        "depth": 1
+      },
+      {
+        "id": "130800",
+        "name": "承德市",
+        "depth": 1
+      },
+      {
+        "id": "130900",
+        "name": "沧州市",
+        "depth": 1
+      },
+      {
+        "id": "131000",
+        "name": "廊坊市",
+        "depth": 1
+      },
+      {
+        "id": "131100",
+        "name": "衡水市",
+        "depth": 1
+      },
+      {
+        "id": "140000",
+        "name": "山西省",
+        "depth": 0
+      },
+      {
+        "id": "140100",
+        "name": "太原市",
+        "depth": 1
+      },
+      {
+        "id": "140200",
+        "name": "大同市",
+        "depth": 1
+      },
+      {
+        "id": "140300",
+        "name": "阳泉市",
+        "depth": 1
+      }
+    ]
+  },
+  "审批链预览": {
+    "orgId=1503(副产品销售组)": [
+      {
+        "node": "分公司总经理",
+        "id": 15615,
+        "nickname": "宋存鑫"
+      },
+      {
+        "node": "财务经理",
+        "id": 16797,
+        "nickname": "代荣远"
+      }
+    ],
+    "orgId=208(断喙组)": [
+      {
+        "node": "单元负责人",
+        "id": 15577,
+        "nickname": "周学海"
+      },
+      {
+        "node": "分公司总经理",
+        "id": 15615,
+        "nickname": "宋存鑫"
+      },
+      {
+        "node": "财务经理",
+        "id": 16797,
+        "nickname": "代荣远"
+      }
+    ],
+    "orgId=212(后勤)": [
+      {
+        "node": "单元负责人",
+        "id": 15577,
+        "nickname": "周学海"
+      },
+      {
+        "node": "分公司总经理",
+        "id": 15615,
+        "nickname": "宋存鑫"
+      },
+      {
+        "node": "财务经理",
+        "id": 16797,
+        "nickname": "代荣远"
+      }
+    ],
+    "orgId=210(运雏车队)": [
+      {
+        "node": "单元负责人",
+        "id": 15266,
+        "nickname": "张立新"
+      },
+      {
+        "node": "分公司总经理",
+        "id": 15615,
+        "nickname": "宋存鑫"
+      },
+      {
+        "node": "财务经理",
+        "id": 16797,
+        "nickname": "代荣远"
+      }
+    ],
+    "orgId=211(车队后勤)": [
+      {
+        "node": "单元负责人",
+        "id": 15266,
+        "nickname": "张立新"
+      },
+      {
+        "node": "分公司总经理",
+        "id": 15615,
+        "nickname": "宋存鑫"
+      },
+      {
+        "node": "财务经理",
+        "id": 16797,
+        "nickname": "代荣远"
+      }
+    ]
+  },
+  "审批链节点明细": {
+    "orgId=1503(副产品销售组)": [
+      {
+        "node": "单元负责人",
+        "candidateStrategy": 60,
+        "candidateUsers": []
+      },
+      {
+        "node": "分公司总经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15615
+        ]
+      },
+      {
+        "node": "支出专员类岗位签批",
+        "candidateStrategy": 60,
+        "candidateUsers": []
+      },
+      {
+        "node": "财务经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          16797
+        ]
+      }
+    ],
+    "orgId=208(断喙组)": [
+      {
+        "node": "单元负责人",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15577
+        ]
+      },
+      {
+        "node": "分公司总经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15615
+        ]
+      },
+      {
+        "node": "支出专员类岗位签批",
+        "candidateStrategy": 60,
+        "candidateUsers": []
+      },
+      {
+        "node": "财务经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          16797
+        ]
+      }
+    ],
+    "orgId=212(后勤)": [
+      {
+        "node": "单元负责人",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15577
+        ]
+      },
+      {
+        "node": "分公司总经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15615
+        ]
+      },
+      {
+        "node": "支出专员类岗位签批",
+        "candidateStrategy": 60,
+        "candidateUsers": []
+      },
+      {
+        "node": "财务经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          16797
+        ]
+      }
+    ],
+    "orgId=210(运雏车队)": [
+      {
+        "node": "单元负责人",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15266
+        ]
+      },
+      {
+        "node": "分公司总经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15615
+        ]
+      },
+      {
+        "node": "支出专员类岗位签批",
+        "candidateStrategy": 60,
+        "candidateUsers": []
+      },
+      {
+        "node": "财务经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          16797
+        ]
+      }
+    ],
+    "orgId=211(车队后勤)": [
+      {
+        "node": "单元负责人",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15266
+        ]
+      },
+      {
+        "node": "分公司总经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          15615
+        ]
+      },
+      {
+        "node": "支出专员类岗位签批",
+        "candidateStrategy": 60,
+        "candidateUsers": []
+      },
+      {
+        "node": "财务经理",
+        "candidateStrategy": 60,
+        "candidateUsers": [
+          16797
+        ]
+      }
+    ]
+  },
+  "我": {
+    "id": "18243",
+    "realName": "姚淼鑫",
+    "organizationName": "设计中心1236",
+    "organizationId": "101"
+  }
+}

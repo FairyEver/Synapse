@@ -1,0 +1,38 @@
+{
+  "pagePath": "/dashboard/platform/setting/log/operation/list",
+  "capturedAt": "2026-09-22",
+  "environment": "webtest01.wodecorp.cn",
+  "requests": [
+    {
+      "scenario": "reset-empty-query",
+      "method": "GET",
+      "url": "/adminmanage-api/system/operate-log/page?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "<present>",
+        "token": "<redacted>",
+        "Accept-Language": "<present>"
+      },
+      "absentHeaders": ["module-type"]
+    },
+    {
+      "scenario": "synthetic-no-match-filters",
+      "method": "GET",
+      "url": "/adminmanage-api/system/operate-log/page?order=&orderField=&bizId=999999999&name=SDK-NOMATCH&type=SDK-NOMATCH&subType=SDK-NOMATCH&action=SDK-NOMATCH&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "<present>",
+        "token": "<redacted>",
+        "Accept-Language": "<present>"
+      },
+      "absentHeaders": ["module-type"]
+    }
+  ],
+  "observedActions": ["query", "reset", "export", "paginate"],
+  "observedColumns": ["traceId", "userId", "userName", "type", "subType", "bizId", "action", "extra", "requestMethod", "requestUrl", "userIp", "userAgent", "createTime"],
+  "notObserved": ["detail", "create", "update", "delete", "status-change", "approval", "import", "print", "upload", "modal"],
+  "notes": [
+    "基准由主代理在独立浏览器会话中抓取，凭据在页面内脱敏。",
+    "筛选使用合成且不匹配的值；文件未保存真实姓名、IP、请求地址或其他日志内容。",
+    "本次未点击导出，导出URL与cleanParams行为来自固定前端源码。",
+    "本次未填createTime，时间范围序列化来自固定前后端源码与离线请求层。"
+  ]
+}

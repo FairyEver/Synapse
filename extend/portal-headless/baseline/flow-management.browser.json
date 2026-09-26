@@ -1,0 +1,317 @@
+{
+ "说明": "由 bsk 抓到的审批管理域八页的真实浏览器请求（全部只读）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "先在门户首页装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到目标页 —— SPA 的同文档导航不会卸载钩子，页面挂载时那条真实请求会被完整抓到。",
+ "requests": [
+  {
+   "页面": "发起流程",
+   "pagePath": "/dashboard/flow/task/create/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-definition/create-list?suspensionState=1&processType=1&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "待办任务",
+   "pagePath": "/dashboard/flow/task/todo/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=1&selectType=1&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "已办任务（新会话直开）",
+   "pagePath": "/dashboard/flow/task/done/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=2&selectType=1&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "抄送我的",
+   "pagePath": "/dashboard/flow/task/copy/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-instance/copy/page?order=&orderField=&processInstanceName=&title=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "抄送我的",
+   "pagePath": "/dashboard/flow/task/copy/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-instance/copy/copy-creator-List?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "抄送我的",
+   "pagePath": "/dashboard/flow/task/copy/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/user/getUserPageInfo?pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程模型（双赢协议）",
+   "pagePath": "/dashboard/flow/old/model/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/model/page?order=&orderField=&key=&name=&category=&pageNo=1&limit=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "AI审核配置",
+   "pagePath": "/dashboard/flow/ai-review-config/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/ai-review-config/page?pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "AI审核配置",
+   "pagePath": "/dashboard/flow/ai-review-config/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-definition/list?suspensionState=1&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "AI审核配置",
+   "pagePath": "/dashboard/flow/ai-review-config/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/tip-template/list?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-instance/manager-page?order=&orderField=&name=&title=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/category/simple-list?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=1&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=2&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=3&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=4&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=5&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=6&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=7&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=8&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程实例",
+   "pagePath": "/dashboard/flow/process-instance/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=9&pageSize=500&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "流程任务",
+   "pagePath": "/dashboard/flow/task/manager/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/manager-page?order=&orderField=&name=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  }
+ ]
+}

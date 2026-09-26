@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto"
 import { HttpException, Inject, Injectable, Logger, OnModuleDestroy } from "@nestjs/common"
-import type { Catalog } from "portal-headless" with { "resolution-mode": "import" }
+import type { Catalog } from "@synapse/portal-headless" with { "resolution-mode": "import" }
 import type { z } from "zod"
 import { catalogInput, describeInput, readInput, type PortalCredentials } from "./contract"
 
 export const PORTAL_SDK_LOADER = "PORTAL_HEADLESS_SDK_LOADER"
-export type PortalSdk = typeof import("portal-headless", { with: { "resolution-mode": "import" } })
+export type PortalSdk = typeof import("@synapse/portal-headless", { with: { "resolution-mode": "import" } })
 type Operation = { op: "context" }
   | { op: "catalog"; input: z.infer<typeof catalogInput> }
   | { op: "describe"; input: z.infer<typeof describeInput> }

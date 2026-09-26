@@ -1,0 +1,255 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 的图库管理页面上真实操作一遍读链路与写链路时捕获的浏览器真实请求。token 已在页面内脱敏（tools/baseline/install-hook.js）。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/base/image/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/dashboard/base/image/list",
+  "权限码": "/dashboard/base/image",
+  "routeFile": "app/portal/views/dashboard/education/base/image/list.vue",
+  "http实例": "platform（list.vue 显式 import 了 platform.js 的 http，但没把它传给 useListPageModule；即便不 import，main.js:42-48 注入的全局默认也是同一个实例，两条路同源）",
+  "浏览器请求头（本站后端 API 通用）": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "module-type": {
+    "值": 12,
+    "标签": "学习管理",
+    "依据": "规则表的第一条前缀 `/dashboard/base/`（app/portal/menus/index.js 的 all_menus_type_match），与 resolveModuleType('/dashboard/base/image/list') 一致（generated/page-catalog.json 给这一页标的也是 12）。",
+    "⚠️ 踩到的坑": "这个头读的是 cookie `hr-0.0.0-menuPath`，而 cookie 是**整个浏览器 profile 全局共享**的（路由守卫每次导航覆写）。本轮共捕获到两种值：正常导航下是 12；另一次本页 URL 一个字没变、只因并行的另一个会话在别的标签页跳到 /dashboard/backlog/task-examine/list，本页请求就带上了 11（组织管理）。同一轮里还抓到过一次 POST 请求**完全不发**这个头（下面「写请求」第 1 条的备注）。⇒ 抓到的值必须拿规则表复核，不能直接当答案抄。"
+  },
+  "读请求": [
+    {
+      "能力": "base-image-list",
+      "动作": "进入列表页 / 点「查询」（三个筛选条件全空）",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage/page?order=&orderField=&imgName=&status=&name=&createTimeStart=&createTimeEnd=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": [
+        "一个筛选条件都没填，imgName / status / name / createTimeStart / createTimeEnd 照样以空串发出——renren 列表页的空值默认参数必须一并复刻（D20）。",
+        "pageSize 默认 20，来自 useListPageModule 的 styleV2 分支（common/libs/renren/list.js:391），不是 renren 配置里的 10。",
+        "参数顺序是契约的一部分：order, orderField, imgName, status, name, createTimeStart, createTimeEnd, pageNo, pageSize（qs.stringify 之后就是这个顺序）。"
+      ]
+    },
+    {
+      "能力": "base-image-list",
+      "动作": "「图片名称」填 SDK-TEST 后点「查询」",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage/page?order=&orderField=&imgName=SDK-TEST&status=&name=&createTimeStart=&createTimeEnd=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "后端这条 SQL 是 `t1.name like CONCAT(#{imgName},'%')`——**前缀匹配**，不是模糊匹配（与作业管理页的 title 不同）。这一点影响「改名之后旧名字还查不查得到」这类断言。"
+    },
+    {
+      "能力": "base-image-list",
+      "动作": "「创建时间」区间选 2026-09-20 ~ 2026-09-20 后点「查询」",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage/page?order=&orderField=&imgName=&status=&name=&createTimeStart=2026-09-20%2000%3A00%3A00&createTimeEnd=2026-09-21%2000%3A00%3A00&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": [
+        "页面的 convertFetchForm：createTimeStart = date[0].startOf('date')，createTimeEnd = date[1].startOf('date').add(1,'day')。选同一天，结束是**次日 00:00:00**，即**结束日的开区间**——与作业管理那条线一模一样，所以两边共用 buildCreateTimeRange()。",
+        "日期控件是**不带 showTime** 的 a-range-picker，点开是**两个 panel 并排**（2026年9月 + 2026年10月）。tools/baseline/README.md §2.1 里「页面里只有一个 panel」是会议室表单那条线的性质，不是通则。",
+        "两个输入框同样是 readOnly（rc-picker 本来就这样，与 showTime 无关）。"
+      ]
+    },
+    {
+      "能力": "base-image-list",
+      "动作": "「发布状态」下拉选「已完成」后点「查询」（**这个筛选器是坏的**，见备注）",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage/page?order=&orderField=&imgName=SDK-TEST&status=TRADE_FINISHED&name=&createTimeStart=&createTimeEnd=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": [
+        "⚠️ **这一条的归因已更正**（原草稿写「后端 HTTP 200，但结果为空……带上 status=TRADE_FINISHED 之后是 0 条」。**观察是对的、归因错了**，2026-09-20 复核实测）。",
+        "后端返回的不是\"空结果\"，是**失败包络**：HTTP 200 + `{\"ret\":\"FAIL\",\"code\":400,\"msg\":\"请求参数不正确:Failed to convert property value of type 'java.lang.String' to required type 'java.lang.Integer' for property 'status'; For input string: \\\"TRADE_FINISHED\\\"\"}`。原因：列表接口的 status 是 `Integer`（SysImageManageSelectDTO），而字典给的是字符串，Spring 绑定直接失败。",
+        "页面看着像\"查不到数据\"，是因为它对失败的处理是把列表清空（`common/libs/renren/list.js:497` 的 `catch { listReset() }`）—— 抓基准那一刻看到的空表格就是这么来的。",
+        "字典内容本轮也独立复核过（`/admin-api/sys/dict/type/all`）：`dictType: \"status\"` 的 `dictName` 是**「订单状态」**，6 个值是 `WAIT_SELLER_CHECK / WAIT_BUYER_PAY / PROCESSING / TRADE_FINISHED / TRADE_CLOSED / TRADE_CLOSED_BY_SYSTEM` —— 与草稿记的那 6 个 label 完全对得上。",
+        "⇒ SDK **不把 status 声明成 enum 的\"字典值\"**（那是错的候选集），而是声明成后端真正认的 `0 未发布 / 1 已发布`（实测 `status=1` 命中 3 条、`status=0` 命中 2 条，全库共 5 条）。页面上那个下拉是**页面缺陷**，如实记在 docs/pages/图库管理.md 里。"
+      ]
+    }
+  ],
+  "写请求": [
+    {
+      "能力": "base-image-create",
+      "动作": "列表页点「新建」→ 上传一张图片 → 点「保存」",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "[{\"name\":\"SDK-TEST-图库基准头-222914\",\"url\":\"https://files-test.wodecorp.cn/Public/public/2026/09/wejkhpeuunnshrwj.png\"}]",
+      "备注": [
+        "**body 是一个数组**（后端 `@RequestBody List<SysImageManageDTO>`），每项只有 name 与 url 两个键——页面把上传组件的 fileList 原样 POST 出去，项目/创建人/时间/status 全由后端填。",
+        "⚠️ 这一条抓到的请求头里**没有 module-type**。同一轮里 PUT / DELETE 都带了 module-type: 12（见下），作业管理那条线的写基准四个请求也都带了，所以这是那一瞬间 cookie `hr-0.0.0-menuPath` 被并行会话写成了匹配不到任何规则的值（同一个坑见「module-type」一节），**不是「写请求不发这个头」**。SDK 的做法是按页面路径推导后照常发。",
+        "URL 里的图片是页面上传到 OSS 之后拿到的地址（`files-test.wodecorp.cn`）。SDK 不覆盖上传，url 由调用方给。"
+      ]
+    },
+    {
+      "能力": "base-image-create-release",
+      "动作": "列表页点「新建」→ 上传一张图片 → 点「保存并发布」",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage/saveAndRelease",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "[{\"name\":\"SDK-TEST-图库基准发布-222306\",\"url\":\"https://files-test.wodecorp.cn/Public/public/2026/09/sikprrprpwzazrbq.png\"}]",
+      "备注": "与上一条**只有 URL 不同**，body 形状完全一样。「保存」写 status=0，「保存并发布」写 status=1（后端 saveImage(list, status)），publishTime 两条都写当前时间。"
+    },
+    {
+      "能力": "base-image-get",
+      "动作": "列表行点「编辑」，编辑页 formLoad 打的详情请求",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage/11?_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "id 在**路径段**上，不在 query 上；query 上只有一个 GET 通用的 `_t`。"
+    },
+    {
+      "能力": "base-image-update",
+      "动作": "编辑页改「图片名称」后点「保存」",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":11,\"url\":\"https://files-test.wodecorp.cn/Public/public/2026/09/wejkhpeuunnshrwj.png\",\"name\":\"SDK-TEST-图库基准头改后\",\"status\":0,\"project\":1,\"creator\":18243,\"createTime\":\"2026-09-20 22:29:17\",\"updater\":null,\"updateTime\":null,\"creatorName\":null,\"publishTime\":\"2026-09-20 22:29:17\"}",
+      "备注": [
+        "编辑页的 formLoad 把 `GET /{id}` 的**整个响应**铺进 formState（form.js:176 的 formStateSet），formSubmit 再把整个 formState PUT 回去——所以 body 是**整行**，不只是被改的那两个字段。",
+        "`id` 是**数字**（后端把 Long 序列化成数字，不是作业管理那条线上的字符串）。",
+        "时间字段是 `\"YYYY-MM-DD HH:mm:ss\"` 字符串，未改的字段是 null（updater / updateTime / creatorName）。",
+        "后端的 updateInfo 是 `updateById(entity)`（MyBatis-Plus 默认只更新非 null 字段），所以**是部分更新**；但 `if (dto.getStatus() == 1)` 对 null 的 Integer 会拆箱 NPE，所以 status 实际上**不能不传**——实测记录见 docs/pages/图库管理.md。"
+      ]
+    },
+    {
+      "能力": "base-image-set-status",
+      "动作": "列表行「更多操作 → 启用」（该行当时 status 是 0），确认弹层点「启用」",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":9,\"status\":1}",
+      "备注": [
+        "（同一次操作的另一半是 {\"id\":9,\"status\":0}，两次都真实发出去了。）",
+        "body 只有两个键，顺序 `id, status`；`id` 是数字。",
+        "status 是**目标值**不是切换值——页面在客户端算好 `record.status === 0 ? 1 : 0` 再发（list.vue 的 actionStatus）。"
+      ]
+    },
+    {
+      "能力": "base-image-remove",
+      "动作": "列表行点「删除」→ 确认弹层（「确认删除？ 取消 删除」）点「删除」",
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/imagemanage",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "[11]",
+      "备注": [
+        "id 数组在**请求体**里，不是 `${deleteURL}/${id}`——页面用的是 renren 通用删除（deleteIsBatch: true）。",
+        "数组元素是**数字** `[11]`，后端是 `@RequestBody Long[] ids`。作业管理那条线是 `[\"1071\"]`（字符串），两边不同。",
+        "⚠️ 这里与作业管理正好相反：**是物理删除**。实体 SysImageManageEntity 没有逻辑删除字段（没有 @TableLogic），CrudServiceImpl.delete 走的是 baseDao.deleteBatchIds。删完 list 查不到，get(id) 也**返回空**——实测见 docs/pages/图库管理.md。"
+      ]
+    }
+  ],
+  "产生与撤销": {
+    "浏览器共建过的记录": "3 条（id 9「保存并发布」、id 10「保存」、id 11「保存」），全部在同一轮里用页面自己的「删除」删掉了；收尾时在列表上按 imgName=SDK-TEST 前缀查一次，0 条，测试环境没有留下任何 SDK-TEST- 前缀的残留。",
+    "图片字节": "上传用的是临时生成的一张 8x8 PNG（/tmp，不入库）。文件通过页面内 new File + DataTransfer 塞给 antd 的 input[type=file]，走的是页面自己的上传组件与 OSS 配置——只有「选文件」这一步绕开了操作系统的文件选择框（bsk upload 需要 Chrome 的 'Allow access to file URLs' 权限，共享浏览器上不动这个设置）。",
+    "删除方式": "列表行 → 删除 → 确认弹层"
+  },
+  "复核": {
+    "复核时间": "2026-09-20",
+    "复核人": "本轮代理（草稿来自 /tmp/portal-nightly-stuck/图库管理/base-image.browser.json，未经上一轮复核）",
+    "结论": "四条读请求、六条写请求的 method / url / 参数与键顺序 / body 形状**全部对得上**，可以复用；但那条坏 status 的**归因错了**，已在本文件里更正。",
+    "怎么复核的": [
+      "① 逐条对源码：list.vue 的 getDataListURL / deleteURL / convertFetchForm / actionStatus；create-multiple/create.vue 的 handleSubmit / onFileUploadDone；[mode]/[id].vue 的 objectURL + common/libs/renren/form.js:131,176 的 GET/PUT 分支；common/libs/renren/list.js:474-481（参数顺序）与 :517（deleteIsBatch 的 body）。四条读 + 六条写的形状全部在源码里找到出处。",
+      "② 逐条打真实后端（只用自己的 SDK-TEST- 前缀数据）：冒烟 34 项全绿，另有两次一次性探针。实测到的数字见下面「本轮实测定到的后端语义」。",
+      "③ 没有重新抓浏览器基准：共享浏览器当时另有两条并行任务在用，而源码 + 真机两边都闭合，重抓的边际价值低。**代价**：请求头的逐字节（尤其是写请求那次没有 module-type 的现象）没有重新确认，那一条仍是上一轮的观察。"
+    ],
+    "草稿里没提但本轮实测到的": [
+      "列表 SQL **没有租户、也没有数据范围条件**（SysImageManageSelectDTO 继承了 DataScopeEntity，但 XML 里一个字段都没用到）。实测：无筛选时全库 5 条，`creator` 分别是 15228 与 18243 —— **跨创建人**。所以没有\"只看我上传的\"这种过滤，`creator` 也不是查询参数。",
+      "`order` / `orderField` 页面照样发，但**后端不认**：SQL 是写死的 `order by t1.publish_time desc, t1.create_time desc`，没有拼接。",
+      null,
+      "两个时间边界都是**开区间**（`create_time > start` 且 `create_time < end`），与页面「结束日 +1 天」正好配成\"含头不含尾\"。",
+      "`name` 没有长度限制：提交 137 字的图片名，存下来还是 137 字。",
+      "重复 `DELETE` 同一个 id 后端直接返回成功（不报错）。"
+    ],
+    "本轮实测定到的后端语义": {
+      "create与createRelease": "POST 返回 `{\"ret\":\"SUCCESS\",\"code\":0,\"data\":null}` —— **data 是 null，拿不到新建的 id**，所以\"建成功了没有\"只能回列表查（实测：建完按前缀查到 2 条，id 13 / 14，`project` 都自动填了 1、`creatorName` 是当前登录用户）。",
+      "get": "`GET /sys/imagemanage/{id}` 返回整行，但 **`creatorName` 恒为 null**（SQL 里 join 出来的字段不在实体上）—— 与草稿那条 PUT body 里 `\"creatorName\":null` 对得上。",
+      "update不带status": "**实测 500**：HTTP 200 + `{\"ret\":\"FAIL\",\"code\":500,\"msg\":\"Cannot invoke \\\"java.lang.Integer.intValue()\\\" because the return value of \\\"com.wdbc.erp.module.system.controller.admin.img.dto.SysImageManageDTO.getStatus()\\\" is null\"}`。失败发生在 `updateById` 之前，**记录一个字都没改**（实测：name 仍是改名前的值）。",
+      "update带status": "HTTP 200 成功；只传 `{id,name,status}` 时 **url 没有被清空**（MyBatis-Plus 的 updateById 只写非 null 字段，是部分更新）；`status=0` 时 `publishTime` 不动。",
+      "remove": "`DELETE` body `[13,14]` → 成功；之后 `GET /13` 返回 `{\"ret\":\"SUCCESS\",\"code\":0,\"data\":null}` —— **data 是 null，物理删除**（与作业管理那条线的软删正相反）。列表同步查不到。",
+      "写请求的moduleType": "草稿记的\"那一次 POST 没带 module-type\"**本轮没有复现**（本轮所有请求都带 12），但也没能证伪 —— 它的解释（cookie `hr-0.0.0-menuPath` 被并行会话覆写）与作业管理那条线上实测到的同类现象一致。SDK 按页面路径推导后照常发，与浏览器在\"单标签页正常导航\"下的行为一致。"
+    },
+    "本轮产生的记录": "探针 4 条（id 13 / 14 / 15 / 16）+ 冒烟 2 条，全部是 `SDK-TEST-` 前缀、全部在同一轮里删掉；每次收尾都用 `imgName=SDK-TEST` 再查一次列表，**实测剩 0 条**。图上没有上传任何新文件：`url` 用的是测试环境 OSS 上一个已存在的图片地址（只作为字符串存下来，全程没有修改或删除它）。",
+    "图片字节说明": "页面是先把文件直传 OSS、再把地址 Post 给接口的，接口本身不收字节。所以这个冒烟**没有走上传那一步**（SDK 也不覆盖上传）。"
+  }
+}

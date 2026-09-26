@@ -1,0 +1,165 @@
+{
+  "说明": "由 bsk 在测试环境打开「产品设计文档审核」表单（/simple/hr/form/045）时捕获的真实请求序列。token 已在页面内脱敏（tools/baseline/install-hook.js，脱敏发生在离开浏览器之前）。本文件只含**只读**请求：表单挂载时自动发的 + 把「申请事项/申请内容」填好、点「查看审批流程」与「提交」时触发的几段。**创建请求（create）一次都没有真正发出**（见「提交那次做了什么」一节）。没有创建过任何单据。",
+  "捕获时间": "2026-09-21",
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=hr_product_design_approval&bpmMode=edit&formCustomCreatePath=simple/hr/form/045",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/045（产品设计文档审核）",
+  "抓取手法": [
+    "表单是 SPA 路由进入的：先 navigate 到入口 URL（这一步的请求抓不到，hook 还没装），",
+    "装 hook 之后用 location.hash 在应用内切走再切回，让表单组件**重新挂载**，挂载请求就都进 buffer 了。",
+    "这一步是必要的：bsk 没有『注入 init script 再导航』的入口，整页刷新会把 hook 冲掉。"
+  ],
+  "表单填写值": {
+    "applicationItem": "SDK-TEST-baseline",
+    "applicationContent": "SDK-TEST-baseline content"
+  },
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/org/sensitive/info?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 2,
+      "备注": "应用外壳级请求，与具体页面无关（会议室、通用审批那两条线的基准里也有它）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 2,
+      "备注": "顶部待办角标，外壳级"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=hr_product_design_approval&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "common/libs/flow-form/index.js 的 getProcessDefinition（bpmHttp 实例）。**头部没有 module-type**。响应里 formFields / formCustomCreatePath 都是 null —— 这就是『读接口拿不到字段契约』的现场（key 换成 045 的流程后结论不变）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=1&pageSize=500",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "无 _t 的另一个变体": {
+        "headers": { "Accept": "application/json, text/plain, */*", "Authorization": "…", "token": "<redacted>", "tenant-id": "1" },
+        "备注": "同一批请求里这条路走的是另一个 http 实例（带 Authorization），所以头部集合不同"
+      },
+      "页数": "pageNo 从 1 一直翻到 9（pageSize=500）",
+      "次数": 9,
+      "抓到的每一条": [
+        "/admin-api/system/user/simple-page?pageNo=1&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=1&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=2&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=3&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=4&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=5&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=6&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=2&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=3&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=4&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=5&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=6&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=7&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=8&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=9&pageSize=500",
+        "/admin-api/system/user/simple-page?pageNo=7&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=8&pageSize=500&_t=<ts>",
+        "/admin-api/system/user/simple-page?pageNo=9&pageSize=500&_t=<ts>"
+      ],
+      "抓到的每一条说明": "同一批请求走了**两个 http 实例**（一个带 _t、一个不带，头部集合也不同），所以 pageNo=1..9 各出现了两次（pageNo=1 那次不带 _t 的没抓到 _t 变体）。**去重后的页码是 1..9 共 9 页**。",
+      "备注": "★★ 本文件最值钱的一条，也是本流程**比通用审批更极端**的地方。045 的「抄送人」下拉是**无关键字、把整个组织拉完**：pageNo=1..9 × pageSize=500 ⇒ 约 4500 人（该账号全量 4200+）。035 的基准里只看到 1 页 pageSize=500，045 是**连翻 9 页**。SDK 的 searchUsers 强制关键字，就是不照抄这条（设计 D6 / H35）；这里给 D6 提供的现场比 035 更硬"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/dept/simple-list?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "「抄送人」人员选择弹窗里的部门树（common-mc-select）。SDK 的 user-search 也开了 deptId 这条兜底路径"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/hr/product-design-approval/getTemporaryRequiredStartUserSelectTasks",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"applicationItem\":\"SDK-TEST-baseline\",\"applicationContent\":\"SDK-TEST-baseline content\",\"attachments\":[],\"copyUserIds\":[]}",
+      "备注": "★ 字段契约的现场。它是 045 的 buildSubmitData() 的真实产物：键顺序 applicationItem → applicationContent → attachments → copyUserIds，**没有 id 字段**。与 035 的那条**逐字节相同** —— 「近乎照抄」这句在 045 上成立（本文件是独立抓的，不是从 035 抄的）。头部**没有 module-type**。这条是在**点「提交」**时发出来的（045 的表单里没有 035 那个 `handleApprovalDependencyChange` 失焦钩子，所以它在 035 上由失焦触发、在 045 上只有点提交才触发）"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/bpm/process-instance/preview",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"processDefinitionKey\":\"hr_product_design_approval\",\"variables\":{\"applicationItem\":\"SDK-TEST-baseline\",\"applicationContent\":\"SDK-TEST-baseline content\",\"attachments\":[],\"copyUserIds\":[]},\"startUserSelectAssignees\":{},\"copyUserIds\":[]}",
+      "备注": "点右下角「查看审批流程」（`portal-hxr-flow-process-preview`）时发的。**它里面嵌的 `variables` 又是一份 buildSubmitData() 的产物**，键顺序与上面那条 POST 完全一致 —— 这是字段契约的第二处独立佐证。SDK **不做**这条（它是只读展示件，不影响能不能提交）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-instance/my-page?order=&orderField=&name=&title=&category=&pageNo=1&pageSize=20&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "抓包时把 hash 切到「我的流程」（/dashboard/flow/task/my/list）时发的。**与 035 那条逐字节相同**（页面上 processDefinitionId / status / createTime 三个筛选项为空时不发）。撤销入口就在这一页的行内「取消流程」，用的 `record.id` 就是这个响应里那一行的 `id`；`businessKey` 则等于业务单据 id"
+    }
+  ],
+  "提交那次做了什么（**为什么这里没有 create 的基准**）": [
+    "为了让 045 把 `getTemporaryRequiredStartUserSelectTasks` 发出来（它只在点提交时触发），本轮在页面里**临时装了一个 XHR 拦截器**：",
+    "命中 `/product-design-approval/create` 的请求**不发出去**，直接伪造一个 200 空响应。",
+    "结果：`window.__phBlocked` 是**空的** —— 那条 tasks 请求发出来之后，前端因为「审批人一个都没选」在**本地就停住了**，create 根本没走到。",
+    "⇒ 浏览器侧从头到尾**没有创建过任何单据**，也没有给任何人推过待办。收尾时已确认过「我的流程」里没有多出来的 045 单据。",
+    "所以本文件**没有 create 的真实抓包**。test/product-design-approval.test.ts 对 create 的逐字段断言因此建立在**同源推断**上：create body = 上面那条 POST 的 body + `startUserSelectAssignees`（页面 handleSubmit 的最后一步是 `{ ...submitData, startUserSelectAssignees }`），键顺序由源码确定。",
+    "create 的真实往返（URL / 方法 / 响应形状）另有**真实冒烟**佐证，记录在 docs/pages/产品设计文档审核.md 的「真实验证记录」一节 —— 那一轮真的提交并撤销了。"
+  ],
+  "没有抓到的（如实说明）": [
+    "**create 的真实请求没抓到**（原因见上一节）。",
+    "**移动端表单没抓**：`page/mobile/edit/index.vue` 里的控件与 PC 端一一对应（申请事项 / 申请内容 / 抄送人 / 附件），字段名相同，没有额外字段。",
+    "**「重新发起」（reapply）没抓**：那条分支会从原流程实例抄抄送人，是另起的写链路，本轮没做。"
+  ]
+}

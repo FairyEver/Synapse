@@ -1,0 +1,37 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "webtest01.wodecorp.cn",
+  "frontendCommit": "d3cf56bdc76c73c5eb9252be84b9b39b3900b48e",
+  "requests": [
+    {
+      "action": "list-default",
+      "method": "GET",
+      "url": "/admin-api/finance/fund-standard-line/page?order=&orderField=&orgId=&entryDateStart=&entryDateEnd=&pageNo=1&pageSize=20&_t=<ts>",
+      "moduleType": "23"
+    },
+    {
+      "action": "edit-detail",
+      "method": "GET",
+      "url": "/admin-api/finance/fund-standard-line/get?id=18&_t=<ts>",
+      "moduleType": "23"
+    },
+    {
+      "action": "visible-edit-history-bug",
+      "method": "GET",
+      "url": "/admin-api/finance/financing-repayment/page?order=&orderField=&id=18&editUserIds=&pageNo=1&pageSize=20&_t=<ts>",
+      "moduleType": "23"
+    }
+  ],
+  "observations": {
+    "listRowsObserved": true,
+    "createForm": ["orgId", "entryMonth", "lowLine", "highLine", "avgLine-readonly"],
+    "editAverageExample": {
+      "lowLine": 7000,
+      "highLine": 8000,
+      "avgLine": 7500
+    },
+    "writeSubmitted": false,
+    "historyPage": "The visible edit-history action rendered financing-repayment rows, not fund-standard edit records."
+  },
+  "redaction": "Token and tenant headers were redacted in-page and are not stored."
+}

@@ -1,0 +1,75 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn/portal.html#/dashboard/platform/setting/log/login/list",
+  "page": {
+    "title": "登录日志",
+    "visibleFilters": [
+      "loginTime",
+      "userCode",
+      "userName",
+      "userPhone",
+      "loginVersion",
+      "loginDevice",
+      "ip"
+    ],
+    "visibleActions": [
+      "query",
+      "reset",
+      "pagination"
+    ],
+    "visibleColumns": [
+      "id",
+      "userName",
+      "userPhone",
+      "loginVersion",
+      "loginDevice",
+      "ip",
+      "loginTime"
+    ],
+    "absentActions": [
+      "detail",
+      "create",
+      "edit",
+      "delete",
+      "export",
+      "import",
+      "print",
+      "upload",
+      "download"
+    ],
+    "observedTotal": "approximately 4.45 million; exact value intentionally not recorded"
+  },
+  "requests": [
+    {
+      "scenario": "initial empty filters",
+      "method": "GET",
+      "url": "/adminmanage-api/system/user/smart-layer-log/page?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "<redacted>",
+        "token": "<redacted>",
+        "Accept-Language": "<present>"
+      },
+      "absentHeaders": [
+        "module-type"
+      ]
+    },
+    {
+      "scenario": "all text filters, synthetic non-matching values",
+      "method": "GET",
+      "url": "/adminmanage-api/system/user/smart-layer-log/page?order=&orderField=&userCode=SDK-NOMATCH&userName=SDK-NOMATCH&userPhone=00000000000&loginVersion=0.0.0-test&loginDevice=SDK-NOMATCH&ip=192.0.2.1&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "<redacted>",
+        "token": "<redacted>",
+        "Accept-Language": "<present>"
+      },
+      "absentHeaders": [
+        "module-type"
+      ]
+    }
+  ],
+  "notObserved": [
+    "loginTime array serialization",
+    "non-empty response row values",
+    "SDK request using the controlled smoke session"
+  ]
+}

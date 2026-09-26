@@ -1,0 +1,179 @@
+{
+  "说明": "由 bsk 在测试环境打开「请假申请流程」表单（/simple/hr/form/005）时捕获的真实请求序列。token 已在页面内脱敏（tools/baseline/install-hook.js，脱敏发生在离开浏览器之前）。本文件只含**只读**请求：表单挂载时自动发的 + 填好四个日期字段后触发的请假时长查询 + 点「查看审批流程」触发的预览（它就是提交载荷的来源）。没有提交过任何单据。",
+  "捕获时间": "2026-09-20",
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=qingjia&bpmMode=edit&formCustomCreatePath=simple/hr/form/005",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/005（请假申请流程，processType=1「审核」）",
+  "抓取手法": [
+    "表单是 SPA 路由进入的：先 navigate 到入口 URL（这一步的请求抓不到，hook 还没装）。",
+    "装 hook 之后用 location.hash 在应用内切走（我的流程）再切回，让表单组件**重新挂载**，挂载请求就都进 buffer 了。",
+    "复合日期控件（开始时间 / 结束时间）是 common-button → a-modal → a-date-picker + 「时间段」下拉：",
+    "  点按钮开弹窗 → 点 input[placeholder=请选择日期] 开面板 → 点 .ant-picker-cell[title=YYYY-MM-DD]",
+    "  → 点弹窗里的 .ant-select → 点 .ant-select-item-option[title=上午|下午] → 点弹窗的「保 存」。",
+    "  （antd 的 rc-picker 输入框是 readOnly，不能 fill，只能点面板 —— 见 tools/baseline/README.md §2。）",
+    "★ 提交载荷**不是**靠点「提交」抓的：本表单「事假」这类类型要求附件，而附件上传会真写 OSS；",
+    "  且点提交会真的建单、推真人待办。改走「查看审批流程」按钮 —— 它调的",
+    "  POST /bpm/process-instance/preview 的 body 里 `variables` **就是** buildSubmitPayload() 的产物"
+  ],
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/org/sensitive/info?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "应用外壳级请求，与具体页面无关（会议室 / 通用审批那两条线的基准里也有它）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "顶部待办角标，外壳级"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=qingjia&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "common/libs/flow-form/index.js 的 getProcessDefinition（bpmHttp 实例）。响应里 formFields / formCustomCreatePath 都是 null —— 这就是『读接口拿不到字段契约』的现场。注意头部**没有 module-type**（规则表里没有 /dashboard/flow/ 前缀）"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/hr/attendance-user-rel/getRestDuration",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"startDate\":\"2026-09-21\",\"startType\":1,\"endDate\":\"2026-09-21\",\"endType\":2}",
+      "备注": "★ 复合日期控件的产物：**一个控件产两个字段**（日期 + 上午/下午），且键顺序就是页面 getLeaveDuration(form) 里那个 form 对象的顺序。触发条件是「四个日期字段都齐了」（isShowLeaveDurationComputed）。响应 data = 1（天数），这个数就是提交载荷里的 restDay"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/dept/simple-list?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "「查看审批流程」预览组件为了渲染审批链拉的组织树（走的是另一套 http 实例，头里多一个 Authorization）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=1&pageSize=500&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 9,
+      "备注": "★ 长选项的现场，**比通用审批那条线更狠**：预览组件为了解析 BPMN 里 candidateStrategy=30（指定用户）那几个节点会落到谁头上，**无关键字翻 9 页 × 500 条 = 4500 人**（该账号全量 4225，实测 pageNo 1..9）。这正是设计 D6 / H35 说的那种拉取。⚠️ 本 SDK **一个人员搜索参数都没有**（请假的表单上没有人员控件），所以也不存在照抄它的机会"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/bpm/process-instance/preview",
+      "via": "xhr",
+      "headers": {
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"processDefinitionKey\":\"qingjia\",\"variables\":{\"userId\":\"18243\",\"userName\":\"姚淼鑫\",\"staffCode\":\"2021070101\",\"fullPath\":\"设计中心1236\",\"type\":3,\"startDate\":\"2026-09-21\",\"startType\":1,\"endDate\":\"2026-09-21\",\"endType\":2,\"reason\":\"SDK-TEST-baseline 请假事由（浏览器基准抓取，不会提交）\",\"attachments\":[],\"restDay\":1,\"creatorOrgFullPath\":\"沃德辰龙-沃德博创-沃德博创-系统研发-设计中心1236\"},\"startUserSelectAssignees\":{},\"copyUserIds\":[]}",
+      "备注": "★★ 本文件最值钱的一条。`variables` 就是页面 buildSubmitPayload() 的**真实产物**（`{...formState, restDay}`）加一个 creatorOrgFullPath —— 前 12 个键与顺序同提交载荷，逐字段可对。三个容易看漏的点：① `userId` 是**字符串** \"18243\"（/sys/user/info 的 id 就是字符串，页面原样发）；② `fullPath` 是 `organizationName`（\"设计中心1236\"），**不是** organizationFullPathName（那一个是 creatorOrgFullPath，只在这里出现）；③ `restDay` 在最后（{...formState, restDay} 那个展开）。create 的 body 就是前 12 个键再加一个 startUserSelectAssignees"
+    }
+  ],
+  "表单填写值": {
+    "type": 3,
+    "reason": "SDK-TEST-baseline 请假事由（浏览器基准抓取，不会提交）",
+    "startDate": "2026-09-21",
+    "startType": 1,
+    "endDate": "2026-09-21",
+    "endType": 2,
+    "attachments": []
+  },
+  "提交载荷（从上面那条 preview 的 variables 里原样摘出来，键顺序即序列化顺序）": {
+    "userId": "18243",
+    "userName": "姚淼鑫",
+    "staffCode": "2021070101",
+    "fullPath": "设计中心1236",
+    "type": 3,
+    "startDate": "2026-09-21",
+    "startType": 1,
+    "endDate": "2026-09-21",
+    "endType": 2,
+    "reason": "SDK-TEST-baseline 请假事由（浏览器基准抓取，不会提交）",
+    "attachments": [],
+    "restDay": 1
+  },
+  "发起人信息的来源（同一次页面加载，未抓到请求：/sys/user/info 在应用外壳初始化时就发了、缓存住了）": {
+    "说明": "页面 formState 的四个字段来自 userStore.state（baseData: [user-basic] → app/portal/utils/router/base-data.js:58 → fetchSimpleUserBasic → GET /sys/user/info）。这条是**只读实测**（smoke/with-portal-token.sh 直接打过），不是本文件的抓包内容。",
+    "响应（只摘相关的几项）": {
+      "id": "18243",
+      "username": "2021070101",
+      "realName": "姚淼鑫",
+      "organizationName": "设计中心1236",
+      "organizationFullPathName": "沃德辰龙-沃德博创-沃德博创-系统研发-设计中心1236"
+    },
+    "字段对应": {
+      "userId": "id（字符串）",
+      "userName": "realName",
+      "staffCode": "username",
+      "fullPath": "organizationName（**不是** organizationFullPathName）"
+    },
+    "⚠️ 顺带记一条": "这个响应里带 password2（bcrypt 口令散列）与 salt。SDK 的 profile() **只投影上面四项**，绝不整份透传 —— 见 docs/pages/请假申请.md 的「一处刻意的偏离」。"
+  },
+  "审批人节点（POST /hr/attendance-user-rel/getRequiredStartUserSelectTasks 的响应，另有一次只读实测）": {
+    "说明": "这个 POST 的 body 与提交载荷逐字节相同（页面 actionSubmit 里 fetchMethod 用的就是 submitData）。响应原样记在这里。",
+    "data": [],
+    "为什么是空的": "qingjia 的 BPMN 里 4 个 userTask 的 flowable:candidateStrategy 全是 30 = USER（指定用户，BpmTaskCandidateStrategyEnum），审批人是**写死的用户 id**，不留给发起人选。实测：请假审批 → 用户 15012「乔娜」；领导审核 → 用户 15170「刘爱巧」；HR → 用户 17063「王威」；直属上级 → 用户 15012「乔娜」",
+    "网关条件（BPMN 原文）": {
+      "走请假审批 还是 直属上级": "${creatorOrgFullPath.contains('博创')}",
+      "请假审批之后走不走领导审核": "${restDay >= 3 }"
+    },
+    "candidateParam 与用户的对应": "用 GET /system/user/simple-list（全量 4225 人）对 id 反查出来的，只读"
+  },
+  "同一流程的其它入口（本次未抓包，来自源码）": {
+    "创建": "POST /admin-api/hr/attendance-user-rel/create（本次没有提交，未抓包）",
+    "详情": "GET /admin-api/hr/attendance-user-rel/get?id=",
+    "请假时长": "POST /admin-api/hr/attendance-user-rel/getRestDuration",
+    "年假余额": "GET /admin-api/hr/attendance-user-rel/getYearRest?userId=",
+    "我的流程（撤销入口）": "/dashboard/flow/task/my/list",
+    "取消": "DELETE /admin-api/bpm/process-instance/cancel-by-start-user，body { id: <流程实例 id>, reason }（源码：flow/task/my/list.vue:239-260）"
+  },
+  "没有抓到的（如实说明）": [
+    "**create 的真实请求没抓到**：抓它必须在浏览器里点一次「提交」，那会给三个真人推待办。本轮的写验证只做一次，走的是 SDK 侧的 smoke，不是浏览器 —— 所以没有浏览器侧的 create 基准。",
+    "**「提交」按钮在浏览器里一次都没点过**：表单填是的「事假」，而事假要求附件（formRules.attachments 的 checkType = [3,4,7,8,9]），没有附件时 formRef.validate() 就过不去、根本不会发请求。所以浏览器侧连「点了但被拦」这一步也没有记录。",
+    "**attach 附件的 request 没抓**：本文件里的 attachments 恒为 []。附件的真实形状（页面 onLeaveFileUploadDone 推的是 `{url: file.url, name: file.fileName}`）来自源码，**上传链路本身**由 SDK 侧的 smoke 实测（见 docs/pages/请假申请.md 的「真实验证记录」）。",
+    "因此 test/leave-application.test.ts 对 create 的逐字段断言建立在这份基准的**同源推断**上：create body = 上面那条 submit **载荷** + `startUserSelectAssignees`（页面 actionSubmit 的最后一步是 { ...submitData, startUserSelectAssignees }），键顺序由源码确定；提交 URL 与响应形状另有真实冒烟佐证。"
+  ]
+}

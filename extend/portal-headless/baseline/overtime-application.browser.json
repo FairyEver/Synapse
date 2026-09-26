@@ -1,0 +1,144 @@
+{
+  "说明": "由 bsk 在测试环境打开「加班申请」表单（/simple/hr/form/042）时捕获的真实请求序列。token 已在页面内脱敏（tools/baseline/install-hook.js，脱敏发生在离开浏览器之前）。本文件只含**只读**请求：表单挂载时自动发的、以及点「查看审批流程」那一次预览。**没有点过「提交」**，没有创建任何单据。",
+  "捕获时间": "2026-09-21",
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=hr_overtime_application&bpmMode=edit&formCustomCreatePath=simple/hr/form/042",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/042（加班申请，流程名「加班审批」）",
+  "抓取手法": [
+    "表单是 SPA 路由进入的：先 navigate 到入口 URL（这一步的请求抓不到，hook 还没装），",
+    "装 hook 之后用 location.hash 在应用内切走再切回，让表单组件**重新挂载**，挂载请求就都进 buffer 了。",
+    "关键一步：本表单的「查看审批流程」按钮（portal-hxr-flow-process-preview）会 POST /bpm/process-instance/preview，",
+    "请求体里的 variables 就是表单的 buildSubmitData() 产物 —— 所以**点这个按钮（只读）就能拿到「提交会发什么」**，",
+    "不必真的点「提交」。这是本表单特有的取基准路子：035 那条线只能靠填表后直接提交来观察载荷。",
+    "⚠️ 日期控件：两个都是 a-date-picker + showTime，输入框 readOnly，必须点面板（见 tools/baseline/README.md §2）。",
+    "   点时间列之前必须 scrollIntoView({block:'center',behavior:'instant'})，否则会点偏一行。",
+    "   本次 24 个小时格是 index 0..23，0 基下标即小时数。"
+  ],
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "备注": "顶部待办角标，外壳级，与具体页面无关（035 那条线的基准里也有它）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=hr_overtime_application&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "备注": "common/libs/flow-form/index.js 的 getProcessDefinition（bpmHttp 实例）。响应里 formFields / formCustomCreatePath 都是 null —— 字段契约拿不到，只能读前端源码。**请求头里没有 module-type**"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=<1..9>&pageSize=500",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 18,
+      "备注": "★ 流程表单外壳在挂载时**无关键字**翻页拉全量人员目录（本次实测 9 页 × 500 = 4500+ 人），点「查看审批流程」时又拉了一遍（同样 9 页）。这是设计 D6 / H35「长选项参数必须先要关键字」的现场证据：无头下**不能照抄**这条。SDK 里没有任何一条能力走它"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/performance/basedata/kpimessageremind/getUnreadcount?_t=<ts>",
+      "via": "xhr",
+      "备注": "应用外壳级（未读数角标），与具体页面无关"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/finance/expense-review/pending-count?_t=<ts>",
+      "via": "xhr",
+      "备注": "应用外壳级（未读数角标），与具体页面无关"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/dept/simple-list?_t=<ts>",
+      "via": "xhr",
+      "备注": "点「查看审批流程」时和人员目录一起拉的，用来把预览里的 deptId 翻成部门名（useProcessPreview.js:75-84）"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/bpm/process-instance/preview",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=UTF-8"
+      },
+      "备注": "★ 点「查看审批流程」发的**只读预览**。variables 就是 buildSubmitData() 的产物（下面「提交载荷」一节原样抄自它）；startUserSelectAssignees 来自 useFlowForm 的 bpmStartUserSelectAssignees，本流程实测是 {}；copyUserIds 由预览组件补，恒为 []",
+      "body": "{\"processDefinitionKey\":\"hr_overtime_application\",\"variables\":{\"applicantId\":\"18243\",\"applicantName\":\"姚淼鑫\",\"applyDate\":\"2026-09-21\",\"applyDepartmentId\":\"101\",\"applyDepartmentName\":\"设计中心1236\",\"reason\":\"SDK-TEST-加班申请冒烟 基线抓取用（不会提交）\",\"overtimeType\":1,\"subsidyType\":1,\"startTime\":\"2026-09-22 18:00:00\",\"endTime\":\"2026-09-22 21:00:00\",\"breakHours\":0.5,\"overtimeHours\":2.5},\"startUserSelectAssignees\":{},\"copyUserIds\":[]}"
+    }
+  ],
+  "表单填写值": {
+    "reason": "SDK-TEST-加班申请冒烟 基线抓取用（不会提交）",
+    "overtimeType": 1,
+    "subsidyType": 1,
+    "startTime": "2026-09-22 18:00:00",
+    "endTime": "2026-09-22 21:00:00",
+    "breakHours": 0.5
+  },
+  "提交载荷": {
+    "说明": "★ 逐字段抄自上面那次 preview 请求体的 variables —— 那就是 buildSubmitData() 的返回值（`return { ...(formState.value || {}) }`），键顺序即 formState 的声明顺序。create 的 body 是 `{...submitData, startUserSelectAssignees}`（042/page/pc/edit/index.vue:471）",
+    "body": "{\"applicantId\":\"18243\",\"applicantName\":\"姚淼鑫\",\"applyDate\":\"2026-09-21\",\"applyDepartmentId\":\"101\",\"applyDepartmentName\":\"设计中心1236\",\"reason\":\"SDK-TEST-加班申请冒烟 基线抓取用（不会提交）\",\"overtimeType\":1,\"subsidyType\":1,\"startTime\":\"2026-09-22 18:00:00\",\"endTime\":\"2026-09-22 21:00:00\",\"breakHours\":0.5,\"overtimeHours\":2.5}",
+    "逐字段类型": {
+      "applicantId": "★ 字符串 \"18243\"，不是数字 —— 它来自 /sys/user/info 的 id（那个接口返回的就是字符串），页面直接赋值不做转换",
+      "applicantName": "字符串，来自 /sys/user/info 的 realName",
+      "applyDate": "字符串 YYYY-MM-DD，**是「今天」**（initUserInfo 里 dayjs().format('YYYY-MM-DD')），不是加班那一天",
+      "applyDepartmentId": "★ 字符串 \"101\"，来自 /sys/user/info 的 organizationId",
+      "applyDepartmentName": "字符串，来自 /sys/user/info 的 organizationName",
+      "reason": "字符串，用户填",
+      "overtimeType": "数字 0/1/2",
+      "subsidyType": "数字 0/1/2",
+      "startTime": "字符串 'YYYY-MM-DD HH:mm:ss'（页面 handleStartTimeChange 里 .minute(0).second(0) 后 format）",
+      "endTime": "字符串 'YYYY-MM-DD HH:mm:ss'",
+      "breakHours": "数字",
+      "overtimeHours": "数字，**前端算出来的只读字段**（结束-开始-休息，保留 1 位小数），不是用户填的"
+    }
+  },
+  "只读联动（页面上真的会变的那几处）": [
+    "申请人 / 申请时间 / 申请部门：三个只读展示项，挂载时由 initUserInfo() 从 useUserStore（载荷 `/sys/user/info`，路由 meta.baseData 的 'user-basic'）填入；页面上**没有输入框**（见 baseline 请求里的 /sys/user/info 一节说明）",
+    "加班时长 overtimeHours：a-input-number **disabled**，由 watch([startTimeValue, endTimeValue, breakHours]) → calculateOvertimeHours() 自动算：Math.max(0, end.diff(start,'hour',true) - breakHours) 再 parseFloat(toFixed(1))。本次实测 18:00→21:00 且休息 0.5 ⇒ 页面上显示 2.5（对应 3.0 - 0.5）",
+    "中途休息时长 breakHours 的 :max = maxBreakHours = 结束-开始 的小时数（同一天内），页面把上限卡在这里",
+    "结束时间选择器：开始时间没选时整体 disabled；同一天时 disabledHours 屏蔽 ≤ 开始小时，分钟/秒只能选 00（整点）",
+    "开始时间变化后，若结束时间早于或等于新的开始时间，页面**清空结束时间**并提示「结束时间已清空，请重新选择」"
+  ],
+  "审批链（同一次 preview 的响应，非本文件抓包内容）": {
+    "说明": "POST /bpm/process-instance/preview 的**响应**实测（2026-09-21，同一天另跑的一次只读探针）：",
+    "processDefinitionName": "加班审批",
+    "state": "CONFIRMED",
+    "nodes": [
+      { "nodeId": "Event_055wg5p", "type": "START_EVENT" },
+      {
+        "nodeId": "Activity_158exxp",
+        "name": "直属上级审批",
+        "type": "USER_TASK",
+        "candidateStrategy": 23,
+        "candidateStrategyName": "直属上级",
+        "candidateUsers": [{ "id": 15012, "nickname": "乔娜" }],
+        "approvalMode": "SINGLE"
+      },
+      { "nodeId": "Event_04lk73x", "type": "END_EVENT" }
+    ],
+    "含义": "★ 本流程**没有**「发起人自选」节点（candidateStrategy=35）：审批人是后端按 BpmTaskCandidateStrategyEnum.DIRECT_LEADER(23)「直属上级」**自动算出来**的。所以 GET/POST /hr/overtime-application/getRequiredStartUserSelectTasks 实测返回 **[]**，且 submit 的 startUserSelectAssignees 是 **{}**"
+  },
+  "没有抓到的（如实说明）": [
+    "POST /hr/overtime-application/create 的**真实请求体**没有抓过：本文件是只读基准，脚本里**没有点过「提交」**。create 的 body 由 `{...submitData, startUserSelectAssignees}` 推出（submitData 已由 preview 的 variables 逐字节钉住，startUserSelectAssignees 由源码 finalize() 的 `if (tasks.length === 0) return {}` 钉成 {}）；这个推导在真实提交那一轮由**回读详情接口**交叉验证过，见 docs/pages/加班申请.md",
+    "GET /sys/user/info 的请求没进 buffer：它由路由 meta.baseData 的 'user-basic' 在**首次进入应用时**加载并缓存（本次是 SPA 内切路由，缓存命中所以没重发）。它的响应形状是另一轮只读探针实测的（id/realName/organizationId/organizationName 全是字符串）"
+  ]
+}

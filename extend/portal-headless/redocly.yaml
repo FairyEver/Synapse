@@ -1,0 +1,31 @@
+# OpenAPI 规格的校验规则。
+#
+# 在 Redocly 的 recommended 之上收紧几条——都是与"能生成 SDK / 能被人读懂"直接相关的：
+#   operation-operationId*：没有稳定且唯一的 operationId，任何 SDK 生成器都做不了
+#   operation-description：摘要之外还要有描述（我们在这里放页面上下文、读写标记、长选项提示）
+#   operation-4xx-response：错误响应要写出来，否则调用方只能靠猜
+#   security-defined / no-unresolved-refs：这两个是硬伤，必须 error
+#
+# 用法：pnpm docs:lint
+extends:
+  - recommended
+
+rules:
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-operationId-url-safe: error
+  operation-description: error
+  operation-summary: error
+  operation-2xx-response: error
+  operation-4xx-response: error
+  operation-singular-tag: error
+  operation-tag-defined: error
+  tag-description: error
+  security-defined: error
+  no-unresolved-refs: error
+  no-identical-paths: error
+  no-ambiguous-paths: error
+  # 我们的路径是按能力 ID 造的，不存在路径参数，这条不适用
+  path-parameters-defined: off
+  # 私有包，不适用
+  info-license: off

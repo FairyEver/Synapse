@@ -1,0 +1,159 @@
+{
+ "说明": "由 bsk 捕获的学习管理域「数据统计」五页的真实请求（只读）。其中班级统计与学习统计是 POST，body 一并记下。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "同 study-base.browser.json。",
+ "requests": [
+  {
+   "页面": "学员统计",
+   "pagePath": "/dashboard/statistics/student/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/statistics/studentList?order=&orderField=&staffCode=&name=&allLesson=&startLesson=&completeLessonMin=&completeLessonMax=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "学员统计",
+   "pagePath": "/dashboard/statistics/student/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/grade/studygrade/page?pageSize=99999&pageNo=1&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "讲师统计",
+   "pagePath": "/dashboard/statistics/teacher/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/statistics/teacherList?order=&orderField=&staffCode=&name=&startTime=&endTime=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "班课统计",
+   "pagePath": "/dashboard/statistics/lesson/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/statistics/lessonStatisticsList?pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "班课统计",
+   "pagePath": "/dashboard/statistics/lesson/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/grade/studygrade/page?pageSize=99999&pageNo=1&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "班级统计",
+   "pagePath": "/dashboard/statistics/grade/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/statistics/countGradeMorningLesson",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"managementCenterIdList\":[],\"startDate\":\"2026-09-21\"}"
+  },
+  {
+   "页面": "班级统计",
+   "pagePath": "/dashboard/statistics/grade/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/statistics/statisticsGradeMorningLesson",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"order\":\"\",\"orderField\":\"\",\"managementCenterIdList\":[],\"gradeName\":\"\",\"pageNo\":1,\"pageSize\":20,\"startDate\":\"2026-09-21\",\"endDate\":\"2026-09-21\"}"
+  },
+  {
+   "页面": "班级统计",
+   "pagePath": "/dashboard/statistics/grade/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter/getAllCenter?roleId=&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "学习统计",
+   "pagePath": "/dashboard/statistics/learning/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getTree?roleId=&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "学习统计",
+   "pagePath": "/dashboard/statistics/learning/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://smarterlayerapptest.zhihuidanji.com/api/zhdj/studyLessonCatalogue/getChapterTree?type=2&token=<redacted>&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "token": "<redacted>"
+   },
+   "body": null
+  }
+ ]
+}

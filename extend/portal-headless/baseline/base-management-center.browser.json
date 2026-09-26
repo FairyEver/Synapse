@@ -1,0 +1,219 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 的「组织结构」页面上真实操作一遍读链路与写链路时捕获的浏览器真实请求。token 已在页面内脱敏（tools/baseline/install-hook.js）。写链路的测试数据用 SDK-TEST- 前缀，并在同一轮里删掉。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/base/management-center/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/dashboard/base/management-center/list",
+  "权限码": "/dashboard/base/management-center",
+  "routeFile": "app/portal/views/dashboard/education/base/management-center/list.vue",
+  "表单页": "app/portal/views/dashboard/education/base/management-center/[mode]/[id].vue",
+  "http实例": "platform（list.vue 显式 import 了 platform.js 的 http；即便不 import，main.js:42-48 注入的全局默认也是同一个实例，两条路同源）",
+  "浏览器请求头（本站后端 API 通用）": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "module-type": {
+    "值": 12,
+    "标签": "学习管理",
+    "依据": "规则表的第一条前缀 `/dashboard/base/`（app/portal/menus/index.js:189 的 all_menus_type_match），与 resolveModuleType('/dashboard/base/management-center/list') 一致（generated/page-catalog.json 给这一页标的也是 12）。",
+    "⚠️ 踩到的坑": "这个头读的是 cookie `hr-0.0.0-menuPath`，而 cookie 是**整个浏览器 profile 全局共享**的（路由守卫每次导航覆写）。本轮共捕获到三种值：正常导航进入本页后的第一个请求是 12；随后并行会话在别的标签页跳走，本页后续请求就变成了 11（组织管理）；再往后 cookie 被写成 `/`（`bsk evaluate` 实测 `hr-0.0.0-menuPath=/`），本页请求**完全不发**这个头。⇒ 抓到的值必须拿规则表复核，不能直接当答案抄。SDK 按页面路径推导，给出的恒为 12。"
+  },
+  "读请求": [
+    {
+      "能力": "base-management-center-list",
+      "动作": "进入列表页 / 点「查询」（两个筛选条件全空）",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter/page?order=&orderField=&name=&status=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": [
+        "两个筛选条件都没填，name / status 照样以空串发出——renren 列表页的空值默认参数必须一并复刻（D20）。",
+        "pageSize 默认 20，来自 useListPageModule 的 styleV2 分支（common/libs/renren/list.js:391），不是 renren 配置里的 10。",
+        "参数顺序是契约的一部分：order, orderField, name, status, pageNo, pageSize（qs.stringify 之后就是这个顺序）。"
+      ]
+    },
+    {
+      "能力": "base-management-center-list",
+      "动作": "「名称」填 SDK-TEST-A 后点「查询」",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter/page?order=&orderField=&name=SDK-TEST-A&status=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "后端这条 SQL（StudyManagementCenterDao.xml 的 getManagementPage）是 `t1.name like CONCAT('%',#{dto.name},'%')`——**模糊匹配**。实测：填 `SDK-TEST-A` 时列表只剩 1 条（就是刚建的那条），19 条 → 1 条。"
+    },
+    {
+      "能力": "base-management-center-get",
+      "动作": "列表里对刚建的那条点「编辑」",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter/36?_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": [
+        "路径参数是**数字 36**（这条 GET 的 URL 里没有引号）；而**响应体里 `id` 是字符串 `\"36\"`**，PUT 的 body 里也是字符串。同一页里两种形态并存，SDK 的 `normalizeId` 一律归一成字符串（与写请求一致），URL 上用模板串拼出来同样是 `36`，两边都对得上。",
+        "这条响应里的 `commanderName` 与 `creatorName` 都是 null——**那两个姓名只有列表接口才填**（pageInfo 里用 hrUserApi 的 map 补的），get 不填。"
+      ]
+    },
+    {
+      "能力": "base-management-center-check-status",
+      "动作": "列表里对这条点「更多操作 → 禁用」",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter/updateStatus",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":\"36\",\"status\":0}",
+      "备注": [
+        "⚠️ **这个接口一个字段都不写**（`StudyManagementCenterServiceImpl.updateStatus` 只查了一次 `study_grade`），它是页面在真正禁用**之前**问后端一句「这个一级组织下面有班级吗？禁用会连带禁用它们」。所以它在本 SDK 里声明成 `write: false`。",
+        "响应 `data` 是一个**提示语字符串**（有下属班级且 status=0 时是「禁用一级组织结构，其下属的班级也会被禁用，是否确认禁用」，否则是 null）。页面拿到非空字符串就弹 Modal 让用户确认，点「确认」后照旧发下面那条真正的 PUT。",
+        "本条抓到的 body 是 status=0（禁用方向）；同一轮还抓到了 status=1（启用方向）的那条，形状完全相同。"
+      ]
+    }
+  ],
+  "写请求": [
+    {
+      "能力": "base-management-center-create",
+      "动作": "列表页点「新建」→ 填名称 + 选负责人 → 点「保存」",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"name\":\"SDK-TEST-A\",\"commander\":\"2023040108\"}",
+      "备注": [
+        "**body 只有两个键**：`name` 与 `commander`，键顺序就是表单 formState 的顺序（[mode]/[id].vue 的 `form: { name, commander }`）。status / creator / createTime / updater / updateTime 全由后端 `saveInfo` 写死（status 固定填 0）。",
+        "`commander` 是**字符串**（员工工号形式的 username，来自 `/sys/user/getUserListPage` 的下拉选项），不是数字 id。后端 DTO 的字段类型是 `Long`，靠 Spring 把字符串转成 Long。",
+        "⚠️ `module-type` 抓到的是 11——这是 cookie 被并行会话写脏了（见「module-type」一节），不是「新建页发 11」。SDK 按列表页路径推导发 12。",
+        "⚠️ 名称 ≤ 10 字是**页面表单规则**（`rules.name: [{ required }, { max: 10 }, { validator: validateOnlySpace }]`）。后端 DTO 上一条校验注解都没有，`ValidatorUtils.validateEntity` 拦不住超长名。第一次尝试用 `SDK-TEST-BMC-A`（14 字）时页面红字报「最多 10 个字符」、请求根本没发出去，改用 10 字的 `SDK-TEST-A` 才发出来。"
+      ]
+    },
+    {
+      "能力": "base-management-center-update",
+      "动作": "编辑页把名称从 SDK-TEST-A 改成 SDK-TEST-B → 点「保存」",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":\"36\",\"name\":\"SDK-TEST-B\",\"commander\":\"2023040108\",\"commanderName\":null,\"status\":0,\"code\":null,\"isDel\":0,\"creator\":\"18243\",\"creatorName\":null,\"createTime\":\"2026-09-20 22:53:37\",\"updater\":\"18243\",\"updateTime\":\"2026-09-20 22:53:37\"}",
+      "备注": [
+        "**这是「整份 GET 响应铺回表单再原样 PUT」的形状**：`[mode]/[id].vue` 的 `customLoad` 返回 `http.get(...)` 的整个 data，`form.js` 把它 `{...}` 进 formState，提交时 `data = { ...form, name: form.name.trim() }` —— 于是 `id` 在最前（GET 响应里的键序），后面依次是 name / commander / commanderName / status / code / isDel / creator / creatorName / createTime / updater / updateTime。",
+        "SDK 的 `update` **只发调用方点名的字段 + id**，是这份 body 的**子集**：依据是后端 `update(dto)` → `updateById`（MyBatis-Plus 只写非 null 字段）。理由与作业管理/班次管理一致——把 `creator` / `createTime` 这些服务端字段回写是没验证过的形状。实测（smoke/base-management-center-crud.mjs）：只发 `{id, name}` 之后 `get` 读回 commander / creator / createTime 都没被动过。",
+        "`updateInfo` 里有一条副作用要记住：`if (dto.getStatus() != null && dto.getStatus() == 0)` 会把该组织下**所有班级**一并置为 status=0；`if (dto.getCommander() != null)` 会走一次 `hrUserApi.createUser(commander, SUPER_ADMIN)`。"
+      ]
+    },
+    {
+      "能力": "base-management-center-set-status",
+      "方向": "禁用（写 status=0）",
+      "动作": "「更多操作 → 禁用」→ （无弹窗）自动接着发下面那条 PUT",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":\"36\",\"status\":0}",
+      "备注": [
+        "这条 PUT 与 `update` 打的是**同一个接口**，但它是页面 `actionStatus` 里的 `fetch()`，body 只有 `id` 与 `status` 两个键，且都是客户端算好的**绝对值**（`record.status === 0 ? 1 : 0`），不是 toggle。",
+        "时序：先发 `PUT /updateStatus`（只读预检），拿到空串就直接发这条；拿到提示语字符串就先弹 Modal，用户点「确认」后**仍然发这条**。所以 `updateStatus` 不是「提交」，它不改变终态。"
+      ]
+    },
+    {
+      "能力": "base-management-center-set-status",
+      "方向": "启用（写 status=1）",
+      "动作": "「更多操作 → 启用」→ （无弹窗）自动接着发这条 PUT",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":\"36\",\"status\":1}",
+      "备注": "与禁用方向逐字段同形，只有 status 的值不同。两个方向都是实测抓到的，不是照着一个推另一个。"
+    },
+    {
+      "能力": "base-management-center-remove",
+      "动作": "行内点「删除」→ 气泡里点「删 除」确认",
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "[\"36\"]",
+      "备注": [
+        "删除走 `deleteIsBatch: true` 分支（common/libs/renren/list.js:517）：`http.delete(deleteURL, { data: [id] })`，即 **body 是一个 id 数组、没有路径参数**。数组元素是**字符串**（与 get 响应里的 id 同形）。",
+        "⚠️ **这是逻辑删除**（与班次管理一致，与图库管理正相反）：删完 `list` 查不到，但 `get(36)` **仍然返回整行**、`isDel` 从 0 变成 1。实测报文见「复核」一节。",
+        "⚠️ **可能失败**：后端先查 `study_grade` 里有没有 `management_center_id` 指向它、且 `status == 1` 的班级，有就返回业务错误「本组织结构下设有已启用班级，不可删除，请先删除班级」，一个都不删。"
+      ]
+    }
+  ],
+  "产生与撤销": {
+    "产生": "列表页「新建」→ 填 `SDK-TEST-A` + 选负责人「胡明伟」→ 保存，得到 id=36（后端不返回 id，是从列表里读到的）。",
+    "过程中改过": "编辑页把名称改成 `SDK-TEST-B`（PUT 基准就是这一条）；随后「更多操作 → 启用」（status 1）、再「更多操作 → 禁用」（status 0）。",
+    "撤销": "行内「删除」→ 确认，DELETE body `[\"36\"]`。",
+    "同一轮里没有碰过任何别的组织节点": "全程只对 id=36（自己刚建的这条）点过编辑 / 启用 / 禁用 / 删除。其余 17~18 条既有组织的行只被读取。"
+  },
+  "复核": {
+    "列表": "删除后列表回到 18 条，`SDK-TEST-B` 那一行消失（删前 19 条）。",
+    "详情": "`GET /admin-api/study/base/studymanagementcenter/36` 删除后仍然返回整行，`\"isDel\":1`，`\"name\":\"SDK-TEST-B\"`——**逻辑删除**的铁证。",
+    "按名字查": "`GET .../page?name=SDK-TEST&...` 返回 `{\"list\":[],\"total\":0}`（SQL 里 `t1.is_del = 0`），所以「删干净了没有」**看列表**，不要看 `get`。",
+    "残留": "测试环境里没有留下任何 `SDK-TEST-` 前缀的**可见**记录。"
+  }
+}

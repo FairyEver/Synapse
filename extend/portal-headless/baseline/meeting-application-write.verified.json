@@ -1,0 +1,52 @@
+{
+  "说明": "写链路的真实记录。与 baseline/*.browser.json 不同：这份不是浏览器抓的，而是 SDK 在测试环境真实调用成功后被记下来的请求形状。",
+  "验证时间": "2026-09-20",
+  "环境": "https://biz-api-test.wodecorp.cn （测试环境）",
+  "结果": "端到端成功：提交后该时段在会议室占用查询中出现，取消后消失",
+  "请求": [
+    {
+      "能力": "meeting-application.getRequiredStartUserSelectTasks",
+      "method": "POST",
+      "path": "/admin-api/hr/meeting-application/getRequiredStartUserSelectTasks",
+      "body": {
+        "id": null,
+        "meetingName": "<string, ≤30>",
+        "meetingRoomId": "<number>",
+        "startTime": "YYYY-MM-DD HH:mm:ss",
+        "endTime": "YYYY-MM-DD HH:mm:ss",
+        "attendeeCount": "<number>",
+        "attendees": "<string, ≤500>"
+      },
+      "返回": "数组；会议室流程实测返回 0 个需要人工指定审批人的节点"
+    },
+    {
+      "能力": "meeting-application.create",
+      "method": "POST",
+      "path": "/admin-api/hr/meeting-application/create",
+      "body": {
+        "id": null,
+        "meetingName": "无头SDK冒烟-可删除",
+        "meetingRoomId": 5,
+        "startTime": "2026-09-22 14:00:00",
+        "endTime": "2026-09-22 15:00:00",
+        "attendeeCount": 2,
+        "attendees": "",
+        "startUserSelectAssignees": {}
+      },
+      "返回": "新建单据的 id（本次为 50）"
+    },
+    {
+      "能力": "meeting-application.cancelReservation",
+      "method": "PUT",
+      "path": "/admin-api/hr/meeting-application/cancel-reservation/{id}",
+      "body": null,
+      "返回": "成功；占用查询中该时段由有变空"
+    },
+    {
+      "能力": "meeting-application.roomUsage",
+      "method": "GET",
+      "path": "/admin-api/hr/meeting-application/meeting-room-usage?date=YYYY-MM-DD",
+      "返回结构": "{ organizationId, date, meetingRooms: [{ meetingRoomId, meetingRoomName, timeSlots: [{ startTime, endTime, userName, meetingName }] }] } —— 是对象不是数组"
+    }
+  ]
+}

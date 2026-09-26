@@ -1,0 +1,45 @@
+ M generated/api-docs.html
+ M generated/coverage.html
+ M generated/coverage.md
+ M generated/module-type-rules.json
+ M generated/openapi.json
+ M generated/page-catalog.json
+ M src/capabilities/index.ts
+ M src/capabilities/invoke.ts
+ M src/catalog/aliases.derived.ts
+ M src/index.ts
+ M src/server.ts
+ M tools/baseline/README.md
+?? baseline/ai-interaction-qa.browser.json
+?? baseline/ai-knowledge.browser.json
+?? baseline/ai-model.browser.json
+?? baseline/ai-prompt-tool.browser.json
+?? baseline/ai-prompt.browser.json
+?? docs/ai-contract-audit/
+?? "docs/pages/\344\270\232\345\212\241\344\272\213\344\273\266\347\273\221\345\256\232\346\212\200\350\203\275.md"
+?? "docs/pages/\344\272\244\344\272\222\345\216\206\345\217\262.md"
+?? "docs/pages/\345\267\245\345\205\267\346\217\220\347\244\272\350\257\215\347\273\221\345\256\232.md"
+?? "docs/pages/\345\271\263\345\217\260\347\224\250\351\207\217.md"
+?? "docs/pages/\345\274\200\346\224\276\346\216\245\345\217\243.md"
+?? "docs/pages/\346\204\217\345\233\276\345\210\227\350\241\250.md"
+?? "docs/pages/\346\204\217\350\247\201\345\217\215\351\246\210.md"
+?? "docs/pages/\346\212\200\350\203\275\345\210\227\350\241\250.md"
+?? "docs/pages/\346\217\220\347\244\272\350\257\215\347\261\273\345\236\213.md"
+?? "docs/pages/\346\225\217\346\204\237\350\257\215.md"
+?? "docs/pages/\346\225\260\346\215\256\345\210\206\346\236\220.md"
+?? "docs/pages/\346\250\241\345\236\213\345\210\227\350\241\250.md"
+?? "docs/pages/\346\250\241\345\236\213\351\200\211\346\213\251.md"
+?? "docs/pages/\347\203\255\351\227\250\351\227\256\351\242\230.md"
+?? "docs/pages/\347\237\245\350\257\206\345\256\241\346\240\270.md"
+?? "docs/pages/\347\237\245\350\257\206\347\251\272\351\227\264.md"
+?? src/capabilities/ai-interaction-qa.ts
+?? src/capabilities/ai-knowledge.ts
+?? src/capabilities/ai-model.ts
+?? src/capabilities/ai-prompt-tool.ts
+?? src/capabilities/ai-prompt.ts
+?? src/catalog/ai-contract.ts
+?? test/ai-interaction-qa.test.ts
+?? test/ai-knowledge.test.ts
+?? test/ai-model.test.ts
+?? test/ai-prompt-tool.test.ts
+?? test/ai-prompt.test.ts

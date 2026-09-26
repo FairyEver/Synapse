@@ -1,0 +1,107 @@
+{
+ "说明": "由 bsk 抓到的人工智能域「知识管理子域（知识空间 / 知识审核）」的真实浏览器请求（全部只读）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "先在门户首页装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到目标页 —— SPA 的同文档导航不会卸载钩子，页面挂载时那条真实请求会被完整抓到。（实测：portal.html 的**首次文档加载**会卡在门户自身的「正在加载数据」门禁上，必须先做一次预热 hash 导航把壳启起来，再装钩子、再改 hash 到目标页。）每页一个新会话；`_t` 已归一化为 `<ts>`；token/敏感 query 已由钩子脱敏为 `<redacted>`。",
+ "requests": [
+  {
+   "页面": "知识空间",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/sensitive/info?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "知识空间",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "知识空间",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/knowledgeFile/list?parentId=0&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "知识审核",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/review/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/sensitive/info?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "知识审核",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/review/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "知识审核",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/review/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/knowledgeChangeRecord/list?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "知识审核",
+   "pagePath": "/dashboard/platform/intelligence/knowledge/review/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/knowledgeChangeRecord/list?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  }
+ ]
+}

@@ -1,0 +1,76 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开**流程详情（办理）页** /dashboard/flow/form/detail 时捕获的真实浏览器请求。token 已在页面内脱敏，从未离开浏览器。本轮**没有任何写操作**——下面全部是只读请求。",
+  "捕获时间": "2026-09-21",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/detail?instanceId=75a0fd6e-acbc-11f1-b094-00505683dd67&formCustomCreatePath=simple/hr/form/035",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "task-action-instance / task-action-workflow-path",
+  "抓的是哪台实例": {
+    "processInstanceId": "75a0fd6e-acbc-11f1-b094-00505683dd67",
+    "processDefinitionKey": "hr_general_approval",
+    "为什么是它": "它是**当前账号自己发起**的、且还在跑的实例（待办列表里 startUserId = 自己、processInstance.status = 1）。抓基准必须有一台真实实例，而**不能**去开别人提交给真人的单据——别人的单据内容不进基准、也不进日志。它是账号主自己的单据，全程只读。"
+  },
+  "module-type": "推导不出来也不发：resolveModuleType('/dashboard/flow/form/detail') 在 generated/module-type-rules.json 的规则里一条都命中不了，浏览器实测同样**没有这个头**。与通用审批那条线（/dashboard/flow/form/edit）一致。",
+  "http 实例": "页面显式 import `app/portal/utils/http/platform.js`（flow/form/detail/index.vue:191），实测 URL 落成 /admin-api/…，baseURL 是调用方给的 host。",
+
+  "requests": [
+    {
+      "name": "1. 办理页挂载时读流程实例（getProcessInstance）",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-instance/get?id=75a0fd6e-acbc-11f1-b094-00505683dd67&_t=1789922269366",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "源码位置": "app/portal/views/dashboard/hr/flow/form/detail/index.vue:397-401",
+      "SDK 对应": "task-action-instance（GET /bpm/process-instance/get?id=）"
+    },
+    {
+      "name": "2. 办理页读审批链路（getTaskList）——「该我办的任务」就是从它算出来的",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/process-instance/getWorkflowPath?processInstanceId=75a0fd6e-acbc-11f1-b094-00505683dd67&_t=1789922269367",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "源码位置": "app/portal/views/dashboard/hr/flow/form/detail/index.vue:425-429",
+      "SDK 对应": "task-action-workflow-path（GET /bpm/process-instance/getWorkflowPath?processInstanceId=）"
+    },
+    {
+      "name": "3. 抄送人候选 —— ⚠️ 页面在这里**无关键字拉全量**，SDK 刻意不照抄",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/system/user/simple-page?pageNo=1&pageSize=500&_t=1789922191435",
+      "headers 的来历": "三个读的 header 集合是在同一天另一次会话里抓的（那条 URL 的 headers 没能同时抓到），两次实测的集合完全一致：tenant-id / token / Accept-Language / Accept，**都没有 module-type**。",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "源码位置": "flow/form/detail/index.vue:468 写的是 `http.get('/system/user/simple-list')`，而**真实抓到的是 `simple-page?pageNo=1&pageSize=500`**，而且是 `pageNo=1..N` **翻到底**（同一次挂载里抓到了 pageNo=1..8 连续多页，十几条请求）。两处都是「无关键字的大批量拉取」。",
+      "SDK 对应": "**故意没有对应**：task-action 的 searchUsers / 转办 / 委派 / 抄送人一律走 `/system/user/simple-page` + **强制 keyword**（拒绝 pageSize=-1），与 general-approval-user-search 同一套保护，理由见设计 D6 / H35。这是本能力**唯一一处刻意偏离浏览器**的地方。"
+    }
+  ],
+
+  "同类但不在本能力范围内的请求（同一次挂载里抓到的，记下来免得后人以为漏了）": [
+    "GET /admin-api/bpm/process-follow-up/capability?processInstanceId=… —— 「跟进」按钮的显隐",
+    "GET /admin-api/bpm/process-follow-up/list?processInstanceId=… —— 跟进记录列表",
+    "GET /admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=… —— 顶栏待办角标，不属于本页"
+  ],
+
+  "写请求：**本文件里一条都没有，因为它们抓不到**": {
+    "为什么": "页面上「通过 / 不通过 / 转办 / 委派 / 回退」这几个按钮**只在 `runningTasks` 非空时渲染**（`v-if=\"!onlyViewDetail\"` + `v-for=\"(item, index) in runningTasks\"`），而 `runningTasks` 只收「status 为 1 或 6、且 assigneeUser.id 是我」的任务。要抓它们，必须有一条**分配给我、且由我自己制造**的待办——而这条在单一账号下造不出来（自审规则会秒批，见下）。所以本文件的基准只覆盖**读**。",
+    "自审规则": "`BpmTaskServiceImpl.tryAutoApproveWhenStartUserIsAssignee()`：`startUserId == assignee` 时任务当场自动通过（理由文案「流程发起人与审批人相同，自动审核通过」）。本环境**实测在跑**（smoke/task-action.mjs 第 2.6 节：47 个未取消实例里命中 22 条该文案，其中一条正是 hr_general_approval 的「发起人自选2」、assignee = 本账号）。⇒ 自己提交 + 审批人填自己 = 流程进终态、单据撤不掉。",
+    "写请求形状的来源": "`app/portal/views/dashboard/hr/flow/form/detail/index.vue:499-539`（通过 / 不通过 / 转办 / 委派 / 回退）与 `app/portal/views/dashboard/hr/backlog/task-examine/batch-process/index.vue:219-264`（批量）。**它们是源码直读，不是网络抓包**——测试里的逐字节断言锁的是「实现 == 源码读出来的那份」，不是「实现 == 浏览器发过的那份」。这两件事不要混。",
+    "真实验证到什么程度": "smoke/task-action.mjs --probe-write：8 个读写端点各打一个**必然不存在的 task id**，后端一律回任务级错误 `1009005002 流程任务不存在`（而不是「任务编号不能为空」这类参数级错误）⇒ 路由、HTTP 方法、body 字段名都被后端读到了。**「办理成功」本身没有被验证过。**"
+  }
+}

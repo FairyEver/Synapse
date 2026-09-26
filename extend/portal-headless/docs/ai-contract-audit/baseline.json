@@ -1,0 +1,1531 @@
+{
+  "count": 305,
+  "pages": 103,
+  "capabilities": [
+    {
+      "id": "meeting-room-list",
+      "page": "/dashboard/meeting-room/list",
+      "path": "meetingRoom.list"
+    },
+    {
+      "id": "meeting-application-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "meetingApplication.definition"
+    },
+    {
+      "id": "meeting-room-usage",
+      "page": "/dashboard/flow/form/edit",
+      "path": "meetingApplication.roomUsage"
+    },
+    {
+      "id": "meeting-user-search",
+      "page": "/dashboard/flow/form/edit",
+      "path": "meetingApplication.searchUsers"
+    },
+    {
+      "id": "meeting-application-prepare",
+      "page": "/simple/hr/form/033",
+      "path": "meetingApplication.prepare"
+    },
+    {
+      "id": "meeting-application-submit",
+      "page": "/simple/hr/form/033",
+      "path": "meetingApplication.submitIdempotent"
+    },
+    {
+      "id": "meeting-application-cancel",
+      "page": "/simple/hr/form/033",
+      "path": "meetingApplication.cancelReservation"
+    },
+    {
+      "id": "attendance-archive-sheet-list",
+      "page": "/dashboard/attendance/attendance-archive-sheet/list",
+      "path": "attendanceArchive.list"
+    },
+    {
+      "id": "attendance-org-search",
+      "page": "/dashboard/attendance/attendance-archive-sheet/list",
+      "path": "attendanceArchive.searchOrganizations"
+    },
+    {
+      "id": "assignment-list",
+      "page": "/dashboard/assignment/assignment/list",
+      "path": "assignment.list"
+    },
+    {
+      "id": "assignment-get",
+      "page": "/dashboard/assignment/assignment/list",
+      "path": "assignment.get"
+    },
+    {
+      "id": "assignment-create",
+      "page": "/dashboard/assignment/assignment/list",
+      "path": "assignment.createIdempotent"
+    },
+    {
+      "id": "assignment-update",
+      "page": "/dashboard/assignment/assignment/list",
+      "path": "assignment.update"
+    },
+    {
+      "id": "assignment-set-status",
+      "page": "/dashboard/assignment/assignment/list",
+      "path": "assignment.setStatus"
+    },
+    {
+      "id": "assignment-remove",
+      "page": "/dashboard/assignment/assignment/list",
+      "path": "assignment.remove"
+    },
+    {
+      "id": "attendance-statistics-list",
+      "page": "/dashboard/attendance/attendance-sheet/list",
+      "path": "attendanceStatistics.list"
+    },
+    {
+      "id": "attendance-shift-list",
+      "page": "/dashboard/attendance/attendance-shift/list",
+      "path": "attendanceShift.list"
+    },
+    {
+      "id": "attendance-shift-get",
+      "page": "/dashboard/attendance/attendance-shift/list",
+      "path": "attendanceShift.get"
+    },
+    {
+      "id": "attendance-shift-create",
+      "page": "/dashboard/attendance/attendance-shift/list",
+      "path": "attendanceShift.createIdempotent"
+    },
+    {
+      "id": "attendance-shift-update",
+      "page": "/dashboard/attendance/attendance-shift/list",
+      "path": "attendanceShift.update"
+    },
+    {
+      "id": "attendance-shift-remove",
+      "page": "/dashboard/attendance/attendance-shift/list",
+      "path": "attendanceShift.remove"
+    },
+    {
+      "id": "attendance-team-list",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.list"
+    },
+    {
+      "id": "attendance-team-get",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.get"
+    },
+    {
+      "id": "attendance-team-create",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.createIdempotent"
+    },
+    {
+      "id": "attendance-team-update",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.update"
+    },
+    {
+      "id": "attendance-team-remove",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.remove"
+    },
+    {
+      "id": "attendance-team-schedule-get",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.scheduleGet"
+    },
+    {
+      "id": "attendance-team-schedule-save",
+      "page": "/dashboard/attendance/attendance-team/list",
+      "path": "attendanceTeam.scheduleSave"
+    },
+    {
+      "id": "backlog-task-examine-list",
+      "page": "/dashboard/backlog/task-examine/list",
+      "path": "backlogTaskExamine.list"
+    },
+    {
+      "id": "base-image-list",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.list"
+    },
+    {
+      "id": "base-image-get",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.get"
+    },
+    {
+      "id": "base-image-create",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.createIdempotent"
+    },
+    {
+      "id": "base-image-create-release",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.createReleaseIdempotent"
+    },
+    {
+      "id": "base-image-update",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.update"
+    },
+    {
+      "id": "base-image-set-status",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.setStatus"
+    },
+    {
+      "id": "base-image-remove",
+      "page": "/dashboard/base/image/list",
+      "path": "baseImage.remove"
+    },
+    {
+      "id": "base-management-center-list",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.list"
+    },
+    {
+      "id": "base-management-center-get",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.get"
+    },
+    {
+      "id": "base-management-center-check-status",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.checkStatus"
+    },
+    {
+      "id": "base-management-center-create",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.createIdempotent"
+    },
+    {
+      "id": "base-management-center-update",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.update"
+    },
+    {
+      "id": "base-management-center-set-status",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.setStatus"
+    },
+    {
+      "id": "base-management-center-remove",
+      "page": "/dashboard/base/management-center/list",
+      "path": "baseManagementCenter.remove"
+    },
+    {
+      "id": "contract-template-list",
+      "page": "/dashboard/contract/template/list",
+      "path": "contractTemplate.list"
+    },
+    {
+      "id": "contract-template-get",
+      "page": "/dashboard/contract/template/list",
+      "path": "contractTemplate.get"
+    },
+    {
+      "id": "contract-template-create",
+      "page": "/dashboard/contract/template/list",
+      "path": "contractTemplate.createIdempotent"
+    },
+    {
+      "id": "contract-template-update",
+      "page": "/dashboard/contract/template/list",
+      "path": "contractTemplate.update"
+    },
+    {
+      "id": "contract-template-remove",
+      "page": "/dashboard/contract/template/list",
+      "path": "contractTemplate.remove"
+    },
+    {
+      "id": "base-dept-search",
+      "page": "/base-data/dept-list",
+      "path": "baseData.searchDepartments"
+    },
+    {
+      "id": "base-dept-get",
+      "page": "/base-data/dept-list",
+      "path": "baseData.getDepartment"
+    },
+    {
+      "id": "base-dept-children",
+      "page": "/base-data/dept-list",
+      "path": "baseData.listDepartments"
+    },
+    {
+      "id": "base-dict-get",
+      "page": "/base-data/dict-list",
+      "path": "baseData.getDict"
+    },
+    {
+      "id": "base-dict-search",
+      "page": "/base-data/dict-list",
+      "path": "baseData.searchDictTypes"
+    },
+    {
+      "id": "base-dict-translate",
+      "page": "/base-data/dict-list",
+      "path": "baseData.translateDict"
+    },
+    {
+      "id": "base-permission-has",
+      "page": "/base-data/permission-list",
+      "path": "baseData.hasPermission"
+    },
+    {
+      "id": "base-permission-check",
+      "page": "/base-data/permission-list",
+      "path": "baseData.checkPermissions"
+    },
+    {
+      "id": "base-permission-search",
+      "page": "/base-data/permission-list",
+      "path": "baseData.searchPermissions"
+    },
+    {
+      "id": "base-upload-file",
+      "page": "common/utils/oss.js",
+      "path": "baseUpload.upload"
+    },
+    {
+      "id": "base-upload-acl-get",
+      "page": "common/utils/oss.js",
+      "path": "baseUpload.getAcl"
+    },
+    {
+      "id": "base-upload-delete",
+      "page": "common/utils/oss.js",
+      "path": "baseUpload.deleteObject"
+    },
+    {
+      "id": "base-upload-delete-multi",
+      "page": "common/utils/oss.js",
+      "path": "baseUpload.deleteMulti"
+    },
+    {
+      "id": "base-upload-acl-set",
+      "page": "common/utils/oss.js",
+      "path": "baseUpload.putAcl"
+    },
+    {
+      "id": "base-user-info",
+      "page": "/base-data/user-info",
+      "path": "baseShell.getUserInfo"
+    },
+    {
+      "id": "base-user-search",
+      "page": "/base-data/user-search",
+      "path": "baseShell.searchUsers"
+    },
+    {
+      "id": "base-todo-list",
+      "page": "/base-data/todo",
+      "path": "baseShell.listTodos"
+    },
+    {
+      "id": "base-todo-counts",
+      "page": "/base-data/todo",
+      "path": "baseShell.getTodoCounts"
+    },
+    {
+      "id": "base-menu-nav",
+      "page": "/base-data/menu-nav",
+      "path": "baseShell.getMenuNav"
+    },
+    {
+      "id": "base-menu-paths",
+      "page": "/base-data/menu-nav",
+      "path": "baseShell.listMenuPaths"
+    },
+    {
+      "id": "base-home-widgets",
+      "page": "/base-data/home-widgets",
+      "path": "baseShell.listHomeWidgets"
+    },
+    {
+      "id": "general-approval-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "generalApproval.definition"
+    },
+    {
+      "id": "general-approval-user-search",
+      "page": "/simple/hr/form/035",
+      "path": "generalApproval.searchUsers"
+    },
+    {
+      "id": "general-approval-prepare",
+      "page": "/simple/hr/form/035",
+      "path": "generalApproval.prepare"
+    },
+    {
+      "id": "general-approval-submit",
+      "page": "/simple/hr/form/035",
+      "path": "generalApproval.submitIdempotent"
+    },
+    {
+      "id": "general-approval-detail",
+      "page": "/simple/hr/form/035",
+      "path": "generalApproval.detail"
+    },
+    {
+      "id": "general-approval-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "generalApproval.myInstances"
+    },
+    {
+      "id": "general-approval-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "generalApproval.cancel"
+    },
+    {
+      "id": "base-tenant-list",
+      "page": "/base-data/tenant-list",
+      "path": "baseTenant.listTenants"
+    },
+    {
+      "id": "base-tenant-get",
+      "page": "/base-data/tenant-detail",
+      "path": "baseTenant.getTenant"
+    },
+    {
+      "id": "base-sale-shop-info",
+      "page": "/base-data/sale-shop",
+      "path": "baseSale.getShopInfo"
+    },
+    {
+      "id": "base-sale-area-search",
+      "page": "/base-data/sale-area",
+      "path": "baseSale.searchAreas"
+    },
+    {
+      "id": "base-sale-area-children",
+      "page": "/base-data/sale-area",
+      "path": "baseSale.listAreaChildren"
+    },
+    {
+      "id": "base-sale-area-describe",
+      "page": "/base-data/sale-area",
+      "path": "baseSale.describeAreas"
+    },
+    {
+      "id": "base-sale-manufacturer-search",
+      "page": "/base-data/sale-manufacturer",
+      "path": "baseSale.searchManufacturers"
+    },
+    {
+      "id": "base-sale-brand-search",
+      "page": "/base-data/sale-brand",
+      "path": "baseSale.searchBrands"
+    },
+    {
+      "id": "base-sale-home-tip",
+      "page": "/base-data/sale-home-tip",
+      "path": "baseSale.getHomeTip"
+    },
+    {
+      "id": "leave-application-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "leaveApplication.definition"
+    },
+    {
+      "id": "leave-application-profile",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.profile"
+    },
+    {
+      "id": "leave-application-types",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.types"
+    },
+    {
+      "id": "leave-application-year-rest",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.yearRest"
+    },
+    {
+      "id": "leave-application-duration",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.duration"
+    },
+    {
+      "id": "leave-application-prepare",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.prepare"
+    },
+    {
+      "id": "leave-application-submit",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.submitIdempotent"
+    },
+    {
+      "id": "leave-application-detail",
+      "page": "/simple/hr/form/005",
+      "path": "leaveApplication.detail"
+    },
+    {
+      "id": "leave-application-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "leaveApplication.myInstances"
+    },
+    {
+      "id": "leave-application-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "leaveApplication.cancel"
+    },
+    {
+      "id": "vehicle-application-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "vehicleApplication.definition"
+    },
+    {
+      "id": "vehicle-application-applicant-scope",
+      "page": "/simple/hr/form/031",
+      "path": "vehicleApplication.applicantScope"
+    },
+    {
+      "id": "vehicle-application-applicant-picker",
+      "page": "/simple/hr/form/031",
+      "path": "vehicleApplication.applicantPicker"
+    },
+    {
+      "id": "vehicle-application-approver-search",
+      "page": "/simple/hr/form/031",
+      "path": "vehicleApplication.approverSearch"
+    },
+    {
+      "id": "vehicle-application-prepare",
+      "page": "/simple/hr/form/031",
+      "path": "vehicleApplication.prepare"
+    },
+    {
+      "id": "vehicle-application-submit",
+      "page": "/simple/hr/form/031",
+      "path": "vehicleApplication.submitIdempotent"
+    },
+    {
+      "id": "vehicle-application-detail",
+      "page": "/simple/hr/form/031",
+      "path": "vehicleApplication.detail"
+    },
+    {
+      "id": "vehicle-application-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "vehicleApplication.myInstances"
+    },
+    {
+      "id": "vehicle-application-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "vehicleApplication.cancel"
+    },
+    {
+      "id": "travel-expense-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "travelExpense.definition"
+    },
+    {
+      "id": "travel-expense-org-options",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.orgOptions"
+    },
+    {
+      "id": "travel-expense-fee-items",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.feeItems"
+    },
+    {
+      "id": "travel-expense-dict-options",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.dictOptions"
+    },
+    {
+      "id": "travel-expense-area-options",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.areaOptions"
+    },
+    {
+      "id": "travel-expense-projects",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.projects"
+    },
+    {
+      "id": "travel-expense-travelers",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.travelers"
+    },
+    {
+      "id": "travel-expense-prepare",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.prepare"
+    },
+    {
+      "id": "travel-expense-submit",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.submitIdempotent"
+    },
+    {
+      "id": "travel-expense-detail",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.detail"
+    },
+    {
+      "id": "travel-expense-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "travelExpense.myInstances"
+    },
+    {
+      "id": "travel-expense-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "travelExpense.cancel"
+    },
+    {
+      "id": "travel-expense-payee-options",
+      "page": "/simple/finance/form/003",
+      "path": "travelExpense.payeeOptions"
+    },
+    {
+      "id": "product-design-approval-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "productDesignApproval.definition"
+    },
+    {
+      "id": "product-design-approval-user-search",
+      "page": "/simple/hr/form/045",
+      "path": "productDesignApproval.searchUsers"
+    },
+    {
+      "id": "product-design-approval-prepare",
+      "page": "/simple/hr/form/045",
+      "path": "productDesignApproval.prepare"
+    },
+    {
+      "id": "product-design-approval-preview",
+      "page": "/simple/hr/form/045",
+      "path": "productDesignApproval.preview"
+    },
+    {
+      "id": "product-design-approval-submit",
+      "page": "/simple/hr/form/045",
+      "path": "productDesignApproval.submitIdempotent"
+    },
+    {
+      "id": "product-design-approval-detail",
+      "page": "/simple/hr/form/045",
+      "path": "productDesignApproval.detail"
+    },
+    {
+      "id": "product-design-approval-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "productDesignApproval.myInstances"
+    },
+    {
+      "id": "product-design-approval-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "productDesignApproval.cancel"
+    },
+    {
+      "id": "task-action-instance",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.instance"
+    },
+    {
+      "id": "task-action-workflow-path",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.workflowPath"
+    },
+    {
+      "id": "task-action-approve",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.approve"
+    },
+    {
+      "id": "task-action-reject",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.reject"
+    },
+    {
+      "id": "task-action-transfer",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.transfer"
+    },
+    {
+      "id": "task-action-delegate",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.delegate"
+    },
+    {
+      "id": "task-action-return-options",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.returnOptions"
+    },
+    {
+      "id": "task-action-return",
+      "page": "/dashboard/flow/form/detail",
+      "path": "taskAction.returnTask"
+    },
+    {
+      "id": "task-action-batch-approve",
+      "page": "/dashboard/backlog/task-examine/batch-process",
+      "path": "taskAction.batchApprove"
+    },
+    {
+      "id": "task-action-batch-reject",
+      "page": "/dashboard/backlog/task-examine/batch-process",
+      "path": "taskAction.batchReject"
+    },
+    {
+      "id": "overtime-application-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "overtimeApplication.definition"
+    },
+    {
+      "id": "overtime-application-current-user",
+      "page": "/simple/hr/form/042",
+      "path": "overtimeApplication.currentUser"
+    },
+    {
+      "id": "overtime-application-approval-chain",
+      "page": "/simple/hr/form/042",
+      "path": "overtimeApplication.approvalChain"
+    },
+    {
+      "id": "overtime-application-prepare",
+      "page": "/simple/hr/form/042",
+      "path": "overtimeApplication.prepare"
+    },
+    {
+      "id": "overtime-application-submit",
+      "page": "/simple/hr/form/042",
+      "path": "overtimeApplication.submitIdempotent"
+    },
+    {
+      "id": "overtime-application-detail",
+      "page": "/simple/hr/form/042",
+      "path": "overtimeApplication.detail"
+    },
+    {
+      "id": "overtime-application-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "overtimeApplication.myInstances"
+    },
+    {
+      "id": "overtime-application-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "overtimeApplication.cancel"
+    },
+    {
+      "id": "rest-leave-application-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "restLeaveApplication.definition"
+    },
+    {
+      "id": "rest-leave-application-current-user",
+      "page": "/simple/hr/form/043",
+      "path": "restLeaveApplication.currentUser"
+    },
+    {
+      "id": "rest-leave-application-remaining-hours",
+      "page": "/simple/hr/form/043",
+      "path": "restLeaveApplication.remainingOvertimeHours"
+    },
+    {
+      "id": "rest-leave-application-approval-chain",
+      "page": "/simple/hr/form/043",
+      "path": "restLeaveApplication.approvalChain"
+    },
+    {
+      "id": "rest-leave-application-prepare",
+      "page": "/simple/hr/form/043",
+      "path": "restLeaveApplication.prepare"
+    },
+    {
+      "id": "rest-leave-application-submit",
+      "page": "/simple/hr/form/043",
+      "path": "restLeaveApplication.submitIdempotent"
+    },
+    {
+      "id": "rest-leave-application-detail",
+      "page": "/simple/hr/form/043",
+      "path": "restLeaveApplication.detail"
+    },
+    {
+      "id": "rest-leave-application-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "restLeaveApplication.myInstances"
+    },
+    {
+      "id": "rest-leave-application-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "restLeaveApplication.cancel"
+    },
+    {
+      "id": "business-trip-application-definition",
+      "page": "/dashboard/flow/form/edit",
+      "path": "businessTripApplication.definition"
+    },
+    {
+      "id": "business-trip-application-current-user",
+      "page": "/simple/hr/form/041",
+      "path": "businessTripApplication.currentUser"
+    },
+    {
+      "id": "business-trip-application-approval-chain",
+      "page": "/simple/hr/form/041",
+      "path": "businessTripApplication.approvalChain"
+    },
+    {
+      "id": "business-trip-application-prepare",
+      "page": "/simple/hr/form/041",
+      "path": "businessTripApplication.prepare"
+    },
+    {
+      "id": "business-trip-application-submit",
+      "page": "/simple/hr/form/041",
+      "path": "businessTripApplication.submitIdempotent"
+    },
+    {
+      "id": "business-trip-application-detail",
+      "page": "/simple/hr/form/041",
+      "path": "businessTripApplication.detail"
+    },
+    {
+      "id": "business-trip-application-my-instances",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "businessTripApplication.myInstances"
+    },
+    {
+      "id": "business-trip-application-cancel",
+      "page": "/dashboard/flow/task/my/list",
+      "path": "businessTripApplication.cancel"
+    },
+    {
+      "id": "study-course-text-list",
+      "page": "/dashboard/course/text-course/list",
+      "path": "studyCourse.listText"
+    },
+    {
+      "id": "study-course-video-list",
+      "page": "/dashboard/course/video-course/list",
+      "path": "studyCourse.listVideo"
+    },
+    {
+      "id": "study-course-im-list",
+      "page": "/dashboard/course/im-course/list",
+      "path": "studyCourse.listIm"
+    },
+    {
+      "id": "study-student-list",
+      "page": "/dashboard/base/student/list",
+      "path": "studyStudent.list"
+    },
+    {
+      "id": "study-student-check-in-grade",
+      "page": "/dashboard/base/student/list",
+      "path": "studyStudent.checkInGrade"
+    },
+    {
+      "id": "study-grade-list",
+      "page": "/dashboard/grade/grade/list",
+      "path": "studyGrade.list"
+    },
+    {
+      "id": "study-grade-search",
+      "page": "/dashboard/grade/grade/list",
+      "path": "studyGrade.searchByKeyword"
+    },
+    {
+      "id": "study-lesson-daily-list",
+      "page": "/dashboard/lesson/daily-lesson/list",
+      "path": "studyLesson.listDaily"
+    },
+    {
+      "id": "study-lesson-weekly-list",
+      "page": "/dashboard/lesson/weekly-lesson/list",
+      "path": "studyLesson.listWeekly"
+    },
+    {
+      "id": "study-lesson-monthly-list",
+      "page": "/dashboard/lesson/monthly-lesson/list",
+      "path": "studyLesson.listMonthly"
+    },
+    {
+      "id": "study-record-list",
+      "page": "/dashboard/study/study/list",
+      "path": "studyRecord.list"
+    },
+    {
+      "id": "study-statistics-student-list",
+      "page": "/dashboard/statistics/student/list",
+      "path": "studyStatistics.listStudents"
+    },
+    {
+      "id": "study-statistics-teacher-list",
+      "page": "/dashboard/statistics/teacher/list",
+      "path": "studyStatistics.listTeachers"
+    },
+    {
+      "id": "study-statistics-lesson-list",
+      "page": "/dashboard/statistics/lesson/list",
+      "path": "studyStatistics.listLessons"
+    },
+    {
+      "id": "study-statistics-grade-list",
+      "page": "/dashboard/statistics/grade/list",
+      "path": "studyStatistics.listGradeLessons"
+    },
+    {
+      "id": "study-statistics-learning-summary",
+      "page": "/dashboard/statistics/learning/list",
+      "path": "studyStatistics.learningSummary"
+    },
+    {
+      "id": "study-teacher-list",
+      "page": "/dashboard/base/teacher/list",
+      "path": "studyTeacher.list"
+    },
+    {
+      "id": "study-teacher-level-list",
+      "page": "/dashboard/base/teacher-level/list",
+      "path": "studyTeacher.listLevels"
+    },
+    {
+      "id": "study-appraise-setting-list",
+      "page": "/dashboard/base/teacher-appraise-setting/list",
+      "path": "studyTeacher.listAppraiseSettings"
+    },
+    {
+      "id": "perf-agreement-change-list",
+      "page": "/dashboard/agreement-change/main/list",
+      "path": "perfAgreement.listAgreementChange"
+    },
+    {
+      "id": "perf-month-agreement-list",
+      "page": "/dashboard/month-agreement/main/list",
+      "path": "perfAgreement.listMonthAgreements"
+    },
+    {
+      "id": "perf-month-agreement-others-list",
+      "page": "/dashboard/month-agreement/others/list",
+      "path": "perfAgreement.listMonthAgreementsOthers"
+    },
+    {
+      "id": "perf-year-agreement-list",
+      "page": "/dashboard/year-agreement/main/list",
+      "path": "perfAgreement.listYearAgreements"
+    },
+    {
+      "id": "perf-year-agreement-others-list",
+      "page": "/dashboard/year-agreement/others/list",
+      "path": "perfAgreement.listYearAgreementsOthers"
+    },
+    {
+      "id": "perf-year-protocol-config-get",
+      "page": "/dashboard/year-agreement/main/list",
+      "path": "perfAgreement.getYearProtocolConfig"
+    },
+    {
+      "id": "perf-manage-formula-definition-list",
+      "page": "/dashboard/manage/formula-definition/list",
+      "path": "perfManageConfig.listFormulaDefinitions"
+    },
+    {
+      "id": "perf-manage-indicator-list",
+      "page": "/dashboard/manage/indicator/list",
+      "path": "perfManageConfig.listIndicators"
+    },
+    {
+      "id": "perf-manage-insurance-list",
+      "page": "/dashboard/manage/insurance/list",
+      "path": "perfManageConfig.listInsuranceFunds"
+    },
+    {
+      "id": "perf-manage-standard-list",
+      "page": "/dashboard/manage/standard/list",
+      "path": "perfManageConfig.listStandards"
+    },
+    {
+      "id": "perf-manage-protocol-config-read",
+      "page": "/dashboard/manage/protocol-configuration/list",
+      "path": "perfManageConfig.readProtocolConfig"
+    },
+    {
+      "id": "perf-manage-protocol-deduct-rule-list",
+      "page": "/dashboard/manage/protocol-deduct-rule/list",
+      "path": "perfManageConfig.listProtocolDeductRules"
+    },
+    {
+      "id": "perf-manage-profit-list",
+      "page": "/dashboard/manage/profit/list",
+      "path": "perfManageTemplate.listProfits"
+    },
+    {
+      "id": "perf-manage-salary-structure-list",
+      "page": "/dashboard/manage/salary-structure/list",
+      "path": "perfManageTemplate.listSalaryStructures"
+    },
+    {
+      "id": "perf-manage-template-content-list",
+      "page": "/dashboard/manage/template-content/list",
+      "path": "perfManageTemplate.listTemplateContents"
+    },
+    {
+      "id": "perf-manage-template-structure-list",
+      "page": "/dashboard/manage/template-structure/list",
+      "path": "perfManageTemplate.listTemplateStructures"
+    },
+    {
+      "id": "perf-manage-study-task-config-get",
+      "page": "/dashboard/manage/study-task-config/list",
+      "path": "perfManageTemplate.getStudyTaskConfig"
+    },
+    {
+      "id": "perf-manage-task-type-config-list",
+      "page": "/dashboard/manage/task-type-config/list",
+      "path": "perfManageTemplate.listTaskTypeConfigs"
+    },
+    {
+      "id": "perf-salary-main-list",
+      "page": "/dashboard/salary/main/list",
+      "path": "perfSalary.listSalaryMain"
+    },
+    {
+      "id": "perf-salary-adjust-list",
+      "page": "/dashboard/salary/adjust/list",
+      "path": "perfSalary.listSalaryAdjust"
+    },
+    {
+      "id": "perf-salary-examine-result-list",
+      "page": "/dashboard/salary/examine-result/list",
+      "path": "perfSalary.listSalaryExamineResult"
+    },
+    {
+      "id": "perf-block-main-list",
+      "page": "/dashboard/block/main/list",
+      "path": "perfSalary.listBlockMain"
+    },
+    {
+      "id": "perf-analysis-department-summary",
+      "page": "/dashboard/analysis/department/list",
+      "path": "perfSalary.getAnalysisDepartmentSummary"
+    },
+    {
+      "id": "perf-analysis-department-self-check",
+      "page": "/dashboard/analysis/department/list",
+      "path": "perfSalary.listAnalysisDepartmentSelfCheck"
+    },
+    {
+      "id": "perf-analysis-person-summary",
+      "page": "/dashboard/analysis/person/list",
+      "path": "perfSalary.getAnalysisPersonSummary"
+    },
+    {
+      "id": "flow-task-create-definitions",
+      "page": "/dashboard/flow/task/create/list",
+      "path": "flowTask.listDefinitions"
+    },
+    {
+      "id": "flow-task-todo-list",
+      "page": "/dashboard/flow/task/todo/list",
+      "path": "flowTask.listTodo"
+    },
+    {
+      "id": "flow-task-done-list",
+      "page": "/dashboard/flow/task/done/list",
+      "path": "flowTask.listDone"
+    },
+    {
+      "id": "flow-task-copy-list",
+      "page": "/dashboard/flow/task/copy/list",
+      "path": "flowTask.listCopy"
+    },
+    {
+      "id": "flow-manage-model-list",
+      "page": "/dashboard/flow/old/model/list",
+      "path": "flowManage.listModels"
+    },
+    {
+      "id": "flow-manage-ai-review-config-list",
+      "page": "/dashboard/flow/ai-review-config/list",
+      "path": "flowManage.listAiReviewConfigs"
+    },
+    {
+      "id": "flow-manage-process-instance-list",
+      "page": "/dashboard/flow/process-instance/manager/list",
+      "path": "flowManage.listProcessInstances"
+    },
+    {
+      "id": "flow-manage-task-list",
+      "page": "/dashboard/flow/task/manager/list",
+      "path": "flowManage.listFlowTasks"
+    },
+    {
+      "id": "ai-knowledge-workspace-list",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.listChildren"
+    },
+    {
+      "id": "ai-knowledge-workspace-permission-get",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.getPermission"
+    },
+    {
+      "id": "ai-knowledge-workspace-create",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.createFolder"
+    },
+    {
+      "id": "ai-knowledge-workspace-rename",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.rename"
+    },
+    {
+      "id": "ai-knowledge-workspace-move",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.move"
+    },
+    {
+      "id": "ai-knowledge-workspace-remove",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.remove"
+    },
+    {
+      "id": "ai-knowledge-workspace-set-permission",
+      "page": "/dashboard/platform/intelligence/knowledge/document/workspace/list",
+      "path": "aiKnowledge.setPermission"
+    },
+    {
+      "id": "ai-knowledge-review-list",
+      "page": "/dashboard/platform/intelligence/knowledge/review/list",
+      "path": "aiKnowledge.listRecords"
+    },
+    {
+      "id": "ai-knowledge-review-audit",
+      "page": "/dashboard/platform/intelligence/knowledge/review/list",
+      "path": "aiKnowledge.audit"
+    },
+    {
+      "id": "ai-interaction-hot-topics-list",
+      "page": "/dashboard/platform/intelligence/interaction/hotTopics/list",
+      "path": "aiInteractionQa.listHotQuestions"
+    },
+    {
+      "id": "ai-interaction-hot-question-create",
+      "page": "/dashboard/platform/intelligence/interaction/hotTopics/list",
+      "path": "aiInteractionQa.createHotQuestion"
+    },
+    {
+      "id": "ai-interaction-hot-question-update",
+      "page": "/dashboard/platform/intelligence/interaction/hotTopics/list",
+      "path": "aiInteractionQa.updateHotQuestion"
+    },
+    {
+      "id": "ai-interaction-hot-question-remove",
+      "page": "/dashboard/platform/intelligence/interaction/hotTopics/list",
+      "path": "aiInteractionQa.removeHotQuestions"
+    },
+    {
+      "id": "ai-interaction-chat-list",
+      "page": "/dashboard/platform/intelligence/interaction/questionsAndAnswersDetails/list",
+      "path": "aiInteractionQa.listChats"
+    },
+    {
+      "id": "ai-interaction-chat-get",
+      "page": "/dashboard/platform/intelligence/interaction/questionsAndAnswersDetails/list",
+      "path": "aiInteractionQa.getChatRow"
+    },
+    {
+      "id": "ai-interaction-chat-set-display",
+      "page": "/dashboard/platform/intelligence/interaction/questionsAndAnswersDetails/list",
+      "path": "aiInteractionQa.setChatDisplay"
+    },
+    {
+      "id": "ai-interaction-chat-convert-hot",
+      "page": "/dashboard/platform/intelligence/interaction/questionsAndAnswersDetails/list",
+      "path": "aiInteractionQa.convertChatToHot"
+    },
+    {
+      "id": "ai-interaction-sensitive-word-list",
+      "page": "/dashboard/platform/intelligence/interaction/sensitiveWordWhitelist/list",
+      "path": "aiInteractionQa.listWhitelist"
+    },
+    {
+      "id": "ai-interaction-sensitive-word-check",
+      "page": "/dashboard/platform/intelligence/interaction/sensitiveWordWhitelist/list",
+      "path": "aiInteractionQa.checkSensitiveWords"
+    },
+    {
+      "id": "ai-interaction-sensitive-word-create",
+      "page": "/dashboard/platform/intelligence/interaction/sensitiveWordWhitelist/list",
+      "path": "aiInteractionQa.createWhitelistWord"
+    },
+    {
+      "id": "ai-interaction-sensitive-word-update",
+      "page": "/dashboard/platform/intelligence/interaction/sensitiveWordWhitelist/list",
+      "path": "aiInteractionQa.updateWhitelistWord"
+    },
+    {
+      "id": "ai-interaction-sensitive-word-remove",
+      "page": "/dashboard/platform/intelligence/interaction/sensitiveWordWhitelist/list",
+      "path": "aiInteractionQa.removeWhitelistWords"
+    },
+    {
+      "id": "ai-interaction-feedback-list",
+      "page": "/dashboard/platform/intelligence/interaction/feedback/list",
+      "path": "aiInteractionQa.listFeedback"
+    },
+    {
+      "id": "ai-model-list",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.listModels"
+    },
+    {
+      "id": "ai-model-detail",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.getModel"
+    },
+    {
+      "id": "ai-model-available-list",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.listAvailableModels"
+    },
+    {
+      "id": "ai-model-save",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.saveModel"
+    },
+    {
+      "id": "ai-model-delete",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.deleteModel"
+    },
+    {
+      "id": "ai-model-test",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.testModelConnectivity"
+    },
+    {
+      "id": "ai-model-quota-rule-list",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.listQuotaRules"
+    },
+    {
+      "id": "ai-model-quota-rule-save",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.saveQuotaRule"
+    },
+    {
+      "id": "ai-model-quota-rule-delete",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.deleteQuotaRule"
+    },
+    {
+      "id": "ai-model-flow-rule-list",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.listFlowRules"
+    },
+    {
+      "id": "ai-model-flow-rule-save",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.saveFlowRule"
+    },
+    {
+      "id": "ai-model-flow-rule-delete",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.deleteFlowRule"
+    },
+    {
+      "id": "ai-model-rule-history",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.listRuleHistory"
+    },
+    {
+      "id": "ai-model-apply-record-list",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.listApplyRecords"
+    },
+    {
+      "id": "ai-model-apply-pending-count",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.getPendingApplyCount"
+    },
+    {
+      "id": "ai-model-apply-handle",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.handleApply"
+    },
+    {
+      "id": "ai-model-search-user",
+      "page": "/dashboard/platform/intelligence/interaction/model/list",
+      "path": "aiModel.searchUsers"
+    },
+    {
+      "id": "ai-model-selection-list",
+      "page": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+      "path": "aiModel.listModelSelections"
+    },
+    {
+      "id": "ai-model-selection-detail",
+      "page": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+      "path": "aiModel.getModelSelection"
+    },
+    {
+      "id": "ai-model-selection-save",
+      "page": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+      "path": "aiModel.saveModelSelection"
+    },
+    {
+      "id": "ai-model-selection-delete",
+      "page": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+      "path": "aiModel.deleteModelSelection"
+    },
+    {
+      "id": "platform-usage-quota-list",
+      "page": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+      "path": "aiModel.listPlatformQuota"
+    },
+    {
+      "id": "platform-usage-quota-summary",
+      "page": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+      "path": "aiModel.getPlatformQuotaSummary"
+    },
+    {
+      "id": "platform-usage-usage-list",
+      "page": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+      "path": "aiModel.listPlatformUsageRecords"
+    },
+    {
+      "id": "platform-usage-usage-analytics",
+      "page": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+      "path": "aiModel.platformUsageAnalytics"
+    },
+    {
+      "id": "platform-usage-usage-detail",
+      "page": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+      "path": "aiModel.getPlatformUsageDetail"
+    },
+    {
+      "id": "platform-usage-function-module-list",
+      "page": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+      "path": "aiModel.listFunctionModules"
+    },
+    {
+      "id": "data-analysis-overview",
+      "page": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+      "path": "aiModel.dataAnalysisOverview"
+    },
+    {
+      "id": "ai-prompt-tip-type-list",
+      "page": "/dashboard/platform/intelligence/prompt/type/list",
+      "path": "aiPrompt.listTipTypes"
+    },
+    {
+      "id": "ai-prompt-tip-type-get",
+      "page": "/dashboard/platform/intelligence/prompt/type/list",
+      "path": "aiPrompt.getTipType"
+    },
+    {
+      "id": "ai-prompt-tip-type-options",
+      "page": "/dashboard/platform/intelligence/prompt/type/list",
+      "path": "aiPrompt.listTipTypeOptions"
+    },
+    {
+      "id": "ai-prompt-tip-type-create",
+      "page": "/dashboard/platform/intelligence/prompt/type/list",
+      "path": "aiPrompt.createTipType"
+    },
+    {
+      "id": "ai-prompt-tip-type-update",
+      "page": "/dashboard/platform/intelligence/prompt/type/list",
+      "path": "aiPrompt.updateTipType"
+    },
+    {
+      "id": "ai-prompt-tip-type-remove",
+      "page": "/dashboard/platform/intelligence/prompt/type/list",
+      "path": "aiPrompt.removeTipType"
+    },
+    {
+      "id": "ai-prompt-skill-list",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.listSkills"
+    },
+    {
+      "id": "ai-prompt-skill-get",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.getSkill"
+    },
+    {
+      "id": "ai-prompt-skill-preview",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.previewSkill"
+    },
+    {
+      "id": "ai-prompt-skill-prepare",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.prepareSkillReview"
+    },
+    {
+      "id": "ai-prompt-skill-submit",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.submitSkillSave"
+    },
+    {
+      "id": "ai-prompt-skill-remove",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.cancelSkillSave"
+    },
+    {
+      "id": "ai-prompt-skill-card-list",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.listSkillCards"
+    },
+    {
+      "id": "ai-prompt-skill-model-options",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.listAvailableModels"
+    },
+    {
+      "id": "ai-prompt-skill-interface-search",
+      "page": "/dashboard/platform/intelligence/prompt/prompt/list",
+      "path": "aiPrompt.searchSkillInterfaces"
+    },
+    {
+      "id": "ai-prompt-intent-list",
+      "page": "/dashboard/platform/intelligence/prompt/intent/list",
+      "path": "aiPrompt.listIntents"
+    },
+    {
+      "id": "ai-prompt-intent-get",
+      "page": "/dashboard/platform/intelligence/prompt/intent/list",
+      "path": "aiPrompt.getIntent"
+    },
+    {
+      "id": "ai-prompt-intent-template-search",
+      "page": "/dashboard/platform/intelligence/prompt/intent/list",
+      "path": "aiPrompt.searchIntentTemplates"
+    },
+    {
+      "id": "ai-prompt-intent-create",
+      "page": "/dashboard/platform/intelligence/prompt/intent/list",
+      "path": "aiPrompt.createIntent"
+    },
+    {
+      "id": "ai-prompt-intent-update",
+      "page": "/dashboard/platform/intelligence/prompt/intent/list",
+      "path": "aiPrompt.updateIntent"
+    },
+    {
+      "id": "ai-prompt-intent-remove",
+      "page": "/dashboard/platform/intelligence/prompt/intent/list",
+      "path": "aiPrompt.removeIntent"
+    },
+    {
+      "id": "ai-business-event-list",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.list"
+    },
+    {
+      "id": "ai-business-event-get",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.get"
+    },
+    {
+      "id": "ai-business-event-available-skill-list",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.listAvailableSkills"
+    },
+    {
+      "id": "ai-business-event-record-list",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.listRecords"
+    },
+    {
+      "id": "ai-business-event-record-get",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.getRecord"
+    },
+    {
+      "id": "ai-business-event-create",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.prepareCreate"
+    },
+    {
+      "id": "ai-business-event-update",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.prepareUpdate"
+    },
+    {
+      "id": "ai-business-event-set-enabled",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.prepareSetEnabled"
+    },
+    {
+      "id": "ai-business-event-remove",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.prepareRemove"
+    },
+    {
+      "id": "ai-business-event-record-retry",
+      "page": "/dashboard/platform/intelligence/prompt/business-event/list",
+      "path": "aiPromptTool.businessEvent.prepareRecordRetry"
+    },
+    {
+      "id": "ai-open-api-registry-list",
+      "page": "/dashboard/platform/intelligence/prompt/interface/list",
+      "path": "aiPromptTool.openApiRegistry.list"
+    },
+    {
+      "id": "ai-open-api-registry-get",
+      "page": "/dashboard/platform/intelligence/prompt/interface/list",
+      "path": "aiPromptTool.openApiRegistry.get"
+    },
+    {
+      "id": "ai-open-api-registry-scan",
+      "page": "/dashboard/platform/intelligence/prompt/interface/list",
+      "path": "aiPromptTool.openApiRegistry.scan"
+    },
+    {
+      "id": "ai-open-api-registry-create",
+      "page": "/dashboard/platform/intelligence/prompt/interface/list",
+      "path": "aiPromptTool.openApiRegistry.prepareCreate"
+    },
+    {
+      "id": "ai-open-api-registry-update",
+      "page": "/dashboard/platform/intelligence/prompt/interface/list",
+      "path": "aiPromptTool.openApiRegistry.prepareUpdate"
+    },
+    {
+      "id": "ai-open-api-registry-remove",
+      "page": "/dashboard/platform/intelligence/prompt/interface/list",
+      "path": "aiPromptTool.openApiRegistry.prepareRemove"
+    },
+    {
+      "id": "ai-prompt-template-binding-list",
+      "page": "/dashboard/platform/intelligence/prompt/template/list",
+      "path": "aiPromptTool.templateBinding.list"
+    },
+    {
+      "id": "ai-prompt-template-binding-get",
+      "page": "/dashboard/platform/intelligence/prompt/template/list",
+      "path": "aiPromptTool.templateBinding.get"
+    },
+    {
+      "id": "ai-prompt-template-binding-create",
+      "page": "/dashboard/platform/intelligence/prompt/template/list",
+      "path": "aiPromptTool.templateBinding.prepareCreate"
+    },
+    {
+      "id": "ai-prompt-template-binding-update",
+      "page": "/dashboard/platform/intelligence/prompt/template/list",
+      "path": "aiPromptTool.templateBinding.prepareUpdate"
+    },
+    {
+      "id": "ai-prompt-template-binding-remove",
+      "page": "/dashboard/platform/intelligence/prompt/template/list",
+      "path": "aiPromptTool.templateBinding.prepareRemove"
+    }
+  ]
+}

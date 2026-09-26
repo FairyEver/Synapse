@@ -1,0 +1,82 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 的作业管理页面上真实操作一遍写链路（新建 → 改状态 → 删除 → 打开编辑页）时捕获的浏览器真实请求。token 已在页面内脱敏。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/assignment/assignment/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "模块类型": "12（module-type 头，见 baseline/assignment-list.browser.json 的备注里那条 cookie 依赖）",
+  "请求": [
+    {
+      "能力": "assignment-create",
+      "动作": "点「新建」 → 填作业名称 / 作业要求 / 作业类型=文字 / 作业提交截止时间 → 点「保存」",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/assignment/studyassignment",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"title\":\"SDK-TEST-作业管理-写基准\",\"demand\":\"SDK-TEST 浏览器写基准，可删除\",\"type\":4,\"endTime\":\"2026-09-30 21:19:10\",\"isUploadAnswer\":0,\"answerType\":\"\",\"answerPublishTime\":null,\"imageAnswer\":[],\"fileAnswer\":\"\",\"fileAnswerName\":\"\",\"videoAnswer\":\"\",\"textAnswer\":\"\",\"isUploadCore\":\"\",\"coreType\":\"\",\"corePublishTime\":null,\"imageCore\":[],\"fileCore\":\"\",\"fileCoreName\":\"\",\"videoCores\":\"\",\"textCore\":\"\",\"isSelfScoring\":0,\"selfScoringEndTime\":null,\"isTeacherCheck\":0,\"scoreType\":\"\"}"
+    },
+    {
+      "能力": "assignment-get",
+      "动作": "在列表行上点「编辑」时，编辑页的 customLoad 打的详情请求",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/assignment/studyassignment/1072?_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "id 在**路径段**上，不在 query 上。"
+    },
+    {
+      "能力": "assignment-set-status",
+      "动作": "在列表行上点「更多操作 → 禁用」，确认前的 PUT（该行当时的 status 是 1）",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/assignment/studyassignment",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":\"1071\",\"status\":0}",
+      "备注": [
+        "id 是**字符串**：后端把 Long 序列化成字符串，页面的 record.id 就是 \"1071\"，回传时原样带回去。",
+        "status 是**目标值**不是切换值——页面在客户端算好 record.status === 0 ? 1 : 0 再发。"
+      ]
+    },
+    {
+      "能力": "assignment-remove",
+      "动作": "在列表行上点「删除」→ 确认弹层点「删 除」",
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/assignment/studyassignment",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "[\"1071\"]",
+      "备注": "id 数组在**请求体**里，不是 `${deleteURL}/${id}`——页面用自己的 actionDelete 覆盖了 renren 的通用删除。"
+    }
+  ],
+  "产生与撤销": {
+    "新建的记录": "浏览器共建过 3 条（id 1070 / 1071 / 1072），每一条都在同一轮里删掉了，测试环境没有留下任何 SDK-TEST- 前缀的残留",
+    "删除方式": "列表行 → 删除 → 确认弹层"
+  }
+}

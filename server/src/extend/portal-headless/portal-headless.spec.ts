@@ -7,7 +7,7 @@ import { PortalHeadlessController } from "./portal-headless.controller"
 
 vi.mock("../../config/env", () => ({ loadEnv: () => ({ userAccessJwtSecret: "synthetic-sy-test-secret-not-real" }) }))
 let sdk: PortalSdk
-beforeAll(async () => { sdk = await import("portal-headless") })
+beforeAll(async () => { sdk = await import("@synapse/portal-headless") })
 const identity = { owner: "owner-one", credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
 function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]> } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []

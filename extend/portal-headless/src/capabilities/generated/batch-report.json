@@ -1,0 +1,2619 @@
+{
+  "生成物": "src/capabilities/generated/**",
+  "生成器": "tools/generate/batch-capabilities.mjs",
+  "输入": {
+    "portalRepo": "/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js",
+    "pageCatalog": "generated/page-catalog.json"
+  },
+  "实例推导器": {
+    "来源": "src/context/http-instance.ts 的 resolveHttpInstance()（本脚本只消费结论，不另写一份）",
+    "实例总数": 17,
+    "范围内实例": "platform",
+    "范围依据": "决策 D3：只做 Portal 主后端"
+  },
+  "口径说明": {
+    "裁决（auto/partial/failed）": "只看\"这页的路径与参数契约抽不抽得出来\"，**不计 http 实例**。上一轮报告的 136 / 115 / 4 就是这个口径，原样保留在上面的键里以便追溯。",
+    "范围（in-scope / out-of-scope）": "走 platform 实例 = 范围内；走别的实例 = 范围外。范围外的页面不是\"待补\"，是范围决策的结果——除非 D3 改了，人补再多也不会变成能接的能力。",
+    "参数 kind（控件判据）": "kind 的判据是**页面上的控件**（源码模板里写的是 a-input 还是 a-select），不是表单初值的类型（判据与出处见生成器 §2.4）。判得出来的写死；判不出来的（最典型：下拉的候选规模——实测同类下拉从 6 条到 922 条都有，而它决定该是 enum 还是 search/tree）写进 `unresolved`，**不拿一个看起来很确定的 kind 蒙过去**。这一维度与「裁决」「范围」都正交：一页可以既 auto 又有要人补的参数。"
+  },
+  "抽样页数": 20,
+  "抽样依据": [
+    {
+      "pagePath": "/dashboard/meeting-room/list",
+      "stratum": "A:绝对 /admin-api + 已有浏览器基准（锚点）"
+    },
+    {
+      "pagePath": "/dashboard/platform/intelligence/prompt/intent/list",
+      "stratum": "A:绝对 /admin-api（平台域，最容易的一类）"
+    },
+    {
+      "pagePath": "/dashboard/platform/intelligence/prompt/type/list",
+      "stratum": "A:绝对 /admin-api（平台域）"
+    },
+    {
+      "pagePath": "/dashboard/org/org-propType/list",
+      "stratum": "A:绝对 /admin-api（最\"容易\"的一类，136 个 auto 的代表）"
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-sheet/list",
+      "stratum": "A:相对 /org/... 需补 /admin-api 前缀"
+    },
+    {
+      "pagePath": "/dashboard/assignment/assignment/list",
+      "stratum": "A:相对 + D:convertFetchForm + C:日期区间"
+    },
+    {
+      "pagePath": "/dashboard/platform/activity/monitor/list",
+      "stratum": "A:/mall-manage-api 透传 + C:null 值 + C:运行时三元表达式"
+    },
+    {
+      "pagePath": "/dashboard/platform/category/classify/sort/list",
+      "stratum": "A:/mall-manage-api 透传 + D:getDataListIsPage 缺省（不分页）"
+    },
+    {
+      "pagePath": "/dashboard/platform/goods/distribution/list",
+      "stratum": "A:/mall-manage-api + C:computed() 包裹的 form"
+    },
+    {
+      "pagePath": "/dashboard/sale/customer-service/after-sale/list",
+      "stratum": "A:/admin/... 需补前缀（店务路径）"
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/classification/list",
+      "stratum": "B:文件 import sale.js（base 不同） + D:getDataListIsPage 缺省"
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/distribution/list",
+      "stratum": "A:漏写前导斜杠的 admin/..."
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/logistics-company/list",
+      "stratum": "D:getDataListIsPage: false"
+    },
+    {
+      "pagePath": "/dashboard/platform/setting/category-dict/list",
+      "stratum": "A:模板串（常量）+ D:getDataListIsPage 缺省"
+    },
+    {
+      "pagePath": "/dashboard/sale/shop/apply-cat/list",
+      "stratum": "A:模板串（运行时变量 shopInfo.shopId）——预期抽不出"
+    },
+    {
+      "pagePath": "/dashboard/course/text-course/list",
+      "stratum": "A:URL 自带 query string + D:convertFetchForm"
+    },
+    {
+      "pagePath": "/dashboard/platform/report/sale/trade/list",
+      "stratum": "A:/mall-manage-api + C:computed() + D:getDataListIsPage 缺省"
+    },
+    {
+      "pagePath": "/dashboard/manage/insurance/list",
+      "stratum": "C:computed() 包裹的 form"
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/cat-map/list",
+      "stratum": "D:getDataListIsPage: false + A:绝对 /admin-api"
+    },
+    {
+      "pagePath": "/dashboard/flow/old/model/list",
+      "stratum": "D:fieldNamePageSize 单页覆盖成 limit（真的改掉了参数名）"
+    }
+  ],
+  "抽样判定": {
+    "total": 20,
+    "auto": 10,
+    "partial": 9,
+    "failed": 1,
+    "partialKind": {
+      "contract": 2,
+      "base": 3,
+      "path": 1,
+      "defaults": 3
+    },
+    "失败原因": {
+      "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_S": 1
+    }
+  },
+  "全量外推（240 个声明式列表页同一条代码路径）": {
+    "total": 240,
+    "auto": 122,
+    "partial": 114,
+    "failed": 4,
+    "partialKind": {
+      "contract": 72,
+      "base": 16,
+      "path": 1,
+      "defaults": 25
+    },
+    "失败原因": {
+      "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_S": 4
+    }
+  },
+  "全量外推·按 http 实例范围拆分": {
+    "口径": "计 http 实例与固定菜单范围；走 platform 为后端范围内，included + callable 为菜单保留范围。",
+    "页数": 240,
+    "范围内": 213,
+    "范围外": 27,
+    "实例未解出": 0,
+    "按实例": {
+      "platform": 213,
+      "crm": 1,
+      "sale": 26
+    },
+    "裁决内拆分": {
+      "auto": {
+        "范围内": 122,
+        "范围外": 0
+      },
+      "partial": {
+        "范围内": 91,
+        "范围外": 23
+      },
+      "failed": {
+        "范围内": 0,
+        "范围外": 4
+      }
+    },
+    "可接_范围内且auto": 122,
+    "SDK可接_范围内且菜单保留且auto": 57,
+    "范围外明细": [
+      {
+        "pagePath": "/dashboard/platform/market/market/todo/list",
+        "verdict": "partial",
+        "httpInstance": "crm",
+        "httpModule": "crm.js",
+        "baseUrlEnv": "VITE_CRM_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/customer-service/after-sale-evaluation/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/customer-service/after-sale/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/customer-service/appeal/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/customer-service/evaluation-overview/list",
+        "verdict": "failed",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/customer-service/evaluation/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/additional-service/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/classification/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/distribution/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/image/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/manage/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/sales-area/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/marketing/activity/gift/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/marketing/charm/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/setting/dict/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/settlement/detail/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/settlement/summary/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/shop/apply-cat/list",
+        "verdict": "failed",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/shop/enter-store/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/shop/message/list",
+        "verdict": "failed",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/shop/qualification/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/shop/rule/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/trade/aftersales-refund/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/trade/logistic-template/list",
+        "verdict": "failed",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/trade/logistics-company/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/trade/order-cancel/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/trade/user-deposit-log/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      }
+    ]
+  },
+  "抽样页·按 http 实例范围拆分": {
+    "口径": "计 http 实例与固定菜单范围；走 platform 为后端范围内，included + callable 为菜单保留范围。",
+    "页数": 20,
+    "范围内": 15,
+    "范围外": 5,
+    "实例未解出": 0,
+    "按实例": {
+      "platform": 15,
+      "sale": 5
+    },
+    "裁决内拆分": {
+      "auto": {
+        "范围内": 10,
+        "范围外": 0
+      },
+      "partial": {
+        "范围内": 5,
+        "范围外": 4
+      },
+      "failed": {
+        "范围内": 0,
+        "范围外": 1
+      }
+    },
+    "可接_范围内且auto": 10,
+    "SDK可接_范围内且菜单保留且auto": 9,
+    "范围外明细": [
+      {
+        "pagePath": "/dashboard/sale/customer-service/after-sale/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/classification/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/goods/distribution/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/trade/logistics-company/list",
+        "verdict": "partial",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      },
+      {
+        "pagePath": "/dashboard/sale/shop/apply-cat/list",
+        "verdict": "failed",
+        "httpInstance": "sale",
+        "httpModule": "sale.js",
+        "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+        "scope": "out-of-scope"
+      }
+    ]
+  },
+  "浏览器实测核对": {
+    "核对页数": 7,
+    "一致页数": 7,
+    "说明": "用 bsk 在测试环境实测抓取；只读、无写操作；token 由页面内钩子脱敏。_t 时间戳已剔除。",
+    "明细": [
+      {
+        "pagePath": "/dashboard/meeting-room/list",
+        "note": "仓库已有基准 baseline/meeting-room-page.browser.json",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/admin-api/hr/meeting-room/page?order=&orderField=&name=&pageNo=1&pageSize=20",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/admin-api/hr/meeting-room/page?order=&orderField=&name=&pageNo=1&pageSize=20",
+        "一致": true,
+        "该页判定": "auto"
+      },
+      {
+        "pagePath": "/dashboard/org/org-propType/list",
+        "note": "绝对 /admin-api 那一类（auto 里最多的形态）",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/admin-api/hr/org/organizationProperty/page?order=&orderField=&name=&pageNo=1&pageSize=20",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/admin-api/hr/org/organizationProperty/page?order=&orderField=&name=&pageNo=1&pageSize=20",
+        "一致": true,
+        "该页判定": "auto"
+      },
+      {
+        "pagePath": "/dashboard/attendance/attendance-sheet/list",
+        "note": "相对路径补 /admin-api 前缀",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&pageNo=1&pageSize=20",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&pageNo=1&pageSize=20",
+        "一致": true,
+        "该页判定": "auto"
+      },
+      {
+        "pagePath": "/dashboard/platform/activity/monitor/list",
+        "note": "/mall-manage-api 前缀透传；form 里的 null 被 qs 丢掉",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/coupon/page?orderField=&pageNo=1&pageSize=20",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/coupon/page?orderField=&pageNo=1&pageSize=20",
+        "一致": true,
+        "该页判定": "partial"
+      },
+      {
+        "pagePath": "/dashboard/platform/setting/category-dict/list",
+        "note": "模板串 URL 解出常量；getDataListIsPage 缺省 → 不带分页参数",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/category-dict/tree?order=&orderField=&name=&code=",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/category-dict/tree?order=&orderField=&name=&code=",
+        "一致": true,
+        "该页判定": "auto"
+      },
+      {
+        "pagePath": "/dashboard/flow/old/model/list",
+        "note": "单页把 fieldNamePageSize 覆写成 limit",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/model/page?order=&orderField=&key=&name=&category=&pageNo=1&limit=20",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/model/page?order=&orderField=&key=&name=&category=&pageNo=1&limit=20",
+        "一致": true,
+        "该页判定": "auto"
+      },
+      {
+        "pagePath": "/dashboard/sale/customer-service/after-sale/list",
+        "note": "显式传 sale.js：另一个 base、不补 /admin-api、分页名 limit —— 静态推导最容易错的一页",
+        "浏览器发出的": "https://biz-api-test.wodecorp.cn/admin-shop-api/admin/aftersales/page?order=&orderField=&itemTitle=&tid=&handledFlag=0&pageNo=1&limit=20",
+        "按生成契约还原的": "https://biz-api-test.wodecorp.cn/admin-shop-api/admin/aftersales/page?order=&orderField=&itemTitle=&tid=&handledFlag=0&pageNo=1&limit=20",
+        "一致": true,
+        "该页判定": "partial"
+      }
+    ]
+  },
+  "参数 kind（控件判据）": {
+    "口径": "kind 的判据是页面上的控件，不是表单初值的类型（生成器 §2.4）。「待人补」= 控件类型判出来了、但 kind 定不死（`unresolved` 非空）的参数数。",
+    "抽样": {
+      "参数总数": 46,
+      "按kind": {
+        "text": 23,
+        "tree": 1,
+        "search": 14,
+        "date": 6,
+        "enum": 2
+      },
+      "按判据": {
+        "control": 45,
+        "default-value": 1
+      },
+      "按控件家族": {
+        "text": 22,
+        "tree": 1,
+        "lazy-options": 14,
+        "date-range": 2,
+        "view-switcher": 2,
+        "(判不出)": 1,
+        "date": 4
+      },
+      "待人补": {
+        "参数数": 19,
+        "页数": 9,
+        "按原因": {
+          "下拉的候选规模未测": 14,
+          "日期区间控件的两个值，ParamKind 表达不了；日期格式未确认": 2,
+          "页签键未提取": 2,
+          "控件绑在脚本变量上": 1
+        }
+      },
+      "按账号条件渲染": {
+        "参数数": 0,
+        "页数": 0
+      },
+      "从能力参数里剔掉的页面定义": {
+        "参数数": 7,
+        "页数": 3,
+        "参数名": [
+          "date",
+          "isOpenToPublic",
+          "progress",
+          "shopFilterType",
+          "tid"
+        ],
+        "说明": "它们**仍在 query（wire 契约）里**——浏览器确实会发这些初值。剔掉的只是给 AI 看的那份：页面定义混进能力参数，等于给 AI 一个页面上没有入口的开关，拨了会静默换一批数据。"
+      }
+    },
+    "全量": {
+      "参数总数": 777,
+      "按kind": {
+        "text": 297,
+        "search": 208,
+        "date": 128,
+        "enum": 40,
+        "tree": 71,
+        "number": 33
+      },
+      "按判据": {
+        "control": 769,
+        "default-value": 8
+      },
+      "按控件家族": {
+        "text": 294,
+        "lazy-options": 208,
+        "date-range": 60,
+        "date": 68,
+        "inline-options": 19,
+        "tree": 71,
+        "number": 28,
+        "view-switcher": 21,
+        "(判不出)": 4,
+        "toggle": 4
+      },
+      "待人补": {
+        "参数数": 371,
+        "页数": 157,
+        "按原因": {
+          "下拉的候选规模未测": 189,
+          "日期区间控件的两个值，ParamKind 表达不了；日期格式未确认": 43,
+          "日期区间控件的两个值，ParamKind 表达不了": 17,
+          "枚举值未提取": 19,
+          "日期格式未确认": 20,
+          "多选控件，ParamKind 表达不了数组": 35,
+          "下拉的候选规模未测；多选控件，ParamKind 表达不了数组": 19,
+          "页签键未提取": 21,
+          "控件绑在脚本变量上": 1,
+          "控件 <a-checkbox> 判不出值形状": 4,
+          "控件 <component-image-folder> 判不出值形状": 2,
+          "控件 <portal-hxr-query-controller-button> 判不出值形状": 1
+        }
+      },
+      "按账号条件渲染": {
+        "参数数": 21,
+        "页数": 7
+      },
+      "从能力参数里剔掉的页面定义": {
+        "参数数": 90,
+        "页数": 60,
+        "参数名": [
+          "allocateOrg",
+          "archiveStatus",
+          "assetCategoryId",
+          "assetType",
+          "cashItem",
+          "classCodelike",
+          "code",
+          "costCenterId",
+          "date",
+          "deptId",
+          "disabled",
+          "endDate",
+          "expenseType",
+          "gender",
+          "id",
+          "idCard",
+          "idKey",
+          "indicator",
+          "isArchived",
+          "isOpenToPublic",
+          "ledgerType",
+          "onlyTenantEditable",
+          "order",
+          "orderField",
+          "orgAttributes",
+          "parentId",
+          "payType",
+          "planType",
+          "processCategory",
+          "progress",
+          "purchaseUnit",
+          "ruleType",
+          "rxSchemaVersion",
+          "salesUnit",
+          "shopFilterType",
+          "shopId",
+          "sort",
+          "source",
+          "startDate",
+          "status",
+          "targetType",
+          "tid",
+          "type",
+          "unit",
+          "useSystemList",
+          "userId",
+          "username"
+        ],
+        "说明": "它们**仍在 query（wire 契约）里**——浏览器确实会发这些初值。剔掉的只是给 AI 看的那份：页面定义混进能力参数，等于给 AI 一个页面上没有入口的开关，拨了会静默换一批数据。"
+      }
+    }
+  },
+  "非自动样本明细": [
+    {
+      "pagePath": "/dashboard/assignment/assignment/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/assignment/studyassignment/page",
+      "resolvedPath": "/admin-api/study/assignment/studyassignment/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：status（下拉的候选规模未测）；type（下拉的候选规模未测）；date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/backlog/task-examine/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/bpm/hr/task/list-by-category-web",
+      "resolvedPath": "/admin-api/bpm/hr/task/list-by-category-web",
+      "issues": [
+        "form.finished 的初值是运行时表达式（props.finished），静态只能给个空默认",
+        "参数 selectType 的控件在源码里存在（<a-select>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "form.processCategory 的初值是运行时表达式（route.query.taskKey || null），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（processCategory）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：createTime（日期区间控件的两个值，ParamKind 表达不了）；finished（枚举值未提取）；selectType（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/base/image/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/sys/imagemanage/page",
+      "resolvedPath": "/admin-api/sys/imagemanage/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：status（下拉的候选规模未测）；date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/base/student/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/base/studystudent/page",
+      "resolvedPath": "/admin-api/study/base/studystudent/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：isRelatedClass（下拉的候选规模未测）；isRelatedLayer（下拉的候选规模未测）；date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/course/im-course/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/course/studycourse/courseList?type=4",
+      "resolvedPath": "/admin-api/study/course/studycourse/courseList",
+      "issues": [
+        "URL 自带 query（type=4）：这些参数不来自 form，需人工确认是否算能力参数",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：status（下拉的候选规模未测）；createTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；deleteTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/course/text-course/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/course/studycourse/courseList?type=1",
+      "resolvedPath": "/admin-api/study/course/studycourse/courseList",
+      "issues": [
+        "URL 自带 query（type=1）：这些参数不来自 form，需人工确认是否算能力参数",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/course/video-course/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/course/studycourse/courseList?type=2",
+      "resolvedPath": "/admin-api/study/course/studycourse/courseList",
+      "issues": [
+        "URL 自带 query（type=2）：这些参数不来自 form，需人工确认是否算能力参数",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/depreciation/allocation/expense-indicator-data/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/expense-indicator-data/page",
+      "resolvedPath": "/admin-api/finance/expense-indicator-data/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/depreciation/biological/summary-report/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "admin-api/finance/biological-asset-summary/page",
+      "resolvedPath": "/admin-api/finance/biological-asset-summary/page",
+      "issues": [
+        "URL 漏写前导斜杠（admin-api/finance/biological-asset-summary/page）：axios 会按 baseURL 相对解析，需人工确认",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.accountingYear 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "form.postingPeriod 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 2 处要人补：accountingYear（日期格式未确认）；postingPeriod（日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/investment/financing-repayment/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/financing-repayment/page",
+      "resolvedPath": "/admin-api/finance/financing-repayment/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：corporationIds（多选控件，ParamKind 表达不了数组）；createUserIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；entryDate（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/investment/fund-standard/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/fund-standard-line/page",
+      "resolvedPath": "/admin-api/finance/fund-standard-line/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：createUserIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；entryDate（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/annual-carryforward/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/annual-closing/page",
+      "resolvedPath": "/admin-api/finance/annual-closing/page",
+      "issues": [
+        "form.periodYear 的初值是运行时表达式（formatDay(new Date(), 'YYYY')），静态只能给个空默认",
+        "参数类型留了 2 处要人补：accountingSetIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；closingStatus（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/date-config/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/payment-plan-time-management/page",
+      "resolvedPath": "/admin-api/finance/payment-plan-time-management/page",
+      "issues": [
+        "form.yearMonth 的初值是运行时表达式（formatDay(new Date(), 'YYYY-MM')），静态只能给个空默认",
+        "参数类型留了 1 处要人补：status（枚举值未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/ledger-accounts/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/ledger-accounts/page",
+      "resolvedPath": "/admin-api/finance/ledger-accounts/page",
+      "issues": [
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "参数 tenantName 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "form.ledgerType 的初值是运行时表达式（currentLedgerType.value），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（ledgerType、type）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 2 处要人补：accountingStandardsApply（下拉的候选规模未测）；status（枚举值未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/project/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/project/page",
+      "resolvedPath": "/admin-api/finance/project/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 5 处要人补：projectTypes（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；projectAttributes（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；stages（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；companyIds（多选控件，ParamKind 表达不了数组）；status（枚举值未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/sale-allocation-coefficient/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/finance/sales-allocation-coefficient/page",
+      "resolvedPath": "/admin-api/finance/sales-allocation-coefficient/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 5 个页面定义（unit、allocateOrg、ruleType、expenseType、indicator）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：status（枚举值未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/fund/archive/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryfundcosts/page",
+      "resolvedPath": "/admin-api/salary/salaryfundcosts/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（archiveStatus）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；isSalaryUsed（下拉的候选规模未测）；belongMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；occurMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/fund/cost/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryfundcosts/page",
+      "resolvedPath": "/admin-api/salary/salaryfundcosts/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；archiveStatus（下拉的候选规模未测）；belongMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/fund/process/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryfund/page",
+      "resolvedPath": "/admin-api/salary/salaryfund/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 4 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；staffStatus（下拉的候选规模未测）；insuranceStatus（下拉的候选规模未测）；entryTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/insurance/archive/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryinsurancecosts/page",
+      "resolvedPath": "/admin-api/salary/salaryinsurancecosts/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（archiveStatus）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：isSalaryUsed（下拉的候选规模未测）；orgIds（多选控件，ParamKind 表达不了数组）；belongMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；occurMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/insurance/cost/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryinsurancecosts/page",
+      "resolvedPath": "/admin-api/salary/salaryinsurancecosts/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；archiveStatus（下拉的候选规模未测）；belongMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/insurance/process/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryinsurance/page",
+      "resolvedPath": "/admin-api/salary/salaryinsurance/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 4 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；staffStatus（下拉的候选规模未测）；insuranceStatus（下拉的候选规模未测）；entryTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/lesson/daily-lesson/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/lesson/studylesson/lessonList",
+      "resolvedPath": "/admin-api/study/lesson/studylesson/lessonList",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（type）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：status（下拉的候选规模未测）；gradeNames（下拉的候选规模未测）；createTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；startTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/lesson/monthly-lesson/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/lesson/studylesson/lessonList",
+      "resolvedPath": "/admin-api/study/lesson/studylesson/lessonList",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（type）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：status（下拉的候选规模未测）；gradeNames（下拉的候选规模未测）；createTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；startTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/lesson/weekly-lesson/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/lesson/studylesson/lessonList",
+      "resolvedPath": "/admin-api/study/lesson/studylesson/lessonList",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（type）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 5 处要人补：gradeNames（下拉的候选规模未测）；publishTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；createTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；startTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；endTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/detail/biological/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset/page",
+      "resolvedPath": "/admin-api/inventory/asset/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.orgId 的初值是运行时表达式（bridge?.formState?.orgId || null），静态只能给个空默认",
+        "form.assetType 的初值是运行时表达式（Number(bridge?.formState?.assetType) || ），静态只能给个空默认",
+        "已从能力参数里剔掉 3 个页面定义（assetCategoryId、status、assetType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：accessDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/detail/fixed/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset/page",
+      "resolvedPath": "/admin-api/inventory/asset/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.orgId 的初值是运行时表达式（bridge?.formState?.orgId || null），静态只能给个空默认",
+        "form.assetType 的初值是运行时表达式（Number(bridge?.formState?.assetType) || ），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（assetType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：assetCategoryId（下拉的候选规模未测）；accessDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；status（下拉的候选规模未测）；reviewStatus（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/detail/intangible/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset/page",
+      "resolvedPath": "/admin-api/inventory/asset/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.orgId 的初值是运行时表达式（bridge?.formState?.orgId || null），静态只能给个空默认",
+        "form.assetType 的初值是运行时表达式（Number(bridge?.formState?.assetType) || ），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（assetType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：assetCategoryId（下拉的候选规模未测）；accessDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/detail/long-term/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset/page",
+      "resolvedPath": "/admin-api/inventory/asset/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.orgId 的初值是运行时表达式（bridge?.formState?.orgId || null），静态只能给个空默认",
+        "form.assetType 的初值是运行时表达式（Number(bridge?.formState?.assetType) || ），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（assetType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：assetCategoryId（下拉的候选规模未测）；accessDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/detail/usage/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset/page",
+      "resolvedPath": "/admin-api/inventory/asset/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.orgId 的初值是运行时表达式（bridge?.formState?.orgId || null），静态只能给个空默认",
+        "form.assetType 的初值是运行时表达式（Number(bridge?.formState?.assetType) || ），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（assetType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：assetCategoryId（下拉的候选规模未测）；accessDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/register/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset-registration/page",
+      "resolvedPath": "/admin-api/inventory/asset-registration/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：registrationDate（日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/stocktaking/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset-stocktaking/page",
+      "resolvedPath": "/admin-api/inventory/asset-stocktaking/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.dateRange 的初值是运行时表达式（[dayjs().subtract(1, 'year').format('YYY），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（code）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：status（下拉的候选规模未测）；dateRange（日期区间控件的两个值，ParamKind 表达不了）；type（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/depreciation/info/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/inventory/asset-depreciation-detail/page",
+      "resolvedPath": "/admin-api/inventory/asset-depreciation-detail/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 4 处要人补：assetType（下拉的候选规模未测）；depreciationMethod（下拉的候选规模未测）；depreciationDateStr（日期格式未确认）；accrualStatus（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/me/pay-roll/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/selectPersonPayrollPage",
+      "resolvedPath": "/admin-api/salary/report/selectPersonPayrollPage",
+      "issues": [
+        "form.startYearMonth 的初值是运行时表达式（formatDay(new Date(), 'YYYY-MM')），静态只能给个空默认",
+        "form.endYearMonth 的初值是运行时表达式（formatDay(new Date(), 'YYYY-MM')），静态只能给个空默认"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/activity/full-gift/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/activity/getList",
+      "resolvedPath": "/mall-manage-api/sys/activity/getList",
+      "issues": [
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：sort（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/activity/monitor/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/coupon/page",
+      "resolvedPath": "/mall-manage-api/sys/coupon/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 2 处要人补：order（下拉的候选规模未测）；placementStatus（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/activity/platform-themed/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/platActivityTopic/page",
+      "resolvedPath": "/mall-manage-api/sys/platActivityTopic/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：status（下拉的候选规模未测）；createTime（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/goods/distribution/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/itemDistribute/list",
+      "resolvedPath": "/mall-manage-api/sys/itemDistribute/list",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form 由 computed() 包裹：已在源码内解出，等价于字面量对象，建议人工复核",
+        "form.catId 的初值是运行时表达式（catId.value ? catId.value[catId.value.le），静态只能给个空默认",
+        "参数类型留了 4 处要人补：view（页签键未提取）；orderField（下拉的候选规模未测）；order（下拉的候选规模未测）；catId（控件绑在脚本变量上）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/goods/goods-list/goods-list/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/item/list",
+      "resolvedPath": "/mall-manage-api/sys/item/list",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form 不是静态对象（initialForm()…），字段抽不出"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/market/market/todo/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "crm",
+      "httpModule": "crm.js",
+      "baseUrlEnv": "VITE_CRM_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/vue/crm/config/list",
+      "resolvedPath": "/vue/crm/config/list",
+      "issues": [
+        "范围外：列表请求走 crm 实例（crm.js，baseURL=VITE_CRM_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 crm.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /vue/crm/config/list（VITE_CRM_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：typeList（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/market/notice/all/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/notice/notice",
+      "resolvedPath": "/mall-manage-api/sys/notice/notice",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form.classCodelike 的初值是运行时表达式（'/Msg/MarketOffice' // 超市办公室），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（classCodelike）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：classCode（下拉的候选规模未测）；open（下拉的候选规模未测）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/market/store/customer/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/store/index/getPage",
+      "resolvedPath": "/mall-manage-api/sys/store/index/getPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：areaCode（下拉的候选规模未测）；marketId（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/market/supplier/all/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/store/sysSupplier/getPage",
+      "resolvedPath": "/mall-manage-api/sys/store/sysSupplier/getPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：areaCode（下拉的候选规模未测）；categoryIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/member/loani/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/ccbloanApply/page",
+      "resolvedPath": "/mall-manage-api/sys/ccbloanApply/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：applyTime（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/report/collect/goods/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/statement/getItemCollectStatement",
+      "resolvedPath": "/mall-manage-api/sys/statement/getItemCollectStatement",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "form 由 computed() 包裹：已在源码内解出，等价于字面量对象，建议人工复核",
+        "form.timePeriod 的初值是运行时表达式（timePeriodDefault），静态只能给个空默认",
+        "参数类型留了 3 处要人补：limit（下拉的候选规模未测）；catId（下拉的候选规模未测）；timePeriod（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/report/credit/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/adminmanage-api/sales/credit-report/page",
+      "resolvedPath": "/adminmanage-api/sales/credit-report/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/report/member/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/statement/getUserStatement",
+      "resolvedPath": "/mall-manage-api/sys/statement/getUserStatement",
+      "issues": [
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "form 由 computed() 包裹：已在源码内解出，等价于字面量对象，建议人工复核",
+        "form.timePeriod 的初值是运行时表达式（timePeriodDefault），静态只能给个空默认",
+        "参数类型留了 4 处要人补：sortType（页签键未提取）；limit（下拉的候选规模未测）；sortOrder（下拉的候选规模未测）；timePeriod（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/report/sale/goods/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/statement/getItemStatement",
+      "resolvedPath": "/mall-manage-api/sys/statement/getItemStatement",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "form 由 computed() 包裹：已在源码内解出，等价于字面量对象，建议人工复核",
+        "form.timePeriod 的初值是运行时表达式（timePeriodDefault），静态只能给个空默认",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：sortType（页签键未提取）；limit（下拉的候选规模未测）；catId（下拉的候选规模未测）；timePeriod（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/report/sale/shop/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/statement/getShopStatement",
+      "resolvedPath": "/mall-manage-api/sys/statement/getShopStatement",
+      "issues": [
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "form 由 computed() 包裹：已在源码内解出，等价于字面量对象，建议人工复核",
+        "form.timePeriod 的初值是运行时表达式（timePeriodDefault），静态只能给个空默认",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：sortType（页签键未提取）；limit（下拉的候选规模未测）；timePeriod（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/report/sale/trade/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/statement/getTradeStatement",
+      "resolvedPath": "/mall-manage-api/sys/statement/getTradeStatement",
+      "issues": [
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "form 由 computed() 包裹：已在源码内解出，等价于字面量对象，建议人工复核",
+        "form.timePeriod 的初值是运行时表达式（timePeriodDefault），静态只能给个空默认",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：from（下拉的候选规模未测）；timeStep（下拉的候选规模未测）；timePeriod（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/seller/application/seller-application/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/enterapply/page",
+      "resolvedPath": "/mall-manage-api/sys/enterapply/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：status（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/seller/qualification/qualification-review/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/certificate/page",
+      "resolvedPath": "/mall-manage-api/sys/certificate/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 3 个页面定义（rxSchemaVersion、shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：type（下拉的候选规模未测）；configId（下拉的候选规模未测）；status（页签键未提取）；anomalous（枚举值未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/seller/shop/authority/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/applyCat/page",
+      "resolvedPath": "/mall-manage-api/sys/applyCat/page",
+      "issues": [
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：checkStatus（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/seller/shop/shop-list/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/shopShop/page",
+      "resolvedPath": "/mall-manage-api/sys/shopShop/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数 openType 的控件在源码里存在（<a-select>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "参数 isOpenToPublic 的控件在源码里存在（<a-select>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "已从能力参数里剔掉 1 个页面定义（shopFilterType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 8 处要人补：shopType（下拉的候选规模未测）；status（下拉的候选规模未测）；openType（下拉的候选规模未测）；isShopDecorated（下拉的候选规模未测）；isShopPcDecorated（下拉的候选规模未测）；openDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；closeDate（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；isOpenToPublic（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/station/page/article-list/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/site/pageManage/articleList/page",
+      "resolvedPath": "/mall-manage-api/sys/site/pageManage/articleList/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form.parentId 的初值是运行时表达式（route.query.parentId || null），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（parentId）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 2 处要人补：type（下拉的候选规模未测）；mark（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/station/page/rules-list/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/site/pageManage/ruleList/page",
+      "resolvedPath": "/mall-manage-api/sys/site/pageManage/ruleList/page",
+      "issues": [
+        "文件 import 的是 platform-mall-admin.js，但列表请求没传 http，实际走全局默认 platform.js（baseURL=VITE_ZHDJ_PLATFORM_API，分页名 pageSize）",
+        "form.parentId 的初值是运行时表达式（route.query.parentId || null），静态只能给个空默认",
+        "已从能力参数里剔掉 3 个页面定义（order、orderField、parentId）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：type（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/trade/aftersales-reason-list/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/aftersales/list",
+      "resolvedPath": "/mall-manage-api/sys/aftersales/list",
+      "issues": [
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 2 处要人补：status（下拉的候选规模未测）；progress（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/trade/aftersales-refund-list/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/aftersalesRefund/list",
+      "resolvedPath": "/mall-manage-api/sys/aftersalesRefund/list",
+      "issues": [
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：view（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/trade/invoice-list/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/logistics/delivery/list",
+      "resolvedPath": "/mall-manage-api/sys/logistics/delivery/list",
+      "issues": [
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：status（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/trade/payment-list/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/mall-manage-api/sys/ectools/payBill/list",
+      "resolvedPath": "/mall-manage-api/sys/ectools/payBill/list",
+      "issues": [
+        "form.shopFilterType 的初值是运行时表达式（isMarketPage.value ? 2 : isPlatformPage.），静态只能给个空默认",
+        "form.isOpenToPublic 的初值是运行时表达式（isPlatformPage.value ? 1 : null），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（shopFilterType、isOpenToPublic）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/bank-pay/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/salary/report/bankDropshippingPage",
+      "resolvedPath": "/admin-api/salary/report/bankDropshippingPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.salaryMonth 的初值是运行时表达式（dayjs().startOf('month')），静态只能给个空默认",
+        "参数类型留了 3 处要人补：orgId（多选控件，ParamKind 表达不了数组）；salaryMonth（日期格式未确认）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/bank-summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/getBankSummaryPage",
+      "resolvedPath": "/admin-api/salary/report/getBankSummaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.salaryMonth 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 3 处要人补：organization（多选控件，ParamKind 表达不了数组）；salaryMonth（日期格式未确认）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/center-insurance/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/salaryInsuranceCostsPage",
+      "resolvedPath": "/admin-api/salary/report/salaryInsuranceCostsPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.costMonth 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 3 处要人补：organizationId（多选控件，ParamKind 表达不了数组）；costCenterId（下拉的候选规模未测）；costMonth（日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/cost-center-salary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/costCenterSummaryPage",
+      "resolvedPath": "/admin-api/salary/report/costCenterSummaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.monthPay 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 4 处要人补：organizationId（多选控件，ParamKind 表达不了数组）；monthPay（日期格式未确认）；costCenterId（下拉的候选规模未测）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/department-salary-detail/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/getDeptSalaryPage",
+      "resolvedPath": "/admin-api/salary/report/getDeptSalaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.monthPay 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（sort）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：belongAccount（下拉的候选规模未测）；monthPay（日期格式未确认）；fullPath（多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/department-salary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/deptSalarySummaryPage",
+      "resolvedPath": "/admin-api/salary/report/deptSalarySummaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.monthPay 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 3 处要人补：monthPay（日期格式未确认）；orgId（多选控件，ParamKind 表达不了数组）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/fund-payment-summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryfundcosts/paymentSummaryPage",
+      "resolvedPath": "/admin-api/salary/salaryfundcosts/paymentSummaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；costDateRange（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/insurance-payment-summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salaryinsurancecosts/paymentSummaryPage",
+      "resolvedPath": "/admin-api/salary/salaryinsurancecosts/paymentSummaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；costDateRange（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/insurance-summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/salary/report/standardUnitCostsPage",
+      "resolvedPath": "/admin-api/salary/report/standardUnitCostsPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.costMonth 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 2 处要人补：standardUnitId（多选控件，ParamKind 表达不了数组）；costMonth（日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/person-tax/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/salary/report/personTaxDetailsPage",
+      "resolvedPath": "/admin-api/salary/report/personTaxDetailsPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.monthPayRange 的初值是运行时表达式（[dayjs().subtract(1, 'month').format('YY），静态只能给个空默认",
+        "参数类型留了 3 处要人补：monthPayRange（日期区间控件的两个值，ParamKind 表达不了）；orgId（多选控件，ParamKind 表达不了数组）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/post-salary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/getPostSalaryStatistics",
+      "resolvedPath": "/admin-api/salary/report/getPostSalaryStatistics",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.year 的初值是运行时表达式（dayjs()），静态只能给个空默认",
+        "参数类型留了 3 处要人补：year（日期格式未确认）；organizationName（多选控件，ParamKind 表达不了数组）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/retirement-salary-summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/hr/retire-staff-salary-summary/page",
+      "resolvedPath": "/admin-api/hr/retire-staff-salary-summary/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：organizationId（多选控件，ParamKind 表达不了数组）；useYearMonth（日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/retirement-salary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/hr/retire-staff-salary/page",
+      "resolvedPath": "/admin-api/hr/retire-staff-salary/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（idCard）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：organizationId（多选控件，ParamKind 表达不了数组）；useYearMonth（日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/salary-bill/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/selectPayrollPage",
+      "resolvedPath": "/admin-api/salary/report/selectPayrollPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.yearMonth 的初值是运行时表达式（dayjs().startOf('month')），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（costCenterId）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 5 处要人补：yearMonth（日期格式未确认）；legalPersonId（下拉的候选规模未测）；payrollUnitId（多选控件，ParamKind 表达不了数组）；organizationId（多选控件，ParamKind 表达不了数组）；ledgerId（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/salary-cost/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/salary/report/salaryCostSummaryPage",
+      "resolvedPath": "/admin-api/salary/report/salaryCostSummaryPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.monthPay 的初值是运行时表达式（dayjs().startOf('month')），静态只能给个空默认",
+        "参数类型留了 3 处要人补：orgId（多选控件，ParamKind 表达不了数组）；monthPay（日期格式未确认）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/salary-item/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/report/staffSalaryItemPage",
+      "resolvedPath": "/admin-api/salary/report/staffSalaryItemPage",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.yearMonth 的初值是运行时表达式（[dayjs().subtract(1, 'month'), dayjs()]），静态只能给个空默认",
+        "参数类型留了 3 处要人补：organizationId（多选控件，ParamKind 表达不了数组）；yearMonth（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；ledgerIds（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/temporary-salary-summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/hr/temporary-worker-salary-summary/page",
+      "resolvedPath": "/admin-api/hr/temporary-worker-salary-summary/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：organizationIdList（多选控件，ParamKind 表达不了数组）；useYearMonth（日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/report/temporary-salary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/hr/temporary-worker-salary/page",
+      "resolvedPath": "/admin-api/hr/temporary-worker-salary/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（idCard）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：organizationId（多选控件，ParamKind 表达不了数组）；useYearMonth（日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/salary/process/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/salarytransact/page",
+      "resolvedPath": "/admin-api/salary/salarytransact/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：orgIds（多选控件，ParamKind 表达不了数组）；staffStatus（下拉的候选规模未测）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/salary/salary-accounting/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/salary/document/page",
+      "resolvedPath": "/admin-api/salary/document/page",
+      "issues": [
+        "参数 salaryMonth 的控件在源码里存在（<a-date-picker>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 status 的控件在源码里存在（<common-select-dropdown>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "form.operatorId 的初值是运行时表达式（userStore.state.id），静态只能给个空默认",
+        "参数 operatorId 的控件在源码里存在（<portal-hxr-select-user>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 name 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 ledgerId 的控件在源码里存在（<portal-hxr-select-ledger>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 organizationId 的控件在源码里存在（<portal-hxr-tree-select-role-organization-new>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 personCount 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 creatorName 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 createDate 的控件在源码里存在（<a-date-picker>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 operateDate 的控件在源码里存在（<a-date-picker>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 salaryTaxBand 的控件在源码里存在（<portal-hxr-dict-select>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数类型留了 4 处要人补：status（下拉的候选规模未测）；operatorId（下拉的候选规模未测）；ledgerId（下拉的候选规模未测）；salaryTaxBand（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/customer-service/after-sale-evaluation/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/aftersales/evaluationPage",
+      "resolvedPath": "/admin/aftersales/evaluationPage",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/aftersales/evaluationPage（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 2 处要人补：isContent（控件 <a-checkbox> 判不出值形状）；satisfaction（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/customer-service/after-sale/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/aftersales/page",
+      "resolvedPath": "/admin/aftersales/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/aftersales/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 1 处要人补：handledFlag（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/customer-service/appeal/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/rateAppeal/page",
+      "resolvedPath": "/admin/rateAppeal/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/rateAppeal/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 2 处要人补：appealAgain（下拉的候选规模未测）；appealStatus（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/customer-service/evaluation-overview/list",
+      "verdict": "failed",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": null,
+      "resolvedPath": null,
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "useListPageModule 没有 getDataListURL（清单分类可能已过期）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/customer-service/evaluation/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/tradeRate/page",
+      "resolvedPath": "/admin/tradeRate/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/tradeRate/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "已从能力参数里剔掉 1 个页面定义（idKey）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：isPic（控件 <a-checkbox> 判不出值形状）；isReply（控件 <a-checkbox> 判不出值形状）；isContent（控件 <a-checkbox> 判不出值形状）；result（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/additional-service/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/additionalService/list",
+      "resolvedPath": "/admin/additionalService/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/additionalService/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "参数类型留了 1 处要人补：catId（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/classification/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/itemCat/list",
+      "resolvedPath": "/admin/itemCat/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/itemCat/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/distribution/list",
+      "verdict": "partial",
+      "partialKind": "path",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "admin/item/itemCopyList",
+      "resolvedPath": "/admin/item/itemCopyList",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "URL 漏写前导斜杠（admin/item/itemCopyList）：axios 会按 baseURL 相对解析，需人工确认",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 2 处要人补：catIdList（页签键未提取）；distributeStatus（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/image/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/image/list",
+      "resolvedPath": "/admin/image/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/image/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 4 处要人补：imageType（控件 <component-image-folder> 判不出值形状）；catId（控件 <component-image-folder> 判不出值形状）；orderField（下拉的候选规模未测）；order（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/manage/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/item/list",
+      "resolvedPath": "/admin/item/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/item/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.endDate 的初值是运行时表达式（today.add(1, 'day').format('YYYY-MM-DD')），静态只能给个空默认",
+        "form.startDate 的初值是运行时表达式（today.subtract(1, 'month').format('YYYY-），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（endDate、startDate）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：approveStatus（页签键未提取）；usePlatform（下拉的候选规模未测）；catId（下拉的候选规模未测）；isManage（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/sales-area/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/itemSalesArea/list",
+      "resolvedPath": "/admin/itemSalesArea/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/itemSalesArea/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 1 处要人补：status（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/marketing/activity/gift/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/activity/page",
+      "resolvedPath": "/admin/activity/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/activity/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "没有 form：查询参数只有 order/orderField（复用现有模块，不新增依赖）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/marketing/charm/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/shopStyle/page",
+      "resolvedPath": "/admin/shopStyle/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/shopStyle/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "已从能力参数里剔掉 1 个页面定义（source）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：shopType（下拉的候选规模未测）；type（下拉的候选规模未测）；status（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/plans/year/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/sales/plan/page",
+      "resolvedPath": "/admin-api/sales/plan/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.updateMonthArr 的初值是运行时表达式（[dayjs().startOf('year'), dayjs()]），静态只能给个空默认",
+        "参数类型留了 3 处要人补：regionIds（多选控件，ParamKind 表达不了数组）；varieties（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；updateMonthArr（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/setting/dict/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/dict/type/page",
+      "resolvedPath": "/admin/dict/type/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/dict/type/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/settlement/detail/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/settlement/statementList",
+      "resolvedPath": "/admin/settlement/statementList",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/settlement/statementList（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.date 的初值是运行时表达式（[dayjs().subtract(1, 'week'), dayjs()]），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（status）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/settlement/summary/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/settlement/summaryList",
+      "resolvedPath": "/admin/settlement/summaryList",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/settlement/summaryList（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "form.date 的初值是运行时表达式（[dayjs().subtract(1, 'month').startOf('m），静态只能给个空默认",
+        "参数类型留了 2 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；status（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/shop/apply-cat/list",
+      "verdict": "failed",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": null,
+      "resolvedPath": null,
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "URL 是模板串，插值 shopInfo.shopId 在源码里不是字面常量，静态解不出"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/shop/enter-store/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/categoryCat/shopCatIdList",
+      "resolvedPath": "/admin/categoryCat/shopCatIdList",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/categoryCat/shopCatIdList（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "getDataListIsPage 缺省（=false）：该接口不传分页参数",
+        "form.shopId 的初值是运行时表达式（shopStore.state.shopId），静态只能给个空默认",
+        "已从能力参数里剔掉 1 个页面定义（shopId）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/shop/message/list",
+      "verdict": "failed",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": null,
+      "resolvedPath": null,
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "URL 是模板串，插值 shopInfo.shopId 在源码里不是字面常量，静态解不出"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/shop/qualification/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/certificate/page",
+      "resolvedPath": "/admin/certificate/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/certificate/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "已从能力参数里剔掉 1 个页面定义（rxSchemaVersion）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：status（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/shop/rule/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/shoprule/page",
+      "resolvedPath": "/admin/shoprule/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/shoprule/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/aftersales-refund/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/aftersalesRefund/page",
+      "resolvedPath": "/admin/aftersalesRefund/page",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/aftersalesRefund/page（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "参数类型留了 1 处要人补：progress（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/internal-order/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/sales/domestic-order/page",
+      "resolvedPath": "/admin-api/sales/domestic-order/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 2 个页面定义（salesUnit、purchaseUnit）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 4 处要人补：status（枚举值未提取）；createTime（日期区间控件的两个值，ParamKind 表达不了）；shipTime（日期区间控件的两个值，ParamKind 表达不了）；materialCategory（多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/logistic-template/list",
+      "verdict": "failed",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": null,
+      "resolvedPath": null,
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "URL 是模板串，插值 shopInfo.shopId 在源码里不是字面常量，静态解不出"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/logistics-company/list",
+      "verdict": "partial",
+      "partialKind": "base",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/shopDlyCorp/list",
+      "resolvedPath": "/admin/shopDlyCorp/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/shopDlyCorp/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "getDataListIsPage: false：该接口不传分页参数",
+        "已从能力参数里剔掉 3 个页面定义（tid、date、progress）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/order-cancel/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/tradeCancel/list",
+      "resolvedPath": "/admin/tradeCancel/list",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/tradeCancel/list（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）；progress（页签键未提取）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/trade/user-deposit-log/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "sale",
+      "httpModule": "sale.js",
+      "baseUrlEnv": "VITE_SHOP_ADMIN_API",
+      "scope": "out-of-scope",
+      "rawUrl": "/admin/userDepositLog/flow",
+      "resolvedPath": "/admin/userDepositLog/flow",
+      "issues": [
+        "范围外：列表请求走 sale 实例（sale.js，baseURL=VITE_SHOP_ADMIN_API），不属于 SDK 的 Portal 主后端范围（决策 D3）。接到 SDK 里会打到错的 URL，所以这条定义不可接线。",
+        "该页走 sale.js，它没有 platform.js 的补前缀拦截器：真实路径就是 /admin/userDepositLog/flow（VITE_SHOP_ADMIN_API 是另一个 base，SDK 现有单 base 客户端调不到）",
+        "sale 实例的拦截器把 pageSize 改名成 limit，所以这一页的真实分页参数是 limit，不是全局的 pageSize",
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数 farmerName 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 farmerMobile 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 customerName 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "参数 customerCode 的控件在源码里存在（<a-input>），但所在表单项带 v-if：它按账号/条件渲染，本次抓不到不代表页面上没有，契约里要按\"有条件\"描述。",
+        "form.date 的初值是运行时表达式（[dayjs().subtract(1, 'week'), dayjs()]），静态只能给个空默认",
+        "参数类型留了 1 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/setting/user/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/sys/user/page",
+      "resolvedPath": "/admin-api/sys/user/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（useSystemList）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 3 处要人补：role（下拉的候选规模未测）；status（下拉的候选规模未测）；time（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/statistics/student/list",
+      "verdict": "partial",
+      "partialKind": "defaults",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/statistics/studentList",
+      "resolvedPath": "/admin-api/study/statistics/studentList",
+      "issues": [
+        "form.gradeName 的初值是运行时表达式（route.query.gradeName），静态只能给个空默认",
+        "已从能力参数里剔掉 2 个页面定义（order、orderField）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 1 处要人补：gradeName（下拉的候选规模未测）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/statistics/teacher/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/statistics/teacherList",
+      "resolvedPath": "/admin-api/study/statistics/teacherList",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 1 处要人补：date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/study/study/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/study/statistics/studystudyrecord/studyList",
+      "resolvedPath": "/admin-api/study/statistics/studystudyrecord/studyList",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 4 处要人补：status（下拉的候选规模未测）；lessonType（下拉的候选规模未测）；gradeId（下拉的候选规模未测）；date（日期区间控件的两个值，ParamKind 表达不了；日期格式未确认）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/supply/admittance/supplier/supplier-admittance/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/supply/supplier/page",
+      "resolvedPath": "/admin-api/supply/supplier/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 7 处要人补：type（下拉的候选规模未测）；level（下拉的候选规模未测）；status（下拉的候选规模未测）；relationOrgIds（多选控件，ParamKind 表达不了数组）；category（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；paymentTerm（下拉的候选规模未测；多选控件，ParamKind 表达不了数组）；time（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/supply/enter-warehouse/acceptance/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/supply/purchase-acceptance/page",
+      "resolvedPath": "/admin-api/supply/purchase-acceptance/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 4 处要人补：materielType（下拉的候选规模未测）；factoryIds（多选控件，ParamKind 表达不了数组）；status（枚举值未提取）；createTimeRange（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/supply/enter-warehouse/enter-store/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/supply/inbound/page",
+      "resolvedPath": "/admin-api/supply/inbound/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 2 处要人补：status（下拉的候选规模未测）；createDateRange（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/supply/plans/bidding/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/supply/quotation-bidding/page",
+      "resolvedPath": "/admin-api/supply/quotation-bidding/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 3 处要人补：materielType（下拉的候选规模未测）；status（下拉的候选规模未测）；validityRange（日期区间控件的两个值，ParamKind 表达不了）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/supply/plans/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/supply/purchasePlan/page",
+      "resolvedPath": "/admin-api/supply/purchasePlan/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "参数类型留了 5 处要人补：materielType（下拉的候选规模未测）；planType（下拉的候选规模未测）；status（下拉的候选规模未测）；createTimeRange（日期区间控件的两个值，ParamKind 表达不了）；factoryIds（多选控件，ParamKind 表达不了数组）"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/supply/purchase/list",
+      "verdict": "partial",
+      "partialKind": "contract",
+      "httpInstance": "platform",
+      "httpModule": "platform.js",
+      "baseUrlEnv": "VITE_ZHDJ_PLATFORM_API",
+      "scope": "in-scope",
+      "rawUrl": "/admin-api/supply/purchase/page",
+      "resolvedPath": "/admin-api/supply/purchase/page",
+      "issues": [
+        "该页调用 convertFetchForm 改写请求参数：真实 query 与 form 字段**不一致**，必须人读那段函数才能定契约（清单的 customLoad 行数统计抓不到它）",
+        "已从能力参数里剔掉 1 个页面定义（planType）：页面上没有控件绑定到它们，wire 契约照旧按浏览器发。",
+        "参数类型留了 7 处要人补：purchaseType（下拉的候选规模未测）；materielType（下拉的候选规模未测）；status（下拉的候选规模未测）；startDate（日期格式未确认）；endDate（日期格式未确认）；factoryIds（多选控件，ParamKind 表达不了数组）；contractStatus（枚举值未提取）"
+      ]
+    }
+  ]
+}

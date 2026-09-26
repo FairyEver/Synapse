@@ -1,0 +1,60 @@
+{
+  "说明": "写链路的真实记录。与 baseline/*.browser.json 不同：这份不是浏览器抓的，而是 SDK 在测试环境真实调用成功后被记下来的请求形状与复核结果。",
+  "验证时间": "2026-09-20 21:29",
+  "环境": "https://biz-api-test.wodecorp.cn （测试环境）",
+  "跑法": "smoke/with-portal-token.sh node smoke/assignment-crud.mjs",
+  "结果": "端到端成功（20 项检查全绿），测试环境没有留下 SDK-TEST- 前缀的残留",
+  "一次完整回合": [
+    "起手：按名字查列表 —— 0 条（排除「本来就有一条」这种假阳性）",
+    "create：createIdempotent 返回新建 id（本次 1076）",
+    "独立证实①：按名字查列表 —— 恰好 1 条，id 与返回值一致",
+    "独立证实②：按 id 查详情 —— 标题 / 作业要求 / 作业类型 / 截止时间逐项与提交值一致",
+    "防重：同一个 requestId 再调一次 —— 列表仍 1 条，回放第一次的返回值",
+    "setStatus(0) → get：status=0；setStatus(1) → get：status=1",
+    "update（先 get 再改，只改标题）→ get：标题变了；列表里旧名字 0 条、新名字 1 条",
+    "update 原样重发一次 —— 仍 1 条，终态不变",
+    "remove → 列表查不到；重复 remove 后端返回成功",
+    "收尾：列表按两个名字各查一次 —— 0 条"
+  ],
+  "请求": [
+    {
+      "能力": "assignment-create",
+      "method": "POST",
+      "path": "/admin-api/study/assignment/studyassignment",
+      "body": "24 个键，与 baseline/assignment-write.browser.json 的 body 逐字节一致（同一份填写值）",
+      "返回": "新建作业的 id，**字符串**（本次 \"1076\"）"
+    },
+    {
+      "能力": "assignment-get",
+      "method": "GET",
+      "path": "/admin-api/study/assignment/studyassignment/{id}",
+      "返回结构": "对象。实测字段：id(字符串) / title / demand / status / type / isTeacherCheck / isUploadAnswer / answerPublishTime / textAnswer / fileAnswer / fileAnswerName / imageAnswer / isSelfScoring / selfScoringEndTime / endTime / scoreType / isDel / creator / creatorName / createTime / updater / updateTime / isUploadCore / textCore / corePublishTime / coreType / isRemind / videoAnswer / videoCores …"
+    },
+    {
+      "能力": "assignment-set-status",
+      "method": "PUT",
+      "path": "/admin-api/study/assignment/studyassignment",
+      "body": "{\"id\":\"<字符串 id>\",\"status\":0|1}",
+      "返回": "成功；随后 get 能读到新状态"
+    },
+    {
+      "能力": "assignment-update",
+      "method": "PUT",
+      "path": "/admin-api/study/assignment/studyassignment",
+      "body": "create 的 24 键载荷 + id（追加在最后）",
+      "备注": "**这一条是推断形状，不是浏览器基准**：编辑页的 PUT 没有单独抓过基准（见 docs/pages/作业管理.md 的「尚未覆盖」）。载荷形状按 create 推的，并且已在测试环境真实调用成功、get 复核字段确实变了。"
+    },
+    {
+      "能力": "assignment-remove",
+      "method": "DELETE",
+      "path": "/admin-api/study/assignment/studyassignment",
+      "body": "[\"<字符串 id>\"]",
+      "返回": "成功"
+    }
+  ],
+  "三条实测出来的语义（不是推断）": [
+    "**删除是逻辑删除**：remove 之后 list 查不到，但 get(id) 仍然返回整行，只是 isDel 从 0 变成 1；重复 remove 后端直接返回成功。所以「删干净了没有」只能看列表。",
+    "**create 返回字符串 id**：后端把 Long 序列化成字符串，删除 body 与改状态 body 里回传的 id 也都是字符串（与浏览器基准一致）。",
+    "**后端会归一化页面的奇怪初值**：创建时页面发的是 isUploadCore:'' / coreType:'' / scoreType:'' / answerType:'' / imageAnswer:[]，读回来是 0 / null / 0 / null / null。所以「先 get 再改」时把这些字段原样传回去，比让 SDK 拿创建态默认值去填更贴近页面编辑态。"
+  ]
+}

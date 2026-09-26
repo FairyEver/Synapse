@@ -20,17 +20,19 @@ Skill 引导用户自己的 AI 从本机 MCP 获取凭证，AI 使用自己的 H
 
 ## SDK 如何进入后端
 
-SDK 源码仍在独立仓库维护，SY 不复制一套业务源码。当前固定源码提交 `0dae0247f34ee503d6086c58a5f6243f3665fb3d`，从该提交导出干净快照构建，不包含另一工作区正在开发的改动。
+SDK 源码就在本仓库内，是 `extend/portal-headless` 下的 workspace 子包 `@synapse/portal-headless`。2026-09-26 由独立仓库整体迁入，不再有跨仓库交付产物。
 
-- `server/vendor/portal-headless-0.0.1-synapse.0dae0247.tgz` 是交付产物。
-- `server/vendor/portal-headless.manifest.json` 记录版本、来源提交和 SHA-256；pnpm lock 另记录归档 integrity。
-- 归档只包含构建后的 JS/类型、包元数据和必要生成资源；不包含 smoke、baseline、用户凭据或开发 node_modules。
-- 必带 `generated/page-catalog.json` 与 `generated/module-type-rules.json`，缺失不能静默发布。
-- `server/package.json` 通过 `file:vendor/...tgz` 固定依赖，依赖实际安装到 node_modules，不是跨仓库软链接。
-- Nest 后端为 CommonJS/NodeNext，通过保留的动态 `import("portal-headless")` 加载 ESM。SDK 不进入 Electron 安装包。
-- Docker deps 阶段先复制 vendor 再 frozen install；build 阶段运行 `check:portal-sdk` 后构建；正式阶段沿用现有 node_modules 复制路径。部署脚本现有 `/server/***` 白名单包含归档。
+- `server/package.json` 通过 `workspace:*` 依赖该包，解析为指向 `extend/portal-headless` 的符号链接。
+- 包入口是 `dist/index.js`（`exports` 只声明 `import` 条件），由 `pnpm --filter @synapse/portal-headless run build` 产出。
+- 必带 `generated/page-catalog.json` 与 `generated/module-type-rules.json`：这两个是**运行时按 `import.meta.url` 读取**的资源，不内联进 dist；缺失时目录查询会失败。
+- Nest 后端为 CommonJS/NodeNext，通过保留的动态 `import("@synapse/portal-headless")` 加载 ESM。SDK 不进入 Electron 安装包。
+- Docker deps 阶段复制包 `package.json` 后 frozen install；build 阶段先构建 SDK，再运行 `check:portal-sdk` 与 server 构建；正式阶段显式复制 `extend/portal-headless` 的 `dist`、那两个运行时生成资源与依赖链接——workspace 依赖是符号链接，不像归档那样实体落盘，不复制该目录则链接在生产镜像中断开。部署脚本白名单含 `/extend/***`。
 
-升级时从 SDK 的干净提交执行冻结依赖安装与构建，按此包的 `exports/files` 元数据生成新版本 tarball；更新归档、manifest、server 依赖与 lockfile，并运行 `pnpm --filter @synapse/server check:portal-sdk`、后端测试/typecheck/build 和 Docker 构建。不得指向开发者 `/Users/...` 或从生产服务器拉浮动分支。发布包来源应通过独立 SHA 与 Node 版本记录复核。具体打包步骤与当前上游测试限制见 `server/vendor/README.md`。
+迁入前用的是 `file:vendor/*.tgz` 归档：从独立仓库的干净提交导出、构建、`npm pack`，再由 `server/vendor/portal-headless.manifest.json` 记录版本、来源提交与 SHA-256，归档只含构建后的 JS/类型与必要生成资源。那套机制要保证的「线上运行的 SDK 精确来自某个已知提交」依然成立，现在由 monorepo 的原子提交承担——SDK 变更与其 SY 侧适配变更落在同一次提交里，比归档更直接。
+
+`check:portal-sdk` 相应从供应链校验收窄为构建产物校验：不再比对归档 SHA-256 与来源提交，保留包可加载、运行时资源在位、三个只读契约（`meeting-room-usage` / `perf-year-agreement-list` / `base-dict-get` 必须是非写、`ai.effect` 为 `read`、且存在 `invoke` 绑定）三项。
+
+改完 SDK 仍需真实测试账号联调：`check:portal-sdk` 只验证构建产物与只读契约，不发业务请求，**合成测试不能代替真实授权验收**。原冻结提交 `0dae0247f34ee503d6086c58a5f6243f3665fb3d` 的上游全量测试记录为 2387 通过、19 失败、51 跳过，19 项失败都在 `test/sample-device.test.ts`（缺该提交未跟踪的 `tools/sample/endpoints.json`）——这不代表上游全量测试通过，该状态随源码一并带入，属本包已知情况。
 
 ## 运行范围与限制
 

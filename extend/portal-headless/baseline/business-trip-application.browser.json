@@ -1,0 +1,196 @@
+{
+  "说明": "出差申请（hr_business_trip_application / /simple/hr/form/041）的真实浏览器请求基准。用 tools/baseline/install-hook.js 在页内抓的；token 类请求头在页内被替换成 <redacted>，所以本文件里没有凭据。",
+  "捕获时间": "2026-09-21（Asia/Shanghai）",
+  "入口": "/dashboard/flow/form/edit?processDefinitionKey=hr_business_trip_application&bpmMode=edit&formCustomCreatePath=simple/hr/form/041",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/041",
+  "抓取手法": [
+    "bsk session start --no-focus → bsk navigate <入口> → bsk evaluate \"$(cat tools/baseline/install-hook.js)\"",
+    "在页面上：类型下拉选「出差」→ 填同行人/始发地/目的地/事由（bsk fill）→ 选开始时间 2026-09-24 09:00:00 → 选结束时间 2026-09-24 18:30:00 → 点「查看审批流程」",
+    "**没有点「提交」**：页面上那个 portal-hxr-flow-process-preview 会把 resolvePreviewVariables()（= buildSubmitData()）塞进 POST /bpm/process-instance/preview 的 variables，所以点这个只读按钮就能拿到一份逐字节等于提交载荷的东西。",
+    "bsk session stop <id>"
+  ],
+  "抓取时踩到的两个坑（datetime 选择器，与前几条线的配方不同）": [
+    "① bsk click 点面板里的日期格/时间格会被判 element not visible（面板底部超出视口 645px）。改用 bsk evaluate 在页内 dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})) —— React 的合成事件认它，值真的写进表单（已用输入框的值复核过）。",
+    "② 本表单是**两个独立的 a-date-picker show-time**（不是一个 range-picker），而它的值**只在点「确 定」之后才写进表单状态**：直接去点另一个输入框，前一个的值会被清掉（实测：开始时间先显示 2026-09-24 09:00:00，点了结束时间输入框之后变回空）。所以每一步都必须以「确 定」收尾，而「确 定」按钮同样要用 ① 的页内点击。",
+    "③ rc-picker 的输入框是 readOnly，bsk fill 改不了它（与 tools/baseline/README.md §2 的结论一致）。"
+  ],
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=hr_business_trip_application&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "备注": "**没有 module-type 头**（D20 / 第 7 条硬约束）。表单外壳用它拿流程名与 bpmnXml；本能力只做只读回显，不发这个头。"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=1&pageSize=500",
+      "via": "xhr",
+      "headers": {
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1"
+      },
+      "次数": 9,
+      "备注": "表单外壳挂载时无关键字翻页拉全量人员目录：9 页 × 500 = 4500+ 人（与 042/043 两条线同一现象）。**本能力一条都不打这个接口**——本表单根本没有人员控件（「同行人」是个 a-textarea 自由文本，见源码）。它是设计 D6「长选项必须先要关键字」的现场证据。"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "备注": "流程表单外壳的待办角标（工作台壳子的一部分），不是本表单的字段，本能力不做。"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/org/sensitive/info?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "备注": "门户全局（身份/组织敏感信息）请求，不是本表单的一部分，本能力不做。"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/bpm/process-instance/preview",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "processDefinitionKey": "hr_business_trip_application",
+        "variables": {
+          "applicantId": "18243",
+          "applicantName": "姚淼鑫",
+          "applyDate": "2026-09-21",
+          "applyDepartmentId": "101",
+          "applyDepartmentName": "设计中心1236",
+          "applyPostId": "702",
+          "applyPostName": "高级产品经理",
+          "tripType": 0,
+          "companions": "SDK-TEST-同行人张三、李四",
+          "startTime": "2026-09-24 09:00:00",
+          "endTime": "2026-09-24 18:30:00",
+          "origin": "SDK-TEST-北京",
+          "destination": "SDK-TEST-上海",
+          "reason": "SDK-TEST-客户拜访，用于抓取基准"
+        },
+        "startUserSelectAssignees": {},
+        "copyUserIds": []
+      },
+      "备注": "★ 本基准里最要紧的一条：`variables` 那一层**逐字节等于 create 的载荷**（create 的 body 就是它 + 末尾的 startUserSelectAssignees）。键顺序 = formState 的声明顺序。`startUserSelectAssignees` 实测是 `{}`（本流程没有 candidateStrategy=35 节点），`copyUserIds` 恒 `[]`。"
+    }
+  ],
+  "表单填写值": {
+    "只读（页面 disabled 的 input，来自 /sys/user/info）": {
+      "申请人": "姚淼鑫",
+      "申请时间": "2026-09-21",
+      "申请部门": "设计中心1236",
+      "申请岗位": "高级产品经理"
+    },
+    "用户填": {
+      "tripType": 0,
+      "companions": "SDK-TEST-同行人张三、李四",
+      "startTime": "2026-09-24 09:00:00",
+      "endTime": "2026-09-24 18:30:00",
+      "origin": "SDK-TEST-北京",
+      "destination": "SDK-TEST-上海",
+      "reason": "SDK-TEST-客户拜访，用于抓取基准"
+    }
+  },
+  "提交载荷": {
+    "body": {
+      "applicantId": "18243",
+      "applicantName": "姚淼鑫",
+      "applyDate": "2026-09-21",
+      "applyDepartmentId": "101",
+      "applyDepartmentName": "设计中心1236",
+      "applyPostId": "702",
+      "applyPostName": "高级产品经理",
+      "tripType": 0,
+      "companions": "SDK-TEST-同行人张三、李四",
+      "startTime": "2026-09-24 09:00:00",
+      "endTime": "2026-09-24 18:30:00",
+      "origin": "SDK-TEST-北京",
+      "destination": "SDK-TEST-上海",
+      "reason": "SDK-TEST-客户拜访，用于抓取基准"
+    },
+    "键顺序": [
+      "applicantId",
+      "applicantName",
+      "applyDate",
+      "applyDepartmentId",
+      "applyDepartmentName",
+      "applyPostId",
+      "applyPostName",
+      "tripType",
+      "companions",
+      "startTime",
+      "endTime",
+      "origin",
+      "destination",
+      "reason"
+    ],
+    "逐字段类型": {
+      "applicantId": "字符串（实测 \"18243\"）—— 来自 userStore 的 id，页面直接赋值不做转换",
+      "applicantName": "字符串",
+      "applyDate": "字符串 YYYY-MM-DD，**是「今天」**（页面 formState 的初值 dayjs().format('YYYY-MM-DD')），不是出差那天",
+      "applyDepartmentId": "字符串（实测 \"101\"）",
+      "applyDepartmentName": "字符串",
+      "applyPostId": "字符串（实测 \"702\"）",
+      "applyPostName": "字符串",
+      "tripType": "数字（a-select 的 value，本地常量 0/1/2）",
+      "companions": "字符串，提交前 trim",
+      "startTime": "字符串 YYYY-MM-DD HH:mm:ss（formatSubmitDateTime 的产物）",
+      "endTime": "字符串 YYYY-MM-DD HH:mm:ss",
+      "origin": "字符串，提交前 trim",
+      "destination": "字符串，提交前 trim",
+      "reason": "字符串，提交前 trim"
+    }
+  },
+  "只读联动（页面上真的会变的那几处）": [
+    "申请人 / 申请时间 / 申请部门 / 申请岗位 四个输入框都是 `disabled` 的 a-input，值来自 `useUserStore().state`；而那个 store 由路由 meta 的 `baseData: ['user-basic']` → `utils/router/base-data.js` 的 `fetchSimpleUserBasic()` → **GET /sys/user/info** 填（401 行附近，`critical: true`）。",
+    "**本表单没有算出来的字段**：没有时长自动计算、没有金额、没有跨字段禁用。7 个只读字段全是「后端/会话算出来的身份信息」，用户填的那 7 个彼此之间**没有联动**（两个时间控件之间也没有 disabled/清空联动，见源码 041/page/pc/edit/index.vue —— 与 042 加班那条线不同）。"
+  ],
+  "审批链（另行用 POST /bpm/process-instance/preview 实测拿到，不是本文件抓包内容）": {
+    "processDefinitionId": "hr_business_trip_application:2:...",
+    "state": "CONFIRMED",
+    "nodes": [
+      { "nodeId": "START_EVENT", "type": "START_EVENT" },
+      {
+        "nodeId": "Activity_...",
+        "name": "直属上级审批",
+        "type": "USER_TASK",
+        "candidateStrategy": 23,
+        "candidateStrategyName": "直属上级",
+        "candidateUsers": [{ "id": 15012, "nickname": "乔娜" }]
+      },
+      { "nodeId": "END_EVENT", "type": "END_EVENT" }
+    ],
+    "备注": "23 = BpmTaskCandidateStrategyEnum.DIRECT_LEADER（直属上级）——审批人是后端按发起人所在组织**算出来**的，不是发起人选的。发起人是 18243（姚淼鑫），审批人是 15012（乔娜）⇒ **不是同一人**，可以提交（否则会撞上后端的「流程发起人与审批人相同，自动审核通过」，单据永远撤不掉）。"
+  },
+  "没抓到的（如实说明）": [
+    "`GET /sys/user/info` **不在这一次抓包的请求列表里**：`fetchSimpleUserBasic()` 有 `if (userStore.state?.basicInfoReady && !force) return` 的短路，而这次是先在门户首页（它自己也声明了 user-basic）再进表单页，store 已经就绪，所以没有再打。字段来源是**源码 + 另一次实测**（`GET /sys/user/info` 返回 `{id:\"18243\", realName:\"姚淼鑫\", organizationId:\"101\", organizationName:\"设计中心1236\", postId:\"702\", postName:\"高级产品经理\", username:\"2021070101\"}`，与页面显示的四个只读值逐个对得上）。前面几条线（调休 043）的基准里能直接看到这条请求。",
+    "`POST /hr/business-trip-application/create` 的真实抓包**不在本文件里**：本轮基准是只读抓的（点的是「查看审批流程」而不是「提交」）。提交链路的往返记录在 `docs/pages/出差申请.md` §六。",
+    "「我的流程」（`/dashboard/flow/task/my/list`）那一页的抓包不在本文件里——撤销链路的形状沿用 042/043 两条线已经验证过的那一套（同一个 `GET /bpm/process-instance/my-page` + `DELETE /bpm/process-instance/cancel-by-start-user`）。"
+  ]
+}

@@ -1,0 +1,3272 @@
+{
+  "全量外推": {
+    "口径": "只做**结构分组**，不用\"层内通过率 × 层大小\"外推百分比——那个乘法假设了组内同质，而下面实测已证明它不同质。",
+    "auto总数": 136,
+    "A 组·无页面级参数（契约里只有 order/orderField ± 分页）": 31,
+    "B 组·有页面级参数": 105,
+    "分组依据": "这是**契约本身的函数**，不需要跑浏览器就能数出来：没有页面级参数，就没有\"kind 描述不了控件\"这个问题。",
+    "实测": {
+      "A 组抽样": 3,
+      "A 组判为可以直接接": 3,
+      "B 组抽样": 21,
+      "B 组判为可以直接接": 1,
+      "B 组里判为可以直接接的页": [
+        "/dashboard/platform/category/supplier/brand/list"
+      ],
+      "说明": "**B 组不是均质的**：B 组抽样 21 页里有 1 页可以直接接，它们的共同点是**参数全是自由文本输入**（platform/category/supplier/brand/list）——kind=string 对文本框本来就是对的。所以\"有参数 ⇒ 需要人补\"这个更强的说法被实测推翻了：**只有参数会渲染成日期/下拉/选项的页才需要人补**，而\"某个参数会不会渲染成下拉\"在源码里判不出来，只能运行时看。"
+    },
+    "外推": {
+      "能直接说的": "A 组 31 页结构上不会因 kind 出问题（实测抽到的 A 组页全部通过）；B 组 105 页里，抽样 21 页有 20 页需要人补。",
+      "不能说": "不能把抽样比例乘回 B 组——B 组内部差异极大（从\"全是文本框\"到\"6 个参数里 4 个 kind 是错的\"都有），乘出来的数字没有依据。B 组要得到逐页结论，只能逐页跑本装置（每页约 30 秒）。",
+      "本轮的实测比例": "24 页：可以直接接 4（17%）｜需要人补 19｜不能接 1"
+    }
+  },
+  "待补齐（本轮没做到的）": [
+    "长选项的**搜索接口**没有逐个确认：装置量到了\"有 922 条候选\"（班组）与\"494 条候选且页面自己靠 keyword+分页\"（供应商），但没有回答\"无头调用方该传哪个关键字参数、打哪个接口\"。这是**真正只能人做**的那部分，也是新增工作量的大头。",
+    "\"页面定义混进契约\"这一类在 136 里的**规模**没有结论：抽样命中 4 页 / 7 个参数，但这个比例既不能乘（B 组不同质），也没有别的判据可以先验地找出这类页——只能逐页跑装置。后果最重（静默换数据集），所以它值得逐页过。",
+    "响应侧没比对：装置只抓请求，不判断返回的数据对不对（D20 只要求请求逐字段一致）。",
+    "值改写只在\"初值是字面量\"的参数上比对了（`默认值与浏览器不符`）。初值为空/null 的参数被钩子改写值，装置看不出来。",
+    "探针的覆盖是**逐例**核对的（4 页命中 probe-blindspot，都回源确认过），不是一个自动的全覆盖检查；换言之\"装置没报无控件\"不等于\"这页所有控件都被映射到了\"。",
+    "多个标签页共用一个浏览器 profile，`hr-0.0.0-menuPath` 这个 module-type 来源的 cookie 是全局的。本轮的流程（每次 reload 到目标路由）让 24/24 页的 cookie 都指向本页，因此没能**观察到**被别的标签页污染的情形——污染本身是已知事实（见 baseline/attendance-archive-sheet.browser.json 的记录），但本轮的样本里没有复现出来。"
+  ],
+  "口径": {
+    "抽样": "分层抽样（层定义见 tools/sample/select-sample.mjs），不是随机抽样",
+    "抽样轮次": "L4 层（71 页，最大的一层）第一轮只抽了 4 页，看到结果后把配额提到 7 补跑 3 页——是自适应抽样，只新增不淘汰；详见 select-sample.mjs 头部",
+    "分类判据": "不能接=会发错请求｜需要人补=请求形状对但契约描述错｜可以直接接=形状与描述都对上",
+    "moduleType": "一律以规则表（dist/context/module-type.js 的 resolveModuleType）为准，浏览器抓到的值只在 cookie 指向本页时作参考",
+    "应用外壳": "出现在 >= 15/24 页上的请求路径被判定为「应用外壳」（字典/菜单/租户/待办角标），不计入单页的候选来源",
+    "moduleTypeCookie": "`hr-0.0.0-menuPath` 是同一浏览器 profile **全局共享**的 cookie（由路由守卫写，见 baseline/attendance-archive-sheet.browser.json）。抓取时它若指向别的路由，浏览器发出的 module-type 就不是本页的值，该页的浏览器值不可采信——以规则表为准。"
+  },
+  "module-type 统计": {
+    "可采信页数": 24,
+    "不可采信页数": 0,
+    "契约与规则表不符页数": 0,
+    "浏览器与规则表不符页数": 0,
+    "按规则表发出头的页数": 10,
+    "规则表算不出的页数": 14
+  },
+  "抽样总数": 24,
+  "成功抓取": 24,
+  "分类合计": {
+    "需要人补": 19,
+    "可以直接接": 4,
+    "不能接": 1
+  },
+  "形状全对页数": 24,
+  "形状全对但描述有缺": 19,
+  "发现按类型计数": {
+    "kind 判错（选择型）": 22,
+    "契约里有、页面上没有控件（page-definition）": 7,
+    "kind 判错（日期）": 3,
+    "长选项未标注": 4,
+    "kind 判错": 3,
+    "契约里有、页面上没有控件（conditional）": 1,
+    "契约里有、页面上没有控件（probe-blindspot）": 4,
+    "页面筛选与契约参数完全不重合": 5
+  },
+  "待补分级": {
+    "第 1 档·会静默返回错数据（页面定义混进了筛选条件）": {
+      "页数": 4,
+      "参数个数": 7,
+      "页": [
+        "/dashboard/attendance/attendance-archive-sheet/list",
+        "/dashboard/platform/chicken/apply/list",
+        "/dashboard/platform/control-panel/image-list/list",
+        "/dashboard/setting/category-dict/list"
+      ]
+    },
+    "第 2 档·AI 无法正确调用（长选项：不知道传什么、要不要关键字）": {
+      "页数": 4,
+      "页": [
+        "/dashboard/attendance/attendance-archive-sheet/list",
+        "/dashboard/attendance/attendance-sheet/list",
+        "/dashboard/sale/goods/material/list",
+        "/dashboard/setting/material/list"
+      ]
+    },
+    "第 3 档·只能瞎猜值域（日期/选择型的 kind 没有任何说明）": {
+      "页数": 15,
+      "页": [
+        "/dashboard/meeting-room/list",
+        "/dashboard/attendance/attendance-archive-sheet/list",
+        "/dashboard/attendance/attendance-sheet/list",
+        "/dashboard/base/management-center/list",
+        "/dashboard/block/main/list",
+        "/dashboard/contract/template/list",
+        "/dashboard/finance/setting/accounting-manage/list",
+        "/dashboard/finance/setting/accounting-period/list",
+        "/dashboard/flow/old/model/list",
+        "/dashboard/grade/grade/list",
+        "/dashboard/manage/cost-center/list",
+        "/dashboard/material/assets/code-setting/list",
+        "/dashboard/org/org-setting/list",
+        "/dashboard/sale/goods/material/list",
+        "/dashboard/setting/material/list"
+      ]
+    },
+    "附带·按账号/条件渲染的参数（契约里必须有条件地描述）": {
+      "页数": 1,
+      "页": [
+        "/dashboard/finance/setting/accounting-period/list"
+      ]
+    },
+    "附带·探针盲区（控件在，只是没走 id 注入——**不是**页面的问题）": {
+      "页数": 3,
+      "页": [
+        "/dashboard/grade/grade/list",
+        "/dashboard/platform/category/attribute/property/list",
+        "/dashboard/platform/control-panel/payment-method/list"
+      ],
+      "备注": "「没有控件」的三种成因是**源码核对**得出的（静态），不依赖探针盲区字段；后者只是旁证。"
+    }
+  },
+  "参数级统计": {
+    "检查的参数数": 68,
+    "kind与页面控件不符": 28,
+    "页面上没有控件": 12,
+    "一致": 28,
+    "按控件类型": {
+      "text": 28,
+      "select": 22,
+      "(无控件)": 12,
+      "picker": 3,
+      "radio-group": 2,
+      "input-number": 1
+    }
+  },
+  "按层": {
+    "L2:参数名是 Id 引用": {
+      "抽样": 11,
+      "可以直接接": 0,
+      "需要人补": 10,
+      "不能接": 1,
+      "层内总量": 44
+    },
+    "L1:参数名像日期/时间": {
+      "抽样": 3,
+      "可以直接接": 0,
+      "需要人补": 3,
+      "不能接": 0,
+      "层内总量": 18
+    },
+    "L3:参数个数>=8": {
+      "抽样": 8,
+      "可以直接接": 0,
+      "需要人补": 8,
+      "不能接": 0,
+      "层内总量": 38
+    },
+    "L7:对照(绝对 /admin-api、参数少、无日期无引用)": {
+      "抽样": 3,
+      "可以直接接": 0,
+      "需要人补": 3,
+      "不能接": 0,
+      "层内总量": 29
+    },
+    "L4:非 /admin-api 前缀": {
+      "抽样": 7,
+      "可以直接接": 3,
+      "需要人补": 3,
+      "不能接": 1,
+      "层内总量": 71
+    },
+    "L5:不分页": {
+      "抽样": 3,
+      "可以直接接": 2,
+      "需要人补": 1,
+      "不能接": 0,
+      "层内总量": 21
+    },
+    "L6:源码有改写钩子": {
+      "抽样": 2,
+      "可以直接接": 0,
+      "需要人补": 2,
+      "不能接": 0,
+      "层内总量": 3
+    }
+  },
+  "应用外壳路径": [
+    "/admin-api/bpm/task/list-by-category",
+    "/admin-api/finance/expense-review/pending-count",
+    "/admin-api/hr/system-tenant/getUserTenantsByPage",
+    "/admin-api/org/organization/getRoleOrganizationTree",
+    "/admin-api/org/sensitive/info",
+    "/admin-api/performance/basedata/kpimessageremind/getUnreadcount",
+    "/admin-api/sys/menu/permissionsNotBySystem",
+    "/admin-api/system/dict-data/grouped-list",
+    "/admin-api/system/tenant/get",
+    "/admin-crm-api/vue/getUserInfo",
+    "/admin-shop-api/admin/area/allArea",
+    "/admin-shop-api/admin/categoryBrand/brandAllList",
+    "/admin-shop-api/admin/categoryManufacturer/manufacturerInfoList",
+    "/admin-shop-api/admin/shop/getInfo",
+    "/adminmanage-api/adminmanage/platform-config/list",
+    "/adminmanage-api/system/dict-data/list-all-simple",
+    "/mall-manage-api/sys/crm/area/list"
+  ],
+  "逐页": [
+    {
+      "pagePath": "/dashboard/meeting-room/list",
+      "capabilityId": "batch:meeting-room-list",
+      "title": "会议室",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "resolvedPath": "/admin-api/hr/meeting-room/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/meeting-room/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "authorizedOrgId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "authorizedOrgId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "会议室名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "authorizedOrgId",
+            "kind": "undefined",
+            "defaultValue": null,
+            "control": "select",
+            "label": "授权组织",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 undefined，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [
+          {
+            "参数": "authorizedOrgId",
+            "label": "授权组织",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "authorizedOrgId",
+          "说明": "参数 authorizedOrgId：kind 是 undefined，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "授权组织"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/hr/meeting-room/page?order=&orderField=&name=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-archive-sheet/list",
+      "capabilityId": "batch:attendance-attendance-archive-sheet-list",
+      "title": "考勤档案",
+      "layers": [
+        "L1:参数名像日期/时间",
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "resolvedPath": "/admin-api/org/hrAttendanceSheet/page",
+      "moduleType": {
+        "契约": 11,
+        "规则表": 11,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "11",
+        "抓取时cookie": "/dashboard/attendance/attendance-archive-sheet/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "isArchived",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "isArchived",
+            "yearMonth",
+            "departmentId",
+            "organizationId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "yearMonth",
+            "departmentId",
+            "organizationId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "isArchived",
+            "kind": "number",
+            "defaultValue": 1,
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "yearMonth",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "picker",
+            "label": "月份",
+            "pickerClass": "ant-picker css-lu8iya",
+            "verdict": "kind 是 null，实际是日期控件",
+            "mismatch": true
+          },
+          {
+            "name": "departmentId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "部门",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "organizationId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "班组",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "isArchived",
+            "kind": "page-definition",
+            "defaultValue": 1,
+            "why": "源码里除了 form 初值，没有任何 formState.isArchived 绑定——页面上不存在这个控件"
+          }
+        ],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=1",
+            "path": "/admin-api/org/organization/getAllOrganizationByType",
+            "候选条数": 17,
+            "总数": null,
+            "自带关键字或分页": false
+          },
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=2",
+            "path": "/admin-api/org/organization/getAllOrganizationByType",
+            "候选条数": 922,
+            "总数": null,
+            "自带关键字或分页": false
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "departmentId",
+            "label": "部门",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          },
+          {
+            "参数": "organizationId",
+            "label": "班组",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=1",
+                "path": "/admin-api/org/organization/getAllOrganizationByType",
+                "候选条数": 17,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              },
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=2",
+                "path": "/admin-api/org/organization/getAllOrganizationByType",
+                "候选条数": 922,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              }
+            ]
+          }
+        ],
+        "长选项个数": 1
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "isArchived",
+          "说明": "参数 isArchived（契约 kind=number，初值 1）在 DOM 里没有 form_item_isArchived 这个 id。源码里除了 form 初值，没有任何 formState.isArchived 绑定——页面上不存在这个控件→ 它是**页面自己定义的常量**（初值 1，不是空值），用来给列表分档；留在契约里等于给 AI 一个可以拨动的开关，拨了会静默查到另一批数据。"
+        },
+        {
+          "类型": "kind 判错（日期）",
+          "严重度": "high",
+          "参数": "yearMonth",
+          "说明": "参数 yearMonth：kind 是 null，实际是日期控件",
+          "控件": "picker",
+          "label": "月份"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "departmentId",
+          "说明": "参数 departmentId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "部门"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "organizationId",
+          "说明": "参数 organizationId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "班组"
+        },
+        {
+          "类型": "长选项未标注",
+          "严重度": "high",
+          "参数": "organizationId",
+          "说明": "参数 organizationId（「班组」）是下拉，候选规模达 922 条（来源 /admin-api/org/organization/getAllOrganizationByType）；契约里只有一个 kind，调用方不知道传什么、也不知道要不要关键字。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&isArchived=1&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-sheet/list",
+      "capabilityId": "batch:attendance-attendance-sheet-list",
+      "title": "考勤统计",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "resolvedPath": "/admin-api/org/hrAttendanceSheet/page",
+      "moduleType": {
+        "契约": 11,
+        "规则表": 11,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "11",
+        "抓取时cookie": "/dashboard/attendance/attendance-sheet/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "departmentId",
+            "organizationId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "departmentId",
+            "organizationId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "departmentId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "部门",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "organizationId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "班组",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": [
+          "操作(null)"
+        ],
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=1",
+            "path": "/admin-api/org/organization/getAllOrganizationByType",
+            "候选条数": 17,
+            "总数": null,
+            "自带关键字或分页": false
+          },
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=2",
+            "path": "/admin-api/org/organization/getAllOrganizationByType",
+            "候选条数": 922,
+            "总数": null,
+            "自带关键字或分页": false
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "departmentId",
+            "label": "部门",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          },
+          {
+            "参数": "organizationId",
+            "label": "班组",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=1",
+                "path": "/admin-api/org/organization/getAllOrganizationByType",
+                "候选条数": 17,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              },
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=2",
+                "path": "/admin-api/org/organization/getAllOrganizationByType",
+                "候选条数": 922,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              }
+            ]
+          }
+        ],
+        "长选项个数": 1
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "departmentId",
+          "说明": "参数 departmentId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "部门"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "organizationId",
+          "说明": "参数 organizationId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "班组"
+        },
+        {
+          "类型": "长选项未标注",
+          "严重度": "high",
+          "参数": "organizationId",
+          "说明": "参数 organizationId（「班组」）是下拉，候选规模达 922 条（来源 /admin-api/org/organization/getAllOrganizationByType）；契约里只有一个 kind，调用方不知道传什么、也不知道要不要关键字。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/base/management-center/list",
+      "capabilityId": "batch:base-management-center-list",
+      "title": "组织结构",
+      "layers": [
+        "L7:对照(绝对 /admin-api、参数少、无日期无引用)"
+      ],
+      "resolvedPath": "/admin-api/study/base/studymanagementcenter/page",
+      "moduleType": {
+        "契约": 12,
+        "规则表": 12,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "12",
+        "抓取时cookie": "/dashboard/base/management-center/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "status",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "启用状态",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [
+          {
+            "参数": "status",
+            "label": "启用状态",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "status",
+          "说明": "参数 status：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "启用状态"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studymanagementcenter/page?order=&orderField=&name=&status=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/block/main/list",
+      "capabilityId": "batch:block-main-list",
+      "title": "组件管理",
+      "layers": [
+        "L7:对照(绝对 /admin-api、参数少、无日期无引用)"
+      ],
+      "resolvedPath": "/admin-api/performance/basedata/kpisubassembly/page",
+      "moduleType": {
+        "契约": 13,
+        "规则表": 13,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "13",
+        "抓取时cookie": "/dashboard/block/main/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "warehouseType",
+            "type",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "warehouseType",
+            "type",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "组件名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "warehouseType",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "组件库类型",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "type",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "组件类型",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [
+          {
+            "参数": "warehouseType",
+            "label": "组件库类型",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          },
+          {
+            "参数": "type",
+            "label": "组件类型",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "warehouseType",
+          "说明": "参数 warehouseType：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "组件库类型"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "type",
+          "说明": "参数 type：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "组件类型"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/performance/basedata/kpisubassembly/page?order=&orderField=&name=&warehouseType=&type=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/contract/template/list",
+      "capabilityId": "batch:contract-template-list",
+      "title": "合同模板",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "resolvedPath": "/admin-api/hr/contract-template/page",
+      "moduleType": {
+        "契约": 15,
+        "规则表": 15,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "15",
+        "抓取时cookie": "/dashboard/contract/template/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "typeId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "name",
+            "typeId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "text",
+            "label": "模板",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "typeId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "类型",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/system/category-dict/getChildNodeTree?code=contract_type",
+            "path": "/admin-api/system/category-dict/getChildNodeTree",
+            "候选条数": 1,
+            "总数": null,
+            "自带关键字或分页": false
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "typeId",
+            "label": "类型",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "typeId",
+          "说明": "参数 typeId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "类型"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/page?order=&orderField=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/accounting-manage/list",
+      "capabilityId": "batch:finance-setting-accounting-manage-list",
+      "title": "账套管理",
+      "layers": [
+        "L1:参数名像日期/时间",
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "resolvedPath": "/admin-api/finance/accounting-manage/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/finance/setting/accounting-manage/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "accountCode",
+            "accountingName",
+            "accountingStandardsApply",
+            "periodYear",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "corporationId",
+            "accountCode",
+            "accountingName",
+            "accountingStandardsApply",
+            "periodYear",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "corporationId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "corporationId",
+            "kind": "undefined",
+            "defaultValue": null,
+            "control": "select",
+            "label": "所属法人单位",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 undefined，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "accountCode",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "账套编码",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "accountingName",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "账套名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "accountingStandardsApply",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "会计准则",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "periodYear",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "picker",
+            "label": "会计期间",
+            "pickerClass": "ant-picker css-lu8iya",
+            "verdict": "kind 是 string，实际是日期控件",
+            "mismatch": true
+          },
+          {
+            "name": "status",
+            "kind": "number",
+            "defaultValue": 0,
+            "control": "radio-group",
+            "label": "状态",
+            "verdict": "kind 是 number，实际是 radio-group",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/org/corporation/page?pageNo=1&pageSize=200",
+            "path": "/admin-api/org/corporation/page",
+            "候选条数": 58,
+            "总数": 58,
+            "自带关键字或分页": true
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "corporationId",
+            "label": "所属法人单位",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/org/corporation/page?pageNo=1&pageSize=200",
+                "path": "/admin-api/org/corporation/page",
+                "候选条数": 58,
+                "总数": 58,
+                "自带关键字或分页": true,
+                "score": 1
+              }
+            ]
+          },
+          {
+            "参数": "accountingStandardsApply",
+            "label": "会计准则",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "corporationId",
+          "说明": "参数 corporationId：kind 是 undefined，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "所属法人单位"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "accountingStandardsApply",
+          "说明": "参数 accountingStandardsApply：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "会计准则"
+        },
+        {
+          "类型": "kind 判错（日期）",
+          "严重度": "high",
+          "参数": "periodYear",
+          "说明": "参数 periodYear：kind 是 string，实际是日期控件",
+          "控件": "picker",
+          "label": "会计期间"
+        },
+        {
+          "类型": "kind 判错",
+          "严重度": "high",
+          "参数": "status",
+          "说明": "参数 status：kind 是 number，实际是 radio-group",
+          "控件": "radio-group",
+          "label": "状态"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/finance/accounting-manage/page?order=&orderField=&accountCode=&accountingName=&accountingStandardsApply=&periodYear=&status=0&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/accounting-period/list",
+      "capabilityId": "batch:finance-setting-accounting-period-list",
+      "title": "会计期间",
+      "layers": [
+        "L1:参数名像日期/时间"
+      ],
+      "resolvedPath": "/admin-api/finance/accounting-period/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/finance/setting/accounting-period/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "year",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "year",
+            "tenantName",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "tenantName"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "year",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "picker",
+            "label": "年度",
+            "pickerClass": "ant-picker css-lu8iya",
+            "verdict": "kind 是 string，实际是日期控件",
+            "mismatch": true
+          },
+          {
+            "name": "tenantName",
+            "kind": "null",
+            "defaultValue": null,
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "status",
+            "kind": "number",
+            "defaultValue": 0,
+            "control": "radio-group",
+            "label": "状态",
+            "verdict": "kind 是 number，实际是 radio-group",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "tenantName",
+            "kind": "conditional",
+            "defaultValue": null,
+            "why": "控件存在但所在表单项带 v-if（v-if=\"userStore.state.username === 'admin'\"），当前账号下没有渲染"
+          }
+        ],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（conditional）",
+          "严重度": "high",
+          "参数": "tenantName",
+          "说明": "参数 tenantName（契约 kind=null，初值 null）在 DOM 里没有 form_item_tenantName 这个 id。控件存在但所在表单项带 v-if（v-if=\"userStore.state.username === 'admin'\"），当前账号下没有渲染→ 它是不是能力参数取决于登录账号，契约里必须有条件地描述它。"
+        },
+        {
+          "类型": "kind 判错（日期）",
+          "严重度": "high",
+          "参数": "year",
+          "说明": "参数 year：kind 是 string，实际是日期控件",
+          "控件": "picker",
+          "label": "年度"
+        },
+        {
+          "类型": "kind 判错",
+          "严重度": "high",
+          "参数": "status",
+          "说明": "参数 status：kind 是 number，实际是 radio-group",
+          "控件": "radio-group",
+          "label": "状态"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/finance/accounting-period/page?order=&orderField=&year=&status=0&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/flow/old/model/list",
+      "capabilityId": "batch:flow-old-model-list",
+      "title": "流程模型 双赢协议",
+      "layers": [
+        "L7:对照(绝对 /admin-api、参数少、无日期无引用)"
+      ],
+      "resolvedPath": "/admin-api/bpm/hr/model/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/flow/old/model/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "key",
+            "name",
+            "category",
+            "pageNo",
+            "limit"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "key",
+            "name",
+            "category",
+            "pageNo",
+            "limit"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "key",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "流程标识",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "流程名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "category",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "流程分类",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [
+          {
+            "参数": "category",
+            "label": "流程分类",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "category",
+          "说明": "参数 category：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "流程分类"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/model/page?order=&orderField=&key=&name=&category=&pageNo=1&limit=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/grade/grade/list",
+      "capabilityId": "batch:grade-grade-list",
+      "title": "班级管理",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "resolvedPath": "/admin-api/study/grade/studygrade/page",
+      "moduleType": {
+        "契约": 12,
+        "规则表": 12,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "12",
+        "抓取时cookie": "/dashboard/grade/grade/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "type",
+            "studentNumMin",
+            "studentNumMax",
+            "teacherName",
+            "teachingAssistantName",
+            "orgId",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "type",
+            "studentNumMin",
+            "studentNumMax",
+            "teacherName",
+            "teachingAssistantName",
+            "orgId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "班级名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "type",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "班级类型",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "studentNumMin",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "studentNumMax",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "teacherName",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "班主任姓名",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "teachingAssistantName",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "助教姓名",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "orgId",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "组织结构",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "studentNumMin",
+            "kind": "probe-blindspot",
+            "defaultValue": "",
+            "why": "源码里有 true 处 formState.studentNumMin 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）"
+          },
+          {
+            "name": "studentNumMax",
+            "kind": "probe-blindspot",
+            "defaultValue": "",
+            "why": "源码里有 true 处 formState.studentNumMax 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）"
+          }
+        ],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [
+          {
+            "参数": "type",
+            "label": "班级类型",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          },
+          {
+            "参数": "orgId",
+            "label": "组织结构",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（probe-blindspot）",
+          "严重度": "high",
+          "参数": "studentNumMin",
+          "说明": "参数 studentNumMin（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_studentNumMin 这个 id。源码里有 true 处 formState.studentNumMin 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）→ 这是**探针的盲区**，不是页面的问题：不要据此断言\"契约里有死参数\"。"
+        },
+        {
+          "类型": "契约里有、页面上没有控件（probe-blindspot）",
+          "严重度": "high",
+          "参数": "studentNumMax",
+          "说明": "参数 studentNumMax（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_studentNumMax 这个 id。源码里有 true 处 formState.studentNumMax 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）→ 这是**探针的盲区**，不是页面的问题：不要据此断言\"契约里有死参数\"。"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "type",
+          "说明": "参数 type：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "班级类型"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "orgId",
+          "说明": "参数 orgId：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "组织结构"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/study/grade/studygrade/page?order=&orderField=&name=&type=&studentNumMin=&studentNumMax=&teacherName=&teachingAssistantName=&orgId=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/manage/cost-center/list",
+      "capabilityId": "batch:manage-cost-center-list",
+      "title": "成本中心",
+      "layers": [
+        "L3:参数个数>=8"
+      ],
+      "resolvedPath": "/admin-api/salary/costcenter/page",
+      "moduleType": {
+        "契约": 14,
+        "规则表": 14,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "14",
+        "抓取时cookie": "/dashboard/manage/cost-center/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "insuranceCost",
+            "fundCost",
+            "salaryCost",
+            "organization",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "insuranceCost",
+            "fundCost",
+            "salaryCost",
+            "organization",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "姓名",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "insuranceCost",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "社保成本中心",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "fundCost",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "公积金成本中心",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "salaryCost",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "薪资成本中心",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "organization",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "所属组织",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [
+          {
+            "参数": "organization",
+            "label": "所属组织",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "organization",
+          "说明": "参数 organization：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "所属组织"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/salary/costcenter/page?order=&orderField=&name=&insuranceCost=&fundCost=&salaryCost=&organization=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/material/assets/code-setting/list",
+      "capabilityId": "batch:material-assets-code-setting-list",
+      "title": "资产编码",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "resolvedPath": "/admin-api/inventory/organization-config/page",
+      "moduleType": {
+        "契约": 31,
+        "规则表": 31,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "31",
+        "抓取时cookie": "/dashboard/material/assets/code-setting/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "orgId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "orgId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "orgId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "法人单位",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/system/dept/list-all-simple?pageNo=-1&pageSize=-1&isCorporation=1",
+            "path": "/admin-api/system/dept/list-all-simple",
+            "候选条数": 35,
+            "总数": null,
+            "自带关键字或分页": true
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "orgId",
+            "label": "法人单位",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "orgId",
+          "说明": "参数 orgId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "法人单位"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/inventory/organization-config/page?order=&orderField=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/org/org-setting/list",
+      "capabilityId": "batch:org-org-setting-list",
+      "title": "组织设置",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "resolvedPath": "/admin-api/org/organization/page",
+      "moduleType": {
+        "契约": 11,
+        "规则表": 11,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "11",
+        "抓取时cookie": "/dashboard/org/org-setting/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "pName",
+            "code",
+            "typeId",
+            "level",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "pName",
+            "code",
+            "typeId",
+            "level",
+            "status",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "组织名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "pName",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "上级组织名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "code",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "组织编号",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "typeId",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "select",
+            "label": "组织类型",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "level",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "input-number",
+            "label": "组织层级",
+            "verdict": "kind 是 string，实际是数字输入",
+            "mismatch": true
+          },
+          {
+            "name": "status",
+            "kind": "number",
+            "defaultValue": 1,
+            "control": "select",
+            "label": "状态",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 number，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organizationType/selectAll",
+            "path": "/admin-api/org/organizationType/selectAll",
+            "候选条数": 17,
+            "总数": null,
+            "自带关键字或分页": false
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "typeId",
+            "label": "组织类型",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organizationType/selectAll",
+                "path": "/admin-api/org/organizationType/selectAll",
+                "候选条数": 17,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              }
+            ]
+          },
+          {
+            "参数": "status",
+            "label": "状态",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": []
+          }
+        ],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "typeId",
+          "说明": "参数 typeId：kind 是 string，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "组织类型"
+        },
+        {
+          "类型": "kind 判错",
+          "严重度": "high",
+          "参数": "level",
+          "说明": "参数 level：kind 是 string，实际是数字输入",
+          "控件": "input-number",
+          "label": "组织层级"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "status",
+          "说明": "参数 status：kind 是 number，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "状态"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/page?order=&orderField=&name=&pName=&code=&typeId=&level=&status=1&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/platform/category/attribute/property/list",
+      "capabilityId": "batch:platform-category-attribute-property-list",
+      "title": "属性列表",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/categorypProps/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/category/attribute/property/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "propType",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "propType",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "propType",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "propType",
+            "kind": "probe-blindspot",
+            "defaultValue": "",
+            "why": "源码里有 true 处 formState.propType 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）"
+          }
+        ],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（probe-blindspot）",
+          "严重度": "high",
+          "参数": "propType",
+          "说明": "参数 propType（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_propType 这个 id。源码里有 true 处 formState.propType 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）→ 这是**探针的盲区**，不是页面的问题：不要据此断言\"契约里有死参数\"。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/categorypProps/page?order=&orderField=&propType=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/platform/category/classify/sort/list",
+      "capabilityId": "batch:platform-category-classify-sort-list",
+      "title": "分类列表",
+      "layers": [
+        "L4:非 /admin-api 前缀",
+        "L5:不分页"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/categoryCat/getTree",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/category/classify/sort/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/categoryCat/getTree?order=&orderField=",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "可以直接接"
+    },
+    {
+      "pagePath": "/dashboard/platform/category/supplier/brand/list",
+      "capabilityId": "batch:platform-category-supplier-brand-list",
+      "title": "品牌管理",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/categorypBrand/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/category/supplier/brand/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "brandName",
+            "brandAlias",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "brandName",
+            "brandAlias",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "brandName",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "品牌名称:",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "brandAlias",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "品牌别名:",
+            "verdict": "一致",
+            "mismatch": false
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/categorypBrand/page?order=&orderField=&brandName=&brandAlias=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "可以直接接"
+    },
+    {
+      "pagePath": "/dashboard/platform/chicken/apply/list",
+      "capabilityId": "batch:platform-chicken-apply-list",
+      "title": "申请管理",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L4:非 /admin-api 前缀"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/platapplymanage/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/chicken/apply/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "username",
+            "gender",
+            "deptId",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "username",
+            "gender",
+            "deptId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "username",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "gender",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "deptId",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "username",
+            "kind": "page-definition",
+            "defaultValue": "",
+            "why": "源码里除了 form 初值，没有任何 formState.username 绑定——页面上不存在这个控件"
+          },
+          {
+            "name": "gender",
+            "kind": "page-definition",
+            "defaultValue": "",
+            "why": "源码里除了 form 初值，没有任何 formState.gender 绑定——页面上不存在这个控件"
+          },
+          {
+            "name": "deptId",
+            "kind": "page-definition",
+            "defaultValue": "",
+            "why": "源码里除了 form 初值，没有任何 formState.deptId 绑定——页面上不存在这个控件"
+          }
+        ],
+        "探针盲区": null,
+        "页面控件但契约没有": [
+          "userName(text)",
+          "phone(text)",
+          "product(select)",
+          "startTime(picker)",
+          "endTime(picker)"
+        ],
+        "筛选区与契约完全不重合": true,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "username",
+          "说明": "参数 username（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_username 这个 id。源码里除了 form 初值，没有任何 formState.username 绑定——页面上不存在这个控件→ 页面上没有任何入口能设置它，浏览器每次发的都是空值——要么这页的筛选区没和列表请求接上线，要么它就是个死参数。"
+        },
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "gender",
+          "说明": "参数 gender（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_gender 这个 id。源码里除了 form 初值，没有任何 formState.gender 绑定——页面上不存在这个控件→ 页面上没有任何入口能设置它，浏览器每次发的都是空值——要么这页的筛选区没和列表请求接上线，要么它就是个死参数。"
+        },
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "deptId",
+          "说明": "参数 deptId（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_deptId 这个 id。源码里除了 form 初值，没有任何 formState.deptId 绑定——页面上不存在这个控件→ 页面上没有任何入口能设置它，浏览器每次发的都是空值——要么这页的筛选区没和列表请求接上线，要么它就是个死参数。"
+        },
+        {
+          "类型": "页面筛选与契约参数完全不重合",
+          "严重度": "blocking",
+          "参数": "userName",
+          "说明": "页面表单有 userName（text，label「申请人姓名」），契约里没有。而且契约里那些参数**一个控件都没有**——两边是两套不相干的字段名，说明这页的筛选区与列表请求没接上。"
+        },
+        {
+          "类型": "页面筛选与契约参数完全不重合",
+          "严重度": "blocking",
+          "参数": "phone",
+          "说明": "页面表单有 phone（text，label「申请人电话」），契约里没有。而且契约里那些参数**一个控件都没有**——两边是两套不相干的字段名，说明这页的筛选区与列表请求没接上。"
+        },
+        {
+          "类型": "页面筛选与契约参数完全不重合",
+          "严重度": "blocking",
+          "参数": "product",
+          "说明": "页面表单有 product（select，label「申请产品」），契约里没有。而且契约里那些参数**一个控件都没有**——两边是两套不相干的字段名，说明这页的筛选区与列表请求没接上。"
+        },
+        {
+          "类型": "页面筛选与契约参数完全不重合",
+          "严重度": "blocking",
+          "参数": "startTime",
+          "说明": "页面表单有 startTime（picker，label「申请开始时间」），契约里没有。而且契约里那些参数**一个控件都没有**——两边是两套不相干的字段名，说明这页的筛选区与列表请求没接上。"
+        },
+        {
+          "类型": "页面筛选与契约参数完全不重合",
+          "严重度": "blocking",
+          "参数": "endTime",
+          "说明": "页面表单有 endTime（picker，label「申请结束时间」），契约里没有。而且契约里那些参数**一个控件都没有**——两边是两套不相干的字段名，说明这页的筛选区与列表请求没接上。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/platapplymanage/page?order=&orderField=&username=&gender=&deptId=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "不能接"
+    },
+    {
+      "pagePath": "/dashboard/platform/chicken/product-setting/list",
+      "capabilityId": "batch:platform-chicken-product-setting-list",
+      "title": "产品配置",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/platproductmanage/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/chicken/product-setting/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [],
+        "无控件参数成因": [],
+        "探针盲区": [
+          "操作(null)"
+        ],
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/user/info",
+            "path": "/admin-api/sys/user/info",
+            "候选条数": null,
+            "总数": null,
+            "自带关键字或分页": false
+          }
+        ],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/platproductmanage/page?order=&orderField=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "可以直接接"
+    },
+    {
+      "pagePath": "/dashboard/platform/control-panel/image-list/list",
+      "capabilityId": "batch:platform-control-panel-image-list-list",
+      "title": "图片管理",
+      "layers": [
+        "L3:参数个数>=8",
+        "L4:非 /admin-api 前缀"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/imageImage/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/control-panel/image-list/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "imageName",
+            "url",
+            "targetType",
+            "disabled",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "imageName",
+            "url",
+            "targetType",
+            "disabled",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "imageName",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "图片名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "url",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "图片地址",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "targetType",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          },
+          {
+            "name": "disabled",
+            "kind": "string",
+            "defaultValue": "0",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "targetType",
+            "kind": "page-definition",
+            "defaultValue": "",
+            "why": "源码里 formState.targetType 出现了 7 次，但**没有一次是控件绑定**（都是赋值/条件判断），它由页面逻辑或切 tab 时程序写入，不是用户能填的筛选条件"
+          },
+          {
+            "name": "disabled",
+            "kind": "page-definition",
+            "defaultValue": "0",
+            "why": "源码里 formState.disabled 出现了 9 次，但**没有一次是控件绑定**（都是赋值/条件判断），它由页面逻辑或切 tab 时程序写入，不是用户能填的筛选条件"
+          }
+        ],
+        "探针盲区": [
+          "操作(null)"
+        ],
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "targetType",
+          "说明": "参数 targetType（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_targetType 这个 id。源码里 formState.targetType 出现了 7 次，但**没有一次是控件绑定**（都是赋值/条件判断），它由页面逻辑或切 tab 时程序写入，不是用户能填的筛选条件→ 页面上没有任何入口能设置它，浏览器每次发的都是空值——要么这页的筛选区没和列表请求接上线，要么它就是个死参数。"
+        },
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "disabled",
+          "说明": "参数 disabled（契约 kind=string，初值 \"0\"）在 DOM 里没有 form_item_disabled 这个 id。源码里 formState.disabled 出现了 9 次，但**没有一次是控件绑定**（都是赋值/条件判断），它由页面逻辑或切 tab 时程序写入，不是用户能填的筛选条件→ 它是**页面自己定义的常量**（初值 \"0\"，不是空值），用来给列表分档；留在契约里等于给 AI 一个可以拨动的开关，拨了会静默查到另一批数据。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/imageImage/page?order=&orderField=&imageName=&url=&targetType=&disabled=0&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/platform/control-panel/payment-method/list",
+      "capabilityId": "batch:platform-control-panel-payment-method-list",
+      "title": "支付方式管理",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "resolvedPath": "/mall-manage-api/sys/paymentMethod/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/platform/control-panel/payment-method/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "platform",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "platform",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "platform",
+            "kind": "string",
+            "defaultValue": "",
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "platform",
+            "kind": "probe-blindspot",
+            "defaultValue": "",
+            "why": "源码里有 true 处 formState.platform 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）"
+          }
+        ],
+        "探针盲区": [
+          "操作(null)"
+        ],
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/user/info",
+            "path": "/admin-api/sys/user/info",
+            "候选条数": null,
+            "总数": null,
+            "自带关键字或分页": false
+          }
+        ],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（probe-blindspot）",
+          "严重度": "high",
+          "参数": "platform",
+          "说明": "参数 platform（契约 kind=string，初值 \"\"）在 DOM 里没有 form_item_platform 这个 id。源码里有 true 处 formState.platform 绑定、所在表单项没有 v-if，控件确实在页面上——是探针没映射到（该控件没有 form_item_* id）→ 这是**探针的盲区**，不是页面的问题：不要据此断言\"契约里有死参数\"。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/mall-manage-api/sys/paymentMethod/page?order=&orderField=&platform=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/material/list",
+      "capabilityId": "batch:sale-goods-material-list",
+      "title": "物料维护",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8",
+        "L6:源码有改写钩子"
+      ],
+      "resolvedPath": "/admin-api/system/sys-materiel/page",
+      "moduleType": {
+        "契约": 60,
+        "规则表": 60,
+        "规则表命中依据": "rule",
+        "浏览器实际发送": "60",
+        "抓取时cookie": "/dashboard/sale/goods/material/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "matName",
+            "matDescribe",
+            "supplierId",
+            "categoryId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "matName",
+            "matDescribe",
+            "supplierId",
+            "categoryId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "matName",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "text",
+            "label": "物料名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "matDescribe",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "text",
+            "label": "物料描述",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "supplierId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "供应商",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "categoryId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "物料分类",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?pageNo=1&pageSize=200",
+            "path": "/admin-api/supply/supplier/page",
+            "候选条数": 200,
+            "总数": 494,
+            "自带关键字或分页": true
+          },
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree?level=5",
+            "path": "/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree",
+            "候选条数": 6,
+            "总数": null,
+            "自带关键字或分页": false
+          },
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?pageNo=2&pageSize=200",
+            "path": "/admin-api/supply/supplier/page",
+            "候选条数": 200,
+            "总数": 494,
+            "自带关键字或分页": true
+          },
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?pageNo=3&pageSize=200",
+            "path": "/admin-api/supply/supplier/page",
+            "候选条数": 94,
+            "总数": 494,
+            "自带关键字或分页": true
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "supplierId",
+            "label": "供应商",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?pageNo=1&pageSize=200",
+                "path": "/admin-api/supply/supplier/page",
+                "候选条数": 200,
+                "总数": 494,
+                "自带关键字或分页": true,
+                "score": 1
+              },
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?pageNo=2&pageSize=200",
+                "path": "/admin-api/supply/supplier/page",
+                "候选条数": 200,
+                "总数": 494,
+                "自带关键字或分页": true,
+                "score": 1
+              }
+            ]
+          },
+          {
+            "参数": "categoryId",
+            "label": "物料分类",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree?level=5",
+                "path": "/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree",
+                "候选条数": 6,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              }
+            ]
+          }
+        ],
+        "长选项个数": 1
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "supplierId",
+          "说明": "参数 supplierId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "供应商"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "categoryId",
+          "说明": "参数 categoryId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "物料分类"
+        },
+        {
+          "类型": "长选项未标注",
+          "严重度": "high",
+          "参数": "supplierId",
+          "说明": "参数 supplierId（「供应商」）是下拉，候选规模达 494 条（来源 /admin-api/supply/supplier/page），页面自己都要靠 keyword+分页去收敛；契约里只有一个 kind，调用方不知道传什么、也不知道要不要关键字。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/system/sys-materiel/page?order=&orderField=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/setting/area/list",
+      "capabilityId": "batch:setting-area-list",
+      "title": "地区管理",
+      "layers": [
+        "L5:不分页"
+      ],
+      "resolvedPath": "/admin-api/system/area/getTree",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/setting/area/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/system/area/getTree?order=&orderField=",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "可以直接接"
+    },
+    {
+      "pagePath": "/dashboard/setting/category-dict/list",
+      "capabilityId": "batch:setting-category-dict-list",
+      "title": "分类字典",
+      "layers": [
+        "L5:不分页"
+      ],
+      "resolvedPath": "/admin-api/system/category-dict/tree",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/setting/category-dict/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "name",
+            "code",
+            "onlyTenantEditable"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "name",
+            "code",
+            "onlyTenantEditable"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": []
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "name",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "code",
+            "kind": "string",
+            "defaultValue": "",
+            "control": "text",
+            "label": "编码",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "onlyTenantEditable",
+            "kind": "boolean",
+            "defaultValue": true,
+            "control": null,
+            "verdict": "页面上没有这个控件"
+          }
+        ],
+        "无控件参数成因": [
+          {
+            "name": "onlyTenantEditable",
+            "kind": "page-definition",
+            "defaultValue": true,
+            "why": "源码里除了 form 初值，没有任何 formState.onlyTenantEditable 绑定——页面上不存在这个控件"
+          }
+        ],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [],
+        "下拉参数归因": [],
+        "长选项个数": 0
+      },
+      "发现": [
+        {
+          "类型": "契约里有、页面上没有控件（page-definition）",
+          "严重度": "high",
+          "参数": "onlyTenantEditable",
+          "说明": "参数 onlyTenantEditable（契约 kind=boolean，初值 true）在 DOM 里没有 form_item_onlyTenantEditable 这个 id。源码里除了 form 初值，没有任何 formState.onlyTenantEditable 绑定——页面上不存在这个控件→ 它是**页面自己定义的常量**（初值 true，不是空值），用来给列表分档；留在契约里等于给 AI 一个可以拨动的开关，拨了会静默查到另一批数据。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/system/category-dict/tree?order=&orderField=&name=&code=&onlyTenantEditable=true",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    },
+    {
+      "pagePath": "/dashboard/setting/material/list",
+      "capabilityId": "batch:setting-material-list",
+      "title": "物料管理",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8",
+        "L6:源码有改写钩子"
+      ],
+      "resolvedPath": "/admin-api/system/sys-materiel/page",
+      "moduleType": {
+        "契约": null,
+        "规则表": null,
+        "规则表命中依据": "none",
+        "浏览器实际发送": null,
+        "抓取时cookie": "/dashboard/setting/material/list",
+        "cookie是否指向本页": true,
+        "规则表与契约一致": true,
+        "浏览器值是否可采信": true
+      },
+      "比对": {
+        "路径一致": true,
+        "挂载与查询一致": true,
+        "参数": {
+          "浏览器实际顺序": [
+            "order",
+            "orderField",
+            "pageNo",
+            "pageSize"
+          ],
+          "契约顺序": [
+            "order",
+            "orderField",
+            "matName",
+            "matDescribe",
+            "supplierId",
+            "categoryId",
+            "pageNo",
+            "pageSize"
+          ],
+          "多发_契约里没有": [],
+          "应发未发": [],
+          "null初值未发": [
+            "matName",
+            "matDescribe",
+            "supplierId",
+            "categoryId"
+          ]
+        },
+        "初值不一致": [],
+        "顺序一致": true,
+        "控件": [
+          {
+            "name": "matName",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "text",
+            "label": "物料名称",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "matDescribe",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "text",
+            "label": "物料描述",
+            "verdict": "一致",
+            "mismatch": false
+          },
+          {
+            "name": "supplierId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "供应商",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          },
+          {
+            "name": "categoryId",
+            "kind": "null",
+            "defaultValue": null,
+            "control": "select",
+            "label": "物料分类",
+            "showSearch": true,
+            "multiple": false,
+            "verdict": "kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+            "mismatch": true
+          }
+        ],
+        "无控件参数成因": [],
+        "探针盲区": null,
+        "页面控件但契约没有": [],
+        "筛选区与契约完全不重合": false,
+        "候选来源请求": [
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree?level=5",
+            "path": "/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree",
+            "候选条数": 6,
+            "总数": null,
+            "自带关键字或分页": false
+          },
+          {
+            "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?&pageNo=1&pageSize=-1",
+            "path": "/admin-api/supply/supplier/page",
+            "候选条数": 494,
+            "总数": 0,
+            "自带关键字或分页": true
+          }
+        ],
+        "下拉参数归因": [
+          {
+            "参数": "supplierId",
+            "label": "供应商",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/supply/supplier/page?&pageNo=1&pageSize=-1",
+                "path": "/admin-api/supply/supplier/page",
+                "候选条数": 494,
+                "总数": 0,
+                "自带关键字或分页": true,
+                "score": 1
+              }
+            ]
+          },
+          {
+            "参数": "categoryId",
+            "label": "物料分类",
+            "showSearch": true,
+            "归因方式": "按名字推断（不精确）",
+            "候选来源": [
+              {
+                "url": "https://biz-api-test.wodecorp.cn/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree?level=5",
+                "path": "/admin-api/inventory/asset-depreciation-config/get-materiel-category-tree",
+                "候选条数": 6,
+                "总数": null,
+                "自带关键字或分页": false,
+                "score": 1
+              }
+            ]
+          }
+        ],
+        "长选项个数": 1
+      },
+      "发现": [
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "supplierId",
+          "说明": "参数 supplierId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "供应商"
+        },
+        {
+          "类型": "kind 判错（选择型）",
+          "严重度": "high",
+          "参数": "categoryId",
+          "说明": "参数 categoryId：kind 是 null，实际是「选择型」控件（契约没有任何字段说明它是选项、有候选、要不要关键字）",
+          "控件": "select",
+          "label": "物料分类"
+        },
+        {
+          "类型": "长选项未标注",
+          "严重度": "high",
+          "参数": "supplierId",
+          "说明": "参数 supplierId（「供应商」）是下拉，候选规模达 494 条（来源 /admin-api/supply/supplier/page），页面自己都要靠 keyword+分页去收敛；契约里只有一个 kind，调用方不知道传什么、也不知道要不要关键字。"
+        }
+      ],
+      "实际列表请求": "https://biz-api-test.wodecorp.cn/admin-api/system/sys-materiel/page?order=&orderField=&pageNo=1&pageSize=20",
+      "形状": {
+        "路径": true,
+        "参数集合": true,
+        "顺序": true
+      },
+      "形状全对": true,
+      "分类": "需要人补"
+    }
+  ]
+}

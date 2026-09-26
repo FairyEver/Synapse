@@ -1,0 +1,17 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 的会议室列表页点击「查询」时捕获的真实浏览器请求。token 已在页面内脱敏。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/meeting-room/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "meeting-room-list",
+  "via": "xhr",
+  "method": "GET",
+  "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/meeting-room/page?order=&orderField=&name=&pageNo=1&pageSize=20&_t=<ts>",
+  "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "body": null
+}

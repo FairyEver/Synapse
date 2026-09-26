@@ -1,0 +1,34 @@
+{
+  "pagePath": "/dashboard/finance/setting/accounting-period/list",
+  "capturedAt": "2026-09-22",
+  "environment": "webtest01.wodecorp.cn",
+  "requests": [
+    {
+      "action": "list-default-enabled",
+      "method": "GET",
+      "url": "/admin-api/finance/accounting-period/page?order=&orderField=&year=&status=0&pageNo=1&pageSize=20&_t=<ts>"
+    }
+  ],
+  "presentHeaders": ["tenant-id", "token", "Accept-Language"],
+  "absentHeaders": ["module-type"],
+  "observedFilters": ["year", "status"],
+  "conditionalFilters": [{ "name": "tenantName", "visibleWhen": "username === admin" }],
+  "observedColumns": ["tenantName", "year", "startDate", "endDate", "status", "updateTime"],
+  "observedActions": ["query", "reset", "create", "set-status", "detail", "paginate"],
+  "detail": {
+    "networkRequest": false,
+    "rows": 12,
+    "fields": ["month", "start", "end"]
+  },
+  "createForm": {
+    "fields": ["startDate", "endDate"],
+    "submit": "POST /admin-api/finance/accounting-period/create",
+    "submitted": false
+  },
+  "writesPerformed": false,
+  "notes": [
+    "详情通过列表记录桥接并在页面本地生成12个月度行，没有发会计期间详情GET。",
+    "页面没有删除或编辑，自建记录无法安全清理，因此未提交创建，也未切换既有记录状态。",
+    "凭据未记录；页面中真实企业与人员信息未写入本文件。"
+  ]
+}

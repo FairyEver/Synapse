@@ -1,0 +1,145 @@
+{
+ "说明": "由 bsk 抓到的绩效管理域「配置类」六页的真实浏览器请求（全部只读）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "先在门户首页装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到目标页 —— SPA 的同文档导航不会卸载钩子，页面挂载时那条真实请求会被完整抓到。",
+ "requests": [
+  {
+   "页面": "公式定义",
+   "pagePath": "/dashboard/manage/formula-definition/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/infra/formula/definition/page?pageNo=1&pageSize=20&formulaName=&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "公式定义",
+   "pagePath": "/dashboard/manage/formula-definition/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/infra/formula/scene/list?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "指标管理",
+   "pagePath": "/dashboard/manage/indicator/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/basedata/kpitarget/page?order=&orderField=&name=&creatorName=&targetType=&type=&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "保险",
+   "pagePath": "/dashboard/manage/insurance/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/basedata/hrinsurancefund/page?order=&orderField=&name=&idcard=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "标准",
+   "pagePath": "/dashboard/manage/standard/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/kpistandard/treePage?parentId=0&keyword=&selection=false&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "协议配置",
+   "pagePath": "/dashboard/manage/protocol-configuration/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/dict/type/page?dictType=protocol_config&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "协议配置",
+   "pagePath": "/dashboard/manage/protocol-configuration/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/dict/type/page?dictType=template_prompt_content&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "协议配置",
+   "pagePath": "/dashboard/manage/protocol-configuration/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/homePage/save",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"config\":\"[{\\\"x\\\":0,\\\"y\\\":0,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"0yy5U74S\\\",\\\"widget\\\":\\\"hr/learning/course-completion\\\",\\\"knownModules\\\":[\\\"hr/learning\\\",\\\"hr/performance\\\",\\\"hr/salary\\\",\\\"hr/risk\\\",\\\"hr/approval\\\",\\\"hr/organization\\\",\\\"finance/income\\\",\\\"finance/expenditure\\\",\\\"finance/allocation\\\",\\\"finance/value-added\\\",\\\"material/asset\\\",\\\"material/inventory\\\",\\\"material/depreciation\\\",\\\"product/chick\\\",\\\"product/layer\\\",\\\"product/epidemic\\\",\\\"supply/admittance\\\",\\\"supply/plans\\\",\\\"supply/purchase\\\",\\\"supply/inbound\\\",\\\"supply/payment\\\",\\\"sales/customer\\\",\\\"sales/order\\\",\\\"sales/market\\\",\\\"sales/business\\\",\\\"sales/performance\\\",\\\"sales/plan\\\",\\\"common/common\\\",\\\"common/chart\\\"]},{\\\"x\\\":4,\\\"y\\\":0,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"eGM7IuJq\\\",\\\"widget\\\":\\\"hr/learning/course-implementation\\\"},{\\\"x\\\":8,\\\"y\\\":0,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"yAkYVjGw\\\",\\\"widget\\\":\\\"hr/learning/course-my\\\"},{\\\"x\\\":0,\\\"y\\\":5,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"PFTR1gtg\\\",\\\"widget\\\":\\\"hr/performance/agreement-monthly\\\"},{\\\"x\\\":4,\\\"y\\\":5,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"cqdM38hK\\\",\\\"widget\\\":\\\"hr/performance/analysis\\\"},{\\\"x\\\":8,\\\"y\\\":5,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"SR9evB2x\\\",\\\"widget\\\":\\\"hr/performance/score-comparison\\\"},{\\\"x\\\":0,\\\"y\\\":10,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"77C4vKdS\\\",\\\"widget\\\":\\\"hr/salary/accumulated\\\"},{\\\"x\\\":4,\\\"y\\\":10,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"KgLVMHDW\\\",\\\"widget\\\":\\\"hr/salary/my-payslip\\\"},{\\\"x\\\":8,\\\"y\\\":10,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"5YbOJLTH\\\",\\\"widget\\\":\\\"hr/salary/summary-month\\\"},{\\\"x\\\":0,\\\"y\\\":15,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"Q3WuhrRE\\\",\\\"widget\\\":\\\"hr/risk/certificate\\\"},{\\\"x\\\":4,\\\"y\\\":15,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"SkzdFGkh\\\",\\\"widget\\\":\\\"hr/risk/intellectual-property\\\"},{\\\"x\\\":8,\\\"y\\\":15,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"3QgNoMIg\\\",\\\"widget\\\":\\\"hr/risk/system\\\"},{\\\"x\\\":0,\\\"y\\\":20,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"i4FKlmxN\\\",\\\"widget\\\":\\\"hr/approval/todo\\\"},{\\\"x\\\":4,\\\"y\\\":20,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"QdkyKyHs\\\",\\\"widget\\\":\\\"hr/organization/attendance-status\\\"},{\\\"x\\\":8,\\\"y\\\":20,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"quwxZ92B\\\",\\\"widget\\\":\\\"hr/organization/employee-statistics\\\"},{\\\"x\\\":0,\\\"y\\\":25,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"wc6eU4oe\\\",\\\"widget\\\":\\\"finance/income/order-income\\\",\\\"configCode\\\":\\\"finance_income_order_income\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-09\\\",\\\"incomeCategory\\\":1,\\\"compareType\\\":\\\"YOY\\\",\\\"standardLine\\\":1}},{\\\"x\\\":4,\\\"y\\\":25,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"i5BnOsi0\\\",\\\"widget\\\":\\\"finance/income/order-prepayment\\\",\\\"configCode\\\":\\\"finance_income_order_prepayment\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-09\\\",\\\"incomeCategory\\\":1,\\\"compareType\\\":\\\"YOY\\\",\\\"standardLine\\\":1}},{\\\"x\\\":8,\\\"y\\\":25,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"3mOb4710\\\",\\\"widget\\\":\\\"finance/income/order-uncollected\\\",\\\"configCode\\\":\\\"finance_income_order_uncollected\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-09\\\",\\\"incomeCategory\\\":1,\\\"compareType\\\":\\\"YOY\\\",\\\"standardLine\\\":1}},{\\\"x\\\":0,\\\"y\\\":30,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"h7noZgBy\\\",\\\"widget\\\":\\\"finance/expenditure/expense-budget-plan\\\",\\\"configCode\\\":\\\"finance_expense_budget_plan\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-09\\\",\\\"startDate\\\":null,\\\"endDate\\\":null,\\\"timeGranularity\\\":\\\"MONTH\\\",\\\"expenditureCategory\\\":0,\\\"displayDimension\\\":\\\"TYPE\\\",\\\"budgetCategory\\\":\\\"ALL\\\",\\\"segmentDimension\\\":\\\"FIVE_CATEGORY\\\"}},{\\\"x\\\":4,\\\"y\\\":30,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"aVcifYmb\\\",\\\"widget\\\":\\\"finance/expenditure/expense-budget\\\",\\\"configCode\\\":\\\"finance_expense_budget\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-09\\\",\\\"startDate\\\":null,\\\"endDate\\\":null,\\\"timeGranularity\\\":\\\"MONTH\\\",\\\"expenditureCategory\\\":0,\\\"displayDimension\\\":\\\"TYPE\\\",\\\"budgetCategory\\\":\\\"ALL\\\",\\\"segmentDimension\\\":\\\"FIVE_CATEGORY\\\"}},{\\\"x\\\":8,\\\"y\\\":30,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"BaaQjtCS\\\",\\\"widget\\\":\\\"finance/expenditure/expense-plan\\\",\\\"configCode\\\":\\\"finance_expense_plan\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-09\\\",\\\"startDate\\\":null,\\\"endDate\\\":null,\\\"timeGranularity\\\":\\\"MONTH\\\",\\\"expenditureCategory\\\":0,\\\"displayDimension\\\":\\\"TYPE\\\",\\\"budgetCategory\\\":\\\"ALL\\\",\\\"segmentDimension\\\":\\\"FIVE_CATEGORY\\\"}},{\\\"x\\\":0,\\\"y\\\":35,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"p_gCLf76\\\",\\\"widget\\\":\\\"finance/allocation/expense-accrual\\\",\\\"configCode\\\":\\\"finance_allocation_expense_accrual\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-08\\\"}},{\\\"x\\\":4,\\\"y\\\":35,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"ig62Qz3_\\\",\\\"widget\\\":\\\"finance/allocation/expense-allocation\\\",\\\"configCode\\\":\\\"finance_allocation_expense_allocation\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-08\\\"}},{\\\"x\\\":8,\\\"y\\\":35,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"LR1eZQox\\\",\\\"widget\\\":\\\"finance/value-added/financial-accounting\\\",\\\"configCode\\\":\\\"finance_value_financial_accounting\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-08\\\",\\\"reportType\\\":null,\\\"reportCategory\\\":null}},{\\\"x\\\":0,\\\"y\\\":40,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"PIrNzKzq\\\",\\\"widget\\\":\\\"finance/value-added/financial-report\\\",\\\"configCode\\\":\\\"finance_value_financial_report\\\",\\\"filters\\\":{\\\"orgIds\\\":[101],\\\"month\\\":\\\"2026-08\\\",\\\"reportType\\\":\\\"BALANCE_SHEET\\\",\\\"reportCategory\\\":\\\"ASSET_OVERVIEW\\\"}},{\\\"x\\\":4,\\\"y\\\":40,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"fW4tFTCu\\\",\\\"widget\\\":\\\"material/asset/net-value-ratio\\\"},{\\\"x\\\":8,\\\"y\\\":40,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"anSH6Dsn\\\",\\\"widget\\\":\\\"material/asset/quantity-ratio\\\"},{\\\"x\\\":0,\\\"y\\\":45,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"fFropS44\\\",\\\"widget\\\":\\\"material/asset/register-quantity\\\"},{\\\"x\\\":4,\\\"y\\\":45,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"6yjVtiX1\\\",\\\"widget\\\":\\\"material/inventory/category-outbound-ratio\\\"},{\\\"x\\\":8,\\\"y\\\":45,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"Lpk9c5Ns\\\",\\\"widget\\\":\\\"material/inventory/category-stock-quantity\\\"},{\\\"x\\\":0,\\\"y\\\":50,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"KVFEswvq\\\",\\\"widget\\\":\\\"material/inventory/category-stock-ratio\\\"},{\\\"x\\\":4,\\\"y\\\":50,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"I8HIvb4k\\\",\\\"widget\\\":\\\"material/depreciation/distribution\\\"},{\\\"x\\\":8,\\\"y\\\":50,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"Mj3jSMXq\\\",\\\"widget\\\":\\\"material/depreciation/recent-amount\\\"},{\\\"x\\\":0,\\\"y\\\":55,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"4hFUUS9K\\\",\\\"widget\\\":\\\"material/depreciation/recent-quantity\\\"},{\\\"x\\\":4,\\\"y\\\":55,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"JkI6VGQC\\\",\\\"widget\\\":\\\"product/chick/mortality-rate\\\"},{\\\"x\\\":8,\\\"y\\\":55,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"q-65Jt6u\\\",\\\"widget\\\":\\\"product/chick/weight\\\"},{\\\"x\\\":0,\\\"y\\\":60,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"5RWlyLtb\\\",\\\"widget\\\":\\\"product/layer/egg-production-rate\\\"},{\\\"x\\\":4,\\\"y\\\":60,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"qOAUsOJB\\\",\\\"widget\\\":\\\"product/layer/fertility-rate\\\"},{\\\"x\\\":8,\\\"y\\\":60,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"2Jg8eapr\\\",\\\"widget\\\":\\\"product/layer/qualified-hatching-egg\\\"},{\\\"x\\\":0,\\\"y\\\":65,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"4OJlq8rZ\\\",\\\"widget\\\":\\\"product/epidemic/culling-rate\\\"},{\\\"x\\\":4,\\\"y\\\":65,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"kHRy_-cW\\\",\\\"widget\\\":\\\"product/epidemic/mortality-rate\\\"},{\\\"x\\\":8,\\\"y\\\":65,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"RPpypBAj\\\",\\\"widget\\\":\\\"supply/admittance/admission\\\",\\\"filters\\\":{\\\"month\\\":\\\"2026-09\\\",\\\"orgId\\\":37}},{\\\"x\\\":0,\\\"y\\\":70,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"CoLJIlbr\\\",\\\"widget\\\":\\\"supply/plans/plan\\\",\\\"filters\\\":{\\\"month\\\":\\\"2026-09\\\",\\\"orgId\\\":35,\\\"materielType\\\":1}},{\\\"x\\\":4,\\\"y\\\":70,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"qFjJkJYk\\\",\\\"widget\\\":\\\"supply/purchase/order\\\",\\\"filters\\\":{\\\"month\\\":\\\"2026-09\\\",\\\"orgId\\\":35,\\\"statisticsDimension\\\":\\\"ORDER\\\"}},{\\\"x\\\":8,\\\"y\\\":70,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"hI-MEdXn\\\",\\\"widget\\\":\\\"supply/inbound/acceptance\\\",\\\"filters\\\":{\\\"month\\\":\\\"2026-09\\\",\\\"orgId\\\":35,\\\"materielType\\\":1}},{\\\"x\\\":0,\\\"y\\\":75,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"94A-VH3x\\\",\\\"widget\\\":\\\"supply/payment/expense\\\",\\\"filters\\\":{\\\"month\\\":\\\"2026-09\\\",\\\"orgId\\\":34}},{\\\"x\\\":4,\\\"y\\\":75,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"FgbsXXH6\\\",\\\"widget\\\":\\\"sales/customer/customer\\\"},{\\\"x\\\":8,\\\"y\\\":75,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"u5ivpx_5\\\",\\\"widget\\\":\\\"sales/customer/supermarket\\\"},{\\\"x\\\":0,\\\"y\\\":80,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"iWdo33Ut\\\",\\\"widget\\\":\\\"sales/order/order\\\"},{\\\"x\\\":4,\\\"y\\\":80,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"kLtsHdUR\\\",\\\"widget\\\":\\\"sales/order/pre-order\\\"},{\\\"x\\\":8,\\\"y\\\":80,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"U-mZC0cN\\\",\\\"widget\\\":\\\"sales/market/price-seven\\\"},{\\\"x\\\":0,\\\"y\\\":85,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"SheFM63f\\\",\\\"widget\\\":\\\"sales/business/visit\\\"},{\\\"x\\\":4,\\\"y\\\":85,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"0uX6aCnr\\\",\\\"widget\\\":\\\"sales/performance/performance\\\"},{\\\"x\\\":8,\\\"y\\\":85,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"Yg9C9El0\\\",\\\"widget\\\":\\\"sales/plan/chicken-number\\\"},{\\\"x\\\":0,\\\"y\\\":90,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"Hc2yeeqw\\\",\\\"widget\\\":\\\"sales/plan/chicken-plan\\\"},{\\\"x\\\":4,\\\"y\\\":90,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"uxmqa1Aa\\\",\\\"widget\\\":\\\"common/common/open-in-iframe\\\"},{\\\"x\\\":8,\\\"y\\\":90,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"L3ioXde8\\\",\\\"widget\\\":\\\"common/common/time\\\"},{\\\"x\\\":0,\\\"y\\\":95,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"iB_S7qoU\\\",\\\"widget\\\":\\\"common/common/ua-detail\\\"},{\\\"x\\\":4,\\\"y\\\":95,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"sK1YqSUN\\\",\\\"widget\\\":\\\"common/chart/bar-multiple\\\"},{\\\"x\\\":8,\\\"y\\\":95,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"oPCqvxVL\\\",\\\"widget\\\":\\\"common/chart/bar\\\"},{\\\"x\\\":0,\\\"y\\\":100,\\\"w\\\":4,\\\"h\\\":5,\\\"id\\\":\\\"JF-ZInwJ\\\",\\\"widget\\\":\\\"common/chart/line-multiple\\\"}]\"}"
+  },
+  {
+   "页面": "协议扣款规则",
+   "pagePath": "/dashboard/manage/protocol-deduct-rule/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/basedata/protocol-deduct-rule/list?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  }
+ ]
+}

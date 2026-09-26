@@ -1,0 +1,112 @@
+{
+  "说明": "由 bsk 在测试环境打开「通用审批」表单（/simple/hr/form/035）时捕获的真实请求序列。token 已在页面内脱敏（tools/baseline/install-hook.js，脱敏发生在离开浏览器之前）。本文件只含**只读**请求：表单挂载时自动发的 + 把「申请事项/申请内容」填好触发的那一次审批人节点查询。没有提交过任何单据。",
+  "捕获时间": "2026-09-20",
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=hr_general_approval&bpmMode=edit&formCustomCreatePath=simple/hr/form/035",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/035（通用审批）",
+  "抓取手法": [
+    "表单是 SPA 路由进入的：先 navigate 到入口 URL（这一步的请求抓不到，hook 还没装），",
+    "装 hook 之后用 location.hash 在应用内切走再切回，让表单组件**重新挂载**，挂载请求就都进 buffer 了。",
+    "这一步是必要的：bsk 没有『注入 init script 再导航』的入口，整页刷新会把 hook 冲掉。"
+  ],
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/org/sensitive/info?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 2,
+      "备注": "应用外壳级请求，与具体页面无关（会议室那条线的基准里也有它）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 2,
+      "备注": "顶部待办角标，外壳级"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=hr_general_approval&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "common/libs/flow-form/index.js 的 getProcessDefinition（bpmHttp 实例）。响应里 formFields / formCustomCreatePath 都是 null —— 这就是『读接口拿不到字段契约』的现场"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=1&pageSize=500",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 3,
+      "备注": "★ 长选项的现场：**无关键字、一次 500 条**（该账号全量 4225 人，实测 simple-list 是 4225 条）。其中两次不带 _t、一次带 _t。SDK 的 searchUsers 强制关键字，就是不照抄这条（设计 D6 / H35）。注意 035 的源码里 fetchCopyUserOptions 写的是 simple-list，与实际抓到的 simple-page 不是同一个接口 —— 但两者都是『无关键字的大批量拉取』，结论不变"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/hr/general-approval/getTemporaryRequiredStartUserSelectTasks",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"applicationItem\":\"SDK-TEST-baseline\",\"applicationContent\":\"SDK-TEST-baseline content\",\"attachments\":[],\"copyUserIds\":[]}",
+      "备注": "★ 本文件最值钱的一条。它是 buildGeneralApprovalSubmitData() 的真实产物：键顺序 applicationItem → applicationContent → attachments → copyUserIds，**没有 id 字段**。create 的 body 就是它再加一个 startUserSelectAssignees。头部**没有 module-type** —— 页面在这条路由上算不出它，SDK 也不发（设计 D34）"
+    }
+  ],
+  "表单填写值": {
+    "applicationItem": "SDK-TEST-baseline",
+    "applicationContent": "SDK-TEST-baseline content"
+  },
+  "审批人节点（同一次请求的响应，非本文件抓包内容，另有一次只读实测）": {
+    "说明": "POST 同一个接口的响应体，2026-09-20 用 smoke/with-portal-token.sh 只读实测过一次，原样记在这里；本文件的『请求』一节只描述请求。",
+    "data": [
+      {
+        "id": "Activity_1o1sabd",
+        "name": "发起人自选2",
+        "approvalMode": "SEQUENTIAL",
+        "approvalModeName": "依次审批",
+        "executionMode": "SEQUENTIAL",
+        "completionRule": "ALL_APPROVED",
+        "minSelectCount": 1,
+        "maxSelectCount": null,
+        "selectionOrderRequired": true,
+        "approvalDescription": "所选人员按选择顺序依次审批，全部通过后节点通过"
+      }
+    ]
+  },
+  "同一流程的其它入口（本次未抓包，来自源码）": {
+    "我的流程（撤销入口）": "/dashboard/flow/task/my/list —— 抓包时切到过这一页，看到过一次 GET /admin-api/bpm/process-instance/my-page?order=&orderField=&name=&title=&category=&pageNo=1&pageSize=20&_t=<ts>（页面上 processDefinitionId / status / createTime 三个筛选项为空时不发）",
+    "创建": "POST /admin-api/hr/general-approval/create（本次没有提交，未抓包）",
+    "详情": "GET /admin-api/hr/general-approval/get?id=",
+    "取消": "DELETE /admin-api/bpm/process-instance/cancel-by-start-user，body { id: <流程实例 id>, reason }（源码：flow/task/my/list.vue:239-260）"
+  },
+  "没有抓到的（如实说明）": [
+    "**create 的真实请求没抓到**：抓它必须在浏览器里点一次「提交」，那会给真人推一条待办。本轮的写验证只做一次，走的是 SDK 侧的 smoke，不是浏览器 —— 所以没有浏览器侧的 create 基准。",
+    "因此 test/general-approval.test.ts 对 create 的逐字段断言建立在这份基准的**同源推断**上：create body = 上面那条 POST 的 body + `startUserSelectAssignees`（页面 handleSubmit 的最后一步是 { ...submitData, startUserSelectAssignees }），键顺序由源码确定；提交 URL 与响应形状另有真实冒烟佐证（docs/pages/通用审批.md 的「真实验证记录」）。"
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "commands": {
+    "typecheck": "passed",
+    "tests": {
+      "filesPassed": 85,
+      "passed": 2702,
+      "skipped": 31,
+      "todo": 21,
+      "finalTargetedFiles": 6,
+      "finalTargetedPassed": 50
+    },
+    "structural": {
+      "capabilities": 318,
+      "methodContracts": 96,
+      "issues": 0
+    },
+    "complete": {
+      "passed": false,
+      "issues": 2,
+      "allIssues": "incomplete-evidence",
+      "capabilitiesWithGaps": 1,
+      "methodContractsWithGaps": 1,
+      "sameUnderlyingIssue": "Portal ignore sends 1; Java only accepts 0/3/4"
+    },
+    "docs": "working tree and isolated index snapshot passed including OpenAPI lint",
+    "isolatedSubmittedSnapshot": {
+      "capabilities": 225,
+      "methodContracts": 56,
+      "completeIssues": 0,
+      "filesPassed": 77,
+      "groupsSkipped": 3,
+      "passed": 2342,
+      "skipped": 51,
+      "setupNote": "Fresh snapshot initially lacked dist; built first, then full tests passed without changing assertions."
+    },
+    "isolatedDriftGate": {
+      "passed": true,
+      "checkedArtifacts": 3,
+      "implementationCommit": "09366fd"
+    }
+  },
+  "scope": {
+    "capabilities": 318,
+    "pageContexts": 104,
+    "menuPages": 74,
+    "described": 317,
+    "blocked": 1,
+    "missing": 0,
+    "unregisteredBusinessMethods": 95,
+    "missingMethods": 0,
+    "generatedOnly": 19
+  },
+  "mutations": {
+    "thisPass": {
+      "travelPrincipal": 1,
+      "businessAndSchema": 4,
+      "candidates": 6,
+      "model": 4,
+      "crossCapabilityLink": 1,
+      "total": 16,
+      "result": "all failed under actual source mutation, restored and passed"
+    },
+    "previousPass": {
+      "business": 18,
+      "docsGate": 2
+    },
+    "pageAlignmentPass": {
+      "business": 4,
+      "permission": 2,
+      "model": 2,
+      "executionGuard": 1,
+      "total": 9,
+      "result": "all failed under actual source mutation, restored and passed"
+    }
+  },
+  "referenceMode": "read-only Web and Java source; no pull, checkout, browser or business API calls this pass",
+  "liveWritesThisPass": 0,
+  "otherSessionCapabilityDelta": 93,
+  "implementationCommitsThisPass": [
+    "f81e05e",
+    "11ac733"
+  ],
+  "scopePolicy": "Portal page-visible data and functional parity; compatibility extensions are not display or action fields",
+  "pageAlignmentImplementationCommit": "09366fd"
+}

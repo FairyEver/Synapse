@@ -1,0 +1,29 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 的作业管理列表页点击「查询」时捕获的真实浏览器请求（三个筛选条件全空）。token 已在页面内脱敏。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/assignment/assignment/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "assignment-list",
+  "via": "xhr",
+  "method": "GET",
+  "url": "https://biz-api-test.wodecorp.cn/admin-api/study/assignment/studyassignment/page?order=&orderField=&title=&status=&type=&createTimeStart=&createTimeEnd=&pageNo=1&pageSize=20&_t=<ts>",
+  "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "body": null,
+  "筛选条件": {
+    "title": "",
+    "status": "",
+    "type": "",
+    "date": []
+  },
+  "备注": [
+    "三个筛选条件一个都没填，createTimeStart/createTimeEnd 照样以空串发出——renren 列表页的空值默认参数必须一并复刻（D20）。",
+    "module-type=12（学习管理）来自 cookies hr-0.0.0-menuPath=/dashboard/assignment/assignment/list 命中 app/portal/menus/index.js:176-192 的第一条前缀规则。",
+    "⚠️ 这个头是从浏览器 profile 全局的 cookie 现读的，多标签页并行时会被别的标签页覆盖：同一次会话里在本页面上抓到过 11（别的标签页停在 /dashboard/attendance/...）与完全不发（cookie 被写成 /）两种异常值。见 docs/pages/作业管理.md 的「换域之后哪些做法不适用了」。"
+  ]
+}

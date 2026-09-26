@@ -1,0 +1,98 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开「课程管理」下的三个列表页时捕获的真实浏览器请求（全部只读，无写操作）。token 已在页面内脱敏，从未离开浏览器。",
+  "捕获时间": "2026-09-21",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/course/",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "study-course-text-list / study-course-video-list / study-course-im-list",
+  "抓法": "逐页 navigate → 装 tools/baseline/install-hook.js → 点「查询」触发一次真实请求 → 读 window.__phCap。三个页面各抓一次；图文课程额外抓了「关键字」与「日期区间」两条填值路径。",
+  "为什么这三个页面打同一个接口": "`app/portal/views/dashboard/education/course/*/list.vue` 的 getDataListURL 分别是 `/study/course/studycourse/courseList?type=1|2|4`。后端 `StudyCourseController#selectNewsCourseList` 只接一个 `SelectCourseDTO`，`type` 决定切哪一片；对应的 SQL（`StudyCourseDao.xml` 的 `selectCourseList`）第一句就是 `WHERE t1.type = #{dto.type}`。type 是**这一页是哪一页**的定义，不是可选筛选。",
+  "type=3（直播课程）为什么不在这里": "抓的时候抓过（`?type=3`，与另外两页逐字段同形），但**这一页不进 SDK**：`app/portal/menus/hr.js:299` 的菜单项是整行注释掉的，用户到不了这一页。按项目规则（docs/conventions.md 的「注释掉的代码不算代码」）删掉了那条基准与对应能力。生成器也已同步修好——它此前会把全仓 44 条被注释掉的菜单项（38 个页面 + 6 个 iframe）扫进 page-catalog。",
+  "module-type": "四条请求实测都发 module-type=12（学习管理），与 generated/module-type-rules.json 里 `/dashboard/course/` 前缀的推导一致。⚠️ 这个头在浏览器里读的是 cookie `hr-0.0.0-menuPath`（全局共享，不分标签页），并行任务跳别的域时会被污染 —— 本轮实测一致且与规则表吻合，可用。",
+  "requests": [
+    {
+      "name": "图文课程 · 挂载自动查询 / 点「查询」（无筛选条件）",
+      "能力": "study-course-text-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/course/studycourse/courseList?order=&orderField=&keyword=&startTime=&endTime=&pageNo=1&pageSize=20&_t=<ts>&type=1",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "视频课程 · 挂载自动查询 / 点「查询」（无筛选条件）",
+      "能力": "study-course-video-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/course/studycourse/courseList?order=&orderField=&keyword=&startTime=&endTime=&pageNo=1&pageSize=20&_t=<ts>&type=2",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "即时通讯课程 · 挂载自动查询 / 点「查询」（无筛选条件）",
+      "能力": "study-course-im-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/course/studycourse/courseList?order=&orderField=&keyword=&numberMin=&numberMax=&status=&createTimeStart=&createTimeEnd=&deleteTimeStart=&deleteTimeEnd=&pageNo=1&pageSize=20&_t=<ts>&type=4",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "这一页的筛选字段与另外两页**完全不同**：没有 startTime/endTime，换成 numberMin/numberMax/status + 两组区间（createTime* / deleteTime*）。见下面两条填值路径。"
+    },
+    {
+      "name": "图文课程 · 关键字填值（在「关键字」输入框填「蛋鸡」后点查询）",
+      "能力": "study-course-text-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/course/studycourse/courseList?order=&orderField=&keyword=%E8%9B%8B%E9%B8%A1&startTime=&endTime=&pageNo=1&pageSize=20&_t=<ts>&type=1",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "keyword 是 URL 编码后的「蛋鸡」；startTime/endTime 仍是**空字符串**（不是省略）。"
+    },
+    {
+      "name": "图文课程 · 日期区间填值（2026-09-01 ~ 2026-09-15 后点查询）",
+      "能力": "study-course-text-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/study/course/studycourse/courseList?order=&orderField=&keyword=&startTime=2026-09-01%2000%3A00%3A00&endTime=2026-09-16%2000%3A00%3A00&pageNo=1&pageSize=20&_t=<ts>&type=1",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "**结束端 +1 天**：选区选的是 09-15，发出去的是 09-16 00:00:00（convertFetchForm 里 `.add(1,'day').startOf('date')`）。两端都带 `00:00:00`。"
+    }
+  ],
+  "convertFetchForm 的实测契约": {
+    "源码": "`app/portal/views/dashboard/education/course/{text,video,live}-course/list.vue` 三处一字不差；`im-course/list.vue` 是另一份。",
+    "text/video": "返回**只有三个字段** `{ keyword, startTime, endTime }` —— 表单里的 `date` 区间被拆成两个标量，其余字段一个不透传。四个空值一个不落，全部发**空字符串**（`keyword=`、`startTime=`、`endTime=` 都真实出现在 URL 上）。",
+    "im": "`omit(data, ['createTime','deleteTime'])` 后展开，再补四个区间字段，所以最终是 `keyword, numberMin, numberMax, status, createTimeStart, createTimeEnd, deleteTimeStart, deleteTimeEnd` —— 顺序即 URL 上的顺序，同样全是空字符串。",
+    "为什么这一条值得单独记": "生成器的判据只扫 `getDataListURL`，看不到这个函数（tools/generate/batch-capabilities.mjs 把这类页面判成 partial/contract）。全量 241 个声明式列表页里 69 页命中它，而 auto 桶里 0 页 —— 它就是「需人补」这 112 页的主要成因。配方见 tools/baseline/README.md §3。"
+  },
+  "抓基准时顺带看到、但与本能力无关的一条": "直播课程列表页的「新建」按钮点了没反应（`live-course/list.vue:22-24` 的 `<common-action-create>` 缺 `@click`；同期对照：图文课程那个按钮能正常跳到 `create/new`）。记在这里只是因为本轮抓过那一页；**那一页已按项目规则排除在 SDK 之外**，见上一条。"
+}

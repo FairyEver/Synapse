@@ -1,0 +1,470 @@
+{
+  "generatedAt": "2026-09-25T15:21:07.005Z",
+  "source": "CodeReview_Projects_Js@test/portal/main@app/portal/menus/index.js (all_menus_type_match) + app/portal/utils/define.js",
+  "portalRepo": "/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js",
+  "rules": [
+    {
+      "type": 12,
+      "label": "学习管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/statistics/",
+        "/dashboard/grade/",
+        "/dashboard/lesson/",
+        "/dashboard/course/",
+        "/dashboard/study/",
+        "/dashboard/assignment/",
+        "/dashboard/base/"
+      ]
+    },
+    {
+      "type": 13,
+      "label": "绩效管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/analysis/",
+        "/dashboard/year-agreement/",
+        "/dashboard/month-agreement/",
+        "/dashboard/other-task/",
+        "/dashboard/agreement-change/",
+        "/dashboard/salary/main/",
+        "/dashboard/salary/adjust/",
+        "/dashboard/salary/examine-result/",
+        "/dashboard/manage/template-structure/",
+        "/dashboard/manage/template-content/",
+        "/dashboard/block/",
+        "/dashboard/manage/indicator/",
+        "/dashboard/manage/profit/",
+        "/dashboard/manage/standard/",
+        "/dashboard/manage/salary-structure/",
+        "/dashboard/manage/insurance/",
+        "/dashboard/manage/protocol-configuration/",
+        "/dashboard/manage/protocol-deduct-rule/",
+        "/dashboard/manage/study-task-config/",
+        "/dashboard/manage/formula-definition/",
+        "/dashboard/manage/formula-sync/",
+        "/dashboard/manage/task-type-config/"
+      ]
+    },
+    {
+      "type": 11,
+      "label": "组织管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/me/personal/",
+        "/dashboard/me/organization/",
+        "/dashboard/staff/",
+        "/dashboard/post/",
+        "/dashboard/org/",
+        "/dashboard/attendance/"
+      ]
+    },
+    {
+      "type": 14,
+      "label": "薪酬管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/salary/process/",
+        "/dashboard/salary/person-tax-handle/",
+        "/dashboard/salary/person-tax-file/",
+        "/dashboard/salary/person-tax/",
+        "/dashboard/salary/salary-accounting/",
+        "/dashboard/salary/adjust-import/",
+        "/dashboard/salary/salary-level/",
+        "/dashboard/fund/",
+        "/dashboard/insurance/",
+        "/dashboard/report/",
+        "/dashboard/manage/salary/",
+        "/dashboard/manage/salary-package/",
+        "/dashboard/manage/cost-center/",
+        "/dashboard/me/pay-roll/"
+      ]
+    },
+    {
+      "type": 15,
+      "label": "风险防控",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/contract/",
+        "/dashboard/institution/",
+        "/dashboard/certificate/"
+      ]
+    },
+    {
+      "type": 60,
+      "label": "销售系统",
+      "kind": "paths",
+      "paths": [
+        "/dashboard/sale/custom/qr/list",
+        "/dashboard/sale/customer-service/after-sale-evaluation/list",
+        "/dashboard/sale/customer-service/after-sale/list",
+        "/dashboard/sale/customer-service/appeal/list",
+        "/dashboard/sale/customer-service/evaluation-overview/list",
+        "/dashboard/sale/customer-service/evaluation/list",
+        "/dashboard/sale/customer/analysis/list",
+        "/dashboard/sale/customer/client-list/list",
+        "/dashboard/sale/customer/customer/list",
+        "/dashboard/sale/customer/enter-standard/list",
+        "/dashboard/sale/customer/market-quotation/list",
+        "/dashboard/sale/customer/organization/list",
+        "/dashboard/sale/customer/quotation-setting/list",
+        "/dashboard/sale/customer/register-code/list",
+        "/dashboard/sale/customer/sales-plan-statistic/list",
+        "/dashboard/sale/goods/additional-service/list",
+        "/dashboard/sale/goods/classification/list",
+        "/dashboard/sale/goods/create-goods/list",
+        "/dashboard/sale/goods/distribution/list",
+        "/dashboard/sale/goods/image/list",
+        "/dashboard/sale/goods/manage/list",
+        "/dashboard/sale/goods/material/list",
+        "/dashboard/sale/goods/purchase-permission/list",
+        "/dashboard/sale/goods/sales-area/list",
+        "/dashboard/sale/goods/videos/list",
+        "/dashboard/sale/job/schedule-job-log/list",
+        "/dashboard/sale/job/schedule-job/list",
+        "/dashboard/sale/marketing/activity/gift/list",
+        "/dashboard/sale/marketing/charm/list",
+        "/dashboard/sale/marketing/coupon/list",
+        "/dashboard/sale/order/ccb-account/list",
+        "/dashboard/sale/order/money-check/list",
+        "/dashboard/sale/order/payment-account/list",
+        "/dashboard/sale/order/trade-storeroom/list",
+        "/dashboard/sale/plans/year/list",
+        "/dashboard/sale/quotation/data/list",
+        "/dashboard/sale/report/abnormal/list",
+        "/dashboard/sale/report/farmer/all-liveness/list",
+        "/dashboard/sale/report/farmer/cage/list",
+        "/dashboard/sale/report/farmer/column/list",
+        "/dashboard/sale/report/farmer/document-update/list",
+        "/dashboard/sale/report/farmer/liveness/list",
+        "/dashboard/sale/report/farmer/market/list",
+        "/dashboard/sale/report/order-integration/list",
+        "/dashboard/sale/report/quotation/country/list",
+        "/dashboard/sale/report/quotation/province/list",
+        "/dashboard/sale/report/trade/all-category-detail/list",
+        "/dashboard/sale/report/trade/all-category-summary/list",
+        "/dashboard/sale/report/trade/chick-lower-price/list",
+        "/dashboard/sale/report/trade/chick-sale/list",
+        "/dashboard/sale/report/trade/feed-lower-price/list",
+        "/dashboard/sale/report/trade/feed-sale/list",
+        "/dashboard/sale/report/trade/manual-order/list",
+        "/dashboard/sale/report/trade/market-online/list",
+        "/dashboard/sale/report/trade/market-trade/list",
+        "/dashboard/sale/report/trade/overall/list",
+        "/dashboard/sale/report/trade/self-support/list",
+        "/dashboard/sale/report/transfer/list",
+        "/dashboard/sale/setting/claim-setting/list",
+        "/dashboard/sale/setting/dict/list",
+        "/dashboard/sale/setting/old-chicken-sale/list",
+        "/dashboard/sale/setting/price-control/list",
+        "/dashboard/sale/setting/price-control/low-price/list",
+        "/dashboard/sale/setting/service-subject/list",
+        "/dashboard/sale/settlement/detail/list",
+        "/dashboard/sale/settlement/summary/list",
+        "/dashboard/sale/shop/apply-cat/list",
+        "/dashboard/sale/shop/decoration/list",
+        "/dashboard/sale/shop/enter-store/list",
+        "/dashboard/sale/shop/info/page/shop/details",
+        "/dashboard/sale/shop/message/list",
+        "/dashboard/sale/shop/qualification/list",
+        "/dashboard/sale/shop/rule/list",
+        "/dashboard/sale/sys/dict/list",
+        "/dashboard/sale/sys/office/list",
+        "/dashboard/sale/sys/user/list",
+        "/dashboard/sale/trade/aftersales-refund/list",
+        "/dashboard/sale/trade/claim-apply/list",
+        "/dashboard/sale/trade/export/list",
+        "/dashboard/sale/trade/internal-order/list",
+        "/dashboard/sale/trade/logistic-template/list",
+        "/dashboard/sale/trade/logistics-company/list",
+        "/dashboard/sale/trade/manual-order/list",
+        "/dashboard/sale/trade/order-cancel/list",
+        "/dashboard/sale/trade/order/list",
+        "/dashboard/sale/trade/pending-order/list",
+        "/dashboard/sale/trade/pre-order/list",
+        "/dashboard/sale/trade/third-party-payment/list",
+        "/dashboard/sale/trade/user-deposit-log/list",
+        "/dashboard/sale/trade/user-deposit-vice/list",
+        "/dashboard/sale/visit/recommend-setting/list",
+        "/dashboard/sale/visit/visit-list/list",
+        "/dashboard/sale/visit/visit-record/list"
+      ]
+    },
+    {
+      "type": 60,
+      "label": "销售系统",
+      "kind": "paths",
+      "paths": [
+        "/dashboard/sale/custom/qr/list",
+        "/dashboard/sale/customer-service/after-sale-evaluation/list",
+        "/dashboard/sale/customer-service/after-sale/list",
+        "/dashboard/sale/customer-service/appeal/list",
+        "/dashboard/sale/customer-service/evaluation-overview/list",
+        "/dashboard/sale/customer-service/evaluation/list",
+        "/dashboard/sale/customer/analysis/list",
+        "/dashboard/sale/customer/client-list/list",
+        "/dashboard/sale/customer/customer/list",
+        "/dashboard/sale/customer/enter-standard/list",
+        "/dashboard/sale/customer/market-quotation/list",
+        "/dashboard/sale/customer/organization/list",
+        "/dashboard/sale/customer/quotation-setting/list",
+        "/dashboard/sale/customer/register-code/list",
+        "/dashboard/sale/customer/sales-plan-statistic/list",
+        "/dashboard/sale/goods/additional-service/list",
+        "/dashboard/sale/goods/classification/list",
+        "/dashboard/sale/goods/create-goods/list",
+        "/dashboard/sale/goods/distribution/list",
+        "/dashboard/sale/goods/image/list",
+        "/dashboard/sale/goods/manage/list",
+        "/dashboard/sale/goods/material/list",
+        "/dashboard/sale/goods/purchase-permission/list",
+        "/dashboard/sale/goods/sales-area/list",
+        "/dashboard/sale/goods/videos/list",
+        "/dashboard/sale/job/schedule-job-log/list",
+        "/dashboard/sale/job/schedule-job/list",
+        "/dashboard/sale/marketing/activity/gift/list",
+        "/dashboard/sale/marketing/charm/list",
+        "/dashboard/sale/marketing/coupon/list",
+        "/dashboard/sale/order/ccb-account/list",
+        "/dashboard/sale/order/money-check/list",
+        "/dashboard/sale/order/payment-account/list",
+        "/dashboard/sale/order/trade-storeroom/list",
+        "/dashboard/sale/plans/year/list",
+        "/dashboard/sale/quotation/data/list",
+        "/dashboard/sale/report/abnormal/list",
+        "/dashboard/sale/report/farmer/all-liveness/list",
+        "/dashboard/sale/report/farmer/cage/list",
+        "/dashboard/sale/report/farmer/column/list",
+        "/dashboard/sale/report/farmer/document-update/list",
+        "/dashboard/sale/report/farmer/liveness/list",
+        "/dashboard/sale/report/farmer/market/list",
+        "/dashboard/sale/report/order-integration/list",
+        "/dashboard/sale/report/quotation/country/list",
+        "/dashboard/sale/report/quotation/province/list",
+        "/dashboard/sale/report/trade/all-category-detail/list",
+        "/dashboard/sale/report/trade/all-category-summary/list",
+        "/dashboard/sale/report/trade/chick-lower-price/list",
+        "/dashboard/sale/report/trade/chick-sale/list",
+        "/dashboard/sale/report/trade/feed-lower-price/list",
+        "/dashboard/sale/report/trade/feed-sale/list",
+        "/dashboard/sale/report/trade/manual-order/list",
+        "/dashboard/sale/report/trade/market-online/list",
+        "/dashboard/sale/report/trade/market-trade/list",
+        "/dashboard/sale/report/trade/overall/list",
+        "/dashboard/sale/report/trade/self-support/list",
+        "/dashboard/sale/report/transfer/list",
+        "/dashboard/sale/setting/claim-setting/list",
+        "/dashboard/sale/setting/dict/list",
+        "/dashboard/sale/setting/old-chicken-sale/list",
+        "/dashboard/sale/setting/price-control/list",
+        "/dashboard/sale/setting/price-control/low-price/list",
+        "/dashboard/sale/setting/service-subject/list",
+        "/dashboard/sale/settlement/detail/list",
+        "/dashboard/sale/settlement/summary/list",
+        "/dashboard/sale/shop/apply-cat/list",
+        "/dashboard/sale/shop/decoration/list",
+        "/dashboard/sale/shop/enter-store/list",
+        "/dashboard/sale/shop/info/page/shop/details",
+        "/dashboard/sale/shop/message/list",
+        "/dashboard/sale/shop/qualification/list",
+        "/dashboard/sale/shop/rule/list",
+        "/dashboard/sale/sys/dict/list",
+        "/dashboard/sale/sys/office/list",
+        "/dashboard/sale/sys/user/list",
+        "/dashboard/sale/trade/aftersales-refund/list",
+        "/dashboard/sale/trade/claim-apply/list",
+        "/dashboard/sale/trade/export/list",
+        "/dashboard/sale/trade/internal-order/list",
+        "/dashboard/sale/trade/logistic-template/list",
+        "/dashboard/sale/trade/logistics-company/list",
+        "/dashboard/sale/trade/manual-order/list",
+        "/dashboard/sale/trade/order-cancel/list",
+        "/dashboard/sale/trade/order/list",
+        "/dashboard/sale/trade/pending-order/list",
+        "/dashboard/sale/trade/pre-order/list",
+        "/dashboard/sale/trade/third-party-payment/list",
+        "/dashboard/sale/trade/user-deposit-log/list",
+        "/dashboard/sale/trade/user-deposit-vice/list",
+        "/dashboard/sale/visit/recommend-setting/list",
+        "/dashboard/sale/visit/visit-list/list",
+        "/dashboard/sale/visit/visit-record/list"
+      ]
+    },
+    {
+      "type": 22,
+      "label": "支出管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/finance/expenditure/",
+        "/dashboard/finance/funds/"
+      ]
+    },
+    {
+      "type": 21,
+      "label": "收入管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/finance/revenue/"
+      ]
+    },
+    {
+      "type": 26,
+      "label": "分配分摊",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/finance/depreciation/"
+      ]
+    },
+    {
+      "type": 23,
+      "label": "资金管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/finance/investment/"
+      ]
+    },
+    {
+      "type": 24,
+      "label": "增值管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/finance/value-added/"
+      ]
+    },
+    {
+      "type": 34,
+      "label": "库存管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/material/store/"
+      ]
+    },
+    {
+      "type": 31,
+      "label": "资产管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/material/assets/"
+      ]
+    },
+    {
+      "type": 32,
+      "label": "折旧管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/material/depreciation/"
+      ]
+    },
+    {
+      "type": 33,
+      "label": "运营管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/material/operation/"
+      ]
+    },
+    {
+      "type": 41,
+      "label": "高产管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/product/chicken/",
+        "/dashboard/product/broiler-chicken/",
+        "/dashboard/product/report/chicken/",
+        "/dashboard/product/report/broiler/",
+        "/dashboard/product/report/business-report/",
+        "/dashboard/product/operation/order-chicken/list?moduleType=41",
+        "/dashboard/product/operation/farm-material/list?moduleType=41"
+      ]
+    },
+    {
+      "type": 42,
+      "label": "稳产管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/product/layer/",
+        "/dashboard/product/report/layer/",
+        "/dashboard/product/report/chick/",
+        "/dashboard/product/operation/order-chicken/list?moduleType=42",
+        "/dashboard/product/operation/farm-material/list?moduleType=42"
+      ]
+    },
+    {
+      "type": 43,
+      "label": "孵化管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/product/hatchery-saas/",
+        "/dashboard/product/hatchery/",
+        "/dashboard/product/report/hatchery/",
+        "/dashboard/product/operation/order-hatch/list?moduleType=43"
+      ]
+    },
+    {
+      "type": 44,
+      "label": "饲料管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/product/feed/",
+        "/dashboard/product/operation/feed-order/list?moduleType=44"
+      ]
+    },
+    {
+      "type": 45,
+      "label": "防疫管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/product/prevention/",
+        "/dashboard/product/operation/veterinarians/"
+      ]
+    },
+    {
+      "type": 46,
+      "label": "运输管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/product/transport/"
+      ]
+    },
+    {
+      "type": 51,
+      "label": "准入管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/supply/admittance/"
+      ]
+    },
+    {
+      "type": 54,
+      "label": "入库管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/supply/enter-warehouse/"
+      ]
+    },
+    {
+      "type": 55,
+      "label": "支出管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/supply/payment/"
+      ]
+    },
+    {
+      "type": 52,
+      "label": "计划管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/supply/plans/"
+      ]
+    },
+    {
+      "type": 53,
+      "label": "采购管理",
+      "kind": "prefix",
+      "prefixes": [
+        "/dashboard/supply/purchase/"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn",
+  "pagePath": "/dashboard/finance/investment/financing-repayment/list",
+  "evidence": "真实浏览器读取列表、ID11详情和编辑记录，并打开新建表单后取消。页面没有删除或撤销动作，为避免留下不可清理测试数据，本轮未提交新建或编辑。token在页面内脱敏。",
+  "requests": [
+    {
+      "name": "列表",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/financing-repayment/page?order=&orderField=&entryDateStart=&entryDateEnd=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "23",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "详情",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/financing-repayment/get?id=11&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "23",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "法人单位候选",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/fund-daily-v2/meta/corporations?_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "23",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "编辑记录",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/financing-repayment/edit-record/page?order=&orderField=&dataId=11&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "23",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "修改人候选",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/sys/user/getUserBasicInfoPage?pageNo=1&pageSize=20&statusList=1%2C4&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "23",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    }
+  ],
+  "verificationGap": "创建与编辑尚未真实提交验证；页面没有删除或撤销能力，不能安全创建可清理的测试记录。"
+}

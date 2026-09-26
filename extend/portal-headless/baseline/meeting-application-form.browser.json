@@ -1,0 +1,69 @@
+{
+  "说明": "由 bsk 在测试环境打开「会议室预定」表单（/simple/hr/form/033）时捕获的真实请求序列。token 已在页面内脱敏。",
+  "捕获时间": "2026-09-20",
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=meeting_application&bpmMode=edit&formCustomCreatePath=simple/hr/form/033",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/033（会议室审批）",
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/org/sensitive/info?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=meeting_application&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=1&pageSize=500",
+      "via": "xhr",
+      "headers": {
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1"
+      },
+      "次数": 9
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/hr/meeting-application/meeting-room-usage?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1
+    }
+  ]
+}

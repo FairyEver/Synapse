@@ -1,0 +1,549 @@
+{
+  "用途": "设计 D20 的浏览器抽样基准：逐页比对「生成器给的契约」与「浏览器真实发出的请求」",
+  "选择方式": "分层抽样（不是随机）。层定义、口径与理由见 tools/sample/select-sample.mjs 文件头",
+  "样本总量": 24,
+  "锚点": [
+    {
+      "pagePath": "/dashboard/meeting-room/list",
+      "reason": "已有基准 baseline/meeting-room-page.browser.json，装置必须复现出一致的结论"
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-archive-sheet/list",
+      "reason": "已知反例：URL 层全对但 6 个参数里 4 个的 kind 是错的，isArchived 根本不该在契约里"
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-sheet/list",
+      "reason": "对照组：与上一条打同一个后端接口（/org/hrAttendanceSheet/page）但没有 isArchived——两页之差就是这个词的全部语义"
+    }
+  ],
+  "分层总量": {
+    "L1:参数名像日期/时间": 18,
+    "L2:参数名是 Id 引用": 44,
+    "L3:参数个数>=8": 38,
+    "L4:非 /admin-api 前缀": 71,
+    "L5:不分页": 21,
+    "L6:源码有改写钩子": 3,
+    "L7:对照(绝对 /admin-api、参数少、无日期无引用)": 29
+  },
+  "层内去重说明": "一页可同时属于多层，但只抽一次；按 L1→L7 顺序认领，高风险层先拿名额",
+  "源码可得性": {
+    "withRouteFile": 136,
+    "total": 136
+  },
+  "页": [
+    {
+      "pagePath": "/dashboard/meeting-room/list",
+      "claimedBy": "锚点",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "resolvedPath": "/admin-api/hr/meeting-room/page",
+      "moduleType": null
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-archive-sheet/list",
+      "claimedBy": "锚点",
+      "layers": [
+        "L1:参数名像日期/时间",
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "resolvedPath": "/admin-api/org/hrAttendanceSheet/page",
+      "moduleType": 11
+    },
+    {
+      "pagePath": "/dashboard/attendance/attendance-sheet/list",
+      "claimedBy": "锚点",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "resolvedPath": "/admin-api/org/hrAttendanceSheet/page",
+      "moduleType": 11
+    },
+    {
+      "pagePath": "/dashboard/base/management-center/list",
+      "claimedBy": "L7:对照(绝对 /admin-api、参数少、无日期无引用)",
+      "layers": [
+        "L7:对照(绝对 /admin-api、参数少、无日期无引用)"
+      ],
+      "title": "组织结构",
+      "domain": "base",
+      "routeFile": "app/portal/views/dashboard/education/base/management-center/list.vue",
+      "resolvedPath": "/admin-api/study/base/studymanagementcenter/page",
+      "sizeParam": "pageSize",
+      "moduleType": 12,
+      "paramCount": 6,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:string",
+        "status:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/block/main/list",
+      "claimedBy": "L7:对照(绝对 /admin-api、参数少、无日期无引用)",
+      "layers": [
+        "L7:对照(绝对 /admin-api、参数少、无日期无引用)"
+      ],
+      "title": "组件管理",
+      "domain": "block",
+      "routeFile": "app/portal/views/dashboard/hr/block/main/list.vue",
+      "resolvedPath": "/admin-api/performance/basedata/kpisubassembly/page",
+      "sizeParam": "pageSize",
+      "moduleType": 13,
+      "paramCount": 7,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:string",
+        "warehouseType:string",
+        "type:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/contract/template/list",
+      "claimedBy": "L2:参数名是 Id 引用",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "title": "合同模板",
+      "domain": "contract",
+      "routeFile": "app/portal/views/dashboard/hr/contract/template/list.vue",
+      "resolvedPath": "/admin-api/hr/contract-template/page",
+      "sizeParam": "pageSize",
+      "moduleType": 15,
+      "paramCount": 6,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:null",
+        "typeId:null",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/accounting-manage/list",
+      "claimedBy": "L1:参数名像日期/时间",
+      "layers": [
+        "L1:参数名像日期/时间",
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "title": "账套管理",
+      "domain": "finance",
+      "routeFile": "app/portal/views/dashboard/finance/setting/accounting-manage/list.vue",
+      "resolvedPath": "/admin-api/finance/accounting-manage/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 10,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "corporationId:undefined",
+        "accountCode:string",
+        "accountingName:string",
+        "accountingStandardsApply:string",
+        "periodYear:string",
+        "status:number",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/finance/setting/accounting-period/list",
+      "claimedBy": "L1:参数名像日期/时间",
+      "layers": [
+        "L1:参数名像日期/时间"
+      ],
+      "title": "会计期间",
+      "domain": "finance",
+      "routeFile": "app/portal/views/dashboard/finance/setting/accounting-period/list.vue",
+      "resolvedPath": "/admin-api/finance/accounting-period/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 7,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "year:string",
+        "tenantName:null",
+        "status:number",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/flow/old/model/list",
+      "claimedBy": "L7:对照(绝对 /admin-api、参数少、无日期无引用)",
+      "layers": [
+        "L7:对照(绝对 /admin-api、参数少、无日期无引用)"
+      ],
+      "title": "流程模型 双赢协议",
+      "domain": "flow",
+      "routeFile": "app/portal/views/dashboard/hr/flow/old/model/list.vue",
+      "resolvedPath": "/admin-api/bpm/hr/model/page",
+      "sizeParam": "limit",
+      "moduleType": null,
+      "paramCount": 7,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "key:string",
+        "name:string",
+        "category:string",
+        "pageNo:number",
+        "limit:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/grade/grade/list",
+      "claimedBy": "L2:参数名是 Id 引用",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "title": "班级管理",
+      "domain": "grade",
+      "routeFile": "app/portal/views/dashboard/education/grade/grade/list.vue",
+      "resolvedPath": "/admin-api/study/grade/studygrade/page",
+      "sizeParam": "pageSize",
+      "moduleType": 12,
+      "paramCount": 11,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:string",
+        "type:string",
+        "studentNumMin:string",
+        "studentNumMax:string",
+        "teacherName:string",
+        "teachingAssistantName:string",
+        "orgId:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/manage/cost-center/list",
+      "claimedBy": "L3:参数个数>=8",
+      "layers": [
+        "L3:参数个数>=8"
+      ],
+      "title": "成本中心",
+      "domain": "manage",
+      "routeFile": "app/portal/views/dashboard/hr/manage/cost-center/list.vue",
+      "resolvedPath": "/admin-api/salary/costcenter/page",
+      "sizeParam": "pageSize",
+      "moduleType": 14,
+      "paramCount": 9,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:string",
+        "insuranceCost:string",
+        "fundCost:string",
+        "salaryCost:string",
+        "organization:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/material/assets/code-setting/list",
+      "claimedBy": "L2:参数名是 Id 引用",
+      "layers": [
+        "L2:参数名是 Id 引用"
+      ],
+      "title": "资产编码",
+      "domain": "material",
+      "routeFile": "app/portal/views/dashboard/material/assets/code-setting/list.vue",
+      "resolvedPath": "/admin-api/inventory/organization-config/page",
+      "sizeParam": "pageSize",
+      "moduleType": 31,
+      "paramCount": 5,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "orgId:null",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/org/org-setting/list",
+      "claimedBy": "L3:参数个数>=8",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8"
+      ],
+      "title": "组织设置",
+      "domain": "org",
+      "routeFile": "app/portal/views/dashboard/hr/org/org-setting/list.vue",
+      "resolvedPath": "/admin-api/org/organization/page",
+      "sizeParam": "pageSize",
+      "moduleType": 11,
+      "paramCount": 10,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:string",
+        "pName:string",
+        "code:string",
+        "typeId:string",
+        "level:string",
+        "status:number",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/category/attribute/property/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "title": "属性列表",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/category/attribute/property/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/categorypProps/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 5,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "propType:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/category/classify/sort/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L4:非 /admin-api 前缀",
+        "L5:不分页"
+      ],
+      "title": "分类列表",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/category/classify/sort/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/categoryCat/getTree",
+      "sizeParam": null,
+      "moduleType": null,
+      "paramCount": 2,
+      "params": [
+        "order:string",
+        "orderField:string"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/category/supplier/brand/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "title": "品牌管理",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/category/supplier/brand/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/categorypBrand/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 6,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "brandName:string",
+        "brandAlias:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/chicken/apply/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L4:非 /admin-api 前缀"
+      ],
+      "title": "申请管理",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/chicken/apply/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/platapplymanage/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 7,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "username:string",
+        "gender:string",
+        "deptId:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/chicken/product-setting/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "title": "产品配置",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/chicken/product-setting/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/platproductmanage/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 4,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/control-panel/image-list/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L3:参数个数>=8",
+        "L4:非 /admin-api 前缀"
+      ],
+      "title": "图片管理",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/control-panel/image-list/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/imageImage/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 8,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "imageName:string",
+        "url:string",
+        "targetType:string",
+        "disabled:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/platform/control-panel/payment-method/list",
+      "claimedBy": "L4:非 /admin-api 前缀",
+      "layers": [
+        "L4:非 /admin-api 前缀"
+      ],
+      "title": "支付方式管理",
+      "domain": "platform",
+      "routeFile": "app/portal/views/dashboard/platform/control-panel/payment-method/list.vue",
+      "resolvedPath": "/mall-manage-api/sys/paymentMethod/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 5,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "platform:string",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/sale/goods/material/list",
+      "claimedBy": "L6:源码有改写钩子",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8",
+        "L6:源码有改写钩子"
+      ],
+      "title": "物料维护",
+      "domain": "sale",
+      "routeFile": "app/portal/views/dashboard/sale/goods/material/list.vue",
+      "resolvedPath": "/admin-api/system/sys-materiel/page",
+      "sizeParam": "pageSize",
+      "moduleType": 60,
+      "paramCount": 8,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "matName:null",
+        "matDescribe:null",
+        "supplierId:null",
+        "categoryId:null",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/setting/area/list",
+      "claimedBy": "L5:不分页",
+      "layers": [
+        "L5:不分页"
+      ],
+      "title": "地区管理",
+      "domain": "setting",
+      "routeFile": "app/portal/views/dashboard/hr/setting/area/list.vue",
+      "resolvedPath": "/admin-api/system/area/getTree",
+      "sizeParam": null,
+      "moduleType": null,
+      "paramCount": 2,
+      "params": [
+        "order:string",
+        "orderField:string"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/setting/category-dict/list",
+      "claimedBy": "L5:不分页",
+      "layers": [
+        "L5:不分页"
+      ],
+      "title": "分类字典",
+      "domain": "setting",
+      "routeFile": "app/portal/views/dashboard/hr/setting/category-dict/list.vue",
+      "resolvedPath": "/admin-api/system/category-dict/tree",
+      "sizeParam": null,
+      "moduleType": null,
+      "paramCount": 5,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "name:string",
+        "code:string",
+        "onlyTenantEditable:boolean"
+      ]
+    },
+    {
+      "pagePath": "/dashboard/setting/material/list",
+      "claimedBy": "L6:源码有改写钩子",
+      "layers": [
+        "L2:参数名是 Id 引用",
+        "L3:参数个数>=8",
+        "L6:源码有改写钩子"
+      ],
+      "title": "物料管理",
+      "domain": "setting",
+      "routeFile": "app/portal/views/dashboard/hr/setting/material/list.vue",
+      "resolvedPath": "/admin-api/system/sys-materiel/page",
+      "sizeParam": "pageSize",
+      "moduleType": null,
+      "paramCount": 8,
+      "params": [
+        "order:string",
+        "orderField:string",
+        "matName:null",
+        "matDescribe:null",
+        "supplierId:null",
+        "categoryId:null",
+        "pageNo:number",
+        "pageSize:number"
+      ]
+    }
+  ]
+}

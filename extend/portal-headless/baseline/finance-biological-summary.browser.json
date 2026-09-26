@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn",
+  "pagePath": "/dashboard/finance/depreciation/biological/summary-report/list",
+  "evidence": "真实浏览器进入生物资产汇总表，确认所属组织、会计年度、会计期间、订单号/批次号四项筛选，并按默认年度和期间查询。当前返回0行；页面还提供重置和分页，没有详情或写入动作。token在页面内脱敏。",
+  "requests": [
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/biological-asset-summary/page?order=&orderField=&accountingYear=2026&postingPeriod=2026-09&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "capturedAt": "2026-09-22",
+  "pagePath": "/dashboard/finance/setting/ledger-accounts/list",
+  "sourceRevision": "d3cf56bdc76c73c5eb9252be84b9b39b3900b48e",
+  "requests": [
+    {
+      "action": "default-list",
+      "method": "GET",
+      "url": "/admin-api/finance/ledger-accounts/page?order=&orderField=&name=&accountingStandardsApply=&organizationId=&tenantName=&ledgerType=1&subjectLevel=&type=&code=&status=0&_t=<ts>"
+    }
+  ],
+  "absentHeaders": ["module-type"],
+  "observations": {
+    "pagination": false,
+    "detailRequestCount": 0,
+    "createFormBusinessRequestCount": 0,
+    "lowerLevelFormBusinessRequestCount": 0,
+    "writeSubmitted": false,
+    "visibleActions": ["新建", "添加下级", "启用或停用", "详情", "导入", "导出", "下载模版"]
+  },
+  "redaction": "凭据在页面内脱敏；本文件不含业务行、token、tenant-id或个人信息。"
+}

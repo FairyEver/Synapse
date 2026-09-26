@@ -1,0 +1,226 @@
+{
+ "说明": "由 bsk 抓到的绩效管理域「薪酬与分析」六页的真实浏览器请求（全部只读）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "先在门户首页装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到目标页 —— SPA 的同文档导航不会卸载钩子，页面挂载时那条真实请求会被完整抓到。",
+ "requests": [
+  {
+   "页面": "薪酬主表",
+   "pagePath": "/dashboard/salary/main/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/salary/basedata/hrsalarymanagement/page",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"order\":\"\",\"orderField\":\"\",\"name\":\"\",\"year\":\"2026\",\"month\":9,\"orgIdList\":[],\"pageNo\":1,\"pageSize\":20}"
+  },
+  {
+   "页面": "薪酬主表",
+   "pagePath": "/dashboard/salary/main/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getRoleOrganizationTree?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "调薪",
+   "pagePath": "/dashboard/salary/adjust/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/salary/basedata/hrsalarymanagement/adjustPage",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"order\":\"\",\"orderField\":\"\",\"year\":\"\",\"month\":\"\",\"name\":\"\",\"staffCode\":\"\",\"orgIdList\":[],\"pageNo\":1,\"pageSize\":20}"
+  },
+  {
+   "页面": "调薪",
+   "pagePath": "/dashboard/salary/adjust/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getRoleOrganizationTree?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "考核结果",
+   "pagePath": "/dashboard/salary/examine-result/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/examineresult/page",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"order\":\"\",\"orderField\":\"\",\"name\":\"\",\"year\":\"\",\"month\":\"\",\"organizationIdList\":[],\"pageNo\":1,\"pageSize\":20}"
+  },
+  {
+   "页面": "考核结果",
+   "pagePath": "/dashboard/salary/examine-result/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getRoleOrganizationTree?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "组件管理",
+   "pagePath": "/dashboard/block/main/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/basedata/kpisubassembly/page?order=&orderField=&name=&warehouseType=&type=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "管理分析",
+   "pagePath": "/dashboard/analysis/department/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getRoleOrganizationTree?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "管理分析",
+   "pagePath": "/dashboard/analysis/department/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/statistics/homepage/deptMonthProtocolInfo",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"year\":2026,\"month\":8,\"organizationIdList\":[\"34\"],\"temIdList\":[]}"
+  },
+  {
+   "页面": "管理分析",
+   "pagePath": "/dashboard/analysis/department/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/statistics/homepage/deptSignStatisticsInfo",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"year\":2026,\"month\":8,\"organizationIdList\":[\"34\"],\"temIdList\":[]}"
+  },
+  {
+   "页面": "管理分析",
+   "pagePath": "/dashboard/analysis/department/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/statistics/homepage/branchDeptSignInfo",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"year\":2026,\"month\":8,\"organizationIdList\":[\"34\"],\"temIdList\":[]}"
+  },
+  {
+   "页面": "管理分析",
+   "pagePath": "/dashboard/analysis/department/list",
+   "via": "xhr",
+   "method": "POST",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/statistics/homepage/deptScoreStatisticsInfo",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+   },
+   "body": "{\"year\":2026,\"month\":8,\"organizationIdList\":[\"34\"],\"temIdList\":[]}"
+  },
+  {
+   "页面": "个人分析",
+   "pagePath": "/dashboard/analysis/person/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/statistics/homepage/monthProtocolInfo?year=2026&month=8&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "个人分析",
+   "pagePath": "/dashboard/analysis/person/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/performance/statistics/homepage/personalStatistics?year=2026&month=8&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "13",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  }
+ ]
+}

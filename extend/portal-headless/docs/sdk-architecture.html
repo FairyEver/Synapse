@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Portal Headless SDK 与 Synapse 服务端、客户端、连接器的整体架构和调用时序。">
+<title>Portal Headless × SY · 整体架构与调用顺序</title>
+<!-- Styles are compiled from unmodified Tailwind CSS 4.2.2 default theme and utilities. No custom styles. -->
+<style id="tailwind-offline">/*! tailwindcss v4.2.2 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+      "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    --color-amber-50: oklch(98.7% 0.022 95.277);
+    --color-amber-800: oklch(47.3% 0.137 46.201);
+    --color-amber-900: oklch(41.4% 0.112 45.904);
+    --color-zinc-100: oklch(96.7% 0.001 286.375);
+    --color-zinc-200: oklch(92% 0.004 286.32);
+    --color-zinc-300: oklch(87.1% 0.006 286.286);
+    --color-zinc-500: oklch(55.2% 0.016 285.938);
+    --color-zinc-600: oklch(44.2% 0.017 285.786);
+    --color-zinc-700: oklch(37% 0.013 285.805);
+    --color-zinc-800: oklch(27.4% 0.006 286.033);
+    --color-zinc-900: oklch(21% 0.006 285.885);
+    --color-zinc-950: oklch(14.1% 0.005 285.823);
+    --color-white: #fff;
+    --spacing: 0.25rem;
+    --breakpoint-2xl: 96rem;
+    --container-4xl: 56rem;
+    --text-sm: 0.875rem;
+    --text-sm--line-height: calc(1.25 / 0.875);
+    --text-base: 1rem;
+    --text-base--line-height: calc(1.5 / 1);
+    --text-lg: 1.125rem;
+    --text-lg--line-height: calc(1.75 / 1.125);
+    --text-2xl: 1.5rem;
+    --text-2xl--line-height: calc(2 / 1.5);
+    --text-3xl: 1.875rem;
+    --text-3xl--line-height: calc(2.25 / 1.875);
+    --text-4xl: 2.25rem;
+    --text-4xl--line-height: calc(2.5 / 2.25);
+    --font-weight-semibold: 600;
+    --tracking-tight: -0.025em;
+    --leading-tight: 1.25;
+    --radius-lg: 0.5rem;
+    --default-font-family: var(--font-sans);
+    --default-mono-font-family: var(--font-mono);
+  }
+}
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+  html, :host {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    tab-size: 4;
+    font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+    font-feature-settings: var(--default-font-feature-settings, normal);
+    font-variation-settings: var(--default-font-variation-settings, normal);
+    -webkit-tap-highlight-color: transparent;
+  }
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
+  }
+  abbr:where([title]) {
+    -webkit-text-decoration: underline dotted;
+    text-decoration: underline dotted;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+  a {
+    color: inherit;
+    -webkit-text-decoration: inherit;
+    text-decoration: inherit;
+  }
+  b, strong {
+    font-weight: bolder;
+  }
+  code, kbd, samp, pre {
+    font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+    font-feature-settings: var(--default-mono-font-feature-settings, normal);
+    font-variation-settings: var(--default-mono-font-variation-settings, normal);
+    font-size: 1em;
+  }
+  small {
+    font-size: 80%;
+  }
+  sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+  sub {
+    bottom: -0.25em;
+  }
+  sup {
+    top: -0.5em;
+  }
+  table {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+  :-moz-focusring {
+    outline: auto;
+  }
+  progress {
+    vertical-align: baseline;
+  }
+  summary {
+    display: list-item;
+  }
+  ol, ul, menu {
+    list-style: none;
+  }
+  img, svg, video, canvas, audio, iframe, embed, object {
+    display: block;
+    vertical-align: middle;
+  }
+  img, video {
+    max-width: 100%;
+    height: auto;
+  }
+  button, input, select, optgroup, textarea, ::file-selector-button {
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    border-radius: 0;
+    background-color: transparent;
+    opacity: 1;
+  }
+  :where(select:is([multiple], [size])) optgroup {
+    font-weight: bolder;
+  }
+  :where(select:is([multiple], [size])) optgroup option {
+    padding-inline-start: 20px;
+  }
+  ::file-selector-button {
+    margin-inline-end: 4px;
+  }
+  ::placeholder {
+    opacity: 1;
+  }
+  @supports (not (-webkit-appearance: -apple-pay-button))  or (contain-intrinsic-size: 1px) {
+    ::placeholder {
+      color: currentcolor;
+      @supports (color: color-mix(in lab, red, red)) {
+        color: color-mix(in oklab, currentcolor 50%, transparent);
+      }
+    }
+  }
+  textarea {
+    resize: vertical;
+  }
+  ::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+  ::-webkit-date-and-time-value {
+    min-height: 1lh;
+    text-align: inherit;
+  }
+  ::-webkit-datetime-edit {
+    display: inline-flex;
+  }
+  ::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+  ::-webkit-datetime-edit, ::-webkit-datetime-edit-year-field, ::-webkit-datetime-edit-month-field, ::-webkit-datetime-edit-day-field, ::-webkit-datetime-edit-hour-field, ::-webkit-datetime-edit-minute-field, ::-webkit-datetime-edit-second-field, ::-webkit-datetime-edit-millisecond-field, ::-webkit-datetime-edit-meridiem-field {
+    padding-block: 0;
+  }
+  ::-webkit-calendar-picker-indicator {
+    line-height: 1;
+  }
+  :-moz-ui-invalid {
+    box-shadow: none;
+  }
+  button, input:where([type="button"], [type="reset"], [type="submit"]), ::file-selector-button {
+    appearance: button;
+  }
+  ::-webkit-inner-spin-button, ::-webkit-outer-spin-button {
+    height: auto;
+  }
+  [hidden]:where(:not([hidden="until-found"])) {
+    display: none !important;
+  }
+}
+@layer utilities {
+  .mx-auto {
+    margin-inline: auto;
+  }
+  .mt-3 {
+    margin-top: calc(var(--spacing) * 3);
+  }
+  .mt-4 {
+    margin-top: calc(var(--spacing) * 4);
+  }
+  .mt-5 {
+    margin-top: calc(var(--spacing) * 5);
+  }
+  .mt-6 {
+    margin-top: calc(var(--spacing) * 6);
+  }
+  .mt-7 {
+    margin-top: calc(var(--spacing) * 7);
+  }
+  .mt-8 {
+    margin-top: calc(var(--spacing) * 8);
+  }
+  .mb-2 {
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .mb-3 {
+    margin-bottom: calc(var(--spacing) * 3);
+  }
+  .mb-4 {
+    margin-bottom: calc(var(--spacing) * 4);
+  }
+  .mb-5 {
+    margin-bottom: calc(var(--spacing) * 5);
+  }
+  .mb-6 {
+    margin-bottom: calc(var(--spacing) * 6);
+  }
+  .block {
+    display: block;
+  }
+  .flex {
+    display: flex;
+  }
+  .grid {
+    display: grid;
+  }
+  .w-full {
+    width: 100%;
+  }
+  .max-w-4xl {
+    max-width: var(--container-4xl);
+  }
+  .max-w-none {
+    max-width: none;
+  }
+  .max-w-screen-2xl {
+    max-width: var(--breakpoint-2xl);
+  }
+  .scroll-mt-6 {
+    scroll-margin-top: calc(var(--spacing) * 6);
+  }
+  .flex-wrap {
+    flex-wrap: wrap;
+  }
+  .items-baseline {
+    align-items: baseline;
+  }
+  .items-center {
+    align-items: center;
+  }
+  .justify-between {
+    justify-content: space-between;
+  }
+  .gap-2 {
+    gap: calc(var(--spacing) * 2);
+  }
+  .gap-4 {
+    gap: calc(var(--spacing) * 4);
+  }
+  .gap-5 {
+    gap: calc(var(--spacing) * 5);
+  }
+  .gap-8 {
+    gap: calc(var(--spacing) * 8);
+  }
+  .gap-x-6 {
+    column-gap: calc(var(--spacing) * 6);
+  }
+  .gap-y-3 {
+    row-gap: calc(var(--spacing) * 3);
+  }
+  .divide-y {
+    :where(& > :not(:last-child)) {
+      --tw-divide-y-reverse: 0;
+      border-bottom-style: var(--tw-border-style);
+      border-top-style: var(--tw-border-style);
+      border-top-width: calc(1px * var(--tw-divide-y-reverse));
+      border-bottom-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
+    }
+  }
+  .divide-zinc-200 {
+    :where(& > :not(:last-child)) {
+      border-color: var(--color-zinc-200);
+    }
+  }
+  .overflow-x-auto {
+    overflow-x: auto;
+  }
+  .rounded {
+    border-radius: 0.25rem;
+  }
+  .rounded-lg {
+    border-radius: var(--radius-lg);
+  }
+  .border {
+    border-style: var(--tw-border-style);
+    border-width: 1px;
+  }
+  .border-t {
+    border-top-style: var(--tw-border-style);
+    border-top-width: 1px;
+  }
+  .border-zinc-200 {
+    border-color: var(--color-zinc-200);
+  }
+  .border-zinc-300 {
+    border-color: var(--color-zinc-300);
+  }
+  .bg-amber-50 {
+    background-color: var(--color-amber-50);
+  }
+  .bg-white {
+    background-color: var(--color-white);
+  }
+  .bg-zinc-100 {
+    background-color: var(--color-zinc-100);
+  }
+  .fill-current {
+    fill: currentcolor;
+  }
+  .p-5 {
+    padding: calc(var(--spacing) * 5);
+  }
+  .px-3 {
+    padding-inline: calc(var(--spacing) * 3);
+  }
+  .px-4 {
+    padding-inline: calc(var(--spacing) * 4);
+  }
+  .px-5 {
+    padding-inline: calc(var(--spacing) * 5);
+  }
+  .py-1 {
+    padding-block: calc(var(--spacing) * 1);
+  }
+  .py-2 {
+    padding-block: calc(var(--spacing) * 2);
+  }
+  .py-3 {
+    padding-block: calc(var(--spacing) * 3);
+  }
+  .py-4 {
+    padding-block: calc(var(--spacing) * 4);
+  }
+  .py-8 {
+    padding-block: calc(var(--spacing) * 8);
+  }
+  .py-10 {
+    padding-block: calc(var(--spacing) * 10);
+  }
+  .pb-8 {
+    padding-bottom: calc(var(--spacing) * 8);
+  }
+  .text-left {
+    text-align: left;
+  }
+  .align-top {
+    vertical-align: top;
+  }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .font-sans {
+    font-family: var(--font-sans);
+  }
+  .text-2xl {
+    font-size: var(--text-2xl);
+    line-height: var(--tw-leading, var(--text-2xl--line-height));
+  }
+  .text-3xl {
+    font-size: var(--text-3xl);
+    line-height: var(--tw-leading, var(--text-3xl--line-height));
+  }
+  .text-base {
+    font-size: var(--text-base);
+    line-height: var(--tw-leading, var(--text-base--line-height));
+  }
+  .text-lg {
+    font-size: var(--text-lg);
+    line-height: var(--tw-leading, var(--text-lg--line-height));
+  }
+  .text-sm {
+    font-size: var(--text-sm);
+    line-height: var(--tw-leading, var(--text-sm--line-height));
+  }
+  .leading-6 {
+    --tw-leading: calc(var(--spacing) * 6);
+    line-height: calc(var(--spacing) * 6);
+  }
+  .leading-7 {
+    --tw-leading: calc(var(--spacing) * 7);
+    line-height: calc(var(--spacing) * 7);
+  }
+  .leading-8 {
+    --tw-leading: calc(var(--spacing) * 8);
+    line-height: calc(var(--spacing) * 8);
+  }
+  .leading-tight {
+    --tw-leading: var(--leading-tight);
+    line-height: var(--leading-tight);
+  }
+  .font-semibold {
+    --tw-font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-semibold);
+  }
+  .tracking-tight {
+    --tw-tracking: var(--tracking-tight);
+    letter-spacing: var(--tracking-tight);
+  }
+  .text-amber-50 {
+    color: var(--color-amber-50);
+  }
+  .text-amber-800 {
+    color: var(--color-amber-800);
+  }
+  .text-amber-900 {
+    color: var(--color-amber-900);
+  }
+  .text-zinc-100 {
+    color: var(--color-zinc-100);
+  }
+  .text-zinc-300 {
+    color: var(--color-zinc-300);
+  }
+  .text-zinc-500 {
+    color: var(--color-zinc-500);
+  }
+  .text-zinc-600 {
+    color: var(--color-zinc-600);
+  }
+  .text-zinc-700 {
+    color: var(--color-zinc-700);
+  }
+  .text-zinc-800 {
+    color: var(--color-zinc-800);
+  }
+  .text-zinc-900 {
+    color: var(--color-zinc-900);
+  }
+  .text-zinc-950 {
+    color: var(--color-zinc-950);
+  }
+  .underline {
+    text-decoration-line: underline;
+  }
+  .underline-offset-4 {
+    text-underline-offset: 4px;
+  }
+  .antialiased {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .hover\:bg-zinc-100 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--color-zinc-100);
+      }
+    }
+  }
+  .hover\:text-amber-800 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-amber-800);
+      }
+    }
+  }
+  .hover\:text-zinc-950 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-zinc-950);
+      }
+    }
+  }
+  .md\:grid-cols-2 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  .md\:grid-cols-4 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .md\:px-10 {
+    @media (width >= 48rem) {
+      padding-inline: calc(var(--spacing) * 10);
+    }
+  }
+  .md\:text-4xl {
+    @media (width >= 48rem) {
+      font-size: var(--text-4xl);
+      line-height: var(--tw-leading, var(--text-4xl--line-height));
+    }
+  }
+  .print\:hidden {
+    @media print {
+      display: none;
+    }
+  }
+}
+@property --tw-divide-y-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --tw-leading {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-tracking {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-divide-y-reverse: 0;
+      --tw-border-style: solid;
+      --tw-leading: initial;
+      --tw-font-weight: initial;
+      --tw-tracking: initial;
+    }
+  }
+}
+</style>
+</head>
+<body class="bg-white text-zinc-900 font-sans antialiased">
+<main class="max-w-screen-2xl mx-auto px-5 md:px-10 py-10">
+<header class="pb-8"><p class="text-sm font-mono text-zinc-500 mb-4">PORTAL HEADLESS / SYNAPSE · 2026-09-22</p>
+<h1 class="text-3xl md:text-4xl font-semibold tracking-tight leading-tight">SDK、连接器与 SY 的整体架构</h1>
+<p class="mt-5 text-lg leading-8 max-w-4xl text-zinc-700">用户在 SY 对话中提出任务；客户端完成授权和凭据管理，SY 服务端调用 SDK，以用户的 Portal 身份执行。目录、业务说明和执行能力由 SDK 统一提供。</p>
+<nav aria-label="章节导航" class="flex flex-wrap gap-x-6 gap-y-3 mt-7 text-sm"><a class="underline underline-offset-4 hover:text-amber-800" href="#overview">总体框架</a><a class="underline underline-offset-4 hover:text-amber-800" href="#connection">首次连接</a><a class="underline underline-offset-4 hover:text-amber-800" href="#runtime">日常调用</a><a class="underline underline-offset-4 hover:text-amber-800" href="#structure">SDK 结构</a><a class="underline underline-offset-4 hover:text-amber-800" href="#protocol">协议与工具</a><a class="underline underline-offset-4 hover:text-amber-800" href="#delivery">更新链路</a><a class="underline underline-offset-4 hover:text-amber-800" href="#decisions">待定事项</a></nav></header><section id="overview" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">01</span><h2 class="text-2xl font-semibold tracking-tight">总体框架</h2></div><div class="flex flex-wrap items-center justify-between gap-4 mb-5"><div class="flex flex-wrap gap-4 text-sm"><span class="bg-zinc-100 px-3 py-1 rounded">已有：SDK 代码 / Portal 基础设施</span><span class="bg-amber-50 text-amber-900 px-3 py-1 rounded">浅琥珀：接入规划</span><span class="text-zinc-600">虚线箭头：待接通</span></div><div class="flex gap-2 print:hidden"><button id="fit-diagram" type="button" class="border border-zinc-300 rounded px-3 py-2 text-sm hover:bg-zinc-100">适合窗口</button><button id="actual-diagram" type="button" class="border border-zinc-300 rounded px-3 py-2 text-sm hover:bg-zinc-100">原始尺寸</button></div></div><div class="overflow-x-auto rounded-lg border border-zinc-200 bg-white" data-diagram><svg id="framework" width="1500" height="1030" viewBox="0 0 1500 1030" role="img" aria-labelledby="framework-title framework-desc" class="block max-w-none font-sans"><title id="framework-title">Portal Headless 总体框架与调用顺序</title><desc id="framework-desc">四列分别为用户与 SY 桌面、拟议 SY 服务端接入层、同一服务端进程内已实现的 SDK，以及 Portal。先绑定凭据，再建立会话、获取描述、调用能力，结果沿原通道返回。</desc><defs><marker id="framework-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" class="text-zinc-500"/></marker></defs><text x="380" y="32" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="380" dy="0">SY 服务端 · 同一 Node.js / NestJS 进程（拟接入）</tspan></text><path d="M380 47 H1110" stroke="currentColor" class="text-zinc-300"/><text x="28" y="82" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="28" dy="0">用户 / SY 桌面客户端</tspan></text><text x="28" y="108" class="text-sm fill-current text-zinc-500"><tspan x="28" dy="0">Portal 接入待开发</tspan></text><text x="380" y="82" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="380" dy="0">SY 接入层</tspan></text><text x="380" y="108" class="text-sm fill-current text-zinc-500"><tspan x="380" dy="0">拟新增 PortalModule</tspan></text><text x="750" y="82" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="750" dy="0">portal-headless SDK</tspan></text><text x="750" y="108" class="text-sm fill-current text-zinc-500"><tspan x="750" dy="0">TypeScript 包 · 进程内函数调用</tspan></text><text x="1190" y="82" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="1190" dy="0">Portal 系统</tspan></text><text x="1190" y="108" class="text-sm fill-current text-zinc-500"><tspan x="1190" dy="0">用户身份 / 权限 / 业务数据</tspan></text><g><rect x="28" y="150" width="265" height="142" rx="8" fill="currentColor" class="text-amber-50"/><text x="46" y="178" class="text-sm fill-current text-amber-800"><tspan x="46" dy="0">接入规划</tspan></text><text x="46" y="207" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="46" dy="0">① 用户发起任务</tspan></text><text x="46" y="230" class="text-base fill-current text-zinc-700"><tspan x="46" dy="0">“帮我查明天的会议室”</tspan><tspan x="46" dy="24">桌面桥读取本地 Portal 凭据</tspan><tspan x="46" dy="24">附带 SY 登录会话</tspan></text></g><g><rect x="380" y="150" width="270" height="142" rx="8" fill="currentColor" class="text-amber-50"/><text x="398" y="178" class="text-sm fill-current text-amber-800"><tspan x="398" dy="0">接入规划</tspan></text><text x="398" y="207" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="398" dy="0">② HTTP 入口 / 鉴权</tspan></text><text x="398" y="230" class="text-base fill-current text-zinc-700"><tspan x="398" dy="0">/api/console/portal/**</tspan><tspan x="398" dy="24">UserAuthGuard → SY userId</tspan><tspan x="398" dy="24">接收 Portal token + tenantId</tspan></text></g><g><rect x="750" y="150" width="350" height="142" rx="8" fill="currentColor" class="text-zinc-100"/><text x="768" y="178" class="text-sm fill-current text-zinc-600"><tspan x="768" dy="0">已有</tspan></text><text x="768" y="207" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="768" dy="0">③ forSession(...)</tspan></text><text x="768" y="230" class="text-base fill-current text-zinc-700"><tspan x="768" dy="0">SY 用户 × Portal 租户 × 语言</tspan><tspan x="768" dy="24">复用或新建会话与请求函数</tspan><tspan x="768" dy="24">换 token 自动失效旧会话</tspan></text></g><g><rect x="1190" y="150" width="282" height="142" rx="8" fill="currentColor" class="text-zinc-100"/><text x="1208" y="178" class="text-sm fill-current text-zinc-600"><tspan x="1208" dy="0">已有</tspan></text><text x="1208" y="207" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="1208" dy="0">Portal 身份 / 基础数据</tspan></text><text x="1208" y="230" class="text-base fill-current text-zinc-700"><tspan x="1208" dy="0">用户、租户、部门、权限等</tspan><tspan x="1208" dy="24">按请求返回基础数据</tspan><tspan x="1208" dy="24">凭据有效性由 Portal 校验</tspan></text></g><path d="M293 220 H380" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="305" y="207" class="text-sm fill-current text-zinc-600"><tspan x="305" dy="0">HTTPS</tspan></text><path d="M650 220 H750" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="669" y="207" class="text-sm fill-current text-zinc-600"><tspan x="669" dy="0">函数调用</tspan></text><path d="M1100 220 H1190" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500"/><text x="1106" y="207" class="text-sm fill-current text-zinc-600"><tspan x="1106" dy="0">缓存未命中</tspan></text><g><rect x="28" y="365" width="265" height="142" rx="8" fill="currentColor" class="text-amber-50"/><text x="46" y="393" class="text-sm fill-current text-amber-800"><tspan x="46" dy="0">接入规划</tspan></text><text x="46" y="422" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="46" dy="0">⑤ AI 读取能力说明</tspan></text><text x="46" y="445" class="text-base fill-current text-zinc-700"><tspan x="46" dy="0">本地 Skill 指导查找与下钻</tspan><tspan x="46" dy="24">模型只消费描述与业务数据</tspan><tspan x="46" dy="24">按契约补齐候选和参数</tspan></text></g><g><rect x="380" y="365" width="270" height="142" rx="8" fill="currentColor" class="text-amber-50"/><text x="398" y="393" class="text-sm fill-current text-amber-800"><tspan x="398" dy="0">接入规划</tspan></text><text x="398" y="422" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="398" dy="0">目录 / 描述服务</tspan></text><text x="398" y="445" class="text-base fill-current text-zinc-700"><tspan x="398" dy="0">PortalCatalogService</tspan><tspan x="398" dy="24">转发用户可见的 SDK 目录</tspan><tspan x="398" dy="24">PortalCapabilityService.describe</tspan></text></g><g><rect x="750" y="365" width="350" height="142" rx="8" fill="currentColor" class="text-zinc-100"/><text x="768" y="393" class="text-sm fill-current text-zinc-600"><tspan x="768" dy="0">已有</tspan></text><text x="768" y="422" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="768" dy="0">④ 用户可见目录 + AI 契约</tspan></text><text x="768" y="445" class="text-base fill-current text-zinc-700"><tspan x="768" dy="0">visibleCatalog({ project })</tspan><tspan x="768" dy="24">recommend / describe / -llm</tspan><tspan x="768" dy="24">用途 · 字段 · 映射 · 下一步</tspan></text></g><g><rect x="1190" y="365" width="282" height="142" rx="8" fill="currentColor" class="text-zinc-100"/><text x="1208" y="393" class="text-sm fill-current text-zinc-600"><tspan x="1208" dy="0">已有</tspan></text><text x="1208" y="422" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="1208" dy="0">Portal 菜单树</tspan></text><text x="1208" y="445" class="text-base fill-current text-zinc-700"><tspan x="1208" dy="0">/sys/menu/nav?project=…</tspan><tspan x="1208" dy="24">收敛模型可见面</tspan><tspan x="1208" dy="24">业务权限仍由后端裁决</tspan></text></g><path d="M925 292 V365" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500"/><text x="938" y="329" class="text-sm fill-current text-zinc-600"><tspan x="938" dy="0">显式获取视图</tspan></text><path d="M1190 435 H1100" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500"/><text x="1107" y="421" class="text-sm fill-current text-zinc-600"><tspan x="1107" dy="0">菜单数据</tspan></text><path d="M750 435 H650" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="663" y="421" class="text-sm fill-current text-zinc-600"><tspan x="663" dy="0">描述 / 数据</tspan></text><path d="M380 435 H293" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="298" y="421" class="text-sm fill-current text-zinc-600"><tspan x="298" dy="0">返回 JSON</tspan></text><g><rect x="28" y="585" width="265" height="142" rx="8" fill="currentColor" class="text-amber-50"/><text x="46" y="613" class="text-sm fill-current text-amber-800"><tspan x="46" dy="0">接入规划</tspan></text><text x="46" y="642" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="46" dy="0">⑥ 工具桥发起调用</tspan></text><text x="46" y="665" class="text-base fill-current text-zinc-700"><tspan x="46" dy="0">SY 外层 search / invoke</tspan><tspan x="46" dy="24">内部 portal 域工具（拟议）</tspan><tspan x="46" dy="24">capabilityId + args</tspan></text></g><g><rect x="380" y="585" width="270" height="142" rx="8" fill="currentColor" class="text-amber-50"/><text x="398" y="613" class="text-sm fill-current text-amber-800"><tspan x="398" dy="0">接入规划</tspan></text><text x="398" y="642" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="398" dy="0">能力调用服务</tspan></text><text x="398" y="665" class="text-base fill-current text-zinc-700"><tspan x="398" dy="0">只接收已注册 capabilityId</tspan><tspan x="398" dy="24">从鉴权主体取得 SY userId</tspan><tspan x="398" dy="24">封装结果与可操作错误</tspan></text></g><g><rect x="750" y="585" width="350" height="142" rx="8" fill="currentColor" class="text-zinc-100"/><text x="768" y="613" class="text-sm fill-current text-zinc-600"><tspan x="768" dy="0">已有</tspan></text><text x="768" y="642" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="768" dy="0">⑦ 能力执行 → 页面请求</tspan></text><text x="768" y="665" class="text-base fill-current text-zinc-700"><tspan x="768" dy="0">capabilities.invoke(id, args)</tspan><tspan x="768" dy="24">参数校验 / 写前准备 / 短窗防重</tspan><tspan x="768" dy="24">pagePath → HTTP 实例 / module-type</tspan></text></g><g><rect x="1190" y="585" width="282" height="142" rx="8" fill="currentColor" class="text-zinc-100"/><text x="1208" y="613" class="text-sm fill-current text-zinc-600"><tspan x="1208" dy="0">已有</tspan></text><text x="1208" y="642" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="1208" dy="0">Portal 业务后端</tspan></text><text x="1208" y="665" class="text-base fill-current text-zinc-700"><tspan x="1208" dy="0">会话 token + tenant-id</tspan><tspan x="1208" dy="24">执行权限与业务规则校验</tspan><tspan x="1208" dy="24">查询 / 审批 / 创建 / 更新</tspan></text></g><path d="M160 507 V585" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="175" y="550" class="text-sm fill-current text-zinc-600"><tspan x="175" dy="0">按描述填参</tspan></text><path d="M293 655 H380" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="305" y="642" class="text-sm fill-current text-zinc-600"><tspan x="305" dy="0">HTTPS</tspan></text><path d="M650 655 H750" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="669" y="642" class="text-sm fill-current text-zinc-600"><tspan x="669" dy="0">函数调用</tspan></text><path d="M1100 655 H1190" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500"/><text x="1112" y="642" class="text-sm fill-current text-zinc-600"><tspan x="1112" dy="0">HTTP(S)</tspan></text><path d="M1328 727 V765 H160 V727" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500"/><text x="353" y="752" class="text-sm fill-current text-zinc-600"><tspan x="353" dy="0">⑧ SDK 按实例拆包 → SY 返回 → AI 按字段语义交付；需要后续动作则再次调用</tspan></text><g><rect x="28" y="818" width="265" height="145" rx="8" fill="currentColor" class="text-amber-50"/><text x="46" y="846" class="text-sm fill-current text-amber-800"><tspan x="46" dy="0">接入规划</tspan></text><text x="46" y="875" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="46" dy="0">连接器 / 本地凭据</tspan></text><text x="46" y="898" class="text-base fill-current text-zinc-700"><tspan x="46" dy="0">开关 → 授权页 → 回调</tspan><tspan x="46" dy="24">DataRepository / secrets</tspan><tspan x="46" dy="24">读取、注入由桌面桥负责</tspan></text></g><g><rect x="380" y="818" width="270" height="145" rx="8" fill="currentColor" class="text-amber-50"/><text x="398" y="846" class="text-sm fill-current text-amber-800"><tspan x="398" dy="0">接入规划</tspan></text><text x="398" y="875" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="398" dy="0">SY 运行治理</tspan></text><text x="398" y="898" class="text-base fill-current text-zinc-700"><tspan x="398" dy="0">会话管理 / 断开 / 限流</tspan><tspan x="398" dy="24">写调用审计：主体 + 指纹</tspan><tspan x="398" dy="24">不记录 token 和业务正文</tspan></text></g><g><rect x="750" y="818" width="350" height="145" rx="8" fill="currentColor" class="text-zinc-100"/><text x="768" y="846" class="text-sm fill-current text-zinc-600"><tspan x="768" dy="0">已有</tspan></text><text x="768" y="875" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="768" dy="0">SDK 进程内状态</tspan></text><text x="768" y="898" class="text-base fill-current text-zinc-700"><tspan x="768" dy="0">会话缓存：按需加载 / TTL / LRU / 单飞</tspan><tspan x="768" dy="24">IdempotencyStore：默认 10 分钟</tspan><tspan x="768" dy="24">缓存与防重重启清空；无 SDK 数据库</tspan></text></g><g><rect x="1190" y="818" width="282" height="145" rx="8" fill="currentColor" class="text-zinc-100"/><text x="1208" y="846" class="text-sm fill-current text-zinc-600"><tspan x="1208" dy="0">已有</tspan></text><text x="1208" y="875" class="text-lg font-semibold fill-current text-zinc-950"><tspan x="1208" dy="0">Portal 持久业务数据</tspan></text><text x="1208" y="898" class="text-base fill-current text-zinc-700"><tspan x="1208" dy="0">写入最终落在 Portal 后端</tspan><tspan x="1208" dy="24">用户在 Portal 页面也能查看</tspan><tspan x="1208" dy="24">按能力指定方式核实结果</tspan></text></g><path d="M1328 727 V818" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#framework-arrow)" class="text-zinc-500"/><text x="28" y="1005" class="text-base fill-current text-zinc-700"><tspan x="28" dy="0">阅读顺序：① → ② → ③ → ④ → ⑤ → ⑥ → ⑦ → ⑧；元数据下钻可能往返多次。</tspan></text></svg></div><p class="mt-4 text-sm text-zinc-600">SDK 在 SY 服务端进程内运行；SY 提供 HTTP 接口，桌面桥负责凭据，AI 负责理解任务与消费契约。图中“已有”不代表对应页面的所有业务动作均已交付。</p></section><section id="connection" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">02</span><h2 class="text-2xl font-semibold tracking-tight">连接器：用户怎样连上 Portal</h2></div><p class="mb-5 text-zinc-700 leading-7">用户路径：登录 SY → 打开 Portal 连接 → 在 Portal 授权页确认账号和租户 → 回到 SY 显示已连接 → 在对话里提出业务请求。该链路是接入规划。</p><div class="overflow-x-auto rounded-lg border border-zinc-200 bg-white" data-diagram><svg id="binding" width="1440" height="1102" viewBox="0 0 1440 1102" role="img" aria-labelledby="binding-title binding-desc" class="block max-w-none font-sans"><title id="binding-title">首次连接与授权时序</title><desc id="binding-desc">首次连接与授权时序。所有接入步骤为规划。</desc><defs><marker id="binding-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" class="text-zinc-500"/></marker></defs><text x="95.0" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="95.0" dy="0">用户 / 桌面</tspan></text><path d="M95.0 58 V1026" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><text x="511.6666666666667" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="511.6666666666667" dy="0">连接桥 / 本地 secrets</tspan></text><path d="M511.6666666666667 58 V1026" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><text x="928.3333333333334" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="928.3333333333334" dy="0">SY 服务端</tspan></text><path d="M928.3333333333334 58 V1026" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><text x="1279.0" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="1279.0" dy="0">Portal 授权页</tspan></text><path d="M1345.0 58 V1026" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><path d="M95.0 112 H511.6666666666667" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="96" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">01  打开“Portal 连接”</tspan></text><path d="M511.6666666666667 194 H928.3333333333334" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="178" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">02  发起绑定：登记一次性 state，绑定 SY 用户与短 TTL（建议 5 分钟）</tspan></text><path d="M511.6666666666667 276 H1345.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="260" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">03  打开授权 URL：state、callback、SDK / 客户端版本</tspan></text><path d="M1345.0 342 h-105 v24 h105" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500"/><text x="805.0" y="330" class="text-base fill-current text-zinc-800"><tspan x="805.0" dy="0">04  核对版本策略，展示账号、租户及权限范围</tspan></text><path d="M95.0 440 H1345.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="424" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">05  用户确认授权；取消则结束</tspan></text><path d="M1345.0 522 H511.6666666666667" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="506" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">06  synapse://portal-headless/callback：state + tenant + token / code（待决）</tspan></text><path d="M511.6666666666667 588 h105 v24 h-105" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500"/><text x="525.6666666666667" y="576" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">07  先校验 state；若为 code 再兑换 token（接口/兑换方待定）</tspan></text><path d="M511.6666666666667 686 H928.3333333333334" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="670" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">08  携 Portal token + tenantId，经 SY 会话鉴权提交绑定结果</tspan></text><path d="M928.3333333333334 752 h105 v24 h-105" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500"/><text x="942.3333333333334" y="740" class="text-base fill-current text-zinc-800"><tspan x="942.3333333333334" dy="0">09  校验 state 归属和一次性；调用 SDK 建立会话</tspan></text><path d="M928.3333333333334 850 H511.6666666666667" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="834" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">10  返回连接结果；成功后凭据存入本地 encrypted-json secrets</tspan></text><path d="M511.6666666666667 932 H928.3333333333334" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#binding-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="916" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">11  后续每次调用携凭据；服务端重启后可重新建立内存会话</tspan></text><text x="28" y="1078" class="text-sm fill-current text-zinc-600"><tspan x="28" dy="0">state 的签发/登记协议、发起与完成绑定的接口拆分尚待定稿；此图表达所需职责，不表示接口已存在。</tspan></text></svg></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-zinc-100"><tr><th class="px-4 py-3 font-semibold">连接器职责</th><th class="px-4 py-3 font-semibold">设计边界</th></tr></thead><tbody class="divide-y divide-zinc-200"><tr><td class="px-4 py-4 align-top leading-6">产品入口</td><td class="px-4 py-4 align-top leading-6">“Portal 连接”是用户可见的连接入口。现有 Connectors V1 的本地 MCP 模式不能直接套用；草案建议独立 System App + portal MCP 域，归属待决。</td></tr><tr><td class="px-4 py-4 align-top leading-6">本地存储</td><td class="px-4 py-4 align-top leading-6">拟用 DataRepository 的 app.secrets.items（encrypted-json）保存 token / tenantId / portalWebUrl；连接状态另行保存。模型得到连接状态与业务结果，不得到原始凭据。</td></tr><tr><td class="px-4 py-4 align-top leading-6">SY 身份与 Portal 身份</td><td class="px-4 py-4 align-top leading-6">SY 会话用于确认谁在调用 SY；Portal token + tenantId 决定以谁的身份访问 Portal。SY userId 必须取自服务端鉴权结果，不能信任客户端自报。跨身份代理是否允许仍待决。</td></tr><tr><td class="px-4 py-4 align-top leading-6">过期 / 断开</td><td class="px-4 py-4 align-top leading-6">凭据拒绝时提示重新连接。断开清理本地连接和服务端会话；无法据此承诺撤销 Portal 已签发 token。此限制来自项目现有凭据约束。</td></tr><tr><td class="px-4 py-4 align-top leading-6">版本</td><td class="px-4 py-4 align-top leading-6">原始要求为版本严格对齐。草案提出契约版本及不匹配降级只读，但未定稿；不能把 SDK 内容哈希与 Portal buildId 直接当同一种值比较。</td></tr></tbody></table></div></section><section id="runtime" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">03</span><h2 class="text-2xl font-semibold tracking-tight">日常调用：先知道怎么用，再执行业务</h2></div><div class="overflow-x-auto rounded-lg border border-zinc-200 bg-white" data-diagram><svg id="invocation" width="1440" height="1020" viewBox="0 0 1440 1020" role="img" aria-labelledby="invocation-title invocation-desc" class="block max-w-none font-sans"><title id="invocation-title">日常调用：发现、说明、执行、返回</title><desc id="invocation-desc">日常调用：发现、说明、执行、返回。所有接入步骤为规划。</desc><defs><marker id="invocation-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="currentColor" class="text-zinc-500"/></marker></defs><text x="95.0" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="95.0" dy="0">用户 / AI</tspan></text><path d="M95.0 58 V944" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><text x="511.6666666666667" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="511.6666666666667" dy="0">SY 工具桥</tspan></text><path d="M511.6666666666667 58 V944" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><text x="928.3333333333334" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="928.3333333333334" dy="0">SY PortalModule</tspan></text><path d="M928.3333333333334 58 V944" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><text x="1279.0" y="37" class="text-base font-semibold fill-current text-zinc-950"><tspan x="1279.0" dy="0">SDK / Portal</tspan></text><path d="M1345.0 58 V944" stroke="currentColor" stroke-dasharray="4 6" class="text-zinc-300"/><path d="M95.0 112 H511.6666666666667" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="96" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">01  自然语言目标 → 本地 Skill → SY search / invoke</tspan></text><path d="M511.6666666666667 194 H928.3333333333334" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="178" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">02  推荐或目录下钻请求；桥自动附 SY 会话与 Portal 凭据</tspan></text><path d="M928.3333333333334 276 H1345.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="942.3333333333334" y="260" class="text-base fill-current text-zinc-800"><tspan x="942.3333333333334" dy="0">03  forSession → visibleCatalog({project}) → recommend / search</tspan></text><path d="M1345.0 358 H95.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="342" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">04  逐层返回候选页面与 capabilityId；信息不足时向用户补问</tspan></text><path d="M511.6666666666667 440 H1345.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="424" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">05  describe(id)：取得参数、返回字段、候选来源与执行顺序</tspan></text><path d="M1345.0 522 H95.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="506" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">06  AI 读取说明；需要时继续候选查询或动态结构下钻</tspan></text><path d="M511.6666666666667 604 H928.3333333333334" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="525.6666666666667" y="588" class="text-base fill-current text-zinc-800"><tspan x="525.6666666666667" dy="0">07  invoke(id,args)；需防重的动作传 requestId，同一意图重试复用</tspan></text><path d="M928.3333333333334 686 H1345.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="942.3333333333334" y="670" class="text-base fill-current text-zinc-800"><tspan x="942.3333333333334" dy="0">08  能力校验 → 页面上下文 → 请求适配 → Portal 校验和执行</tspan></text><path d="M1345.0 768 H95.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="752" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">09  返回 SDK 最终数据 / 明确失败 / 结果不确定，AI 按契约解释</tspan></text><path d="M95.0 850 H1345.0" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#invocation-arrow)" class="text-zinc-500" stroke-dasharray="7 5"/><text x="109.0" y="834" class="text-base fill-current text-zinc-800"><tspan x="109.0" dy="0">10  写操作按描述核实结果；只有用户要撤销时才走 cancel</tspan></text><text x="28" y="996" class="text-sm fill-current text-zinc-600"><tspan x="28" dy="0">跨列长箭头表示经中间各层转发；AI 不直接访问 SDK/Portal，不接触原始 Portal token。</tspan></text></svg></div><div class="grid md:grid-cols-2 gap-8 mt-6"><div><h3 class="font-semibold mb-3">目录下钻</h3><p class="leading-7 font-mono text-sm">listDomains → listPages → describePage<br>→ describe → candidates / dynamic schema<br>→ invoke → completion / next</p><p class="mt-3 text-sm text-zinc-600">已知目标可从 recommend / search 进入，无需每次从根目录遍历。</p></div><div><h3 class="font-semibold mb-3">以会议室预订为例</h3><p class="leading-7">日期与时段 → 查询房间及占用 → 选择真实 roomId → prepare → 补齐所需审批人 → submit → 查询占用核实。cancel 只在需要撤销时执行。</p><p class="mt-3 text-sm text-zinc-600">普通 CRUD 不必都有 prepare；以各能力实际描述为准。短信等交互闸门需要用户参与。</p></div></div></section><section id="structure" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">04</span><h2 class="text-2xl font-semibold tracking-tight">SDK 内部结构与运行边界</h2></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-zinc-100"><tr><th class="px-4 py-3 font-semibold">模块</th><th class="px-4 py-3 font-semibold">职责</th><th class="px-4 py-3 font-semibold">输入 → 输出 / 状态</th></tr></thead><tbody class="divide-y divide-zinc-200"><tr><td class="px-4 py-4 align-top leading-6"><code>src/server.ts</code></td><td class="px-4 py-4 align-top leading-6">多用户入口 createPortalServer / forSession</td><td class="px-4 py-4 align-top leading-6">进程启动建立一份 server；请求按用户、租户、语言取得 scoped 门面。单用户程序另可用 createPortalHeadless。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>src/session/</code></td><td class="px-4 py-4 align-top leading-6">会话、基础数据缓存、依赖加载、两层单飞</td><td class="px-4 py-4 align-top leading-6">默认绝对 / 空闲 TTL 均 30 分钟，取先到者；默认容量 64，LRU 淘汰。SY 应按并发用户与租户规模配置。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>src/catalog/</code></td><td class="px-4 py-4 align-top leading-6">动态目录、推荐、逐字段 AI 说明、可见性视图</td><td class="px-4 py-4 align-top leading-6">共享静态索引；visibleCatalog 显式生成每用户 / 租户 / project 的视图。菜单不可用默认失败关闭。菜单视图不是最终权限裁决。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>src/capabilities/</code></td><td class="px-4 py-4 align-top leading-6">页面能力定义、参数校验、业务方法与统一调用绑定</td><td class="px-4 py-4 align-top leading-6">capabilityId + args → SDK 最终业务结果。定义、执行和 describe 由同一能力绑定关系关联。未接线能力不应作为可调用功能发布。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>src/call.ts</code><br><code>src/context/</code></td><td class="px-4 py-4 align-top leading-6">从页面确定 module-type 与 HTTP 实例</td><td class="px-4 py-4 align-top leading-6">module-type 无规则时按浏览器省略；HTTP 实例解析不了则拒绝。非默认实例必须配置对应 baseURL。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>src/http/</code></td><td class="px-4 py-4 align-top leading-6">集中请求客户端、凭据头、前缀、分页、序列化、拆包</td><td class="px-4 py-4 align-top leading-6">一份会话一份绑定凭据的请求函数；按实例复刻响应语义。SY 不向远程调用方开放原始 URL / call(pagePath, …)。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>src/idempotency/</code><br><code>src/invalidation/</code></td><td class="px-4 py-4 align-top leading-6">短窗口防重；写后缓存失效规则</td><td class="px-4 py-4 align-top leading-6">适用写动作按契约传 requestId；默认防重窗口 10 分钟。同键异载荷报错；结果不确定先核实，不盲目重发。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>generated/</code><br><code>tools/generate/</code></td><td class="px-4 py-4 align-top leading-6">由 Portal 源码推导目录、上下文规则和规格</td><td class="px-4 py-4 align-top leading-6">生成物 + 人工能力定义构成权威；SY 不维护第二份能力目录。源码推导还需浏览器基准验证。</td></tr></tbody></table></div><div class="mt-6 bg-zinc-100 rounded-lg p-5"><h3 class="font-semibold mb-2">部署与状态</h3><p class="leading-7">一期草案采用单实例 SY 服务端 + 内存 SessionStore / IdempotencyStore。SDK 无数据库依赖；Portal 业务数据仍由 Portal 后端持久化。SY 的账号和审计设施沿用其自身机制。进程重启后会话可由客户端凭据重建，防重记录会丢失；多副本与共享缓存属于后续待决事项。</p></div></section><section id="protocol" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">05</span><h2 class="text-2xl font-semibold tracking-tight">通信协议、工具面与开发者调用</h2></div><p class="mb-5 leading-7 text-zinc-700">两种网络入口拟复用同一 PortalModule 与 schema；它们都通过函数调用使用 SDK。下面的 HTTP 路由和 MCP 名称来自接入草案，尚不是已上线接口。</p><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-zinc-100"><tr><th class="px-4 py-3 font-semibold">通道</th><th class="px-4 py-3 font-semibold">鉴权 / 作用</th><th class="px-4 py-3 font-semibold">状态</th></tr></thead><tbody class="divide-y divide-zinc-200"><tr><td class="px-4 py-4 align-top leading-6"><code>/api/console/portal/**</code></td><td class="px-4 py-4 align-top leading-6">SY 登录会话；桌面客户端主通道。Portal 凭据由桌面桥随请求交给服务端。</td><td class="px-4 py-4 align-top leading-6">规划</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>/api/open/v1/portal/**</code></td><td class="px-4 py-4 align-top leading-6">SY API key + portal.invoke scope；面向 CLI / 自动化。API key 不替代 Portal 会话 token。</td><td class="px-4 py-4 align-top leading-6">二期可用性 / 身份绑定待定</td></tr><tr><td class="px-4 py-4 align-top leading-6">手机 / 无桌面客户端</td><td class="px-4 py-4 align-top leading-6">桌面凭据模式不能直接保证离线桌面时仍可调用。独立授权、凭据持有及调用通道尚未闭合。</td><td class="px-4 py-4 align-top leading-6">待定</td></tr></tbody></table></div><h3 class="font-semibold mt-8 mb-4">拟议固定 HTTP 表面</h3><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-zinc-100"><tr><th class="px-4 py-3 font-semibold">请求</th><th class="px-4 py-3 font-semibold">职责</th></tr></thead><tbody class="divide-y divide-zinc-200"><tr><td class="px-4 py-4 align-top leading-6"><code>GET /portal/session</code></td><td class="px-4 py-4 align-top leading-6">查看绑定身份、租户、连接状态与版本信息。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>POST /portal/session/bindings</code></td><td class="px-4 py-4 align-top leading-6">草案同时用于“发起”和“完成”绑定；必须拆分或用明确阶段协议消除歧义，目前不作为可直接调用的契约。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>DELETE /portal/session</code></td><td class="px-4 py-4 align-top leading-6">断开服务端绑定；桌面同步清理本地连接。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>POST /portal/catalog</code></td><td class="px-4 py-4 align-top leading-6">op = domains / pages / page / search / recommend；按当前身份返回目录数据。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>POST /portal/capabilities/{id}/describe</code></td><td class="px-4 py-4 align-top leading-6">返回怎么调、每个字段含义、如何消费、后续动作与失败处理。</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>POST /portal/capabilities/{id}/invoke</code></td><td class="px-4 py-4 align-top leading-6">调用已注册能力；不让调用方指定任意接口路径或页面上下文。</td></tr></tbody></table></div><h3 class="font-semibold mt-8 mb-4">SY 外层两工具 → portal 域七个拟议工具 → 任意已接线业务能力</h3><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-zinc-100"><tr><th class="px-4 py-3 font-semibold">拟议内部工具</th><th class="px-4 py-3 font-semibold">对应 SDK 方法</th></tr></thead><tbody class="divide-y divide-zinc-200"><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.catalog.domains</code></td><td class="px-4 py-4 align-top leading-6">catalog.listDomains({ detail: false })</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.catalog.pages</code></td><td class="px-4 py-4 align-top leading-6">catalog.listPages(domain)</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.catalog.page</code></td><td class="px-4 py-4 align-top leading-6">catalog.describePage(pageId)</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.catalog.search</code></td><td class="px-4 py-4 align-top leading-6">catalog.search(keyword)</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.catalog.recommend</code></td><td class="px-4 py-4 align-top leading-6">catalog.recommend(text)</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.capability.describe</code></td><td class="px-4 py-4 align-top leading-6">catalog.describe(capabilityId)；兼容 id-llm 语义</td></tr><tr><td class="px-4 py-4 align-top leading-6"><code>app.portal.capability.invoke</code></td><td class="px-4 py-4 align-top leading-6">scoped.capabilities.invoke(id, args)</td></tr></tbody></table></div><p class="mt-4 leading-7 text-amber-900">接口缺口：当前 SDK 还有 describeSchema、describeMethod、listMethods，以及描述里引用的动态结构入口。旧七工具草案尚未定义这些入口的完整传输方式，接入前必须补齐；不要将 sdkPath 当作 capabilityId。</p><h3 class="font-semibold mt-8 mb-4">SY 适配层如何调用现有 SDK</h3><pre class="overflow-x-auto bg-zinc-100 rounded-lg p-5 text-sm leading-7"><code>import { createPortalServer } from &#x27;portal-headless&#x27;
+
+// SY 进程启动时创建一份；服务端配置决定目标后端。
+const portal = createPortalServer({ baseUrl: portalApiBaseUrl })
+
+// 下列值由 SY 接入层提供；userId 必须来自鉴权结果。
+const scoped = await portal.forSession({
+  userId: authenticatedSyUserId,
+  credential: { token: portalToken, tenantId },
+})
+const { catalog } = await scoped.visibleCatalog({ project })
+const description = catalog.describe(&#x27;meeting-room-usage&#x27;)
+// 将 description 返回给 AI；按其中字段契约消费结果。
+const result = await scoped.capabilities.invoke(&#x27;meeting-room-usage&#x27;, {
+  date: &#x27;2026-09-23&#x27;,
+})</code></pre><p class="mt-3 text-sm text-zinc-600">这是 SDK 调用形状示例，变量由 SY 适配层提供；HTTP 控制器、凭据注入和鉴权尚待实现。SDK 当前返回最终业务数据或错误；统一 data/code/message/llm 网络包络仍需 SY 契约定稿。</p></section><section id="delivery" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">06</span><h2 class="text-2xl font-semibold tracking-tight">能力从哪里来，如何持续更新</h2></div><div class="grid md:grid-cols-4 gap-5"><div class="bg-zinc-100 rounded-lg p-5"><p class="font-mono text-sm text-zinc-500 mb-3">01 →</p><h3 class="font-semibold mb-2">Portal 来源</h3><p class="text-sm leading-7">固定分支源码 + 真实页面<br>菜单 / 路由 / 请求 / 交互</p></div><div class="bg-zinc-100 rounded-lg p-5"><p class="font-mono text-sm text-zinc-500 mb-3">02 →</p><h3 class="font-semibold mb-2">SDK 交付</h3><p class="text-sm leading-7">能力实现 + AI 说明 + 基准<br>参数 / 返回 / 映射同步</p></div><div class="bg-zinc-100 rounded-lg p-5"><p class="font-mono text-sm text-zinc-500 mb-3">03 →</p><h3 class="font-semibold mb-2">验证与生成</h3><p class="text-sm leading-7">回归 + 反证 + ai:check<br>docs / 漂移 / 覆盖报告</p></div><div class="bg-zinc-100 rounded-lg p-5"><p class="font-mono text-sm text-zinc-500 mb-3">04 </p><h3 class="font-semibold mb-2">SY 发布</h3><p class="text-sm leading-7">更新包 + 接入层 / 客户端<br>真实用户连接与读写闭环</p></div></div><p class="mt-5 leading-7">Portal 前端固定读取 <code>test/portal/main</code>，后端固定读取 <code>test/test</code>；源码使用前更新。静态推导用于发现能力，浏览器基准用于核对真实行为。每个页面同时交付执行逻辑、AI 说明、操作记录和测试；目录计入覆盖不等于整页功能完成。</p><p class="mt-3 leading-7">能力目录随 SDK 包更新，由 SY 运行时下发；Skill 只描述检索和调用方法。生成物新鲜度按内容哈希判断，不能用生成时间戳。运行期版本兼容机制尚待落地。</p></section><section id="decisions" class="scroll-mt-6 py-10 border-t border-zinc-200"><div class="flex gap-4 items-baseline mb-6"><span class="font-mono text-sm text-zinc-500">07</span><h2 class="text-2xl font-semibold tracking-tight">接入前仍需定稿的边界</h2></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-zinc-100"><tr><th class="px-4 py-3 font-semibold">事项</th><th class="px-4 py-3 font-semibold">当前依据 / 尚缺部分</th></tr></thead><tbody class="divide-y divide-zinc-200"><tr><td class="px-4 py-4 align-top leading-6">连接器归属</td><td class="px-4 py-4 align-top leading-6">System App + portal MCP 域是草案建议；现有 Connectors 的 Token、多账号、远程能力边界需单独定稿。</td></tr><tr><td class="px-4 py-4 align-top leading-6">授权与回调</td><td class="px-4 py-4 align-top leading-6">token 直接回跳还是一次性 code；state 在两端如何登记、签发、核销；绑定发起与完成接口如何区分。</td></tr><tr><td class="px-4 py-4 align-top leading-6">版本兼容</td><td class="px-4 py-4 align-top leading-6">严格匹配还是错配只读；buildId 与契约哈希的映射；版本探针在生成期还是运行期；portalWebUrl 归属。</td></tr><tr><td class="px-4 py-4 align-top leading-6">外部调用与身份</td><td class="px-4 py-4 align-top leading-6">手机 / CLI 无桌面时的凭据来源；SY 服务端是否可持久化用户凭据；是否允许 SY 用户与 Portal 用户不同。</td></tr><tr><td class="px-4 py-4 align-top leading-6">规模与开放范围</td><td class="px-4 py-4 align-top leading-6">单实例或共享缓存；限流规则；一期开放哪些已接线且说明完整的能力；独立 OpenAPI 目录契约是否采用。</td></tr><tr><td class="px-4 py-4 align-top leading-6">最新 AI 契约接线</td><td class="px-4 py-4 align-top leading-6">补齐 describeSchema / describeMethod / listMethods 与动态入口传输；确保 AI 只读服务端描述即可完成调用。</td></tr></tbody></table></div><p class="mt-4 text-sm leading-7 text-zinc-600">这份图核对了本仓库当前实现与设计记录，未对 SY 当前部署、手机网络层或授权链路做线上验证。SY 接入文档为待评审草案，路线图阶段③④仍标未开始。</p></section><footer class="border-t border-zinc-200 py-8 text-sm text-zinc-600"><h2 class="font-semibold text-zinc-900 mb-3">依据与阅读口径</h2><div class="flex flex-wrap gap-x-6 gap-y-3"><a class="underline underline-offset-4 hover:text-zinc-950" href="design.md">整体设计与历史决策</a><a class="underline underline-offset-4 hover:text-zinc-950" href="sy-integration-design.md">SY 接入草案（2026-09-20）</a><a class="underline underline-offset-4 hover:text-zinc-950" href="conventions.md">实现约束与后续校正</a><a class="underline underline-offset-4 hover:text-zinc-950" href="ai-description-contract.md">AI 说明规范</a><a class="underline underline-offset-4 hover:text-zinc-950" href="usage.md">SDK 调用示例</a><a class="underline underline-offset-4 hover:text-zinc-950" href="roadmap.json">阶段进展</a><a class="underline underline-offset-4 hover:text-zinc-950" href="../src/server.ts">多用户门面</a><a class="underline underline-offset-4 hover:text-zinc-950" href="../src/catalog/index.ts">当前目录与可见性入口</a><a class="underline underline-offset-4 hover:text-zinc-950" href="../src/session/store.ts">会话 TTL / 容量</a><a class="underline underline-offset-4 hover:text-zinc-950" href="../src/idempotency/README.md">短窗口防重边界</a></div><p class="mt-5 leading-7">核对日期：2026-09-22。灰色为本仓库读码确认的实现或已有 Portal 基础设施；琥珀色为待实施的接入。旧文档中的页面数量与“可见性未接线”表述未沿用。来源链接在仓库目录内可打开；HTML 本体无需网络或其他文件即可展示。</p></footer></main><script>(() => {
+  const diagrams = Array.from(document.querySelectorAll('[data-diagram] svg'));
+  let fit = true;
+  function resize() {
+    for (const svg of diagrams) {
+      const box = svg.viewBox.baseVal;
+      const width = fit ? Math.max(1120, Math.min(box.width, svg.parentElement.clientWidth)) : box.width;
+      svg.setAttribute('width', String(width));
+      svg.setAttribute('height', String(width * box.height / box.width));
+    }
+  }
+  document.getElementById('fit-diagram').addEventListener('click', () => { fit = true; resize(); });
+  document.getElementById('actual-diagram').addEventListener('click', () => { fit = false; resize(); });
+  new ResizeObserver(resize).observe(document.querySelector('main'));
+  resize();
+})();</script></body></html>

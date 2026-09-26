@@ -45,13 +45,13 @@
 | SDK 测试基线 | 312 文件全部通过；4331 passed / 31 skipped / 21 todo；33.55 s |
 | 硬编码绝对路径 | 235 个文件；其中 234 个指向外部参考仓库（有 env 兜底），1 个指向 SDK 自身 |
 
-`generated/` 明细：`api-docs.html` 50 MB、`openapi.json` 37 MB、`scope-audit.json` 5.5 MB、`coverage.html` 620 KB、`page-catalog.json` 520 KB、`coverage.md` 420 KB、`portal-scope.json` 216 KB、`module-type-rules.json` 17 KB。运行时与 `check:portal-sdk` 只依赖后四项中的 `page-catalog.json` 与 `module-type-rules.json`，其余为文档与覆盖产物。
+`generated/` 明细：`api-docs.html` 50 MB、`openapi.json` 37 MB、`scope-audit.json` 5.5 MB、`coverage.html` 620 KB、`page-catalog.json` 520 KB、`coverage.md` 420 KB、`portal-scope.json` 216 KB、`module-type-rules.json` 17 KB。运行时按 `import.meta.url` 读取的是 `page-catalog.json`、`module-type-rules.json` 与 `portal-scope.json` 三个，其余为文档与覆盖产物。
 
 ## 目标结构
 
 ```text
 Synapse/
-├── portal-headless/            ← 新增，与 shared/ server/ desktop/ 平级
+├── extend/portal-headless/     ← 新增，与 auto/ templates/ 同为分类目录下的子包
 │   ├── src/ test/ tools/ baseline/ smoke/ docs/ generated/
 │   ├── CLAUDE.md  AGENTS.md -> CLAUDE.md
 │   ├── package.json            ← name: @synapse/portal-headless
@@ -68,7 +68,7 @@ Synapse/
 
 ### 1. 搬入
 
-从 SDK 仓库复制到 `portal-headless/`，排除：`.git`、`node_modules`、`dist`、`.githooks`。
+从 SDK 仓库复制到 `extend/portal-headless/`，排除：`.git`、`node_modules`、`dist`、`.githooks`。
 
 - `dist/` 不搬：由 `pnpm --filter @synapse/portal-headless run build` 生成，与 SY 其它包一致。
 - `.githooks/` 不搬：SY 没有 git hooks 体系（无 `.githooks`、无 `.husky`），单独带入会制造一套只对子目录生效、且与根仓库无关的钩子。对应删除 `package.json` 的 `hooks:install` 脚本。
@@ -77,7 +77,7 @@ Synapse/
 
 ### 2. 包名与入口元数据
 
-`package.json` 的 `name` 由 `portal-headless` 改为 `@synapse/portal-headless`，`pnpm-workspace.yaml` 的 `packages` 增加 `- portal-headless`。
+`package.json` 的 `name` 由 `portal-headless` 改为 `@synapse/portal-headless`，`pnpm-workspace.yaml` 的 `packages` 增加 `- extend/portal-headless`。
 
 **必须补上入口字段。** SDK 源仓库的 `package.json` 只有 `name` / `version` / `private` / `type` / `engines`，**没有 `main` / `types` / `exports`**——这三个字段是打包脚本在生成发布归档时注入的（已对照现有 tarball 核实）。源码直接进 monorepo 后不存在打包步骤，不补则 server 的动态 import 无法解析：
 
@@ -100,7 +100,7 @@ server 侧需改名的引用共 5 处：
 
 ### 3. 工具链对齐
 
-`portal-headless/package.json` 的 devDependencies 改为与 shared / server / desktop 一致：
+`extend/portal-headless/package.json` 的 devDependencies 改为与 shared / server / desktop 一致：
 
 | 依赖 | 迁移前 | 迁移后 |
 |---|---|---|
@@ -121,17 +121,21 @@ server 侧需改名的引用共 5 处：
 
 `server/Dockerfile` 三处修改：
 
-- **deps 阶段**：`COPY server/vendor/ server/vendor/` 改为 `COPY portal-headless/package.json portal-headless/package.json`。`pnpm install --frozen-lockfile --filter @synapse/server...` 的 `...` 已含依赖项，无需额外 `--filter`。
-- **build 阶段**：增加 `COPY portal-headless/ portal-headless/` 与 `COPY --from=deps /app/portal-headless/node_modules ./portal-headless/node_modules`；在 `check:portal-sdk` 之前增加 `RUN pnpm --filter @synapse/portal-headless run build`（server 的动态 import 指向包产物，必须先构建）。
-- **production 阶段**：增加 `COPY --from=build /app/portal-headless ./portal-headless`。这一条是必需的：workspace 依赖是**符号链接**（`server/node_modules/@synapse/portal-headless` → `../../portal-headless`），不像 tgz 那样实体落盘；不复制该目录，软链在生产镜像里会断。参照 `shared` 的现有处理方式。
+- **deps 阶段**：`COPY server/vendor/ server/vendor/` 改为 `COPY extend/portal-headless/package.json extend/portal-headless/package.json`。`pnpm install --frozen-lockfile --filter @synapse/server...` 的 `...` 已含依赖项，无需额外 `--filter`。
+- **build 阶段**：增加 `COPY extend/ extend/` 与 `COPY --from=deps /app/extend/portal-headless/node_modules ./extend/portal-headless/node_modules`；在 `check:portal-sdk` 之前增加 `RUN pnpm --filter @synapse/portal-headless run build`（server 的动态 import 指向包产物，必须先构建）。
+- **production 阶段**：复制 `extend/portal-headless` 的 `package.json`、`dist`、整个 `generated/` 与依赖链接。这一条是必需的：workspace 依赖是**符号链接**（`server/node_modules/@synapse/portal-headless` → `../../../extend/portal-headless`），不像 tgz 那样实体落盘；不复制则链接在生产镜像里断开。
+
+  `generated/` 整体复制而非逐文件列举：dist 运行时按 `import.meta.url` 读它，而缺文件时是**静默降级**而不是报错。实现时第一版确实只列了 `page-catalog.json` 与 `module-type-rules.json`，漏掉 `portal-scope.json`——正是这个静态核对发现的。逐文件列举在「静默降级」的失败模式下不成立。
+
+  参照 `shared` 的现有处理方式。
 
 ### 6. 部署脚本
 
-`deploy.sh` 的 include 白名单是逐条列举的，必须增加 `--include='/portal-headless/***'`。Docker 构建在服务器上执行，缺这一行则源码不上传、`docker build` 在 `pnpm install` 阶段失败（本地全绿、只在部署暴露）。
+`deploy.sh` 的 include 白名单是逐条列举的，必须增加 `--include='/extend/***'`。Docker 构建在服务器上执行，缺这一行则源码不上传、`docker build` 在 `pnpm install` 阶段失败（本地全绿、只在部署暴露）。
 
 ### 7. 构建编排
 
-沿用 SY 现有模式——各包脚本以 `pnpm --filter @synapse/shared run build &&` 开头。在 server 与 desktop 的相关脚本中，把 portal-headless 的构建插到最前：
+沿用 SY 现有模式——各包脚本以 `pnpm --filter @synapse/shared run build &&` 开头。在 server 的相关脚本（`build` / `dev` / `dev:api` / `test` / `test:problem-feedback:e2e` / `typecheck`）与根 `package.json` 的 `dev:server` 中，把 portal-headless 的构建插到最前：
 
 ```text
 pnpm --filter @synapse/portal-headless run build && pnpm --filter @synapse/shared run build && ...

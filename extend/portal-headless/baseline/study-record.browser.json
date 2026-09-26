@@ -1,0 +1,39 @@
+{
+ "说明": "由 bsk 捕获的「学习管理」页真实请求（只读）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "同 study-base.browser.json。",
+ "requests": [
+  {
+   "页面": "学习管理",
+   "pagePath": "/dashboard/study/study/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/statistics/studystudyrecord/studyList?order=&orderField=&staffName=&lessonTitle=&status=&lessonType=&gradeId=&startStudyTime=&endStudyTime=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "学习管理",
+   "pagePath": "/dashboard/study/study/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/grade/studygrade/page?pageSize=99999&pageNo=1&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  }
+ ]
+}

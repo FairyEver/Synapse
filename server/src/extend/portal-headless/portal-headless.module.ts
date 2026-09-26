@@ -10,7 +10,7 @@ import { PORTAL_SDK_LOADER, PortalHeadlessService } from "./portal-headless.serv
   imports: [UserAuthModule, PrismaModule],
   controllers: [PortalHeadlessController],
   providers: [PortalHeadlessAccessService, PortalHeadlessService, {
-    provide: PORTAL_SDK_LOADER, useValue: () => import("portal-headless"),
+    provide: PORTAL_SDK_LOADER, useValue: () => import("@synapse/portal-headless"),
   }],
 })
 export class PortalHeadlessModule implements NestModule {

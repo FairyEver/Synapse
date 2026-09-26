@@ -1,0 +1,144 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开待办事项列表页（/dashboard/backlog/task-examine/list）时捕获的真实浏览器请求（无写操作）。token 已在页面内脱敏，从未离开浏览器。URL 里的百分号编码是浏览器真实发出去的样子，原样保留。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/backlog/task-examine/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "backlog-task-examine-list",
+  "module-type 的坑（与考勤档案同源，本页结论相反）": "这个头读的是 cookie `hr-0.0.0-menuPath`（最近一次路由守卫写入的菜单路径），cookie 是**同一个浏览器 profile 全局共享**的、不分标签页。抓本页时并行任务在另一个标签页跳到了 /dashboard/base/...，本页发请求时头就变成了 12（学习管理），而本页 URL 一个字都没变。等 cookie 回到无规则匹配的 `/` 时重抓，头**直接不发**——这与规则表推导一致：`resolveModuleType('/dashboard/backlog/task-examine/list')` = null（27 条规则里没有任何一条命中 /dashboard/backlog/，且所有规则的 check 只读 menuEntryPath，routeFullPath 这一路输入在当前规则表里没有被用到）。所以下面各条的 headers 是**把 module-type 污染排除掉之后**的样子：没有这个键。",
+  "requests": [
+    {
+      "name": "列表页挂载时自动查询（待办事项，无筛选条件）",
+      "能力": "backlog-task-examine-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=1&selectType=1&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "切到「已办事项」标签（页面右上角 segmented）",
+      "能力": "backlog-task-examine-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=2&selectType=1&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "已办事项 + 把「时间范围」改成「全部」（selectType=2）后点查询",
+      "能力": "backlog-task-examine-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=2&selectType=2&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "已办事项 + 发起时间区间 2026-09-01 00:00:00 ~ 2026-09-10 00:00:00",
+      "能力": "backlog-task-examine-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&createTime%5B0%5D=2026-09-01%2000%3A00%3A00&createTime%5B1%5D=2026-09-10%2000%3A00%3A00&startUserName=&finished=2&selectType=2&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "在上一条基础上再填「流程名称 = 通用」（name）后点查询",
+      "能力": "backlog-task-examine-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=%E9%80%9A%E7%94%A8&title=&createTime%5B0%5D=2026-09-01%2000%3A00%3A00&createTime%5B1%5D=2026-09-10%2000%3A00%3A00&startUserName=&finished=2&selectType=2&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "从消息中心深链进入：?taskKey=Task_month（route.query.taskKey → processCategory）",
+      "能力": "backlog-task-examine-list",
+      "备注（2026-09-20 复核实测）": "**这条请求后端会报 500（业务 code，HTTP 仍是 200）：`Cannot invoke \"java.util.List.stream()\" because \"<local10>\" is null`。** 根因在后端 `BpmHrTaskServiceImpl.webGetTaskListByCategory`：`modelMapGroupCategory.get(pageVO.getProcessCategory())` 查不到时返回 null，紧接着 `.stream()` 空指针。所以**任何在这个分类表里不存在的值都会 500**——消息中心深链传的四个 taskKey（Task_month / Protocol_year / Protocol_month / protocolMonthScore）实测全部 500，页面实际渲染成「暂无数据 / 共 0 条记录」。传一个真实存在的分类（实测 `human_process`）才返回数据（total=16）。详见 `docs/pages/待办事项.md` 的「processCategory 这一条是坏的」。",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=1&selectType=1&processCategory=Task_month&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "点「重置」之后立刻打的那条（selectType 消失了）",
+      "能力": "backlog-task-examine-list",
+      "备注": "同上：只要 processCategory 这个键在，后端就 500。所以「重置之后页面也是坏的」——这条与上一条一样，锁的是**发出去的形状**，不是「这次查询有结果」。",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=&title=&startUserName=&finished=1&processCategory=Task_month&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "三个文本筛选一起填（流程名称=通用 / 审批内容=资产 / 发起人=姚）后点查询",
+      "能力": "backlog-task-examine-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/hr/task/list-by-category-web?order=&orderField=&name=%E9%80%9A%E7%94%A8&title=%E8%B5%84%E4%BA%A7&startUserName=%E5%A7%9A&finished=1&selectType=1&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    }
+  ],
+  "对照组": {
+    "说明": "同一个组件被另外两条菜单复用的证据 —— 不是本页的请求，是 /dashboard/flow/task/todo/list 与 /dashboard/flow/task/done/list 用 <PageView :finished=\"N\" :componentMode=\"true\"> 复用本页组件。它们只是把 finished 预置成 1/2 并关掉了标签切换器，请求形状与本页完全一样。",
+    "复用方": [
+      { "页面": "/dashboard/flow/task/todo/list", "title": "待办任务", "finished": 1, "componentMode": true },
+      { "页面": "/dashboard/flow/task/done/list", "title": "已办任务", "finished": 2, "componentMode": true }
+    ],
+    "组件": "app/portal/views/dashboard/hr/backlog/task-examine/list.vue"
+  },
+  "复核记录（2026-09-20，独立重抓）": {
+    "说明": "这份基准由上一轮代理抓取后被搁置，**本轮由本能力文件的责任人用另一个 bsk 会话独立重抓了一遍**，逐条比对（含键顺序）后确认：第 1~7 条 URL 与 headers 完全一致，未作改动。第 8 条是本次补抓的（上一版把 title / startUserName 列为「未取得基准」）。",
+    "补充的两种抓法": [
+      "前 7 条：bsk 会话内 `tools/baseline/install-hook.js` 钩 XHR（与既有基准同一配方）。",
+      "深链那条（第 6 条）需要**全新文档**才会生效（本页 `<script>` 里有一份模块级 stateCache，SPA 内来回切会把 formState 恢复回去、把 route.query.taskKey 覆盖掉），所以改用 `bsk network` 读 devtools 网络缓冲抓的。"
+    ],
+    "module-type 的现场": "本轮抓第 4 条时，钩子里**真的出现了** `module-type: 11`（组织管理），而本页 URL 一个字都没改——同一时刻 cookie `hr-0.0.0-menuPath` 是 `/dashboard/attendance/attendance-shift/list`，那是**另一个并行代理在同一个浏览器 profile 里导航写进去的**。等它变回无规则匹配的值时重抓，这个头就消失了。这正面证实了本文件顶部那条坑：**基准里的 module-type 不能当答案抄**，只能拿规则表推导复核。"
+  },
+  "未取得基准的部分": [
+    "点「跟进」弹窗、「办理 / 详情」跳转、「撤销审批」这三条动作都没有展开：它们要么是弹窗、要么跳到别的页面，属于别的页面的能力面，本页只覆盖列表查询。",
+    "「批量办理」（finished=1 时出现，需先勾选行的复选框）没有抓：它只是把选中行塞进 bridge 再 router.push 到 `/dashboard/backlog/task-examine/batch-process`，本身不发列表查询请求。"
+  ]
+}

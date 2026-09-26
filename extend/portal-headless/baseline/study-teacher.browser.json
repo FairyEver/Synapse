@@ -1,0 +1,76 @@
+{
+ "说明": "由 bsk 捕获的讲师三页真实请求（只读）。⚠️ 前一页两页的接口在 smarterlayeradmintest 上，且 token 走 **URL query**（本基准里已脱敏成 <redacted>）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "同 study-base.browser.json。",
+ "requests": [
+  {
+   "页面": "讲师管理",
+   "pagePath": "/dashboard/base/teacher/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://smarterlayeradmintest.zhihuidanji.com/admin/manage/getAllProfessorPage.lay?order=&orderField=&name=&page=1&limit=20&token=<redacted>&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "讲师管理",
+   "pagePath": "/dashboard/base/teacher/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://smarterlayeradmintest.zhihuidanji.com/admin/dict/selectByPage.lay?type=teacher_type&page=1&pageSize=-1&token=<redacted>&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "讲师管理",
+   "pagePath": "/dashboard/base/teacher/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://smarterlayeradmintest.zhihuidanji.com/admin/manage/selectAllTeacherLevel.lay?token=<redacted>&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "讲师类型",
+   "pagePath": "/dashboard/base/teacher-level/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://smarterlayeradmintest.zhihuidanji.com/admin/manage/study/teacherlevelmanagement.lay?page=1&token=<redacted>&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "评价设置",
+   "pagePath": "/dashboard/base/teacher-appraise-setting/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studyappraiseteacher/list?_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  }
+ ]
+}

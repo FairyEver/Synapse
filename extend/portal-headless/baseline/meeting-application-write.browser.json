@@ -1,0 +1,37 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 的会议室预定表单上真实填写并点击「提交」时，捕获的浏览器真实发出的 create 请求。token 已在页面内脱敏。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=meeting_application&bpmMode=edit&formCustomCreatePath=simple/hr/form/033",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "meeting-application.create",
+  "via": "xhr",
+  "method": "POST",
+  "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/meeting-application/create",
+  "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"id\":null,\"meetingName\":\"无头SDK写基准-可删除\",\"meetingRoomId\":5,\"startTime\":\"2026-09-22 14:00:00\",\"endTime\":\"2026-09-22 15:00:00\",\"attendeeCount\":2,\"attendees\":\"\",\"startUserSelectAssignees\":{}}",
+  "表单填写值": {
+    "meetingName": "无头SDK写基准-可删除",
+    "meetingRoomId": 5,
+    "meetingRoomName": "博创小会议室",
+    "startTime": "2026-09-22 14:00:00",
+    "endTime": "2026-09-22 15:00:00",
+    "attendeeCount": 2,
+    "attendees": ""
+  },
+  "同一提交动作的前一步": {
+    "说明": "表单的 handleSubmit 是两步：先 getRequiredStartUserSelectTasks 拿需要人工指定审批人的节点，再 create。本文件记录的是第二步；第一步的 body 是同一份载荷去掉 startUserSelectAssignees。",
+    "method": "POST",
+    "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/meeting-application/getRequiredStartUserSelectTasks",
+    "body": "{\"id\":null,\"meetingName\":\"无头SDK写基准-可删除\",\"meetingRoomId\":5,\"startTime\":\"2026-09-22 14:00:00\",\"endTime\":\"2026-09-22 15:00:00\",\"attendeeCount\":2,\"attendees\":\"\"}"
+  },
+  "产生与撤销": {
+    "新建单据": "bpmBusinessKey = 51",
+    "撤销": "同一账号在「我的流程」列表对该单据点「更多操作 → 取消预定」，页面发出 PUT /admin-api/hr/meeting-application/cancel-reservation/51，提示「取消预定成功」"
+  }
+}

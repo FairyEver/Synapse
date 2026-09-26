@@ -1,0 +1,163 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开「合同模板」（/dashboard/contract/template/list）时捕获的真实浏览器请求。读链路（挂载 / 按名称 / 按类型 / 详情）与写链路（新建 / 修改 / 删除）在同一轮里抓下来了；token 已在页面内脱敏，从未离开浏览器。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/contract/template/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": ["contract-template-list", "contract-template-get", "contract-template-create", "contract-template-update", "contract-template-remove"],
+  "抓法": "先在门户首页（#/）装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到本页 —— 这是 SPA 的同文档导航，钩子不会被卸载。写链路走真实鼠标点击：点「创建模板」跳到流程表单页 /dashboard/flow/form/edit?…formCustomCreatePath=simple/hr/form/007，表单是「模板名称」输入框 + 「合同类型」树选择器（`code=contract_type`，**是 `only-leaf`，根节点要先展开两级才点得到「采购合同」**）+ 「所属系统」下拉，再点**「仅保存」**（不是「保存并提交」，理由见下）。删除是行内「删除」→ 气泡「确认删除？」→「删 除」。",
+  "为什么写链路只抓「仅保存」这一支": "表单页有两个提交按钮：`actionSubmit(false)`（仅保存，`onlySubmit: 1`）与 `actionSubmit(true)`（保存并提交，`onlySubmit: 0`）。后者在后端会**真的 createProcessInstance 起一条 contract_template 审批流**，给真人推待办与通知 —— 那不是「一条脏数据」，是一串人的待办箱里多出一条假单据。而且它在**前端本来就是坏的**：submitFlow 为真时它先打 `POST /hr/contract-template/getRequiredStartUserSelectTasks`，而 `WorkflowContractTemplateController`（`@RequestMapping(\"/hr/contract-template\")`）里**没有这个映射**，全仓唯一的同名 `@PostMapping` 在 `BusinessRegistrationApplicationController`（路径不同）——拿不到数组就 `throw new Error('获取审批节点失败')`，整条提交中断。⇒ 「保存并提交」这一支**没抓、不实现**，详见 docs/pages/合同模板.md。",
+  "module-type 取值的坑（本轮又踩到一次，且这次是「同一个页面不同时刻不同值」）": "这个头读的是 cookie `hr-0.0.0-menuPath`，**同一个浏览器 profile 全局共享**，而本轮**另有 2 个代理在并行用同一个浏览器**。实测：页面刚挂载时列表请求发的是 **15（风险防控，与规则表推导一致）**；到本轮后段同一条列表请求变成了 **11（组织管理）**，因为并行的另一个会话在别的标签页导航、把 cookie 改写了。规程不变：**抓基准时 module-type 必须拿规则表复核，不能把抓到的那一次当答案抄**。SDK 的能力绑在列表页路径上，`resolveModuleType('/dashboard/contract/template/list')` 确定性地给 15。",
+  "requests": [
+    {
+      "name": "列表页挂载时自动查询（无筛选条件）",
+      "能力": "contract-template-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/page?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "15",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "表单里 `name` / `typeId` 两项初值都是 null，被 qs 的 skipNulls 丢掉 —— 浏览器不发，SDK 也不发。但 `order=&orderField=` 这两个空串**一定会发**（renren 列表页的默认空值参数，D20）。"
+    },
+    {
+      "name": "「模板」填 SDK-TEST-合同模板 后点「查 询」",
+      "能力": "contract-template-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/page?order=&orderField=&name=SDK-TEST-%E5%90%88%E5%90%8C%E6%A8%A1%E6%9D%BF&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": null,
+      "headers 未抓到的原因": "启动时那次 filter dump 只取了 method/url（`window.__phCap` 会被后续请求冲掉，本轮的抓取脚本没在这一次同时取 headers）。URL 与键顺序是实测的，头与第 1 条同构（同一页面、同一 http 实例），但**不要把它当成抓过的东西**。",
+      "body": null,
+      "备注": "`name` 落在 `orderField` 之后、`pageNo` 之前。后端 `selectByPage` 是 `like concat('%', #{pageReqVO.name}, '%')` —— **模糊匹配**。"
+    },
+    {
+      "name": "「类型」树选择器选「采购合同」后点「查 询」",
+      "能力": "contract-template-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/page?order=&orderField=&typeId=13&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": null,
+      "headers 未抓到的原因": "同上。",
+      "body": null,
+      "备注": "`typeId` 落在 `name` 与 `pageNo` 之间。13 是分类字典 `contract_type` 里「采购合同」的节点 id。后端是**精确匹配**（`and t1.type_id = #{pageReqVO.typeId}`）。"
+    },
+    {
+      "name": "行内「详情」（跳 /dashboard/contract/template/detail/77）",
+      "能力": "contract-template-get",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/get?id=77&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "15",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "**这个请求不是列表页发的**：`list.vue` 的「详情」是 `router.push('/dashboard/contract/template/detail/{id}')`，`get` 在 `template/detail/[id].vue` 里发（另一处调用点是 `[mode]/preview/share.js`）。列在这里是因为 SDK 把它做成能力 `contract-template-get`；它绑定的仍是**列表页路径**（module-type 15，与实测一致）。"
+    },
+    {
+      "name": "新建：填完名称/类型/所属系统后点「仅保存」（POST）",
+      "能力": "contract-template-create",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/create",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"typeId\":13,\"name\":\"SDK-TEST-合同模板基准\",\"useSystem\":0,\"onlySubmit\":1,\"content\":\"{\\\"version\\\":\\\"1.0.0\\\",\\\"blocks\\\":[]}\",\"startUserSelectAssignees\":{}}",
+      "body 形状的来历": "`simple/hr/form/007/page/pc/edit/index.vue` 的 `buildSubmitPayload(false)` 是 `{typeId, name, useSystem, onlySubmit: 1, content}`，`actionSubmit` 再 `{...submitData, startUserSelectAssignees: tasksData}`（仅保存时 `tasksData = {}`）。**键顺序照抄**。`content` 是**字符串**（把 `formState.content` 对象 `JSON.stringify` 后的结果），默认值就是 `{\"version\":\"1.0.0\",\"blocks\":[]}` —— 实测它**能过前后端两侧的校验**（后端 `ContractContentValidator` 对空 blocks 不报错）。",
+      "备注": "这条的 `module-type` 是 **11**，因为流程表单跑在 `/dashboard/flow/form/edit?…` 路由上、cookie 取到的是别的值（见上面 module-type 那条）。SDK 绑列表页路径，发的是 15。"
+    },
+    {
+      "name": "编辑：改名后点「仅保存」（PUT，整份覆写）",
+      "能力": "contract-template-update",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/update",
+      "headers": null,
+      "headers 未抓到的原因": "这一条只抓了 method/url/body，没抓 headers。它与上面那条 POST 走的是**同一条路由**（`/dashboard/flow/form/edit?…&bridge=…`）、同一个 http 实例，所以头应与之同构（含 `Content-Type: application/json` 与当时 cookie 给出的 module-type）—— 但**这是推断，不是实测**，如实记在这里。",
+      "body": "{\"id\":77,\"typeId\":13,\"name\":\"SDK-TEST-模板乙版\",\"useSystem\":0,\"onlySubmit\":1,\"content\":\"{\\\"version\\\":\\\"1.0.0\\\",\\\"blocks\\\":[]}\",\"startUserSelectAssignees\":{}}",
+      "body 形状的来历": "编辑态**不是**先 `GET /get`：`list.vue` 的 `actionEdit(record)` 把整行塞进 bridge（`bridgeSet({ record })`），表单初始化 `formState.value.name = record.name` 等。`buildSubmitPayload` 是 `{...(hasRecord ? { id: bridge.record.id } : {}), typeId, name, useSystem, onlySubmit, content}` —— **`id` 在首位**，且实测是 **number 77**（不是字符串；与班次管理那条线相反，那边后端给的是 `\"9\"`）。",
+      "备注": "改名后的新名字（SDK-TEST-模板乙版）**不包含**原名（SDK-TEST-合同模板改名后）—— 因为 `name` 是模糊匹配，「改名成功」这条断言用包含关系会假绿（作业管理那条线上踩过）。"
+    },
+    {
+      "name": "删除：行内「删除」→ 气泡确认「删 除」（DELETE）",
+      "能力": "contract-template-remove",
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/hr/contract-template/delete?id=77",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "**id 走查询参数、没有请求体**（`list.vue` 的 `http.delete('/hr/contract-template/delete', { params: { id: record.id } })`；与作业管理那条线的 `DELETE` + body `[\"1071\"]` 不同）。删除前有二次确认气泡「确认删除？」。本轮第一次删的是 id=76（同一轮里建的另一个 `SDK-TEST-` 记录），抓到的 URL 是 `…/delete?id=76`，形状相同。"
+    }
+  ],
+  "真实环境写链路复核（smoke/contract-template-crud.mjs，2026-09-20）": {
+    "怎么跑": "smoke/with-portal-token.sh node smoke/contract-template-crud.mjs",
+    "结果": "20 项检查全绿；测试环境没有留下任何 `SDK-TEST-` 前缀的残留（收尾按前缀扫，0 条）",
+    "本轮建了又删的记录": "id 78 / id 79（两轮冒烟各一条，名字 `SDK-TEST-合同模板-<6位>` →改为 `SDK-TEST-模板改-<6位>`）",
+    "关键几行": [
+      "起手：按名字查列表 —— 0 条；按 `SDK-TEST-` 前缀扫 —— 也是 0 条（排除假阳性）",
+      "create：createIdempotent 返回 79，按名字查列表恰好 1 条、id 也是 79（返回值与独立读到的**同一个数字**）",
+      "get：name / typeId / typeName(采购合同) / useSystem / content 与提交值逐项一致",
+      "status=1（待提交）、processInstanceId=null —— **只保存不发流程**的硬证据",
+      "同一个 requestId 重试：POST 次数 1 → 1（根本没发出去），列表仍 1 条",
+      "update：名称与 useSystem 都变了，旧名字 0 条；原样重发一次仍 1 条、终态不变",
+      "remove：列表查不到；重复 remove 后端返回成功",
+      "收尾：两个名字 0 / 0，`SDK-TEST-` 前缀 0 条"
+    ],
+    "实测出来的后端语义（不是推断）": {
+      "create 确实回传新 id": "`CommonResult<Long>`，实测返回 79 且与列表查到的一致。**这一条纠正了写这条能力时的第一版推断**（照抄班次管理那条线的「save 不回传 id」是错的）。但「接口说成功」不算验证，冒烟里仍然回列表按名字复核。",
+      "id 是 number": "列表行、`get`、以及基准里浏览器 PUT 回传的 `\"id\":77` 全是 **number** —— 与班次管理那条线（后端把 Long 序列化成字符串）**相反**。SDK 原样透传，不做类型归一（归一反而让 body 与浏览器不一致）。",
+      "remove 之后再 get(id) **会抛错**": "`deleteContractTemplate` 把 `deleted` 置 1；`ContractTemplateDO` 继承的 `BaseDO` 上 `deleted` 带 `@TableLogic`，所以 `selectById` 补 `deleted = 0` 后**查不到**；`getContractTemplate` 接着在 null 上调 `getTypeId()` → NPE，后端返回 `Cannot invoke \"…ContractTemplateRespVO.getTypeId()\" because \"<local3>\" is null`。⇒ 「删干净了没有」**只能看列表**。⚠️ 与班次管理那条线**相反**：那边 `get` 删完仍返回整行（isDel=1）。两条线都把结论写成「看列表」是对的，但理由不同。",
+      "「保存并提交」那一支在前端是断的（实测探针）": "`POST /admin-api/hr/contract-template/getRequiredStartUserSelectTasks` 返回 `请求资源不存在:No static resource admin-api/hr/contract-template/getRequiredStartUserSelectTasks.` —— 后端确实没有这个映射。前端 `007` 在 submitFlow 为真时拿不到数组就 `throw new Error('获取审批节点失败')`，所以那个按钮点下去必挂。这条把「SDK 只做仅保存」从一个源码推断升级成了实测。",
+      "update 会把 status 重写成 1": "后端 `updateContractTemplate` 按 `onlySubmit` 把 `status` 写死成 PENDING_SUBMIT(1)。冒烟里实测 update 之后 status 仍是 1（从 1 改到 1，**没有制造出「4 被打回 1」的现场**）—— 「已完成(4) 的模板被改回待提交」是**源码读出，未实测**。"
+    }
+  },
+  "抓完之后的复核": {
+    "列表总数（挂载时）": 14,
+    "本轮建了又删的记录": [
+      "id 76 / SDK-TEST-合同模板基准 / 采购合同 / useSystem 公共 / 待提交 —— 同一轮里删掉",
+      "id 77 / SDK-TEST-合同模板改名后 →（改名）SDK-TEST-模板乙版 / 采购合同 / 待提交 —— 同一轮里删掉"
+    ],
+    "收尾": "按 `name=SDK-TEST-` 查列表 —— **0 条**（页面表格渲染「暂无数据」）。测试环境没有留下任何残留。"
+  },
+  "本轮实测到的页面数据": {
+    "行（列表 14 条，节选）": [
+      "name / typeName / contractCount / updaterName / statusLabel / updateTime",
+      "「关联合同数」那一列是**按钮**（点了跳 /dashboard/contract/template/relation-contract/list?templateId=<id>），不是纯文本"
+    ],
+    "状态列渲染": "页面 `statusOptions` = 待提交(1) / 审核中(2) / 已驳回(3) / 已生效(4) / 已取消(7)。后端枚举多一个「关闭(6)」，页面上没有。本轮新建的两条都是「待提交」。",
+    "行内按钮": "`status !== 2` 才有「编辑」与「删除」；「详情」恒有。「撤销」在前端被注释掉了（见下）。"
+  },
+  "前端里读到、但后端没有对应物的两条（都没进能力定义）": {
+    "cancelContractTemplate": {
+      "前端": "`list.vue` 的 `handleRevoke` 里 `http.get('/hr/contract-template/cancelContractTemplate', { params: { id } })`，函数上方留了注释「// 有问题」",
+      "调用点": "**被注释掉了** —— 表格操作列里那行 `<!-- <common-action-core v-if=\"record.status === 2\" …>撤销</common-action-core> -->` 是注释",
+      "后端": "`WorkflowContractTemplateController` 里**没有** `@GetMapping(\"/cancelContractTemplate\")`",
+      "结论": "死代码。SDK 不做这个能力。"
+    },
+    "getRequiredStartUserSelectTasks": {
+      "前端": "`007/page/pc/edit/index.vue` 的 `http.post('/hr/contract-template/getRequiredStartUserSelectTasks', submitData)`，只在「保存并提交」时走",
+      "后端": "**没有这个映射**（全仓唯一的同名 `@PostMapping` 在 `BusinessRegistrationApplicationController`）",
+      "结论": "「保存并提交」这一支是断的。SDK 只做「仅保存」。"
+    }
+  }
+}

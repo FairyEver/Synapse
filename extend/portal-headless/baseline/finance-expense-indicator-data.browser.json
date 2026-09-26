@@ -1,0 +1,112 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn",
+  "pagePath": "/dashboard/finance/depreciation/allocation/expense-indicator-data/list",
+  "evidence": "真实浏览器按SDK-TEST-费用指标新建费用指标数据并回查详情，记录ID为41。浏览器把输入0.000001按控件精度提交为0.01。当前PC编辑误调用凭证状态接口，删除误把ID拼进路径，二者都返回业务错误；记录等待通过SDK正确接口更新、删除并独立回查清理。token在页面内脱敏。",
+  "requests": [
+    {
+      "name": "默认列表",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/expense-indicator-data/page?order=&orderField=&yearMonth=2026-09&status=1&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "费用指标候选",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/indicator-library/page?pageNo=1&pageSize=-1&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "部门树",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getRoleOrganizationTreeNew?excludePost=false&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "创建",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/expense-indicator-data/create",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"yearMonth\":\"2026-09\",\"indicatorId\":94,\"dataList\":[{\"deptId\":\"34\",\"indicatorValue\":0.01}]}"
+    },
+    {
+      "name": "详情回查",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/expense-indicator-data/get?id=41&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "PC编辑错误请求",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/expense-indicator-data/update-voucher-status",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":41,\"yearMonth\":\"2026-09\",\"indicatorId\":94,\"dataList\":[{\"deptId\":\"34\",\"indicatorValue\":0.02}]}"
+    },
+    {
+      "name": "PC删除错误请求",
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/finance/expense-indicator-data/delete/41",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "26",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    }
+  ],
+  "pcDefects": [
+    "编辑调用 update-voucher-status，后端要求 voucherStatus，无法保存页面编辑表单。",
+    "删除请求为 delete/41，当前后端实际控制器契约为 delete?id=41，记录未删除。"
+  ]
+}

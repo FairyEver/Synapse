@@ -1,0 +1,331 @@
+{
+ "说明": "由 bsk 抓到的人工智能域「智能交互子域·模型与用量（模型列表 / 模型选择 / 平台用量 / 数据分析）」的真实浏览器请求（全部只读）。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "先在门户首页装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到目标页 —— SPA 的同文档导航不会卸载钩子，页面挂载时那条真实请求会被完整抓到。（实测：portal.html 的**首次文档加载**会卡在门户自身的「正在加载数据」门禁上，必须先做一次预热 hash 导航把壳启起来，再装钩子、再改 hash 到目标页。）每页一个新会话；`_t` 已归一化为 `<ts>`；token/敏感 query 已由钩子脱敏为 `<redacted>`。",
+ "requests": [
+  {
+   "页面": "模型列表",
+   "pagePath": "/dashboard/platform/intelligence/interaction/model/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/sensitive/info?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型列表",
+   "pagePath": "/dashboard/platform/intelligence/interaction/model/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型列表",
+   "pagePath": "/dashboard/platform/intelligence/interaction/model/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/aiModelConfig/getByPage?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型列表",
+   "pagePath": "/dashboard/platform/intelligence/interaction/model/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/ai-token/apply/pending-count?statisticsDimension=3&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型列表",
+   "pagePath": "/dashboard/platform/intelligence/interaction/model/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/aiModelConfig/getByPage?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型选择",
+   "pagePath": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/sensitive/info?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型选择",
+   "pagePath": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型选择",
+   "pagePath": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/aiModelSelection/getByPage?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "模型选择",
+   "pagePath": "/dashboard/platform/intelligence/interaction/modelSelect/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manager/aiModelSelection/getByPage?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "平台用量",
+   "pagePath": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/sensitive/info?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "平台用量",
+   "pagePath": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "平台用量",
+   "pagePath": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/system/tenant/page?name=&pageNo=1&pageSize=200&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "平台用量",
+   "pagePath": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/ai-token/quota-usage/summary?quotaCycle=3&statisticsDimension=3&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "平台用量",
+   "pagePath": "/dashboard/platform/intelligence/interaction/platform-usage/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/ai-token/quota-usage/page?quotaCycle=3&statisticsDimension=3&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/sensitive/info?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getStatsAnsRightRate?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getStatsByTime?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getKnowledgeRecordRank?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getAiToolRecordRank?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getAiToolClickRank?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getQuestionKeywordHeat?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  },
+  {
+   "页面": "数据分析",
+   "pagePath": "/dashboard/platform/intelligence/interaction/dataAnalysis/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/manage/ai/getStatsAnsRightRate?_t=<ts>",
+   "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN",
+    "tenant-id": "1",
+    "token": "<redacted>"
+   },
+   "body": null
+  }
+ ]
+}

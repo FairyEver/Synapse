@@ -1,0 +1,55 @@
+{
+  "说明": "isArchived 的后果实测：只读 GET，测试环境。用来判断\"页面定义混进契约\"这一类错值不值得修。",
+  "环境": "https://biz-api-test.wodecorp.cn",
+  "接口": "/admin-api/org/hrAttendanceSheet/page",
+  "moduleType": 11,
+  "结果": [
+    {
+      "label": "isArchived=1（考勤档案页发的）",
+      "query": "order=&orderField=&pageNo=1&pageSize=5&isArchived=1",
+      "status": 200,
+      "ret": "SUCCESS",
+      "code": 0,
+      "条数": 105,
+      "本页行数": 5,
+      "前三个id": [
+        "153",
+        "149",
+        "148"
+      ]
+    },
+    {
+      "label": "isArchived=0（契约允许 AI 拨的值）",
+      "query": "order=&orderField=&pageNo=1&pageSize=5&isArchived=0",
+      "status": 200,
+      "ret": "SUCCESS",
+      "code": 0,
+      "条数": 118,
+      "本页行数": 5,
+      "前三个id": [
+        "154",
+        "153",
+        "152"
+      ]
+    },
+    {
+      "label": "不带 isArchived（考勤表页发的）",
+      "query": "order=&orderField=&pageNo=1&pageSize=5",
+      "status": 200,
+      "ret": "SUCCESS",
+      "code": 0,
+      "条数": 118,
+      "本页行数": 5,
+      "前三个id": [
+        "154",
+        "153",
+        "152"
+      ]
+    }
+  ],
+  "判读": {
+    "isArchived=0 与\"不带\"是否等价": true,
+    "isArchived=0 与 isArchived=1 是否等价": false,
+    "后果": "拨一下 isArchived 会静默换成另一批数据：不报错、不提示，条数从 105 变 118。"
+  }
+}

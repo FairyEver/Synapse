@@ -8,6 +8,7 @@ packages:
   - pdf-renderer
   - auto
   - auto/web
+  - extend/portal-headless
   - templates/shadcn-admin
 
 onlyBuiltDependencies:

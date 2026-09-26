@@ -1,0 +1,27 @@
+{
+  "说明": "同一个列表页，在「创建时间」区间里选了 2026-09-01 ~ 2026-09-05 之后点击「查询」捕获的真实浏览器请求。token 已在页面内脱敏。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/assignment/assignment/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "assignment-list",
+  "via": "xhr",
+  "method": "GET",
+  "url": "https://biz-api-test.wodecorp.cn/admin-api/study/assignment/studyassignment/page?order=&orderField=&title=&status=&type=&createTimeStart=2026-09-01%2000%3A00%3A00&createTimeEnd=2026-09-06%2000%3A00%3A00&pageNo=1&pageSize=20&_t=<ts>",
+  "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+  },
+  "body": null,
+  "筛选条件": {
+    "date": ["2026-09-01", "2026-09-05"]
+  },
+  "备注": [
+    "结束日 +1 天：面板上选到 2026-09-05，发出的 createTimeEnd 是 2026-09-06 00:00:00——**开区间**。",
+    "出处是 list.vue 的 convertFetchForm：date[1].startOf('date').add(1, 'day').format('YYYY-MM-DD HH:mm:ss')。",
+    "两端的时分秒固定是 00:00:00（startOf('date')），与用户选的时刻无关。",
+    "自己拼这个区间很容易少查一天（选到 9-05 却查不到 9-05 当天），SDK 用 buildCreateTimeRange() 生成这两个值。"
+  ]
+}

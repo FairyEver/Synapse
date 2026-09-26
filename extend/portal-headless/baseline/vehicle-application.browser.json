@@ -1,0 +1,218 @@
+{
+  "说明": "由 bsk 在测试环境打开「用车审批」表单（/simple/hr/form/031）时捕获的真实请求序列。token 已在页面内脱敏（tools/baseline/install-hook.js，脱敏发生在离开浏览器之前）。本文件只含**只读**请求：表单挂载时自动发的（含申请人选择器那三条）+ 点「查看审批流程」触发的预览（它的 variables 就是提交载荷）。**没有提交过任何单据**。",
+  "捕获时间": "2026-09-21",
+  "入口": "https://webtest01.wodecorp.cn/portal.html#/dashboard/flow/form/edit?processDefinitionKey=vehicle_usage_application&bpmMode=edit&formCustomCreatePath=simple/hr/form/031",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "页面": "/simple/hr/form/031（用车审批，processType=2「审批」）",
+  "抓取手法": [
+    "表单是 SPA 路由进入的：先 navigate 到门户（这一步的请求抓不到，hook 还没装）。",
+    "装 hook 之后用 location.hash 在应用内切走再切回，让表单组件**重新挂载**，挂载请求就都进 buffer 了。",
+    "「时间段」是 a-range-picker + show-time：点 input[placeholder=开始日期] 开面板 → 点 .ant-picker-cell[title=YYYY-MM-DD]",
+    "  → 点 .ant-picker-time-panel-column:nth-child(1|2|3) > li 设时分秒 → 再点结束日期输入框重复一遍 → 点 .ant-picker-ok button。",
+    "  （rc-picker 的输入框是 readOnly，不能 fill，只能点面板 —— 见 tools/baseline/README.md §2。）",
+    "★ 提交载荷**不是**靠点「提交」抓的：那会真的建单、给 3 个审批人推待办。改走「查看审批流程」按钮 ——",
+    "  它调的 POST /bpm/process-instance/preview 的 body 里 `variables` **就是** buildVehicleUsageSubmitData() 的产物。",
+    "  ⚠️ 该按钮是普通 button，用 `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '查看审批流程').click()` 触发。"
+  ],
+  "请求": [
+    {
+      "于": "GET",
+      "u": "/admin-api/org/sensitive/info?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 2,
+      "备注": "应用外壳级请求，与具体页面无关（会议室 / 通用审批 / 请假那几条线的基准里也有它）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/task/list-by-category?finished=1&pageNo=1&pageSize=10&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 2,
+      "备注": "顶部待办角标，外壳级"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/bpm/process-definition/get?key=vehicle_usage_application&_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "次数": 1,
+      "备注": "common/libs/flow-form/index.js 的 getProcessDefinition（bpmHttp 实例）。响应里 formFields / formCustomCreatePath 都是 null —— 这就是『读接口拿不到字段契约』的现场。注意头部**没有 module-type**（规则表里没有 /dashboard/flow/ 前缀）。⚠️ 与另外两条线不同的一点：本流程的 `startUserSelectTasks` **不是 null**，它给了那三个「发起人自选」节点的 id/name（但它是**流程定义级**的，不等于 prepare 按当前载荷算出来的那一组）"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/org/staff/getStaffByOrgPage",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 3,
+      "body": "{\"organizationIds\":[\"35\",\"36\",\"37\",\"71\",\"467\",\"3997\",\"4026\",\"4094\",\"4099\",\"4111\"],\"includeDescendants\":true,\"keyword\":\"\",\"pageNo\":1,\"pageSize\":20,\"selectedStaffIds\":[1163]}",
+      "备注": "★★ 本文件第二值钱的一条：**申请人选择器的真实数据源**。`organizationIds` 就是页面 getVehicleUsageOrganizationRoots(组织树) 摊平出来的 10 个二级组织（注意序列化成**字符串**）。三次调用只有 selectedStaffIds 不同：[1163]（回显当前登录员工，ensureSelectedOptions）→ [1163] → []（loadInitial）。键顺序 organizationIds → includeDescendants → keyword → pageNo → pageSize → selectedStaffIds。头部**没有 module-type**。⚠️ **与 docs/process-forms.md 记的不符**：那个文件说 031 走 /org/staff/getStaffByOrg（数组入口），实测页面上跑的是**分页**入口。后者的数组版本在这个环境下还会直接 500『员工超过1000条，请升级客户端并使用分页选择器』"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/user/simple-page?pageNo=1..9&pageSize=500",
+      "via": "xhr",
+      "headers": {
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1"
+      },
+      "次数": 9,
+      "备注": "★ 长选项的现场：审批人候选。**无关键字翻 9 页 × 500 = 4500 人**（页面上「审批人」三个下拉的候选来自 common/libs/flow-form/index.js 的 getStartUserSelectTasks()）。注意这是**另一套 http 实例**（头里多一个 Authorization、少一个 Accept-Language）。SDK 的 approver-search 强制关键字 + 分页，就是不照抄这条（设计 D6 / H35）"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/hr/vehicle-usage-application/getTemporaryRequiredStartUserSelectTasks",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"staffId\":\"1163\",\"staffName\":\"姚淼鑫\",\"reason\":\"\",\"startTime\":\"\",\"endTime\":\"\",\"destination\":\"\",\"remark\":\"\"}",
+      "备注": "★★ 本文件最值钱的一条之一。它**就是** buildVehicleUsageSubmitData() 的真实产物（页面 refreshApprovalTasks/handleSubmit 传的都是它，不是「少几个字段的预览版」）：键顺序 staffId → staffName → reason → startTime → endTime → destination → remark，**没有 id、没有 attachments**。① `staffId` 是**字符串** \"1163\"；② 表单名是 `applicantId`，出载荷时被映射成了 staffId/staffName；③ 空备注是**空串**不是 undefined。此时表单刚挂载、只有申请人被自动回显，所以除 staffId/staffName 外全是空串。头部**没有 module-type**。⚠️ 接口名字用的是 getTemporary… 那个变体（后端两个都写了，前端用这个）"
+    },
+    {
+      "于": "GET",
+      "u": "/admin-api/system/dept/simple-list?_t=<ts>",
+      "via": "xhr",
+      "headers": {
+        "Accept": "application/json, text/plain, */*",
+        "Authorization": "<redacted>",
+        "token": "<redacted>",
+        "tenant-id": "1"
+      },
+      "次数": 1,
+      "备注": "「查看审批流程」预览组件为了把 BPMN 里的审批人解析成名字拉的组织列表（与上面的 simple-page 同一套 http 实例）"
+    },
+    {
+      "于": "POST",
+      "u": "/admin-api/bpm/process-instance/preview",
+      "via": "xhr",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "次数": 1,
+      "body": "{\"processDefinitionKey\":\"vehicle_usage_application\",\"variables\":{\"staffId\":\"1163\",\"staffName\":\"姚淼鑫\",\"reason\":\"SDK-TEST-baseline 用车事由（浏览器基准抓取，不会提交）\",\"startTime\":\"2026-09-22 09:00:00\",\"endTime\":\"2026-09-22 15:00:00\",\"destination\":\"SDK-TEST-baseline 目的地\",\"remark\":\"\"},\"startUserSelectAssignees\":{\"Activity_0yx86ms\":[null],\"Activity_0q8l1yc\":[null],\"Activity_0viq4cx\":[null]},\"copyUserIds\":[]}",
+      "备注": "★★★ 本文件最值钱的一条：**填好表单后**点「查看审批流程」的载荷。`variables` 就是 buildVehicleUsageSubmitData() 的产物、`startUserSelectAssignees` 就是三个自选节点的当前选择（都还没选人，所以是 [null]）。它同时给出四件事：① 时间段的**一个控件产两个字段**（startTime / endTime，格式 `YYYY-MM-DD HH:mm:ss`）；② 三个节点的 **id**（Activity_0yx86ms / Activity_0q8l1yc / Activity_0viq4cx，页面自己也是按 id 发的）；③ `copyUserIds` 是**预览组件自己的默认值**，**不是表单字段** —— 本表单没有抄送人控件，create 的 body 里**没有**这个键（见下面『create 的 body 怎么来』）；④ 空备注仍是空串"
+    }
+  ],
+  "表单填写值": {
+    "applicantId": "（控件自动回显了当前登录员工，页面把它映射成 staffId/staffName）",
+    "staffId": "1163",
+    "staffName": "姚淼鑫",
+    "reason": "SDK-TEST-baseline 用车事由（浏览器基准抓取，不会提交）",
+    "startTime": "2026-09-22 09:00:00",
+    "endTime": "2026-09-22 15:00:00",
+    "destination": "SDK-TEST-baseline 目的地",
+    "remark": ""
+  },
+  "提交载荷（从上面那条 preview 的 variables 里原样摘出来，键顺序即序列化顺序）": {
+    "staffId": "1163",
+    "staffName": "姚淼鑫",
+    "reason": "SDK-TEST-baseline 用车事由（浏览器基准抓取，不会提交）",
+    "startTime": "2026-09-22 09:00:00",
+    "endTime": "2026-09-22 15:00:00",
+    "destination": "SDK-TEST-baseline 目的地",
+    "remark": ""
+  },
+  "create 的 body 怎么来": "页面 handleSubmit() 的最后一步是 `const finalData = { ...submitData, startUserSelectAssignees: tasksData }`，然后 `http.post('/admin-api/hr/vehicle-usage-application/create', finalData)`。所以 **create 的 body = 上面那 7 个键 + startUserSelectAssignees（永远在最后）**。⚠️ 编辑分支（PUT /update、以及往 submitData 里塞 id）在 035 和 031 里都被前端**注释掉了**，`apiSubmit` 写死成 `/create`，所以 body 里**没有 id**。⚠️ `copyUserIds` 不在里面（那只是 preview 组件的参数）。**create 的真实请求没抓到**（抓它必须点一次「提交」，那会给 3 个真人推待办；本轮的写验证走 SDK 侧冒烟，不是浏览器）。",
+  "审批人节点（POST /hr/vehicle-usage-application/getTemporaryRequiredStartUserSelectTasks 的响应，另有一次只读实测）": {
+    "说明": "这个 POST 的 body 与提交载荷逐字节相同（页面 refreshApprovalTasks/handleSubmit 用的就是 submitData）。响应原样记在这里，2026-09-21 用 smoke/with-portal-token.sh 只读实测。",
+    "data": [
+      {
+        "id": "Activity_0yx86ms",
+        "name": "发起人自选",
+        "approvalMode": "SINGLE",
+        "approvalModeName": "单人审批",
+        "executionMode": "SINGLE",
+        "completionRule": "ALL_APPROVED",
+        "minSelectCount": 1,
+        "maxSelectCount": 1,
+        "selectionOrderRequired": false,
+        "approvalDescription": "仅可选择一名审核人；该人员通过后节点通过"
+      },
+      {
+        "id": "Activity_0q8l1yc",
+        "name": "发起人自选",
+        "approvalMode": "SINGLE",
+        "approvalModeName": "单人审批",
+        "executionMode": "SINGLE",
+        "completionRule": "ALL_APPROVED",
+        "minSelectCount": 1,
+        "maxSelectCount": 1,
+        "selectionOrderRequired": false,
+        "approvalDescription": "仅可选择一名审核人；该人员通过后节点通过"
+      },
+      {
+        "id": "Activity_0viq4cx",
+        "name": "发起人自选",
+        "approvalMode": "SINGLE",
+        "approvalModeName": "单人审批",
+        "executionMode": "SINGLE",
+        "completionRule": "ALL_APPROVED",
+        "minSelectCount": 1,
+        "maxSelectCount": 1,
+        "selectionOrderRequired": false,
+        "approvalDescription": "仅可选择一名审核人；该人员通过后节点通过"
+      }
+    ],
+    "BPMN 原文": {
+      "链": "开始 → 发起人自选(Activity_0yx86ms) → 发起人自选(Activity_0q8l1yc) → 发起人自选(Activity_0viq4cx) → 结束",
+      "三个 userTask 的属性": "flowable:candidateStrategy=\"35\"（= START_USER_SELECT，发起人自选），flowable:candidateParam=\"__placeholder__\"",
+      "没有的东西": "**没有网关**（exclusive/inclusive/parallel 一个都没有）、**没有 `${...}` 条件表达式** —— 与 qingjia 那条线两个网关条件形成对照"
+    },
+    "为什么三个节点的 name 一模一样": "它们在 BPMN 里就叫这个名字，只有 id 不同。**所以选人必须按 id，不能按名字** —— 这是本流程与通用审批（那边只有一个节点、叫「发起人自选2」）最直观的区别",
+    "⚠️ 取人时必须用 userId": "startUserSelectAssignees 里放的是 **userId**（如 18243），不是申请人的 staffId（如 1163）。两者不是一个 id 空间：userId 来自 /system/user/simple-page 的 id，staffId 来自 /org/staff/getStaffByOrgPage 的 staffId。"
+  },
+  "⚠️ 申请人选择器的旧入口已经不可用（同一环境的只读实测）": {
+    "旧入口": "POST /admin-api/org/staff/getStaffByOrg，body 是**裸数组** [\"35\",\"36\",...]",
+    "实测结果": "code 500, ret FAIL, msg: 「员工超过1000条，请升级客户端并使用分页选择器，不支持全量数组加载」",
+    "后端判据": "HrStaffServiceImpl.getStaffByOrgLegacyHttp → requireCompleteStaffPickerLegacy(total)：total > 1000 就抛（源码里那句 legacyRen 文案与实测一字不差）",
+    "结论": "docs/process-forms.md（2026-09-20 调查）记的 031 走 getStaffByOrg **已经过期**。SDK 走它的分页继任者 getStaffByOrgPage —— 也就是**页面上真正在跑的那一条**"
+  },
+  "同一流程的其它入口（本次未抓包，来自源码 / 只读实测）": {
+    "我的流程（撤销入口）": "/dashboard/flow/task/my/list —— 行内「取消流程」按钮（record.status === 1 时出现）",
+    "创建": "POST /admin-api/hr/vehicle-usage-application/create（本次没有提交，未抓包）",
+    "详情": "GET /admin-api/hr/vehicle-usage-application/get?id=",
+    "详情响应里有 processInstanceId": "★ 与通用审批 / 请假**不同**：VehicleUsageApplicationRespVO 有 processInstanceId 字段，而 startBpmProcess() 把流程实例 id 写回了 DO。所以 cancel 不必翻「我的流程」。另注：**传一个不存在的 id 时后端不报错、回 null**（BeanUtil.toBean(null, ...) 实测）",
+    "取消": "DELETE /admin-api/bpm/process-instance/cancel-by-start-user，body { id: <流程实例 id>, reason }（源码：flow/task/my/list.vue:239-260）",
+    "本流程没有自己的 cancel 端点": "实测 PUT/DELETE /admin-api/hr/vehicle-usage-application/cancel/0 都是 **404**（『请求资源不存在』）。源码里 VehicleUsageApplicationService.cancelApplication 存在，但**没有映射到 Controller**，所以它只被流程监听器用到、页面上走不到",
+    "申请人选择器的组织范围": "GET /admin-api/org/organization/getRoleOrganizationTree（页面 fetchOrganization()）→ getVehicleUsageOrganizationRoots() 摊平成那 10 个 id"
+  },
+  "没有抓到的（如实说明）": [
+    "**create 的真实请求没抓到**：抓它必须在浏览器里点一次「提交」，那会给 3 个真人推待办。本轮的写验证只做一次，走的是 SDK 侧的 smoke，不是浏览器 —— 所以没有浏览器侧的 create 基准。",
+    "因此 test/vehicle-application.test.ts 对 create 的逐字段断言建立在这份基准的**同源推断**上：create body = 上面那条 preview 载荷 + `startUserSelectAssignees`（页面 handleSubmit 的最后一步是 { ...submitData, startUserSelectAssignees }），键顺序由源码确定；提交 URL 与响应形状另有真实冒烟佐证（docs/pages/用车申请.md 的「真实验证记录」）。",
+    "**点「提交」的次数是 0**：本轮在浏览器里一次都没有点过提交。",
+    "**「加载更多申请人」按钮没点过**：pageNo>1 的那条路径（onPopupScroll / loadMore）没有浏览器侧记录，只有源码（usePagedOptions 的 loadPage(page+1, keyword, true)）。SDK 的 applicantPicker 支持 pageNo 参数正是照着它做的。"
+  ]
+}

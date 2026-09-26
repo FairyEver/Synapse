@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+
+# 抽样装置的中间产物：都能由一条命令重生成，或与合并文件重复，不入库
+#   endpoints.json   ← BATCH_OUT_DIR=/tmp/x node tools/generate/batch-capabilities.mjs --all
+#   results/         ← 与合并的 sample-results.json 内容重复（约 444K）
+tools/sample/endpoints.json
+tools/sample/results/

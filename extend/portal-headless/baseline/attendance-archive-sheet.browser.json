@@ -1,0 +1,75 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开考勤档案列表页时捕获的真实浏览器请求（无写操作）。token 已在页面内脱敏，从未离开浏览器。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/attendance/attendance-archive-sheet/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": "attendance-archive-sheet-list",
+  "module-type 取值的坑": "浏览器发这个头时读的是 cookie `hr-0.0.0-menuPath`（最近一次路由守卫写入的菜单路径），cookie 是**同一个浏览器 profile 全局共享**的，不分标签页。所以只要同一浏览器里还有别的标签页在其他路由之间跳（本次是另一个并行任务在跑 /dashboard/assignment/assignment/list），这一页再发请求时头就会变成对方的 module-type（实测从 11 变成 12），而当前标签页的 URL 一个字都没变。下面三个请求是 cookie 指向本页（/dashboard/attendance/attendance-archive-sheet/list）时抓的，module-type=11 与规则表推导一致。",
+  "requests": [
+    {
+      "name": "列表页挂载时自动查询（无筛选条件）",
+      "能力": "attendance-archive-sheet-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&isArchived=1&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "选完月份（2026-08）后点「查询」",
+      "能力": "attendance-archive-sheet-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&isArchived=1&yearMonth=2026-08&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "「部门」选框的候选来源（type=1，页面 a-select 的取数）",
+      "能力": "attendance-org-search",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=1&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "「班组」选框的候选来源（type=2，同一接口的另一个 type）",
+      "能力": "attendance-org-search",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getAllOrganizationByType?type=2&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    }
+  ],
+  "对照组": {
+    "说明": "同一后端接口、另一个页面的请求 —— 用来证明 isArchived=1 是「考勤档案」与「考勤表」唯一的分界。这一条是访问 /dashboard/attendance/attendance-sheet/list 时发出的，不是本页。",
+    "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceSheet/page?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+    "页面": "/dashboard/attendance/attendance-sheet/list"
+  }
+}

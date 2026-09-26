@@ -1,0 +1,106 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开「班次管理」（/dashboard/attendance/attendance-shift/list）时捕获的真实浏览器请求。读链路（挂载 + 按名称查询）与写链路（新建 / 修改 / 删除）都在同一轮里抓下来了；token 已在页面内脱敏，从未离开浏览器。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/attendance/attendance-shift/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": ["attendance-shift-list", "attendance-shift-get", "attendance-shift-create", "attendance-shift-update", "attendance-shift-remove"],
+  "抓法": "先在门户首页（#/）装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到本页 —— 这是 SPA 的同文档导航，钩子不会被卸载。写链路照旧用真实鼠标点击：新建页的四个时间是 antd a-time-picker（value-format=HH:mm:ss），面板里的时/分/秒三列可以点，**必须点面板里的「确 定」才会落到表单**（不点确定、被别处重新渲染时值会回退成空 —— 实测踩过两次）。注意 `.ant-picker-ok button` 这个全局选择器会命中 DOM 里**别的**（零尺寸、不可见）面板的确定按钮，必须筛可见面板：`[...document.querySelectorAll('.ant-picker-panel')].filter(p=>p.offsetParent)[0].querySelector('.ant-picker-ok button')`。",
+  "module-type 取值的坑": "浏览器发这个头时读的是 cookie `hr-0.0.0-menuPath`（最近一次路由守卫写入的菜单路径），cookie 是**同一个浏览器 profile 全局共享**的，不分标签页。本轮实测：列表相关的三条（列表挂载 / 按名称查询 / 修改 / 删除）都是 module-type=11，与规则表推导一致；但**新建页那条 POST 一个 module-type 都没发**（下面的第 3 条），说明这个头在 `#/dashboard/attendance/attendance-shift/create/new` 这条路由上取不到值。SDK 侧不受影响：能力绑定的是**列表页路径** `/dashboard/attendance/attendance-shift/list`，`resolveModuleType` 确定性地给 11，与浏览器在列表页上的行为一致。",
+  "requests": [
+    {
+      "name": "列表页挂载时自动查询（无筛选条件）",
+      "能力": "attendance-shift-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkShift/page?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "表单里 `name` / `status` 两项初值都是 null，被 qs 的 skipNulls 丢掉 —— 浏览器不发，SDK 也不发。"
+    },
+    {
+      "name": "「班次名称」填「班」后点「查询」",
+      "能力": "attendance-shift-list",
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkShift/page?order=&orderField=&name=%E7%8F%AD&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "`name` 落在 orderField 之后、pageNo 之前。`status` 依旧没发 —— 这一页**没有任何控件绑定它**（详见 docs/pages/班次管理.md）。"
+    },
+    {
+      "name": "新建：填完四个时间点「保 存」（POST）",
+      "能力": "attendance-shift-create",
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkShift/save",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"name\":\"SDK-TEST-班次基准\",\"morningStartTime\":\"08:00:00\",\"morningEndTime\":\"11:30:00\",\"afternoonStartTime\":\"13:00:00\",\"afternoonEndTime\":\"17:00:00\"}",
+      "备注": "请求体就是表单的五个键，**键顺序与 `[mode]/[id].vue` 里 `form` 的声明顺序一致**。注意这一条**没有 module-type 头**（见上面的说明）。响应无 data，**不回传新 id** —— 要拿新记录只能回列表按名字查。"
+    },
+    {
+      "name": "编辑：改名后点「保 存」（PUT，整单替换）",
+      "能力": "attendance-shift-update",
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkShift",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"name\":\"SDK-TEST-班次改名\",\"morningStartTime\":\"08:00:00\",\"morningEndTime\":\"11:30:00\",\"afternoonStartTime\":\"13:00:00\",\"afternoonEndTime\":\"17:00:00\",\"id\":\"9\",\"status\":1,\"isDel\":0,\"createTime\":\"2026-09-20 22:38:06\",\"creator\":\"18243\",\"updateTime\":\"2026-09-20 22:38:06\",\"updater\":\"18243\"}",
+      "body 形状的来历": "编辑页 **不是**先 `GET /{id}`：列表的 `actionEdit(record, record)` 把整行塞进 bridge（`bridgeSet`），表单初始化是 `{...form, ...bridgeGet(bridgeID)}`，所以实测的 PUT body 是「表单五个键 + 被 bridge 带进来的整行服务端字段」。`id` 是**字符串** `\"9\"`（后端把 Long 序列化成字符串，与作业管理那条线一致）。SDK 的 update 只发「五个业务键 + id」，是这份 body 的子集 —— 见 docs/pages/班次管理.md 的「尚未覆盖」。"
+    },
+    {
+      "name": "删除：行内「删除」→ 气泡确认「删 除」（DELETE）",
+      "能力": "attendance-shift-remove",
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkShift/9",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "URL 里带 id（renren 通用删除 `${deleteURL}/${id}`），没有请求体。删除前有二次确认气泡「确认删除？」。"
+    }
+  ],
+  "get 与它为什么没有单独的浏览器请求": {
+    "接口": "GET /admin-api/org/hrWorkShift/{id}",
+    "出处": "后端 HrWorkShiftController 的 `@GetMapping(\"{id}\")`；前端**没有**调用点 —— 编辑页走的是 bridge（把列表行塞进 query），不是按 id 取详情。",
+    "所以": "这条请求**本轮没有从浏览器抓到**，它是后端确实提供、SDK 提供的能力（改之前先读当前值是整单替换的安全用法），但没有浏览器侧基准可对。SDK 的冒烟里对真实后端调过它。"
+  },
+  "本轮实测到的页面数据": {
+    "列表总数": 3,
+    "行": [
+      "1 / 沃德博创考勤班次 / 08:00:00~11:30:00 / 13:00:00~17:00:00",
+      "2 / 北京行政班 / 08:00:00~12:00:00 / 13:00:00~17:00:00",
+      "3 / 徐曼曼的 / 08:00:00~11:30:00 / 13:00:00~05:00:00"
+    ],
+    "备注": "新建 / 修改 / 删除三条写请求就是拿 `SDK-TEST-班次基准` 这条记录跑出来的，**同一轮里删掉了**，抓完复核列表仍是 3 条。"
+  }
+}

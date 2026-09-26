@@ -1,0 +1,54 @@
+{
+ "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开学习管理域「基础数据」两页时捕获的真实浏览器请求（全部只读）。token 已在页面内脱敏（含 URL 上的 token），从未离开浏览器。",
+ "捕获时间": "2026-09-21",
+ "环境": "https://webtest01.wodecorp.cn/portal.html#/",
+ "后端": "https://biz-api-test.wodecorp.cn",
+ "抓法": "先在门户首页装 tools/baseline/install-hook.js，再用**只改 hash** 的方式导航到目标页 —— SPA 的同文档导航不会卸载钩子，所以页面挂载时那条真实请求会被完整抓到。",
+ "requests": [
+  {
+   "页面": "学员管理",
+   "pagePath": "/dashboard/base/student/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/base/studystudent/page?order=&orderField=&name=&mobile=&isRelatedClass=&isRelatedLayer=&createTimeStart=&createTimeEnd=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "班级管理",
+   "pagePath": "/dashboard/grade/grade/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/study/grade/studygrade/page?order=&orderField=&name=&type=&studentNumMin=&studentNumMax=&teacherName=&teachingAssistantName=&orgId=&pageNo=1&pageSize=20&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  },
+  {
+   "页面": "班级管理",
+   "pagePath": "/dashboard/grade/grade/list",
+   "via": "xhr",
+   "method": "GET",
+   "url": "https://biz-api-test.wodecorp.cn/admin-api/org/organization/getRoleOrganizationTree?roleId=&_t=<ts>",
+   "headers": {
+    "tenant-id": "1",
+    "token": "<redacted>",
+    "module-type": "12",
+    "Accept-Language": "zh-CN",
+    "Accept": "application/json, text/plain, */*"
+   },
+   "body": null
+  }
+ ]
+}

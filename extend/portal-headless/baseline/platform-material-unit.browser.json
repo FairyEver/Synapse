@@ -1,0 +1,81 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "https://webtest01.wodecorp.cn",
+  "evidence": "真实浏览器：按SDK-TEST-U查询0条→新建sort9999→列表1条编码0054→编辑sort9998→列表确认→删除→相同筛选0条。ID51359为本次新建并已清理。非SDK线上冒烟。token页面内脱敏。",
+  "requests": [
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/materiel-unit/page?order=&orderField=&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/materiel-unit/page?order=&orderField=&unitName=SDK-TEST-U&pageNo=1&pageSize=20&_t=<ts>",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "via": "xhr",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/materiel-unit/create",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":null,\"unitName\":\"SDK-TEST-U\",\"sort\":9999}"
+    },
+    {
+      "via": "xhr",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/materiel-unit/get?_t=<ts>&id=51359",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "via": "xhr",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/materiel-unit/update",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":51359,\"unitName\":\"SDK-TEST-U\",\"unitCode\":\"0054\",\"dataType\":null,\"decimalPlaces\":null,\"sort\":9998,\"createTime\":\"2026-09-22 18:44:07\"}"
+    },
+    {
+      "via": "xhr",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/adminmanage-api/system/materiel-unit/delete?id=51359",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    }
+  ]
+}

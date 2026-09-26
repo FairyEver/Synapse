@@ -1,0 +1,53 @@
+{
+  "capturedAt": "2026-09-22",
+  "environment": "webtest01.wodecorp.cn",
+  "pagePath": "/dashboard/finance/setting/accounting-manage/list",
+  "sourceAnchors": {
+    "frontend": "d3cf56bdc76c73c5eb9252be84b9b39b3900b48e",
+    "backend": "dcb3f360194e63c33cfd7ef9df4360355ff13533"
+  },
+  "requests": [
+    {
+      "action": "list-default",
+      "method": "GET",
+      "url": "/admin-api/finance/accounting-manage/page?order=&orderField=&accountCode=&accountingName=&accountingStandardsApply=&periodYear=&status=0&pageNo=1&pageSize=20&_t=<ts>",
+      "absentHeaders": ["module-type"]
+    },
+    {
+      "action": "create-corporation-options",
+      "method": "GET",
+      "url": "/admin-api/org/corporation/page?pageNo=1&pageSize=200&_t=<ts>",
+      "absentHeaders": ["module-type"]
+    },
+    {
+      "action": "create-user-options",
+      "method": "GET",
+      "url": "/admin-api/sys/user/getUserBasicInfoPage?pageNo=1&pageSize=20&statusList=1%2C4&_t=<ts>",
+      "absentHeaders": ["module-type"]
+    },
+    {
+      "action": "create-period-options",
+      "method": "GET",
+      "url": "/admin-api/finance/accounting-period/page?pageSize=-1&status=0&_t=<ts>",
+      "absentHeaders": ["module-type"]
+    },
+    {
+      "action": "create-accuracy-options",
+      "method": "GET",
+      "url": "/admin-api/finance/accuracy-manage/page?pageSize=-1&status=0&_t=<ts>",
+      "absentHeaders": ["module-type"]
+    }
+  ],
+  "ui": {
+    "listColumns": ["账套名称", "账套编码", "所属法人单位", "会计准则", "会计期间", "状态", "启用时间"],
+    "rowActions": ["停用或启用", "详情"],
+    "detailNetworkRequests": [],
+    "writeSubmitted": false,
+    "exportClicked": false
+  },
+  "notes": [
+    "详情直接消费列表行与路由桥接状态，点击详情没有新增HTTP。",
+    "未执行导出、创建或启停；本文件不证明这些动作在真实部署成功。",
+    "法人组件的PC实现会无关键字分页拉取；SDK按无头长候选规则要求关键字并限制小页，因此候选URL不会逐字复刻该条浏览器请求。"
+  ]
+}

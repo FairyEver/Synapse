@@ -1,0 +1,145 @@
+{
+  "说明": "由 bsk 在 https://webtest01.wodecorp.cn 打开「排班管理」（/dashboard/attendance/attendance-team/list）时捕获的真实浏览器请求。外层（考勤组 CRUD）与内层（排班读写）都在同一轮里抓下来了；token 已在页面内脱敏，从未离开浏览器。",
+  "捕获时间": "2026-09-20",
+  "环境": "https://webtest01.wodecorp.cn/portal.html#/dashboard/attendance/attendance-team/list",
+  "后端": "https://biz-api-test.wodecorp.cn",
+  "能力": [
+    "attendance-team-list",
+    "attendance-team-get",
+    "attendance-team-create",
+    "attendance-team-update",
+    "attendance-team-remove",
+    "attendance-team-schedule-get",
+    "attendance-team-schedule-save"
+  ],
+  "抓法": "先在门户首页（#/）装 tools/baseline/install-hook.js（用只改 hash 的 SPA 导航到这个钩子不会被卸载），再照页面的真实鼠标点击走一遍：列表挂载 → 填「考勤组名称」+ 选「考勤类型」→ 查询 → 新建（填名 + 「选择班次」弹窗里点一行 + 保存）→ 行内「编辑」（改名字 + 保存）→ 行内「排班管理」（选日期 + 确定）→ 行内「删除」→ 气泡「删除」确认。写链路用的记录名是 SDK-TEST-组-030131（17 字，在页面 20 字规则内），改名成 SDK-TEST-改-030131，**同一轮里删掉了**，收尾复核列表仍是最初的 3 条。",
+  "module-type 取值的坑（本轮实测踩到）": [
+    "浏览器发这个头时读的是 cookie `hr-0.0.0-menuPath`（最近一次路由守卫写入的菜单路径）。cookie 是**同一个浏览器 profile 全局共享**的，不分标签页。",
+    "本轮基线里第 1、2、4、5 条是 module-type=11（组织管理），与规则表对 /dashboard/attendance/attendance-team/list 的推导一致；第 3、6、8 条抓到的是 12 / 15 —— 那是**并行标签页污染**，不是这一页的取值：抓完之后读 cookie，里面躺的是 /dashboard/base/management-center/list，既不是本页、也不是本轮任何一次导航的目标。",
+    "⇒ 照抄抓到的那一次会得出错误结论。SDK 的能力全部绑在**列表页路径**上，resolveModuleType 确定性地给 11（matchedBy: 'rule'），与浏览器在列表页上的行为一致。抓基准时这个头**仍然必须拿规则表复核**。",
+    "同样的坑 docs/pages/班次管理.md 记过一次（那次是「新建页取不到值」），这里是「被别的标签页改掉」这一种。"
+  ],
+  "头部缺失": [
+    "第 2、4、7 条只逐条打印过 method + url（`__phCap.map(r => r.method + ' ' + r.url.split('?')[0])`），headers 本轮没有单独 dump，所以记成 null —— 宁可空着，也不把「按构造应该是」当成「实测是」。这三条的 module-type 因此没有记录。",
+    "第 4 条的 **query 也一并被截掉了**（那一次打印用的是 `r.url.split('?')[0]`），所以它的 url 里没有 `_t` —— 实测（`smoke/read-attendance-team.mjs` ③）SDK 发出的详情 URL 是 `/admin-api/org/hrAttendanceGroup/3?_t=<ts>`。测试对第 4 条**只比 path**，不拿「按构造应该是」去补 query。第 2、7 条打印的是完整 url，query 都在。"
+  ],
+  "requests": [
+    {
+      "name": "列表挂载",
+      "能力": "attendance-team-list",
+      "触发": "`list.vue` 的 `rrList.logicFetch()`（进页面时）",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceGroup/page?order=&orderField=&pageNo=1&pageSize=20&_t=1789916012558",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null
+    },
+    {
+      "name": "列表按名称 + 类型筛选",
+      "能力": "attendance-team-list",
+      "触发": "填「考勤组名称」=考勤、选「考勤类型」=标准工时，点「查 询」",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceGroup/page?order=&orderField=&name=%E8%80%83%E5%8B%A4&type=1&pageNo=1&pageSize=20&_t=1789916023013",
+      "headers": null,
+      "body": null,
+      "备注": "**type 是真参数**（页面上有 common-select-dropdown 绑着它）。与班次管理的 status 不同 —— 那边声明了却没控件绑定、浏览器从不发，SDK 因此显式拒绝；这里照发。参数顺序：order, orderField, name, type, pageNo, pageSize。"
+    },
+    {
+      "name": "新建考勤组",
+      "能力": "attendance-team-create",
+      "触发": "列表页「新 建」→ create 页填名 + 「选择班次」弹窗选一行 → 「保 存」",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceGroup",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"name\":\"SDK-TEST-组-030131\",\"type\":1,\"shiftId\":\"6\"}",
+      "备注": "URL 与修改是**同一个**（`customSubmit` 里那两行三元表达式的两侧写的是同一个字符串），只有 method 不同。键顺序 = 表单 form 的键顺序。module-type=12 见上面的「取值的坑」。"
+    },
+    {
+      "name": "考勤组详情",
+      "能力": "attendance-team-get",
+      "触发": "行内「编辑」→ 编辑页 `customLoad`（这次是真的打了这个接口，不是走 bridge）",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceGroup/7",
+      "headers": null,
+      "body": null,
+      "备注": "导航到 `#/dashboard/attendance/attendance-team/edit/7?bridge=iycpcFdA` 时发的。与班次管理不同：那边编辑页只靠 bridge 带整行、没有任何调用点。"
+    },
+    {
+      "name": "修改考勤组",
+      "能力": "attendance-team-update",
+      "触发": "编辑页改名 → 「保 存」",
+      "method": "PUT",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceGroup",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "11",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"id\":\"7\",\"name\":\"SDK-TEST-改-030131\",\"type\":1,\"status\":1,\"isDel\":0,\"creator\":\"18243\",\"createTime\":\"2026-09-20 22:54:04\",\"updater\":\"18243\",\"updateTime\":\"2026-09-20 22:54:04\",\"shiftId\":\"6\",\"shiftName\":null,\"workShift\":{\"id\":\"6\",\"name\":\"北京行政班\",\"morningStartTime\":\"08:00:00\",\"morningEndTime\":\"12:00:00\",\"afternoonStartTime\":\"13:00:00\",\"afternoonEndTime\":\"17:00:00\",\"status\":1,\"isDel\":0,\"createTime\":\"2025-01-22 09:09:22\",\"creator\":\"16832\",\"updateTime\":\"2025-01-22 09:09:22\",\"updater\":\"16832\"},\"sheetUserRelDTOS\":null}",
+      "备注": "浏览器发的是 `customLoad` 灌进 form 的**整个服务端记录**（连 workShift 这个嵌套对象都在）。SDK 只发「三个业务键 + id」，是这份 body 的**子集** —— 见 docs/pages/排班管理.md 的「我们的 PUT 是浏览器那份 body 的子集」。"
+    },
+    {
+      "name": "删除考勤组",
+      "能力": "attendance-team-remove",
+      "触发": "行内「删除」→ 气泡「确认删除？」→「删 除」",
+      "method": "DELETE",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrAttendanceGroup/7",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "15",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*"
+      },
+      "body": null,
+      "备注": "没有请求体（与班次管理一致；作业管理那边是 DELETE + body [\"1071\"]）。module-type=15 见上面的「取值的坑」。"
+    },
+    {
+      "name": "读考勤组的排班",
+      "能力": "attendance-team-schedule-get",
+      "触发": "行内「排班管理」→ 弹窗 `schedual.vue` 的 `init()`",
+      "method": "GET",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkSchedule/getWorkSchedule?groupId=7&_t=1789916050446",
+      "headers": null,
+      "body": null,
+      "备注": "**只有 groupId 一个参数**。响应里 hrGroupUserRelEntityList 在没排过班时是 null，不是 []。"
+    },
+    {
+      "name": "存考勤组的排班",
+      "能力": "attendance-team-schedule-save",
+      "触发": "排班管理弹窗里选「排班日期」=2026-09-01（没选人）→「确 定」",
+      "method": "POST",
+      "url": "https://biz-api-test.wodecorp.cn/admin-api/org/hrWorkSchedule",
+      "headers": {
+        "tenant-id": "1",
+        "token": "<redacted>",
+        "module-type": "12",
+        "Accept-Language": "zh-CN",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json"
+      },
+      "body": "{\"groupId\":\"7\",\"startDate\":\"2026-09-01\",\"dutyIdList\":[],\"organizationIdList\":[],\"postIdList\":[],\"userIdList\":[]}",
+      "备注": "键顺序看着别扭（duty 在 organization 前面），来源是 schedual.vue 里 reactive({...}) 的书写顺序 —— 后面那次 `{...formState, 四个列表}` 展开**不改变已有键的位置**。四个列表永远发出去、空的就是 []：后端正是靠「四个都空」判定「清空该组所有排班」这条分支。module-type=12 见上面的「取值的坑」。"
+    }
+  ],
+  "没抓到的一条（如实记下）": {
+    "路径": "POST /org/organization/getUserByType",
+    "为什么没抓": "它只在「排班管理」弹窗里**该组已经有排班记录**时才会被调（schedual.vue 里那句 `if (result.hrGroupUserRelEntityList) { ... getUser() }`），本轮抓的时候那个组还是空的，所以没触发。",
+    "为什么也不打算补": "**它不进 SDK**。实测它的响应里对每个用户返回 `password`（MD5）/ `password2`（bcrypt）/ `salt` 三个字段 —— 把它做成能力等于把密码散列塞进 AI 的上下文。而且它是纯粹的渲染辅助（把已选的人显示成一行行），**不参与任何写载荷**。理由写在 src/capabilities/attendance-team.ts 的文件头。"
+  }
+}

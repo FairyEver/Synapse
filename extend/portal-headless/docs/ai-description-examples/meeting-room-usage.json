@@ -1,0 +1,79 @@
+{
+  "purpose": "按查询日期返回各会议室的已占用时段，为选择目标时间段没有占用的会议室提供依据。",
+  "whenToUse": "用户查询会议室占用或准备预定时使用；查询会议室名称、授权组织等基础资料时使用会议室列表能力。",
+  "boundaries": [
+    "返回根值是对象，不是会议室数组。",
+    "结果描述当前身份可查询到的会议室；不代表所有租户的全部会议室。",
+    "此查询不创建预定，也不锁定空闲时段。提交时仍可能发生占用冲突。"
+  ],
+  "effect": "read",
+  "prerequisites": ["SDK 已绑定用户会话和租户。", "按用户明确的目标日期查询，避免依赖尚未确定的后端默认日期。"],
+  "inputs": {
+    "date": {
+      "type": "string",
+      "required": false,
+      "nullable": false,
+      "meaning": "希望查看会议室占用的日历日期。",
+      "source": "用户给出的目标日期；相对日期应结合用户上下文解析。",
+      "format": "YYYY-MM-DD；业务时区尚未独立验证，不得无依据做跨时区转换。",
+      "omitted": "SDK 不发送 date 参数，由后端决定查询日期；当前证据没有证明其默认值一定是今天。",
+      "constraints": ["指定日期时原样传入该日期，不把整个时间段放进 date。"]
+    }
+  },
+  "output": {
+    "shape": "{ organizationId?: number, date?: string, meetingRooms: MeetingRoomUsageItem[] }；MeetingRoomUsageItem 的字段展开在 fields。",
+    "fields": [
+      {"path":"$","type":"object","meaning":"本次占用查询结果。","optional":false,"nullable":false},
+      {"path":"organizationId","type":"number","meaning":"响应中附带的组织标识；其组织口径尚未验证，不能擅自当成租户ID或会议室授权组织。","optional":true,"nullable":false,"source":"后端占用查询响应。"},
+      {"path":"date","type":"string","meaning":"响应中附带的查询日期；缺席时不能据此推断使用了哪个默认日期。","optional":true,"nullable":false,"format":"日历日期；具体回包格式的完整取值范围待验证。"},
+      {"path":"meetingRooms","type":"array","meaning":"返回范围内按会议室分组的占用结果；本响应没有分页总数字段。","optional":false,"nullable":false},
+      {"path":"meetingRooms[]","type":"object","meaning":"一个会议室及其占用时段。","optional":false,"nullable":false},
+      {"path":"meetingRooms[].meetingRoomId","type":"number","meaning":"会议室ID，可填写会议室预定准备能力的 meetingRoomId；不是申请单ID。","optional":false,"nullable":false,"source":"占用查询的会议室标识。"},
+      {"path":"meetingRooms[].meetingRoomName","type":"string","meaning":"对应会议室的展示名称，供用户识别候选。","optional":false,"nullable":false},
+      {"path":"meetingRooms[].timeSlots","type":"array","meaning":"该会议室在查询范围内的已占用时段。","optional":false,"nullable":false},
+      {"path":"meetingRooms[].timeSlots[]","type":"object","meaning":"一段占用信息。","optional":false,"nullable":false},
+      {"path":"meetingRooms[].timeSlots[].startTime","type":"string","meaning":"该段占用的开始时间。","optional":false,"nullable":false,"format":"格式及时区需按实际占用响应确认；不能假设为UTC。"},
+      {"path":"meetingRooms[].timeSlots[].endTime","type":"string","meaning":"该段占用的结束时间；相邻边界是否允许预定需以业务规则为准。","optional":false,"nullable":false,"format":"应与同一时段的 startTime 使用同一时间口径。"},
+      {"path":"meetingRooms[].timeSlots[].userName","type":"string","meaning":"该段占用附带的人员显示名称；不能当作人员ID。","optional":true,"nullable":false},
+      {"path":"meetingRooms[].timeSlots[].meetingName","type":"string","meaning":"占用对应的会议名称。","optional":true,"nullable":false}
+    ],
+    "empty": "meetingRooms=[] 表示本次查询没有返回会议室，不证明整个系统没有会议室。某房间 timeSlots=[] 表示本次范围内没有返回占用，仍不是预定已成功。缺少可选组织/日期/显示名称不等于请求失败；请求异常不得转为空数组。"
+  },
+  "consume": [
+    "先读取 meetingRooms，按用户指定会议室或候选条件定位房间，再检查该房间 timeSlots。",
+    "只报告查询到的占用事实。时间格式、时区或相邻边界尚不清楚时，不对边界时段作确定的空闲承诺。",
+    "用户要预定且候选已确定时，传递该项 meetingRoomId，并补齐名称、时间和人数进入准备步骤。"
+  ],
+  "steps": [
+    {
+      "role": "optional",
+      "when": "用户要预定，已选择一个目标时段无占用的会议室，并且时间口径已明确。",
+      "capabilityId": "meeting-application-prepare",
+      "mapping": {"meetingRoomId":"result.meetingRooms[].meetingRoomId"},
+      "instruction": "只取用户已确定的一个会议室ID，不把整列ID传入。其余 meetingName/startTime/endTime/attendeeCount 来自用户需求，缺项先补问；按目标能力契约校验。"
+    }
+  ],
+  "completion": "将所查询日期和会议室的占用情况告知用户；仅查询占用的任务到此完成。用户要预定时，本次查询不能作为预定成功的回执。",
+  "failures": [
+    "会话或权限错误时没有可靠的查询结果，应恢复相应会话/权限后重新查询，不得报成没有占用。",
+    "网络异常或无法解析响应时本次结果未知；此调用只读，可在恢复连接后重查。"
+  ],
+  "idempotency": null,
+  "evidence": [
+    {"source":"src/capabilities/meeting-application.ts: MeetingRoomUsageResponse / roomUsage","kind":"implementation","note":"证明SDK声明的根结构与参数透传；不是本次线上观测。"},
+    {"source":"src/capabilities/meeting-room.ts: MeetingRoomUsageItem","kind":"implementation","note":"证明分组、占用时段及可选显示字段的SDK类型。"},
+    {"source":"test/meeting-application.test.ts","kind":"test","note":"已有离线测试核对请求路径；未验证所有响应字段的线上取值。"}
+  ],
+  "gaps": [
+    "本样例依据SDK类型展开字段，尚未独立验证全部线上可空性、时间格式/时区及相邻时间边界。",
+    "organizationId的具体组织口径以及不传date时的后端默认日期未确认。"
+  ],
+  "examples": [
+    {
+      "scenario": "构造数据：指定日期返回一个暂无占用的会议室，ID仅用于示例。",
+      "args": {"date":"2026-09-22"},
+      "result": {"date":"2026-09-22","meetingRooms":[{"meetingRoomId":5,"meetingRoomName":"示例会议室","timeSlots":[]}]},
+      "interpretation": "读取meetingRooms中的一项；可把5作为该项示例的会议室ID传给准备步骤，但不能把样例ID用于真实环境，也不能说已经预定成功。"
+    }
+  ]
+}

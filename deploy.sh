@@ -322,6 +322,7 @@ sync_remote_code() {
     --include='/setup.sh' \
     --include='/restart.sh' \
     --include='/server/***' \
+    --include='/extend/***' \
     --include='/dashboard/***' \
     --include='/shared/***' \
     --include='/ui/***' \
