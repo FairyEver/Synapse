@@ -185,26 +185,22 @@ struct DriveBrowserView: View {
 
     // MARK: - 一页
 
-    /// 浏览列上的一页：面包屑、计数行、列表。
+    /// 浏览列上的一页：面包屑、计数行、列表，全在 `DriveBrowserList` 那一块 `List` 里。
     ///
     /// 标题与工具栏挂在页上而不是列表里：`DriveBrowserList` 是「一页的内容」，
-    /// 而这一页叫什么、右上角有什么是这一层的事。
+    /// 而这一页叫什么、右上角有什么是这一层的事。面包屑与计数行属于内容，因此也在里面 ——
+    /// **这一页是一整块 `List`，外面不套 `VStack`**：套了的话列表上方那一条带子落回容器的
+    /// 白底（这一页其余部分是 `insetGrouped` 的浅灰），导航栏那一片就是一块不动的白，
+    /// 而那一行字也不跟列表滚、收起大标题时还会和标题叠在一起。
     private func page(_ layer: DriveBrowserLayer) -> some View {
-        VStack(spacing: 0) {
-            if layer.isCurrent(in: model.drive), model.drive.path.count >= 2 {
-                // 深度够了才出现：根层下面没有可跳的上面一层，多一行面包屑只是多一行字。
-                breadcrumbs
-            }
-            countLine(layer)
-            DriveBrowserList(
-                layer: layer,
-                editing: $editing,
-                picked: $picked,
-                actions: actions,
-                isCompact: isCompact
-            )
-                .safeAreaInset(edge: .bottom) { sharingProgress }
-        }
+        DriveBrowserList(
+            layer: layer,
+            editing: $editing,
+            picked: $picked,
+            actions: actions,
+            isCompact: isCompact
+        )
+        .safeAreaInset(edge: .bottom) { sharingProgress }
         .navigationTitle(title(layer))
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbar }
@@ -254,60 +250,6 @@ struct DriveBrowserView: View {
             }
         }
         return model.drive.title
-    }
-
-    /// 大标题下面那一行「N 项 · 按名称升序」（Spec §4.2）。
-    ///
-    /// 数还不知道时（这一层还没取回来、或者正在重取）画灰条而不是说「0 项」：那是替服务端
-    /// 说话，而这一刻它还没回答。
-    private func countLine(_ layer: DriveBrowserLayer) -> some View {
-        let known = layer.isCurrent(in: model.drive) && !model.drive.loading
-        return Text(
-            DriveBrowserHeader.countLine(
-                count: known ? model.drive.visibleChildren.count : 0,
-                key: model.drive.sortKey,
-                ascending: model.drive.sortAscending
-            )
-        )
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .redacted(reason: known ? [] : .placeholder)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 8)
-    }
-
-    /// 面包屑：从「云盘」到这一层，点哪一级跳哪一级。
-    ///
-    /// 自己可横滚：层深下去之后这一行一定比屏幕宽，而最右边的当前层名是这一行里最该看见的
-    /// 那一个字。
-    private var breadcrumbs: some View {
-        let crumbs = model.drive.breadcrumbs
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
-                    if index > 0 {
-                        Image(systemName: "chevron.forward")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Button {
-                        jump(to: index)
-                    } label: {
-                        // 最小可点面积加在 label 上，不是加在按钮外面：加在外面只是把按钮摆在
-                        // 一块 44pt 高的空地中间（`Metrics.minimumTapTarget` 要的是可点区域）。
-                        Text(crumb.name)
-                            .font(.footnote)
-                            .fontWeight(index == crumbs.count - 1 ? .semibold : .regular)
-                            .foregroundStyle(index == crumbs.count - 1 ? Color.primary : Color.secondary)
-                            .lineLimit(1)
-                            .frame(minHeight: Metrics.minimumTapTarget)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 20)
-        }
     }
 
     /// 导出那一趟在做什么，加一个取消。
@@ -455,7 +397,8 @@ struct DriveBrowserView: View {
             export: { exportItems($0) },
             trash: { items in Task { await remove(items) } },
             openTrash: { path.append(.trash) },
-            openAssets: { path.append(.assets) }
+            openAssets: { path.append(.assets) },
+            jump: { jump(to: $0) }
         )
     }
 

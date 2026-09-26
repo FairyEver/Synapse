@@ -221,6 +221,9 @@ struct DriveBrowserActions {
     /// 所以不走 `open`。
     let openTrash: () -> Void
     let openAssets: () -> Void
+    /// 面包屑跳转：第 0 级是「云盘」。面包屑画在列表里（见 `pageHeader`），而跳转要改的是
+    /// 调用方那条栈，所以这一下也得问调用方。
+    let jump: (Int) -> Void
 }
 
 // MARK: - 列表
@@ -253,6 +256,26 @@ struct DriveBrowserList: View {
 
     var body: some View {
         List {
+            // 大标题下面那一行与面包屑是这一页的**内容**，跟列表一起滚。
+            //
+            // 这一块原先住在 `List` 外面（`DriveBrowserView` 里那个 `VStack`），有两个看得见
+            // 的后果：列表顶上的带子落回容器的白底，而这一页其余部分是 `insetGrouped` 的浅灰，
+            // 于是导航栏那一片永远是一块不动的白；那一行字也不跟列表滚，收起大标题时还会和
+            // 标题叠在一起。摆进列表里，这一页就与主页、终端列表是同一个形状：一整块 `List`，
+            // 背景自然是那层浅灰（`DriveBrowserView.page(_:)` 那条注释里记着这件事）。
+            Section {
+                pageHeader
+                    // 行本身不要卡片、不要内边距：这是「大标题下面的一行字」，不是一张卡。
+                    // 横向内边距由这一块自己带 —— 面包屑那条要横向滚到屏幕边。
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            // 贴着下面的内容：这一块是那一列的题注，不是与它平级的一段。默认的段间距是给
+            // 「两段内容」用的（本页其余几段之间那 35pt），题注与它描述的那张卡之间要的是
+            // 一行字的距离 —— 那点距离在 `countLine` 自己的内边距里，这里不留段间距。
+            .listSectionSpacing(.custom(0))
+
             if !uploads.isEmpty {
                 // 上传的项在本机是「刚发生的事」，排在列表最上面：用户刚选完文件，
                 // 要看到的是它们在动，而不是在下面找自己刚传的那一行。
@@ -323,6 +346,74 @@ struct DriveBrowserList: View {
     /// 顶上，用户会以为自己刚传的东西跑到了别的文件夹里。
     private var uploads: [DriveUploadItem] {
         model.driveUploader.items.filter { $0.parentId == layer.folderId }
+    }
+
+    // MARK: - 大标题下面那一块
+
+    /// 面包屑 +「N 项 · 按名称升序」。列表内容的第一段，跟着列表滚（理由见 `body`）。
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 深度够了才出现：根层下面没有可跳的上面一层，多一行面包屑只是多一行字。
+            if layer.isCurrent(in: model.drive), model.drive.path.count >= 2 {
+                breadcrumbs
+            }
+            countLine
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 大标题下面那一行「N 项 · 按名称升序」（Spec §4.2）。
+    ///
+    /// 数还不知道时（这一层还没取回来、或者正在重取）画灰条而不是说「0 项」：那是替服务端
+    /// 说话，而这一刻它还没回答。
+    private var countLine: some View {
+        let known = layer.isCurrent(in: model.drive) && !model.drive.loading
+        return Text(
+            DriveBrowserHeader.countLine(
+                count: known ? model.drive.visibleChildren.count : 0,
+                key: model.drive.sortKey,
+                ascending: model.drive.sortAscending
+            )
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .redacted(reason: known ? [] : .placeholder)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+    }
+
+    /// 面包屑：从「云盘」到这一层，点哪一级跳哪一级。
+    ///
+    /// 自己可横滚：层深下去之后这一行一定比屏幕宽，而最右边的当前层名是这一行里最该看见的
+    /// 那一个字。
+    private var breadcrumbs: some View {
+        let crumbs = model.drive.breadcrumbs
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
+                    if index > 0 {
+                        Image(systemName: "chevron.forward")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Button {
+                        actions.jump(index)
+                    } label: {
+                        // 最小可点面积加在 label 上，不是加在按钮外面：加在外面只是把按钮摆在
+                        // 一块 44pt 高的空地中间（`Metrics.minimumTapTarget` 要的是可点区域）。
+                        Text(crumb.name)
+                            .font(.footnote)
+                            .fontWeight(index == crumbs.count - 1 ? .semibold : .regular)
+                            .foregroundStyle(index == crumbs.count - 1 ? Color.primary : Color.secondary)
+                            .lineLimit(1)
+                            .frame(minHeight: Metrics.minimumTapTarget)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
     }
 
     // MARK: - 一行
