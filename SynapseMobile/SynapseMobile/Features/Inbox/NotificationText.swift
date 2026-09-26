@@ -4,6 +4,8 @@ import Foundation
 ///
 /// 它们全是读的人判断先后的依据：一条十分钟前的消息和一条三周前的消息，标题可能一字
 /// 不差，而列表上唯一把它们分开的就是这一小段时间。算错了不会崩，只会让人读错。
+///
+/// 角标上那个数字也是同一类东西：写多长直接决定它盖不盖住铃铛、会不会被顶栏裁掉。
 enum NotificationText {
     /// 消息行右上角那一小段时间。
     ///
@@ -53,6 +55,16 @@ enum NotificationText {
         if group.isEmpty { return time }
         if time.isEmpty { return group }
         return "\(group) · \(time)"
+    }
+
+    /// 铃铛角标上那个数字。
+    ///
+    /// 三位封顶：100 条起一律写「99+」。角标只有铃铛右上角那一小块地方，位数越多它越
+    /// 往左长，先压到铃铛身上，再长就会被 iOS 26 的工具栏内容框切掉一角；而多出来的位数
+    /// 并不增加信息 —— 「99+」和「1234」说的是同一件事：多到看不完。
+    static func badgeCount(_ unreadCount: Int) -> String {
+        let count = max(0, unreadCount)
+        return count < 100 ? "\(count)" : "99+"
     }
 
     /// 固定中文，理由和 `MeetingText.relativeTime` 是同一条：这个 App 的界面只有中文

@@ -106,4 +106,26 @@ struct NotificationTextTests {
         #expect(meta("", group: "测试", now: now) == "测试")
         #expect(meta("", group: nil, now: now) == "")
     }
+
+    // MARK: - 铃铛角标上那个数字
+
+    /// 边界钉在 99/100 上：99 条还是它自己，100 条起就不是了。
+    @Test func anUnreadCountBelowAHundredIsWrittenAsItIs() {
+        #expect(NotificationText.badgeCount(1) == "1")
+        #expect(NotificationText.badgeCount(98) == "98")
+        #expect(NotificationText.badgeCount(99) == "99")
+    }
+
+    /// 100 条起一律「99+」：角标只有铃铛角上那一小块地方，位数再多也放不下，
+    /// 而多出来的位数并不增加信息——「99+」和「1234」说的是同一件事。
+    @Test func aHundredOrMoreReadsAsNinetyNinePlus() {
+        #expect(NotificationText.badgeCount(100) == "99+")
+        #expect(NotificationText.badgeCount(1234) == "99+")
+        #expect(NotificationText.badgeCount(.max) == "99+")
+    }
+
+    /// 角标只在有未读时才画，所以负数到不了这里；但纯函数不该把它写成「-1」。
+    @Test func aNegativeCountReadsAsZero() {
+        #expect(NotificationText.badgeCount(-1) == "0")
+    }
 }
