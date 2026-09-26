@@ -110,6 +110,28 @@ struct DriveStoreTests {
         #expect(names(DriveSort.sorted(items, by: .size, ascending: false)) == ["c.md", "b.md", "a.md"])
     }
 
+    // MARK: - 显示方式
+
+    @Test func displayModeReadsBackWhatWasStored() {
+        #expect(DriveDisplayMode.stored("grid") == .grid)
+        #expect(DriveDisplayMode.stored("list") == .list)
+    }
+
+    @Test func unknownDisplayModeFallsBackToTheList() {
+        // 没写过（首次进来）、旧版本写的、被写坏的：三种都落到列表。读不出来时这一屏还得
+        // 能打开，而列表是那个「什么都不知道也能看」的形状。
+        #expect(DriveDisplayMode.stored(nil) == .list)
+        #expect(DriveDisplayMode.stored("") == .list)
+        #expect(DriveDisplayMode.stored("gallery") == .list)
+    }
+
+    @Test func displayModeHasALabelForEachOption() {
+        // 菜单里那一行字：两种各有一句，且不重样（重样的话「现在是哪种」就看不出来了）。
+        let labels = DriveDisplayMode.allCases.map(\.label)
+        #expect(labels == ["列表", "网格"])
+        #expect(Set(labels).count == labels.count)
+    }
+
     // MARK: - 路径栈
 
     @Test func drillingDownAndUpKeepsTheStackInOrder() {

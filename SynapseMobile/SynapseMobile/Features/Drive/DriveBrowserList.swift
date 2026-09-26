@@ -108,6 +108,37 @@ enum DriveBrowserHeader {
     }
 }
 
+// MARK: - 网格那一套尺寸
+
+/// 网格的尺寸。
+enum DriveGridMetrics {
+    /// 一格至少多宽。紧凑窗（iPhone 竖屏与横屏、iPad 半窗）。
+    ///
+    /// 92 这个数是按**iPhone 一屏正好三列**挑的：`insetGrouped` 的卡片两侧各让开 20、列内
+    /// 再按 `horizontalPadding` 各让开 16，所以 393 那一档可摆 321。`.adaptive` 取
+    /// `floor((可摆宽度 + spacing) / (minimumWidth + spacing))` —— 三列要
+    /// 92×3 + 10×2 = 296 宽、四列要 398，而 iPhone 全系可摆 321–368，夹在两者之间：
+    /// 竖屏横屏、SE 到 Pro Max 都是三列。
+    static let compactMinimumWidth: CGFloat = 92
+    /// 一格至少多宽。常规窗（iPad 全屏、iPhone Pro Max 横屏）。
+    ///
+    /// **这一档存在的理由是格子也要跟着变大，不只是列数变多。** 只用 92 那一档的话，13 英寸
+    /// 竖屏（可摆 973）会被 `.adaptive` 摊成九列、每格 103 宽 —— 手机上多大的格子，在 iPad 上
+    /// 还是多大，只是铺得更满。系统「文件」与「照片」在 iPad 上是把**格子**放大：140 在这块
+    /// 宽度上给六列、每格约 154，与「文件」App 在 13 英寸上的六列是一个密度。
+    ///
+    /// 验收驱动 `DriveAcceptanceUITests.test12` 量的是真格子的位置与宽度，不靠这段算术自证。
+    static let regularMinimumWidth: CGFloat = 140
+    /// 同一行里两格之间、与两行之间的间距。
+    static let spacing: CGFloat = 10
+    /// 网格一整块自己的上下内边距，与列表行的上下留白对齐。
+    static let verticalPadding: CGFloat = 12
+    /// 网格一整块左右的内边距。列表行是卡片自己让出的距离，网格这块是整行内容，得自己让。
+    static let horizontalPadding: CGFloat = 16
+    /// 图标本体的字号。列表行是 29（Spec §4.3），网格里这一格只有图标与名字，图标就该更大些。
+    static let iconSize: CGFloat = 44
+}
+
 // MARK: - 多选
 
 /// 多选那一套纯计算。
@@ -291,7 +322,12 @@ struct DriveBrowserList: View {
             }
 
             Section {
-                ForEach(items) { row($0) }
+                switch model.drive.displayMode {
+                case .list:
+                    ForEach(items) { row($0) }
+                case .grid:
+                    grid
+                }
             }
             if items.isEmpty || model.drive.errorMessage != nil {
                 statusSection
@@ -544,6 +580,104 @@ struct DriveBrowserList: View {
             Label("删除", systemImage: "trash")
         }
         .disabled(actions.busy)
+    }
+
+    // MARK: - 网格
+
+    /// 网格：一格一枚图标 + 名字，每行几个、格子多大由这一块实际有多宽算出来。
+    ///
+    /// **宽度才是判据**（`docs/agents/mobile-adaptive-layout.md` 那条），这里拿 `isCompact`
+    /// 代它：这一屏 2026-09-26 起不再有分栏、网格直接铺在窗口里，而 `isCompact` 说的就是
+    /// 「这个窗口窄」——两者是同一件事。分两档不是两套规则：窄窗用手机那一档最小宽度
+    /// （一屏三列），宽窗用大一档（格子跟着变大，见 `DriveGridMetrics`），摆几列都由
+    /// `.adaptive` 按真实宽度算。
+    ///
+    /// 整块摆成 `List` 里的**一行**，而不是把每一格都做成一行：一格里没有第二行字，逐格分行
+    /// 只会让 `List` 为每一格画一条分隔线。代价是这一段在 `List` 里不再逐格懒加载，
+    /// 而是一整块进内存——一页最多 100 项（`DriveStore.pageLimit`），可以接受。
+    private var grid: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(
+                        minimum: isCompact
+                            ? DriveGridMetrics.compactMinimumWidth
+                            : DriveGridMetrics.regularMinimumWidth
+                    ),
+                    spacing: DriveGridMetrics.spacing
+                )
+            ],
+            spacing: DriveGridMetrics.spacing
+        ) {
+            ForEach(items) { cell($0) }
+        }
+        .padding(.vertical, DriveGridMetrics.verticalPadding)
+        .listRowInsets(
+            EdgeInsets(
+                top: 0,
+                leading: DriveGridMetrics.horizontalPadding,
+                bottom: 0,
+                trailing: DriveGridMetrics.horizontalPadding
+            )
+        )
+        .listRowSeparator(.hidden)
+    }
+
+    /// 网格里的一格。
+    ///
+    /// 点法与列表行逐字相同：编辑态切换选择，否则打开。长按开的是**同一份菜单**（`menu(_:)`）
+    /// —— 网格里没有左滑，分享 / 重命名 / 移动到 / 导出 / 删除因此全落在那份菜单上，一条都
+    /// 不能少（列表行左滑有、菜单也有，是两条路；网格只剩这一条）。
+    private func cell(_ item: DriveBrowserItem) -> some View {
+        Button {
+            if editing {
+                toggle(item)
+            } else {
+                actions.open(item)
+            }
+        } label: {
+            VStack(spacing: 6) {
+                ZStack(alignment: .topTrailing) {
+                    DriveFileIcon(
+                        name: item.name,
+                        isFolder: item.isFolder,
+                        size: DriveGridMetrics.iconSize
+                    )
+                    if editing {
+                        Image(systemName: picked.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(picked.contains(item.id) ? Theme.ink : Color.secondary)
+                            // 压在图标的右上角，稍微往外错一点：正落在图标里会像是图标自己
+                            // 画上去的一笔。
+                            .offset(x: 6, y: -4)
+                    }
+                }
+                name(item)
+                    .font(.caption)
+                    .multilineTextAlignment(.center)
+                    // 名字一行还是两行，这一格都占两行的高度：不占的话同一行里几格的图标
+                    // 会一个高一个低。
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu { menu(item) }
+        // 验收驱动靠它把这一层的格子一个个数出来（`DriveAcceptanceUITests.test12`）。
+        .accessibilityIdentifier("drive-browser-grid-cell")
+        .onAppear { loadMoreIfNeeded(item) }
+    }
+
+    /// 一格底下那行名字。分享过的那一项在名字后面跟一枚 `link`，与列表行尾那一枚同一个意思。
+    ///
+    /// 用 `Text` 拼起来而不是摆一个 `HStack`：拼出来的那一枚是**文字流里的一段**，名字长到
+    /// 换行时它跟着最后一个字走，而不是被挤到格子的边上去。
+    private func name(_ item: DriveBrowserItem) -> Text {
+        let text = Text(item.name)
+        guard DriveBrowserRow.isShared(item) else { return text }
+        return text + Text(" ") + Text(Image(systemName: "link")).foregroundStyle(Color.secondary)
     }
 
     // MARK: - 上传那一组

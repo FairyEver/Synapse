@@ -283,6 +283,7 @@ struct DriveBrowserView: View {
                 Label("上传文件", systemImage: "square.and.arrow.up")
             }
             sortMenu
+            displayMenu
             Button {
                 editing.toggle()
             } label: {
@@ -331,6 +332,29 @@ struct DriveBrowserView: View {
             }
         } label: {
             Label("排序方式", systemImage: "arrow.up.arrow.down")
+        }
+    }
+
+    /// 显示方式：一行一项（列表），还是每行几个的网格。
+    ///
+    /// 与排序方式同一个形状：当前那一项带勾 —— 菜单收起之后，勾是「现在是哪一种」唯一还能
+    /// 看见的地方。它是本地视图偏好（`DriveDisplayMode`），落盘在 `DriveStore` 上，换一层、
+    /// 退出重进都照旧。
+    private var displayMenu: some View {
+        Menu {
+            ForEach(DriveDisplayMode.allCases, id: \.self) { mode in
+                Button {
+                    model.drive.setDisplayMode(mode)
+                } label: {
+                    if mode == model.drive.displayMode {
+                        Label(mode.label, systemImage: "checkmark")
+                    } else {
+                        Text(mode.label)
+                    }
+                }
+            }
+        } label: {
+            Label("显示方式", systemImage: "rectangle.grid.2x2")
         }
     }
 

@@ -806,4 +806,92 @@ final class DriveAcceptanceUITests: XCTestCase {
         capture(app, name: "91-返回手势之后")
     }
 
+    // MARK: - 第十二条：显示方式（列表 ↔ 网格）
+
+    /// 右上角 `···` 菜单里的「显示方式」：切到网格之后每行几格**跟着可用宽度走**，切回列表
+    /// 还原成一行一项。
+    ///
+    /// **格数只能量真格子。** `.adaptive` 摆几列是 SwiftUI 按这一块真实可摆的宽度算的，拿
+    /// `DriveGridMetrics` 那点算术去自证只能证明算术对，证明不了它摆出来的样子。所以这里读
+    /// 每个格子自己的 frame，按上边那一线分组（同一行的格子 y 相同），数第一行有几个。
+    ///
+    /// **两条腿的期望本来就不同，而且两边都要判。** iPhone 一屏（约 400 宽）是三格；iPad 全屏
+    /// 那一档屏宽一千出头，摆出来明显不止三格、而且每一格比手机上大。只判 iPhone 那三格的话，
+    /// 「宽窗也写死三列」过得了；只判 iPad 那一边的话，「宽窗照搬手机的小格子铺满」也过得了
+    /// —— 一条判「窄窗是三」，一条判「宽窗不止三格、而且格子跟着变大」，合起来才是这一套尺寸
+    /// 的样子。2026-09-26 两条都在真机上跑过（iPhone 17 Pro 与 iPad Pro 13 英寸 M4 各一遍）。
+    ///
+    /// 140 那个数是 `DriveGridMetrics.regularMinimumWidth`（界面测试另起一个进程，拿不到那个
+    /// 常量，所以这里写死并留出 1pt 的取整余量）。它要拦的是「宽窗仍然按 92 摆」——那时每格
+    /// 只有 100 出头，这条会红。
+    ///
+    /// iPad 半窗与三分之一窗仍然没量过（`simctl` 与 XCUITest 都改不了模拟器的窗口尺寸，
+    /// 见文件头那条已知空白）。
+    func test12DisplayModeSwitchesBetweenListAndGrid() throws {
+        let app = launchAndSignIn()
+        openDrive(app)
+        waitFor(app, "工作")
+
+        // 替身那一层只有三项，而「每行几格」要四项以上才判得出来：两列、三列、四列都能把三项
+        // 摆成同一行。先新建一个凑够四项，第一行才是「摆得下几个」的真凭据。
+        app.buttons["更多"].tap()
+        app.buttons["新建文件夹"].firstMatch.tap()
+        let field = app.textFields["drive-rename-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 15), "新建文件夹那一张没有出现")
+        replaceText(field, with: "网格用例")
+        app.buttons["创建"].firstMatch.tap()
+        waitFor(app, "网格用例")
+        capture(app, name: "95-列表")
+
+        switchDisplayMode(app, to: "网格")
+        let cells = app.buttons.matching(identifier: "drive-browser-grid-cell")
+        XCTAssertTrue(cells.firstMatch.waitForExistence(timeout: 15), "切到网格之后一格都没有")
+        capture(app, name: "96-网格")
+
+        let frames = (0..<cells.count)
+            .map { cells.element(boundBy: $0).frame }
+            .filter { $0.height > 0 }
+        XCTAssertGreaterThanOrEqual(frames.count, 4, "这一层的东西不够数出一行来")
+        let firstRowCount = frames.filter { abs($0.minY - frames[0].minY) < 2 }.count
+        if app.windows.firstMatch.frame.width < 700 {
+            XCTAssertEqual(firstRowCount, 3, "iPhone 一屏应当每行三格")
+        } else {
+            XCTAssertGreaterThan(firstRowCount, 3, "宽窗下仍然每行三格，说明列数没跟着可用宽度走")
+            XCTAssertGreaterThanOrEqual(
+                frames[0].width,
+                139,
+                "宽窗下每格还是手机那么大，说明格子的尺寸没跟着可用宽度走"
+            )
+        }
+
+        switchDisplayMode(app, to: "列表")
+        waitFor(app, "工作")
+        XCTAssertFalse(cells.firstMatch.exists, "切回列表之后网格的格子还在")
+        capture(app, name: "97-切回列表")
+    }
+
+    /// 从 `···` 菜单里选一种显示方式。菜单展开有动画，要等它出来再点。
+    private func switchDisplayMode(_ app: XCUIApplication, to label: String) {
+        app.buttons["更多"].tap()
+        menuOption(app, "显示方式").tap()
+        menuOption(app, label).tap()
+        // 摆法换过之后 `List` 要重摆这一段，等它落定再往下量。
+        sleep(2)
+    }
+
+    /// 菜单里的一项。
+    ///
+    /// 展开的 `Menu` 多数时候在 `buttons` 里查得到，而子菜单那一层有时只在 `menuItems` 里。
+    /// 两边都试，先出来的那个用它；都不出来才是真的没有。
+    private func menuOption(_ app: XCUIApplication, _ label: String) -> XCUIElement {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if app.buttons[label].exists { return app.buttons[label] }
+            if app.menuItems[label].exists { return app.menuItems[label] }
+            usleep(200_000)
+        }
+        XCTFail("菜单里没有「\(label)」")
+        return app.buttons[label]
+    }
+
 }

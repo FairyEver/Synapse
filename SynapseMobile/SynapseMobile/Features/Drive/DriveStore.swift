@@ -22,6 +22,31 @@ enum DriveSortKey: String, CaseIterable, Hashable {
     }
 }
 
+/// 一层怎么摆：一行一项，还是每行几个的网格。
+///
+/// 与排序同一类东西：**本地视图偏好**，服务端不知道这件事。列表是默认的那一种——网格是给
+/// 「一眼扫图标找人」用的，而列表多带一行大小与修改时间。
+enum DriveDisplayMode: String, CaseIterable, Hashable {
+    case list
+    case grid
+
+    /// 菜单里那一项的说法。
+    var label: String {
+        switch self {
+        case .list: return "列表"
+        case .grid: return "网格"
+        }
+    }
+
+    /// 落盘的那一格读出来是什么。
+    ///
+    /// 认不出来时（旧版本写的、写坏的）退回列表：一个读不出来的偏好不该让这一屏打不开，
+    /// 而列表是那个「什么都不知道时也能看」的形状。
+    static func stored(_ raw: String?) -> DriveDisplayMode {
+        raw.flatMap(DriveDisplayMode.init(rawValue:)) ?? .list
+    }
+}
+
 /// 一层列表的排序。
 ///
 /// 纯函数：偏好（哪个键、升还是降）由 `DriveStore` 读了当参数传进来，这一层**不碰**
@@ -656,9 +681,12 @@ final class DriveStore {
     /// 本地视图偏好（Spec §2.3）：服务端不接受排序参数，排序发生在已加载的这一段上。
     private(set) var sortKey: DriveSortKey
     private(set) var sortAscending: Bool
+    /// 列表还是网格。与上面两个同一类，只是它不改顺序、只改摆法。
+    private(set) var displayMode: DriveDisplayMode
 
     private static let sortKeyDefaultsKey = "SynapseDriveSortKey"
     private static let sortAscendingDefaultsKey = "SynapseDriveSortAscending"
+    private static let displayModeDefaultsKey = "SynapseDriveDisplayMode"
 
     /// 回收站 / 分享 / 公开素材一次要多少条。
     ///
@@ -679,6 +707,7 @@ final class DriveStore {
         sortAscending = defaults.object(forKey: Self.sortAscendingDefaultsKey) == nil
             ? true
             : defaults.bool(forKey: Self.sortAscendingDefaultsKey)
+        displayMode = DriveDisplayMode.stored(defaults.string(forKey: Self.displayModeDefaultsKey))
     }
 
     // MARK: - 派生
@@ -732,6 +761,16 @@ final class DriveStore {
         guard ascending != sortAscending else { return }
         sortAscending = ascending
         UserDefaults.standard.set(ascending, forKey: Self.sortAscendingDefaultsKey)
+    }
+
+    /// 换显示方式（列表 / 网格）。
+    ///
+    /// 与排序一样只改本机的看法：不发请求、不动 `layerGeneration`，已经取回来的这一层
+    /// 立刻按新摆法重画。落盘的是它自己那一格 —— 换一层、退出重进都照旧。
+    func setDisplayMode(_ mode: DriveDisplayMode) {
+        guard mode != displayMode else { return }
+        displayMode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.displayModeDefaultsKey)
     }
 
     // MARK: - 浏览
