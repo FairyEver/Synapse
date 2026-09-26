@@ -293,7 +293,11 @@ struct RootView: View {
             // 系统角标，颜色不改。SwiftUI 的 `TabView` 没有自定义 tab 角标颜色的 API，
             // 桥接 `UITabBarItem` 只在 iPhone 底栏生效、iPadOS 侧边栏做不到同色。
             // 「有人需要你」的琥珀色由主页里那枚铃铛自绘承担。
-            .badge(model.notifications.unreadCount)
+            //
+            // 写的是字符串而不是数字，为了让这里也走角标那条封顶规则（100 条起「99+」）。
+            // 代价是没了「0 就不画」这条：数字版按 0 隐藏，字符串版只认 nil，所以没有未读
+            // 时得传 nil，传 "0" 会在底栏上明晃晃挂一个 0。
+            .badge(unreadBadge)
             .tag(Tab.home)
 
             AdaptiveFeatureNavigation(
@@ -323,6 +327,15 @@ struct RootView: View {
             NotificationPanel(onOpenTerminal: openWaitingSession)
         }
         .newSessionSheet(isPresented: $isNewSessionPresented, onOpenCreated: openNewlyCreatedFromHome)
+    }
+
+    /// 底栏主页那一格的角标。
+    ///
+    /// 写法与主页铃铛上那枚同一份（`NotificationText.badgeCount`）：99 条以内照实写，100 条
+    /// 起「99+」。没有未读时传 nil —— 字符串版角标不认 0。
+    private var unreadBadge: String? {
+        let count = model.notifications.unreadCount
+        return count > 0 ? NotificationText.badgeCount(count) : nil
     }
 
     /// 从主页那张待处理卡进一个会话。

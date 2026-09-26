@@ -27,6 +27,25 @@ struct NotificationBadgePreferenceTests {
         #expect(NotificationBadgePreference.badgeCount(unreadCount: -1, enabled: true) == 0)
     }
 
+    /// 封顶：图标角标只收数字、写不出「+」，所以 100 条以上都写成 99 —— 它得和界面上
+    /// 那两枚写着「99+」的角标（主页铃铛、底栏主页那一格）对得上。
+    @Test func aLargeCountStopsAtTheLimit() {
+        #expect(NotificationBadgePreference.badgeCount(unreadCount: 99, enabled: true) == 99)
+        #expect(NotificationBadgePreference.badgeCount(unreadCount: 100, enabled: true) == 99)
+        #expect(NotificationBadgePreference.badgeCount(unreadCount: 1234, enabled: true) == 99)
+    }
+
+    /// 关掉总闸仍然是 0，不是「封顶后的 99」：关掉是要把已经画上去的数字擦掉。
+    @Test func aDisabledPreferenceWritesZeroEvenWhenCapped() {
+        #expect(NotificationBadgePreference.badgeCount(unreadCount: 1234, enabled: false) == 0)
+    }
+
+    /// 界面里能写字的角标和这里读同一个上限，两处不会各封各的。
+    @Test func theLimitIsTheOneTheTextSideReads() {
+        #expect(NotificationText.badgeCount(NotificationBadgePreference.badgeLimit) == "99")
+        #expect(NotificationText.badgeCount(NotificationBadgePreference.badgeLimit + 1) == "99+")
+    }
+
     /// **没存过就是开。** `UserDefaults.bool(forKey:)` 对缺失的 key 返回 `false`，
     /// 直接用它会让所有既有用户升级后静默失去角标。
     @Test func anAbsentPreferenceMeansEnabled() {

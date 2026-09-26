@@ -61,9 +61,11 @@ struct SettingsCategoriesView: View {
         return model.viewedDesktopIsOffline ? Color.secondary : Theme.running
     }
 
+    /// 未读数照角标那条规则封顶（`NotificationText.badgeCount`）：这一行说的是「有没有、
+    /// 多到什么程度」，不差那几个位数，而和铃铛、底栏写成两套数字更像两笔账。
     private var unreadValue: String? {
         let count = model.notifications.unreadCount
-        return count > 0 ? "\(count) 条未读" : nil
+        return count > 0 ? "\(NotificationText.badgeCount(count)) 条未读" : nil
     }
 
     private func row(_ category: SettingsCategory, value: String?, dot: Color? = nil) -> some View {

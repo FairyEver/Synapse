@@ -70,6 +70,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 - 有列表和详情的功能必须复用 `AdaptiveFeatureNavigation` 的选择与折叠模式：宽窗口列表、详情并排，紧凑窗口单列下钻；选中项和深链目标在旋转、窗口缩放、切 Tab 后保持一致。顶层功能导航使用系统自适应 Tab / Sidebar。
 - iPadOS 设置采用分类列表与详情；终端主画布按实际可用尺寸计算网格，窗口拖动中不得向桌面反复发送过渡尺寸。录音、通知和终端的现有业务状态不可因栏位折叠丢失。
 - 使用 SwiftUI 和系统控件、系统颜色、安全区与呈现方式；支持动态字体、VoiceOver、硬件键盘和指针。任何新的 iOS 页面都按 `docs/agents/mobile-adaptive-layout.md` 的宽窗、半窗、紧凑窗矩阵设计与验证。旧专题规格中的「不做 iPad 专门适配」仅代表当次范围，不再是后续功能的豁免。
+- 显示通知未读数的地方一律封顶：99 条以内照实写，超过写「99+」（App 图标角标只收数字，封在 99）。新增显示未读数的地方同样适用；四处现状、写法与理由见 `docs/agents/mobile-adaptive-layout.md` 的「通知数量显示」。
 
 ## Phase 0 架构硬约束
 

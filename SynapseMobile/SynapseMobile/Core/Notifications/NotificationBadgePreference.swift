@@ -12,6 +12,13 @@ import Foundation
 enum NotificationBadgePreference {
     static let key = "mobile.notificationBadge.enabled"
 
+    /// 一枚角标最多写到这个数：99 条以内照实写，再多就是「多到看不完」，位数不增加信息。
+    ///
+    /// 全应用的角标上限只有这一处。界面里能写字的角标（主页铃铛、底栏主页那一格）由
+    /// `NotificationText.badgeCount` 写成「99+」；App 图标那枚只收数字、写不出「+」，
+    /// 封在这个数上 —— 它的接口 `setBadgeCount` 只接受整数。
+    static let badgeLimit = 99
+
     /// 没存过就是开。
     ///
     /// `UserDefaults.bool(forKey:)` 对缺失的 key 返回 `false`，直接用它会让升级上来的
@@ -26,9 +33,12 @@ enum NotificationBadgePreference {
     }
 
     /// 该写进 App 图标角标的数字。纯函数，好判。
+    ///
+    /// 封在 `badgeLimit` 上：图标角标只收数字，写不出「+」，所以 100 条以上都写成 99。
+    /// 不封的话这枚角标会一直长，和界面上那两枚写着「99+」的对不上。
     static func badgeCount(unreadCount: Int, enabled: Bool) -> Int {
         guard enabled else { return 0 }
-        return max(0, unreadCount)
+        return min(max(0, unreadCount), badgeLimit)
     }
 
     /// 读偏好取该写的数字。

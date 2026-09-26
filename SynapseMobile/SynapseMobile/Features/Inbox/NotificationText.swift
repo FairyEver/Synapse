@@ -57,14 +57,17 @@ enum NotificationText {
         return "\(group) · \(time)"
     }
 
-    /// 铃铛角标上那个数字。
+    /// 角标上那个数字：99 条以内照实写，100 条起「99+」。
     ///
-    /// 三位封顶：100 条起一律写「99+」。角标只有铃铛右上角那一小块地方，位数越多它越
-    /// 往左长，先压到铃铛身上，再长就会被 iOS 26 的工具栏内容框切掉一角；而多出来的位数
-    /// 并不增加信息 —— 「99+」和「1234」说的是同一件事：多到看不完。
+    /// 角标只有那么一点地方，位数越多它越往左长，先压到铃铛身上，再长就会被 iOS 26 的
+    /// 工具栏内容框切掉一角；而多出来的位数并不增加信息 —— 「99+」和「1234」说的是同一
+    /// 件事：多到看不完。上限本身在 `NotificationBadgePreference.badgeLimit`，App 图标
+    /// 那枚角标也读同一处。
     static func badgeCount(_ unreadCount: Int) -> String {
         let count = max(0, unreadCount)
-        return count < 100 ? "\(count)" : "99+"
+        return count <= NotificationBadgePreference.badgeLimit
+            ? "\(count)"
+            : "\(NotificationBadgePreference.badgeLimit)+"
     }
 
     /// 固定中文，理由和 `MeetingText.relativeTime` 是同一条：这个 App 的界面只有中文

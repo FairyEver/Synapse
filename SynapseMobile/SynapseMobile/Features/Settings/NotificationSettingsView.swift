@@ -36,7 +36,8 @@ struct NotificationSettingsView: View {
                         Label("通知中心", systemImage: "bell")
                         Spacer(minLength: 8)
                         if model.notifications.unreadCount > 0 {
-                            Text("\(model.notifications.unreadCount) 条未读")
+                            // 与铃铛、底栏同一份写法，见 `NotificationText.badgeCount`。
+                            Text("\(NotificationText.badgeCount(model.notifications.unreadCount)) 条未读")
                                 .foregroundStyle(.secondary)
                         }
                         Image(systemName: "chevron.right")
