@@ -146,8 +146,14 @@ struct HomeView: View {
     /// 画，也是这个红，两处读的是同一个数字，颜色不一致就会像两套计数。红在这里只
     /// 表示「有未读」，不表示出错；琥珀仍然只留给「有人在等你回话」。
     ///
-    /// 角标挑在铃铛框的右上角外，所以**这一层不能被裁剪**：以后给这个按钮加背景或
-    /// 圆角时不要顺手加 `clipShape`，那会把角标切掉一半。
+    /// 角标挑在铃铛框的右上角外，于是它落在**这一项自己的内容框之外** —— 而 iOS 26
+    /// 起工具栏项自带背景，并把项的内容裁进背景里那块约 36pt 见方的地方（44pt 的圆往
+    /// 里收 4pt）。原先那 9/-8 的位移正好把角标推出框外，顶边和右边各被切掉一截。
+    /// 位移收到 `badgeOffset` 里那块框内，角标就完整了；iOS 18 没有这层背景也没有这层
+    /// 裁剪，原来的位移在那里本来就是完整的。
+    ///
+    /// 约束是那块框，不是铃铛：以后动这个按钮的背景、尺寸或图标，都要重新确认角标还在
+    /// 框内 —— 越界不会报错，只会被安静地切掉一角。
     private var bell: some View {
         Button(action: onOpenNotifications) {
             Image(systemName: "bell")
@@ -159,7 +165,7 @@ struct HomeView: View {
                             .padding(.horizontal, 4)
                             .frame(minWidth: 16, minHeight: 16)
                             .background(Color(uiColor: .systemRed), in: Capsule())
-                            .offset(x: 9, y: -8)
+                            .offset(x: badgeOffset.x, y: badgeOffset.y)
                     }
                 }
         }
@@ -169,6 +175,14 @@ struct HomeView: View {
                 ? "通知，\(model.notifications.unreadCount) 条未读"
                 : "通知"
         )
+    }
+
+    /// 角标相对铃铛右上角的位移，判据见 `bell` 的说明。
+    ///
+    /// 两版差的不是口味：iOS 26 那 36pt 的内容框只容得下 4pt，再多一点就会被裁；
+    /// iOS 18 上把角标推到框外才是它原本的样子。
+    private var badgeOffset: (x: CGFloat, y: CGFloat) {
+        if #available(iOS 26.0, *) { (4, -4) } else { (9, -8) }
     }
 
     /// 「N 个会话在等你」。
