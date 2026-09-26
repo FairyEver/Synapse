@@ -154,6 +154,11 @@ struct HomeView: View {
     ///
     /// 约束是那块框，不是铃铛：以后动这个按钮的背景、尺寸或图标，都要重新确认角标还在
     /// 框内 —— 越界不会报错，只会被安静地切掉一角。
+    ///
+    /// 角标还要按自己的内容定宽（`fixedSize`）：`.overlay` 只把铃铛那点宽度提给它，四位数
+    /// 在里面放不下就会折成两行，红底变成一块竖着的疙瘩。定宽之后它随数字向左长，右边始终
+    /// 挂在铃铛的右上角上，多少位都还是一行。位数太多时左端会顶到上面那块框，框得住四位数
+    /// ——够用了，真到了五位数再谈怎么缩。
     private var bell: some View {
         Button(action: onOpenNotifications) {
             Image(systemName: "bell")
@@ -162,9 +167,11 @@ struct HomeView: View {
                         Text("\(model.notifications.unreadCount)")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(Color.white)
+                            .lineLimit(1)
                             .padding(.horizontal, 4)
                             .frame(minWidth: 16, minHeight: 16)
                             .background(Color(uiColor: .systemRed), in: Capsule())
+                            .fixedSize()
                             .offset(x: badgeOffset.x, y: badgeOffset.y)
                     }
                 }
