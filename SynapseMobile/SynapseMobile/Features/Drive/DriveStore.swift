@@ -229,7 +229,7 @@ enum DrivePath {
 
     /// 下钻一级。
     ///
-    /// 文件进不了栈：点开一个文件是预览，它不改变「现在在哪一层」。根同理——它不进栈。
+    /// 文件进不了栈：点开一个文件是交给浏览器打开，它不改变「现在在哪一层」。根同理——它不进栈。
     static func pushing(_ item: DriveBrowserItem, onto path: [DriveBrowserItem]) -> [DriveBrowserItem] {
         guard item.isFolder, !item.isRoot else { return path }
         return path + [item]
@@ -496,6 +496,40 @@ enum DrivePublicAssetLink {
     }
 }
 
+// MARK: - 在浏览器里打开
+
+/// 一项在浏览器里打开的那条地址。
+///
+/// **与桌面端点开一项是同一条**：桌面端拿 id 拼 `{公开站点地址}/drive/items/{itemId}`
+/// （`desktop/electron/services/account-service.ts` 的 `currentOwnerDriveBrowserUrl`），而
+/// 服务端的 `browserUrl` 给的正是这条**站内路径**（相对路径，`shared/src/drive.ts` 的
+/// `DRIVE_OWNER_BROWSER_PATH_PREFIX`）接上源站的结果 —— 两者一致，这里照桌面端那条拼，
+/// 不必先绕服务端的字段再判它是不是相对路径。
+///
+/// 打开之后那一页由网页版云盘自己渲染（`dashboard/src/routes/_authenticated/drive/items/`）：
+/// 网页、Markdown、PDF、图片、Office 各长什么样由那条路由说了算，手机端不另画一套。
+enum DriveItemWebLink {
+    /// 服务端那一片路由：`drive.controller.ts` 的 `/drive/items/:itemId`。
+    static let pathPrefix = "/drive/items"
+
+    /// `{origin}/drive/items/{itemId}`。
+    ///
+    /// `origin` 是参数而不是在这里读 `AppConfiguration`：与 `DriveRoute.download`、
+    /// `DrivePublicAssetLink.url` 同一个理由 —— 那个键会被并行测试改写，纯函数不去读它，
+    /// 断言才是密闭的。
+    static func url(for item: DriveBrowserItem, origin: URL) -> URL {
+        let path = pathPrefix + "/" + escaped(item.id)
+        // 源站那一头由 `AppConfiguration.apiOrigin` 保证有 host，所以拼出来的一定是能开的
+        // 一条；真拼坏了（源站被写坏）时退回源站自己 —— 打开站点首页，好过按下去没反应。
+        return URL(string: origin.absoluteString + path) ?? origin
+    }
+
+    /// 路径段里的编码：与 `DrivePublicAssetLink` 里那一句同一条规则。
+    private static func escaped(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
+    }
+}
+
 // MARK: - 搜索词
 
 /// 搜索词的归一。
@@ -704,7 +738,7 @@ final class DriveStore {
 
     /// 下钻到一个文件夹。
     ///
-    /// 只对文件夹成立：文件点开是预览，不是一层。传进来的是文件时这一趟什么都不改
+    /// 只对文件夹成立：文件点开是交给浏览器打开，不是一层。传进来的是文件时这一趟什么都不改
     /// （`current` 与 `path` 是一对，只动一半就会让「现在在哪一层」这件事自相矛盾）。
     func open(itemId: String, using client: APIClient) async {
         await load(itemId: itemId, intending: .push, using: client)
@@ -793,7 +827,7 @@ final class DriveStore {
             switch intent {
             case .push:
                 guard snapshot.current.isFolder else {
-                    // 点开的是文件：`current` 与 `path` 一起不动，等预览那边自己取它的内容。
+                    // 点开的是文件：`current` 与 `path` 一起不动 —— 它不由这一屏打开。
                     return
                 }
                 // 打开根（不经过面包屑的那条路）就等于回根层。

@@ -3,7 +3,9 @@ import SwiftUI
 struct TerminalResourcesSheet: View {
     @Environment(\.dismiss) private var dismiss
     let store: TerminalStore
-    @State private var opened: TerminalResource?
+    /// 要在浏览器里打开的那一条。装的是共用的那个打开链接的能力（`LinkBrowser`），
+    /// 与云盘点开一个文件走的是同一条。
+    @State private var opened: WebLink?
     /// 每条链接问到的答案。没问到的就是没有键 —— 那时什么都不标，不拿「不知道」当失效。
     @State private var reachability: [String: TerminalResourceReachability] = [:]
 
@@ -11,7 +13,7 @@ struct TerminalResourcesSheet: View {
         NavigationStack {
             List(store.resources) { resource in
                 Button {
-                    opened = resource
+                    opened = WebLink(url: resource.url)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(resource.name).lineLimit(2)
@@ -41,9 +43,7 @@ struct TerminalResourcesSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .sheet(item: $opened) { resource in
-            TerminalResourceBrowser(url: resource.url) { opened = nil }
-        }
+        .linkBrowser($opened)
         .task(id: store.resources) { await checkReachability() }
     }
 

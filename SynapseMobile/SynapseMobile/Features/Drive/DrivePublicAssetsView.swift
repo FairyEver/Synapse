@@ -38,7 +38,7 @@ struct DrivePublicAssetsView: View {
     @Environment(SynapseAppModel.self) private var model
 
     /// 正在选文件 / 正在改名的那一张。两件事共用一片 sheet：同一个视图上挂两片 `.sheet`
-    /// 只有一片会出来，而且出来的可能是错的那一片（`DrivePreviewPane` 记着这一条）。
+    /// 只有一片会出来，而且出来的可能是错的那一片（`DriveBrowserView` 记着这一条）。
     @State private var sheet: Sheet?
     /// 刚传完那几条的直链：要摆到用户面前（Spec §4.7「上传后直接给出直链」）。
     /// 空数组表示不弹。

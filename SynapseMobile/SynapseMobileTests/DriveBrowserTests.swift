@@ -108,8 +108,10 @@ struct DriveBrowserTests {
     }
 
     @Test func theOpenActionIsNamedAfterTheKind() {
+        // 文件夹是下钻一层；文件交给系统浏览器 —— 叫法要说清去哪儿，只写「预览」会让人
+        // 以为还在这一屏里。
         #expect(DriveBrowserRow.openLabel(item("设计稿", folder: true)) == "打开")
-        #expect(DriveBrowserRow.openLabel(item()) == "预览")
+        #expect(DriveBrowserRow.openLabel(item()) == "在浏览器中打开")
     }
 
     /// 文件夹不能导出：服务端那条下载路由认的是单个文件。菜单里这一条置灰而不是藏起来，

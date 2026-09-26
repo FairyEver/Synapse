@@ -377,7 +377,7 @@ struct DriveShareSheet: View {
             Spacer(minLength: 8)
             Button { copy(value) } label: {
                 // 44pt 加在 label 上：加在按钮外面时按到边缘不算数（见
-                // `DrivePreviewPane.tappableLabel` 那段）。
+                // `DriveBrowserList` 里 `tappableLabel` 那段）。
                 Text("拷贝")
                     .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
             }

@@ -4,34 +4,33 @@ import UIKit
 
 /// 手机端云盘的浏览界面（Spec §4.2、§5.1、§5.2）。
 ///
-/// **这一屏自己带一个 `NavigationSplitView`**：左边是浏览列（文件夹逐层下钻），右边是预览
-/// 列，紧凑宽度折成一列。它因此是一整块内容区，**不能被推进任何 `NavigationStack`** ——
-/// 分栏视图里再套一条导航栈，紧凑窗要出现两条导航栏，返回手势落在哪一层也说不清。
-/// 调用方把它当作本 Tab 的一页摆出来（`RootView` 里那种「本 Tab 的一页」的写法）。
+/// **一条栈，只有一列。** 文件夹逐层下钻；文件交给系统浏览器打开（见 `open(_:)`），这一屏
+/// 不画文件内容。它因此是一整块内容区，**不能被推进任何 `NavigationStack`** —— 这一屏自己
+/// 那条栈与调用方那条撞在一起时，返回手势落在哪一层说不清。调用方把它当作本 Tab 的一页摆
+/// 出来（`RootView` 里那种「本 Tab 的一页」的写法）。
 ///
 /// 三件事在这里分工：浏览状态（在哪一层、加载标志、代次）全在 `DriveStore` 上，这一层不自己
-/// 发请求；行、多选与空/加载/失败三态在 `DriveBrowserList`；预览在 `DrivePreviewPane`。
-/// 这里管的是**跨这些块的东西**：撑起分栏、把栈与 store 的层对上、以及那几张对话框
-/// （`···` 菜单、行菜单与预览列的动作栏开的是同一批，所以由这里统一持有）。
+/// 发请求；行、多选与空/加载/失败三态在 `DriveBrowserList`；这一层管的是**跨这些块的东西**
+/// —— 把栈与 store 的层对上、打开链接，以及那几张对话框（`···` 菜单与行菜单开的是同一批，
+/// 所以由这里统一持有）。
 struct DriveBrowserView: View {
     /// 「返回主页」。回到哪儿由调用方决定 —— 这一屏不知道自己在哪个 Tab 里。
     let onExit: () -> Void
 
     @Environment(SynapseAppModel.self) private var model
 
-    /// 窗口现在有多宽。**只用来判「有没有第二列可以放预览」**，不看机型也不看屏幕尺寸：
-    /// 同一个 iPad 分屏时是紧凑、全屏时是常规，用户手上的窗口才是判据
-    /// （`docs/agents/mobile-adaptive-layout.md`）。
+    /// 窗口现在有多宽。**只用来判「这一层列表挂不挂下拉刷新」**（`refreshableIfCompact`），
+    /// 不看机型也不看屏幕尺寸：同一个 iPad 分屏时是紧凑、全屏时是常规，用户手上的窗口才是
+    /// 判据（`docs/agents/mobile-adaptive-layout.md`）。
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    /// 浏览列栈上的层：根一层，下钻的每个文件夹一层，三个整屏的列表页与紧凑窗里的预览
-    /// 也在这条栈上。
+    /// 栈上的层：根一层，下钻的每个文件夹一层，三个整屏的列表页也在这条栈上。
     ///
     /// 栈与 `DriveStore.path` 是同一件事的两种表示（一个是视图栈，一个是数据栈），
     /// 保持一致由 `layerChanged` 负责。
     @State private var path: [DriveRoute] = []
-    /// 宽窗下详情列里那一样东西。紧凑窗不用它（见 `DriveRoute.preview`）。
-    @State private var preview: DriveBrowserItem?
+    /// 要交给系统浏览器打开的那一项。非 nil 即呈现（`linkBrowser`），关掉之后清空。
+    @State private var link: WebLink?
 
     /// 多选。放在这里而不是列表里：`···` 菜单里那颗「选择」与列表内部的行都动它。
     @State private var editing = false
@@ -42,47 +41,25 @@ struct DriveBrowserView: View {
     /// 刚收起的这一张动过分享没有。见 `sheetDismissed` 与 `shareChanged`。
     @State private var shareChanged = false
 
-    /// 这一屏会开出来的那几张。收成一片 sheet：`···` 菜单、行菜单与预览列的动作栏开的是
-    /// 同一批对话框，而两片 sheet 挂在同一个视图上只有一片会出来。
+    /// 这一屏会开出来的那几张。收成一片 sheet：`···` 菜单与行菜单开的是同一批对话框，
+    /// 而两片 sheet 挂在同一个视图上只有一片会出来。
     @State private var sheet: Sheet?
-    /// 导出那一趟。与预览列自己那个是两份 —— 那里是「预览这一项」下的字节，这里是
-    /// 「导出选中的这些」下的字节，进度、取消与落地目录都各是各的。
+    /// 导出那一趟：行菜单与多选底栏上那两颗「导出」下下来的字节。
     @State private var export = DriveFileExport()
     /// 已经因为传完而重取过的上传项，见 `uploadsChanged`。
     @State private var seenUploads: Set<String> = []
-    /// 上一次栈变化是不是「窗口变宽、把预览那一页换成详情列」那一趟，见 `layerChanged`。
-    @State private var keepingPreview = false
     /// 栈上一次量出来的文件夹深度。
     ///
     /// `layerChanged` 判「层变没变」用的是它，而不是 store 的 `path.count`（后者在下钻时
     /// 已经先写好了，比不出变化）。初始值 0 对得上 `path` 的初始值：这一屏进来就停在根层。
     @State private var lastDepth = 0
 
-    /// 分栏现在摆几列。
-    ///
-    /// 常规宽度下得**明说要两列**，不能留给默认的 `.automatic`：这一屏活在 `.sidebarAdaptable`
-    /// 的 `TabView` 的一格里，默认值在 iPad 上会把浏览列整列收起来 —— 2026-09-25 在
-    /// iPad Pro 13 英寸（iPadOS 18）实测，进去只看得到预览列那句「选择一项来预览」，
-    /// 浏览列与栏上那枚「返回主页」都不在屏上，展开侧边栏出来的是 App 自己那三个 Tab，
-    /// 于是这一屏在 iPad 上没有文件、也没路可回。紧凑宽度照旧 `.automatic`（折成一列，
-    /// 由分栏自己决定停在哪一列）。
-    ///
-    /// 而且**不能把它存在 `@State` 里**：存了的话，系统在 iPad 上转过屏、切过标签之后再按
-    /// `.automatic` 摆一次时，我们那位「已经写进去了」不算变化 —— 同一个值再写一次不触发
-    /// 重算，收起来的浏览列就回不来（2026-09-25 实测：iPad 竖屏进云盘、下钻、转横屏，
-    /// 列表整列消失，只剩「选择一项来预览」，屏上也没有路把它叫回来）。这里给的是**算出来的
-    /// 常量**：每次重绘都按当下的宽度重新摆，系统收不动它。
-    private var columnVisibility: NavigationSplitViewVisibility {
-        isCompact ? .automatic : .doubleColumn
-    }
     /// 栈顶上一次是哪一格。判「是不是刚从一张整屏的列表页退回来」用它，见 `layerChanged`。
     @State private var lastRoute: DriveRoute?
 
-    /// 浏览列栈上的一格。
+    /// 栈上的一格。
     private enum DriveRoute: Hashable {
         case folder(DriveBrowserItem)
-        /// 紧凑窗里的文件预览。**只**在紧凑窗用，见 `open(_:)`。
-        case preview(DriveBrowserItem)
         case trash
         case assets
         case shares
@@ -125,25 +102,22 @@ struct DriveBrowserView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(columnVisibility)) {
-            browse
-        } detail: {
-            previewPane
-        }
-        // 对话框那一批挂在外层，导出那一批挂在浏览列上（见 `browse`）：分开挂是因为
-        // 同一个视图上挂两片 sheet 只有一片会出来，而且出来的可能是错的那一片。
-        .sheet(item: $sheet, onDismiss: sheetDismissed) { presented($0) }
-        .onChange(of: path) { _, routes in layerChanged(routes) }
-        .onChange(of: sizeClass) { _, new in widthChanged(new) }
-        .onChange(of: editing) { _, on in if !on { picked = [] } }
-        .onChange(of: model.driveUploader.items) { _, items in uploadsChanged(items) }
-        .task {
-            await enter()
-        }
-        .noticeOverlay(model)
+        browse
+            // 对话框那一批挂在外层，导出那一批挂在 `browse` 那一条栈上：分开挂是因为
+            // 同一个视图上挂两片 sheet 只有一片会出来，而且出来的可能是错的那一片。
+            .sheet(item: $sheet, onDismiss: sheetDismissed) { presented($0) }
+            // 打开链接也在这个外层：它盖住的是整块内容区，不是某一条栈上的一页。
+            .linkBrowser($link)
+            .onChange(of: path) { _, routes in layerChanged(routes) }
+            .onChange(of: editing) { _, on in if !on { picked = [] } }
+            .onChange(of: model.driveUploader.items) { _, items in uploadsChanged(items) }
+            .task {
+                await enter()
+            }
+            .noticeOverlay(model)
     }
 
-    // MARK: - 两列
+    // MARK: - 一条栈
 
     private var browse: some View {
         NavigationStack(path: $path) {
@@ -168,19 +142,6 @@ struct DriveBrowserView: View {
             // 问这一句的全部理由是大小，所以这一行只说大小。
             Text("共 \(DriveText.bytes(String(pending.totalBytes)))")
         }
-        .navigationSplitViewColumnWidth(min: 320, ideal: 360, max: 460)
-    }
-
-    /// 预览列。它自带空态、自带标题与动作栏（Task 7），这里只递进去要预览的那一项。
-    ///
-    /// 紧凑窗里这一列根本不会被显示（分栏折成单列，停在浏览列上），预览走栈上的一页——
-    /// 为什么不用 `preferredCompactColumn = .detail` 把这一列推上来，见 `open(_:)`。
-    private var previewPane: some View {
-        DrivePreviewPane(
-            item: preview,
-            onShare: { sheet = .share($0) },
-            onInfo: { sheet = .info($0) }
-        )
     }
 
     // MARK: - 一页
@@ -211,22 +172,12 @@ struct DriveBrowserView: View {
         switch route {
         case .folder(let item):
             page(.folder(item))
-        case .preview(let item):
-            // 紧凑窗里的预览：整块内容区，自带标题与动作栏。这里不另加标题 ——
-            // 它自己那一条头部已经写着名字了，导航栏上再来一次是同一句话说两遍。
-            DrivePreviewPane(
-                item: item,
-                onShare: { sheet = .share($0) },
-                onInfo: { sheet = .info($0) }
-            )
-            .navigationBarTitleDisplayMode(.inline)
         case .trash:
             // 三张整屏的列表页（Task 9）：从环境取 model、自带标题与 `.noticeOverlay`，
             // 所以这里只把它们推上栈，不再包一层 List，也不再挂一份 overlay。
             //
-            // 宽窄必须由这里传（它们住在这条分栏的浏览列里，自己读到的
-            // `horizontalSizeClass` 是列自己的，见 `refreshableIfCompact`）：这一个值决定
-            // 它们那条下拉刷新挂不挂。
+            // 宽窄必须由这里传（它们自己读到的 `horizontalSizeClass` 与窗口那一层不是一回事，
+            // 见 `refreshableIfCompact`）：这一个值决定它们那条下拉刷新挂不挂。
             DriveTrashView(isCompact: isCompact)
                 .environment(model)
         case .assets:
@@ -273,7 +224,7 @@ struct DriveBrowserView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    Button { export.cancel(.share) } label: {
+                    Button { export.cancel() } label: {
                         tappableLabel("取消")
                     }
                     .buttonStyle(.borderless)
@@ -402,45 +353,31 @@ struct DriveBrowserView: View {
         )
     }
 
-    /// 点一行。文件夹下钻（推一层），文件去预览。
+    /// 点一行。文件夹下钻（推一层），文件交给系统浏览器打开。
+    ///
+    /// **文件在这一屏里不画。** 服务端那条 `/drive/items/{itemId}` 是网页版云盘自己的一页
+    /// （`dashboard/src/routes/_authenticated/drive/items/`），网页、Markdown、PDF、图片、
+    /// Office 都由那一页渲染；桌面端点开一项走的正是它（`DriveItemWebLink` 那条注释里记着
+    /// 出处）。手机端与它一致，因此不再自己读文本、画图、调 QuickLook —— 那些读出来的都不是
+    /// 这一项本来的样子。
     ///
     /// **文件用它自己那一份，不拿 id 回 store 反查**：`DriveStore.open` 是给文件夹的
     /// （它拉的是子层快照），拿文件 id 去走那条路只会把当前这一层弄丢。
-    ///
-    /// 预览落到哪里按窗口宽度分（实测出来的，不是照着分栏的直觉写的）：
-    ///
-    /// - **常规宽度**：分栏并排，`preview` 交给详情列。
-    /// - **紧凑宽度**：预览是这条栈上推出来的一页。
-    ///
-    /// 紧凑窗本来该用 `preferredCompactColumn = .detail` 把详情列推上来，实测这么做站不住：
-    /// 用户在预览那一页按返回之后，系统弹的是它自己那条导航栈（栈深从 2 回到 1），而
-    /// `preferredCompactColumn` 仍停在 `.detail` —— 它既不会写回绑定，详情列的
-    /// `onDisappear` 也不触发（详情那一块在折起来的分栏里一直活着）。于是再点第二个文件时
-    /// `column = .detail` 不算变化，界面上什么都不会发生，看起来像点不动。
-    ///
-    /// 推一页则把这段状态整个绕开：返回手势、导航栏、深链目标都在同一条栈上，与文件夹下钻
-    /// 共用一套。`DrivePreviewPane` 本来就是「一整块内容区」（自带空态、头部与动作栏），
-    /// 推上来与放在详情列里长得一样。
     private func open(_ item: DriveBrowserItem) {
-        guard item.isFolder else {
-            if isCompact {
-                path.append(.preview(item))
-            } else {
-                preview = item
-            }
+        guard !item.isFolder else {
+            Task { await drill(into: item) }
             return
         }
-        Task { await drill(into: item) }
+        link = WebLink(url: DriveItemWebLink.url(for: item, origin: AppConfiguration.apiOrigin))
     }
 
-    /// 有没有第二列可以放预览。
+    /// 窗口是不是紧凑的。只用来判这一层列表挂不挂下拉刷新（`refreshableIfCompact`）。
     private var isCompact: Bool { sizeClass == .compact }
 
     /// 下钻一层。
     ///
     /// 先让 store 走一趟再推栈：store 说它没进去（这一项已经不是文件夹了、请求失败了）
-    /// 就不推 —— 栈上多一格空页面比这一次没反应更糟。推栈之后 `layerChanged` 会把
-    /// 多选与预览清掉。
+    /// 就不推 —— 栈上多一格空页面比这一次没反应更糟。推栈之后 `layerChanged` 会把多选清掉。
     ///
     /// **注意这里的写入次序**：store 的路径是在 `path.append` **之前**写好的，所以栈变的
     /// 那一刻 `model.drive.path.count` 已经等于新的深度了。`layerChanged` 判「层变没变」
@@ -475,7 +412,7 @@ struct DriveBrowserView: View {
     /// `exporting` 置灰，所以这道守卫在界面上是看得见的，不是一个闷掉的手势。
     private func exportItems(_ items: [DriveBrowserItem]) {
         guard !items.isEmpty, !busy, !exporting else { return }
-        export.download(items, purpose: .share, using: model)
+        export.download(items, using: model)
     }
 
     /// 这一屏正在下一批导出（进度行还在）。下完交给面板时 `progress` 就空了，那一趟不再算
@@ -508,15 +445,8 @@ struct DriveBrowserView: View {
 
     /// 栈变了：把 store 的层对齐，并清掉属于上一层的那几样东西。
     ///
-    /// 预览那一项与多选都是「上一层的事」：留着它们，下一层会看起来像是点过了一行。
+    /// 多选是「上一层的事」：留着它，下一层会看起来像是点过了一行。
     private func layerChanged(_ routes: [DriveRoute]) {
-        // `keepingPreview` 那一趟不是用户往回走，是「窗口变宽」把栈上那页预览换成了详情列的
-        // 选择（见 `widthChanged`）：刚写进去的那一项不该被这里抹掉。
-        if keepingPreview {
-            keepingPreview = false
-        } else {
-            preview = nil
-        }
         // 三个整屏的列表页不是一层文件夹：它们各自取数，store 的层不动。栈退回它们下面时
         // 也要把 store 扳回对应那一层（否则退回浏览页会看到上一层的列表）。
         let depth = routes.prefix { route in
@@ -532,10 +462,6 @@ struct DriveBrowserView: View {
         // 菜单的「打开」进文件夹是会发生的（那颗键只按 `busy` 置灰），回来时选择圈停在上一层
         // 的那几项上，工具条按 `picked.count` 说「已选 N 项」，而按钮作用的对象是过滤后
         // 的空集 —— 一串看起来能用、按下去什么都不发生的键。
-        //
-        // 宽度跨过 compact/regular 阈值时这条也会跑（`widthChanged` 把那页预览从栈上摘掉，
-        // 栈一变就走到这里），但文件夹深度没变，所以仍然提前返回：那不是「用户离开了这一层」，
-        // 而 `docs/agents/mobile-adaptive-layout.md` 写着折叠与展开不能重置选择。
         if depth != lastDepth {
             lastDepth = depth
             editing = false
@@ -567,22 +493,8 @@ struct DriveBrowserView: View {
     private static func isManagementRoute(_ route: DriveRoute?) -> Bool {
         switch route {
         case .trash, .assets, .shares: return true
-        case .folder, .preview, .none: return false
+        case .folder, .none: return false
         }
-    }
-
-    // MARK: - 窗口变宽了
-
-    /// 从紧凑转到常规：栈上那一页预览在分栏里没有位置（它只属于单列），换成详情列里的选择。
-    ///
-    /// 不处理的话会同时出现两处预览：侧栏那一列里推着一页预览，右边详情列还画着另一样东西。
-    /// 窗口宽度变了：换分栏的列数，并把紧凑窗里那一页预览收进详情列。
-    private func widthChanged(_ sizeClass: UserInterfaceSizeClass?) {
-        guard sizeClass != .compact else { return }
-        guard case .preview(let item)? = path.last else { return }
-        path.removeLast()
-        keepingPreview = true
-        preview = item
     }
 
     // MARK: - 对话框

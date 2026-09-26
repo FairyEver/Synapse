@@ -310,6 +310,11 @@ PUT 403 后只重 prepare 一次、`overwrite` 缺失时不弹确认。
 
 ## Task 6 — 浏览界面
 
+> **外壳已改（2026-09-26）。** 分栏去掉了（见 Task 7 那条批注）：这一屏只有一条
+> `NavigationStack`，文件夹逐层下钻；文件交给系统浏览器打开。下面「自带
+> `NavigationSplitView`：浏览列 + 预览列」那一行不再成立，其余（面包屑、标题、菜单、
+> 多选、上传、三态）照旧。
+
 **Files**
 - `SynapseMobile/SynapseMobile/Features/Drive/DriveBrowserView.swift`（新建）
 - `SynapseMobile/SynapseMobile/Features/Drive/DriveBrowserList.swift`（新建）
@@ -382,6 +387,15 @@ PUT 403 后只重 prepare 一次、`overwrite` 缺失时不弹确认。
 **Commit**：`feat: 手机端云盘的浏览界面与文件列表`
 
 ## Task 7 — 预览
+
+> **已被推翻（2026-09-26）。** 用户要求手机端点开一项与桌面端一致：不再在应用里画内容
+> （网页与 Markdown 显示源码没有意义），改为交给系统浏览器打开服务端那条网页路由
+> `{源站}/drive/items/{itemId}` —— 桌面端点开一项走的正是它。本任务下面这些「按
+> `previewKind` 分流、读文本、画图、调 QuickLook」的实现因此整份删掉
+> （`DrivePreviewPane`、`DriveQuickLook`、`DriveFileExport` 的预览那一趟），云盘那一屏也
+> 回到单列（详情那一栏随之没有）。`DriveFileExport` 的导出那一半继续有效。
+> 打开链接本身抽成了全 App 共用的能力：`DesignSystem/LinkBrowser.swift`（终端里嗅探到的
+> 资源也走它）。本任务其余内容作为当时的实现记录保留。
 
 **Files**
 - `SynapseMobile/SynapseMobile/Features/Drive/DrivePreviewPane.swift`（新建，整份）

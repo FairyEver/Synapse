@@ -6,19 +6,18 @@ import os
 
 /// 导出：把云盘里的字节下到临时目录，再交给系统分享面板。
 ///
-/// 只有一条路——「存储到文件」是面板里的一个动作，所以不再单独做一个导出按钮
+/// 只有一条路 ——「存储到文件」是面板里的一个动作，所以不再单独做一个导出按钮
 /// （Spec §5.4）。单个文件与多选走的是同一条：先把字节下到本机，再把一组文件 URL
-/// 交给面板；预览里的图片与 PDF 也从这里取本机那一份，省掉第二条下载通路。
+/// 交给面板。
 ///
 /// **下载必须自己带令牌。** owner 的下载路由在 `/api` 前缀之外，认的是
-/// `Authorization` 头；面板与 `QLPreviewController` 都是系统自己去读那些文件，加不了
-/// 自定义头。所以远程地址绝不能交给 `AsyncImage`、QuickLook 的远程模式或
-/// `SFSafariViewController` —— 字节一定先在 `APIClient.downloadDriveItem` 里落盘。
+/// `Authorization` 头；系统面板自己去读那些文件，加不了自定义头。所以远程地址绝不能
+/// 交给 `AsyncImage` 或 `SFSafariViewController` —— 字节一定先在
+/// `APIClient.downloadDriveItem` 里落盘。
 ///
-/// **两个用途各走一趟**，见 `Slot`：动作栏上「预览」与「导出」是并排的两颗按钮，而它们
-/// 原来是共用一份 task / progress / staged 的，于是互相拆台——正在预览的那一项按「导出」，
-/// 会把预览那一份删掉（预览列掉回「还没有下载到本机」，关掉面板也回不来）；反过来，
-/// 正在导出时任何一次预览取数都会静默取消它，一次用户主动发起的动作连一句话都没有就没了。
+/// 一趟导出自己一份状态，见 `Slot`：边下边看进度、随时取消、落地的那一份收在自己那个
+/// 目录里。这一屏只有它一趟（2026-09-26 起文件预览走系统浏览器，原来那条并行的预览下载
+/// 没有了），但状态仍然收在一个小结构里 —— 「这一趟在飞的是谁」这类判断不该散在调用方。
 @MainActor
 @Observable
 final class DriveFileExport {
@@ -38,24 +37,6 @@ final class DriveFileExport {
         let fraction: Double?
     }
 
-    /// 这一批字节下下来做什么用。
-    ///
-    /// 只有去向不同：交给系统面板，还是留给调用方（预览：图片要画出来、PDF 要交给
-    /// QuickLook）。下载、进度、取消、超过阈值先问一句，两条路走的是同一套——但状态各是
-    /// 各的，见 `Slot`。
-    enum Purpose: Equatable {
-        case share
-        case preview
-    }
-
-    /// 下好的那一组本地文件。
-    struct Staged: Equatable {
-        let files: [URL]
-        /// 这一批是为哪几项下的。预览那条路只有一项，落地时用它核对现在拿到的还是不是
-        /// 同一项——上一项的字节不该画到这一项上。
-        let itemIds: [String]
-    }
-
     /// 面板要分享的那一组本地文件。
     ///
     /// 单独包一层是因为 `sheet(item:)` 要一个身份：同一批文件连着导出两次也要能各弹
@@ -69,31 +50,23 @@ final class DriveFileExport {
     struct PendingConfirmation: Equatable {
         let items: [DriveBrowserItem]
         let totalBytes: Int64
-        let purpose: Purpose
     }
 
-    /// 一个用途自己那一趟：自己的 task、自己的进度、自己落地的那一份、自己的目录。
+    /// 这一趟：自己的 task、自己的进度、自己落地的那一份、自己的目录。
     ///
-    /// 两个小结构（这里一个类、外面两个实例）而不是一份共享状态，是因为「预览」与
-    /// 「导出」确实是两件事：一边在下载的时候另一边还要能看着、能开始、能各报各的进度。
-    /// 合在一起时后开始的那一趟必然要动到前一趟的状态，而用户看到的就是「我刚按的动作
-    /// 没了」。
+    /// 收成一个小结构而不是把几个变量摊在类上，是因为「这一趟是不是还在飞」「落地的是不是
+    /// 这一批」总是要一起判：散着写时，后开始的那一趟会顺手把它们改成自己的，而用户看到的
+    /// 就是「我刚按的那一下没了」。
     @MainActor
     @Observable
     final class Slot {
-        let purpose: Purpose
         fileprivate(set) var progress: Download?
-        fileprivate(set) var staged: Staged?
         /// 在飞的那一趟。
         @ObservationIgnored fileprivate var task: Task<Void, Never>?
         /// 第几趟。上一趟的最后一次进度回调不该落到接手那一趟的进度行上。
         @ObservationIgnored fileprivate var generation = 0
         /// 这一次落地的目录。换一趟就换一个，收尾时整棵删掉。
         @ObservationIgnored fileprivate var directory: URL?
-
-        init(purpose: Purpose) {
-            self.purpose = purpose
-        }
 
         /// 这一趟到此为止。
         ///
@@ -116,26 +89,22 @@ final class DriveFileExport {
                 try? FileManager.default.removeItem(at: directory)
             }
             directory = nil
-            staged = nil
         }
     }
 
     // MARK: - 状态
 
-    /// 预览那一趟：图片、PDF 那些要拿到本机字节才能画/打开的东西。
-    let preview: Slot
-    /// 导出那一趟：交给系统分享面板的那一批。
+    /// 这一趟：交给系统分享面板的那一批。
     let share: Slot
 
     private(set) var pendingConfirmation: PendingConfirmation?
     /// 面板该出来了。非 nil 即呈现；收起时调 `finishSharing()`。
     ///
-    /// 只留一份：一次只弹得出一片面板，而动作栏上那颗「导出」一次只发起一批。
+    /// 只留一份：一次只弹得出一片面板，一次导出也只发起一批。
     var shareRequest: ShareRequest?
 
     init() {
-        preview = Slot(purpose: .preview)
-        share = Slot(purpose: .share)
+        share = Slot()
     }
 
     // MARK: - 动作
@@ -143,28 +112,26 @@ final class DriveFileExport {
     /// 下这一批。
     ///
     /// 出现 `pendingConfirmation` 时先问一句，用户点头后调 `confirmPending(using:)`。
-    func download(_ items: [DriveBrowserItem], purpose: Purpose, using model: SynapseAppModel) {
+    func download(_ items: [DriveBrowserItem], using model: SynapseAppModel) {
         guard !items.isEmpty else { return }
-        // 同一个用途的上一趟先放掉：新的选择是用户后来的意思，两趟同时往一行进度上写只会
-        // 互相顶。取消是安全的——取消标志在，被放掉的那一趟不会再落任何状态。
-        // 只放掉这一个用途：另一个用途那一趟是用户按的另一件事，不该被这里掀掉。
-        cancel(purpose)
+        // 上一趟先放掉：新的选择是用户后来的意思，两趟同时往一行进度上写只会互相顶。
+        // 取消是安全的——取消标志在，被放掉的那一趟不会再落任何状态。
+        cancel()
         // 还没回答的那一问一起作废：它问的是上一批，用户换了选择之后再点「下载」，
-        // 下下来的会是上一批。这一问是模态的，弹着的时候按不到第二颗按钮，所以不存在
-        // 「另一问正开着」的处境。
+        // 下下来的会是上一批。这一问是模态的，弹着的时候按不到第二颗按钮。
         pendingConfirmation = nil
         if let total = Self.confirmationTotal(for: items) {
-            pendingConfirmation = PendingConfirmation(items: items, totalBytes: total, purpose: purpose)
+            pendingConfirmation = PendingConfirmation(items: items, totalBytes: total)
             return
         }
-        start(items, purpose: purpose, using: model)
+        start(items, using: model)
     }
 
     /// 用户点了「下载」。
     func confirmPending(using model: SynapseAppModel) {
         guard let pending = pendingConfirmation else { return }
         pendingConfirmation = nil
-        start(pending.items, purpose: pending.purpose, using: model)
+        start(pending.items, using: model)
     }
 
     /// 用户点了「取消」，或者把那一句划掉了。
@@ -172,14 +139,12 @@ final class DriveFileExport {
         pendingConfirmation = nil
     }
 
-    /// 停下某个用途那一趟，并放掉它落地的字节。进度行上那个「取消」用它。
+    /// 停下这一趟，并放掉它落地的字节。进度行上那个「取消」用它。
     ///
-    /// 落地的字节一起收：还在路上的是半个文件，已经落地的那些此刻没有第二处在读
-    /// （唯一读它的是这一屏，而这一屏正把它换回「还没有下载到本机」）。
-    func cancel(_ purpose: Purpose) {
-        let slot = slot(purpose)
-        slot.cancel()
-        slot.discard()
+    /// 落地的字节一起收：还在路上的是半个文件，已经落地的那些此刻没有第二处在读。
+    func cancel() {
+        share.cancel()
+        share.discard()
     }
 
     /// 面板收起了。
@@ -195,38 +160,24 @@ final class DriveFileExport {
         share.discard()
     }
 
-    /// 预览那一份不再需要了：换了一项，或者离开了这一屏。
-    ///
-    /// 只收预览那一趟。分享那一批一个字节都不动——它要么还没交给面板，要么面板正开着；
-    /// 顺手取消它等于把用户刚按下去的那一次导出吃掉，而这是原先共用一份状态的直接后果。
-    func releasePreview() {
-        cancel(.preview)
-    }
-
     // MARK: - 一趟
 
-    private func slot(_ purpose: Purpose) -> Slot {
-        purpose == .share ? share : preview
-    }
-
-    private func start(_ items: [DriveBrowserItem], purpose: Purpose, using model: SynapseAppModel) {
-        let slot = slot(purpose)
-        slot.generation += 1
-        let mine = slot.generation
-        slot.task = Task { [weak self] in
-            await self?.run(items, purpose: purpose, using: model, generation: mine)
+    private func start(_ items: [DriveBrowserItem], using model: SynapseAppModel) {
+        share.generation += 1
+        let mine = share.generation
+        share.task = Task { [weak self] in
+            await self?.run(items, using: model, generation: mine)
         }
     }
 
     private func run(
         _ items: [DriveBrowserItem],
-        purpose: Purpose,
         using model: SynapseAppModel,
         generation: Int
     ) async {
-        let slot = slot(purpose)
-        // 这一趟自己的那一份：同用途的前一趟已经在上面的 `cancel` 里放掉了，这里收的是更早
-        // 留下的目录（比如取消之后没再动过的那一个）。
+        let slot = share
+        // 这一趟自己的那一份：上一趟已经在上面的 `cancel` 里放掉了，这里收的是更早留下的
+        // 目录（比如取消之后没再动过的那一个）。
         slot.discard()
         let directory: URL
         do {
@@ -254,7 +205,7 @@ final class DriveFileExport {
                     // 直接在 `Task` 里引用弱捕获的 `self` 是「并发里碰一个可变捕获」。
                     guard let self else { return }
                     Task { @MainActor in
-                        self.land(item.name, fraction, purpose: purpose, generation: generation)
+                        self.land(item.name, fraction, generation: generation)
                     }
                 }
             } catch {
@@ -278,21 +229,17 @@ final class DriveFileExport {
             landed.append(destination)
         }
 
-        // 这一趟被取消时什么都不落：`progress` 与 `staged` 已经是接手那一趟的了。
+        // 这一趟被取消时什么都不落：`progress` 与那一份面板请求已经是接手那一趟的了。
         guard !Task.isCancelled, generation == slot.generation else { return }
         slot.task = nil
         slot.progress = nil
-        slot.staged = Staged(files: landed, itemIds: items.map(\.id))
-        if purpose == .share {
-            shareRequest = ShareRequest(files: landed)
-        }
+        shareRequest = ShareRequest(files: landed)
     }
 
     /// 一次进度回调。
-    private func land(_ name: String, _ fraction: Double, purpose: Purpose, generation: Int) {
-        let slot = slot(purpose)
-        guard generation == slot.generation else { return }
-        slot.progress = Download(name: name, fraction: fraction)
+    private func land(_ name: String, _ fraction: Double, generation: Int) {
+        guard generation == share.generation else { return }
+        share.progress = Download(name: name, fraction: fraction)
     }
 
     // MARK: - 落地
@@ -307,15 +254,15 @@ final class DriveFileExport {
         let directory = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         slot.directory = directory
-        sweep(root, keeping: [preview.directory, share.directory].compactMap { $0 })
+        sweep(root, keeping: [share.directory].compactMap { $0 })
         return directory
     }
 
     /// 清掉过期的那些。
     ///
     /// 上一趟开始时与面板收起时都会删掉当时那一份，但 App 在那之前被系统杀掉的话它会
-    /// 留在盘上，而临时目录系统不会替我们收。只清一天之前的：更近的那几份可能正被另一个
-    /// 界面用着（一个还开着的面板就在读它），而两个用途同时活着的那两份一定都得留下。
+    /// 留在盘上，而临时目录系统不会替我们收。只清一天之前的：更近的那一份可能正被另一个
+    /// 界面用着（一个还开着的面板就在读它）。
     private func sweep(_ root: URL, keeping: [URL]) {
         let manager = FileManager.default
         guard let entries = try? manager.contentsOfDirectory(

@@ -262,18 +262,15 @@ final class DriveAcceptanceUITests: XCTestCase {
 
     /// 界面每一层都在这一条栏上，多余的那一条一定要看得出来。
     ///
-    /// 判据是「这一屏现在只摆得一列」，落成一条 700pt 的窗口宽度线，**不是按设备型号排除
-    /// iPad**：宽窗下这一屏自己是一个 `NavigationSplitView`，浏览列与预览列各有一条导航栏，
-    /// 那两条是对的；折成一列时多出来的那一条才是缺陷。700 这个数把两种已知形状分开 ——
-    /// iPhone 竖屏最宽约 440、iPad 全屏竖屏最窄 744；横屏最宽的 iPhone（约 932）落在线以上，
-    /// 所以第 7 条那几条横屏用例读不到这条判据（那是它的已知空白，不是判据说它们通过了）。
+    /// **恒为 1，宽窄都一样。** 云盘那一屏 2026-09-26 起只有一列（文件预览改走系统浏览器，
+    /// 详情那一栏没有了，见 `DriveBrowserView`），所以「几条栏」不再随窗口宽窄变化 —— 原来
+    /// 那条 700pt 的窗口宽度线（宽窗下分栏的浏览列与预览列各有一条栏，两条是对的）因此撤掉：
+    /// 它在线以上直接返回，等于 iPad 上什么都不判。
     ///
-    /// **线以下的 iPad 从没跑过**：iPadOS 半窗 / 三分之一窗会落到 700 以下，那时这条判据
-    /// 本来应该生效，但 `simctl`、Stage Manager 和 XCUITest 都改不了模拟器的窗口尺寸，
-    /// 所以 `regular → compact` 的运行时转场一次都没量过 —— 缺口记在
+    /// **iPad 半窗与三分之一窗仍然没量过**（`simctl`、Stage Manager 和 XCUITest 都改不了
+    /// 模拟器的窗口尺寸）：形状上一条单列栈只有一条栏，但这一格没有实测证据 —— 缺口记在
     /// `docs/agents/mobile-adaptive-layout.md`。
     private func assertSingleNavigationBar(_ app: XCUIApplication, _ where_: String) {
-        guard app.windows.firstMatch.frame.width < 700 else { return }
         XCTAssertEqual(app.navigationBars.count, 1, "\(where_)出现了不止一条导航栏")
     }
 
@@ -711,6 +708,40 @@ final class DriveAcceptanceUITests: XCTestCase {
         capture(app, name: "70-深色外观")
     }
 
+    // MARK: - 第十三条：点开一个文件走的是系统浏览器
+
+    /// 点一行文件不在这一屏里画内容，而是交给系统浏览器（`LinkBrowser`）打开网页版云盘那一页
+    /// —— 与桌面端点开一项是同一条地址（`account-service.ts` 的 `getDriveItemPreviewUrl`；
+    /// 拼法在 `DriveItemWebLink`）。
+    ///
+    /// **只能断言「这一屏被盖住了」**：`SFSafariViewController` 的壳（地址栏、关闭键）与页面
+    /// 都由另一个进程画，它们不在这个 App 的控件树里，按它们问「在不在」永远问不出来。所以
+    /// 这里量的是这一页自己的东西还够不够得着 —— 够得着就说明什么都没有打开。
+    ///
+    /// 替身不认识这条站内路径（那是网页版云盘的路由，不是 `/api`），浏览器里那一页会是一个
+    /// 错误页。这一条只判「交出去了」，不判那一页画成什么样。
+    func test13OpeningAFileHandsItToTheBrowser() throws {
+        let app = launchAndSignIn()
+        openDrive(app)
+        waitFor(app, "工作")
+        tap(app, "工作")
+        waitFor(app, "周报.md")
+        capture(app, name: "98-下钻到文件")
+
+        let row = item(app, "周报.md")
+        XCTAssertTrue(waitForHittable(row, timeout: 15), "文件那一行点不着")
+        row.tap()
+
+        let backHome = app.buttons["drive-browser-back-home"]
+        let deadline = Date().addingTimeInterval(20)
+        while backHome.isHittable, Date() < deadline { usleep(200_000) }
+        XCTAssertFalse(
+            backHome.isHittable,
+            "点开一个文件之后这一屏还露在外面，说明浏览器没有打开"
+        )
+        capture(app, name: "99-已经交给浏览器")
+    }
+
     // MARK: - 第十条：从推入的页面（回收站）直接回主页
 
     /// 云盘那一格上「推入的页面」也有一条退回主页的路：顶上那枚「主页」标签（重按当前
@@ -743,12 +774,13 @@ final class DriveAcceptanceUITests: XCTestCase {
 
     // MARK: - Spec §10.3：紧凑窗里系统返回手势把人带回哪一层
 
-    /// 云盘那一页自己带一层 `NavigationStack`（分栏在紧凑窗里折起来时，那一层就是屏上这
-    /// 一层），下钻之后从屏幕左缘往回划，应当退回**上一个文件夹**；无论如何都不能把整页
-    /// 掀掉、也不能多出一条只剩返回键的导航栏 —— 那正是「云盘是这一格的一页、不在主页那个
-    /// 栈上」要保证的事（Spec §10.3；`mobile-adaptive-layout.md` 里那条功能页规则）。
+    /// 云盘那一页自己带一层 `NavigationStack`（这一屏就是这一格上的一页），下钻之后从屏幕
+    /// 左缘往回划，应当退回**上一个文件夹**；无论如何都不能把整页掀掉、也不能多出一条只剩
+    /// 返回键的导航栏 —— 那正是「云盘是这一格的一页、不在主页那个栈上」要保证的事
+    /// （Spec §10.3；`mobile-adaptive-layout.md` 里那条功能页规则）。
     ///
-    /// 宽窗（iPad 全屏）下这一屏是并排分栏，系统没有这个返回手势，只断言人还在这一页。
+    /// **宽窗（iPad 全屏）下只断言人还在这一页**：那一档有没有这个返回手势没有实测过
+    /// （2026-09-26 之前这一屏在宽窗下是并排分栏，那时也不存在这一划，所以这一格一直是空的）。
     func test11EdgeSwipeBackStaysInsideDrive() throws {
         let app = launchAndSignIn()
         openDrive(app)

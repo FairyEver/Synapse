@@ -80,9 +80,10 @@ enum DriveBrowserRow {
         !(item.shareUrl ?? "").isEmpty
     }
 
-    /// 长按菜单里头一条的叫法：文件夹是「打开」，文件是「预览」。
+    /// 长按菜单里头一条的叫法：文件夹是「打开」（下钻一层），文件是「在浏览器中打开」
+    /// （交给系统浏览器，走服务端那条网页版路由，见 `DriveItemWebLink`）。
     static func openLabel(_ item: DriveBrowserItem) -> String {
-        item.isFolder ? "打开" : "预览"
+        item.isFolder ? "打开" : "在浏览器中打开"
     }
 
     /// 这一项能不能直接导出成文件。
@@ -242,11 +243,14 @@ struct DriveBrowserList: View {
 
     /// 窗口是不是紧凑的。**由调用方给，不在这里读 `horizontalSizeClass`。**
     ///
-    /// 这一条列表住在分栏的浏览列里，而列里读到的是那一列自己的宽度类别，不是窗口的：
-    /// 2026-09-25 在 iPad 全屏下拿「这条下拉刷新挂不挂」当探针量过 —— 同一个开关，读这里
-    /// 环境值的那一版**没能**把下拉刷新摘掉（列里读到的是 `compact`），改成由调用方
-    /// （`DriveBrowserView`，它读的是窗口那一层）传进来才摘掉。只用来判下拉刷新挂不挂，
-    /// 见 `refreshableIfCompact`。
+    /// 只用来判下拉刷新挂不挂，见 `refreshableIfCompact`。这个值 2026-09-25 是在分栏的浏览列里
+    /// 量出来的：列里读到的是那一列自己的宽度类别，不是窗口的 —— 拿「下拉刷新挂不挂」当探针
+    /// 试过，读环境值的那一版**没能**把它摘掉（iPad 全屏下列里读到的仍是 `compact`），改成由
+    /// 调用方（`DriveBrowserView`，它读的是窗口那一层）传进来才摘掉。
+    ///
+    /// 云盘那一屏 2026-09-26 起不再带分栏（文件预览改走系统浏览器），这条列表直接摆在这一格
+    /// 上，两种读法会得到同一个答案；仍然由调用方给 —— 它决定的是 iPad 上挂不挂下拉刷新，
+    /// 与谁读这个值无关。
     let isCompact: Bool
 
     @Environment(SynapseAppModel.self) private var model
@@ -496,7 +500,7 @@ struct DriveBrowserList: View {
         Button {
             actions.open(item)
         } label: {
-            Label(DriveBrowserRow.openLabel(item), systemImage: item.isFolder ? "folder" : "eye")
+            Label(DriveBrowserRow.openLabel(item), systemImage: item.isFolder ? "folder" : "safari")
         }
         .disabled(actions.busy)
 
@@ -816,6 +820,12 @@ extension View {
     /// `List` 也挂着下拉刷新，那一趟没崩（`DriveAcceptanceUITests.test10`）。所以这里不赌
     /// 「哪几条安全」——回收站、公开素材、分享管理这三屏推入同一个 `NavigationStack`、都在
     /// 宽窗下住在同一个浏览列里，四条按同一条规则办。
+    ///
+    /// 云盘那一屏 2026-09-26 起不再带分栏（详情那一栏没了，文件预览改走系统浏览器，见
+    /// `DriveBrowserView`），这四条列表因此不再住在分栏的列里。**门禁照旧**：当初的触发条件
+    /// 就没定死 —— 上面那一串逐种改法试到最后也只是「换一处读法」，而「换个容器就不会崩」
+    /// 是一条没量过的形状。要撤它，先照 `DriveAcceptanceUITests` 那一趟在 iPad 全屏下实测
+    /// 「从云盘换回主页」。
     ///
     /// 丢掉的只是 iPad 上「往下拉一把」这个手势：进屏、传完文件、分享改动过、从回收站那几屏
     /// 回来都已经各自重取，失败态还另有「重试」。紧凑宽度（iPhone、iPad 半窗）一点没变。
