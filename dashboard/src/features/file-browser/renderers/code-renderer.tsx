@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { useTheme } from '@/context/theme-provider'
 import { ApiError } from '@/lib/api'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import type { FileRendererEditContext } from './renderer-shell'
@@ -31,6 +32,7 @@ export function FileBrowserCodeRenderer({
   readonly editContext?: FileRendererEditContext | null
 }) {
   const language = getCodeEditorLanguage(path)
+  const { resolvedTheme } = useTheme()
   const savedValueRef = useRef(text)
   const [value, setValue] = useState(text)
   const [versionId, setVersionId] = useState(baseVersionId)
@@ -137,6 +139,7 @@ export function FileBrowserCodeRenderer({
         <Editor
           height='100%'
           language={language}
+          theme={resolvedTheme === 'dark' ? 'vs-dark' : 'light'}
           value={value}
           onChange={(nextValue) => {
             if (!canEdit) return

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
-import { syncThemeColorMeta } from './theme-provider'
+import { THEME_COOKIE_NAME, syncThemeColorMeta } from './theme-provider'
 
 describe('syncThemeColorMeta', () => {
   afterEach(() => {
@@ -30,5 +31,18 @@ describe('syncThemeColorMeta', () => {
 
     expect(document.head.querySelectorAll("meta[name='theme-color']")).toHaveLength(1)
     expect(meta.getAttribute('content')).toBe('oklch(0.129 0.042 264.695)')
+  })
+})
+
+describe('theme-init.v1.js', () => {
+  const script = readFileSync('public/theme-init.v1.js', 'utf8')
+
+  it('reads the theme cookie that ThemeProvider writes', () => {
+    expect(script).toContain(THEME_COOKIE_NAME)
+  })
+
+  it('falls back to the system preference and applies the class before the app boots', () => {
+    expect(script).toContain('(prefers-color-scheme: dark)')
+    expect(script).toContain("document.documentElement.classList.add(isDark ? 'dark' : 'light')")
   })
 })

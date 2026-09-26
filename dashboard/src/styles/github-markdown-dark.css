@@ -1,0 +1,278 @@
+/*
+ * GitHub 风格 Markdown 预览的暗色主题。
+ *
+ * 预览正文用的是 github-markdown-css：该包不提供随 .dark 类切换的主题，
+ * 只有分别按 light / dark 写死的两份文件、按 prefers-color-scheme 生效。
+ * 这里把 github-markdown-css@5.9.0 的 github-markdown-dark.css 与 light 版本
+ * 有差异的声明抄录出来，作用域收在 .dark 下，与 markdown-renderer 引的
+ * github-markdown-light.css 配合使用。（列出的 .pl-* 是 GitHub 自己的高亮类，
+ * 当前渲染管线不会产生，保留是为了与上游差异保持逐条对应。）
+ *
+ * 升级 github-markdown-css 时，diff 该包这两份文件，把差异同步到这里。
+ */
+
+.dark .markdown-body {
+  color-scheme: dark;
+  color: #f0f6fc;
+  background-color: #0d1117;
+}
+
+.dark .markdown-body a {
+  color: #4493f8;
+}
+
+.dark .markdown-body h1 {
+  border-bottom: 1px solid #3d444db3;
+}
+
+.dark .markdown-body mark {
+  background-color: #bb800926;
+  color: #f0f6fc;
+}
+
+.dark .markdown-body hr {
+  border-bottom: 1px solid #3d444db3;
+  background-color: #3d444d;
+}
+
+.dark .markdown-body ::placeholder {
+  color: #9198a1;
+}
+
+.dark .markdown-body kbd {
+  color: #f0f6fc;
+  background-color: #151b23;
+}
+
+.dark .markdown-body h2 {
+  border-bottom: 1px solid #3d444db3;
+}
+
+.dark .markdown-body h6 {
+  color: #9198a1;
+}
+
+.dark .markdown-body blockquote {
+  color: #9198a1;
+  border-left: .25em solid #3d444d;
+}
+
+.dark .markdown-body .absent {
+  color: #f85149;
+}
+
+.dark .markdown-body h1 .octicon-link,
+.dark .markdown-body h2 .octicon-link,
+.dark .markdown-body h3 .octicon-link,
+.dark .markdown-body h4 .octicon-link,
+.dark .markdown-body h5 .octicon-link,
+.dark .markdown-body h6 .octicon-link {
+  color: #f0f6fc;
+}
+
+.dark .markdown-body table th,
+.dark .markdown-body table td {
+  border: 1px solid #3d444d;
+}
+
+.dark .markdown-body table tr {
+  background-color: #0d1117;
+  border-top: 1px solid #3d444db3;
+}
+
+.dark .markdown-body table tr:nth-child(2n) {
+  background-color: #151b23;
+}
+
+.dark .markdown-body span.frame>span {
+  border: 1px solid #3d444d;
+}
+
+.dark .markdown-body span.frame span span {
+  color: #f0f6fc;
+}
+
+.dark .markdown-body code,
+.dark .markdown-body tt {
+  background-color: #656c7633;
+}
+
+.dark .markdown-body .highlight pre,
+.dark .markdown-body pre {
+  color: #f0f6fc;
+  background-color: #151b23;
+}
+
+.dark .markdown-body .csv-data .blob-num {
+  background: #0d1117;
+}
+
+.dark .markdown-body .csv-data th {
+  background: #151b23;
+}
+
+.dark .markdown-body .footnotes {
+  color: #9198a1;
+  border-top: 1px solid #3d444d;
+}
+
+.dark .markdown-body .footnotes li:target::before {
+  border: 2px solid #1f6feb;
+}
+
+.dark .markdown-body .footnotes li:target {
+  color: #f0f6fc;
+}
+
+.dark .markdown-body .pl-c {
+  color: #9198a1;
+}
+
+.dark .markdown-body .pl-c1,
+.dark .markdown-body .pl-s .pl-v {
+  color: #79c0ff;
+}
+
+.dark .markdown-body .pl-e,
+.dark .markdown-body .pl-en {
+  color: #d2a8ff;
+}
+
+.dark .markdown-body .pl-smi,
+.dark .markdown-body .pl-s .pl-s1 {
+  color: #f0f6fc;
+}
+
+.dark .markdown-body .pl-ent {
+  color: #7ee787;
+}
+
+.dark .markdown-body .pl-k {
+  color: #ff7b72;
+}
+
+.dark .markdown-body .pl-s,
+.dark .markdown-body .pl-pds,
+.dark .markdown-body .pl-s .pl-pse .pl-s1,
+.dark .markdown-body .pl-sr,
+.dark .markdown-body .pl-sr .pl-cce,
+.dark .markdown-body .pl-sr .pl-sre,
+.dark .markdown-body .pl-sr .pl-sra {
+  color: #a5d6ff;
+}
+
+.dark .markdown-body .pl-v,
+.dark .markdown-body .pl-smw {
+  color: #ffa657;
+}
+
+.dark .markdown-body .pl-bu {
+  color: #f85149;
+}
+
+.dark .markdown-body .pl-c2 {
+  color: #f0f6fc;
+  background-color: #b62324;
+}
+
+.dark .markdown-body .pl-sr .pl-cce {
+  color: #7ee787;
+}
+
+.dark .markdown-body .pl-ml {
+  color: #f2cc60;
+}
+
+.dark .markdown-body .pl-mh,
+.dark .markdown-body .pl-mh .pl-en,
+.dark .markdown-body .pl-ms {
+  color: #1f6feb;
+}
+
+.dark .markdown-body .pl-mi {
+  color: #f0f6fc;
+}
+
+.dark .markdown-body .pl-mb {
+  color: #f0f6fc;
+}
+
+.dark .markdown-body .pl-md {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
+.dark .markdown-body .pl-mi1 {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+
+.dark .markdown-body .pl-mc {
+  color: #ffdfb6;
+  background-color: #5a1e02;
+}
+
+.dark .markdown-body .pl-mi2 {
+  color: #f0f6fc;
+  background-color: #1158c7;
+}
+
+.dark .markdown-body .pl-mdr {
+  color: #d2a8ff;
+}
+
+.dark .markdown-body .pl-ba {
+  color: #9198a1;
+}
+
+.dark .markdown-body .pl-sg {
+  color: #3d444d;
+}
+
+.dark .markdown-body .pl-corl {
+  color: #a5d6ff;
+}
+
+.dark .markdown-body .markdown-alert {
+  border-left: .25em solid #3d444d;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-note {
+  border-left-color: #1f6feb;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: #4493f8;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-important {
+  border-left-color: #8957e5;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: #ab7df8;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-warning {
+  border-left-color: #9e6a03;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: #d29922;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-tip {
+  border-left-color: #238636;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: #3fb950;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-caution {
+  border-left-color: #da3633;
+}
+
+.dark .markdown-body .markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: #f85149;
+}

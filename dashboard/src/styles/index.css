@@ -4,6 +4,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
+@import './github-markdown-dark.css';
 
 @source '../../../ui/src';
 
@@ -249,6 +250,13 @@
 
 .drive-mdxeditor-content.drive-mdxeditor-content :is(th, td):not([data-tool-cell]) p {
   margin: 0;
+}
+
+/* mdxeditor 把工具栏弹层（段落类型、插入表格、链接对话框等）portal 到 body 上的
+   .mdxeditor-popup-container 里，并把弹层底面写死成 --basePageBg: white；深色模式下
+   会得到白底配浅灰字。这里接回主题底色，浅色下取值不变。 */
+.mdxeditor-popup-container.mdxeditor-popup-container {
+  --basePageBg: var(--background);
 }
 
 @keyframes slideDown {

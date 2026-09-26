@@ -90,7 +90,7 @@ export function IconLayoutDefault(props: SVGProps<SVGSVGElement>) {
           ry={2}
           opacity={0.8}
         />
-        <g stroke='#fff'>
+        <g className='stroke-primary-foreground'>
           <path
             fill='none'
             opacity={0.72}
@@ -109,7 +109,7 @@ export function IconLayoutDefault(props: SVGProps<SVGSVGElement>) {
             strokeWidth='2px'
             d='M9.02 20.88L18.4 20.88'
           />
-          <circle cx={10.98} cy={9.91} r={2.54} fill='#fff' opacity={0.8} />
+          <circle cx={10.98} cy={9.91} r={2.54} className='fill-primary-foreground' opacity={0.8} />
           <path
             fill='none'
             opacity={0.8}
