@@ -3,6 +3,7 @@
 让 AI 能以用户本人的身份驱动 Portal（`CodeReview_Projects_Js` 的 `app/portal`，固定分支 `test/portal/main`）的服务端 SDK。
 它不是 HTTP 服务，是一个 TypeScript 包；能力的来源是**从 Portal 前端源码推导 + 真实页面观察**，
 不是手写接口列表。
+对话与文档里的 `PH` 一律指本包，规则见仓库根 `AGENTS.md`。
 
 ## 先读什么
 

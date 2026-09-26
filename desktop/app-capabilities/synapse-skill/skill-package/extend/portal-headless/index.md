@@ -1,5 +1,7 @@
 # Portal Headless
 
+`PH` is this extension: when the user or the calling agent writes `PH`, they mean Portal Headless and its SDK, not a literal two-letter token.
+
 ## Reaching Synapse tools
 
 Synapse publishes only two tools: `search` and `invoke`. Search for `extend_portal_headless_credential_get` in domain `extend`, then invoke its exact returned name and schema. Business calls use the returned HTTP base URL; they are not MCP tools.

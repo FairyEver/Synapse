@@ -1,6 +1,6 @@
 ---
 name: synapse-skill
-description: Use when operating Synapse through MCP tools, checking or installing Synapse Desktop updates, fully restarting the desktop app for 帮我检查一下更新、帮我更新、帮我重启, creating Synapse Agent conversations in default or specified groups, listing conversation groups and available providers/models, creating with a requested model, opening, reading, observing, or controlling a Synapse Agent conversation from its deep link, submitting 问题反馈 to Synapse, or creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory. Trigger for requests such as 开发 Skill、新建 Skill、创建 Skill、修改现有 Skill、迁移 Skill, even when the user does not explicitly name Synapse Skill. Synapse domains include Database; Drive one-time upload versus persistent local file or folder sync, including 备份、镜像、挂载、绑定到云盘、持续同步 and keep synchronized requests; local Markdown document upload or sharing with linked images and HTML; Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, account sign-in, app capabilities including JSON repair, and extensions such as Portal Headless business operations.
+description: Use when operating Synapse through MCP tools, checking or installing Synapse Desktop updates, fully restarting the desktop app for 帮我检查一下更新、帮我更新、帮我重启, creating Synapse Agent conversations in default or specified groups, listing conversation groups and available providers/models, creating with a requested model, opening, reading, observing, or controlling a Synapse Agent conversation from its deep link, submitting 问题反馈 to Synapse, or creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory. Trigger for requests such as 开发 Skill、新建 Skill、创建 Skill、修改现有 Skill、迁移 Skill, even when the user does not explicitly name Synapse Skill. Synapse domains include Database; Drive one-time upload versus persistent local file or folder sync, including 备份、镜像、挂载、绑定到云盘、持续同步 and keep synchronized requests; local Markdown document upload or sharing with linked images and HTML; Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, account sign-in, app capabilities including JSON repair, and extensions such as Portal Headless, which the user may abbreviate as PH (缩写 PH), business operations.
 ---
 
 # Synapse Skill
@@ -16,7 +16,7 @@ The Synapse MCP server publishes only two tools. In Synapse Agent conversations 
 First classify the user's intent, then read the matching domain file before using tools:
 
 - Creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory -> `skill-authoring/index.md`
-- Portal Headless, Portal meeting-room occupancy, Portal yearly agreements, or other extensions -> `extend/index.md`
+- Portal Headless (PH, 缩写 PH), Portal meeting-room occupancy, Portal yearly agreements, or other extensions -> `extend/index.md`
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
 - Drive files, folders, one-time upload, persistent local file or folder sync, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
@@ -36,6 +36,8 @@ Treat an App-provided capability configured inside a Workflow as a Workflow oper
 If the task spans multiple domains, handle each part in order and read each relevant domain file.
 
 If the user message contains `sss`, treat it as Synapse Services Shortcut. Infer the real domain from surrounding intent. Do not default to Database just because `sss` appears.
+
+If the user message contains `PH`, read it as Portal Headless and route to `extend/index.md`. The same abbreviation covers both the Portal business extension and the local `extend/portal-headless/` SDK, so `用 PH 查一下…` and `改一下 PH` name the same target. Resolve it from context, and keep the literal meaning of `PH` only when the surrounding text clearly points elsewhere; ask one short clarifying question if it stays ambiguous.
 
 For scheduled-task, scheduler, cron, interval, enable/disable, run-history, or runtime-state requests, use the current Automation domain. Legacy `scheduler_*` MCP tools are retired and are not supported aliases.
 
