@@ -2,6 +2,27 @@ import type { CapabilityDefinition, ParamSpec } from './types.js'
 import type { PortalRequest } from './meeting-room.js'
 
 /**
+ * 本族请求函数接受的配置。
+ *
+ * 比 `PortalRequest` 只多一个 `httpInstance`：课程三页的列表走全局默认实例 `platform`，
+ * 但**弹窗与隐藏子路由**打的是 `smart-layer-admin` / `zhdj-sms`（host 与主站不同）。
+ * `PortalRequestConfig.httpInstance` 就是为「同一次页面操作里有多个实例」准备的
+ * （conventions 第 29 条），所以这里在请求级把它传下去，而不是给整页挂一条页面规则
+ * ——挂了 `HTTP_INSTANCE_PAGE_RULES` 会把这一页的**列表**也一起改道，那是错的。
+ *
+ * 这是 `PortalRequest` 的**超集**（多的字段全是可选的），所以现有的调用方
+ * （门面里那个 `(config) => call(页面, config)`）不需要改一行。
+ */
+export type StudyCourseRequest = <T>(config: {
+  url: string
+  method: 'get' | 'post' | 'put' | 'delete'
+  params?: unknown
+  data?: unknown
+  isOriginal?: boolean
+  httpInstance?: string
+}) => Promise<T>
+
+/**
  * 课程管理（学习管理域）—— `/dashboard/course/` 下的三个列表页。
  *
  * | 页面 | 菜单路径 | 路由文件 | 列表的 type |
@@ -98,6 +119,95 @@ export const STUDY_COURSE_IM_ROUTE_FILES = {
 
 /** 默认每页条数。`useListPageModule({ styleV2: true })` → 20（`list.js:391`） */
 export const DEFAULT_PAGE_SIZE = 20
+
+// ---------------------------------------------------------------------------
+// 弹窗 / 隐藏子路由：另一个 axios 实例上的那些请求
+// ---------------------------------------------------------------------------
+
+/**
+ * 三个页面的**列表**走全局默认实例 `platform`；但它们的**弹窗与隐藏子路由**打的是 `.lay` 网关，
+ * 那是**另一个实例**：host 不同（`smarterlayeradmintest.zhihuidanji.com/admin`）、
+ * 请求头只有 `token` + `Accept-Language`（**不发 `tenant-id`，也不发 `module-type`**）、
+ * 响应按 `smart-layer` 那一档拆包络（**不看 `ret`，看 `code`**）。
+ *
+ * 所以这一族能力在定义里钉死实例（`describe()` 的 entryPoints 会据此报出 baseUrlEnv），
+ * 实现里逐请求传 `httpInstance` —— 与 `study-teacher.ts` 同一条路（conventions 第 29 条：
+ * 同一次页面操作里可能有多个实例，实例是**逐请求**的输入）。
+ *
+ * **代价（conventions 第 27 条）**：调用方必须在 `createPageCall` 的
+ * `options.baseUrls['smart-layer-admin']` 里给这个实例配 baseURL，没配就**拒绝发请求**。
+ */
+export const STUDY_COURSE_LAY_HTTP_INSTANCE = 'smart-layer-admin'
+
+/**
+ * 图文课程「生成语音」弹窗走的是**第三个**实例：`app/portal/utils/http/zhdj-sms.js` 导出的
+ * `zhdjCMSHttp`（页面里 import 的名字就叫 `zhdjCMSHttp`，与文件名 `zhdj-sms.js` 不同名，
+ * 容易看错）。它**不是** `smart-layer-admin`：包络是 `zhdj-sms` 那一档
+ * （先看 `ret` 再看 `code`，且 `ret !== 'SUCCESS'` 而 `code === 200` 时**不抛**）。
+ *
+ * 测试环境里两个实例的 baseURL env **取值相同**（都是
+ * `https://smarterlayeradmintest.zhihuidanji.com/admin`），但它们是两个实例、两套规则 ——
+ * 按 baseURL 判实例会把这一档的包络判错。
+ */
+export const STUDY_COURSE_CMS_HTTP_INSTANCE = 'zhdj-sms'
+
+/** 即时通讯课程「群主」候选：隐藏新建表单里的 `group-owner-select.vue` */
+export const STUDY_COURSE_IM_STUDENT_LIST_PATH = '/study/base/studystudent/list'
+/** 讲师级别全量候选（页面用它把 `level` 渲染成中文名） */
+export const STUDY_COURSE_IM_TEACHER_LEVEL_PATH = '/manage/selectAllTeacherLevel.lay'
+/** 按班级取班课候选：语音合并弹窗的 `lesson-select.vue` 与隐藏新建表单共用 */
+export const STUDY_COURSE_IM_LESSON_LIST_PATH = '/study/lesson/studylessongraderel/getLessonListByGradeId'
+
+/** 图文 / 视频两页的评论页**共用**这一个 URL，靠 `type` 分片（1 图文 / 2 视频） */
+export const STUDY_COURSE_COMMENT_LIST_PATH = '/manage/getCommentList.lay'
+/** 图文课程评论页（隐藏路由） */
+export const STUDY_COURSE_TEXT_COMMENT_PAGE_PATH = '/dashboard/course/text-course/comment/[id]/item-list'
+/** 视频课程评论页（隐藏路由） */
+export const STUDY_COURSE_VIDEO_COMMENT_PAGE_PATH = '/dashboard/course/video-course/comment/[id]/item-list'
+/** 视频课程编辑页（隐藏路由）：类别下拉与标签来自 `.lay` 网关 */
+export const STUDY_COURSE_VIDEO_FORM_PAGE_PATH = '/dashboard/course/video-course/[mode]/[id]'
+
+/** 生成语音弹窗（`generated-speech-new.vue`）：识别图片后生成 */
+export const STUDY_COURSE_TEXT_SPEECH_BY_IMAGE_PATH = '/manage/generatedSpeechByImage'
+/** 生成语音弹窗：上传音频后生成 */
+export const STUDY_COURSE_TEXT_SPEECH_BY_VOICE_PATH = '/manage/generatedSpeechByVoice'
+/** 播报人（讯飞发音人）字典。**字典类型在路径里，不是查询参数** */
+export const STUDY_COURSE_TEXT_VOICE_LIST_PATH = '/dict/xunfeiVoice.lay'
+/** 生成语音弹窗的「识别文字」分支：**GET，但真的产生外部副作用** */
+export const STUDY_COURSE_TEXT_GENERATED_SPEECH_PATH = '/manage/generatedSpeech.lay'
+
+/** 视频课程编辑页的分类下拉（`type=1` 表示"新建/修改时的下拉，去掉有子分类的"） */
+export const STUDY_COURSE_VIDEO_TYPE_TREE_PATH = '/manage/getVideoTypeTreeList.lay'
+/** 视频课程「查看讲师」弹窗 */
+export const STUDY_COURSE_VIDEO_PROFESSOR_LIST_PATH = '/manage/professorsByMediaId.lay'
+/** 视频课程标签候选（原文拼写就是 `lable`，不是 `label`）；图文课程那条走的是 `/tag/list.lay` */
+export const STUDY_COURSE_VIDEO_TAG_LIST_PATH = '/manage/lableList2.lay'
+
+/**
+ * 页面在 URL / params 上**钉死**的几个常量，SDK 不开放给调用方改写：
+ *
+ * | 常量 | 值 | 出处 |
+ * | --- | --- | --- |
+ * | 评论页 `type`（图文） | 1 | `text-course/comment/[id]/item-list.vue:70` 的 `form.type` |
+ * | 评论页 `type`（视频） | 2 | `video-course/comment/[id]/item-list.vue:70` |
+ * | 分类下拉 `type` | 1 | `video-course/[mode]/[id].vue:140` |
+ * | 讲师查询 `type` | 0 | `video-course/list.vue:147`（`record.videos.type` 那行是**注释掉的**） |
+ * | 标签 `type` | 21 | `video-course/components/tag.vue:32` |
+ */
+export const STUDY_COURSE_COMMENT_TYPE = { text: 1, video: 2 } as const
+export const STUDY_COURSE_VIDEO_TYPE_TREE_TYPE = 1
+export const STUDY_COURSE_VIDEO_PROFESSOR_TYPE = 0
+export const STUDY_COURSE_VIDEO_TAG_TYPE = 21
+
+/**
+ * 生成语音弹窗的「生成类型」，取值来自 `generated-speech-new.vue:104-110` 的 `options.type`。
+ * ⚠️ **与课程列表的 `type`（1/2/4）不是同一组取值**，别混。
+ */
+export const STUDY_COURSE_SPEECH_MODE_OPTIONS: ReadonlyArray<{ label: string; value: number }> = [
+  { label: '识别文字', value: 1 },
+  { label: '识别图片', value: 2 },
+  { label: '上传语音', value: 3 },
+]
 
 export type PageResult<T> = { list: T[]; total: number }
 
@@ -263,6 +373,104 @@ export type StudyCourseAudioMergeDraft = {
   fileList: string[]
 }
 
+// ---------------------------------------------------------------------------
+// 弹窗 / 隐藏子路由：请求与返回的形状
+// ---------------------------------------------------------------------------
+
+/**
+ * 「群主」候选行。后端 `getStudentInfoList` 的 SQL 只 select 这 5 列
+ * （`StudyStudentDao.xml:443-460`：`t1.id, t1.name, t1.staff_code as staffCode, t1.mobile,
+ * … AS organizationName`），所以**没有** level 之类的其它列。
+ */
+export type StudyCourseStudentOption = {
+  id?: number
+  name?: string
+  /** 工号。群主选择器的 `valueKey` 就是它 —— 提交给新建接口的是工号，不是 id */
+  staffCode?: number | string
+  mobile?: number | string
+  organizationName?: string
+  [key: string]: unknown
+}
+
+/** 讲师级别行（`selectAllTeacherLevel.lay` 的 `StudyTeacherLevelDTOList` 元素） */
+export type StudyCourseTeacherLevelOption = {
+  id?: number
+  /** 级别名称，页面用它把 `level` 渲染成中文 */
+  name?: string
+  /** 级别等级。把它与候选行里的 level 相等比较来取名 */
+  level?: number
+  sort?: number
+  /** 0 未启用 / 1 已启用。接口名义上只返回"启用状态"的，值仍原样带回 */
+  status?: number
+  isDel?: number
+  [key: string]: unknown
+}
+
+/** 班课候选行（`getLessonListByGradeId`）。页面只用到 `id` 与 `title` */
+export type StudyCourseLessonOption = {
+  id?: number | string
+  title?: string
+  /** 讲师姓名。页面下拉不展示，原样保留 */
+  teacherName?: string
+  [key: string]: unknown
+}
+
+/** 评论行（图文 / 视频两页评论页共用；`columns` 定义了页面真正展示的 8 列） */
+export type StudyCourseCommentRow = {
+  id?: number
+  content?: string
+  /** 1 一级评论 / 2 二级评论（页面文案）。0 或其它值页面按"二级评论"展示 */
+  commentType?: number
+  /** 所属标题（评论挂在哪条图文/视频上） */
+  newsTitle?: string
+  userName?: string
+  userPhone?: string
+  /** 1 已置顶 / 其它未置顶 */
+  top?: number
+  /** 评论时间。后端给的是已格式化的字符串，页面直接展示 */
+  createTimeStr?: string
+  [key: string]: unknown
+}
+
+/**
+ * 评论页的查询条件。
+ *
+ * ⚠️ **图文页与视频页的字段名不一样**，这是页面源码里就有的差异：
+ * 图文页用 `username` / `phone`，视频页用 `userName` / `userPhone`。
+ * 后端 `CommentLayController#getCommentList` 收的是 `username` / `phone` ——
+ * 也就是说**视频页的这两个筛选在后端根本没有对应参数**（Spring 对多余的 query 参数
+ * 不报错、直接忽略），页面上填了也不生效。SDK 照抄页面、把这件事写在契约里，不"顺手修正"。
+ */
+export type StudyCourseCommentQuery = {
+  /** 远端资源 id（图文的 news id / 视频的 videos id），**不是课程行 id** */
+  newsId: StudyCourseId
+  /** 图文页是 `username`，视频页是 `userName` —— 见类型说明 */
+  userName?: string
+  /** 图文页是 `phone`，视频页是 `userPhone` —— 见类型说明 */
+  userPhone?: string
+  content?: string
+  /** 时间起 `YYYY-MM-DD HH:mm:ss`；用 buildStudyCourseTimeRange 生成 */
+  startTime?: string
+  /** 时间止 `YYYY-MM-DD HH:mm:ss`（结束日 +1 天）；用 buildStudyCourseTimeRange 生成 */
+  endTime?: string
+  /** 页码，默认 1。**参数名是 `page`，不是 `pageNo`**（同 `study-teacher` 那一族） */
+  page?: number
+  /** 每页条数，默认 20。**是 `limit`，不是 `pageSize`** */
+  limit?: number
+}
+
+/** 图文课程「生成语音」弹窗的输入（三个分支共用 `id` = news id） */
+export type StudyCourseSpeechInput = {
+  /** 远端图文资源 id。**不是**课程行 id —— 链路里两处主键很容易互换 */
+  newsId: StudyCourseId
+  /** 播报人；取值来自 `listVoiceOptions()` 的 `value` */
+  voiceName?: string
+  /** 识别出的文字（`type=2` 分支）；`type=1` 分支由后端从文章正文里取 */
+  content?: string
+  /** 已上传的音频地址（`type=3` 分支） */
+  voiceUrl?: string
+}
+
 /**
  * 图文 / 视频两页共用的参数顺序 —— **顺序即 qs 序列化后的顺序**，所以它是契约，不是默认值表（D20）。
  *
@@ -326,6 +534,49 @@ const AUDIO_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
   { name: 'roomId', defaultValue: '' },
   { name: 'pageNo', defaultValue: 1 },
   { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/**
+ * 图文课程评论页的**参数顺序即 qs 顺序**，逐字取自 `comment/[id]/item-list.vue:79-91`
+ * 的那个对象字面量（`customLoad` 里手写的，**没有** `order` / `orderField`）。
+ *
+ * 两个要记住的点：
+ * 1. **分页参数叫 `limit` / `page`，不是 `pageSize` / `pageNo`** —— 页面在 `customLoad`
+ *    里把模块的 `pageSize`/`pageNo` 转成了这两个名字（`:83-84`）。
+ * 2. `type` 是**页面固定值 1**（`form.type`，`:70` 的注释写着 "1.资讯 2.视频"），
+ *    与课程列表那个 `type=1|2|4` 不是同一套取值。
+ */
+const TEXT_COMMENT_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'newsId', defaultValue: '' },
+  { name: 'type', defaultValue: STUDY_COURSE_COMMENT_TYPE.text },
+  { name: 'limit', defaultValue: DEFAULT_PAGE_SIZE },
+  { name: 'page', defaultValue: 1 },
+  { name: 'username', defaultValue: '' },
+  { name: 'phone', defaultValue: '' },
+  { name: 'content', defaultValue: '' },
+  { name: 'startTime', defaultValue: '' },
+  { name: 'endTime', defaultValue: '' },
+]
+
+/**
+ * 视频课程评论页的参数顺序。与图文页**同形**，只有两处不同：
+ * `type` 是 2，以及**两个筛选字段叫 `userName` / `userPhone`**
+ * （`video-course/comment/[id]/item-list.vue:73-74, :85-86`）。
+ *
+ * ⚠️ 后端收的是 `username` / `phone`（`CommentLayController#getCommentList` 的形参名），
+ * 所以视频页这两个框**在后端没有落点**：Spring 忽略多余的 query 参数，请求照样 200，
+ * 筛选不生效。SDK 照抄页面形状、把差异写进契约，不擅自改名 —— 改名就与基准不逐字段一致了。
+ */
+const VIDEO_COMMENT_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'newsId', defaultValue: '' },
+  { name: 'type', defaultValue: STUDY_COURSE_COMMENT_TYPE.video },
+  { name: 'limit', defaultValue: DEFAULT_PAGE_SIZE },
+  { name: 'page', defaultValue: 1 },
+  { name: 'userName', defaultValue: '' },
+  { name: 'userPhone', defaultValue: '' },
+  { name: 'content', defaultValue: '' },
+  { name: 'startTime', defaultValue: '' },
+  { name: 'endTime', defaultValue: '' },
 ]
 
 /** 按契约里的**固定顺序**拼参数：调用方的实参顺序不影响 qs 序列化结果（D20） */
@@ -590,6 +841,83 @@ const AUDIO_MERGE_PREPARE_PARAMS: ParamSpec[] = [
   p('fileList', 'array', true, '至少两个外部音频 URL；服务端会下载并交给 FFmpeg 合并'),
 ]
 
+/** 学员（群主）候选：**必须给关键字**，见下面那条注释 */
+const STUDENT_SEARCH_PARAMS: ParamSpec[] = [
+  {
+    name: 'keyword',
+    kind: 'search',
+    required: true,
+    description:
+      '学员姓名关键字（后端按 `name LIKE %关键字%` 过滤）。**必填**：' +
+      '页面的群主选择器是 `http.get(url)` —— 不带任何参数、一次把全部"在职学员"拉回来，' +
+      '而这条 SQL（`StudyStudentDao.xml:443`）**没有分页也没有 LIMIT**。' +
+      '按 conventions 第 11 条（D6 / H35），无头不能照抄这种全量候选请求：' +
+      '它会冲掉调用方上下文。所以 SDK 强制要关键字，而不是把整张表返回。',
+  },
+]
+
+const LESSON_BY_GRADE_PARAMS: ParamSpec[] = [
+  p('gradeId', 'text', true, '班级 ID；来自班级候选（不能用品类名称或班课 id 代替）'),
+]
+
+const COMMENT_PARAMS: ParamSpec[] = [
+  p('newsId', 'text', true, '远端资源 id：图文页取 `news.id`，视频页取 `videos.id`；**不是课程行 id**'),
+  p('userName', 'text', false, '评论人筛选。⚠️ 图文页发的是 `username`、视频页发的是 `userName`；而后端只认 `username`/`phone`，所以**视频页这个筛选实际不生效**'),
+  p('userPhone', 'text', false, '手机号筛选。⚠️ 同上，视频页发的 `userPhone` 后端不认（后端形参名是 `phone`）'),
+  p('content', 'text', false, '评论内容筛选'),
+  p('startTime', 'date', false, '评论时间起 `YYYY-MM-DD HH:mm:ss`；用 buildStudyCourseTimeRange 生成'),
+  p('endTime', 'date', false, '评论时间止，**开区间**（结束日 +1 天）；用 buildStudyCourseTimeRange 生成'),
+  p('page', 'number', false, '页码，默认 1（**参数名是 page，不是 pageNo**）'),
+  p('limit', 'number', false, `每页条数，默认 ${DEFAULT_PAGE_SIZE}（**是 limit，不是 pageSize**）`),
+]
+
+const SPEECH_IMAGE_PARAMS: ParamSpec[] = [
+  p('newsId', 'text', true, '远端图文资源 id（弹窗的 `id` prop = `record.news.id`）；**不是课程行 id**'),
+  p('voiceName', 'text', true, '播报人；取值来自 listVoiceOptions() 的 `value`（如 `x2_qige`）'),
+  p('content', 'text', true, '识别出的文字；非空，否则后端返回 `code:300 没有文本内容！`'),
+]
+
+const SPEECH_VOICE_PARAMS: ParamSpec[] = [
+  p('newsId', 'text', true, '远端图文资源 id；与另外两个分支同一个主键'),
+  p('voiceUrl', 'text', true, '已上传到 OSS 的音频地址（页面来自 common-upload-dragger 的 `audioInfo.url`）'),
+]
+
+const SPEECH_DOC_PARAMS: ParamSpec[] = [
+  p('newsId', 'text', true, '远端图文资源 id；**不是课程行 id**'),
+  {
+    name: 'type',
+    kind: 'enum',
+    required: true,
+    description: '生成类型；与课程列表的 type（1/2/4）不是同一组取值',
+    options: STUDY_COURSE_SPEECH_MODE_OPTIONS.map((o) => ({ label: o.label, value: o.value })),
+  },
+  p('voiceName', 'text', true, '播报人；取值来自 listVoiceOptions() 的 `value`'),
+]
+
+const VIDEO_TYPE_TREE_PARAMS: ParamSpec[] = [
+  {
+    name: 'type',
+    kind: 'number',
+    required: false,
+    description:
+      '固定为 1（"新建或修改时需要的下拉框，需要去掉有子分类的"）—— 页面写死、SDK 不开放改写；' +
+      '开了它就能拿到与页面不同的分类树，属于另一条产品路径，不在本能力范围内',
+  },
+]
+
+const PROFESSOR_PARAMS: ParamSpec[] = [
+  p('mediaId', 'text', true, '远端视频资源 id（列表行的 `videos.id`）；**不是课程行 id**'),
+]
+
+const TAG_PARAMS: ParamSpec[] = [
+  {
+    name: 'type',
+    kind: 'number',
+    required: false,
+    description: '固定为 21（视频课程标签）；页面写死、SDK 不开放改写',
+  },
+]
+
 /** 页面方法名与能力 ID 的固定映射；共享目录由主线负责接入。 */
 export const STUDY_COURSE_METHODS = {
   'study-course-text-list': 'listText',
@@ -615,12 +943,41 @@ export const STUDY_COURSE_METHODS = {
   'study-course-im-prepare-audio-merge': 'prepareAudioMerge',
   'study-course-im-audio-merge': 'audioMerge',
   'study-course-im-cancel-audio-merge': 'cancelAudioMerge',
+  // 隐藏路由 / 弹窗里那些**不发往 platform 实例**的请求
+  'study-course-im-student-list': 'searchStudents',
+  'study-course-im-owner-level-options': 'listOwnerLevels',
+  'study-course-im-lesson-list': 'listLessonsByGrade',
+  'study-course-text-comment-list': 'listTextComments',
+  'study-course-video-comment-list': 'listVideoComments',
+  'study-course-text-voice-list': 'listVoiceOptions',
+  'study-course-text-generated-speech': 'generateSpeech',
+  'study-course-text-generate-speech': 'generateSpeechByImage',
+  'study-course-text-generate-speech-by-voice': 'generateSpeechByVoice',
+  'study-course-video-type-tree': 'listVideoTypes',
+  'study-course-video-professor-list': 'listProfessors',
+  'study-course-video-tag-list': 'listTags',
 } as const
 
 const IM_CAPABILITY_META = {
   pagePath: STUDY_COURSE_IM_PAGE_PATH,
   permission: STUDY_COURSE_IM_PERMISSION,
 } as const
+
+const TEXT_CAPABILITY_META = {
+  pagePath: STUDY_COURSE_TEXT_PAGE_PATH,
+  permission: '/dashboard/course/text-course',
+} as const
+
+const VIDEO_CAPABILITY_META = {
+  pagePath: STUDY_COURSE_VIDEO_PAGE_PATH,
+  permission: '/dashboard/course/video-course',
+} as const
+
+/**
+ * 弹窗 / 隐藏子路由里的请求**页面上没有菜单项**，但它们由列表行或弹窗实际触发，
+ * 因此沿用所属列表页的 `pagePath` / `permission`（与上一轮即时通讯那批同一条口径：
+ * 隐藏路由没有独立权限码，模块与权限上下文都由列表页决定）。
+ */
 
 export const studyCourseCapabilities: CapabilityDefinition[] = [
   {
@@ -790,6 +1147,107 @@ export const studyCourseCapabilities: CapabilityDefinition[] = [
     write: false,
     params: [],
   },
+
+  // -------------------------------------------------------------------------
+  // 弹窗 / 隐藏子路由：`.lay` 网关与 zhdj-sms 实例上的请求
+  // -------------------------------------------------------------------------
+
+  {
+    id: 'study-course-im-student-list',
+    title: '按姓名关键字查询即时通讯课程群主候选',
+    ...IM_CAPABILITY_META,
+    write: false,
+    params: STUDENT_SEARCH_PARAMS,
+  },
+  {
+    id: 'study-course-im-owner-level-options',
+    title: '查询讲师级别候选',
+    ...IM_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    write: false,
+    params: [],
+  },
+  {
+    id: 'study-course-im-lesson-list',
+    title: '按班级查询班课候选',
+    ...IM_CAPABILITY_META,
+    write: false,
+    params: LESSON_BY_GRADE_PARAMS,
+  },
+  {
+    id: 'study-course-text-comment-list',
+    title: '查询图文课程评论列表',
+    ...TEXT_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    write: false,
+    params: COMMENT_PARAMS,
+  },
+  {
+    id: 'study-course-video-comment-list',
+    title: '查询视频课程评论列表',
+    ...VIDEO_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    write: false,
+    params: COMMENT_PARAMS,
+  },
+  {
+    id: 'study-course-text-voice-list',
+    title: '查询语音播报人候选',
+    ...TEXT_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+    write: false,
+    params: [],
+  },
+  {
+    id: 'study-course-text-generated-speech',
+    title: '按文章正文生成语音',
+    ...TEXT_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+    // GET，但**真的产生外部副作用**（置 voiceState=2、写库、提交异步线程生成 MP3），
+    // 所以 write 按真实行为写 true，不按 HTTP 方法写（conventions：write 按真实行为）
+    write: true,
+    params: SPEECH_DOC_PARAMS,
+  },
+  {
+    id: 'study-course-text-generate-speech',
+    title: '按识别出的图片文字生成语音',
+    ...TEXT_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+    write: true,
+    params: SPEECH_IMAGE_PARAMS,
+  },
+  {
+    id: 'study-course-text-generate-speech-by-voice',
+    title: '按已上传的音频生成语音',
+    ...TEXT_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+    write: true,
+    params: SPEECH_VOICE_PARAMS,
+  },
+  {
+    id: 'study-course-video-type-tree',
+    title: '查询视频课程分类候选',
+    ...VIDEO_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    write: false,
+    params: VIDEO_TYPE_TREE_PARAMS,
+  },
+  {
+    id: 'study-course-video-professor-list',
+    title: '查询视频课程讲师列表',
+    ...VIDEO_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    write: false,
+    params: PROFESSOR_PARAMS,
+  },
+  {
+    id: 'study-course-video-tag-list',
+    title: '查询视频课程标签候选',
+    ...VIDEO_CAPABILITY_META,
+    httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    write: false,
+    params: TAG_PARAMS,
+  },
 ]
 
 /**
@@ -893,7 +1351,107 @@ function audioListQueryOf (value: unknown): StudyCourseAudioListQuery {
   }
 }
 
-export function createStudyCourseCapability (request: PortalRequest) {
+// ---------------------------------------------------------------------------
+// 弹窗 / 隐藏子路由：取值与解包
+// ---------------------------------------------------------------------------
+
+/** 必填的非空文本（学员姓名关键字、播报人、音频地址……） */
+function requiredTextOf (value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.trim() === '') throw new Error(`${label}不能为空`)
+  return value.trim()
+}
+
+/** 可选文本：`undefined` 与 `''` 都当作"没给"（这一族这些字段页面发的是空串） */
+function optionalTextOf (value: unknown, label: string): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') throw new Error(`${label}必须是字符串`)
+  return value
+}
+
+/** 数组守卫：形状变了当场炸，不能静默返回空列表（同 `study-teacher` 的 `fromPagedBody`） */
+function arrayFrom (value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label}：期望数组，实际是 ${value === null ? 'null' : typeof value}。形状变了要当场失败，不能当成空列表`)
+  }
+  return value
+}
+
+/**
+ * 从 `isOriginal` 拿到的**整个响应体**里取某个数组字段。
+ *
+ * 这些 `.lay` 接口的响应是 `{ret, code, msg, <业务键>}`（`R.ok().put(键, 值)`，
+ * 见 `SmartLayer_Java` 的 `R.java:52-87`），业务数据挂在**一个页面自己约定的键**上
+ * ——`StudyTeacherLevelDTOList` / `videoTypes` / `data` 各不相同，没有统一形状。
+ * 缺键必须抛：静默返回空列表会让调用方以为"真的没有候选"。
+ */
+function arrayFieldFrom (body: unknown, key: string, label: string): unknown[] {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error(`${label}：期望响应体是对象，实际是 ${body === null ? 'null' : typeof body}`)
+  }
+  const value = (body as Record<string, unknown>)[key]
+  if (value === undefined) {
+    throw new Error(`${label}：响应体里没有 ${key} 字段（这一族的业务数据挂在该键上，形状变了要当场失败）`)
+  }
+  return arrayFrom(value, `${label} 的 ${key}`)
+}
+
+/**
+ * 评论列表的解包。
+ *
+ * 这个接口**没有带 `isOriginal`**，所以走的是 `smart-layer` 那一档包络的
+ * `return data ? data : pages`。后端回的是 `R.ok().put("pages", page)`
+ * （`CommentLayController:304`）—— **没有 `data`，落在 `pages` 这一支上**，
+ * 正是 `src/http/client.ts` 里那句"`pages` 是第二选择，不是摆设"的实例。
+ *
+ * 两条独立证据都读的是 `result.pages.results` / `result.pages.totalRecord`
+ * （`zhdj-admin` 侧的 `manage/comment/list.vue:91-93` 与 `videos-list/details/comment.vue:92-93`）。
+ * 页面里写成 `result.results`，因为包络已经把 `pages` 拆出来了。
+ */
+function commentPageOf (body: unknown, label: string): PageResult<StudyCourseCommentRow> {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error(`${label}：期望分页对象，实际是 ${body === null ? 'null' : typeof body}`)
+  }
+  const page = body as { results?: unknown; totalRecord?: unknown }
+  const list = arrayFrom(page.results, `${label} 的 results`)
+  const total = page.totalRecord
+  return {
+    list: list as StudyCourseCommentRow[],
+    total: typeof total === 'number' ? total : Number(total ?? 0),
+  }
+}
+
+/** 课程标签候选：`lableList2.lay` 的 `data` 是**字符串数组**（标签名） */
+function tagNamesOf (body: unknown, label: string): string[] {
+  return arrayFieldFrom(body, 'data', label).map((item, index) => {
+    if (typeof item !== 'string') throw new Error(`${label} 的 data[${index}] 不是字符串（标签名）`)
+    return item
+  })
+}
+
+/** 播报人候选：字典行只取页面真正消费的 `label` / `value` 两项，其余原样丢弃 */
+function voiceOptionsOf (body: unknown, label: string): Array<{ label: string; value: string }> {
+  return arrayFrom(body, label).map((item, index) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`${label}[${index}] 不是对象`)
+    }
+    const row = item as { label?: unknown; value?: unknown }
+    if (typeof row.value !== 'string' || row.value === '') {
+      throw new Error(`${label}[${index}].value 不是非空字符串（它是提交给 voiceName 的值）`)
+    }
+    return { label: typeof row.label === 'string' ? row.label : row.value, value: row.value }
+  })
+}
+
+/** 生成类型只能是页面给出的三个取值之一（识别文字 / 识别图片 / 上传语音） */
+function speechModeOf (value: unknown): number {
+  const mode = typeof value === 'number' ? value : Number(value)
+  if (!STUDY_COURSE_SPEECH_MODE_OPTIONS.some((option) => option.value === mode)) {
+    throw new Error(`生成语音.type 只能是 ${STUDY_COURSE_SPEECH_MODE_OPTIONS.map((o) => o.value).join('/')}`)
+  }
+  return mode
+}
+
+export function createStudyCourseCapability (request: StudyCourseRequest) {
   /** 图文 / 视频两页的公共实现：只有 URL 上那个 type 不同 */
   const listOf = (type: 1 | 2) =>
     (query: StudyCourseListQuery = {}): Promise<PageResult<StudyCourseRow>> =>
@@ -919,6 +1477,50 @@ export function createStudyCourseCapability (request: PortalRequest) {
       method: 'get',
       params: buildParams(AUDIO_ORDER, normalized as unknown as Record<string, unknown>),
     })
+  }
+
+  /**
+   * 评论列表：两页共用实现，只有 `type` 与两个筛选字段名不同（见两张 ORDER 表的注释）。
+   *
+   * `async` 是**刻意**的：实例解析失败（没配 baseURL）时 `call` 是**同步抛**的，
+   * 包一层才让它与其余方法一样走 `Promise.reject`（与 `study-teacher` 同一条约定）。
+   */
+  const listCommentsOf = async (
+    kind: 'text' | 'video',
+    query: StudyCourseCommentQuery,
+  ): Promise<PageResult<StudyCourseCommentRow>> => {
+    const input = objectOf(query ?? {}, '课程评论查询')
+    const newsId = idOf(input.newsId, '课程评论查询.newsId')
+    const shared = {
+      newsId,
+      content: optionalTextOf(input.content, '课程评论查询.content'),
+      startTime: optionalTextOf(input.startTime, '课程评论查询.startTime'),
+      endTime: optionalTextOf(input.endTime, '课程评论查询.endTime'),
+      page: input.page,
+      limit: input.limit,
+    }
+    // 字段名按页面分叉：图文页是 username/phone，视频页是 userName/userPhone。
+    // 后端两页都只认 username/phone —— 视频页那两个筛选因此不生效，这里**照抄页面**，
+    // 改名就与页面发出的请求不逐字段一致了。
+    const named = kind === 'text'
+      ? {
+          ...shared,
+          username: optionalTextOf(input.userName, '课程评论查询.userName'),
+          phone: optionalTextOf(input.userPhone, '课程评论查询.userPhone'),
+        }
+      : {
+          ...shared,
+          userName: optionalTextOf(input.userName, '课程评论查询.userName'),
+          userPhone: optionalTextOf(input.userPhone, '课程评论查询.userPhone'),
+        }
+    const order = kind === 'text' ? TEXT_COMMENT_ORDER : VIDEO_COMMENT_ORDER
+    const body = await request<unknown>({
+      url: STUDY_COURSE_COMMENT_LIST_PATH,
+      method: 'get',
+      params: buildParams(order, named as Record<string, unknown>),
+      httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+    })
+    return commentPageOf(body, kind === 'text' ? '图文课程评论' : '视频课程评论')
   }
 
   return {
@@ -1058,7 +1660,6 @@ export function createStudyCourseCapability (request: PortalRequest) {
     cancelAudioStatus (): { cancelled: true } {
       return { cancelled: true }
     },
-
     /** 页面 deleteIsBatch=true：单删和多选都直接把 ID 数组作为 JSON body。 */
     prepareAudioDelete (input: { ids: StudyCourseId[] }): { draft: StudyCourseAudioDeleteDraft } {
       return { draft: { ids: idsOf(input?.ids, '合并语音删除ids') } }
@@ -1112,6 +1713,212 @@ export function createStudyCourseCapability (request: PortalRequest) {
 
     cancelAudioMerge (): { cancelled: true } {
       return { cancelled: true }
+    },
+
+    // -----------------------------------------------------------------------
+    // 弹窗 / 隐藏子路由
+    // -----------------------------------------------------------------------
+
+    /**
+     * 学员（群主）候选。**走 platform 实例**，但**必须给关键字**。
+     *
+     * 页面那一句是 `http.get('/study/base/studystudent/list')` —— 一个参数都不带，
+     * 一次拉回全部"在职学员"，而这条 SQL 没有分页也没有 LIMIT
+     * （`StudyStudentDao.xml:443-460`）。按 conventions 第 11 条不在无头里照抄：
+     * 关键字进 `name`（后端唯一认的过滤条件），返回的是**过滤后的全集**（这一条接口没有分页）。
+     */
+    async searchStudents (input: { keyword: string }): Promise<StudyCourseStudentOption[]> {
+      const keyword = requiredTextOf(input?.keyword, '学员姓名关键字')
+      const body = await request<unknown>({
+        url: STUDY_COURSE_IM_STUDENT_LIST_PATH,
+        method: 'get',
+        params: { name: keyword },
+      })
+      return arrayFrom(body, '学员候选') as StudyCourseStudentOption[]
+    },
+
+    /**
+     * 讲师级别全量候选。**走 `smart-layer-admin` 实例**、拿整个响应体。
+     *
+     * 页面 `group-owner-select.vue:34` 就是 `get(url, { isOriginal: true })`：
+     * 业务数据在 `StudyTeacherLevelDTOList` 键上，页面用它把候选里的 `level` 渲染成中文名。
+     * 无参数（接口就是 `@GetMapping("selectAllTeacherLevel.lay")`，一个形参都没有）。
+     */
+    async listOwnerLevels (): Promise<StudyCourseTeacherLevelOption[]> {
+      const body = await request<unknown>({
+        url: STUDY_COURSE_IM_TEACHER_LEVEL_PATH,
+        method: 'get',
+        isOriginal: true,
+        httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+      })
+      return arrayFieldFrom(body, 'StudyTeacherLevelDTOList', '讲师级别候选') as StudyCourseTeacherLevelOption[]
+    },
+
+    /**
+     * 按班级取班课候选。**走 platform 实例**。
+     *
+     * 页面两处都在用：隐藏新建表单的 `component-grade-select`（`[mode]/[id].vue:10-14`）
+     * 与语音合并弹窗的 `lesson-select.vue:32-36`；两处传的都是 `params: { gradeId }`，
+     * 页面拿到后把**第一项**默认选中。
+     */
+    async listLessonsByGrade (input: { gradeId: StudyCourseId }): Promise<StudyCourseLessonOption[]> {
+      const gradeId = idOf(input?.gradeId, '班课候选查询.gradeId')
+      const body = await request<unknown>({
+        url: STUDY_COURSE_IM_LESSON_LIST_PATH,
+        method: 'get',
+        params: { gradeId },
+      })
+      return arrayFrom(body, '班课候选') as StudyCourseLessonOption[]
+    },
+
+    /** 图文课程评论列表（`type=1`）。只读，走 `smart-layer-admin` 实例。 */
+    listTextComments (query: StudyCourseCommentQuery): Promise<PageResult<StudyCourseCommentRow>> {
+      return listCommentsOf('text', query)
+    },
+
+    /** 视频课程评论列表（`type=2`）。只读，同一个接口同一个实例，参数名有两处不同。 */
+    listVideoComments (query: StudyCourseCommentQuery): Promise<PageResult<StudyCourseCommentRow>> {
+      return listCommentsOf('video', query)
+    },
+
+    /**
+     * 语音播报人候选（讯飞发音人字典）。只读。
+     *
+     * ⚠️ **走 `zhdj-sms` 实例**（页面 `generated-speech-new.vue:99,124` import 的
+     * `zhdjCMSHttp` 来自 `utils/http/zhdj-sms.js`），不是 `smart-layer-admin`。
+     * 页面还传了一个 `{ sourceResult: true }` —— 那个开关属于 `zhdj-cms` / `platform-mall-*`，
+     * **`zhdj-sms` 的响应拦截器根本不读它**（`zhdj-sms.js:49-100`），所以它在这一路是空转。
+     *
+     * 字典类型在**路径**里（后端是 `@RequestMapping("/{type}.lay")`，`type` 是 PathVariable），
+     * 不是查询参数，所以这个能力没有参数。
+     */
+    async listVoiceOptions (): Promise<Array<{ label: string; value: string }>> {
+      const body = await request<unknown>({
+        url: STUDY_COURSE_TEXT_VOICE_LIST_PATH,
+        method: 'get',
+        httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+      })
+      return voiceOptionsOf(body, '播报人候选')
+    },
+
+    /**
+     * 「识别文字」分支：按文章正文生成语音。
+     *
+     * ⚠️ **GET，但真的写** —— `NewsLayController#generatedSpeechLay:352-396` 会
+     * 置 `voiceState=2`、调 `addNews`（**写库**）、把生成任务提交到异步线程池、
+     * 再 `updateByPrimaryKeySelective` 记下 `generateVoiceMethod=1`。
+     * 所以这个能力的 `write` 是 `true`（按真实行为，不按 HTTP 方法）。
+     */
+    async generateSpeech (input: {
+      newsId: StudyCourseId
+      type: number
+      voiceName: string
+    }): Promise<void> {
+      const newsId = idOf(input?.newsId, '生成语音.newsId')
+      const type = speechModeOf(input?.type)
+      const voiceName = requiredTextOf(input?.voiceName, '生成语音.voiceName')
+      await request<unknown>({
+        url: STUDY_COURSE_TEXT_GENERATED_SPEECH_PATH,
+        method: 'get',
+        // 键序与页面逐字一致：id、type、voiceName（`generated-speech-new.vue:142`）
+        params: { id: newsId, type, voiceName },
+        httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+      })
+    },
+
+    /** 「识别图片」分支：把识别出的文字交给后端生成语音。POST JSON `{id, voiceName, content}` */
+    async generateSpeechByImage (input: {
+      newsId: StudyCourseId
+      voiceName: string
+      content: string
+    }): Promise<void> {
+      const newsId = idOf(input?.newsId, '图片生成语音.newsId')
+      const voiceName = requiredTextOf(input?.voiceName, '图片生成语音.voiceName')
+      const content = requiredTextOf(input?.content, '图片生成语音.content')
+      await request<unknown>({
+        url: STUDY_COURSE_TEXT_SPEECH_BY_IMAGE_PATH,
+        method: 'post',
+        // 键序与页面逐字一致：id、voiceName、content（`generated-speech-new.vue:144`）
+        data: { id: newsId, voiceName, content },
+        httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+      })
+    },
+
+    /**
+     * 「上传语音」分支：把已上传的音频地址记到文章上。POST JSON `{id, voiceUrl}`。
+     *
+     * 与另外两个分支**副作用不同**：`generatedSpeechByVoice:456-470` 只更新
+     * `voiceState=0`、`generateVoiceMethod=3`、`voiceUrl` 三列，**不提交生成线程、不写新行**。
+     */
+    async generateSpeechByVoice (input: { newsId: StudyCourseId; voiceUrl: string }): Promise<void> {
+      const newsId = idOf(input?.newsId, '上传语音生成.newsId')
+      const voiceUrl = requiredTextOf(input?.voiceUrl, '上传语音生成.voiceUrl')
+      await request<unknown>({
+        url: STUDY_COURSE_TEXT_SPEECH_BY_VOICE_PATH,
+        method: 'post',
+        // 键序与页面逐字一致：id、voiceUrl（`generated-speech-new.vue:146`）
+        data: { id: newsId, voiceUrl },
+        httpInstance: STUDY_COURSE_CMS_HTTP_INSTANCE,
+      })
+    },
+
+    /**
+     * 视频课程分类候选。只读，走 `smart-layer-admin` 实例 + 整个响应体。
+     *
+     * 页面写死 `type: 1`（"新建或者修改的时候需要的下拉框，需要去掉有子分类的"），
+     * 业务数据在 `videoTypes` 键上，页面取 `item.title` / `item.type` 做下拉的 label / value。
+     */
+    async listVideoTypes (): Promise<Array<Record<string, unknown>>> {
+      const body = await request<unknown>({
+        url: STUDY_COURSE_VIDEO_TYPE_TREE_PATH,
+        method: 'get',
+        params: { type: STUDY_COURSE_VIDEO_TYPE_TREE_TYPE },
+        isOriginal: true,
+        httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+      })
+      return arrayFieldFrom(body, 'videoTypes', '视频分类候选') as Array<Record<string, unknown>>
+    },
+
+    /**
+     * 「查看讲师」弹窗：按远端视频 id 取挂在这条视频上的讲师。只读，走 `smart-layer-admin`。
+     *
+     * `type` 页面写死 0（`video-course/list.vue:147`，紧挨着的
+     * `// type: record.videos.type` 那行是**注释掉的**）—— 按项目规则注释掉的东西不算数，
+     * SDK 只发页面真的会发的那一个值。
+     */
+    async listProfessors (input: { mediaId: StudyCourseId }): Promise<Array<Record<string, unknown>>> {
+      const mediaId = idOf(input?.mediaId, '视频讲师查询.mediaId')
+      const body = await request<unknown>({
+        url: STUDY_COURSE_VIDEO_PROFESSOR_LIST_PATH,
+        method: 'get',
+        // 键序与页面一致：mediaId、type（`professorList.vue:22-26`）
+        params: { mediaId, type: STUDY_COURSE_VIDEO_PROFESSOR_TYPE },
+        httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+      })
+      return arrayFrom(body, '视频讲师列表') as Array<Record<string, unknown>>
+    },
+
+    /**
+     * 视频课程标签候选：返回的是**标签名字符串数组**（后端 `select content from zhdj_label …`）。
+     * 只读，走 `smart-layer-admin` 实例 + 整个响应体。
+     *
+     * `type` 页面写死 21。
+     *
+     * ⚠️ **图文课程编辑页用的不是这个接口**：那边 import 的是
+     * `text-course/components/tag.vue`，打 `/tag/list.lay?typeList=1`，返回的是
+     * `{id, name}` 对象数组（页面还把 id 转成字符串）、选中值也存 `tagIds` 而不是标签名。
+     * 两个同名组件、两个接口、两种数据结构 —— 派单表只给了视频课程这一条，
+     * 图文课程那条（`/tag/list.lay`）**不在本次范围内**，见报告。
+     */
+    async listTags (): Promise<string[]> {
+      const body = await request<unknown>({
+        url: STUDY_COURSE_VIDEO_TAG_LIST_PATH,
+        method: 'get',
+        params: { type: STUDY_COURSE_VIDEO_TAG_TYPE },
+        isOriginal: true,
+        httpInstance: STUDY_COURSE_LAY_HTTP_INSTANCE,
+      })
+      return tagNamesOf(body, '课程标签候选')
     },
   }
 }

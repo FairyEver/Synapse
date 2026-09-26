@@ -83,6 +83,46 @@ describe('财务设置→凭证模板页面能力', () => {
     })
   })
 
+  it('常用摘要弹窗：固定 status=0、默认每页 10 条，键序与弹窗一致', async () => {
+    const root = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const markModal = readFileSync(join(root, 'app/portal/views/dashboard/finance/setting/voucher-templates/[mode]/modal-mark.vue'), 'utf8')
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const mapper = readFileSync(join(javaRoot, 'erp-module-finance/erp-module-finance-biz/src/main/java/com/wdbc/erp/module/finance/dal/mysql/abstractmanage/AbstractManageMapper.java'), 'utf8')
+    // 弹窗的 form 初值：searchKey 空串、status 写死 0；列表模块没有 styleV2
+    expect(markModal).toContain("getDataListURL: '/admin-api/finance/abstract-manage/page'")
+    expect(markModal).toContain("searchKey: ''")
+    expect(markModal).toContain('status: 0')
+    expect(markModal).not.toContain('styleV2')
+    expect(mapper).toContain('likeIfPresent(AbstractManageDO::getAbstracts, reqVO.getAbstracts())')
+    expect(mapper).toContain('getSearchKey')
+    expect(mapper).toContain('eqIfPresent(AbstractManageDO::getStatus, reqVO.getStatus())')
+
+    const f = fixture([{ list: [{
+      id: '9007199254740993', quickNumber: 12, abstracts: '采购货款', status: 0,
+      createTime: '2026-09-01 10:00:00', tenantName: '默认租户', ignored: '不应泄漏',
+    }], total: 1 }])
+    await expect(f.api.listAbstracts()).resolves.toEqual({ list: [{
+      id: '9007199254740993', quickNumber: 12, abstracts: '采购货款', status: 0,
+      createTime: '2026-09-01 10:00:00', tenantName: '默认租户',
+    }], total: 1 })
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/finance/abstract-manage/page', method: 'get',
+      params: { order: '', orderField: '', searchKey: '', status: 0, pageNo: 1, pageSize: 10 },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual(['order', 'orderField', 'searchKey', 'status', 'pageNo', 'pageSize'])
+  })
+
+  it('常用摘要：关键字与分页按页面规则装配，坏输入与坏响应不静默成功', async () => {
+    const f = fixture([{ list: [], total: 0 }, { notAPage: true }, { list: [{ id: 0 }], total: 1 }])
+    await f.api.listAbstracts({ searchKey: '采购', pageNo: 2, pageSize: 50 })
+    expect(f.calls[0]?.params).toEqual({ order: '', orderField: '', searchKey: '采购', status: 0, pageNo: 2, pageSize: 50 })
+    await expect(f.api.listAbstracts({ pageSize: 30 })).rejects.toThrow('10、20、50或100')
+    await expect(f.api.listAbstracts({ pageNo: 0 })).rejects.toThrow('pageNo')
+    expect(f.calls).toHaveLength(1)
+    await expect(f.api.listAbstracts()).rejects.toThrow('list或total')
+    await expect(f.api.listAbstracts()).rejects.toThrow('id')
+  })
+
   it('金额选项、详情和预览分别复现支撑请求与本地桥接', async () => {
     const detail = { ...row, income: { isCreditUsed: 1 }, entry: [{ summary: '摘要' }] }
     const f = fixture([[{ amountCode: 'orderTotal', amountLabel: '订单总额', sort: 1 }], detail])
@@ -149,5 +189,15 @@ describe('财务设置→凭证模板页面能力', () => {
     expect(Object.keys(methodContracts)).toEqual(Object.values(FINANCE_SETTING_VOUCHER_TEMPLATES_METHODS).map(method => `financeSettingVoucherTemplates.${method}`))
     expect(contracts['finance-setting-voucher-templates-prepare-create']?.steps.some(step => step.mapping?.entry === 'result.draft.entry')).toBe(true)
     expect(contracts['finance-setting-voucher-templates-set-status']?.boundaries.join('\n')).toContain('整行')
+
+    const abstract = contracts['finance-setting-voucher-templates-abstract-list']!
+    expect(abstract.effect).toBe('read')
+    expect(abstract.inputs.searchKey?.omitted).toContain('不拼')
+    expect(abstract.output.fields.find(item => item.path === 'list[].id')?.meaning).toContain('summaryId')
+    expect(abstract.output.fields.find(item => item.path === 'list[].abstracts')?.meaning).toContain('mark')
+    expect(abstract.output.fields.find(item => item.path === 'list[].status')?.constraints?.join('\n')).toContain('未登记')
+    expect(abstract.boundaries.join('\n')).toContain('钉死')
+    expect(abstract.gaps?.join('\n')).toContain('status=0')
+    expect(abstract.consume.join('\n')).toContain('同一行')
   })
 })

@@ -19,7 +19,17 @@ import { studyRecordCapabilities } from '../capabilities/study-record.js'
 import { studyStatisticsCapabilities } from '../capabilities/study-statistics.js'
 import { studyTeacherCapabilities } from '../capabilities/study-teacher.js'
 import { STUDY_COURSE_AI_CONTRACTS, STUDY_COURSE_METHOD_CONTRACTS } from './contracts-study-course.js'
-import { STUDY_LESSON_AI_CONTRACTS, STUDY_LESSON_METHOD_CONTRACTS } from './contracts-study-lesson.js'
+import { ASSIGNMENT_RECORD_AI_CONTRACTS, ASSIGNMENT_RECORD_METHOD_CONTRACTS } from './contracts-assignment.js'
+import { ATTENDANCE_TEAM_AI_CONTRACTS } from './contracts-attendance-team.js'
+import { BACKLOG_TASK_EXAMINE_AI_CONTRACTS } from './contracts-backlog-task-examine.js'
+import { BASE_MANAGEMENT_CENTER_AI_CONTRACTS } from './contracts-base-management-center.js'
+import { PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS } from './contracts-perf-analysis-department-detail.js'
+import { PERF_MANAGE_STANDARD_ROLE_POST_TREE_CONTRACTS } from './contracts-perf-manage-standard-role-post.js'
+import { PERF_MONTH_PROTOCOL_CONFIG_CONTRACTS } from './contracts-perf-month-protocol-config.js'
+import { STUDY_GRADE_AI_CONTRACTS, STUDY_GRADE_METHOD_CONTRACTS } from './contracts-study-grade.js'
+import { STUDY_RECORD_HIDDEN_AI_CONTRACTS, STUDY_RECORD_HIDDEN_METHOD_CONTRACTS } from './contracts-study-record.js'
+import { STUDY_STATISTICS_AI_CONTRACTS } from './contracts-study-statistics.js'
+import { STUDY_LESSON_AI_CONTRACTS, STUDY_LESSON_METHOD_CONTRACTS, STUDY_LESSON_HIDDEN_AI_CONTRACTS, STUDY_LESSON_HIDDEN_METHOD_CONTRACTS } from './contracts-study-lesson.js'
 import { STUDY_GRADE_TEACHER_AI_CONTRACTS, STUDY_GRADE_TEACHER_METHOD_CONTRACTS } from './contracts-study-grade-teacher.js'
 import { perfAgreementCapabilities } from '../capabilities/perf-agreement.js'
 import { perfManageConfigCapabilities } from '../capabilities/perf-manage-config.js'
@@ -3419,6 +3429,23 @@ for (const [id, aiContract] of Object.entries(STUDY_COURSE_AI_CONTRACTS)) {
 Object.assign(BUSINESS_METHOD_CONTRACTS, STUDY_COURSE_METHOD_CONTRACTS)
 Object.assign(BUSINESS_AI_CONTRACTS, STUDY_LESSON_AI_CONTRACTS)
 Object.assign(BUSINESS_METHOD_CONTRACTS, STUDY_LESSON_METHOD_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, STUDY_LESSON_HIDDEN_AI_CONTRACTS)
+Object.assign(BUSINESS_METHOD_CONTRACTS, STUDY_LESSON_HIDDEN_METHOD_CONTRACTS)
+
+// 2026-09-26 补缺口轮次：弹窗 / 隐藏子路由 / 下钻页与几处单点接口的契约（业务域）。
+Object.assign(BUSINESS_AI_CONTRACTS, ASSIGNMENT_RECORD_AI_CONTRACTS)
+Object.assign(BUSINESS_METHOD_CONTRACTS, ASSIGNMENT_RECORD_METHOD_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, ATTENDANCE_TEAM_AI_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, BACKLOG_TASK_EXAMINE_AI_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, BASE_MANAGEMENT_CENTER_AI_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, PERF_MANAGE_STANDARD_ROLE_POST_TREE_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, PERF_MONTH_PROTOCOL_CONFIG_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, STUDY_GRADE_AI_CONTRACTS)
+Object.assign(BUSINESS_METHOD_CONTRACTS, STUDY_GRADE_METHOD_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, STUDY_RECORD_HIDDEN_AI_CONTRACTS)
+Object.assign(BUSINESS_METHOD_CONTRACTS, STUDY_RECORD_HIDDEN_METHOD_CONTRACTS)
+Object.assign(BUSINESS_AI_CONTRACTS, STUDY_STATISTICS_AI_CONTRACTS)
 Object.assign(BUSINESS_AI_CONTRACTS, STUDY_GRADE_TEACHER_AI_CONTRACTS)
 Object.assign(BUSINESS_METHOD_CONTRACTS, STUDY_GRADE_TEACHER_METHOD_CONTRACTS)
 for (const [id, aiContract] of Object.entries(PERF_MANAGE_TEMPLATE_AI_CONTRACTS)) {

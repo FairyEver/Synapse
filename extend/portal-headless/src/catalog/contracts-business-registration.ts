@@ -130,6 +130,111 @@ const shareFields = ['organization', 'post', 'duty', 'user']
 add('business-registration-get-share', base({ purpose: '读取企业登记的共享设置。', effect: 'read', inputs: { resourceId: param('企业登记 ID。', 'business-registration-list.list[].id', { type: 'string | number', required: true }) }, output: { shape: '{ organization: object[], post: object[], duty: object[], user: object[] }', fields: shareFields.flatMap(key => [field(key, 'object[]', `${key} 共享成员数组`), field(`${key}[].id`, 'string | number', `${key} 成员 ID`), field(`${key}[].managerType`, 'number | null', 'Portal 读取可能返回的管理类型；保存企业登记时不回传', { nullable: true, nullMeaning: '响应未提供' })]), empty: '四类数组为空表示当前共享设置没有该类成员，不等同于无权限。' }, consume: ['读取 managerType 只用于展示或后续选择；保存时必须只保留成员 id。'], steps: [{ role: 'optional', when: '用户确认调整共享', capabilityId: 'business-registration-save-share', mapping: { resourceId: 'args.resourceId', organization: 'result.organization', post: 'result.post', duty: 'result.duty', user: 'result.user' }, instruction: '让用户确认成员后提交，完成后重新读取共享设置。' }], completion: '得到当前 type=5 的四类共享成员。', idempotency: null }))
 add('business-registration-save-share', base({ purpose: '保存企业登记共享设置。', effect: 'write', inputs: { resourceId: param('企业登记 ID。', 'business-registration-list.list[].id', { type: 'string | number', required: true }), organization: param('共享组织成员；每项至少含 id。', '用户选择的组织成员', { type: 'object[]', required: false }), post: param('共享岗位成员；每项至少含 id。', '用户选择的岗位成员', { type: 'object[]', required: false }), duty: param('共享职务成员；每项至少含 id。', '用户选择的职务成员', { type: 'object[]', required: false }), user: param('共享人员成员；每项至少含 id。', '用户选择的人员成员', { type: 'object[]', required: false }) }, output: trueOutput, consume: ['请求固定发送 type=5、resourceId 和四类 *Ids；每个成员只保留 {id}，不会把 managerType 发给 Portal。true 后必须 get-share 回查。'], steps: [{ role: 'required', when: '保存成功或超时', capabilityId: 'business-registration-get-share', mapping: { resourceId: 'args.resourceId' }, instruction: '回查四类成员与目标一致后才报告共享保存完成。' }, { role: 'cancel', when: '用户取消共享设置', instruction: '不调用 saveShare。' }], completion: '共享设置回查确认四类成员终态一致。', idempotency: '没有 requestId；超时先读取共享设置，不换 payload 盲目重发。' }))
 
+// ---------------------------------------------------------------------------
+// 人员弹窗的两个候选（内部人员 / 外部人员）
+//
+// 与班级管理页是同 URL、不同页面语境，所以在两处各有一条能力。这里的两条只服务
+// 登记信息的人员弹窗：module-type 15、权限 /dashboard/certificate/enterpriseRegistration，
+// 选出来的人是填进企业登记的董事/监事/高管/法人，不是班级学员。
+// ---------------------------------------------------------------------------
+
+const personCandidateFields: AiField[] = [
+  field('list[].id', 'string | number | null', '用户 ID（hr_sys_user.id）；不是工号。企业登记的人员关系用的不是它，见下。', { nullable: true, nullMeaning: '后端未返回' }),
+  field('list[].username', 'string | null', '工号（服务端是 String，不会序列化成数字）。弹窗把它显示成「工号」列，并在确定回传时作为 staffCode 交给企业登记表单。', { nullable: true, nullMeaning: '后端未返回工号' }),
+  field('list[].realName', 'string | null', '姓名。弹窗显示为「姓名」列并作为 staffName 回传。', { nullable: true, nullMeaning: '后端未返回姓名' }),
+  field('list[].organizationName', 'string | null', '组织全路径。弹窗显示为「组织路径」列。', { nullable: true, nullMeaning: '后端未返回组织' }),
+  field('list[].mobile', 'string | null', '手机号。本页不显示，仅在需要区分同名人员时使用。', { nullable: true, nullMeaning: '后端未返回手机号' }),
+  field('list[].organizationId', 'string | number | null', '所属组织 ID；不是组织路径、不是企业登记的 organizationId。', { nullable: true, nullMeaning: '后端未返回组织' }),
+  field('list[].status', 'number | null', '账号状态原码；服务端已按在职过滤，不要用它再判在职。', { nullable: true, nullMeaning: '后端未返回状态' }),
+]
+
+const externalPersonFields: AiField[] = [
+  field('list[].id', 'string | number | null', '外部人员记录 ID（hr_study_student.id）；不是工号。', { nullable: true, nullMeaning: '后端未返回' }),
+  field('list[].staffCode', 'string | number | null', '工号。弹窗把它作为 staffCode 回传。', { nullable: true, nullMeaning: '后端未返回工号' }),
+  field('list[].name', 'string | null', '姓名。弹窗显示为「姓名」列并作为 staffName 回传。', { nullable: true, nullMeaning: '后端未返回姓名' }),
+  field('list[].mobile', 'string | number | null', '手机号（服务端 DTO 里是 Long，JSON 里是数字）。弹窗显示为「手机号」列，关键词也能命中它。', { nullable: true, nullMeaning: '后端未返回手机号' }),
+  field('list[].isRelatedClass', 'number | null', '是否已关联班级：0 否、1 是。本页不展示，但可用来提示"这个人已经在某个班里"。', { nullable: true, values: { '0': '否', '1': '是' }, nullMeaning: '后端未返回' }),
+  field('list[].isRelatedLayer', 'number | null', '是否已关联智慧蛋鸡账号：0 否、1 是。', { nullable: true, values: { '0': '否', '1': '是' }, nullMeaning: '后端未返回' }),
+  field('list[].isCreateManually', 'number | null', '是否手动创建：0 否、1 是。', { nullable: true, nullMeaning: '后端未返回' }),
+  field('list[].createTime', 'string | null', '录入时间；服务端按它倒序返回。', { nullable: true, nullMeaning: '后端未返回' }),
+]
+
+const candidateBase = base({
+  purpose: '按关键字分页查询「人员」弹窗的内部人员候选。',
+  effect: 'read',
+  inputs: {},
+  output: { shape: '{ list: object[], total: number }', fields: [field('$', 'object', '内部人员候选分页结果。'), field('list', 'object[]', '当前页记录。'), field('total', 'number', '符合关键字的记录总数。'), ...personCandidateFields], empty: 'list=[] 且 total=0 表示当前关键字没有命中；请求失败时抛出，不降级为空页。' },
+  consume: [],
+  steps: [],
+  completion: '返回当前关键字的内部人员候选页。',
+  idempotency: null,
+})
+
+const PERSON_CANDIDATE_BOUNDARIES = [
+  '这两条能力只服务「人员」弹窗（components/add-personnel.vue），与班级管理页里同名 URL 的能力**不是同一条**：那一页的上下文是 module-type 12 / 学习管理，把选出来的人填进班级学员；这里选出来的人进的是企业登记的董事/监事/高级管理人员/法人关系。',
+  '「未注册智慧蛋鸡人员」页签没有接口（页面本地输入即回传），不属于本组能力。',
+  '弹窗回传给表单的是 { staffName, staffCode } 两项：staffCode 是工号（内部人员取 username，外部人员取 staffCode），staffName 是姓名。它**不是**企业登记里的 legalRepresentative（那是用户 ID），两者不能互换。',
+  '人员候选属于长选项参数：SDK 强制要求 keyword，没有关键字的调用会在发请求前被拒（SDK 侧策略，不是后端要求）。',
+  '`userNotInGrade` 的 SQL 并不过滤已在班级的人（LEFT JOIN 的子查询没被使用），且本页根本不传 gradeId；SDK 原样透传，不补本地过滤。',
+  '内部人员的 keyword 是 real_name **前缀**匹配，外部人员的 keyword 同时匹配姓名与手机号（包含匹配）：同一个关键字在两页签的命中范围不一样。',
+  'SDK 会裁掉内部人员响应里的 password / password2 / salt 三个键；不要据此认为这些字段在服务端不存在。',
+]
+
+const PERSON_CANDIDATE_GAPS = [
+  '尚未在真实测试环境打开人员弹窗执行候选查询与"确定回传"的完整闭环；本轮只有固定检出源码与离线请求断言。',
+  '未做浏览器抓包：请求的 qs 键序按 Portal 源码字面顺序锁定，没有与线上字节逐字比对。',
+]
+
+add('business-registration-person-candidate', {
+  ...candidateBase,
+  purpose: '按关键字分页查询「人员」弹窗的「内部人员」候选（在职、组织非空的用户）。',
+  whenToUse: '操作 Portal「风险防控 → 登记信息」列表里企业登记表单的「人员」弹窗，在「内部人员」页签里按姓名挑人。',
+  boundaries: [...candidateBase.boundaries, ...PERSON_CANDIDATE_BOUNDARIES],
+  inputs: {
+    keyword: param('内部人员姓名关键字；服务端按 real_name **前缀**匹配（只记得名字中间几个字时会查不到）。', '用户给出的姓名片段', { type: 'string', required: true, constraints: ['非空白', 'SDK 不接受无关键字调用：那是全量人员拉取（D6 / H35）'] }),
+    pageNo: param('页码，从 1 开始；弹窗每页 5 条、带页码分页。', '弹窗分页位置', { type: 'number', required: false, default: '1' }),
+    pageSize: param('每页条数；弹窗用 5。', '弹窗分页设置', { type: 'number', required: false, default: '5', constraints: ['1 ≤ pageSize ≤ 500', '不接受 -1 或 0：那是全量拉取，SDK 直接抛错'] }),
+  },
+  output: { shape: '{ list: object[], total: number }', fields: [field('$', 'object', '内部人员候选分页结果。'), field('list', 'object[]', '当前页记录，不是全部记录。'), field('total', 'number', '符合关键字的记录总数。'), ...personCandidateFields], empty: 'list=[] 且 total=0 表示当前关键字没有命中；请求失败时抛出，不降级为空页。' },
+  consume: [
+    '把 list[].realName 显示成「姓名」列、list[].username 显示成「工号」列、list[].organizationName 显示成「组织路径」列；勾选后回传给企业登记表单的是 { staffName: realName, staffCode: username }。',
+    '这条接口名叫「不在该班级的用户列表」，但当前 SQL 并不过滤已在班级的人，而且本页不传 gradeId：把它当成"在职人员列表"用，不要用它做任何"未入班"判断。',
+    '未登记的其它后端字段原样透传，不属于弹窗消费契约；password / password2 / salt 已被 SDK 裁掉。',
+  ],
+  steps: [
+    { role: 'optional', when: '用户在「内部人员」页签勾完人', capabilityId: 'business-registration-prepare-create', mapping: { form: 'user.registrationForm' }, instruction: '把勾选结果并进企业登记表单的董事/监事/高级管理人员数组（每人只保留 staffName 与 staffCode）后重新准备草稿；本能力自身不写入。' },
+  ],
+  completion: '返回当前关键字的内部人员候选页；读取本身不修改数据。需要覆盖全部命中时继续翻页到 total。',
+  idempotency: null,
+  evidence: [...candidateBase.evidence, { source: 'CodeReview_Projects_Js@test/portal/main:6ac274fc9e app/portal/views/dashboard/hr/certificate/enterpriseRegistration/components/add-personnel.vue（内部人员页签，:178）', kind: 'reference', note: '锁定弹窗发出的参数名与顺序（name/pageNo/pageSize，无 gradeId）、每页 5 条、表格三列与回传字段名。' }, { source: 'CodeReview_Mall_Platform_Java@test/test:77fbc2a206c HrSysUserController#getUserNotInGrade、HrSysUserServiceImpl、SysUserDao.xml#getUserNotInGrade、SysUserDTO', kind: 'reference', note: '核对端点方法、name 的前缀匹配、LEFT JOIN 子查询未被使用、以及 password2/salt 会被序列化。' }],
+  gaps: PERSON_CANDIDATE_GAPS,
+})
+
+add('business-registration-external-person-list', {
+  ...candidateBase,
+  purpose: '按关键字分页查询「人员」弹窗的「外部人员」候选（未接入智慧蛋鸡账号的外部人员）。',
+  whenToUse: '操作 Portal「风险防控 → 登记信息」列表里企业登记表单的「人员」弹窗，在「外部人员」页签里按姓名或手机号挑人。',
+  boundaries: [...candidateBase.boundaries, ...PERSON_CANDIDATE_BOUNDARIES],
+  inputs: {
+    keyword: param('外部人员姓名或手机号关键字；服务端同时按 name 与 mobile 做**包含**匹配。', '用户给出的姓名或手机号片段', { type: 'string', required: true, constraints: ['非空白', 'SDK 不接受无关键字调用：那是全量人员拉取（D6 / H35）'] }),
+    pageNo: param('页码，从 1 开始；弹窗每页 5 条、带页码分页。', '弹窗分页位置', { type: 'number', required: false, default: '1' }),
+    pageSize: param('每页条数；弹窗用 5。', '弹窗分页设置', { type: 'number', required: false, default: '5', constraints: ['1 ≤ pageSize ≤ 500', '不接受 -1 或 0：那是全量拉取，SDK 直接抛错'] }),
+  },
+  output: { shape: '{ list: object[], total: number }', fields: [field('$', 'object', '外部人员候选分页结果。'), field('list', 'object[]', '当前页记录，不是全部记录。'), field('total', 'number', '符合关键字的记录总数。'), ...externalPersonFields], empty: 'list=[] 且 total=0 表示当前关键字没有命中；请求失败时抛出，不降级为空页。' },
+  consume: [
+    '把 list[].name 显示成「姓名」列、list[].mobile 显示成「手机号」列；勾选后回传给企业登记表单的是 { staffName: name, staffCode: staffCode }。',
+    '服务端固定只返回外部人员（内部把 isStaff 置 0），这条能力拿不到内部人员；要内部人员用 business-registration-person-candidate。',
+    'organizationId / organizationName 在这条响应里恒为空（SQL 没选这两列），不要用它们做组织判断。',
+  ],
+  steps: [
+    { role: 'optional', when: '用户在「外部人员」页签勾完人', capabilityId: 'business-registration-prepare-create', mapping: { form: 'user.registrationForm' }, instruction: '把勾选结果并进企业登记表单的对应人员数组（每人只保留 staffName 与 staffCode）后重新准备草稿；本能力自身不写入。' },
+  ],
+  completion: '返回当前关键字的外部人员候选页；读取本身不修改数据。需要覆盖全部命中时继续翻页到 total。',
+  idempotency: null,
+  evidence: [...candidateBase.evidence, { source: 'CodeReview_Projects_Js@test/portal/main:6ac274fc9e app/portal/views/dashboard/hr/certificate/enterpriseRegistration/components/add-personnel.vue（外部人员页签，:258）', kind: 'reference', note: '锁定弹窗发出的参数（name/pageNo/pageSize、无 gradeId）、每页 5 条、表格两列与回传字段名。' }, { source: 'CodeReview_Mall_Platform_Java@test/test:77fbc2a206c StudyGradeStudentRelController#getExternalStudentList、StudyStudentServiceImpl#pageExternalStudent、StudyStudentDao.xml#pageExternalStudent', kind: 'reference', note: '核对端点方法、服务端固定 isStaff=0、name 同时匹配姓名与手机号、以及 select 列表里没有组织字段。' }],
+  gaps: PERSON_CANDIDATE_GAPS,
+})
+
 export const BUSINESS_REGISTRATION_AI_CONTRACTS = contracts
 export const BUSINESS_REGISTRATION_METHOD_CONTRACTS: Record<string, AiContract> = {}
 for (const [id, method] of Object.entries(BUSINESS_REGISTRATION_METHODS)) {

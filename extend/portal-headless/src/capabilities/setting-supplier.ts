@@ -67,6 +67,51 @@ export type SettingSupplierAddPlatformInput = {
   tenantId: SettingSupplierId
 }
 
+/**
+ * 系统品牌候选（供应商表单那一列的 `brandOptions` 来源）。
+ *
+ * ⚠️ **两个检出里有两个同名端点，只有 supply 那个对得上**：
+ *
+ * | 类 | 类级映射 | 完整路径 | 是否本能力 |
+ * | --- | --- | --- | --- |
+ * | `erp-module-supply` 的 `MaterielController#getSysBrandPage:205` | `/supply/materiel` | `/admin-api/supply/materiel/get-sys-brand-page` | ✅ 页面打的就是它 |
+ * | `erp-module-system` 包路径 `controller.adminmanage.materiel` 的 `PlatformMaterielController:95` | `/system/materiel` | `/system/materiel/get-sys-brand-page`（**不会**补 `/admin-api`） | ❌ 路径对不上 |
+ *
+ * 写契约/排障时不要混：平台物料库那条线属于另一个域，它的返回 DTO 虽然同名，但部署前缀与权限都不同。
+ *
+ * ⚠️ **页面拉它却不用它**：`hr/setting/supplier/[mode]/[id].vue` 在 `onMounted` 里无条件调
+ * `getBrandList()`，用 `loopFetch({ pageSize: 200, maxPages: 100 })` 全量翻页拉；
+ * 但消费这份数据的品牌多选列（模板 140-155 行的 `<template v-else-if="column.key === 'sysBrandIds'">`
+ * 与 `columns` 里的 `{ key: 'sysBrandIds' }`）在固定检出里**都是注释掉的**。
+ * 所以这个请求会真发，但当前**没有任何可见功能消费它的结果**，见该能力的 gaps。
+ */
+const SYS_BRAND_PAGE_URL = '/admin-api/supply/materiel/get-sys-brand-page'
+
+/** 页面自己的全量拉取分片大小；SDK 把它当默认值，并把 `PageParam` 的 `@Max(500)` 当上限。 */
+export const SETTING_SUPPLIER_BRAND_PAGE_SIZE_DEFAULT = 200
+export const SETTING_SUPPLIER_BRAND_PAGE_SIZE_MAX = 500
+
+export type SettingSupplierBrandQuery = {
+  pageNo?: number
+  pageSize?: number
+}
+
+export type SettingSupplierBrand = {
+  /** 品牌ID；供应商表单勾选后按逗号 join 成 `sysBrandIds`。 */
+  brandId: SettingSupplierId
+  brandName: string | null
+  brandAlias: string | null
+  /** 品牌网址（后端标注为保留字段）。 */
+  brandUrl: string | null
+  orderSort: number | null
+  /** 品牌介绍（后端标注为保留字段）。 */
+  brandDesc: string | null
+  brandLogo: string | null
+  modifiedTime: number | null
+  /** 是否失效：0 有效、1 失效。 */
+  disabled: number | null
+}
+
 type JsonObject = Record<string, unknown>
 
 function objectOf (value: unknown, label: string): JsonObject {
@@ -207,6 +252,39 @@ function trueOf (value: unknown, label: string): true {
   return true
 }
 
+function brandPageParamsOf (query: SettingSupplierBrandQuery = {}): JsonObject {
+  const rawPageNo = query.pageNo
+  const pageNo = rawPageNo === undefined ? 1 : rawPageNo
+  if (!Number.isSafeInteger(pageNo) || pageNo < 1) throw new Error('pageNo必须为正整数')
+  const rawPageSize = query.pageSize
+  const pageSize = rawPageSize === undefined ? SETTING_SUPPLIER_BRAND_PAGE_SIZE_DEFAULT : rawPageSize
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > SETTING_SUPPLIER_BRAND_PAGE_SIZE_MAX) {
+    throw new Error(`pageSize必须是1到${SETTING_SUPPLIER_BRAND_PAGE_SIZE_MAX}之间的正整数（后端PageParam的最大值校验是500）`)
+  }
+  return { pageNo, pageSize }
+}
+
+function nullableIntegerFieldOf (value: unknown, label: string): number | null {
+  if (value === undefined || value === null) return null
+  if (!Number.isSafeInteger(value)) throw new Error(`${label}必须为整数或null`)
+  return value as number
+}
+
+function brandOf (value: unknown, index: number): SettingSupplierBrand {
+  const row = objectOf(value, `系统品牌[${index}]`)
+  return {
+    brandId: idOf(row.brandId, `系统品牌[${index}].brandId`),
+    brandName: textOf(row.brandName, `系统品牌[${index}].brandName`),
+    brandAlias: textOf(row.brandAlias, `系统品牌[${index}].brandAlias`),
+    brandUrl: textOf(row.brandUrl, `系统品牌[${index}].brandUrl`),
+    orderSort: nullableIntegerFieldOf(row.orderSort, `系统品牌[${index}].orderSort`),
+    brandDesc: textOf(row.brandDesc, `系统品牌[${index}].brandDesc`),
+    brandLogo: textOf(row.brandLogo, `系统品牌[${index}].brandLogo`),
+    modifiedTime: nullableIntegerFieldOf(row.modifiedTime, `系统品牌[${index}].modifiedTime`),
+    disabled: nullableIntegerFieldOf(row.disabled, `系统品牌[${index}].disabled`),
+  }
+}
+
 function createPayloadOf (input: SettingSupplierCreateInput): JsonObject[] {
   const value = objectOf(input, '供应商批量创建参数')
   if (!Array.isArray(value.suppliers) || value.suppliers.length === 0) throw new Error('suppliers必须为非空数组')
@@ -285,6 +363,19 @@ export function createSettingSupplierCapability (request: PortalRequest) {
       const tenantId = idOf(input?.tenantId, 'tenantId')
       return trueOf(await request({ url: `${ROOT}/update-use-tenant`, method: 'post', data: { supplierIds, tenantId } }), '添加平台供应商')
     },
+
+    /**
+     * 系统品牌候选分页（供应商表单品牌多选列的数据源）。
+     *
+     * ⚠️ 该接口带 `@TenantIgnore`，返回的是**跨租户的系统品牌字典**，不是当前租户私有的品牌；
+     * 页面也正因如此把它当作全局候选。
+     */
+    async listBrandCandidates (query: SettingSupplierBrandQuery = {}): Promise<PageResult<SettingSupplierBrand>> {
+      const result = await request<unknown>({ url: SYS_BRAND_PAGE_URL, method: 'get', params: brandPageParamsOf(query) })
+      const page = objectOf(result, '系统品牌分页响应')
+      if (!Array.isArray(page.list) || !Number.isSafeInteger(page.total) || (page.total as number) < 0) throw new Error('系统品牌分页响应缺少有效list或total')
+      return { list: page.list.map(brandOf), total: page.total as number }
+    },
   }
 }
 
@@ -307,6 +398,7 @@ export const SETTING_SUPPLIER_METHODS = {
   'setting-supplier-remove': 'remove',
   'setting-supplier-platform-list': 'platformList',
   'setting-supplier-add-platform': 'addPlatform',
+  'setting-supplier-brand-candidates': 'listBrandCandidates',
 } as const
 
 export const settingSupplierCapabilities: CapabilityDefinition[] = [
@@ -316,4 +408,5 @@ export const settingSupplierCapabilities: CapabilityDefinition[] = [
   { id: 'setting-supplier-remove', title: '删除供应商', write: true, params: [idParam('id', '供应商ID')] },
   { id: 'setting-supplier-platform-list', title: '查询平台供应商库', write: false, params: queryParams },
   { id: 'setting-supplier-add-platform', title: '添加平台供应商到当前租户', write: true, params: [p('supplierIds', 'text', true, '平台供应商ID数组'), idParam('tenantId', '当前租户ID；页面随请求提交，后端以会话租户为准')] },
+  { id: 'setting-supplier-brand-candidates', title: '查询系统品牌候选', write: false, params: [p('pageNo', 'number', false, '从1开始；默认1'), p('pageSize', 'number', false, '默认200（页面的分片大小），上限500')] },
 ].map(definition => ({ ...definition, pagePath: SETTING_SUPPLIER_PAGE_PATH, permission: SETTING_SUPPLIER_PERMISSION, moduleType: SETTING_SUPPLIER_MODULE_TYPE, httpInstance: 'platform' }))

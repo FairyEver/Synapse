@@ -185,3 +185,94 @@ describe('Portal 人力 → 内部员工页面能力', () => {
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const XLS_MIME = 'application/vnd.ms-excel'
+
+// ---------------------------------------------------------------------------
+// 职务变动的「有编制的组织结构树」——本轮补齐的那一条
+// ---------------------------------------------------------------------------
+
+describe('内部员工：有编制的组织结构树（职务变动组织候选）', () => {
+  it('参数键序 staffCode → id；id 后端不绑但页面会发（逐字段一致）', async () => {
+    const { api, calls } = fixture([[
+      { id: 3, pid: 0, name: '总部', isHavePost: 0, children: [{ id: 4, pid: 3, name: '杭州', isHavePost: 1 }] },
+    ]])
+    await api.postOrgTree({ staffCode: '2026050801', id: '9001' })
+    expect(calls[0]).toEqual({
+      url: '/org/organization/getHavePostOrgTree',
+      method: 'get',
+      params: { staffCode: '2026050801', id: '9001' },
+    })
+    expect(Object.keys(calls[0]?.params as object)).toEqual(['staffCode', 'id'])
+  })
+
+  it('两个参数都可以不给：那时只返回有编制的组织与祖先（不并入某人当前组织）', async () => {
+    const { api, calls } = fixture([[]])
+    await api.postOrgTree()
+    expect(calls[0]?.params).toEqual({})
+  })
+
+  it('归一：fullPath 缺失时按「父路径 / 名称」兜底，isHavePost 原值保留，children 递归', async () => {
+    const { api } = fixture([[
+      {
+        id: 3, pid: 0, name: '总部', isHavePost: 0,
+        children: [{ id: 4, pid: 3, name: '杭州', isHavePost: 1, fullPath: '总部/杭州', children: [] }],
+      },
+    ]])
+    await expect(api.postOrgTree({ staffCode: '1' })).resolves.toEqual([
+      {
+        id: 3, pid: 0, name: '总部', fullPath: '总部', isHavePost: 0,
+        children: [{ id: 4, pid: 3, name: '杭州', fullPath: '总部/杭州', isHavePost: 1, children: [] }],
+      },
+    ])
+  })
+
+  it('叶子节点没有 children 键是正常的（后端只给有子节点的父节点挂 children）', async () => {
+    const { api } = fixture([[{ id: 5, pid: 0, name: '孤岛', isHavePost: 1 }]])
+    await expect(api.postOrgTree()).resolves.toEqual([
+      { id: 5, pid: 0, name: '孤岛', fullPath: '孤岛', isHavePost: 1, children: [] },
+    ])
+  })
+
+  it('形状变了要当场炸：非数组、缺 id', async () => {
+    await expect(fixture([{ list: [] }]).api.postOrgTree()).rejects.toThrow(/不是数组/)
+    await expect(fixture([[{ name: '没有id' }]]).api.postOrgTree()).rejects.toThrow(/缺少id/)
+  })
+
+  it('能力定义与执行绑定同名方法，且是只读', () => {
+    expect(HR_INTERNAL_STAFF_METHODS['hr-internal-staff-post-org-tree']).toBe('postOrgTree')
+    const definition = hrInternalStaffCapabilities.find(item => item.id === 'hr-internal-staff-post-org-tree')
+    expect(definition).toMatchObject({
+      pagePath: HR_INTERNAL_STAFF_PAGE_PATH,
+      permission: HR_INTERNAL_STAFF_PERMISSION,
+      moduleType: HR_INTERNAL_STAFF_MODULE_TYPE,
+      write: false,
+    })
+  })
+
+  it('AI 说明契约：isHavePost=0 置灰、只绑 staffCode、返回集口径都写清楚，并通过结构校验', async () => {
+    const contract = contracts['hr-internal-staff-post-org-tree']!
+    expect(contract.effect).toBe('read')
+    expect(contract.output.fields.find(item => item.path === '[].isHavePost')?.values?.['0']).toContain('置灰')
+    expect(contract.consume.join(' ')).toContain('isHavePost === 0')
+    expect(contract.inputs.id?.meaning).toContain('只绑 staffCode')
+    expect(contract.consume.join(' ')).toContain('祖先')
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = await import(validatorUrl) as {
+      validateAiContract: (id: string, contract: unknown, options?: unknown) => Array<{ code: string; message: string }>
+    }
+    const definitions = new Map(hrInternalStaffCapabilities.map(item => [item.id, item] as const))
+    expect(validateAiContract('hr-internal-staff-post-org-tree', contract, { definitions })).toEqual([])
+  })
+
+  it('源码锁定：页面的两条参数与后端的单参签名', () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const page = read(portalRoot, 'app/portal/views/dashboard/hr/staff/staff-list/[mode]/[id].vue')
+    expect(page).toContain("'/org/organization/getHavePostOrgTree'")
+    expect(page).toContain('staffCode: rrForm.formState.staffCode')
+    expect(page).toContain('Number(item.isHavePost) === 0')
+    const controller = read(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/organization/org/controller/HrOrganizationController.java')
+    expect(controller).toContain('getHavePostOrgTree(Long staffCode)')
+    const service = read(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/organization/org/service/impl/HrOrganizationServiceImpl.java')
+    expect(service).toContain('dto.setIsHavePost(orgList.contains(dto.getId()) ? 1 : 0)')
+  })
+})

@@ -1,8 +1,10 @@
 import type { AiContract, AiField, AiParameter } from './ai-contract.js'
 import {
+  STUDY_LESSON_HIDDEN_METHODS,
   STUDY_LESSON_METHODS,
   studyLessonActionCapabilities,
   studyLessonCapabilities,
+  studyLessonHiddenCapabilities,
 } from '../capabilities/study-lesson.js'
 
 type LessonKind = 'daily' | 'weekly' | 'monthly'
@@ -629,4 +631,435 @@ export const STUDY_LESSON_METHOD_CONTRACTS: Record<string, AiContract> = Object.
       boundaries: [...source.boundaries, `这是公开方法 sdk.studyLesson.${method}；参数按本契约 inputs 传入，写操作仍必须遵守 prepare → submit → cancel。`],
     }]
   }),
+)
+
+/* ---------------------------------------------------------------------------
+ * 学习记录页与月课堂隐藏子页（本节点新增）
+ *
+ * 与上面两组**分开导出**：`STUDY_LESSON_AI_CONTRACTS` / `STUDY_LESSON_METHOD_CONTRACTS`
+ * 已经被 `contracts-business.ts` 合并进权威目录，本组还没有，接线由派单方统一做。
+ * 分开的理由见 `src/capabilities/study-lesson.ts` 里 `studyLessonHiddenCapabilities` 的注释。
+ * ------------------------------------------------------------------------- */
+
+const hiddenDefinitions = new Map(studyLessonHiddenCapabilities.map(definition => [definition.id, definition]))
+
+const hiddenEvidence: AiContract['evidence'] = [
+  {
+    source: 'CodeReview_Projects_Js@test/portal/main:6ac274fc9e app/portal/views/dashboard/education/lesson/{daily-lesson,weekly-lesson,monthly-lesson}/record/[id]/item-list.vue、monthly-lesson/meeting-resolution/[mode]/[id]/{item-list.vue,components/view-meeting.vue}、monthly-lesson/score-record/[id]/{item-list.vue,components/score-record.vue}',
+    kind: 'reference',
+    note: '逐页核对隐藏子路由与弹窗实际发出的 URL、HTTP 方法、参数键序、列表模块的 getDataListIsPage/deleteIsBatch 取值、以及弹窗内本地过滤与本地排序；三份 record/[id]/item-list.vue 已逐字比对（晨/周/月三页的列表与删除配置完全相同）。',
+  },
+  {
+    source: 'CodeReview_Mall_Platform_Java@test/test:77fbc2a206c StudyStudyRecordController、StudyLessonController（getMotionByLesson/getMotionRateListByLesson/getRateListByMotionId）、OverseeTaskController、StudyStudyRecordServiceImpl、StudyLessonMotionServiceImpl、LessonStudyStudentDTO、StudyLessonMotionDTO、StudyMonthMotionLessonRateDTO、OverseeTaskRespVO',
+    kind: 'reference',
+    note: '核对 HTTP 路由、DTO 字段、service 的读写行为（是否 insert/update）、删除的 -1 业务返回与错误文案、getRateListByMotionId 的排序白名单与内存过滤；固定检出的静态证据不代表已部署版本。',
+  },
+  {
+    source: 'src/capabilities/study-lesson.ts',
+    kind: 'implementation',
+    note: '核对 STUDY_LESSON_HIDDEN_METHODS、studyLessonHiddenCapabilities、参数装配顺序、本地名称过滤、DELETE 数组 body 与 id 校验。',
+  },
+  {
+    source: 'test/study-lesson.test.ts',
+    kind: 'test',
+    note: '锁定 URL/method/params 键序、DELETE body 形状、name 不进 query、以及 -1 业务失败的契约文字；离线断言不替代真实测试环境读取。',
+  },
+]
+
+const hiddenGaps = [
+  '本轮未在真实测试环境读取这些隐藏子页/弹窗：请求形状来自固定 Portal/Java 检出与离线测试，字段可空性与真实返回条数未实测。',
+  '学习记录列表与议案的返回结构没有浏览器基准（这几页在上一轮基准抓取范围之外），字段语义来自后端 DTO 与页面 columns。',
+  '晨课堂与月课堂的 record/[id]/item-list 在固定检出里**没有入口**（两个列表页打开的都是弹窗，全仓没有 push 到这两条子路由的代码）；对应能力是否应当按 conventions §28 移除尚未决定，见 study-lesson-{daily,monthly}-record-list 的边界。',
+]
+
+function hiddenParam (meaning: string, source: string, extra: Partial<AiParameter> = {}): AiParameter {
+  return { meaning, source, ...extra }
+}
+
+const RECORD_ROW_FIELDS: AiField[] = [
+  field('list[].id', 'string | number', '学习记录 ID；移出（study-record-remove）用的就是它，不是学员工号。'),
+  field('list[].name', 'string | null', '学员姓名。', { nullable: true, nullMeaning: '学员档案里没有姓名或后端未返回' }),
+  field('list[].staffCode', 'string | number | null', '学员工号。', { nullable: true, nullMeaning: '后端未返回' }),
+  field('list[].mobile', 'string | null', '联系方式。', { nullable: true, nullMeaning: '学员档案没有手机号' }),
+  field('list[].orgName', 'string | null', '标准化单元（组织名称）；学员没有组织时为 null。', { nullable: true, nullMeaning: '学员没有挂组织' }),
+  field('list[].isRelatedLayer', 'number | null', '是否关联智慧蛋鸡；页面按 yes_or_no 字典显示。', { nullable: true, values: { '0': '未关联', '1': '已关联' }, nullMeaning: '后端未返回' }),
+  field('list[].createTime', 'string | null', '入班时间。', { nullable: true, nullMeaning: '后端未返回' }),
+  field('list[].isAdmAdd', 'number | null', '这条学习记录是否管理员手动添加：**只有 1 的行才会渲染"移出"按钮**，0 的行移出会被后端拒绝。', { nullable: true, values: { '0': '学员自学产生', '1': '管理员添加' }, nullMeaning: '后端未返回' }),
+]
+
+function recordListOutput (label: string): AiContract['output'] {
+  return {
+    shape: '{ list: object[], total: number }',
+    fields: [
+      field('list', 'object[]', `当前页${label}学习记录；不是全班学员名单。`),
+      field('total', 'number', '符合当前筛选的记录总数，不是当前页长度。'),
+      ...RECORD_ROW_FIELDS,
+    ],
+    empty: 'list=[] 且 total=0 表示这个课堂当前没有可见的学习记录；不能把空列表当成"已移出成功"。',
+  }
+}
+
+const RECORD_LIST_INPUTS: Record<string, AiParameter> = {
+  lessonId: hiddenParam('当前课堂 ID；不是学习记录 ID、也不是班课环节 ID。', '对应课堂的 list[].id（隐藏路由 record/[id] 的 id）', { type: 'string | number', required: true }),
+  name: hiddenParam('学员姓名，后端 LIKE 模糊匹配。', '用户输入的学员姓名', { type: 'string', required: false }),
+  staffCode: hiddenParam('学员工号，后端等值匹配；不是用户 ID。', '用户输入的工号', { type: 'string | number', required: false }),
+  pageNo: hiddenParam('从 1 开始的页码。', '调用方分页状态', { type: 'integer', required: false, default: '1', constraints: ['正整数'] }),
+  pageSize: hiddenParam('每页条数；Portal 列表模块默认 20。', '调用方分页状态', { type: 'integer', required: false, default: '20', constraints: ['正整数'] }),
+}
+
+/**
+ * 「这个 record 子页现在到底进不进得去」——三页不一样，而派单表把它们当同一件事。
+ *
+ * 实测（固定检出 `6ac274fc9e`，全仓 `grep -rn 'record/.*item-list'` 只命中 4 处）：
+ * - **周课堂可达**：`weekly-lesson/list.vue:77` 的「学习记录」按钮
+ *   （`v-if="record.lessonKind === 1"`，即作业周课堂行）`router.push('./record/${id}/item-list')`。
+ * - **晨课堂不可达**：daily 列表的「课堂记录」打开的是弹窗（`components/course-record.vue`），
+ *   没有 push 到 `daily-lesson/record/[id]/item-list` 的代码。
+ * - **月课堂不可达**：monthly 列表的「会议记录」也是弹窗（会议记录弹窗），
+ *   该页只 push `meeting-resolution/...` 与 `score-record/...`。
+ *
+ * 按 conventions §28「能渲染不等于用户能做的事」的口径，晨/月两份本可以不算能力；
+ * 但派单表把三条都列进来了，所以这里**保留三条**并把事实写进说明，由派单方决定是否裁掉。
+ */
+const RECORD_PAGE_REACHABILITY: Record<LessonKind, string> = {
+  daily: '⚠️ **本页当前没有可达入口**：晨课堂列表的「课堂记录」打开的是弹窗（`components/course-record.vue`），固定检出里没有任何代码 push 到 `daily-lesson/record/[id]/item-list`。能力按派单表保留，但按 conventions §28「能渲染不等于用户能做的事」它可能应当移除 —— 这一点未决。',
+  weekly: '本页可达：周课堂列表的「学习记录」按钮（`weekly-lesson/list.vue:77`，`v-if="record.lessonKind === 1"`，即作业周课堂行）push 到 `./record/${id}/item-list`。',
+  monthly: '⚠️ **本页当前没有可达入口**：月课堂列表的「会议记录」打开的是弹窗，固定检出里只 push `meeting-resolution/...` 与 `score-record/...`，没有 push 到 `monthly-lesson/record/[id]/item-list`。能力按派单表保留，但按 conventions §28 它可能应当移除 —— 这一点未决。',
+}
+
+function recordListContract (id: string): AiContract {
+  const kind = lessonKindOf(id)
+  const meta = pageMeta[kind]
+  return {
+    purpose: `查询「${meta.label}」某个课堂下的学习记录（学员名单）分页；返回的是学员行，不是课程资源。`,
+    whenToUse: `从${meta.label}列表进入该课堂的「学习记录」子页、需要看这个课堂里有哪些学员（以及谁是可移出的）时使用。`,
+    boundaries: [
+      ...commonBoundaries,
+      `**本能力只服务${meta.label}的隐藏子页 ${meta.pagePath} 下的 record/[id]/item-list.vue**；晨/周/月三页各自有独立能力，请求与后端方法相同但页面上下文不同，不要拿本能力代替另外两页。`,
+      RECORD_PAGE_REACHABILITY[kind],
+      '列表行 ID 是 hr_study_record 的记录 ID；staffCode 是学员工号，移出时两者不能互换。',
+      '本能力只读，不改变学员与课堂的关系；移出要走 study-record-remove。',
+    ],
+    effect: 'read',
+    prerequisites: [
+      `使用当前用户会话、租户和${meta.label}页面权限（${meta.permission}）；结果只代表当前数据范围。`,
+      'lessonId 必须来自课堂列表返回的 list[].id，不能用课堂名称或班课环节 ID 代替。',
+    ],
+    inputs: RECORD_LIST_INPUTS,
+    output: recordListOutput(meta.label),
+    consume: [
+      '按 list[].id 作为移出目标；按 list[].isAdmAdd 判断这一行能不能移出（只有 1 能），不要用 status 或 whether 之类的字段替代。',
+      'isRelatedLayer 需要中文标签时按 yes_or_no 字典解释；isAdmAdd 是页面自己的可见性判据，不在字典里。',
+    ],
+    steps: [
+      { role: 'optional', when: '用户要移出选中的行', capabilityId: 'study-record-remove', mapping: { ids: 'result.list[].id' }, instruction: '只把 isAdmAdd=1 的行的 id 放进数组；0 的行会被后端整体拒绝（连同一批里能移出的也一起失败）。' },
+    ],
+    completion: `返回该课堂当前筛选下的一页${meta.label}学习记录及 total；读取本身不改变任何学员关系。`,
+    failures: [
+      '权限、租户数据范围、网络或响应形状错误原样抛出；list=[] 只表示当前筛选没有记录。',
+      `lessonId 缺失或不是正整数时在发请求前抛错（页面上下文由隐藏路由提供，调用方不要猜）。`,
+    ],
+    idempotency: null,
+    evidence: hiddenEvidence,
+    gaps: hiddenGaps,
+  }
+}
+
+const RECORD_REMOVE_INPUTS: Record<string, AiParameter> = {
+  ids: hiddenParam(
+    '待移出的学习记录 ID 数组；单删也发只有一个元素的数组。',
+    'study-lesson-weekly-record-list 返回的 list[].id',
+    { type: '(string | number)[]', required: true, constraints: ['非空', '每项为安全正整数或无前导零的正整数字符串', '只放 isAdmAdd=1 的行'] },
+  ),
+}
+
+const hiddenContracts: Record<string, AiContract> = {
+  'study-lesson-weekly-record-list': recordListContract('study-lesson-weekly-record-list'),
+
+  'study-record-remove': {
+    purpose: '把学员从课堂的学习记录里移出（页面按钮文案就是"移出"）；请求是 DELETE，body 是一个 ID 数组。',
+    whenToUse: '用户在某个课堂的「学习记录」子页选中一行或多行（isAdmAdd=1）并确认移出时使用；这是真写，不是只读查询。',
+    boundaries: [
+      ...commonBoundaries,
+      '**同一个请求在晨/周/月三个 record/[id] 子页上逐字节相同**（三份 item-list.vue 的 deleteURL 与 deleteIsBatch 完全相同），所以这里合成一个能力；它的页面上下文绑定在**周课堂**页 —— 三页里只有周课堂列表真的 push 到自己的 record 子页（`weekly-lesson/list.vue:77` 的「学习记录」，`v-if="record.lessonKind === 1"`），晨/月两页的同名子页在固定检出里没有入口。三页的 module-type 推导同为 12，请求本身不区分页面。',
+      '⚠️ **晨/月两份 record 子页当前不可达**（理由见 `study-lesson-{daily,monthly}-record-list` 的边界）；本能力绑在可达的周课堂上，但它移除的其实是"任意一个课堂的学习记录"，与入口页无关。',
+      '请求形状是 renren 列表模块的 `deleteIsBatch: true` 分支：`DELETE deleteURL` + JSON 数组 body，**没有 query、也没有 `${deleteURL}/{id}` 这种路径参数**。改成路径参数就不是这一页发的东西了。',
+      '本能力只移出"管理员添加的学习记录"；它不删除学员档案，也不解除学员与班级的关系。',
+    ],
+    effect: 'write',
+    prerequisites: [
+      '使用当前用户会话、租户与课堂上下文；ids 必须来自同一课堂的最新列表读取结果。',
+      '先按 isAdmAdd=1 过滤：这一列是页面"移出"按钮的渲染条件，也是后端接受移出的条件。',
+    ],
+    inputs: RECORD_REMOVE_INPUTS,
+    output: {
+      shape: 'undefined',
+      fields: [field('$', 'undefined', 'Portal 成功响应没有供调用方消费的业务 data；SDK 等待请求完成后返回 undefined。')],
+      empty: '正常空回执；undefined 不能证明已经移出，必须重新读取同一课堂的学习记录列表核对。',
+    },
+    consume: [
+      '请求体严格是 `["<id>", …]` 的数组本身，不是 `{ ids: [...] }`；这一点与"学习管理"的批量删除同形，与本模块学生的 moveOut 批量删除也同形。',
+      '成功或超时后都重新读取同一 lessonId 的学习记录列表，确认目标 id 已不在 list 里；不要用"HTTP 成功"当结论。',
+    ],
+    steps: [
+      { role: 'recovery', when: '请求成功、超时或响应丢失后需要确认最终业务状态', capabilityId: 'study-lesson-weekly-record-list', mapping: { lessonId: 'context.lessonId' }, instruction: '按同一课堂重新读取学习记录列表，逐条核对目标 id 是否还在；列表里少了才算移出成功。' },
+    ],
+    completion: '同一课堂的学习记录列表里不再出现这些 id 后，才能报告移出完成。',
+    failures: [
+      'ids 为空或含非法 ID 时在发请求前抛错（页面在选择为空时按钮本就是禁用的）。',
+      '**后端有业务失败分支**：只要这批 id 里有一条 `is_adm_add = 0`（学员自学产生的记录），service 直接返回 -1，控制器把它转成 `ret:"FAIL", code:500, msg:"线上学习学员不可移出，请重新选择"`（`StudyStudyRecordServiceImpl:349-357` + `StudyStudyRecordController:99-108`）。',
+      '拿到上面那条错时**不要重试、也不要少传几条试探**：先回到列表读 isAdmAdd，把 0 的行从这一批里剔除，并如实告诉用户"这几条是学员自学记录，不能移出"。',
+      '权限、租户或网络错误按原错误处理；不要把失败的批量当成部分成功。',
+    ],
+    idempotency: '端点没有 requestId；重复移出同一批 id 不会新建记录（记录已经不在），但成功与否仍要按同一 lessonId 回查列表确认。',
+    evidence: hiddenEvidence,
+    gaps: [
+      ...hiddenGaps,
+      '未在真实测试环境执行过移出：`-1` 那条失败分支的形状来自固定后端检出（service 返回值 + 控制器 fail 文案），未记录真实响应体。',
+      '成功响应是空回执还是带 data（控制器只 `CommonResult.result()` 不带 data），未在真实环境确认；SDK 按"无业务 data"处理。',
+    ],
+  },
+
+  'study-lesson-monthly-motion-list': {
+    purpose: '读取某个「月课堂」下的全部议案，供会议决议弹窗/列表选择；返回的每一行带议案内容、附件与决议字段。',
+    whenToUse: '在月课堂的「会议决议」子页查看或选中某条议案时使用；只读。',
+    boundaries: [
+      ...commonBoundaries,
+      '本能力只服务月课堂的隐藏子页 `monthly-lesson/meeting-resolution/[mode]/[id]/item-list.vue`；它按 lessonId 取该课堂的全部议案，不做审核状态过滤（与“评分记录”用的那个接口不同，见 study-lesson-monthly-motion-rate-list）。',
+      '**名称筛选是页面在本地做的**：`name` 不会进入请求。第 2 条约束的理由是页面 `customLoad` 的行为（`item-list.vue:66-75`），不是后端没有该能力 —— 照页面原样做才不会在"同一个接口两个行为"上分叉。',
+      '返回的是议案（议题）数据，不是投票结果；页面另外调用决议详情/总议案接口时 SDK 未覆盖（见 gaps）。',
+    ],
+    effect: 'read',
+    prerequisites: [
+      '使用当前用户会话、租户与月课堂页面权限（/dashboard/lesson/monthly-lesson）。',
+      'lessonId 来自月课堂列表返回的 list[].id；motionId 来自本能力返回的 list[].id。',
+    ],
+    inputs: {
+      lessonId: hiddenParam('当前月课堂 ID。', 'study-lesson-monthly-list 返回的 list[].id', { type: 'string | number', required: true }),
+      name: hiddenParam(
+        '议案名称过滤；**只在本地按 includes 过滤**，不发到服务端。',
+        '用户输入的议案名称片段',
+        { type: 'string', required: false, omitted: '不传时返回服务端返回的全部议案', constraints: ['子串匹配，不是模糊拼音或分词'] },
+      ),
+    },
+    output: {
+      shape: '{ list: object[], total: number }',
+      fields: [
+        field('$', 'object', '页面 customLoad 归整后的结果；后端本身返回的是数组。'),
+        field('list', 'object[]', '议案行（本地过滤后）。'),
+        field('total', 'number', '本地过滤后的条数；**不是后端报告的总数**（页面把 total 设成过滤结果的长度）。'),
+        field('list[].id', 'string | number', '议案 ID；openTotalMotion/getResolutionInfo 与督办任务都用它，不是课堂 ID。'),
+        field('list[].name', 'string | null', '议案名称。', { nullable: true, nullMeaning: '后端未返回；页面本地过滤时这一行会抛错，SDK 按空串处理' }),
+        field('list[].lessonName', 'string | null', '所属课程名称（页面"所属课程"列）。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('list[].isTotalMotion', 'number | null', '是否总议案：1 是总议案（决议弹窗走"合并展示"分支）。', { nullable: true, values: { '0': '分议案', '1': '总议案' }, nullMeaning: '后端未返回，弹窗按分议案渲染' }),
+        field('list[].motionContentType', 'number | null', '议案内容类型：1 填写内容、2 文件。', { nullable: true, values: { '1': '填写内容', '2': '文件' }, nullMeaning: '后端未返回' }),
+        field('list[].motionContent', 'string | null', '议案内容（类型 1 时是正文）。', { nullable: true, nullMeaning: '没有内容' }),
+        field('list[].motionFileName', 'string | null', '议案附件名（类型 2 时展示）。', { nullable: true, nullMeaning: '没有附件' }),
+        field('list[].motionFileUrl', 'string | null', '议案附件 URL；页面交给文件预览组件打开。', { nullable: true, nullMeaning: '没有附件' }),
+        field('list[].isPass', 'number | null', '议案是否通过：1 通过。', { nullable: true, values: { '0': '不通过', '1': '通过' }, nullMeaning: '尚未表决' }),
+      ],
+      empty: 'list=[] 表示这个课堂没有（或名称过滤后没有）议案；权限与网络错误照常抛出，不降级为空结果。',
+    },
+    consume: [
+      '列表展示用 name / lessonName；点击"查看"时把 list[].id 交给决议详情弹窗，把 isTotalMotion 一起带过去决定渲染分支。',
+      '`name` 传了就只在本地过滤，且 total 会跟着变成过滤后的条数；要"后端报告的总数"只能用不带 name 的调用。',
+      '"下载"按钮走的是一个前端页面路由（/simple/education/download/month-proposal），不是 JSON 接口，SDK 未覆盖。',
+    ],
+    steps: [
+      { role: 'optional', when: '用户要查看某条议案的评分记录', capabilityId: 'study-lesson-monthly-rate-list', mapping: { motionId: 'result.list[].id' }, instruction: '评分记录按议案维度查询，只传 motionId，不要传课堂 ID 或环节 ID。' },
+      { role: 'optional', when: '用户要查看某条议案上的督办任务', capabilityId: 'study-lesson-monthly-oversee-task-list', mapping: { lessonId: 'args.lessonId', motionId: 'result.list[].id' }, instruction: '两个 ID 都要：课堂 ID 当 businessId、议案 ID 当 featureId，不能互换。' },
+    ],
+    completion: '返回该月课堂的议案列表（或本地过滤后的子集）；读取不改变表决与决议数据。',
+    failures: [
+      'lessonId 缺失或非正整数时在发请求前抛错。',
+      '权限、租户与响应形状错误原样抛出；不能把空议案列表解释成"这个课堂没有开过会"。',
+    ],
+    idempotency: null,
+    evidence: hiddenEvidence,
+    gaps: hiddenGaps,
+  },
+
+  'study-lesson-monthly-motion-rate-list': {
+    purpose: '读取某个「月课堂」下**已发布课堂**的议案列表，供「评分记录」页选择要看的议案。',
+    whenToUse: '在月课堂的「评分记录」子页按议案名称查找议案、再点"查看"打开评分明细时使用；只读。',
+    boundaries: [
+      ...commonBoundaries,
+      '本能力只服务月课堂的隐藏子页 `monthly-lesson/score-record/[id]/item-list.vue`；页面 `getDataListIsPage: false`，所以**没有 pageNo/pageSize**，它一次返回全部命中行。',
+      '与 `study-lesson-monthly-motion-list` 打的是**两个不同接口**：那一个是 `getMotionByLesson`（按 lessonId 取全部议案、名称本地过滤），本能力是 `getMotionRateListByLesson`（名称走服务端 LIKE，且 SQL 额外要求 `hr_study_lesson.status = 1`，即**只返回已发布课堂的议案**）。两者不能互换。',
+      '返回的只是议案本身，不含任何评分；评分明细要再用 study-lesson-monthly-rate-list 按 motionId 查。',
+    ],
+    effect: 'read',
+    prerequisites: [
+      '使用当前用户会话、租户与月课堂页面权限（/dashboard/lesson/monthly-lesson）。',
+      'lessonId 来自月课堂列表返回的 list[].id。',
+    ],
+    inputs: {
+      lessonId: hiddenParam('当前月课堂 ID。', 'study-lesson-monthly-list 返回的 list[].id', { type: 'string | number', required: true }),
+      name: hiddenParam('议案名称，**服务端** LIKE 模糊匹配（与 getMotionByLesson 的本地过滤相反）。', '用户输入的议案名称片段', { type: 'string', required: false, omitted: '发送空字符串，不过滤' }),
+    },
+    output: {
+      shape: 'object[]',
+      fields: [
+        field('$', 'object[]', '议案数组（后端直接返回数组，页面列表模块把它当 list 用）。'),
+        field('[].id', 'string | number', '议案 ID；打开评分明细弹窗时作为 motionId。'),
+        field('[].name', 'string | null', '议案名称（页面"所属议案"列）。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].lessonName', 'string | null', '所属课程名称（页面"所属课程"列）。', { nullable: true, nullMeaning: '后端未返回' }),
+      ],
+      empty: '[] 表示该课堂（或该名称）下没有可评分的议案；非分页结构，不读取 list/total。',
+    },
+    consume: [
+      '用 [].id 打开评分明细；页面在这一层没有勾选、没有批量动作。',
+      '因为后端要求课堂已发布，草稿状态的月课堂查不到议案时先确认课堂状态，不要当成"没有议案"。',
+    ],
+    steps: [
+      { role: 'required', when: '用户点"查看"打开某条议案的评分明细', capabilityId: 'study-lesson-monthly-rate-list', mapping: { motionId: 'result.[].id' }, instruction: '只把议案 ID 当 motionId 传过去；staffName 留空表示看全部评分人。' },
+    ],
+    completion: '返回该月课堂下（名称命中的）议案数组；读取不改变议案与评分。',
+    failures: [
+      'lessonId 缺失或非正整数时在发请求前抛错。',
+      '权限、租户与响应形状错误原样抛出；空数组只表示当前条件下没有议案。',
+    ],
+    idempotency: null,
+    evidence: hiddenEvidence,
+    gaps: hiddenGaps,
+  },
+
+  'study-lesson-monthly-rate-list': {
+    purpose: '读取某条议案的全部评分明细（评分人、鲜花数、评价内容、评分时间）。',
+    whenToUse: '用户在「评分记录」里点开某条议案后查看谁给过评分、给了几朵花时使用；只读。',
+    boundaries: [
+      ...commonBoundaries,
+      '本能力只服务月课堂隐藏子页 `score-record/[id]/components/score-record.vue` 打开的弹窗；它的表**没有分页控件**，页面 `:pagination="false"`，一次返回全部。',
+      '**HTTP 方法是 POST，但实现是纯读**：`StudyLessonMotionServiceImpl#getRateListByMotionId` 只有一次 select + 字典/用户回填 + 内存过滤，没有任何 insert/update。所以这里按 `read` 登记，不按方法名或方法判定。',
+      '后端只认排序白名单 `flower` / `rate_time`（且要求两个字段同时给），页面没有排序控件、也不发这两个参数，所以 SDK 不开放它们。',
+    ],
+    effect: 'read',
+    prerequisites: [
+      '使用当前用户会话、租户与月课堂页面权限（/dashboard/lesson/monthly-lesson）。',
+      'motionId 必须来自 study-lesson-monthly-motion-rate-list 返回的 [].id 或 study-lesson-monthly-motion-list 的 list[].id。',
+    ],
+    inputs: {
+      staffName: hiddenParam(
+        '评分人姓名；后端在**内存里**做 contains 过滤（不是 SQL LIKE）。',
+        '用户输入的评分人姓名',
+        { type: 'string', required: false, omitted: '发送空字符串，返回全部评分人' },
+      ),
+      motionId: hiddenParam('议案 ID；不是课堂 ID，也不是班课环节 ID。', 'study-lesson-monthly-motion-rate-list 返回的 [].id', { type: 'string | number', required: true }),
+    },
+    output: {
+      shape: 'object[]',
+      fields: [
+        field('$', 'object[]', '评分记录数组；页面表格直接渲染这个数组。'),
+        field('[].id', 'string | number | null', '评分记录 ID。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].motionId', 'string | number | null', '议案 ID。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].staffCode', 'string | number | null', '评分人工号；不是用户 ID。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].staffName', 'string | null', '评分人姓名；**后端按工号回填，查不到用户时为 null**。', { nullable: true, nullMeaning: '工号在用户表里找不到对应的人' }),
+        field('[].flower', 'number | null', '鲜花数原值 0-6（数据库值）。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].flowerStr', 'string | null', '展示用评分结果：flower+1；flower=6 时固定为 "6+"。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].flowerContent', 'string | null', '评价内容；由 `motion_flower` 字典按 flower 取 label，字典缺项时为 null。', { nullable: true, nullMeaning: '字典里没有对应档位' }),
+        field('[].rateTime', 'string | null', '评分时间。', { nullable: true, nullMeaning: '后端未返回' }),
+      ],
+      empty: '[] 表示这条议案还没有人评分；非分页结构，不读取 list/total。',
+    },
+    consume: [
+      '页面"评分结果"列显示的是 flowerStr（不是 flower），两者差值固定为 1，flower=6 时是 "6+"；要展示分数就用 flowerStr，要统计原始档位才用 flower。',
+      '"评价"列显示 flowerContent，它来自字典而非评分人自由输入。',
+      '页面有本地排序（按 flowerStr 数值、按 rateTime），SDK 返回服务端顺序，排序由调用方自己做。',
+    ],
+    steps: [],
+    completion: '返回该议案的评分明细数组；读取不改变评分。',
+    failures: [
+      'motionId 缺失或非正整数时在发请求前抛错。',
+      '权限、租户与响应形状错误原样抛出；空数组只表示还没有评分。',
+      '弹窗里的"导出"是另一个接口（POST /admin-api/study/lesson/studylesson/exportMotionRateInfo，二进制响应），SDK 未覆盖。',
+    ],
+    idempotency: null,
+    evidence: hiddenEvidence,
+    gaps: hiddenGaps,
+  },
+
+  'study-lesson-monthly-oversee-task-list': {
+    purpose: '读取挂在这条议案上的督办任务（任务名、紧急程度、被督办人、计划完成时间、是否完成）。',
+    whenToUse: '在会议决议弹窗的"督办记录"区域查看/撤销/提醒督办任务时使用；本能力只读，撤销与提醒是另外的接口。',
+    boundaries: [
+      ...commonBoundaries,
+      '本能力只服务 `view-meeting.vue` 的"督办记录"区块；它属于 hr 督办模块（`/hr/oversee-task/**`），不是学习模块的接口。',
+      '`type` 是页面写死的业务类型 1（月课堂议案），SDK 钉死不发调用方参数；`businessId` 收的是**课堂 ID**、`featureId` 收的是**议案 ID**，两者不能互换。',
+      '页面给每条记录本地加了 `isSend: false` 并按 isComplete 把未完成的排到前面；`isSend` 是弹窗自己的按钮状态、不是后端字段，SDK 不伪造它、也不重排服务端顺序。',
+      '弹窗里的"撤销"（DELETE /admin-api/hr/oversee-task/delete）和"发送提醒"（GET /admin-api/hr/oversee-task/sendMessage）是写操作，本能力不覆盖它们。',
+    ],
+    effect: 'read',
+    prerequisites: [
+      '使用当前用户会话、租户与月课堂页面权限（/dashboard/lesson/monthly-lesson）。',
+      'lessonId 来自月课堂列表 list[].id；motionId 来自议案列表 list[].id。',
+    ],
+    inputs: {
+      lessonId: hiddenParam('当前月课堂 ID；请求里叫 `businessId`（业务主表 id）。', 'study-lesson-monthly-list 返回的 list[].id', { type: 'string | number', required: true }),
+      motionId: hiddenParam('议案 ID；请求里叫 `featureId`（功能主表 id），不是课堂 ID。', 'study-lesson-monthly-motion-list 返回的 list[].id', { type: 'string | number', required: true }),
+    },
+    output: {
+      shape: 'object[]',
+      fields: [
+        field('$', 'object[]', '督办任务数组（服务端顺序）。'),
+        field('[].id', 'string | number', '督办任务 ID；撤销/查看详情用它，不是议案 ID。'),
+        field('[].taskName', 'string | null', '督办任务名称。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].degreeType', 'number | null', '紧急程度原码；页面用 `degreeTypeOptions` 翻译成标签。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].tip', 'string | null', '提示内容（页面灰色小字）。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].endDate', 'string | null', '计划完成时间（`YYYY-MM-DD`）。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].isComplete', 'number | null', '是否已完成：1 已完成。**未完成的（非 1）才显示撤销/发送提醒**。', { nullable: true, values: { '0': '未完成', '1': '已完成' }, nullMeaning: '后端未返回' }),
+        field('[].isCreator', 'number | null', '是否当前登录人创建：只有 1 才渲染撤销与提醒按钮。', { nullable: true, values: { '0': '不是本人创建', '1': '本人创建' }, nullMeaning: '后端未返回' }),
+        field('[].superviseeList', 'object[] | null', '被督办人列表；页面把每个元素的 superviseeName 用中文逗号连起来显示。', { nullable: true, nullMeaning: '没有被督办人' }),
+        field('[].superviseeList[].superviseeName', 'string | null', '被督办人姓名；不是 ID。', { nullable: true, nullMeaning: '后端未返回' }),
+      ],
+      empty: '[] 表示这条议案还没有督办任务；非分页结构，不读取 list/total。',
+    },
+    consume: [
+      '展示顺序按服务端返回；页面会把未完成的排前面，需要同样效果时由调用方按 isComplete 自行排序。',
+      '按钮可见性要同时看 `isComplete !== 1` 与 `isCreator === 1`；`isSend` 是页面本地状态，不要从返回值里找它。',
+      '详情/撤销/提醒都会跳到或打到别的地方（分别是 urge-detail 路由、DELETE /delete、GET /sendMessage），SDK 未覆盖，见 gaps。',
+    ],
+    steps: [],
+    completion: '返回这条议案下的督办任务数组；读取本身不改变任务状态，也不发送提醒。',
+    failures: [
+      'lessonId 或 motionId 缺失、非正整数时在发请求前抛错。',
+      '权限、租户与响应形状错误原样抛出；空数组只表示没有督办任务。',
+    ],
+    idempotency: null,
+    evidence: hiddenEvidence,
+    gaps: [
+      ...hiddenGaps,
+      '同一弹窗里的督办"撤销""发送提醒""详情"没有对应的 SDK 能力，本次未覆盖（派单表未列入）。',
+    ],
+  },
+}
+
+// 契约与能力定义必须一一对应：多一个少一个都在这里暴露，而不是等到 describe() 返回空说明。
+const hiddenMethodIds = Object.keys(STUDY_LESSON_HIDDEN_METHODS)
+const hiddenMismatch = hiddenMethodIds.filter(id => !hiddenContracts[id]).concat(Object.keys(hiddenContracts).filter(id => !hiddenMethodIds.includes(id)))
+if (hiddenMismatch.length > 0) throw new Error(`study-lesson 隐藏子页契约映射不一致：${hiddenMismatch.join(',')}`)
+for (const id of hiddenMethodIds) {
+  if (!hiddenDefinitions.has(id)) throw new Error(`study-lesson 隐藏子页契约没有能力定义：${id}`)
+  const params = hiddenDefinitions.get(id)!.params
+  const inputs = hiddenContracts[id]!.inputs
+  const missingInput = params.filter(param => inputs[param.name] === undefined)
+  if (missingInput.length > 0) throw new Error(`${id} 的契约缺少参数说明：${missingInput.map(p => p.name).join(',')}`)
+}
+
+/** 隐藏子页/弹窗的 AI 契约；接线由派单方负责（见本节顶部注释）。 */
+export const STUDY_LESSON_HIDDEN_AI_CONTRACTS: Record<string, AiContract> = Object.fromEntries(
+  hiddenMethodIds.map(id => [id, hiddenContracts[id]!]),
+)
+
+/** 同一组能力的公开方法路径契约（键形如 `studyLesson.listDailyRecords`）。 */
+export const STUDY_LESSON_HIDDEN_METHOD_CONTRACTS: Record<string, AiContract> = Object.fromEntries(
+  Object.entries(STUDY_LESSON_HIDDEN_METHODS).map(([capabilityId, method]) => [
+    `studyLesson.${method}`,
+    {
+      ...hiddenContracts[capabilityId]!,
+      boundaries: [
+        ...hiddenContracts[capabilityId]!.boundaries,
+        `这是公开门面 sdk.studyLesson.${method}；参数按本契约 inputs 传入，不要绕过页面上下文另拼 module-type。`,
+      ],
+    },
+  ]),
 )

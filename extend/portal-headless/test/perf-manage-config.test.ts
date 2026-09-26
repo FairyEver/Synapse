@@ -21,8 +21,10 @@ import {
   PROTOCOL_CONFIG_DICT_TYPES,
   PROTOCOL_RULE_CODES,
   STANDARD_MAX_PAGE_SIZE,
+  STANDARD_ROLE_POST_TREE_URL,
   STANDARD_SAVE_DATA_URL,
 } from '../src/capabilities/perf-manage-config.js'
+import { PERF_MANAGE_STANDARD_ROLE_POST_TREE_CONTRACTS } from '../src/catalog/contracts-perf-manage-standard-role-post.js'
 import { createPortalHeadless } from '../src/index.js'
 
 type CapturedCall = InternalAxiosRequestConfig & { moduleType?: number; httpInstance?: string }
@@ -649,7 +651,8 @@ describe('六页能力定义与 page-catalog.json 对齐', () => {
 
   it('每条定义的 pagePath 在目录里逐字存在（多一个字少一个字都要红）', () => {
     const paths = new Set(catalog.items.map((item) => item.menuPath))
-    expect(perfManageConfigCapabilities).toHaveLength(37)
+    // 37 → 38：新增标准详情页「使用标准岗位」候选树（getRoleOrganizationPost）。
+    expect(perfManageConfigCapabilities).toHaveLength(38)
     for (const capability of perfManageConfigCapabilities) {
       expect(paths.has(capability.pagePath), `${capability.id} 的 pagePath 不在目录里：${capability.pagePath}`).toBe(
         true,
@@ -694,5 +697,118 @@ describe('六页能力定义与 page-catalog.json 对齐', () => {
     expect(new Set(ids).size).toBe(ids.length)
     expect(PERF_MANAGE_CONFIG_METHODS['perf-manage-indicator-save-data']).toBe('submitIndicatorDataSave')
     expect(PERF_MANAGE_CONFIG_METHODS['perf-manage-standard-save-data']).toBe('submitStandardDataSave')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 标准详情页「使用标准岗位」候选树（`/org/organization/getRoleOrganizationPost`）
+//
+// ⚠️ 没有基准：这一条在**详情页**发（`standard/[mode]/[id]`），基准只抓了列表页。
+// 所以这一组锁的是"源码里的调用形状 + Java 侧字段规则 + 契约语义"。
+// ---------------------------------------------------------------------------
+
+describe('标准管理 —— 「使用标准岗位」候选树', () => {
+  it('GET /org/organization/getRoleOrganizationPost，参数只有 roleId、页面发空串、`_t` 在最后', async () => {
+    const { calls, cap } = build(() => [])
+    await cap.getStandardRolePostTree()
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.method?.toUpperCase()).toBe('GET')
+    expect(normalize(String(calls[0]?.url))).toBe(
+      `/admin-api${STANDARD_ROLE_POST_TREE_URL}?roleId=&_t=<ts>`,
+    )
+    expect(calls[0]?.headers['module-type']).toBe('13')
+  })
+
+  it('显式给 roleId 时原样发出（页面没这个入口，但能力暴露了它）', async () => {
+    const { calls, cap } = build(() => [])
+    await cap.getStandardRolePostTree({ roleId: 7 })
+    expect(queryPairs(String(calls[0]?.url))).toEqual([
+      ['roleId', '7'],
+      ['_t', '<ts>'],
+    ])
+  })
+
+  it('返回的是**树**：组织节点与岗位节点混在同一棵树上，字段原样透传', async () => {
+    const tree = [
+      {
+        id: 34,
+        organizationId: 34,
+        name: '总部',
+        pid: 1,
+        children: [
+          // 岗位节点的 id 是后端拼出来的（organizationId + postId 当成字符串连起来）
+          { id: 3411, organizationId: 34, postId: 11, orgPostId: 9001, name: '场长', pid: 34, children: [] },
+        ],
+      },
+    ]
+    const { cap } = build(() => tree)
+    const result = await cap.getStandardRolePostTree()
+    expect(result).toEqual(tree)
+    // 组织节点**没有** orgPostId（页面靠它判 disabled）、岗位节点才有
+    expect(result[0]?.orgPostId).toBeUndefined()
+    expect(result[0]?.children?.[0]?.orgPostId).toBe(9001)
+    // 岗位节点的 id 不是 orgPostId，也不是 postId：三者是三个不同的值
+    const post = result[0]?.children?.[0]
+    expect(post?.id).toBe(3411)
+    expect(post?.postId).toBe(11)
+    expect(post?.orgPostId).toBe(9001)
+  })
+
+  it('能力定义挂在标准管理页、只读、参数只有 roleId', () => {
+    const definition = perfManageConfigCapabilities.find((item) => item.id === 'perf-manage-standard-role-post-tree')
+    expect(definition, '候选树能力没有登记').toBeTruthy()
+    expect(definition!.pagePath).toBe(PERF_MANAGE_STANDARD_PAGE_PATH)
+    expect(definition!.permission).toBe('/dashboard/manage/standard')
+    expect(definition!.write).toBe(false)
+    expect(definition!.params.map((param) => param.name)).toEqual(['roleId'])
+    expect(PERF_MANAGE_CONFIG_METHODS['perf-manage-standard-role-post-tree']).toBe('getStandardRolePostTree')
+  })
+
+  it('契约写对了三个关键语义：orgPostId 才是提交值、组织节点不可选、roleId 缺省即当前用户', () => {
+    const contract = PERF_MANAGE_STANDARD_ROLE_POST_TREE_CONTRACTS['perf-manage-standard-role-post-tree']
+    expect(contract, '缺契约').toBeTruthy()
+    expect(contract!.effect).toBe('read')
+    expect(contract!.idempotency).toBeNull()
+    const boundaries = contract!.boundaries.join('\n')
+    // ⚠️ 把「提交 orgPostId」写成「提交节点 id」会红
+    expect(boundaries).toContain('orgPostId')
+    expect(boundaries).toContain('不是节点 id')
+    expect(boundaries).toContain('只有带 orgPostId 的节点可选')
+    // ⚠️ 把 roleId 的缺省语义写错（例如「必填」或「按当前用户 id 筛」）会红
+    expect(contract!.inputs.roleId?.omitted).toContain('当前登录用户的角色')
+    expect(contract!.inputs.roleId?.required).toBe(false)
+    // 步骤必须把两个字段分开映射，且目标都是保存草稿能力
+    const step = contract!.steps.find(item => item.capabilityId === 'perf-manage-standard-prepare-save-data')!
+    expect(step, '缺 prepare-save-data 步骤').toBeTruthy()
+    expect(step.mapping).toEqual({ orgPostIdList: 'result.orgPostId', orgTreeIdList: 'result.id' })
+    expect(step.instruction).toContain('不是 id')
+    // 这一页里那两段被注释掉的组织树写法不算数
+    expect(boundaries).toContain('organizationList')
+  })
+})
+
+describe('标准管理候选树 —— AI 说明契约结构', () => {
+  it('必填章节齐全、缺口如实登记', () => {
+    const contract = PERF_MANAGE_STANDARD_ROLE_POST_TREE_CONTRACTS['perf-manage-standard-role-post-tree']!
+    expect(contract.purpose.length).toBeGreaterThan(8)
+    expect(contract.whenToUse.length).toBeGreaterThan(8)
+    expect(contract.boundaries.length).toBeGreaterThan(0)
+    expect(contract.prerequisites.length).toBeGreaterThan(0)
+    expect(contract.consume.length).toBeGreaterThan(0)
+    expect(contract.completion.length).toBeGreaterThan(8)
+    expect(contract.failures.length).toBeGreaterThan(0)
+    expect(contract.evidence.length).toBeGreaterThan(0)
+    expect(contract.gaps?.length, '必须如实登记缺口').toBeGreaterThan(0)
+    expect(contract.output.fields.length).toBeGreaterThan(0)
+    expect(contract.output.empty).toContain('[]')
+  })
+
+  it('节点字段解释了合成 id 的来历（不能当主键）', () => {
+    const contract = PERF_MANAGE_STANDARD_ROLE_POST_TREE_CONTRACTS['perf-manage-standard-role-post-tree']!
+    const id = contract.output.fields.find(field => field.path === 'id')!
+    expect(id.meaning).toContain('合成')
+    expect(id.constraints?.join('')).toContain('orgPostIdList')
+    const orgPostId = contract.output.fields.find(field => field.path === 'orgPostId')!
+    expect(orgPostId.source).toContain('getOrgPostList')
   })
 })

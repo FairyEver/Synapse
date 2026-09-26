@@ -111,6 +111,43 @@ add('setting-user-get-info', base({
   idempotency: null,
 }))
 
+add('setting-user-auto-create-staff-code', {
+  ...base({
+  purpose: '读取新增用户表单要预填的建议用户名：取当天已有用户名的最大值加一，当天没有则以 yyyyMMdd01 起头。',
+  effect: 'read',
+  inputs: {},
+  output: {
+    shape: 'string',
+    fields: [
+      field('$', 'string', '建议的用户名/职工号，十进制字符串（形状：当天日期 yyyyMMdd 开头 + 序号；后端两个分支分别是 `<yyyyMMdd>01` 与 `MAX(username)+1`）。**不是**一个已被占用的号，也不代表任何写入已经发生。'),
+    ],
+    empty: '接口本身总是返回一个字符串；请求失败（401/403、网络、响应不是十进制字符串）抛错，不返回空字符串代替。',
+  },
+  consume: [
+    '把返回值填进新增表单的 username 字段（页面就是这么做的），不要把它当成员工工号去调用其它按工号查询的接口。',
+    '它是"当时算出来的建议值"，不是预约值：并发或稍后再调都可能不同，保存时仍会被后端的用户名/手机号校验拦住。',
+    '不要把它转成数字再格式化 —— 返回值是字符串，前导零（如 `…01`）只在字符串里成立。',
+  ],
+  steps: [],
+  completion: '返回一个十进制字符串；它只用于表单预填，接口本身没有写入，也没有需要回查的终态。',
+  idempotency: null,
+  }),
+  whenToUse: '在新增用户表单里需要一个初始的用户名时使用；与 phoneIsExist（查手机号是否被占用）不是一回事，也不能替代保存时的唯一性校验。',
+  boundaries: [
+    '⚠️ 名字像写、实际只读：后端 `HrSysUserServiceImpl#autoCreateStaffCode` 只做 SELECT MAX + 1 并返回字符串，**没有 INSERT/UPDATE，不产生持久化**。因此它不需要防重，也不存在"占号"语义。',
+    '⚠️ 它算的是 username 列（不是 staff_code），页面拿到后填的也是表单的 username 字段；接口名里的"职工号"是历史命名。',
+    '⚠️ 它是当日序号：`SELECT MAX(username) WHERE LEFT(username,8) = <今天>`，两个分支为 `<yyyyMMdd>01` 与 `MAX(username)+1`。两次调用之间有人建了用户，返回值就会变；并发下两个人可能拿到同一个值。',
+    '只覆盖新增用户表单的这一次预取；用户的新增/保存本身不在本能力内（页面新增走的是打开流程表单，不是本页 PUT）。',
+    '走 platform 实例，moduleType=null，路径由实例补 /admin-api。',
+  ],
+  gaps: [
+    '未启动浏览器、未在真实测试环境调用过该接口；语义来自固定检出 Java Service 与 Dao XML（`selectMaxStaffCodeByNowDate`）以及页面调用点，未线上验证。',
+    '返回值只用"非空十进制字符串"校验：后端把 MAX(username) 转 Integer 后 +1，若当天存在非数字用户名，数据库隐式转换的取值未在真实环境验证。',
+    '并发下是否真的会撞号未验证：本接口不占号，唯一性由保存时校验决定，SDK 不把这个字符串当预约。',
+    'Portal/Java 固定检出未按任务约束 pull 到远端最新。',
+  ],
+})
+
 add('setting-user-phone-is-exist', base({
   purpose: '按编辑页手机号校验规则检查非空手机号是否已被其他用户占用。',
   effect: 'read',

@@ -232,3 +232,118 @@ describe('Portal 风险防控 → 登记信息页面能力', () => {
     expect(validateAiContracts(contracts)).toEqual([])
   })
 })
+
+/**
+ * 第二批：人员弹窗的两个候选（内部人员 / 外部人员）。
+ *
+ * 同 URL、不同页面语境 —— 与班级管理页那两条能力并存，见
+ * `src/capabilities/business-registration.ts` 文件头。
+ */
+describe('登记信息人员弹窗候选', () => {
+  const PORTAL_REPO = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+  const JAVA_REPO = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+  const PERSON_MODAL = 'app/portal/views/dashboard/hr/certificate/enterpriseRegistration/components/add-personnel.vue'
+
+  function personFixture () {
+    const calls: RequestConfig[] = []
+    const responses: unknown[] = []
+    const request: PortalRequest = async <T>(config: RequestConfig) => {
+      calls.push(config)
+      return (responses.shift() ?? { list: [], total: 0 }) as T
+    }
+    return { api: createBusinessRegistrationCapability(request), calls, responses }
+  }
+
+  it('两个候选按页面参数发出：name → pageNo → pageSize，都没有 gradeId', async () => {
+    const { api, calls, responses } = personFixture()
+    responses.push({ list: [], total: 0 })
+    await api.searchPersonCandidates({ keyword: ' 张三 ' })
+    responses.push({ list: [], total: 0 })
+    await api.listExternalPersons({ keyword: '13800000000', pageNo: 2, pageSize: 10 })
+
+    expect(calls).toEqual([
+      { url: '/sys/user/userNotInGrade', method: 'get', params: { name: '张三', pageNo: 1, pageSize: 5 } },
+      { url: '/study/grade/student/getExternalStudentList', method: 'get', params: { name: '13800000000', pageNo: 2, pageSize: 10 } },
+    ])
+    // 页面那两处 params 里没有 gradeId（班级管理页的同名调用才有）
+    for (const call of calls) expect(call.params).not.toHaveProperty('gradeId')
+  })
+
+  it('内部人员响应里的 password / password2 / salt 被裁掉，其余原样保留', async () => {
+    const { api, responses } = personFixture()
+    responses.push({ list: [{ id: 5, username: '1005', realName: '钱七', organizationName: '总部/一部', password: 'x', password2: '$2a$10$hash', salt: 'zz' }], total: 1 })
+    const page = await api.searchPersonCandidates({ keyword: '钱' })
+    expect(Object.keys(page.list[0]!).sort()).toEqual(['id', 'organizationName', 'realName', 'username'])
+    expect(JSON.stringify(page)).not.toMatch(/password|salt|\$2a\$/)
+  })
+
+  it('空关键字、全量拉取的 pageSize 与坏响应都在本地拒绝', async () => {
+    const { api, calls, responses } = personFixture()
+    await expect(api.searchPersonCandidates({ keyword: '   ' })).rejects.toThrow(/长选项参数/)
+    await expect(api.listExternalPersons({ keyword: '' })).rejects.toThrow(/长选项参数/)
+    await expect(api.searchPersonCandidates({ keyword: '张', pageSize: -1 })).rejects.toThrow(/全量拉取/)
+    await expect(api.listExternalPersons({ keyword: '张', pageSize: 501 })).rejects.toThrow(/最多 500/)
+    await expect(api.listExternalPersons({ keyword: '张', pageNo: 0 })).rejects.toThrow(/pageNo/)
+    // 上面这些都在发请求前就拒绝了
+    expect(calls).toHaveLength(0)
+    // 坏响应是发出去之后才判的：这两条确实打了请求，但必须抛错而不是返回空页
+    responses.push({ list: [], total: 'x' })
+    await expect(api.searchPersonCandidates({ keyword: '张' })).rejects.toThrow(/list 或 total/)
+    responses.push({ total: 0 })
+    await expect(api.listExternalPersons({ keyword: '张' })).rejects.toThrow(/list 或 total/)
+    expect(calls).toHaveLength(2)
+  })
+
+  it('Portal 与 Java 源码锁定两个候选的页面语境（本页不传 gradeId）', () => {
+    const modal = read(PORTAL_REPO, PERSON_MODAL)
+    const sysUserDao = read(JAVA_REPO, 'erp-module-system/erp-module-system-biz/src/main/resources/mapper/hrSysUser/SysUserDao.xml')
+    const studentService = read(JAVA_REPO, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/study/base/service/impl/StudyStudentServiceImpl.java')
+
+    // 内部人员：{ name, pageNo, pageSize }，没有 gradeId
+    expect(modal).toContain("() => http.get('/sys/user/userNotInGrade', {\n    params: {\n      name: filterName.value,\n      pageNo: pageNo.value,\n      pageSize: 5")
+    // 外部人员：同一形状
+    expect(modal).toContain("() => http.get('/study/grade/student/getExternalStudentList', {\n    params: {\n      name: filterName2.value,\n      pageNo: pageNo2.value,\n      pageSize: 5")
+    // 回传给表单的是 { staffName, staffCode }
+    expect(modal).toContain('staffName: item.staffName')
+    expect(modal).toContain('staffCode: item.staffCode')
+    // 「未注册智慧蛋鸡人员」是纯本地输入，不发请求
+    expect(modal).toContain('addNameList.value.push({ staffCode: addName.value })')
+    expect(modal).not.toContain("http.get('/study/grade/student/addGradeStudent'")
+
+    // 后端：userNotInGrade 不过滤已在班级的人 + name 仅前缀匹配
+    const notInGrade = sysUserDao.slice(sysUserDao.indexOf('<select id="getUserNotInGrade"'), sysUserDao.indexOf('</select>', sysUserDao.indexOf('<select id="getUserNotInGrade"')))
+    expect(notInGrade).toContain('LEFT JOIN (SELECT distinct staff_code')
+    expect(notInGrade).not.toContain('s.staff_code is null')
+    expect(notInGrade.slice(notInGrade.indexOf('<where>'))).not.toContain('s.')
+    // 外部人员：服务端固定 isStaff=0
+    expect(studentService).toContain('dto.setIsStaff(0)')
+  })
+
+  it('两条能力的 AI 说明完整、与班级管理页那条分开，并点明同 URL 不同语境', async () => {
+    const internal = contracts['business-registration-person-candidate']!
+    const external = contracts["business-registration-external-person-list"]!
+
+    expect(internal.effect).toBe('read')
+    expect(external.effect).toBe('read')
+    expect(internal.inputs.keyword!.required).toBe(true)
+    expect(internal.inputs.pageSize!.default).toBe('5')
+    expect(internal.boundaries.join(' ')).toContain('不是同一条')
+    expect(internal.boundaries.join(' ')).toContain('未注册智慧蛋鸡人员')
+    expect(internal.consume.join(' ')).toContain('并不过滤已在班级的人')
+    expect(internal.consume.join(' ')).toContain('staffCode')
+    expect(external.inputs.keyword!.meaning).toContain('同时按 name 与 mobile')
+    expect(external.consume.join(' ')).toContain('拿不到内部人员')
+    expect(external.consume.join(' ')).toContain('恒为空')
+
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = await import(validatorUrl) as {
+      validateAiContract: (id: string, value: unknown, options: Record<string, unknown>) => Array<{ code: string; message: string }>
+    }
+    for (const id of ['business-registration-person-candidate', 'business-registration-external-person-list']) {
+      const issues = validateAiContract(id, contracts[id], { profile: 'complete', definitions: businessRegistrationCapabilities, contracts })
+      const unexpected = issues.filter(issue => issue.code !== 'incomplete-evidence')
+      expect(unexpected, `${id}: ${JSON.stringify(unexpected)}`).toEqual([])
+      expect(contracts[id]!.gaps?.length ?? 0).toBeGreaterThan(0)
+    }
+  })
+})

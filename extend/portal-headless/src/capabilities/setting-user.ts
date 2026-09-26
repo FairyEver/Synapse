@@ -8,6 +8,26 @@ export const SETTING_USER_PERMISSION = '/dashboard/setting/user'
 export const SETTING_USER_MODULE_TYPE = null
 
 const ROOT = '/sys/user'
+
+/**
+ * 「新增用户」表单里用户名的那次预取（`/sys/user/autoCreateStaffCode`）。
+ *
+ * ⚠️ **名字像写、实际只读**：`HrSysUserServiceImpl#autoCreateStaffCode` 只做了一次
+ * `SELECT MAX(username) FROM hr_sys_user WHERE LEFT(username, 8) = <today>`，然后
+ * 把结果 +1 返回；**没有 INSERT、没有 UPDATE、没有任何落库**。所以 `effect` 是 `read`，
+ * 不产生持久化，也不需要防重或回查。
+ *
+ * ⚠️ **它算的是「用户名」不是「工号」**：SQL 取的是 `username` 列（`staff_code` 根本没参与），
+ * 而页面拿到之后填的是表单的 `username` 字段（`[mode]/[id].vue:115` 的
+ * `rrForm.formState.username = await getStaffCode()`）。接口名里的"职工号"是历史命名。
+ *
+ * ⚠️ **它是"当日序号"，不是唯一号**：两个分支分别是
+ * ① 今天还没有以今天日期开头的用户名 → `<yyyyMMdd>01`；
+ * ② 有 → `MAX(username) + 1` 的十进制字符串。
+ * 两次调用之间只要有别人建了用户，返回值就会变；**并发下两个人可能拿到同一个值** ——
+ * 后端没有唯一约束兜底（用户名唯一性由保存时的校验负责，不在本接口）。
+ */
+const AUTO_CREATE_STAFF_CODE_URL = '/sys/user/autoCreateStaffCode'
 const USE_SYSTEM_LIST_QUERY = '1,2,3,4,5,6'
 const USE_SYSTEM_LIST_PAYLOAD = [1, 2, 3, 4, 5, 6]
 
@@ -316,6 +336,18 @@ export function createSettingUserCapability (request: PortalRequest) {
       const id = idOf(input?.id, '用户ID')
       return userOf(await request({ url: `${ROOT}/getInfo`, method: 'get', params: { id, useSystemList: USE_SYSTEM_LIST_QUERY } }), '用户详情')
     },
+    /**
+     * 新增用户表单的用户名预取（**只读，不落库**）。
+     *
+     * 页面在 `onMounted` 且处于新建态时调用它，把返回值填进表单的 `username` 字段。
+     * 它只是"看一眼现在该用哪个号"，**不占用、不预留**：真正的唯一性由保存时的校验决定。
+     */
+    async autoCreateStaffCode (): Promise<string> {
+      const result = await request<unknown>({ url: AUTO_CREATE_STAFF_CODE_URL, method: 'get' })
+      if (typeof result !== 'string' || !/^\d+$/.test(result)) throw new Error('自动生成职工号响应必须是非空十进制字符串')
+      return result
+    },
+
     async phoneIsExist (input: { phone: string }): Promise<number> {
       const phone = phoneOf(input?.phone)
       if (phone === '') return 0
@@ -360,6 +392,7 @@ const queryParams: ParamSpec[] = [
 export const SETTING_USER_METHODS = {
   'setting-user-list': 'list',
   'setting-user-get-info': 'getInfo',
+  'setting-user-auto-create-staff-code': 'autoCreateStaffCode',
   'setting-user-phone-is-exist': 'phoneIsExist',
   'setting-user-prepare-update': 'prepareUpdate',
   'setting-user-update': 'update',
@@ -371,6 +404,7 @@ export const SETTING_USER_METHODS = {
 export const settingUserCapabilities: CapabilityDefinition[] = [
   { id: 'setting-user-list', title: '查询用户分页', write: false, params: queryParams },
   { id: 'setting-user-get-info', title: '读取用户编辑表单', write: false, params: [p('id', 'text', true, '用户ID')] },
+  { id: 'setting-user-auto-create-staff-code', title: '读取新增用户的建议用户名', write: false, params: [] },
   { id: 'setting-user-phone-is-exist', title: '检查手机号是否已占用', write: false, params: [p('phone', 'text', true, '手机号；空字符串按Portal规则本地返回0')] },
   { id: 'setting-user-prepare-update', title: '准备编辑用户', write: false, params: [p('current', 'text', true, '来自最新getInfo的完整用户对象'), p('changes', 'text', false, '仅允许username、realName、mobile、roleIdList')] },
   { id: 'setting-user-update', title: '保存用户编辑', write: true, params: [p('draft', 'text', true, 'prepareUpdate返回的完整用户表单草稿')] },

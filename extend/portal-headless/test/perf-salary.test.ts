@@ -7,6 +7,7 @@ import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 import type { PortalRequest } from '../src/session/types.js'
 import {
+  ANALYSIS_DEPARTMENT_DETAIL_URLS,
   ANALYSIS_DEPARTMENT_SELF_CHECK_URL,
   ANALYSIS_DEPARTMENT_URLS,
   ANALYSIS_PERSON_URLS,
@@ -35,6 +36,7 @@ import {
   BLOCK_MAIN_LIST_URL,
 } from '../src/capabilities/perf-salary.js'
 import type { SalaryMainRow } from '../src/capabilities/perf-salary.js'
+import { PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS } from '../src/catalog/contracts-perf-analysis-department-detail.js'
 import { createPortalHeadless } from '../src/index.js'
 
 type CapturedCall = InternalAxiosRequestConfig & { moduleType?: number; httpInstance?: string }
@@ -863,9 +865,35 @@ describe('能力定义', () => {
     expect(perfSalaryCapabilities.some((capability) => capability.id === 'perf-block-main-list')).toBe(true)
   })
 
-  it('二十五个能力覆盖六个页面（读、prepare 与 Portal 实际写入口）', () => {
-    expect(perfSalaryCapabilities).toHaveLength(25)
+  it('二十八个能力覆盖六个页面（读、prepare 与 Portal 实际写入口）', () => {
+    // 25 → 28：新增的是管理分析隐藏下钻页的三条读能力（见下面的专项 describe）。
+    expect(perfSalaryCapabilities).toHaveLength(28)
     expect(new Set(perfSalaryCapabilities.map((c) => c.pagePath)).size).toBe(6)
+  })
+
+  it('三条下钻能力挂在管理分析页上、都是只读、参数只收 protocolId（外加列表模块的 order/orderField）', () => {
+    for (const id of [
+      'perf-analysis-department-self-assessment-task-check-detail',
+      'perf-analysis-department-index-check-detail',
+      'perf-analysis-department-self-check-profit',
+    ]) {
+      const definition = perfSalaryCapabilities.find((item) => item.id === id)
+      expect(definition, `${id} 没有登记`).toBeTruthy()
+      expect(definition!.pagePath).toBe(PERF_ANALYSIS_DEPARTMENT_PAGE_PATH)
+      expect(definition!.permission).toBe('/dashboard/analysis/department')
+      expect(definition!.write).toBe(false)
+      expect(definition!.params.some((param) => param.name === 'protocolId')).toBe(true)
+      // 分页两项一律没有：这一页的三个端点都不分页
+      expect(definition!.params.some((param) => param.name === 'pageNo')).toBe(false)
+      expect(definition!.params.some((param) => param.name === 'pageSize')).toBe(false)
+    }
+    // 「考核任务」那一张表走 useListPageModule，所以多两个排序键；另两条没有
+    const taskDetail = perfSalaryCapabilities.find((item) => item.id === 'perf-analysis-department-self-assessment-task-check-detail')!
+    expect(taskDetail.params.map((param) => param.name)).toEqual(['order', 'orderField', 'protocolId'])
+    const indexDetail = perfSalaryCapabilities.find((item) => item.id === 'perf-analysis-department-index-check-detail')!
+    expect(indexDetail.params.map((param) => param.name)).toEqual(['protocolId'])
+    const profitDetail = perfSalaryCapabilities.find((item) => item.id === 'perf-analysis-department-self-check-profit')!
+    expect(profitDetail.params.map((param) => param.name)).toEqual(['protocolId'])
   })
 
   it('端点常量不是菜单路径（命名分工：`*_PAGE_PATH` 只给菜单路径）', () => {
@@ -884,6 +912,240 @@ describe('能力定义', () => {
 
   it('组织候选那条（getRoleOrganizationTree）**没有**被做成能力', () => {
     expect(perfSalaryCapabilities.some((c) => c.id.includes('org'))).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 管理分析隐藏下钻页（`./detail/item`）的三条能力
+//
+// ⚠️ 这里**没有基准可对**：基准抓的是页面挂载时的请求，下钻页要真的点进去才有流量。
+// 所以这一组锁的是"源码里的调用形状 + 契约语义"，不是"与浏览器逐字段一致"。
+// ---------------------------------------------------------------------------
+
+describe('管理分析下钻页 —— 请求形状与返回透传', () => {
+  const PAGE = PERF_ANALYSIS_DEPARTMENT_PAGE_PATH
+  const TASK_URL = ANALYSIS_DEPARTMENT_DETAIL_URLS.selfAssessmentTaskCheckDetail
+  const INDEX_URL = ANALYSIS_DEPARTMENT_DETAIL_URLS.selfIndexCheckDetail
+  const PROFIT_URL = ANALYSIS_DEPARTMENT_DETAIL_URLS.selfCheckProfit
+
+  it('三个端点互不相同，且都不是同页那条自查分析 POST /selfCheck（**不许合并**）', () => {
+    expect(new Set([TASK_URL, INDEX_URL, PROFIT_URL]).size).toBe(3)
+    for (const url of [TASK_URL, INDEX_URL, PROFIT_URL]) {
+      expect(url).not.toBe(ANALYSIS_DEPARTMENT_SELF_CHECK_URL)
+      // 同页四条 /selfCheck* 前缀不同：这三条是隐藏下钻，那条是自查列表
+      expect(url.startsWith('/performance/statistics/homepage/')).toBe(true)
+    }
+    expect(TASK_URL).toBe('/performance/statistics/homepage/selfAssessmentTaskCheckDetail')
+    expect(INDEX_URL).toBe('/performance/statistics/homepage/selfIndexCheckDetail')
+    expect(PROFIT_URL).toBe('/performance/statistics/homepage/selfCheckProfit')
+  })
+
+  it('考核任务：GET、参数键序 order → orderField → protocolId、无分页、`_t` 在最后', async () => {
+    const { cap, calls } = build([])
+    await cap.listAnalysisDepartmentTaskCheckDetail({ protocolId: 77 })
+    const sent = queryPairs(String(calls[0]?.url))
+    expect(calls[0]?.method?.toUpperCase()).toBe('GET')
+    expect(sent.map(([key]) => key)).toEqual(['order', 'orderField', 'protocolId', '_t'])
+    expect(sent[0]?.[1]).toBe('')
+    expect(sent[1]?.[1]).toBe('')
+    expect(sent[2]?.[1]).toBe('77')
+    expect(calls[0]?.url).toContain(TASK_URL)
+    // getDataListIsPage 默认 false ⇒ 页面与 SDK 都不发分页
+    expect(String(calls[0]?.url)).not.toContain('pageNo')
+    expect(String(calls[0]?.url)).not.toContain('pageSize')
+  })
+
+  it('考核任务：返回的是**数组本身**（不是 { list, total }），元素与附件原样透传', async () => {
+    const row = {
+      taskId: 501,
+      title: '月度重点工作',
+      content: '完成说明',
+      baseCore: 10,
+      baseCoreOneself: 8,
+      baseCoreByLeader: 10,
+      isSpecial: 0,
+      attachment: [{ id: 9, fileName: 'a.pdf', fileUrl: 'https://example.invalid/a.pdf', fileType: 3 }],
+    }
+    const { cap } = build([row])
+    const list = await cap.listAnalysisDepartmentTaskCheckDetail({ protocolId: 77 })
+    // 后端返回数组 ⇒ SDK 也返回数组：不能被包装成 { list, total }
+    expect(Array.isArray(list)).toBe(true)
+    expect(list).toEqual([row])
+    expect(Array.isArray(list[0]?.attachment)).toBe(true)
+    expect(list[0]?.attachment?.[0]?.fileUrl).toBe('https://example.invalid/a.pdf')
+  })
+
+  it('考核任务：protocolId 缺失或非法时**同步抛错**且一条请求都不发（页面没它同样查不出东西）', async () => {
+    const { cap, calls } = build([])
+    expect(() => cap.listAnalysisDepartmentTaskCheckDetail({} as never)).toThrow(/protocolId/)
+    expect(() => cap.listAnalysisDepartmentTaskCheckDetail({ protocolId: '0' } as never)).toThrow(/protocolId/)
+    expect(() => cap.listAnalysisDepartmentTaskCheckDetail({ protocolId: 1.5 } as never)).toThrow(/protocolId/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('考核指标：GET、**只有 protocolId**（连 order/orderField 都没有）、`_t` 在最后', async () => {
+    const { cap, calls } = build([])
+    await cap.listAnalysisDepartmentIndexCheckDetail({ protocolId: '88' })
+    const sent = queryPairs(String(calls[0]?.url))
+    expect(calls[0]?.method?.toUpperCase()).toBe('GET')
+    expect(sent.map(([key]) => key)).toEqual(['protocolId', '_t'])
+    expect(sent[0]?.[1]).toBe('88')
+    expect(calls[0]?.url).toContain(INDEX_URL)
+  })
+
+  it('考核指标：返回数组，`targetList`/`expected`/`isUserImport` 都不被改写', async () => {
+    const row = {
+      id: 31,
+      name: '出栏量',
+      unit: '万只',
+      score: 20,
+      actualScore: 18,
+      actualIndicator: 95,
+      resourceType: 1,
+      targetList: [{ lineName: '完成线', expected: 100, forecastIndicator: 98, dataList: [1, 2, 3] }],
+    }
+    const imported = { id: 32, name: '导入指标', score: 5, isUserImport: 1, targetList: [{ lineName: '完成线', forecastIndicator: 7 }] }
+    const { cap } = build([row, imported])
+    const list = await cap.listAnalysisDepartmentIndexCheckDetail({ protocolId: 88 })
+    expect(list).toEqual([row, imported])
+    // isUserImport 的行**不补** expected —— SDK 不替后端补字段
+    expect(list[1]?.targetList?.[0]?.expected).toBeUndefined()
+  })
+
+  it('利润工资：GET、**只有 protocolId**；返回的组件行原样透传（type 恒 15 由后端保证，SDK 不重复过滤）', async () => {
+    const row = { id: 61, type: 15, canDel: 0, value: [{ id: 7, name: '利润A', proportion: 60, actualIndicator: 12, profitList: [{ lineName: '完成线', forecastIndicator: 3 }] }] }
+    const { cap, calls } = build([row])
+    const list = await cap.listAnalysisDepartmentProfitCheck({ protocolId: 99 })
+    expect(calls[0]?.method?.toUpperCase()).toBe('GET')
+    expect(queryPairs(String(calls[0]?.url)).map(([key]) => key)).toEqual(['protocolId', '_t'])
+    expect(calls[0]?.url).toContain(PROFIT_URL)
+    expect(list).toEqual([row])
+    expect(list[0]?.type).toBe(15)
+    // 组件值在 value 里 —— 不是被摊平到行上
+    expect(Array.isArray(list[0]?.value)).toBe(true)
+  })
+
+  it('三条都走管理分析页的上下文（module-type 13），不是个人分析页', async () => {
+    const { cap, calls } = build([])
+    await cap.listAnalysisDepartmentTaskCheckDetail({ protocolId: 1 })
+    await cap.listAnalysisDepartmentIndexCheckDetail({ protocolId: 1 })
+    await cap.listAnalysisDepartmentProfitCheck({ protocolId: 1 })
+    expect(calls).toHaveLength(3)
+    for (const call of calls) expect(call.headers['module-type']).toBe('13')
+    expect(calls.map((call) => normalize(String(call.url)))).toEqual([
+      `/admin-api${TASK_URL}?order=&orderField=&protocolId=1&_t=<ts>`,
+      `/admin-api${INDEX_URL}?protocolId=1&_t=<ts>`,
+      `/admin-api${PROFIT_URL}?protocolId=1&_t=<ts>`,
+    ])
+  })
+})
+
+describe('管理分析下钻页 —— AI 说明契约', () => {
+  const IDS = [
+    'perf-analysis-department-self-assessment-task-check-detail',
+    'perf-analysis-department-index-check-detail',
+    'perf-analysis-department-self-check-profit',
+  ] as const
+
+  it('三条各有契约，且必填章节都不为空', () => {
+    for (const id of IDS) {
+      const contract = PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS[id]
+      expect(contract, `${id} 缺契约`).toBeTruthy()
+      expect(contract!.purpose.length).toBeGreaterThan(8)
+      expect(contract!.whenToUse.length).toBeGreaterThan(8)
+      expect(contract!.boundaries.length).toBeGreaterThan(0)
+      expect(contract!.prerequisites.length).toBeGreaterThan(0)
+      expect(contract!.consume.length).toBeGreaterThan(0)
+      expect(contract!.completion.length).toBeGreaterThan(8)
+      expect(contract!.failures.length).toBeGreaterThan(0)
+      expect(contract!.evidence.length).toBeGreaterThan(0)
+      expect(contract!.gaps?.length, `${id} 必须如实登记缺口`).toBeGreaterThan(0)
+      expect(contract!.effect).toBe('read')
+      expect(contract!.idempotency).toBeNull()
+      expect(contract!.inputs.protocolId?.required).toBe(true)
+    }
+  })
+
+  it('三条都写明"隐藏路由、只读、返回原序"，并指向自查分析那条的来源', () => {
+    for (const id of IDS) {
+      const contract = PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS[id]!
+      const boundaries = contract.boundaries.join('\n')
+      expect(boundaries).toContain('detail/item')
+      expect(boundaries).toContain('/dashboard/analysis/department')
+      expect(contract.inputs.protocolId?.source).toContain('perf-analysis-department-self-check')
+      // 来源必须点名 protocolId 这个字段本身（写成 taskId / userId 这类别的 id 会红）
+      expect(contract.inputs.protocolId?.source).toContain('protocolId')
+      // 「返回的是端点的原数组与原顺序」必须写在说明里（不重排、不改写）
+      expect(boundaries).toContain('原顺序')
+    }
+  })
+
+  it('考核任务的说明写对了两件关键语义：三档重排靠"分量 ≠ 基本分"，特殊行只显示 special*', () => {
+    const contract = PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS['perf-analysis-department-self-assessment-task-check-detail']!
+    const boundary = contract.boundaries.join('\n')
+    // ⚠️ 把"分量与基本分比较"写成"分数大小"就会红
+    expect(boundary).toContain('分量与基本分的比较')
+    expect(boundary).toContain('不是靠分数大小')
+    expect(boundary).toContain('isSpecial=1')
+    expect(boundary).toContain('special')
+    const consume = contract.consume.join('\n')
+    expect(consume).toContain('initSortData')
+    expect(consume).toContain('baseCoreByLeader 不等于 baseCore')
+    expect(consume).toContain('baseCoreOneself 不等于 baseCore')
+    // 头部分数不是任务分之和 —— 这句话被写反过，钉住它
+    expect(consume).toContain('不是这些任务分之和')
+    const isSpecial = contract.output.fields.find(field => field.path === 'isSpecial')!
+    expect(isSpecial.values).toEqual({ '0': '普通考核工作', '1': '特殊考核工作' })
+    expect(isSpecial.constraints?.join('')).toContain('严格等于')
+  })
+
+  it('考核任务的附件说明点明 fileUrl 是外链、SDK 不下载', () => {
+    const contract = PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS['perf-analysis-department-self-assessment-task-check-detail']!
+    const fileUrl = contract.output.fields.find(field => field.path === 'attachment[].fileUrl')!
+    expect(fileUrl.meaning).toContain('window.open')
+    expect(fileUrl.constraints?.join('')).toContain('外链')
+    const attachment = contract.output.fields.find(field => field.path === 'attachment')!
+    expect(attachment.meaning).toContain('空数组')
+  })
+
+  it('考核指标的说明点明"只返回第一跳 + 页面还要打 targetInfo + 导入行没有 expected"', () => {
+    const contract = PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS['perf-analysis-department-index-check-detail']!
+    const boundary = contract.boundaries.join('\n')
+    expect(boundary).toContain('/performance/basedata/kpitarget/targetInfo')
+    expect(boundary).toContain('isUserImport === 1')
+    expect(boundary).toContain('不设 expected')
+    expect(boundary).toContain('actual')
+    // 单位回退是页面行为，SDK 不做
+    const unit = contract.output.fields.find(field => field.path === 'unit')!
+    expect(unit.meaning).toContain('万元')
+    expect(unit.meaning).toContain('不做这个回退')
+    expect(unit.nullMeaning).toContain('没有写单位')
+    // 第二跳缺失必须进 gaps，不能悄悄略过
+    expect(contract.gaps?.join('\n')).toContain('targetInfo')
+    const expected = contract.output.fields.find(field => field.path === 'targetList[].expected')!
+    expect(expected.meaning).toContain('页面「预测指标」一列显示的就是它')
+    // ⚠️ 这两个字段最容易写反：forecastIndicator 不是页面「预测指标」列取的字段
+    const forecastIndicator = contract.output.fields.find(field => field.path === 'targetList[].forecastIndicator')!
+    expect(forecastIndicator.meaning).toContain('**不**取它')
+  })
+
+  it('利润工资的说明写对了 Controller 泛型与实现层的差别，以及 type 恒为 15', () => {
+    const contract = PERF_ANALYSIS_DEPARTMENT_DETAIL_CONTRACTS['perf-analysis-department-self-check-profit']!
+    const boundary = contract.boundaries.join('\n')
+    // ⚠️ 把"只能从实现层看"删掉、或把 List<ProtocolSubassemblyDTO> 说成别的，都会红
+    expect(boundary).toContain('CommonResult<Object>')
+    expect(boundary).toContain('List<ProtocolSubassemblyDTO>')
+    expect(boundary).toContain('type == 15')
+    // 那个坑：后端根本不会返回 type != 15 的行
+    const type = contract.output.fields.find(field => field.path === 'type')!
+    expect(type.values).toEqual({ '15': '月度利润组件' })
+    // 业务数据在 value 里，页面只取第一条
+    const value = contract.output.fields.find(field => field.path === 'value')!
+    expect(value.meaning).toContain('利润列表')
+    expect(contract.boundaries.join('\n')).toContain('第一条')
+    // 空数组不是错误（协议里没有利润组件）
+    expect(contract.output.empty).toContain('[]')
+    expect(contract.output.empty).toContain('不代表')
   })
 })
 

@@ -12,9 +12,17 @@ import {
   studyGradeCapabilities,
 } from '../capabilities/study-grade.js'
 import {
+  STUDY_APPRAISE_SETTING_PAGE_PATH,
+  STUDY_APPRAISE_SETTING_SAVE_PATH,
+  STUDY_TEACHER_CANDIDATE_STUDENT_PATH,
+  STUDY_TEACHER_LEVEL_CREATE_PATH,
+  STUDY_TEACHER_LEVEL_PAGE_PATH,
+  STUDY_TEACHER_LEVEL_UPDATE_PATH,
   STUDY_TEACHER_MODULE_TYPE,
   STUDY_TEACHER_PAGE_PATH,
   STUDY_TEACHER_SAVE_TEACHER_PATH,
+  STUDY_TEACHER_TYPE_DICT_PATH,
+  STUDY_TEACHER_TYPE_DICT_TYPE,
   studyTeacherCapabilities,
 } from '../capabilities/study-teacher.js'
 
@@ -243,6 +251,149 @@ const teacherContext: Context = {
 
 const writeIdempotency = '端点没有requestId，SDK不伪造服务端幂等键；请求完成或超时后必须先独立回查，确认未落库前不得盲目重试。'
 
+/**
+ * 讲师管理页上「走 platform 实例」的那一类请求（人员候选）。
+ *
+ * 与 `teacherContext` 的区别只在实例：讲师页的列表走 smart-layer-admin，
+ * 而 `studentNoTeacherList` 在页面上写的是 `import { http } from platform.js`。
+ * 同一次页面操作里两个实例，所以这里分开记。
+ */
+const teacherCandidateContext: Context = {
+  pagePath: STUDY_TEACHER_PAGE_PATH,
+  permission: '/dashboard/base/teacher',
+  moduleType: STUDY_TEACHER_MODULE_TYPE,
+  boundaries: [
+    `仅覆盖 Portal 讲师管理页 ${STUDY_TEACHER_PAGE_PATH} 表单里「讲师姓名」下拉的候选读取；权限是 /dashboard/base/teacher，走 platform 实例、发送 module-type=${STUDY_TEACHER_MODULE_TYPE}。`,
+    `端点是 GET ${STUDY_TEACHER_CANDIDATE_STUDENT_PATH}，**没有任何参数**（页面就是 http.get(url)）；SDK 不提供关键字或分页入口。`,
+    '候选取的是「还不是讲师的学员」，与 base-user-search（/system/user/simple-page，返回 sys_user.id）不是同一份名单，两者不能互换。',
+  ],
+  prerequisites: [
+    '使用当前用户、当前租户的会话 token 创建 SDK，并拥有讲师管理页权限。',
+    '只有在需要为讲师表单挑人（新建外部讲师或把已有学员设为讲师）时读取；候选里的 staffCode 必须由用户确认后再用于写操作。',
+  ],
+  evidence: [
+    {
+      source: 'CodeReview_Projects_Js@test/portal/main:82651c98c5 app/portal/views/dashboard/education/base/teacher/[mode]/[id].vue（约 185 行）',
+      kind: 'reference',
+      note: '确认该请求走 platform 实例、无参数、返回值被映射为 {value: staffCode, label: name}；固定检出源码证据，未在真实环境调用。',
+    },
+    {
+      source: 'CodeReview_Mall_Platform_Java@test/test:998ce8223fa StudyStudentController#studentNoTeacherList',
+      kind: 'reference',
+      note: '确认后端方法无参数并返回 List<StudyStudentDTO>；未核实返回规模。',
+    },
+  ],
+  gaps: [
+    '候选人数的规模**未实测**：后端没有关键字/分页入口，返回的是全部「还不是讲师的学员」，SDK 无法在本地收敛它。',
+    '尚未在真实测试环境调用过这个端点。',
+  ],
+}
+
+/** 讲师类型表单页（隐藏路由 `[mode]/[id].vue`），列表与写入口都走 smart-layer-admin */
+const levelContext: Context = {
+  pagePath: STUDY_TEACHER_LEVEL_PAGE_PATH,
+  permission: '/dashboard/base/teacher-level',
+  moduleType: STUDY_TEACHER_MODULE_TYPE,
+  boundaries: [
+    `覆盖 Portal 讲师类型页 ${STUDY_TEACHER_LEVEL_PAGE_PATH} 表单页的保存动作（隐藏路由 [mode]/[id].vue）；权限是 /dashboard/base/teacher-level，走 smart-layer-admin 实例并发送 module-type=${STUDY_TEACHER_MODULE_TYPE}。`,
+    `create 打 ${STUDY_TEACHER_LEVEL_CREATE_PATH}，edit 打 ${STUDY_TEACHER_LEVEL_UPDATE_PATH}；两条都是 POST + JSON body，页面按 isCreateMode 二选一。`,
+    '保存成功后**没有**业务返回值可读；SDK 通过 smart-layer 的 code 判定成败，并要求用 study-teacher-level-list 回查确认。',
+    'SDK 只提交表单上真有控件的四个字段（name/level/sort，编辑态加 id）；页面在编辑态会把 bridge 里的整行（去掉 createTime/updateTime）一起回传，可能还带 status —— 该差异记在 gaps。',
+  ],
+  prerequisites: [
+    '使用当前用户、当前租户的会话 token 创建 SDK，并拥有讲师类型页权限。',
+    'smart-layer-admin 实例的 baseURL 必须由调用方在 httpBaseUrls 里显式给出，否则 SDK 失败关闭、不发请求（conventions 第 27 条）。',
+    '修改一条类型时先取得该行的 id（来自 study-teacher-level-list），不要用类型名称代替。',
+  ],
+  evidence: [
+    {
+      source: 'CodeReview_Projects_Js@test/portal/main:82651c98c5 app/portal/views/dashboard/education/base/teacher-level/[mode]/[id].vue 与 list.vue',
+      kind: 'reference',
+      note: '确认两个 .lay 端点、POST 形状、表单初值与 rules（name ≤10 字 / level 1~99 / sort 1~999）、编辑态 level 输入框 disabled；固定检出源码证据，未在真实环境调用。',
+    },
+    {
+      source: 'src/capabilities/study-teacher.ts',
+      kind: 'implementation',
+      note: '锁定端点选择、body 键序、本地校验与 code 判定；未覆盖 smart-layer 后端的字段要求。',
+    },
+  ],
+  gaps: [
+    'smart-layer 后端（`.lay` 那一侧）**不在本仓库的两个固定检出内**：它有没有要求行上的其它字段（如 status）无法核实，所以 SDK 只发页面表单真有的字段。',
+    '这两个端点**没有浏览器基准**，参数形状来自固定检出源码（conventions 第 31 条：无基准的契约只能算推断）。',
+    '尚未在真实测试环境执行过新建/修改（写操作闭环未做）。',
+  ],
+}
+
+/**
+ * 教师类型字典：两个页面上都发（讲师管理列表页与讲师管理表单页），
+ * 都是 `smartLayerAdminHttp.get('/dict/selectByPage.lay', {params: {type: 'teacher_type', page: 1, pageSize: -1}})`。
+ */
+const teacherTypeDictContext: Context = {
+  pagePath: STUDY_TEACHER_PAGE_PATH,
+  permission: '/dashboard/base/teacher',
+  moduleType: STUDY_TEACHER_MODULE_TYPE,
+  boundaries: [
+    `覆盖 Portal 讲师管理页 ${STUDY_TEACHER_PAGE_PATH}（列表页与表单页都会发）读取教师类型字典；权限是 /dashboard/base/teacher，走 smart-layer-admin 实例。`,
+    `端点是 GET ${STUDY_TEACHER_TYPE_DICT_PATH}，三个参数（type=${STUDY_TEACHER_TYPE_DICT_TYPE}、page=1、pageSize=-1）都由页面写死，SDK 不开放调用方改写。`,
+    '这一条请求在页面上**不带 isOriginal**，是靠实例拦截器判 code 的；而页面上下文在接线处被配成 isOriginal:true，所以 SDK 自己补了 code 判定。',
+    '它不是「讲师类型管理页」的那张表：那个是 study-teacher-level-list（/manage/study/teacherlevelmanagement.lay）。',
+  ],
+  prerequisites: [
+    '使用当前用户、当前租户的会话 token 创建 SDK，并拥有讲师管理页权限。',
+    'smart-layer-admin 实例的 baseURL 必须由调用方在 httpBaseUrls 里显式给出，否则 SDK 失败关闭、不发请求（conventions 第 27 条）。',
+  ],
+  evidence: [
+    {
+      source: 'CodeReview_Projects_Js@test/portal/main:82651c98c5 app/portal/views/dashboard/education/base/teacher/list.vue（141-153 行）与 teacher/[mode]/[id].vue（199-211 行）',
+      kind: 'reference',
+      note: '两处调用逐字一致：type=teacher_type、page=1、pageSize=-1，并把 results 映射成 {value: Number(item.value), label: item.label}；固定检出源码证据，未在真实环境调用。',
+    },
+    {
+      source: 'src/capabilities/study-teacher.ts',
+      kind: 'implementation',
+      note: '锁定固定参数、results 的两种响应形状容忍与 code 判定；未覆盖 smart-layer 后端的分页上限语义。',
+    },
+  ],
+  gaps: [
+    '响应里 results 的位置（顶层 vs 包络里的 data.results）**未在真实环境核实**：页面上下文被配成 isOriginal 时拿到的是原始体，SDK 两种都认。',
+    '这个端点没有浏览器基准。',
+    '字典项除 value/label 之外的字段（如 id、排序）未纳入契约。',
+  ],
+}
+
+/** 评价设置页（无子路由，保存就是这一页底部的表单） */
+const appraiseContext: Context = {
+  pagePath: STUDY_APPRAISE_SETTING_PAGE_PATH,
+  permission: '/dashboard/base/teacher-appraise-setting',
+  moduleType: STUDY_TEACHER_MODULE_TYPE,
+  boundaries: [
+    `覆盖 Portal 评价设置页 ${STUDY_APPRAISE_SETTING_PAGE_PATH} 的题目保存；权限是 /dashboard/base/teacher-appraise-setting，走 platform 实例。`,
+    `端点是 POST ${STUDY_APPRAISE_SETTING_SAVE_PATH}，body 是题目**数组**；后端整份替换（把现有题目全部 is_del=1 后重插），不是增量保存。`,
+    '这一页还有一块「评价等级说明/分值」的表格，它编辑的是**字典**（`/sys/dict/data/updateList`），不是评价设置题目 —— 本能力不覆盖字典那一块。',
+  ],
+  prerequisites: [
+    '使用当前用户、当前租户的会话 token 创建 SDK，并拥有评价设置页权限。',
+    '读一次 study-appraise-setting-list 拿到当前题目，再在它的基础上增删改；否则整份替换会把没带上的题目删掉。',
+  ],
+  evidence: [
+    {
+      source: 'CodeReview_Projects_Js@test/portal/main:82651c98c5 app/portal/views/dashboard/education/base/teacher-appraise-setting/{list.vue,components/form.vue}',
+      kind: 'reference',
+      note: '确认保存请求的 URL、POST 方法、数组 body 与 `sort: index + 1` 重排；确认页面规则（required / max 100 / validateOnlySpace）与「新增一项」到 5 就停；固定检出源码证据，未在真实环境调用。',
+    },
+    {
+      source: 'CodeReview_Mall_Platform_Java@test/test:998ce8223fa StudyAppraiseTeacherController#save、StudyAppraiseTeacherServiceImpl#saveInfo',
+      kind: 'reference',
+      note: '确认 3~5 条的硬限制、先软删现有题目再插新、以及只读 sort/content 两个字段；未在真实环境执行写操作。',
+    },
+  ],
+  gaps: [
+    '保存端点**没有浏览器基准**，body 形状来自源码与后端实现；页面把读回来的整行一起回传，SDK 只发 {sort, content} 是基于后端只读这两个字段的静态结论。',
+    '尚未在真实测试环境执行 prepare→submit→回查的完整写闭环。',
+    '「评价等级说明/分值」那一块编辑走字典接口（/sys/dict/data/updateList），不在本能力范围内。',
+  ],
+}
+
 function base (
   id: string,
   purpose: string,
@@ -446,6 +597,227 @@ const contracts: Record<string, AiContract> = {
     '返回cancelled=true且没有网络副作用。',
     teacherContext,
   ),
+
+  // -------------------------------------------------------------------------
+  // 本轮补齐：人员候选、教师类型字典、讲师类型写入口、评价设置保存
+  // -------------------------------------------------------------------------
+
+  'study-teacher-candidate-student-list': base(
+    'study-teacher-candidate-student-list',
+    `查询讲师管理表单「讲师姓名」下拉的候选：**还不是讲师**的学员列表（GET ${STUDY_TEACHER_CANDIDATE_STUDENT_PATH}，走 platform 实例）。`,
+    'read',
+    {},
+    {
+      shape: 'object[]',
+      fields: [
+        field('$', 'object[]', '候选学员数组；**这不是分页结构**（该端点没有 pageNo/pageSize，页面直接对数组 map）。'),
+        field('[]', 'object', '一名候选学员。'),
+        field('[].staffCode', 'string | number | null', '学员工号；表单选中后就是讲师的 staffCode（**不是** sys_user.id）。Java Long 可能序列化成字符串，按原样保留。', { nullable: true, nullMeaning: '后端未返回' }),
+        field('[].name', 'string | null', '学员姓名；下拉的显示文本。', { nullable: true, nullMeaning: '后端未返回' }),
+      ],
+      empty: '[] 表示当前租户没有「还没有对应讲师」的学员；响应不是数组会抛错，不降级为空候选。',
+    },
+    [
+      '把 list[].staffCode 作为讲师表单的 staffCode、list[].name 作为显示文本；这两个字段之外的学员数据本能力不返回（页面不消费）。',
+      '候选是「所有还不是讲师的学员」，**没有关键字入口**（后端方法无参数）：要精确找某个人用 base-user-search（按姓名/部门，返回 sys_user.id 而不是工号），两者不能互换。',
+    ],
+    [
+      { role: 'optional', when: '用户在讲师新建表单选了某个候选且要创建讲师主体', capabilityId: 'study-teacher-save-teacher', instruction: '只有在所选候选的 staffCode 为空、需要先建外部讲师学员记录时才走 saveTeacher；正常候选已有 staffCode，讲师主体保存走 /manage/addProfessorStudy.lay（本能力族不覆盖）。' },
+    ],
+    '返回当前租户「还不是讲师的学员」候选；读取本身不创建或修改讲师。',
+    teacherCandidateContext,
+    { failures: [
+      '响应不是数组会抛错（页面直接对结果 map）：不把形状变化降级成"没有候选"。',
+      '401/403、缺 baseURL、网络错误原样抛出；只读查询可重试，但要保留同一份候选口径。',
+    ] },
+  ),
+
+  'study-teacher-type-dict': base(
+    'study-teacher-type-dict',
+    `查询教师类型字典（GET ${STUDY_TEACHER_TYPE_DICT_PATH}?type=${STUDY_TEACHER_TYPE_DICT_TYPE}，smart-layer-admin 实例，固定 page=1&pageSize=-1）。`,
+    'read',
+    {},
+    {
+      shape: 'object[]',
+      fields: [
+        field('$', 'object[]', '教师类型字典项数组。'),
+        field('[]', 'object', '一个字典项。'),
+        field('[].value', 'string', '字典值**原样字符串**；Portal 页面对它再做 Number(...)，SDK 不改写。表单提交时这个值就是讲师类型的 level。'),
+        field('[].label', 'string', '字典显示文本；页面把它填进 a-select 的 label。'),
+      ],
+      empty: '[] 表示字典里没有教师类型；响应里没有 results 数组会抛错，不降级为空列表。',
+    },
+    [
+      '用 list[].value 作为讲师类型下拉的取值、list[].label 作为显示文本；不要自行把 value 映射成"第 1 类/第 2 类"。',
+      '这不是「讲师类型管理页」的数据源：那个是 `study-teacher-level-list`（另一张表，字段是 name/level/sort/status）。两者不可互相顶替。',
+    ],
+    [],
+    '返回教师类型字典项；读取本身不修改任何配置。',
+    teacherTypeDictContext,
+    { failures: [
+      '响应里没有 results 数组会抛错：不把它降级成空的类型列表（那会被读成"这个租户没有教师分类"）。',
+      'smart-layer 业务失败（code≠200）会抛错：SDK 自己补了这一判，因为页面此时拿到的是原始响应体。',
+      '401/403、缺 baseURL、网络错误原样抛出；只读查询可重试。',
+    ] },
+  ),
+
+  'study-teacher-level-prepare-save': base(
+    'study-teacher-level-prepare-save',
+    '按 Portal 讲师类型表单规则校验名称、类型与排序，并**按 create/edit 分支选好端点**，生成尚未提交的保存草稿。',
+    'prepare',
+    {
+      form: input('讲师类型表单对象。', 'Portal 讲师类型表单页 [mode]/[id].vue 的 formState', {
+        type: '{ mode: "create" | "edit", id?: string | number, name: string, level: number, sort: number }',
+        constraints: [
+          'name 必填、最多 10 个字符、不能全是空格（页面 rules.name 的三条）。',
+          'level 必须是 1~99 的整数（页面 a-input-number 的 min/max + precision=0）。',
+          'sort 必须是 1~999 的整数（同上）。',
+          'mode=create 不允许带 id；mode=edit 必须带 id。',
+        ],
+      }),
+      'form.mode': input('保存分支：create 打 insertTeacherLevel.lay，edit 打 updateTeacherLevel.lay。', '页面按 rrForm.isCreateMode 自动决定', { type: '"create" | "edit"', options: [{ value: 'create', label: '新建' }, { value: 'edit', label: '修改' }] }),
+      'form.id': input('讲师类型记录 ID；edit 分支必填，来自讲师类型列表行。', 'study-teacher-level-list.result.list[].id', { type: 'string | number', required: false, requiredWhen: 'mode=edit 时必填；mode=create 时不允许出现', nullable: true, nullMeaning: '新建态没有该字段' }),
+      'form.name': input('类型名称。', '用户在讲师类型表单里填写的类型名称', { type: 'string', format: '非空、≤10 字、不能全是空格' }),
+      'form.level': input('类型（1~99 的整数）。⚠️ 编辑态页面上这个输入框是 disabled 的，改不了，但页面仍会原样回传。', '讲师类型表单的「类型」输入框', { type: 'integer', unit: '无（按原值发送的等级序号）' }),
+      'form.sort': input('排序（1~999 的整数）。', '讲师类型表单的「排序」输入框', { type: 'integer' }),
+    },
+    {
+      shape: '{ draft: { mode, url, body } }',
+      fields: [
+        field('$', 'object', '本地准备结果；只做校验与端点选择，没有写入服务端。'),
+        field('draft', 'object', '供 study-teacher-level-save 使用的草稿。'),
+        field('draft.mode', '"create" | "edit"', '保存分支，与传入的 form.mode 一致。', { values: { create: '新建', edit: '修改' } }),
+        field('draft.url', 'string', `实际要 POST 的路径：create → ${STUDY_TEACHER_LEVEL_CREATE_PATH}；edit → ${STUDY_TEACHER_LEVEL_UPDATE_PATH}。`),
+        field('draft.body', 'object', '实际要发送的 JSON body；键序 name, level, sort，编辑态在**最前面**多一个 id。'),
+        field('draft.body.id', 'string | number', '讲师类型记录 ID；只在 edit 分支出现。', { optional: true, nullable: false }),
+        field('draft.body.name', 'string', '类型名称（已 trim）。'),
+        field('draft.body.level', 'integer', '类型值。'),
+        field('draft.body.sort', 'integer', '排序值。'),
+      ],
+      empty: '名称、类型、排序或 mode/id 组合不符合规则时在发请求前抛错，不返回空草稿。',
+    },
+    [
+      '把 draft.url 与 draft.body 一起展示给用户确认：用户要能看出这次是「新建」还是「修改」哪一条。',
+      'level 在编辑态改不了：如果用户想改类型值，只能停用/删除后新建（页面就是这么限制的）。',
+    ],
+    [
+      { role: 'required', when: '用户确认保存且草稿仍有效', capabilityId: 'study-teacher-level-save', mapping: { draft: 'result.draft' }, instruction: '原样提交完整 draft（含 mode 与 url），不要自己换端点或删掉 id。' },
+    ],
+    '得到通过 Portal 表单规则、且端点已按 create/edit 选定的本地草稿；服务端尚未改变。',
+    levelContext,
+    { failures: [
+      '名称超 10 字、类型不在 1~99、排序不在 1~999、mode 与 id 不匹配，都会在发请求前抛错。',
+      'prepare 不发起任何网络请求；它失败时不要改用 save 直接提交未校验的字段。',
+    ] },
+  ),
+
+  'study-teacher-level-save': base(
+    'study-teacher-level-save',
+    `保存讲师类型（**写操作**）：按草稿的 mode POST ${STUDY_TEACHER_LEVEL_CREATE_PATH} 或 ${STUDY_TEACHER_LEVEL_UPDATE_PATH}。`,
+    'write',
+    {
+      draft: input('study-teacher-level-prepare-save 返回的完整草稿；mode 与 url 必须自洽。', 'study-teacher-level-prepare-save.result.draft', {
+        type: '{ mode: "create" | "edit", url: string, body: { id?: string | number, name: string, level: number, sort: number } }',
+        constraints: ['mode=create 时 url 必须是 insertTeacherLevel.lay，mode=edit 时必须是 updateTeacherLevel.lay；不自洽会被 SDK 拒绝。'],
+      }),
+      'draft.url': input('要 POST 的路径；由 prepare 按 mode 选定。', 'study-teacher-level-prepare-save.result.draft.url', { type: 'string', constraints: [`只接受 ${STUDY_TEACHER_LEVEL_CREATE_PATH} 与 ${STUDY_TEACHER_LEVEL_UPDATE_PATH} 两个值。`] }),
+      'draft.body': input('提交体；提交前 SDK 会用与 prepare 相同的规则重新校验一遍。', 'study-teacher-level-prepare-save.result.draft.body', { type: 'object' }),
+    },
+    {
+      shape: 'void',
+      fields: [field('$', 'void', 'SDK 不返回业务数据：Portal 保存成功后只弹提示，不读响应体。')],
+      empty: '业务失败（smart-layer code≠200）会抛错；成功没有返回值，必须按 steps 回查。',
+    },
+    [
+      '提交前把 draft.body 与"新建/修改"方向展示给用户；写的是绝对值，不需要先读当前值。',
+      '⚠️ SDK 会**自己判一次 smart-layer 的 code**：讲师两页的页面上下文在接线处被配成了 isOriginal:true，而实例拦截器在 isOriginal 下不看 code —— 不补这一判，业务失败会以"成功的 undefined"返回。',
+      '端点没有 requestId：insert 重发会建出第二条同名类型，超时先回查再决定。',
+    ],
+    [
+      { role: 'required', when: '请求完成或超时', capabilityId: 'study-teacher-level-list', instruction: '按 page 回查讲师类型列表，核对 name/level/sort 与记录条数；新建时"条数 +1 且出现该 name"才算成功，不能只看请求没抛错。' },
+    ],
+    '讲师类型列表回查确认目标记录已出现（新建）或字段已更新（修改）后，才能报告保存完成。',
+    levelContext,
+    {
+      failures: [
+        '草稿的 url 与 mode 不自洽、或 body 里的 name/level/sort 不符合页面规则，会在发请求前抛错。',
+        'smart-layer 业务失败（code≠200）会抛错：页面上下文在接线处被配成 isOriginal，实例拦截器不判 code，所以 SDK 自己补了这一判；不补的话业务失败会以"成功的 void"返回。',
+        '401/403、缺 baseURL、网络错误原样抛出；写操作超时后先回查列表（新建可能已经写进去了），不要盲目重发。',
+      ],
+      idempotency: '端点没有 requestId 或其它防重键；修改写的是绝对值、重发终态相同，但新建重发会多出一条记录 —— 超时先回查列表，确认没有再重发。',
+    },
+  ),
+
+  'study-appraise-setting-prepare-save': base(
+    'study-appraise-setting-prepare-save',
+    '按 Portal 评价设置表单规则校验题目数组（3~5 条、每题必填且 ≤100 字），并按数组顺序重排题号，生成尚未提交的草稿。',
+    'prepare',
+    {
+      items: input('题目数组，**顺序即题号**。', '用户在评价设置页编辑的题目列表', {
+        type: '{ content: string, sort?: number }[]',
+        constraints: ['条数 3~5（后端 saveInfo 的硬限制）', '每条 content 必填、不能全是空格、≤100 字', '调用方给的 sort 会被忽略并按下标重排为 1..N'],
+      }),
+      'items[].content': input('题干文本。', '评价设置页每行的输入框', { type: 'string', format: '非空、≤100 字、不能全是空格' }),
+      'items[].sort': input('题号；**不要自己填**，提交时按数组下标重排。', '评价设置页的行顺序', { type: 'integer', required: false, omitted: '按数组下标重排为 1..N' }),
+    },
+    {
+      shape: '{ draft: { items: { sort, content }[] } }',
+      fields: [
+        field('$', 'object', '本地准备结果；只做校验与题号重排，没有写入服务端。'),
+        field('draft', 'object', '供 study-appraise-setting-save 使用的草稿。'),
+        field('draft.items', 'object[]', '已重排题号的题目数组；提交时作为 JSON **数组** body 发送。'),
+        field('draft.items[].sort', 'integer', '题号 1..N，按数组顺序重排（与页面 onSubmit 的 `sort: index + 1` 一致）。'),
+        field('draft.items[].content', 'string', '题干（已 trim）。'),
+      ],
+      empty: '条数不在 3~5、或某条 content 为空/超长时在发请求前抛错，不返回空草稿。',
+    },
+    [
+      '把重排后的题号展示给用户：页面上的上下移动按钮只改变数组顺序，题号是提交时现算的。',
+      '条数上限 5 同时来自页面（「新增一项」到 5 就停）与后端（>5 报「题目不能多于5个」）；下限 3 只来自后端 —— 页面允许删到 1 条，那时保存会失败，所以 SDK 提前挡住。',
+    ],
+    [
+      { role: 'required', when: '用户确认保存', capabilityId: 'study-appraise-setting-save', mapping: { draft: 'result.draft' }, instruction: '原样提交 draft；不要包成 { items: [...] }，也不要只提交改动的那几条。' },
+    ],
+    '得到题号已重排、尚未写入的本地草稿；服务端题目未改变。',
+    appraiseContext,
+    { failures: [
+      '题目条数不在 3~5、或某条题干为空/超长，会在发请求前抛错（后端对条数也有同样的硬校验）。',
+      'prepare 不发起任何网络请求；它失败时不要绕过校验直接提交。',
+    ] },
+  ),
+
+  'study-appraise-setting-save': base(
+    'study-appraise-setting-save',
+    `保存讲师评价设置题目（**写操作**）：POST ${STUDY_APPRAISE_SETTING_SAVE_PATH}，body 是题目**数组**；后端整份替换（先把现有题目置 is_del=1 再重插）。`,
+    'write',
+    {
+      draft: input('study-appraise-setting-prepare-save 返回的草稿；提交前 SDK 用同一套规则重新校验。', 'study-appraise-setting-prepare-save.result.draft', { type: '{ items: { sort, content }[] }' }),
+      'draft.items': input('题目数组（3~5 条）。**必须包含全部要保留的题目** —— 这是整份替换，不是增量。', 'study-appraise-setting-prepare-save.result.draft.items', { type: 'object[]', constraints: ['非空、3~5 条'] }),
+    },
+    {
+      shape: 'void',
+      fields: [field('$', 'void', 'SDK 不返回业务数据：Portal 保存成功后只弹「保存成功」，不读响应体。')],
+      empty: '请求失败（含后端条数/内容校验）会抛错；成功没有返回值，必须按 steps 回查。',
+    },
+    [
+      '⚠️ **整份替换**：只提交要保留的那几条；漏掉的题目会被后端置 is_del=1（下一次 list 就看不到）。所以在提交前，draft.items 必须是"保存后想要的完整题目列表"。',
+      '请求体是**数组**（`[{sort, content}, …]`），不是 `{ items: [...] }`；SDK 只发这两个字段 —— 页面会把读回来的整行（id/isDel/createTime 等）一起回传，而后端 saveInfo 只读 sort 与 content。',
+      '保存成功后再读一次 `study-appraise-setting-list` 才算确认；返回的题目顺序可能与提交顺序不同（后端按 sort 展示）。',
+    ],
+    [
+      { role: 'required', when: '请求完成或超时', capabilityId: 'study-appraise-setting-list', instruction: '回查题目列表：条数、题干文本与顺序都要与草稿一致；条数不对说明这次替换把某些题目删掉了（或没删掉）。' },
+    ],
+    '评价设置列表回查确认题目条数与文本跟草稿一致后，才能报告保存完成；只看到请求没抛错不算。',
+    appraiseContext,
+    {
+      failures: [
+        '草稿条数不在 3~5、或某条题干为空/超长，会在发请求前抛错（后端 saveInfo 有同样的条数硬校验）。',
+        '后端业务失败（含条数/内容校验）原样抛出；不要把它当成保存成功。',
+        '401/403 与网络错误原样抛出；保存后必须回查列表 —— 条数少了说明整份替换把没带上的题目删掉了，要按原样补回。',
+      ],
+      idempotency: '端点没有 requestId；同一份载荷重发终态相同（整份替换），但**漏发条目**与**重复提交**的后果不同方向 —— 超时后先回查列表再决定是否重发。',
+    },
+  ),
 }
 
 const METHOD_PATHS = {
@@ -461,6 +833,12 @@ const METHOD_PATHS = {
   'study-teacher-prepare-save-teacher': 'studyTeacher.prepareSaveTeacher',
   'study-teacher-save-teacher': 'studyTeacher.submitSaveTeacher',
   'study-teacher-cancel-save-teacher': 'studyTeacher.cancelSaveTeacher',
+  'study-teacher-candidate-student-list': 'studyTeacher.listCandidateStudents',
+  'study-teacher-type-dict': 'studyTeacher.listTeacherTypes',
+  'study-teacher-level-prepare-save': 'studyTeacher.prepareSaveLevel',
+  'study-teacher-level-save': 'studyTeacher.saveLevel',
+  'study-appraise-setting-prepare-save': 'studyTeacher.prepareSaveAppraiseSetting',
+  'study-appraise-setting-save': 'studyTeacher.submitAppraiseSetting',
 } as const
 
 export const STUDY_GRADE_TEACHER_AI_CONTRACTS: Record<string, AiContract> = Object.fromEntries(

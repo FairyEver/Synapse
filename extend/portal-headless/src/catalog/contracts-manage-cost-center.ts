@@ -49,11 +49,58 @@ function base (value: Omit<AiContract, 'whenToUse' | 'boundaries' | 'prerequisit
   }
 }
 
+const maintenanceRowFields: AiField[] = [
+  field('list[].id', 'string | number', '成本中心维护记录ID；子页的编辑/删除用它，不是汇总页的员工记录ID', { constraints: idRules }),
+  field('list[].code', 'string', '成本中心编码；该子页表格第一列', { nullable: true, nullMeaning: '后端未返回编码' }),
+  field('list[].name', 'string', '成本中心名称；该子页表格第二列', { nullable: true, nullMeaning: '后端未返回名称' }),
+  field('list[].isDel', 'integer', '逻辑删除标记：0 否、1 是；查询固定带 is_del=0', { optional: true, nullable: true, values: { '0': '未删除', '1': '已删除' }, nullMeaning: '后端未返回该标记' }),
+  field('list[].creator', 'string | number', '创建人ID', { optional: true, nullable: true, nullMeaning: '后端未返回创建人' }),
+  field('list[].createTime', 'string | number', '创建时间原值', { optional: true, nullable: true, nullMeaning: '后端未返回创建时间' }),
+  field('list[].updater', 'string | number', '修改人ID', { optional: true, nullable: true, nullMeaning: '后端未返回修改人' }),
+  field('list[].updateTime', 'string | number', '修改时间原值', { optional: true, nullable: true, nullMeaning: '后端未返回修改时间' }),
+]
+const maintenanceOutput: AiContract['output'] = { shape: '{ list: array, total: integer }', fields: [field('$', 'object', '成本中心维护分页结果'), field('list', 'array', '当前页记录，不是全部数据'), field('list[]', 'object', '一条成本中心维护记录'), ...maintenanceRowFields, field('total', 'integer', '符合筛选的总记录数，不是当前页长度')], empty: 'list=[]且total=0表示当前筛选没有成本中心；权限、网络或响应形状错误会抛出，不降级为空页。' }
+
 const RAW: Record<string, AiContract> = {
   'manage-cost-center-list': base({ purpose: '按员工姓名、三个成本中心文本和所属组织筛选成本中心汇总。', effect: 'read', inputs: queryInputs, output: pageOutput, consume: ['按total分页；展示name、staffCode、idCard、三个成本中心文本和fullPath。', '需要继续维护时先确认当前页面结果，再调用本地maintenance动作进入子页。'], steps: [{ role: 'optional', when: '需要组织筛选候选', capabilityId: 'manage-cost-center-organization-tree', mapping: {}, instruction: '读取树后只提交组织ID到args.organization，不用名称。' }, { role: 'optional', when: '用户明确要求维护成本中心', capabilityId: 'manage-cost-center-maintenance', mapping: {}, instruction: '只导航，不把本页汇总行当成维护表单。' }], completion: '返回当前筛选页和total。', idempotency: null }),
   'manage-cost-center-organization-tree': base({ purpose: '读取成本中心汇总页面所属组织筛选使用的角色组织树。', effect: 'read', inputs: {}, output: treeOutput, consume: ['选择节点ID填入manage-cost-center-list.organization。'], steps: [], completion: '获得当前会话可见组织树。', idempotency: null }),
   'manage-cost-center-export': base({ purpose: '按成本中心汇总页面筛选条件导出当前结果。', effect: 'read', inputs: queryInputs, output: fileOutput, consume: ['保存非空文件；Java未固定Content-Disposition时使用SDK回退文件名。'], steps: [], completion: '获得非空导出文件。', idempotency: null }),
   'manage-cost-center-maintenance': base({ purpose: '进入Portal成本中心维护子页。', effect: 'local', inputs: {}, output: routeOutput, consume: ['在支持Portal路由的调用方打开./maintenance/list；该结果不代表维护保存成功。'], steps: [], completion: '获得与Portal一致的相对路由。', idempotency: null }),
+  'manage-cost-center-maintenance-list': {
+    ...base({
+      purpose: '分页查询「成本中心维护」子页的成本中心编码与名称，按编码/名称关键字过滤。',
+      effect: 'read',
+      inputs: {
+        code: optional('成本中心编码关键字（后端 like 模糊匹配）', '子页编码输入框；页面先 trim，空值转 undefined', '该 URL 参数整条不出现（qs 的 skipNulls 丢掉 undefined），不限制编码', { type: 'string', nullable: true }),
+        name: optional('成本中心名称关键字（后端 like 模糊匹配）', '子页名称输入框；页面先 trim，空值转 undefined', '该 URL 参数整条不出现，不限制名称', { type: 'string', nullable: true }),
+        pageNo: optional('从1开始的页码', '子页分页状态', 'SDK默认1', { type: 'integer', constraints: ['正整数'] }),
+        pageSize: optional('每页条数', '子页分页器', 'SDK默认20（子页用了 styleV2）', { type: 'integer', constraints: ['10、20、50、100'] }),
+      },
+      output: maintenanceOutput,
+      consume: [
+        '用 list[].code 与 list[].name 展示维护表格的两列；total 用于分页，不是当前页长度。',
+        '按 total 递增 pageNo 取全；筛选关键字是模糊匹配，改关键字后要重新从 pageNo=1 开始。',
+        '后端固定 order by id 升序且只查 is_del=0，页面的 order/orderField 参数后端不读——不要承诺调用方能改排序。',
+      ],
+      steps: [
+        { role: 'optional', when: '用户要从维护列表回到汇总列表', capabilityId: 'manage-cost-center-list', mapping: {}, instruction: '两个子页查询的是不同的数据（汇总按员工、维护按成本中心字典），不要用这里的行去填汇总页的字段。' },
+      ],
+      completion: '返回当前筛选页的成本中心记录；读取不修改成本中心。',
+      idempotency: null,
+    }),
+    whenToUse: '需要给用户列出可维护的成本中心（编码 + 名称）或按编码/名称找某一条时使用；与 manage-cost-center-list 的“员工成本中心汇总”不是同一份数据。',
+    boundaries: [
+      '只覆盖成本中心维护子页的列表查询；该子页的「编辑」「删除」属于其它动作（删除是 DELETE /salary/costcenter，body 为 [id]），本能力不发布写操作。',
+      '后端这条查询固定 is_del=0、order by id asc，并在 Service 层把 pageNo 归一到 ≥1、pageSize 归一到 [1,500]；页面发的 order/orderField 后端不读。',
+      'code/name 是 like 模糊匹配；空值在页面上被转成 undefined，URL 里不出现该键（不是发送空字符串）。',
+      '走 platform 实例，moduleType=14，路径由实例补 /admin-api。',
+    ],
+    gaps: [
+      '未启动浏览器、未取得独立网络基准、未在真实测试环境执行该读请求；参数装配与字段来自固定检出的 Portal 子页源码、Java Controller/DTO/ServiceImpl 与离线断言。',
+      '子页的删除动作（DELETE /salary/costcenter，body [id]）与编辑动作本轮未接入，本能力不覆盖；页面这两个按钮的可达性与权限未复核。',
+      'Portal/Java 固定检出未按任务约束 pull 到远端最新。',
+    ],
+  },
 }
 
 export const MANAGE_COST_CENTER_AI_CONTRACTS: Record<string, AiContract> = Object.fromEntries(Object.keys(MANAGE_COST_CENTER_METHODS).map(id => [id, RAW[id]!]))

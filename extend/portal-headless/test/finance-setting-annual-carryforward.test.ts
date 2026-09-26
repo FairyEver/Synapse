@@ -75,12 +75,16 @@ describe('年度账结转页面动作', () => {
       'finance-setting-annual-carryforward-prepare-transfer',
       'finance-setting-annual-carryforward-transfer',
       'finance-setting-annual-carryforward-cancel-transfer',
+      'finance-setting-annual-carryforward-opening-balance',
+      'finance-setting-annual-carryforward-opening-balance-detail',
+      'finance-setting-annual-carryforward-trial-balance',
+      'finance-setting-annual-carryforward-reconcile',
     ])
     expect(financeSettingAnnualCarryforwardCapabilities.every(item => item.pagePath === FINANCE_SETTING_ANNUAL_CARRYFORWARD_PAGE_PATH)).toBe(true)
     expect(financeSettingAnnualCarryforwardCapabilities.every(item => item.httpInstance === 'platform' && item.moduleType === null)).toBe(true)
   })
 
-  it('锁定详情页对账入口与固定Java检出状态，且不暴露不可交付能力', () => {
+  it('锁定详情页对账入口与固定Java检出状态：页面绑了按钮，后端没有这条路由', () => {
     const portal = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
     const java = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
     const detail = readFileSync(`${portal}/app/portal/views/dashboard/finance/setting/annual-carryforward/detail/balance/index.vue`, 'utf8')
@@ -89,7 +93,10 @@ describe('年度账结转页面动作', () => {
     expect(detail).toContain('accountingSetId: data.id')
     expect(detail).toContain('periodYear: data.periodYear')
     expect(controller).not.toContain('@PostMapping("/reconcile")')
-    expect('reconcile' in fixture().api).toBe(false)
+    // ⚠️ 这一条在 2026-09-26 的补缺口轮次里**反向**了：上一轮按“不可交付能力不暴露”
+    //    把详情页四个动作整组排除，本轮按派单要求把页面实际绑定的对账按钮也交付出来，
+    //    并把“后端未核到路由”写进 gaps。能力存在 ≠ 后端可用：下面同时钉住这两个事实。
+    expect('reconcile' in fixture().api).toBe(true)
   })
 
   it('默认查询逐字段复现Portal列表请求，投影隐藏字段并保留两个不同ID', async () => {
@@ -219,6 +226,158 @@ describe('年度账结转页面动作', () => {
   })
 })
 
+describe('嵌套详情页（期初余额）四个动作', () => {
+  const balanceRow = {
+    subjectId: '9007199254740993',
+    subjectCode: 1001,
+    subjectName: '库存现金',
+    balanceDirection: 1,
+    openingBalance: 1234.56,
+    ancillaryAccounting: 'supplierCode,customerCode',
+    detailType: 'SUPPLIER',
+    detailApi: '/finance/annual-closing/supplier-balance/detail',
+    detailParams: { supplierId: 1 },
+    detailEnabled: true,
+    detailLabel: '供应商余额明细',
+    ignored: '不应泄漏',
+  }
+  const trialItem = (subjectType: number | null, name: string, amount: number, direction: number) =>
+    ({ subjectType, subjectTypeName: name, balanceAmount: amount, balanceDirection: direction })
+
+  it('期初余额按页面原样全量取：pageNo=1、pageSize=-1，参数键序与页面一致', async () => {
+    const f = fixture([{ list: [balanceRow], total: 1 }])
+    await expect(f.api.listOpeningBalance({ accountingSetId: '9007199254740994', periodYear: '2026' })).resolves.toEqual({
+      list: [{
+        subjectId: '9007199254740993',
+        subjectCode: 1001,
+        subjectName: '库存现金',
+        balanceDirection: 1,
+        openingBalance: 1234.56,
+        ancillaryAccounting: 'supplierCode,customerCode',
+        detailType: 'SUPPLIER',
+        detailApi: '/finance/annual-closing/supplier-balance/detail',
+        detailParams: { supplierId: 1 },
+        detailEnabled: true,
+        detailLabel: '供应商余额明细',
+      }],
+      total: 1,
+    })
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/finance/annual-closing/opening-balance/page',
+      method: 'get',
+      params: { accountingSetId: '9007199254740994', periodYear: '2026', subjectCode: undefined, pageNo: 1, pageSize: -1 },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual([
+      'accountingSetId', 'periodYear', 'subjectCode', 'pageNo', 'pageSize',
+    ])
+  })
+
+  it('科目筛选沿用页面的 subjectCode 参数名（页面传的是科目ID，SDK 不做 id→code 换算）', async () => {
+    const f = fixture([{ list: [], total: 0 }])
+    await f.api.listOpeningBalance({ accountingSetId: 5, periodYear: '2026', subjectCode: 77 })
+    expect(f.calls[0]?.params).toEqual({
+      accountingSetId: 5, periodYear: '2026', subjectCode: 77, pageNo: 1, pageSize: -1,
+    })
+    // 页面就是这么写的：property key 是 subjectCode，值来自科目选择器的 id
+    const portal = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const page = readFileSync(`${portal}/app/portal/views/dashboard/finance/setting/annual-carryforward/detail/balance/index.vue`, 'utf8')
+    expect(page).toContain('subjectCode: form.subjectId || undefined')
+    expect(page).toContain('pageSize: -1')
+  })
+
+  it('期初余额明细只发四个字段且必须是数组；空数组是合法结果', async () => {
+    const f = fixture([[{ ancillaryCode: 'S001', ancillaryName: '供应商A', balanceDirection: 1, balance: 100 }], []])
+    await expect(f.api.getOpeningBalanceDetail({
+      accountingSetId: 5, periodYear: '2026', subjectId: '9007199254740993', ancillaryField: 'supplierCode',
+    })).resolves.toEqual([{ ancillaryCode: 'S001', ancillaryName: '供应商A', balanceDirection: 1, balance: 100 }])
+    await expect(f.api.getOpeningBalanceDetail({
+      accountingSetId: 5, periodYear: '2026', subjectId: 6, ancillaryField: 'supplierCode',
+    })).resolves.toEqual([])
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/finance/annual-closing/opening-balance/detail',
+      method: 'get',
+      params: { accountingSetId: 5, periodYear: '2026', subjectId: '9007199254740993', ancillaryField: 'supplierCode' },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual([
+      'accountingSetId', 'periodYear', 'subjectId', 'ancillaryField',
+    ])
+  })
+
+  it('试算平衡把 periodYear 拼成 YYYY-12，投影五类与两侧合计并保留 isBalanced', async () => {
+    const f = fixture([{
+      asset: trialItem(1, '资产', 50000, 1),
+      liability: trialItem(2, '负债', 20000, 2),
+      equity: trialItem(3, '权益', 20000, 2),
+      cost: trialItem(4, '成本', 0, 3),
+      profitLoss: trialItem(5, '损益', -10000, 2),
+      assetCostTotal: trialItem(null, '资产+成本合计', 50000, 1),
+      equityLiabilityProfitLossTotal: trialItem(null, '权益+负债+损益合计', 50000, 2),
+      isBalanced: true,
+    }])
+    const result = await f.api.getTrialBalance({ accountingSetId: 5, periodYear: '2026' })
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/finance/annual-closing/trial-balance',
+      method: 'get',
+      params: { accountingSetId: 5, period: '2026-12' },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual(['accountingSetId', 'period'])
+    expect(result.isBalanced).toBe(true)
+    expect(result.assetCostTotal).toEqual({ subjectType: null, subjectTypeName: '资产+成本合计', balanceAmount: 50000, balanceDirection: 1 })
+    expect(result.asset.balanceDirection).toBe(1)
+    expect(result.cost.balanceDirection).toBe(3)
+    // 页面自己拼的就是这一条：`const period = `${data.periodYear}-12``
+    const portal = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const page = readFileSync(`${portal}/app/portal/views/dashboard/finance/setting/annual-carryforward/detail/balance/index.vue`, 'utf8')
+    expect(page).toContain('const period = `${data.periodYear}-12`')
+  })
+
+  it('对账按页面 POST body 提交，成功时返回 undefined（页面不读响应体）', async () => {
+    const f = fixture([null])
+    await expect(f.api.reconcile({ accountingSetId: 5, periodYear: '2026' })).resolves.toBeUndefined()
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/finance/annual-closing/reconcile',
+      method: 'post',
+      data: { accountingSetId: 5, periodYear: '2026' },
+    })
+    const backendError = fixture([new Error('Request failed with status code 404')])
+    await expect(backendError.api.reconcile({ accountingSetId: 5, periodYear: '2026' })).rejects.toThrow('404')
+  })
+
+  it('四个动作的坏输入与坏响应不会被改写成空数据', async () => {
+    const f = fixture([[null], { asset: {}, isBalanced: 'yes' }])
+    await expect(f.api.listOpeningBalance({ accountingSetId: 0, periodYear: '2026' })).rejects.toThrow('accountingSetId')
+    await expect(f.api.listOpeningBalance({ accountingSetId: 5, periodYear: '26' })).rejects.toThrow('YYYY')
+    await expect(f.api.getOpeningBalanceDetail({ accountingSetId: 5, periodYear: '2026', subjectId: 6, ancillaryField: '  ' })).rejects.toThrow('ancillaryField')
+    await expect(f.api.getOpeningBalanceDetail({ accountingSetId: 5, periodYear: '2026', subjectId: 6, ancillaryField: 'supplierCode' })).rejects.toThrow('明细行')
+    await expect(f.api.getTrialBalance({ accountingSetId: 5, periodYear: '2026' })).rejects.toThrow('isBalanced')
+    // 前三条在发请求前就被本地校验拦下，只有最后一条真的发了请求
+    expect(f.calls).toHaveLength(2)
+    const badPage = fixture([{ list: [{ ...balanceRow, balanceDirection: 9 }], total: 1 }])
+    await expect(badPage.api.listOpeningBalance({ accountingSetId: 5, periodYear: '2026' })).rejects.toThrow('balanceDirection')
+    const badPage2 = fixture([{ list: [], total: -1 }])
+    await expect(badPage2.api.listOpeningBalance({ accountingSetId: 5, periodYear: '2026' })).rejects.toThrow('list或total')
+    const badDetail = fixture([{ notAnArray: true }])
+    await expect(badDetail.api.getOpeningBalanceDetail({ accountingSetId: 5, periodYear: '2026', subjectId: 6, ancillaryField: 'supplierCode' })).rejects.toThrow('必须是数组')
+  })
+
+  it('四个动作都归属同一个页面路径与权限上下文，写标记只给对账', () => {
+    const detail = financeSettingAnnualCarryforwardCapabilities.filter(item => /opening-balance|trial-balance|reconcile/.test(item.id))
+    expect(detail.map(item => item.id)).toEqual([
+      'finance-setting-annual-carryforward-opening-balance',
+      'finance-setting-annual-carryforward-opening-balance-detail',
+      'finance-setting-annual-carryforward-trial-balance',
+      'finance-setting-annual-carryforward-reconcile',
+    ])
+    expect(detail.every(item => item.pagePath === FINANCE_SETTING_ANNUAL_CARRYFORWARD_PAGE_PATH)).toBe(true)
+    expect(detail.every(item => item.permission === '/dashboard/finance/setting/annual-carryforward')).toBe(true)
+    expect(detail.map(item => item.write)).toEqual([false, false, false, true])
+    // 嵌套页与列表页是同一个 permission（route 块里写的就是这一个）
+    const portal = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const subjectDetail = readFileSync(`${portal}/app/portal/views/dashboard/finance/setting/annual-carryforward/detail/balance/subject-detail/index.vue`, 'utf8')
+    expect(subjectDetail).toContain('permission: /dashboard/finance/setting/annual-carryforward')
+  })
+})
+
 describe('年度账结转AI契约与共享接线要求', () => {
   it('4项可交付能力、公开方法映射和AI结构一一对应', async () => {
     const {
@@ -233,6 +392,10 @@ describe('年度账结转AI契约与共享接线要求', () => {
       'financeSettingAnnualCarryforward.prepareTransfer',
       'financeSettingAnnualCarryforward.transfer',
       'financeSettingAnnualCarryforward.cancelTransfer',
+      'financeSettingAnnualCarryforward.listOpeningBalance',
+      'financeSettingAnnualCarryforward.getOpeningBalanceDetail',
+      'financeSettingAnnualCarryforward.getTrialBalance',
+      'financeSettingAnnualCarryforward.reconcile',
     ])
     const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
     const { validateAiContracts } = await import(validatorUrl)
@@ -260,6 +423,35 @@ describe('年度账结转AI契约与共享接线要求', () => {
     })
     expect(transfer.gaps?.join('\n')).toContain('未启动浏览器')
     expect(transfer.gaps?.join('\n')).toContain('accountingSetIds')
+
+    const openingBalance = contracts['finance-setting-annual-carryforward-opening-balance']!
+    expect(openingBalance.effect).toBe('read')
+    expect(openingBalance.inputs.accountingSetId?.meaning).toContain('不是结转记录行 id')
+    expect(openingBalance.output.fields.find(item => item.path === 'list[].subjectId')?.meaning).toContain('不是科目编码')
+    expect(openingBalance.inputs.subjectCode?.source).toContain('valueType=id')
+    expect(openingBalance.output.empty).toContain('closingStatus=1')
+    expect(openingBalance.steps.find(step => step.capabilityId === 'finance-setting-annual-carryforward-opening-balance-detail')?.mapping).toEqual({
+      accountingSetId: 'args.accountingSetId', periodYear: 'args.periodYear', subjectId: 'result.list[].subjectId', ancillaryField: 'result.list[].ancillaryAccounting',
+    })
+
+    const detail = contracts['finance-setting-annual-carryforward-opening-balance-detail']!
+    expect(detail.inputs.subjectId?.meaning).toContain('不是 subjectCode')
+    expect(detail.inputs.ancillaryField?.source).toContain('ancillaryAccounting')
+    expect(detail.output.empty).toContain('未结转')
+
+    const trial = contracts['finance-setting-annual-carryforward-trial-balance']!
+    expect(trial.inputs.periodYear?.meaning).toContain('-12')
+    expect(trial.output.fields.find(item => item.path === 'isBalanced')?.meaning).toContain('互为相反数')
+    expect(trial.output.fields.find(item => item.path === 'asset.balanceDirection')?.values?.['3']).toBe('平')
+    expect(trial.gaps?.join('\n')).toContain('真实环境')
+
+    const reconcile = contracts['finance-setting-annual-carryforward-reconcile']!
+    expect(reconcile.effect).toBe('write')
+    expect(reconcile.output.shape).toBe('undefined')
+    expect(reconcile.boundaries.join('\n')).toContain('对账')
+    expect(reconcile.boundaries.join('\n')).toContain('没有对应映射')
+    expect(reconcile.gaps?.join('\n')).toContain('两个检出里都核不到对应路由')
+    expect(reconcile.steps.some(step => step.role === 'recovery')).toBe(true)
 
     const broken = {
       ...contracts,

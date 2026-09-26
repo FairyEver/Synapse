@@ -204,6 +204,51 @@ describe('Portal 薪资 → 个税专项扣款 → 扣款费用页面能力', ()
     expect(f.calls[0]).toEqual({ url: '/salary/staff-eligibility/check', method: 'post', data: { staffCodes: [9001, '9002'], businessDate: '2026-08-01' } })
   })
 
+  it('员工候选：有界分页、六列投影，且不照抄页面的 pageSize=200 全量翻页', async () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const staffSelect = readFileSync(`${portalRoot}/app/portal/views/dashboard/hr/salary/person-tax/components/staff-select.vue`, 'utf8')
+    const daoXml = readFileSync(`${javaRoot}/erp-module-hr/erp-module-hr-biz/src/main/resources/mapper/organization/staff/HrStaffDao.xml`, 'utf8')
+    // 页面确实是无界全量：pageSize=200、最多 100 页
+    expect(staffSelect).toContain("http.get('/org/staff/allStaffByPage'")
+    expect(staffSelect).toContain('pageSize: 200')
+    expect(staffSelect).toContain('maxPages: 100')
+    // 这条 SQL 压根不拼 name —— SDK 因此不暴露 name 筛选
+    const allStaffSql = daoXml.slice(daoXml.indexOf('<select id="allStaffByPage"'), daoXml.indexOf('<select id="getLeaveCount"'))
+    expect(allStaffSql).toContain('dto.isFilterLeaveStaff')
+    expect(allStaffSql).not.toContain('dto.name')
+
+    const f = fixture([{ list: [{
+      id: '9007199254740993', name: '张三', staffCode: 9001, idCard: '110101199001010011',
+      organization: 77, status: 1, salaryLevel: 5, ignored: '不应泄漏',
+    }], total: 4200 }])
+    await expect(f.api.listStaffCandidates()).resolves.toEqual({ list: [{
+      id: '9007199254740993', name: '张三', staffCode: 9001, idCard: '110101199001010011',
+      organization: 77, status: 1,
+    }], total: 4200 })
+    expect(f.calls[0]).toEqual({
+      url: '/org/staff/allStaffByPage', method: 'get',
+      params: { organizationId: undefined, isFilterLeaveStaff: undefined, pageNo: 1, pageSize: 20 },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual(['organizationId', 'isFilterLeaveStaff', 'pageNo', 'pageSize'])
+  })
+
+  it('员工候选：收窄参数与边界，拒绝全量拉取和坏输入', async () => {
+    const f = fixture([{ list: [], total: 0 }])
+    await f.api.listStaffCandidates({ organizationId: 77, isFilterLeaveStaff: 1, pageNo: 3, pageSize: 200 })
+    expect(f.calls[0]?.params).toEqual({ organizationId: 77, isFilterLeaveStaff: 1, pageNo: 3, pageSize: 200 })
+    // 页面是 pageSize=200×100 页的全量拉；SDK 明确拒绝 -1 和超过 200 的请求
+    await expect(f.api.listStaffCandidates({ pageSize: -1 })).rejects.toThrow('pageSize')
+    await expect(f.api.listStaffCandidates({ pageSize: 201 })).rejects.toThrow('pageSize')
+    await expect(f.api.listStaffCandidates({ pageNo: 0 })).rejects.toThrow('pageNo')
+    await expect(f.api.listStaffCandidates({ organizationId: 0 })).rejects.toThrow('organizationId')
+    expect(f.calls).toHaveLength(1)
+    await expect(fixture([{ list: null, total: 0 }]).api.listStaffCandidates()).rejects.toThrow('list或total')
+    await expect(fixture([{ list: [{ id: 1, name: 'x', staffCode: 2, idCard: null, organization: null, status: 9 }], total: 1 }]).api.listStaffCandidates()).resolves.toEqual({
+      list: [{ id: 1, name: 'x', staffCode: 2, idCard: null, organization: null, status: 9 }], total: 1,
+    })
+  })
+
   it('坏参数、坏响应和AI说明缺口不会静默通过', async () => {
     await expect(fixture([pageResponse]).api.list({ pageSize: 30 })).rejects.toThrow('pageSize')
     await expect(fixture([pageResponse]).api.list({ costDate: ['2026-13', '2026-09'] })).rejects.toThrow('YYYY-MM')
@@ -222,5 +267,13 @@ describe('Portal 薪资 → 个税专项扣款 → 扣款费用页面能力', ()
     expect(contracts['salary-person-tax-update']?.boundaries.some(item => item.includes('costTime'))).toBe(true)
     expect(contracts['salary-person-tax-import']?.output.fields.some(item => item.path === 'excludedStaffList[].reason')).toBe(true)
     expect(contracts['salary-person-tax-archive']?.output.fields.some(item => item.path === 'processedCount')).toBe(true)
+    const staffPage = contracts['salary-person-tax-staff-page']!
+    expect(staffPage.output.fields.some(item => item.path === 'list[].staffCode')).toBe(true)
+    expect(staffPage.inputs.pageSize?.constraints?.join('\n')).toContain('200')
+    expect(staffPage.boundaries.join('\n')).toContain('不暴露 name')
+    expect(staffPage.gaps?.join('\n')).toContain('HrStaffDao.xml')
+    expect(staffPage.steps.find(step => step.capabilityId === 'salary-person-tax-eligibility-check')?.mapping).toEqual({
+      staffCodes: 'result.list[].staffCode', businessDate: 'context.businessDate',
+    })
   })
 })

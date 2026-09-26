@@ -131,6 +131,35 @@ describe('Portal 系统设置 → 用户查询页面能力', () => {
     expect(f.calls).toEqual([])
   })
 
+  it('自动生成职工号：无参数、只读不落库，返回十进制字符串', async () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const form = readFileSync(join(portalRoot, 'app/portal/views/dashboard/hr/setting/user/[mode]/[id].vue'), 'utf8')
+    const impl = readFileSync(join(javaRoot, 'erp-module-system/erp-module-system-biz/src/main/java/com/wdbc/erp/module/system/service/user/HrSysUserServiceImpl.java'), 'utf8')
+    const daoXml = readFileSync(join(javaRoot, 'erp-module-system/erp-module-system-biz/src/main/resources/mapper/hrSysUser/SysUserDao.xml'), 'utf8')
+    // 页面把它填给 username（不是 staffCode 字段）
+    expect(form).toContain("http.get('/sys/user/autoCreateStaffCode')")
+    expect(form).toContain('rrForm.formState.username = await getStaffCode()')
+    // 后端只 SELECT MAX，没有 insert/update
+    const method = impl.slice(impl.indexOf('public String autoCreateStaffCode()'), impl.indexOf('public int phoneIsExist(String phone)'))
+    expect(method).toContain('selectMaxStaffCodeByNowDate')
+    expect(method).not.toContain('insert')
+    expect(method).not.toContain('update')
+    expect(daoXml).toContain('SELECT MAX(username)')
+    expect(daoXml).toContain('LEFT(username, 8) = #{nowDate}')
+
+    const f = fixture(['2026092601', '2026092602'])
+    await expect(f.api.autoCreateStaffCode()).resolves.toBe('2026092601')
+    await expect(f.api.autoCreateStaffCode()).resolves.toBe('2026092602')
+    expect(f.calls).toEqual([
+      { url: '/sys/user/autoCreateStaffCode', method: 'get' },
+      { url: '/sys/user/autoCreateStaffCode', method: 'get' },
+    ])
+    await expect(fixture([2026092601]).api.autoCreateStaffCode()).rejects.toThrow('十进制字符串')
+    await expect(fixture(['']).api.autoCreateStaffCode()).rejects.toThrow('十进制字符串')
+    await expect(fixture([undefined]).api.autoCreateStaffCode()).rejects.toThrow('十进制字符串')
+  })
+
   it('AI说明锁定可达权限、时间开区间、隐藏创建/删除边界和编辑回查，结构契约通过', async () => {
     expect(Object.keys(contracts).sort()).toEqual(Object.keys(SETTING_USER_METHODS).sort())
     expect(contracts['setting-user-list']?.consume.join(' ')).toContain('结束日次日')
@@ -138,6 +167,11 @@ describe('Portal 系统设置 → 用户查询页面能力', () => {
     expect(contracts['setting-user-update']?.boundaries.join(' ')).toContain('password')
     expect(contracts['setting-user-prepare-update']?.steps.some(step => step.role === 'cancel')).toBe(true)
     expect(contracts['setting-user-list']?.output.fields.map(item => item.path)).toEqual(expect.arrayContaining(['list[].id', 'list[].roleList', 'list[].organizationFullPathName']))
+    const autoCode = contracts['setting-user-auto-create-staff-code']!
+    expect(autoCode.effect).toBe('read')
+    expect(autoCode.boundaries.join('\n')).toContain('不产生持久化')
+    expect(autoCode.output.fields.map(item => item.path)).toEqual(['$'])
+    expect(autoCode.gaps?.join('\n')).toContain('username')
     const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
     const { validateAiContracts } = await import(validatorUrl) as { validateAiContracts: (contracts: Record<string, unknown>) => unknown[] }
     expect(validateAiContracts(contracts)).toEqual([])

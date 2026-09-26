@@ -488,6 +488,11 @@ export const contractTemplateCapabilities: CapabilityDefinition[] = [
       ...DRAFT_PARAMS,
     ],
   },
+  // 没有 `contract-template-cancel`：页面的「撤销」**两处入口都是注释掉的**
+  // （模板里 `list.vue:50` 的 `<common-action-core …>撤销</…>` 整行被 HTML 注释；
+  // 动作列那条 `list.vue:161` 的 `// { component: 'action-core', text: '撤销' }` 被 JS 注释），
+  // 用户点不到 ⇒ 按 conventions 第 28 条不进 SDK。后端也没有该映射。
+  // 与「直播课程」「晨/月课堂的学习记录子页」同型，详见 docs/pages/合同模板.md。
   {
     id: 'contract-template-remove',
     title: '删除合同模板',
@@ -606,6 +611,7 @@ export function createContractTemplateCapability (request: PortalRequest) {
         params: { id },
       })
     },
+
   }
 }
 

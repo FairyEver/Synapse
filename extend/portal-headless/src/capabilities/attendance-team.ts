@@ -321,6 +321,28 @@ function normalizeId (value: string | number, label = '考勤组 id'): string {
   return text
 }
 
+/** 把 year / month 归一成后端能绑定的形状：非空、且是整数样式的字符串或数字 */
+function holidayPartOf (value: unknown, label: 'year' | 'month'): string | number {
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  if (typeof value === 'string' && /^\d{1,2}$|^\d{4}$/.test(value.trim())) return value.trim()
+  throw new Error(
+    `节假日 ${label} 必填，且要是整数（year 如 2026、month 如 9 或 '09'），` +
+      `收到的是 ${JSON.stringify(value)}。后端对空值不报错，只会静默返回空日历。`,
+  )
+}
+
+function holidayRecordOf (value: unknown, label: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label}必须是对象`)
+  return value as Record<string, unknown>
+}
+
+/** 可空文本：缺失/空串一律归一成 null（不把 undefined 混进返回结构） */
+function holidayTextOf (value: unknown, label: string): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') throw new Error(`${label}必须是字符串或 null`)
+  return value === '' ? null : value
+}
+
 /** 按契约里的**固定顺序**拼参数：调用方的实参顺序不影响 qs 序列化结果（D20） */
 function buildListParams (query: AttendanceTeamQuery): Record<string, unknown> {
   const provided = query as Record<string, unknown>
@@ -451,6 +473,68 @@ const SCHEDULE_LIST_PARAMS: ParamSpec[] = [
   },
 ]
 
+/**
+ * 「法定节假日日历」那个弹窗的数据源：`GET /org/holiday/getHoliday`。
+ *
+ * 它挂在**考勤组表单页**（`[mode]/[id].vue:57` 的 `components/calendar.vue`）里 ——
+ * 新建 / 编辑考勤组时打开日历看这个月哪天休、哪天班。所以本能力的 `pagePath` 绑的是
+ * 排班管理列表页（与同文件其它能力一致；隐藏表单页没有独立菜单）。
+ *
+ * ⚠️ 它**不是**"查某一天的假期"：后端是 `WHERE year = ? AND month = ?` 的精确匹配，
+ * 一次返回该月**全部**行（休与班都在里面），页面再按 `holidayDate` 逐格去比。
+ * 两个参数都必须给：后端 `getHoliday(Integer year, Integer month)` 对 null 不报错，
+ * 而是生成 `year = null` 这种匹配不到任何行的条件 —— **静默返回空**正是要避免的失败方式。
+ */
+export const ATTENDANCE_TEAM_HOLIDAY_PATH = '/org/holiday/getHoliday'
+
+/**
+ * 假期行的归一化结果。
+ *
+ * 只保留页面真正用到、以及解释这一行所必需的字段；`wage` / `creator` / `createTime` /
+ * `updater` / `updateTime` 与本次查询动作无关，按 conventions 第 33 条的范围口径不透传。
+ */
+export type AttendanceTeamHolidayRow = {
+  /** 假期记录 id */
+  id?: string | number
+  /** 假期名称（如「元旦」「春节」）。⚠️ 页面上的日历**不显示名称**，只画「休 / 班」 */
+  name?: string | null
+  /** 日期，后端固定序列化成 `yyyy-MM-dd`（`@JsonFormat(pattern = "yyyy-MM-dd")`） */
+  holidayDate?: string | null
+  /**
+   * 是否休息：**1 = 休**（页面画「休」）；**0 = 班**（页面画「班」）。
+   * 页面判「班」的写法是"月匹配且不是 `isHoliday === 1`"，所以 0 之外的其它值也会被画成「班」。
+   */
+  isHoliday?: number | null
+  /** 年（后端 `hr_sys_holiday.year`） */
+  year?: number | null
+  /** 月（后端 `hr_sys_holiday.month`），1~12 */
+  month?: number | null
+}
+
+export type AttendanceTeamHolidayQuery = {
+  /** 年。页面传 `dayjs` 的 `YYYY`（字符串），后端是 `Integer` —— 两种都接受 */
+  year: number | string
+  /** 月。页面传 `MM`（**零填充**，如 `'09'`），后端是 `Integer` —— 两种都接受 */
+  month: number | string
+}
+
+const HOLIDAY_PARAMS: ParamSpec[] = [
+  {
+    name: 'year',
+    kind: 'number',
+    required: true,
+    description: '年份（如 2026）。页面传 `YYYY` 字符串，后端是 Integer：`WHERE year = ?`，必填',
+  },
+  {
+    name: 'month',
+    kind: 'number',
+    required: true,
+    description:
+      '月份 1~12。页面传**零填充**的 `MM`（如 `09`），后端按 Integer 绑定；两种写法都能过，' +
+      '但必须给 —— 不给时后端生成 `month = null` 这种匹配不到行的条件，静默返回空',
+  },
+]
+
 export const attendanceTeamCapabilities: CapabilityDefinition[] = [
   {
     id: 'attendance-team-list',
@@ -571,6 +655,14 @@ export const attendanceTeamCapabilities: CapabilityDefinition[] = [
       },
       ...SCHEDULE_LIST_PARAMS,
     ],
+  },
+  {
+    id: 'attendance-team-holiday-list',
+    title: '查询某月的法定节假日日历（休 / 班）',
+    pagePath: ATTENDANCE_TEAM_PAGE_PATH,
+    permission: ATTENDANCE_TEAM_PERMISSION,
+    write: false,
+    params: HOLIDAY_PARAMS,
   },
 ]
 
@@ -696,6 +788,46 @@ export function createAttendanceTeamCapability (request: PortalRequest) {
         url: '/org/hrWorkSchedule',
         method: 'post',
         data: buildSchedulePayload(draft),
+      })
+    },
+
+    /**
+     * 查某个月的节假日日历（休 / 班）。只读。
+     *
+     * 页面上就是考勤组表单里那个「法定节假日日历」弹窗（`components/calendar.vue`）：
+     * 打开时按当前年月查一次，翻月再查一次。返回的数组里同时有「休」和「班」两种行，
+     * 页面按 `holidayDate` 逐格比对：命中 `isHoliday === 1` 的画「休」，否则画「班」。
+     *
+     * ⚠️ 两个参数都必填（页面永远两个一起发）；后端对 null 不报错，只会**静默返回空数组**。
+     * 参数按页面原样发：`year` 是 `YYYY`、`month` 是零填充的 `MM`（后端按 Integer 绑定）。
+     */
+    async holidayList (query: AttendanceTeamHolidayQuery): Promise<AttendanceTeamHolidayRow[]> {
+      const year = holidayPartOf(query?.year, 'year')
+      const month = holidayPartOf(query?.month, 'month')
+      const list = await request<unknown>({
+        url: ATTENDANCE_TEAM_HOLIDAY_PATH,
+        method: 'get',
+        // 键序与页面一致：year 在前、month 在后
+        params: { year, month },
+      })
+      if (!Array.isArray(list)) {
+        throw new Error(
+          '节假日接口没有返回数组：页面直接对结果 find/比对，形状变了要当场炸，' +
+            '不能静默返回空日历（那会被读成"这个月没有假期"）',
+        )
+      }
+      return list.map((item, index) => {
+        const row = holidayRecordOf(item, `节假日行[${index}]`)
+        const numberOrNull = (key: string): number | null =>
+          row[key] === undefined || row[key] === null ? null : Number(row[key])
+        return {
+          id: row.id as string | number | undefined,
+          name: holidayTextOf(row.name, `节假日行[${index}].name`),
+          holidayDate: holidayTextOf(row.holidayDate, `节假日行[${index}].holidayDate`),
+          isHoliday: numberOrNull('isHoliday'),
+          year: numberOrNull('year'),
+          month: numberOrNull('month'),
+        }
       })
     },
   }

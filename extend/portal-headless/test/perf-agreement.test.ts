@@ -14,6 +14,7 @@ import {
   PERF_AGREEMENT_CHANGE_PATHS,
   PERF_MONTH_AGREEMENT_MAIN_PAGE_PATH,
   PERF_MONTH_AGREEMENT_OTHERS_PAGE_PATH,
+  PERF_MONTH_PROTOCOL_CONFIG_PATH,
   PERF_MONTH_PROTOCOL_LIST_PATH,
   PERF_MONTH_PROTOCOL_OTHERS_PATH,
   PERF_MONTH_PROTOCOL_SIGNATORY_PATH,
@@ -24,6 +25,7 @@ import {
   PERF_YEAR_PROTOCOL_OTHERS_PATH,
   type PerfAgreementCapability,
 } from '../src/capabilities/perf-agreement.js'
+import { PERF_MONTH_PROTOCOL_CONFIG_CONTRACTS } from '../src/catalog/contracts-perf-month-protocol-config.js'
 import { createPortalHeadless } from '../src/index.js'
 
 /**
@@ -108,7 +110,7 @@ function maskSignatory (pairs: Array<[string, string]>): Array<[string, string]>
 }
 
 /** 每个页面一个 `request`（与门面的接法一致）：记录 `call` 收到的配置 */
-function makeSdk () {
+function makeSdk (respond?: (config: InternalAxiosRequestConfig) => unknown) {
   const calls: CapturedCall[] = []
   const sdk = createPortalHeadless({
     baseUrl: 'https://biz-api-test.wodecorp.cn',
@@ -117,7 +119,7 @@ function makeSdk () {
   ;(sdk.http as AxiosInstance).defaults.adapter = async (config) => {
     calls.push(config as CapturedCall)
     return {
-      data: { ret: 'SUCCESS', code: 0, msg: '', data: { list: [], total: 0 } },
+      data: { ret: 'SUCCESS', code: 0, msg: '', data: respond ? respond(config) : { list: [], total: 0 } },
       status: 200,
       statusText: 'OK',
       headers: {},
@@ -130,8 +132,8 @@ function makeSdk () {
 }
 
 /** 五页各建一次能力（每页一个 `PortalRequest`，与门面一致） */
-function makeCap () {
-  const { calls, at } = makeSdk()
+function makeCap (respond?: (config: InternalAxiosRequestConfig) => unknown) {
+  const { calls, at } = makeSdk(respond)
   return {
     calls,
     cap: createPerfAgreementCapability(
@@ -556,7 +558,7 @@ describe('能力定义：pagePath 与目录逐字一致、全是只读、id 不�
     }
   })
 
-  it('id 互不重复；只有"年度页的两条读"共用同一个 pagePath（有意）', () => {
+  it('id 互不重复；两个 main 页各有"列表 + 配置读"两条共用同一个 pagePath（有意）', () => {
     const ids = perfAgreementCapabilities.map((c) => c.id)
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids).toEqual([
@@ -566,6 +568,7 @@ describe('能力定义：pagePath 与目录逐字一致、全是只读、id 不�
       'perf-year-agreement-list',
       'perf-year-agreement-others-list',
       'perf-year-protocol-config-get',
+      'perf-month-protocol-config-get',
     ])
     const byPage = new Map<string, string[]>()
     for (const def of perfAgreementCapabilities) {
@@ -573,6 +576,10 @@ describe('能力定义：pagePath 与目录逐字一致、全是只读、id 不�
     }
     const shared = [...byPage.entries()].filter(([, list]) => list.length > 1)
     expect(shared).toEqual([
+      [
+        PERF_MONTH_AGREEMENT_MAIN_PAGE_PATH,
+        ['perf-month-agreement-list', 'perf-month-protocol-config-get'],
+      ],
       [
         PERF_YEAR_AGREEMENT_MAIN_PAGE_PATH,
         ['perf-year-agreement-list', 'perf-year-protocol-config-get'],
@@ -592,5 +599,106 @@ describe('能力定义：pagePath 与目录逐字一致、全是只读、id 不�
     for (const path of expected) {
       expect(byPath.has(path), `${path} 不在目录里`).toBe(true)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 七、个人月度页的第二个读：「时间节点及扣分标准」弹窗
+//
+// ⚠️ 这一条**没有基准**：它只在用户点开弹窗、组件被创建时才发（`useAsyncState` 写在
+// `info.vue` 的 setup 里），基准抓的是页面挂载请求 —— **基准里没有它不代表页面不发它**。
+// 所以这一组锁的是"源码里的调用形状 + Java 侧那 4 行的固定顺序 + 契约语义"。
+// ---------------------------------------------------------------------------
+
+describe('个人月度：时间节点及扣分标准（弹窗自己发的请求）', () => {
+  /**
+   * 这一条与年度那条**是两份不同的配置、两个不同的端点**。
+   * 之所以特地断言"年度端点不是它"，是因为文档里曾经把这一页的弹窗写成"没有接口"。
+   */
+  it('GET /sys/dict/data/getMonthProtocolConfig，零参数、只有 `_t`', async () => {
+    const { cap, calls } = makeCap()
+    await cap.getMonthProtocolConfig()
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.method?.toUpperCase()).toBe('GET')
+    expect(queryPairs(String(calls[0]?.url))).toEqual([['_t', '<ts>']])
+    expect(normalize(String(calls[0]?.url))).toBe(`/admin-api${PERF_MONTH_PROTOCOL_CONFIG_PATH}?_t=<ts>`)
+  })
+
+  it('走的是**个人月度页**的上下文（module-type 13），不是年度页的', async () => {
+    const { cap, calls } = makeCap()
+    await cap.getMonthProtocolConfig()
+    expect(calls[0]?.moduleType).toBe(13)
+  })
+
+  it('它与年度那条是两个端点，互不代替（页面也是各读各的）', () => {
+    expect(PERF_MONTH_PROTOCOL_CONFIG_PATH).not.toBe(PERF_YEAR_PROTOCOL_CONFIG_PATH)
+    expect(PERF_MONTH_PROTOCOL_CONFIG_PATH).toContain('getMonthProtocolConfig')
+    expect(PERF_YEAR_PROTOCOL_CONFIG_PATH).toContain('getYearProtocolConfig')
+    // 基准里那条年度配置属于年度页；月度这一条**不该**被算成它
+    const yearOwners = new Set(
+      BASE.requests.filter((r) => /getYearProtocolConfig/.test(r.url)).map((r) => r.pagePath),
+    )
+    expect([...yearOwners]).toEqual([PERF_YEAR_AGREEMENT_MAIN_PAGE_PATH])
+  })
+
+  it('返回的是**字符串数组**（后端 CommonResult<List<String>>），SDK 不解析、不重排', async () => {
+    const lines = [
+      '月度协议签订时间为次月5日之前完成，延迟1天扣1分，最多扣5分',
+      '月度协议自评时间为当月25日到当月最后一天',
+      '月度协议评价时间为当月最后一天之前完成，延迟1天扣1分，最多扣5分',
+      '评分申诉时间每月5日之前完成',
+    ]
+    const { cap } = makeCap(() => lines)
+    const result = await cap.getMonthProtocolConfig()
+    expect(result).toEqual(lines)
+    expect(result).toHaveLength(4)
+  })
+
+  it('能力定义：挂在个人月度页、只读、零参数', () => {
+    const definition = perfAgreementCapabilities.find((item) => item.id === 'perf-month-protocol-config-get')
+    expect(definition, '月度配置读能力没有登记').toBeTruthy()
+    expect(definition!.pagePath).toBe(PERF_MONTH_AGREEMENT_MAIN_PAGE_PATH)
+    expect(definition!.permission).toBe('/dashboard/month-agreement/main')
+    expect(definition!.write).toBe(false)
+    expect(definition!.params).toEqual([])
+  })
+
+  it('契约为四行写明固定顺序与各自的含义，并把缺口如实登记', () => {
+    const contract = PERF_MONTH_PROTOCOL_CONFIG_CONTRACTS['perf-month-protocol-config-get']
+    expect(contract, '缺契约').toBeTruthy()
+    expect(contract!.effect).toBe('read')
+    expect(contract!.idempotency).toBeNull()
+    expect(contract!.inputs).toEqual({})
+    expect(contract!.gaps?.length, '必须如实登记缺口').toBeGreaterThan(0)
+    // ⚠️ 那 4 行的顺序是契约的一部分；把顺序写乱、或说成"顺序随意"都会红
+    const root = contract!.output.fields.find(field => field.path === '$')!
+    expect(root.meaning).toContain('固定顺序')
+    expect(root.meaning).toContain('签订 → 自评 → 评价 → 申诉')
+    const line = contract!.output.fields.find(field => field.path === '$[]')!
+    const constraints = line.constraints!.join('\n')
+    expect(constraints).toContain('签订')
+    expect(constraints).toContain('自评')
+    expect(constraints).toContain('评价')
+    expect(constraints).toContain('申诉')
+    expect(constraints).toContain('0 起算')
+    // 空数组不是正常结果 —— 不能把形状异常说成"没有时间节点"
+    expect(contract!.output.empty).toContain('不是正常结果')
+    // 页面是"点开才发"，这一点必须写在边界里（否则基准里没有它会被误读成页面不发）
+    const boundaries = contract!.boundaries.join('\n')
+    expect(boundaries).toContain('组件被创建时才发')
+  })
+
+  it('契约的结构章节齐全', () => {
+    const contract = PERF_MONTH_PROTOCOL_CONFIG_CONTRACTS['perf-month-protocol-config-get']!
+    expect(contract.purpose.length).toBeGreaterThan(8)
+    expect(contract.whenToUse.length).toBeGreaterThan(8)
+    expect(contract.boundaries.length).toBeGreaterThan(0)
+    expect(contract.prerequisites.length).toBeGreaterThan(0)
+    expect(contract.consume.length).toBeGreaterThan(0)
+    expect(contract.completion.length).toBeGreaterThan(8)
+    expect(contract.failures.length).toBeGreaterThan(0)
+    expect(contract.evidence.length).toBeGreaterThan(0)
+    expect(contract.output.shape).toContain('string[]')
+    expect(contract.output.fields.length).toBeGreaterThan(0)
   })
 })

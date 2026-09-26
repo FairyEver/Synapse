@@ -539,6 +539,237 @@ export const studyLessonActionCapabilities: CapabilityDefinition[] = [
   actionDefinition('monthly', 'study-lesson-monthly-student-attendance-toggle', '切换月课堂学生出勤状态', true, [ID_PARAM]),
 ]
 
+/**
+ * 学习记录页与月课堂隐藏子页（本节点新增）。
+ *
+ * 这一组和 `studyLessonActionCapabilities` 分开导出，**目前还没有接进
+ * `src/capabilities/index.ts` / `invoke.ts` / `contracts-business.ts`** ——
+ * 接线由派单方统一做（同 `contracts-study-course.ts` 那一轮的分工）。
+ * 分开导出的代价是"暂时查不到"（`describe()` 还拿不到这些说明），
+ * 好处是**接进目录之前不会改变任何既有产物**：那三个共享文件看到的注册面与提交前逐字节相同，
+ * 目录能力数、方法路径契约数、`test/ai-contract-business.test.ts` 的闭合断言都不动。
+ *
+ * 它们同属一类缺口：请求由**隐藏子路由和弹窗**发出，菜单里没有独立页面，
+ * 所以既有的"按页面扫列表接口"覆盖判据整块漏掉了它们。
+ *
+ * | 能力 | 发出位置 | 请求 |
+ * | --- | --- | --- |
+ * | `study-lesson-{daily,weekly,monthly}-record-list` | `record/[id]/item-list.vue` 的 `getDataListURL` | `GET /study/statistics/studystudyrecord/list` |
+ * | `study-record-remove` | 同页 `deleteURL` + `deleteIsBatch: true` | `DELETE /study/statistics/studystudyrecord`，body 是 ID 数组 |
+ * | `study-lesson-monthly-oversee-task-list` | `meeting-resolution/[mode]/[id]/components/view-meeting.vue` | `GET /hr/oversee-task/getOverseeTaskListByBusinessId` |
+ * | `study-lesson-monthly-motion-list` | `meeting-resolution/[mode]/[id]/item-list.vue` 的 `customLoad` | `GET /study/lesson/studylesson/getMotionByLesson` |
+ * | `study-lesson-monthly-motion-rate-list` | `score-record/[id]/item-list.vue` 的 `getDataListURL` | `GET /admin-api/study/lesson/studylesson/getMotionRateListByLesson` |
+ * | `study-lesson-monthly-rate-list` | `score-record/[id]/components/score-record.vue` | `POST /admin-api/study/lesson/studylesson/getRateListByMotionId` |
+ *
+ * 三条 `studystudyrecord/list` 与那个 DELETE 是**同一份源码**在三个页面上的复制
+ * （晨/周/月的 `record/[id]/item-list.vue` 逐字相同；daily 与 weekly 只差两个模板属性），
+ * 所以字段顺序、删受体形状三页一致。列表按页拆成三个能力（`boundaries` 里写清各自只服务哪一页），
+ * 删除按派单表的建议合成**一个** `study-record-remove`：它的请求在三页上逐字节相同，
+ * 页面上下文（module-type=12）也相同，拆三份只会得到三个同样的定义。
+ */
+export const STUDY_RECORD_LIST_PATH = '/study/statistics/studystudyrecord/list'
+export const STUDY_RECORD_DELETE_PATH = '/study/statistics/studystudyrecord'
+export const STUDY_LESSON_MONTHLY_MOTION_PATH = '/study/lesson/studylesson/getMotionByLesson'
+export const STUDY_LESSON_MONTHLY_MOTION_RATE_PATH = '/admin-api/study/lesson/studylesson/getMotionRateListByLesson'
+export const STUDY_LESSON_MONTHLY_RATE_PATH = '/admin-api/study/lesson/studylesson/getRateListByMotionId'
+export const STUDY_LESSON_MONTHLY_OVERSEE_TASK_PATH = '/hr/oversee-task/getOverseeTaskListByBusinessId'
+
+/**
+ * 「学习记录」页（`record/[id]/item-list.vue`）的行。
+ *
+ * 来源是 `LessonStudyStudentDTO`（SQL 从 `hr_study_record` + `hr_study_student` JOIN 出来），
+ * 页面上显示的列就是下面这几个；`isAdmAdd` 决定"移出"按钮是否渲染。
+ */
+export type StudyLessonRecordRow = {
+  id: StudyLessonId
+  /** 学员姓名 */
+  name?: string | null
+  /** 学员工号 */
+  staffCode?: string | number | null
+  /** 联系方式 */
+  mobile?: string | null
+  /** 标准化单元（`hr_organization.name`） */
+  orgName?: string | null
+  /** 是否关联智慧蛋鸡 `yes_or_no`：0 未关联 / 1 已关联 */
+  isRelatedLayer?: number | null
+  /** 入班时间 */
+  createTime?: string | null
+  /** 这条学习记录是否管理员手动添加：**只有 1 才能被移出** */
+  isAdmAdd?: number | null
+  [key: string]: unknown
+}
+
+export type StudyLessonRecordQuery = {
+  /** 当前课堂 ID；页面取自隐藏路由 `record/[id]` 的 `id` */
+  lessonId: StudyLessonId
+  /** 学员姓名（后端 LIKE，模糊） */
+  name?: string
+  /** 学员工号（后端等值） */
+  staffCode?: string | number
+  pageNo?: number
+  pageSize?: number
+}
+
+/** 月课堂议案（`StudyLessonMotionDTO` 的页面消费子集） */
+export type StudyLessonMotionRow = {
+  id: StudyLessonId
+  /** 议案名称 */
+  name?: string | null
+  /** 所属课程名称 */
+  lessonName?: string | null
+  lessonId?: StudyLessonId | null
+  /** 是否总议案；总议案行是"合并展示"的那一条 */
+  isTotalMotion?: number | null
+  /** 议题内容类型 1 填写内容 / 2 文件 */
+  motionContentType?: number | null
+  motionContent?: string | null
+  motionFileName?: string | null
+  motionFileUrl?: string | null
+  /** 议题是否通过 */
+  isPass?: number | null
+  [key: string]: unknown
+}
+
+/** 会议决议页的列表结果：页面 `customLoad` 返回的就是 `{ list, total }`（不是后端的分页对象） */
+export type StudyLessonMotionListResult = { list: StudyLessonMotionRow[]; total: number }
+
+/** 评分记录页的行（`StudyLessonMotionDTO` 的子集，SQL 只选 base 列 + lessonName） */
+export type StudyLessonMotionRateRow = {
+  id: StudyLessonId
+  name?: string | null
+  lessonName?: string | null
+  [key: string]: unknown
+}
+
+/** 议案评分弹窗的行（`StudyMonthMotionLessonRateDTO`） */
+export type StudyLessonRateRow = {
+  id?: StudyLessonId | null
+  motionId?: StudyLessonId | null
+  staffCode?: string | number | null
+  /** 评分人姓名（后端按工号回填） */
+  staffName?: string | null
+  /** 鲜花数原值 0..6 */
+  flower?: number | null
+  /** 展示用评分结果：flower+1，flower=6 时固定 "6+" */
+  flowerStr?: string | null
+  /** 评价内容（`motion_flower` 字典按 flower 取 label） */
+  flowerContent?: string | null
+  rateTime?: string | null
+  [key: string]: unknown
+}
+
+/** 督办记录（`OverseeTaskRespVO` 的页面消费子集） */
+export type StudyLessonOverseeTaskRow = {
+  id: StudyLessonId
+  taskName?: string | null
+  /** 紧急程度原码；页面用 `degreeTypeOptions` 翻译 */
+  degreeType?: number | null
+  /** 提示内容 */
+  tip?: string | null
+  /** 计划完成时间 `YYYY-MM-DD` */
+  endDate?: string | null
+  /** 是否完成：1 已完成（页面把未完成排在前面） */
+  isComplete?: number | null
+  /** 是否当前登录人创建；决定"撤销/发送提醒"是否渲染 */
+  isCreator?: number | null
+  /** 被督办人列表 */
+  superviseeList?: Array<Record<string, unknown>> | null
+  [key: string]: unknown
+}
+
+/**
+ * 「学习记录」列表的字段顺序 —— 逐字对齐页面的 `useListPageModule`：
+ * `form` 是 `{ lessonId, name, staffCode }`，`logicFetch` 拼成
+ * `{ order, orderField, ...form, pageNo, pageSize }`（`common/libs/renren/list.js:473-483`）。
+ */
+const RECORD_LIST_FIELDS: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'lessonId', defaultValue: '' },
+  { name: 'name', defaultValue: '' },
+  { name: 'staffCode', defaultValue: '' },
+  { name: 'pageNo', defaultValue: 1 },
+  { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/** `score-record/[id]/item-list.vue`：`getDataListIsPage: false`，所以**没有** pageNo/pageSize */
+const MOTION_RATE_LIST_FIELDS: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'lessonId', defaultValue: '' },
+  { name: 'name', defaultValue: '' },
+]
+
+/**
+ * `view-meeting.vue` 的 `getUrgeTaskList`：`businessId` ← 课堂 id、`featureId` ← 议案 id、
+ * `type` 页面写死 1。**被 API 收下的名字是 businessId/featureId**，不是 lessonId/motionId。
+ */
+const OVERSEE_TASK_FIELDS: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'businessId', defaultValue: '' },
+  { name: 'featureId', defaultValue: '' },
+  { name: 'type', defaultValue: 1 },
+]
+
+const RECORD_PAGE_PARAMS: ParamSpec[] = [
+  p('lessonId', 'text', true, '当前课堂 ID；来自课堂列表 list[].id（隐藏路由 record/[id] 的 id），不是学习记录 id'),
+  p('name', 'text', false, '学员姓名，后端 LIKE 模糊匹配'),
+  p('staffCode', 'text', false, '学员工号，后端等值匹配；不是用户 ID'),
+  ...PAGE_PARAMS,
+]
+
+const MOTION_FILTER_PARAM = p(
+  'name',
+  'text',
+  false,
+  '议案名称。⚠️ `getMotionByLesson` 的 `name` **不发到服务端** —— 页面在本地用 includes 过滤（见能力实现），这里沿用页面行为',
+)
+
+export const studyLessonHiddenCapabilities: CapabilityDefinition[] = [
+  // 只有**周课堂**这一条：三页共用同一个 `GET /study/statistics/studystudyrecord/list`，
+  // 但晨/月两页的 `record/[id]/item-list.vue` **用户到不了**——晨课堂的「课堂记录」按钮
+  // 打开的是 `../components/course-record.vue` 弹窗（`daily-lesson/list.vue:172-173`），
+  // 月课堂的「会议记录」打开的是 `ComponentMonthCourseRecord` 弹窗（`monthly-lesson/list.vue:209`），
+  // 全仓 `grep -rn 'daily-lesson/record\|monthly-lesson/record'` **零命中**。
+  // 只有周课堂列表真的 `router.push('./record/${id}/item-list')`（`weekly-lesson/list.vue:307`）。
+  // 按 conventions 第 28 条（「能渲染 ≠ 用户能做的事」，与直播课程同型）：到不了就不建。
+  actionDefinition('weekly', 'study-lesson-weekly-record-list', '查询周课堂学习记录', false, RECORD_PAGE_PARAMS),
+  // 三页共用同一个 DELETE，所以合成一个能力；pagePath 落在**周课堂**：
+  // 三页里只有周课堂列表真的 push 到自己的 record 子页（`weekly-lesson/list.vue:77` 的
+  // 「学习记录」，`v-if="record.lessonKind === 1"`），晨/月两页的按钮打开的是弹窗
+  // （daily 的 `course-record.vue`、monthly 的会议记录弹窗），全仓没有 push 到那两条
+  // `record/[id]/item-list` 的代码。三页的 module-type（12 学习管理）与请求本身完全一样，
+  // 绑在可达的那一页更贴近事实。
+  actionDefinition('weekly', 'study-record-remove', '移出课堂学习记录', true, [
+    p('ids', 'array', true, '待移出的学习记录 id 数组；单删也按数组发送（页面 deleteIsBatch=true）'),
+  ]),
+  actionDefinition('monthly', 'study-lesson-monthly-motion-list', '查询月课堂议案列表', false, [
+    LESSON_ID_PARAM,
+    MOTION_FILTER_PARAM,
+  ]),
+  actionDefinition('monthly', 'study-lesson-monthly-motion-rate-list', '查询月课堂议案评分记录列表', false, [
+    LESSON_ID_PARAM,
+    p('name', 'text', false, '议案名称，后端 LIKE 模糊匹配（与 getMotionByLesson 的本地过滤不同）'),
+  ]),
+  actionDefinition('monthly', 'study-lesson-monthly-rate-list', '查询议案评分明细', false, [
+    p('staffName', 'text', false, '评分人姓名；后端在**内存里**按 contains 过滤（不是 SQL LIKE）'),
+    p('motionId', 'text', true, '议案 ID；来自评分记录列表行 list[].id，不是课堂 ID'),
+  ]),
+  actionDefinition('monthly', 'study-lesson-monthly-oversee-task-list', '查询议案督办任务', false, [
+    LESSON_ID_PARAM,
+    p('motionId', 'text', true, '议案 ID；请求里叫 `featureId`，来自会议决议列表行 list[].id'),
+  ]),
+]
+
+/** 页面方法名与能力 ID 的固定映射；接线由派单方负责（见本节点顶部注释）。 */
+export const STUDY_LESSON_HIDDEN_METHODS = {
+  'study-lesson-weekly-record-list': 'listWeeklyRecords',
+  'study-record-remove': 'removeStudyRecord',
+  'study-lesson-monthly-motion-list': 'listMonthlyMotions',
+  'study-lesson-monthly-motion-rate-list': 'listMonthlyMotionRates',
+  'study-lesson-monthly-rate-list': 'listMonthlyRates',
+  'study-lesson-monthly-oversee-task-list': 'listMonthlyOverseeTasks',
+} as const
+
 /** 页面方法名与动作能力 ID 的固定映射；共享目录由主线负责接入。 */
 export const STUDY_LESSON_METHODS = {
   'study-lesson-daily-list': 'listDaily',
@@ -1054,6 +1285,112 @@ export function createStudyLessonCapability (
     await request<unknown>({ url: STUDY_LESSON_STUDENT_ATTENDANCE_TOGGLE_PATH, method: 'get', params: { id: idOf(id, '学生关联id') } })
   }
 
+  /**
+   * 「学习记录」列表：`GET /study/statistics/studystudyrecord/list`。
+   *
+   * 三页打的是同一个后端方法（`StudyStudyRecordController#studyRecordList`），
+   * 只有页面上下文不同，所以实现共用、`request` 各自传入。
+   */
+  const listRecordsOf = (request: PortalRequest) =>
+    async (query: StudyLessonRecordQuery): Promise<PageResult<StudyLessonRecordRow>> => {
+      const lessonId = idOf(query?.lessonId, '学习记录lessonId')
+      return request<PageResult<StudyLessonRecordRow>>({
+        url: STUDY_RECORD_LIST_PATH,
+        method: 'get',
+        params: buildParams(RECORD_LIST_FIELDS, { ...query, lessonId } as unknown as Record<string, unknown>),
+      })
+    }
+
+  /**
+   * 移出学习记录：`DELETE /study/statistics/studystudyrecord`，**body 是 ID 数组**。
+   *
+   * `common/libs/renren/list.js:517` 的 `deleteIsBatch: true` 分支：
+   * `_http.delete(deleteURL, { data: id ? [id] : selectState.value })` ——
+   * 单行删是 `[id]`、多选删是选中的 id 数组，**两种都是 JSON 数组 body，没有 query**。
+   * 通用删除的 `${deleteURL}/${id}` 那条路这一页没走。
+   */
+  const removeStudyRecord = async (input: { ids: StudyLessonId[] }): Promise<void> => {
+    await requestDaily<unknown>({
+      url: STUDY_RECORD_DELETE_PATH,
+      method: 'delete',
+      data: idsOf(input?.ids, '学习记录ids'),
+    })
+  }
+
+  /**
+   * 月课堂议案列表：`GET /study/lesson/studylesson/getMotionByLesson?lessonId=…`。
+   *
+   * ⚠️ 页面用 `customLoad` 包了一层：**只有 `lessonId` 发到服务端**，
+   * 名称筛选是在拿回整段数组之后用 `item.name.includes(form.name)` **在本地**做的
+   * （`meeting-resolution/[mode]/[id]/item-list.vue:66-75`），并且把
+   * `total` 设成过滤后的条数。这里逐字复刻这个可观察行为，不把 `name` 拼进 query。
+   *
+   * 与页面唯一的差别：页面在 `item.name` 为 null 时会直接抛 `TypeError`；
+   * SDK 按空串处理（不复制崩溃），调用方能拿到完整列表。
+   */
+  const listMonthlyMotions = async (input: { lessonId: StudyLessonId; name?: string }): Promise<StudyLessonMotionListResult> => {
+    const lessonId = idOf(input?.lessonId, '月课堂议案lessonId')
+    const rows = await requestMonthly<StudyLessonMotionRow[]>({
+      url: STUDY_LESSON_MONTHLY_MOTION_PATH,
+      method: 'get',
+      params: { lessonId },
+    })
+    const list = Array.isArray(rows) ? rows : []
+    const name = input?.name === undefined || input.name === null ? '' : String(input.name)
+    const filtered = name === '' ? list : list.filter(item => String(item?.name ?? '').includes(name))
+    return { list: filtered, total: filtered.length }
+  }
+
+  /**
+   * 评分记录列表：`GET /admin-api/study/lesson/studylesson/getMotionRateListByLesson`。
+   *
+   * `getDataListIsPage: false` —— 列表模块直接把响应数组当列表，**没有分页参数**，
+   * 但 `order` / `orderField` 仍然会发（`list.js:473-475` 无条件拼）。
+   * 这一页的排序控件是 antd 的本地排序，不发服务端。
+   */
+  const listMonthlyMotionRates = async (query: { lessonId: StudyLessonId; name?: string }): Promise<StudyLessonMotionRateRow[]> => {
+    const lessonId = idOf(query?.lessonId, '议案评分记录lessonId')
+    return requestMonthly<StudyLessonMotionRateRow[]>({
+      url: STUDY_LESSON_MONTHLY_MOTION_RATE_PATH,
+      method: 'get',
+      params: buildParams(MOTION_RATE_LIST_FIELDS, { ...query, lessonId } as unknown as Record<string, unknown>),
+    })
+  }
+
+  /**
+   * 议案评分明细：`POST /admin-api/study/lesson/studylesson/getRateListByMotionId`。
+   *
+   * **是 POST，但实现是纯读**（`StudyLessonMotionServiceImpl#getRateListByMotionId`：
+   * 一条 select + 字典/用户回填 + 内存过滤，没有任何写）。所以能力按 `read` 登记，
+   * 不按 HTTP 方法判定。body 的键序与页面 `formState` 一致：`staffName` 在前、`motionId` 在后。
+   */
+  const listMonthlyRates = async (input: { staffName?: string; motionId: StudyLessonId }): Promise<StudyLessonRateRow[]> => {
+    const motionId = idOf(input?.motionId, '议案评分motionId')
+    const staffName = input?.staffName === undefined || input.staffName === null ? '' : String(input.staffName)
+    return requestMonthly<StudyLessonRateRow[]>({
+      url: STUDY_LESSON_MONTHLY_RATE_PATH,
+      method: 'post',
+      data: { staffName, motionId },
+    })
+  }
+
+  /**
+   * 议案督办任务：`GET /hr/oversee-task/getOverseeTaskListByBusinessId`。
+   *
+   * 页面把 `lessonId` 当 `businessId`、`motionId` 当 `featureId`，`type` 写死 1（业务类型：月课堂议案）。
+   * 页面另外给每条加了 `isSend: false` 并按 `isComplete` 本地排序 —— 那是弹窗自己的展示状态，
+   * SDK 不伪造 `isSend`、也不重排服务端返回的顺序。
+   */
+  const listMonthlyOverseeTasks = (input: { lessonId: StudyLessonId; motionId: StudyLessonId }): Promise<StudyLessonOverseeTaskRow[]> => {
+    const lessonId = idOf(input?.lessonId, '督办任务lessonId')
+    const motionId = idOf(input?.motionId, '督办任务motionId')
+    return requestMonthly<StudyLessonOverseeTaskRow[]>({
+      url: STUDY_LESSON_MONTHLY_OVERSEE_TASK_PATH,
+      method: 'get',
+      params: buildParams(OVERSEE_TASK_FIELDS, { businessId: lessonId, featureId: motionId }, { type: 1 }),
+    })
+  }
+
   const listDaily = listOf(requestDaily, '1', DAILY_MONTHLY_FIELDS) as (
     query?: StudyLessonDailyQuery,
   ) => Promise<PageResult<StudyLessonRow>>
@@ -1179,6 +1516,15 @@ export function createStudyLessonCapability (
 
     getGradeInfo: (gradeIdList: StudyLessonId[]): Promise<unknown> => requestMonthly<unknown>({ url: STUDY_LESSON_GRADE_INFO_PATH, method: 'post', data: idsOf(gradeIdList, 'gradeIdList') }),
     getLastMonthLesson: (gradeIdList: StudyLessonId[]): Promise<unknown> => requestMonthly<unknown>({ url: STUDY_LESSON_LAST_MONTH_PATH, method: 'post', data: idsOf(gradeIdList, 'gradeIdList') }),
+
+    // 学习记录子页（只有周课堂到得了，见 STUDY_LESSON_HIDDEN_METHODS 的说明）与月课堂隐藏子页；
+    // 方法与 STUDY_LESSON_HIDDEN_METHODS 一一对应。
+    listWeeklyRecords: listRecordsOf(requestWeekly),
+    removeStudyRecord,
+    listMonthlyMotions,
+    listMonthlyMotionRates,
+    listMonthlyRates,
+    listMonthlyOverseeTasks,
   }
 }
 

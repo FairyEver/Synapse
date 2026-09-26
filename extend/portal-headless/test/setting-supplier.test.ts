@@ -120,6 +120,50 @@ describe('Portal 系统设置 → 供应商管理页面能力', () => {
     await expect(denied.api.list()).rejects.toThrow('无权限')
   })
 
+  it('系统品牌候选：默认 200、上限 500、只发两个分页参数，并锁定两个同名端点的归属', async () => {
+    const root = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const form = readFileSync(join(root, 'app/portal/views/dashboard/hr/setting/supplier/[mode]/[id].vue'), 'utf8')
+    const supplyController = readFileSync(join(javaRoot, 'erp-module-supply/erp-module-supply-biz/src/main/java/com/wdbc/erp/module/supply/controller/admin/materiel/MaterielController.java'), 'utf8')
+    const systemController = readFileSync(join(javaRoot, 'erp-module-system/erp-module-system-biz/src/main/java/com/wdbc/erp/module/system/controller/adminmanage/materiel/PlatformMaterielController.java'), 'utf8')
+    const pageParam = readFileSync(join(javaRoot, 'erp-framework/erp-common/src/main/java/com/wdbc/erp/framework/common/pojo/PageParam.java'), 'utf8')
+    // 页面：全量翻页拉（pageSize=200、最多100页），两个消费点都注释掉了
+    expect(form).toContain("http.get('/admin-api/supply/materiel/get-sys-brand-page'")
+    expect(form).toContain('pageSize: 200')
+    expect(form).toContain('maxPages: 100')
+    expect(form).toContain("// { key: 'sysBrandIds', width: 150 },")
+    expect(form).toContain("<!-- <template v-else-if=\"column.key === 'sysBrandIds'\">")
+    // 两个同名端点：只有 supply 那个挂 /supply/materiel
+    expect(supplyController).toContain('@RequestMapping("/supply/materiel")')
+    expect(supplyController).toContain('@GetMapping("/get-sys-brand-page")')
+    expect(systemController).toContain('@RequestMapping("/system/materiel")')
+    expect(systemController).toContain('@GetMapping("/get-sys-brand-page")')
+    expect(systemController).not.toContain('@RequestMapping("/admin-api')
+    expect(pageParam).toContain('@Max(value = 500')
+
+    const f = fixture([{ list: [{
+      brandId: '9007199254740993', brandName: '小米', brandAlias: 'MI', brandUrl: null, orderSort: 1,
+      brandDesc: null, brandLogo: 'logo.png', modifiedTime: 1767225600, disabled: 0, ignored: 'x',
+    }], total: 300 }])
+    await expect(f.api.listBrandCandidates()).resolves.toEqual({ list: [{
+      brandId: '9007199254740993', brandName: '小米', brandAlias: 'MI', brandUrl: null, orderSort: 1,
+      brandDesc: null, brandLogo: 'logo.png', modifiedTime: 1767225600, disabled: 0,
+    }], total: 300 })
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/supply/materiel/get-sys-brand-page', method: 'get',
+      params: { pageNo: 1, pageSize: 200 },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual(['pageNo', 'pageSize'])
+
+    const g = fixture([{ list: [], total: 0 }])
+    await g.api.listBrandCandidates({ pageNo: 2, pageSize: 500 })
+    expect(g.calls[0]?.params).toEqual({ pageNo: 2, pageSize: 500 })
+    await expect(fixture().api.listBrandCandidates({ pageSize: 501 })).rejects.toThrow('pageSize')
+    await expect(fixture().api.listBrandCandidates({ pageNo: 0 })).rejects.toThrow('pageNo')
+    await expect(fixture([{ list: null, total: 0 }]).api.listBrandCandidates()).rejects.toThrow('list或total')
+    await expect(fixture([{ list: [{ brandId: 0 }], total: 1 }]).api.listBrandCandidates()).rejects.toThrow('brandId')
+  })
+
   it('AI说明覆盖表单提交、删除语义、平台租户权限和导出上限，结构契约通过', async () => {
     expect(Object.keys(contracts).sort()).toEqual(Object.keys(SETTING_SUPPLIER_METHODS).sort())
     expect(contracts['setting-supplier-create']?.inputs.suppliers?.constraints?.join(' ')).toContain('postalCode')
@@ -127,6 +171,14 @@ describe('Portal 系统设置 → 供应商管理页面能力', () => {
     expect(contracts['setting-supplier-add-platform']?.boundaries.join(' ')).toContain('TenantContextHolder')
     expect(contracts['setting-supplier-remove']?.boundaries.join(' ')).toContain('采购属性')
     expect(contracts['setting-supplier-export']?.output.fields.find(item => item.path === 'base64')?.meaning).toContain('base64')
+    const brand = contracts['setting-supplier-brand-candidates']!
+    expect(brand.effect).toBe('read')
+    expect(brand.boundaries.join('\n')).toContain('/system/materiel')
+    expect(brand.boundaries.join('\n')).toContain('注释')
+    expect(brand.gaps?.join('\n')).toContain('没有可见入口')
+    expect(brand.inputs.pageSize?.meaning).toContain('500')
+    expect(brand.output.fields.find(item => item.path === 'list[].disabled')?.values?.['1']).toBe('失效')
+    expect(brand.consume.join('\n')).toContain('@TenantIgnore')
     const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
     const { validateAiContracts } = await import(validatorUrl) as { validateAiContracts: (contracts: Record<string, unknown>) => unknown[] }
     expect(validateAiContracts(contracts)).toEqual([])

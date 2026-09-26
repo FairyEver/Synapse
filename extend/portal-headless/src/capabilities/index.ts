@@ -202,7 +202,7 @@ import { withExecutionEffect } from './execution-effects.js'
  * 不再按源码格式扫描，映射生成或紧凑声明的能力也不会漏掉。
  * `test/aliases-derived.test.ts` 核对注册数和生成物内容，避免陈旧构建被当成最新。
  */
-import { assignmentCapabilities } from './assignment.js'
+import { assignmentCapabilities, assignmentRecordCapabilities } from './assignment.js'
 import { attendanceArchiveSheetCapabilities } from './attendance-archive-sheet.js'
 import { attendanceAnnualLeaveCapabilities } from './attendance-annual-leave.js'
 import { attendanceExceptionCapabilities } from './attendance-exception.js'
@@ -248,8 +248,8 @@ import { meetingApplicationCapabilities } from './meeting-application.js'
 import { meetingRoomCapabilities } from './meeting-room.js'
 import { studyStudentCapabilities } from './study-student.js'
 import { studyGradeCapabilities } from './study-grade.js'
-import { studyLessonCapabilities, studyLessonActionCapabilities } from './study-lesson.js'
-import { studyRecordCapabilities } from './study-record.js'
+import { studyLessonCapabilities, studyLessonActionCapabilities, studyLessonHiddenCapabilities } from './study-lesson.js'
+import { studyRecordCapabilities, studyRecordHiddenCapabilities } from './study-record.js'
 import { studyStatisticsCapabilities } from './study-statistics.js'
 import { studyTeacherCapabilities } from './study-teacher.js'
 import { perfAgreementCapabilities } from './perf-agreement.js'
@@ -497,6 +497,8 @@ export const ALL_CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
   ...standardDocumentCapabilities,
   ...trademarkCapabilities,
   ...assignmentCapabilities,
+  // 作业管理的「完成情况」子页（提交记录分页 + 提交统计）
+  ...assignmentRecordCapabilities,
   ...attendanceStatisticsCapabilities,
   ...attendanceShiftCapabilities,
   ...attendanceTeamCapabilities,
@@ -545,8 +547,12 @@ export const ALL_CAPABILITY_DEFINITIONS: CapabilityDefinition[] = [
   // 课堂三页（晨/周/月）
   ...studyLessonCapabilities,
   ...studyLessonActionCapabilities,
+  // 课堂的隐藏子页与弹窗（只有周课堂的学习记录子页到得了，见 study-lesson.ts 的说明）
+  ...studyLessonHiddenCapabilities,
   // 学习管理（学习记录列表）
   ...studyRecordCapabilities,
+  // 学习管理页上由弹窗发出的请求（作业详情 / 评分 / 查看学习详情）
+  ...studyRecordHiddenCapabilities,
   // 数据统计五页
   ...studyStatisticsCapabilities,
   // 讲师三页（讲师管理 / 讲师类型 / 评价设置）——前两页走 smart-layer-admin 实例

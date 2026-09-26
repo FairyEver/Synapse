@@ -150,6 +150,79 @@ function contract (
   }
 }
 
+const detailRouteFile = 'app/portal/views/dashboard/finance/setting/annual-carryforward/detail/balance/index.vue'
+
+const detailEvidence: AiContract['evidence'] = [
+  ...evidence,
+  {
+    source: `CodeReview_Projects_Js@test/portal/main:acab69acc77b ${detailRouteFile} 与 detail/balance/subject-detail/index.vue`,
+    kind: 'reference',
+    note: '静态锁定嵌套详情页的两个请求形状（opening-balance/page 的 pageNo=1&pageSize=-1、opening-balance/detail 的四个参数）、试算按钮把 periodYear 拼成 YYYY-12、对账按钮的 POST 载荷、以及“科目”选择器 valueType=id 与后端按 code 匹配之间的字段错配；没有浏览器实测。',
+  },
+  {
+    source: 'CodeReview_Mall_Platform_Java@test/test:0f1a55718eb AnnualClosingController 与 AnnualClosingServiceImpl#getOpeningBalancePage/getOpeningBalanceDetail/getTrialBalance',
+    kind: 'reference',
+    note: '静态锁定三条读接口的请求 VO、结转状态前置条件、辅助核算分支、试算平衡的固定五类与两侧合计公式；同时证明该 Controller 没有 reconcile 路由。',
+  },
+]
+
+const detailGaps = [
+  '本轮按任务约束未启动浏览器，也没有对测试环境发过这三个读请求；请求键序、参数名和返回字段全部来自固定检出的源码与离线断言。',
+  '未执行真实环境读冒烟，也没有在真实租户上确认“未结转时返回空页”“辅助核算不匹配时返回空数组”这两个静默分支的实际表现。',
+  'Portal 与 Java 固定检出未 pull 到远端最新（任务禁止 pull）；以上结论只覆盖当前检出提交。',
+  '/finance/annual-closing/reconcile 在 Portal 与 Java 两个检出里都核不到对应路由，页面按钮却仍然绑着它，且失败时只 console.error —— 这个动作可能本身就是坏的；SDK 按前端契约交付并保留该缺口，调用方拿到失败是预期结果。',
+  '详情页把列表行 id 当作 accountingSetId 使用（handleReset/openDetail 都如此），而后端 finance_annual_closing 的 id 与 accounting_set_id 是两个独立列；SDK 要求调用方传真正的账套ID，没有复刻页面的行 id，两者是否在部署环境里碰巧相等未验证。',
+  '期初余额页“科目”筛选把科目ID塞进 subjectCode，后端按 LedgerAccountsDO.code 等值匹配；SDK 保留该参数名与页面逐字一致，但页面上的按科目筛选很可能什么都筛不出来，未在真实环境复现。',
+]
+
+function detailContract (
+  purpose: string,
+  effect: AiContract['effect'],
+  inputs: Record<string, AiParameter>,
+  output: AiContract['output'],
+  consume: string[],
+  steps: AiContract['steps'],
+  completion: string,
+  extra: Partial<AiContract> = {},
+): AiContract {
+  return {
+    purpose,
+    whenToUse: '在门户“财务设置→年度账结转”列表点某行「详情」后进入的嵌套期初余额页（该页没有独立菜单项）；用于读期初余额、下钻辅助核算明细和试算平衡，以及页面上的「对账」按钮。',
+    boundaries: [
+      '嵌套页与列表页共用 permission /dashboard/finance/setting/annual-carryforward，能力定义沿用同一个页面上下文与 module-type 规则（无法推导时不发该头）。HTTP 走 platform 实例，路径由实例补 /admin-api。',
+      '这三个读接口都以“该账套该年度的结转状态已经是已结转(1)”为前置：不满足时后端返回空页/空数组而**不报错**。所以 list=[] 不能直接解释为“没有科目”，必须先看列表行的 closingStatus。',
+      'accountingSetId 必须是账套主键（finance_annual_closing.accounting_set_id），不是结转记录行 id、也不是账套名称。ID 一律来自 finance-setting-annual-carryforward-list 的返回。',
+      'subjectId（科目ID）与 subjectCode（科目编码）是两个不同的主键，不能互换；辅助核算下钻用的是 subjectId，ancillaryField 必须来自该行 ancillaryAccounting 里真实出现过的字段名。',
+      '试算平衡只按年末期间取数（页面固定把 periodYear 拼成 YYYY-12），SDK 不开放任意月份，也不把 isBalanced 解释为“账已平账”之外的业务结论。',
+      '本组能力只覆盖页面实际发出的四个请求；页面的前端展示（两位小数、方向字典文案、虚拟滚动）不改变返回字段本身。',
+      '⚠️ 这四个动作里只有期初余额、期初余额明细和试算平衡在后端核到了路由；「对账」那个 POST 在固定 Java 检出里没有对应映射（调用会失败），详见该能力自己的 gaps。',
+    ],
+    prerequisites: [
+      '已建立带有效会话 token、tenant-id 的 SDK；账号拥有该页面菜单权限。',
+      '先从 finance-setting-annual-carryforward-list 取得目标行，读到 accountingSetId 与 periodYear；并确认 closingStatus=1，否则空结果是预期的。',
+    ],
+    effect,
+    inputs,
+    output,
+    consume,
+    steps,
+    completion,
+    failures: [
+      'accountingSetId/subjectId 不是正整数、periodYear 不是四位年份、ancillaryField 为空：SDK 不发请求，修正输入后重试。',
+      '401/403、网络错误、响应形状错误原样抛出；不能改写成空列表或空对象。',
+      '期初余额分页和明细在“未结转/科目未启用该辅助核算”时返回空结果而不报错；这不是权限错误，也不是网络失败的替代品，必须靠列表行的结转状态区分。',
+      '明细接口在 subjectId 不存在时抛业务错误（科目不存在）；此时不要换一个科目重试，先核对传入的 subjectId 是否来自同一次期初余额查询。',
+      '对账接口在当前后端没有路由（404 一类），失败不代表目标状态已达成；不要重试，把它当作已登记的后端能力缺口上报。',
+    ],
+    idempotency: effect === 'write'
+      ? '对账动作在后端没有可核到的实现，也没有幂等语义；不要重试或把它与任何“已对账”状态绑定。'
+      : null,
+    evidence: detailEvidence,
+    gaps: detailGaps,
+    ...extra,
+  }
+}
+
 export const FINANCE_SETTING_ANNUAL_CARRYFORWARD_AI_CONTRACTS: Record<string, AiContract> = {
   'finance-setting-annual-carryforward-list': contract(
     '按账套、会计年度和结转状态分页查询年度账结转记录，返回页面表格字段及后续动作所需的两个ID。',
@@ -315,6 +388,165 @@ export const FINANCE_SETTING_ANNUAL_CARRYFORWARD_AI_CONTRACTS: Record<string, Ai
     ],
     'cancel-close返回true且列表回查全部目标账套为该年度closingStatus=0并清空结转信息；只收到true不算完成证据。',
     { idempotency: '后端没有请求幂等键；超时必须先list回查，不能盲目重复cancel-close。' },
+  ),
+
+  'finance-setting-annual-carryforward-opening-balance': detailContract(
+    '查询指定账套指定会计年度的期初余额科目表：每行一个科目，带科目编码/名称、余额方向和期初余额，以及后续能否下钻辅助核算明细。',
+    'read',
+    {
+      accountingSetId: input('账套ID；来自已结转的列表行 accountingSetId，不是结转记录行 id。', 'finance-setting-annual-carryforward-list.list[].accountingSetId', {
+        type: 'string | number',
+        constraints: ['安全正整数或无前导零的正整数字符串；不用科目名、账套名或行号代替。'],
+      }),
+      periodYear: input('会计期间年份，取该行的 periodYear。', 'finance-setting-annual-carryforward-list.list[].periodYear', {
+        type: 'string',
+        format: 'YYYY',
+        constraints: ['四位年份；不能传 YYYY-MM 或日期时间。'],
+      }),
+      subjectCode: input('科目筛选值，原样发给后端的 subjectCode 参数。', '用户在详情页「科目」选择器选出的一项；该控件 valueType=id，所以值实际是科目ID', {
+        type: 'string | number',
+        required: false,
+        nullable: true,
+        omitted: '该 URL 参数不出现（页面 form.subjectId 为空即 undefined，被 qs 丢弃），表示不按科目筛选。',
+        constraints: ['沿用页面的请求形状，SDK 不做“科目ID换成科目编码”的转换。', '后端按 LedgerAccountsDO.code 等值匹配，与页面传入的科目ID不是同一序列（见 gaps）。'],
+        nullMeaning: '不清空、不筛选，等价于省略。',
+      }),
+    },
+    {
+      shape: '{ list: array, total: integer }',
+      fields: [
+        field('$', 'object', '期初余额科目表结果。'),
+        field('list', 'array', '科目行；页面用虚拟滚动整表渲染，不分页。'),
+        field('list[]', 'object', '一个启用中（status=0）的会计科目及其期初余额。'),
+        field('list[].subjectId', 'string | number', '科目ID；下钻明细时作为 subjectId，不是科目编码。', { constraints: ['长ID保留字符串。'] }),
+        field('list[].subjectCode', 'string | number', '科目编码（后端为 Long，可能序列化为数字或字符串）。', { nullable: true, nullMeaning: '后端未返回科目编码。' }),
+        field('list[].subjectName', 'string', '科目名称；有辅助核算时页面把它渲染成可点击链接。', { nullable: true, nullMeaning: '后端未返回科目名称。' }),
+        field('list[].balanceDirection', 'integer', '余额方向。', { nullable: true, values: { '1': '借', '2': '贷', '3': '平' }, nullMeaning: '后端未返回方向，页面显示占位符「—」。' }),
+        field('list[].openingBalance', 'number | string', '期初余额（元），BigDecimal 原值；页面按两位小数展示，不做单位换算。', { nullable: true, nullMeaning: '后端未返回余额；页面显示 0.00。' }),
+        field('list[].ancillaryAccounting', 'string', '辅助核算字段名原文（后端可能是逗号分隔的多个字段）；为空表示该科目没有辅助核算。', { nullable: true, nullMeaning: '该科目没有辅助核算，不能下钻。' }),
+        field('list[].detailType', 'string', '明细下钻类型：NONE 不可下钻、SUPPLIER、CUSTOMER、BIO_PRODUCTIVE、BIO_CONSUMABLE。', { nullable: true, values: { NONE: '不可下钻', SUPPLIER: '供应商余额明细', CUSTOMER: '客户余额明细', BIO_PRODUCTIVE: '生产性生物资产', BIO_CONSUMABLE: '消耗性生物资产' }, nullMeaning: '后端未返回。' }),
+        field('list[].detailApi', 'string', '明细下钻接口相对路径，如 /finance/annual-closing/supplier-balance/detail。', { nullable: true, nullMeaning: '没有下钻接口。' }),
+        field('list[].detailParams', 'object', '后端建议的下钻参数；键随科目类型不同。', { nullable: true, nullMeaning: '没有建议参数。' }),
+        field('list[].detailEnabled', 'boolean', '是否允许下钻；false 时页面不显示链接。', { nullable: true, nullMeaning: '后端未返回，页面按“允许”处理。' }),
+        field('list[].detailLabel', 'string', '下钻入口文案，如「供应商余额明细」。', { nullable: true, nullMeaning: '后端未返回。' }),
+        field('total', 'integer', '返回行数。页面按 pageSize=-1 全量取，因此它等于 list 长度，不是另一层分页总数。'),
+      ],
+      empty: 'list=[] 且 total=0：该账套该年度**要么没有启用中的科目，要么结转状态还不是已结转**——后端在这两种情况下都返回空页而不报错，必须回列表确认 closingStatus=1 才能区分。',
+    },
+    [
+      '用 list[].subjectId 作为下钻参数；不要用 subjectCode，也不要从科目名推断 ID。',
+      '按 balanceDirection 字典解释方向（1 借 / 2 贷 / 3 平），openingBalance 是元为单位的原值，页面只做两位小数展示，SDK 不做换算。',
+      'ancillaryAccounting 为空的行不能下钻；不为空的先用该行给的方向决定要不要取明细（页面只在 ancillaryAccounting 非空时把科目名渲染成链接）。',
+      'total 与 list 长度相同（全量取数），不要据此再翻页。',
+    ],
+    [
+      {
+        role: 'optional',
+        when: '用户点击某个带辅助核算的科目名，要看清它按维度拆开后的期初余额',
+        capabilityId: 'finance-setting-annual-carryforward-opening-balance-detail',
+        mapping: { accountingSetId: 'args.accountingSetId', periodYear: 'args.periodYear', subjectId: 'result.list[].subjectId', ancillaryField: 'result.list[].ancillaryAccounting' },
+        instruction: 'ancillaryAccounting 里可能有多个字段（逗号分隔），要按用户选中的那个维度传单个字段名；页面在有多个字段时用 Tab 让用户先选一个。不要传整串字段列表。',
+      },
+    ],
+    '返回该账套该年度的期初余额科目表；读取本身不改变结转状态或科目数据。',
+    { idempotency: null },
+  ),
+
+  'finance-setting-annual-carryforward-opening-balance-detail': detailContract(
+    '按辅助核算维度查询指定科目在指定账套年度的期初余额明细（详情页第二层）。',
+    'read',
+    {
+      accountingSetId: input('账套ID；来自已结转的列表行 accountingSetId。', 'finance-setting-annual-carryforward-list.list[].accountingSetId', { type: 'string | number' }),
+      periodYear: input('会计期间年份，与上一层查询同一行同一值。', 'finance-setting-annual-carryforward-list.list[].periodYear', { type: 'string', format: 'YYYY' }),
+      subjectId: input('科目ID；来自期初余额行的 subjectId，不是 subjectCode。', 'finance-setting-annual-carryforward-opening-balance.list[].subjectId', { type: 'string | number' }),
+      ancillaryField: input('辅助核算字段名，如 supplierCode / customerCode / costCenterCode / bankAccountName；必须是该科目 ancillaryAccounting 里真实出现过的字段。', 'finance-setting-annual-carryforward-opening-balance.list[].ancillaryAccounting 拆分出的单个字段名', { type: 'string', constraints: ['非空字符串', '不能传整串逗号分隔的字段列表', '不能传中文标签'] }),
+    },
+    {
+      shape: 'array',
+      fields: [
+        field('$', 'array', '该科目在该辅助核算维度下的期初余额明细；页面按 Tab 分组整表渲染。'),
+        field('[]', 'object', '一条辅助核算余额记录。'),
+        field('[].ancillaryCode', 'string', '辅助核算编码；随 ancillaryField 变（供应商编码/客户编码/成本中心编码/银行账户名等）。', { nullable: true, nullMeaning: '后端未返回编码。' }),
+        field('[].ancillaryName', 'string', '辅助核算名称；页面第一列的标题取用户选中的维度标签。', { nullable: true, nullMeaning: '后端未返回名称。' }),
+        field('[].balanceDirection', 'integer', '余额方向。', { nullable: true, values: { '1': '借', '2': '贷', '3': '平' }, nullMeaning: '后端未返回。' }),
+        field('[].balance', 'number | string', '该维度的期初余额（元），BigDecimal 原值。', { nullable: true, nullMeaning: '后端未返回余额；页面显示 0.00。' }),
+      ],
+      empty: '[] 有三种来源：该账套该年度未结转、该科目没有该辅助核算字段、或该维度确实没有余额。三者后端都不报错，SDK 原样返回空数组，由调用方结合上一层结果判断。',
+    },
+    [
+      '第一列用 ancillaryName、方向列用 balanceDirection 字典、金额列用 balance 原值展示；页面还允许按行继续下钻（供应商/客户/生产成本），那一步超出本能力，本能力不承诺该行一定能继续下钻。',
+      '明细数组顺序即后端返回顺序，SDK 不重排、不去重。',
+    ],
+    [],
+    '返回该科目该辅助核算维度的期初余额明细；读取不改变任何余额数据。',
+    { idempotency: null },
+  ),
+
+  'finance-setting-annual-carryforward-trial-balance': detailContract(
+    '按年末期间查询固定五类科目的净额试算平衡汇总，含两侧合计和是否平衡，用于页面「试算」按钮弹窗。',
+    'read',
+    {
+      accountingSetId: input('账套ID；来自已结转的列表行 accountingSetId。', 'finance-setting-annual-carryforward-list.list[].accountingSetId', { type: 'string | number' }),
+      periodYear: input('会计期间年份；页面固定拼成 ${periodYear}-12 作为后端 period，所以这里只接受四位年份。', 'finance-setting-annual-carryforward-list.list[].periodYear', { type: 'string', format: 'YYYY', constraints: ['四位年份；不能传 YYYY-MM（后端 period 由 SDK 生成）'] }),
+    },
+    {
+      shape: '{ asset, liability, equity, cost, profitLoss, assetCostTotal, equityLiabilityProfitLossTotal, isBalanced }',
+      fields: [
+        field('$', 'object', '试算平衡汇总；固定五类 + 两侧合计 + 是否平衡。'),
+        field('asset', 'object', '资产类合计。'),
+        field('liability', 'object', '负债类合计。'),
+        field('equity', 'object', '权益类合计。'),
+        field('cost', 'object', '成本类合计。'),
+        field('profitLoss', 'object', '损益类合计。'),
+        field('assetCostTotal', 'object', '资产+成本的有符号合计项。'),
+        field('equityLiabilityProfitLossTotal', 'object', '权益+负债+损益的有符号合计项。'),
+        field('asset.subjectType', 'integer', '科目类型字典 account_type；五个分类项都返回自己的类型值。', { nullable: true, nullMeaning: '合计项固定为 null（后端不设类型）。' }),
+        field('asset.subjectTypeName', 'string', '科目类型名称；合计项是「资产+成本合计」/「权益+负债+损益合计」。', { nullable: true, nullMeaning: '字典或后端未返回名称。' }),
+        field('asset.balanceAmount', 'number | string', '该类净额的绝对值（元），BigDecimal 原值。', { nullable: true, nullMeaning: '后端未返回金额。' }),
+        field('asset.balanceDirection', 'integer', '净额方向：1 借、2 贷、3 平。', { nullable: true, values: { '1': '借', '2': '贷', '3': '平' }, nullMeaning: '后端未返回方向。' }),
+        field('isBalanced', 'boolean', '资产+成本 的有符号净额与 权益+负债+损益 的有符号净额互为相反数时为 true；页面据此显示“试算结果平衡/不平衡”。'),
+      ],
+      empty: '接口本身不会返回空对象；五个分类项在没有任何余额时各项是 0、方向为 3（平）。isBalanced 缺失或不是布尔值属于响应形状错误，SDK 直接抛错。',
+    },
+    [
+      '页面把每项渲染成「名称 = 借/贷 金额」或「名称 = 平」，方向和金额分别取 balanceDirection 与 balanceAmount；金额按两位小数展示。',
+      'isBalanced 只表示两侧有符号净额互为相反数，不代表账务“应该平”或“已经对账”；不要把它写成业务结论。',
+      '页面只读展示，不提供任何修正入口；不平衡时应回到凭证/期初数据排查，而不是重复调用本能力。',
+    ],
+    [],
+    '返回年末期间的试算平衡汇总；读取不改变账务数据。',
+    { idempotency: null },
+  ),
+
+  'finance-setting-annual-carryforward-reconcile': detailContract(
+    '详情页「对账」按钮：按账套和年度发起一次对账请求。⚠️ 当前后端没有该路由，调用会失败。',
+    'write',
+    {
+      accountingSetId: input('账套ID；来自已结转的列表行 accountingSetId（页面在这里传的是结转记录行 id，SDK 不回退到那个值）。', 'finance-setting-annual-carryforward-list.list[].accountingSetId', { type: 'string | number' }),
+      periodYear: input('会计期间年份，YYYY。', 'finance-setting-annual-carryforward-list.list[].periodYear', { type: 'string', format: 'YYYY' }),
+    },
+    {
+      shape: 'undefined',
+      fields: [
+        field('$', 'undefined', '页面不读响应体，请求成功后直接弹「对账成功，未检查到差异」；SDK 因此不编造业务对象，成功时返回 undefined。', { nullable: true, nullMeaning: 'undefined 表示请求已被受理，不表示对账结果已核对；对账差异也从未在响应里出现。' }),
+      ],
+      empty: '请求失败（含当前后端缺少路由导致的 404）：抛错。undefined 不能被解释成“没有差异”。',
+    },
+    [
+      '页面提示的「未检查到差异」是固定文案，不是响应字段；SDK 不得据此报告差异结果。',
+      '需要核对余额差异时，改用期初余额与试算平衡两个读能力，不要依赖本能力的返回值。',
+    ],
+    [
+      {
+        role: 'recovery',
+        when: '对账请求失败（当前后端没有 /finance/annual-closing/reconcile 路由，返回 404 一类错误）',
+        capabilityId: 'finance-setting-annual-carryforward-trial-balance',
+        mapping: { accountingSetId: 'args.accountingSetId', periodYear: 'args.periodYear' },
+        instruction: '这是已登记的后端能力缺口，不是重试信号：不要重复调用本能力，改为读取试算平衡并向用户说明“对账接口在当前后端不存在”。',
+      },
+    ],
+    '按页面契约发出对账请求并等待结束；当前固定后端没有该路由，因此正常结果就是失败。不要把它写成“已对账”，也不要用 undefined 代替差异结论。',
+    { idempotency: '后端没有可核到的实现，无法说明防重或重试边界；不要重试。' },
   ),
 
 }

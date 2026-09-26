@@ -9,6 +9,53 @@ export const FINANCE_SETTING_VOUCHER_TEMPLATES_PAGE_PATH = '/dashboard/finance/s
 const ROOT = '/admin-api/finance/voucher-template'
 const AMOUNT_OPTION_URL = '/admin-api/finance/voucher-amount-option/list'
 
+/**
+ * 「选择摘要」弹窗（`[mode]/modal-mark.vue`）的数据源。
+ *
+ * ⚠️ 弹窗是**隐藏组件**：它不在菜单里，而是被两个地方 `createModal` 打开 ——
+ * 凭证模板表单（`[mode]/[id].vue:448`，选中后写 `entry[index].summary`/`summaryId`）
+ * 和通用凭证表格（`app/portal/components/portal/finance/vouchers-table/index.vue:591`，
+ * 选中后写行的 `mark`/`markId`）。两处都只消费 `id` 与 `abstracts`。
+ */
+const ABSTRACT_PAGE_URL = '/admin-api/finance/abstract-manage/page'
+
+/** 弹窗自己的列表模块没有 `styleV2`，所以每页默认是 **10** 条（`list.js:391` 的 `styleV2 ? 20 : 10`）。 */
+const ABSTRACT_DEFAULT_PAGE_SIZE = 10
+
+/**
+ * 弹窗把 `status` 固定成 **0** 并作为筛选条件之一发出（`modal-mark.vue:35`），
+ * 页面上既没有状态下拉也没有状态列，所以 SDK 同样钉死这个值、不开放给调用方。
+ * 0/1 的业务含义在后端字典里未登记（`AbstractManageDO.status` 只有 `状态` 两个字），
+ * 见该能力的 gaps：**不要把它解释成“启用/停用”**。
+ */
+const ABSTRACT_FIXED_STATUS = 0
+
+export type FinanceVoucherAbstractRow = {
+  /** 常用摘要主键；弹窗选中后回写成 `summaryId`/`markId`，是唯一被下游消费的标识。 */
+  id: FinanceVoucherTemplateId
+  /** 快捷编号（后端 Integer）；弹窗表格不显示，只参与后端 searchKey 的等值匹配。 */
+  quickNumber: number | null
+  /** 摘要正文；弹窗表格唯一展示的列，选中后写进 summary/mark。 */
+  abstracts: string | null
+  /** 状态原值；由弹窗固定的 status=0 筛出，页面对它没有任何展示或分支。 */
+  status: number | null
+  /** 录入时间原值。 */
+  createTime: string | number | null
+  /** 租户名称（后端 JOIN 出来）；不在页面消费契约内。 */
+  tenantName: string | null
+}
+
+export type FinanceVoucherAbstractQuery = {
+  /**
+   * 摘要关键字；后端是 `abstracts LIKE %key%` **或** `quickNumber = key`（二选一命中即可）。
+   *
+   * 弹窗的输入框（「请输入摘要内容或快速选择编码」）初值是空字符串，回车/点搜索才带上值。
+   */
+  searchKey?: string
+  pageNo?: number
+  pageSize?: number
+}
+
 export type FinanceVoucherTemplateId = string | number
 export type FinanceVoucherTemplateStatus = 0 | 1
 export type FinanceVoucherEntryType = 1 | 2
@@ -333,6 +380,33 @@ function trueResult (value: unknown, label: string): true {
   return true
 }
 
+function abstractQueryOf (query: FinanceVoucherAbstractQuery = {}): JsonObject {
+  const searchKey = query.searchKey === undefined || query.searchKey === null ? '' : textOf(query.searchKey, 'searchKey', false)
+  const pageSize = pageNumberOf(query.pageSize, ABSTRACT_DEFAULT_PAGE_SIZE, 'pageSize')
+  return {
+    order: '',
+    orderField: '',
+    searchKey,
+    status: ABSTRACT_FIXED_STATUS,
+    pageNo: pageNumberOf(query.pageNo, 1, 'pageNo'),
+    pageSize,
+  }
+}
+
+function abstractRowOf (value: unknown, index: number): FinanceVoucherAbstractRow {
+  const row = objectOf(value, `常用摘要[${index}]`)
+  const quickNumber = row.quickNumber === undefined || row.quickNumber === null ? null : integerOf(row.quickNumber, `常用摘要[${index}].quickNumber`)
+  const status = row.status === undefined || row.status === null ? null : integerOf(row.status, `常用摘要[${index}].status`)
+  return {
+    id: idOf(row.id, `常用摘要[${index}].id`),
+    quickNumber,
+    abstracts: nullableTextOf(row.abstracts, `常用摘要[${index}].abstracts`),
+    status,
+    createTime: dateTimeOf(row.createTime, `常用摘要[${index}].createTime`),
+    tenantName: nullableTextOf(row.tenantName, `常用摘要[${index}].tenantName`),
+  }
+}
+
 function amountOptionOf (value: unknown, index: number): FinanceVoucherAmountOption {
   const option = objectOf(value, `金额选项[${index}]`)
   return {
@@ -355,6 +429,19 @@ export function createFinanceSettingVoucherTemplatesCapability (request: PortalR
       const result = await request<unknown>({ url: `${ROOT}/get`, method: 'get', params: { id } })
       if (result === null || result === undefined) return null
       return detailOf(result)
+    },
+
+    /**
+     * 「选择摘要」弹窗的分页列表。
+     *
+     * 固定 `status=0`（页面写死的筛选值），`searchKey` 为空字符串时后端整条 `and(...)` 不拼，
+     * 等价于只按状态筛。返回行里下游真正消费的只有 `id`（→ summaryId/markId）
+     * 和 `abstracts`（→ summary/mark 文本）。
+     */
+    async listAbstracts (query: FinanceVoucherAbstractQuery = {}): Promise<PageResult<FinanceVoucherAbstractRow>> {
+      const result = await request<PageResult<unknown>>({ url: ABSTRACT_PAGE_URL, method: 'get', params: abstractQueryOf(query) })
+      if (!result || !Array.isArray(result.list) || !Number.isSafeInteger(result.total) || result.total < 0) throw new Error('常用摘要分页响应缺少有效list或total')
+      return { list: result.list.map(abstractRowOf), total: result.total }
     },
 
     async amountOptions (input: { businessType: string; businessDetail?: string | null }): Promise<FinanceVoucherAmountOption[]> {
@@ -416,6 +503,7 @@ const createParams: ParamSpec[] = [p('name', 'text', true, '集成逻辑名称�
 export const FINANCE_SETTING_VOUCHER_TEMPLATES_METHODS = {
   'finance-setting-voucher-templates-list': 'list',
   'finance-setting-voucher-templates-get': 'get',
+  'finance-setting-voucher-templates-abstract-list': 'listAbstracts',
   'finance-setting-voucher-templates-amount-options': 'amountOptions',
   'finance-setting-voucher-templates-prepare-create': 'prepareCreate',
   'finance-setting-voucher-templates-create': 'create',
@@ -428,6 +516,7 @@ export const FINANCE_SETTING_VOUCHER_TEMPLATES_METHODS = {
 export const financeSettingVoucherTemplatesCapabilities: CapabilityDefinition[] = [
   { id: 'finance-setting-voucher-templates-list', title: '查询凭证模板', write: false, params: queryParams },
   { id: 'finance-setting-voucher-templates-get', title: '查询凭证模板详情', write: false, params: [p('id', 'text', true, '凭证模板主记录ID')] },
+  { id: 'finance-setting-voucher-templates-abstract-list', title: '查询常用摘要候选', write: false, params: [p('searchKey', 'text', false, '摘要关键字；后端按摘要模糊或快捷编号等值匹配，默认空字符串'), p('pageNo', 'number', false, '从1开始；默认1'), p('pageSize', 'number', false, '弹窗默认10，支持10、20、50、100')] },
   { id: 'finance-setting-voucher-templates-amount-options', title: '查询凭证模板金额选项', write: false, params: [p('businessType', 'text', true, '业务类型字典值'), p('businessDetail', 'text', false, '业务场景字典值')] },
   { id: 'finance-setting-voucher-templates-prepare-create', title: '准备创建凭证模板', write: false, params: createParams },
   { id: 'finance-setting-voucher-templates-create', title: '创建凭证模板', write: true, params: createParams },

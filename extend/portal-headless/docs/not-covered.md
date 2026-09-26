@@ -53,7 +53,7 @@
 | `GET /org/organization/getRoleOrganizationTree` | 按角色返回**一整棵树**（实测约 580–596 KB） | 调用方自备 id | `src/capabilities/perf-salary.ts:258`、`base-sale.ts:154`（记为 #13） |
 | `GET /study/grade/studygrade/page?pageSize=99999&pageNo=1` | 学习管理页挂载时全量拉班级 | `study-grade-search`（强制关键字） | `src/capabilities/study-grade.ts:215-216`、`study-record.ts:26-30` |
 | `GET /performance/protocol/kpi{month,year}protocol/signatoryByPage` | 协议页挂载时全量拉签订人 | `base-user-search`（强制关键字） | `src/capabilities/perf-agreement.ts:215`、`:288`、`:592` |
-| 薪资基础数据的人员全量翻页 | 扣款费用页挂载时循环翻页 | `salary-person-tax-staff-page`（强制关键字） | `src/capabilities/salary-person-tax.ts:17`、`:307` |
+| 薪资基础数据的人员全量翻页 | 扣款费用页挂载时 `loopFetch({pageSize:200,maxPages:100})` 循环翻页 | `salary-person-tax-staff-page`（**有界分页**：默认 20 / 上限 200，另给 `organizationId`、`isFilterLeaveStaff` 收窄）。⚠️ **不是"强制关键字"**——该接口的 SQL 根本不拼 `name`，关键字在这条上行不通 | `src/capabilities/salary-person-tax.ts:17`、`:307` |
 | 各域页面挂载时的人员/组织全量拉 | 多处，形态相同 | 见上；**结论一致** | `src/capabilities/business-trip-application.ts:1617`、`inventory-asset-stocktaking-config.ts:218`、`vehicle-application.ts:1617` |
 
 **判据不是"这个接口有没有分页"，是"页面有没有在无关键字的情况下把它整份拉下来"。**
@@ -85,12 +85,23 @@
 
 这两类有专门的规则，不要重复登记：
 
-1. **Portal 里被注释掉的菜单项**（如直播课程 `type=3`）——「能渲染 ≠ 用户能做的事」，
-   见 `conventions.md` 第 28 条。审计扫 URL 时会扫到它们，**不要**报成缺口。
+1. **Portal 里被注释掉的东西**——「能渲染 ≠ 用户能做的事」，见 `conventions.md` 第 28 条。
+   审计扫 URL 时会扫到它们，**不要**报成缺口。三种形态都算：
+   - **菜单项**（如直播课程 `type=3`，`app/portal/menus/hr.js:299` 整行注释）；
+   - **路由页**（晨课堂 / 月课堂的 `record/[id]/item-list.vue`：路由文件在、按 URL 能渲染，
+     但页面的按钮打开的是弹窗，全仓没有任何代码 push 到它）；
+   - **页面里的动作入口**（合同模板的「撤销」：`list.vue:50` 的按钮整行被 HTML 注释、
+     `:161` 的动作列那一行被 JS 注释，`handleRevoke` 只剩定义和注释里的引用）。
+
+   ⚠️ **这一族要与"前后端冲突"分开判**：按钮**活着**、后端缺路由 ⇒ 按第 33 条**交付 + 登记缺口**
+   （例：`finance-setting-annual-carryforward-reconcile`）；按钮**被注释掉** ⇒ 按第 28 条**不建**。
+   区别只有一条：**用户点不点得到**。
+
 2. **页面声明了但从不发送的接口**（如 `getProfessorList.lay`：`list.vue` 有 `getDataListURL`，
-   但同页 `customLoad` 覆写了它，声明永远不触发）。这类要在报告里单列为
-   「死声明」，**既不是缺口，也不需要建能力**。
-   见 `src/capabilities/study-teacher.ts:62` 与 `perf-agreement.ts` §五第 3 条。
+   但同页 `customLoad` 覆写了它，声明永远不触发；又如奖励导入页的那个组织树组件
+   被 import 却从未在模板里渲染）。这类要在报告里单列为「死声明」，
+   **既不是缺口，也不需要建能力**。
+   见 `src/capabilities/study-teacher.ts:62`、`perf-agreement.ts` §五第 3 条、`docs/pages/奖励导入.md`。
 
 ---
 

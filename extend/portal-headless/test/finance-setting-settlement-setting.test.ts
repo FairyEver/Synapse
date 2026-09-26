@@ -134,11 +134,55 @@ describe('财务设置→结转单设置页面能力', () => {
     await expect(fixture([false]).api.update({ current: row })).rejects.toThrow('不是true')
   })
 
+  it('核算范围清单：只发 id、投影七个字段，并如实登记“组件无引用 + 开关默认关闭”', async () => {
+    const root = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const scopeModal = readFileSync(join(root, 'app/portal/views/dashboard/finance/setting/settlement-setting/components/scope-modal.vue'), 'utf8')
+    // 页面对它的调用形状就是这一行：只有 id
+    expect(scopeModal).toContain("http.get('/admin-api/finance/settlement-setting/scope-list', {")
+    expect(scopeModal).toContain('params: { id: props.id }')
+    const impl = readFileSync(join(javaRoot, 'erp-module-finance/erp-module-finance-biz/src/main/java/com/wdbc/erp/module/finance/service/settlement/SettlementSettingServiceImpl.java'), 'utf8')
+    expect(impl).toContain('private static final int SCOPE_MAX = 500')
+    expect(impl).toContain('getDescendantByAncestor')
+    const controller = readFileSync(join(javaRoot, 'erp-module-finance/erp-module-finance-biz/src/main/java/com/wdbc/erp/module/finance/controller/admin/settlement/SettlementSettingController.java'), 'utf8')
+    expect(controller).toContain('@ConditionalOnProperty')
+
+    const f = fixture([[
+      { orgId: '9007199254740993', orgName: '石家庄雏鸡场', orgCode: 'SJZ-CJC', isStandardUnit: 1, isCorporation: 0, level: 3, fullPath: '总部/河北/石家庄', ignored: '不应泄漏' },
+      { orgId: 100259, orgName: '邢台雏鸡场', orgCode: null, isStandardUnit: null, isCorporation: 1, level: 3, fullPath: null },
+    ]])
+    await expect(f.api.listScope({ id: row.id })).resolves.toEqual([
+      { orgId: '9007199254740993', orgName: '石家庄雏鸡场', orgCode: 'SJZ-CJC', isStandardUnit: 1, isCorporation: 0, level: 3, fullPath: '总部/河北/石家庄' },
+      { orgId: 100259, orgName: '邢台雏鸡场', orgCode: null, isStandardUnit: null, isCorporation: 1, level: 3, fullPath: null },
+    ])
+    expect(f.calls[0]).toEqual({
+      url: '/admin-api/finance/settlement-setting/scope-list', method: 'get', params: { id: row.id },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual(['id'])
+  })
+
+  it('核算范围清单：空数组合法，坏ID与坏响应不静默成功', async () => {
+    await expect(fixture([[]]).api.listScope({ id: 1 })).resolves.toEqual([])
+    await expect(fixture().api.listScope({ id: 0 })).rejects.toThrow('结转单设置id')
+    await expect(fixture([{ notAnArray: true }]).api.listScope({ id: 1 })).rejects.toThrow('必须是数组')
+    await expect(fixture([[{ orgId: 0 }]]).api.listScope({ id: 1 })).rejects.toThrow('orgId')
+    // 后端 DTO 是 Integer：字符串标记不放行，避免把 'yes' 当成 1
+    await expect(fixture([[{ orgId: 1, isStandardUnit: 'yes' }]]).api.listScope({ id: 1 })).rejects.toThrow('isStandardUnit')
+  })
+
   it('AI契约登记、关键映射和反证字段存在', () => {
     expect(Object.keys(contracts)).toEqual(Object.keys(FINANCE_SETTING_SETTLEMENT_SETTING_METHODS))
     expect(Object.keys(methodContracts)).toEqual(Object.values(FINANCE_SETTING_SETTLEMENT_SETTING_METHODS).map(method => `financeSettingSettlementSetting.${method}`))
     expect(contracts['finance-setting-settlement-setting-list']?.output.fields.some(field => field.path === 'list[].accountingScopeOrgIds')).toBe(true)
     expect(contracts['finance-setting-settlement-setting-prepare-create']?.steps.some(step => step.mapping?.accountingScopeOrgIds === 'result.draft.accountingScopeOrgIds')).toBe(true)
     expect(contracts['finance-setting-settlement-setting-set-status']?.boundaries.join('\n')).toContain('实际')
+    const scope = contracts['finance-setting-settlement-setting-scope-list']!
+    expect(scope.output.fields.some(field => field.path === '[].fullPath')).toBe(true)
+    expect(scope.output.fields.find(field => field.path === '[]')?.meaning).toBeDefined()
+    expect(scope.consume.join('\n')).toContain('后代')
+    expect(scope.consume.join('\n')).toContain('500')
+    expect(scope.gaps?.join('\n')).toContain('scope-modal.vue')
+    expect(scope.gaps?.join('\n')).toContain('erp.finance.settlement.enabled')
+    expect(scope.boundaries.join('\n')).toContain('没有入口')
   })
 })

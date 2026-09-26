@@ -176,6 +176,127 @@ export function buildTaskWithdrawPayload (params: TaskWithdrawParams): Record<st
   return { id, reason: reason || DEFAULT_TASK_WITHDRAW_REASON }
 }
 
+// ---------------------------------------------------------------------------
+// 任务评分（待办事项页的下钻页 `task-score/[id].vue`）
+// ---------------------------------------------------------------------------
+
+/**
+ * 「任务评分」页的提交端点。
+ *
+ * 页面在 `handleSubmit()` 里**连打两个接口**：先这一条算分落库，再
+ * `POST /bpm/hr/task/approve`（body `{id: bpm任务id, type: 4, reason: ''}`）把审批推下去。
+ * 本能力只做**第一条**（第二条是 bpm 审批动作，见能力边界）。
+ */
+export const MONTH_TASK_REVIEW_SCORE_PATH = '/performance/protocol/kpimonthprotocol/taskReviewScore'
+
+/**
+ * 「当月任务评分」的提交载荷。
+ *
+ * 逐字段对照后端 `KpiMonthProtocolTaskServiceImpl.taskReviewScore`：
+ * 它**只读五个字段**（`id`、`reviewScore`、`reviewScoreEvaluation`、
+ * `excessReviewScore`、`excessReviewEvaluation`），其余在 `MonthTaskScoreDTO` 里存在、
+ * 但在这一条路径上没人读。
+ *
+ * ⚠️ **所以本能力不发那 8 个页面会发的字段**（`leaderScore` / `leaderEvaluation` /
+ * `excessLeaderScore` / `excessLeaderEvaluation` / `selfScore` / `selfEvaluation` /
+ * `excessSelfScore` / `excessSelfEvaluation`）：它们的意思是「领导打分 / 自评」，
+ * 是**别人**在别的环节写的值，从这个动作里原样回传一遍只会让调用方以为"评分动作会设置自评分"。
+ * 页面之所以带上，是因为它把读回来的整行铺进了提交对象（`[mode]` 表单的常见写法）。
+ */
+export type BacklogTaskReviewScoreParams = {
+  /**
+   * **月度任务 id**（`kpi_month_protocol_task.id`，页面取的是
+   * `data[0].monthTaskList[0].id`）。
+   *
+   * ⚠️ 它**不是**流程实例 id、不是 `bpm` 任务 id、也不是协议 id：
+   * 后端拿它 `getProtocolByTaskId(id)` 反查协议，再把分数写回这条任务。
+   */
+  taskId: string | number
+  /**
+   * 完成审核评分（绝对值）。后端对非「客户拜访」类任务**必填**，为空报
+   * 「完成审核评分不能为空」；且不能超过该任务的完成分（`completeScore`）。
+   */
+  reviewScore: number | string
+  /** 完成审核评分说明 */
+  reviewScoreEvaluation?: string | null
+  /**
+   * 超额审核评分。**可为空**（大多数任务没有超额分）。
+   * 有值时不能超过任务的超额分（`excessScore`），否则报「超额审核评分不能超过任务超额分数」。
+   */
+  excessReviewScore?: number | string | null
+  /** 超额评分说明 */
+  excessReviewEvaluation?: string | null
+}
+
+/**
+ * 月度任务 id 的归一。
+ *
+ * ⚠️ **不能复用 `normalizeTaskId`**：那一个是 bpm/Flowable 的**任务 id**（字符串、非空即可），
+ * 而这里的 `id` 是 `kpi_month_protocol_task.id`（Java `Long`，后端拿它 `getProtocolByTaskId`）。
+ * 两者是不同实体，错误信息也必须点明这一点，否则调用方会拿 bpm 任务 id 来试。
+ */
+function monthTaskIdOf (value: unknown): string | number {
+  if (typeof value === 'number') {
+    if (Number.isSafeInteger(value) && value > 0) return value
+  } else if (typeof value === 'string' && /^[1-9]\d*$/.test(value.trim())) {
+    return value.trim()
+  }
+  throw new Error(
+    'taskId 必须是月度任务 id（kpi_month_protocol_task.id，正整数或正整数字符串），' +
+      `收到的是 ${JSON.stringify(value ?? null)}。它不是流程实例 id、不是 bpm 任务 id、也不是协议 id。`,
+  )
+}
+
+/** 提交体的键序 —— 与后端 DTO 的字段顺序一致（页面那份对象也是这个顺序的子集） */
+export function buildTaskReviewScorePayload (
+  params: BacklogTaskReviewScoreParams,
+): Record<string, unknown> {
+  const taskId = monthTaskIdOf(params?.taskId)
+  if (params?.reviewScore === undefined || params.reviewScore === null || String(params.reviewScore).trim() === '') {
+    throw new Error('完成审核评分（reviewScore）必填：后端对空值返回「完成审核评分不能为空」')
+  }
+  const payload: Record<string, unknown> = {
+    id: taskId,
+    reviewScore: params.reviewScore,
+    reviewScoreEvaluation: params.reviewScoreEvaluation ?? null,
+  }
+  // 超额两项只在**真的给了**的时候才发（页面上没有超额任务时这两个是 undefined，会被 JSON 丢掉）
+  if (params.excessReviewScore !== undefined && params.excessReviewScore !== null) {
+    payload.excessReviewScore = params.excessReviewScore
+  }
+  if (params.excessReviewEvaluation !== undefined && params.excessReviewEvaluation !== null) {
+    payload.excessReviewEvaluation = params.excessReviewEvaluation
+  }
+  return payload
+}
+
+const TASK_REVIEW_SCORE_PARAMS: ParamSpec[] = [
+  {
+    name: 'taskId',
+    kind: 'text',
+    required: true,
+    description:
+      '**月度任务 id**（kpi_month_protocol_task.id），来自任务评分页读到的 `monthTaskList[0].id`。' +
+      '不是流程实例 id、不是 bpm 任务 id、也不是协议 id —— 后端拿它反查协议',
+  },
+  {
+    name: 'reviewScore',
+    kind: 'number',
+    required: true,
+    description:
+      '完成审核评分，**绝对值**（不是增量）。后端要求非空且不超过任务完成分；' +
+      '「客户拜访」类任务的分数由后端公式算出、不读这个字段',
+  },
+  { name: 'reviewScoreEvaluation', kind: 'text', required: false, description: '完成审核评分说明' },
+  {
+    name: 'excessReviewScore',
+    kind: 'number',
+    required: false,
+    description: '超额审核评分；没有超额分时不要传。有值时不能超过任务的超额分',
+  },
+  { name: 'excessReviewEvaluation', kind: 'text', required: false, description: '超额评分说明' },
+]
+
 const DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
 
 /**
@@ -306,6 +427,14 @@ export const backlogTaskExamineCapabilities: CapabilityDefinition[] = [
     write: true,
     params: TASK_WITHDRAW_PARAMS,
   },
+  {
+    id: 'backlog-task-examine-review-score',
+    title: '提交月度任务审核评分',
+    pagePath: BACKLOG_TASK_EXAMINE_PAGE_PATH,
+    permission: BACKLOG_TASK_EXAMINE_PERMISSION,
+    write: true,
+    params: TASK_REVIEW_SCORE_PARAMS,
+  },
 ]
 
 /**
@@ -357,6 +486,31 @@ export function createBacklogTaskExamineCapability (request: PortalRequest) {
         url: BPM_TASK_WITHDRAW_PATH,
         method: 'put',
         data: buildTaskWithdrawPayload(params),
+      })
+    },
+
+    /**
+     * 提交月度任务审核评分（**写操作**）。
+     *
+     * 对应任务评分页 `task-score/[id].vue` 里 `handleSubmit()` 的第一条请求：
+     * `POST /performance/protocol/kpimonthprotocol/taskReviewScore`，body 是
+     * `MonthTaskScoreDTO`。后端 `@Transactional`：先 `lockScoreProtocol` + `lockScoreTasks`
+     * 锁住协议与任务，再校验分数区间，最后把审核分与说明写回该任务并盖 `reviewerScoreTime`。
+     *
+     * ⚠️ **这条请求不等于"审批通过"**：页面在它之后还会打
+     * `POST /bpm/hr/task/approve`（body `{id: bpm任务id, type: 4, reason: ''}`）把审批推下去。
+     * 本能力**只做算分落库**那一段 —— bpm 审批动作属于流程侧（`task-action.ts` 里那套
+     * `/bpm/task/*` 是另一个端点，两者不能互相顶替）。所以调用完这里，待办不会消失。
+     *
+     * ⚠️ 没有 `requestId`。写的是**绝对值**，同一载荷重发终态相同，
+     * 但后端校验会随任务当前状态变化，超时后先回查再决定是否重发。
+     */
+    async reviewScore (params: BacklogTaskReviewScoreParams): Promise<unknown> {
+      // 参数错误一律走 Promise.reject（`async` 保证），与 withdraw / list 一致
+      return request<unknown>({
+        url: MONTH_TASK_REVIEW_SCORE_PATH,
+        method: 'post',
+        data: buildTaskReviewScorePayload(params),
       })
     },
   }

@@ -477,6 +477,74 @@ function pageOf (value: unknown): PageResult<HrInternalStaffListRow> {
   return { list: page.list.map((item, index) => listRowOf(item, `内部员工列表行[${index}]`)), total: page.total as number }
 }
 
+/** 职务变动里的「有编制的组织结构树」节点（页面用到的字段；其余 DTO 字段不属于本页消费范围） */
+export type HrInternalStaffPostOrgNode = {
+  /** 组织 id。职务变动的 `beforeOrganizationId` / `afterOrganizationId` 用的就是它 */
+  id: HrInternalStaffId
+  /** 父组织 id（根是 0 或 null，按后端原值） */
+  pid?: HrInternalStaffId | null
+  /** 组织名称 */
+  name: string | null
+  /**
+   * 组织全路径。⚠️ **后端这一条查询不会填它**（`getHavePostOrgTree` 是实体直接转 DTO，
+   * `fullPath` 不是表字段），所以实测常为 `null` —— 页面此时自己按 `父路径 / 名称` 兜底。
+   * SDK 只做同样的兜底（见 `buildPostOrgTree`），不编造一个后端没给的路径。
+   */
+  fullPath: string | null
+  /**
+   * 该组织是否有编制：**1 = 有编制（或就是这名员工当前所在组织），0 = 只是祖先节点**。
+   * 页面把 `0` 的选项置灰（`disabled: Number(item.isHavePost) === 0`）—— 这个映射是本能力的关键语义。
+   */
+  isHavePost: number | null
+  /** 子节点。没有子节点时是 []（不是 null） */
+  children: HrInternalStaffPostOrgNode[]
+}
+
+/** 取一个节点上的 id，非正整数直接抛（整棵树里有坏 id 就当场炸，不静默跳过子树） */
+function nodeIdOf (value: unknown, label: string): HrInternalStaffId {
+  if (value === undefined || value === null || value === '') throw new Error(`${label}缺少id`)
+  return idOf(value, label)
+}
+
+/**
+ * 递归归一「有编制的组织结构树」。
+ *
+ * 页面在 `buildPostTransferOrganizationTree` 里做两件事，这里逐条复刻：
+ * ① `fullPath` 为空时用 `父路径 / 自身名称` 兜底（`normalizePostTransferText` 的 255 截断一并保留）；
+ * ② `children` 递归。另外**只保留页面消费的字段**（id/pid/name/fullPath/isHavePost/children），
+ * DTO 里的负责人、法人、成本中心等不属于本页动作所需。
+ */
+function postOrgPidOf (value: unknown, label: string): HrInternalStaffId | null {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value
+  if (typeof value === 'string' && /^\d+$/.test(value)) return value
+  throw new Error(`${label}必须是非负整数（组织结构表用 0 表示根，不是 null）`)
+}
+
+function buildPostOrgTree (value: unknown, parentLabel: string, label: string): HrInternalStaffPostOrgNode[] {
+  // 叶子节点上没有 `children` 键是正常的（页面用 `Array.isArray(list) ? list : []` 兜的，
+  // 后端 TreeUtils.build 也只给有子节点的父节点挂 children），所以缺键/为 null 一律当空数组，
+  // 但**长度有限的值必须真是数组** —— 形状变了要当场炸，不能静默丢掉整棵子树。
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error(`${label}不是数组`)
+  return value.map((item, index) => {
+    const node = objectOf(item, `${label}[${index}]`)
+    const id = nodeIdOf(node.id, `${label}[${index}]`)
+    const name = nullableTextOf(node.name, `${label}[${index}].name`)
+    const fallbackPath = [parentLabel, name].filter((part) => part !== null && part !== '').join(' / ')
+    const fullPath = normalizePostTransferText(node.fullPath, `${label}[${index}].fullPath`, 255) || fallbackPath
+    return {
+      id,
+      // ⚠️ 根节点的 pid 是 **0**（不是 null），所以这里不能用 nullableIdOf 那条正整数判据
+      pid: postOrgPidOf(node.pid, `${label}[${index}].pid`),
+      name,
+      fullPath,
+      isHavePost: integerOf(node.isHavePost, `${label}[${index}].isHavePost`),
+      children: buildPostOrgTree(node.children, fullPath, `${label}[${index}].children`),
+    }
+  })
+}
+
 function idsOf (value: unknown): HrInternalStaffId[] {
   if (!Array.isArray(value) || value.length === 0) throw new Error('ids必须为非空ID数组')
   return [...new Set(value.map((item, index) => idOf(item, `ids[${index}]`)))]
@@ -718,6 +786,39 @@ export function createHrInternalStaffCapability (request: PortalRequest) {
       const id = idOf(input?.id, '内部员工变更记录ID')
       return historyDetailOf(await request({ url: `/hr/staff/changeLog/${id}`, method: 'get' }))
     },
+    /**
+     * 职务变动里「变动后组织」的候选树：**有编制的组织结构树**。只读。
+     *
+     * 页面在详情页的职务变动区块里打开组织选择器时打它
+     * （`[mode]/[id].vue:2650`，`ensurePostTransferOrganizationOptions`）。返回的是一条**树**，
+     * 页面把树拍平后当选项，`isHavePost === 0` 的选项**置灰**（不可选）。
+     *
+     * ⚠️ 两个参数里 **`staffCode` 才有用**：后端签名是
+     * `getHavePostOrgTree(Long staffCode)`，`id` 压根没绑（页面多发了它）。
+     * 传了 `staffCode` 时后端会把**这名员工当前所在的组织**也并进候选集，
+     * 所以"给自己做职务变动"时要带上它，否则自己当前的组织可能不在树里。
+     *
+     * ⚠️ 返回集不是"全组织树"，也不是"有编制的组织的子树"：它是
+     * 「有编制的组织 ∪ 该员工所在组织」的**所有祖先**（`getHavePostOrgTree` 只取 ancestor），
+     * 中间那些没有编制的祖先节点 `isHavePost = 0` —— 这正是页面要置灰的那些。
+     */
+    async postOrgTree (input: { staffCode?: HrInternalStaffId; id?: HrInternalStaffId } = {}): Promise<HrInternalStaffPostOrgNode[]> {
+      const staffCode = input?.staffCode === undefined || input.staffCode === null || input.staffCode === ''
+        ? undefined
+        : idOf(input.staffCode, '职务变动组织树staffCode')
+      const recordId = input?.id === undefined || input.id === null || input.id === ''
+        ? undefined
+        : idOf(input.id, '职务变动组织树id')
+      // 键序与页面一致：staffCode 在前、id 在后（后者后端不绑，只是与浏览器逐字段一致）
+      const params: JsonObject = {}
+      if (staffCode !== undefined) params.staffCode = staffCode
+      if (recordId !== undefined) params.id = recordId
+      return buildPostOrgTree(
+        await request({ url: '/org/organization/getHavePostOrgTree', method: 'get', params }),
+        '',
+        '职务变动组织树',
+      )
+    },
   }
 }
 
@@ -734,6 +835,7 @@ export const HR_INTERNAL_STAFF_METHODS = {
   'hr-internal-staff-prepare-contract-import': 'prepareContractImport', 'hr-internal-staff-import-contract': 'importContract',
   'hr-internal-staff-download-post-transfer-template': 'downloadPostTransferTemplate', 'hr-internal-staff-prepare-post-transfer-import': 'preparePostTransferImport',
   'hr-internal-staff-import-post-transfer': 'importPostTransfer', 'hr-internal-staff-history-list': 'historyList', 'hr-internal-staff-history-detail': 'historyDetail',
+  'hr-internal-staff-post-org-tree': 'postOrgTree',
 } as const
 
 export const hrInternalStaffCapabilities: CapabilityDefinition[] = [
@@ -760,6 +862,7 @@ export const hrInternalStaffCapabilities: CapabilityDefinition[] = [
   { id: 'hr-internal-staff-import-post-transfer', title: '导入员工职务变动', write: true, params: [p('staffId', 'text', true, '员工ID'), p('file', 'text', true, 'xlsx或xls文件')] },
   { id: 'hr-internal-staff-history-list', title: '查询内部员工变更历史', write: false, params: [p('staffId', 'text', false, '员工ID；从当前页面历史入口传入'), p('operatorName', 'text', false, '操作人筛选'), p('startTime', 'date', false, '开始时间'), p('endTime', 'date', false, '结束时间'), p('pageNo', 'number', false, '默认1'), p('pageSize', 'number', false, '页面支持10、20、50、100；默认20')] },
   { id: 'hr-internal-staff-history-detail', title: '读取内部员工变更历史详情', write: false, params: [p('id', 'text', true, '变更记录ID')] },
+  { id: 'hr-internal-staff-post-org-tree', title: '查询有编制的组织结构树（职务变动组织候选）', write: false, params: [p('staffCode', 'text', false, '员工工号；传了它后端会把这名员工当前所在组织并进候选集，做本人职务变动时应当传'), p('id', 'text', false, '内部员工记录ID；页面会发，但后端签名只绑 staffCode，这个键被忽略')] },
 ].map(definition => ({
   ...definition,
   pagePath: HR_INTERNAL_STAFF_PAGE_PATH,

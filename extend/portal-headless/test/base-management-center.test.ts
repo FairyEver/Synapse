@@ -180,9 +180,11 @@ describe('组织结构 —— 页面上下文', () => {
     expect(entry?.write).toBe(true)
   })
 
-  it('七个能力的 pagePath / permission 与清单一致，写标志也对', () => {
+  it('八个能力的 pagePath / permission 与清单一致，写标志也对', () => {
+    // 第 8 个是本轮补的负责人候选（`/sys/user/getUserListPage`），只读
     expect(baseManagementCenterCapabilities.map((item) => item.id)).toEqual([
       'base-management-center-list',
+      'base-management-center-person-search',
       'base-management-center-get',
       'base-management-center-check-status',
       'base-management-center-create',
@@ -589,5 +591,118 @@ describe.runIf(LIVE)('LIVE 真实环境 —— 组织结构的读链路', () => 
     )
     expect(check?.write).toBe(false)
     expect(check?.params.map((item) => item.name)).toEqual(['id', 'status'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 负责人候选（`/sys/user/getUserListPage`）—— 本轮补齐的那一条
+//
+// 它是隐藏表单页 `[mode]/[id].vue` 的「负责人」下拉发出的请求，原来整条都没落进任何能力。
+// 判据同样是两个固定检出的源码 + 一个设计约束（长选项参数必须先要关键字，D6 / H35）。
+// ---------------------------------------------------------------------------
+
+describe('组织结构：负责人候选（只读）', () => {
+  const calls: Array<Record<string, unknown>> = []
+  const request = async <T>(config: unknown): Promise<T> => {
+    calls.push(config as Record<string, unknown>)
+    return {
+      list: [
+        { id: 197916, username: '2026050801', realName: '徐曼曼', password: 'should-not-leak', password2: null, salt: 'should-not-leak' },
+      ],
+      total: 1,
+    } as T
+  }
+  const api = createBaseManagementCenterCapability(request)
+
+  it('keyword 与 username 都不给时**直接拒绝**，不发请求（长选项参数先要关键字）', async () => {
+    calls.length = 0
+    await expect(api.searchPersons({})).rejects.toThrow(/keyword/)
+    await expect(api.searchPersons({ pageSize: -1 })).rejects.toThrow(/keyword/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('keyword → name（模糊），键序 pageNo, pageSize, name，与页面 fetchStudentPage 一致', async () => {
+    calls.length = 0
+    const result = await api.searchPersons({ keyword: '徐', pageNo: 2, pageSize: 50 })
+    expect(calls[0]).toEqual({
+      url: '/sys/user/getUserListPage',
+      method: 'get',
+      params: { pageNo: 2, pageSize: 50, name: '徐' },
+    })
+    expect(Object.keys(calls[0]?.params as object)).toEqual(['pageNo', 'pageSize', 'name'])
+    expect(result.total).toBe(1)
+  })
+
+  it('username → 精确相等的那一支（页面用它回显已选负责人）', async () => {
+    calls.length = 0
+    await api.searchPersons({ username: '2026050801', pageSize: 1 })
+    expect(calls[0]?.params).toEqual({ pageNo: 1, pageSize: 1, username: '2026050801' })
+    expect(Object.keys(calls[0]?.params as object)).not.toContain('name')
+  })
+
+  it('返回值只留 username/realName：SysUserDTO 里的 password/salt 不得出现在 SDK 结果里', async () => {
+    calls.length = 0
+    const result = await api.searchPersons({ keyword: '徐' })
+    expect(result.list).toEqual([{ username: '2026050801', realName: '徐曼曼' }])
+    const serialized = JSON.stringify(result)
+    expect(serialized).not.toContain('password')
+    expect(serialized).not.toContain('salt')
+    expect(serialized).not.toContain('should-not-leak')
+  })
+
+  it('pageSize 越界（含 -1 这种"全量"写法）在发请求前拒绝', async () => {
+    calls.length = 0
+    await expect(api.searchPersons({ keyword: '徐', pageNo: 0 })).rejects.toThrow(/pageNo/)
+    await expect(api.searchPersons({ keyword: '徐', pageSize: 0 })).rejects.toThrow(/pageSize/)
+    await expect(api.searchPersons({ keyword: '徐', pageSize: 501 })).rejects.toThrow(/pageSize/)
+    await expect(api.searchPersons({ keyword: '徐', pageSize: -1 })).rejects.toThrow(/pageSize/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('能力元数据：绑定组织结构页、只读', () => {
+    const definition = baseManagementCenterCapabilities.find(item => item.id === 'base-management-center-person-search')
+    expect(definition).toMatchObject({
+      pagePath: BASE_MANAGEMENT_CENTER_PAGE_PATH,
+      permission: BASE_MANAGEMENT_CENTER_PERMISSION,
+      write: false,
+    })
+    expect(definition?.params.map(item => item.name)).toEqual(['keyword', 'username', 'pageNo', 'pageSize'])
+  })
+
+  it('源码锁定：页面的两条调用形状 + 后端签名与查询条件', () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const read = (root: string, path: string): string => readFileSync(join(root, path), 'utf8')
+    const form = read(portalRoot, 'app/portal/views/dashboard/education/base/management-center/[mode]/[id].vue')
+    expect(form).toContain("http.get('/sys/user/getUserListPage'")
+    expect(form).toContain('...(keyword ? { name: keyword } : {})')
+    expect(form).toContain('username,')
+    const controller = read(javaRoot, 'erp-module-system/erp-module-system-biz/src/main/java/com/wdbc/erp/module/system/controller/admin/user/HrSysUserController.java')
+    expect(controller).toContain('getUserListPage(String name, String username, Integer pageNo, Integer pageSize)')
+    const service = read(javaRoot, 'erp-module-system/erp-module-system-biz/src/main/java/com/wdbc/erp/module/system/service/user/HrSysUserServiceImpl.java')
+    expect(service).toContain('.like(StringUtils.isNotBlank(name), "real_name", name)')
+    expect(service).toContain('.eq(StringUtils.isNotBlank(username), "username", username)')
+    expect(service).toContain('pageSize > MAX_LEGACY_USER_RESULTS')
+  })
+
+  it('AI 说明契约：关键字必填、投影边界、与 base-user-search 的区别都写清楚，并通过结构校验', async () => {
+    const mod = await import('../src/catalog/contracts-base-management-center.js')
+    const contracts = mod.BASE_MANAGEMENT_CENTER_AI_CONTRACTS
+    const contract = contracts['base-management-center-person-search']!
+    expect(contract.effect).toBe('read')
+    expect(contract.whenToUse).toContain('base-user-search')
+    expect(contract.boundaries.join(' ')).toContain('password')
+    expect(contract.inputs.keyword?.requiredWhen).toContain('username')
+    expect(contract.output.fields.map(item => item.path)).toEqual(
+      expect.arrayContaining(['list[].username', 'list[].realName']),
+    )
+    const definitions = new Map(
+      baseManagementCenterCapabilities.map(item => [item.id, item] as const),
+    )
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = await import(validatorUrl) as {
+      validateAiContract: (id: string, contract: unknown, options?: unknown) => Array<{ code: string; message: string }>
+    }
+    expect(validateAiContract('base-management-center-person-search', contract, { definitions })).toEqual([])
   })
 })

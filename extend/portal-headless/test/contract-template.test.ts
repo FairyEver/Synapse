@@ -488,6 +488,40 @@ describe('新建 / 修改的表单必填（页面规则 required，后端不校�
   })
 })
 
+describe('「撤销」不进 SDK（conventions 第 28 条）', () => {
+  const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+  const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+
+  it('页面上的撤销入口**两处都是注释**，调用点上方自带 `// 有问题`', () => {
+    // 2026-09-26 实测：这不是"按钮被隐藏"，是**整行被注释**，用户点不到。
+    const page = readFileSync(join(portalRoot, 'app/portal/views/dashboard/hr/contract/template/list.vue'), 'utf8')
+    expect(page).toContain('// 有问题')
+    // 表格里绑定 @click 的按钮整行被 HTML 注释
+    expect(page).toContain('<!-- <common-action-core v-if="record.status === 2" @click="handleRevoke(record)">撤销</common-action-core> -->')
+    // 动作列那一行被 JS 注释
+    expect(page).toContain("// { component: 'action-core', text: '撤销' },")
+    // handleRevoke 只有一处定义 + 一处（注释里的）引用 —— 固定检出里没有可点的地方
+    expect(page.split('handleRevoke').length - 1).toBe(2)
+  })
+
+  it('后端固定检出也没有这条路由（两个检出都核过）', () => {
+    const controller = readFileSync(join(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/riskcontrol/contract/WorkflowContractTemplateController.java'), 'utf8')
+    expect(controller).toContain('@RequestMapping("/hr/contract-template")')
+    expect(controller).not.toContain('cancelContractTemplate')
+    for (const fragment of ['@PostMapping("/create")', '@PutMapping("/update")', '@DeleteMapping("/delete")', '@GetMapping("/page")', '@PostMapping("updateStatus")']) {
+      expect(controller).toContain(fragment)
+    }
+  })
+
+  it('因此**不建能力**：入口到不了 + 后端没有映射，两条各自都足够', () => {
+    // 与「直播课程」（study-course.ts 文件头）、「晨/月课堂的学习记录子页」同型。
+    // 这条断言是**反向锁**：谁要把 contract-template-cancel 加回来，先得推翻上面两条证据。
+    expect(contractTemplateCapabilities.some(item => item.id === 'contract-template-cancel')).toBe(false)
+    const api = createContractTemplateCapability(() => { throw new Error('不该被调用') })
+    expect('cancel' in api).toBe(false)
+  })
+})
+
 describe('能力定义（给目录 / 别名 / invoke 用）', () => {
   it('五个能力，id 与 write 标记都对', () => {
     expect(contractTemplateCapabilities.map((item) => [item.id, item.write])).toEqual([

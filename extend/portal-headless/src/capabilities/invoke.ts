@@ -5755,6 +5755,218 @@ export const CAPABILITY_BINDINGS: readonly CapabilityBinding[] = [
     run: (host, args) =>
       host.aiPromptTool.templateBinding.prepareRemove(args.id as number | string),
   },
+  // 2026-09-26 补缺口轮次：页面弹窗 / 隐藏子路由 / 下钻页发出的请求（此前无绑定）。
+  {
+    // 学员统计·班课列表（下钻）
+    capabilityId: 'study-statistics-student-lesson-list',
+    sdkPath: 'studyStatistics.listStudentLessons',
+    run: (host, args) => host.studyStatistics.listStudentLessons(args as never),
+  },
+  {
+    // 学员统计·班课明细
+    capabilityId: 'study-statistics-student-lesson-detail',
+    sdkPath: 'studyStatistics.listStudentLessonDetail',
+    run: (host, args) => host.studyStatistics.listStudentLessonDetail(args as never),
+  },
+  {
+    // 讲师统计·课程列表
+    capabilityId: 'study-statistics-teacher-course-list',
+    sdkPath: 'studyStatistics.listTeacherCourses',
+    run: (host, args) => host.studyStatistics.listTeacherCourses(args as never),
+  },
+  {
+    // 讲师统计·班课列表
+    capabilityId: 'study-statistics-teacher-lesson-list',
+    sdkPath: 'studyStatistics.listTeacherLessons',
+    run: (host, args) => host.studyStatistics.listTeacherLessons(args as never),
+  },
+  {
+    // 讲师统计·得分明细
+    capabilityId: 'study-statistics-teacher-score-list',
+    sdkPath: 'studyStatistics.listTeacherScores',
+    run: (host, args) => host.studyStatistics.listTeacherScores(args as never),
+  },
+  {
+    // 学习统计·行为明细
+    capabilityId: 'study-statistics-learning-action-details',
+    sdkPath: 'studyStatistics.listLearningActionDetails',
+    run: (host, args) => host.studyStatistics.listLearningActionDetails(args as never),
+  },
+  {
+    // 班级统计·课堂记录
+    capabilityId: 'study-statistics-grade-lesson-record',
+    sdkPath: 'studyStatistics.listGradeLessonRecords',
+    run: (host, args) => host.studyStatistics.listGradeLessonRecords(args as never),
+  },
+  {
+    // 管理分析·自评任务考核明细
+    capabilityId: 'perf-analysis-department-self-assessment-task-check-detail',
+    sdkPath: 'perfSalary.listAnalysisDepartmentTaskCheckDetail',
+    run: (host, args) => host.perfSalary.listAnalysisDepartmentTaskCheckDetail(args as never),
+  },
+  {
+    // 管理分析·指标考核明细
+    capabilityId: 'perf-analysis-department-index-check-detail',
+    sdkPath: 'perfSalary.listAnalysisDepartmentIndexCheckDetail',
+    run: (host, args) => host.perfSalary.listAnalysisDepartmentIndexCheckDetail(args as never),
+  },
+  {
+    // 管理分析·利润自检
+    capabilityId: 'perf-analysis-department-self-check-profit',
+    sdkPath: 'perfSalary.listAnalysisDepartmentProfitCheck',
+    run: (host, args) => host.perfSalary.listAnalysisDepartmentProfitCheck(args as never),
+  },
+  {
+    // 个人月度·协议配置
+    capabilityId: 'perf-month-protocol-config-get',
+    sdkPath: 'perfAgreement.getMonthProtocolConfig',
+    run: (host) => host.perfAgreement.getMonthProtocolConfig(),
+  },
+  {
+    // 标准管理·角色岗位树
+    capabilityId: 'perf-manage-standard-role-post-tree',
+    sdkPath: 'perfManageConfig.getStandardRolePostTree',
+    run: (host, args) => host.perfManageConfig.getStandardRolePostTree(args as never),
+  },
+  {
+    // 组织结构·人员候选
+    capabilityId: 'base-management-center-person-search',
+    sdkPath: 'baseManagementCenter.searchPersons',
+    run: (host, args) => host.baseManagementCenter.searchPersons(args as never),
+  },
+  {
+    // 内部员工·有岗组织树
+    capabilityId: 'hr-internal-staff-post-org-tree',
+    sdkPath: 'hrInternalStaff.postOrgTree',
+    run: (host, args) => host.hrInternalStaff.postOrgTree(args as never),
+  },
+  {
+    // 排班管理·节假日
+    capabilityId: 'attendance-team-holiday-list',
+    sdkPath: 'attendanceTeam.holidayList',
+    run: (host, args) => host.attendanceTeam.holidayList(args as never),
+  },
+  {
+    // 待办事项·任务评分
+    capabilityId: 'backlog-task-examine-review-score',
+    sdkPath: 'backlogTaskExamine.reviewScore',
+    run: (host, args) => host.backlogTaskExamine.reviewScore(args as never),
+  },
+  {
+    // 登记信息·人员候选
+    capabilityId: 'business-registration-person-candidate',
+    sdkPath: 'businessRegistration.searchPersonCandidates',
+    run: (host, args) => host.businessRegistration.searchPersonCandidates(args as never),
+  },
+  {
+    // 登记信息·外部学员列表
+    capabilityId: 'business-registration-external-person-list',
+    sdkPath: 'businessRegistration.listExternalPersons',
+    run: (host, args) => host.businessRegistration.listExternalPersons(args as never),
+  },
+  {
+    // 结转单设置·核算范围
+    capabilityId: 'finance-setting-settlement-setting-scope-list',
+    sdkPath: 'financeSettingSettlementSetting.listScope',
+    run: (host, args) => host.financeSettingSettlementSetting.listScope(args as never),
+  },
+  {
+    // 凭证模板·常用摘要
+    capabilityId: 'finance-setting-voucher-templates-abstract-list',
+    sdkPath: 'financeSettingVoucherTemplates.listAbstracts',
+    run: (host, args) => host.financeSettingVoucherTemplates.listAbstracts(args as never),
+  },
+  {
+    // 成本中心·维护列表
+    capabilityId: 'manage-cost-center-maintenance-list',
+    sdkPath: 'manageCostCenter.listMaintenance',
+    run: (host, args) => host.manageCostCenter.listMaintenance(args as never),
+  },
+  {
+    // 供应商管理·品牌候选
+    capabilityId: 'setting-supplier-brand-candidates',
+    sdkPath: 'settingSupplier.listBrandCandidates',
+    run: (host, args) => host.settingSupplier.listBrandCandidates(args as never),
+  },
+  {
+    // 用户查询·生成工号
+    capabilityId: 'setting-user-auto-create-staff-code',
+    sdkPath: 'settingUser.autoCreateStaffCode',
+    run: (host) => host.settingUser.autoCreateStaffCode(),
+  },
+  // 2026-09-26 补缺口轮次：课堂隐藏子页 / 学习管理弹窗 / 作业记录子页。
+  {
+    // 周课堂·学习记录列表
+    capabilityId: 'study-lesson-weekly-record-list',
+    sdkPath: 'studyLesson.listWeeklyRecords',
+    run: (host, args) => host.studyLesson.listWeeklyRecords(args as never),
+  },
+  {
+    // 课堂·移出学习记录
+    capabilityId: 'study-record-remove',
+    sdkPath: 'studyLesson.removeStudyRecord',
+    run: (host, args) => host.studyLesson.removeStudyRecord(args as never),
+  },
+  {
+    // 月课堂·议案列表
+    capabilityId: 'study-lesson-monthly-motion-list',
+    sdkPath: 'studyLesson.listMonthlyMotions',
+    run: (host, args) => host.studyLesson.listMonthlyMotions(args as never),
+  },
+  {
+    // 月课堂·议案评分记录
+    capabilityId: 'study-lesson-monthly-motion-rate-list',
+    sdkPath: 'studyLesson.listMonthlyMotionRates',
+    run: (host, args) => host.studyLesson.listMonthlyMotionRates(args as never),
+  },
+  {
+    // 月课堂·评分明细
+    capabilityId: 'study-lesson-monthly-rate-list',
+    sdkPath: 'studyLesson.listMonthlyRates',
+    run: (host, args) => host.studyLesson.listMonthlyRates(args as never),
+  },
+  {
+    // 月课堂·督办任务
+    capabilityId: 'study-lesson-monthly-oversee-task-list',
+    sdkPath: 'studyLesson.listMonthlyOverseeTasks',
+    run: (host, args) => host.studyLesson.listMonthlyOverseeTasks(args as never),
+  },
+  {
+    // 学习管理·查看学习详情
+    capabilityId: 'study-record-lesson-detail',
+    sdkPath: 'studyRecord.getLessonDetail',
+    run: (host, args) => host.studyRecord.getLessonDetail(args as never),
+  },
+  {
+    // 学习管理·作业详情
+    capabilityId: 'study-record-assignment-get',
+    sdkPath: 'studyRecord.getAssignment',
+    run: (host, args) => host.studyRecord.getAssignment(args as never),
+  },
+  {
+    // 学习管理·评分权限检查
+    capabilityId: 'assignment-check-permission',
+    sdkPath: 'studyRecord.checkAssignmentPermission',
+    run: (host, args) => host.studyRecord.checkAssignmentPermission(args as never),
+  },
+  {
+    // 学习管理·讲师评分
+    capabilityId: 'study-record-assignment-update',
+    sdkPath: 'studyRecord.updateAssignmentScore',
+    run: (host, args) => host.studyRecord.updateAssignmentScore(args as never),
+  },
+  {
+    // 作业管理·提交统计
+    capabilityId: 'assignment-static',
+    sdkPath: 'assignment.getRecordStatic',
+    run: (host, args) => host.assignment.getRecordStatic(args as never),
+  },
+  {
+    // 作业管理·提交记录分页
+    capabilityId: 'assignment-submit-record-page',
+    sdkPath: 'assignment.listSubmitRecords',
+    run: (host, args) => host.assignment.listSubmitRecords(args as never),
+  },
   ...batchCapabilityBindings(),
 ]
 

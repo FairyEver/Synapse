@@ -476,7 +476,8 @@ describe('能力定义', () => {
     // 与 generated/page-catalog.json 的 290bc1 行、app/portal/menus/hr.js:89 同源
   })
 
-  it('七个能力都绑在这一页上，权限码一致，写标志标对', () => {
+  it('八个能力都绑在这一页上，权限码一致，写标志标对', () => {
+    // 第 8 个是本轮补的节假日日历（考勤组表单里的弹窗），只读
     expect(attendanceTeamCapabilities.map((item) => item.id)).toEqual([
       'attendance-team-list',
       'attendance-team-get',
@@ -485,6 +486,7 @@ describe('能力定义', () => {
       'attendance-team-remove',
       'attendance-team-schedule-get',
       'attendance-team-schedule-save',
+      'attendance-team-holiday-list',
     ])
     expect(attendanceTeamCapabilities.map((item) => item.write)).toEqual([
       false,
@@ -494,6 +496,7 @@ describe('能力定义', () => {
       true,
       false,
       true,
+      false,
     ])
     for (const item of attendanceTeamCapabilities) {
       expect(item.pagePath).toBe(ATTENDANCE_TEAM_PAGE_PATH)
@@ -550,5 +553,97 @@ describe('能力定义', () => {
       const camel = item.id.replace(/^attendance-team-/, '').replace(/-(\w)/g, (_m, c: string) => c.toUpperCase())
       expect(implKeys.has(camel), `缺少实现 ${camel}（能力 ${item.id}）`).toBe(true)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 法定节假日日历（考勤组表单里的弹窗）—— 本轮补齐的那一条
+// ---------------------------------------------------------------------------
+
+describe('排班管理：某月法定节假日日历（只读）', () => {
+  const calls: Array<Record<string, unknown>> = []
+  const request = async <T>(config: unknown): Promise<T> => {
+    calls.push(config as Record<string, unknown>)
+    return [
+      { id: 1, name: '国庆节', holidayDate: '2026-10-01', isHoliday: 1, year: 2026, month: 10, wage: 3, creator: 9 },
+      { id: 2, name: '调休上班', holidayDate: '2026-10-11', isHoliday: 0, year: 2026, month: 10, wage: 3 },
+    ] as T
+  }
+  const api = createAttendanceTeamCapability(request)
+
+  it('参数键序 year → month，两边都按页面原样发（YYYY 与零填充 MM）', async () => {
+    calls.length = 0
+    const list = await api.holidayList({ year: '2026', month: '10' })
+    expect(calls[0]).toEqual({
+      url: '/org/holiday/getHoliday',
+      method: 'get',
+      params: { year: '2026', month: '10' },
+    })
+    expect(Object.keys(calls[0]?.params as object)).toEqual(['year', 'month'])
+    expect(list).toHaveLength(2)
+  })
+
+  it('归一：只留页面消费的字段，isHoliday=1 是休、0 是班；其它后端字段不带出来', async () => {
+    calls.length = 0
+    const list = await api.holidayList({ year: 2026, month: 10 })
+    expect(list[0]).toEqual({
+      id: 1, name: '国庆节', holidayDate: '2026-10-01', isHoliday: 1, year: 2026, month: 10,
+    })
+    expect(list[1]?.isHoliday).toBe(0)
+    expect(Object.prototype.hasOwnProperty.call(list[0] as object, 'wage')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(list[0] as object, 'creator')).toBe(false)
+  })
+
+  it('两个参数都必填：后端对 null 不报错，只会静默返回空日历', async () => {
+    calls.length = 0
+    await expect(api.holidayList({ year: 2026 } as never)).rejects.toThrow(/month/)
+    await expect(api.holidayList({ month: 10 } as never)).rejects.toThrow(/year/)
+    await expect(api.holidayList({ year: '', month: 10 })).rejects.toThrow(/year/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('响应不是数组要当场炸（页面直接对结果 find）', async () => {
+    const broken = createAttendanceTeamCapability(async <T>() => ({ list: [], total: 0 }) as T)
+    await expect(broken.holidayList({ year: 2026, month: 10 })).rejects.toThrow(/没有返回数组/)
+  })
+
+  it('能力元数据：绑定排班管理页、只读', () => {
+    const definition = attendanceTeamCapabilities.find(item => item.id === 'attendance-team-holiday-list')
+    expect(definition).toMatchObject({
+      pagePath: ATTENDANCE_TEAM_PAGE_PATH,
+      permission: ATTENDANCE_TEAM_PERMISSION,
+      write: false,
+    })
+    expect(definition?.params.map(item => item.name)).toEqual(['year', 'month'])
+  })
+
+  it('源码锁定：弹窗的两条参数、翻月重发、以及后端按 year+month 精确匹配', () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const calendar = readFileSync(join(portalRoot, 'app/portal/views/dashboard/hr/attendance/attendance-team/components/calendar.vue'), 'utf8')
+    expect(calendar).toContain("http.get('/org/holiday/getHoliday'")
+    expect(calendar).toContain("formatDay(date, 'YYYY')")
+    expect(calendar).toContain('item.isHoliday === 1')
+    const form = readFileSync(join(portalRoot, 'app/portal/views/dashboard/hr/attendance/attendance-team/[mode]/[id].vue'), 'utf8')
+    expect(form).toContain("import ComponentCalendar from '../components/calendar.vue'")
+    const service = readFileSync(join(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/organization/attendance/service/impl/SysHolidayServiceImpl.java'), 'utf8')
+    expect(service).toContain('queryWrapper.eq("year", year)')
+    expect(service).toContain('queryWrapper.eq("month", month)')
+  })
+
+  it('AI 说明契约：1=休/0=班、按月精确匹配、两个参数必填都写清楚，并通过结构校验', async () => {
+    const mod = await import('../src/catalog/contracts-attendance-team.js')
+    const contract = mod.ATTENDANCE_TEAM_AI_CONTRACTS['attendance-team-holiday-list']!
+    expect(contract.effect).toBe('read')
+    expect(contract.output.fields.find(item => item.path === '[].isHoliday')?.values?.['1']).toBe('休')
+    expect(contract.inputs.year?.required).toBe(true)
+    expect(contract.inputs.month?.constraints?.join(' ')).toContain('静默返回空')
+    expect(contract.consume.join(' ')).toContain('isHoliday === 1')
+    const definitions = new Map(attendanceTeamCapabilities.map(item => [item.id, item] as const))
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = await import(validatorUrl) as {
+      validateAiContract: (id: string, contract: unknown, options?: unknown) => Array<{ code: string; message: string }>
+    }
+    expect(validateAiContract('attendance-team-holiday-list', contract, { definitions })).toEqual([])
   })
 })

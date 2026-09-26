@@ -15,6 +15,24 @@ import {
   CapabilityInvokeError,
   type AssignmentDraft,
 } from '../src/index.js'
+// 「作业完成情况」隐藏子路由的两个能力：定义/实现与契约都直接 import ——
+// 它们还没接进 `src/index.js` 的目录（接线由派单方做），走模块入口才能先测到。
+import {
+  ASSIGNMENT_RECORD_METHODS,
+  ASSIGNMENT_STATIC_PATH,
+  ASSIGNMENT_SUBMIT_RECORD_PAGE_PATH,
+  assignmentCapabilities,
+  assignmentRecordCapabilities,
+  createAssignmentCapability,
+} from '../src/capabilities/assignment.js'
+import { studyRecordCapabilities, studyRecordHiddenCapabilities } from '../src/capabilities/study-record.js'
+import { studyGradeCapabilities } from '../src/capabilities/study-grade.js'
+import { STUDY_RECORD_HIDDEN_AI_CONTRACTS } from '../src/catalog/contracts-study-record.js'
+import {
+  ASSIGNMENT_RECORD_AI_CONTRACTS,
+  ASSIGNMENT_RECORD_METHOD_CONTRACTS,
+} from '../src/catalog/contracts-assignment.js'
+import type { PortalRequest } from '../src/capabilities/meeting-room.js'
 
 /**
  * 作业管理（`/dashboard/assignment/assignment/list`）—— 第一条**换域 + 普通 CRUD** 的线。
@@ -473,25 +491,33 @@ describe('invoke 接线', () => {
 })
 
 describe('能力定义与绑定表', () => {
-  it('六个能力的 pagePath 都指向本页（完成状态是推导的，不是手工记的）', () => {
+  it('本页八个能力的 pagePath 都指向本页（完成状态是推导的，不是手工记的）', () => {
     const { sdk } = capture()
-    const mine = sdk.capabilities.filter((capability) => capability.id.startsWith('assignment-'))
+    // 按 **pagePath** 取，不按 id 前缀：`assignment-check-permission` 的 id 前缀是
+    // `assignment-`，但它由**学习管理页**（/dashboard/study/study/list）的评分弹窗发出，
+    // pagePath 挂在学习管理页，不该被这一页的断言圈进来。
+    const mine = sdk.capabilities.filter((capability) => capability.pagePath === ASSIGNMENT_PAGE_PATH)
     expect(mine.map((capability) => capability.id).sort()).toEqual([
       'assignment-create',
       'assignment-get',
       'assignment-list',
       'assignment-remove',
       'assignment-set-status',
+      'assignment-static',
+      'assignment-submit-record-page',
       'assignment-update',
     ])
     for (const capability of mine) {
       expect(capability.pagePath).toBe(ASSIGNMENT_PAGE_PATH)
     }
-    // 写能力的标记：create/update/set-status/remove 是写，list/get 是读
+    // 写能力的标记：create/update/set-status/remove 是写，list/get 是读。
+    // ⚠️ `assignment-submit-record-page` **名字叫 Page 却是写**：实现对每条记录插短链并回写
+    // `fileUploadUrl`（`StudyAssignmentSubmitRecordServiceImpl#getAssignmentPage`）。
     expect(mine.filter((capability) => capability.write).map((capability) => capability.id).sort()).toEqual([
       'assignment-create',
       'assignment-remove',
       'assignment-set-status',
+      'assignment-submit-record-page',
       'assignment-update',
     ])
   })
@@ -519,5 +545,186 @@ describe('能力定义与绑定表', () => {
       { label: '视频', value: 5 },
       { label: '视频+文字', value: 6 },
     ])
+  })
+})
+
+/**
+ * 「作业完成情况」页（`record/[assignmentId]/item-list.vue`）—— 作业管理列表行跳进去的隐藏子路由。
+ *
+ * 它不在菜单里，所以上一轮"按页面扫列表接口"的覆盖判据看不到它。
+ * 这里测**直接 import 的能力模块**（定义/实现）与**直接 import 的契约模块**：
+ * 它们还没接进 `src/index.js` 的目录（接线由派单方做）。
+ */
+type RecordCall = {
+  url: string
+  method: 'get' | 'post' | 'put' | 'delete'
+  params?: Record<string, unknown>
+  data?: unknown
+}
+
+function buildRecordCapability (results: Record<string, unknown> = {}) {
+  const calls: RecordCall[] = []
+  const request = async <T>(config: RecordCall): Promise<T> => {
+    calls.push(config)
+    return (config.url in results ? results[config.url] : undefined) as T
+  }
+  const cap = createAssignmentCapability(request as PortalRequest)
+  return { cap, calls }
+}
+
+describe('作业完成情况页（隐藏子路由）', () => {
+  it('两个能力挂在作业管理页上，write 按真实行为标注：分页查询其实是写', () => {
+    expect(assignmentRecordCapabilities.map((d) => d.id)).toEqual([
+      'assignment-static',
+      'assignment-submit-record-page',
+    ])
+    for (const definition of assignmentRecordCapabilities) {
+      expect(definition.pagePath).toBe(ASSIGNMENT_PAGE_PATH)
+      expect(definition.permission).toBe('/dashboard/assignment/assignment')
+    }
+    // 名字叫 Page 的那个每次查询都插短链 → 写；静态统计不写。
+    expect(assignmentRecordCapabilities.filter((d) => d.write).map((d) => d.id)).toEqual([
+      'assignment-submit-record-page',
+    ])
+  })
+
+  it('方法映射、能力定义、契约三者一一对应，且实现里真的有这两个方法', () => {
+    const ids = assignmentRecordCapabilities.map((d) => d.id)
+    expect(Object.keys(ASSIGNMENT_RECORD_METHODS).sort()).toEqual([...ids].sort())
+    expect(Object.keys(ASSIGNMENT_RECORD_AI_CONTRACTS).sort()).toEqual([...ids].sort())
+    expect(Object.keys(ASSIGNMENT_RECORD_METHOD_CONTRACTS).sort()).toEqual(
+      Object.values(ASSIGNMENT_RECORD_METHODS).map((method) => `assignment.${method}`).sort(),
+    )
+    const { cap } = buildRecordCapability()
+    for (const method of Object.values(ASSIGNMENT_RECORD_METHODS)) {
+      expect(typeof (cap as unknown as Record<string, unknown>)[method]).toBe('function')
+    }
+    for (const definition of assignmentRecordCapabilities) {
+      const contract = ASSIGNMENT_RECORD_AI_CONTRACTS[definition.id]!
+      expect(contract.effect).toBe(definition.write ? 'write' : 'read')
+      for (const param of definition.params) {
+        const input = contract.inputs[param.name]
+        expect(input, `${definition.id}.${param.name} 缺少契约`).toBeDefined()
+        expect(input!.meaning.length).toBeGreaterThan(4)
+      }
+    }
+  })
+
+  it('静态统计的参数**不含** order/orderField 与分页 —— 两套参数不同套', async () => {
+    const { cap, calls } = buildRecordCapability({ [ASSIGNMENT_STATIC_PATH]: { totalNumber: 3 } })
+    const stats = await cap.getRecordStatic({ assignmentId: 66, complete: 1 })
+    expect(calls[0]!.method).toBe('get')
+    expect(Object.keys(calls[0]!.params!)).toEqual([
+      'assignmentId', 'studentName', 'staffCode', 'complete', 'gradeId', 'lessonName', 'createTimeStart', 'createTimeEnd',
+    ])
+    expect(calls[0]!.params).toEqual({
+      assignmentId: 66, studentName: '', staffCode: '', complete: 1, gradeId: '', lessonName: '', createTimeStart: '', createTimeEnd: '',
+    })
+    expect(stats).toEqual({ totalNumber: 3 })
+    // 契约里也不能出现这两个参数，否则 AI 会以为统计接口能翻页
+    const inputs = ASSIGNMENT_RECORD_AI_CONTRACTS['assignment-static']!.inputs
+    expect(inputs.pageNo).toBeUndefined()
+    expect(inputs.pageSize).toBeUndefined()
+  })
+
+  it('分页查询的参数是 order → orderField → 表单字段 → pageNo → pageSize', async () => {
+    const { cap, calls } = buildRecordCapability({ [ASSIGNMENT_SUBMIT_RECORD_PAGE_PATH]: { list: [], total: 0 } })
+    await cap.listSubmitRecords({ assignmentId: '66' })
+    expect(calls[0]!.method).toBe('get')
+    expect(Object.keys(calls[0]!.params!)).toEqual([
+      'order', 'orderField', 'assignmentId', 'studentName', 'staffCode', 'complete', 'gradeId', 'lessonName',
+      'createTimeStart', 'createTimeEnd', 'pageNo', 'pageSize',
+    ])
+    expect(calls[0]!.params).toMatchObject({ order: '', orderField: '', assignmentId: '66', pageNo: 1, pageSize: 20 })
+  })
+
+  it('assignmentId 是必填：缺失或不是正整数时在发请求前拒绝', async () => {
+    const { cap, calls } = buildRecordCapability()
+    await expect(cap.getRecordStatic({} as unknown as { assignmentId: string })).rejects.toThrow('assignmentId')
+    await expect(cap.listSubmitRecords({ assignmentId: '0' })).rejects.toThrow('assignmentId')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('契约把"分页查询每次都在写短链"写成边界、消费提醒与幂等说明', () => {
+    const contract = ASSIGNMENT_RECORD_AI_CONTRACTS['assignment-submit-record-page']!
+    expect(contract.effect).toBe('write')
+    const boundaries = contract.boundaries.join(' ')
+    expect(boundaries).toContain('hr_study_short_url')
+    expect(boundaries).toContain('fileUploadUrl')
+    expect(boundaries).toContain('每一条')
+    expect(contract.consume.join(' ')).toContain('不要轮询')
+    expect(contract.idempotency).toContain('新增短链')
+    // fileUploadUrl 必须写清"每次不同"，否则调用方会把它当作业固定地址缓存
+    const url = contract.output.fields.find((f) => f.path === 'list[].fileUploadUrl')
+    expect(url?.meaning).toContain('本次查询')
+    expect(url?.meaning).toContain('不同')
+    // id 可能为空的语义（页面据此决定评分按钮）
+    expect(contract.output.fields.find((f) => f.path === 'list[].id')?.nullMeaning).toContain('没有提交记录')
+  })
+
+  it('契约如实记下时间筛选的前后端不一致（照页面发，但服务端收不到）', () => {
+    const warning = 'submitTimeStart'
+    for (const id of ['assignment-static', 'assignment-submit-record-page']) {
+      const contract = ASSIGNMENT_RECORD_AI_CONTRACTS[id]!
+      expect(contract.boundaries.join(' '), `${id} 没有写时间参数不一致`).toContain(warning)
+      expect(contract.boundaries.join(' ')).toContain('createTimeStart')
+      expect(contract.gaps?.length ?? 0).toBeGreaterThan(0)
+    }
+    // 能力定义里的参数说明也要带同一句，AI 在 describe 的参数表里就看得到
+    const definition = assignmentRecordCapabilities.find((d) => d.id === 'assignment-submit-record-page')!
+    const createTimeStart = definition.params.find((p) => p.name === 'createTimeStart')
+    expect(createTimeStart?.description).toContain('后端收不到')
+    // 参数名照页面原样，不擅自改成 submitTimeStart
+    expect(definition.params.some((p) => p.name === 'submitTimeStart')).toBe(false)
+  })
+
+  it('统计字段与 complete 的口径写在契约里', () => {
+    const staticContract = ASSIGNMENT_RECORD_AI_CONTRACTS['assignment-static']!
+    expect(staticContract.effect).toBe('read')
+    expect(staticContract.output.shape).toBe('object')
+    expect(staticContract.output.fields.find((f) => f.path === 'isTeacherCheck')?.values).toEqual({ '0': '不需要讲师评分', '1': '需要讲师评分' })
+    const pageContract = ASSIGNMENT_RECORD_AI_CONTRACTS['assignment-submit-record-page']!
+    const complete = pageContract.output.fields.find((f) => f.path === 'list[].complete')
+    expect(complete?.values).toEqual({ '0': '未提交', '1': '已提交', '2': '晚交' })
+    expect(pageContract.inputs.complete?.options?.map((o) => o.value)).toEqual([0, 1, 2])
+    expect(pageContract.inputs.gradeId?.lookup?.capabilityId).toBe('study-grade-search')
+  })
+})
+
+describe('本批 2 条"作业完成情况"契约通过项目自己的检查器（complete 档）', () => {
+  it('除"已声明缺口"以外零问题，且缺口提示必须存在', async () => {
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = (await import(validatorUrl)) as {
+      validateAiContract: (
+        id: string,
+        contract: unknown,
+        options?: Record<string, unknown>,
+      ) => Array<{ capabilityId: string; path: string; code: string; message: string }>
+    }
+    const ids = assignmentRecordCapabilities.map((definition) => definition.id)
+    // 检查器要按注册表核对 lookup / steps 指向的能力是否真的存在，所以这里把**被引用的**
+    // 那几份定义一起登记：本页原有六条、学习管理页弹窗那四条、以及 gradeId 的候选入口
+    // `study-grade-search` 所在的班级管理模块。只登记本批两条会让它们被判成 unknown-capability。
+    const registry = [
+      ...assignmentRecordCapabilities,
+      ...assignmentCapabilities,
+      ...studyRecordHiddenCapabilities,
+      ...studyRecordCapabilities,
+      ...studyGradeCapabilities,
+    ]
+    const options = {
+      profile: 'complete',
+      definitions: registry,
+      contracts: { ...ASSIGNMENT_RECORD_AI_CONTRACTS, ...STUDY_RECORD_HIDDEN_AI_CONTRACTS },
+    }
+    const issues = ids.flatMap((id) => validateAiContract(id, ASSIGNMENT_RECORD_AI_CONTRACTS[id], options))
+
+    // 与 study-lesson / study-record 两份同理：`incomplete-evidence` 是"存在已声明缺口"的固定提示。
+    const declaredGapNotices = issues.filter((issue) => issue.code === 'incomplete-evidence')
+    expect(declaredGapNotices).toHaveLength(ids.length)
+    expect(declaredGapNotices.every((issue) => issue.path === '$.gaps')).toBe(true)
+
+    const realIssues = issues.filter((issue) => issue.code !== 'incomplete-evidence')
+    expect(realIssues, JSON.stringify(realIssues, null, 2)).toEqual([])
   })
 })

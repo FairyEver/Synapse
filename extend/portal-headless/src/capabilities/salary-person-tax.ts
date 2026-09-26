@@ -11,6 +11,70 @@ export const SALARY_PERSON_TAX_MODULE_TYPE = 14
 const ROOT = '/salary/salarypersontax'
 const STAFF_ELIGIBILITY_URL = '/salary/staff-eligibility/check'
 
+/**
+ * 员工候选来源（`components/staff-select.vue:53`）。
+ *
+ * ## 页面是**全量翻页拉**，SDK 刻意不照抄
+ *
+ * `staff-select.vue` 用 `loopFetch(..., { pageSize: 200, maxPages: 100 })` 把
+ * 「包括退休离职员工」**全量拉一遍**（最坏 20 万条，实测本租户量级是几千人），
+ * 再把结果按 500 一批打到 `/salary/staff-eligibility/check` 过滤出可发薪的人。
+ * 这正是 conventions 第 11 条点名的那种长候选：无头不能照抄，会冲掉调用方上下文。
+ *
+ * ⇒ SDK 这一层**只做有界分页**（默认 20、上限 200），拒绝 `pageSize=-1` 这类全量请求；
+ * 想要"能发薪的员工候选"必须自己分页取，再把 `staffCode` 交给已经存在的
+ * `salary-person-tax-eligibility-check` 过滤。
+ *
+ * ⚠️ 这条接口**没有关键字筛选可用**：`HrStaffSelectDataScopeDTO` 上虽然声明了 `name`，
+ * 但 `HrStaffDao.xml` 的 `allStaffByPage` 的 `<where>` 里**只有** `is_del`、
+ * `organizationIdList`、`isFilterLeaveStaff` 和数据范围，**压根不拼 `name`** ——
+ * 传了也等于没传。所以这里**不暴露 `name`**：暴露一个会被静默忽略的筛选条件，
+ * 正是本仓库最不想要的那种"不报错但是错的"。
+ */
+const STAFF_PAGE_URL = '/org/staff/allStaffByPage'
+
+/** 页面自己的全量拉取分片大小；SDK 把它当作 `pageSize` 的**上限**。 */
+export const SALARY_PERSON_TAX_STAFF_PAGE_SIZE_MAX = 200
+const SALARY_PERSON_TAX_STAFF_DEFAULT_PAGE_SIZE = 20
+
+export type SalaryPersonTaxStaffQuery = {
+  /**
+   * 按所属组织收敛（含该组织的全部后代，后端用 `getDescendantByAncestor` 展开）。
+   *
+   * 页面自己**不传**这个字段（它要的是全量），SDK 提供它是为了在禁止全量拉取的前提下
+   * 仍能给出一个可控的收窄手段。
+   */
+  organizationId?: SalaryPersonTaxId | null
+  /**
+   * 是否只留在职序列的员工；后端在 `=1` 时加 `t1.status in (1,4,5)`（在职/返聘/在编不在岗）。
+   *
+   * 页面自己**不传**（它的"包括退休离职"语义就是不加这个条件）。
+   */
+  isFilterLeaveStaff?: number | null
+  pageNo?: number
+  pageSize?: number
+}
+
+export type SalaryPersonTaxStaffCandidate = {
+  /** 员工主键（`hr_staff.id`）；不是工号、不是用户ID。 */
+  id: SalaryPersonTaxId
+  /** 姓名。 */
+  name: string | null
+  /** 工号；调用资格检查时用的就是它。 */
+  staffCode: SalaryPersonTaxId | null
+  /** 身份证号。 */
+  idCard: string | null
+  /** 所属组织ID；不是组织名称。 */
+  organization: SalaryPersonTaxId | null
+  /** 在职状态：1 在职、2 离职、3 退休、4 返聘、5 在编不在岗。 */
+  status: number | null
+}
+
+export type SalaryPersonTaxStaffPage = {
+  list: SalaryPersonTaxStaffCandidate[]
+  total: number
+}
+
 export type SalaryPersonTaxId = string | number
 export type SalaryPersonTaxMonthRange = readonly [string | null | undefined, string | null | undefined] | readonly string[]
 export type SalaryPersonTaxQuery = {
@@ -224,6 +288,45 @@ function listParamsOf (query: SalaryPersonTaxQuery = {}): Record<string, unknown
     costDateEnd,
     order: 'desc',
     orderField: 'id',
+  }
+}
+
+function staffStatusOf (value: unknown, label: string): number | null {
+  if (value === undefined || value === null) return null
+  if (!Number.isSafeInteger(value)) throw new Error(`${label}必须为安全整数或null`)
+  return value as number
+}
+
+function staffPageParamsOf (query: SalaryPersonTaxStaffQuery = {}): Record<string, unknown> {
+  const rawPageNo = query.pageNo
+  const pageNo = rawPageNo === undefined ? 1 : rawPageNo
+  if (!Number.isSafeInteger(pageNo) || pageNo < 1) throw new Error('pageNo必须为正整数')
+  const rawPageSize = query.pageSize
+  const pageSize = rawPageSize === undefined ? SALARY_PERSON_TAX_STAFF_DEFAULT_PAGE_SIZE : rawPageSize
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > SALARY_PERSON_TAX_STAFF_PAGE_SIZE_MAX) {
+    throw new Error(`pageSize必须是1到${SALARY_PERSON_TAX_STAFF_PAGE_SIZE_MAX}之间的正整数；SDK不照抄页面的全量翻页`)
+  }
+  const organizationId = query.organizationId === undefined || query.organizationId === null || query.organizationId === ''
+    ? undefined
+    : idOf(query.organizationId, 'organizationId')
+  const rawFilter = query.isFilterLeaveStaff
+  let isFilterLeaveStaff: number | undefined
+  if (rawFilter !== undefined && rawFilter !== null) {
+    if (!Number.isSafeInteger(rawFilter)) throw new Error('isFilterLeaveStaff必须为安全整数')
+    isFilterLeaveStaff = rawFilter as number
+  }
+  return { organizationId, isFilterLeaveStaff, pageNo, pageSize }
+}
+
+function staffCandidateOf (value: unknown, index: number): SalaryPersonTaxStaffCandidate {
+  const row = objectOf(value, `员工候选[${index}]`)
+  return {
+    id: idOf(row.id, `员工候选[${index}].id`),
+    name: nullableTextOf(row.name, `员工候选[${index}].name`),
+    staffCode: row.staffCode === undefined || row.staffCode === null ? null : idOf(row.staffCode, `员工候选[${index}].staffCode`),
+    idCard: nullableTextOf(row.idCard, `员工候选[${index}].idCard`),
+    organization: row.organization === undefined || row.organization === null ? null : idOf(row.organization, `员工候选[${index}].organization`),
+    status: staffStatusOf(row.status, `员工候选[${index}].status`),
   }
 }
 
@@ -496,6 +599,18 @@ export function createSalaryPersonTaxCapability (request: PortalRequest) {
       if (!businessDate) throw new Error('businessDate不能为空')
       return eligibilityResultOf(await request<unknown>({ url: STAFF_ELIGIBILITY_URL, method: 'post', data: { staffCodes, businessDate } }))
     },
+
+    /**
+     * 分页读取员工候选（含离职/退休），供扣款费用表单的「员工」选择器或导入前的工号核对使用。
+     *
+     * 页面是 `pageSize=200 × 最多100页` 的全量翻页拉；SDK 只做有界分页，
+     * 见本文件 `STAFF_PAGE_URL` 的说明。要得到"能发薪的人"还要再调 eligibilityCheck。
+     */
+    async listStaffCandidates (query: SalaryPersonTaxStaffQuery = {}): Promise<SalaryPersonTaxStaffPage> {
+      const result = await request<{ list: unknown[]; total: number }>({ url: STAFF_PAGE_URL, method: 'get', params: staffPageParamsOf(query) })
+      if (!result || !Array.isArray(result.list) || !Number.isSafeInteger(result.total) || result.total < 0) throw new Error('员工分页响应缺少有效list或total')
+      return { list: result.list.map(staffCandidateOf), total: result.total }
+    },
   }
 }
 
@@ -521,6 +636,7 @@ export const SALARY_PERSON_TAX_METHODS = {
   'salary-person-tax-prepare-archive': 'prepareArchive',
   'salary-person-tax-archive': 'archive',
   'salary-person-tax-eligibility-check': 'eligibilityCheck',
+  'salary-person-tax-staff-page': 'listStaffCandidates',
 } as const
 
 export const salaryPersonTaxCapabilities: CapabilityDefinition[] = [
@@ -537,6 +653,7 @@ export const salaryPersonTaxCapabilities: CapabilityDefinition[] = [
   { id: 'salary-person-tax-prepare-archive', title: '准备归档扣款费用', write: false, params: idsParams },
   { id: 'salary-person-tax-archive', title: '归档扣款费用', write: true, params: idsParams },
   { id: 'salary-person-tax-eligibility-check', title: '检查扣款费用员工资格', write: false, params: [p('staffCodes', 'text', true, '已核实的员工工号数组'), p('businessDate', 'date', true, '资格检查业务日期')] },
+  { id: 'salary-person-tax-staff-page', title: '分页查询员工候选', write: false, params: [p('organizationId', 'text', false, '按所属组织收敛（含后代）；页面自己不发这个字段'), p('isFilterLeaveStaff', 'text', false, '等于1时只留在职序列（在职/返聘/在编不在岗）；页面自己不发这个字段'), p('pageNo', 'number', false, '从1开始；默认1'), p('pageSize', 'number', false, '默认20，上限200；SDK拒绝全量拉取')] },
 ].map(definition => ({
   ...definition,
   pagePath: SALARY_PERSON_TAX_PAGE_PATH,

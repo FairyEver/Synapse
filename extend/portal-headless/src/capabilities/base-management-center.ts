@@ -350,6 +350,99 @@ const LIST_PARAMS: ParamSpec[] = [
   { name: 'pageSize', kind: 'number', required: false, description: `每页条数，默认 ${DEFAULT_PAGE_SIZE}` },
 ]
 
+/**
+ * 负责人候选（`/sys/user/getUserListPage`）的**返回值投影**。
+ *
+ * 只留页面真正消费的两个字段：下拉的 `value: item.username` 与 `label: item.realName`
+ * （`portal-education-dropdown-student` 在传了 `fetch-page` 时就是这两句，见
+ * `app/portal/components/portal/education/dropdown/student/index.vue:88-92`）。
+ *
+ * ⚠️ **刻意不透传整个 `SysUserDTO`**：那个 DTO 里带着 `password` / `password2` / `salt`
+ * 三个字段（后端 `getUserListPageData` 走的是 `ConvertUtils.sourceToTarget(entity, SysUserDTO)`
+ * ——`BeanUtils.copyProperties`，同名字段照抄）。做法是**白名单**（只挑这两个字段），
+ * 与 `base-shell.ts` 处理 `sys/user/info` 的那条铁律一致（那里写着"黑名单漏一次就是一次凭据泄漏，
+ * 而且不会有任何测试变红"），也与本 SDK 拒绝 `/org/organization/getUserByType`
+ * （`attendance-team.ts` 文件头第 1 条）是同一个理由：不把凭据形状的东西送进调用方上下文。
+ * 范围上也站得住：这两个字段之外的数据页面既没显示、也不参与任何动作。
+ */
+export type ManagementCenterPersonRow = {
+  /** 用户名。**就是负责人字段要的「工号形式的 username」**，不是 `sys_user.id` */
+  username: string
+  /** 姓名。下拉的显示文本 */
+  realName: string
+}
+
+/**
+ * 后端 `HrSysUserServiceImpl.validatePage` 的上限：
+ * `pageNo ≥ 1`、`pageSize` 在 `1~500`（`MAX_LEGACY_USER_RESULTS = 500`），
+ * 越界直接 `IllegalArgumentException`。本地先挡，免得把 500 丢出去。
+ */
+export const PERSON_SEARCH_MAX_PAGE_SIZE = 500
+
+/**
+ * 负责人候选的查询条件。
+ *
+ * ⚠️ **必须先给关键字**（conventions 第 11 条 / 设计 D6 / H35）：这个接口不传 `name`
+ * 与 `username` 时返回的是**全租户在职且有组织的用户**分页（几千条量级），
+ * 页面的做法就是"无关键字也照样拉第一页"。无头照抄等于让调用方替 AI 猜人。
+ * 两种精确入口二选一：
+ *
+ * - `keyword` → 走后端的 `real_name like`（模糊）；
+ * - `username` → 走后端的 `username =`（精确相等，页面用它回显已选项）。
+ */
+export type ManagementCenterPersonQuery = {
+  /** 姓名关键字（模糊）。与 `username` 至少给一个 */
+  keyword?: string
+  /** 用户名（**精确相等**）。页面回显已选负责人时用它，一次查一条 */
+  username?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+/** 按契约里的固定顺序拼候选查询参数：`pageNo, pageSize, name?, username?` */
+export function buildPersonSearchParams (query: ManagementCenterPersonQuery = {}): Record<string, unknown> {
+  const params: Record<string, unknown> = {
+    pageNo: query.pageNo === undefined ? 1 : query.pageNo,
+    pageSize: query.pageSize === undefined ? 20 : query.pageSize,
+  }
+  // 页面两条调用各自只带其中一个，这里保持"给了才发"——与浏览器逐字段一致
+  if (query.keyword !== undefined && query.keyword !== '') params.name = query.keyword
+  if (query.username !== undefined && query.username !== '') params.username = query.username
+  return params
+}
+
+const PERSON_SEARCH_PARAMS: ParamSpec[] = [
+  {
+    name: 'keyword',
+    kind: 'search',
+    required: false,
+    description:
+      '姓名关键字（模糊）。**与 username 至少给一个**：这个接口无关键字时返回全租户在职用户分页，' +
+      '无头不照抄页面的"无关键字也拉第一页"（D6 / H35）。后端匹配的是 `real_name like`',
+  },
+  {
+    name: 'username',
+    kind: 'text',
+    required: false,
+    description:
+      '用户名，**精确相等**。用于回显已知的负责人（页面 `fetchSelectedStudents` 就是这么打的，一次查一条）',
+  },
+  {
+    name: 'pageNo',
+    kind: 'number',
+    required: false,
+    description: '页码，默认 1。后端要求 ≥1',
+  },
+  {
+    name: 'pageSize',
+    kind: 'number',
+    required: false,
+    description:
+      `每页条数，默认 20。后端要求 1~${PERSON_SEARCH_MAX_PAGE_SIZE}` +
+      '（`HrSysUserServiceImpl.validatePage` 的硬上限），越界后端直接抛错',
+  },
+]
+
 export const baseManagementCenterCapabilities: CapabilityDefinition[] = [
   {
     id: 'base-management-center-list',
@@ -358,6 +451,14 @@ export const baseManagementCenterCapabilities: CapabilityDefinition[] = [
     permission: BASE_MANAGEMENT_CENTER_PERMISSION,
     write: false,
     params: LIST_PARAMS,
+  },
+  {
+    id: 'base-management-center-person-search',
+    title: '按关键字查员工候选（负责人下拉）',
+    pagePath: BASE_MANAGEMENT_CENTER_PAGE_PATH,
+    permission: BASE_MANAGEMENT_CENTER_PERMISSION,
+    write: false,
+    params: PERSON_SEARCH_PARAMS,
   },
   {
     id: 'base-management-center-get',
@@ -513,6 +614,69 @@ export function createBaseManagementCenterCapability (request: PortalRequest) {
         url: '/study/base/studymanagementcenter/page',
         method: 'get',
         params: buildListParams(query),
+      })
+    },
+
+    /**
+     * 查**负责人候选**（`GET /sys/user/getUserListPage`）。只读。
+     *
+     * 页面上它是「负责人」那个下拉的数据源（`[mode]/[id].vue` 的 `fetchStudentPage`），
+     * 下拉的 `value` 是 `username`（工号形式）、`label` 是 `realName` ——
+     * 而 `create` 的 `commander` 要的就是这个 `username`，不是 `sys_user.id`。
+     *
+     * ⚠️ **必须先给关键字**（`keyword` 或 `username` 二选一）：后端无关键字时返回
+     * **全租户在职且组织非空**的用户分页（`buildUserListQuery` 的
+     * `isNotNull("organization_id").eq("status", 1)`），几千条量级。页面自己就是
+     * "无关键字也拉第一页"，无头照抄会把调用方上下文冲掉（D6 / H35）。
+     *
+     * ⚠️ 与 SDK 已有的 `base-user-search` 打的是**另一个端点**
+     * （`/admin-api/system/user/simple-page`，按 `nickname` 匹配、返回 `list[].id/realName`）：
+     * 那一个给的是 `sys_user.id`，本能力给的是 `username`。**两者不能互换** ——
+     * 本页 `commander` 要的是 `username`。
+     *
+     * 返回值经过投影，只有 `username` / `realName` 两个字段，理由见 `ManagementCenterPersonRow`。
+     */
+    searchPersons (
+      query: ManagementCenterPersonQuery = {},
+    ): Promise<{ list: ManagementCenterPersonRow[]; total: number }> {
+      const keyword = query.keyword === undefined ? '' : String(query.keyword).trim()
+      const username = query.username === undefined ? '' : String(query.username).trim()
+      if (keyword === '' && username === '') {
+        return Promise.reject(
+          new Error(
+            '负责人候选属于长选项参数：必须提供 keyword（姓名关键字）或 username（精确用户名），' +
+              '不允许无条件下全量拉取（设计 D6 / H35）。不知道关键字时可以直接问用户，' +
+              '或用 base-management-center-list 看现有负责人的写法。',
+          ),
+        )
+      }
+      const pageNo = query.pageNo === undefined ? 1 : query.pageNo
+      const pageSize = query.pageSize === undefined ? 20 : query.pageSize
+      if (!Number.isInteger(pageNo) || pageNo < 1) {
+        return Promise.reject(new Error('pageNo 必须是 ≥1 的整数（后端 validatePage 的判据）'))
+      }
+      if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > PERSON_SEARCH_MAX_PAGE_SIZE) {
+        return Promise.reject(
+          new Error(
+            `pageSize 必须是 1~${PERSON_SEARCH_MAX_PAGE_SIZE} 的整数（后端 validatePage 的硬上限）；` +
+              `不允许 pageSize = -1 这类全量拉取，收到的是 ${JSON.stringify(query.pageSize)}`,
+          ),
+        )
+      }
+      return request<{ list: ManagementCenterPersonRow[]; total: number }>({
+        url: '/sys/user/getUserListPage',
+        method: 'get',
+        params: buildPersonSearchParams({ keyword, username, pageNo, pageSize }),
+      }).then((page) => {
+        const list = Array.isArray(page?.list) ? page.list : []
+        const rows: ManagementCenterPersonRow[] = list.map((item) => {
+          const row = (item ?? {}) as Record<string, unknown>
+          return {
+            username: String(row.username ?? ''),
+            realName: String(row.realName ?? ''),
+          }
+        })
+        return { list: rows, total: Number(page?.total ?? 0) }
       })
     },
 

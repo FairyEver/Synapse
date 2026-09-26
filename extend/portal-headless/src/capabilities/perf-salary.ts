@@ -108,6 +108,11 @@ import type { CapabilityDefinition, ParamSpec } from './types.js'
  * 基准顺带落实了另一件原本只是推断的事：这些请求的**请求头里 `module-type: 13`**
  * （绩效管理），与 `page-catalog.json` 的 `moduleType` 一致。
  *
+ * ⚠️ **上面这张表说的是"页面挂载时发的那几条"**。管理分析还有一个**隐藏下钻页**
+ * （`./detail/item`，自查分析表格点姓名进入），它自己发三条只读 GET
+ * （`ANALYSIS_DEPARTMENT_DETAIL_URLS`）—— 那三条**没有基准**：要真的点进去才有流量。
+ * 它们的契约来自源码与 Java 实现的静态推导，逐条见该常量与 `docs/pages/管理分析.md`。
+ *
  * ---------------------------------------------------------------------------
  * ⚠️ 敏感字段：本组页面的响应里有工资与证件信息，**没有写进类型定义**
  * ---------------------------------------------------------------------------
@@ -155,7 +160,7 @@ export const PERF_ANALYSIS_PERSON_PAGE_PATH = '/dashboard/analysis/person/list'
 
 const VIEWS = 'app/portal/views/dashboard/hr'
 
-/** 六个路由文件，写进文档与排障时用得上 */
+/** 六个菜单页 + 一个隐藏下钻页的路由文件，写进文档与排障时用得上 */
 export const PERF_SALARY_ROUTE_FILES = {
   salaryMain: `${VIEWS}/salary/main/list.vue`,
   salaryAdjust: `${VIEWS}/salary/adjust/list.vue`,
@@ -163,6 +168,12 @@ export const PERF_SALARY_ROUTE_FILES = {
   blockMain: `${VIEWS}/block/main/list.vue`,
   analysisDepartment: `${VIEWS}/analysis/department/list.vue`,
   analysisPerson: `${VIEWS}/analysis/person/list.vue`,
+  /**
+   * 管理分析的**隐藏下钻页**（自查分析表格点姓名进入）。
+   * 菜单里没有它，但由 `actionItem()` 实际 push（`analysis/department/list.vue:625-641`），
+   * 所以它发的三个请求属于这一页的 SDK 能力范围（与 `study-course` 的隐藏路由同一判断）。
+   */
+  analysisDepartmentDetail: `${VIEWS}/analysis/department/detail/item.vue`,
 } as const
 
 // ---------------------------------------------------------------------------
@@ -213,6 +224,29 @@ export const ANALYSIS_DEPARTMENT_URLS = {
 
 /** 管理分析页「自查分析」表格。**POST**，`getDataListIsPage` 被注释掉 ⇒ 无分页参数 */
 export const ANALYSIS_DEPARTMENT_SELF_CHECK_URL = '/performance/statistics/homepage/selfCheck'
+
+/**
+ * 管理分析页**隐藏下钻页**（`./detail/item`）的三个 GET 端点。
+ *
+ * 这一页不是菜单项：自查分析表格里点「姓名」那一列走 `actionItem()`
+ * （`analysis/department/list.vue:625-641`）跳到 **`/dashboard/analysis/department/detail/item`**，
+ * 把 `protocolId` 等字段经 bridge 传过去。三个端点都**只收 `protocolId`**、都返回**列表**
+ * （不是分页包络），且与同页已有的 `selfCheck`（POST）**不是同一个端点** —— 别合并。
+ *
+ * | 端点 | 喂给卡片 | 请求形状 |
+ * | --- | --- | --- |
+ * | `selfAssessmentTaskCheckDetail` | 「考核任务」表格 | `useListPageModule` 默认通道（`getDataListIsPage` 默认 false）⇒ `order`/`orderField`/`protocolId` + `_t`，**无分页** |
+ * | `selfIndexCheckDetail` | 「考核指标」表格 | 直接 `http.get`，只有 `protocolId` + `_t` |
+ * | `selfCheckProfit` | 「利润工资」卡片 | 同上一行：直接 `http.get`，只有 `protocolId` + `_t` |
+ */
+export const ANALYSIS_DEPARTMENT_DETAIL_URLS = {
+  /** 「考核任务」→ `ProtocolDetailDTO[]` */
+  selfAssessmentTaskCheckDetail: '/performance/statistics/homepage/selfAssessmentTaskCheckDetail',
+  /** 「考核指标」→ `TargetSubassemblyDTO[]` */
+  selfIndexCheckDetail: '/performance/statistics/homepage/selfIndexCheckDetail',
+  /** 「利润工资」→ `ProtocolSubassemblyDTO[]`（实现在 `KpiHomepageServiceImpl:1838`，只收 `type=15`） */
+  selfCheckProfit: '/performance/statistics/homepage/selfCheckProfit',
+} as const
 
 /** 个人分析页的两个端点。**GET**，params 只有 `{ year, month }` + `_t` */
 export const ANALYSIS_PERSON_URLS = {
@@ -354,6 +388,175 @@ export type BlockMainRow = {
   [key: string]: unknown
 }
 
+/** 金额/分数原值：后端是 `BigDecimal`，序列化成数字或十进制字符串。SDK 不换算、不补齐精度。 */
+export type PerfDecimalValue = number | string | null
+
+/** 考核任务行的附件。页面只渲染 `fileName`（标签文字）与 `fileUrl`（新窗口打开）。 */
+export type AnalysisDepartmentTaskAttachment = {
+  id?: PerfSalaryId
+  /** 所属月度任务 id（与行的 `taskId` 同一个） */
+  taskId?: PerfSalaryId
+  /** 文件名，页面上的标签文字 */
+  fileName?: string
+  /** 文件地址，页面 `preview()` 用 `window.open` 打开；SDK 不下载它 */
+  fileUrl?: string
+  fileSize?: string
+  /** 1 图片 / 2 视频 / 3 pdf / 4 其他 */
+  fileType?: number | null
+  fileSuffix?: string | null
+  creatorName?: string | null
+  createTime?: string | null
+  [key: string]: unknown
+}
+
+/**
+ * 「考核任务」下钻（`selfAssessmentTaskCheckDetail`）的行 = `ProtocolDetailDTO`。
+ *
+ * ⚠️ **自评/领导评分各有三个分量，判定「是否已评」靠的是"分量 ≠ 基本分"**：
+ * 页面 `initSortData()`（`detail/item.vue:131-149`）按
+ * `baseCoreByLeader !== baseCore && baseCoreByLeader !== null` 优先、
+ * 其次 `baseCoreOneself !== baseCore && baseCoreOneself !== null` 把行分三档重排
+ * （**只影响页面显示顺序，不影响本能力返回的数组顺序**）。
+ * 页面上 `isSpecial === 1` 的行只显示「特殊：」那一项，不显示基本/超额两行。
+ */
+export type AnalysisDepartmentTaskRow = {
+  /** 月度任务 id（`hr_kpi_month_protocol_task.id`）。附件用同一个 id 关联，**不是**协议 id */
+  taskId?: PerfSalaryId
+  /** 月度重点工作内容 */
+  title?: string
+  /** 完成说明（SQL 里取的是 `self_evaluation`） */
+  content?: string
+  /** 基本分（应得） */
+  baseCore?: PerfDecimalValue
+  /** 自评基本分 */
+  baseCoreOneself?: PerfDecimalValue
+  /** 领导评分基本分 */
+  baseCoreByLeader?: PerfDecimalValue
+  /** 超额分（应得） */
+  overageScore?: PerfDecimalValue
+  /** 自评超额分 */
+  overageScoreOnSelf?: PerfDecimalValue
+  /** 领导评分超额分 */
+  overageScoreByLeader?: PerfDecimalValue
+  /** 1 表示特殊考核工作 */
+  isSpecial?: number | null
+  specialScore?: PerfDecimalValue
+  specialSelfScore?: PerfDecimalValue
+  specialLeaderScore?: PerfDecimalValue
+  /** 后端计算的自评总分（三项自评分之和）；字段缺席时才由 Java getter 现算 */
+  totalSelfScore?: PerfDecimalValue
+  /** 后端计算的领导评分总分（三项领导分之和） */
+  totalLeaderScore?: PerfDecimalValue
+  /** 该任务的附件列表；没有附件时是空数组 */
+  attachment?: AnalysisDepartmentTaskAttachment[]
+  [key: string]: unknown
+}
+
+/** 「考核指标」下钻里的一条标准线（`TargetDataDTO`）。 */
+export type AnalysisDepartmentIndexTargetLine = {
+  /** 线类型码，页面不渲染 */
+  lineType?: string | null
+  /** 线名称，页面「标准」一列显示的就是它 */
+  lineName?: string | null
+  /** 公式文本，页面不渲染（明细弹窗才用） */
+  formula?: string | null
+  /** 1~12 月的逐月数据，下标 = 月份 - 1 */
+  dataList?: PerfDecimalValue[] | null
+  /** 预测指标；页面「预测指标」一列取的是 `expected`，不是这一项 */
+  forecastIndicator?: PerfDecimalValue
+  /** 浮动比例 */
+  floatRatio?: PerfDecimalValue
+  /** 考核标准 */
+  assessmentStandards?: PerfDecimalValue
+  /** 预测指标，页面「预测指标」一列显示的就是它 */
+  expected?: PerfDecimalValue
+  [key: string]: unknown
+}
+
+/**
+ * 「考核指标」下钻（`selfIndexCheckDetail`）的行 = `TargetSubassemblyDTO`。
+ *
+ * ⚠️ **这一页的指标明细是"两跳"的**：本端点只给指标的骨架
+ * （`name`/`unit`/`score`/`targetList[].lineName`/`expected`），页面拿到之后**再对每一行**
+ * 打一次 `/performance/basedata/kpitarget/targetInfo` 去补 `name`/`unit`/`actual`
+ * 与整份 `targetList`（`detail/item.vue:220-241` 的 `handleDetail`）。
+ * 那第二个端点**不是本能力**（SDK 里也还没有对应能力），见契约的 `gaps`。
+ *
+ * `isUserImport === 1` 的行是后端从「考核导入」结果表拼出来的（`KpiHomepageServiceImpl:1149-1165`），
+ * 它的 `targetList` 只有一条「完成线」，`expected` 字段**不设**（只有 `forecastIndicator`）。
+ */
+export type AnalysisDepartmentIndexRow = {
+  /** 指标 id。页面用它去调 `targetInfo`，不是协议 id */
+  id?: PerfSalaryId
+  /** 指标名称（`isUserImport=1` 的行被后端改写成导入结果的名称） */
+  name?: string
+  /** 单位；页面在 `handleDetail` 失败时才回退显示 `'万元'` */
+  unit?: string
+  /** 考核分数（分母） */
+  score?: PerfDecimalValue
+  /** 实际分数（分子） */
+  actualScore?: PerfDecimalValue
+  /** 实际指标 */
+  actualIndicator?: PerfDecimalValue
+  /** 0 年度带的 / 1 月度新增的 */
+  resourceType?: number | null
+  /** 1 表示这条指标来自「考核导入」的结果表，不是协议里的指标组件 */
+  isUserImport?: number | null
+  targetList?: AnalysisDepartmentIndexTargetLine[]
+  [key: string]: unknown
+}
+
+/** 「利润工资」下钻里的一条利润线（`TargetDataDTO`，与指标线同一族）。 */
+export type AnalysisDepartmentProfitLine = AnalysisDepartmentIndexTargetLine & {
+  /** 本月预测利润（后端把 `forecastIndicator` 重写成 `dataList[month-1]`） */
+  forecastIndicator?: PerfDecimalValue
+}
+
+/** 「利润工资」下钻里的一行利润（`ProfitSubassemblyDTO`）。 */
+export type AnalysisDepartmentProfitItem = {
+  /** 利润 id */
+  id?: PerfSalaryId
+  /** 利润名称 */
+  name?: string
+  unit?: string
+  /** 利润比重（%） */
+  proportion?: PerfDecimalValue
+  /** 几线利润（1 四线利润） */
+  lineType?: number | null
+  /** 利润线数据 */
+  profitList?: AnalysisDepartmentProfitLine[]
+  /** 0 年度带的 / 1 月度新增的 */
+  resourceType?: number | null
+  /** 实际利润 */
+  actualIndicator?: PerfDecimalValue
+  /** 是否有限制：0 否 / 1 是 */
+  restricted?: number | null
+  /** 实际应得工资 */
+  actualMoney?: PerfDecimalValue
+  [key: string]: unknown
+}
+
+/**
+ * 「利润工资」下钻（`selfCheckProfit`）的行 = `ProtocolSubassemblyDTO`。
+ *
+ * ⚠️ **Controller 的签名是 `CommonResult<Object>`，返回类型只能从实现层看**：
+ * `KpiHomepageServiceImpl:1838` 返回 `List<ProtocolSubassemblyDTO>`，
+ * 并且**只把 `type == 15`（月度利润组件）的行收进来**，所以 `type` 恒为 `15`。
+ *
+ * `value` 是 `Object`：对这一族行来说它是 `ProfitSubassemblyDTO[]`（见上面的类型）。
+ * 页面只用第一行的 `value`（`detail/item.vue:256-260` 的 `newValue[0].value`）。
+ */
+export type AnalysisDepartmentProfitRow = {
+  id?: PerfSalaryId
+  /** 组件类型；本端点返回的行恒为 15（月度利润） */
+  type?: number
+  /** 组件能否删除：0 不能 / 1 能 */
+  canDel?: number | null
+  /** 组件值；type=15 时是 `AnalysisDepartmentProfitItem[]` */
+  value?: AnalysisDepartmentProfitItem[] | unknown
+  [key: string]: unknown
+}
+
 // ---------------------------------------------------------------------------
 // 查询条件
 // ---------------------------------------------------------------------------
@@ -432,6 +635,18 @@ export type AnalysisDepartmentSelfCheckQuery = {
   year?: number | string
   /** 月，数字 */
   month?: number | string
+}
+
+/**
+ * 管理分析**隐藏下钻页**三个端点的查询条件 —— 它们**只收 `protocolId`**。
+ *
+ * 页面这一层没有别的筛选控件：三个端点都是"给定一份月度协议，把它的某一类明细全查出来"。
+ * `order`/`orderField` 是 `useListPageModule` 给「考核任务」那张表加的默认键
+ * （钉死空串、不开放），另外两个端点连这两个键都没有。
+ */
+export type AnalysisDepartmentDetailQuery = {
+  /** 月度双赢协议 id；来自自查分析列表行的 `protocolId` */
+  protocolId: PerfSalaryId
 }
 
 /** 个人分析页查询条件 */
@@ -987,7 +1202,37 @@ const ANALYSIS_DEPARTMENT_SELF_CHECK_PARAMS: ParamSpec[] = [
   { name: 'month', kind: 'number', required: false, description: '月，**数字**。默认上月。用 buildDeptYearMonth 生成' },
 ]
 
+/**
+ * 隐藏下钻页三个端点共用的参数：只有一个 `protocolId`。
+ *
+ * 它**必填**：页面从路由 bridge 取（`detail/item.vue:113/157/248` 的 `bridge.protocolId`），
+ * 取不到时表单里是 `undefined`、qs 的 `skipNulls` 会把整个键丢掉 ——
+ * 也就是说**没有 protocolId 时页面自己也查不出东西**，所以 SDK 直接拒绝，不照抄"发空查询"。
+ *
+ * 值从自查分析表格那一行的 `protocolId` 来（`analysis/department/list.vue:625-641`
+ * 的 `actionItem(record)`），是**月度协议 id**，不是任务 id、也不是用户 id。
+ */
+const ANALYSIS_DEPARTMENT_PROTOCOL_PARAM: ParamSpec = {
+  name: 'protocolId',
+  kind: 'text',
+  required: true,
+  description:
+    '月度双赢协议 id。来自 `perf-analysis-department-self-check` 返回行的 `protocolId`' +
+    '（自查分析表格点姓名进入的下钻页就是按它查的）。是**协议 id**，不是 `taskId`、也不是用户 id 或工号',
+}
+
+/** 「考核任务」下钻：`useListPageModule` 的默认通道 ⇒ `order`/`orderField` 在、**分页不在** */
+const ANALYSIS_DEPARTMENT_TASK_DETAIL_PARAMS: ParamSpec[] = [
+  { name: 'order', kind: 'text', required: false, description: '排序方向。页面**没有这个控件**，列表模块加的，钉死空串' },
+  { name: 'orderField', kind: 'text', required: false, description: '排序字段。同上，钉死空串' },
+  ANALYSIS_DEPARTMENT_PROTOCOL_PARAM,
+]
+
+/** 「考核指标」与「利润工资」两个下钻：页面是直接 `http.get`，**连 `order`/`orderField` 都没有** */
+const ANALYSIS_DEPARTMENT_DETAIL_GET_PARAMS: ParamSpec[] = [ANALYSIS_DEPARTMENT_PROTOCOL_PARAM]
+
 const ANALYSIS_PERSON_PARAMS: ParamSpec[] = [
+
   {
     name: 'year',
     kind: 'date',
@@ -1260,6 +1505,35 @@ export const perfSalaryCapabilities: CapabilityDefinition[] = [
     write: false,
     params: ANALYSIS_PERSON_PARAMS,
   },
+  // ⚠️ 下面三条与上面 `perf-analysis-department-self-check` **共用同一个 pagePath**，
+  //    这是**有意**的：它们是自查分析表格点「姓名」进入的隐藏下钻页
+  //    （`/dashboard/analysis/department/detail/item`）实际发的请求，菜单里没有这一页
+  //    （与 `study-course` 的隐藏消息页同一形态）。合成一条会把"按工号筛人"
+  //    和"按协议查一个人的明细"混成一个契约。三条**都只收 `protocolId`**、都返回列表。
+  {
+    id: 'perf-analysis-department-self-assessment-task-check-detail',
+    title: '查询管理分析下钻页的考核任务明细（按协议）',
+    pagePath: PERF_ANALYSIS_DEPARTMENT_PAGE_PATH,
+    permission: '/dashboard/analysis/department',
+    write: false,
+    params: ANALYSIS_DEPARTMENT_TASK_DETAIL_PARAMS,
+  },
+  {
+    id: 'perf-analysis-department-index-check-detail',
+    title: '查询管理分析下钻页的考核指标明细（按协议）',
+    pagePath: PERF_ANALYSIS_DEPARTMENT_PAGE_PATH,
+    permission: '/dashboard/analysis/department',
+    write: false,
+    params: ANALYSIS_DEPARTMENT_DETAIL_GET_PARAMS,
+  },
+  {
+    id: 'perf-analysis-department-self-check-profit',
+    title: '查询管理分析下钻页的利润工资明细（按协议）',
+    pagePath: PERF_ANALYSIS_DEPARTMENT_PAGE_PATH,
+    permission: '/dashboard/analysis/department',
+    write: false,
+    params: ANALYSIS_DEPARTMENT_DETAIL_GET_PARAMS,
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -1307,6 +1581,29 @@ function deptSelfCheckOrder (): OrderedField[] {
     { name: 'staffCodeList', defaultValue: null },
     { name: 'year', defaultValue: ym.year },
     { name: 'month', defaultValue: ym.month },
+  ]
+}
+
+/**
+ * 隐藏下钻页「考核任务」那一张表的参数顺序。
+ *
+ * `rrList = useListPageModule({ getDataListURL: '…/selfAssessmentTaskCheckDetail',
+ * form: { protocolId: bridge.protocolId }, columns: [...] })`
+ * （`detail/item.vue:110-123`），随后第 125 行 `rrList.logicFetch()` 直接拉。
+ *
+ * 于是 `list.js:473-490` 的拼装就是 `{ order: '', orderField: '', ...{ protocolId } }`
+ * ⇒ 键序 **`order → orderField → protocolId`**，末尾补 `_t`（GET）。
+ *
+ * ⚠️ **没有 `pageNo`/`pageSize`**：`getDataListIsPage` **不传就是 `false`**
+ * （`list.js:226`），这一页从头到尾没写过它，也没写过 `customLoad`。
+ * 分页开关关掉时 `list.js:493-496` 走的是 `listSet(result)` ——
+ * **后端返回的数组本身就是列表**，所以 SDK 也返回数组，不是 `{ list, total }`。
+ */
+function deptTaskDetailOrder (): OrderedField[] {
+  return [
+    { name: 'order', defaultValue: '' },
+    { name: 'orderField', defaultValue: '' },
+    { name: 'protocolId', defaultValue: '' },
   ]
 }
 
@@ -1612,6 +1909,80 @@ export function createPerfSalaryCapability (
         url: ANALYSIS_DEPARTMENT_SELF_CHECK_URL,
         method: 'post',
         data: buildParams(deptSelfCheckOrder(), query as Record<string, unknown>, { staffCodeList }),
+      })
+    },
+
+    /**
+     * 管理分析**隐藏下钻页**（`./detail/item`）的「考核任务」表格。只读。
+     *
+     * `GET /performance/statistics/homepage/selfAssessmentTaskCheckDetail`
+     * —— `useListPageModule` 的默认通道，所以参数在 **query** 上、会补 `_t`，
+     * 键序 `order → orderField → protocolId`，**没有分页**（`getDataListIsPage` 默认 false）。
+     *
+     * ⚠️ 返回的是**数组本身**（不是 `{ list, total }`）：分页开关关掉时
+     * `list.js:493-496` 直接把后端 `data` 当列表用。别按分页包络解。
+     *
+     * ⚠️ 数组顺序是**后端的顺序**。页面显示前会按
+     * `baseCoreByLeader !== baseCore` / `baseCoreOneself !== baseCore` 重排成三档
+     * （`detail/item.vue:131-149` 的 `initSortData`）—— 那是页面显示顺序，
+     * 本能力**不照抄**，因为改了就与端点的返回不逐字段一致（见契约 consume）。
+     */
+    listAnalysisDepartmentTaskCheckDetail (
+      query: AnalysisDepartmentDetailQuery,
+    ): Promise<AnalysisDepartmentTaskRow[]> {
+      const protocolId = idOf(query?.protocolId, 'protocolId')
+      return requestAnalysisDepartment<AnalysisDepartmentTaskRow[]>({
+        url: ANALYSIS_DEPARTMENT_DETAIL_URLS.selfAssessmentTaskCheckDetail,
+        method: 'get',
+        params: buildParams(deptTaskDetailOrder(), { ...query, protocolId } as Record<string, unknown>),
+      })
+    },
+
+    /**
+     * 管理分析**隐藏下钻页**的「考核指标」表格。只读。
+     *
+     * `GET /performance/statistics/homepage/selfIndexCheckDetail`
+     * —— 页面这里是直接 `http.get(url, { params: { protocolId } })`
+     * （`detail/item.vue:153-163`），所以**只有 `protocolId` + `_t`**，
+     * 连 `order`/`orderField` 都没有；也没有分页。
+     *
+     * ⚠️ 返回的 `targetList` 是**协议里存的那份**；页面拿到之后还会对每一行再打一次
+     * `/performance/basedata/kpitarget/targetInfo` 去补 `name`/`unit`/`actual` 与整份
+     * `targetList`（`detail/item.vue:220-241`）。**那第二个端点不是本能力**
+     * —— SDK 目前也没有对应能力，见契约的 `gaps`。
+     */
+    listAnalysisDepartmentIndexCheckDetail (
+      query: AnalysisDepartmentDetailQuery,
+    ): Promise<AnalysisDepartmentIndexRow[]> {
+      const protocolId = idOf(query?.protocolId, 'protocolId')
+      return requestAnalysisDepartment<AnalysisDepartmentIndexRow[]>({
+        url: ANALYSIS_DEPARTMENT_DETAIL_URLS.selfIndexCheckDetail,
+        method: 'get',
+        params: { protocolId },
+      })
+    },
+
+    /**
+     * 管理分析**隐藏下钻页**的「利润工资」卡片。只读。
+     *
+     * `GET /performance/statistics/homepage/selfCheckProfit`
+     * —— 与上面那条同一个形状：直接 `http.get`（`detail/item.vue:244-254`），
+     * 只有 `protocolId` + `_t`，没有排序、没有分页。
+     *
+     * ⚠️ **Controller 写的是 `CommonResult<Object>`，真实返回类型只能从实现层看**：
+     * `KpiHomepageServiceImpl:1838` 返回 `List<ProtocolSubassemblyDTO>`，
+     * 且**只收 `type == 15`（月度利润组件）的行** ⇒ 响应里 `type` 恒为 `15`。
+     * 返回条数不固定（协议里可以挂多个利润组件）；页面只取**第一条**的 `value`
+     * （`detail/item.vue:256-260`），本能力把整个数组交出去，选哪条由调用方定。
+     */
+    listAnalysisDepartmentProfitCheck (
+      query: AnalysisDepartmentDetailQuery,
+    ): Promise<AnalysisDepartmentProfitRow[]> {
+      const protocolId = idOf(query?.protocolId, 'protocolId')
+      return requestAnalysisDepartment<AnalysisDepartmentProfitRow[]>({
+        url: ANALYSIS_DEPARTMENT_DETAIL_URLS.selfCheckProfit,
+        method: 'get',
+        params: { protocolId },
       })
     },
 

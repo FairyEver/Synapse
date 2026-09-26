@@ -469,6 +469,238 @@ export const assignmentCapabilities: CapabilityDefinition[] = [
   },
 ]
 
+/**
+ * 作业完成情况页（`record/[assignmentId]/item-list.vue`，本节点新增）。
+ *
+ * 它不在菜单里，是作业管理列表行跳进去的隐藏子路由，所以上一轮的"按页面扫列表接口"
+ * 没有看到它。它比本文件上面那六个能力**多一个前提**：整页的数据都挂在
+ * 路由参数 `assignmentId` 上 —— 页面里唯一的作业筛选就是这个路由参数，没有控件。
+ *
+ * 与 `contracts-study-course.ts` 那一轮同样的分工：这一组单独导出，
+ * **还没接进 `src/capabilities/index.ts` / `invoke.ts` / `contracts-business.ts`**，
+ * 由派单方统一接线。
+ *
+ * | 能力 | 页面位置 | 请求 | 会不会写 |
+ * | --- | --- | --- | --- |
+ * | `assignment-static` | 顶部统计卡片（`item-list.vue:130`） | `GET /study/statistics/studyassignmentsubmitrecord/assignmentStatic` | 不写 |
+ * | `assignment-submit-record-page` | 表格 `getDataListURL`（`item-list.vue:92`） | `GET /study/statistics/studyassignmentsubmitrecord/assignmentPage` | **写**（每条记录插一条短链） |
+ */
+export const ASSIGNMENT_RECORD_PAGE_PATH = `${ASSIGNMENT_PAGE_PATH}/record/[assignmentId]`
+
+export const ASSIGNMENT_STATIC_PATH = '/study/statistics/studyassignmentsubmitrecord/assignmentStatic'
+export const ASSIGNMENT_SUBMIT_RECORD_PAGE_PATH = '/study/statistics/studyassignmentsubmitrecord/assignmentPage'
+
+/**
+ * 顶部统计卡片（`AssignmentStaticDTO`）。
+ *
+ * 四个数字是后端按**未分页的整份名单**算的（`getAssignmentStatic` 里的 `records` 是
+ * 同一条件的全长列表），所以它们与表格当前页无关。
+ */
+export type AssignmentStatic = {
+  /** 作业名称 */
+  assignmentName?: string | null
+  /** 学员总数 */
+  totalNumber?: number | null
+  /** 已交作业人数 */
+  submitNumber?: number | null
+  /** 未交作业人数 */
+  unSubmitNumber?: number | null
+  /** 晚交作业人数 */
+  lateSubmitNumber?: number | null
+  /** 这份作业是否需要讲师评分：0 否 / 1 是（决定评分弹窗是"打分"还是"送花"） */
+  isTeacherCheck?: number | null
+  [key: string]: unknown
+}
+
+/** 作业完成情况表格的一行（`AssignmentPageDTO`） */
+export type AssignmentSubmitRecordRow = {
+  /** 提交记录 id；**没有提交记录时这一行也可能为 null**（页面据此决定"评分"按钮是否渲染） */
+  id?: string | number | null
+  studentName?: string | null
+  /** 学员工号；评分弹窗用它查答案 */
+  staffCode?: string | number | null
+  gradeId?: string | number | null
+  gradeName?: string | null
+  lessonId?: string | number | null
+  lessonName?: string | null
+  /** 班课环节 id；评分弹窗用它当 linkId */
+  linkId?: string | number | null
+  /** 作业提交时间 */
+  submitTime?: string | null
+  /** 提交状态：0 未提交 / 1 已提交 / 2 晚交（字典 `assignment_record_complete_type`） */
+  complete?: number | null
+  /** 自评分 */
+  selfScore?: number | null
+  /** 自评说明（"自评说明"按钮的数据来源） */
+  selfScoreInfo?: string | null
+  /** 导师评分 */
+  teacherScore?: number | null
+  /** 自评时间 */
+  selfScoreTime?: string | null
+  /**
+   * **本接口每次调用都为这一行新签发的**短链地址（`fileUploadUrl`），
+   * 页面的"提交作业"按钮就是 `window.open(record.fileUploadUrl)`。
+   * 它不是作业的固定地址，同一行两次查询拿到的值不同。
+   */
+  fileUploadUrl?: string | null
+  [key: string]: unknown
+}
+
+export type AssignmentRecordQuery = {
+  /** 作业要求 id；页面取自路由参数 `assignmentId` */
+  assignmentId: string | number
+  /** 学员姓名，模糊匹配 */
+  studentName?: string
+  /** 学员工号（等值） */
+  staffCode?: string | number
+  /** 完成状态 0 未提交 / 1 已提交 / 2 晚交 */
+  complete?: number | ''
+  /** 所属班级 id；用 `study-grade-search` 先取候选 */
+  gradeId?: string | number
+  /** 班课名称，模糊匹配 */
+  lessonName?: string
+  /** 提交时间起 `YYYY-MM-DD HH:mm:ss`；用 buildCreateTimeRange 生成 */
+  createTimeStart?: string
+  /** 提交时间止，**开区间**（结束日 +1 天）；用 buildCreateTimeRange 生成 */
+  createTimeEnd?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+/**
+ * `assignmentStatic` 的参数顺序 —— 逐字对齐页面 `item-list.vue:129-137`：
+ * 它先 `omit(formState, ['submitTime'])` 再补两个时间字段。
+ *
+ * ⚠️ 与 `assignmentPage` **不同**：这里**没有** `order` / `orderField`，
+ * 也**没有** `pageNo` / `pageSize`（它是一次算全量统计的请求，不是分页列表）。
+ */
+const ASSIGNMENT_STATIC_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'assignmentId', defaultValue: '' },
+  { name: 'studentName', defaultValue: '' },
+  { name: 'staffCode', defaultValue: '' },
+  { name: 'complete', defaultValue: '' },
+  { name: 'gradeId', defaultValue: '' },
+  { name: 'lessonName', defaultValue: '' },
+  { name: 'createTimeStart', defaultValue: '' },
+  { name: 'createTimeEnd', defaultValue: '' },
+]
+
+/**
+ * `assignmentPage` 的参数顺序 —— `useListPageModule` 的 `logicFetch` 拼法
+ * （`common/libs/renren/list.js:473-483`）：`order → orderField → convertFetchForm 的返回值 → pageNo → pageSize`。
+ * `convertFetchForm` 把表单里的 `submitTime` 换成 `createTimeStart` / `createTimeEnd`。
+ */
+const ASSIGNMENT_RECORD_PAGE_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  ...ASSIGNMENT_STATIC_ORDER,
+  { name: 'pageNo', defaultValue: 1 },
+  { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/** 按契约里的**固定顺序**拼参数：调用方的实参顺序不影响 qs 序列化结果（D20） */
+function buildOrderedParams (
+  order: ReadonlyArray<{ name: string; defaultValue: unknown }>,
+  query: Record<string, unknown>,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {}
+  for (const item of order) {
+    const value = query[item.name]
+    params[item.name] = value === undefined ? item.defaultValue : value
+  }
+  return params
+}
+
+/**
+ * 完成状态（字典 `assignment_record_complete_type`）。
+ *
+ * 取值 0/1/2 有后端两处独立证据（`AssignmentPageDTO.complete` 的 Schema 注释、
+ * `assignmentStatic` 里按 `case 0/1/2` 分类计数的 switch）；**字典里的中文 label 本节点没有读到**，
+ * 这里给的是后端注释上的说法。
+ */
+const ASSIGNMENT_COMPLETE_OPTIONS = [
+  { label: '未提交', value: 0 },
+  { label: '已提交', value: 1 },
+  { label: '晚交', value: 2 },
+] as const
+
+const GRADE_ID_PARAM = {
+  name: 'gradeId',
+  kind: 'search' as const,
+  required: false,
+  description: '所属班级 id。**先问用户关键字**再调 study-grade-search 取候选，不要猜 id',
+  lookup: { capabilityId: 'study-grade-search', keywordParam: 'keyword' },
+}
+
+const RECORD_COMMON_PARAMS = [
+  { name: 'studentName', kind: 'text' as const, required: false, description: '学员姓名，模糊匹配' },
+  { name: 'staffCode', kind: 'text' as const, required: false, description: '学员工号（等值），不是用户 ID' },
+  {
+    name: 'complete',
+    kind: 'enum' as const,
+    required: false,
+    description: '完成状态（字典 assignment_record_complete_type）',
+    options: ASSIGNMENT_COMPLETE_OPTIONS.map((item) => ({ label: item.label, value: item.value })),
+  },
+  GRADE_ID_PARAM,
+  { name: 'lessonName', kind: 'text' as const, required: false, description: '班课名称，模糊匹配' },
+  {
+    name: 'createTimeStart',
+    kind: 'date' as const,
+    required: false,
+    description: '提交时间起 YYYY-MM-DD HH:mm:ss；用 buildCreateTimeRange 生成。⚠️ 见能力说明：这一对参数后端收不到',
+  },
+  {
+    name: 'createTimeEnd',
+    kind: 'date' as const,
+    required: false,
+    description: '提交时间止，**开区间**（结束日 +1 天）；用 buildCreateTimeRange 生成。⚠️ 同 createTimeStart',
+  },
+]
+
+export const assignmentRecordCapabilities: CapabilityDefinition[] = [
+  {
+    id: 'assignment-static',
+    title: '查询作业完成情况统计',
+    pagePath: ASSIGNMENT_PAGE_PATH,
+    permission: ASSIGNMENT_PERMISSION,
+    write: false,
+    params: [
+      { name: 'assignmentId', kind: 'text', required: true, description: '作业要求 id；来自 assignment-list 行 list[].id（隐藏子路由的 assignmentId）' },
+      ...RECORD_COMMON_PARAMS,
+    ],
+  },
+  {
+    id: 'assignment-submit-record-page',
+    title: '查询作业完成情况列表',
+    pagePath: ASSIGNMENT_PAGE_PATH,
+    permission: ASSIGNMENT_PERMISSION,
+    // 名字叫 Page，但每查一页就给每条记录 INSERT 一条短链并回写 fileUploadUrl。
+    write: true,
+    params: [
+      { name: 'assignmentId', kind: 'text', required: true, description: '作业要求 id；来自 assignment-list 行 list[].id（隐藏子路由的 assignmentId）' },
+      ...RECORD_COMMON_PARAMS,
+      { name: 'pageNo', kind: 'number', required: false, description: '页码，默认 1' },
+      { name: 'pageSize', kind: 'number', required: false, description: `每页条数，默认 ${DEFAULT_PAGE_SIZE}` },
+    ],
+  },
+]
+
+/** 页面方法名与能力 ID 的固定映射；接线由派单方负责（见本节顶部注释）。 */
+export const ASSIGNMENT_RECORD_METHODS = {
+  'assignment-static': 'getRecordStatic',
+  'assignment-submit-record-page': 'listSubmitRecords',
+} as const
+
+function assignmentRecordIdOf (value: unknown, label: string): string | number {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${label}必须为正整数ID`)
+    return value
+  }
+  if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) return value
+  throw new Error(`${label}必须为正整数ID`)
+}
+
 export function createAssignmentCapability (request: PortalRequest) {
   return {
     /**
@@ -486,6 +718,51 @@ export function createAssignmentCapability (request: PortalRequest) {
           pageNo: query.pageNo ?? 1,
           pageSize: query.pageSize ?? DEFAULT_PAGE_SIZE,
         },
+      })
+    },
+
+    /**
+     * 作业完成情况页顶部的统计卡片：`GET /study/statistics/studyassignmentsubmitrecord/assignmentStatic`。
+     *
+     * 参数顺序照页面（`order`/`orderField`/分页都没有），
+     * 四个数字是后端按整份名单算的，与表格当前页无关。
+     *
+     * ⚠️ `createTimeStart` / `createTimeEnd` 是**页面真的会发**的参数名
+     * （`item-list.vue` 的 `convertFetchForm` 把 `submitTime` 区间转成这两个键），
+     * 但后端 DTO `AssignmentPageSelectDTO` 上只有 `submitTimeStart` / `submitTimeEnd`，
+     * 所以这一对**在服务端收不到、筛选不生效**。SDK 照页面原样发，不擅自改名。
+     */
+    async getRecordStatic (query: AssignmentRecordQuery): Promise<AssignmentStatic> {
+      const assignmentId = assignmentRecordIdOf(query?.assignmentId, '作业完成情况assignmentId')
+      return request<AssignmentStatic>({
+        url: ASSIGNMENT_STATIC_PATH,
+        method: 'get',
+        params: buildOrderedParams(ASSIGNMENT_STATIC_ORDER, { ...query, assignmentId } as unknown as Record<string, unknown>),
+      })
+    },
+
+    /**
+     * 作业完成情况表格：`GET /study/statistics/studyassignmentsubmitrecord/assignmentPage`。
+     *
+     * ⚠️ **名字叫 Page，实际每调一次都在写**：后端对返回的**每一条**记录
+     * `studyShortUrlDao.insert(...)` 插一条短链，再把签名 URL 回写到 `fileUploadUrl`
+     * （`StudyAssignmentSubmitRecordServiceImpl:381-395`）。所以
+     * ① 反复翻页/重查会持续累积短链行，**不要拿它当轮询接口**；
+     * ② 同一行的 `fileUploadUrl` 每次查询都不同，"提交作业"按钮打开的地址也每次不同。
+     * 按 `write: true` 登记。
+     */
+    async listSubmitRecords (query: AssignmentRecordQuery): Promise<PageResult<AssignmentSubmitRecordRow>> {
+      const assignmentId = assignmentRecordIdOf(query?.assignmentId, '作业完成情况assignmentId')
+      const pageSize = query?.pageSize ?? DEFAULT_PAGE_SIZE
+      return request<PageResult<AssignmentSubmitRecordRow>>({
+        url: ASSIGNMENT_SUBMIT_RECORD_PAGE_PATH,
+        method: 'get',
+        params: buildOrderedParams(ASSIGNMENT_RECORD_PAGE_ORDER, {
+          ...query,
+          assignmentId,
+          pageNo: query?.pageNo ?? 1,
+          pageSize,
+        } as unknown as Record<string, unknown>),
       })
     },
 

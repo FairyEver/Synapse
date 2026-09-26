@@ -112,6 +112,41 @@ add('hr-internal-staff-import-post-transfer', base({ purpose: '把xlsx/xls职务
 add('hr-internal-staff-history-list', base({ purpose: '读取当前内部员工历史入口的变更记录分页。', effect: 'read', inputs: { staffId: param('员工ID；从详情页历史按钮传入。', 'hr-internal-staff-get.id', { required: false, type: 'string | number' }), operatorName: param('操作人筛选。', '历史页操作人输入框', { required: false, type: 'string' }), startTime: param('开始时间，YYYY-MM-DD HH:mm:ss。', '历史页开始时间', { required: false, type: 'string' }), endTime: param('结束时间，YYYY-MM-DD HH:mm:ss。', '历史页结束时间', { required: false, type: 'string' }), pageNo: param('从1开始页码。', 'Portal分页', { required: false, type: 'number' }), pageSize: param('每页条数，10/20/50/100。', 'Portal分页', { required: false, type: 'number' }) }, output: historyOutput, consume: ['保留记录id作为historyDetail目标；changeFieldCount是字段数量不是列表长度。'], steps: [{ role: 'optional', when: '用户查看某条历史', capabilityId: 'hr-internal-staff-history-detail', mapping: { id: 'result.list[].id' }, instruction: '读取逐字段变更项。' }], completion: '返回当前历史筛选的一页和total。', idempotency: null }))
 add('hr-internal-staff-history-detail', base({ purpose: '读取一条内部员工变更历史的逐字段详情。', effect: 'read', inputs: { id: param('变更记录ID。', 'hr-internal-staff-history-list.list[].id', { required: true, type: 'string | number' }) }, output: historyDetailOutput, consume: ['用changeItems逐项展示dataType、changeAction、fieldName、oldValue、newValue和changeDesc；oldValue/newValue是文本快照，不自动转换成当前字典名称。'], steps: [], completion: '获得一条完整变更记录及其字段变化。', idempotency: null }))
 
+const postOrgTreeOutput: AiContract['output'] = {
+  shape: 'object[]',
+  fields: [
+    field('$', 'object[]', '组织树根节点数组（**树**，不是分页结构）：每个节点的 children 递归。'),
+    field('[]', 'object', '一个组织节点。'),
+    field('[].id', 'string | number', '组织 id。职务变动的 beforeOrganizationId / afterOrganizationId 用的就是它。', { constraints: ['Java Long 可能序列化成字符串，按原样保留'] }),
+    field('[].pid', 'string | number | null', '父组织 id；根节点的值是后端原值（0 或 null），不要自行归一。', { nullable: true, nullMeaning: '后端未返回（根节点）' }),
+    field('[].name', 'string | null', '组织名称。', { nullable: true, nullMeaning: '后端未返回' }),
+    field('[].fullPath', 'string | null', '组织全路径。⚠️ 这条查询由实体直接转 DTO，fullPath 不是表字段，通常为 null —— 此时 SDK 复刻页面的兜底：用「父路径 / 自身名称」拼出来。', { nullable: true, nullMeaning: '后端未返回，SDK 已用父路径+名称兜底' }),
+    field('[].isHavePost', 'number | null', '是否有编制：**1 = 有编制，或就是该员工当前所在组织**；**0 = 只是祖先节点**（页面把这类选项**置灰**）。', { nullable: true, values: { '1': '有编制（可选）', '0': '无编制（页面置灰）' }, nullMeaning: '后端未返回' }),
+    field('[].children', 'object[]', '子节点；没有子节点时是空数组（不是 null）。', { optional: true }),
+  ],
+  empty: '[] 表示后端没有返回任何有编制的组织；响应不是数组会抛错，不降级为空树。',
+}
+
+add('hr-internal-staff-post-org-tree', base({
+  purpose: '读取职务变动里「变动后组织」的候选树：有编制的组织结构树（含它们的祖先节点，并可按员工工号并入其当前组织）。只读。',
+  effect: 'read',
+  inputs: {
+    staffCode: param('员工工号。传了它后端会把**这名员工当前所在的组织**也并进候选集，所以给自己做职务变动时应当传。', '当前内部员工详情/列表行的 staffCode（不是 id）', { required: false, type: 'string | number', omitted: '只返回有编制的组织及其祖先，不并入任何人当前的组织' }),
+    id: param('内部员工记录ID。页面会发它，但后端签名只绑 staffCode（`getHavePostOrgTree(Long staffCode)`），这个键会被忽略 —— 保留是为了与浏览器逐字段一致。', 'Page [mode]/[id].vue 的 rrForm.formState.id', { required: false, type: 'string | number', omitted: '不发该参数（后端行为不变）' }),
+  },
+  output: postOrgTreeOutput,
+  consume: [
+    '页面把树**拍平**后当选项：`isHavePost === 0` 的节点要禁用（那是只有层级意义、没有编制的祖先）。SDK 返回的是树，拍平与禁用由调用方按同一条规则做。',
+    '用节点的 id 作为职务变动的 afterOrganizationId；name / fullPath 只用于展示，不能反过来当 id。',
+    '这不是「全部组织树」：返回集是「有编制的组织 ∪ 该员工所在组织」的**所有祖先**，没有编制的旁支组织不在里面。',
+  ],
+  steps: [
+    { role: 'optional', when: '用户确认了变动后的组织', capabilityId: 'hr-internal-staff-prepare-update', instruction: '把选中节点的 id 作为 afterOrganizationId 放进 prepareUpdate.changes.postTransferList；该子表只有显式出现在 changes 里才会被作为全量发送。' },
+  ],
+  completion: '返回可用于职务变动选择器的组织树；读取本身不修改任何员工字段。',
+  idempotency: null,
+}))
+
 export const HR_INTERNAL_STAFF_AI_CONTRACTS = contracts
 export const HR_INTERNAL_STAFF_METHOD_CONTRACTS: Record<string, AiContract> = Object.fromEntries(
   Object.entries(HR_INTERNAL_STAFF_METHODS).map(([id, method]) => [`hrInternalStaff.${method}`, { ...HR_INTERNAL_STAFF_AI_CONTRACTS[id]!, boundaries: [...HR_INTERNAL_STAFF_AI_CONTRACTS[id]!.boundaries, '直接方法使用该分组的同名方法；写操作遵守prepare→submit→回查，取消仅存在于prepare之后且不会撤销已提交请求。'] }]),

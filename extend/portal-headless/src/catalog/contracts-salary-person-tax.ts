@@ -2,7 +2,7 @@ import type { AiContract, AiField, AiParameter } from './ai-contract.js'
 import { SALARY_PERSON_TAX_METHODS, salaryPersonTaxCapabilities } from '../capabilities/salary-person-tax.js'
 
 const definitions = new Map(salaryPersonTaxCapabilities.map(definition => [definition.id, definition]))
-const field = (path: string, type: string, meaning: string): AiField => ({ path, type, meaning, optional: true, nullable: true })
+const field = (path: string, type: string, meaning: string, extra: Partial<AiField> = {}): AiField => ({ path, type, meaning, optional: true, nullable: true, ...extra })
 
 const rowFields: AiField[] = [
   field('list[].id', 'string | number', '扣款主记录ID；编辑、删除和选中导出使用此ID'),
@@ -157,6 +157,91 @@ const contracts: Record<string, AiContract> = {
   'salary-person-tax-prepare-archive': base('salary-person-tax-prepare-archive', '准备归档扣款费用记录。', { shape: '{ draft: { ids: string[] | number[], status: 2 } }', fields: [field('draft.ids', 'string[] | number[]', '不重复的未归档扣款主记录ID'), field('draft.status', '2', '固定归档状态')], empty: 'ids为空或重复时准备失败。' }, ['展示归档数量并等待用户确认；取消确认不发送请求。']),
   'salary-person-tax-archive': base('salary-person-tax-archive', '归档扣款费用记录。', eligibilityOutput, ['执行prepareArchive→用户确认→提交status=2；读取eligible/excluded回执后重新查询。'], 'write'),
   'salary-person-tax-eligibility-check': base('salary-person-tax-eligibility-check', '按业务日期检查员工是否可办理个税专项扣款。', eligibilityOutput, ['先展示eligibleStaffCodes和excludedStaffList，再允许用户把符合资格的staffCode交给表单；不能把未检查的员工工号直接当成可办理。']),
+  'salary-person-tax-staff-page': {
+    ...base('salary-person-tax-staff-page', '分页读取员工候选（含离职/退休），给出扣款费用表单「员工」选择器需要的工号、姓名和身份证号。', {
+      shape: '{ list: array, total: integer }',
+      fields: [
+        field('$', 'object', '员工候选分页结果。'),
+        field('list', 'array', '当前页员工，不是全部员工。'),
+        field('list[]', 'object', '一名员工（SQL 只 select 了这六列）。'),
+        field('list[].id', 'string | number', '员工主键（hr_staff.id）；不是工号、不是系统用户ID。'),
+        field('list[].name', 'string', '姓名。', { nullable: true, nullMeaning: '后端未返回姓名。' }),
+        field('list[].staffCode', 'string | number', '工号；资格检查与表单回填用的就是它。', { nullable: true, nullMeaning: '后端未返回工号。' }),
+        field('list[].idCard', 'string', '身份证号；页面选择器用它回填 idCard 字段。', { nullable: true, nullMeaning: '后端未返回身份证号。' }),
+        field('list[].organization', 'string | number', '所属组织ID；不是组织名称。', { nullable: true, nullMeaning: '后端未返回组织。' }),
+        field('list[].status', 'integer', '在职状态。', { nullable: true, values: { '1': '在职', '2': '离职', '3': '退休', '4': '返聘', '5': '在编不在岗' }, nullMeaning: '后端未返回状态。' }),
+        field('total', 'integer', '符合筛选条件的员工总数，不是当前页长度。'),
+      ],
+      empty: 'list=[]且total=0表示当前筛选没有员工；权限、网络或响应形状错误会抛错，不降级为空页。total>0 而 list=[] 只说明当前 pageNo 越界。',
+    }, [
+      '按 total 递增 pageNo 取完所需范围；页面选择器展示的是 `${name}(${staffCode})`，但回填给表单/资格检查的是 staffCode。',
+      '拿到 staffCode 后必须再调 salary-person-tax-eligibility-check（同一天的 businessDate）才能判断谁可办理；本能力只给"有哪些员工"，不给"谁能办"。',
+      'idCard 可以直接回填表单的身份证字段，但不要用它当员工标识去调用其它接口。',
+      '员工规模是几千人，不要为了"看全"把 pageSize 顶到上限反复翻页——先按 organizationId 收窄再分页。',
+    ]),
+    whenToUse: '需要在扣款费用页面给用户列员工候选（选择器或工号核对）时使用；它不含"能否办理个税专项扣款"的判断，那一步是 eligibilityCheck。',
+    inputs: {
+      organizationId: {
+        meaning: '按所属组织收敛候选（后端会展开该组织的全部后代）。',
+        source: '用户指定的组织；不在本页表单里，页面自己不发这个字段',
+        type: 'string | number',
+        required: false,
+        nullable: true,
+        omitted: '不带组织条件，按数据范围返回全部可见员工。',
+        nullMeaning: '同省略，不按组织筛选。',
+        constraints: ['安全正整数或无前导零的正整数字符串；不是组织名称'],
+      },
+      isFilterLeaveStaff: {
+        meaning: '是否只留在职序列的员工：等于 1 时后端加 status in (1,4,5)（在职/返聘/在编不在岗）。',
+        source: '调用方筛选意图；页面自己不发这个字段（它的语义是"包括退休离职"）',
+        type: 'integer',
+        required: false,
+        nullable: true,
+        omitted: '不加该条件，返回含离职/退休在内的员工。',
+        nullMeaning: '同省略。',
+        constraints: ['数值 1 是唯一被后端识别的取值；其它值等于不加条件。'],
+      },
+      pageNo: {
+        meaning: '从1开始的页码。',
+        source: '调用方分页状态',
+        type: 'integer',
+        required: false,
+        omitted: 'SDK使用1。',
+        constraints: ['正整数'],
+      },
+      pageSize: {
+        meaning: '每页条数。',
+        source: '调用方分页状态',
+        type: 'integer',
+        required: false,
+        omitted: 'SDK使用20（页面自己的分片是200，但页面是循环全量拉，SDK 不照抄）。',
+        constraints: ['1 到 200 的整数；SDK 在发请求前拒绝更大值和 -1，避免把几千人拉进调用方上下文'],
+      },
+    },
+    boundaries: [
+      '只覆盖 /dashboard/salary/person-tax 页面「员工」选择器的候选来源；使用 platform 实例并发送 module-type=14。',
+      '这条接口没有可用的关键字筛选：DTO 上虽然声明了 name，但 DAO 的 allStaffByPage SQL 的 where 里只有 is_del、organizationIdList、isFilterLeaveStaff 和数据范围，压根不拼 name，因此 SDK 不暴露 name —— 暴露一个被静默忽略的筛选会把调用方引向错误结论。',
+      'SDK 只做有界分页，拒绝 -1 与超大 pageSize：页面用 pageSize=200×最多100页 全量拉（conventions 第 11 条明确禁止照抄）。',
+      '返回的行只含 SQL 选出的六列（id/name/staffCode/idCard/organization/status）；DTO 上其它字段（薪资等级、成本中心、联系方式等）不是这条 SQL 的产出，SDK 不补齐也不解释。',
+      '本能力不判断员工能否办理个税专项扣款，也不写任何数据。',
+    ],
+    gaps: [
+      '未启动浏览器、未取得独立网络基准、未在真实测试环境执行该读请求；字段与语义来自固定检出的 Portal 组件、Java Controller/DTO/DAO XML 与离线断言。',
+      '组织收窄（organizationId → 全部后代）与 isFilterLeaveStaff 的实际过滤效果未在真实租户验证；页面自己不发这两个参数，SDK 提供它们是为了在禁止全量拉取的前提下仍可收窄。',
+      'name 被后端 SQL 忽略这件事读自 HrStaffDao.xml 的 allStaffByPage 原文（where 里没有 name 条件），没有真实环境抓包复核。',
+      'Portal/Java 固定检出未按任务约束 pull 到远端最新。',
+    ],
+    steps: [
+      {
+        role: 'required',
+        when: '用户要从候选里挑人办理扣款',
+        capabilityId: 'salary-person-tax-eligibility-check',
+        mapping: { staffCodes: 'result.list[].staffCode', businessDate: 'context.businessDate' },
+        instruction: '把本页员工的 staffCode 批量交给资格检查（同一天的业务日期，页面用 formatDay() 当天）；只有 eligibleStaffCodes 里的工号才能进入表单，excludedStaffList 要如实展示原因。',
+      },
+    ],
+    completion: '返回当前筛选下的员工页；这只是候选来源，是否可办理仍以 eligibilityCheck 的回执为准。',
+  },
 }
 
 export const SALARY_PERSON_TAX_AI_CONTRACTS: Record<string, AiContract> = Object.fromEntries(Object.keys(SALARY_PERSON_TAX_METHODS).map(id => [id, contracts[id]!]))

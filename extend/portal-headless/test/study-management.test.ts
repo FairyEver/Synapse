@@ -8,7 +8,7 @@ import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import type { PortalRequest } from '../src/capabilities/meeting-room.js'
 
 import { createStudyStudentCapability } from '../src/capabilities/study-student.js'
-import { createStudyGradeCapability } from '../src/capabilities/study-grade.js'
+import { createStudyGradeCapability, studyGradeCapabilities } from '../src/capabilities/study-grade.js'
 import {
   buildStudyLessonTimeRange,
   createStudyLessonCapability,
@@ -21,6 +21,7 @@ import { createStudyRecordCapability } from '../src/capabilities/study-record.js
 import {
   buildStudyStatisticsGradeRange,
   buildStudyStatisticsLessonTimeRange,
+  buildStudyStatisticsTeacherScoreTimeRange,
   buildStudyStatisticsTeacherTimeRange,
   createStudyStatisticsCapability,
   dropEmptyParams,
@@ -541,6 +542,18 @@ describe('讲师三页 —— 与浏览器基准逐字段一致（D20）', () =>
 // 能力定义
 // ---------------------------------------------------------------------------
 
+/**
+ * 学习管理域这三份能力文件里**允许是写操作**的能力 ID。
+ *
+ * 逐条对应：外部讲师学员创建（saveTeacher）、讲师类型保存（.lay）、评价设置题目保存。
+ * 任何一条新写能力出现时都必须显式加到这里 —— 这是有意的手工闸门。
+ */
+const WRITE_CAPABILITY_IDS = new Set([
+  'study-teacher-save-teacher',
+  'study-teacher-level-save',
+  'study-appraise-setting-save',
+])
+
 describe('能力定义：页面路径与目录一致，且没有两个能力指向同一页', () => {
   const catalog = JSON.parse(
     readFileSync(join(here, '../generated/page-catalog.json'), 'utf8'),
@@ -554,7 +567,9 @@ describe('能力定义：页面路径与目录一致，且没有两个能力指�
     ]
     for (const def of all) {
       expect(catalog.items.some((i) => i.menuPath === def.pagePath), `${def.id} 的 pagePath 不在目录里`).toBe(true)
-      expect(def.write).toBe(def.id === 'study-teacher-save-teacher')
+      // 写能力必须**逐个点名**：这条断言原先写的是 `def.write === (def.id === 'study-teacher-save-teacher')`，
+      // 那时这一族只有一条写能力；本轮补了讲师类型保存与评价设置保存，改成显式清单比原来的表达式更紧。
+      expect(def.write).toBe(WRITE_CAPABILITY_IDS.has(def.id))
     }
   })
 
@@ -568,5 +583,275 @@ describe('能力定义：页面路径与目录一致，且没有两个能力指�
       'study-teacher-list', 'study-teacher-level-list', 'study-appraise-setting-list',
     ]
     expect(new Set(ids).size).toBe(16)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+// 统计五页的**下钻子路由 / 弹窗**（本轮补齐的七条）
+//
+// 这七条没有浏览器基准（`baseline/study-statistics.browser.json` 只抓了五页列表），
+// 所以参数形状的判据是**两个固定检出的源码**：前端 `list.vue`/`item-list.vue`/弹窗组件，
+// 以及后端 controller 的签名。测试里逐条把这两个出处钉住，源码漂移就会红。
+//
+// 断言的是**请求最终形态**（URL 上的有序 query / JSON 化的 body），不是能力收到的那层对象：
+// 请求层会给 platform 实例补 `/admin-api` 与 `_t`，也把 body 序列化成字符串 ——
+// 这些都是要一并核对的真实行为。
+// ---------------------------------------------------------------------------
+
+describe('统计下钻七条 —— 参数装配与关键语义', () => {
+  function build () {
+    const { calls, at } = makeSdk()
+    const cap = createStudyStatisticsCapability(
+      at(STUDY_STATISTICS_STUDENT_PAGE_PATH),
+      at(STUDY_STATISTICS_TEACHER_PAGE_PATH),
+      at(STUDY_STATISTICS_LESSON_PAGE_PATH),
+      at(STUDY_STATISTICS_GRADE_PAGE_PATH),
+      at(STUDY_STATISTICS_LEARNING_PAGE_PATH),
+    )
+    return { calls, cap }
+  }
+
+  /** URL 上的 query 键顺序（去掉请求层加的 `_t`） */
+  const keysOf = (call?: CapturedCall): string[] =>
+    queryPairs(String(call?.url ?? ''))
+      .filter(([key]) => key !== '_t')
+      .map(([key]) => key)
+
+  const pairsOf = (call?: CapturedCall): Record<string, string> =>
+    Object.fromEntries(queryPairs(String(call?.url ?? '')).filter(([key]) => key !== '_t'))
+
+  /** POST 的 body：请求层已经把它序列化成 JSON 字符串 */
+  const bodyOf = (call?: CapturedCall): Record<string, unknown> =>
+    typeof call?.data === 'string' ? JSON.parse(call.data) as Record<string, unknown> : (call?.data ?? {}) as Record<string, unknown>
+
+  it('学员班课明细列表：route.query 来的四项默认**不发**，键序与列表模块一致', async () => {
+    const { cap, calls } = build()
+    await cap.listStudentLessons()
+    // 4 个 undefined 的项被 qs 的 skipNulls 丢掉：URL 上只剩 11 个键（与页面一致）
+    expect(keysOf(calls[0])).toEqual([
+      'order', 'orderField', 'staffName', 'mobile', 'lessonTitle', 'lessonType', 'gradeId',
+      'startTimeCondition', 'endTimeCondition', 'pageNo', 'pageSize',
+    ])
+    // route.query 取不到就是 undefined：页面这几个也一样不发（与同页 gradeId 的空串不同）
+    const pairs = pairsOf(calls[0])
+    for (const key of ['staffCode', 'isStarted', 'lessonId', 'status']) {
+      expect(Object.prototype.hasOwnProperty.call(pairs, key), `${key} 不该出现`).toBe(false)
+    }
+    expect(pairs.gradeId).toBe('')
+    expect(pairs.pageNo).toBe('1')
+    expect(pairs.pageSize).toBe('20')
+  })
+
+  it('学员班课明细列表：给了 route.query 那几项就照发（且不改变位置）', async () => {
+    const { cap, calls } = build()
+    await cap.listStudentLessons({ staffCode: '2026050801', isStarted: 1, lessonId: 198577, status: 3 })
+    expect(pairsOf(calls[0])).toMatchObject({
+      staffCode: '2026050801', isStarted: '1', lessonId: '198577', status: '3',
+    })
+    // 位置不变：staffCode 仍在第 3 位、status 仍在分页参数之前
+    const keys = keysOf(calls[0])
+    expect(keys.indexOf('staffCode')).toBe(2)
+    expect(keys.indexOf('status')).toBeLessThan(keys.indexOf('pageNo'))
+  })
+
+  it('学员班课明细页：**不分页**，参数只有 order/orderField/staffCode/lessonId', async () => {
+    const { cap, calls } = build()
+    await cap.listStudentLessonDetail({ staffCode: '2026050801', lessonId: 198577 })
+    expect(String(calls[0]?.url)).toContain('/study/statistics/studentLessonDetail')
+    expect(keysOf(calls[0])).toEqual(['order', 'orderField', 'staffCode', 'lessonId'])
+  })
+
+  it('讲师讲授课程明细：startTime 是**单值**（不是 +1 天的区间）', async () => {
+    const { cap, calls } = build()
+    await cap.listTeacherCourses({ staffCode: 'S1', type: 1, startTime: '2026-09-01 00:00:00' })
+    expect(keysOf(calls[0])).toEqual([
+      'order', 'orderField', 'staffCode', 'type', 'startTime', 'pageNo', 'pageSize',
+    ])
+    expect(pairsOf(calls[0]).startTime).toBe('2026-09-01%2000%3A00%3A00')
+    expect(Object.prototype.hasOwnProperty.call(pairsOf(calls[0]), 'endTime')).toBe(false)
+  })
+
+  it('讲师讲授班课明细：六个筛选字段都在分页参数之前', async () => {
+    const { cap, calls } = build()
+    await cap.listTeacherLessons({ title: '晨课堂', appraiseNumMin: 1, avgScoreMax: 5 })
+    expect(keysOf(calls[0])).toEqual([
+      'order', 'orderField', 'staffCode', 'title', 'appraiseNumMin', 'appraiseNumMax',
+      'avgScoreMin', 'avgScoreMax', 'pageNo', 'pageSize',
+    ])
+  })
+
+  it('讲师得分明细：字段名是 startTimeFrom/startTimeEnd（不是 endTime），且 +1 天', async () => {
+    const { cap, calls } = build()
+    await cap.listTeacherScores({
+      staffCode: 'S1',
+      ...buildStudyStatisticsTeacherScoreTimeRange('2026-09-01', '2026-09-15'),
+    })
+    expect(keysOf(calls[0])).toEqual([
+      'order', 'orderField', 'staffCode', 'allScoreMin', 'allScoreMax',
+      'startTimeFrom', 'startTimeEnd', 'pageNo', 'pageSize',
+    ])
+    const pairs = pairsOf(calls[0])
+    expect(decodeURIComponent(pairs.startTimeFrom ?? '')).toBe('2026-09-01 00:00:00')
+    // 结束日 +1 天（开区间），不是 2026-09-15 —— 少这一天是静默的
+    expect(decodeURIComponent(pairs.startTimeEnd ?? '')).toBe('2026-09-16 00:00:00')
+  })
+
+  it('学习/转发明细：POST 到带 /admin-api 的路径，body 键序 lessonId, staffId, actionType', async () => {
+    const { cap, calls } = build()
+    await cap.listLearningActionDetails({ lessonId: 123, staffId: 456, actionType: 5 })
+    const call = calls[0]
+    expect(String(call?.url)).toContain('/admin-api/hr/zhdj-study-statics/action-details')
+    expect(String(call?.url).startsWith('/admin-api/admin-api')).toBe(false)
+    expect(call?.method).toBe('post')
+    expect(Object.keys(bodyOf(call))).toEqual(['lessonId', 'staffId', 'actionType'])
+    expect(bodyOf(call)).toEqual({ lessonId: 123, staffId: 456, actionType: 5 })
+  })
+
+  it('学习/转发明细：actionType 只收 1 与 5（页面只有这两列入口），2/3/4 在发请求前拒绝', async () => {
+    const { cap, calls } = build()
+    await expect(
+      cap.listLearningActionDetails({ lessonId: 1, staffId: 2, actionType: 2 }),
+    ).rejects.toThrow(/actionType/)
+    await expect(cap.listLearningActionDetails({ lessonId: 1, staffId: 2, actionType: 1 })).resolves.toBeTruthy()
+    expect(calls).toHaveLength(1)
+  })
+
+  it('学习/转发明细：lessonId 与 staffId 缺一不可', async () => {
+    const { cap, calls } = build()
+    await expect(cap.listLearningActionDetails({ lessonId: '', staffId: 2, actionType: 1 })).rejects.toThrow(/lessonId/)
+    await expect(cap.listLearningActionDetails({ lessonId: 1, staffId: '', actionType: 1 })).rejects.toThrow(/staffId/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('课堂内容：数组拼成逗号分隔串，且**没有** order/pageNo 那一套', async () => {
+    const { cap, calls } = build()
+    await cap.listGradeLessonRecords({ lessonIds: [198577, 198578] })
+    expect(String(calls[0]?.url)).toContain('/study/statistics/getGradeLessonRecord')
+    expect(keysOf(calls[0])).toEqual(['lessonIds'])
+    expect(pairsOf(calls[0]).lessonIds).toBe('198577%2C198578')
+  })
+
+  it('课堂内容：空数组 / 空串在发请求前拦住（后端对空值是静默返回空列表）', async () => {
+    const { cap, calls } = build()
+    await expect(cap.listGradeLessonRecords({ lessonIds: [] })).rejects.toThrow(/不能为空数组/)
+    await expect(cap.listGradeLessonRecords({ lessonIds: '  ' })).rejects.toThrow(/不能为空/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('七个能力的元数据：pagePath 绑可达的父菜单页、且全是只读', () => {
+    const expected: Record<string, string> = {
+      'study-statistics-student-lesson-list': STUDY_STATISTICS_STUDENT_PAGE_PATH,
+      'study-statistics-student-lesson-detail': STUDY_STATISTICS_STUDENT_PAGE_PATH,
+      'study-statistics-teacher-course-list': STUDY_STATISTICS_TEACHER_PAGE_PATH,
+      'study-statistics-teacher-lesson-list': STUDY_STATISTICS_TEACHER_PAGE_PATH,
+      'study-statistics-teacher-score-list': STUDY_STATISTICS_TEACHER_PAGE_PATH,
+      'study-statistics-learning-action-details': STUDY_STATISTICS_LEARNING_PAGE_PATH,
+      'study-statistics-grade-lesson-record': STUDY_STATISTICS_GRADE_PAGE_PATH,
+    }
+    for (const [id, pagePath] of Object.entries(expected)) {
+      const definition = studyStatisticsCapabilities.find(item => item.id === id)
+      expect(definition, `${id} 没有能力定义`).toBeDefined()
+      expect(definition?.pagePath).toBe(pagePath)
+      expect(definition?.write).toBe(false)
+    }
+  })
+
+  it('能力定义与两个固定检出的源码逐条对上（源码漂移就会红）', () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const views = 'app/portal/views/dashboard/education/statistics'
+    const read = (root: string, path: string): string => readFileSync(join(root, path), 'utf8')
+
+    const studentItemList = read(portalRoot, `${views}/student/lesson/item-list.vue`)
+    expect(studentItemList).toContain("getDataListURL: '/study/statistics/studentLessonStatisticsList'")
+    expect(studentItemList).toContain('startTimeCondition: data.date')
+    expect(read(portalRoot, `${views}/student/lesson/detail/[lessonId].vue`))
+      .toContain("getDataListURL: '/study/statistics/studentLessonDetail'")
+
+    expect(read(portalRoot, `${views}/teacher/course/[staffCode]/item-list.vue`))
+      .toContain("getDataListURL: '/study/statistics/teacherCourseList'")
+    expect(read(portalRoot, `${views}/teacher/lesson/[staffCode]/item-list.vue`))
+      .toContain("getDataListURL: '/study/statistics/teacherLessonList'")
+    const score = read(portalRoot, `${views}/teacher/score/[staffCode]/item-list.vue`)
+    expect(score).toContain("getDataListURL: '/study/statistics/teacherScoreList'")
+    expect(score).toContain('startTimeFrom:')
+    expect(score).toContain('startTimeEnd:')
+
+    const actionDetails = read(portalRoot, `${views}/learning/components/action-details.vue`)
+    expect(actionDetails).toContain("'/admin-api/hr/zhdj-study-statics/action-details'")
+    const learningList = read(portalRoot, `${views}/learning/list.vue`)
+    expect(learningList).toContain('hasView: 1')
+    expect(learningList).toContain('hasForward: 5')
+
+    const record = read(portalRoot, `${views}/grade/components/record.vue`)
+    expect(record).toContain('/study/statistics/getGradeLessonRecord')
+    expect(record).toContain('params: { lessonIds: props.lessonIds }')
+
+    const controller = read(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/study/statistics/controller/StudyStatisticsController.java')
+    expect(controller).toContain('studentLessonDetail(Long staffCode, Long lessonId)')
+    expect(controller).toContain('getGradeLessonRecord(String lessonIds)')
+    const service = read(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/study/statistics/service/impl/StatisticsServiceImpl.java')
+    expect(service).toContain('StringUtils.isBlank(lessonIds)')
+    expect(service).toContain('Collections.reverseOrder()')
+  })
+})
+
+describe('统计下钻七条的 AI 说明契约', () => {
+  const load = async (): Promise<Record<string, import('../src/catalog/ai-contract.js').AiContract>> => {
+    const mod = await import('../src/catalog/contracts-study-statistics.js')
+    return mod.STUDY_STATISTICS_AI_CONTRACTS
+  }
+
+  it('每条都有契约，并通过结构校验（含未登记/重复路径等可验证引用）', async () => {
+    const contracts = await load()
+    const ids = Object.keys(contracts)
+    expect(ids.sort()).toEqual([
+      'study-statistics-grade-lesson-record',
+      'study-statistics-learning-action-details',
+      'study-statistics-student-lesson-detail',
+      'study-statistics-student-lesson-list',
+      'study-statistics-teacher-course-list',
+      'study-statistics-teacher-lesson-list',
+      'study-statistics-teacher-score-list',
+    ])
+    // 逐条校验，而不是 `validateAiContracts`：本文件是**增量**，同批另五条列表契约在
+    // contracts-business.ts 里；用后者会报出一堆 missing-contract（那不是在查本文件的问题），
+    // 而 references 又要能查到跨域的候选能力（study-grade-search 等），所以 definitions
+    // 传的是学习域三份能力文件的并集。
+    const definitions = new Map(
+      [...studyGradeCapabilities, ...studyStatisticsCapabilities, ...studyTeacherCapabilities]
+        .map(item => [item.id, item] as const),
+    )
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = await import(validatorUrl) as {
+      validateAiContract: (id: string, contract: unknown, options?: unknown) => Array<{ code: string }>
+    }
+    const issues = ids.flatMap(id => validateAiContract(id, contracts[id], { definitions }))
+    expect(issues).toEqual([])
+  })
+
+  it('关键语义：数组端点、倒序、题号归属、ID 不能互换、无基准', async () => {
+    const contracts = await load()
+    // 三个不分页端点的返回值必须是数组，而不是 {list,total}
+    for (const id of [
+      'study-statistics-student-lesson-detail',
+      'study-statistics-learning-action-details',
+      'study-statistics-grade-lesson-record',
+    ]) {
+      expect(contracts[id]?.output.shape, id).toBe('object[]')
+    }
+    // 课堂内容：后端按字符串倒序处理，返回顺序不代表输入顺序
+    expect(contracts['study-statistics-grade-lesson-record']?.consume.join(' ')).toContain('字符串倒序')
+    // 得分明细的第二个时间字段名必须写清楚（与讲师统计页不同名）
+    expect(contracts['study-statistics-teacher-score-list']?.inputs.startTimeEnd?.meaning).toContain('startTimeEnd')
+    // 1~5 题均分的题号含义由评价设置决定，不能自行编造
+    expect(contracts['study-statistics-teacher-lesson-list']?.consume.join(' ')).toContain('study-appraise-setting-list')
+    // 四类 ID 不能互换这条边界必须在
+    expect(contracts['study-statistics-student-lesson-list']?.boundaries.join(' ')).toContain('ID 不能互换')
+    // actionType 的取值域：页面只有 1 与 5
+    expect(contracts['study-statistics-learning-action-details']?.inputs.actionType?.options?.map(item => item.value)).toEqual([1, 5])
+    // 没有浏览器基准这件事必须如实写进 gaps
+    expect(contracts['study-statistics-student-lesson-list']?.gaps?.join(' ')).toContain('没有浏览器基准')
   })
 })

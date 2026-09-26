@@ -215,6 +215,20 @@ export const STANDARD_IMPORT_URL = '/performance/kpistandard/import'
 export const STANDARD_SAVE_DATA_URL = '/performance/kpistandard/saveStandardData'
 export const STANDARD_DELETE_URL = '/performance/kpistandard'
 
+/**
+ * 标准详情页「使用标准岗位」那一项的**候选树**（`standard/components/post-select.vue:52`）。
+ *
+ * 全仓唯一的 `getRoleOrganizationPost` 调用点就是它。⚠️ 与同页**注释掉**的另外两个写法
+ * 不是一回事（`standard-data.vue:20-31` 留着两段注释：旧的 `component-organization-select`
+ * 与 `portal-hxr-tree-select-role-org` 都指 `/org/organization/getRoleOrganizationTree`）——
+ * 「4月22日长建让改成这个」是页面里最后一版，注释掉的那两个**不算数**（conventions 第 28 条）。
+ *
+ * 页面把它当**受控树选择器**用（`v-model:value="formState.orgTreeIdList"` +
+ * `@update:select="data => formState.orgPostIdList = data"`），所以它会喂**两个**保存字段 ——
+ * 见 `StandardRolePostNode` 与契约里的步骤。
+ */
+export const STANDARD_ROLE_POST_TREE_URL = '/org/organization/getRoleOrganizationPost'
+
 const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const FORMULA_PUBLISH_REMARK = 'Web 保存公式并发布新修订'
 
@@ -667,6 +681,42 @@ export type StandardDataSave = Record<string, unknown> & {
   orgTreeIdList: PerfManageConfigId[]
 }
 
+/**
+ * 「使用标准岗位」候选树的一个节点（后端 `OrganizationPostDTO`）。
+ *
+ * 后端在这一个接口里把**两种节点**混在同一棵树上（`HrOrganizationServiceImpl:3443-3472`）：
+ *
+ * | 节点 | `id` | `postId` | `orgPostId` | `pid` | 能不能选 |
+ * | --- | --- | --- | --- | --- | --- |
+ * | 组织 | 组织 id | 无 | **无** | 上级组织 id | ❌（页面 `disabled: !item.orgPostId`） |
+ * | 岗位 | **拼出来的** `organizationId + "" + postId` | 岗位 id | `hr_organization_post.id` | 所属组织 id | ✅ |
+ *
+ * ⚠️ **岗位节点的 `id` 不是数据库主键**，是后端把两个 id 当字符串拼起来的
+ * （`organizationPostDTO.setId(Long.valueOf(orgPost.getOrganizationId() + "" + orgPost.getPostId()))`）
+ * —— 它只用于树组件回显（`orgTreeIdList`）。**真正落库的是 `orgPostId`**
+ * （页面 `onTreeChange` 拿它组 `orgPostIdList`）。这两个数别互相代替。
+ */
+export type StandardRolePostNode = {
+  /** 树组件用的节点 id：组织节点是真组织 id，岗位节点是拼出来的合成 id */
+  id?: PerfManageConfigId
+  /** 组织节点上是组织 id；岗位节点上是它所属的组织 id */
+  organizationId?: PerfManageConfigId
+  /** 岗位 id；组织节点没有这一项 */
+  postId?: PerfManageConfigId
+  /**
+   * `hr_organization_post` 主键；**组织节点没有这一项**。
+   * 页面的两条规则都以它为判据：有它才可选、有它才取出提交值
+   */
+  orgPostId?: PerfManageConfigId
+  /** 名称（组织名 / 岗位名） */
+  name?: string
+  /** 上级节点 id。岗位节点的上级就是它所属的组织 */
+  pid?: PerfManageConfigId | null
+  /** 子节点；叶子节点是空数组（后端 `TreeNode.children` 初值就是 `new ArrayList<>()`） */
+  children?: StandardRolePostNode[]
+  [key: string]: unknown
+}
+
 // ---------------------------------------------------------------------------
 // 查询参数
 // ---------------------------------------------------------------------------
@@ -717,6 +767,18 @@ export type StandardQuery = {
   keyword?: string
   pageNo?: number
   pageSize?: number
+}
+
+/**
+ * 标准详情页「使用标准岗位」候选树的查询条件。
+ *
+ * **只有一个 `roleId`，而且页面永远给空串** —— 空串到后端被绑成 `null`，
+ * 语义是"按当前登录用户的角色算可见范围"。所以正常调用**不要传它**，
+ * 传了就等于换成另一个角色的范围（页面没这个入口）。
+ */
+export type StandardRolePostQuery = {
+  /** 角色 id。省略即按当前登录用户的角色（与页面一致） */
+  roleId?: number | string
 }
 
 // ---------------------------------------------------------------------------
@@ -1283,6 +1345,18 @@ const INDICATOR_DATA_SAVE_FORM_PARAMS: ParamSpec[] = [
 const INDICATOR_DATA_SAVE_DRAFT_PARAMS: ParamSpec[] = [
   { name: 'draft', kind: 'text', required: true, description: 'prepareIndicatorDataSave返回的 {actualTarget, forecastTarget, targetId} 草稿。' },
 ]
+const STANDARD_ROLE_POST_TREE_PARAMS: ParamSpec[] = [
+  {
+    name: 'roleId',
+    kind: 'text',
+    required: false,
+    description:
+      '角色 id。**页面永远发空串**（`post-select.vue:23` 的 `roleId` 默认就是空串，' +
+      '而 `standard-data.vue:33` 用这个组件时没传它），Spring 把空串绑成 null ⇒ 按**当前登录用户的角色**算范围。' +
+      '要按别的角色看，得先拿到角色 id（本 SDK 没有为它建候选入口）',
+  },
+]
+
 const STANDARD_DATA_SAVE_FORM_PARAMS: ParamSpec[] = [
   { name: 'id', kind: 'text', required: true, description: '标准详情页当前标准ID。' },
   { name: 'standardType', kind: 'enum', required: true, description: '标准类型：0=品种标准，1=指标标准。', options: [{ label: '品种标准', value: 0 }, { label: '指标标准', value: 1 }] },
@@ -1480,6 +1554,17 @@ export const perfManageConfigCapabilities: CapabilityDefinition[] = [
     permission: '/dashboard/manage/standard',
     write: false,
     params: [],
+  },
+  // 标准详情页（`standard/[mode]/[id]` 的 `standard-data.vue`）「使用标准岗位」那一项的候选树。
+  // ⚠️ 用同一个 pagePath 是**有意**的：它是这一页表单里 `orgPostIdList` / `orgTreeIdList`
+  //    两个字段的唯一来源，与列表读、保存分开成三条能力（同一页多个形态的既有做法）。
+  {
+    id: 'perf-manage-standard-role-post-tree',
+    title: '查询标准详情页「使用标准岗位」的组织岗位候选树',
+    pagePath: PERF_MANAGE_STANDARD_PAGE_PATH,
+    permission: '/dashboard/manage/standard',
+    write: false,
+    params: STANDARD_ROLE_POST_TREE_PARAMS,
   },
   {
     id: 'perf-manage-protocol-config-read',
@@ -1690,6 +1775,7 @@ export const PERF_MANAGE_CONFIG_METHODS = {
   'perf-manage-standard-prepare-save-data': 'prepareStandardDataSave',
   'perf-manage-standard-save-data': 'submitStandardDataSave',
   'perf-manage-standard-cancel-save-data': 'cancelStandardDataSave',
+  'perf-manage-standard-role-post-tree': 'getStandardRolePostTree',
 } as const
 
 // ---------------------------------------------------------------------------
@@ -2002,6 +2088,29 @@ export function createPerfManageConfigCapability (
         url: STANDARD_SAVE_DATA_URL,
         method: 'post',
         data: standardDataSaveOf(input?.draft),
+      })
+    },
+
+    /**
+     * 标准详情页「使用标准岗位」候选树。只读。
+     *
+     * `GET /org/organization/getRoleOrganizationPost`（`post-select.vue:52`），
+     * **只有一个 `roleId`** 参数，页面发的是空串。
+     *
+     * 后端把组织与岗位混在同一棵树上（见 `StandardRolePostNode` 的对照表）：
+     * 组织节点没有 `orgPostId`、岗位节点有。返回的是**树**，字段原样保留
+     * （页面也是自己在这棵树上判 `disabled`、自己 `flatTree` 找 `orgPostId`）。
+     *
+     * ⚠️ 这一页的 `organizationList` 字段在保存 DTO 里仍然存在，但页面**已经不用它**了
+     * （`standard-data.vue:20-31` 那两段注释就是它和旧组织树的替代方案）——
+     * 现在生效的是 `orgTreeIdList` + `orgPostIdList` 这一对。
+     */
+    getStandardRolePostTree (query: StandardRolePostQuery = {}): Promise<StandardRolePostNode[]> {
+      const roleId = query.roleId === undefined || query.roleId === null ? '' : String(query.roleId)
+      return requestStandard<StandardRolePostNode[]>({
+        url: STANDARD_ROLE_POST_TREE_URL,
+        method: 'get',
+        params: { roleId },
       })
     },
 

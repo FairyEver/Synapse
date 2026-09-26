@@ -4,10 +4,70 @@ import type { PortalRequest } from '../session/types.js'
 import type { CapabilityDefinition, ParamSpec } from './types.js'
 import type { PageResult } from './meeting-room.js'
 
+/**
+ * Portal「风险防控 → 登记信息」列表、企业登记表单和变更记录页面。
+ *
+ * ## 人员弹窗的两个候选（本文件第二批）
+ *
+ * `components/add-personnel.vue` 有三个页签，其中「内部人员」与「外部人员」各打一条只读接口：
+ *
+ * | 页签 | 端点 | 本文件的能力 |
+ * | --- | --- | --- |
+ * | 内部人员 | `GET /sys/user/userNotInGrade` | `business-registration-person-candidate` |
+ * | 外部人员 | `GET /study/grade/student/getExternalStudentList` | `business-registration-external-person-list` |
+ * | 未注册智慧蛋鸡人员 | 无接口（纯本地输入） | — |
+ *
+ * ⚠️ 这两个端点在**班级管理**页里也各有一条能力（`study-grade.ts` 的
+ * `study-grade-student-candidate` / `study-grade-external-student-list`）。
+ * 是**两条能力**而不是一条复用的原因：能力的页面语境是契约的一部分 ——
+ * 这一页是 module-type 15（风险防控）、权限 `/dashboard/certificate/enterpriseRegistration`、
+ * 提交给企业登记表单；班级管理页是 module-type 12（学习管理）、权限 `/dashboard/grade/grade`、
+ * 提交给班级学员。同一个 URL 在两个上下文里 `boundaries` 与 `consume` 都不一样，
+ * 合并会让 AI 看到一半是错的说明。
+ *
+ * 「未注册智慧蛋鸡人员」页签**不进 SDK**：它在页面上就是一个输入框加一个"添加"按钮
+ * （`add-personnel.vue:329` 的 `onAdd`），值只进组件的本地数组，随弹窗的 `modalEmit('ok', …)`
+ * 交给父页面，不发任何请求。
+ *
+ * ## `userNotInGrade` 的两条实测语义（与班级管理页共享，理由见 `study-grade.ts` 文件头）
+ *
+ * 1. 它的 SQL 把「本班学员」子查询 `LEFT JOIN` 进来却**从没在 `WHERE`/`SELECT` 里使用**，
+ *    所以它**不过滤已在班级的人**；而且本页**根本不传 `gradeId`**
+ *    （`add-personnel.vue:178` 的 params 只有 name/pageNo/pageSize），
+ *    连那条子查询都命中不了 —— 这个接口在本页就是一个「在职、组织非空的用户列表」。
+ * 2. 它的 `name` 是 **`real_name LIKE 'kw%'`（仅前缀）**；而外部人员那条是
+ *    `name LIKE %kw%` **或** `mobile LIKE %kw%`（同时匹配手机号）。两者别互相照抄。
+ *
+ * ## 凭据形状的字段
+ *
+ * `userNotInGrade` 的响应 DTO 里 `password2`（口令散列）与 `salt` 会真的被序列化
+ * （`password` 上有 `@JsonProperty(WRITE_ONLY)`，不会）。SDK **裁掉这三个键**再返回，
+ * 与 `study-grade.ts` 的处理一致；理由见那边文件头。
+ */
+
 /** Portal「风险防控 → 登记信息」列表、企业登记表单和变更记录页面。 */
 export const BUSINESS_REGISTRATION_PAGE_PATH = '/dashboard/certificate/enterpriseRegistration/list'
 export const BUSINESS_REGISTRATION_PERMISSION = '/dashboard/certificate/enterpriseRegistration'
 export const BUSINESS_REGISTRATION_MODULE_TYPE = 15
+
+/** 「内部人员」候选（`components/add-personnel.vue:178`）。platform 实例会补 `/admin-api` 前缀 */
+export const BUSINESS_REGISTRATION_PERSON_CANDIDATE_PATH = '/sys/user/userNotInGrade'
+/** 「外部人员」候选（`components/add-personnel.vue:258`）。与班级管理页是**同一条 URL** */
+export const BUSINESS_REGISTRATION_EXTERNAL_PERSON_PATH = '/study/grade/student/getExternalStudentList'
+
+/**
+ * 人员候选的每页条数。
+ *
+ * 页面两张表都写死 `pageSize: 5`（`add-personnel.vue:182` 与 `:262`）。
+ * 与 `study-grade.ts` 的同名常量是同一个数、同一套理由（那边文件头有完整说明）：
+ * 这里是**刻意各写一份**，能力层不跨文件共享数值，改的时候两处都要看。
+ */
+export const PERSON_CANDIDATE_PAGE_SIZE = 5
+/** 人员候选单页上限。与 `study-grade.ts` 的 `MAX_PERSON_PAGE_SIZE` 同值同理由 */
+export const MAX_PERSON_PAGE_SIZE = 500
+
+/** 响应里**必须裁掉**的三个键（`SysUserDTO` 的口令散列与盐） */
+const CREDENTIAL_KEYS = ['password', 'password2', 'salt'] as const
 
 const ROOT = '/admin-api/hr/business-registration'
 const LOG_ROOT = '/admin-api/hr/business-registration-log'
@@ -696,6 +756,120 @@ function exportParamsOf (query: BusinessRegistrationQuery = {}): JsonObject {
   return { name: pageTextOf(query.name, 'name'), type }
 }
 
+/**
+ * 「内部人员」候选行（`SysUserDTO` 的裁剪结果）。
+ *
+ * 本页表格只显示三列：姓名（`realName`）、工号（`username`）、组织路径（`organizationName`），
+ * 与班级管理页的同一张表同形。`organizationName` 在这一条**有值** ——
+ * `userNotInGrade` 的 SQL 里写了 `hro.full_path as organizationName`，
+ * 而 `getUserListPage` 那条走实体查询，没有这一列。
+ */
+export type BusinessRegistrationPersonCandidateRow = Record<string, unknown> & {
+  id?: BusinessRegistrationId
+  /** 工号（`hr_sys_user.username`），不是用户 ID */
+  username?: string | null
+  /** 姓名 */
+  realName?: string | null
+  mobile?: string | null
+  organizationId?: BusinessRegistrationId | null
+  /** 组织全路径 */
+  organizationName?: string | null
+  status?: number | null
+}
+
+/**
+ * 「外部人员」候选行（`hr_study_student`）。
+ *
+ * `organizationId` / `organizationName` 在这条响应里**恒为空**（SQL 的 select 列表里没有这两列）。
+ * 页面表格只显示姓名与手机号。
+ */
+export type BusinessRegistrationExternalPersonRow = Record<string, unknown> & {
+  id?: BusinessRegistrationId
+  /** 外部人员工号 */
+  staffCode?: BusinessRegistrationId | null
+  name?: string | null
+  /** 手机号；服务端 DTO 里是 Long，JSON 里是数字 */
+  mobile?: BusinessRegistrationId | null
+  isRelatedClass?: number | null
+  isRelatedLayer?: number | null
+  isCreateManually?: number | null
+  createTime?: string | null
+}
+
+/**
+ * 人员候选的必填关键字。
+ *
+ * **SDK 侧策略，不是后端要求**：两个端点在无关键字时都会返回 200，但那是一次全量人员拉取
+ * （conventions 第 11 条 / D6 / H35）。与 `base-shell.searchUsers()`、`study-grade.ts`
+ * 的人员候选同一条规则。
+ */
+function candidateKeywordOf (value: unknown, label: string): string {
+  const keyword = typeof value === 'string' ? value.trim() : ''
+  if (keyword === '') {
+    throw new Error(
+      `${label}属于长选项参数：必须提供 keyword，不允许无条件下全量拉取（设计 D6 / H35）。` +
+        '后端在无关键字时不会报错，返回的是全部人员。用户说不出完整名字时，先问他名字里的一两个字。',
+    )
+  }
+  return keyword
+}
+
+/** 页码：正整数，默认 1 */
+function candidatePageNoOf (value: unknown, label: string): number {
+  if (value === undefined || value === null || value === '') return 1
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${label}必须为正整数`)
+  }
+  return value
+}
+
+/** 每页条数：默认 5（页面值），拒绝 ≤0（`-1` 是全量拉取）与超过上限 */
+function candidatePageSizeOf (value: unknown, label: string): number {
+  if (value === undefined || value === null || value === '') return PERSON_CANDIDATE_PAGE_SIZE
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error(`${label}必须为整数`)
+  if (value < 1) throw new Error(`${label}必须 ≥ 1；-1 或 0 是"全量拉取"，SDK 不接受（设计 D6）`)
+  if (value > MAX_PERSON_PAGE_SIZE) throw new Error(`${label}最多 ${MAX_PERSON_PAGE_SIZE}（本接口单页上限）`)
+  return value
+}
+
+/** 按页面的键序拼人员候选参数：`name` 在前时与 `add-personnel.vue` 的 params 字面顺序一致 */
+function candidateParamsOf (
+  order: readonly string[],
+  query: Record<string, unknown>,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {}
+  for (const name of order) {
+    if (query[name] !== undefined) params[name] = query[name]
+  }
+  return params
+}
+
+/** 裁掉 `SysUserDTO` 上的口令散列与盐（文件头） */
+function withoutCredentials<T extends Record<string, unknown>> (row: T): T {
+  const copy = { ...row }
+  for (const key of CREDENTIAL_KEYS) delete copy[key]
+  return copy
+}
+
+function personCandidatePageOf (value: unknown): PageResult<BusinessRegistrationPersonCandidateRow> {
+  const page = objectOf(value, '内部人员候选分页响应')
+  if (!Array.isArray(page.list) || !Number.isSafeInteger(page.total)) {
+    throw new Error('内部人员候选分页响应缺少有效 list 或 total')
+  }
+  return {
+    list: page.list.map((row, index) => withoutCredentials(objectOf(row, `内部人员候选[${index}]`)) as BusinessRegistrationPersonCandidateRow),
+    total: page.total as number,
+  }
+}
+
+function externalPersonPageOf (value: unknown): PageResult<BusinessRegistrationExternalPersonRow> {
+  const page = objectOf(value, '外部人员候选分页响应')
+  if (!Array.isArray(page.list) || !Number.isSafeInteger(page.total)) {
+    throw new Error('外部人员候选分页响应缺少有效 list 或 total')
+  }
+  return { list: page.list as BusinessRegistrationExternalPersonRow[], total: page.total as number }
+}
+
 export function createBusinessRegistrationCapability (request: PortalRequest) {
   return {
     async list (query: BusinessRegistrationQuery = {}): Promise<PageResult<BusinessRegistrationRow>> {
@@ -763,6 +937,54 @@ export function createBusinessRegistrationCapability (request: PortalRequest) {
       if (result !== true) throw new Error('保存企业登记共享响应不是true')
       return true
     },
+
+    /**
+     * 「内部人员」候选。只读。
+     *
+     * 页面发的是 `{ name, pageNo, pageSize }`（`add-personnel.vue:178`）—— **没有 `gradeId`**，
+     * 与班级管理页的同名调用不同。后端把 `name` 当**前缀**匹配（`real_name LIKE 'kw%'`）。
+     */
+    async searchPersonCandidates (query: {
+      keyword: string
+      pageNo?: number
+      pageSize?: number
+    }): Promise<PageResult<BusinessRegistrationPersonCandidateRow>> {
+      const keyword = candidateKeywordOf(query?.keyword, '内部人员候选')
+      const payload = await request<unknown>({
+        url: BUSINESS_REGISTRATION_PERSON_CANDIDATE_PATH,
+        method: 'get',
+        params: candidateParamsOf(['name', 'pageNo', 'pageSize'], {
+          name: keyword,
+          pageNo: candidatePageNoOf(query?.pageNo, '内部人员候选 pageNo'),
+          pageSize: candidatePageSizeOf(query?.pageSize, '内部人员候选 pageSize'),
+        }),
+      })
+      return personCandidatePageOf(payload)
+    },
+
+    /**
+     * 「外部人员」候选。只读。
+     *
+     * 与班级管理页发的是**同一形状**的请求（`{ name, pageNo, pageSize }`）；
+     * 服务端固定按外部人员过滤，`name` 同时匹配姓名与手机号（都是包含匹配）。
+     */
+    async listExternalPersons (query: {
+      keyword: string
+      pageNo?: number
+      pageSize?: number
+    }): Promise<PageResult<BusinessRegistrationExternalPersonRow>> {
+      const keyword = candidateKeywordOf(query?.keyword, '外部人员候选')
+      const payload = await request<unknown>({
+        url: BUSINESS_REGISTRATION_EXTERNAL_PERSON_PATH,
+        method: 'get',
+        params: candidateParamsOf(['name', 'pageNo', 'pageSize'], {
+          name: keyword,
+          pageNo: candidatePageNoOf(query?.pageNo, '外部人员候选 pageNo'),
+          pageSize: candidatePageSizeOf(query?.pageSize, '外部人员候选 pageSize'),
+        }),
+      })
+      return externalPersonPageOf(payload)
+    },
   }
 }
 
@@ -785,6 +1007,30 @@ export const BUSINESS_REGISTRATION_METHODS = {
   'business-registration-remove-change-record': 'removeChangeRecord',
   'business-registration-get-share': 'getShare',
   'business-registration-save-share': 'saveShare',
+  'business-registration-person-candidate': 'searchPersonCandidates',
+  'business-registration-external-person-list': 'listExternalPersons',
+} as const
+
+const CANDIDATE_KEYWORD_PARAM = p(
+  'keyword',
+  'text',
+  true,
+  '人员姓名关键字（内部人员按 `real_name` 前缀匹配、外部人员同时匹配姓名与手机号）。' +
+    '**必填**：人员候选是几千条量级，无关键字时后端照样返回 200 但那是全量拉取（conventions 第 11 条 / D6）。' +
+    'SDK 侧拒绝无关键字调用；用户说不出完整名字时先问他名字里的一两个字',
+)
+
+const CANDIDATE_PAGE_PARAMS: ParamSpec[] = [
+  p('pageNo', 'number', false, '页码，从 1 开始；默认 1'),
+  p('pageSize', 'number', false, `每页条数；默认 ${PERSON_CANDIDATE_PAGE_SIZE}（与页面一致），上限 ${MAX_PERSON_PAGE_SIZE}`),
+]
+
+/** 人员弹窗的两个候选：与班级管理页是同 URL、不同页面语境（见文件头） */
+const PERSON_CANDIDATE_META = {
+  pagePath: BUSINESS_REGISTRATION_PAGE_PATH,
+  permission: BUSINESS_REGISTRATION_PERMISSION,
+  moduleType: BUSINESS_REGISTRATION_MODULE_TYPE,
+  httpInstance: 'platform',
 } as const
 
 export const businessRegistrationCapabilities: CapabilityDefinition[] = [
@@ -802,4 +1048,7 @@ export const businessRegistrationCapabilities: CapabilityDefinition[] = [
   { id: 'business-registration-remove-change-record', title: '删除登记信息变更记录', write: true, params: [p('ids', 'text', true, '同一变更批次的记录ID数组')] },
   { id: 'business-registration-get-share', title: '读取登记信息共享设置', write: false, params: [p('resourceId', 'number', true, '企业登记ID')] },
   { id: 'business-registration-save-share', title: '保存登记信息共享设置', write: true, params: [p('resourceId', 'number', true, '企业登记ID'), p('organization', 'text', false, '共享组织成员数组'), p('post', 'text', false, '共享岗位成员数组'), p('duty', 'text', false, '共享职务成员数组'), p('user', 'text', false, '共享人员成员数组')] },
+  // 人员弹窗的两个候选。**刻意与班级管理页各建一条能力**（同 URL、不同页面语境）：见文件头
+  { id: 'business-registration-person-candidate', title: '查询登记信息的内部人员候选', ...PERSON_CANDIDATE_META, write: false, params: [CANDIDATE_KEYWORD_PARAM, ...CANDIDATE_PAGE_PARAMS] },
+  { id: 'business-registration-external-person-list', title: '查询登记信息的外部人员候选', ...PERSON_CANDIDATE_META, write: false, params: [CANDIDATE_KEYWORD_PARAM, ...CANDIDATE_PAGE_PARAMS] },
 ].map(definition => ({ ...definition, pagePath: BUSINESS_REGISTRATION_PAGE_PATH, permission: BUSINESS_REGISTRATION_PERMISSION, moduleType: BUSINESS_REGISTRATION_MODULE_TYPE, httpInstance: 'platform' }))

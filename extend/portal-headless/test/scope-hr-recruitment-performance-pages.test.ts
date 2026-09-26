@@ -92,6 +92,8 @@ const PAGE_CAPABILITIES = [
       'perf-manage-standard-import',
       'perf-manage-standard-prepare-delete',
       'perf-manage-standard-delete',
+      // 详情页「使用标准岗位」候选树（`getRoleOrganizationPost`）：与保存能力同页、另一个形态。
+      'perf-manage-standard-role-post-tree',
     ],
   },
   {

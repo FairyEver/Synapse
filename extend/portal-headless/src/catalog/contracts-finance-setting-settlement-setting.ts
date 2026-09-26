@@ -87,6 +87,61 @@ const queryInputs: Record<string, AiParameter> = {
 export const FINANCE_SETTING_SETTLEMENT_SETTING_AI_CONTRACTS: Record<string, AiContract> = {
   'finance-setting-settlement-setting-list': contract({ purpose: '分页查询结转单设置列表。', effect: 'read', inputs: queryInputs, output: pageOutput, consume: ['展示主体、核算范围数量、归属方式、有效期和状态；按total分页。', '保留list[].id/status供详情、编辑和启停。'], steps: [{ role: 'optional', when: '需要表单组织选择或范围展示', capabilityId: 'finance-setting-settlement-setting-organization-tree', mapping: {}, instruction: '读取组织树并按节点ID关联列表范围；不以名称代替ID。' }], completion: '返回当前筛选页和total。', idempotency: null }),
   'finance-setting-settlement-setting-get': contract({ purpose: '读取结转单设置详情作为编辑/详情快照。', effect: 'read', inputs: { id: input('结转单设置ID', '列表行id', { type: 'string | number', constraints: idRules }) }, output: detailOutput, consume: ['用详情中的全部页面字段构造编辑草稿；组织树加载后按ID显示名称。'], steps: [{ role: 'optional', when: '详情需要展开组织名称', capabilityId: 'finance-setting-settlement-setting-organization-tree', mapping: {}, instruction: '按accountingScopeOrgIds关联树节点。' }], completion: '获得详情或明确null。', idempotency: null }),
+  'finance-setting-settlement-setting-scope-list': {
+    ...contract({
+    purpose: '查看某条结转单设置的核算范围最终覆盖了哪些组织：勾选的组织加其全部后代，经核算主体类型过滤后逐行返回组织名称、编码、层级和全路径。',
+    effect: 'read',
+    inputs: {
+      id: input('结转单设置主记录ID', 'finance-setting-settlement-setting-list.list[].id 或 finance-setting-settlement-setting-get.id', { type: 'string | number', constraints: idRules }),
+    },
+    output: {
+      shape: 'array',
+      fields: [
+        field('$', 'array', '展开并过滤后的组织清单；按 orgId 升序。'),
+        field('[]', 'object', '一个核算范围内组织的展示信息。'),
+        field('[].orgId', 'string | number', '组织ID；与表单里的 accountingScopeOrgIds 同属组织ID命名空间。', { constraints: idRules }),
+        field('[].orgName', 'string', '组织名称。', { nullable: true, nullMeaning: '后端未返回名称。' }),
+        field('[].orgCode', 'string', '组织编码。', { nullable: true, nullMeaning: '后端未返回编码。' }),
+        field('[].isStandardUnit', 'integer', '是否标准化单元：0 否、1 是。', { nullable: true, values: { '0': '否', '1': '是' }, nullMeaning: '后端未返回该标记；页面按 formatBooleanFlag 显示为「—」。' }),
+        field('[].isCorporation', 'integer', '是否法人单位：0 否、1 是。', { nullable: true, values: { '0': '否', '1': '是' }, nullMeaning: '后端未返回该标记；页面显示「—」。' }),
+        field('[].level', 'integer', '组织层级。', { nullable: true, nullMeaning: '后端未返回层级。' }),
+        field('[].fullPath', 'string', '组织全路径（隶属路径）。', { nullable: true, nullMeaning: '后端未返回路径。' }),
+      ],
+      empty: '[] 有三种来源：该设置没有勾选任何组织、展开后没有任何组织匹配它的核算主体类型、或后端缺失。这三种后端都返回空数组而不报错，必须结合设置详情里的 accountingScopeOrgIds 与 accountingEntityType 判断，不能直接解释成“范围为空配置”。',
+    },
+    consume: [
+      '第一列用 orgName、其后依次是 orgCode、fullPath、level、isStandardUnit、isCorporation；布尔标记按 0=否 / 1=是 解释，null 显示占位符。',
+      '清单是“勾选 + 后代 + 按核算主体类型过滤”的结果，不要把它当作保存时勾选的那几个ID；要改范围仍然走编辑表单的 accountingScopeOrgIds。',
+      '结果按 orgId 升序且最多 500 条（后端 SCOPE_MAX 硬上限，超出时按 orgId 升序静默取前 500）；当返回条数正好是 500 时不要断言已覆盖全部组织。',
+    ],
+    steps: [
+      {
+        role: 'optional',
+        when: '用户要核对某个组织为什么出现在或不出现在清单里',
+        capabilityId: 'finance-setting-settlement-setting-organization-tree',
+        mapping: {},
+        instruction: '用组织树补齐祖先/父子关系与 isCorporation / isStandardUnit 标记；清单已含全路径，不要另建一份组织数据。',
+      },
+    ],
+    completion: '返回该设置展开后的组织清单；读取不改变配置，也不能据它推断保存时的勾选值。',
+    idempotency: null,
+    }),
+    whenToUse: '需要向用户解释“这条结转单设置实际作用到哪些组织”，或核对勾选范围展开后的结果时使用；与列表里的 accountingScopeOrgIds（只给ID）和详情接口（只给原始勾选值）不同，它是唯一带组织名称的展开结果。',
+    boundaries: [
+      '调用方触发点是 scope-modal.vue，但它在固定检出里没有被任何页面或组件 import（整仓 grep 无引用）：这个动作当前在 Portal 界面上没有入口，能力仍按后端与前端组件契约交付，见 gaps。',
+      '后端 SettlementSettingController 挂着 @ConditionalOnProperty(erp.finance.settlement.enabled=true)，默认关闭；开关未开启的部署上本能力会 404，不能据 SDK 描述推断部署可用。',
+      '清单是展开结果（勾选组织 + 全部后代），并已按该设置的 accountingEntityType 过滤；它不包含被过滤掉的组织，也不能用来反推勾选集合。',
+      '结果有 500 条硬上限，超出时按 orgId 升序截断且不报错——这是后端刻意的性能保护，不是数据缺失。',
+      'id 必须是结转单设置主记录ID；后端在设置不存在时抛业务错误，不会返回空数组，两者含义不同。',
+    ],
+    gaps: [
+      '未启动浏览器、未取得独立网络基准、未在真实测试环境执行该读请求；请求形状与返回字段来自固定检出源码与离线断言。',
+      'scope-modal.vue 在固定 Portal 检出里没有任何引用点，无法确认这个动作在当前部署上是否真的可达；SDK 交付的是后端与组件的契约本身。',
+      'erp.finance.settlement.enabled 在各环境是否开启未核实；开关关闭时该 Controller 整体不注册，本能力必然 404。',
+      '后端展开规则（后代、核算主体类型过滤、SCOPE_MAX=500 截断、按 orgId 排序）读自 ServiceImpl 源码，未在真实租户上验证实际输出。',
+      'Portal/Java 固定检出未按任务约束 pull 到远端最新。',
+    ],
+  },
   'finance-setting-settlement-setting-organization-tree': contract({ purpose: '读取结转单表单使用的角色组织树。', effect: 'read', inputs: {}, output: { shape: 'array', fields: [field('$', 'array', '组织树根节点数组'), field('[].id', 'string | number', '组织ID'), field('[].name', 'string', '组织名称'), field('[].pid', 'string | number', '父组织ID', { nullable: true }), field('[].children', 'array', '子节点')], empty: '[]表示当前会话没有可见组织；请求失败抛错。' }, consume: ['用节点id填充accountingScopeOrgIds；用isCorporation/isStandardUnit决定范围清单展示。'], steps: [], completion: '获得可供页面选择的组织树。', idempotency: null }),
   'finance-setting-settlement-setting-prepare-create': contract({ purpose: '按页面表单规则生成新建草稿。', effect: 'prepare', inputs: saveInputs, output: saveOutput, consume: ['确认草稿后交给create；long_term的effectiveEnd已经是空字符串。'], steps: [{ role: 'required', when: '用户确认新建', capabilityId: 'finance-setting-settlement-setting-create', mapping: { accountingEntityType: 'result.draft.accountingEntityType', accountingScopeOrgIds: 'result.draft.accountingScopeOrgIds', externalSalesBelongType: 'result.draft.externalSalesBelongType', validType: 'result.draft.validType', effectiveStart: 'result.draft.effectiveStart', effectiveEnd: 'result.draft.effectiveEnd', status: 'result.draft.status' }, instruction: '只提交草稿；创建没有页面取消接口。' }], completion: '获得无副作用创建草稿。', idempotency: null }),
   'finance-setting-settlement-setting-create': contract({ purpose: '创建结转单设置。', effect: 'write', inputs: saveInputs, output: { shape: 'string | number', fields: [field('$', 'string | number', '新建记录ID', { constraints: idRules })], empty: '没有合法ID时失败。' }, consume: ['保存ID后list/get回查字段和状态；HTTP成功不等于落库证据。'], steps: [{ role: 'required', when: '返回ID后回查', capabilityId: 'finance-setting-settlement-setting-get', mapping: { id: 'result.$' }, instruction: '按同一ID读取并核对有效期、组织范围和状态。' }, { role: 'cancel', when: '创建需清理', instruction: '页面无删除/取消动作，停止并报告需受控运维清理。' }], completion: '返回合法ID且回查确认。', idempotency: '后端没有requestId或SDK幂等包装；请求超时先按返回ID或创建字段回查，未确认前不要重复创建；页面没有可达删除/取消动作。' }),

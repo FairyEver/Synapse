@@ -446,12 +446,132 @@ describe('接线（能力定义这一侧）', () => {
   })
 
   it('被另外两条菜单复用是一个事实，不是本页多出来的能力面', () => {
-    // 基准里记着复用方；列表与共享组件上的撤销动作是两个能力，
-    // 三条菜单共用同一个组件不代表把固定 finished 的复用方重复注册。
-    expect(backlogTaskExamineCapabilities).toHaveLength(2)
+    // 基准里记着复用方；列表、共享组件上的撤销动作，以及任务评分下钻页的评分提交，
+    // 一共三个能力 —— 三条菜单共用同一个列表组件，不代表把固定 finished 的复用方重复注册。
+    expect(backlogTaskExamineCapabilities.map((item) => item.id)).toEqual([
+      'backlog-task-examine-list',
+      'backlog-task-examine-withdraw',
+      'backlog-task-examine-review-score',
+    ])
     expect(baseline.对照组.复用方.map((item) => `${item.页面}#${item.finished}`)).toEqual([
       '/dashboard/flow/task/todo/list#1',
       '/dashboard/flow/task/done/list#2',
     ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 任务评分（隐藏下钻页 `task-score/[id].vue`）—— 本轮补齐的那一条写能力
+// ---------------------------------------------------------------------------
+
+describe('待办事项：月度任务审核评分（写）', () => {
+  const calls: Array<Record<string, unknown>> = []
+  const request = async <T>(config: unknown): Promise<T> => {
+    calls.push(config as Record<string, unknown>)
+    return undefined as T
+  }
+  const api = createBacklogTaskExamineCapability(request)
+
+  it('body 只有后端真正读的五个字段，且只发给了值的超额项', async () => {
+    calls.length = 0
+    await api.reviewScore({
+      taskId: '9001',
+      reviewScore: 88,
+      reviewScoreEvaluation: '完成度好',
+      excessReviewScore: 5,
+      excessReviewEvaluation: '超额部分达标',
+    })
+    expect(calls[0]).toEqual({
+      url: '/performance/protocol/kpimonthprotocol/taskReviewScore',
+      method: 'post',
+      data: {
+        id: '9001',
+        reviewScore: 88,
+        reviewScoreEvaluation: '完成度好',
+        excessReviewScore: 5,
+        excessReviewEvaluation: '超额部分达标',
+      },
+    })
+    expect(Object.keys(calls[0]?.data as object)).toEqual([
+      'id', 'reviewScore', 'reviewScoreEvaluation', 'excessReviewScore', 'excessReviewEvaluation',
+    ])
+  })
+
+  it('没有超额分时**不发**那两个键（页面上没有超额任务时它们是 undefined）', async () => {
+    calls.length = 0
+    await api.reviewScore({ taskId: 1, reviewScore: 60 })
+    const data = calls[0]?.data as Record<string, unknown>
+    expect(Object.keys(data)).toEqual(['id', 'reviewScore', 'reviewScoreEvaluation'])
+    expect(data.reviewScoreEvaluation).toBeNull()
+    expect(Object.prototype.hasOwnProperty.call(data, 'excessReviewScore')).toBe(false)
+  })
+
+  it('**不发**自评与领导分：那 8 个字段不是这个动作写的（页面会顺带回传）', async () => {
+    calls.length = 0
+    await api.reviewScore({ taskId: 1, reviewScore: 60 })
+    const data = calls[0]?.data as Record<string, unknown>
+    for (const key of [
+      'leaderScore', 'leaderEvaluation', 'excessLeaderScore', 'excessLeaderEvaluation',
+      'selfScore', 'selfEvaluation', 'excessSelfScore', 'excessSelfEvaluation',
+      'taskIndex', 'taskTitle',
+    ]) {
+      expect(Object.prototype.hasOwnProperty.call(data, key), `${key} 不该出现`).toBe(false)
+    }
+  })
+
+  it('reviewScore 必填（后端对空值报「完成审核评分不能为空」），taskId 必须是正整数 ID', async () => {
+    calls.length = 0
+    await expect(api.reviewScore({ taskId: 1, reviewScore: '' })).rejects.toThrow(/reviewScore/)
+    await expect(api.reviewScore({ taskId: 1, reviewScore: null as never })).rejects.toThrow(/reviewScore/)
+    await expect(api.reviewScore({ taskId: '0', reviewScore: 1 })).rejects.toThrow(/月度任务 id/)
+    // 明确不是 bpm 任务 id：拿空串也照样拦
+    await expect(api.reviewScore({ taskId: '', reviewScore: 1 })).rejects.toThrow(/月度任务 id/)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('能力元数据：写、绑定待办事项页；入参是 taskId 而不是 bpm 任务 id', () => {
+    const definition = backlogTaskExamineCapabilities.find(item => item.id === 'backlog-task-examine-review-score')
+    expect(definition).toMatchObject({
+      pagePath: BACKLOG_TASK_EXAMINE_PAGE_PATH,
+      permission: BACKLOG_TASK_EXAMINE_PERMISSION,
+      write: true,
+    })
+    expect(definition?.params.map(item => item.name)).toEqual([
+      'taskId', 'reviewScore', 'reviewScoreEvaluation', 'excessReviewScore', 'excessReviewEvaluation',
+    ])
+  })
+
+  it('源码锁定：页面的两步提交与后端的只读五字段', () => {
+    const portalRoot = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const read = (root: string, path: string): string => readFileSync(join(root, path), 'utf8')
+    const page = read(portalRoot, 'app/portal/views/dashboard/hr/backlog/task-examine/task-score/[id].vue')
+    expect(page).toContain("http.post('/performance/protocol/kpimonthprotocol/taskReviewScore', submitData)")
+    // 第二步是 bpm 审批，本能力不覆盖 —— 这条断言就是那个事实的锚
+    expect(page).toContain("http.post('/bpm/hr/task/approve', {")
+    const impl = read(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/performance/task/service/impl/KpiMonthProtocolTaskServiceImpl.java')
+    expect(impl).toContain('lockScoreProtocol(protocol.getId())')
+    expect(impl).toContain('完成审核评分不能为空')
+    expect(impl).toContain('超额审核评分不能超过任务超额分数')
+  })
+
+  it('AI 说明契约：只做算分落库这一段、id 归属、绝对值与回查都写清楚', async () => {
+    const mod = await import('../src/catalog/contracts-backlog-task-examine.js')
+    const contract = mod.BACKLOG_TASK_EXAMINE_AI_CONTRACTS['backlog-task-examine-review-score']!
+    expect(contract.effect).toBe('write')
+    // 「不等于审批通过」必须写在说明里
+    expect(contract.boundaries.join(' ')).toContain('/bpm/hr/task/approve')
+    expect(contract.completion).toContain('审批')
+    // taskId 的归属要说清
+    expect(contract.inputs.taskId?.meaning).toContain('kpi_month_protocol_task.id')
+    // 没有读回入口这件事必须如实进 gaps
+    expect(contract.gaps?.join(' ')).toContain('读回')
+    expect(typeof contract.idempotency).toBe('string')
+    const validatorUrl = new URL('../tools/ai-contract/validate.mjs', import.meta.url).href
+    const { validateAiContract } = await import(validatorUrl) as {
+      validateAiContract: (id: string, contract: unknown, options?: unknown) => Array<{ code: string; message: string }>
+    }
+    const definitions = new Map(backlogTaskExamineCapabilities.map(item => [item.id, item] as const))
+    expect(validateAiContract('backlog-task-examine-review-score', contract, { definitions })).toEqual([])
   })
 })

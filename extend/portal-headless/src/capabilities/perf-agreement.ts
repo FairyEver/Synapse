@@ -302,6 +302,39 @@ export const PERF_MONTH_PROTOCOL_SIGNATORY_PATH =
  */
 export const PERF_YEAR_PROTOCOL_CONFIG_PATH = '/sys/dict/data/getYearProtocolConfig'
 
+/**
+ * 「个人月度」页**弹窗**「时间节点及扣分标准」读的那一份配置
+ * （`month-agreement/main/components/info.vue:12-16` 的
+ * `useAsyncState(() => http.get('/sys/dict/data/getMonthProtocolConfig'))`，
+ * 由 `main/list.vue:153-161` 的 `actionViewInfo()` 开一个 `createModal` 挂上去）。
+ *
+ * ⚠️ **它不在页面挂载时发**：只在用户点那个 info 按钮、弹窗组件被创建时才发
+ * （`useAsyncState` 在 `setup` 里跑）。所以它不会出现在基准的"页面请求"里
+ * ——**基准里没有这一条不是"页面不发它"的证据**。
+ * ⚠️ 它与「个人年度」页那个 `getYearProtocolConfig` 是**两份不同的配置、两个不同的端点**：
+ * 年度那份只被 `year-agreement/main` 读，这一份只被 `month-agreement/main` 的弹窗读。
+ * 别把 `docs/pages/个人月度.md` 里"弹窗是纯展示、没有接口"那句当回事 —— 那是错的（已改）。
+ *
+ * 后端 `SysDictDataController:139` → `SysDictDataServiceImpl:283` 返回 `List<String>`：
+ * **条数、顺序、文案都由后端拼死**（4 条，见 `SysDictDataServiceImpl:283-338` 的 `result.add` 次序）。
+ */
+export const PERF_MONTH_PROTOCOL_CONFIG_PATH = '/sys/dict/data/getMonthProtocolConfig'
+
+/**
+ * 「个人月度」弹窗那 4 行文案的**固定顺序**（`SysDictDataServiceImpl:283-338` 的
+ * `result.add(...)` 次序，一条不多一条不少）。
+ *
+ * 后端把字典里的天数/扣分配置渲染成整句，SDK **不解析、不重排、不补段落** ——
+ * 页面就是 `v-for` 把每一项原样渲染成一个 `<p>`（`info.vue:1-6`）。
+ * 顺序常量留在这里是为了让"哪一行在说什么"这件事可核对。
+ */
+export const MONTH_PROTOCOL_CONFIG_LINES = [
+  { index: 0, meaning: '月度协议**签订**时间与延迟扣分（下单日、延迟天数、单次扣分、最多扣分）' },
+  { index: 1, meaning: '月度协议**自评**时间窗口（起、止）' },
+  { index: 2, meaning: '月度协议**评价**时间与延迟扣分（止日、延迟天数、单次扣分、最多扣分）' },
+  { index: 3, meaning: '**评分申诉**时间（截止日）' },
+] as const
+
 /** 默认每页条数。`useListPageModule({ styleV2: true })` → 20（`list.js:391`） */
 const DEFAULT_PAGE_SIZE = 20
 
@@ -710,6 +743,17 @@ export const perfAgreementCapabilities: CapabilityDefinition[] = [
     write: false,
     params: [],
   },
+  // ⚠️ 与 `perf-month-agreement-list` **共用 pagePath**，同样是**有意**的：
+  //    它是「时间节点及扣分标准」弹窗自己发的零参数请求，不是列表数据。
+  //    与年度那条同一个形态（那条也共用 pagePath）；两条合起来才是完整的"两页各读各的配置"。
+  {
+    id: 'perf-month-protocol-config-get',
+    title: '查询个人月度协议的时间节点及扣分标准（月度页弹窗）',
+    pagePath: PERF_MONTH_AGREEMENT_MAIN_PAGE_PATH,
+    permission: '/dashboard/month-agreement/main',
+    write: false,
+    params: [],
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -849,6 +893,24 @@ export function createPerfAgreementCapability (
     getYearProtocolConfig (): Promise<string> {
       return requestYearMain<string>({
         url: PERF_YEAR_PROTOCOL_CONFIG_PATH,
+        method: 'get',
+      })
+    },
+
+    /**
+     * 读「个人月度」页「时间节点及扣分标准」弹窗里的那 4 行配置。只读。
+     *
+     * **零参数**：页面的调用是 `http.get('/sys/dict/data/getMonthProtocolConfig')`
+     * （`main/components/info.vue:12-16`），URL 上只有 `_t`。所以这里不收 query、不发分页。
+     *
+     * 返回**字符串数组**（后端 `CommonResult<List<String>>`），按
+     * `MONTH_PROTOCOL_CONFIG_LINES` 的固定顺序给出签订 / 自评 / 评价 / 申诉四段文案。
+     * SDK **不解析这些句子**：天数与扣分值是后端从字典读出来拼进模板的，
+     * 页面也只是原样换行显示。要改天数请去「时间节点」配置页，不是这个能力的职责。
+     */
+    getMonthProtocolConfig (): Promise<string[]> {
+      return requestMonthMain<string[]>({
+        url: PERF_MONTH_PROTOCOL_CONFIG_PATH,
         method: 'get',
       })
     },

@@ -79,10 +79,57 @@ describe('成本中心汇总页面能力', () => {
     await expect(fixture([{ data: new ArrayBuffer(0), headers: {} }]).api.export()).rejects.toThrow('空文件')
   })
 
+  it('维护子页列表：pagePath 复用汇总页、code/name 空值不发键、后端固定 is_del=0 与 id 升序', async () => {
+    const root = process.env.PORTAL_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Projects_Js'
+    const javaRoot = process.env.JAVA_REPO ?? '/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java'
+    const maintenance = readFileSync(join(root, 'app/portal/views/dashboard/hr/manage/cost-center/maintenance/list.vue'), 'utf8')
+    const impl = readFileSync(join(javaRoot, 'erp-module-hr/erp-module-hr-biz/src/main/java/com/wdbc/erp/module/hr/controller/admin/salary/service/impl/SalaryCostCenterServiceImpl.java'), 'utf8')
+    expect(maintenance).toContain("getDataListURL: '/salary/costcenter/manage-page'")
+    expect(maintenance).toContain('styleV2: true')
+    // 页面把空值转成 undefined（不是空字符串），qs 的 skipNulls 会把该键整条丢掉
+    expect(maintenance).toContain('code: form.code?.trim() || undefined')
+    expect(maintenance).toContain('name: form.name?.trim() || undefined')
+    expect(impl).toContain('eq(SalaryCostCenterEntity::getIsDel, 0)')
+    expect(impl).toContain('orderByAsc(SalaryCostCenterEntity::getId)')
+    expect(impl).toContain('Math.min(dto.getPageSize(), 500)')
+
+    const f = fixture([{ list: [{
+      id: 9, code: 'C001', name: '研发中心', isDel: 0, creator: 1, createTime: '2026-09-01 10:00:00', updater: null, updateTime: null, ignored: 'x',
+    }], total: 1 }])
+    await expect(f.api.listMaintenance()).resolves.toEqual({ list: [{
+      id: 9, code: 'C001', name: '研发中心', isDel: 0, creator: 1, createTime: '2026-09-01 10:00:00', updater: null, updateTime: null,
+    }], total: 1 })
+    expect(f.calls[0]).toEqual({
+      url: '/salary/costcenter/manage-page', method: 'get',
+      params: { order: '', orderField: '', code: undefined, name: undefined, pageNo: 1, pageSize: 20 },
+    })
+    expect(Object.keys(f.calls[0]!.params as object)).toEqual(['order', 'orderField', 'code', 'name', 'pageNo', 'pageSize'])
+
+    const g = fixture([{ list: [], total: 0 }, { list: [], total: 0 }])
+    await g.api.listMaintenance({ code: '  C0  ', name: '研发', pageNo: 2, pageSize: 50 })
+    expect(g.calls[0]?.params).toEqual({ order: '', orderField: '', code: 'C0', name: '研发', pageNo: 2, pageSize: 50 })
+    // 全空白 == 空值，同样不发该键
+    await g.api.listMaintenance({ code: '   ' })
+    expect(g.calls[1]?.params).toEqual({ order: '', orderField: '', code: undefined, name: undefined, pageNo: 1, pageSize: 20 })
+  })
+
+  it('维护子页列表的坏分页与坏响应不静默成功', async () => {
+    await expect(fixture().api.listMaintenance({ pageSize: 30 })).rejects.toThrow('10、20、50或100')
+    await expect(fixture().api.listMaintenance({ pageNo: 0 })).rejects.toThrow('pageNo')
+    await expect(fixture([{ list: null, total: 0 }]).api.listMaintenance()).rejects.toThrow('list或total')
+    await expect(fixture([{ list: [{ id: 0, code: 'C', name: 'N' }], total: 1 }]).api.listMaintenance()).rejects.toThrow('id')
+  })
+
   it('AI契约完整登记并锁定本页不伪造维护CRUD', () => {
     expect(Object.keys(contracts)).toEqual(Object.keys(MANAGE_COST_CENTER_METHODS))
     expect(Object.keys(methodContracts)).toEqual([...new Set(Object.values(MANAGE_COST_CENTER_METHODS).map(method => `manageCostCenter.${method}`))])
     expect(contracts['manage-cost-center-list']?.output.fields.some(item => item.path === 'list[].fullPath')).toBe(true)
     expect(contracts['manage-cost-center-maintenance']?.boundaries.join('\n')).toContain('不在本能力中伪造维护CRUD')
+    const maintenanceList = contracts['manage-cost-center-maintenance-list']!
+    expect(maintenanceList.output.fields.some(item => item.path === 'list[].code')).toBe(true)
+    expect(maintenanceList.inputs.code?.omitted).toContain('不出现')
+    expect(maintenanceList.consume.join('\n')).toContain('order by id')
+    expect(maintenanceList.boundaries.join('\n')).toContain('DELETE /salary/costcenter')
+    expect(maintenanceList.gaps?.join('\n')).toContain('删除动作')
   })
 })

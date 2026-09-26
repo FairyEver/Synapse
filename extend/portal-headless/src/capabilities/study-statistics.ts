@@ -63,6 +63,33 @@ export const STUDY_STATISTICS_STUDENT_LIST_PATH = '/study/statistics/studentList
 export const STUDY_STATISTICS_TEACHER_LIST_PATH = '/study/statistics/teacherList'
 export const STUDY_STATISTICS_LESSON_LIST_PATH = '/study/statistics/lessonStatisticsList'
 
+// ---------------------------------------------------------------------------
+// 隐藏子路由 / 弹窗发出的那一批请求（本轮补齐）
+//
+// 覆盖判据是「页面只要有**任一**能力指向它就算完成」，于是 `lesson/[staffCode]/item-list.vue`、
+// `course/[staffCode]/`、`score/[staffCode]/`、`student/lesson/detail/[lessonId].vue`
+// 这些**隐藏子路由**、以及 `grade/components/record.vue`（弹窗）与
+// `learning/components/action-details.vue`（弹窗）发出的请求整块漏掉了。
+//
+// 它们都**没有菜单项**，但都由列表行/按钮实际 push 或 createModal 到达，所以仍属于对应页面的能力范围。
+// 每个能力的 `pagePath` 因此绑**可达的父菜单页**（与 `study-course.ts` 处理隐藏 IM 路由同一做法）。
+// ---------------------------------------------------------------------------
+
+/** 班级统计「课堂内容」弹窗：`getGradeLessonRecord`。`lessonIds` 是**逗号分隔**的字符串（见下） */
+export const STUDY_STATISTICS_GRADE_RECORD_PATH = '/study/statistics/getGradeLessonRecord'
+/** 学习统计「个人维度」行上点「是」弹出的明细：`action-details`，路径**自带 `/admin-api`** */
+export const STUDY_STATISTICS_ACTION_DETAILS_PATH = '/admin-api/hr/zhdj-study-statics/action-details'
+/** 学员统计「实学班课数」下钻列表页：`studentLessonStatisticsList` */
+export const STUDY_STATISTICS_STUDENT_LESSON_LIST_PATH = '/study/statistics/studentLessonStatisticsList'
+/** 学员班课明细页：`studentLessonDetail`（**不分页**，返回数组） */
+export const STUDY_STATISTICS_STUDENT_LESSON_DETAIL_PATH = '/study/statistics/studentLessonDetail'
+/** 讲师统计「讲授课程数量」下钻 */
+export const STUDY_STATISTICS_TEACHER_COURSE_LIST_PATH = '/study/statistics/teacherCourseList'
+/** 讲师统计「讲师班课数量」下钻 */
+export const STUDY_STATISTICS_TEACHER_LESSON_LIST_PATH = '/study/statistics/teacherLessonList'
+/** 讲师统计「整体评价」下钻（得分明细） */
+export const STUDY_STATISTICS_TEACHER_SCORE_LIST_PATH = '/study/statistics/teacherScoreList'
+
 /**
  * 班级统计的三个**列表**端点，按课堂类型切。
  *
@@ -280,6 +307,269 @@ export type LearningStaticsPayload = {
 }
 
 // ---------------------------------------------------------------------------
+// 隐藏子路由 / 弹窗的查询类型
+// ---------------------------------------------------------------------------
+
+/**
+ * 「课堂内容」弹窗的入参。
+ *
+ * ⚠️ **只有 `lessonIds` 一个参数**（弹窗里就是 `http.get(url, { params: { lessonIds } })`），
+ * **没有** `order`/`orderField`/`pageNo`/`pageSize` —— 它不是列表模块发的请求。
+ *
+ * ⚠️ `lessonIds` 是**逗号分隔的字符串**（后端 `lessonIds.split(",")`），不是数组，
+ * 也不是重复参数。它在页面上来自班级统计行的 `record.lessonIds`（`GradeLessonCountDTO.lessonIds`）。
+ */
+export type StudyStatisticsGradeRecordQuery = {
+  /** 班课 id 列表。数组会被拼成逗号分隔字符串（页面就是这个形状） */
+  lessonIds: Array<number | string> | string
+}
+
+/**
+ * 「学习/转发明细」弹窗的入参。
+ *
+ * 页面只传三个字段，键序就是下面这个顺序（`handleActionDetailClick` 里现拼的对象）。
+ * `startDate`/`endDate` 后端 DTO 有，但**页面从不传**，所以本能力不开放。
+ */
+export type StudyStatisticsActionDetailsQuery = {
+  /** 课程 id（章或节）。来自个人维度行的勾选上下文，**不是**本地班课 id */
+  lessonId: number | string
+  /** 员工 id（`hr_staff.id`）。来自个人维度行的 `record.staffId` */
+  staffId: number | string
+  /** 行为类型。页面只会传 1（学习）或 5（转发），见 ACTION_TYPE_OPTIONS */
+  actionType: number
+}
+
+/**
+ * 个人维度那一列「学习 / 转发」到 `actionType` 的映射。
+ *
+ * **实测自源码**（`learning/list.vue:234-242`）：
+ * `hasView → 1`、`hasForward → 5`；页面只有这两列入参。
+ * 后端支持的 2/3/4（点赞/收藏/评论）在**这一页上没有入口**，所以本能力按页面只开放 1 与 5。
+ */
+export const ACTION_DETAILS_TYPE_OPTIONS: ReadonlyArray<{ label: string; value: number }> = [
+  { label: '学习', value: 1 },
+  { label: '转发', value: 5 },
+]
+
+/** 学员班课明细（下钻列表页 `/dashboard/statistics/student/lesson/item-list`）的查询条件 */
+export type StudyStatisticsStudentLessonQuery = {
+  /** 学员工号。来自父页 push 过来的 `route.query.staffCode` */
+  staffCode?: string | number
+  /**
+   * 是否已开始。父页「实学班课数」列跳转时传 `1`。
+   * 后端注释：由学员统计列表点击「实学班课数」、或班课统计点击「实际学习人数」跳转时传 1，其余时候不传。
+   */
+  isStarted?: string | number
+  /** 学员姓名 */
+  staffName?: string
+  /** 学员电话 */
+  mobile?: string | number
+  /** 班课 id。从班课统计跳过来时带 `route.query.lessonId` */
+  lessonId?: string | number
+  /** 班课名称 */
+  lessonTitle?: string
+  /** 课堂类型，字典 `lesson_type`（取值域未实测） */
+  lessonType?: string | number
+  /** 所属班级 id */
+  gradeId?: string | number
+  /** 班课状态，字典 `lesson_study_status`（取值域未实测） */
+  status?: string | number
+  /** 开课时间起 `YYYY-MM-DD HH:mm:ss`；用 buildStudyStatisticsLessonTimeRange 生成 */
+  startTimeCondition?: string
+  /** 开课时间止，**开区间**（结束日 +1 天） */
+  endTimeCondition?: string
+  order?: string
+  orderField?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+/** 学员班课明细页（`detail/[lessonId].vue`）的查询条件。**不分页** */
+export type StudyStatisticsStudentLessonDetailQuery = {
+  /** 学员工号 */
+  staffCode?: string | number
+  /** 班课 id。来自路由参数 `[lessonId]` */
+  lessonId?: string | number
+}
+
+/** 讲师统计三个下钻页共用的分页参数 */
+export type StudyStatisticsTeacherCourseQuery = {
+  /** 讲师工号。来自路由参数 `[staffCode]` */
+  staffCode?: string | number
+  /** 课程类型，字典 `course_type`（取值域未实测） */
+  type?: string | number
+  /** 讲授时间。⚠️ 这一页是 `a-date-picker` **单选**，不是区间，所以只有一个字段、没有 +1 天 */
+  startTime?: string
+  order?: string
+  orderField?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+export type StudyStatisticsTeacherLessonQuery = {
+  /** 讲师工号。来自路由参数 `[staffCode]` */
+  staffCode?: string | number
+  /** 班课名称 */
+  title?: string
+  /** 评分人数下限 */
+  appraiseNumMin?: string | number
+  /** 评分人数上限 */
+  appraiseNumMax?: string | number
+  /** 平均得分下限 */
+  avgScoreMin?: string | number
+  /** 平均得分上限 */
+  avgScoreMax?: string | number
+  order?: string
+  orderField?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+export type StudyStatisticsTeacherScoreQuery = {
+  /** 讲师工号。来自路由参数 `[staffCode]` */
+  staffCode?: string | number
+  /** 评价总分下限 */
+  allScoreMin?: string | number
+  /** 评价总分上限 */
+  allScoreMax?: string | number
+  /** 评分时间起 `YYYY-MM-DD HH:mm:ss`；用 buildStudyStatisticsTeacherScoreTimeRange 生成 */
+  startTimeFrom?: string
+  /** 评分时间止，**开区间**（结束日 +1 天）。⚠️ 字段名是 `startTimeEnd`，不是 `endTime` */
+  startTimeEnd?: string
+  order?: string
+  orderField?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+/**
+ * 学员班课明细列表的参数顺序。
+ *
+ * 依据是 `student/lesson/item-list.vue` 的 `form` 键序与列表模块的拼装方式
+ * （`common/libs/renren/list.js:470-482`：`{ order, orderField, ...formState, pageNo, pageSize }`，
+ * 重复键保留**第一次出现的位置**）：
+ *
+ * ```text
+ * order, orderField, staffCode, isStarted, staffName, mobile, lessonId, lessonTitle,
+ * lessonType, gradeId, status, startTimeCondition, endTimeCondition, pageNo, pageSize
+ * ```
+ *
+ * ⚠️ `staffCode` / `isStarted` / `lessonId` / `status` 的初值来自 `route.query.*`，
+ * 取不到就是 `undefined` —— qs 的 `skipNulls` 会把它们**整个丢掉**（与同页 `gradeId` 的
+ * 空串不同）。所以这几项的默认值必须是 `undefined`，不是空串。
+ *
+ * ⚠️ `startTimeCondition` / `endTimeCondition` 是 `convertFetchForm` **追加**上去的
+ * （`omit(data, ['date'])` 之后展开），所以排在 `status` 之后、分页参数之前。
+ */
+const STUDENT_LESSON_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'staffCode', defaultValue: undefined },
+  { name: 'isStarted', defaultValue: undefined },
+  { name: 'staffName', defaultValue: '' },
+  { name: 'mobile', defaultValue: '' },
+  { name: 'lessonId', defaultValue: undefined },
+  { name: 'lessonTitle', defaultValue: '' },
+  { name: 'lessonType', defaultValue: '' },
+  { name: 'gradeId', defaultValue: '' },
+  { name: 'status', defaultValue: undefined },
+  { name: 'startTimeCondition', defaultValue: '' },
+  { name: 'endTimeCondition', defaultValue: '' },
+  { name: 'pageNo', defaultValue: 1 },
+  { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/**
+ * 学员班课明细页（`detail/[lessonId].vue`）的参数顺序。
+ *
+ * 这一页**没有** `getDataListIsPage`，所以列表模块**不加** `pageNo`/`pageSize`
+ * （`list.js:479` 那个 `if`）—— 顺序就是 `order, orderField, staffCode, lessonId`。
+ * 少了这一条会多发两个后端不认的参数，而它是一个不分页的数组接口。
+ */
+const STUDENT_LESSON_DETAIL_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'staffCode', defaultValue: '' },
+  { name: 'lessonId', defaultValue: '' },
+]
+
+/** 讲师讲授课程明细：`form` 键序 staffCode, type, startTime + 分页 */
+const TEACHER_COURSE_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'staffCode', defaultValue: '' },
+  { name: 'type', defaultValue: '' },
+  { name: 'startTime', defaultValue: '' },
+  { name: 'pageNo', defaultValue: 1 },
+  { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/** 讲师讲授班课明细：`form` 键序 staffCode, title, appraiseNumMin/Max, avgScoreMin/Max + 分页 */
+const TEACHER_LESSON_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'staffCode', defaultValue: '' },
+  { name: 'title', defaultValue: '' },
+  { name: 'appraiseNumMin', defaultValue: '' },
+  { name: 'appraiseNumMax', defaultValue: '' },
+  { name: 'avgScoreMin', defaultValue: '' },
+  { name: 'avgScoreMax', defaultValue: '' },
+  { name: 'pageNo', defaultValue: 1 },
+  { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/** 得分明细：`omit(form,'date')` 之后**追加** startTimeFrom/startTimeEnd，再排 pageNo/pageSize */
+const TEACHER_SCORE_ORDER: ReadonlyArray<{ name: string; defaultValue: unknown }> = [
+  { name: 'order', defaultValue: '' },
+  { name: 'orderField', defaultValue: '' },
+  { name: 'staffCode', defaultValue: '' },
+  { name: 'allScoreMin', defaultValue: '' },
+  { name: 'allScoreMax', defaultValue: '' },
+  { name: 'startTimeFrom', defaultValue: '' },
+  { name: 'startTimeEnd', defaultValue: '' },
+  { name: 'pageNo', defaultValue: 1 },
+  { name: 'pageSize', defaultValue: DEFAULT_PAGE_SIZE },
+]
+
+/**
+ * 把 `lessonIds` 归一成后端认的**逗号分隔字符串**。
+ *
+ * 依据是后端 `StatisticsServiceImpl.getGradeLessonRecord`：
+ * `StringUtils.isBlank(lessonIds) → 返回空列表`；否则 `lessonIds.split(",")`。
+ * 空串与空数组都返回空结果，所以本地直接拦住"什么都没选"那次调用。
+ *
+ * ⚠️ 后端拿到之后会 `Arrays.stream(ids).sorted(Collections.reverseOrder())` ——
+ * **按字符串倒序重排**（不是按数值、也不是保持传入顺序），
+ * 所以返回数组的顺序与传入顺序**不一致**，调用方不能按下标对齐。
+ */
+function joinLessonIds (value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) throw new Error('lessonIds 不能为空数组：后端对空值是直接返回空列表，不是"查全部"')
+    return value.map((item, index) => {
+      const text = typeof item === 'number' ? String(item) : String(item ?? '').trim()
+      if (text === '') throw new Error(`lessonIds[${index}] 不能为空`)
+      return text
+    }).join(',')
+  }
+  if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  throw new Error('lessonIds 不能为空：传班课 id 数组（或逗号分隔字符串）')
+}
+
+/**
+ * 得分明细页的时间区间 → `{ startTimeFrom, startTimeEnd }`。
+ *
+ * 与讲师统计页同一套 `+1 天` 开区间（`convertFetchForm` 里是 `.add(1,'day')`），
+ * 只是**字段名不同**（`startTimeFrom`/`startTimeEnd`）。
+ */
+export function buildStudyStatisticsTeacherScoreTimeRange (
+  startDate: string,
+  endDate: string,
+): { startTimeFrom: string; startTimeEnd: string } {
+  const { start, endExclusive } = plusOneDayRange(startDate, endDate, '得分明细评分时间')
+  return { startTimeFrom: formatDateTime(start), startTimeEnd: formatDateTime(endExclusive) }
+}
+
+// ---------------------------------------------------------------------------
 // 参数装配
 // ---------------------------------------------------------------------------
 
@@ -466,6 +756,140 @@ const LEARNING_PARAMS: ParamSpec[] = [
   ...PAGE_PARAMS,
 ]
 
+const STUDENT_LESSON_PARAMS: ParamSpec[] = [
+  {
+    name: 'staffCode',
+    kind: 'text',
+    required: false,
+    description:
+      '学员工号。父页「实学班课数」列跳转时带过来；**不传就不发这一项**（页面初值是 route.query）',
+  },
+  {
+    name: 'isStarted',
+    kind: 'number',
+    required: false,
+    description:
+      '是否已开始。父页跳转时传 1（后端注释：由学员统计「实学班课数」或班课统计「实际学习人数」跳转时传 1）；不传就不发',
+  },
+  text('staffName', '学员姓名'),
+  text('mobile', '学员电话'),
+  {
+    name: 'lessonId',
+    kind: 'search',
+    required: false,
+    description:
+      '班课 id。从班课统计「实际学习人数」跳过来时才带；候选见班课统计的 lessonTitle 检索结果，不要猜 id',
+  },
+  text('lessonTitle', '班课名称'),
+  text('lessonType', '课堂类型（字典 lesson_type，取值域未实测，只透传）'),
+  {
+    name: 'gradeId',
+    kind: 'search',
+    required: false,
+    description: '所属班级 id。**先问用户关键字**再调 study-grade-search 取候选，不要猜 id',
+    lookup: { capabilityId: 'study-grade-search', keywordParam: 'keyword' },
+  },
+  text('status', '班课状态（字典 lesson_study_status，取值域未实测，只透传）'),
+  {
+    name: 'startTimeCondition',
+    kind: 'date',
+    required: false,
+    description: '开课时间起 `YYYY-MM-DD HH:mm:ss`；用 buildStudyStatisticsLessonTimeRange 生成（开区间）',
+  },
+  {
+    name: 'endTimeCondition',
+    kind: 'date',
+    required: false,
+    description: '开课时间止，**开区间**（结束日 +1 天）；**必须与 startTimeCondition 成对**',
+  },
+  ...PAGE_PARAMS,
+]
+
+const STUDENT_LESSON_DETAIL_PARAMS: ParamSpec[] = [
+  text('staffCode', '学员工号'),
+  { name: 'lessonId', kind: 'number', required: false, description: '班课 id（来自下钻列表行）' },
+]
+
+const TEACHER_COURSE_PARAMS: ParamSpec[] = [
+  text('staffCode', '讲师工号（来自下钻路由的 [staffCode]）'),
+  text('type', '课程类型（字典 course_type，取值域未实测，只透传）'),
+  {
+    name: 'startTime',
+    kind: 'date',
+    required: false,
+    description:
+      '讲授时间，`YYYY-MM-DD HH:mm:ss`。⚠️ 这一页是**单选日期**，不是区间 —— 没有"结束日 +1 天"那回事',
+  },
+  ...PAGE_PARAMS,
+]
+
+const TEACHER_LESSON_PARAMS: ParamSpec[] = [
+  text('staffCode', '讲师工号（来自下钻路由的 [staffCode]）'),
+  text('title', '班课名称'),
+  { name: 'appraiseNumMin', kind: 'number', required: false, description: '评分人数下限' },
+  { name: 'appraiseNumMax', kind: 'number', required: false, description: '评分人数上限' },
+  { name: 'avgScoreMin', kind: 'number', required: false, description: '平均得分下限' },
+  { name: 'avgScoreMax', kind: 'number', required: false, description: '平均得分上限' },
+  ...PAGE_PARAMS,
+]
+
+const TEACHER_SCORE_PARAMS: ParamSpec[] = [
+  text('staffCode', '讲师工号（来自下钻路由的 [staffCode]）'),
+  { name: 'allScoreMin', kind: 'number', required: false, description: '评价总分下限' },
+  { name: 'allScoreMax', kind: 'number', required: false, description: '评价总分上限' },
+  {
+    name: 'startTimeFrom',
+    kind: 'date',
+    required: false,
+    description: '评分时间起 `YYYY-MM-DD HH:mm:ss`；用 buildStudyStatisticsTeacherScoreTimeRange 生成',
+  },
+  {
+    name: 'startTimeEnd',
+    kind: 'date',
+    required: false,
+    description:
+      '评分时间止，**开区间**（结束日 +1 天）。⚠️ 字段名是 `startTimeEnd`（不是 endTime），别照抄讲师统计页',
+  },
+  ...PAGE_PARAMS,
+]
+
+const ACTION_DETAILS_PARAMS: ParamSpec[] = [
+  {
+    name: 'lessonId',
+    kind: 'number',
+    required: true,
+    description:
+      '课程（章或节）id。**不是**本地班课 id：它来自学习统计页课程级联选择器选中的末节点' +
+      '（`smart-layer-app` 实例的 `/api/zhdj/studyLessonCatalogue/getChapterTree`）',
+  },
+  {
+    name: 'staffId',
+    kind: 'number',
+    required: true,
+    description: '员工 id（`hr_staff.id`），来自学习统计个人维度行的 `record.staffId`。**不是**工号',
+  },
+  {
+    name: 'actionType',
+    kind: 'enum',
+    required: true,
+    description:
+      '行为类型。页面只在个人维度「学习」「转发」两列上开入口，所以本能力只开放 1 与 5；' +
+      '后端还支持 2/3/4，但**这一页没有入口**',
+    options: ACTION_DETAILS_TYPE_OPTIONS.map((item) => ({ label: item.label, value: item.value })),
+  },
+]
+
+const GRADE_RECORD_PARAMS: ParamSpec[] = [
+  {
+    name: 'lessonIds',
+    kind: 'array',
+    required: true,
+    description:
+      '班课 id 数组（会拼成逗号分隔字符串）。来自班级统计行的 `record.lessonIds`；' +
+      '后端把它 split(",") 后**按字符串倒序**处理，所以返回顺序与传入顺序不一致',
+  },
+]
+
 export const studyStatisticsCapabilities: CapabilityDefinition[] = [
   {
     id: 'study-statistics-student-list',
@@ -476,12 +900,52 @@ export const studyStatisticsCapabilities: CapabilityDefinition[] = [
     params: STUDENT_PARAMS,
   },
   {
+    id: 'study-statistics-student-lesson-list',
+    title: '查询学员班课明细列表（学员统计下钻）',
+    pagePath: STUDY_STATISTICS_STUDENT_PAGE_PATH,
+    permission: '/dashboard/statistics/student',
+    write: false,
+    params: STUDENT_LESSON_PARAMS,
+  },
+  {
+    id: 'study-statistics-student-lesson-detail',
+    title: '查询学员班课的环节明细（学员统计下钻）',
+    pagePath: STUDY_STATISTICS_STUDENT_PAGE_PATH,
+    permission: '/dashboard/statistics/student',
+    write: false,
+    params: STUDENT_LESSON_DETAIL_PARAMS,
+  },
+  {
     id: 'study-statistics-teacher-list',
     title: '查询讲师统计列表',
     pagePath: STUDY_STATISTICS_TEACHER_PAGE_PATH,
     permission: '/dashboard/statistics/teacher',
     write: false,
     params: TEACHER_PARAMS,
+  },
+  {
+    id: 'study-statistics-teacher-course-list',
+    title: '查询讲师讲授课程明细（讲师统计下钻）',
+    pagePath: STUDY_STATISTICS_TEACHER_PAGE_PATH,
+    permission: '/dashboard/statistics/teacher',
+    write: false,
+    params: TEACHER_COURSE_PARAMS,
+  },
+  {
+    id: 'study-statistics-teacher-lesson-list',
+    title: '查询讲师讲授班课明细（讲师统计下钻）',
+    pagePath: STUDY_STATISTICS_TEACHER_PAGE_PATH,
+    permission: '/dashboard/statistics/teacher',
+    write: false,
+    params: TEACHER_LESSON_PARAMS,
+  },
+  {
+    id: 'study-statistics-teacher-score-list',
+    title: '查询讲师得分明细（讲师统计下钻）',
+    pagePath: STUDY_STATISTICS_TEACHER_PAGE_PATH,
+    permission: '/dashboard/statistics/teacher',
+    write: false,
+    params: TEACHER_SCORE_PARAMS,
   },
   {
     id: 'study-statistics-lesson-list',
@@ -506,6 +970,22 @@ export const studyStatisticsCapabilities: CapabilityDefinition[] = [
     permission: '/dashboard/statistics/learning',
     write: false,
     params: LEARNING_PARAMS,
+  },
+  {
+    id: 'study-statistics-learning-action-details',
+    title: '查询学员学习/转发明细（学习统计下钻）',
+    pagePath: STUDY_STATISTICS_LEARNING_PAGE_PATH,
+    permission: '/dashboard/statistics/learning',
+    write: false,
+    params: ACTION_DETAILS_PARAMS,
+  },
+  {
+    id: 'study-statistics-grade-lesson-record',
+    title: '查询班级课堂内容记录（班级统计下钻）',
+    pagePath: STUDY_STATISTICS_GRADE_PAGE_PATH,
+    permission: '/dashboard/statistics/grade',
+    write: false,
+    params: GRADE_RECORD_PARAMS,
   },
 ]
 
@@ -636,6 +1116,130 @@ export function createStudyStatisticsCapability (
         }),
       ])
       return { summary, byOrganizationChart, byOrganization, byStaff, errors }
+    },
+
+    /**
+     * 学员统计下钻：某个学员的班课明细分页。只读。
+     *
+     * 参数顺序见 `STUDENT_LESSON_ORDER` 的注释；`staffCode`/`isStarted`/`lessonId`/`status`
+     * 这几项**不传就整个不发**（页面初值来自 `route.query`，是 `undefined`）。
+     */
+    listStudentLessons (
+      query: StudyStatisticsStudentLessonQuery = {},
+    ): Promise<PageResult<StudyStatisticsRow>> {
+      return requestStudent<PageResult<StudyStatisticsRow>>({
+        url: STUDY_STATISTICS_STUDENT_LESSON_LIST_PATH,
+        method: 'get',
+        params: buildOrdered(STUDENT_LESSON_ORDER, query as Record<string, unknown>),
+      })
+    },
+
+    /**
+     * 学员统计下钻的下一层：某个学员在某个班课里的**环节**明细。只读。
+     *
+     * ⚠️ 这个接口**不分页**：页面没写 `getDataListIsPage`，列表模块就不加
+     * `pageNo`/`pageSize`（`list.js:479`），后端也返回数组（`CommonResult<List<AppLessonLinkDTO>>`）。
+     * SDK 因此返回**数组**而不是 `{list,total}` —— 与同域其它列表能力不同形，这是刻意的。
+     */
+    listStudentLessonDetail (
+      query: StudyStatisticsStudentLessonDetailQuery = {},
+    ): Promise<StudyStatisticsRow[]> {
+      return requestStudent<StudyStatisticsRow[]>({
+        url: STUDY_STATISTICS_STUDENT_LESSON_DETAIL_PATH,
+        method: 'get',
+        params: buildOrdered(STUDENT_LESSON_DETAIL_ORDER, query as Record<string, unknown>),
+      })
+    },
+
+    /** 讲师统计下钻：某讲师讲授过的**课程**明细分页。只读 */
+    listTeacherCourses (
+      query: StudyStatisticsTeacherCourseQuery = {},
+    ): Promise<PageResult<StudyStatisticsRow>> {
+      return requestTeacher<PageResult<StudyStatisticsRow>>({
+        url: STUDY_STATISTICS_TEACHER_COURSE_LIST_PATH,
+        method: 'get',
+        params: buildOrdered(TEACHER_COURSE_ORDER, query as Record<string, unknown>),
+      })
+    },
+
+    /** 讲师统计下钻：某讲师讲授过的**班课**明细分页（含 1~5 题均分与总均分）。只读 */
+    listTeacherLessons (
+      query: StudyStatisticsTeacherLessonQuery = {},
+    ): Promise<PageResult<StudyStatisticsRow>> {
+      return requestTeacher<PageResult<StudyStatisticsRow>>({
+        url: STUDY_STATISTICS_TEACHER_LESSON_LIST_PATH,
+        method: 'get',
+        params: buildOrdered(TEACHER_LESSON_ORDER, query as Record<string, unknown>),
+      })
+    },
+
+    /** 讲师统计下钻：某讲师收到的**逐条评分**明细分页。只读 */
+    listTeacherScores (
+      query: StudyStatisticsTeacherScoreQuery = {},
+    ): Promise<PageResult<StudyStatisticsRow>> {
+      return requestTeacher<PageResult<StudyStatisticsRow>>({
+        url: STUDY_STATISTICS_TEACHER_SCORE_LIST_PATH,
+        method: 'get',
+        params: buildOrdered(TEACHER_SCORE_ORDER, query as Record<string, unknown>),
+      })
+    },
+
+    /**
+     * 学习统计下钻：「学习 / 转发」列上点「是」弹出的明细。**读**，返回**数组**。
+     *
+     * 路径按页面原样写成了 `/admin-api/hr/zhdj-study-statics/action-details`
+     * （`platform.js` 的前缀拦截器对已带 `/admin-api` 的不再补），与同页那四个 POST 同源。
+     *
+     * ⚠️ `lessonId` 是**智慧蛋鸡的课程/章节 id**，`staffId` 是 `hr_staff.id` —— 两者都不是
+     * 本地班课 id 或工号，不能互相顶替。
+     */
+    async listLearningActionDetails (
+      query: StudyStatisticsActionDetailsQuery,
+    ): Promise<StudyStatisticsRow[]> {
+      // `async` 是刻意的：参数错误走 Promise.reject，不是同步抛（与其它能力一致）
+      const actionType = query?.actionType
+      if (!ACTION_DETAILS_TYPE_OPTIONS.some((item) => item.value === actionType)) {
+        throw new Error(
+          `actionType 只能是 1（学习）或 5（转发）—— 这是学习统计页个人维度上仅有的两个入口，` +
+            `收到的是 ${JSON.stringify(actionType)}`,
+        )
+      }
+      if (query?.lessonId === undefined || query.lessonId === null || String(query.lessonId).trim() === '') {
+        throw new Error('lessonId（课程/章节 id）必填')
+      }
+      if (query?.staffId === undefined || query.staffId === null || String(query.staffId).trim() === '') {
+        throw new Error('staffId（员工 id）必填')
+      }
+      // 键序与页面自己拼的对象一致：lessonId, staffId, actionType
+      return requestLearning<StudyStatisticsRow[]>({
+        url: STUDY_STATISTICS_ACTION_DETAILS_PATH,
+        method: 'post',
+        data: {
+          lessonId: query.lessonId,
+          staffId: query.staffId,
+          actionType,
+        },
+      })
+    },
+
+    /**
+     * 班级统计下钻：「课堂内容」弹窗里那个课堂记录。**读**，返回**数组**。
+     *
+     * ⚠️ 参数只有 `lessonIds`，**没有** `order`/`pageNo` 那一套 —— 它不是列表模块发的请求。
+     * 传数组会按逗号拼成后端认的字符串；空值在本地就拦住（后端对空值是直接返回空列表，
+     * 而不是"查全部"，静默返回空会让人以为"这个班没有课堂内容"）。
+     *
+     * ⚠️ 后端对 id 做**字符串倒序**排序后再逐个取，所以返回数组的顺序**不代表**输入顺序。
+     */
+    async listGradeLessonRecords (
+      query: StudyStatisticsGradeRecordQuery,
+    ): Promise<StudyStatisticsRow[]> {
+      const lessonIds = joinLessonIds(query?.lessonIds)
+      return requestGrade<StudyStatisticsRow[]>({
+        url: STUDY_STATISTICS_GRADE_RECORD_PATH,
+        method: 'get',
+        params: { lessonIds },
+      })
     },
   }
 }

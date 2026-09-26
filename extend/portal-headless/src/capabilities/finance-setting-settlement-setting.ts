@@ -35,6 +35,28 @@ export type FinanceSettlementSettingRow = {
 
 export type FinanceSettlementSettingDetail = FinanceSettlementSettingRow
 
+/**
+ * 核算范围清单项（`SettlementScopeItemRespVO`）。
+ *
+ * ⚠️ 这个清单**不是**"保存时勾选的那几个组织"，而是后端把它展开后的结果：
+ * 勾选的组织 + 这些组织的全部后代（`getDescendantByAncestor`），再按该条设置的
+ * `accountingEntityType` 过滤（standard_unit 只留 isStandardUnit=1，corporation 只留
+ * isCorporation=1），最后按 `orgId` 升序排列。
+ */
+export type FinanceSettlementScopeItem = {
+  orgId: FinanceSettlementSettingId
+  orgName: string | null
+  orgCode: string | null
+  /** 是否标准化单元：0 否、1 是。 */
+  isStandardUnit: number | null
+  /** 是否法人主体：0 否、1 是。 */
+  isCorporation: number | null
+  /** 组织层级。 */
+  level: number | null
+  /** 组织全路径。 */
+  fullPath: string | null
+}
+
 export type FinanceSettlementSettingSaveDraft = {
   id?: FinanceSettlementSettingId | ''
   accountingEntityType: FinanceSettlementAccountingEntityType
@@ -197,6 +219,25 @@ function trueResult (value: unknown, label: string): true {
   return true
 }
 
+function nullableFlagOf (value: unknown, label: string): number | null {
+  if (value === undefined || value === null) return null
+  if (!Number.isSafeInteger(value)) throw new Error(`${label}必须为整数或null`)
+  return value as number
+}
+
+function scopeItemOf (value: unknown, index: number): FinanceSettlementScopeItem {
+  const item = objectOf(value, `核算范围清单[${index}]`)
+  return {
+    orgId: idOf(item.orgId, `核算范围清单[${index}].orgId`),
+    orgName: nullableTextOf(item.orgName, `核算范围清单[${index}].orgName`),
+    orgCode: nullableTextOf(item.orgCode, `核算范围清单[${index}].orgCode`),
+    isStandardUnit: nullableFlagOf(item.isStandardUnit, `核算范围清单[${index}].isStandardUnit`),
+    isCorporation: nullableFlagOf(item.isCorporation, `核算范围清单[${index}].isCorporation`),
+    level: nullableFlagOf(item.level, `核算范围清单[${index}].level`),
+    fullPath: nullableTextOf(item.fullPath, `核算范围清单[${index}].fullPath`),
+  }
+}
+
 export function createFinanceSettingSettlementSettingCapability (request: PortalRequest) {
   return {
     async list (query: FinanceSettlementSettingQuery = {}): Promise<PageResult<FinanceSettlementSettingRow>> {
@@ -208,6 +249,24 @@ export function createFinanceSettingSettlementSettingCapability (request: Portal
       const id = idOf(input?.id, '结转单设置id')
       return detailOf(await request<unknown>({ url: `${ROOT}/get`, method: 'get', params: { id } }))
     },
+    /**
+     * 查看某条结转单设置的「核算范围」清单（scope-modal 那一屏）。
+     *
+     * ⚠️ 两点必须让调用方知道：
+     * 1. `scope-modal.vue` 在固定检出里**没有被任何页面或组件 import**（整仓 grep 无引用），
+     *    所以这个动作当前在 Portal 界面上**没有入口**；能力仍然交付，因为后端接口与前端
+     *    组件契约都是真实存在的，且它是"看这条设置的核算范围到底覆盖了哪些组织"的唯一实现。
+     * 2. 后端整个 `SettlementSettingController` 挂着
+     *    `@ConditionalOnProperty(erp.finance.settlement.enabled=true)`，**默认关闭**；
+     *    开关没开的部署上，本能力（连同本文件的其它结转单设置能力）一律 404。
+     */
+    async listScope (input: { id: FinanceSettlementSettingId }): Promise<FinanceSettlementScopeItem[]> {
+      const id = idOf(input?.id, '结转单设置id')
+      const result = await request<unknown>({ url: `${ROOT}/scope-list`, method: 'get', params: { id } })
+      if (!Array.isArray(result)) throw new Error('核算范围清单响应必须是数组')
+      return result.map(scopeItemOf)
+    },
+
     async organizationTree (): Promise<FinanceSettlementOrganizationNode[]> {
       const result = await request<unknown>({ url: ORG_TREE_URL, method: 'get', params: { excludePost: false } })
       if (!Array.isArray(result)) throw new Error('结转单设置组织树响应必须是数组')
@@ -265,6 +324,7 @@ const saveParams: ParamSpec[] = [
 export const FINANCE_SETTING_SETTLEMENT_SETTING_METHODS = {
   'finance-setting-settlement-setting-list': 'list',
   'finance-setting-settlement-setting-get': 'get',
+  'finance-setting-settlement-setting-scope-list': 'listScope',
   'finance-setting-settlement-setting-organization-tree': 'organizationTree',
   'finance-setting-settlement-setting-prepare-create': 'prepareCreate',
   'finance-setting-settlement-setting-create': 'create',
@@ -277,6 +337,7 @@ export const FINANCE_SETTING_SETTLEMENT_SETTING_METHODS = {
 export const financeSettingSettlementSettingCapabilities: CapabilityDefinition[] = [
   { id: 'finance-setting-settlement-setting-list', title: '查询结转单设置', write: false, params: pageParams },
   { id: 'finance-setting-settlement-setting-get', title: '查询结转单设置详情', write: false, params: [p('id', 'text', true, '结转单设置主记录ID')] },
+  { id: 'finance-setting-settlement-setting-scope-list', title: '查询结转单设置核算范围清单', write: false, params: [p('id', 'text', true, '结转单设置主记录ID')] },
   { id: 'finance-setting-settlement-setting-organization-tree', title: '查询结转单设置组织树', write: false, params: [] },
   { id: 'finance-setting-settlement-setting-prepare-create', title: '准备创建结转单设置', write: false, params: saveParams },
   { id: 'finance-setting-settlement-setting-create', title: '创建结转单设置', write: true, params: saveParams },

@@ -109,6 +109,47 @@ add('setting-supplier-remove', '删除当前供应商列表中的一条供应商
 add('setting-supplier-platform-list', '查询 Portal“平台供应商库中选择”弹窗中的平台供应商分页。', page('平台供应商列表'), ['只把 selectable=true 的行交给 addPlatform；保留 row.id，不把平台列表行直接当作当前租户供应商。'])
 add('setting-supplier-add-platform', '把平台供应商选择弹窗中可选的供应商加入当前租户。', trueOutput, ['提交后重新 list，核对每个 supplierId 已进入当前租户可见列表；请求体 tenantId 只用于复刻页面，不作为权限凭据。'], { inputs: { supplierIds: param('用户选中的 selectable=true 平台供应商 ID 数组。', 'setting-supplier-platform-list 返回值', { type: '(string | number)[]', required: true, constraints: ['必须非空；不要提交 selectable=false 的行'] }), tenantId: param('当前会话租户 ID；Portal 会提交此字段，但后端以会话 TenantContextHolder 为准。', 'SDK 会话租户上下文', { type: 'string | number', required: true }) }, steps: [{ capabilityId: 'setting-supplier-list', role: 'required', when: '添加成功或响应超时', instruction: '逐 ID 回查当前租户列表，确认已可见；不能仅凭 true 判定已添加。' }] })
 
+add('setting-supplier-brand-candidates', '分页读取跨租户的系统品牌字典，给出供应商表单品牌多选列需要的品牌ID与名称。', {
+  shape: '{ list: array, total: integer }',
+  fields: [
+    field('$', 'object', '系统品牌分页结果。'),
+    field('list', 'array', '当前页品牌，不是全部品牌。'),
+    field('list[]', 'object', '一个系统品牌。'),
+    field('list[].brandId', 'string | number', '品牌ID；勾选后按逗号 join 成供应商表单的 sysBrandIds（本能力不写数据，只给候选）。'),
+    field('list[].brandName', 'string', '品牌名称；页面下拉的显示文本。', { nullable: true, nullMeaning: '后端未返回名称。' }),
+    field('list[].brandAlias', 'string', '品牌别名。', { nullable: true, nullMeaning: '后端未返回别名。' }),
+    field('list[].brandUrl', 'string', '品牌网址（后端标注为保留字段）。', { nullable: true, nullMeaning: '后端未返回网址。' }),
+    field('list[].orderSort', 'integer', '排序值。', { nullable: true, nullMeaning: '后端未返回排序值。' }),
+    field('list[].brandDesc', 'string', '品牌介绍（后端标注为保留字段）。', { nullable: true, nullMeaning: '后端未返回介绍。' }),
+    field('list[].brandLogo', 'string', '品牌图片标识。', { nullable: true, nullMeaning: '后端未返回图片标识。' }),
+    field('list[].modifiedTime', 'integer', '修改时间（整数时间戳/秒级原值，后端未给出单位说明，不换算）。', { nullable: true, nullMeaning: '后端未返回修改时间。' }),
+    field('list[].disabled', 'integer', '是否失效：0 有效、1 失效。', { nullable: true, values: { '0': '有效', '1': '失效' }, nullMeaning: '后端未返回该标记；不要默认当作有效。' }),
+    field('total', 'integer', '符合条件的品牌总数，不是当前页长度。'),
+  ],
+  empty: 'list=[]且total=0表示系统品牌字典为空；权限、网络或响应形状错误会抛出，不降级为空页。',
+}, [
+  '用 list[].brandId 作为选项值、brandName 作为显示文本；勾选结果按逗号 join 才是供应商表单的 sysBrandIds 形状，本能力本身不提交。',
+  '按 total 递增 pageNo 取全；页面默认一次取 200 条，SDK 沿用该默认值。',
+  '按 disabled 区分有效/失效品牌（0 有效、1 失效），不要凭名称判断；null 只代表后端没返回该标记。',
+  '系统品牌是跨租户字典（后端方法带 @TenantIgnore），不是当前租户私有的品牌数据；不要据此推断租户范围。',
+], {
+  boundaries: [
+    '只覆盖 /dashboard/setting/supplier/list 页可达表单里对系统品牌候选的读取；不发布品牌的创建、修改、失效或供应商品牌绑定的写入（页面没有这些动作）。',
+    '⚠️ 页面读它却不用它：供应商表单在 onMounted 里无条件发起品牌预取，但消费这份数据的品牌多选列在固定检出里是注释状态（模板里 `column.key === \'sysBrandIds\'` 的整段 <template> 与 columns 里对应的 `{ key: \'sysBrandIds\' }`）。因此本能力当前没有可见的消费方，调用前先向用户说明这一点。',
+    '⚠️ 两个检出里有两个同名端点，只有本能力指向的那个对得上：erp-module-supply 的 MaterielController（类级 /supply/materiel，页面实际打的 /admin-api/supply/materiel/get-sys-brand-page）；包路径 controller.adminmanage.materiel 的 PlatformMaterielController 挂在 /system/materiel 下、不会补 /admin-api，不是本能力。',
+    '响应是跨租户的系统品牌字典（后端 @TenantIgnore）；权限码在当前 Controller 上被注释掉（@PreAuthorize 未启用），但 SDK 不据此承诺人人可调。',
+    '走 platform 实例；pageSize 上限 500 来自后端 PageParam 的 @Max(500)，pageSize=-1 不是本接口的“全量”语义（后端没有 PAGE_SIZE_NONE 分支）。',
+    '本能力只给候选；把品牌 ID 写进供应商是 setting-supplier-create 的 sysBrandIds，而且那个动作同样不依赖本能力（品牌列不可见）。',
+  ],
+  gaps: [
+    '未启动浏览器、未取得独立网络基准、未在真实测试环境执行该读请求；端点归属、参数与字段来自固定检出的 Portal 表单、两个 Java Controller/DTO 与离线断言。',
+    '品牌多选列与它的 columns 定义在固定 Portal 检出里是注释状态（conventions 第 28 条：注释掉的东西不算用户能做的事），所以这个动作当前没有可见入口；SDK 按派单要求保留后端与前端契约并如实登记该状态。',
+    '后端响应带 @TenantIgnore，跨租户可见范围与各租户实际品牌数据未在真实环境核对。',
+    'modifiedTime 是整数原值，后端没有给出单位（秒/毫秒）说明，SDK 不做换算。',
+    'Portal/Java 固定检出未按任务约束 pull 到远端最新。',
+  ],
+})
+
 export const SETTING_SUPPLIER_AI_CONTRACTS = contracts
 export const SETTING_SUPPLIER_METHOD_CONTRACTS: Record<string, AiContract> = Object.fromEntries(
   Object.entries(SETTING_SUPPLIER_METHODS).map(([id, method]) => [`settingSupplier.${method}`, { ...SETTING_SUPPLIER_AI_CONTRACTS[id]!, boundaries: [...SETTING_SUPPLIER_AI_CONTRACTS[id]!.boundaries, '直接方法签名使用单个对象参数；批量表单字段按 inputs 中的嵌套结构填写。'] }]),
