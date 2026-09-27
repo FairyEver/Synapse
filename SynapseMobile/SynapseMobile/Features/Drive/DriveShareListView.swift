@@ -57,6 +57,7 @@ struct DriveShareListView: View {
                     Text(error)
                         .font(.footnote)
                         .foregroundStyle(Theme.failure)
+                        .driveListRow()
                 }
             }
             Section {
@@ -65,7 +66,7 @@ struct DriveShareListView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .driveListSurface()
         .overlay {
             if model.drive.shares.isEmpty {
                 if model.drive.sharesLoading {
@@ -104,9 +105,12 @@ struct DriveShareListView: View {
         Button {
             openShare = share
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: DriveListRow.spacing) {
+                // 这一屏的主角是那一条链接，不是被分享的文件 —— 行首因此还是 `link` 而不是
+                // `DriveFileIcon`：同一份文件可能有三条分享挂在上面。
                 Image(systemName: "link")
                     .foregroundStyle(Color(uiColor: .systemBlue))
+                    .frame(width: DriveListRow.iconBox)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(share.itemName)
                         .font(.subheadline)
@@ -127,6 +131,7 @@ struct DriveShareListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .driveListRow()
     }
 }
 

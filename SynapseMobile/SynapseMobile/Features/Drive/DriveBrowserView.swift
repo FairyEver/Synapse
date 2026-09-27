@@ -150,9 +150,10 @@ struct DriveBrowserView: View {
     ///
     /// 标题与工具栏挂在页上而不是列表里：`DriveBrowserList` 是「一页的内容」，
     /// 而这一页叫什么、右上角有什么是这一层的事。面包屑与计数行属于内容，因此也在里面 ——
-    /// **这一页是一整块 `List`，外面不套 `VStack`**：套了的话列表上方那一条带子落回容器的
-    /// 白底（这一页其余部分是 `insetGrouped` 的浅灰），导航栏那一片就是一块不动的白，
-    /// 而那一行字也不跟列表滚、收起大标题时还会和标题叠在一起。
+    /// **这一页是一整块 `List`，外面不套 `VStack`**：套了的话那一行字不跟列表滚、
+    /// 收起大标题时还会和标题叠在一起（2026-09-26 那次还因为套着它，列表顶上那一条带子
+    /// 落在了容器的白底上；2026-09-27 起四屏走 `driveListSurface()`，底色与容器同色，
+    /// 这一条不再出现）。
     private func page(_ layer: DriveBrowserLayer) -> some View {
         DriveBrowserList(
             layer: layer,

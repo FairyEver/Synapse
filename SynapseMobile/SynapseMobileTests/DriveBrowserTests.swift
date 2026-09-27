@@ -101,6 +101,20 @@ struct DriveBrowserTests {
         #expect(DriveBrowserRow.subtitle(for: subject) == "—")
     }
 
+    /// 网格那一格最下面一行：文件给大小，**文件夹给空格**。
+    ///
+    /// 不是「文件夹就不画这一行」：`LazyVGrid` 一行的高度取最高的那一格，少一行的格子会被
+    /// 居中摆进那一行，图标跟着比旁边的矮半行。所以这一条钉的是「文件夹那一行仍然是**一行**」，
+    /// 而不是「文件夹没有这一行」。
+    @Test func theGridSizeLineIsABlankForFolders() {
+        #expect(DriveBrowserRow.gridSizeLine(item("设计稿", folder: true, size: "0")) == " ")
+        // 文件那一行还是大小本身，与列表行的副标题同一句话。
+        #expect(DriveBrowserRow.gridSizeLine(item(size: "2048")) == DriveText.bytes("2048"))
+        // 读不出大小的那一项，这一行也是「—」不是空白 —— 空白是文件夹那一格的占位，
+        // 两者在这一行里不能混成同一个样子。
+        #expect(DriveBrowserRow.gridSizeLine(item(size: "99999999999999999999999")) == "—")
+    }
+
     @Test func onlyAnActiveShareGetsTheLinkBadge() {
         #expect(!DriveBrowserRow.isShared(item(shareUrl: nil)))
         #expect(!DriveBrowserRow.isShared(item(shareUrl: "")))

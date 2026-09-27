@@ -314,6 +314,16 @@ PUT 403 后只重 prepare 一次、`overwrite` 缺失时不弹确认。
 > `NavigationStack`，文件夹逐层下钻；文件交给系统浏览器打开。下面「自带
 > `NavigationSplitView`：浏览列 + 预览列」那一行不再成立，其余（面包屑、标题、菜单、
 > 多选、上传、三态）照旧。
+>
+> **外观已改（2026-09-27）：这一屏按系统「文件」App 重做了一遍表面。** 云盘那四屏
+> （浏览 / 回收站 / 公开素材 / 分享管理）的列表从 `.insetGrouped` 的「灰底 + 白卡片」改成
+> `driveListSurface()`（`.plain` + 白底，内容直接落在容器上），行间距走 `driveListRow()`
+> 收在一处；`DriveFileIcon` 从「彩色纸张 + 白色扩展名角标」改成系统那枚通用文档图标的样子
+> —— 一页纸 + 折角，纸上压着一枚按 `DriveText.kindColor` 着色的字形（`DriveText.glyph(of:)`）
+> 与扩展名，纸是浅灰的不是白的（底色已经是白，白纸会没有边）；网格的 `iconSize` 从 44 提到
+> 60，一格从「图标 + 一行名字」改成「图标 + 名字（两行）+ 修改时间 + 大小」，逐行居中，与
+> 「文件」App 那一格同一套排法。下面 Task 6 / Task 9 里关于 `insetGrouped`、29pt 图标、
+> 网格只有一行名字的写法都以此为准。回收站与公开素材的行首也换成了同一枚 `DriveFileIcon`。
 
 **Files**
 - `SynapseMobile/SynapseMobile/Features/Drive/DriveBrowserView.swift`（新建）

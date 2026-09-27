@@ -59,6 +59,7 @@ struct DriveTrashView: View {
                     Text(error)
                         .font(.footnote)
                         .foregroundStyle(Theme.failure)
+                        .driveListRow()
                 }
             }
             Section {
@@ -67,7 +68,7 @@ struct DriveTrashView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .driveListSurface()
         // 状态画在列表**上面**而不是列表里的一行：`ContentUnavailableView` 要的是整块内容区，
         // 而留在 `List` 上也让空态与失败态下照旧能下拉刷新（紧凑宽度下，那里就是「重试」）。
         // 宽窗下这条下拉刷新不挂（见 `refreshableIfCompact`，崩溃规避），那时重试的路是
@@ -133,9 +134,10 @@ struct DriveTrashView: View {
     /// 两个动作走**手势的那套语法**（Spec §5.1 是「左滑 = 删除、右滑 = 分享」：右滑露建设性
     /// 的那个、左滑露破坏性的那个），长按菜单里同样两条 —— 手势快，菜单全。
     private func row(_ entry: DriveTrashEntry) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: entry.isFolder ? "folder.fill" : "doc.fill")
-                .foregroundStyle(iconTint(entry))
+        HStack(spacing: DriveListRow.spacing) {
+            // 与浏览那一屏同一枚图标（`DriveFileIcon`）：同一样东西在回收站里换一张脸，
+            // 用户会以为它是另一样东西。
+            DriveFileIcon(name: entry.name, isFolder: entry.isFolder, size: DriveListRow.iconSize)
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.name)
                     .font(.subheadline)
@@ -148,6 +150,7 @@ struct DriveTrashView: View {
         }
         .frame(minHeight: Metrics.minimumTapTarget)
         .contentShape(Rectangle())
+        .driveListRow()
         .contextMenu { actions(entry) }
         // 建设性的那个在最前面：右滑露出「恢复」，与浏览列表「右滑分享」同一个方向感。
         .swipeActions(edge: .leading) {
@@ -171,13 +174,6 @@ struct DriveTrashView: View {
             .tint(Color(uiColor: .systemRed))
             .disabled(busy)
         }
-    }
-
-    /// 文件夹用系统蓝（与云盘列表一致）；文件按扩展名那一类取 `DriveText.kindColor`。
-    private func iconTint(_ entry: DriveTrashEntry) -> Color {
-        entry.isFolder
-            ? Color(uiColor: .systemBlue)
-            : DriveText.kindColor(DriveText.kind(of: entry.name))
     }
 
     /// 长按菜单里的两条。与手势里那两条逐个对应，不另立说法。

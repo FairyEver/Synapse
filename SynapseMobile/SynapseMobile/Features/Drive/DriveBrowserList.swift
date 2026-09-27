@@ -69,6 +69,18 @@ enum DriveBrowserRow {
         return DriveText.bytes(String(bytes))
     }
 
+    /// 网格里那一格最下面一行。**文件夹没有大小，给一个空格。**
+    ///
+    /// 不是「文件夹就不画这一行」：`LazyVGrid` 里一行的高度取最高的那一格，少一行的格子会被
+    /// 居中摆进那一行，图标跟着比旁边的矮这么半行 —— 同一排图标一高一低，比多一个空格难看得多。
+    /// 空格撑住的高度跟着动态字体走，写死的数值做不到这件事。
+    ///
+    /// 副标题那一行里的大小另有一套（`subtitle(for:)` 不给文件夹报大小），两处的取舍不一样：
+    /// 那里是行的正文，这里是格子里的占位。
+    static func gridSizeLine(_ item: DriveBrowserItem) -> String {
+        item.isFolder ? " " : size(item)
+    }
+
     /// 修改时间。服务端的时间戳认不出来时（`DriveText.date` 给空串）说「—」，不留一格空白。
     static func updatedAt(_ item: DriveBrowserItem) -> String {
         let text = DriveText.date(item.updatedAt)
@@ -114,18 +126,22 @@ enum DriveBrowserHeader {
 enum DriveGridMetrics {
     /// 一格至少多宽。紧凑窗（iPhone 竖屏与横屏、iPad 半窗）。
     ///
-    /// 92 这个数是按**iPhone 一屏正好三列**挑的：`insetGrouped` 的卡片两侧各让开 20、列内
-    /// 再按 `horizontalPadding` 各让开 16，所以 393 那一档可摆 321。`.adaptive` 取
-    /// `floor((可摆宽度 + spacing) / (minimumWidth + spacing))` —— 三列要
-    /// 92×3 + 10×2 = 296 宽、四列要 398，而 iPhone 全系可摆 321–368，夹在两者之间：
-    /// 竖屏横屏、SE 到 Pro Max 都是三列。
-    static let compactMinimumWidth: CGFloat = 92
+    /// 100 这个数是按**iPhone 一屏正好三列**挑的：整块只按 `horizontalPadding` 两侧各让开 16
+    /// （卡片那一层 2026-09-27 去掉了，让开的两份从 20+16 变成 16，可摆宽度因此宽了 72），
+    /// 而 `.adaptive` 取 `floor((可摆宽度 + spacing) / (minimumWidth + spacing))`。
+    ///
+    /// 卡片去掉之前这里是 92，那时 iPhone 全系可摆 303–368，夹在「三列 296」与「四列 398」
+    /// 之间。去掉卡片之后最大那两档可摆到 408（440 那一档），92 会让它摊成**四列**、每格只剩
+    /// 94.5 —— 名字一行放不下几个字。100 把所有 iPhone 都摁回三列（343–408 可摆宽度上分别是
+    /// 107.7–129.3 一格），最大那一档的 129.3 正好对上系统「文件」App 在 402pt 屏上的 129.65。
+    /// 认的是宽度不是机型：`.adaptive` 只看这一块实际有多宽。
+    static let compactMinimumWidth: CGFloat = 100
     /// 一格至少多宽。常规窗（iPad 全屏、iPhone Pro Max 横屏）。
     ///
-    /// **这一档存在的理由是格子也要跟着变大，不只是列数变多。** 只用 92 那一档的话，13 英寸
-    /// 竖屏（可摆 973）会被 `.adaptive` 摊成九列、每格 103 宽 —— 手机上多大的格子，在 iPad 上
+    /// **这一档存在的理由是格子也要跟着变大，不只是列数变多。** 只用 100 那一档的话，13 英寸
+    /// 竖屏（可摆 1000）会被 `.adaptive` 摊成十列、每格约 91 宽 —— 手机上多大的格子，在 iPad 上
     /// 还是多大，只是铺得更满。系统「文件」与「照片」在 iPad 上是把**格子**放大：140 在这块
-    /// 宽度上给六列、每格约 154，与「文件」App 在 13 英寸上的六列是一个密度。
+    /// 宽度上给六列、每格约 158，与「文件」App 在 13 英寸上的六列是一个密度。
     ///
     /// 验收驱动 `DriveAcceptanceUITests.test12` 量的是真格子的位置与宽度，不靠这段算术自证。
     static let regularMinimumWidth: CGFloat = 140
@@ -133,10 +149,33 @@ enum DriveGridMetrics {
     static let spacing: CGFloat = 10
     /// 网格一整块自己的上下内边距，与列表行的上下留白对齐。
     static let verticalPadding: CGFloat = 12
-    /// 网格一整块左右的内边距。列表行是卡片自己让出的距离，网格这块是整行内容，得自己让。
+    /// 网格一整块左右的内边距。与列表行的左右同样让 16（`DriveListRow.inset`），两者一列。
     static let horizontalPadding: CGFloat = 16
-    /// 图标本体的字号。列表行是 29（Spec §4.3），网格里这一格只有图标与名字，图标就该更大些。
-    static let iconSize: CGFloat = 44
+    /// 图标本体的字号。列表行是 29（Spec §4.3），网格里这一格只有图标与几行字，图标就该更大些。
+    ///
+    /// 60 是按系统「文件」App 量出来的：那边一页纸高 77pt、格子宽 129.65pt，按本屏三列
+    /// （可摆 116.7pt）折算下来是 69pt 的纸 —— 这里的方框 70.8pt、纸 68pt，同一个大小。
+    static let iconSize: CGFloat = 60
+}
+
+// MARK: - 列表那一套尺寸
+
+/// 云盘那四屏列表行的尺寸。
+///
+/// 收在一处是因为四屏的行长得一样：同样的左右内边距、同样大小的图标、同样的间距。各写各的
+/// 迟早会漂开，而这几条是**对齐**性质的数 —— 漂开一寸，屏幕上就是一列对不齐的图标。
+enum DriveListRow {
+    /// 列表行里图标本体的字号（Spec §4.3）。
+    static let iconSize: CGFloat = 29
+    /// 图标那一枚方框的宽。与 `DriveFileIcon.box` 同一条算式（那边按传进去的字号算，
+    /// 这边按列表行那一档算），行首那些不是文件图标的符号按它对齐。
+    static var iconBox: CGFloat { iconSize * 1.18 }
+    /// 图标与文字之间的间距。
+    static let spacing: CGFloat = 12
+    /// 行左右让出的距离。系统「文件」App 里那一列也是 16。
+    static let inset: CGFloat = 16
+    /// 行上下让出的距离。加上内容自己的 44pt 最小高度，一行约 56pt。
+    static let verticalInset: CGFloat = 6
 }
 
 // MARK: - 多选
@@ -293,11 +332,12 @@ struct DriveBrowserList: View {
         List {
             // 大标题下面那一行与面包屑是这一页的**内容**，跟列表一起滚。
             //
-            // 这一块原先住在 `List` 外面（`DriveBrowserView` 里那个 `VStack`），有两个看得见
-            // 的后果：列表顶上的带子落回容器的白底，而这一页其余部分是 `insetGrouped` 的浅灰，
-            // 于是导航栏那一片永远是一块不动的白；那一行字也不跟列表滚，收起大标题时还会和
-            // 标题叠在一起。摆进列表里，这一页就与主页、终端列表是同一个形状：一整块 `List`，
-            // 背景自然是那层浅灰（`DriveBrowserView.page(_:)` 那条注释里记着这件事）。
+            // 这一块原先住在 `List` 外面（`DriveBrowserView` 里那个 `VStack`），最看得见的一个
+            // 后果是那一行字不跟列表滚，收起大标题时还会和标题叠在一起（当时还多一条底色对不上：
+            // 那一块落在容器的白底上、而列表是 `insetGrouped` 的浅灰，导航栏那一片就是一块不动
+            // 的白 —— 2026-09-27 起四屏都改走 `driveListSurface()`，底色与容器同色，这一条不再
+            // 出现）。摆进列表里，这一页就与主页、终端列表是同一个形状：一整块 `List`
+            // （`DriveBrowserView.page(_:)` 那条注释里记着这件事）。
             Section {
                 pageHeader
                     // 行本身不要卡片、不要内边距：这是「大标题下面的一行字」，不是一张卡。
@@ -338,7 +378,7 @@ struct DriveBrowserList: View {
                 usageSection
             }
         }
-        .listStyle(.insetGrouped)
+        .driveListSurface()
         .refreshableIfCompact(isCompact) { await model.driveReload() }
         .safeAreaInset(edge: .bottom) {
             if editing { selectionBar }
@@ -419,7 +459,7 @@ struct DriveBrowserList: View {
         .foregroundStyle(.secondary)
         .redacted(reason: known ? [] : .placeholder)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, DriveListRow.inset)
         .padding(.bottom, 8)
     }
 
@@ -452,7 +492,7 @@ struct DriveBrowserList: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, DriveListRow.inset)
         }
     }
 
@@ -469,6 +509,7 @@ struct DriveBrowserList: View {
             rowLabel(item)
         }
         .buttonStyle(.plain)
+        .driveListRow()
         .contextMenu { menu(item) }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
@@ -495,13 +536,13 @@ struct DriveBrowserList: View {
     }
 
     private func rowLabel(_ item: DriveBrowserItem) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DriveListRow.spacing) {
             if editing {
                 Image(systemName: picked.contains(item.id) ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
                     .foregroundStyle(picked.contains(item.id) ? Theme.ink : Color.secondary)
             }
-            DriveFileIcon(name: item.name, isFolder: item.isFolder)
+            DriveFileIcon(name: item.name, isFolder: item.isFolder, size: DriveListRow.iconSize)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(item.name)
@@ -623,7 +664,12 @@ struct DriveBrowserList: View {
         .listRowSeparator(.hidden)
     }
 
-    /// 网格里的一格。
+    /// 网格里的一格：图标、名字、修改时间、大小。
+    ///
+    /// 四样、逐行居中、字号与行距照系统「文件」App 那一格量出来的（名字 `subheadline` 两行、
+    /// 下面两行 `footnote` 次要色）。比原来的「一枚图标 + 一行名字」多两行信息：那一格有
+    /// 一整个图标那么高，只写个名字就把下面空着了，而这一层的排序键与大小本来就在列表模式里
+    /// 给着 —— 两种显示方式说的该是同一件事。
     ///
     /// 点法与列表行逐字相同：编辑态切换选择，否则打开。长按开的是**同一份菜单**（`menu(_:)`）
     /// —— 网格里没有左滑，分享 / 重命名 / 移动到 / 导出 / 删除因此全落在那份菜单上，一条都
@@ -636,7 +682,7 @@ struct DriveBrowserList: View {
                 actions.open(item)
             }
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 0) {
                 ZStack(alignment: .topTrailing) {
                     DriveFileIcon(
                         name: item.name,
@@ -652,12 +698,26 @@ struct DriveBrowserList: View {
                             .offset(x: 6, y: -4)
                     }
                 }
+                // 图标与名字之间这一档，量的是「文件」App：那边纸的下沿到名字那一行的上沿
+                // 差不多是这么宽。
+                .padding(.bottom, 8)
+
                 name(item)
-                    .font(.caption)
+                    .font(.subheadline)
                     .multilineTextAlignment(.center)
                     // 名字一行还是两行，这一格都占两行的高度：不占的话同一行里几格的图标
                     // 会一个高一个低。
                     .lineLimit(2, reservesSpace: true)
+                    .frame(maxWidth: .infinity)
+                Text(DriveBrowserRow.updatedAt(item))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                Text(DriveBrowserRow.gridSizeLine(item))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity)
@@ -683,7 +743,9 @@ struct DriveBrowserList: View {
     // MARK: - 上传那一组
 
     private func uploadRow(_ item: DriveUploadItem) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DriveListRow.spacing) {
+            // 比列表行那一档再小一点：这一组是「正在发生的事」，排在列表最上面，不该比
+            // 正式的条目还抢眼。
             DriveFileIcon(name: item.name, isFolder: false, size: 24)
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
@@ -703,6 +765,7 @@ struct DriveBrowserList: View {
             trailing(for: item)
         }
         .frame(minHeight: Metrics.minimumTapTarget)
+        .driveListRow()
     }
 
     /// 每一项右边那一两颗。等确认的给「覆盖」，还在动的给「取消」，停下来的给「重试」与「移除」。
@@ -770,7 +833,6 @@ struct DriveBrowserList: View {
                 failureRow(error)
             } else if items.isEmpty, layer.isCurrent(in: model.drive), !model.drive.loading {
                 ContentUnavailableView("文件夹为空", systemImage: "folder")
-                    .listRowBackground(Color.clear)
             } else {
                 placeholderRows
             }
@@ -780,8 +842,8 @@ struct DriveBrowserList: View {
     /// 加载中的占位：几行灰条，比一整屏转圈好在它告诉用户这里将来会是一列东西。
     private var placeholderRows: some View {
         ForEach(0..<6, id: \.self) { _ in
-            HStack(spacing: 12) {
-                DriveFileIcon(name: "placeholder", isFolder: false)
+            HStack(spacing: DriveListRow.spacing) {
+                DriveFileIcon(name: "placeholder", isFolder: false, size: DriveListRow.iconSize)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("占位名字")
                         .font(.subheadline)
@@ -791,6 +853,7 @@ struct DriveBrowserList: View {
             }
             .frame(minHeight: Metrics.minimumTapTarget)
             .redacted(reason: .placeholder)
+            .driveListRow()
         }
     }
 
@@ -804,6 +867,7 @@ struct DriveBrowserList: View {
             }
             .font(.footnote)
         }
+        .driveListRow()
     }
 
     // MARK: - 根层的两个入口与用量
@@ -831,11 +895,12 @@ struct DriveBrowserList: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: DriveListRow.spacing) {
                 Image(systemName: symbol)
                     .font(.system(size: 20))
                     .foregroundStyle(.secondary)
-                    .frame(width: 29 * 1.18)
+                    // 与文件图标同宽：这一列图标才对得齐。
+                    .frame(width: DriveListRow.iconBox)
                 Text(title)
                     .font(.subheadline)
                 Spacer(minLength: 0)
@@ -852,6 +917,7 @@ struct DriveBrowserList: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .driveListRow()
     }
 
     @ViewBuilder
@@ -862,6 +928,7 @@ struct DriveBrowserList: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                    .driveListRow()
             }
         }
     }
@@ -931,6 +998,38 @@ struct DriveBrowserList: View {
 }
 
 extension View {
+    /// 云盘那四屏共用的列表底座：**内容直接落在容器的底上，中间没有卡片那一层。**
+    ///
+    /// `insetGrouped` 那一版会在浅灰底上再画一张白卡，一屏里两层表面；这一屏要的是一层 ——
+    /// 系统「文件」App 的摆法（白底、行直接排在上面）。深色外观下底是黑的，纸是深灰的，
+    /// 关系一样（`DriveFileIcon`）。
+    ///
+    /// `.plain` 与 `scrollContentBackground(.hidden)` 一起用：前者给的是「没有卡片」的形状，
+    /// 后者把 `plain` 自带的底抽掉，换成与导航栏同一种容器的白。四屏一起走这一条，
+    /// 免得哪一屏还是灰底白卡。
+    func driveListSurface() -> some View {
+        listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color(uiColor: .systemBackground))
+    }
+
+    /// 云盘那四屏的行：左右各让 16，上下各让 6。
+    ///
+    /// **分隔线不另指位置**，由 `.plain` 自己对齐到文字那一列（图标右边、名字的左边缘）——
+    /// 2026-09-27 在 iPhone 17 上量过：四屏的分隔线都起在 `x = 62pt`（`16 + 34.2 + 12`）、
+    /// 收在 `385.7pt`，屏宽 402pt。这正是系统列表的样子（设置、邮件、文件都是这么对的），
+    /// 而且不用自己算 —— 换一种图标尺寸时那条线跟着走，不会对不齐。
+    func driveListRow() -> some View {
+        listRowInsets(
+            EdgeInsets(
+                top: DriveListRow.verticalInset,
+                leading: DriveListRow.inset,
+                bottom: DriveListRow.verticalInset,
+                trailing: DriveListRow.inset
+            )
+        )
+    }
+
     /// 紧凑宽度下才挂下拉刷新。
     ///
     /// **常规宽度（iPad 全屏、分栏并排）下不挂 —— 分栏浏览列上那四条列表都不挂。**

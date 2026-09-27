@@ -82,6 +82,7 @@ struct DrivePublicAssetsView: View {
                     Text(error)
                         .font(.footnote)
                         .foregroundStyle(Theme.failure)
+                        .driveListRow()
                 }
             }
             Section {
@@ -90,7 +91,7 @@ struct DrivePublicAssetsView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .driveListSurface()
         .overlay {
             if model.drive.assets.isEmpty {
                 if model.drive.assetsLoading {
@@ -157,9 +158,10 @@ struct DrivePublicAssetsView: View {
     /// 手势与菜单的分工与回收站那一屏一致：右滑露「拷贝直链」（这一屏最常用的那一下）、
     /// 左滑露「删除」，长按菜单三条全在。
     private func row(_ asset: DrivePublicAsset) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "doc.fill")
-                .foregroundStyle(DriveText.kindColor(DriveText.kind(of: asset.name)))
+        HStack(spacing: DriveListRow.spacing) {
+            // 与浏览那一屏同一枚图标（`DriveFileIcon`）：同一样东西在别的屏上换一张脸，
+            // 用户会以为它是另一样东西。
+            DriveFileIcon(name: asset.name, isFolder: false, size: DriveListRow.iconSize)
             VStack(alignment: .leading, spacing: 3) {
                 Text(asset.name)
                     .font(.subheadline)
@@ -172,6 +174,7 @@ struct DrivePublicAssetsView: View {
         }
         .frame(minHeight: Metrics.minimumTapTarget)
         .contentShape(Rectangle())
+        .driveListRow()
         .contextMenu { actions(asset) }
         .swipeActions(edge: .leading) {
             Button {

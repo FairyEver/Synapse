@@ -133,6 +133,29 @@ enum DriveText {
         return String(ext.uppercased().prefix(4))
     }
 
+    /// 图标里那枚字形：SF Symbols 的名字。
+    ///
+    /// 与 `kindColor` 的分工是「形状」对「颜色」：颜色说的是这一大类，字形说的是这一类里
+    /// 长什么样。两者合起来仍然分不出 `.md` 与 `.txt` —— 那件事由角标那几个字母承担，
+    /// 所以这里给的是**类别**的字形而不是某一种后缀的。
+    ///
+    /// `unknown` 给 `nil`：认不出种类时纸上只留扩展名（没有扩展名就是一张空白的纸），
+    /// 与系统「文件」App 那枚通用文档图标同一件事。
+    static func glyph(of kind: DriveFileKind) -> String? {
+        switch kind {
+        case .pdf: return "doc.richtext"
+        case .image: return "photo"
+        case .video: return "play.rectangle"
+        case .audio: return "waveform"
+        case .archive: return "archivebox"
+        case .document: return "text.alignleft"
+        case .spreadsheet: return "tablecells"
+        case .presentation: return "rectangle.on.rectangle"
+        case .code: return "chevron.left.forwardslash.chevron.right"
+        case .unknown: return nil
+        }
+    }
+
     /// 图标底色，取 Spec §4.3 那十行里写的系统色。
     static func kindColor(_ kind: DriveFileKind) -> Color {
         switch kind {

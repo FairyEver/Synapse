@@ -178,6 +178,52 @@ struct DriveTextTests {
         #expect(components(DriveText.kindColor(.code)) == components(DriveText.kindColor(.unknown)))
     }
 
+    // MARK: - 图标字形
+
+    /// 十类都在。`unknown` 是一条：认不出种类时纸上不画字形，只留扩展名那行字。
+    @Test func glyphsFollowTheTable() {
+        #expect(DriveText.glyph(of: .pdf) == "doc.richtext")
+        #expect(DriveText.glyph(of: .image) == "photo")
+        #expect(DriveText.glyph(of: .video) == "play.rectangle")
+        #expect(DriveText.glyph(of: .audio) == "waveform")
+        #expect(DriveText.glyph(of: .archive) == "archivebox")
+        #expect(DriveText.glyph(of: .document) == "text.alignleft")
+        #expect(DriveText.glyph(of: .spreadsheet) == "tablecells")
+        #expect(DriveText.glyph(of: .presentation) == "rectangle.on.rectangle")
+        #expect(DriveText.glyph(of: .code) == "chevron.left.forwardslash.chevron.right")
+        #expect(DriveText.glyph(of: .unknown) == nil)
+    }
+
+    /// 上面那一串等值断言自己证明不了「字形分得开」：把九类写成同一个名字，它照样逐条成立。
+    /// 所以另钉一条 —— 除 `unknown` 外九类两两不同。
+    @Test func glyphsAreDistinct() {
+        let kinds: [DriveFileKind] = [
+            .pdf, .image, .video, .audio, .archive,
+            .document, .spreadsheet, .presentation, .code,
+        ]
+        let names = kinds.compactMap { DriveText.glyph(of: $0) }
+        #expect(names.count == kinds.count)
+        #expect(Set(names).count == kinds.count)
+    }
+
+    /// 每个名字都得是真的 SF Symbol。
+    ///
+    /// **这是唯一拦得住错字的地方。** `Image(systemName:)` 拿到一个不存在的名字不崩也不报错，
+    /// 画出来的是一片空白 —— 屏幕上是「一页没有字形的纸」，看不出是名字打错了。
+    @Test func everyGlyphNamesASymbolThatExists() {
+        let kinds: [DriveFileKind] = [
+            .pdf, .image, .video, .audio, .archive,
+            .document, .spreadsheet, .presentation, .code,
+        ]
+        for kind in kinds {
+            guard let glyph = DriveText.glyph(of: kind) else {
+                Issue.record("\(kind) 没有字形")
+                continue
+            }
+            #expect(UIImage(systemName: glyph) != nil, "\(kind) 的字形「\(glyph)」不是一个真的 SF Symbol")
+        }
+    }
+
     // MARK: - 文案
 
     @Test func errorMessageUsesTheServersSentence() {
