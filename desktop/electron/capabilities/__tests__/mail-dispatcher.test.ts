@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest"
+import { buildMailTools } from "../../../synapse-capabilities/shared/mail-domain"
 import { createMailCapabilityDispatcher } from "../mail-dispatcher"
 
 describe("mail capability dispatcher", () => {
+  it("does not expose retired draft operations", async () => {
+    const executeMailOperation = vi.fn()
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })
+    expect(buildMailTools().map((tool) => tool.name).filter((name) => name.includes("draft"))).toEqual([])
+    await expect(dispatcher.dispatch("app.mail.draft.list", {}, { source: "api" })).rejects.toThrow("Unknown mail action")
+    expect(executeMailOperation).not.toHaveBeenCalled()
+  })
+
   it("requires the explicit confirmation flag before invoking background send", async () => {
     const executeMailOperation = vi.fn(async () => ({ messageId: "message-1" }))
     const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })

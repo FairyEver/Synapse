@@ -14,7 +14,6 @@ const PREVIEW_TTL_MS = 10 * 60 * 1000
 const PENDING_ATTACHMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 type Content = { recipientIds: string[]; subject: string; body: string; attachmentIds: string[]; replyToId?: string }
-type DraftContent = Content
 
 function ids(value: unknown, max: number): string[] {
   if (!Array.isArray(value) || value.length > max || value.some((id) => typeof id !== "string" || !id)) throw new BadRequestException("无效的用户或附件列表。")
@@ -249,49 +248,6 @@ export class MailService {
     return { stream: await this.storage.open(row.storageKey), fileName: row.fileName, mimeType: row.mimeType, size: Number(row.size) }
   }
 
-  async listDrafts(userId: string) {
-    const rows = await this.prisma.mailDraft.findMany({ where: { userId }, orderBy: { updatedAt: "desc" } })
-    const attachmentIds = rows.flatMap((row) => ids(row.attachmentIds, MAX_ATTACHMENTS))
-    const attachments = await this.prisma.mailAttachment.findMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } })
-    return { items: rows.map((row) => ({ ...this.draftDto(row), attachments: ids(row.attachmentIds, MAX_ATTACHMENTS).flatMap((id) => { const item = attachments.find((candidate) => candidate.id === id); return item ? [{ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) }] : [] }) })) }
-  }
-
-  private draftDto(row: { id: string; recipientIds: Prisma.JsonValue; subject: string; body: string; attachmentIds: Prisma.JsonValue; replyToId: string | null; version: number; updatedAt: Date }) {
-    return { draftId: row.id, recipientIds: row.recipientIds, subject: row.subject, body: row.body, attachmentIds: row.attachmentIds, replyToId: row.replyToId, version: row.version, updatedAt: row.updatedAt }
-  }
-
-  async createDraft(userId: string, raw: DraftContent) {
-    const attachmentIds = ids(raw.attachmentIds, MAX_ATTACHMENTS)
-    const row = await this.prisma.$transaction(async (tx) => {
-      await this.reserveDraftAttachments(tx, userId, attachmentIds)
-      return tx.mailDraft.create({ data: { userId, recipientIds: ids(raw.recipientIds, MAX_RECIPIENTS), subject: raw.subject ?? "", body: raw.body ?? "", attachmentIds, replyToId: raw.replyToId } })
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
-    return this.draftDto(row)
-  }
-
-  async updateDraft(userId: string, id: string, baseVersion: number, raw: DraftContent) {
-    const attachmentIds = ids(raw.attachmentIds, MAX_ATTACHMENTS)
-    const row = await this.prisma.$transaction(async (tx) => {
-      await this.reserveDraftAttachments(tx, userId, attachmentIds)
-      const result = await tx.mailDraft.updateMany({ where: { id, userId, version: baseVersion }, data: { recipientIds: ids(raw.recipientIds, MAX_RECIPIENTS), subject: raw.subject, body: raw.body, attachmentIds, replyToId: raw.replyToId, version: { increment: 1 } } })
-      if (!result.count) throw new ConflictException("草稿已在其他设备更新，请刷新后再编辑。")
-      return tx.mailDraft.findUniqueOrThrow({ where: { id } })
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
-    return this.draftDto(row)
-  }
-
-  private async reserveDraftAttachments(tx: Prisma.TransactionClient, userId: string, attachmentIds: string[]): Promise<void> {
-    if (!attachmentIds.length) return
-    const result = await tx.mailAttachment.updateMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null }, data: { lastReferencedAt: new Date() } })
-    if (result.count !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
-  }
-
-  async deleteDraft(userId: string, id: string) {
-    const result = await this.prisma.mailDraft.deleteMany({ where: { id, userId } })
-    if (!result.count) throw new NotFoundException("草稿不存在。")
-    return { deleted: true }
-  }
-
   @Cron("0 * * * *")
   async scheduledCleanup(): Promise<void> {
     try { await this.cleanupExpiredMail() }
@@ -315,11 +271,8 @@ export class MailService {
       })
       const ownerIds = [...new Set(candidates.map((item) => item.ownerId))]
       if (ownerIds.length) {
-        const [drafts, previews] = await Promise.all([
-          this.prisma.mailDraft.findMany({ where: { userId: { in: ownerIds } }, select: { attachmentIds: true } }),
-          this.prisma.mailSendPreview.findMany({ where: { userId: { in: ownerIds }, expiresAt: { gt: now } }, select: { attachmentIds: true } }),
-        ])
-        const referenced = new Set([...drafts, ...previews].flatMap((row) => Array.isArray(row.attachmentIds) ? row.attachmentIds.filter((id): id is string => typeof id === "string") : []))
+        const previews = await this.prisma.mailSendPreview.findMany({ where: { userId: { in: ownerIds }, expiresAt: { gt: now } }, select: { attachmentIds: true } })
+        const referenced = new Set(previews.flatMap((row) => Array.isArray(row.attachmentIds) ? row.attachmentIds.filter((id): id is string => typeof id === "string") : []))
         for (const item of candidates) {
           if (referenced.has(item.id)) continue
           try {

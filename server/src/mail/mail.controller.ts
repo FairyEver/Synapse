@@ -8,7 +8,6 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import { MAIL_MAX_ATTACHMENT_BYTES, MailService } from "./mail.service"
 
 const content = z.object({ recipientIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10).default([]), replyToId: z.string().min(1).optional() }).strict()
-const draft = content
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -86,26 +85,5 @@ export class MailController {
   send(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
     const input = parse(z.object({ previewId: z.string().min(1), clientRequestId: z.string().min(1).max(100) }).strict(), body)
     return this.mail.send(userId(request), input.previewId, input.clientRequestId)
-  }
-
-  @Get("drafts")
-  listDrafts(@Req() request: AuthenticatedUserRequest) {
-    return this.mail.listDrafts(userId(request))
-  }
-
-  @Post("drafts")
-  createDraft(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
-    return this.mail.createDraft(userId(request), parse(draft, body))
-  }
-
-  @Patch("drafts/:id")
-  updateDraft(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Body() body: unknown) {
-    const input = parse(draft.extend({ baseVersion: z.number().int().min(1) }), body)
-    return this.mail.updateDraft(userId(request), id, input.baseVersion, input)
-  }
-
-  @Delete("drafts/:id")
-  deleteDraft(@Req() request: AuthenticatedUserRequest, @Param("id") id: string) {
-    return this.mail.deleteDraft(userId(request), id)
   }
 }

@@ -10,7 +10,6 @@ function harness() {
     user: { findMany: vi.fn(async (_query?: { take?: number }) => [sender, teammate]), findFirst: vi.fn(async () => teammate), count: vi.fn(async () => 2) },
     team: { findFirst: vi.fn(async () => ({ id: "team-1", name: "团队一" })) },
     mailAttachment: { create: vi.fn(async (input: { data: { fileName: string; size: bigint } }) => ({ id: "attachment-1", fileName: input.data.fileName, mimeType: "application/octet-stream", size: input.data.size })), findMany: vi.fn(async () => []), count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })), deleteMany: vi.fn(async () => ({ count: 1 })) },
-    mailDraft: { findMany: vi.fn(async () => []), create: vi.fn(async () => ({ id: "draft-1" })) },
     mailStorageDeletion: { create: vi.fn(async () => ({ id: "deletion-1" })), findMany: vi.fn(async () => []), deleteMany: vi.fn(async () => ({ count: 1 })) },
     mailSendPreview: {
       create: vi.fn(async () => ({ id: "preview-1", expiresAt: new Date(Date.now() + 60_000) })),
@@ -136,10 +135,10 @@ describe("MailService", () => {
     expect(prisma.mailStorageDeletion.deleteMany).toHaveBeenCalledWith({ where: { id: "deletion-1" } })
   })
 
-  it("keeps an old attachment referenced by a draft", async () => {
+  it("keeps an old attachment referenced by an active send preview", async () => {
     const { service, prisma, storage } = harness()
     prisma.mailAttachment.findMany.mockResolvedValueOnce([{ id: "attachment-1", ownerId: "sender", storageKey: "mail/attachments/object-1", lastReferencedAt: new Date("2026-09-01") }] as never)
-    prisma.mailDraft.findMany.mockResolvedValueOnce([{ attachmentIds: ["attachment-1"] }] as never)
+    prisma.mailSendPreview.findMany.mockResolvedValueOnce([{ attachmentIds: ["attachment-1"] }] as never)
     await service.cleanupExpiredMail(new Date("2026-09-27T00:00:00.000Z"))
     expect(prisma.mailAttachment.deleteMany).not.toHaveBeenCalled()
     expect(storage.delete).not.toHaveBeenCalled()
@@ -151,11 +150,5 @@ describe("MailService", () => {
     storage.delete.mockRejectedValueOnce(new Error("storage unavailable"))
     await service.cleanupExpiredMail()
     expect(prisma.mailStorageDeletion.deleteMany).not.toHaveBeenCalled()
-  })
-
-  it("rejects a draft whose attachment was already reclaimed", async () => {
-    const { service, prisma } = harness()
-    await expect(service.createDraft("sender", { recipientIds: [], subject: "草稿", body: "正文", attachmentIds: ["missing"] })).rejects.toThrow("附件已失效")
-    expect(prisma.mailDraft.create).not.toHaveBeenCalled()
   })
 })

@@ -11,7 +11,6 @@ export type MailSummary = {
   attachmentCount: number
 }
 export type MailMessage = MailSummary & { viewerId: string; body: string; team: { id: string; name: string }; replyToId: string | null; attachments: MailAttachment[] }
-export type MailDraft = { draftId: string; recipientIds: string[]; subject: string; body: string; attachmentIds: string[]; attachments?: MailAttachment[]; replyToId: string | null; version: number; updatedAt: string }
 export type MailContent = { recipientIds: string[]; subject: string; body: string; attachmentIds: string[]; replyToId?: string }
 export type MailOperation =
   | { kind: "recipientSearch"; query: string }
@@ -19,10 +18,6 @@ export type MailOperation =
   | { kind: "messageGet"; messageId: string }
   | { kind: "messageSetRead"; messageId: string; read: boolean }
   | { kind: "messageDelete"; messageId: string }
-  | { kind: "draftList" }
-  | { kind: "draftCreate"; content: MailContent }
-  | { kind: "draftUpdate"; draftId: string; baseVersion: number; content: MailContent }
-  | { kind: "draftDelete"; draftId: string }
   | { kind: "attachmentLocal"; filePath: string }
   | { kind: "attachmentDownload"; messageId: string; attachmentId: string; outputPath?: string }
   | { kind: "sendPreview"; content: MailContent }
@@ -34,10 +29,6 @@ export type MailOperationResult = {
   messageGet: MailMessage
   messageSetRead: { read: boolean }
   messageDelete: { deleted: boolean }
-  draftList: { items: MailDraft[] }
-  draftCreate: MailDraft
-  draftUpdate: MailDraft
-  draftDelete: { deleted: boolean }
   attachmentLocal: MailAttachment & { attachmentToken: string; state: "ready" }
   attachmentDownload: { path: string } | null
   sendPreview: { previewId: string; expiresAt: string; team: { id: string; name: string }; recipients: MailPerson[]; subject: string; body: string; attachments: MailAttachment[] }

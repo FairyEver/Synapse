@@ -85,18 +85,3 @@ struct MailPreview: Decodable {
 }
 
 struct MailReceipt: Decodable { let messageId: String; let recipientIds: [String]; let sentAt: String }
-
-struct MailDraft: Decodable, Identifiable {
-    let draftId: String
-    let recipientIds: [String]
-    let subject: String
-    let body: String
-    let attachmentIds: [String]
-    let attachments: [MailAttachment]?
-    let replyToId: String?
-    let version: Int
-    let updatedAt: String
-    var id: String { draftId }
-}
-
-struct MailDraftPage: Decodable { let items: [MailDraft] }

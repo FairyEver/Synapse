@@ -18,13 +18,6 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
     case "app.mail.message.get": return { kind: "messageGet", ...z.object({ messageId: id }).strict().parse(params) }
     case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
     case "app.mail.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id }).strict().parse(params) }
-    case "app.mail.draft.list": return { kind: "draftList" }
-    case "app.mail.draft.create": return { kind: "draftCreate", content: content.parse(params) }
-    case "app.mail.draft.update": {
-      const parsed = content.extend({ draftId: id, baseVersion: z.number().int().positive() }).parse(params)
-      return { kind: "draftUpdate", draftId: parsed.draftId, baseVersion: parsed.baseVersion, content: { recipientIds: parsed.recipientIds, subject: parsed.subject, body: parsed.body, attachmentIds: parsed.attachmentIds, replyToId: parsed.replyToId } }
-    }
-    case "app.mail.draft.delete": return { kind: "draftDelete", ...z.object({ draftId: id }).strict().parse(params) }
     case "app.mail.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }
     case "app.mail.attachment.download_file": return { kind: "attachmentDownload", ...z.object({ messageId: id, attachmentId: id, outputPath: z.string().min(1) }).strict().parse(params) }
     case "app.mail.send.preview": return { kind: "sendPreview", content: content.parse(params) }

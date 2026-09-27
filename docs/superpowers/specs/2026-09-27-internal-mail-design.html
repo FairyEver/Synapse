@@ -59,7 +59,6 @@
               <p class="px-3 pb-2 text-xs font-medium text-neutral-600">信箱</p>
               <button id="desktop-inbox" type="button" class="w-full rounded-md px-3 py-2 text-left text-sm font-medium" aria-pressed="true">收到</button>
               <button id="desktop-sent" type="button" class="w-full rounded-md px-3 py-2 text-left text-sm font-medium" aria-pressed="false">已发送</button>
-              <button id="desktop-drafts" type="button" class="w-full rounded-md px-3 py-2 text-left text-sm font-medium" aria-pressed="false">草稿</button>
             </nav>
             <div class="col-span-2 border-r border-neutral-200">
               <div class="border-b border-neutral-200 p-3"><label class="sr-only" for="desktop-search">搜索信件</label><input id="desktop-search" type="search" placeholder="搜索信件" class="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"></div>
@@ -73,12 +72,12 @@
         <div class="mt-8 grid items-start gap-8 lg:grid-cols-2">
           <div>
             <h3 class="text-base font-semibold">iPhone 与 iPadOS</h3>
-            <p class="mt-2 text-sm leading-6 text-neutral-700">入口放在系统「主页 → 功能」，不增加第四个全局 Tab。站内信使用系统导航栏、信箱选择、List 与搜索；点信件进入详情，iPhone 写信打开全高度 sheet。宽 iPad 窗口用现有 AdaptiveFeatureNavigation 展开列表与详情，窄窗口折叠，选中信件与草稿保持不变。</p>
+            <p class="mt-2 text-sm leading-6 text-neutral-700">入口放在系统「主页 → 功能」，不增加第四个全局 Tab。站内信使用系统导航栏、信箱选择、List 与搜索；点信件进入详情，iPhone 写信打开全高度 sheet。宽 iPad 窗口用现有 AdaptiveFeatureNavigation 展开列表与详情，窄窗口折叠，选中信件保持不变。</p>
             <div class="mt-5 border-t border-neutral-200 pt-5">
               <h4 class="text-sm font-semibold">关键路径</h4>
               <ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700">
                 <li>1. 从同团队成员列表浏览或搜索，逐个选择一位或多位收件人。</li>
-                <li>2. 编辑主题、正文与附件；桌面和手机共用服务端草稿。</li>
+                <li>2. 编辑主题、正文与附件。</li>
                 <li>3. 发送前服务端再次核验团队成员关系和附件状态。</li>
                 <li>4. 每位收件人拥有自己的未读、删除状态，发件人可见已发送。</li>
               </ol>
@@ -90,7 +89,7 @@
               <strong id="mobile-title" class="text-lg">站内信</strong>
               <div class="flex gap-1"><button id="mobile-compose" type="button" class="rounded-md px-2 py-2 text-sm font-medium hover:bg-neutral-100">写信</button><button id="mobile-send" type="button" class="hidden rounded-md px-2 py-2 text-sm font-medium hover:bg-neutral-100">发送</button></div>
             </div>
-            <div id="mobile-tabs" class="m-3 flex rounded-lg bg-neutral-100 p-1" role="group" aria-label="信箱选择器结构示意"><button id="mobile-inbox" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="true">收到</button><button id="mobile-sent" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="false">已发送</button><button id="mobile-drafts" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="false">草稿</button></div>
+            <div id="mobile-tabs" class="m-3 flex rounded-lg bg-neutral-100 p-1" role="group" aria-label="信箱选择器结构示意"><button id="mobile-inbox" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="true">收到</button><button id="mobile-sent" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="false">已发送</button></div>
             <div id="mobile-search-wrap" class="border-b border-neutral-200 px-4 py-2"><label class="sr-only" for="mobile-search">搜索信件</label><input id="mobile-search" type="search" placeholder="搜索信件" class="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"></div>
             <div id="mobile-content" class="min-h-96 flex-1" aria-live="polite"></div><div id="mobile-detail-actions"></div>
           </div>
@@ -103,9 +102,9 @@
         <p class="mt-2 text-sm leading-6 text-neutral-700">依据 Apple 现行 Human Interface Guidelines 与 SynapseMobile 的导航约束。网页只表达信息结构和状态；正式 iOS 界面由 SwiftUI 系统组件呈现，不在网页中仿制 Liquid Glass。</p>
         <div class="mt-5 overflow-x-auto"><table class="w-full min-w-160 border-collapse text-left text-sm"><thead><tr class="border-b border-neutral-300"><th scope="col" class="px-3 py-3 font-semibold">场景</th><th scope="col" class="px-3 py-3 font-semibold">组件与布局</th><th scope="col" class="px-3 py-3 font-semibold">交互要求</th></tr></thead><tbody class="divide-y divide-neutral-200 text-neutral-700">
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">全局入口</th><td class="px-3 py-3 align-top">保留现有系统 <code>TabView</code> 的「主页 / 终端 / 我的」；站内信是主页功能清单的一页。</td><td class="px-3 py-3 align-top">不新增底部标签，不在功能页里复制全局导航；iPad 顶部标签或侧边栏交由系统适配。</td></tr>
-          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">信箱列表</th><td class="px-3 py-3 align-top"><code>AdaptiveFeatureNavigation</code> / <code>NavigationSplitView</code> + <code>List(selection:)</code>；收到、已发送、草稿用信箱选择器，不画第二套 Tab bar；搜索用 <code>.searchable</code>。</td><td class="px-3 py-3 align-top">iPhone 与窄窗单列下钻；宽 iPad 并排列表与详情，保持选中行高亮；搜索只筛当前账号可见信件。</td></tr>
+          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">信箱列表</th><td class="px-3 py-3 align-top"><code>AdaptiveFeatureNavigation</code> / <code>NavigationSplitView</code> + <code>List(selection:)</code>；收到、已发送用信箱选择器，不画第二套 Tab bar；搜索用 <code>.searchable</code>。</td><td class="px-3 py-3 align-top">iPhone 与窄窗单列下钻；宽 iPad 并排列表与详情，保持选中行高亮；搜索只筛当前账号可见信件。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">阅读与操作</th><td class="px-3 py-3 align-top">系统导航栏、<code>toolbar</code>、SF Symbols；详情正文在内容层，回复、转发、删除放工具栏或 <code>Menu</code>。</td><td class="px-3 py-3 align-top">紧凑窗用系统返回；宽窗保留列表；长按或右键菜单的操作也须在主界面可达。</td></tr>
-          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">写信</th><td class="px-3 py-3 align-top">iPhone 使用全高度 <code>sheet</code>，左上「取消」、右上「发送」；iPad 用给正文充分空间的系统 sheet。使用系统文本输入、收件人搜索、<code>fileImporter</code> 与附件列表。</td><td class="px-3 py-3 align-top">收件人逐个选；取消或下滑前保存草稿，未保存时给出明确选择；键盘出现时正文与发送动作仍可达。</td></tr>
+          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">写信</th><td class="px-3 py-3 align-top">iPhone 使用全高度 <code>sheet</code>，左上「取消」、右上「发送」；iPad 用给正文充分空间的系统 sheet。使用系统文本输入、收件人搜索、<code>fileImporter</code> 与附件列表。</td><td class="px-3 py-3 align-top">收件人逐个选；取消或下滑时直接退出写信界面；键盘出现时正文与发送动作仍可达。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">窗口与辅助功能</th><td class="px-3 py-3 align-top">使用安全区、系统材质和语义色；按容器可用宽度折叠分栏，不按设备型号判断。</td><td class="px-3 py-3 align-top">验证 iPhone 竖横屏、iPad 全屏/半窗/最窄窗，以及动态字体、深色外观、VoiceOver、键盘和指针。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">macOS 桌面</th><td class="px-3 py-3 align-top">沿用 Synapse 的 <code>SystemAppWindowShell</code>；内容区采用信箱侧栏、信件列表、详情三栏，壳层工具栏的「写信」打开独立任务界面。</td><td class="px-3 py-3 align-top">窄窗口先收侧栏，再保证列表与正文可读；不在内容区叠加第二条应用顶栏。Electron 界面遵循布局与行为规则，不宣称是原生 AppKit 控件。</td></tr>
         </tbody></table></div>
@@ -122,7 +121,7 @@
         <h2 id="rules-title" class="text-xl font-semibold">产品规则</h2>
         <div class="mt-5 grid gap-x-10 gap-y-6 md:grid-cols-2">
           <div><h3 class="font-semibold">身份与收件人</h3><p class="mt-2 text-sm leading-6 text-neutral-700">每人只有一个账号收件箱，汇集所有所属团队的信件。写信时按姓名或 handle 搜索并逐个选择用户，不选择团队作为收件人。候选人须与发件人有共同团队；同一封信的发件人与全部收件人还须共同属于至少一个有效团队。多个共同团队由服务端按稳定规则确定信件归属，不按团队群发。没有团队时仍可读历史，但不能发新信。用用户 ID 寻址，不输入外部邮箱地址。</p></div>
-          <div><h3 class="font-semibold">收发与会话</h3><p class="mt-2 text-sm leading-6 text-neutral-700">收到与已发送是主要信箱，草稿从同一信箱选择器进入。支持主题、正文、多人收件、附件、回复、回复全部、同团队转发、搜索、已读/未读、按人删除与跨端草稿。草稿编辑时保存服务端版本；断网时保留本机编辑内容，恢复连接后提示重试，绝不显示「已发送」。发送请求使用幂等键。</p></div>
+          <div><h3 class="font-semibold">收发与会话</h3><p class="mt-2 text-sm leading-6 text-neutral-700">收到与已发送是信箱分类。支持主题、正文、多人收件、附件、回复、回复全部、同团队转发、搜索、已读/未读和按人删除。发送失败时保留当前写信界面的编辑内容，绝不显示「已发送」。发送请求使用幂等键。</p></div>
           <div><h3 class="font-semibold">附件</h3><p class="mt-2 text-sm leading-6 text-neutral-700">附件只接受本机或文件 App 中的文件直接上传到站内信专属存储，收件人经信件 ACL 读取。云盘文件通过分享链接放入正文，不提供云盘附件选择，也不自动复制云盘文件。</p></div>
           <div><h3 class="font-semibold">成员变化</h3><p class="mt-2 text-sm leading-6 text-neutral-700">禁用账号、已退出团队的用户不可成为新信收件人。发出后退出团队，历史信仍留在个人信箱，但不能再以原团队回复或转发，除非重新加入。删除团队保留历史信和发送时的团队名快照，阻止该团队的新发送；删除个人信件只隐藏自己的副本。</p></div>
           <div><h3 class="font-semibold">通知与隐私</h3><p class="mt-2 text-sm leading-6 text-neutral-700">新信及附件提交成功后才广播变更，并向收件账号发提醒。通知中心仅展示「收到站内信」与发件人，不复制主题、正文和附件名；点击按信件 ID 打开站内信，信已删除时回到收件箱。站内信未读数独立于通知未读数，显示上限沿用 99+。服务端日志和推送不记录信件内容。</p></div>
@@ -136,7 +135,6 @@
         <div class="mt-5 overflow-x-auto"><table class="w-full min-w-180 border-collapse text-left text-sm"><thead><tr class="border-b border-neutral-300"><th scope="col" class="px-3 py-3 font-semibold">能力</th><th scope="col" class="px-3 py-3 font-semibold">人：桌面 / iOS</th><th scope="col" class="px-3 py-3 font-semibold">AI：MCP</th><th scope="col" class="px-3 py-3 font-semibold">服务端结果</th></tr></thead><tbody class="divide-y divide-neutral-200 text-neutral-700">
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">进入信箱</th><td class="px-3 py-3 align-top">桌面启动台打开独立应用；手机主页「功能 → 站内信」。</td><td class="px-3 py-3 align-top"><code>message_list</code></td><td class="px-3 py-3 align-top">按当前账号分页返回收到/已发送；无团队仍可看历史。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">找人</th><td class="px-3 py-3 align-top">手机写信 → 浏览同团队成员或搜姓名/handle → 逐个选人；桌面写信沿用搜索。</td><td class="px-3 py-3 align-top"><code>recipient_search</code>；精确唯一匹配可暂定，模糊或重名时列出候选让用户选。</td><td class="px-3 py-3 align-top">只返回与发件人同团队的有效其他成员及 userId、handle、共同团队；整封信再校验共同团队交集。</td></tr>
-          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">写信与草稿</th><td class="px-3 py-3 align-top">写信 → 编辑；草稿入口恢复，离开前自动保存。</td><td class="px-3 py-3 align-top"><code>draft_save/list/get/delete</code></td><td class="px-3 py-3 align-top">按账号持久化，版本冲突返回最新版本，不覆盖另一端的编辑。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">附文件</th><td class="px-3 py-3 align-top">从本机/文件 App 选文件；云盘分享链接写入正文。</td><td class="px-3 py-3 align-top">生成本地文件后调 <code>attachment_create</code> 直接上传。</td><td class="px-3 py-3 align-top">返回仅发件人可用的附件令牌，文件保存在站内信专属存储。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">发送</th><td class="px-3 py-3 align-top">写信页点击「发送」。</td><td class="px-3 py-3 align-top"><code>send_preview</code> 返回固定待发内容；在对话中展示收件人、主题、完整正文及附件，得到用户明确确认后才调 <code>send</code>。</td><td class="px-3 py-3 align-top">校验预览与提交内容一致，事务内重验全部成员和附件；全成或全败；按幂等键返回信件 ID。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">阅读与搜索</th><td class="px-3 py-3 align-top">列表搜索 → 详情；附件点开或下载。</td><td class="px-3 py-3 align-top"><code>message_list/get</code>、<code>attachment_download</code></td><td class="px-3 py-3 align-top">每次按参与者 ACL 读取，分页搜索仅覆盖自己可见信件。</td></tr>
@@ -144,7 +142,7 @@
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">状态与删除</th><td class="px-3 py-3 align-top">打开标已读；详情可设未读、删除并撤销。</td><td class="px-3 py-3 align-top"><code>message_set_read</code>、<code>message_delete</code></td><td class="px-3 py-3 align-top">状态只属于当前参与者，广播该账号各端，不影响其他收件人。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">提醒落点</th><td class="px-3 py-3 align-top">点桌面提醒或 iOS 推送，按信件 ID 定位。</td><td class="px-3 py-3 align-top">发送结果直接返回信件 ID，无提醒依赖。</td><td class="px-3 py-3 align-top">通知仅存安全摘要；详情请求仍做信件 ACL 校验。</td></tr>
         </tbody></table></div>
-        <div class="mt-7 grid gap-6 md:grid-cols-2"><div><h3 class="font-semibold">发送事务</h3><p class="mt-2 text-sm leading-6 text-neutral-700">服务端预览固定收件人 userId 数组、主题、完整正文、附件令牌、共同团队上下文，并返回短期有效的 previewId。提交携带 previewId 与 clientRequestId；事务再次确认预览未被改动、发件人和全部收件人仍是有效成员、令牌属于发件人且已准备完成，再写入信件、参与者、附件引用与 outbox 事件。失败时临时对象由清理任务回收。相同 clientRequestId 返回同一信件 ID。</p></div><div><h3 class="font-semibold">失败与权限</h3><p class="mt-2 text-sm leading-6 text-neutral-700">成员退出、账号禁用、团队删除、附件失效、预览过期或草稿版本冲突，都返回可识别错误和对象 ID，客户端保留编辑内容。回复全部出现失效成员时显示名单，让用户移除后重新预览并确认。读取、下载、回复、删除每次按当前 userId 与信件参与者关系校验。通知投递失败只影响提醒，收件箱仍可通过列表读取；客户端重连后增量同步。</p></div></div>
+        <div class="mt-7 grid gap-6 md:grid-cols-2"><div><h3 class="font-semibold">发送事务</h3><p class="mt-2 text-sm leading-6 text-neutral-700">服务端预览固定收件人 userId 数组、主题、完整正文、附件令牌、共同团队上下文，并返回短期有效的 previewId。提交携带 previewId 与 clientRequestId；事务再次确认预览未被改动、发件人和全部收件人仍是有效成员、令牌属于发件人且已准备完成，再写入信件、参与者、附件引用与 outbox 事件。失败时临时对象由清理任务回收。相同 clientRequestId 返回同一信件 ID。</p></div><div><h3 class="font-semibold">失败与权限</h3><p class="mt-2 text-sm leading-6 text-neutral-700">成员退出、账号禁用、团队删除、附件失效、预览过期，都返回可识别错误和对象 ID，客户端保留编辑内容。回复全部出现失效成员时显示名单，让用户移除后重新预览并确认。读取、下载、回复、删除每次按当前 userId 与信件参与者关系校验。通知投递失败只影响提醒，收件箱仍可通过列表读取；客户端重连后增量同步。</p></div></div>
       </section>
 
       <section id="architecture" class="scroll-mt-6 border-t border-neutral-300 py-9" aria-labelledby="architecture-title">
@@ -153,7 +151,7 @@
           <table class="w-full min-w-160 border-collapse text-left text-sm">
             <thead><tr class="border-b border-neutral-300"><th scope="col" class="px-3 py-3 font-semibold">层</th><th scope="col" class="px-3 py-3 font-semibold">新增职责</th><th scope="col" class="px-3 py-3 font-semibold">复用与边界</th></tr></thead>
             <tbody class="divide-y divide-neutral-200 text-neutral-700">
-              <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">服务端</th><td class="px-3 py-3 align-top">团队内成员发现；草稿、信件、参与者状态、附件快照；列表分页、搜索、发送事务与审计。</td><td class="px-3 py-3 align-top">复用 UserAuthGuard、TeamMembership 及账号广播。正文不写入 UserNotification。</td></tr>
+              <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">服务端</th><td class="px-3 py-3 align-top">团队内成员发现；信件、参与者状态、附件快照；列表分页、搜索、发送事务与审计。</td><td class="px-3 py-3 align-top">复用 UserAuthGuard、TeamMembership 及账号广播。正文不写入 UserNotification。</td></tr>
               <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">桌面端</th><td class="px-3 py-3 align-top">独立「站内信」System App；信箱侧栏、信件列表、详情三栏，以及独立写信任务界面、附件选择和未读状态。</td><td class="px-3 py-3 align-top">复用 SystemAppWindowShell、shadcn 组件、窄类型 preload bridge；主进程负责认证与网络。</td></tr>
               <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">iOS / iPadOS</th><td class="px-3 py-3 align-top">主页功能入口、系统列表与分栏详情、系统写信 sheet、系统文件选择与推送落点。</td><td class="px-3 py-3 align-top">手机直连服务端，不依赖电脑在线；复用 AdaptiveFeatureNavigation、系统 TabView、toolbar、账号认证与通知数量规则。</td></tr>
               <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">MCP + Skill</th><td class="px-3 py-3 align-top">搜索同团队用户、准备附件、生成发送预览、在对话确认后直发；也可查询、阅读、回复与标记已读。</td><td class="px-3 py-3 align-top">新 mail domain；工具走同一服务端校验。Skill 写明歧义消解、完整内容确认及发送回执；不唤起写信界面。</td></tr>
@@ -161,10 +159,10 @@
           </table>
         </div>
         <div class="mt-8 grid gap-8 lg:grid-cols-2">
-          <div><h3 class="font-semibold">拟议数据边界</h3><p class="mt-2 text-sm leading-6 text-neutral-700">MailThread 保存会话与 teamId、团队名快照；teamId 不设级联删除外键，团队删除后历史仍可读。MailMessage 保存发送者、主题、正文、发送时间和幂等键；MailParticipant 保存每位参与者的已读与隐藏状态；MailAttachment 存放直接上传的站内信专属对象；MailDraft 保存跨端草稿和版本。收件箱与发件箱由参与者身份投影，不复制正文。</p></div>
-          <div><h3 class="font-semibold">拟议 MCP 工具组</h3><p class="mt-2 text-sm leading-6 text-neutral-700"><code>app_mail_recipient_search</code>、<code>app_mail_draft_*</code>、<code>app_mail_attachment_create</code>、<code>app_mail_attachment_download</code>、<code>app_mail_send_preview</code>、<code>app_mail_send</code>、<code>app_mail_message_list/get/set_read/delete/reply/forward</code>。工具名是方案，尚未注册。系统 Skill 要说明相似匹配歧义、对话中最终确认、回执及失败处理；工具经现有 search/invoke 路由、PermissionGuard 和 AuditSink。</p></div>
+          <div><h3 class="font-semibold">拟议数据边界</h3><p class="mt-2 text-sm leading-6 text-neutral-700">MailThread 保存会话与 teamId、团队名快照；teamId 不设级联删除外键，团队删除后历史仍可读。MailMessage 保存发送者、主题、正文、发送时间和幂等键；MailParticipant 保存每位参与者的已读与隐藏状态；MailAttachment 存放直接上传的站内信专属对象。收件箱与发件箱由参与者身份投影，不复制正文。</p></div>
+          <div><h3 class="font-semibold">拟议 MCP 工具组</h3><p class="mt-2 text-sm leading-6 text-neutral-700"><code>app_mail_recipient_search</code>、<code>app_mail_attachment_create</code>、<code>app_mail_attachment_download</code>、<code>app_mail_send_preview</code>、<code>app_mail_send</code>、<code>app_mail_message_list/get/set_read/delete/reply/forward</code>。工具名是方案，尚未注册。系统 Skill 要说明相似匹配歧义、对话中最终确认、回执及失败处理；工具经现有 search/invoke 路由、PermissionGuard 和 AuditSink。</p></div>
         </div>
-        <div class="mt-8 border-t border-neutral-200 pt-5"><h3 class="font-semibold">拟议服务端接口</h3><div class="mt-3 grid gap-4 text-sm leading-6 text-neutral-700 md:grid-cols-2"><p><code>GET /api/mail/recipients?query</code> 供人和 AI 搜索与自己同团队的有效用户；<code>GET /api/mail/messages?box&amp;query&amp;cursor</code>、<code>GET /api/mail/messages/:id</code> 读取个人信件。</p><p><code>GET/POST/PATCH/DELETE /api/mail/drafts</code> 管理跨端草稿，PATCH 携带 baseVersion；冲突返回新版本供用户选择。<code>PATCH /api/mail/messages/:id/read</code> 与 <code>DELETE /api/mail/messages/:id</code> 只改本人状态。</p><p><code>PUT /api/mail/attachments/local</code> 直接接收本地文件，不接受云盘 itemId 或版本。<code>GET /api/mail/messages/:id/attachments/:attachmentId</code> 校验参与者后下载。</p><p><code>POST /api/mail/send-previews</code> 固定待发送内容并返回 previewId；<code>POST /api/mail/messages</code> 用 previewId 和幂等键提交。回复和转发携带原信 ID 与操作类型；回包含 messageId、实际 recipientIds、sentAt。</p></div></div>
+        <div class="mt-8 border-t border-neutral-200 pt-5"><h3 class="font-semibold">拟议服务端接口</h3><div class="mt-3 grid gap-4 text-sm leading-6 text-neutral-700 md:grid-cols-2"><p><code>GET /api/mail/recipients?query</code> 供人和 AI 搜索与自己同团队的有效用户；<code>GET /api/mail/messages?box&amp;query&amp;cursor</code>、<code>GET /api/mail/messages/:id</code> 读取个人信件。</p><p><code>PATCH /api/mail/messages/:id/read</code> 与 <code>DELETE /api/mail/messages/:id</code> 只改本人状态。</p><p><code>PUT /api/mail/attachments/local</code> 直接接收本地文件，不接受云盘 itemId 或版本。<code>GET /api/mail/messages/:id/attachments/:attachmentId</code> 校验参与者后下载。</p><p><code>POST /api/mail/send-previews</code> 固定待发送内容并返回 previewId；<code>POST /api/mail/messages</code> 用 previewId 和幂等键提交。回复和转发携带原信 ID 与操作类型；回包含 messageId、实际 recipientIds、sentAt。</p></div></div>
         <p class="mt-6 text-sm leading-6 text-neutral-700">桌面端通过主进程的窄类型 bridge 调用上述账号接口；iOS 通过现有登录态直接调用。两端共用请求/响应契约。新增通知来源、桌面 System App、移动端 HomeRoute、MCP capability/tool 和 Skill 时，同步更新能力注册表、消息中心专题与团队专题；只有实施完成后才改变现有产品边界。</p>
         <div class="mt-8 border-t border-neutral-200 pt-5"><h3 class="font-semibold">关键 MCP 入参与回执</h3><div class="mt-3 grid gap-4 text-sm leading-6 text-neutral-700 md:grid-cols-2"><p><code>recipient_search({query, cursor})</code> 返回 <code>userId、nickname、handle、matchKind、similarity、sharedTeamIds</code>。只有唯一精确匹配可暂定收件人；重名或模糊匹配必须列候选让用户选，分数不能代替选择。<code>attachment_create({filePath})</code> 返回 <code>attachmentToken、fileName、state=ready</code>；未 ready 不可发送。</p><p><code>send_preview({recipientIds, subject, body, attachmentTokens, replyTo?})</code> 返回 <code>previewId</code>、已解析收件人、完整正文、附件名与团队上下文；多个共同团队时服务端确定归属，不将团队作为收件地址。<code>send({previewId, clientRequestId})</code> 返回 <code>messageId、recipientIds、sentAt</code>。回复、转发也走预览与确认；读取附件按参与者权限。</p></div></div>
         <div class="mt-8 border-t border-neutral-200 pt-5"><h3 class="font-semibold">AI 对话直发文档</h3><ol class="mt-4 grid gap-4 text-sm leading-6 text-neutral-700 md:grid-cols-2"><li><strong class="block text-neutral-950">1 生成并存文档</strong>AI 在当前对话按指令生成本地文档；需要作为附件发送时直接上传本地文件。已有云盘文件可取得分享链接放入正文。</li><li><strong class="block text-neutral-950">2 搜索收件人</strong>从 SynapseSkill 得知 <code>app_mail_recipient_search</code> 的方法与参数并调用。唯一精确匹配可暂定；模糊或多个匹配时在对话中给出姓名、handle 等候选，让用户确定每一位收件人。</li><li><strong class="block text-neutral-950">3 固定待发内容</strong>本地文件作为附件时调用 <code>attachment_create</code>，再调用 <code>send_preview</code>。在对话中展示实际收件人、主题、完整信件正文与附件名；AI 生成的文档也给出完整内容或可打开的精确预览。</li><li><strong class="block text-neutral-950">4 取得最终确认</strong>明确问「是否按以上内容发送？」即使人名精确匹配、原指令已经说「发给某人」，也必须等用户对这一次完整预览明确说可以。任何收件人、正文或附件修改都重做预览并重新确认。</li><li><strong class="block text-neutral-950">5 后台发送</strong>确认后，AI 直接调用 <code>app_mail_send({previewId, clientRequestId})</code>；服务端以当前用户身份校验并投递，不打开桌面或 iOS 的写信界面，也不要求用户点击发送按钮。</li><li><strong class="block text-neutral-950">6 返回回执</strong>AI 将 messageId、实际收件人和发送结果告知用户。失败时保留待发内容并说明原因，不声称已发送；重试沿用幂等键。</li></ol><p class="mt-4 text-sm leading-6 text-neutral-700">对话确认是 SynapseSkill 与 Agent 宿主的行为约束；服务端能校验 previewId 对应内容未变、当前用户身份和发送权限，不能仅凭一个工具参数证明用户在对话中说过「可以」。实现时需在 Agent 宿主保留确认状态与审计关联。</p></div>
@@ -173,8 +171,8 @@
       <section id="delivery" class="scroll-mt-6 border-t border-neutral-300 py-9" aria-labelledby="delivery-title">
         <h2 id="delivery-title" class="text-xl font-semibold">实施与验收</h2>
         <div class="mt-5 grid gap-7 md:grid-cols-2">
-          <div><h3 class="font-semibold">实施顺序</h3><ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700"><li>1. 先定团队成员查询、信件 ACL、直接上传附件与数据库迁移。</li><li>2. 上线服务端 API、实时事件、推送与审计，再接桌面和 iOS 共享契约。</li><li>3. 桌面独立应用与 iOS 主页功能同时覆盖收、发、读、回复、草稿。</li><li>4. 注册 MCP、系统 Skill、能力清单并补齐 Agent 指南；同步修订团队旧规格。</li></ol></div>
-          <div><h3 class="font-semibold">必须通过的场景</h3><ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-neutral-700"><li>手动逐个选择一人或多人发送成功；全部参与者没有共同团队、禁用账号、离团成员时整封失败且保留草稿。</li><li>零团队用户能读历史且不能发；多团队用户可搜索与自己共享团队的用户，不出现团队群发选项；同名用户按 handle 区分。</li><li>桌面写草稿、手机继续编辑；并发改稿发生版本冲突时不覆盖内容。</li><li>本机文件可直接上传为附件；云盘文件的分享链接可放入正文，写信时没有云盘附件选项，也不复制云盘文件。</li><li>回复、回复全部和同团队转发保留正确参与者；失效成员需要显式处理。</li><li>桌面发送后手机离线重连可收到；搜索、未读与按人删除跨端一致；通知点击精确定位。</li><li>手机在 iPhone、iPad 全屏、半窗和窄窗均能写信、读信、返回原列表。</li><li>AI 生成文档后搜索人；模糊或重名时让用户选；唯一精确匹配也展示完整待发内容并取得最终确认，再从后台 MCP 发送，不唤起写信界面。</li><li>AI 能查询、读正文、下载附件、写草稿、回复、设已读和删除；发送工具重试不重复投递，失败不声称成功。</li></ul></div>
+          <div><h3 class="font-semibold">实施顺序</h3><ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700"><li>1. 先定团队成员查询、信件 ACL、直接上传附件与数据库迁移。</li><li>2. 上线服务端 API、实时事件、推送与审计，再接桌面和 iOS 共享契约。</li><li>3. 桌面独立应用与 iOS 主页功能同时覆盖收、发、读和回复。</li><li>4. 注册 MCP、系统 Skill、能力清单并补齐 Agent 指南；同步修订团队旧规格。</li></ol></div>
+          <div><h3 class="font-semibold">必须通过的场景</h3><ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-neutral-700"><li>手动逐个选择一人或多人发送成功；全部参与者没有共同团队、禁用账号、离团成员时整封失败且写信界面保留内容。</li><li>零团队用户能读历史且不能发；多团队用户可搜索与自己共享团队的用户，不出现团队群发选项；同名用户按 handle 区分。</li><li>关闭写信界面后不保存未发送内容，不显示保存提示。</li><li>本机文件可直接上传为附件；云盘文件的分享链接可放入正文，写信时没有云盘附件选项，也不复制云盘文件。</li><li>回复、回复全部和同团队转发保留正确参与者；失效成员需要显式处理。</li><li>桌面发送后手机离线重连可收到；搜索、未读与按人删除跨端一致；通知点击精确定位。</li><li>手机在 iPhone、iPad 全屏、半窗和窄窗均能写信、读信、返回原列表。</li><li>AI 生成文档后搜索人；模糊或重名时让用户选；唯一精确匹配也展示完整待发内容并取得最终确认，再从后台 MCP 发送，不唤起写信界面。</li><li>AI 能查询、读正文、下载附件、回复、设已读和删除；发送工具重试不重复投递，失败不声称成功。</li></ul></div>
         </div>
         <p class="mt-8 text-xs text-neutral-600">此页面用于评审目标方案与交互，不代表功能已经接入 Synapse。团队、成员与信件均为虚构演示数据，不代表当前账号或组织。</p>
       </section>
@@ -197,18 +195,17 @@ const received = [
   { id: 'r3', team: 'current', sender: '周恬', senderId: 'zhou', otherIds: [], to: '我', subject: '签收稿件确认', body: '这版内容可以进入下一轮评审。', time: '周三 09:26', unread: false },
 ];
 const sent = [
-  { id: 's1', team: 'current', sender: '我', to: '林槿、周恬', subject: '本周方案草稿', body: '请查看本周的方案草稿。', time: '今天 09:15', attachment: '方案草稿.md' },
+  { id: 's1', team: 'current', sender: '我', to: '林槿、周恬', subject: '本周方案', body: '请查看本周的方案。', time: '今天 09:15', attachment: '本周方案.md' },
   { id: 's2', team: 'current', sender: '我', to: '王珂', subject: '流程说明', body: '流程说明已更新。', time: '周二 14:32' },
 ];
-const drafts = [];
 const state = {
   box: 'inbox', selected: 'r1', screen: 'list', composing: false,
   team: 'current', recipients: [], prefill: {}, attachment: null,
-  draftId: null, query: '', deleted: null,
+  query: '', deleted: null,
 };
 const $ = (id) => document.getElementById(id);
 const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-const items = () => state.box === 'inbox' ? received : state.box === 'sent' ? sent : drafts;
+const items = () => state.box === 'inbox' ? received : sent;
 const current = () => items().find((item) => item.id === state.selected);
 const names = (teamId, ids) => teams[teamId].members.filter((member) => ids.includes(member.id)).map((member) => member.name).join('、');
 const filtered = () => items().filter((item) => `${item.sender} ${item.to} ${item.subject} ${item.body}`.toLowerCase().includes(state.query.toLowerCase()));
@@ -228,14 +225,13 @@ function row(item, mobile) {
 }
 function detail(item, mobile = false) {
   if (!item) return '<p class="text-sm text-neutral-600">选择一封信件</p>';
-  if (state.box === 'drafts') return `<article><h3 class="text-lg font-semibold">${safe(item.subject || '无主题')}</h3><p class="mt-2 text-sm text-neutral-700">${safe(item.to || '未选收件人')}</p><p class="mt-5 whitespace-pre-wrap text-sm leading-7">${safe(item.body || '未填写正文')}</p><div class="mt-6 flex flex-wrap gap-2"><button type="button" data-action="edit-draft" class="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white">继续编辑</button><button type="button" data-action="delete-draft" class="rounded-md border border-neutral-300 px-3 py-2 text-sm">删除草稿</button></div></article>`;
   const reply = state.box === 'inbox' ? '<button type="button" data-action="reply" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">回复</button><button type="button" data-action="reply-all" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">回复全部</button>' : '';
   const read = state.box === 'inbox' ? `<button type="button" data-action="toggle-read" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">${item.unread ? '标为已读' : '标为未读'}</button>` : '';
   return `<article><div><h3 class="text-lg font-semibold">${safe(item.subject)}</h3><p class="mt-2 text-sm text-neutral-700">${safe(item.sender)} → ${safe(item.to)}</p><p class="mt-1 text-xs text-neutral-600">${safe(item.time)}</p></div>${mobile ? '' : `<div class="mt-5 flex flex-wrap gap-2">${reply}<button type="button" data-action="forward" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">转发</button>${read}<button type="button" data-action="delete" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">删除</button></div>`}<p class="mt-8 whitespace-pre-wrap text-sm leading-7">${safe(item.body)}</p>${item.attachment ? `<div class="mt-7 border-t border-neutral-200 pt-4"><p class="text-xs font-medium text-neutral-600">附件</p><button type="button" data-action="attachment" class="mt-2 rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">${safe(item.attachment)}</button></div>` : ''}</article>`;
 }
 function mobileDetailToolbar() {
   const item = current();
-  if (state.screen !== 'detail' || !item || state.box === 'drafts') return '';
+  if (state.screen !== 'detail' || !item) return '';
   const reply = state.box === 'inbox' ? '<button type="button" data-action="reply" class="rounded-md px-3 py-2 text-sm font-medium">回复</button>' : '';
   const replyAll = state.box === 'inbox' ? '<button type="button" data-action="reply-all" class="block w-full px-3 py-2 text-left text-sm">回复全部</button>' : '';
   const read = state.box === 'inbox' ? `<button type="button" data-action="toggle-read" class="block w-full px-3 py-2 text-left text-sm">${item.unread ? '标为已读' : '标为未读'}</button>` : '';
@@ -244,12 +240,12 @@ function mobileDetailToolbar() {
 function form(mobile) {
   const prefix = mobile ? 'mobile' : 'desktop';
   const candidates = teams[state.team].members;
-  const actions = mobile ? '' : `<div class="flex flex-wrap gap-2"><button type="submit" class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">发送</button><button type="button" data-action="save-draft" class="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100">保存草稿</button><button type="button" data-action="cancel" class="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100">取消</button></div>`;
+  const actions = mobile ? '' : `<div class="flex flex-wrap gap-2"><button type="submit" class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">发送</button><button type="button" data-action="cancel" class="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100">取消</button></div>`;
   return `<form class="space-y-4" data-compose-form><fieldset><legend class="text-sm font-medium">收件人</legend><label class="sr-only" for="${prefix}-recipient-search">搜索收件人</label><input id="${prefix}-recipient-search" name="recipientSearch" type="search" placeholder="搜索昵称或 handle" class="mt-2 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"><div class="mt-2 space-y-1">${candidates.map((member) => `<label data-member-search="${safe(`${member.name} ${member.handle}`.toLowerCase())}" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-neutral-100"><input type="checkbox" name="recipient" value="${member.id}" ${state.recipients.includes(member.id) ? 'checked' : ''} class="size-4 accent-neutral-900"><span>${safe(member.name)}</span><span class="text-xs text-neutral-600">${safe(member.handle)}</span></label>`).join('')}</div></fieldset><div><label class="block text-sm font-medium" for="${prefix}-subject">主题</label><input id="${prefix}-subject" name="subject" required maxlength="120" value="${safe(state.prefill.subject || '')}" class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"></div><div><label class="block text-sm font-medium" for="${prefix}-body">正文</label><textarea id="${prefix}-body" name="body" required rows="${mobile ? 6 : 8}" class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900">${safe(state.prefill.body || '')}</textarea></div><div><p class="text-sm font-medium">附件</p><div class="mt-2 flex flex-wrap gap-2"><label class="cursor-pointer rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">选本机文件<input name="localFile" type="file" class="sr-only"></label>${state.attachment ? '<button type="button" data-action="remove-attachment" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">移除附件</button>' : ''}</div>${state.attachment ? `<p class="mt-2 text-sm">已选：${safe(state.attachment)}</p>` : ''}<p class="mt-1 text-xs text-neutral-600">此预览只记录文件名，不上传文件。</p></div>${actions}</form>`;
 }
 function render() {
-  tab($('desktop-inbox'), state.box === 'inbox'); tab($('desktop-sent'), state.box === 'sent'); tab($('desktop-drafts'), state.box === 'drafts');
-  tab($('mobile-inbox'), state.box === 'inbox'); tab($('mobile-sent'), state.box === 'sent'); tab($('mobile-drafts'), state.box === 'drafts');
+  tab($('desktop-inbox'), state.box === 'inbox'); tab($('desktop-sent'), state.box === 'sent');
+  tab($('mobile-inbox'), state.box === 'inbox'); tab($('mobile-sent'), state.box === 'sent');
   $('desktop-list').innerHTML = filtered().length ? filtered().map((item) => row(item, false)).join('') : '<p class="p-5 text-sm text-neutral-600">没有匹配的信件</p>';
   $('desktop-detail').innerHTML = detail(current());
   $('desktop-compose-surface').classList.toggle('hidden', !state.composing);
@@ -263,22 +259,11 @@ function render() {
   $('mobile-content').innerHTML = state.screen === 'compose' ? `<div class="p-4">${form(true)}</div>` : state.screen === 'detail' ? `<div class="p-4">${detail(current(), true)}</div>` : (filtered().length ? filtered().map((item) => row(item, true)).join('') : '<p class="p-5 text-sm text-neutral-600">没有匹配的信件</p>');
   $('mobile-detail-actions').innerHTML = mobileDetailToolbar();
 }
-function saveDraft(force = false) {
-  if (!state.composing) return;
-  const subject = String(state.prefill.subject || '').trim();
-  const body = String(state.prefill.body || '').trim();
-  if (!force && !subject && !body && !state.recipients.length && !state.attachment) return;
-  if (!state.draftId) state.draftId = `d${Date.now()}`;
-  const draft = { id: state.draftId, team: state.team, recipients: [...state.recipients], sender: '草稿', to: names(state.team, state.recipients), subject, body, attachment: state.attachment, time: '刚刚' };
-  const index = drafts.findIndex((item) => item.id === draft.id);
-  if (index < 0) drafts.unshift(draft); else drafts[index] = draft;
-}
 function openCompose(prefill = {}, options = {}) {
   state.prefill = { subject: prefill.subject || '', body: prefill.body || '' };
   state.team = options.team || state.team;
   state.recipients = options.recipients || [];
   state.attachment = prefill.attachment || null;
-  state.draftId = options.draftId || null;
   state.composing = true;
   state.screen = 'compose';
   render();
@@ -296,7 +281,7 @@ function setBox(box) {
 function restoreDeleted() {
   if (!state.deleted) return;
   const { box, item, index } = state.deleted;
-  const target = box === 'inbox' ? received : box === 'sent' ? sent : drafts;
+  const target = box === 'inbox' ? received : sent;
   target.splice(index, 0, item);
   state.deleted = null;
   state.box = box;
@@ -322,31 +307,23 @@ document.addEventListener('click', (event) => {
   const button = event.target.closest('button'); if (!button) return;
   if (button.id === 'desktop-inbox' || button.id === 'mobile-inbox') return setBox('inbox');
   if (button.id === 'desktop-sent' || button.id === 'mobile-sent') return setBox('sent');
-  if (button.id === 'desktop-drafts' || button.id === 'mobile-drafts') return setBox('drafts');
   if (button.id === 'desktop-compose' || button.id === 'mobile-compose') return openCompose();
-  if (button.id === 'mobile-back') { if (state.screen === 'compose') saveDraft(); if (state.screen === 'list') { say('返回主页（演示）。'); return; } state.screen = 'list'; state.composing = false; render(); return; }
+  if (button.id === 'mobile-back') { if (state.screen === 'list') { say('返回主页（演示）。'); return; } state.screen = 'list'; state.composing = false; render(); return; }
   if (button.id === 'mobile-send') { $('mobile-content').querySelector('[data-compose-form]')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); return; }
   if (button.id === 'demo-undo') return restoreDeleted();
   if (button.id === 'demo-notify') { const item = received.find((entry) => entry.id === 'r1') || received[0]; if (!item) return; state.box = 'inbox'; state.selected = item.id; state.screen = 'detail'; state.composing = false; item.unread = false; render(); say('已按信件 ID 打开新信（演示）。'); return; }
   if (button.dataset.open) {
     state.selected = button.dataset.open;
-    if (state.box === 'drafts') {
-      const draft = current();
-      if (draft) openCompose(draft, { team: draft.team, recipients: [...draft.recipients], draftId: draft.id });
-    } else {
-      state.composing = false; state.screen = 'detail';
-      const item = current(); if (item) item.unread = false;
-      render();
-    }
+    state.composing = false; state.screen = 'detail';
+    const item = current(); if (item) item.unread = false;
+    render();
     return;
   }
   const action = button.dataset.action;
-  if (action === 'cancel') { saveDraft(); state.composing = false; state.screen = 'list'; render(); say('编辑内容已存为草稿（演示）。'); return; }
-  if (action === 'save-draft') { saveDraft(true); setBox('drafts'); say('草稿已保存（演示）。'); return; }
-  if (action === 'remove-attachment') { state.attachment = null; saveDraft(); render(); return; }
+  if (action === 'cancel') { state.composing = false; state.screen = 'list'; render(); return; }
+  if (action === 'remove-attachment') { state.attachment = null; render(); return; }
   if (action === 'attachment') { say('通过信件权限打开发送时的附件快照（演示）。'); return; }
-  if (action === 'delete' || action === 'delete-draft') return deleteCurrent();
-  if (action === 'edit-draft') { const draft = current(); if (draft) openCompose(draft, { team: draft.team, recipients: [...draft.recipients], draftId: draft.id }); return; }
+  if (action === 'delete') return deleteCurrent();
   if (action === 'toggle-read') { const item = current(); if (item) item.unread = !item.unread; render(); return; }
   if (action === 'reply' || action === 'reply-all' || action === 'forward') {
     const item = current(); if (!item) return;
@@ -367,7 +344,7 @@ document.addEventListener('input', (event) => {
     target.closest('fieldset').querySelectorAll('[data-member-search]').forEach((label) => { label.classList.toggle('hidden', !label.dataset.memberSearch.includes(query)); });
     return;
   }
-  if (target.name === 'subject' || target.name === 'body') { state.prefill[target.name] = target.value; saveDraft(); }
+  if (target.name === 'subject' || target.name === 'body') { state.prefill[target.name] = target.value; }
 });
 document.addEventListener('change', (event) => {
   const target = event.target;
@@ -375,9 +352,8 @@ document.addEventListener('change', (event) => {
     const id = target.value;
     state.recipients = target.checked ? [...new Set([...state.recipients, id])] : state.recipients.filter((value) => value !== id);
     document.querySelectorAll(`[data-compose-form] input[name="recipient"][value="${id}"]`).forEach((input) => { input.checked = target.checked; });
-    saveDraft();
   }
-  if (target.name === 'localFile' && target.files?.length) { state.attachment = target.files[0].name; saveDraft(); render(); say('已选择本机文件；此预览不会上传（演示）。'); }
+  if (target.name === 'localFile' && target.files?.length) { state.attachment = target.files[0].name; render(); say('已选择本机文件；此预览不会上传（演示）。'); }
 });
 document.addEventListener('submit', (event) => {
   if (!event.target.matches('[data-compose-form]')) return;
@@ -390,9 +366,8 @@ document.addEventListener('submit', (event) => {
   const to = names(state.team, recipients);
   const id = `s${Date.now()}`;
   sent.unshift({ id, team: state.team, sender: '我', to, subject, body, time: '刚刚', attachment: state.attachment });
-  if (state.draftId) { const index = drafts.findIndex((draft) => draft.id === state.draftId); if (index >= 0) drafts.splice(index, 1); }
   state.box = 'sent'; state.selected = id; state.composing = false; state.screen = 'detail';
-  state.prefill = {}; state.attachment = null; state.draftId = null;
+  state.prefill = {}; state.attachment = null;
   render(); say(`已发送给 ${to}（演示，未调用服务端）。`);
 });
 render();

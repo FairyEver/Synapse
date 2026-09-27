@@ -684,10 +684,6 @@ final class SynapseAppModel {
     func mailMessage(id: String) async throws -> MailMessage { try await apiClient.mailMessage(id: id) }
     func mailSetRead(id: String, read: Bool) async throws { try await apiClient.mailSetRead(id: id, read: read) }
     func mailDelete(id: String) async throws { try await apiClient.mailDelete(id: id) }
-    func mailDrafts() async throws -> MailDraftPage { try await apiClient.mailDrafts() }
-    func mailCreateDraft(_ content: MailContent) async throws -> MailDraft { try await apiClient.mailCreateDraft(content) }
-    func mailUpdateDraft(id: String, baseVersion: Int, content: MailContent) async throws -> MailDraft { try await apiClient.mailUpdateDraft(id: id, baseVersion: baseVersion, content: content) }
-    func mailDeleteDraft(id: String) async throws { try await apiClient.mailDeleteDraft(id: id) }
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment { try await apiClient.mailPrepareLocalAttachment(url: url) }
     func mailPreview(_ content: MailContent) async throws -> MailPreview { try await apiClient.mailPreview(content) }
     func mailSend(previewId: String, clientRequestId: String) async throws -> MailReceipt { try await apiClient.mailSend(previewId: previewId, clientRequestId: clientRequestId) }

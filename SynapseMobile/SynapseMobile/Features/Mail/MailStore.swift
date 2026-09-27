@@ -4,16 +4,15 @@ import Observation
 @Observable @MainActor
 final class MailStore {
     enum Box: String, CaseIterable, Identifiable {
-        case inbox, sent, drafts
+        case inbox, sent
         var id: String { rawValue }
         var title: String {
-            switch self { case .inbox: "收件箱"; case .sent: "已发送"; case .drafts: "草稿箱" }
+            switch self { case .inbox: "收件箱"; case .sent: "已发送" }
         }
     }
 
     var box: Box = .inbox
     var messages: [MailSummary] = []
-    var drafts: [MailDraft] = []
     var detail: MailMessage?
     var loading = false
     var error: String?
@@ -30,26 +29,16 @@ final class MailStore {
         error = nil
         defer { if generation == loadGeneration { loading = false } }
         do {
-            if requestedBox == .drafts {
-                let page = try await model.mailDrafts()
-                guard generation == loadGeneration, box == requestedBox else { return }
-                drafts = query.isEmpty ? page.items : page.items.filter { $0.subject.localizedCaseInsensitiveContains(query) || $0.body.localizedCaseInsensitiveContains(query) }
-                messages = []
-                nextCursor = nil
-                loadedQuery = query
-            } else {
-                let page = try await model.mailMessages(box: requestedBox.rawValue, query: query)
-                guard generation == loadGeneration, box == requestedBox else { return }
-                messages = page.items
-                drafts = []
-                nextCursor = page.nextCursor
-                loadedQuery = query
-            }
+            let page = try await model.mailMessages(box: requestedBox.rawValue, query: query)
+            guard generation == loadGeneration, box == requestedBox else { return }
+            messages = page.items
+            nextCursor = page.nextCursor
+            loadedQuery = query
         } catch { if generation == loadGeneration { self.error = error.localizedDescription } }
     }
 
     func loadMore(using model: SynapseAppModel, query: String = "") async {
-        guard box != .drafts, query == loadedQuery, let nextCursor, !loading else { return }
+        guard query == loadedQuery, let nextCursor, !loading else { return }
         let requestedBox = box
         let generation = loadGeneration
         loading = true

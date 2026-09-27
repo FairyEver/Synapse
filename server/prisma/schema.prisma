@@ -76,7 +76,6 @@ model User {
   teamMemberships                TeamMembership[]
   mailMessagesSent               MailMessage[]                   @relation("MailSender")
   mailRecipients                 MailRecipient[]
-  mailDrafts                      MailDraft[]
   mailPreviews                    MailSendPreview[]
   mailAttachments                 MailAttachment[]
   createdAt                      DateTime                        @default(now())
@@ -1318,22 +1317,6 @@ model MailNotificationOutbox {
 
   @@unique([messageId, recipientId])
   @@index([createdAt])
-}
-
-model MailDraft {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipientIds    Json
-  subject         String   @default("") @db.VarChar(120)
-  body            String   @default("") @db.Text
-  attachmentIds   Json
-  replyToId       String?
-  version         Int      @default(1)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([userId, updatedAt])
 }
 
 model MailSendPreview {

@@ -19,6 +19,6 @@
 
 `confirmed: true` 由调用者声明，不能替代第 4 步的对话确认；当前服务端只验证预览、身份和发送权限，无法从该参数核实用户回复。
 
-## 读信与草稿
+## 读信
 
-用 `app_mail_message_list` 和 `app_mail_message_get` 查看当前用户可见信件；下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。回复、回复全部或转发时重新选择具体收件人，带 `replyToId` 调预览，继续执行完整确认流程。草稿用 `app_mail_draft_list`、`app_mail_draft_create`、`app_mail_draft_update`、`app_mail_draft_delete`；更新必须携带读取到的 `baseVersion`，版本冲突时先重新读取，不能覆盖另一端的改动。标记已读或删除只影响当前用户的状态。
+用 `app_mail_message_list` 和 `app_mail_message_get` 查看当前用户可见信件；下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。回复、回复全部或转发时重新选择具体收件人，带 `replyToId` 调预览，继续执行完整确认流程。标记已读或删除只影响当前用户的状态。

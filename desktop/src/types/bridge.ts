@@ -1407,12 +1407,6 @@ export type SynapseBridge = {
       delete: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageDelete"]>
       send: (input: { previewId: string; clientRequestId: string }) => Promise<import("./mail").MailOperationResult["send"]>
     }
-    draft: {
-      list: () => Promise<import("./mail").MailOperationResult["draftList"]>
-      create: (input: { content: import("./mail").MailContent }) => Promise<import("./mail").MailOperationResult["draftCreate"]>
-      update: (input: { draftId: string; baseVersion: number; content: import("./mail").MailContent }) => Promise<import("./mail").MailOperationResult["draftUpdate"]>
-      delete: (input: { draftId: string }) => Promise<import("./mail").MailOperationResult["draftDelete"]>
-    }
     attachment: {
       create: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
       localCreate: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>

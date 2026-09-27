@@ -19,7 +19,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Portal Headless (PH, 缩写 PH), Portal meeting-room occupancy, Portal yearly agreements, or other extensions -> `extend/index.md`
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
 - Drive files, folders, one-time upload, persistent local file or folder sync, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions -> `drive/index.md`
-- Internal mail / 站内信, team recipient search, drafting, sending generated documents as attachments, reading, replying, forwarding, and mail attachments -> `mail/index.md`
+- Internal mail / 站内信, team recipient search, sending generated documents as attachments, reading, replying, forwarding, and mail attachments -> `mail/index.md`
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
 - Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history -> `automation/index.md`
 - Cloud Skill repositories, local Skill upload, cloud Skill repository update, repository management URL -> `skill-repository/index.md`

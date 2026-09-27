@@ -88,15 +88,12 @@ const mailPersonSchema = z.object({ userId: z.string(), nickname: z.string().nul
 const mailAttachmentSchema = z.object({ attachmentId: z.string(), fileName: z.string(), mimeType: z.string().nullable().optional(), size: z.number() })
 const mailSummarySchema = z.object({ messageId: z.string(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
 const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body: z.string(), team: z.object({ id: z.string(), name: z.string() }), replyToId: z.string().nullable(), attachments: z.array(mailAttachmentSchema) })
-const mailDraftSchema = z.object({ draftId: z.string(), recipientIds: z.array(z.string()), subject: z.string(), body: z.string(), attachmentIds: z.array(z.string()), attachments: z.array(mailAttachmentSchema).optional(), replyToId: z.string().nullable(), version: z.number().int(), updatedAt: z.string() })
 const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
-const mailDraftIdInputSchema = z.object({ draftId: mailIdSchema }).strict()
 const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
 const mailDeletedSchema = z.object({ deleted: z.literal(true) })
 const mailRecipientListInputSchema = z.object({ query: z.string().min(1).max(100) }).strict()
 const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional() }).strict()
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
-const mailDraftUpdateInputSchema = mailContentInputSchema.extend({ draftId: mailIdSchema, baseVersion: z.number().int().positive() })
 const mailAttachmentCreateInputSchema = z.object({ filePath: z.string().min(1) }).strict()
 const mailAttachmentLocalInputSchema = z.object({ filePath: z.string().min(1) }).strict()
 const mailAttachmentDownloadInputSchema = mailIdInputSchema.extend({ attachmentId: mailIdSchema, outputPath: z.string().min(1).optional() })
@@ -1139,23 +1136,6 @@ export const accountIpcModule: IpcModule = {
     mailMessageDelete: {
       kind: "invoke", operationId: "app.mail.message.delete", request: mailIdInputSchema, response: mailDeletedSchema,
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDelete", ...mailIdInputSchema.parse(input) }),
-    },
-    mailDraftList: {
-      kind: "invoke", operationId: "app.mail.draft.list", request: z.void(), response: z.object({ items: z.array(mailDraftSchema) }),
-      handler: async () => accountService.executeMailOperation({ kind: "draftList" }),
-    },
-    mailDraftCreate: {
-      kind: "invoke", operationId: "app.mail.draft.create", request: mailContentInputSchema, response: mailDraftSchema,
-      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "draftCreate", ...mailContentInputSchema.parse(input) }),
-    },
-    mailDraftUpdate: {
-      kind: "invoke", operationId: "app.mail.draft.update",
-      request: mailDraftUpdateInputSchema, response: mailDraftSchema,
-      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "draftUpdate", ...mailDraftUpdateInputSchema.parse(input) }),
-    },
-    mailDraftDelete: {
-      kind: "invoke", operationId: "app.mail.draft.delete", request: mailDraftIdInputSchema, response: mailDeletedSchema,
-      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "draftDelete", ...mailDraftIdInputSchema.parse(input) }),
     },
     mailAttachmentCreate: {
       kind: "invoke", operationId: "app.mail.attachment.create",

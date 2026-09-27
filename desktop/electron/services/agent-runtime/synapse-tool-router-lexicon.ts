@@ -176,7 +176,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   // 唯一能当锚点的就是「手机」。
   //
   // 这里不给「消息」再补一个 `notification` 读法，虽然单看那句也说得通：站内信上线后
-  // `message` 段有 13 个工具顶着，补了会把「我的消息」这类查询从站内信带到通知上去。
+  // `message` 段有 9 个工具顶着，补了会把「我的消息」这类查询从站内信带到通知上去。
   // 「手机」只在"发到我手机上"这类说法里出现，误伤面小得多。
   ["手机", "notification"],
   ["系统", "system"],

@@ -12,10 +12,6 @@ export async function mailRequest<K extends MailOperation["kind"]>(operation: Ex
     case "messageGet": result = await bridge.mail.message.get({ messageId: request.messageId }); break
     case "messageSetRead": result = await bridge.mail.message.update({ messageId: request.messageId, read: request.read }); break
     case "messageDelete": result = await bridge.mail.message.delete({ messageId: request.messageId }); break
-    case "draftList": result = await bridge.mail.draft.list(); break
-    case "draftCreate": result = await bridge.mail.draft.create({ content: request.content }); break
-    case "draftUpdate": result = await bridge.mail.draft.update({ draftId: request.draftId, baseVersion: request.baseVersion, content: request.content }); break
-    case "draftDelete": result = await bridge.mail.draft.delete({ draftId: request.draftId }); break
     case "attachmentLocal": result = await bridge.mail.attachment.localCreate({ filePath: request.filePath }); break
     case "attachmentDownload": result = await bridge.mail.attachment.downloadFile({ messageId: request.messageId, attachmentId: request.attachmentId, outputPath: request.outputPath }); break
     case "sendPreview": result = await bridge.mail.send.preview({ content: request.content }); break

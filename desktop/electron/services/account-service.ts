@@ -494,10 +494,6 @@ export class AccountService {
       case "messageGet": return await json("GET", `/messages/${id(operation.messageId)}`)
       case "messageSetRead": return await json("PATCH", `/messages/${id(operation.messageId)}/read`, { read: operation.read })
       case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}`)
-      case "draftList": return await json("GET", "/drafts")
-      case "draftCreate": return await json("POST", "/drafts", operation.content)
-      case "draftUpdate": return await json("PATCH", `/drafts/${id(operation.draftId)}`, { ...operation.content, baseVersion: operation.baseVersion })
-      case "draftDelete": return await json("DELETE", `/drafts/${id(operation.draftId)}`)
       case "attachmentLocal": {
         const info = await stat(operation.filePath)
         if (!info.isFile() || info.size > 20 * 1024 * 1024 || !info.size) throw new Error("附件必须是 20 MB 以内的文件。")

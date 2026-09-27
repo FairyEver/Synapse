@@ -1227,30 +1227,6 @@ actor APIClient {
         let _: MailDeleteResult = try await send(path: "/mail/messages/\(escaped(id))", method: "DELETE")
     }
 
-    func mailDrafts() async throws -> MailDraftPage {
-        try await send(path: "/mail/drafts", method: "GET")
-    }
-
-    func mailCreateDraft(_ content: MailContent) async throws -> MailDraft {
-        try await send(path: "/mail/drafts", method: "POST", body: content)
-    }
-
-    func mailUpdateDraft(id: String, baseVersion: Int, content: MailContent) async throws -> MailDraft {
-        struct Body: Encodable {
-            let recipientIds: [String]
-            let subject: String
-            let body: String
-            let attachmentIds: [String]
-            let replyToId: String?
-            let baseVersion: Int
-        }
-        return try await send(path: "/mail/drafts/\(escaped(id))", method: "PATCH", body: Body(recipientIds: content.recipientIds, subject: content.subject, body: content.body, attachmentIds: content.attachmentIds, replyToId: content.replyToId, baseVersion: baseVersion))
-    }
-
-    func mailDeleteDraft(id: String) async throws {
-        let _: MailDeleteResult = try await send(path: "/mail/drafts/\(escaped(id))", method: "DELETE")
-    }
-
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }

@@ -1,38 +1,33 @@
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { mailRequest } from "@/lib/mail-api"
-import type { MailAttachment, MailContent, MailDraft, MailPerson } from "@/types/mail"
+import type { MailAttachment, MailContent, MailPerson } from "@/types/mail"
 
-export type ComposeStart = { recipientIds?: string[]; subject?: string; body?: string; replyToId?: string; draft?: MailDraft }
+export type ComposeStart = { recipientIds?: string[]; subject?: string; body?: string; replyToId?: string }
 
-export function MailCompose({ start, onClose, onChanged, onSent }: { start: ComposeStart | null; onClose: () => void; onChanged: () => void; onSent: () => void }) {
+export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | null; onClose: () => void; onSent: () => void }) {
   const [recipientSearch, setRecipientSearch] = useState("")
   const [candidates, setCandidates] = useState<MailPerson[]>([])
   const [recipients, setRecipients] = useState<MailPerson[]>([])
   const [unresolvedIds, setUnresolvedIds] = useState<string[]>([])
-  const [closeConfirm, setCloseConfirm] = useState(false)
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [attachments, setAttachments] = useState<MailAttachment[]>([])
   const [busy, setBusy] = useState(false)
-  const [draft, setDraft] = useState<MailDraft | null>(null)
   const pendingSend = useRef<{ fingerprint: string; previewId: string; clientRequestId: string } | null>(null)
 
   useEffect(() => {
     if (!start) return
-    setSubject(start.subject ?? start.draft?.subject ?? "")
-    setBody(start.body ?? start.draft?.body ?? "")
-    setDraft(start.draft ?? null)
-    setAttachments(start.draft?.attachments ?? [])
+    setSubject(start.subject ?? "")
+    setBody(start.body ?? "")
+    setAttachments([])
     setRecipients([])
     setUnresolvedIds([])
-    setCloseConfirm(false)
     setRecipientSearch("")
     pendingSend.current = null
   }, [start])
@@ -50,7 +45,7 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
 
   useEffect(() => {
     if (!start) return
-    const ids = start.recipientIds ?? start.draft?.recipientIds ?? []
+    const ids = start.recipientIds ?? []
     if (!ids.length) return
     let active = true
     void Promise.allSettled(ids.map((id) => mailRequest({ kind: "recipientSearch", query: id })))
@@ -63,29 +58,7 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
     return () => { active = false }
   }, [start])
 
-  const content = (): MailContent => ({ recipientIds: [...recipients.map((person) => person.userId), ...unresolvedIds], subject, body, attachmentIds: attachments.map((item) => item.attachmentId), replyToId: start?.replyToId ?? start?.draft?.replyToId ?? undefined })
-
-  function requestClose() {
-    if (busy) return
-    if (recipients.length || unresolvedIds.length || subject.trim() || body.trim() || attachments.length) setCloseConfirm(true)
-    else onClose()
-  }
-
-  async function saveDraft() {
-    setBusy(true)
-    try {
-      const current = content()
-      const saved = draft
-        ? await mailRequest({ kind: "draftUpdate", draftId: draft.draftId, baseVersion: draft.version, content: current })
-        : await mailRequest({ kind: "draftCreate", content: current })
-      setDraft(saved)
-      toast.success("草稿已保存")
-      onChanged()
-      onClose()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "草稿保存失败。")
-    } finally { setBusy(false) }
-  }
+  const content = (): MailContent => ({ recipientIds: [...recipients.map((person) => person.userId), ...unresolvedIds], subject, body, attachmentIds: attachments.map((item) => item.attachmentId), replyToId: start?.replyToId })
 
   async function send() {
     if (unresolvedIds.length) { toast.error("请确认未识别的收件人。"); return }
@@ -99,10 +72,6 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
       }
       await mailRequest({ kind: "send", previewId: pendingSend.current.previewId, clientRequestId: pendingSend.current.clientRequestId })
       pendingSend.current = null
-      if (draft) {
-        try { await mailRequest({ kind: "draftDelete", draftId: draft.draftId }) }
-        catch { toast.error("信件已发送，草稿删除失败。") }
-      }
       toast.success("已发送")
       onSent()
       onClose()
@@ -125,7 +94,7 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
   }
 
   return <>
-    <Dialog open={start !== null} onOpenChange={(open) => { if (!open) requestClose() }}>
+    <Dialog open={start !== null} onOpenChange={(open) => { if (!open && !busy) onClose() }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader><DialogTitle>写信</DialogTitle></DialogHeader>
         <div className="space-y-4">
@@ -146,18 +115,8 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
             {attachments.map((attachment) => <Button key={attachment.attachmentId} type="button" size="sm" variant="secondary" onClick={() => setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId))}>{attachment.fileName} ×</Button>)}
           </div>
         </div>
-        <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => void saveDraft()}>保存草稿</Button><Button type="button" disabled={busy || !recipients.length || !!unresolvedIds.length || !subject.trim() || !body.trim()} onClick={() => void send()}>发送</Button></DialogFooter>
+        <DialogFooter><Button type="button" disabled={busy || !recipients.length || !!unresolvedIds.length || !subject.trim() || !body.trim()} onClick={() => void send()}>发送</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-    <AlertDialog open={closeConfirm} onOpenChange={setCloseConfirm}>
-      <AlertDialogContent>
-        <AlertDialogHeader><AlertDialogTitle>保存这封草稿？</AlertDialogTitle></AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>继续编辑</AlertDialogCancel>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => { setCloseConfirm(false); void saveDraft() }}>保存草稿</Button>
-          <AlertDialogAction onClick={onClose}>不保存</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   </>
 }

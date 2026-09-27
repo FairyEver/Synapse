@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, FilePenLine, Inbox, MailOpen, Paperclip, Pencil, RefreshCw, Search, Send } from "lucide-react"
+import { ArrowLeft, Inbox, MailOpen, Paperclip, Pencil, RefreshCw, Search, Send } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -10,7 +10,7 @@ import { SystemAppWindowShell } from "@/modules/apps/components/system-app-windo
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { useAccount } from "@/app-shell/account"
 import { mailRequest } from "@/lib/mail-api"
-import type { MailDraft, MailMessage, MailPerson } from "@/types/mail"
+import type { MailMessage, MailPerson } from "@/types/mail"
 import { MailCompose, type ComposeStart } from "./compose"
 import { useMail, type MailBox } from "./use-mail"
 import type { SynapseSystemAppMailOpenRequest } from "../apps/types"
@@ -18,9 +18,8 @@ import type { SynapseSystemAppMailOpenRequest } from "../apps/types"
 const boxes: { id: MailBox; name: string; icon: typeof Inbox }[] = [
   { id: "inbox", name: "收件箱", icon: Inbox },
   { id: "sent", name: "已发送", icon: Send },
-  { id: "drafts", name: "草稿箱", icon: FilePenLine },
 ]
-const emptyTitles: Record<MailBox, string> = { inbox: "收件箱为空", sent: "还没有已发送信件", drafts: "没有草稿" }
+const emptyTitles: Record<MailBox, string> = { inbox: "收件箱为空", sent: "还没有已发送信件" }
 
 function personName(person: MailPerson): string { return person.nickname || person.handle || person.userId }
 
@@ -49,8 +48,8 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
   const [search, setSearch] = useState("")
   const [compose, setCompose] = useState<ComposeStart | null>(null)
   const mail = useMail(box, search)
-  const hasListItems = box === "drafts" ? mail.drafts.length > 0 : mail.messages.length > 0 || !!mail.nextCursor
-  const showMessageColumns = box !== "drafts" && (mail.messages.length > 0 || mail.selectedId !== null)
+  const hasListItems = mail.messages.length > 0 || !!mail.nextCursor
+  const showMessageColumns = mail.messages.length > 0 || mail.selectedId !== null
   const isEmpty = mail.ready && !mail.loading && !mail.error && !mail.selectedId && !hasListItems
 
   useEffect(() => {
@@ -107,21 +106,21 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
           {boxes.map((entry) => <Button key={entry.id} type="button" variant={box === entry.id ? "secondary" : "ghost"} className="min-w-0 flex-1 justify-center @3xl/mail:mb-1 @3xl/mail:w-full @3xl/mail:justify-start" onClick={() => { setBox(entry.id); mail.setSelectedId(null) }}><entry.icon />{entry.name}</Button>)}
         </nav>
         <div className={`${showMessageColumns ? "@3xl/mail:grid @3xl/mail:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]" : ""} flex min-h-0 min-w-0 flex-1 flex-col`}>
-          <section aria-label={boxes.find((entry) => entry.id === box)?.name} className={`${mail.selectedId && box !== "drafts" ? "hidden @3xl/mail:flex" : "flex"} min-h-0 min-w-0 flex-1 flex-col ${showMessageColumns ? "@3xl/mail:border-r" : ""}`}>
-            {box !== "drafts" && <form className="flex items-center gap-2 border-b px-4 py-3" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()) }}>
+          <section aria-label={boxes.find((entry) => entry.id === box)?.name} className={`${mail.selectedId ? "hidden @3xl/mail:flex" : "flex"} min-h-0 min-w-0 flex-1 flex-col ${showMessageColumns ? "@3xl/mail:border-r" : ""}`}>
+            <form className="flex items-center gap-2 border-b px-4 py-3" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()) }}>
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <Input type="search" aria-label="搜索信件" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索主题或正文" className="min-w-0 max-w-xl flex-1" />
               <Button type="submit" variant="secondary">搜索</Button>
-            </form>}
+            </form>
             {!mail.error && (mail.loading || !mail.ready) && !hasListItems ? <div role="status" aria-label="加载信件中" className="w-full max-w-3xl space-y-3 p-4"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div> : null}
-            {mail.error && !mail.messages.length && !mail.drafts.length ? <Empty>
+            {mail.error && !mail.messages.length ? <Empty>
               <EmptyHeader><EmptyTitle>信件加载失败</EmptyTitle><EmptyDescription role="alert">{mail.error}</EmptyDescription></EmptyHeader>
               <EmptyContent><Button type="button" variant="outline" onClick={mail.refresh}><RefreshCw />重试</Button></EmptyContent>
             </Empty> : null}
-            {isEmpty && <MailEmptyState box={box} searched={!!search && box !== "drafts"} onClearSearch={() => { setQuery(""); setSearch("") }} onCompose={() => setCompose({})} />}
+            {isEmpty && <MailEmptyState box={box} searched={!!search} onClearSearch={() => { setQuery(""); setSearch("") }} onCompose={() => setCompose({})} />}
             {hasListItems && <ScrollArea className="min-h-0 flex-1">
               {mail.error && <p role="alert" className="p-3 text-sm text-destructive">{mail.error}</p>}
-              {box === "drafts" ? mail.drafts.map((draft: MailDraft) => <button key={draft.draftId} type="button" className="block w-full max-w-3xl border-b px-4 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring" onClick={() => setCompose({ draft })}><span className="block truncate text-sm font-medium">{draft.subject || "无主题"}</span><span className="block truncate text-xs text-muted-foreground">{draft.body}</span></button>) : mail.messages.map((message) => <button key={message.messageId} type="button" aria-current={mail.selectedId === message.messageId ? "true" : undefined} className={`block w-full border-b px-4 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring ${mail.selectedId === message.messageId ? "bg-selected" : ""}`} onClick={() => void openMessage(message.messageId, box === "inbox" && !message.readAt)}>
+              {mail.messages.map((message) => <button key={message.messageId} type="button" aria-current={mail.selectedId === message.messageId ? "true" : undefined} className={`block w-full border-b px-4 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring ${mail.selectedId === message.messageId ? "bg-selected" : ""}`} onClick={() => void openMessage(message.messageId, box === "inbox" && !message.readAt)}>
                 <div className="flex items-center justify-between gap-2"><span className={`flex min-w-0 items-center gap-2 truncate text-sm ${message.readAt ? "" : "font-semibold"}`}>{box === "inbox" && !message.readAt && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />}{box === "inbox" ? personName(message.sender) : message.recipients.map(personName).join("、")}</span><span className="shrink-0 text-xs text-muted-foreground">{new Date(message.sentAt).toLocaleDateString()}</span></div>
                 <span className={`block truncate text-sm ${message.readAt ? "" : "font-medium"}`}>{message.subject}</span><span className="block truncate text-xs text-muted-foreground">{message.snippet}</span>
               </button>)}
@@ -142,6 +141,6 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
         </div>
       </div>
     </div>
-    <MailCompose start={compose} onClose={() => setCompose(null)} onChanged={mail.refresh} onSent={() => { mail.setSelectedId(null); setBox("sent"); mail.refresh() }} />
+    <MailCompose start={compose} onClose={() => setCompose(null)} onSent={() => { mail.setSelectedId(null); setBox("sent"); mail.refresh() }} />
   </SystemAppWindowShell>
 }

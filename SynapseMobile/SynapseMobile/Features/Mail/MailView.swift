@@ -35,39 +35,26 @@ struct MailView: View {
 
                 Section(store.box.title) {
                     if let error = store.error { Text(error).foregroundStyle(.red) }
-                    if store.loading && store.messages.isEmpty && store.drafts.isEmpty { ProgressView() }
-                    if store.box == .drafts {
-                        ForEach(store.drafts) { draft in
-                            Button { compose = MailComposeStart(draft: draft) } label: {
-                                VStack(alignment: .leading) {
-                                    Text(draft.subject.isEmpty ? "无主题" : draft.subject).font(.headline)
-                                    Text(draft.body).lineLimit(1).foregroundStyle(.secondary)
+                    if store.loading && store.messages.isEmpty { ProgressView() }
+                    ForEach(store.messages) { message in
+                        NavigationLink(value: message.messageId) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(store.box == .inbox ? message.sender.name : message.recipients.map(\.name).joined(separator: "、"))
+                                        .fontWeight(message.readAt == nil ? .semibold : .regular)
+                                    Spacer()
+                                    Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
                                 }
+                                Text(message.subject).font(.subheadline)
+                                Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
-                            .swipeActions { Button("删除", role: .destructive) { Task { await deleteDraft(draft) } } }
                         }
-                    } else {
-                        ForEach(store.messages) { message in
-                            NavigationLink(value: message.messageId) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text(store.box == .inbox ? message.sender.name : message.recipients.map(\.name).joined(separator: "、"))
-                                            .fontWeight(message.readAt == nil ? .semibold : .regular)
-                                        Spacer()
-                                        Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Text(message.subject).font(.subheadline)
-                                    Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                            }
-                            .tag(message.messageId)
-                            .onAppear {
-                                if store.messages.last?.messageId == message.messageId { Task { await store.loadMore(using: model, query: search) } }
-                            }
+                        .tag(message.messageId)
+                        .onAppear {
+                            if store.messages.last?.messageId == message.messageId { Task { await store.loadMore(using: model, query: search) } }
                         }
                     }
-                    if !store.loading && store.box == .drafts && store.drafts.isEmpty { ContentUnavailableView("没有草稿", systemImage: "square.and.pencil") }
-                    if !store.loading && store.box != .drafts && store.messages.isEmpty { ContentUnavailableView("没有信件", systemImage: "envelope") }
+                    if !store.loading && store.messages.isEmpty { ContentUnavailableView("没有信件", systemImage: "envelope") }
                 }
             }
             .navigationTitle("站内信")
@@ -106,7 +93,7 @@ struct MailView: View {
     }
 
     private func symbol(for box: MailStore.Box) -> String {
-        switch box { case .inbox: "tray"; case .sent: "paperplane"; case .drafts: "doc" }
+        switch box { case .inbox: "tray"; case .sent: "paperplane" }
     }
 
     private func reply(_ kind: MailDetailView.ReplyKind, _ message: MailMessage) {
@@ -122,11 +109,6 @@ struct MailView: View {
         var seen = Set<String>()
         let recipientIds = ids.filter { $0 != message.viewerId && seen.insert($0).inserted }
         compose = MailComposeStart(recipientIds: recipientIds, subject: kind == .forward ? "转发：\(message.subject)" : "回复：\(message.subject)", body: kind == .forward ? "\n\n\(message.body)" : "", replyToId: message.messageId)
-    }
-
-    private func deleteDraft(_ draft: MailDraft) async {
-        do { try await model.mailDeleteDraft(id: draft.draftId); await store.load(using: model) }
-        catch { store.error = error.localizedDescription }
     }
 }
 
