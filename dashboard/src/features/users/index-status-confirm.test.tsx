@@ -56,6 +56,56 @@ afterEach(() => {
 })
 
 describe('UsersPage status confirmation', () => {
+  it('keeps an open user menu when live client status changes', async () => {
+    mockedAdminApi.listUsers.mockResolvedValue({
+      data: [{
+        id: 'user-1',
+        email: 'ada@example.com',
+        handle: 'ada',
+        nickname: 'Ada',
+        adminNote: null,
+        status: 'active',
+        createdAt: '2026-06-14T00:00:00.000Z',
+        updatedAt: '2026-06-14T00:00:00.000Z',
+        teams: [],
+      }],
+      total: 1,
+    })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    let onLiveClientChanged: Parameters<typeof adminApi.subscribeLiveClients>[0] | null = null
+    mockedAdminApi.subscribeLiveClients.mockImplementation((onEvent) => {
+      onLiveClientChanged = onEvent
+      return () => {}
+    })
+
+    renderPage()
+    await waitFor(() => expect(cellByHeader('ada@example.com', '客户端').textContent).toContain('离线'))
+    await openMenu(userActionsButton('ada@example.com'))
+    expect(menuItemByText('编辑昵称')).toBeTruthy()
+
+    if (!onLiveClientChanged) throw new Error('live client subscription not found')
+    await act(async () => {
+      onLiveClientChanged?.({
+        type: 'live.client.changed',
+        occurredAt: '2026-06-14T00:01:00.000Z',
+        client: {
+          userId: 'user-1',
+          clientInstanceId: 'client-1',
+          status: 'online',
+          appVersion: '1.0.0',
+          platform: 'macos',
+          deviceName: 'Mac',
+          connectedAt: '2026-06-14T00:01:00.000Z',
+          lastSeenAt: '2026-06-14T00:01:00.000Z',
+        },
+      })
+    })
+
+    expect(cellByHeader('ada@example.com', '客户端').textContent).toContain('1 台在线')
+    await click(menuItemByText('编辑昵称'))
+    expect(document.querySelector('#user-nickname')).toBeInstanceOf(HTMLInputElement)
+  })
+
   it('requires confirmation before disabling a user', async () => {
     mockedAdminApi.listUsers.mockResolvedValue({
       data: [{

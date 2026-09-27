@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeUserNickname } from '@synapse/shared'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -165,20 +165,20 @@ export default function UsersPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  function handleToggle(user: AdminUserRow) {
+  const handleToggle = useCallback((user: AdminUserRow) => {
     const newStatus = user.status === 'active' ? 'disabled' : 'active'
     setStatusTarget({ user, status: newStatus })
-  }
+  }, [])
 
-  function openAdminNoteDialog(user: AdminUserRow) {
+  const openAdminNoteDialog = useCallback((user: AdminUserRow) => {
     setNoteTarget(user)
     setAdminNoteDraft(user.adminNote ?? '')
-  }
+  }, [])
 
-  function openNicknameDialog(user: AdminUserRow) {
+  const openNicknameDialog = useCallback((user: AdminUserRow) => {
     setNicknameTarget(user)
     setNicknameDraft(user.nickname)
-  }
+  }, [])
 
   function saveNickname() {
     if (!nicknameTarget || nicknameError) return
@@ -188,10 +188,10 @@ export default function UsersPage() {
     }
   }
 
-  function openPasswordResetDialog(user: AdminUserRow) {
+  const openPasswordResetDialog = useCallback((user: AdminUserRow) => {
     createPasswordResetLink.reset()
     setPasswordResetTarget(user)
-  }
+  }, [createPasswordResetLink.reset])
 
   function confirmStatusChange() {
     if (!statusTarget) return
@@ -209,6 +209,58 @@ export default function UsersPage() {
       adminNote: trimmedAdminNote ? trimmedAdminNote : null,
     })
   }
+
+  const actionsColumn = useMemo<ColumnDef<AdminUserRow>>(() => ({
+    id: 'actions',
+    cell: ({ row }) => (
+      <div className='flex justify-end'>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='size-8'
+              aria-label={`${row.original.email} 的用户操作`}
+            >
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end'>
+            <DropdownMenuItem onSelect={() => openNicknameDialog(row.original)}>
+              编辑昵称
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openAdminNoteDialog(row.original)}>
+              编辑备注
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={row.original.status !== 'active'}
+              onSelect={() => openPasswordResetDialog(row.original)}
+            >
+              生成重置链接
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant={row.original.status === 'active' ? 'destructive' : 'default'}
+              disabled={
+                toggleStatus.isPending &&
+                statusTarget?.user.id === row.original.id
+              }
+              onSelect={() => handleToggle(row.original)}
+            >
+              {row.original.status === 'active' ? '禁用用户' : '启用用户'}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    ),
+    meta: {
+      className: 'w-16',
+      thClassName: 'text-right',
+      tdClassName: 'text-right',
+    },
+    enableSorting: false,
+    enableHiding: false,
+  }), [handleToggle, openAdminNoteDialog, openNicknameDialog, openPasswordResetDialog, toggleStatus.isPending, statusTarget?.user.id])
 
   const columns: ColumnDef<AdminUserRow>[] = [
     {
@@ -334,57 +386,7 @@ export default function UsersPage() {
       ),
       meta: { className: 'w-32' },
     },
-    {
-      id: 'actions',
-      cell: ({ row }) => (
-        <div className='flex justify-end'>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant='ghost'
-                size='icon'
-                className='size-8'
-                aria-label={`${row.original.email} 的用户操作`}
-              >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
-              <DropdownMenuItem onSelect={() => openNicknameDialog(row.original)}>
-                编辑昵称
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => openAdminNoteDialog(row.original)}>
-                编辑备注
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={row.original.status !== 'active'}
-                onSelect={() => openPasswordResetDialog(row.original)}
-              >
-                生成重置链接
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant={row.original.status === 'active' ? 'destructive' : 'default'}
-                disabled={
-                  toggleStatus.isPending &&
-                  statusTarget?.user.id === row.original.id
-                }
-                onSelect={() => handleToggle(row.original)}
-              >
-                {row.original.status === 'active' ? '禁用用户' : '启用用户'}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ),
-      meta: {
-        className: 'w-16',
-        thClassName: 'text-right',
-        tdClassName: 'text-right',
-      },
-      enableSorting: false,
-      enableHiding: false,
-    },
+    actionsColumn,
   ]
   const liveClientToolbar = liveClientStatusError ? (
     <div className='flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm'>
