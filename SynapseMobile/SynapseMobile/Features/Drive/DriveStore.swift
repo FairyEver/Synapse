@@ -659,6 +659,7 @@ final class DriveStore {
     private(set) var shares: [DriveShareListItem] = []
     private(set) var sharesLoading = false
     private(set) var sharesErrorMessage: String?
+    private var sharesLoadGeneration = 0
 
     private(set) var assets: [DrivePublicAsset] = []
     private(set) var assetsLoading = false
@@ -694,8 +695,8 @@ final class DriveStore {
     /// （`drive-lifecycle.service.ts`）、公开素材 50 / 200（`drive-public-asset.service.ts`）、
     /// 分享 20 / 100（`drive.service.ts` 的 `normalizeDrivePublicLinksPage`）。**不传**的话
     /// 回收站那行会照实说「N 项」、列表却只有 50 行，另外两个是静默截断。100 是三个上限里
-    /// 最小的那个（分享），也就是三处都收得下的最大值。超过 100 条时手机端只看得到前 100 条
-    /// （桌面端可以看全）——本期的已知上限，不做「加载更多」。
+    /// 最小的那个（分享），也就是三处都收得下的最大值。回收站与公开素材仍只取首页；
+    /// 分享管理为了搜全所有进行中的链接，会按这一页大小继续取到末页。
     private static let pageLimit = 100
 
     init() {
@@ -1094,17 +1095,32 @@ final class DriveStore {
     // MARK: - 分享
 
     /// 分享列表。服务端只给还活着的那些（`enabled: true` 且没过期），所以每一行都还能点开。
+    /// 搜索在本机按名称和行上条件筛选，必须先取齐所有分页，不能把第 101 条误报为无结果。
     func loadShares(using client: APIClient) async {
         let account = accountGeneration
+        sharesLoadGeneration += 1
+        let request = sharesLoadGeneration
         sharesLoading = true
-        defer { sharesLoading = false }
+        defer { if request == sharesLoadGeneration { sharesLoading = false } }
         do {
-            let page = try await client.driveShares(limit: Self.pageLimit)
-            guard account == accountGeneration else { return }
-            shares = page.items
+            var items: [DriveShareListItem] = []
+            var offset = 0
+            while true {
+                try Task.checkCancellation()
+                let page = try await client.driveShares(offset: offset, limit: Self.pageLimit)
+                guard account == accountGeneration, request == sharesLoadGeneration else { return }
+                items.append(contentsOf: page.items)
+                guard page.page.hasMore else { break }
+                guard let nextOffset = page.page.nextOffset, nextOffset > offset else {
+                    throw URLError(.badServerResponse)
+                }
+                offset = nextOffset
+            }
+            guard account == accountGeneration, request == sharesLoadGeneration else { return }
+            shares = items
             sharesErrorMessage = nil
         } catch {
-            guard account == accountGeneration else { return }
+            guard account == accountGeneration, request == sharesLoadGeneration else { return }
             // 与回收站同一条：退出这一屏时被取消的那一趟不写错误行。
             guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             sharesErrorMessage = DriveText.errorMessage(error)
@@ -1302,6 +1318,7 @@ final class DriveStore {
         shares = []
         sharesLoading = false
         sharesErrorMessage = nil
+        sharesLoadGeneration += 1
         assets = []
         assetsLoading = false
         assetsErrorMessage = nil

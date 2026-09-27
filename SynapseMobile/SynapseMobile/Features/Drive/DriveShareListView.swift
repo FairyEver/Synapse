@@ -23,6 +23,18 @@ enum DriveShareRow {
         if share.sourceDeleted { parts.append("来源已删除") }
         return parts.joined(separator: " · ")
     }
+
+    /// 文件名与行上可见的分享条件都能按片段查找；多个词可分别命中不同字段。
+    static func matches(_ share: DriveShareListItem, query: String) -> Bool {
+        let terms = query.split(whereSeparator: \.isWhitespace)
+        guard !terms.isEmpty else { return true }
+        let subtitle = subtitle(for: share)
+        return terms.allSatisfy { term in
+            let text = String(term)
+            return share.itemName.localizedStandardContains(text)
+                || subtitle.localizedStandardContains(text)
+        }
+    }
 }
 
 /// 分享管理（Spec §3 的「工具栏菜单 → 分享管理」）：现在有哪些链接在外面。
@@ -44,8 +56,16 @@ struct DriveShareListView: View {
     let isCompact: Bool
 
     @Environment(SynapseAppModel.self) private var model
+    @State private var searchText = ""
     /// 点开的那一行。
     @State private var openShare: DriveShareListItem?
+
+    private var visibleShares: [DriveShareListItem] {
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return model.drive.shares
+        }
+        return model.drive.shares.filter { DriveShareRow.matches($0, query: searchText) }
+    }
 
     var body: some View {
         List {
@@ -61,24 +81,31 @@ struct DriveShareListView: View {
                 }
             }
             Section {
-                ForEach(model.drive.shares) { share in
+                ForEach(visibleShares) { share in
                     row(share)
                 }
             }
         }
         .driveListSurface()
         .overlay {
-            if model.drive.shares.isEmpty {
+            if visibleShares.isEmpty {
                 if model.drive.sharesLoading {
                     ProgressView()
                 } else if model.drive.sharesErrorMessage == nil {
-                    // 不放「长按文件可以创建分享链接」那类说明：这一页能不能建分享不取决于
-                    // 在这儿说了什么，而空态只该说「这里现在没有东西」。
-                    ContentUnavailableView("没有进行中的分享", systemImage: "link")
+                    if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        ContentUnavailableView("没有进行中的分享", systemImage: "link")
+                    } else {
+                        ContentUnavailableView("没有匹配的分享", systemImage: "magnifyingglass")
+                    }
                 }
             }
         }
         .navigationTitle("分享管理")
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "搜索分享"
+        )
         .task {
             await model.driveLoadShares()
         }
@@ -113,13 +140,13 @@ struct DriveShareListView: View {
                     .frame(width: DriveListRow.iconBox)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(share.itemName)
-                        .font(.subheadline)
+                        .font(.body)
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     Text(DriveShareRow.subtitle(for: share))
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.forward")
@@ -131,6 +158,8 @@ struct DriveShareListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(share.itemName)，\(DriveShareRow.subtitle(for: share))")
+        .accessibilityHint("查看分享详情")
         .driveListRow()
     }
 }

@@ -194,4 +194,14 @@ struct DriveListTests {
                 == "仅阅读 · 有效期至 " + DriveText.date("2030-01-01T00:00:00.000Z") + " · 有密码 · 来源已删除"
         )
     }
+
+    @Test func shareSearchMatchesNameAndVisibleConditions() {
+        let link = share(itemName: "Synapse-通知方案.html", passwordEnabled: true)
+        #expect(DriveShareRow.matches(link, query: "通知"))
+        #expect(DriveShareRow.matches(link, query: "synapse HTML"))
+        #expect(DriveShareRow.matches(link, query: " 通知 有密码 "))
+        #expect(DriveShareRow.matches(link, query: "  "))
+        #expect(!DriveShareRow.matches(link, query: "通知 编辑"))
+        #expect(!DriveShareRow.matches(link, query: "不存在"))
+    }
 }
