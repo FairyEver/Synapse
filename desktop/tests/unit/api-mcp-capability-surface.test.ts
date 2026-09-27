@@ -111,10 +111,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(265)
+    expect(allCapabilityIds()).toHaveLength(261)
     expect(APP_DOMAIN.capabilities).toHaveLength(86)
     expect(buildAppTools()).toHaveLength(82)
-    expect(toolNames).toHaveLength(261)
+    expect(toolNames).toHaveLength(257)
     expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual(["extend_portal_headless_credential_get"])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -126,8 +126,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(261)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(261)
+    expect(buildAllMcpTools()).toHaveLength(257)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(257)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
