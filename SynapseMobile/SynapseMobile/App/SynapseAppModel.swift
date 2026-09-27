@@ -487,6 +487,18 @@ final class SynapseAppModel {
         }
     }
 
+    func currentUserID() async throws -> String {
+        try await apiClient.currentUserID()
+    }
+
+    func webIdentity(cookie: String) async throws -> APIClient.WebIdentity? {
+        try await apiClient.webIdentity(cookie: cookie)
+    }
+
+    func issueRemoteWebCredential() async throws -> APIClient.RemoteWebCredential {
+        try await apiClient.issueRemoteWebCredential()
+    }
+
     /// 提交一条问题反馈。
     ///
     /// 走 `apiClient` 而不是让视图自己拿到它：视图不该知道网络层长什么样。这一页只在
@@ -556,6 +568,7 @@ final class SynapseAppModel {
             )
         }
         await apiClient.logout()
+        await SynapseWebCookies.clear(origin: AppConfiguration.apiOrigin)
         notifications.clear()
         authState = .signedOut
     }

@@ -56,13 +56,13 @@ describe("DashboardAuthController", () => {
         expiresAt: new Date("2026-08-12T00:00:00.000Z"),
       }),
       getMe: vi.fn().mockResolvedValue({
-        user: { email: "user@example.com", handle: "user" },
+        user: { id: "user-1", email: "user@example.com", handle: "user" },
       }),
     }
     const controller = new DashboardAuthController(auth as never)
     const response = { cookie: vi.fn(), clearCookie: vi.fn() }
 
-    await controller.session(
+    const result = await controller.session(
       { cookies: { [userSessionCookieName]: "opaque-token" } } as never,
       response as never,
     )
@@ -71,6 +71,7 @@ describe("DashboardAuthController", () => {
       maxAge: 2 * 24 * 60 * 60 * 1000,
       path: "/drive",
     }))
+    expect(result.userId).toBe("user-1")
   })
 
   it("clears API and Drive-scoped user cookies on logout", async () => {

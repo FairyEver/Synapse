@@ -210,6 +210,66 @@ actor APIClient {
         onCredentialsChanged()
     }
 
+    struct WebIdentity: Decodable {
+        let userId: String
+        let email: String
+    }
+
+    struct RemoteWebCredential: Decodable {
+        let token: String
+        let expiresAt: String
+        let userId: String
+    }
+
+    func currentUserID() async throws -> String {
+        struct Response: Decodable {
+            struct User: Decodable { let id: String }
+            let user: User
+        }
+        let response: Response = try await send(path: "/auth/me", method: "GET")
+        return response.user.id
+    }
+
+    /// Checks the browser session by Cookie alone. A native Bearer header would
+    /// make an expired browser session look signed in.
+    func webIdentity(cookie: String) async throws -> WebIdentity? {
+        let baseURL = await AppConfiguration.apiBaseURL
+        guard let url = URL(string: baseURL.absoluteString + "/console/session") else {
+            throw APIError(status: 0, code: "bad_url", message: "服务器地址无效。")
+        }
+        var request = URLRequest(url: url)
+        request.httpShouldHandleCookies = false
+        request.setValue("synapse_user_session=\(cookie)", forHTTPHeaderField: "Cookie")
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse else {
+            throw APIError(status: 0, code: "network", message: "服务器返回的数据无法读取。")
+        }
+        if response.statusCode == 401 { return nil }
+        guard (200..<300).contains(response.statusCode) else {
+            throw Self.decodeError(status: response.statusCode, data: data)
+        }
+        return try JSONDecoder().decode(WebIdentity.self, from: data)
+    }
+
+    func issueRemoteWebCredential() async throws -> RemoteWebCredential {
+        switch await liveTokenOutcome() {
+        case .token: break
+        case .unreachable:
+            throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
+        case .unauthenticated:
+            throw APIError(status: 401, code: "unauthenticated", message: "请重新登录 Synapse Remote。")
+        }
+        guard let refreshToken = await tokens.refreshToken else {
+            throw APIError(status: 401, code: "unauthenticated", message: "请重新登录 Synapse Remote。")
+        }
+        return try await send(
+            path: "/auth/remote-web-session",
+            method: "POST",
+            body: ["refreshToken": refreshToken],
+            allowRefresh: false
+        )
+    }
+
     /// What happened when the app tried to restore a session at launch.
     ///
     /// `noCredentials` and `unreachable` are deliberately separate. They used to

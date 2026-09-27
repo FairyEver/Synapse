@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UnauthorizedException } from "@nestjs/common"
+import { Body, Controller, Get, Header, Post, Req, Res, UnauthorizedException } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { z } from "zod"
@@ -68,6 +68,7 @@ export class DashboardAuthController {
   }
 
   @Get("/session")
+  @Header("Cache-Control", "no-store")
   async session(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -83,6 +84,7 @@ export class DashboardAuthController {
     const me = await this.auth.getMe(session.userId)
     response.cookie(userSessionCookieName, token, userCookieOptions("/drive", session.expiresAt))
     return {
+      userId: me.user.id,
       email: me.user.email,
       handle: me.user.handle,
       sessionId: session.sessionId,
