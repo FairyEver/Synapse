@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Synapse 站内信跨端产品方案与交互预览">
+  <title>站内信 · Synapse 产品方案</title>
+  <style>
+/*! tailwindcss v4.2.2 | MIT License | https://tailwindcss.com */
+@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-space-y-reverse:0;--tw-divide-y-reverse:0;--tw-border-style:solid;--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-outline-style:solid}}}@layer theme{:root,:host{--font-sans:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";--font-mono:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;--color-neutral-50:oklch(98.5% 0 0);--color-neutral-100:oklch(97% 0 0);--color-neutral-200:oklch(92.2% 0 0);--color-neutral-300:oklch(87% 0 0);--color-neutral-600:oklch(43.9% 0 0);--color-neutral-700:oklch(37.1% 0 0);--color-neutral-900:oklch(20.5% 0 0);--color-neutral-950:oklch(14.5% 0 0);--color-white:#fff;--spacing:.25rem;--container-sm:24rem;--container-3xl:48rem;--container-7xl:80rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--text-base:1rem;--text-base--line-height:calc(1.5 / 1);--text-lg:1.125rem;--text-lg--line-height:calc(1.75 / 1.125);--text-xl:1.25rem;--text-xl--line-height:calc(1.75 / 1.25);--text-3xl:1.875rem;--text-3xl--line-height:calc(2.25 / 1.875);--font-weight-medium:500;--font-weight-semibold:600;--tracking-tight:-.025em;--radius-md:.375rem;--radius-lg:.5rem;--radius-xl:.75rem;--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono)}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring{outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components;@layer utilities{.col-span-2{grid-column:span 2/span 2}.col-span-3{grid-column:span 3/span 3}.mx-auto{margin-inline:auto}.mt-1{margin-top:calc(var(--spacing) * 1)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-3{margin-top:calc(var(--spacing) * 3)}.mt-4{margin-top:calc(var(--spacing) * 4)}.mt-5{margin-top:calc(var(--spacing) * 5)}.mt-6{margin-top:calc(var(--spacing) * 6)}.mt-7{margin-top:calc(var(--spacing) * 7)}.mt-8{margin-top:calc(var(--spacing) * 8)}.mb-5{margin-bottom:calc(var(--spacing) * 5)}.block{display:block}.flex{display:flex}.grid{display:grid}.hidden{display:none}.size-2{width:calc(var(--spacing) * 2);height:calc(var(--spacing) * 2)}.size-4{width:calc(var(--spacing) * 4);height:calc(var(--spacing) * 4)}.max-h-128{max-height:calc(var(--spacing) * 128)}.min-h-6{min-height:calc(var(--spacing) * 6)}.min-h-16{min-height:calc(var(--spacing) * 16)}.min-h-96{min-height:calc(var(--spacing) * 96)}.min-h-128{min-height:calc(var(--spacing) * 128)}.w-full{width:100%}.max-w-3xl{max-width:var(--container-3xl)}.max-w-7xl{max-width:var(--container-7xl)}.max-w-sm{max-width:var(--container-sm)}.min-w-0{min-width:calc(var(--spacing) * 0)}.min-w-160{min-width:calc(var(--spacing) * 160)}.flex-1{flex:1}.shrink-0{flex-shrink:0}.border-collapse{border-collapse:collapse}.scroll-mt-6{scroll-margin-top:calc(var(--spacing) * 6)}.list-disc{list-style-type:disc}.grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.items-end{align-items:flex-end}.items-start{align-items:flex-start}.justify-between{justify-content:space-between}.gap-1{gap:calc(var(--spacing) * 1)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-4{gap:calc(var(--spacing) * 4)}.gap-7{gap:calc(var(--spacing) * 7)}.gap-8{gap:calc(var(--spacing) * 8)}:where(.space-y-1>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 1) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 1) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-2>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-4>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 4) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 4) * calc(1 - var(--tw-space-y-reverse)))}.gap-x-6{column-gap:calc(var(--spacing) * 6)}.gap-x-10{column-gap:calc(var(--spacing) * 10)}.gap-y-2{row-gap:calc(var(--spacing) * 2)}.gap-y-6{row-gap:calc(var(--spacing) * 6)}:where(.divide-y>:not(:last-child)){--tw-divide-y-reverse:0;border-bottom-style:var(--tw-border-style);border-top-style:var(--tw-border-style);border-top-width:calc(1px * var(--tw-divide-y-reverse));border-bottom-width:calc(1px * calc(1 - var(--tw-divide-y-reverse)))}:where(.divide-neutral-200>:not(:last-child)){border-color:var(--color-neutral-200)}.truncate{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.rounded-full{border-radius:3.40282e38px}.rounded-lg{border-radius:var(--radius-lg)}.rounded-md{border-radius:var(--radius-md)}.rounded-xl{border-radius:var(--radius-xl)}.border{border-style:var(--tw-border-style);border-width:1px}.border-t{border-top-style:var(--tw-border-style);border-top-width:1px}.border-r{border-right-style:var(--tw-border-style);border-right-width:1px}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.border-neutral-200{border-color:var(--color-neutral-200)}.border-neutral-300{border-color:var(--color-neutral-300)}.bg-neutral-50{background-color:var(--color-neutral-50)}.bg-neutral-100{background-color:var(--color-neutral-100)}.bg-neutral-900{background-color:var(--color-neutral-900)}.bg-white{background-color:var(--color-white)}.p-2{padding:calc(var(--spacing) * 2)}.p-3{padding:calc(var(--spacing) * 3)}.p-4{padding:calc(var(--spacing) * 4)}.p-5{padding:calc(var(--spacing) * 5)}.p-6{padding:calc(var(--spacing) * 6)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-3{padding-inline:calc(var(--spacing) * 3)}.px-4{padding-inline:calc(var(--spacing) * 4)}.px-5{padding-inline:calc(var(--spacing) * 5)}.py-1\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-9{padding-block:calc(var(--spacing) * 9)}.pt-3{padding-top:calc(var(--spacing) * 3)}.pt-4{padding-top:calc(var(--spacing) * 4)}.pt-5{padding-top:calc(var(--spacing) * 5)}.pt-8{padding-top:calc(var(--spacing) * 8)}.pb-6{padding-bottom:calc(var(--spacing) * 6)}.pb-20{padding-bottom:calc(var(--spacing) * 20)}.pl-5{padding-left:calc(var(--spacing) * 5)}.text-left{text-align:left}.align-top{vertical-align:top}.font-sans{font-family:var(--font-sans)}.text-3xl{font-size:var(--text-3xl);line-height:var(--tw-leading,var(--text-3xl--line-height))}.text-base{font-size:var(--text-base);line-height:var(--tw-leading,var(--text-base--line-height))}.text-lg{font-size:var(--text-lg);line-height:var(--tw-leading,var(--text-lg--line-height))}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xl{font-size:var(--text-xl);line-height:var(--tw-leading,var(--text-xl--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.leading-6{--tw-leading:calc(var(--spacing) * 6);line-height:calc(var(--spacing) * 6)}.leading-7{--tw-leading:calc(var(--spacing) * 7);line-height:calc(var(--spacing) * 7)}.font-medium{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.tracking-tight{--tw-tracking:var(--tracking-tight);letter-spacing:var(--tracking-tight)}.whitespace-pre-wrap{white-space:pre-wrap}.text-neutral-600{color:var(--color-neutral-600)}.text-neutral-700{color:var(--color-neutral-700)}.text-neutral-900{color:var(--color-neutral-900)}.text-neutral-950{color:var(--color-neutral-950)}.text-white{color:var(--color-white)}.underline{text-decoration-line:underline}.underline-offset-4{text-underline-offset:4px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.accent-neutral-900{accent-color:var(--color-neutral-900)}.outline-none{--tw-outline-style:none;outline-style:none}@media (hover:hover){.hover\:bg-neutral-50:hover{background-color:var(--color-neutral-50)}.hover\:bg-neutral-100:hover{background-color:var(--color-neutral-100)}.hover\:bg-neutral-700:hover{background-color:var(--color-neutral-700)}.hover\:underline:hover{text-decoration-line:underline}}.focus\:border-neutral-900:focus{border-color:var(--color-neutral-900)}.focus-visible\:outline-2:focus-visible{outline-style:var(--tw-outline-style);outline-width:2px}.focus-visible\:outline-offset-2:focus-visible{outline-offset:2px}.focus-visible\:outline-neutral-900:focus-visible{outline-color:var(--color-neutral-900)}@media (width>=40rem){.sm\:px-6{padding-inline:calc(var(--spacing) * 6)}}@media (width>=48rem){.md\:block{display:block}.md\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.md\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}@media (width>=64rem){.lg\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.lg\:px-8{padding-inline:calc(var(--spacing) * 8)}}}@property --tw-space-y-reverse{syntax:"*";inherits:false;initial-value:0}@property --tw-divide-y-reverse{syntax:"*";inherits:false;initial-value:0}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-leading{syntax:"*";inherits:false}@property --tw-font-weight{syntax:"*";inherits:false}@property --tw-tracking{syntax:"*";inherits:false}@property --tw-outline-style{syntax:"*";inherits:false;initial-value:solid}
+
+  </style>
+</head>
+<body class="bg-neutral-50 font-sans text-neutral-950 antialiased">
+  <div class="mx-auto max-w-7xl px-4 pb-20 pt-8 sm:px-6 lg:px-8">
+    <header class="border-b border-neutral-200 pb-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-medium text-neutral-600">Synapse / 产品方案 / 2026-09-27</p>
+          <h1 class="mt-2 text-3xl font-semibold tracking-tight">站内信</h1>
+          <p class="mt-3 max-w-3xl text-sm leading-6 text-neutral-700">同一团队成员之间发送可阅读、可回复、可附文件的私有信件。桌面与 iOS 共用账号收件箱，Agent 可按用户指令生成文档并发送。</p>
+        </div>
+        <span class="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium">设计方案 · 尚未上线</span>
+      </div>
+      <nav aria-label="页面目录" class="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <a class="font-medium underline underline-offset-4" href="#preview">交互预览</a>
+        <a class="text-neutral-700 hover:underline" href="#rules">产品规则</a>
+        <a class="text-neutral-700 hover:underline" href="#architecture">能力架构</a>
+        <a class="text-neutral-700 hover:underline" href="#delivery">实施与验收</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="py-9" aria-labelledby="context-title">
+        <h2 id="context-title" class="text-xl font-semibold">现有能力与新增边界</h2>
+        <div class="mt-5 grid gap-4 md:grid-cols-3">
+          <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">团队</h3><p class="mt-2 text-sm leading-6 text-neutral-700">服务端已有 Team 与 TeamMembership。成员由管理员维护，用户可加入多个团队。当前普通用户没有团队查询入口，也没有团队协作权限。</p></div>
+          <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">云盘与 Agent</h3><p class="mt-2 text-sm leading-6 text-neutral-700">云盘能保存文件、版本与分享；Agent 已有文档生成及云盘 MCP。站内信附件应引用发送时的文件版本，并给收件人独立的信件访问权。</p></div>
+          <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">通知与跨端</h3><p class="mt-2 text-sm leading-6 text-neutral-700">账号消息中心负责提醒和未读，桌面与手机可接收实时变化及推送。信件正文、收发记录和已读状态需要单独持久化，通知只负责引导打开信件。</p></div>
+        </div>
+        <p class="mt-5 border-t border-neutral-200 pt-4 text-sm leading-6 text-neutral-700">本方案是对 2026-09-19「团队不产生可见行为」阶段性边界的后续扩展：团队关系只用于站内信的收件人资格，不引入团队角色或团队级云盘权限。实现时须同步修订该专题规则。</p>
+      </section>
+
+      <section id="preview" class="scroll-mt-6 border-t border-neutral-300 py-9" aria-labelledby="preview-title">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div><h2 id="preview-title" class="text-xl font-semibold">交互预览</h2><p class="mt-1 text-sm text-neutral-600">示例数据；写信、筛选、阅读、回复与发送可操作。</p></div>
+          <button id="agent-draft" type="button" class="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm font-medium hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900">填入 Agent 文档草稿</button>
+        </div>
+
+        <div class="mt-6 hidden overflow-hidden rounded-lg border border-neutral-300 bg-white md:block" aria-label="桌面端站内信预览">
+          <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-3">
+            <div class="flex items-center gap-3"><span class="text-base font-semibold">站内信</span><span class="text-xs text-neutral-600">产品组 · 研发组</span></div>
+            <div class="flex items-center gap-2"><button id="desktop-compose" type="button" class="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900">写信</button></div>
+          </div>
+          <div class="grid min-h-128 grid-cols-5">
+            <div class="col-span-2 border-r border-neutral-200">
+              <div class="border-b border-neutral-200 p-3">
+                <div class="flex gap-1" role="group" aria-label="信箱分类">
+                  <button id="desktop-inbox" type="button" class="flex-1 rounded-md px-3 py-2 text-sm font-medium" aria-pressed="true">收到</button>
+                  <button id="desktop-sent" type="button" class="flex-1 rounded-md px-3 py-2 text-sm font-medium" aria-pressed="false">已发送</button>
+                </div>
+                <label class="mt-3 block text-xs font-medium text-neutral-700" for="desktop-search">搜索信件</label>
+                <input id="desktop-search" type="search" placeholder="发件人、主题或正文" class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900">
+              </div>
+              <div id="desktop-list" class="max-h-128 overflow-y-auto" aria-live="polite"></div>
+            </div>
+            <div id="desktop-detail" class="col-span-3 min-w-0 p-6" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="mt-8 grid items-start gap-8 lg:grid-cols-2">
+          <div>
+            <h3 class="text-base font-semibold">iPhone 与窄窗口</h3>
+            <p class="mt-2 text-sm leading-6 text-neutral-700">主页「功能」列表增加「站内信」。列表点入详情，返回后保留原分段与滚动位置；写信为单独编辑页。宽 iPad 窗口用既有 AdaptiveFeatureNavigation 并排展示列表与详情，窗口收窄自动折叠。</p>
+            <div class="mt-5 border-t border-neutral-200 pt-5">
+              <h4 class="text-sm font-semibold">关键路径</h4>
+              <ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700">
+                <li>1. 选择团队，收件人搜索仅列出该团队的有效成员。</li>
+                <li>2. 编辑主题、正文与附件；桌面和手机共用服务端草稿。</li>
+                <li>3. 发送前服务端再次核验团队成员关系和附件版本。</li>
+                <li>4. 每位收件人拥有自己的未读、删除状态，发件人可见已发送。</li>
+              </ol>
+            </div>
+          </div>
+          <div class="mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-neutral-300 bg-white" aria-label="手机端站内信预览">
+            <div class="flex min-h-16 items-center justify-between border-b border-neutral-200 px-4">
+              <button id="mobile-back" type="button" class="hidden rounded-md px-2 py-2 text-sm hover:bg-neutral-100">返回</button>
+              <strong id="mobile-title" class="text-lg">站内信</strong>
+              <button id="mobile-compose" type="button" class="rounded-md px-2 py-2 text-sm font-medium hover:bg-neutral-100">写信</button>
+            </div>
+            <div id="mobile-tabs" class="flex border-b border-neutral-200 p-2" role="group" aria-label="手机信箱分类"><button id="mobile-inbox" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="true">收到</button><button id="mobile-sent" type="button" class="flex-1 rounded-md px-3 py-2 text-sm" aria-pressed="false">已发送</button></div>
+            <div id="mobile-content" class="min-h-96" aria-live="polite"></div>
+          </div>
+        </div>
+        <p id="demo-status" role="status" class="mt-5 min-h-6 text-sm text-neutral-700"></p>
+      </section>
+
+      <section id="rules" class="scroll-mt-6 border-t border-neutral-300 py-9" aria-labelledby="rules-title">
+        <h2 id="rules-title" class="text-xl font-semibold">产品规则</h2>
+        <div class="mt-5 grid gap-x-10 gap-y-6 md:grid-cols-2">
+          <div><h3 class="font-semibold">身份与收件人</h3><p class="mt-2 text-sm leading-6 text-neutral-700">每人只有一个账号收件箱，汇集所有所属团队的信件。写信时必须选定一个团队；一次发送的所有收件人、发件人必须同时属于该团队。多团队成员不可在一封信中跨团队混选。收件人用用户 ID 标识，界面显示昵称、handle 与团队；不输入外部邮箱地址。</p></div>
+          <div><h3 class="font-semibold">收发与会话</h3><p class="mt-2 text-sm leading-6 text-neutral-700">左侧只保留「收到 / 已发送」两个主分类。支持主题、正文、多人收件、附件、回复、回复全部、转发、搜索和自动保存草稿。草稿从「写信」入口继续编辑，不增第三个主分类。发送请求使用幂等键，避免重试产生重复信件。</p></div>
+          <div><h3 class="font-semibold">附件</h3><p class="mt-2 text-sm leading-6 text-neutral-700">可附本地文件或本人云盘文件，Agent 生成的云盘文档也走同一路径。发送时固定文件版本，收件人经信件权限读取该快照；源文件后续修改、移动或取消公开分享，不改变已投递附件。附件不自动进入收件人云盘，也不创建公开分享链接。</p></div>
+          <div><h3 class="font-semibold">成员变化</h3><p class="mt-2 text-sm leading-6 text-neutral-700">禁用账号、已退出团队的用户不可成为新信收件人。发出后退出团队，历史信仍留在个人信箱，但不能再以原团队回复或转发，除非重新加入。删除团队保留历史信和发送时的团队名快照，阻止该团队的新发送；删除个人信件只隐藏自己的副本。</p></div>
+          <div><h3 class="font-semibold">通知与隐私</h3><p class="mt-2 text-sm leading-6 text-neutral-700">新信写库成功后广播变更，并向收件账号发提醒。通知中心仅展示「收到站内信」与发件人，不复制正文和附件内容；点击按信件 ID 打开站内信。站内信未读数独立于通知未读数，显示上限沿用 99+。服务端日志和推送不记录信件正文。</p></div>
+          <div><h3 class="font-semibold">首版范围</h3><p class="mt-2 text-sm leading-6 text-neutral-700">首版不接外部邮件，不提供邮箱地址、抄送/密送、群发名单、定时发送、撤回、团队角色或团队共享信箱。附件类型与大小上限在实现前按现有云盘能力确定，前后端使用同一份配置。</p></div>
+        </div>
+      </section>
+
+      <section id="architecture" class="scroll-mt-6 border-t border-neutral-300 py-9" aria-labelledby="architecture-title">
+        <h2 id="architecture-title" class="text-xl font-semibold">能力架构</h2>
+        <div class="mt-5 overflow-x-auto">
+          <table class="w-full min-w-160 border-collapse text-left text-sm">
+            <thead><tr class="border-b border-neutral-300"><th scope="col" class="px-3 py-3 font-semibold">层</th><th scope="col" class="px-3 py-3 font-semibold">新增职责</th><th scope="col" class="px-3 py-3 font-semibold">复用与边界</th></tr></thead>
+            <tbody class="divide-y divide-neutral-200 text-neutral-700">
+              <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">服务端</th><td class="px-3 py-3 align-top">团队内成员发现；草稿、信件、参与者状态、附件快照；列表分页、搜索、发送事务与审计。</td><td class="px-3 py-3 align-top">复用 UserAuthGuard、TeamMembership、Drive 版本及账号广播。正文不写入 UserNotification。</td></tr>
+              <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">桌面端</th><td class="px-3 py-3 align-top">独立「站内信」System App；收到/已发送列表、详情、写信、附件选择、未读状态。</td><td class="px-3 py-3 align-top">复用 System App 窗口、shadcn 组件、窄类型 preload bridge；主进程负责认证与网络。</td></tr>
+              <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">iOS / iPadOS</th><td class="px-3 py-3 align-top">主页功能入口、列表详情、写信、系统文件选择与推送落点。</td><td class="px-3 py-3 align-top">手机直连服务端，不依赖电脑在线；复用 AdaptiveFeatureNavigation、账号认证与通知数量规则。</td></tr>
+              <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">MCP + Skill</th><td class="px-3 py-3 align-top">按团队找人、建草稿、附文档、发送、查询、阅读、回复与标记已读。</td><td class="px-3 py-3 align-top">新 mail domain；工具走同一服务端校验。Skill 指导 Agent 先解析同名成员和团队，再发送。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-8 grid gap-8 lg:grid-cols-2">
+          <div><h3 class="font-semibold">拟议数据边界</h3><p class="mt-2 text-sm leading-6 text-neutral-700">MailThread 保存会话与团队 ID/名称快照；MailMessage 保存发送者、主题、正文、发送时间和幂等键；MailParticipant 保存每个参与者的已读与隐藏状态；MailAttachment 保存发送时的版本及访问授权；MailDraft 保存跨端草稿。收件箱与发件箱都由参与者身份投影，不复制信件正文。</p></div>
+          <div><h3 class="font-semibold">拟议 MCP 工具组</h3><p class="mt-2 text-sm leading-6 text-neutral-700"><code>app_mail_team_list</code>、<code>app_mail_recipient_search</code>、<code>app_mail_draft_save</code>、<code>app_mail_send</code>、<code>app_mail_message_list</code>、<code>app_mail_message_get</code>、<code>app_mail_message_reply</code>、<code>app_mail_message_mark_read</code>。工具名是方案，尚未注册。Skill 放入系统 Skill 包的 mail 领域，并与 MCP schema 一起发布。</p></div>
+        </div>
+        <div class="mt-8 border-t border-neutral-200 pt-5"><h3 class="font-semibold">Agent 发文档的完整路径</h3><div class="mt-4 grid gap-3 text-sm md:grid-cols-4"><p class="border border-neutral-200 p-3"><strong class="block">1 生成</strong><span class="mt-1 block text-neutral-700">Agent 生成并保存云盘文档，取得不可变版本。</span></p><p class="border border-neutral-200 p-3"><strong class="block">2 找人</strong><span class="mt-1 block text-neutral-700">按指定团队查用户 ID；同名或多团队歧义时向用户确认。</span></p><p class="border border-neutral-200 p-3"><strong class="block">3 发送</strong><span class="mt-1 block text-neutral-700">用户明确说「发给…」后提交正文与附件版本；服务端原子校验。</span></p><p class="border border-neutral-200 p-3"><strong class="block">4 回执</strong><span class="mt-1 block text-neutral-700">返回信件 ID、团队、收件人及发送结果，失败不声称已发出。</span></p></div></div>
+      </section>
+
+      <section id="delivery" class="scroll-mt-6 border-t border-neutral-300 py-9" aria-labelledby="delivery-title">
+        <h2 id="delivery-title" class="text-xl font-semibold">实施与验收</h2>
+        <div class="mt-5 grid gap-7 md:grid-cols-2">
+          <div><h3 class="font-semibold">实施顺序</h3><ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700"><li>1. 先定团队成员查询、信件 ACL、附件快照与数据库迁移。</li><li>2. 上线服务端 API、实时事件、推送与审计，再接桌面和 iOS 共享契约。</li><li>3. 桌面独立应用与 iOS 主页功能同时覆盖收、发、读、回复、草稿。</li><li>4. 注册 MCP、系统 Skill、能力清单并补齐 Agent 指南；同步修订团队旧规格。</li></ol></div>
+          <div><h3 class="font-semibold">必须通过的场景</h3><ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-neutral-700"><li>两人或多人同团队发送成功；跨团队混选、禁用用户、离团用户发送失败。</li><li>多团队用户选择团队后只看到对应成员；同名用户能区分。</li><li>桌面发送后手机离线重连可收到；未读与删除跨端一致。</li><li>源文档更新或撤销分享后，收件人仍能读取发送时附件版本。</li><li>手机在 iPhone、iPad 全屏、半窗和窄窗均能写信、读信、返回原列表。</li><li>Agent 工具重试不重复发送，失败有明确回执；未明确指定收件人时不发送。</li></ul></div>
+        </div>
+        <p class="mt-8 text-xs text-neutral-600">此页面用于评审目标方案与交互，不代表功能已经接入 Synapse。演示中的姓名与信件均为虚构。</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const teams = { product: { name: '产品组', members: [{ id: 'lin', name: '林槿', handle: '@linjin' }, { id: 'zhou', name: '周恬', handle: '@zhoutian' }] }, engineering: { name: '研发组', members: [{ id: 'wang', name: '王珂', handle: '@wangke' }, { id: 'chen', name: '陈岚', handle: '@chenlan' }] } };
+    const received = [
+      { id: 'r1', team: 'product', sender: '林槿', senderId: 'lin', to: '我', subject: '迭代评审材料', body: '评审稿已整理好，请看附件中的需求变更和待确认项。', time: '今天 10:42', unread: true, attachment: '迭代评审.md' },
+      { id: 'r2', team: 'engineering', sender: '王珂', senderId: 'wang', to: '我', subject: '数据接口说明', body: '接口字段已更新。请确认移动端的展示顺序。', time: '昨天 16:18', unread: true, attachment: '接口说明.pdf' },
+      { id: 'r3', team: 'product', sender: '周恬', senderId: 'zhou', to: '我', subject: '签收稿件确认', body: '这版内容可以进入下一轮评审。', time: '周三 09:26', unread: false }
+    ];
+    const sent = [
+      { id: 's1', team: 'product', sender: '我', to: '林槿、周恬', subject: '本周方案草稿', body: '请查看本周的方案草稿。', time: '今天 09:15', attachment: '方案草稿.md' },
+      { id: 's2', team: 'engineering', sender: '我', to: '王珂', subject: '流程说明', body: '流程说明已更新。', time: '周二 14:32' }
+    ];
+    const state = { box: 'inbox', selected: 'r1', screen: 'list', composing: false, team: 'product', recipients: [], prefill: null, query: '' };
+    const $ = (id) => document.getElementById(id);
+    const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    const items = () => state.box === 'inbox' ? received : sent;
+    const current = () => items().find((item) => item.id === state.selected);
+    const filtered = () => items().filter((item) => `${item.sender} ${item.to} ${item.subject} ${item.body}`.toLowerCase().includes(state.query.toLowerCase()));
+    const say = (message) => { $('demo-status').textContent = message; };
+    function tab(button, active) { button.setAttribute('aria-pressed', String(active)); button.className = `flex-1 rounded-md px-3 py-2 text-sm font-medium ${active ? 'bg-neutral-900 text-white' : 'text-neutral-700 hover:bg-neutral-100'}`; }
+    function row(item, mobile) { const active = state.selected === item.id && !state.composing; return `<button type="button" data-open="${safe(item.id)}" class="w-full border-b border-neutral-200 px-4 py-3 text-left hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-neutral-900 ${active && !mobile ? 'bg-neutral-100' : ''}"><span class="flex items-center justify-between gap-2"><span class="truncate text-sm ${item.unread ? 'font-semibold' : 'font-medium'}">${safe(state.box === 'inbox' ? item.sender : item.to)}</span><span class="shrink-0 text-xs text-neutral-600">${safe(item.time)}</span></span><span class="mt-1 flex items-center gap-2"><span class="truncate text-sm ${item.unread ? 'font-semibold' : ''}">${safe(item.subject)}</span>${item.unread ? '<span class="size-2 shrink-0 rounded-full bg-neutral-900" aria-label="未读"></span>' : ''}</span><span class="mt-1 block truncate text-xs text-neutral-600">${safe(teams[item.team].name)} · ${safe(item.body)}</span></button>`; }
+    function detail(item, mobile) { if (!item) return '<p class="text-sm text-neutral-600">选择一封信件</p>'; return `<article><div class="flex flex-wrap items-start justify-between gap-3"><div><h3 class="text-lg font-semibold">${safe(item.subject)}</h3><p class="mt-2 text-sm text-neutral-700">${safe(item.sender)} → ${safe(item.to)}</p><p class="mt-1 text-xs text-neutral-600">${safe(teams[item.team].name)} · ${safe(item.time)}</p></div><div class="flex gap-1">${state.box === 'inbox' ? '<button type="button" data-action="reply" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">回复</button>' : ''}<button type="button" data-action="forward" class="rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">转发</button></div></div><p class="mt-8 whitespace-pre-wrap text-sm leading-7">${safe(item.body)}</p>${item.attachment ? `<div class="mt-7 border-t border-neutral-200 pt-4"><p class="text-xs font-medium text-neutral-600">附件</p><button type="button" data-action="attachment" class="mt-2 rounded-md border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100">${safe(item.attachment)}</button></div>` : ''}</article>`; }
+    function form(mobile) { const selected = state.prefill || {}; const candidates = teams[state.team].members; return `<form class="space-y-4" data-compose-form><div><label class="block text-sm font-medium" for="${mobile ? 'mobile' : 'desktop'}-team">团队</label><select id="${mobile ? 'mobile' : 'desktop'}-team" name="team" class="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm">${Object.entries(teams).map(([id, team]) => `<option value="${id}" ${state.team === id ? 'selected' : ''}>${safe(team.name)}</option>`).join('')}</select></div><fieldset><legend class="text-sm font-medium">收件人</legend><div class="mt-2 space-y-1">${candidates.map((member) => `<label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-neutral-100"><input type="checkbox" name="recipient" value="${member.id}" ${state.recipients.includes(member.id) ? 'checked' : ''} class="size-4 accent-neutral-900"><span>${safe(member.name)}</span><span class="text-xs text-neutral-600">${safe(member.handle)}</span></label>`).join('')}</div></fieldset><div><label class="block text-sm font-medium" for="${mobile ? 'mobile' : 'desktop'}-subject">主题</label><input id="${mobile ? 'mobile' : 'desktop'}-subject" name="subject" required maxlength="120" value="${safe(selected.subject || '')}" class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"></div><div><label class="block text-sm font-medium" for="${mobile ? 'mobile' : 'desktop'}-body">正文</label><textarea id="${mobile ? 'mobile' : 'desktop'}-body" name="body" required rows="${mobile ? 6 : 8}" class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900">${safe(selected.body || '')}</textarea></div>${selected.attachment ? `<p class="text-sm">附件：${safe(selected.attachment)}</p>` : '<p class="text-xs text-neutral-600">本预览不上传真实附件。</p>'}<div class="flex gap-2"><button type="submit" class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">发送</button><button type="button" data-action="cancel" class="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100">取消</button></div></form>`; }
+    function render() {
+      tab($('desktop-inbox'), state.box === 'inbox'); tab($('desktop-sent'), state.box === 'sent'); tab($('mobile-inbox'), state.box === 'inbox'); tab($('mobile-sent'), state.box === 'sent');
+      $('desktop-list').innerHTML = filtered().length ? filtered().map((item) => row(item, false)).join('') : '<p class="p-5 text-sm text-neutral-600">没有匹配的信件</p>';
+      $('desktop-detail').innerHTML = state.composing ? `<h3 class="mb-5 text-lg font-semibold">写信</h3>${form(false)}` : detail(current(), false);
+      $('mobile-tabs').classList.toggle('hidden', state.screen !== 'list'); $('mobile-back').classList.toggle('hidden', state.screen === 'list'); $('mobile-compose').classList.toggle('hidden', state.screen === 'compose');
+      $('mobile-title').textContent = state.screen === 'compose' ? '写信' : state.screen === 'detail' ? '信件' : '站内信';
+      $('mobile-content').innerHTML = state.screen === 'compose' ? `<div class="p-4">${form(true)}</div>` : state.screen === 'detail' ? `<div class="p-4">${detail(current(), true)}</div>` : (filtered().length ? filtered().map((item) => row(item, true)).join('') : '<p class="p-5 text-sm text-neutral-600">没有匹配的信件</p>');
+    }
+    function openCompose(prefill = null) { state.prefill = prefill; state.composing = true; state.screen = 'compose'; render(); }
+    function setBox(box) { state.box = box; state.selected = items()[0]?.id; state.composing = false; state.screen = 'list'; render(); }
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('button'); if (!button) return;
+      if (button.id === 'desktop-inbox' || button.id === 'mobile-inbox') return setBox('inbox');
+      if (button.id === 'desktop-sent' || button.id === 'mobile-sent') return setBox('sent');
+      if (button.id === 'desktop-compose' || button.id === 'mobile-compose') return openCompose();
+      if (button.id === 'mobile-back') { state.screen = 'list'; state.composing = false; render(); return; }
+      if (button.id === 'agent-draft') { state.team = 'product'; state.recipients = ['lin']; openCompose({ subject: '需求方案初稿', body: '林槿，附件是刚生成的需求方案初稿，请查收。', attachment: '需求方案初稿.md' }); say('已填入 Agent 生成文档的发送草稿（演示）。'); return; }
+      if (button.dataset.open) { state.selected = button.dataset.open; state.composing = false; state.screen = 'detail'; const item = current(); if (item) item.unread = false; render(); return; }
+      if (button.dataset.action === 'cancel') { state.composing = false; state.screen = 'list'; state.prefill = null; render(); return; }
+      if (button.dataset.action === 'attachment') { say('附件以发送时的版本供收件人查看。此处为交互预览。'); return; }
+      if (button.dataset.action === 'reply' || button.dataset.action === 'forward') { const item = current(); if (!item) return; state.team = item.team; state.recipients = button.dataset.action === 'reply' ? [item.senderId] : []; openCompose({ subject: `${button.dataset.action === 'reply' ? '回复' : '转发'}：${item.subject}`, body: button.dataset.action === 'forward' ? `\n\n原信：${item.body}` : '', attachment: button.dataset.action === 'forward' ? item.attachment : undefined }); }
+    });
+    document.addEventListener('change', (event) => { if (event.target.name === 'team') { const form = event.target.closest('form'); state.prefill = { ...state.prefill, subject: form.elements.subject.value, body: form.elements.body.value }; state.team = event.target.value; state.recipients = []; render(); say('切换团队后已清空收件人。'); } else if (event.target.name === 'recipient') { const id = event.target.value; state.recipients = event.target.checked ? [...new Set([...state.recipients, id])] : state.recipients.filter((value) => value !== id); document.querySelectorAll(`[data-compose-form] input[name="recipient"][value="${id}"]`).forEach((input) => { input.checked = event.target.checked; }); } });
+    document.addEventListener('submit', (event) => { if (!event.target.matches('[data-compose-form]')) return; event.preventDefault(); const data = new FormData(event.target); const recipients = [...new Set(data.getAll('recipient'))].filter((id) => teams[state.team].members.some((member) => member.id === id)); const subject = String(data.get('subject') || '').trim(); const body = String(data.get('body') || '').trim(); if (!recipients.length || !subject || !body) { say('请选择收件人，并填写主题和正文。'); return; } const names = teams[state.team].members.filter((member) => recipients.includes(member.id)).map((member) => member.name).join('、'); const id = `s${Date.now()}`; sent.unshift({ id, team: state.team, sender: '我', to: names, subject, body, time: '刚刚', attachment: state.prefill?.attachment }); state.box = 'sent'; state.selected = id; state.composing = false; state.screen = 'detail'; state.prefill = null; render(); say(`已发送给 ${names}（演示，未调用服务端）。`); });
+    $('desktop-search').addEventListener('input', (event) => { state.query = event.target.value.trim(); render(); });
+    render();
+  </script>
+</body>
+</html>
