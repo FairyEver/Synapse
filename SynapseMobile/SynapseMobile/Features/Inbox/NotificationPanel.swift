@@ -24,8 +24,8 @@ struct NotificationPanel: View {
             .navigationTitle("通知")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("关闭") { dismiss() }
                 }
             }
         }
@@ -38,7 +38,7 @@ struct NotificationPanel: View {
 
     /// 点一条通知：先标已读，再按它自己的去向往外走。
     ///
-    /// 走之前就收起来。留着一个盖住目标的 sheet，等于让人再点一次「完成」才看得见
+    /// 走之前就收起来。留着一个盖住目标的 sheet，等于让人再点一次「关闭」才看得见
     /// 他刚刚要求去的地方。
     private func open(_ item: SynapseNotification) {
         Task { await model.readNotification(item.id) }

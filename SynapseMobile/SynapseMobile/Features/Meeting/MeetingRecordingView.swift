@@ -9,21 +9,31 @@ import SwiftUI
 struct MeetingRecordingView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .footnote) private var hintLineHeight: CGFloat = 20
+    @ScaledMetric(relativeTo: .largeTitle) private var timerFontSize: CGFloat = 46
 
     var body: some View {
-        VStack(spacing: 20) {
-            title
-            timer
-            waveform
-            hintLine
-            Spacer(minLength: 0)
-            footer
+        ScrollView {
+            VStack(spacing: 20) {
+                title
+                timer
+                waveform
+                hintLine
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 36)
+            .padding(.bottom, 20)
+            .frame(maxWidth: 600)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 36)
-        .padding(.bottom, 24)
-        .frame(maxWidth: 600)
-        .frame(maxWidth: .infinity)
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            footer
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity)
+        }
         .presentationDragIndicator(.visible)
         // 收起不等于停下：这一屏只是个观察窗，录音在 App 模型上跑。
         .interactiveDismissDisabled(false)
@@ -38,7 +48,7 @@ struct MeetingRecordingView: View {
 
     private var timer: some View {
         Text(MeetingText.clock(model.recording.elapsedMs))
-            .font(.system(size: 46, weight: .light))
+            .font(.system(size: timerFontSize, weight: .light))
             .monospacedDigit()
             .foregroundStyle(Theme.ink)
             .accessibilityLabel("已录 \(MeetingText.clock(model.recording.elapsedMs))")
@@ -57,7 +67,7 @@ struct MeetingRecordingView: View {
             .font(.footnote)
             .foregroundStyle(hintIsFailure ? Theme.failure : Color.secondary)
             .lineLimit(1)
-            .frame(height: 20)
+            .frame(height: hintLineHeight)
     }
 
     private var footer: some View {

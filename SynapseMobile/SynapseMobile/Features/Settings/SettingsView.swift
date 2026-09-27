@@ -7,17 +7,13 @@ struct SettingsView: View {
     @State private var showingSignOut = false
     let category: SettingsCategory
     let onSelectDesktop: () -> Void
-    /// 打开通知面板。「我的 → 通知」里那一行要用。
-    let onOpenNotificationCenter: () -> Void
 
     init(
         category: SettingsCategory,
-        onSelectDesktop: @escaping () -> Void,
-        onOpenNotificationCenter: @escaping () -> Void
+        onSelectDesktop: @escaping () -> Void
     ) {
         self.category = category
         self.onSelectDesktop = onSelectDesktop
-        self.onOpenNotificationCenter = onOpenNotificationCenter
     }
 
     var body: some View {
@@ -115,28 +111,6 @@ struct SettingsView: View {
                 }
             }
 
-            // 眼下只有一件事，也单开一页：这个分类将来会长出东西，长在一个已经叫「录音」
-            // 的地方，好过到时候重新组织整个「我的」。
-            if category == .recording {
-                Section {
-                    NavigationLink {
-                        RecordingSettingsView()
-                    } label: {
-                        Text("麦克风权限")
-                    }
-                }
-            }
-
-            if category == .notifications {
-                Section {
-                    NavigationLink {
-                        NotificationSettingsView(onOpenNotifications: { onOpenNotificationCenter() })
-                    } label: {
-                        Text("通知设置")
-                    }
-                }
-            }
-
             // 默认开着：让朋友复现一次不容易，"忘了先打开开关"是最没必要的一种浪费。
             // 关掉只停记录，**不删已有日志** —— 两件事合成一个动作，用户会失去
             // 刚表达过的那个意思。
@@ -158,16 +132,6 @@ struct SettingsView: View {
                     Text("诊断")
                 } footer: {
                     Text("记录崩溃、网络与终端交互的元数据；终端屏幕内容可以单独关掉。")
-                }
-            }
-
-            if category == .about {
-                Section {
-                    NavigationLink {
-                        AboutView()
-                    } label: {
-                        Text("版本与反馈")
-                    }
                 }
             }
 

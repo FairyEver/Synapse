@@ -11,6 +11,8 @@ struct DiagnosticLogView: View {
     @State private var showingDeleteConfirm = false
     @State private var showingContentExportConfirm = false
     @State private var capturesContent = DiagnosticLog.capturesContent
+    @State private var exporting = false
+    @State private var exportFailed = false
 
     var body: some View {
         List {
@@ -83,11 +85,21 @@ struct DiagnosticLogView: View {
                         export()
                     }
                 } label: {
-                    Label("导出并分享", systemImage: "square.and.arrow.up")
+                    if exporting {
+                        ProgressView("正在导出")
+                    } else {
+                        Label("导出并分享", systemImage: "square.and.arrow.up")
+                    }
                 }
-                .disabled(snapshot.fileCount == 0)
+                .disabled(snapshot.fileCount == 0 || exporting)
             } footer: {
-                Text(capturesContent ? "本次导出包含终端屏幕内容。" : "本次导出不含终端屏幕内容。")
+                VStack(alignment: .leading) {
+                    Text(capturesContent ? "本次导出包含终端屏幕内容。" : "本次导出不含终端屏幕内容。")
+                    if exportFailed {
+                        Text("导出失败，请重试")
+                            .foregroundStyle(Theme.failure)
+                    }
+                }
             }
 
             Section {
@@ -130,9 +142,17 @@ struct DiagnosticLogView: View {
         // 导出要读好几个文件、拼成一整份、再压成一个包。这些全排在日志自己那条
         // 后台队列上，这里只等结果 —— 从前那层 `Task.detached` 是无效的（它会先跳回
         // 主线程再同步阻塞）。
+        guard !exporting else { return }
+        exportFailed = false
+        exporting = true
         Task {
-            guard let url = await DiagnosticLog.export() else { return }
-            exportURL = url
+            let url = await DiagnosticLog.export()
+            exporting = false
+            if let url {
+                exportURL = url
+            } else {
+                exportFailed = true
+            }
         }
     }
 

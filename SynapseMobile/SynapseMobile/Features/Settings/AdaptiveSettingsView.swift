@@ -55,11 +55,16 @@ struct AdaptiveSettingsView: View {
             SettingsCategoriesView(selection: $selection)
         } detail: { category in
             NavigationStack {
-                SettingsView(
-                    category: category,
-                    onSelectDesktop: onSelectDesktop,
-                    onOpenNotificationCenter: onOpenNotificationCenter
-                )
+                switch category {
+                case .recording:
+                    RecordingSettingsView()
+                case .notifications:
+                    NotificationSettingsView(onOpenNotifications: onOpenNotificationCenter)
+                case .about:
+                    AboutView()
+                default:
+                    SettingsView(category: category, onSelectDesktop: onSelectDesktop)
+                }
             }
         }
     }

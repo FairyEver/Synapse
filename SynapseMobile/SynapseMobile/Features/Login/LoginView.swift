@@ -49,9 +49,6 @@ struct LoginView: View {
                             .foregroundStyle(Theme.ink)
                         Text("Synapse Remote")
                             .font(.title2.weight(.bold))
-                        Text("使用 Synapse 账号登录")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(.bottom, 30)
 

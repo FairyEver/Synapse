@@ -16,8 +16,6 @@ struct RecordingSettingsView: View {
                     await MeetingPermission.requestMicrophone()
                     microphone = Self.currentMicrophoneState()
                 }
-            } footer: {
-                Text("录音与转写都在服务端处理，不依赖任何一台电脑。")
             }
         }
         .listStyle(.insetGrouped)

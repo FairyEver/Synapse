@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import os
 
 /// 「通知」这个分类。系统通知权限、应用内的通知中心，以及 App 图标角标。
 ///
@@ -20,8 +21,13 @@ struct NotificationSettingsView: View {
                     // 权限只能由系统弹框授予，而这里没有别的事要做 —— 弹框由
                     // `UNUserNotificationCenter` 在第一次注册设备令牌时触发。
                     // 这一行的「未请求」落到这里就是去开一次。
-                    _ = try? await UNUserNotificationCenter.current()
-                        .requestAuthorization(options: [.alert, .badge, .sound])
+                    do {
+                        _ = try await UNUserNotificationCenter.current()
+                            .requestAuthorization(options: [.alert, .badge, .sound])
+                    } catch {
+                        AppLog.network.error("notification authorization request failed: \(error.localizedDescription, privacy: .public)")
+                        model.notice("通知权限请求失败，请重试", tone: .failure)
+                    }
                     system = await Self.currentSystemState()
                 }
             } footer: {

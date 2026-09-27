@@ -118,6 +118,21 @@ final class TerminalFlowUITests: XCTestCase {
         )
     }
 
+    /// On a wide iPad window the recording list must be visible on entry. Otherwise the
+    /// empty detail and sidebar toggle hide both the recordings and the way back home.
+    func testWideRecordingsShowsItsListOnEntry() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+
+        signIn(app)
+        try XCTSkipIf(app.windows.firstMatch.frame.width < 1000, "需要 iPad 宽窗")
+
+        app.buttons["home-feature-录音"].tap()
+        XCTAssertTrue(app.buttons["recordings-back-home"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["new-recording"].exists)
+    }
+
     func testSignInBrowseSessionsAndOpenTerminal() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
@@ -154,7 +169,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
         XCTAssertTrue(app.staticTexts["请求执行一个命令"].exists, "the panel lost the waiting reason")
         // 面板是覆盖层，关掉它才回到刚才那一屏。
-        app.buttons["完成"].tap()
+        app.buttons["关闭"].tap()
 
         tabs.buttons.element(boundBy: TabIndex.terminals).tap()
         app.staticTexts["claude-code"].tap()
@@ -294,6 +309,28 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["安全"].exists, "the removed security section is still listed")
         XCTAssertFalse(app.staticTexts["服务器"].exists, "the removed server section is still listed")
         capture(app, name: "09-settings-account")
+    }
+
+    func testSettingsCategoriesOpenTheirContentWithoutAnExtraPage() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+
+        let settingsTab = app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.settings)
+        settingsTab.tap()
+
+        app.descendants(matching: .any)["settings-category-recording"].tap()
+        XCTAssertTrue(app.buttons["permission-麦克风"].waitForExistence(timeout: 10))
+
+        settingsTab.tap()
+        app.descendants(matching: .any)["settings-category-notifications"].tap()
+        XCTAssertTrue(app.buttons["settings-notification-center"].waitForExistence(timeout: 10))
+
+        settingsTab.tap()
+        app.descendants(matching: .any)["settings-category-about"].tap()
+        XCTAssertTrue(app.staticTexts["版本"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["问题反馈"].exists)
     }
 
     /// A phone opened before any computer was online must notice one signing in.
@@ -1599,15 +1636,16 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
         segment.buttons["快捷输入"].tap()
         XCTAssertTrue(
-            app.staticTexts["phrase-row-q1"].waitForExistence(timeout: 15),
+            app.buttons["phrase-row-q1"].waitForExistence(timeout: 15),
             "the sentence never reached the phone"
         )
-        XCTAssertEqual(app.staticTexts["phrase-row-q1"].label, "第一版")
+        XCTAssertEqual(app.buttons["phrase-row-q1"].label, "第一版")
 
         // Edited on the computer, keeping its id — which is how a rename arrives.
         try setMockQuickPhrases([["id": "q1", "content": "改过之后的那一句"]])
         XCTAssertTrue(
-            waitForLabel(containing: "改过之后的那一句", in: app, timeout: 15),
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "改过之后的那一句"))
+                .firstMatch.waitForExistence(timeout: 15),
             "the phone is still showing the old sentence"
         )
 
@@ -1615,7 +1653,7 @@ final class TerminalFlowUITests: XCTestCase {
         // segment control disappearing, which is the other answer entirely.
         try setMockQuickPhrases([])
         XCTAssertTrue(
-            app.staticTexts["phrase-row-q1"].waitForNonExistence(timeout: 15),
+            app.buttons["phrase-row-q1"].waitForNonExistence(timeout: 15),
             "a sentence deleted on the computer is still on the phone"
         )
         XCTAssertTrue(app.staticTexts["shortcut-phrases-empty"].waitForExistence(timeout: 10))
@@ -1651,7 +1689,7 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(segment.buttons["自定义命令"].isSelected, "the panel would not go back to the commands")
         segment.buttons["快捷输入"].tap()
         XCTAssertTrue(
-            app.staticTexts["phrase-row-mock-log"].waitForExistence(timeout: 10),
+            app.buttons["phrase-row-mock-log"].waitForExistence(timeout: 10),
             "the sentences never appeared"
         )
 
@@ -1819,7 +1857,7 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertEqual(segment.buttons.count, 3, "the panel should offer three segments")
 
         segment.buttons["快捷输入"].tap()
-        let row = app.staticTexts["phrase-row-mock-commit"]
+        let row = app.buttons["phrase-row-mock-commit"]
         XCTAssertTrue(row.waitForExistence(timeout: 10), "the computer's sentences never appeared")
         capture(app, name: "16-phrase-segment")
 
@@ -1929,28 +1967,28 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
 
         segment.buttons["剪贴板"].tap()
-        let first = app.staticTexts["clipboard-row-clip-single-\(clipboardRunId)-1"]
+        let first = app.buttons["clipboard-row-clip-single-\(clipboardRunId)-1"]
         XCTAssertTrue(first.waitForExistence(timeout: 15), "the computer's copied text never appeared")
         capture(app, name: "24-clipboard-segment")
 
         first.tap()
-        // The row itself says so, which is the assertion that can be made deterministically:
+        // The row itself reports the state, which can be asserted deterministically:
         // the app's banner carries the same word but lives one second, and XCUITest waits
         // for this app to go quiet after a tap — with a terminal streaming, that wait
         // outlives the banner.
         XCTAssertTrue(
-            app.staticTexts["clipboard-copied"].waitForExistence(timeout: 10),
+            waitForValue(containing: "已复制", in: first, timeout: 10),
             "copying an item said nothing on the row it was copied from"
         )
         // Still open, unlike the two older segments: copying is usually followed by
         // copying a second one, and this is the list the reader is choosing from.
         XCTAssertTrue(segment.exists, "the panel closed over the list being chosen from")
 
-        let second = app.staticTexts["clipboard-row-clip-single-\(clipboardRunId)-2"]
+        let second = app.buttons["clipboard-row-clip-single-\(clipboardRunId)-2"]
         XCTAssertTrue(second.waitForExistence(timeout: 10), "the second copied item is missing")
         second.tap()
         XCTAssertTrue(
-            app.staticTexts["clipboard-copied"].waitForExistence(timeout: 10),
+            waitForValue(containing: "已复制", in: second, timeout: 10),
             "the second copy said nothing on the row it was copied from"
         )
     }
@@ -1990,13 +2028,11 @@ final class TerminalFlowUITests: XCTestCase {
             "这次改动整理成提交说明，中文，说清楚改了什么",
             "the preview is not the item it stands for"
         )
-        // Nothing on the row claims a copy, which is the evidence that this one did not
-        // happen: `clipboard-copied` is what a copy leaves behind, and the copy test
-        // above is what proves that word appears when one does.
-        XCTAssertFalse(
-            app.staticTexts["clipboard-copied"].exists,
-            "the eye copied the item"
-        )
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertTrue(full.waitForNonExistence(timeout: 10), "the preview did not close")
+        let copied = app.buttons["clipboard-row-clip-eye-\(clipboardRunId)-2"]
+        XCTAssertTrue(copied.waitForExistence(timeout: 10), "the clipboard row disappeared")
+        XCTAssertNotEqual(copied.value as? String, "已复制", "the eye copied the item")
         capture(app, name: "25-clipboard-preview")
     }
 
@@ -2024,7 +2060,7 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
         segment.buttons["剪贴板"].tap()
         XCTAssertTrue(
-            app.staticTexts["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
+            app.buttons["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
             "the list never filled, so clearing it would prove nothing"
         )
 
@@ -2039,7 +2075,7 @@ final class TerminalFlowUITests: XCTestCase {
         // moments, sent again — which is exactly what its ring produces.
         try setMockClipboard(fixture)
         XCTAssertFalse(
-            app.staticTexts["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 5),
+            app.buttons["clipboard-row-clip-clear-\(clipboardRunId)-1"].waitForExistence(timeout: 5),
             "a cleared row came back on the computer's next snapshot"
         )
         XCTAssertTrue(
@@ -2067,7 +2103,7 @@ final class TerminalFlowUITests: XCTestCase {
         button.tap()
 
         XCTAssertTrue(
-            app.staticTexts["clipboard-row-clip-row-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
+            app.buttons["clipboard-row-clip-row-\(clipboardRunId)-1"].waitForExistence(timeout: 15),
             "the device row's clipboard never opened the list"
         )
         capture(app, name: "26-clipboard-sheet")
@@ -2094,7 +2130,7 @@ final class TerminalFlowUITests: XCTestCase {
         // A sentence long enough that one line cannot hold it, which is the whole reason
         // the key exists. The list shows the beginning; the preview shows all of it.
         let long = "这次改动整理成提交说明，中文，说清楚改了什么、为什么改"
-        let row = app.staticTexts["phrase-row-mock-commit"]
+        let row = app.buttons["phrase-row-mock-commit"]
         XCTAssertTrue(row.waitForExistence(timeout: 10), "the sentences never appeared")
         XCTAssertTrue(row.label.hasPrefix("这次改动整理成提交说明"), "the row is not the sentence it should be")
 
@@ -2160,14 +2196,14 @@ final class TerminalFlowUITests: XCTestCase {
             app.staticTexts["电脑上还没有快捷输入"].waitForExistence(timeout: 10),
             "an empty list did not produce the empty state"
         )
-        XCTAssertFalse(app.staticTexts["phrase-row-mock-log"].exists, "a sentence the computer no longer has is still here")
+        XCTAssertFalse(app.buttons["phrase-row-mock-log"].exists, "a sentence the computer no longer has is still here")
         capture(app, name: "18-phrase-empty")
 
         // Left as it was found: the mock outlives this run. `--no-toolbar` runs get a
         // mock of their own and do not see this at all.
         try setMockQuickPhrases(defaultMockQuickPhrases)
         XCTAssertTrue(
-            app.staticTexts["phrase-row-mock-log"].waitForExistence(timeout: 10),
+            app.buttons["phrase-row-mock-log"].waitForExistence(timeout: 10),
             "the sentences were not restored for the tests that follow"
         )
     }

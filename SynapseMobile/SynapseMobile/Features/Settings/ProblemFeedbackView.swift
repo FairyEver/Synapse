@@ -32,7 +32,15 @@ struct ProblemFeedbackView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("提交") { submit() }
+                Button {
+                    submit()
+                } label: {
+                    if submitting {
+                        ProgressView("提交中")
+                    } else {
+                        Text("提交")
+                    }
+                }
                     .disabled(trimmed.isEmpty || submitting)
                     .accessibilityIdentifier("feedback-submit")
             }
@@ -40,6 +48,7 @@ struct ProblemFeedbackView: View {
     }
 
     private func submit() {
+        guard !trimmed.isEmpty, !submitting else { return }
         submitting = true
         Task {
             let content = trimmed

@@ -7,10 +7,8 @@ import SwiftUI
 /// data, so they are the same code: two implementations would be two places for the
 /// gestures, the preview and the clear confirmation to drift apart.
 ///
-/// The row's gestures are the panel's own, deliberately. The row is not a `Button` and
-/// the eye is one, because a button inside a button is not something SwiftUI defines —
-/// tapping the row copies, tapping the eye only shows, and neither steals the other's
-/// taps.
+/// Copy and preview are separate buttons in one row. Both actions remain available to
+/// VoiceOver and keyboard users without nesting buttons.
 struct ClipboardList: View {
     let entries: [MobileClipboardEntry]
     /// The sheet's navigation title, when there is one to draw. `nil` means the caller
@@ -134,27 +132,37 @@ struct ClipboardList: View {
 
     private func row(_ entry: MobileClipboardEntry) -> some View {
         HStack(spacing: 8) {
-            Text(entry.text)
-                // Two lines rather than the sentences' one: what is copied on a computer
-                // is usually a command or a paragraph, and the second line is often what
-                // tells two similar ones apart.
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("clipboard-row-\(entry.id)")
+            Button {
+                onCopy(entry)
+                copiedId = entry.id
+            } label: {
+                HStack(spacing: 8) {
+                    Text(entry.text)
+                        // Two lines distinguish similar commands or paragraphs.
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-            if copiedId == entry.id {
-                Text("已复制")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("clipboard-copied")
-            } else {
-                Text(relativeLabel(entry))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+                    if copiedId == entry.id {
+                        Text("已复制")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(relativeLabel(entry))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(minHeight: Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(entry.text)
+            .accessibilityValue(copiedId == entry.id ? "已复制" : "")
+            .accessibilityHint("复制到手机剪贴板")
+            .accessibilityIdentifier("clipboard-row-\(entry.id)")
 
             Button {
                 Haptics.select()
@@ -172,17 +180,6 @@ struct ClipboardList: View {
             .buttonStyle(.plain)
             .accessibilityLabel("看全文")
             .accessibilityIdentifier("clipboard-preview-\(entry.id)")
-        }
-        // The whole row is the target, text, time and empty space alike.
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // The buzz belongs to whatever performs the copy, not here: this view does not
-            // touch the pasteboard and must not pretend it did. What it does own is saying
-            // so on the row itself.
-            onCopy(entry)
-            // Moves rather than stacks: two rows claiming to be the last one copied would
-            // be a lie about which.
-            copiedId = entry.id
         }
     }
 }

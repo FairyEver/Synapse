@@ -42,6 +42,7 @@ struct PermissionRow: View {
     let onRequest: () async -> Void
 
     @Environment(\.openURL) private var openURL
+    @SwiftUI.State private var requesting = false
 
     var body: some View {
         Button {
@@ -49,7 +50,12 @@ struct PermissionRow: View {
             case .none:
                 break
             case .request:
-                Task { await onRequest() }
+                guard !requesting else { return }
+                requesting = true
+                Task {
+                    await onRequest()
+                    requesting = false
+                }
             case .openSettings:
                 guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(url)
@@ -58,10 +64,14 @@ struct PermissionRow: View {
             HStack {
                 Text(title)
                 Spacer(minLength: 8)
-                Text(state.label)
-                    .foregroundStyle(.secondary)
+                if requesting {
+                    ProgressView("正在请求")
+                } else {
+                    Text(state.label)
+                        .foregroundStyle(.secondary)
+                }
                 // 只在真有下一步的时候画箭头：一个点不动的行带箭头是在骗人。
-                if Self.action(for: state) != .none {
+                if Self.action(for: state) != .none, !requesting {
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -70,7 +80,7 @@ struct PermissionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(Self.action(for: state) == .none)
+        .disabled(requesting || Self.action(for: state) == .none)
         .accessibilityIdentifier("permission-\(title)")
     }
 }

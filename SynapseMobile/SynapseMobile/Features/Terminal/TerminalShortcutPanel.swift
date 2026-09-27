@@ -178,7 +178,7 @@ struct TerminalShortcutPanel: View {
     /// segments are always meaningful, so there is somewhere to switch from and somewhere
     /// to switch to.
     private var picker: some View {
-        Picker("", selection: segment) {
+        Picker("快捷面板内容", selection: segment) {
             ForEach(availableSegments) { option in
                 Text(option.label).tag(option)
             }
@@ -301,26 +301,24 @@ struct TerminalShortcutPanel: View {
 
     /// One sentence, and the key that shows the part of it a single line cannot.
     ///
-    /// The row is not a `Button`, and the preview key is one. A button inside a button
-    /// is not something SwiftUI defines, and the two do different things anyway: tapping
-    /// the row puts the sentence in the composer, while the key only shows it. The key
-    /// takes its own taps because it is the closer control, so the row's gesture never
-    /// sees them.
+    /// The sentence and preview are sibling buttons: inserting and reading are distinct
+    /// actions, and both can be activated without a touch gesture.
     private func row(_ phrase: MobileQuickPhrase) -> some View {
         HStack(spacing: 8) {
-            Text(phrase.content)
-                // One line always, ellipsised at the tail: a sentence allowed to wrap
-                // would turn the card into a wall and lose the whole point of the list,
-                // which is reading a dozen of them at a glance. What does not fit is
-                // what the eye beside it is for.
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // On the sentence rather than on the row: the row is an `HStack` with a
-                // button in it, and `HStack` is not something the accessibility tree has
-                // a name for. This is also the element a tap has to land on, which is
-                // what makes it the row's address rather than only its label.
-                .accessibilityIdentifier("phrase-row-\(phrase.id)")
+            Button {
+                Haptics.select()
+                onInsert(phrase)
+            } label: {
+                Text(phrase.content)
+                    // Keep the list scannable; the preview shows the full sentence.
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("填入输入框")
+            .accessibilityIdentifier("phrase-row-\(phrase.id)")
 
             Button {
                 Haptics.select()
@@ -337,13 +335,6 @@ struct TerminalShortcutPanel: View {
             .buttonStyle(.plain)
             .accessibilityLabel("看全文")
             .accessibilityIdentifier("phrase-preview-\(phrase.id)")
-        }
-        // The whole row is the target, text and empty space alike — not just the
-        // sentence, which is one line of many and often shorter than the row.
-        .contentShape(Rectangle())
-        .onTapGesture {
-            Haptics.select()
-            onInsert(phrase)
         }
     }
 }

@@ -10,10 +10,14 @@ struct AdaptiveFeatureNavigation<Selection: Hashable, Sidebar: View, Detail: Vie
     @ViewBuilder let sidebar: () -> Sidebar
     @ViewBuilder let detail: (Selection) -> Detail
 
+    @State private var columnVisibility: NavigationSplitViewVisibility = .doubleColumn
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
 
     var body: some View {
-        NavigationSplitView(preferredCompactColumn: $preferredCompactColumn) {
+        NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
             sidebar()
                 .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 420)
         } detail: {
@@ -24,6 +28,7 @@ struct AdaptiveFeatureNavigation<Selection: Hashable, Sidebar: View, Detail: Vie
                 ContentUnavailableView(emptyTitle, systemImage: emptySymbol)
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .onAppear {
             preferredCompactColumn = selection == nil ? .sidebar : .detail
         }

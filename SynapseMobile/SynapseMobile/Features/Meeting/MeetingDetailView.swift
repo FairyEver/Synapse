@@ -25,7 +25,6 @@ struct MeetingDetailView: View {
                 // 同一个页面上的音频区载入时写的是「正在下载」，这里却是一个不说在等
                 // 什么的圈——同一次等待，两处两种说法。
                 ProgressView("正在读取录音…")
-                    .task { await model.loadMeetingDetail(meetingId) }
             }
         }
         .navigationTitle(model.meetings.detail(for: meetingId)?.title ?? "录音")
@@ -102,7 +101,7 @@ struct MeetingDetailView: View {
             header(detail)
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
-            Picker("", selection: viewModeBinding(detail)) {
+            Picker("录音内容", selection: viewModeBinding(detail)) {
                 Text("语音").tag(MeetingStore.ViewMode.audio)
                 Text("文字").tag(MeetingStore.ViewMode.text)
             }
