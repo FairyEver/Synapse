@@ -155,21 +155,16 @@ private struct SynapseSiteBrowser: View {
         .sheet(item: $consent, onDismiss: {
             if !consentAccepted { onFinish() }
         }) { request in
-            VStack(alignment: .leading, spacing: 16) {
-                Text(request.existingEmail == nil ? "使用 Synapse Remote 登录 Synapse Console？" : "切换 Synapse Console 账号？")
-                    .font(.headline)
-                if let existingEmail = request.existingEmail {
-                    Text("网页端：\(existingEmail)")
-                }
-                Text("Synapse Remote：\(model.email ?? "")")
-                Spacer(minLength: 0)
-                Button("继续") { consentAccepted = true; consent = nil; Task { await authorize() } }
-                    .buttonStyle(.borderedProminent)
-                Button("取消", action: onFinish)
-            }
-            .padding()
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
+            WebLoginConsentSheet(
+                remoteEmail: model.email ?? "",
+                existingEmail: request.existingEmail,
+                onConfirm: {
+                    consentAccepted = true
+                    consent = nil
+                    Task { await authorize() }
+                },
+                onCancel: onFinish
+            )
         }
     }
 
@@ -212,6 +207,78 @@ private struct SynapseSiteBrowser: View {
         } catch {
             phase = .failed("登录失败，请重试。")
         }
+    }
+}
+
+private struct WebLoginConsentSheet: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @ScaledMetric(relativeTo: .body) private var compactHeight: CGFloat = 300
+
+    let remoteEmail: String
+    let existingEmail: String?
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        Group {
+            if horizontalSizeClass == .compact {
+                ScrollView { content }
+                    .presentationDetents([.height(compactHeight + (existingEmail == nil ? 0 : 60)), .large])
+            } else {
+                content
+                    .presentationSizing(.form.fitted(horizontal: false, vertical: true))
+            }
+        }
+        .presentationDragIndicator(.hidden)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(alignment: .top, spacing: 12) {
+                Text(existingEmail == nil ? "登录 Synapse Console" : "切换 Synapse Console 账号")
+                    .font(.title3.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("取消登录")
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                if let existingEmail {
+                    accountRow(label: "当前网页账号", email: existingEmail)
+                }
+                accountRow(label: "Synapse Remote", email: remoteEmail)
+            }
+
+            Button(action: onConfirm) {
+                Text(existingEmail == nil ? "登录" : "切换账号")
+                    .font(.body.weight(.semibold))
+                    .frame(minWidth: 160, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(uiColor: .systemBlue))
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 32)
+    }
+
+    private func accountRow(label: String, email: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text(email)
+                .font(.body)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
