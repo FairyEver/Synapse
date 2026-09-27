@@ -123,10 +123,10 @@ export function ServerDataTable<TData, TValue>({
   }
 
   useEffect(() => {
-    if (clampPage && page !== boundedPage) {
+    if (clampPage && !isLoading && !error && page !== boundedPage) {
       onPageChange(boundedPage)
     }
-  }, [boundedPage, clampPage, onPageChange, page])
+  }, [boundedPage, clampPage, error, isLoading, onPageChange, page])
 
   const table = useReactTable({
     data,

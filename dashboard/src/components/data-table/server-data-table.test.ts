@@ -3,7 +3,7 @@
 import { type ColumnDef } from '@tanstack/react-table'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import * as dataTableExports from './index'
 import { DataTableColumnHeader } from './column-header'
@@ -80,6 +80,45 @@ describe('server table pinned columns', () => {
 })
 
 describe('ServerDataTable', () => {
+  it('keeps the requested page until its data loads successfully', () => {
+    const onPageChange = vi.fn()
+    const columns: ColumnDef<{ email: string }>[] = [
+      { accessorKey: 'email', header: '邮箱' },
+    ]
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    const renderPage = (total: number, isLoading: boolean, error?: Error) => {
+      act(() => {
+        root?.render(createElement(ServerDataTable, {
+          columns,
+          data: [],
+          page: 3,
+          pageSize: 10,
+          total,
+          isLoading,
+          error,
+          onPageChange,
+          onPageSizeChange: () => undefined,
+        }))
+      })
+    }
+
+    renderPage(0, true)
+    expect(onPageChange).not.toHaveBeenCalled()
+
+    renderPage(0, false, new Error('请求失败'))
+    expect(onPageChange).not.toHaveBeenCalled()
+
+    renderPage(43, false)
+    expect(onPageChange).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('第 3 / 5 页')
+
+    renderPage(20, false)
+    expect(onPageChange).toHaveBeenCalledExactlyOnceWith(2)
+  })
+
   it('shows column visibility controls for hideable server columns', async () => {
     type Row = {
       email: string
