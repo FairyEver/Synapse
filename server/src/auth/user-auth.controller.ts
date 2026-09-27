@@ -114,6 +114,20 @@ export class UserAuthController {
 
   @UseGuards(UserAuthGuard)
   @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Header("Cache-Control", "no-store")
+  @Post("/remote-web-session")
+  remoteWebSession(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const { refreshToken } = parseBody(refreshSchema, body, "登录请求无效。")
+    return this.auth.issueRemoteWebSession({
+      userId: request.user!.id,
+      refreshToken,
+      bearerPresent: /^Bearer\s+\S+$/i.test(request.headers.authorization ?? ""),
+      ipAddress: readRequestIp(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post("/desktop/authorize")
   authorizeDesktop(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const input = parseBody(desktopAuthorizeSchema, body, "登录请求无效。")

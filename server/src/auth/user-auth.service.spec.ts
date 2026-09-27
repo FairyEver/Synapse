@@ -562,6 +562,14 @@ describe("UserAuthService", () => {
       where: { sessionId: "session-1", revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     })
+    expect(prisma.__tx.userSession.updateMany).toHaveBeenCalledWith({
+      where: { sourceSessionId: "session-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    })
+    expect(prisma.__tx.userSessionRefreshToken.updateMany).toHaveBeenCalledWith({
+      where: { session: { sourceSessionId: "session-1" }, revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    })
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "u@example.com",
       action: "user.logout.success",
@@ -569,6 +577,61 @@ describe("UserAuthService", () => {
       targetId: "user-1",
       ipAddress: "203.0.113.25",
     })
+  })
+
+  it("issues a web cookie credential only for the current active mobile session", async () => {
+    const prisma = createPrismaMock()
+    const expiresAt = new Date(Date.now() + 60_000)
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      replacedAt: null,
+      revokedAt: null,
+      expiresAt,
+      session: {
+        id: "mobile-session",
+        userId: "user-1",
+        revokedAt: null,
+        expiresAt,
+        user: { email: "u@example.com" },
+      },
+    })
+    const service = createService(prisma)
+    const input = { userId: "user-1", refreshToken: "mobile-refresh", bearerPresent: true, ipAddress: "127.0.0.1" }
+
+    await expect(service.issueRemoteWebSession({ ...input, userId: "other-user" }))
+      .rejects.toThrow(UnauthorizedException)
+    await expect(service.issueRemoteWebSession({ ...input, bearerPresent: false }))
+      .rejects.toThrow(UnauthorizedException)
+    expect(prisma.userSession.create).not.toHaveBeenCalled()
+
+    const web = await service.issueRemoteWebSession(input)
+    expect(web).toEqual({ token: expect.any(String), userId: "user-1", expiresAt })
+    expect(prisma.userSession.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        sourceSessionId: "mobile-session",
+        refreshTokenHash: hashToken(web.token),
+        expiresAt,
+      },
+    })
+  })
+
+  it("rejects a derived web session after its mobile source is revoked", async () => {
+    const prisma = createPrismaMock()
+    const expiresAt = new Date(Date.now() + 60_000)
+    prisma.userSessionRefreshToken.findUnique.mockResolvedValue({
+      replacedAt: null,
+      revokedAt: null,
+      expiresAt,
+      session: {
+        id: "web-session", sourceSessionId: "mobile-session", revokedAt: null, expiresAt,
+        user: { id: "user-1", status: "active" },
+      },
+    })
+    prisma.userSession.findUnique.mockResolvedValue({ userId: "user-1", revokedAt: new Date(), expiresAt })
+    const service = createService(prisma)
+
+    await expect(service.verifyWebSession("web-cookie")).resolves.toBeNull()
+    expect(prisma.userSession.update).not.toHaveBeenCalled()
   })
 
   it("keeps logout successful when success audit persistence fails", async () => {

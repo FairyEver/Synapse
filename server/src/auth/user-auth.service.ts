@@ -376,6 +376,44 @@ export class UserAuthService {
     return { ...session, user: { id: user.id, email: user.email, handle: user.handle } }
   }
 
+  async issueRemoteWebSession(input: {
+    readonly userId: string
+    readonly refreshToken: string
+    readonly bearerPresent: boolean
+    readonly ipAddress: string
+  }): Promise<{ token: string; expiresAt: Date; userId: string }> {
+    if (!input.bearerPresent) throw new UnauthorizedException("未登录或登录已过期。")
+    const source = await this.prisma.userSessionRefreshToken.findUnique({
+      where: { refreshTokenHash: hashToken(input.refreshToken) },
+      select: {
+        replacedAt: true,
+        revokedAt: true,
+        expiresAt: true,
+        session: {
+          select: {
+            id: true, userId: true, revokedAt: true, expiresAt: true,
+            user: { select: { email: true } },
+          },
+        },
+      },
+    })
+    const now = new Date()
+    if (
+      !source || source.replacedAt || source.revokedAt || source.expiresAt <= now ||
+      source.session.revokedAt || source.session.expiresAt <= now ||
+      source.session.userId !== input.userId
+    ) throw new UnauthorizedException("未登录或登录已过期。")
+
+    const web = await this.issueWebSession({ id: input.userId }, source.session.id, source.session.expiresAt)
+    await this.recordUserAuthSuccessAuditSafely({
+      adminEmail: source.session.user.email,
+      action: "user.remote_web_login.success",
+      targetId: input.userId,
+      ipAddress: input.ipAddress,
+    })
+    return { token: web.token, expiresAt: web.expiresAt, userId: input.userId }
+  }
+
   async verifyWebSession(token: string): Promise<{
     readonly userId: string
     readonly sessionId: string
@@ -391,6 +429,7 @@ export class UserAuthService {
         session: {
           select: {
             id: true,
+            sourceSessionId: true,
             revokedAt: true,
             expiresAt: true,
             user: { select: { id: true, status: true } },
@@ -402,6 +441,13 @@ export class UserAuthService {
       !record || record.replacedAt || record.revokedAt || record.expiresAt <= now ||
       record.session.revokedAt || record.session.expiresAt <= now || record.session.user.status !== "active"
     ) return null
+    if (record.session.sourceSessionId) {
+      const source = await this.prisma.userSession.findUnique({
+        where: { id: record.session.sourceSessionId },
+        select: { userId: true, revokedAt: true, expiresAt: true },
+      })
+      if (!source || source.userId !== record.session.user.id || source.revokedAt || source.expiresAt <= now) return null
+    }
     await this.prisma.userSession.update({
       where: { id: record.session.id },
       data: { lastUsedAt: now },
@@ -651,6 +697,14 @@ export class UserAuthService {
         })
         await tx.userSessionRefreshToken.updateMany({
           where: { sessionId: session.id, revokedAt: null },
+          data: { revokedAt: now },
+        })
+        await tx.userSession.updateMany({
+          where: { sourceSessionId: session.id, revokedAt: null },
+          data: { revokedAt: now },
+        })
+        await tx.userSessionRefreshToken.updateMany({
+          where: { session: { sourceSessionId: session.id }, revokedAt: null },
           data: { revokedAt: now },
         })
       })
@@ -1000,13 +1054,17 @@ export class UserAuthService {
   }
 
   private async issueWebSession(
-    user: Pick<User, "id" | "email">,
+    user: Pick<User, "id">,
+    sourceSessionId?: string,
+    sourceExpiresAt?: Date,
   ): Promise<Omit<UserWebSession, "user">> {
     const token = createOpaqueToken()
-    const expiresAt = addDays(new Date(), this.options.refreshDays)
+    const naturalExpiry = addDays(new Date(), this.options.refreshDays)
+    const expiresAt = sourceExpiresAt && sourceExpiresAt < naturalExpiry ? sourceExpiresAt : naturalExpiry
     const session = await this.prisma.userSession.create({
       data: {
         userId: user.id,
+        sourceSessionId,
         refreshTokenHash: hashToken(token),
         expiresAt,
       },

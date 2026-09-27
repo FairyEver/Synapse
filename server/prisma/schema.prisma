@@ -279,6 +279,7 @@ model UserSession {
   id               String                    @id @default(cuid())
   userId           String
   user             User                      @relation(fields: [userId], references: [id])
+  sourceSessionId  String?
   refreshTokenHash String                    @unique
   expiresAt        DateTime
   revokedAt        DateTime?
@@ -287,6 +288,7 @@ model UserSession {
   refreshTokens    UserSessionRefreshToken[]
 
   @@index([userId])
+  @@index([sourceSessionId])
   @@index([expiresAt])
   @@index([revokedAt])
 }
