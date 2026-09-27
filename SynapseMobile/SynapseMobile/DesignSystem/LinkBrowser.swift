@@ -33,12 +33,17 @@ enum SynapseWebLink {
 @MainActor
 enum SynapseWebCookies {
     private static let name = "synapse_user_session"
-    private static let paths = ["/api", "/drive"]
+
+    private static func paths(for origin: URL) -> [String] {
+        let prefix = origin.path == "/" ? "" : origin.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let base = prefix.isEmpty ? "" : "/\(prefix)"
+        return [base + "/api", base + "/drive"]
+    }
 
     static func currentToken(origin: URL) async -> String? {
         let cookies = await all()
         return cookies.first {
-            matchesOrigin($0, origin: origin) && $0.path == "/api" &&
+            matchesOrigin($0, origin: origin) && $0.path == paths(for: origin)[0] &&
             ($0.expiresDate.map { $0 > Date() } ?? true)
         }?.value
     }
@@ -46,7 +51,7 @@ enum SynapseWebCookies {
     static func install(token: String, expiresAt: Date, origin: URL) async throws {
         guard origin.host != nil else { throw CocoaError(.fileReadInvalidFileName) }
         await clear(origin: origin)
-        for path in paths {
+        for path in paths(for: origin) {
             var properties: [HTTPCookiePropertyKey: Any] = [
                 .name: name,
                 .value: token,
@@ -82,7 +87,7 @@ enum SynapseWebCookies {
 
     private static func matchesOrigin(_ cookie: HTTPCookie, origin: URL) -> Bool {
         cookie.name == name && cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == origin.host &&
-        paths.contains(cookie.path)
+        paths(for: origin).contains(cookie.path)
     }
 }
 

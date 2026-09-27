@@ -16,6 +16,10 @@ struct LinkBrowserTests {
     @Test func publicShareDoesNotRequireRemoteLogin() {
         #expect(SynapseWebLink.isPublic(URL(string: "https://synapse.d2.pub/share/abc")!, origin: origin))
         #expect(!SynapseWebLink.isPublic(URL(string: "https://synapse.d2.pub/drive/items/abc")!, origin: origin))
+        let prefixed = URL(string: "https://synapse.d2.pub/service")!
+        #expect(SynapseWebLink.isTrusted(URL(string: "https://synapse.d2.pub/service/share/abc")!, origin: prefixed))
+        #expect(SynapseWebLink.isPublic(URL(string: "https://synapse.d2.pub/service/share/abc")!, origin: prefixed))
+        #expect(!SynapseWebLink.isTrusted(URL(string: "https://synapse.d2.pub/service-other/share/abc")!, origin: prefixed))
     }
 
     @Test func recognizesConsoleSignInRedirect() {

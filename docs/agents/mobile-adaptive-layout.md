@@ -51,5 +51,5 @@ Apple 依据：[Layout](https://developer.apple.com/design/human-interface-guide
 
 - iOS 云盘与会话资源共用链接浏览入口。仅与当前配置的 Synapse API 源站同协议、主机和端口的链接使用 App 内 `WKWebView`；站外链接仍使用系统浏览器。公开分享和公开资源无需网页账号登录。
 - 受保护的站内链接在加载前用 WebKit Cookie 单独查询 Console 会话，不能把原生 Bearer 带入这项检查。网页身份与当前 Remote 身份相同时直接进入；缺失或不同则展示系统弹窗，用户确认后才签发网页会话。
-- 服务端用当前原生 Bearer 和仍有效的 refresh token 双重校验，签发普通用户 Web 会话，并将它关联到原生会话。App 把会话写入 WebKit 的 HttpOnly Cookie（`/api`、`/drive`），不放入 URL 或 JavaScript。原生退出时服务端撤销关联的 Web 会话，App 清理本机 Cookie。
+- 服务端用当前原生 Bearer 和仍有效的 refresh token 双重校验，签发普通用户 Web 会话，并将它关联到原生会话。App 把会话写入 WebKit 的 HttpOnly Cookie（API 与 Drive 路径，包含自托管地址的路径前缀），不放入 URL 或 JavaScript。原生退出时服务端撤销关联的 Web 会话，App 清理本机 Cookie。
 - iPhone 使用底部确认面板；iPadOS 可缩放窗口使用系统自适应面板。加载、失败、取消和关闭都要有明确出口，动态字体与 VoiceOver 使用系统控件语义。
