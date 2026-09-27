@@ -6,14 +6,14 @@ import Foundation
 /// 「带你去哪」，不在「读它的全文」），而判断本身有了不止一个消费者 —— 通知面板里的行，
 /// 以及 `.message(id)` 深链 —— 所以它得独立出来，不能跟着那一页一起消失。
 ///
-/// 三个去向里只有第一个是应用里的位置。外部链接不是，它交给系统浏览器；没有去处的那一类
+/// 三个去向里只有第一个是应用里的位置。网址由通知面板按来源决定浏览器；没有去处的那一类
 /// 留在原地让人读，这正是取消详情页之后它们的归宿。
 enum NotificationDestination {
 
     enum Outcome: Equatable {
         /// 走 `NotificationRouter` 的路由。
         case route(NotificationRouter.Destination)
-        /// 一条外部链接，交给 `openURL`。
+        /// 一条 HTTPS 链接，交给通知面板的浏览入口。
         case externalURL(URL)
         /// 没有可去的地方。
         case none

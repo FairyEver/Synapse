@@ -12,6 +12,7 @@ struct NotificationPanel: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @State private var openedWebLink: WebLink?
 
     /// 「待处理」段里的行打开一个终端会话。
     let onOpenTerminal: (String) -> Void
@@ -34,6 +35,12 @@ struct NotificationPanel: View {
         // sheet 会盖住底层屏幕挂的那条通知覆盖层，所以这一层要自己再挂一次 ——
         // 与剪贴板 sheet 同一个做法。
         .noticeOverlay(model)
+        .fullScreenCover(item: $openedWebLink) { target in
+            LinkBrowser(url: target.url) {
+                openedWebLink = nil
+                dismiss()
+            }
+        }
     }
 
     /// 点一条通知：先标已读，再按它自己的去向往外走。
@@ -47,8 +54,12 @@ struct NotificationPanel: View {
             dismiss()
             NotificationRouter.shared.route(to: destination)
         case .externalURL(let url):
-            dismiss()
-            openURL(url)
+            if SynapseWebLink.isTrusted(url) {
+                openedWebLink = WebLink(url: url)
+            } else {
+                dismiss()
+                openURL(url)
+            }
         case .none:
             // 没有去处的那一类留在原地读 —— 收起面板等于把它从眼前拿走。
             break
