@@ -193,8 +193,8 @@ describe("AppsModule", () => {
       const firstAnimation = animationCalls[0]
       const centerAnimation = animationCalls[8]
 
-      expect(launcherItems).toHaveLength(17)
-      expect(animateElement).toHaveBeenCalledTimes(17)
+      expect(launcherItems).toHaveLength(18)
+      expect(animateElement).toHaveBeenCalledTimes(18)
       expect(firstAnimation).toBeTruthy()
       expect(centerAnimation).toBeTruthy()
       if (!firstAnimation || !centerAnimation) return

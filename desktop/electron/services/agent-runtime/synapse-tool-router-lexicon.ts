@@ -91,6 +91,19 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["分块", "chunk"],
   ["补丁", "patch"],
 
+  // ---------------- 名词：mail ----------------
+  // 站内信的正式说法是「站内信」，口语里也叫「邮件」「信件」；「信箱 / 收件箱」指装信的
+  // 那一侧。四个词都只给 `mail`，不给 `message`：`message` 段的归属见「消息」那条。
+  ["站内信", "mail"],
+  ["信箱", "mail"],
+  ["收件箱", "mail"],
+  ["邮件", "mail"],
+  ["信件", "mail"],
+  ["草稿", "draft"],
+  ["附件", "attachment"],
+  ["收件人", "recipient"],
+  ["收信人", "recipient"],
+
   // ---------------- 名词：terminal ----------------
   ["会话", "session"],
   ["标签", "workspace"],
@@ -159,6 +172,13 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   // 但检索层不认，那句话就只是写给 AI 看的空话。
   ["叫我一声", "notifier"],
   ["叫我一声", "notification"],
+  // 「给我手机发条消息」这类说法也指通知能力：只有它能把事情发到用户手机上，而整句里
+  // 唯一能当锚点的就是「手机」。
+  //
+  // 这里不给「消息」再补一个 `notification` 读法，虽然单看那句也说得通：站内信上线后
+  // `message` 段有 13 个工具顶着，补了会把「我的消息」这类查询从站内信带到通知上去。
+  // 「手机」只在"发到我手机上"这类说法里出现，误伤面小得多。
+  ["手机", "notification"],
   ["系统", "system"],
   ["问题", "problem"],
   ["反馈", "feedback"],

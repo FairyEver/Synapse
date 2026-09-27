@@ -264,6 +264,8 @@ describe("SynapseSkillService", () => {
       "extend/portal-headless/api-reference.md",
       "extend/portal-headless/index.md",
       "extend/portal-headless/scripts/client.mjs",
+      "mail/api-reference.md",
+      "mail/index.md",
       "model-price/api-reference.md",
       "model-price/index.md",
       "repository/api-reference.md",

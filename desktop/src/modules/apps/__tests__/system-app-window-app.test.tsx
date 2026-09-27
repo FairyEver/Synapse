@@ -87,6 +87,7 @@ vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     apps: {
       onContentOpenRequest: () => () => undefined,
+      onMailOpenRequest: () => () => undefined,
       onGitOpenRequest: (listener: (request: { requestId: string; repositoryId: string }) => void) => {
         mocks.gitOpenRequestListener = listener
         return () => {
