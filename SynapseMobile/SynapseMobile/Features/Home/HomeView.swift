@@ -138,6 +138,7 @@ struct HomeView: View {
             isOnline: model.connectivity == .online,
             showsSwitchAffordance: !model.desktopSwitchTargets.isEmpty
         )
+        .padding(.horizontal, 8)
     }
 
     /// 常驻的那一枚铃铛。
