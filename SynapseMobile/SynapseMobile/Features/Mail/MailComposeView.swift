@@ -24,8 +24,7 @@ struct MailComposeView: View {
     @State private var recipients: [MailPerson] = []
     @State private var unresolvedRecipientIds: [String] = []
     @State private var showCloseConfirmation = false
-    @State private var search = ""
-    @State private var candidates: [MailRecipientCandidate] = []
+    @State private var recipientPicker = false
     @State private var subject: String
     @State private var messageBody: String
     @State private var attachments: [MailAttachment]
@@ -49,21 +48,14 @@ struct MailComposeView: View {
         NavigationStack {
             Form {
                 Section("收件人") {
-                    TextField("搜索姓名或 handle", text: $search)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    ForEach(candidates) { person in
-                        Button {
-                            if !recipients.contains(where: { $0.userId == person.userId }) { recipients.append(person.person) }
-                            unresolvedRecipientIds.removeAll { $0 == person.userId }
-                            search = ""
-                            candidates = []
-                        } label: {
-                            HStack { Text(person.name); if let handle = person.handle { Spacer(); Text(handle).foregroundStyle(.secondary) } }
-                        }
-                    }
+                    Button(recipients.isEmpty ? "选择收件人" : "添加收件人", systemImage: "person.crop.circle.badge.plus") { recipientPicker = true }
                     ForEach(recipients) { person in
-                        HStack { Text(person.name); Spacer(); Button("移除", systemImage: "minus.circle") { recipients.removeAll { $0.userId == person.userId } }.labelStyle(.iconOnly) }
+                        HStack {
+                            Text(person.name)
+                            if let handle = person.handle, handle != person.name { Text(handle).foregroundStyle(.secondary) }
+                            Spacer()
+                            Button("移除 \(person.name)", systemImage: "minus.circle") { recipients.removeAll { $0.userId == person.userId } }.labelStyle(.iconOnly)
+                        }
                     }
                     if !unresolvedRecipientIds.isEmpty {
                         Text("收件人无法确认，请移除或重新搜索").foregroundStyle(.red)
@@ -97,7 +89,10 @@ struct MailComposeView: View {
                 Button("继续编辑", role: .cancel) { }
             }
             .task { await restoreRecipients() }
-            .task(id: search) { await findRecipients() }
+            .sheet(isPresented: $recipientPicker) {
+                MailRecipientPicker(recipients: $recipients, unresolvedRecipientIds: $unresolvedRecipientIds)
+                    .presentationDetents([.large])
+            }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result { Task { await addFiles(urls) } }
                 if case .failure(let failure) = result { error = failure.localizedDescription }
@@ -127,15 +122,7 @@ struct MailComposeView: View {
                 else { unresolved.append(id) }
             } catch { unresolved.append(id); self.error = error.localizedDescription }
         }
-        unresolvedRecipientIds = unresolved
-    }
-
-    private func findRecipients() async {
-        guard !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { candidates = []; return }
-        try? await Task.sleep(for: .milliseconds(250))
-        guard !Task.isCancelled else { return }
-        do { candidates = try await model.mailRecipients(query: search).items }
-        catch { self.error = error.localizedDescription }
+        unresolvedRecipientIds = unresolved.filter { id in !recipients.contains(where: { $0.userId == id }) }
     }
 
     private func addFiles(_ urls: [URL]) async {
@@ -189,6 +176,122 @@ struct MailComposeView: View {
             if let apiError = error as? APIError, apiError.status == 409 { pendingSend = nil }
             self.error = error.localizedDescription
         }
+    }
+}
+
+private struct MailRecipientPicker: View {
+    @Environment(SynapseAppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Binding var recipients: [MailPerson]
+    @Binding var unresolvedRecipientIds: [String]
+    @State private var search = ""
+    @State private var people: [MailRecipientCandidate] = []
+    @State private var nextCursor: String?
+    @State private var loading = false
+    @State private var loadingMore = false
+    @State private var selectionLimitReached = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if loading && people.isEmpty { ProgressView() }
+                ForEach(people) { person in
+                    Button { toggle(person) } label: {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(person.name)
+                                if let handle = person.handle, handle != person.name {
+                                    Text(handle).font(.subheadline).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if recipients.contains(where: { $0.userId == person.userId }) {
+                                Image(systemName: "checkmark.circle.fill")
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityValue(recipients.contains(where: { $0.userId == person.userId }) ? "已选" : "未选")
+                }
+                if let nextCursor {
+                    Button("加载更多") { Task { await loadMore(after: nextCursor) } }
+                        .disabled(loadingMore)
+                }
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                    Button("重试") { Task { await load() } }
+                }
+                if !loading && error == nil && people.isEmpty {
+                    ContentUnavailableView(search.isEmpty ? "没有可选成员" : "没有匹配的成员", systemImage: "person.crop.circle")
+                }
+            }
+            .searchable(text: $search, prompt: "搜索姓名或账号")
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .navigationTitle("选择收件人")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(recipients.isEmpty ? "完成" : "完成（\(recipients.count)）") { dismiss() }
+                }
+            }
+            .task(id: search) { await load() }
+            .alert("最多选择 50 位收件人", isPresented: $selectionLimitReached) {
+                Button("知道了", role: .cancel) { }
+            }
+        }
+    }
+
+    private func toggle(_ person: MailRecipientCandidate) {
+        if recipients.contains(where: { $0.userId == person.userId }) {
+            recipients.removeAll { $0.userId == person.userId }
+        } else if recipients.count + unresolvedRecipientIds.filter({ $0 != person.userId }).count < 50 {
+            recipients.append(person.person)
+            unresolvedRecipientIds.removeAll { $0 == person.userId }
+        } else {
+            selectionLimitReached = true
+        }
+    }
+
+    private func load() async {
+        people = []
+        nextCursor = nil
+        error = nil
+        loading = true
+        loadingMore = false
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            do { try await Task.sleep(for: .milliseconds(250)) }
+            catch { return }
+        }
+        do {
+            let page = try await model.mailRecipients(query: query)
+            guard !Task.isCancelled, search.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+            people = page.items
+            nextCursor = page.nextCursor
+        } catch {
+            guard !Task.isCancelled, search.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+
+    private func loadMore(after cursor: String) async {
+        guard !loadingMore else { return }
+        loadingMore = true
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let page = try await model.mailRecipients(query: query, cursor: cursor)
+            guard search.trimmingCharacters(in: .whitespacesAndNewlines) == query, nextCursor == cursor else { return }
+            people.append(contentsOf: page.items)
+            nextCursor = page.nextCursor
+        } catch {
+            guard search.trimmingCharacters(in: .whitespacesAndNewlines) == query, nextCursor == cursor else { return }
+            self.error = error.localizedDescription
+        }
+        loadingMore = false
     }
 }
 

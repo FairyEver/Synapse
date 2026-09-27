@@ -30,7 +30,7 @@ export type MailOperation =
   | { kind: "send"; previewId: string; clientRequestId: string }
 
 export type MailOperationResult = {
-  recipientSearch: { items: (MailPerson & { matchKind: "exact" | "prefix" | "partial" | "fuzzy"; similarity: number; sharedTeamIds: string[] })[] }
+  recipientSearch: { items: (MailPerson & { matchKind: "exact" | "prefix" | "partial" | "fuzzy" | "browse"; similarity: number; sharedTeamIds: string[] })[] }
   messageList: { items: MailSummary[]; nextCursor: string | null }
   messageGet: MailMessage
   messageSetRead: { read: boolean }

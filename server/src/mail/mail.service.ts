@@ -44,21 +44,35 @@ export class MailService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async searchRecipients(userId: string, query: string) {
+  async searchRecipients(userId: string, query: string, cursor?: string) {
     const term = query.trim().toLocaleLowerCase()
-    if (!term || term.length > 100) throw new BadRequestException("请输入收件人姓名或 handle。")
+    if (term.length > 100) throw new BadRequestException("收件人搜索词过长。")
     const memberships = await this.prisma.teamMembership.findMany({ where: { userId }, select: { teamId: true } })
     const teamIds = memberships.map((row) => row.teamId)
-    if (!teamIds.length) return { items: [] }
+    if (!teamIds.length) return { items: [], nextCursor: null }
+    const where = { id: { not: userId }, status: "active" as const, teamMemberships: { some: { teamId: { in: teamIds } } } }
+    const select = { id: true, nickname: true, handle: true, teamMemberships: { where: { teamId: { in: teamIds } }, select: { teamId: true } } } as const
+    if (!term) {
+      if (cursor && !await this.prisma.user.findFirst({ where: { AND: [where, { id: cursor }] }, select: { id: true } })) throw new BadRequestException("无效的收件人分页位置。")
+      const users = await this.prisma.user.findMany({
+        where,
+        select,
+        orderBy: [{ nickname: "asc" }, { handle: "asc" }, { id: "asc" }],
+        take: 51,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      })
+      const page = users.slice(0, 50)
+      return { items: page.map((user) => ({ ...exposedUser(user), matchKind: "browse", similarity: 1, sharedTeamIds: user.teamMemberships.map((row) => row.teamId) })), nextCursor: users.length > 50 ? page.at(-1)?.id ?? null : null }
+    }
     const users = await this.prisma.user.findMany({
-      where: { id: { not: userId }, status: "active", teamMemberships: { some: { teamId: { in: teamIds } } } },
-      select: { id: true, nickname: true, handle: true, teamMemberships: { where: { teamId: { in: teamIds } }, select: { teamId: true } } },
+      where,
+      select,
     })
     const items = users.map((user) => {
       const match = recipientMatch(term, [user.id, user.nickname, user.handle])
       return match ? { ...exposedUser(user), ...match, sharedTeamIds: user.teamMemberships.map((row) => row.teamId) } : null
     }).filter((item): item is NonNullable<typeof item> => item !== null).sort((a, b) => b.similarity - a.similarity || (a.nickname ?? a.handle ?? "").localeCompare(b.nickname ?? b.handle ?? ""))
-    return { items: items.slice(0, 50) }
+    return { items: items.slice(0, 50), nextCursor: null }
   }
 
   async prepareLocalAttachment(userId: string, fileName: string, mimeType: string | null, body: Buffer) {

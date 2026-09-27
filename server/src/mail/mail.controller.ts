@@ -26,8 +26,8 @@ export class MailController {
   constructor(private readonly mail: MailService) {}
 
   @Get("recipients")
-  searchRecipients(@Req() request: AuthenticatedUserRequest, @Query("query") query?: string) {
-    return this.mail.searchRecipients(userId(request), query ?? "")
+  searchRecipients(@Req() request: AuthenticatedUserRequest, @Query("query") query?: string, @Query("cursor") cursor?: string) {
+    return this.mail.searchRecipients(userId(request), query ?? "", cursor)
   }
 
   @Get("messages")

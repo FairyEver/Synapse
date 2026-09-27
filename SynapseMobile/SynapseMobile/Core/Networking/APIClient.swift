@@ -1201,8 +1201,10 @@ actor APIClient {
         return components.percentEncodedQuery.map { "?" + $0 } ?? ""
     }
 
-    func mailRecipients(query: String) async throws -> MailRecipientPage {
-        try await send(path: "/mail/recipients" + mailQuery([URLQueryItem(name: "query", value: query)]), method: "GET")
+    func mailRecipients(query: String, cursor: String? = nil) async throws -> MailRecipientPage {
+        var items = [URLQueryItem(name: "query", value: query)]
+        if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await send(path: "/mail/recipients" + mailQuery(items), method: "GET")
     }
 
     func mailMessages(box: String, query: String = "", cursor: String? = nil) async throws -> MailMessagePage {

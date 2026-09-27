@@ -37,7 +37,10 @@ describe("internal mail HTTP routes", () => {
     const { app, mail } = await fixture()
     try {
       await request(app.getHttpServer()).get("/api/mail/recipients?query=%E7%8E%8B%E6%98%8E").expect(200)
-      expect(mail.searchRecipients).toHaveBeenCalledWith("sender", "王明")
+      expect(mail.searchRecipients).toHaveBeenCalledWith("sender", "王明", undefined)
+
+      await request(app.getHttpServer()).get("/api/mail/recipients?query=&cursor=person-49").expect(200)
+      expect(mail.searchRecipients).toHaveBeenCalledWith("sender", "", "person-49")
 
       await request(app.getHttpServer()).post("/api/mail/send-previews")
         .send({ recipientIds: ["teammate"], subject: "报告", body: "完整正文", attachmentIds: [] })

@@ -20,7 +20,7 @@ struct MailRecipientCandidate: Decodable, Identifiable {
     var person: MailPerson { MailPerson(userId: userId, nickname: nickname, handle: handle) }
 }
 
-struct MailRecipientPage: Decodable { let items: [MailRecipientCandidate] }
+struct MailRecipientPage: Decodable { let items: [MailRecipientCandidate]; let nextCursor: String? }
 
 struct MailAttachment: Decodable, Identifiable {
     let attachmentId: String

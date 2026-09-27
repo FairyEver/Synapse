@@ -7,7 +7,7 @@ function harness() {
   const teammate = { id: "teammate", nickname: "王明", handle: "wangming", teamMemberships: [{ teamId: "team-1" }] }
   const prisma = {
     teamMembership: { findMany: vi.fn(async () => [{ teamId: "team-1" }]) },
-    user: { findMany: vi.fn(async (_query?: { take?: number }) => [sender, teammate]), count: vi.fn(async () => 2) },
+    user: { findMany: vi.fn(async (_query?: { take?: number }) => [sender, teammate]), findFirst: vi.fn(async () => teammate), count: vi.fn(async () => 2) },
     team: { findFirst: vi.fn(async () => ({ id: "team-1", name: "团队一" })) },
     mailAttachment: { findMany: vi.fn(async () => []), count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })), deleteMany: vi.fn(async () => ({ count: 1 })) },
     mailDraft: { findMany: vi.fn(async () => []), create: vi.fn(async () => ({ id: "draft-1" })) },
@@ -48,6 +48,27 @@ describe("MailService", () => {
     prisma.user.findMany.mockImplementationOnce(async (query?: { take?: number }) => [...users, teammate].slice(0, query?.take ?? Infinity) as never)
     const result = await service.searchRecipients("sender", "王明")
     expect(result.items[0]).toMatchObject({ userId: "teammate", matchKind: "exact" })
+  })
+
+  it("browses only active teammates in stable pages without a search term", async () => {
+    const { service, prisma } = harness()
+    const users = Array.from({ length: 51 }, (_, index) => ({ id: `person-${index}`, nickname: `成员${index}`, handle: `member${index}`, teamMemberships: [{ teamId: "team-1" }] }))
+    prisma.user.findMany.mockResolvedValueOnce(users as never).mockResolvedValueOnce(users.slice(50) as never)
+    const first = await service.searchRecipients("sender", "")
+    expect(first.items).toHaveLength(50)
+    expect(first.nextCursor).toBe("person-49")
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: { not: "sender" }, status: "active", teamMemberships: { some: { teamId: { in: ["team-1"] } } } }), take: 51 }))
+    const second = await service.searchRecipients("sender", "", first.nextCursor!)
+    expect(second.items.map((item) => item.userId)).toEqual(["person-50"])
+    expect(second.nextCursor).toBeNull()
+    expect(prisma.user.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: { id: "person-49" }, skip: 1 }))
+  })
+
+  it("rejects a browse cursor outside the sender's visible teammates", async () => {
+    const { service, prisma } = harness()
+    prisma.user.findFirst.mockResolvedValueOnce(null as never)
+    await expect(service.searchRecipients("sender", "", "outsider")).rejects.toThrow("无效的收件人分页位置")
+    expect(prisma.user.findMany).not.toHaveBeenCalled()
   })
 
   it("previews a shared-team recipient and exposes the complete fixed content", async () => {

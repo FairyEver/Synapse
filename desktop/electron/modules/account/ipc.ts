@@ -1118,7 +1118,7 @@ export const accountIpcModule: IpcModule = {
     mailRecipientList: {
       kind: "invoke", operationId: "app.mail.recipient.list",
       request: mailRecipientListInputSchema,
-      response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })) }),
+      response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy", "browse"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })) }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "recipientSearch", ...mailRecipientListInputSchema.parse(input) }),
     },
     mailMessageList: {

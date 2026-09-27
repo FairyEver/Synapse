@@ -77,7 +77,7 @@
             <div class="mt-5 border-t border-neutral-200 pt-5">
               <h4 class="text-sm font-semibold">关键路径</h4>
               <ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700">
-                <li>1. 搜索并逐个选择收件人；只显示与自己同团队的有效用户。</li>
+                <li>1. 从同团队成员列表浏览或搜索，逐个选择一位或多位收件人。</li>
                 <li>2. 编辑主题、正文与附件；桌面和手机共用服务端草稿。</li>
                 <li>3. 发送前服务端再次核验团队成员关系和附件版本。</li>
                 <li>4. 每位收件人拥有自己的未读、删除状态，发件人可见已发送。</li>
@@ -135,7 +135,7 @@
         <p class="mt-2 max-w-4xl text-sm leading-6 text-neutral-700">人的写信入口与 AI 的对话直发是两条路径，共用服务端权限与发送事务。AI 不打开桌面或手机写信页。表内接口与工具均为待实现契约，当前 SY 还没有站内信 API。</p>
         <div class="mt-5 overflow-x-auto"><table class="w-full min-w-180 border-collapse text-left text-sm"><thead><tr class="border-b border-neutral-300"><th scope="col" class="px-3 py-3 font-semibold">能力</th><th scope="col" class="px-3 py-3 font-semibold">人：桌面 / iOS</th><th scope="col" class="px-3 py-3 font-semibold">AI：MCP</th><th scope="col" class="px-3 py-3 font-semibold">服务端结果</th></tr></thead><tbody class="divide-y divide-neutral-200 text-neutral-700">
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">进入信箱</th><td class="px-3 py-3 align-top">桌面启动台打开独立应用；手机主页「功能 → 站内信」。</td><td class="px-3 py-3 align-top"><code>message_list</code></td><td class="px-3 py-3 align-top">按当前账号分页返回收到/已发送；无团队仍可看历史。</td></tr>
-          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">找人</th><td class="px-3 py-3 align-top">写信 → 搜姓名/handle → 逐个选人。</td><td class="px-3 py-3 align-top"><code>recipient_search</code>；精确唯一匹配可暂定，模糊或重名时列出候选让用户选。</td><td class="px-3 py-3 align-top">只返回与发件人同团队的有效其他成员及 userId、handle、共同团队；整封信再校验共同团队交集。</td></tr>
+          <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">找人</th><td class="px-3 py-3 align-top">手机写信 → 浏览同团队成员或搜姓名/handle → 逐个选人；桌面写信沿用搜索。</td><td class="px-3 py-3 align-top"><code>recipient_search</code>；精确唯一匹配可暂定，模糊或重名时列出候选让用户选。</td><td class="px-3 py-3 align-top">只返回与发件人同团队的有效其他成员及 userId、handle、共同团队；整封信再校验共同团队交集。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">写信与草稿</th><td class="px-3 py-3 align-top">写信 → 编辑；草稿入口恢复，离开前自动保存。</td><td class="px-3 py-3 align-top"><code>draft_save/list/get/delete</code></td><td class="px-3 py-3 align-top">按账号持久化，版本冲突返回最新版本，不覆盖另一端的编辑。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">附文件</th><td class="px-3 py-3 align-top">从本机/文件 App 选文件，或从本人云盘选择。</td><td class="px-3 py-3 align-top">先用现有云盘工具保存生成文档，再调 <code>attachment_prepare</code>。</td><td class="px-3 py-3 align-top">返回仅发件人可用的附件令牌，发送时复制固定版本。</td></tr>
           <tr><th scope="row" class="px-3 py-3 align-top font-medium text-neutral-950">发送</th><td class="px-3 py-3 align-top">写信页点击「发送」。</td><td class="px-3 py-3 align-top"><code>send_preview</code> 返回固定待发内容；在对话中展示收件人、主题、完整正文及附件，得到用户明确确认后才调 <code>send</code>。</td><td class="px-3 py-3 align-top">校验预览与提交内容一致，事务内重验全部成员和附件；全成或全败；按幂等键返回信件 ID。</td></tr>
