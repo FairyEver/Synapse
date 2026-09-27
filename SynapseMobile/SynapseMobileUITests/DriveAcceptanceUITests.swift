@@ -167,10 +167,15 @@ final class DriveAcceptanceUITests: XCTestCase {
     /// `docs/agents/mobile-adaptive-layout.md` 的导航结构那一节，守卫在
     /// `Features/Drive/DriveBrowserList.swift` 的 `refreshableIfCompact`）。
     /// 真实用户没有谁在拆页的那一帧里查控件树，所以这一停是驱动自己让路，不是产品行为。
+    /// **走底栏那一格「主页」，不走顶栏。**
+    ///
+    /// 2026-09-27 起云盘顶栏前缘只剩一枚返回键，而且只在**根层**给（往里下钻是系统那枚，
+    /// 去处是上一个文件夹）。「从哪一层都能一下回主页」这件事因此归底栏 —— 这一枚驱动器
+    /// 跟着改走底栏，深浅两层都是同一个去处，也不再依赖「现在在栈的哪一层」。
     private func backHome(_ app: XCUIApplication) {
-        let back = app.buttons["drive-browser-back-home"]
-        XCTAssertTrue(back.waitForExistence(timeout: 15), "云盘这一屏没有返回键")
-        back.tap()
+        let homeTab = app.buttons["主页"].firstMatch
+        XCTAssertTrue(homeTab.waitForExistence(timeout: 15), "底栏上没有「主页」")
+        homeTab.tap()
         sleep(8)
         XCTAssertTrue(app.buttons["home-feature-云盘"].waitForExistence(timeout: 20), "没有回到主页")
     }
@@ -732,14 +737,64 @@ final class DriveAcceptanceUITests: XCTestCase {
         XCTAssertTrue(waitForHittable(row, timeout: 15), "文件那一行点不着")
         row.tap()
 
-        let backHome = app.buttons["drive-browser-back-home"]
+        // 认这一屏用一个**在哪一层都在**的东西：底栏那一枚「返回主页」只在栈空着时才有
+        // （2026-09-27 起），而这里已经下钻了一层，拿它当探针会是一条永远成立的空断言。
+        // 顶栏那一枚「更多」每一页都有，盖住了就够不着 —— 判据与之前是同一条。
+        let driveMenu = app.buttons["更多"]
+        XCTAssertTrue(driveMenu.waitForExistence(timeout: 15), "云盘这一屏没有「更多」")
         let deadline = Date().addingTimeInterval(20)
-        while backHome.isHittable, Date() < deadline { usleep(200_000) }
+        while driveMenu.isHittable, Date() < deadline { usleep(200_000) }
         XCTAssertFalse(
-            backHome.isHittable,
+            driveMenu.isHittable,
             "点开一个文件之后这一屏还露在外面，说明浏览器没有打开"
         )
         capture(app, name: "99-已经交给浏览器")
+    }
+
+    // MARK: - 顶栏前缘永远只有一枚往回走的键
+
+    /// 云盘顶栏前缘**永远只有一枚**「往回走」，它去的地方随层变：
+    ///
+    /// - 根层：这一屏自己那一枚，按下去回主页（压在底栏「主页」那一格上，底栏任何一层都在）。
+    /// - 下钻之后：系统那一枚，按下去回**上一个文件夹**；这一屏自己那枚不再出现。
+    ///
+    /// 2026-09-27 之前是「根层一枚 `house`；深层 `chevron` + `house` 并肩两枚」——同一格上
+    /// 立着两个都叫「往回走」的键，而一个回上一层、一个把整屏掀掉，从图标上分不出来。这条
+    /// 用例就是钉住那件事不再回来。
+    func test14TheLeadingSlotHasOneWayBack() throws {
+        let app = launchAndSignIn()
+        openDrive(app)
+        waitFor(app, "工作")
+
+        XCTAssertTrue(
+            app.buttons["drive-browser-back-home"].waitForExistence(timeout: 15),
+            "云盘根层顶栏没有返回键"
+        )
+        capture(app, name: "A0-根层的一枚")
+
+        tap(app, "工作")
+        waitFor(app, "周报.md")
+        XCTAssertFalse(
+            app.buttons["drive-browser-back-home"].exists,
+            "下钻之后这一屏自己那枚还在，和系统那枚并成两枚"
+        )
+        capture(app, name: "A1-下钻之后")
+
+        let bar = app.navigationBars.firstMatch
+        let first = bar.buttons.element(boundBy: 0)
+        XCTAssertTrue(first.exists, "下钻之后顶栏上没有任何键")
+        XCTAssertLessThan(
+            first.frame.midX,
+            app.windows.firstMatch.frame.midX,
+            "顶栏第一枚不在前缘，说明系统那枚返回键没在最左边"
+        )
+        first.tap()
+        waitFor(app, "项目")
+        XCTAssertTrue(
+            app.buttons["drive-browser-back-home"].waitForExistence(timeout: 15),
+            "系统返回键退回根层之后，这一屏自己那枚没有回来"
+        )
+        capture(app, name: "A2-退回根层")
     }
 
     // MARK: - 第十条：从推入的页面（回收站）直接回主页

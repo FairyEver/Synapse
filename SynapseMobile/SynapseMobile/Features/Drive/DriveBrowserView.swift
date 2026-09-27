@@ -14,7 +14,8 @@ import UIKit
 /// —— 把栈与 store 的层对上、打开链接，以及那几张对话框（`···` 菜单与行菜单开的是同一批，
 /// 所以由这里统一持有）。
 struct DriveBrowserView: View {
-    /// 「返回主页」。回到哪儿由调用方决定 —— 这一屏不知道自己在哪个 Tab 里。
+    /// 顶栏前缘那一枚返回键按下去之后去哪儿 —— 根层才会用到它（往里走是系统那枚）。
+    /// 回到哪儿由调用方决定 —— 这一屏不知道自己在哪个 Tab 里。
     let onExit: () -> Void
 
     @Environment(SynapseAppModel.self) private var model
@@ -239,15 +240,29 @@ struct DriveBrowserView: View {
 
     // MARK: - 工具栏
 
+    /// 顶栏。**前缘永远只有一枚返回键，不会出现两枚。**
+    ///
+    /// 只在这一屏自己的栈**空着**时给：那一刻系统不画返回键（栈根没有上一页），这一枚就是
+    /// 全屏唯一的一个「往回走」，通了就回主页 —— 与录音页那一枚同一个形状、同一个说法
+    /// （`RootView.recordingsPage`）。
+    ///
+    /// 往里下钻之后**不再给**：系统自己会画一枚返回键，它的去处是上一个文件夹。两枚一起摆
+    /// 出来时，同一格上并肩立着两个「往回走」的键而它们去到的地方不一样 —— 一个回上一层、
+    /// 一个直接掀掉整屏，用户没法从图标上分出哪个是哪个（2026-09-27 之前那一版就是这样：
+    /// 根层一枚 `house`，深层是 `chevron` + `house` 两枚）。
+    ///
+    /// 「快速回主页」不再由顶栏承担：底栏那一格「主页」任何时候都在，从哪一层都能一下回去。
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button(action: onExit) {
-                Image(systemName: "house")
-                    .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+        if path.isEmpty {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: onExit) {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                }
+                .accessibilityLabel("主页")
+                .accessibilityIdentifier("drive-browser-back-home")
             }
-            .accessibilityLabel("返回主页")
-            .accessibilityIdentifier("drive-browser-back-home")
         }
         ToolbarItem(placement: .topBarTrailing) {
             menu

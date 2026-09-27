@@ -280,8 +280,9 @@ struct RootView: View {
 
     /// 云盘页：和录音页同构，整页归这一格所有（见 `homeTab`）。
     ///
-    /// 它自己带分栏（列表 + 预览）与那枚「返回主页」，所以这里只把它摆出来，**不放进任何
-    /// `NavigationStack`** —— 进去以后文件夹下钻、回收站、分享管理都在它自己那条栈上。
+    /// 它自己带那条 `NavigationStack` 与根层那枚返回键（往里走是系统那枚），所以这里只把它
+    /// 摆出来，**不放进任何 `NavigationStack`** —— 进去以后文件夹下钻、回收站、分享管理
+    /// 都在它自己那条栈上。
     private var drivePage: some View {
         DriveBrowserView(onExit: { popToRoot(.home) })
     }
