@@ -498,7 +498,6 @@ export class AccountService {
       case "draftCreate": return await json("POST", "/drafts", operation.content)
       case "draftUpdate": return await json("PATCH", `/drafts/${id(operation.draftId)}`, { ...operation.content, baseVersion: operation.baseVersion })
       case "draftDelete": return await json("DELETE", `/drafts/${id(operation.draftId)}`)
-      case "attachmentPrepare": return await json("POST", "/attachments/prepare", { driveItemId: operation.driveItemId, versionId: operation.versionId })
       case "attachmentLocal": {
         const info = await stat(operation.filePath)
         if (!info.isFile() || info.size > 20 * 1024 * 1024 || !info.size) throw new Error("附件必须是 20 MB 以内的文件。")

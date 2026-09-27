@@ -1414,7 +1414,7 @@ export type SynapseBridge = {
       delete: (input: { draftId: string }) => Promise<import("./mail").MailOperationResult["draftDelete"]>
     }
     attachment: {
-      create: (input: { driveItemId: string; versionId?: string }) => Promise<import("./mail").MailOperationResult["attachmentPrepare"]>
+      create: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
       localCreate: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
       downloadFile: (input: { messageId: string; attachmentId: string; outputPath?: string }) => Promise<import("./mail").MailOperationResult["attachmentDownload"]>
     }

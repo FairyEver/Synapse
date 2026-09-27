@@ -1251,11 +1251,6 @@ actor APIClient {
         let _: MailDeleteResult = try await send(path: "/mail/drafts/\(escaped(id))", method: "DELETE")
     }
 
-    func mailPrepareDriveAttachment(itemId: String) async throws -> MailPreparedAttachment {
-        struct Body: Encodable { let driveItemId: String }
-        return try await send(path: "/mail/attachments/prepare", method: "POST", body: Body(driveItemId: itemId))
-    }
-
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }

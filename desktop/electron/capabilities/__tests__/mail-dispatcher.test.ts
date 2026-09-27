@@ -20,4 +20,17 @@ describe("mail capability dispatcher", () => {
     await expect(dispatcher.dispatch("app.mail.attachment.download_file", { messageId: "message-1", attachmentId: "attachment-1", outputPath: "/tmp/mail.txt" }, { source: "api" })).rejects.toThrow("denied")
     expect(executeMailOperation).not.toHaveBeenCalled()
   })
+
+  it("uploads local files and rejects Drive attachment parameters", async () => {
+    const executeMailOperation = vi.fn(async () => ({ attachmentId: "attachment-1" }))
+    const permissionGuard = { check: vi.fn(async ({ action }: { action: string }) => ({ allowed: action !== "fs.read.outside-userdata", reason: "denied" })) }
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation }, permissionGuard: permissionGuard as never })
+    await expect(dispatcher.dispatch("app.mail.attachment.create", { driveItemId: "drive-file" }, { source: "api" })).rejects.toThrow()
+    await expect(dispatcher.dispatch("app.mail.attachment.create", { filePath: "relative.txt" }, { source: "api" })).rejects.toThrow("absolute")
+    await expect(dispatcher.dispatch("app.mail.attachment.create", { filePath: "/tmp/local.txt" }, { source: "api" })).rejects.toThrow("denied")
+    expect(executeMailOperation).not.toHaveBeenCalled()
+    permissionGuard.check.mockResolvedValue({ allowed: true, reason: "allowed" })
+    await expect(dispatcher.dispatch("app.mail.attachment.create", { filePath: "/tmp/local.txt" }, { source: "api" })).resolves.toMatchObject({ ok: true })
+    expect(executeMailOperation).toHaveBeenCalledWith({ kind: "attachmentLocal", filePath: "/tmp/local.txt" })
+  })
 })

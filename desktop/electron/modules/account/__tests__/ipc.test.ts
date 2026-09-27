@@ -178,6 +178,19 @@ describe("accountIpcModule", () => {
     expect(accountService.executeMailOperation).toHaveBeenCalledWith({ kind: "messageList", box: "inbox" })
   })
 
+  it("accepts only a local file path when creating a mail attachment", async () => {
+    const method = accountIpcModule.methods.mailAttachmentCreate
+    assertParseableSchema(method.request)
+    expect(method.request.parse({ filePath: "/tmp/report.txt" })).toEqual({ filePath: "/tmp/report.txt" })
+    expect(() => method.request.parse({ driveItemId: "drive-file" })).toThrow()
+    const check = vi.fn(async () => ({ allowed: true }))
+    const record = vi.fn()
+    const ctx = { resolve: (key: string) => key === "core.permission-guard" ? { check } : { record } } as unknown as IpcHandlerContext
+    await method.handler(ctx, { filePath: "/tmp/report.txt" })
+    expect(check).toHaveBeenCalledWith(expect.objectContaining({ action: "fs.read.outside-userdata", resource: "/tmp/report.txt" }))
+    expect(accountService.executeMailOperation).toHaveBeenLastCalledWith({ kind: "attachmentLocal", filePath: "/tmp/report.txt" })
+  })
+
   it("validates account webhook responses", () => {
     const responseSchema = accountIpcModule.methods.listWebhooks.response
     expect(responseSchema).toBeDefined()

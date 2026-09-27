@@ -16,7 +16,6 @@ export async function mailRequest<K extends MailOperation["kind"]>(operation: Ex
     case "draftCreate": result = await bridge.mail.draft.create({ content: request.content }); break
     case "draftUpdate": result = await bridge.mail.draft.update({ draftId: request.draftId, baseVersion: request.baseVersion, content: request.content }); break
     case "draftDelete": result = await bridge.mail.draft.delete({ draftId: request.draftId }); break
-    case "attachmentPrepare": result = await bridge.mail.attachment.create({ driveItemId: request.driveItemId, versionId: request.versionId }); break
     case "attachmentLocal": result = await bridge.mail.attachment.localCreate({ filePath: request.filePath }); break
     case "attachmentDownload": result = await bridge.mail.attachment.downloadFile({ messageId: request.messageId, attachmentId: request.attachmentId, outputPath: request.outputPath }); break
     case "sendPreview": result = await bridge.mail.send.preview({ content: request.content }); break

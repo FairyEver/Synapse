@@ -9,7 +9,7 @@ function harness() {
     teamMembership: { findMany: vi.fn(async () => [{ teamId: "team-1" }]) },
     user: { findMany: vi.fn(async (_query?: { take?: number }) => [sender, teammate]), findFirst: vi.fn(async () => teammate), count: vi.fn(async () => 2) },
     team: { findFirst: vi.fn(async () => ({ id: "team-1", name: "团队一" })) },
-    mailAttachment: { findMany: vi.fn(async () => []), count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })), deleteMany: vi.fn(async () => ({ count: 1 })) },
+    mailAttachment: { create: vi.fn(async (input: { data: { fileName: string; size: bigint } }) => ({ id: "attachment-1", fileName: input.data.fileName, mimeType: "application/octet-stream", size: input.data.size })), findMany: vi.fn(async () => []), count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })), deleteMany: vi.fn(async () => ({ count: 1 })) },
     mailDraft: { findMany: vi.fn(async () => []), create: vi.fn(async () => ({ id: "draft-1" })) },
     mailStorageDeletion: { create: vi.fn(async () => ({ id: "deletion-1" })), findMany: vi.fn(async () => []), deleteMany: vi.fn(async () => ({ count: 1 })) },
     mailSendPreview: {
@@ -31,12 +31,24 @@ function harness() {
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   }
   const notifications = { create: vi.fn(async () => ({ id: "notice-1" })) }
-  const storage = { delete: vi.fn(async () => undefined) }
-  const service = new MailService(prisma as never, storage as never, {} as never, notifications as never)
+  const storage = { put: vi.fn(async () => undefined), delete: vi.fn(async () => undefined) }
+  const service = new MailService(prisma as never, storage as never, notifications as never)
   return { service, prisma, notifications, storage, sender, teammate }
 }
 
 describe("MailService", () => {
+  it("stores a directly uploaded file without a Drive source", async () => {
+    const { service, prisma, storage } = harness()
+    const body = Buffer.from("local file")
+    const result = await service.prepareLocalAttachment("sender", "report.txt", "application/octet-stream", body)
+    expect(storage.put).toHaveBeenCalledWith(expect.stringMatching(/^mail\/attachments\/[a-f0-9-]+$/u), body, "application/octet-stream")
+    expect(prisma.mailAttachment.create).toHaveBeenCalledWith({ data: {
+      ownerId: "sender", fileName: "report.txt", mimeType: "application/octet-stream", size: BigInt(body.length), storageKey: expect.stringMatching(/^mail\/attachments\/[a-f0-9-]+$/u),
+    } })
+    expect(result).toMatchObject({ attachmentId: "attachment-1", state: "ready" })
+    expect(result).not.toHaveProperty("versionId")
+  })
+
   it("ranks exact recipients above fuzzy matches", () => {
     expect(recipientMatch("王明", ["王明", "wangming"])).toMatchObject({ matchKind: "exact", similarity: 1 })
     expect(recipientMatch("wangmong", ["王明", "wangming"])?.matchKind).toBe("fuzzy")

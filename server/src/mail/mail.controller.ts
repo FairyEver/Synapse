@@ -62,12 +62,6 @@ export class MailController {
     await pipeline(file.stream, response)
   }
 
-  @Post("attachments/prepare")
-  prepareDriveAttachment(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
-    const input = parse(z.object({ driveItemId: z.string().min(1), versionId: z.string().min(1).optional() }).strict(), body)
-    return this.mail.prepareDriveAttachment(userId(request), input.driveItemId, input.versionId)
-  }
-
   @Put("attachments/local")
   async prepareLocalAttachment(@Req() request: AuthenticatedUserRequest & Request, @Query("fileName") fileName?: string) {
     if (!fileName) throw new BadRequestException("缺少文件名。")

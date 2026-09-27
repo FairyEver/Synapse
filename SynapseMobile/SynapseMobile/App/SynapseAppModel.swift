@@ -688,16 +688,10 @@ final class SynapseAppModel {
     func mailCreateDraft(_ content: MailContent) async throws -> MailDraft { try await apiClient.mailCreateDraft(content) }
     func mailUpdateDraft(id: String, baseVersion: Int, content: MailContent) async throws -> MailDraft { try await apiClient.mailUpdateDraft(id: id, baseVersion: baseVersion, content: content) }
     func mailDeleteDraft(id: String) async throws { try await apiClient.mailDeleteDraft(id: id) }
-    func mailPrepareDriveAttachment(itemId: String) async throws -> MailPreparedAttachment { try await apiClient.mailPrepareDriveAttachment(itemId: itemId) }
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment { try await apiClient.mailPrepareLocalAttachment(url: url) }
     func mailPreview(_ content: MailContent) async throws -> MailPreview { try await apiClient.mailPreview(content) }
     func mailSend(previewId: String, clientRequestId: String) async throws -> MailReceipt { try await apiClient.mailSend(previewId: previewId, clientRequestId: clientRequestId) }
     func mailDownloadAttachment(messageId: String, attachment: MailAttachment) async throws -> URL { try await apiClient.mailDownloadAttachment(messageId: messageId, attachment: attachment) }
-    func mailDriveSnapshot(folderId: String?) async throws -> DriveBrowserSnapshot {
-        if let folderId { return try await apiClient.driveItemSnapshot(itemId: folderId, childrenOffset: nil, childrenLimit: nil) }
-        return try await apiClient.driveRootSnapshot(childrenOffset: nil, childrenLimit: nil)
-    }
-
     // MARK: - 云盘
 
     /// 预览与导出要的那三条。

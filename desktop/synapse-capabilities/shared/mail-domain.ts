@@ -11,9 +11,9 @@ const definitions = [
   ["app_mail_draft_create", "app.mail.draft.create", "Create a mail draft."],
   ["app_mail_draft_update", "app.mail.draft.update", "Update a mail draft using its current baseVersion."],
   ["app_mail_draft_delete", "app.mail.draft.delete", "Delete a mail draft."],
-  ["app_mail_attachment_create", "app.mail.attachment.create", "Copy an owned Synapse Drive file version into an immutable internal mail attachment."],
+  ["app_mail_attachment_create", "app.mail.attachment.create", "Upload a local file as an internal mail attachment without adding it to Synapse Drive."],
   ["app_mail_attachment_download_file", "app.mail.attachment.download_file", "Download an attachment from a mail the current user may read to an absolute local path."],
-  ["app_mail_send_preview", "app.mail.send.preview", "Fix recipients, complete subject and body, attachment versions, and team for final confirmation. Show the full preview to the user before sending."],
+  ["app_mail_send_preview", "app.mail.send.preview", "Fix recipients, complete subject and body, attachments, and team for final confirmation. Show the full preview to the user before sending."],
   ["app_mail_message_send", "app.mail.message.send", "Send a previously previewed internal mail only after the user explicitly confirms that exact recipients, subject, complete body, and attachments in conversation. Does not open a compose UI."],
 ] as const
 
@@ -30,7 +30,7 @@ const content = {
   recipientIds: ids("Resolved userIds. Select each recipient individually; no group address."),
   subject: text("Mail subject, at most 120 characters."),
   body: text("Complete plain-text mail body, at most 100000 characters."),
-  attachmentIds: ids("Ready attachmentTokens returned by app_mail_attachment_create."),
+  attachmentIds: ids("Ready attachmentTokens returned by app_mail_attachment_create, or empty when sharing a Drive link in the body."),
   replyToId: text("Optional source message id when replying or forwarding."),
 }
 
@@ -44,7 +44,7 @@ const schemas: Record<string, { properties: Record<string, unknown>; required?: 
   app_mail_draft_create: { properties: content, required: ["recipientIds", "subject", "body", "attachmentIds"] },
   app_mail_draft_update: { properties: { draftId: text("Draft id."), baseVersion: { type: "integer" }, ...content }, required: ["draftId", "baseVersion", "recipientIds", "subject", "body", "attachmentIds"] },
   app_mail_draft_delete: { properties: { draftId: text("Draft id.") }, required: ["draftId"] },
-  app_mail_attachment_create: { properties: { driveItemId: text("Owned Drive file item id."), versionId: text("Optional exact Drive file version id.") }, required: ["driveItemId"] },
+  app_mail_attachment_create: { properties: { filePath: text("Absolute path to a local file to upload directly as a mail attachment.") }, required: ["filePath"] },
   app_mail_attachment_download_file: { properties: { messageId: text("Mail id."), attachmentId: text("Attachment id in the mail."), outputPath: text("Absolute destination path.") }, required: ["messageId", "attachmentId", "outputPath"] },
   app_mail_send_preview: { properties: content, required: ["recipientIds", "subject", "body", "attachmentIds"] },
   app_mail_message_send: { properties: { previewId: text("Unexpired previewId from app_mail_send_preview; do not modify the preview after user confirmation."), clientRequestId: text("Stable UUID for retries of this exact send."), confirmed: { type: "boolean", description: "True only after the user explicitly confirms the complete preview in this conversation." } }, required: ["previewId", "clientRequestId", "confirmed"] },

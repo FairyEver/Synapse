@@ -20,9 +20,6 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [attachments, setAttachments] = useState<MailAttachment[]>([])
-  const [driveOpen, setDriveOpen] = useState(false)
-  const [driveFolderId, setDriveFolderId] = useState<string | null>(null)
-  const [driveItems, setDriveItems] = useState<{ id: string; name: string; type: "file" | "folder" }[]>([])
   const [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState<MailDraft | null>(null)
   const pendingSend = useRef<{ fingerprint: string; previewId: string; clientRequestId: string } | null>(null)
@@ -65,17 +62,6 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
       })
     return () => { active = false }
   }, [start])
-
-  useEffect(() => {
-    if (!driveOpen) return
-    let active = true
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-    void bridge.drive.item.list({ parentId: driveFolderId })
-      .then((page) => { if (active) setDriveItems(page.items.map((item) => ({ id: item.id, name: item.name, type: item.type }))) })
-      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "云盘加载失败。"))
-    return () => { active = false }
-  }, [driveOpen, driveFolderId])
 
   const content = (): MailContent => ({ recipientIds: [...recipients.map((person) => person.userId), ...unresolvedIds], subject, body, attachmentIds: attachments.map((item) => item.attachmentId), replyToId: start?.replyToId ?? start?.draft?.replyToId ?? undefined })
 
@@ -138,16 +124,6 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
     finally { setBusy(false) }
   }
 
-  async function attachDrive(itemId: string) {
-    setBusy(true)
-    try {
-      const result = await mailRequest({ kind: "attachmentPrepare", driveItemId: itemId })
-      setAttachments((current) => [...current, result])
-      setDriveOpen(false)
-    } catch (error) { toast.error(error instanceof Error ? error.message : "添加附件失败。") }
-    finally { setBusy(false) }
-  }
-
   return <>
     <Dialog open={start !== null} onOpenChange={(open) => { if (!open) requestClose() }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -166,7 +142,7 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
           </div>
           <div className="space-y-2"><label htmlFor="mail-subject" className="text-sm font-medium">主题</label><Input id="mail-subject" maxLength={120} value={subject} onChange={(event) => setSubject(event.target.value)} /></div>
           <div className="space-y-2"><label htmlFor="mail-body" className="text-sm font-medium">正文</label><Textarea id="mail-body" rows={10} value={body} onChange={(event) => setBody(event.target.value)} /></div>
-          <div className="space-y-2"><p className="text-sm font-medium">附件</p><div className="flex flex-wrap gap-2"><label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm">选本机文件<input type="file" className="sr-only" onChange={(event) => void attachLocal(event.target.files?.[0])} /></label><Button type="button" variant="outline" onClick={() => setDriveOpen(true)}>从云盘选择</Button></div>
+          <div className="space-y-2"><p className="text-sm font-medium">附件</p><label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm">选本机文件<input type="file" className="sr-only" onChange={(event) => void attachLocal(event.target.files?.[0])} /></label>
             {attachments.map((attachment) => <Button key={attachment.attachmentId} type="button" size="sm" variant="secondary" onClick={() => setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId))}>{attachment.fileName} ×</Button>)}
           </div>
         </div>
@@ -183,13 +159,5 @@ export function MailCompose({ start, onClose, onChanged, onSent }: { start: Comp
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    <Dialog open={driveOpen} onOpenChange={setDriveOpen}>
-      <DialogContent><DialogHeader><DialogTitle>选择云盘文件</DialogTitle></DialogHeader>
-        <div className="max-h-80 overflow-y-auto">
-          {driveFolderId && <Button type="button" variant="ghost" onClick={() => setDriveFolderId(null)}>返回根目录</Button>}
-          {driveItems.map((item) => <button key={item.id} type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => item.type === "folder" ? setDriveFolderId(item.id) : void attachDrive(item.id)}>{item.name}</button>)}
-        </div>
-      </DialogContent>
-    </Dialog>
   </>
 }

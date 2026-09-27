@@ -30,7 +30,6 @@ struct MailComposeView: View {
     @State private var attachments: [MailAttachment]
     @State private var draft: MailDraft?
     @State private var importing = false
-    @State private var drivePicker = false
     @State private var busy = false
     @State private var error: String?
     @State private var pendingSend: PendingSend?
@@ -68,7 +67,6 @@ struct MailComposeView: View {
                 Section("正文") { TextEditor(text: $messageBody).frame(minHeight: 180) }
                 Section("附件") {
                     Button("选取文件", systemImage: "paperclip") { importing = true }
-                    Button("从云盘选择", systemImage: "internaldrive") { drivePicker = true }
                     ForEach(attachments) { attachment in
                         HStack { Text(attachment.fileName); Spacer(); Button("移除", systemImage: "minus.circle") { attachments.removeAll { $0.id == attachment.id } }.labelStyle(.iconOnly) }
                     }
@@ -97,7 +95,6 @@ struct MailComposeView: View {
                 if case .success(let urls) = result { Task { await addFiles(urls) } }
                 if case .failure(let failure) = result { error = failure.localizedDescription }
             }
-            .sheet(isPresented: $drivePicker) { MailDrivePicker { item in Task { await addDrive(item) } } }
         }
     }
 
@@ -132,13 +129,6 @@ struct MailComposeView: View {
             do { attachments.append(try await model.mailPrepareLocalAttachment(url: url).attachment) }
             catch { self.error = error.localizedDescription }
         }
-    }
-
-    private func addDrive(_ item: DriveBrowserItem) async {
-        busy = true
-        defer { busy = false }
-        do { attachments.append(try await model.mailPrepareDriveAttachment(itemId: item.id).attachment); drivePicker = false }
-        catch { self.error = error.localizedDescription }
     }
 
     private func saveDraft() async {
@@ -292,35 +282,5 @@ private struct MailRecipientPicker: View {
             self.error = error.localizedDescription
         }
         loadingMore = false
-    }
-}
-
-private struct MailDrivePicker: View {
-    @Environment(SynapseAppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-    let onSelect: (DriveBrowserItem) -> Void
-    @State private var folders: [DriveBrowserItem] = []
-    @State private var items: [DriveBrowserItem] = []
-    @State private var error: String?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if !folders.isEmpty { Button("返回上一级", systemImage: "chevron.left") { folders.removeLast() } }
-                ForEach(items) { item in
-                    Button {
-                        if item.isFolder { folders.append(item) }
-                        else { onSelect(item); dismiss() }
-                    } label: { Label(item.name, systemImage: item.isFolder ? "folder" : "doc") }
-                }
-                if let error { Text(error).foregroundStyle(.red) }
-            }
-            .navigationTitle("云盘文件")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
-            .task(id: folders.last?.id) {
-                do { items = try await model.mailDriveSnapshot(folderId: folders.last?.id).children }
-                catch { self.error = error.localizedDescription }
-            }
-        }
     }
 }

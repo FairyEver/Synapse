@@ -15,10 +15,10 @@
 | `app_mail_draft_create` | `recipientIds`, `subject`, `body`, `attachmentIds` | 新草稿 |
 | `app_mail_draft_update` | 上述内容及 `draftId`, `baseVersion` | 乐观并发更新 |
 | `app_mail_draft_delete` | `draftId` | 删除自己的草稿 |
-| `app_mail_attachment_create` | `driveItemId`，可选 `versionId` | `attachmentToken`、固定版本、文件名 |
+| `app_mail_attachment_create` | 本地文件绝对路径 `filePath` | 直接上传并返回 `attachmentToken`、文件名 |
 | `app_mail_attachment_download_file` | `messageId`, `attachmentId`, `outputPath` | 下载到绝对本地路径 |
 | `app_mail_send_preview` | `recipientIds`, `subject`, `body`, `attachmentIds`，可选 `replyToId` | `previewId`、完整待发内容与团队 |
 | `app_mail_message_send` | `previewId`, `clientRequestId`, `confirmed: true` | `messageId`、实际收件人、发送时间 |
 
-附件最大 20 MB，最多 10 个；一封信最多 50 位具体收件人。`previewId` 有效 10 分钟；失效后重做预览并重新获得用户确认。服务端在发送时重新校验当前登录用户、所有收件人的共同团队及附件状态。
+附件只接受本地文件直接上传，最大 20 MB，最多 10 个；云盘文件使用分享链接放在正文中。一封信最多 50 位具体收件人。`previewId` 有效 10 分钟；失效后重做预览并重新获得用户确认。服务端在发送时重新校验当前登录用户、所有收件人的共同团队及附件状态。
 未发出的附件若七天未被草稿或有效预览引用，会由服务端回收；长时间保留的待发内容应先保存为草稿。`confirmed: true` 仅是调用者声明，不是对话确认凭证。

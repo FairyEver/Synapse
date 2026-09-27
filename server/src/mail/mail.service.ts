@@ -1,11 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
-import { Readable } from "node:stream"
 import { PrismaService } from "../prisma/prisma.service"
 import { NotificationService } from "../notifications/notification.service"
-import type { DriveStoragePort } from "../drive/drive-storage"
 import { MailStorageService } from "./mail-storage.service"
 import { recipientMatch } from "./mail-recipient-match"
 
@@ -40,7 +38,6 @@ export class MailService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: MailStorageService,
-    @Inject("DriveStoragePort") private readonly driveStorage: DriveStoragePort,
     private readonly notifications: NotificationService,
   ) {}
 
@@ -81,34 +78,12 @@ export class MailService {
     return this.storeAttachment(userId, safeFileName(fileName), mimeType, body)
   }
 
-  async prepareDriveAttachment(userId: string, itemId: string, versionId?: string) {
-    const item = await this.prisma.driveItem.findFirst({ where: { id: itemId, userId, type: "file", lifecycleStatus: "active", deletedAt: null } })
-    if (!item) throw new NotFoundException("云盘文件不存在。")
-    const version = await this.prisma.driveFileVersion.findFirst({
-      where: { itemId, userId, deletedAt: null, ...(versionId ? { id: versionId } : {}) },
-      orderBy: { versionNumber: "desc" },
-    })
-    if (!version) throw new NotFoundException("云盘文件版本不存在。")
-    if (version.size > BigInt(MAIL_MAX_ATTACHMENT_BYTES)) throw new PayloadTooLargeException("附件不能超过 20 MB。")
-    const source = await this.driveStorage.getObjectStream({ key: version.storageKey })
-    const chunks: Buffer[] = []
-    let size = 0
-    for await (const chunk of source.stream as Readable) {
-      const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      size += part.length
-      if (size > MAIL_MAX_ATTACHMENT_BYTES) throw new PayloadTooLargeException("附件不能超过 20 MB。")
-      chunks.push(part)
-    }
-    if (BigInt(size) !== version.size) throw new ConflictException("云盘版本内容已变化，请重试。")
-    return this.storeAttachment(userId, safeFileName(item.name), version.mimeType, Buffer.concat(chunks), itemId, version.id)
-  }
-
-  private async storeAttachment(userId: string, fileName: string, mimeType: string | null, body: Buffer, sourceItemId?: string, sourceVersionId?: string) {
+  private async storeAttachment(userId: string, fileName: string, mimeType: string | null, body: Buffer) {
     const key = `mail/attachments/${randomUUID()}`
     await this.storage.put(key, body, mimeType)
     try {
-      const row = await this.prisma.mailAttachment.create({ data: { ownerId: userId, fileName, mimeType, size: BigInt(body.length), storageKey: key, sourceItemId, sourceVersionId } })
-      return { attachmentId: row.id, attachmentToken: row.id, fileName: row.fileName, mimeType: row.mimeType, size: Number(row.size), versionId: row.sourceVersionId, state: "ready" as const }
+      const row = await this.prisma.mailAttachment.create({ data: { ownerId: userId, fileName, mimeType, size: BigInt(body.length), storageKey: key } })
+      return { attachmentId: row.id, attachmentToken: row.id, fileName: row.fileName, mimeType: row.mimeType, size: Number(row.size), state: "ready" as const }
     } catch (error) {
       await this.storage.delete(key).catch((cleanupError: unknown) => this.logger.error({ reason: cleanupError instanceof Error ? cleanupError.name : typeof cleanupError }, "Mail object cleanup failed"))
       throw error
@@ -140,7 +115,7 @@ export class MailService {
       }
       return tx.mailSendPreview.create({ data: { userId, recipientIds, attachmentIds, teamIdSnapshot: team.id, teamNameSnapshot: team.name, subject, body, replyToId: raw.replyToId, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } })
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
-    return { previewId: preview.id, expiresAt: preview.expiresAt, team: { id: team.id, name: team.name }, recipients: recipientIds.map((id) => exposedUser(participants.find((user) => user.id === id)!)), subject, body, attachments: attachmentIds.map((id) => { const row = attachments.find((item) => item.id === id)!; return { attachmentId: id, fileName: row.fileName, size: Number(row.size), versionId: row.sourceVersionId } }) }
+    return { previewId: preview.id, expiresAt: preview.expiresAt, team: { id: team.id, name: team.name }, recipients: recipientIds.map((id) => exposedUser(participants.find((user) => user.id === id)!)), subject, body, attachments: attachmentIds.map((id) => { const row = attachments.find((item) => item.id === id)!; return { attachmentId: id, fileName: row.fileName, size: Number(row.size) } }) }
   }
 
   async send(userId: string, previewId: string, clientRequestId: string) {
@@ -245,7 +220,7 @@ export class MailService {
       include: { sender: { select: { id: true, nickname: true, handle: true } }, recipients: { include: { user: { select: { id: true, nickname: true, handle: true } } } }, attachments: true },
     })
     if (!row) throw new NotFoundException("信件不存在。")
-    return { ...this.summary(row, userId), viewerId: userId, body: row.body, team: { id: row.teamIdSnapshot, name: row.teamNameSnapshot }, replyToId: row.replyToId, attachments: row.attachments.map((item) => ({ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size), versionId: item.sourceVersionId })) }
+    return { ...this.summary(row, userId), viewerId: userId, body: row.body, team: { id: row.teamIdSnapshot, name: row.teamNameSnapshot }, replyToId: row.replyToId, attachments: row.attachments.map((item) => ({ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) })) }
   }
 
   private summary(row: { id: string; senderId: string; sender: { id: string; nickname: string | null; handle: string | null }; recipients: { userId: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; subject: string; body: string; sentAt: Date; attachments: { id: string }[] }, userId: string) {
@@ -278,7 +253,7 @@ export class MailService {
     const rows = await this.prisma.mailDraft.findMany({ where: { userId }, orderBy: { updatedAt: "desc" } })
     const attachmentIds = rows.flatMap((row) => ids(row.attachmentIds, MAX_ATTACHMENTS))
     const attachments = await this.prisma.mailAttachment.findMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } })
-    return { items: rows.map((row) => ({ ...this.draftDto(row), attachments: ids(row.attachmentIds, MAX_ATTACHMENTS).flatMap((id) => { const item = attachments.find((candidate) => candidate.id === id); return item ? [{ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size), versionId: item.sourceVersionId }] : [] }) })) }
+    return { items: rows.map((row) => ({ ...this.draftDto(row), attachments: ids(row.attachmentIds, MAX_ATTACHMENTS).flatMap((id) => { const item = attachments.find((candidate) => candidate.id === id); return item ? [{ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) }] : [] }) })) }
   }
 
   private draftDto(row: { id: string; recipientIds: Prisma.JsonValue; subject: string; body: string; attachmentIds: Prisma.JsonValue; replyToId: string | null; version: number; updatedAt: Date }) {

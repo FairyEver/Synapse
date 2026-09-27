@@ -1,5 +1,5 @@
 export type MailPerson = { userId: string; nickname: string | null; handle: string | null }
-export type MailAttachment = { attachmentId: string; fileName: string; mimeType?: string | null; size: number; versionId?: string | null }
+export type MailAttachment = { attachmentId: string; fileName: string; mimeType?: string | null; size: number }
 export type MailSummary = {
   messageId: string
   sender: MailPerson
@@ -23,7 +23,6 @@ export type MailOperation =
   | { kind: "draftCreate"; content: MailContent }
   | { kind: "draftUpdate"; draftId: string; baseVersion: number; content: MailContent }
   | { kind: "draftDelete"; draftId: string }
-  | { kind: "attachmentPrepare"; driveItemId: string; versionId?: string }
   | { kind: "attachmentLocal"; filePath: string }
   | { kind: "attachmentDownload"; messageId: string; attachmentId: string; outputPath?: string }
   | { kind: "sendPreview"; content: MailContent }
@@ -39,7 +38,6 @@ export type MailOperationResult = {
   draftCreate: MailDraft
   draftUpdate: MailDraft
   draftDelete: { deleted: boolean }
-  attachmentPrepare: MailAttachment & { attachmentToken: string; state: "ready" }
   attachmentLocal: MailAttachment & { attachmentToken: string; state: "ready" }
   attachmentDownload: { path: string } | null
   sendPreview: { previewId: string; expiresAt: string; team: { id: string; name: string }; recipients: MailPerson[]; subject: string; body: string; attachments: MailAttachment[] }

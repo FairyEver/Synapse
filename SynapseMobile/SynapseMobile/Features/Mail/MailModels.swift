@@ -27,7 +27,6 @@ struct MailAttachment: Decodable, Identifiable {
     let fileName: String
     let mimeType: String?
     let size: Int
-    let versionId: String?
     var id: String { attachmentId }
 }
 
@@ -37,9 +36,8 @@ struct MailPreparedAttachment: Decodable {
     let fileName: String
     let mimeType: String?
     let size: Int
-    let versionId: String?
     let state: String
-    var attachment: MailAttachment { MailAttachment(attachmentId: attachmentId, fileName: fileName, mimeType: mimeType, size: size, versionId: versionId) }
+    var attachment: MailAttachment { MailAttachment(attachmentId: attachmentId, fileName: fileName, mimeType: mimeType, size: size) }
 }
 
 struct MailSummary: Decodable, Identifiable {

@@ -85,7 +85,7 @@ const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pe
 const mailContentSchema = z.object({ recipientIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), replyToId: z.string().optional() }).strict()
 const mailIdSchema = z.string().min(1)
 const mailPersonSchema = z.object({ userId: z.string(), nickname: z.string().nullable(), handle: z.string().nullable() })
-const mailAttachmentSchema = z.object({ attachmentId: z.string(), fileName: z.string(), mimeType: z.string().nullable().optional(), size: z.number(), versionId: z.string().nullable().optional() })
+const mailAttachmentSchema = z.object({ attachmentId: z.string(), fileName: z.string(), mimeType: z.string().nullable().optional(), size: z.number() })
 const mailSummarySchema = z.object({ messageId: z.string(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
 const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body: z.string(), team: z.object({ id: z.string(), name: z.string() }), replyToId: z.string().nullable(), attachments: z.array(mailAttachmentSchema) })
 const mailDraftSchema = z.object({ draftId: z.string(), recipientIds: z.array(z.string()), subject: z.string(), body: z.string(), attachmentIds: z.array(z.string()), attachments: z.array(mailAttachmentSchema).optional(), replyToId: z.string().nullable(), version: z.number().int(), updatedAt: z.string() })
@@ -97,7 +97,7 @@ const mailRecipientListInputSchema = z.object({ query: z.string().min(1).max(100
 const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional() }).strict()
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
 const mailDraftUpdateInputSchema = mailContentInputSchema.extend({ draftId: mailIdSchema, baseVersion: z.number().int().positive() })
-const mailAttachmentCreateInputSchema = z.object({ driveItemId: mailIdSchema, versionId: mailIdSchema.optional() }).strict()
+const mailAttachmentCreateInputSchema = z.object({ filePath: z.string().min(1) }).strict()
 const mailAttachmentLocalInputSchema = z.object({ filePath: z.string().min(1) }).strict()
 const mailAttachmentDownloadInputSchema = mailIdInputSchema.extend({ attachmentId: mailIdSchema, outputPath: z.string().min(1).optional() })
 const mailMessageSendInputSchema = z.object({ previewId: mailIdSchema, clientRequestId: mailIdSchema }).strict()
@@ -1161,7 +1161,11 @@ export const accountIpcModule: IpcModule = {
       kind: "invoke", operationId: "app.mail.attachment.create",
       request: mailAttachmentCreateInputSchema,
       response: mailAttachmentSchema.extend({ attachmentToken: z.string(), state: z.literal("ready") }),
-      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "attachmentPrepare", ...mailAttachmentCreateInputSchema.parse(input) }),
+      handler: async (ctx, input) => {
+        const parsed = mailAttachmentCreateInputSchema.parse(input)
+        await checkAccountPermission({ ctx, action: "fs.read.outside-userdata", resource: parsed.filePath, source: "account.mail.attachmentCreate", context: { kind: "attachmentLocal" } })
+        return accountService.executeMailOperation({ kind: "attachmentLocal", ...parsed })
+      },
     },
     mailAttachmentLocalCreate: {
       kind: "invoke", operationId: "app.mail.attachment.local_create",

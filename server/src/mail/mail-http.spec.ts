@@ -64,4 +64,13 @@ describe("internal mail HTTP routes", () => {
       expect(mail.prepareLocalAttachment).toHaveBeenCalledWith("sender", "report.txt", "application/octet-stream", Buffer.from("report body"))
     } finally { await app.close() }
   })
+
+  it("does not expose Drive file import as a mail attachment route", async () => {
+    const { app } = await fixture()
+    try {
+      await request(app.getHttpServer()).post("/api/mail/attachments/prepare")
+        .send({ driveItemId: "drive-file" })
+        .expect(404)
+    } finally { await app.close() }
+  })
 })

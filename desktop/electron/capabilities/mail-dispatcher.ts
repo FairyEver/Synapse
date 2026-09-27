@@ -25,7 +25,7 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
       return { kind: "draftUpdate", draftId: parsed.draftId, baseVersion: parsed.baseVersion, content: { recipientIds: parsed.recipientIds, subject: parsed.subject, body: parsed.body, attachmentIds: parsed.attachmentIds, replyToId: parsed.replyToId } }
     }
     case "app.mail.draft.delete": return { kind: "draftDelete", ...z.object({ draftId: id }).strict().parse(params) }
-    case "app.mail.attachment.create": return { kind: "attachmentPrepare", ...z.object({ driveItemId: id, versionId: id.optional() }).strict().parse(params) }
+    case "app.mail.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }
     case "app.mail.attachment.download_file": return { kind: "attachmentDownload", ...z.object({ messageId: id, attachmentId: id, outputPath: z.string().min(1) }).strict().parse(params) }
     case "app.mail.send.preview": return { kind: "sendPreview", content: content.parse(params) }
     case "app.mail.message.send": {
@@ -44,6 +44,11 @@ export function createMailCapabilityDispatcher(deps: MailDeps) {
       const metadata = { source: context.source ?? "api", action, operation: operation.kind, controllerInstanceId: context.controllerInstanceId }
       const permission = await checkCapabilityPermission({ permissionGuard: deps.permissionGuard, auditSink: deps.auditSink, action: "network.connect", actor: currentActor, resource: "synapse-mail", context: metadata })
       if (permission && !permission.allowed) throw new Error(permission.reason)
+      if (operation.kind === "attachmentLocal") {
+        if (!path.isAbsolute(operation.filePath)) throw new Error("Attachment filePath must be absolute.")
+        const readPermission = await checkCapabilityPermission({ permissionGuard: deps.permissionGuard, auditSink: deps.auditSink, action: "fs.read.outside-userdata", actor: currentActor, resource: operation.filePath, context: metadata })
+        if (readPermission && !readPermission.allowed) throw new Error(readPermission.reason)
+      }
       if (operation.kind === "attachmentDownload") {
         if (!operation.outputPath || !path.isAbsolute(operation.outputPath)) throw new Error("Attachment outputPath must be absolute.")
         const writePermission = await checkCapabilityPermission({ permissionGuard: deps.permissionGuard, auditSink: deps.auditSink, action: "fs.write.outside-userdata", actor: currentActor, resource: operation.outputPath, context: metadata })
