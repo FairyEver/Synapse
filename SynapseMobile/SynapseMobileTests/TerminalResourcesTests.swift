@@ -58,6 +58,7 @@ struct TerminalResourcesTests {
             try line("ATZ3CW0JEBAGTZV），原分享链接不变。", wrapFlags: 1),
         ], kind: "reset"))
         #expect(store.resources.map(\.url.absoluteString) == [url])
+        #expect(store.resources.first?.needsConfirmation == false)
     }
 
     @Test func keepsChineseCharactersInsideARealURLPath() throws {
@@ -66,12 +67,27 @@ struct TerminalResourcesTests {
         #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/%E8%B7%AF%E5%BE%84"])
     }
 
+    @Test func keepsBalancedParenthesesInAURLPath() throws {
+        let store = TerminalStore()
+        store.apply(frame([try line("见 https://en.wikipedia.org/wiki/Function_(mathematics) 详情")], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == [
+            "https://en.wikipedia.org/wiki/Function_(mathematics)",
+        ])
+    }
+
+    @Test func removesOnlyTheOuterClosingParenthesis() throws {
+        let store = TerminalStore()
+        store.apply(frame([try line("见 (https://example.org/a_(b)) 详情")], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/a_(b)"])
+    }
+
     @Test func waitsForSoftWrappedContinuationAcrossFrames() throws {
         let store = TerminalStore()
         store.apply(frame([try line("https://example.org/very/", wrapFlags: 2)], kind: "reset", total: 2))
         #expect(store.resources.isEmpty)
         store.apply(frame([try line("long-path?x=1#part", wrapFlags: 1)], from: 1, total: 2))
         #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/very/long-path?x=1#part"])
+        #expect(store.resources.first?.needsConfirmation == false)
     }
 
     // MARK: - Hard wraps (Claude Code's own wrapping, which the desktop cannot flag)
@@ -91,6 +107,10 @@ struct TerminalResourcesTests {
         #expect(store.resources.map(\.url.absoluteString) == [
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
         ])
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
+            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR",
+            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
+        ])
     }
 
     @Test func hardWrappedLinkDoesNotIncludeFollowingChineseProse() throws {
@@ -103,6 +123,56 @@ struct TerminalResourcesTests {
         #expect(store.resources.map(\.url.absoluteString) == [
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
         ])
+    }
+
+    @Test func marksAnEnglishSentenceAfterAFullURLAsAmbiguous() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        let url = "https://example.org/" + String(repeating: "a", count: 31)
+        store.apply(frame([
+            try line("  \(url)"),
+            try line("  README updated"),
+        ], kind: "reset"))
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [url, url + "README"])
+        #expect(store.resources.first?.needsConfirmation == true)
+    }
+
+    @Test func marksAUnicodeContinuationAsAmbiguous() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        let prefix = "https://example.org/" + String(repeating: "a", count: 31)
+        store.apply(frame([
+            try line("  \(prefix)"),
+            try line("  路径"),
+        ], kind: "reset"))
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
+            prefix, prefix + "%E8%B7%AF%E5%BE%84",
+        ])
+    }
+
+    @Test func requiresConfirmationEvenWhenOnlyTheJoinedURLIsUsable() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        let prefix = "http://127.0.0.1"
+        let joined = "http://127.0.0.1example.org"
+        store.apply(frame([
+            try line(String(repeating: "x", count: 36) + " " + prefix),
+            try line("  example.org"),
+        ], kind: "reset"))
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [joined])
+        #expect(store.resources.first?.needsConfirmation == true)
+    }
+
+    @Test func aURLAtTheGridEdgeNeedsConfirmationWithoutARecognizedContinuation() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        let url = "https://example.org/" + String(repeating: "a", count: 31)
+        store.apply(frame([
+            try line("  \(url)"),
+            try line("下一行没有悬挂缩进"),
+        ], kind: "reset"))
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [url])
+        #expect(store.resources.first?.needsConfirmation == true)
     }
 
     /// The same pair in the other order. The second row is what arrives second in
@@ -131,19 +201,21 @@ struct TerminalResourcesTests {
         #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/a"])
     }
 
-    /// A URL at the end of a row that happens to be full is the one ambiguous case.
-    /// Waiting for the row below must not lose it when that row turns out not to
-    /// continue it: prose is not a URL tail, so the link is collected on its own.
-    @Test func stillCollectsAURLThatRunsToTheEndOfAFullRow() throws {
+    /// A full row followed by Chinese prose looks the same as a Unicode URL tail.
+    /// Neither interpretation may be opened as certain.
+    @Test func marksAFullURLFollowedByChineseProseAsAmbiguous() throws {
         let store = TerminalStore()
         store.update(columns: 53)
-        store.apply(frame([try line("  https://example.org/" + String(repeating: "a", count: 31))], kind: "reset", total: 2))
+        let prefix = "https://example.org/" + String(repeating: "a", count: 31)
+        store.apply(frame([try line("  \(prefix)")], kind: "reset", total: 2))
         #expect(store.resources.isEmpty)
 
         store.apply(frame([try line("  后续说明继续写下去")], from: 1, total: 2))
-        #expect(store.resources.map(\.url.absoluteString) == [
-            "https://example.org/" + String(repeating: "a", count: 31),
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
+            prefix,
+            prefix + "后续说明继续写下去".addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!,
         ])
+        #expect(store.resources.first?.needsConfirmation == true)
     }
 
     /// A cut that spans more than two rows. The middle row is URL text with no scheme
@@ -159,6 +231,11 @@ struct TerminalResourcesTests {
 
         store.apply(frame([try line("  cccc")], from: 2, total: 3))
         #expect(store.resources.map(\.url.absoluteString) == [
+            "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51) + "cccc",
+        ])
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
+            "https://example.org/" + String(repeating: "a", count: 31),
+            "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51),
             "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51) + "cccc",
         ])
     }

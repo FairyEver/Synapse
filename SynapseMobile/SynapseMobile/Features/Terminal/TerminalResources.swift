@@ -2,16 +2,12 @@ import Foundation
 
 struct TerminalResource: Identifiable, Hashable {
     let url: URL
+    /// Other valid URL boundaries when a TUI inserted an unmarked hard line break.
+    let alternatives: [URL]
+    let needsConfirmation: Bool
 
     var id: String { url.absoluteString }
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.url == rhs.url
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(url)
-    }
+    var candidateURLs: [URL] { alternatives + [url] }
 
     var name: String {
         let host = url.host ?? url.absoluteString
@@ -30,9 +26,8 @@ struct TerminalResource: Identifiable, Hashable {
 /// and indents the continuation, so a URL too long for the columns left on its row
 /// arrives as two rows the terminal never marks as wrapped — the wire flags stay 0, the
 /// first half reads as a whole line, and the reader is handed a link that 404s. Where
-/// the flags are silent the shape speaks: the row a token was cut in was filled to the
-/// grid's last column, and the row below opens with the hanging indent and the rest of
-/// the URL.
+/// the flags are silent, a full row followed by a hanging indent suggests a possible
+/// continuation. Both URL boundaries are retained for the user to choose from.
 ///
 /// An address that only means something on the desktop is not collected at all. A dev
 /// server announces itself as `http://localhost:5173` and the API next to it as
@@ -44,15 +39,24 @@ struct TerminalResourceCollector {
     /// The system detector ends a link at prose punctuation, including Chinese
     /// punctuation. A non-whitespace regex swallowed "），原分享链接不变" as URL text.
     private static let detector = try! NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
-    private static let trailing = CharacterSet(charactersIn: "，。！？；、,.!?;)）]}>")
-    /// Characters URL text keeps going with. A cut token's tail is made of these; a
-    /// fresh line of prose is not.
+    private static let closingDelimiters: [Character: Character] = [")": "(", "）": "（", "]": "[", "}": "{"]
+    /// ASCII URL characters. Unicode letters can also continue a path; without
+    /// wrap metadata either spelling is treated as a candidate, not a certain link.
     private static let urlBody = CharacterSet(
         charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~%!$&'()*+,;=:@/?#[]"
     )
     /// The deepest hanging indent a wrapped row is expected to carry. Past it the row
     /// is more likely a nested block than the tail of the row above.
     private static let deepestHangingIndent = 8
+
+    private struct Assembly {
+        let text: String
+        /// UTF-16 offsets where rows were joined without a terminal wrap flag.
+        let hardBreaks: [Int]
+        /// A link reaching the grid edge may still continue even when the next row
+        /// does not have the expected hanging indent.
+        let uncertainEnd: Bool
+    }
 
     private var seen: Set<String> = []
     /// Rows whose link is not collected yet because the row they continue into has not
@@ -84,8 +88,8 @@ struct TerminalResourceCollector {
                 continue
             }
             waiting.remove(start)
-            for url in Self.urls(in: text) where seen.insert(url.absoluteString).inserted {
-                resources.insert(TerminalResource(url: url), at: 0)
+            for resource in Self.resources(in: text) where seen.insert(resource.id).inserted {
+                resources.insert(resource, at: 0)
                 changed = true
             }
         }
@@ -94,9 +98,10 @@ struct TerminalResourceCollector {
 
     /// The text of the row at `start` with every row it continues into, or nil while one
     /// of them has not arrived yet.
-    private static func assembly(from start: Int, lines: [Int: TerminalLine], columns: Int) -> String? {
+    private static func assembly(from start: Int, lines: [Int: TerminalLine], columns: Int) -> Assembly? {
         guard let first = lines[start] else { return nil }
         var text = first.text
+        var hardBreaks: [Int] = []
         var line = first
         var end = start
         while mayContinue(text, row: line, columns: columns) {
@@ -104,11 +109,20 @@ struct TerminalResourceCollector {
             guard continues(previous: line, next: next, columns: columns) else { break }
             // A soft-wrapped row carries its text and nothing else. A hanging one carries
             // the indent the TUI gave it, which is layout rather than content.
-            text += line.wrappedToNext && next.wrappedFromPrevious ? next.text : withoutHangingIndent(next.text)
+            if line.wrappedToNext && next.wrappedFromPrevious {
+                text += next.text
+            } else {
+                hardBreaks.append(text.utf16.count)
+                text += withoutHangingIndent(next.text)
+            }
             line = next
             end += 1
         }
-        return text
+        return Assembly(
+            text: text,
+            hardBreaks: hardBreaks,
+            uncertainEnd: !line.wrappedToNext && endsInsideURL(text) && fillsGrid(line.text, columns: columns)
+        )
     }
 
     /// Whether the row can have a successor on the row below it. The terminal's own
@@ -162,24 +176,53 @@ struct TerminalResourceCollector {
         let indent = text.count - body.count
         guard indent > 0, indent <= deepestHangingIndent,
               let first = body.first, let scalar = first.unicodeScalars.first else { return false }
-        return urlBody.contains(scalar)
+        return urlBody.contains(scalar) || CharacterSet.letters.contains(scalar)
     }
 
     private static func withoutHangingIndent(_ text: String) -> String {
         String(text.drop { $0 == " " || $0 == "\t" })
     }
 
-    private static func urls(in text: String) -> [URL] {
+    private static func resources(in assembly: Assembly) -> [TerminalResource] {
+        let text = assembly.text
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         return detector.matches(in: text, range: range).compactMap { match in
             guard let matchRange = Range(match.range, in: text) else { return nil }
-            let candidate = String(text[matchRange]).trimmingCharacters(in: trailing)
-            guard let url = URL(string: candidate),
-                  isWebURL(url),
-                  let host = url.host, !host.isEmpty,
-                  !isLocalOnly(host) else { return nil }
-            return url
+            guard let url = webURL(String(text[matchRange])) else { return nil }
+            var alternatives: [URL] = []
+            var needsConfirmation = assembly.uncertainEnd && NSMaxRange(match.range) == text.utf16.count
+            for boundary in assembly.hardBreaks
+            where boundary > match.range.location && boundary < NSMaxRange(match.range) {
+                needsConfirmation = true
+                let prefix = NSRange(location: match.range.location, length: boundary - match.range.location)
+                guard let prefixRange = Range(prefix, in: text),
+                      let prefixURL = webURL(String(text[prefixRange])),
+                      prefixURL != url,
+                      !alternatives.contains(prefixURL) else { continue }
+                alternatives.append(prefixURL)
+            }
+            return TerminalResource(url: url, alternatives: alternatives, needsConfirmation: needsConfirmation)
         }
+    }
+
+    private static func webURL(_ candidate: String) -> URL? {
+        guard let url = URL(string: withoutUnmatchedClosingDelimiters(candidate)),
+              isWebURL(url),
+              let host = url.host, !host.isEmpty,
+              !isLocalOnly(host) else { return nil }
+        return url
+    }
+
+    /// A URL may end in a balanced `)`, as in Wikipedia paths. Only a closing
+    /// bracket belonging to surrounding prose is removed.
+    private static func withoutUnmatchedClosingDelimiters(_ text: String) -> String {
+        var candidate = text
+        while let closing = candidate.last,
+              let opening = closingDelimiters[closing],
+              candidate.filter({ $0 == closing }).count > candidate.filter({ $0 == opening }).count {
+            candidate.removeLast()
+        }
+        return candidate
     }
 
     private static func isWebURL(_ url: URL?) -> Bool {
