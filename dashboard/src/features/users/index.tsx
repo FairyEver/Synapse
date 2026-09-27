@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { normalizeUserNickname } from '@synapse/shared'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MoreHorizontal, RefreshCw } from 'lucide-react'
@@ -33,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   getLiveClientSummary,
@@ -46,6 +48,15 @@ import {
 } from './users-page-error'
 import { UserPasswordResetLinkDialog } from './user-password-reset-link-dialog'
 
+function getNicknameError(value: string): string | null {
+  try {
+    normalizeUserNickname(value)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : '昵称无效。'
+  }
+}
+
 export default function UsersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
@@ -58,10 +69,13 @@ export default function UsersPage() {
     status: AdminUserRow['status']
   } | null>(null)
   const [noteTarget, setNoteTarget] = useState<AdminUserRow | null>(null)
+  const [nicknameTarget, setNicknameTarget] = useState<AdminUserRow | null>(null)
+  const [nicknameDraft, setNicknameDraft] = useState('')
   const [passwordResetTarget, setPasswordResetTarget] = useState<AdminUserRow | null>(null)
   const [adminNoteDraft, setAdminNoteDraft] = useState('')
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
+  const nicknameError = nicknameTarget ? getNicknameError(nicknameDraft) : null
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-users', page, pageSize, sortQuery],
@@ -134,6 +148,18 @@ export default function UsersPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const updateNickname = useMutation({
+    mutationFn: ({ id, nickname }: { id: string; nickname: string }) =>
+      adminApi.updateUserNickname(id, nickname),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setNicknameTarget(null)
+      setNicknameDraft('')
+      toast.success('昵称已保存')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   const createPasswordResetLink = useMutation({
     mutationFn: (id: string) => adminApi.createUserPasswordResetLink(id),
     onError: (err: Error) => toast.error(err.message),
@@ -147,6 +173,19 @@ export default function UsersPage() {
   function openAdminNoteDialog(user: AdminUserRow) {
     setNoteTarget(user)
     setAdminNoteDraft(user.adminNote ?? '')
+  }
+
+  function openNicknameDialog(user: AdminUserRow) {
+    setNicknameTarget(user)
+    setNicknameDraft(user.nickname)
+  }
+
+  function saveNickname() {
+    if (!nicknameTarget || nicknameError) return
+    const nickname = nicknameDraft.trim()
+    if (nickname !== nicknameTarget.nickname) {
+      updateNickname.mutate({ id: nicknameTarget.id, nickname })
+    }
   }
 
   function openPasswordResetDialog(user: AdminUserRow) {
@@ -188,6 +227,15 @@ export default function UsersPage() {
         <DataTableColumnHeader column={column} title='用户名' />
       ),
       cell: ({ row }) => <LongText>{row.original.handle || '-'}</LongText>,
+      meta: { className: 'max-w-0 w-1/5' },
+    },
+    {
+      accessorKey: 'nickname',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='昵称' />
+      ),
+      cell: ({ row }) => <LongText>{row.original.nickname}</LongText>,
+      enableSorting: false,
       meta: { className: 'max-w-0 w-1/5' },
     },
     {
@@ -302,6 +350,9 @@ export default function UsersPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
+              <DropdownMenuItem onSelect={() => openNicknameDialog(row.original)}>
+                编辑昵称
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => openAdminNoteDialog(row.original)}>
                 编辑备注
               </DropdownMenuItem>
@@ -347,6 +398,7 @@ export default function UsersPage() {
   const isAdminNoteUnchanged = noteTarget
     ? adminNoteDraft.trim() === (noteTarget.adminNote ?? '').trim()
     : true
+  const isNicknameUnchanged = nicknameDraft.trim() === nicknameTarget?.nickname
 
   return (
     <>
@@ -406,6 +458,44 @@ export default function UsersPage() {
             }
           }}
         />
+        <Dialog
+          open={Boolean(nicknameTarget)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setNicknameTarget(null)
+              setNicknameDraft('')
+            }
+          }}
+        >
+          <DialogContent className='sm:max-w-md'>
+            <DialogHeader>
+              <DialogTitle>编辑昵称</DialogTitle>
+              <DialogDescription className='sr-only'>编辑用户昵称。</DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-2'>
+              <Label htmlFor='user-nickname'>昵称</Label>
+              <Input
+                id='user-nickname'
+                value={nicknameDraft}
+                onChange={(event) => setNicknameDraft(event.target.value)}
+              />
+              {nicknameError ? (
+                <p className='text-sm text-destructive'>{nicknameError}</p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setNicknameTarget(null)}>
+                取消
+              </Button>
+              <Button
+                disabled={updateNickname.isPending || Boolean(nicknameError) || isNicknameUnchanged}
+                onClick={saveNickname}
+              >
+                保存
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Dialog
           open={Boolean(noteTarget)}
           onOpenChange={(open) => {

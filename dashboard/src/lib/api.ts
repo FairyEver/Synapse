@@ -237,6 +237,7 @@ export type AdminUserRow = {
   id: string
   email: string
   handle: string
+  nickname: string
   adminNote: string | null
   status: 'active' | 'disabled'
   createdAt: string
@@ -1563,6 +1564,14 @@ export const adminApi = {
       {
         method: 'PATCH',
         body: JSON.stringify({ adminNote }),
+      }
+    ),
+  updateUserNickname: (id: string, nickname: string) =>
+    request<AdminUserRow>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/nickname`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ nickname }),
       }
     ),
   createUserPasswordResetLink: (id: string) =>

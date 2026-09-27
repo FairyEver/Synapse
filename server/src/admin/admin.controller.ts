@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Head, Header, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
+import { normalizeUserNickname } from "@synapse/shared"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuditLogService, auditLogExportLimit } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
@@ -17,6 +18,19 @@ const userStatusSchema = z.object({
 
 const userAdminNoteSchema = z.object({
   adminNote: z.string().max(500, "最多 500 个字符").nullable(),
+}).strict()
+
+const userNicknameSchema = z.object({
+  nickname: z.string().trim().superRefine((value, ctx) => {
+    try {
+      normalizeUserNickname(value)
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "昵称无效。",
+      })
+    }
+  }),
 }).strict()
 
 const userSortFields = ["createdAt", "updatedAt", "email", "handle", "status"] as const
@@ -149,6 +163,13 @@ export class AdminController {
     const result = userAdminNoteSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "管理员备注无效。")
     return this.admin.updateUserAdminNote(id, result.data, request?.admin?.email, request?.ip)
+  }
+
+  @Patch("/users/:id/nickname")
+  async updateUserNickname(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
+    const result = userNicknameSchema.safeParse(body)
+    if (!result.success) throw badRequestFromZodError(result.error, "昵称无效。")
+    return this.admin.updateUserNickname(id, result.data, request?.admin?.email, request?.ip)
   }
 
   @Post("/users/:id/password-reset-link")

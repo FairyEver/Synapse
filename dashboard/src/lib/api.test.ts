@@ -127,6 +127,26 @@ describe('adminApi.users', () => {
     )
   })
 
+  it('updates user nicknames through the admin endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'user/id', nickname: '李 阳' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.updateUserNickname('user/id', '李 阳')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/users/user%2Fid/nickname',
+      expect.objectContaining({
+        body: JSON.stringify({ nickname: '李 阳' }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
+    )
+  })
+
   it('searches users for administrator filters', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
-import { buildPasswordResetUrl } from "@synapse/shared"
+import { buildPasswordResetUrl, normalizeUserNickname } from "@synapse/shared"
 import { PinoLogger } from "nestjs-pino"
 import { passwordResetTokenTtlMs } from "../auth/password-reset"
 import { createOpaqueToken, hashToken } from "../auth/token"
@@ -20,6 +20,7 @@ const adminUserSelect = {
   id: true,
   email: true,
   handle: true,
+  nickname: true,
   adminNote: true,
   status: true,
   createdAt: true,
@@ -216,6 +217,38 @@ export class AdminService {
         hasAdminNote: adminNote !== null,
         adminNoteLength: adminNote?.length ?? 0,
       },
+      ipAddress,
+    })
+    return toAdminUserRow(user)
+  }
+
+  async updateUserNickname(
+    id: string,
+    input: { readonly nickname: string },
+    actorEmail = "system",
+    ipAddress = "system",
+  ) {
+    let nickname: string
+    try {
+      nickname = normalizeUserNickname(input.nickname)
+    } catch (error) {
+      if (error instanceof Error) throw new BadRequestException(error.message)
+      throw error
+    }
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { nickname },
+      select: adminUserSelect,
+    }).catch((error: unknown) => {
+      if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
+      throw error
+    })
+    await this.recordServiceManagedAuditSafely({
+      adminEmail: actorEmail,
+      action: "admin.user.nickname_update",
+      targetType: "user",
+      targetId: id,
+      detail: { fields: ["nickname"] },
       ipAddress,
     })
     return toAdminUserRow(user)

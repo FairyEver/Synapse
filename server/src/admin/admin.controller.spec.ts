@@ -457,4 +457,21 @@ describe("AdminController", () => {
     expect(updateUserAdminNote).not.toHaveBeenCalled()
   })
 
+  it("validates and forwards administrator nickname edits", async () => {
+    const updateUserNickname = vi.fn().mockResolvedValue({ id: "user-1", nickname: "李 阳" })
+    const controller = createController({ updateUserNickname })
+    const request = { admin: { email: "admin@example.com" }, ip: "203.0.113.12" } as never
+
+    await expect(controller.updateUserNickname("user-1", { nickname: "  " }, request))
+      .rejects.toThrow("昵称不能为空。")
+    await expect(controller.updateUserNickname("user-1", { nickname: "名".repeat(25) }, request))
+      .rejects.toThrow("昵称不能超过 24 个字符。")
+    expect(updateUserNickname).not.toHaveBeenCalled()
+
+    await controller.updateUserNickname("user-1", { nickname: " 李 阳 " }, request)
+    expect(updateUserNickname).toHaveBeenCalledWith(
+      "user-1", { nickname: "李 阳" }, "admin@example.com", "203.0.113.12",
+    )
+  })
+
 })

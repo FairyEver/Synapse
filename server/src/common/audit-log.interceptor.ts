@@ -12,10 +12,11 @@ import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { formatAuditError } from "./audit-error"
 import { AuditLogService } from "./audit-log.service"
 
-const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|secret|credential|api[-_]?key|access[-_]?key|admin[-_]?note/i
+const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|secret|credential|api[-_]?key|access[-_]?key|admin[-_]?note|nickname/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const USER_ADMIN_NOTE_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/admin-note$/
+const USER_NICKNAME_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/nickname$/
 const USER_PASSWORD_RESET_LINK_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/password-reset-link$/
 const ADMIN_WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN =
@@ -138,6 +139,7 @@ function shouldAuditAdminSuccessFallback(method: string, path: string): boolean 
 function hasControllerManagedAdminSuccessAudit(method: string, path: string): boolean {
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) return true
   if (method === "PATCH" && USER_ADMIN_NOTE_PATH_PATTERN.test(path)) return true
+  if (method === "PATCH" && USER_NICKNAME_PATH_PATTERN.test(path)) return true
   return method === "DELETE" && path === "/api/admin/logs/cleanup"
 }
 
@@ -174,6 +176,9 @@ function resolveKnownAdminAuditTarget(
   }
   if (method === "PATCH" && USER_ADMIN_NOTE_PATH_PATTERN.test(path)) {
     return { action: "admin.user.admin_note_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "PATCH" && USER_NICKNAME_PATH_PATTERN.test(path)) {
+    return { action: "admin.user.nickname_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
   if (method === "POST" && USER_PASSWORD_RESET_LINK_PATH_PATTERN.test(path)) {
     return { action: "admin.user.password_reset_link_create", targetType: "user", targetId: params.id ?? readId(responseBody) }

@@ -145,6 +145,7 @@ describe("AdminService", () => {
         id: true,
         email: true,
         handle: true,
+        nickname: true,
         adminNote: true,
         status: true,
         createdAt: true,
@@ -161,6 +162,7 @@ describe("AdminService", () => {
         id: "user-1",
         email: "liyang@example.com",
         handle: "liyang",
+        nickname: "李阳",
         adminNote: null,
         status: "active",
         createdAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -177,6 +179,7 @@ describe("AdminService", () => {
 
     expect(result.data).toEqual([expect.objectContaining({
       id: "user-1",
+      nickname: "李阳",
       teams: [
         { id: "team-1", name: "产品组" },
         { id: "team-2", name: "研发组" },
@@ -281,6 +284,50 @@ describe("AdminService", () => {
       ipAddress: "203.0.113.12",
     })
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("important account")
+  })
+
+  it("updates a user's nickname with shared validation and an audit record", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.update.mockResolvedValue({
+      id: "user-1",
+      nickname: "李 阳",
+      teamMemberships: [],
+    })
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.updateUserNickname(
+      "user-1", { nickname: " 李 阳 " }, "admin@example.com", "203.0.113.12",
+    )).resolves.toMatchObject({ nickname: "李 阳" })
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { nickname: "李 阳" },
+      select: expect.objectContaining({ nickname: true }),
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.user.nickname_update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { fields: ["nickname"] },
+      ipAddress: "203.0.113.12",
+    })
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("李 阳")
+  })
+
+  it("rejects invalid nicknames and reports missing users", async () => {
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await expect(service.updateUserNickname("user-1", { nickname: "  " }))
+      .rejects.toThrow("昵称不能为空。")
+    await expect(service.updateUserNickname("user-1", { nickname: "名".repeat(25) }))
+      .rejects.toThrow("昵称不能超过 24 个字符。")
+    expect(prisma.user.update).not.toHaveBeenCalled()
+
+    prisma.user.update.mockRejectedValue(createNotFoundError())
+    await expect(service.updateUserNickname("missing-user", { nickname: "Ada" }))
+      .rejects.toThrow("用户不存在。")
   })
 
   it("clears admin-only user notes when the value is blank", async () => {

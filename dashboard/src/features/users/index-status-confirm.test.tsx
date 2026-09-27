@@ -17,6 +17,7 @@ vi.mock('@/lib/api', () => ({
     subscribeLiveClients: vi.fn(),
     createUserPasswordResetLink: vi.fn(),
     updateUserAdminNote: vi.fn(),
+    updateUserNickname: vi.fn(),
     updateUserStatus: vi.fn(),
   },
 }))
@@ -61,6 +62,7 @@ describe('UsersPage status confirmation', () => {
         id: 'user-1',
         email: 'ada@example.com',
         handle: 'ada',
+        nickname: 'Ada',
         adminNote: null,
         status: 'active',
         createdAt: '2026-06-14T00:00:00.000Z',
@@ -75,6 +77,7 @@ describe('UsersPage status confirmation', () => {
       id: 'user-1',
       email: 'ada@example.com',
       handle: 'ada',
+      nickname: 'Ada',
       adminNote: null,
       status: 'disabled',
       createdAt: '2026-06-14T00:00:00.000Z',
@@ -108,6 +111,7 @@ describe('UsersPage status confirmation', () => {
         id: 'user-1',
         email: 'ada@example.com',
         handle: 'ada',
+        nickname: 'Ada',
         adminNote: '付费客户',
         status: 'active',
         createdAt: '2026-06-14T00:00:00.000Z',
@@ -122,6 +126,7 @@ describe('UsersPage status confirmation', () => {
       id: 'user-1',
       email: 'ada@example.com',
       handle: 'ada',
+      nickname: 'Ada',
       adminNote: '内部测试账号',
       status: 'active',
       createdAt: '2026-06-14T00:00:00.000Z',
@@ -160,12 +165,50 @@ describe('UsersPage status confirmation', () => {
     )
   })
 
+  it('shows and edits user nicknames with shared validation', async () => {
+    const user = {
+      id: 'user-1',
+      email: 'ada@example.com',
+      handle: 'ada',
+      nickname: 'Ada',
+      adminNote: null,
+      status: 'active' as const,
+      createdAt: '2026-06-14T00:00:00.000Z',
+      updatedAt: '2026-06-14T00:00:00.000Z',
+      teams: [],
+    }
+    mockedAdminApi.listUsers
+      .mockResolvedValueOnce({ data: [user], total: 1 })
+      .mockResolvedValue({ data: [{ ...user, nickname: '李 阳' }], total: 1 })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+    mockedAdminApi.updateUserNickname.mockResolvedValue({ ...user, nickname: '李 阳' })
+
+    renderPage()
+    await waitFor(() => expect(cellByHeader('ada@example.com', '昵称').textContent).toBe('Ada'))
+    await openMenu(userActionsButton('ada@example.com'))
+    await click(menuItemByText('编辑昵称'))
+
+    const input = document.querySelector('#user-nickname')
+    if (!(input instanceof HTMLInputElement)) throw new Error('nickname input not found')
+    await inputValue(input, '   ')
+    expect(document.body.textContent).toContain('昵称不能为空。')
+    expect(dialogButtonByText('保存').disabled).toBe(true)
+
+    await inputValue(input, ' 李 阳 ')
+    expect(dialogButtonByText('保存').disabled).toBe(false)
+    await click(dialogButtonByText('保存'))
+    expect(mockedAdminApi.updateUserNickname).toHaveBeenCalledWith('user-1', '李 阳')
+    await waitFor(() => expect(cellByHeader('ada@example.com', '昵称').textContent).toBe('李 阳'))
+  })
+
   it('generates and copies password reset links for active users', async () => {
     mockedAdminApi.listUsers.mockResolvedValue({
       data: [{
         id: 'user-1',
         email: 'ada@example.com',
         handle: 'ada',
+        nickname: 'Ada',
         adminNote: null,
         status: 'active',
         createdAt: '2026-06-14T00:00:00.000Z',
@@ -216,6 +259,7 @@ describe('UsersPage status confirmation', () => {
           id: 'user-1',
           email: 'ada@example.com',
           handle: 'ada',
+          nickname: 'Ada',
           adminNote: null,
           status: 'active',
           createdAt: '2026-06-14T00:00:00.000Z',
@@ -229,6 +273,7 @@ describe('UsersPage status confirmation', () => {
           id: 'user-2',
           email: 'bob@example.com',
           handle: 'bob',
+          nickname: 'Bob',
           adminNote: null,
           status: 'active',
           createdAt: '2026-06-15T00:00:00.000Z',
@@ -275,6 +320,15 @@ function renderPage() {
 async function click(element: HTMLElement) {
   await act(async () => {
     element.click()
+    await Promise.resolve()
+  })
+}
+
+async function inputValue(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    valueSetter?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
     await Promise.resolve()
   })
 }
