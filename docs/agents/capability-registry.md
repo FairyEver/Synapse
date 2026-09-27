@@ -23,7 +23,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
-下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 2 条路由：`synapse://recording` 和 `synapse://terminal?desktop=<id>&session=<id>`；后者的 `desktop` / `session` 可省略，用于主屏幕组件进入终端列表或会话。它只解析当前仍在线且在实时摘要中存在的会话；会话已结束时回到列表，不承诺跨重启恢复。两条路由均由 iOS App 本地处理，桌面端不注册对应 action。
+下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 3 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>` 和 `synapse://mail/<message-id>`。Terminal 路由的 `desktop` / `session` 可省略，用于主屏幕组件进入终端列表或会话；它只解析当前仍在线且在实时摘要中存在的会话。Mail 路由进入站内信并按当前用户权限读取该信件。三条路由均由 iOS App 本地处理。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
@@ -37,6 +37,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
+| Mail | 是 | 否 | — | — | 13 | `open` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -55,6 +56,8 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 固定例外：
 
 - System Notifier 的注册表面不变（1 个 MCP 工具、1 个 Workflow 节点），它是「通知用户」这一个能力：一次触发只把消息写进账号消息中心（桌面端入口是 `POST /api/notifications/desktop`），服务端再投递给该账号所有在线桌面（包括发起的那台）并随 APNs 推到用户手机。走桌面登录态，不需要用户新建 API 密钥，也不经过开放 API。System Notifier 同时负责这台电脑的原生呈现：实时连接收到账号消息后交给它，按 `localEnabled` / `silent` 两颗开关决定弹不弹、静不静音；`sendEnabled` 是发送总闸，关掉则完全不发。未登录或离线时发不出去，那就什么都不发生，本机也不另弹一条，但会留下 `notification_sync` 固定诊断。测试通知仅本机显示且永不发送，成功响应仍不承诺送达或显示。
+
+- Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发、保存草稿和处理附件。13 个 MCP 工具由 Synapse Skill 引导 AI 后台调用：逐人搜索同团队收件人、固定完整预览、取得用户明确确认后才发送；AI 不唤起写信界面。附件从用户云盘的固定版本复制为信件专属快照，信件查看与下载只允许发件人或该信收件人。桌面 `synapse://mail/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。没有团队内子组或群组地址。
 
 - Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。
 
@@ -107,6 +110,7 @@ Portal Headless Test 仍通过既有 Connectors 应用授权，私有回调 `syn
 | Usage Monitor | 是 | 否 | — |
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
+| Mail | 是 | 否 | `mail` |
 | Meeting | 是 | 否 | — |
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
@@ -132,12 +136,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 65 | 65 |
+| `mail` | 13 | 13 |
 | `extend` | 1 | 1 |
-| 合计 | 252 | 248 |
+| 合计 | 265 | 261 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 248 个工具（247 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 261 个工具（260 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

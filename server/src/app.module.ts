@@ -18,6 +18,7 @@ import { ClientTelemetryModule } from "./client-telemetry/client-telemetry.modul
 import { OpenApiModule } from "./open-api/open-api.module"
 import { LiveModule } from "./live/live.module"
 import { MeetingModule } from "./meeting/meeting.module"
+import { MailModule } from "./mail/mail.module"
 import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { NotificationModule } from "./notifications/notification.module"
 import { PrismaModule } from "./prisma/prisma.module"
@@ -40,12 +41,14 @@ type RequestLogObject = {
 
 /**
  * 这些路径的访问日志必须关闭：问题反馈直接读取原始请求体，通知接口把 API 密钥和消息
- * 正文放在 URL 段或请求体里。日志同时落 pino-roll 文件和 nginx 访问日志，所以
+ * 正文放在 URL 段或请求体里。站内信查询含收件人姓名。日志同时落 pino-roll 文件和 nginx 访问日志，所以
  * `server/nginx.conf` 里对应的 location 也要 `access_log off`。
  */
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
   return pathname === "/api/problem-feedback"
+    || pathname === "/api/mail"
+    || pathname.startsWith("/api/mail/")
     || pathname === OPEN_API_NOTIFICATIONS_BASE_PATH
     || pathname.startsWith(`${OPEN_API_NOTIFICATIONS_BASE_PATH}/`)
 }
@@ -112,6 +115,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
     UpdateIntentModule,
     VoiceModule,
     MeetingModule,
+    MailModule,
     TeamModule,
     HealthModule,
     PortalHeadlessModule,

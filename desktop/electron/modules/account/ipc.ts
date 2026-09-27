@@ -82,6 +82,25 @@ const notificationListRequestSchema = z.object({
 const notificationIdSchema = z.object({ id: z.string().min(1) })
 const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pending"]) })
 
+const mailContentSchema = z.object({ recipientIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), replyToId: z.string().optional() }).strict()
+const mailIdSchema = z.string().min(1)
+const mailOperationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("recipientSearch"), query: z.string().min(1).max(100) }),
+  z.object({ kind: z.literal("messageList"), box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: z.string().optional() }),
+  z.object({ kind: z.literal("messageGet"), messageId: mailIdSchema }),
+  z.object({ kind: z.literal("messageSetRead"), messageId: mailIdSchema, read: z.boolean() }),
+  z.object({ kind: z.literal("messageDelete"), messageId: mailIdSchema }),
+  z.object({ kind: z.literal("draftList") }),
+  z.object({ kind: z.literal("draftCreate"), content: mailContentSchema }),
+  z.object({ kind: z.literal("draftUpdate"), draftId: mailIdSchema, baseVersion: z.number().int().positive(), content: mailContentSchema }),
+  z.object({ kind: z.literal("draftDelete"), draftId: mailIdSchema }),
+  z.object({ kind: z.literal("attachmentPrepare"), driveItemId: mailIdSchema, versionId: mailIdSchema.optional() }),
+  z.object({ kind: z.literal("attachmentLocal"), filePath: z.string().min(1) }),
+  z.object({ kind: z.literal("attachmentDownload"), messageId: mailIdSchema, attachmentId: mailIdSchema, outputPath: z.string().min(1).optional() }),
+  z.object({ kind: z.literal("sendPreview"), content: mailContentSchema }),
+  z.object({ kind: z.literal("send"), previewId: mailIdSchema, clientRequestId: mailIdSchema }),
+])
+
 const driveItemSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
@@ -1094,6 +1113,34 @@ export const accountIpcModule: IpcModule = {
       request: notificationDeleteAllRequestSchema,
       response: z.object({ ok: z.literal(true) }),
       handler: async (_ctx, input) => accountService.deleteAllNotifications(notificationDeleteAllRequestSchema.parse(input).filter),
+    },
+    mailOperation: {
+      kind: "invoke",
+      operationId: "app.mail.operation.execute",
+      request: mailOperationSchema,
+      response: z.unknown(),
+      handler: async (ctx, input) => {
+        const operation = mailOperationSchema.parse(input)
+        if (operation.kind === "attachmentDownload") {
+          const message = await accountService.executeMailOperation({ kind: "messageGet", messageId: operation.messageId })
+          const attachment = message.attachments.find((item) => item.attachmentId === operation.attachmentId)
+          if (!attachment) throw new Error("附件不存在。")
+          const destination = operation.outputPath ?? (await dialog.showSaveDialog({ defaultPath: attachment.fileName })).filePath
+          if (!destination) return null
+          await checkAccountPermission({
+            ctx,
+            action: "fs.write",
+            resource: destination,
+            source: "account.mail.attachmentDownload",
+            context: { kind: operation.kind, messageId: operation.messageId, attachmentId: operation.attachmentId },
+          })
+          return accountService.executeMailOperation({ ...operation, outputPath: destination })
+        }
+        if (operation.kind === "attachmentLocal") {
+          await checkAccountPermission({ ctx, action: "fs.read.outside-userdata", resource: operation.filePath, source: "account.mail.attachmentLocal", context: { kind: operation.kind } })
+        }
+        return accountService.executeMailOperation(operation)
+      },
     },
     listDriveItems: {
       kind: "invoke",

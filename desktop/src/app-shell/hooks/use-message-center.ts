@@ -93,6 +93,11 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
       } else if (item.source === "meeting-transcription" && item.targetId) {
         onOpenMeeting?.(item.targetId)
         setOpen(false)
+      } else if (item.source === "mail" && item.targetId) {
+        await requireBridgeDomain("apps").openSystemApp("mail", {
+          mailOpenRequest: { requestId: crypto.randomUUID(), messageId: item.targetId },
+        })
+        setOpen(false)
       } else if (item.url) {
         const url = new URL(item.url)
         if (url.protocol === "https:") await requireBridgeDomain("shell").openExternal(url.toString())

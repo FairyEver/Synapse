@@ -9,6 +9,7 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
     driveDispatch: vi.fn(),
+    mailDispatch: vi.fn(),
     modelPriceDispatch: vi.fn(),
     repositoryDispatch: vi.fn(),
     skillRepositoryDispatch: vi.fn(),

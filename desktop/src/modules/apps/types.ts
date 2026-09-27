@@ -3,6 +3,7 @@ export const SYSTEM_APP_IDS = [
   "agent-personas",
   "workflow",
   "drive",
+  "mail",
   "automation",
   "launcher",
   "settings",
@@ -27,6 +28,7 @@ export type SynapseSystemAppNamespace =
   | "agent_personas"
   | "workflow"
   | "drive"
+  | "mail"
   | "automation"
   | "launcher"
   | "settings"
@@ -95,10 +97,16 @@ export type SynapseSystemAppTerminalOpenRequest = {
   readonly sessionId: string
 }
 
+export type SynapseSystemAppMailOpenRequest = {
+  readonly requestId: string
+  readonly messageId: string
+}
+
 export type SynapseSystemAppOpenOptions = {
   readonly contentOpenRequest?: SynapseSystemAppContentOpenRequest | null
   readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
+  readonly mailOpenRequest?: SynapseSystemAppMailOpenRequest | null
 }
 
 export function isSystemAppId(value: string): value is SynapseSystemAppId {

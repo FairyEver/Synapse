@@ -12,6 +12,7 @@ import { problemFeedbackCapabilityManifest } from "./problem-feedback/shared/man
 import { jsonRepairCapabilityManifest } from "./json-repair/shared/manifest"
 import { agentConversationCapabilityManifest } from "./agent/shared/manifest"
 import { terminalCapabilityManifest } from "./terminal/shared/manifest"
+import { mailCapabilityManifest } from "./mail/shared/manifest"
 
 export {
   filterDiscoverableTypes,
@@ -25,6 +26,7 @@ const appDeepLinkManifests = [
   connectorsCapabilityManifest,
   agentConversationCapabilityManifest,
   terminalCapabilityManifest,
+  mailCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,
   htmlGeneratorCapabilityManifest,

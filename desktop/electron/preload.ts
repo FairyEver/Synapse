@@ -80,6 +80,7 @@ const EVENT_CHANNELS = {
     contentOpenRequest: "synapse:app:apps:operation:content_open_request",
     gitOpenRequest: "synapse:app:apps:operation:git_open_request",
     terminalOpenRequest: "synapse:app:apps:operation:terminal_open_request",
+    mailOpenRequest: "synapse:app:apps:operation:mail_open_request",
   },
 }
 
@@ -389,6 +390,10 @@ const synapseBridge: SynapseBridge = {
     onTerminalOpenRequest: createRawPayloadSubscription(
       subscribe,
       EVENT_CHANNELS.apps.terminalOpenRequest,
+    ),
+    onMailOpenRequest: createRawPayloadSubscription(
+      subscribe,
+      EVENT_CHANNELS.apps.mailOpenRequest,
     ),
   },
   documentTemplate: {
@@ -762,6 +767,9 @@ const synapseBridge: SynapseBridge = {
       delete: invoke(IPC_CHANNELS.account.deleteNotification),
       deleteAll: invoke(IPC_CHANNELS.account.deleteAllNotifications),
     },
+  },
+  mail: {
+    execute: invoke(IPC_CHANNELS.account.mailOperation),
   },
   drive: {
     item: {

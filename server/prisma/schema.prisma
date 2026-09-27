@@ -74,6 +74,11 @@ model User {
   clientTelemetryEvents          ClientTelemetryEvent[]
   meetings                       Meeting[]
   teamMemberships                TeamMembership[]
+  mailMessagesSent               MailMessage[]                   @relation("MailSender")
+  mailRecipients                 MailRecipient[]
+  mailDrafts                      MailDraft[]
+  mailPreviews                    MailSendPreview[]
+  mailAttachments                 MailAttachment[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
 }
@@ -1267,4 +1272,88 @@ model TeamMembership {
 
   @@unique([teamId, userId])
   @@index([userId])
+}
+
+model MailMessage {
+  id              String          @id @default(cuid())
+  senderId        String
+  sender          User            @relation("MailSender", fields: [senderId], references: [id], onDelete: Restrict)
+  teamIdSnapshot  String
+  teamNameSnapshot String         @db.VarChar(30)
+  subject         String          @db.VarChar(120)
+  body            String          @db.Text
+  replyToId       String?
+  clientRequestId String          @db.VarChar(100)
+  previewId       String          @unique
+  senderDeletedAt DateTime?
+  sentAt          DateTime        @default(now())
+  recipients      MailRecipient[]
+  attachments     MailAttachment[]
+
+  @@unique([senderId, clientRequestId])
+  @@index([senderId, senderDeletedAt, sentAt, id])
+  @@index([teamIdSnapshot, sentAt])
+}
+
+model MailRecipient {
+  id        String       @id @default(cuid())
+  messageId String
+  message   MailMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  readAt    DateTime?
+  deletedAt DateTime?
+
+  @@unique([messageId, userId])
+  @@index([userId, deletedAt, messageId])
+}
+
+model MailDraft {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipientIds    Json
+  subject         String   @default("") @db.VarChar(120)
+  body            String   @default("") @db.Text
+  attachmentIds   Json
+  replyToId       String?
+  version         Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+model MailSendPreview {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipientIds   Json
+  attachmentIds  Json
+  teamIdSnapshot String
+  teamNameSnapshot String @db.VarChar(30)
+  subject        String   @db.VarChar(120)
+  body           String   @db.Text
+  replyToId      String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+model MailAttachment {
+  id          String       @id @default(cuid())
+  ownerId     String
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  messageId   String?
+  message     MailMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName    String       @db.VarChar(255)
+  mimeType    String?      @db.VarChar(255)
+  size        BigInt
+  storageKey  String       @unique
+  sourceItemId String?
+  sourceVersionId String?
+  createdAt   DateTime     @default(now())
+
+  @@index([ownerId, messageId, createdAt])
 }

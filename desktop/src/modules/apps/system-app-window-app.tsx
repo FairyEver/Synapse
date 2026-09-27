@@ -8,6 +8,7 @@ import { updateTrackingContext } from "@/lib/ui-tracking"
 import { SystemAppContent } from "./components/system-app-content"
 import type {
   SynapseSystemAppGitOpenRequest,
+  SynapseSystemAppMailOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -19,6 +20,7 @@ type AppsBridge = {
   readonly onContentOpenRequest: (listener: (request: ContentOpenRequest) => void) => () => void
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
   readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
+  readonly onMailOpenRequest: (listener: (request: SynapseSystemAppMailOpenRequest) => void) => () => void
 }
 
 function getAppsBridge(): AppsBridge | undefined {
@@ -68,6 +70,15 @@ function parseInitialTerminalOpenRequest(): SynapseSystemAppTerminalOpenRequest 
   }
 }
 
+function parseInitialMailOpenRequest(): SynapseSystemAppMailOpenRequest | null {
+  const raw = new URLSearchParams(window.location.search).get("mailOpenRequest")
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<SynapseSystemAppMailOpenRequest>
+    return typeof parsed.requestId === "string" && typeof parsed.messageId === "string" ? { requestId: parsed.requestId, messageId: parsed.messageId } : null
+  } catch { return null }
+}
+
 function replaceOpenRequestInUrl(name: string, request: unknown): void {
   const url = new URL(window.location.href)
   url.searchParams.set(name, JSON.stringify(request))
@@ -89,6 +100,8 @@ export function SystemAppWindowApp() {
     useState<SynapseSystemAppGitOpenRequest | null>(() => parseInitialGitOpenRequest())
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
+  const [pendingMailOpenRequest, setPendingMailOpenRequest] =
+    useState<SynapseSystemAppMailOpenRequest | null>(() => parseInitialMailOpenRequest())
 
   useEffect(() => {
     updateTrackingContext({ moduleId: appId ?? "apps", windowType: "system-app" })
@@ -121,6 +134,15 @@ export function SystemAppWindowApp() {
     })
   }, [])
 
+  useEffect(() => {
+    const bridge = getAppsBridge()
+    if (!bridge) return undefined
+    return bridge.onMailOpenRequest((request) => {
+      replaceOpenRequestInUrl("mailOpenRequest", request)
+      setPendingMailOpenRequest(request)
+    })
+  }, [])
+
   const forwardContentOpenRequest = useCallback((request: ContentOpenRequest) => {
     void getAppsBridge()?.openSystemApp("resource-repository", {
       contentOpenRequest: request,
@@ -145,6 +167,10 @@ export function SystemAppWindowApp() {
       terminalOpenRequest={pendingTerminalOpenRequest}
       onTerminalOpenRequestConsumed={(requestId) => {
         setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
+      }}
+      mailOpenRequest={pendingMailOpenRequest}
+      onMailOpenRequestConsumed={(requestId) => {
+        setPendingMailOpenRequest((current) => current?.requestId === requestId ? null : current)
       }}
       onContentOpenRequest={forwardContentOpenRequest}
     />

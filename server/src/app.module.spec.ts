@@ -7,6 +7,7 @@ import { ApiKeyModule } from "./api-keys/api-key.module"
 import { AppModule } from "./app.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { LiveModule } from "./live/live.module"
+import { MailModule } from "./mail/mail.module"
 import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { OpenApiModule } from "./open-api/open-api.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
@@ -30,6 +31,7 @@ describe("AppModule", () => {
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([OpenApiModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([VoiceModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([TeamModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([MailModule]))
   })
 
   it("does not assemble the retired invitation module", () => {

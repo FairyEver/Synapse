@@ -33,6 +33,7 @@ import { readFile, realpath, stat, statfs } from "node:fs/promises"
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
+import { createMailCapabilityDispatcher } from "../capabilities/mail-dispatcher"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { createAccountCapabilityDispatcher } from "../../app-capabilities/account/main/dispatcher"
 import { createDesktopControlDispatcher } from "../../app-capabilities/desktop-control/main/dispatcher"
@@ -1680,6 +1681,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       permissionGuard,
       auditSink,
     })
+    const mailDispatcher = createMailCapabilityDispatcher({ accountService, permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
       service: createDocumentTemplateService(),
       permissionGuard,
@@ -1773,6 +1775,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
+      mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       skillRepositoryDispatch: (action, params, context) => skillRepositoryDispatcher.dispatch(action, params, context),

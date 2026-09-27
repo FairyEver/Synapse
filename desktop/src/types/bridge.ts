@@ -553,6 +553,7 @@ import type {
 import type {
   SynapseSystemAppContentOpenRequest,
   SynapseSystemAppGitOpenRequest,
+  SynapseSystemAppMailOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -1037,6 +1038,9 @@ export type SynapseBridge = {
     onTerminalOpenRequest: (
       listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
+    onMailOpenRequest: (
+      listener: (request: SynapseSystemAppMailOpenRequest) => void,
+    ) => () => void
   }
   documentTemplate: {
     template: { choose: () => Promise<string | null> }
@@ -1393,6 +1397,9 @@ export type SynapseBridge = {
       delete: (input: { id: string }) => Promise<{ ok: true }>
       deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>
     }
+  }
+  mail: {
+    execute: (operation: import("./mail").MailOperation) => Promise<unknown>
   }
   drive: {
     item: {

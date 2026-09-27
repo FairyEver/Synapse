@@ -15,5 +15,6 @@ import Foundation
 enum HomeRoute: Hashable {
     case recordings
     case drive
+    case mail
     case clipboard
 }

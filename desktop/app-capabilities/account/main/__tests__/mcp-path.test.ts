@@ -44,6 +44,7 @@ function createMcpPath(state: SynapseAccountState) {
     contentDispatch: unused.dispatch,
     databaseDispatch: unused.dispatch,
     driveDispatch: unused.dispatch,
+    mailDispatch: unused.dispatch,
     modelPriceDispatch: unused.dispatch,
     repositoryDispatch: unused.dispatch,
     skillRepositoryDispatch: unused.dispatch,

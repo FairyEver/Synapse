@@ -43,12 +43,15 @@ const terminalOpenRequestSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
+const mailOpenRequestSchema = z.object({ requestId: z.string().min(1), messageId: z.string().min(1) }).strict()
+
 const openSystemAppRequestSchema = z.object({
   appId: systemAppIdSchema,
   options: z.object({
     contentOpenRequest: contentOpenRequestSchema.optional(),
     gitOpenRequest: gitOpenRequestSchema.optional(),
     terminalOpenRequest: terminalOpenRequestSchema.optional(),
+    mailOpenRequest: mailOpenRequestSchema.optional(),
   }).optional(),
 }).superRefine((request, context) => {
   if (request.options?.gitOpenRequest && request.appId !== "git") {
@@ -64,6 +67,9 @@ const openSystemAppRequestSchema = z.object({
       message: "Terminal open requests require the Terminal app.",
       path: ["options", "terminalOpenRequest"],
     })
+  }
+  if (request.options?.mailOpenRequest && request.appId !== "mail") {
+    context.addIssue({ code: "custom", message: "Mail open requests require the Mail app.", path: ["options", "mailOpenRequest"] })
   }
 })
 

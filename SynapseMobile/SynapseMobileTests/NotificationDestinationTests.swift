@@ -4,7 +4,7 @@ import Testing
 
 /// 一条通知点下去该去哪。
 ///
-/// 四种来源里三种有确切去处，第四种（外部接口发来的普通消息）没有 —— 它该留在原地
+/// 站内信、终端和录音有确切去处；外部接口发来的普通消息没有 —— 它该留在原地
 /// 让人读，而不是把人送到一个不存在的地方去。
 struct NotificationDestinationTests {
 
@@ -39,6 +39,13 @@ struct NotificationDestinationTests {
             notification(source: "meeting-transcription", targetId: "m1", deviceId: nil, url: nil)
         )
         #expect(outcome == .route(.meeting(meetingId: "m1")))
+    }
+
+    @Test func aMailNotificationGoesToTheMessage() {
+        let outcome = NotificationDestination.resolve(
+            notification(source: "mail", targetId: "mail-1", deviceId: nil, url: "synapse://mail/mail-1")
+        )
+        #expect(outcome == .route(.mail(messageId: "mail-1")))
     }
 
     /// 源对了但没有 target：无从去起，就是没有去处。

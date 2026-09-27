@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto"
 import { createReadStream, createWriteStream, type Stats } from "node:fs"
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
+import type { MailOperation, MailOperationResult } from "../../src/types/mail"
 import { Readable, Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { app, safeStorage } from "electron"
@@ -475,6 +476,44 @@ export class AccountService {
     return this.getAuthenticatedJson<import("../../src/types/notification-center").NotificationPage>(
       `${apiBaseUrl()}/notifications${suffix}`, "消息加载失败。",
     )
+  }
+
+  async executeMailOperation<K extends MailOperation["kind"]>(operation: Extract<MailOperation, { kind: K }>): Promise<MailOperationResult[K]>
+  async executeMailOperation(operation: MailOperation): Promise<unknown> {
+    const base = `${apiBaseUrl()}/mail`
+    const id = (value: string) => encodeURIComponent(value)
+    const json = <T>(method: string, path: string, body?: unknown) => this.requestAuthenticatedJson<T>(method, `${base}${path}`, body, "站内信操作失败。")
+    switch (operation.kind) {
+      case "recipientSearch": return await json("GET", `/recipients?query=${id(operation.query)}`)
+      case "messageList": {
+        const query = new URLSearchParams({ box: operation.box })
+        if (operation.query) query.set("query", operation.query)
+        if (operation.cursor) query.set("cursor", operation.cursor)
+        return await json("GET", `/messages?${query}`)
+      }
+      case "messageGet": return await json("GET", `/messages/${id(operation.messageId)}`)
+      case "messageSetRead": return await json("PATCH", `/messages/${id(operation.messageId)}/read`, { read: operation.read })
+      case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}`)
+      case "draftList": return await json("GET", "/drafts")
+      case "draftCreate": return await json("POST", "/drafts", operation.content)
+      case "draftUpdate": return await json("PATCH", `/drafts/${id(operation.draftId)}`, { ...operation.content, baseVersion: operation.baseVersion })
+      case "draftDelete": return await json("DELETE", `/drafts/${id(operation.draftId)}`)
+      case "attachmentPrepare": return await json("POST", "/attachments/prepare", { driveItemId: operation.driveItemId, versionId: operation.versionId })
+      case "attachmentLocal": {
+        const info = await stat(operation.filePath)
+        if (!info.isFile() || info.size > 20 * 1024 * 1024 || !info.size) throw new Error("附件必须是 20 MB 以内的文件。")
+        const response = await this.fetchAuthenticated(`${base}/attachments/local?fileName=${id(path.basename(operation.filePath))}`, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: await readFile(operation.filePath) }, "附件上传失败。")
+        return await response.json()
+      }
+      case "attachmentDownload": {
+        if (!operation.outputPath) throw new Error("缺少附件保存位置。")
+        const response = await this.fetchAuthenticated(`${base}/messages/${id(operation.messageId)}/attachments/${id(operation.attachmentId)}`, {}, "附件下载失败。")
+        await writeFile(operation.outputPath, Buffer.from(await response.arrayBuffer()))
+        return { path: operation.outputPath }
+      }
+      case "sendPreview": return await json("POST", "/send-previews", operation.content)
+      case "send": return await json("POST", "/messages", { previewId: operation.previewId, clientRequestId: operation.clientRequestId })
+    }
   }
 
   /**

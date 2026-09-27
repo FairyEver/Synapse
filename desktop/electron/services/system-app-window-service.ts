@@ -20,6 +20,7 @@ import { createMainLogger } from "./log-store"
 const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:content_open_request"
 const SYSTEM_APP_GIT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:git_open_request"
 const SYSTEM_APP_TERMINAL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:terminal_open_request"
+const SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:mail_open_request"
 export const SYSTEM_APP_WINDOW_SERVICE_ID = "core.system-app-window"
 
 type SystemAppWindowLogger = {
@@ -136,6 +137,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
             })
           }
         }
+        if (options.mailOpenRequest) {
+          sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL, options.mailOpenRequest)
+        }
         logger.info("Focused existing system app window.", { appId, appType: definition.type })
         return
       }
@@ -150,6 +154,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       }
       if (options.terminalOpenRequest) {
         params.set("terminalOpenRequest", JSON.stringify(options.terminalOpenRequest))
+      }
+      if (options.mailOpenRequest) {
+        params.set("mailOpenRequest", JSON.stringify(options.mailOpenRequest))
       }
       const url = buildDetachedViewWindowUrl(baseUrl, params)
       await detachedWindows.open({

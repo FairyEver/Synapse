@@ -80,6 +80,10 @@ const cosConfigGroups = [
     ],
   },
   {
+    name: "MAIL_COS",
+    fields: ["MAIL_COS_SECRET_ID", "MAIL_COS_SECRET_KEY", "MAIL_COS_BUCKET", "MAIL_COS_REGION"],
+  },
+  {
     name: "BACKUP_COS",
     fields: ["BACKUP_COS_SECRET_ID", "BACKUP_COS_SECRET_KEY", "BACKUP_COS_BUCKET", "BACKUP_COS_REGION"],
   },
@@ -128,6 +132,10 @@ const envSchema = z
     PLATFORM_MEDIA_COS_SECRET_KEY: optionalEnvString,
     PLATFORM_MEDIA_COS_BUCKET: optionalEnvString,
     PLATFORM_MEDIA_COS_REGION: optionalEnvString,
+    MAIL_COS_SECRET_ID: optionalEnvString,
+    MAIL_COS_SECRET_KEY: optionalEnvString,
+    MAIL_COS_BUCKET: optionalEnvString,
+    MAIL_COS_REGION: optionalEnvString,
     BACKUP_COS_SECRET_ID: optionalEnvString,
     BACKUP_COS_SECRET_KEY: optionalEnvString,
     BACKUP_COS_BUCKET: optionalEnvString,
@@ -281,6 +289,10 @@ export interface ServerEnv {
   readonly platformMediaCosSecretKey?: string
   readonly platformMediaCosBucket?: string
   readonly platformMediaCosRegion?: string
+  readonly mailCosSecretId?: string
+  readonly mailCosSecretKey?: string
+  readonly mailCosBucket?: string
+  readonly mailCosRegion?: string
   readonly backupCosSecretId?: string
   readonly backupCosSecretKey?: string
   readonly backupCosBucket?: string
@@ -338,6 +350,10 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     platformMediaCosSecretKey: result.data.PLATFORM_MEDIA_COS_SECRET_KEY,
     platformMediaCosBucket: result.data.PLATFORM_MEDIA_COS_BUCKET,
     platformMediaCosRegion: result.data.PLATFORM_MEDIA_COS_REGION,
+    mailCosSecretId: result.data.MAIL_COS_SECRET_ID,
+    mailCosSecretKey: result.data.MAIL_COS_SECRET_KEY,
+    mailCosBucket: result.data.MAIL_COS_BUCKET,
+    mailCosRegion: result.data.MAIL_COS_REGION,
     backupCosSecretId: result.data.BACKUP_COS_SECRET_ID,
     backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
     backupCosBucket: result.data.BACKUP_COS_BUCKET,

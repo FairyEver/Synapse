@@ -3,6 +3,7 @@ import { agentPersonasAppDefinition } from "../../../app-capabilities/agent-pers
 import { automationAppDefinition } from "../automation/app-definition"
 import { databaseAppDefinition } from "../database/app-definition"
 import { driveAppDefinition } from "../drive/app-definition"
+import { mailAppDefinition } from "../mail/app-definition"
 import { synapseSkillAppDefinition } from "../../../app-capabilities/synapse-skill/renderer/app-definition"
 import { secretsAppDefinition } from "../../../app-capabilities/secrets/renderer/app-definition"
 import { quickInputAppDefinition } from "../../../app-capabilities/quick-input/renderer/app-definition"
@@ -25,6 +26,7 @@ const systemAppDefinitions = [
   agentPersonasAppDefinition,
   workflowAppDefinition,
   driveAppDefinition,
+  mailAppDefinition,
   automationAppDefinition,
   launcherAppDefinition,
   settingsAppDefinition,

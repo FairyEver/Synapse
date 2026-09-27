@@ -21,6 +21,7 @@ export type SynapseActionRouterDeps = {
   readonly contentDispatch: DomainDispatch
   readonly databaseDispatch: DomainDispatch
   readonly driveDispatch: DomainDispatch
+  readonly mailDispatch: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
   readonly skillRepositoryDispatch?: DomainDispatch
@@ -40,6 +41,7 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "content") return deps.contentDispatch(action, params, context)
       if (domainId === "database") return deps.databaseDispatch(action, params, context)
       if (domainId === "drive") return deps.driveDispatch(action, params, context)
+      if (domainId === "mail") return deps.mailDispatch(action, params, context)
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(action, params, context)
       if (domainId === "skill_repository") {

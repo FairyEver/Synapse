@@ -20,6 +20,7 @@ export const IPC_CHANNELS = {
     "markAllNotificationsRead": "synapse:app:account:notification:read_all",
     "deleteNotification": "synapse:app:account:notification:delete",
     "deleteAllNotifications": "synapse:app:account:notification:delete_all",
+    "mailOperation": "synapse:app:mail:operation:execute",
     "listDriveItems": "synapse:app:drive:item:list",
     "getDriveItem": "synapse:app:drive:item:get",
     "downloadDriveItem": "synapse:app:drive:item:download",

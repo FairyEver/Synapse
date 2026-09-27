@@ -34,6 +34,9 @@ enum NotificationDestination {
         if item.source == "meeting-transcription", let target = item.targetId {
             return .route(.meeting(meetingId: target))
         }
+        if item.source == "mail", let target = item.targetId {
+            return .route(.mail(messageId: target))
+        }
         // 只有 HTTPS 打开。这一条沿用的是详情页里那个判断，不是新加的限制。
         if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
             return .externalURL(url)

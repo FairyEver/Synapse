@@ -16,6 +16,7 @@ struct HomeView: View {
     let onOpenNotifications: () -> Void
     let onOpenRecordings: () -> Void
     let onOpenDrive: () -> Void
+    let onOpenMail: () -> Void
     let onOpenClipboard: () -> Void
     let onNewSession: () -> Void
     /// 打开一个正卡着等人的会话。参数是会话 id。
@@ -48,6 +49,13 @@ struct HomeView: View {
                     symbol: "internaldrive",
                     value: nil,
                     action: onOpenDrive
+                )
+                row(
+                    title: "站内信",
+                    subtitle: "收件箱与已发送",
+                    symbol: "envelope",
+                    value: nil,
+                    action: onOpenMail
                 )
                 row(
                     title: "新建会话",

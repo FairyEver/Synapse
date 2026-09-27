@@ -15,6 +15,7 @@ struct RootView: View {
     /// 快捷方式带来的深链要能把主页直接推到某一屏上，那些请求不是从主页里发出来的。
     @State private var homePath: [HomeRoute] = []
     @State private var meetingSelection: String?
+    @State private var mailSelection: String?
     @State private var settingsSelection: SettingsCategory?
     /// 通知面板。它挂在根上，因为有两个入口打开的是同一个面板：主页右上角的铃铛，
     /// 和「我的 → 通知」。
@@ -86,7 +87,11 @@ struct RootView: View {
         // 锁屏和灵动岛上那张卡被点开。走 URL 而不是 App Intent：卡片是「带我去看」
         // 的那一个，那两个按钮才是「替我做」。这是 Apple 给实时活动定的分工。
         .onOpenURL { url in
-            if RecordingDeepLink.isOpenRecording(url) {
+            if url.scheme == "synapse", url.host == "mail", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
+                mailSelection = id
+                homePath = [.mail]
+                selectedTab = .home
+            } else if RecordingDeepLink.isOpenRecording(url) {
                 handleRoute(.liveRecording)
             } else if let target = TerminalWidgetLink.target(from: url) {
                 pendingWidgetTarget = target
@@ -98,6 +103,7 @@ struct RootView: View {
                 terminalSelection = nil
                 homePath = []
                 meetingSelection = nil
+                mailSelection = nil
                 settingsSelection = nil
                 isNotificationPanelPresented = false
                 isNewSessionPresented = false
@@ -199,12 +205,15 @@ struct RootView: View {
                 recordingsPage
             case .drive:
                 drivePage
+            case .mail:
+                mailPage
             case .clipboard, .none:
                 NavigationStack(path: $homePath) {
                     HomeView(
                         onOpenNotifications: { isNotificationPanelPresented = true },
                         onOpenRecordings: { openRecording(nil) },
                         onOpenDrive: { openDrive() },
+                        onOpenMail: { homePath = [.mail] },
                         onOpenClipboard: { homePath.append(.clipboard) },
                         onNewSession: { isNewSessionPresented = true },
                         onOpenWaitingSession: openWaitingSession,
@@ -214,7 +223,7 @@ struct RootView: View {
                         switch route {
                         case .clipboard:
                             ClipboardHistoryView()
-                        case .recordings, .drive:
+                        case .recordings, .drive, .mail:
                             // 走不到这一支：功能页换的是这一格的内容，不是往栈里推（见上）。
                             // 留着它只为让这个 switch 对 `HomeRoute` 保持穷尽。
                             EmptyView()
@@ -248,6 +257,7 @@ struct RootView: View {
         switch homePath.last {
         case .recordings: return .recordings
         case .drive: return .drive
+        case .mail: return .mail
         case .clipboard, .none: return nil
         }
     }
@@ -285,6 +295,10 @@ struct RootView: View {
     /// 都在它自己那条栈上。
     private var drivePage: some View {
         DriveBrowserView(onExit: { popToRoot(.home) })
+    }
+
+    private var mailPage: some View {
+        MailView(selection: $mailSelection, onExit: { popToRoot(.home) })
     }
 
     private var tabs: some View {
@@ -399,6 +413,10 @@ struct RootView: View {
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
             openRecording(meetingId)
+        case .mail(let messageId):
+            mailSelection = messageId
+            selectedTab = .home
+            homePath = [.mail]
         case .message(let id):
             openNotification(id)
         case .newRecording:

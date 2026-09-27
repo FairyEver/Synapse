@@ -3,6 +3,7 @@ import { agentPersonasAppManifest } from "../../../app-capabilities/agent-person
 import { automationAppManifest } from "@/modules/automation/app-manifest"
 import { databaseAppManifest } from "@/modules/database/app-manifest"
 import { driveAppManifest } from "@/modules/drive/app-manifest"
+import { mailAppManifest } from "@/modules/mail/app-manifest"
 import { synapseSkillAppManifest } from "../../../app-capabilities/synapse-skill/renderer/app-manifest"
 import { secretsAppManifest } from "../../../app-capabilities/secrets/renderer/app-manifest"
 import { quickInputAppManifest } from "../../../app-capabilities/quick-input/renderer/app-manifest"
@@ -26,6 +27,7 @@ const systemApps = [
   agentPersonasAppManifest,
   workflowAppManifest,
   driveAppManifest,
+  mailAppManifest,
   automationAppManifest,
   launcherAppManifest,
   settingsAppManifest,

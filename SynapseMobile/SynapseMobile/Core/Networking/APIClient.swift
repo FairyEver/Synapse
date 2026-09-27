@@ -1193,6 +1193,104 @@ actor APIClient {
         }
     }
 
+    // MARK: - 站内信
+
+    private func mailQuery(_ items: [URLQueryItem]) -> String {
+        var components = URLComponents()
+        components.queryItems = items
+        return components.percentEncodedQuery.map { "?" + $0 } ?? ""
+    }
+
+    func mailRecipients(query: String) async throws -> MailRecipientPage {
+        try await send(path: "/mail/recipients" + mailQuery([URLQueryItem(name: "query", value: query)]), method: "GET")
+    }
+
+    func mailMessages(box: String, query: String = "", cursor: String? = nil) async throws -> MailMessagePage {
+        var items = [URLQueryItem(name: "box", value: box)]
+        if !query.isEmpty { items.append(URLQueryItem(name: "query", value: query)) }
+        if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await send(path: "/mail/messages" + mailQuery(items), method: "GET")
+    }
+
+    func mailMessage(id: String) async throws -> MailMessage {
+        try await send(path: "/mail/messages/\(escaped(id))", method: "GET")
+    }
+
+    func mailSetRead(id: String, read: Bool) async throws {
+        struct Body: Encodable { let read: Bool }
+        let _: MailReadResult = try await send(path: "/mail/messages/\(escaped(id))/read", method: "PATCH", body: Body(read: read))
+    }
+
+    func mailDelete(id: String) async throws {
+        let _: MailDeleteResult = try await send(path: "/mail/messages/\(escaped(id))", method: "DELETE")
+    }
+
+    func mailDrafts() async throws -> MailDraftPage {
+        try await send(path: "/mail/drafts", method: "GET")
+    }
+
+    func mailCreateDraft(_ content: MailContent) async throws -> MailDraft {
+        try await send(path: "/mail/drafts", method: "POST", body: content)
+    }
+
+    func mailUpdateDraft(id: String, baseVersion: Int, content: MailContent) async throws -> MailDraft {
+        struct Body: Encodable {
+            let recipientIds: [String]
+            let subject: String
+            let body: String
+            let attachmentIds: [String]
+            let replyToId: String?
+            let baseVersion: Int
+        }
+        return try await send(path: "/mail/drafts/\(escaped(id))", method: "PATCH", body: Body(recipientIds: content.recipientIds, subject: content.subject, body: content.body, attachmentIds: content.attachmentIds, replyToId: content.replyToId, baseVersion: baseVersion))
+    }
+
+    func mailDeleteDraft(id: String) async throws {
+        let _: MailDeleteResult = try await send(path: "/mail/drafts/\(escaped(id))", method: "DELETE")
+    }
+
+    func mailPrepareDriveAttachment(itemId: String) async throws -> MailPreparedAttachment {
+        struct Body: Encodable { let driveItemId: String }
+        return try await send(path: "/mail/attachments/prepare", method: "POST", body: Body(driveItemId: itemId))
+    }
+
+    func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        guard !data.isEmpty && data.count <= 20 * 1024 * 1024 else {
+            throw APIError(status: 413, code: "too_large", message: "附件不能超过 20 MB。")
+        }
+        let path = "/mail/attachments/local" + mailQuery([URLQueryItem(name: "fileName", value: url.lastPathComponent)])
+        return try await perform(path: path, method: "PUT", encodedBody: data, contentType: "application/octet-stream", authenticated: true, allowRefresh: true)
+    }
+
+    func mailPreview(_ content: MailContent) async throws -> MailPreview {
+        try await send(path: "/mail/send-previews", method: "POST", body: content)
+    }
+
+    func mailSend(previewId: String, clientRequestId: String) async throws -> MailReceipt {
+        struct Body: Encodable { let previewId: String; let clientRequestId: String }
+        return try await send(path: "/mail/messages", method: "POST", body: Body(previewId: previewId, clientRequestId: clientRequestId))
+    }
+
+    func mailDownloadAttachment(messageId: String, attachment: MailAttachment) async throws -> URL {
+        if accessToken == nil || accessTokenIsStale { _ = await refreshAccessToken() }
+        guard let token = accessToken else { throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。") }
+        let path = "/mail/messages/\(escaped(messageId))/attachments/\(escaped(attachment.attachmentId))"
+        guard let url = URL(string: AppConfiguration.apiBaseURL.absoluteString + path) else { throw APIError(status: 0, code: "bad_url", message: "附件地址无效。") }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (temporary, response) = try await downloadSession.download(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw APIError(status: 0, code: "download", message: "附件下载失败。") }
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + attachment.fileName)
+        try FileManager.default.moveItem(at: temporary, to: destination)
+        return destination
+    }
+
+    private struct MailReadResult: Decodable { let read: Bool }
+    private struct MailDeleteResult: Decodable { let deleted: Bool }
+
     // MARK: - Transport
 
     /// Why a refresh did not produce an access token.

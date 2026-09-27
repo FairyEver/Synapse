@@ -10,6 +10,7 @@ import { AgentModule } from "@/modules/agent"
 import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
 import { DriveModule } from "@/modules/drive"
+import { MailModule } from "@/modules/mail"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { GitModule } from "@/modules/git"
 import { ModelPriceModule } from "@/modules/model-price"
@@ -32,6 +33,7 @@ import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
 import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
 import type {
   SynapseSystemAppGitOpenRequest,
+  SynapseSystemAppMailOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -55,6 +57,8 @@ type SystemAppContentProps = {
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
   readonly onTerminalOpenRequestConsumed?: (requestId: string) => void
   readonly meetingOpenRequest?: string | null
+  readonly mailOpenRequest?: SynapseSystemAppMailOpenRequest | null
+  readonly onMailOpenRequestConsumed?: (requestId: string) => void
   readonly onMeetingOpenRequestConsumed?: () => void
 }
 
@@ -72,6 +76,8 @@ function SystemAppContent({
   terminalOpenRequest = null,
   onTerminalOpenRequestConsumed,
   meetingOpenRequest = null,
+  mailOpenRequest = null,
+  onMailOpenRequestConsumed,
   onMeetingOpenRequestConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
@@ -90,6 +96,7 @@ function SystemAppContent({
   if (appId === "agent-personas") return <AgentPersonasModule />
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
+  if (appId === "mail") return <MailModule openRequest={mailOpenRequest} onOpenRequestConsumed={onMailOpenRequestConsumed} />
   if (appId === "automation") return <AutomationModule />
   if (appId === "launcher") {
     return (

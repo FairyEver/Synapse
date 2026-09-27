@@ -10,7 +10,7 @@ import { MobileLiveRelayService } from "../mobile-live/mobile-live-relay.service
 import { PrismaService } from "../prisma/prisma.service"
 
 export type NotificationLevel = "active" | "passive" | "timeSensitive"
-export type NotificationSource = "external" | "system-notifier" | "terminal-attention" | "terminal-complete" | "meeting-transcription"
+export type NotificationSource = "external" | "system-notifier" | "terminal-attention" | "terminal-complete" | "meeting-transcription" | "mail"
 
 export type CreateNotificationInput = {
   userId: string
