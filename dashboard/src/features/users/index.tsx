@@ -286,7 +286,11 @@ export default function UsersPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='昵称' />
       ),
-      cell: ({ row }) => <LongText>{row.original.nickname}</LongText>,
+      cell: ({ row }) => (
+        <div onDoubleClick={() => openNicknameDialog(row.original)}>
+          <LongText>{row.original.nickname}</LongText>
+        </div>
+      ),
       enableSorting: false,
       meta: { className: 'max-w-0 w-1/5' },
     },

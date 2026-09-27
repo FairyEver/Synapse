@@ -235,9 +235,15 @@ describe('UsersPage status confirmation', () => {
     mockedAdminApi.updateUserNickname.mockResolvedValue({ ...user, nickname: '李 阳' })
 
     renderPage()
-    await waitFor(() => expect(cellByHeader('ada@example.com', '昵称').textContent).toBe('Ada'))
-    await openMenu(userActionsButton('ada@example.com'))
-    await click(menuItemByText('编辑昵称'))
+    const nicknameCell = await waitFor(() => cellByHeader('ada@example.com', '昵称'))
+    expect(nicknameCell.textContent).toBe('Ada')
+    const nicknameText = nicknameCell.firstElementChild
+    if (!(nicknameText instanceof HTMLElement)) throw new Error('nickname text not found')
+    await click(nicknameText)
+    expect(document.querySelector('#user-nickname')).toBeNull()
+    await act(async () => {
+      nicknameText.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
 
     const input = document.querySelector('#user-nickname')
     if (!(input instanceof HTMLInputElement)) throw new Error('nickname input not found')
