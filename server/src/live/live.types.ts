@@ -26,19 +26,27 @@ export interface LiveClientInstance {
 }
 
 /**
- * One computer a phone can reach right now, with the name its user gave it.
+ * One computer a phone can reach right now, with the name its user gave it and
+ * the system it reported.
  *
- * The name rides here rather than on `mobile.presence` on purpose: presence is a
+ * Both ride here rather than on `mobile.presence` on purpose: presence is a
  * broadcast to every phone of the account and its payload is byte-budgeted, while
  * this is fetched by the one phone that is drawing a picker. A phone that never
  * opens the picker pays nothing for it.
  *
- * `deviceName` is required because every online entry has one — it comes from the
- * desktop's `hello` and is a required field on the registry record.
+ * Both are required because every online entry has one — they come from the
+ * desktop's `hello` and are required fields on the registry record.
+ *
+ * `platform` is passed through exactly as the computer reported it
+ * (`darwin-arm64`, `win32-x64`): the cloud has no opinion about what a phone
+ * should draw with it, and keeping the raw value means the phone's fallback for
+ * anything it does not recognise is its own decision rather than a silent
+ * normalisation here.
  */
 export interface LiveReachableDesktop {
   readonly clientInstanceId: string
   readonly deviceName: string
+  readonly platform: string
 }
 
 export interface LiveClientPublicDto {

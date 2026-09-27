@@ -1198,6 +1198,22 @@ final class SynapseAppModel {
         return viewedDesktops.name(for: clientInstanceId) ?? clientInstanceId
     }
 
+    /// 键盘面板要照哪台电脑的键帽画。
+    ///
+    /// 和 `desktopName` 一样，这是**正在看的那台**电脑的属性，不是这台手机的：同一时刻
+    /// 手机只驱动一台电脑，而它的自定义键盘得长得像那台电脑的键盘 —— 终端里写「⌥ + ↑」，
+    /// 面板上就得有印着 `⌥` 的那颗键。见 `DesktopPlatform`。
+    ///
+    /// 只有一个来源，就是这一趟列表（`/api/mobile/desktops`），别处都没有这件事 ——
+    /// 会话、摘要、电脑名里都没有。说不上来的时候是 `.unknown`，画的还是这块面板一直
+    /// 在画的那块 Mac 键盘，所以旧服务端下什么都不会退步。
+    var viewedDesktopPlatform: DesktopPlatform {
+        guard let viewed = selectedDesktopClientInstanceId,
+              let listed = onlineDesktops.first(where: { $0.clientInstanceId == viewed })
+        else { return .unknown }
+        return listed.desktopPlatform
+    }
+
     /// Adopts the pushed list of reachable computers.
     ///
     /// The list is the whole truth about which computers are *reachable*, so one that
@@ -1207,16 +1223,25 @@ final class SynapseAppModel {
     /// is and the screen says why.
     private func applyPresence(_ clientInstanceIds: [String]) {
         defer { publishTerminalWidgetSnapshot() }
-        let knownNames = onlineDesktops.reduce(into: [String: String]()) { names, desktop in
-            if let name = desktop.deviceName { names[desktop.clientInstanceId] = name }
+        // Carried across the rebuild rather than re-fetched: presence is the authority
+        // on which computers are reachable, and it says nothing else about any of
+        // them. Whatever the last list did say — the name, the platform — belongs to
+        // the computer, not to the presence tick that happened to arrive after it.
+        let known = onlineDesktops.reduce(into: [String: ReachableDesktop]()) { known, desktop in
+            known[desktop.clientInstanceId] = desktop
         }
         onlineDesktops = clientInstanceIds.map {
-            ReachableDesktop(clientInstanceId: $0, deviceName: knownNames[$0])
+            ReachableDesktop(
+                clientInstanceId: $0,
+                deviceName: known[$0]?.deviceName,
+                platform: known[$0]?.platform
+            )
         }
         // This payload carries ids only — it is broadcast to every phone of the
-        // account and its shape is byte-budgeted. The names come from the list the
-        // picker draws, which is worth one request per change of the set.
-        Task { await refreshDesktopNames() }
+        // account and its shape is byte-budgeted. The names and the platforms come
+        // from the list the picker draws, which is worth one request per change of
+        // the set.
+        Task { await refreshDesktopDetails() }
         // A computer appearing is exactly the event the cloud refuses to wait for,
         // so it is the moment to hand over anything that was left waiting.
         retryWaitingAttachments()
@@ -1260,33 +1285,38 @@ final class SynapseAppModel {
         }
     }
 
-    /// Names for the computers presence only gave ids for.
+    /// What the computers presence only gave ids for: their names, and which system
+    /// each one runs.
     ///
     /// Deliberately not the whole of `refreshDesktops`: that one also syncs and hands
     /// over waiting files, and a computer signing in is not news about the computer
     /// being viewed.
-    private func refreshDesktopNames() async {
+    private func refreshDesktopDetails() async {
         guard !onlineDesktopIds.isEmpty else { return }
         guard let listed = try? await apiClient.onlineDesktops() else {
-            // The ids from presence are still right; only the labels are missing, and
-            // `desktopName` falls back to the id rather than to nothing.
+            // The ids from presence are still right; only the details are missing, and
+            // each of them has a fallback of its own — the id for a name, the board
+            // this phone has always drawn for a platform.
             return
         }
-        let names = listed.reduce(into: [String: String]()) { names, desktop in
-            if let name = desktop.deviceName { names[desktop.clientInstanceId] = name }
+        let details = listed.reduce(into: [String: ReachableDesktop]()) { details, desktop in
+            details[desktop.clientInstanceId] = desktop
         }
-        // Fills in what this list can name and leaves the rest of the pushed list
-        // alone. Not a replacement for it: presence is the authority on which
-        // computers are reachable, and a fetch that is a moment behind it must not
-        // be able to take one off the picker.
+        // Fills in what this list can say and leaves the rest of the pushed list alone.
+        // Not a replacement for it: presence is the authority on which computers are
+        // reachable, and a fetch that is a moment behind it must not be able to take
+        // one off the picker.
         onlineDesktops = onlineDesktops.map { desktop in
-            guard desktop.deviceName == nil, let name = names[desktop.clientInstanceId] else {
-                return desktop
-            }
-            return ReachableDesktop(clientInstanceId: desktop.clientInstanceId, deviceName: name)
+            guard let listed = details[desktop.clientInstanceId] else { return desktop }
+            return ReachableDesktop(
+                clientInstanceId: desktop.clientInstanceId,
+                deviceName: desktop.deviceName ?? listed.deviceName,
+                platform: desktop.platform ?? listed.platform
+            )
         }
-        for (clientInstanceId, name) in names {
-            viewedDesktops.remember(name: name, for: clientInstanceId)
+        for desktop in listed {
+            guard let name = desktop.deviceName else { continue }
+            viewedDesktops.remember(name: name, for: desktop.clientInstanceId)
         }
     }
 

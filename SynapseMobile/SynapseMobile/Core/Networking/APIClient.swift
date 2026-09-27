@@ -274,6 +274,9 @@ actor APIClient {
         struct Entry: Decodable {
             let clientInstanceId: String
             let deviceName: String?
+            /// 电脑自己报的系统（`darwin-arm64`）。可选，理由同 `deviceName`：这是比
+            /// 列表本身新的字段，没带它的服务端只是让手机按默认那一套键帽画。
+            let platform: String?
         }
 
         let clientInstanceIds: [String]
@@ -287,11 +290,15 @@ actor APIClient {
         let response: DesktopList = try await send(path: "/mobile/desktops", method: "GET")
         guard let desktops = response.desktops else {
             return response.clientInstanceIds.map {
-                ReachableDesktop(clientInstanceId: $0, deviceName: nil)
+                ReachableDesktop(clientInstanceId: $0, deviceName: nil, platform: nil)
             }
         }
         return desktops.map {
-            ReachableDesktop(clientInstanceId: $0.clientInstanceId, deviceName: $0.deviceName)
+            ReachableDesktop(
+                clientInstanceId: $0.clientInstanceId,
+                deviceName: $0.deviceName,
+                platform: $0.platform
+            )
         }
     }
 

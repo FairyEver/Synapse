@@ -112,15 +112,27 @@ struct MobileGitStatusPayload: Decodable, Equatable {
 /// does not send. An absent name is a computer this phone can still reach and
 /// still switch to — it is a worse label, not a different machine — so the list
 /// keeps it either way rather than hiding a computer it cannot name.
+///
+/// Both fields come from one place: the computer announces them in its `hello`,
+/// the cloud stores them on the connection and hands them back here. `platform` is
+/// the raw string the computer reported (`darwin-arm64`), turned into something to
+/// draw by `DesktopPlatform` and nowhere else.
 struct ReachableDesktop: Identifiable, Equatable {
     let clientInstanceId: String
     let deviceName: String?
+    let platform: String?
 
     var id: String { clientInstanceId }
 
     /// What to draw for it. Falls back to the id, which is at least unique and lets
     /// someone who knows their client ids tell the two apart.
     var label: String { deviceName ?? clientInstanceId }
+
+    /// Which computer's keycaps this phone should be drawing.
+    ///
+    /// Absent platform reads as `.unknown`, which draws the Mac board this panel has
+    /// always drawn. See `DesktopPlatform`.
+    var desktopPlatform: DesktopPlatform { DesktopPlatform(reported: platform) }
 }
 
 /// 一条下行消息的 `type`。先只解这一格，再按它去解具体载荷。

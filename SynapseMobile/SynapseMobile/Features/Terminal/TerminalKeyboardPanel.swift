@@ -25,11 +25,21 @@ import SwiftUI
 /// the bar that holds the field is one this panel has put away. Two ways in would be a way
 /// to get the two keyboards confused; one way in is why there is no switch here.
 ///
-/// Four modifiers, and one of them does nothing. `⌘` is drawn because a computer keyboard
-/// has it there, but macOS's own terminal consumes it (⌘C copies, ⌘V pastes, ⌘K clears)
-/// and no byte of it reaches the PTY. It is dimmed like the other keys that have no byte
-/// — `PrtScr`, `ScrLK`, `Pause` — so the panel is a keyboard rather than a claim about
-/// what a terminal can do. 设计文档 §3.4.
+/// Four modifiers, and one of them does nothing. The fourth is drawn because a computer
+/// keyboard has it there, but the terminal application consumes it — macOS takes `⌘`
+/// (⌘C copies, ⌘V pastes, ⌘K clears) and Windows keeps `⊞` the same way — so no byte of
+/// it reaches the PTY. It is dimmed like the other keys that have no byte — `PrtScr`,
+/// `ScrLK`, `Pause` — so the panel is a keyboard rather than a claim about what a
+/// terminal can do. 设计文档 §3.4.
+///
+/// **The keycaps are the computer's, not the phone's** (2026-09-27). This board is a
+/// picture of the keyboard on the other end of the session, and the person reading it is
+/// looking for the key a TUI just named: a prompt that says `⌥ + ↑` has to be answerable
+/// by finding `⌥` on this board, and it was not, because that key said `Alt` and nothing
+/// said the two were the same. So each modifier prints the symbol and the name together
+/// on the machines that have symbols, and a computer that is not a Mac prints the name
+/// alone — see `KeyboardPanelModifier.keycap(on:)`. Which computer it is comes from the
+/// computer itself, never from a guess about it (`DesktopPlatform`).
 ///
 /// A modifier is latched by tapping it and the next key completes the chord, which is the
 /// only vocabulary a touch screen has for "hold Ctrl and press C": a `Button` reports a
@@ -40,9 +50,14 @@ import SwiftUI
 
 // MARK: - Modifiers
 
-/// The modifiers the panel can hold down, plus the one a computer keyboard has and a
-/// terminal cannot be told about.
-private enum KeyboardPanelModifier: String, CaseIterable, Identifiable {
+/// The four modifiers a computer keyboard keeps at its ends.
+///
+/// **`rawValue` is an identity, not a legend.** It is the tail of the accessibility
+/// identifier the UI tests address these keys by, so it stays put while what is drawn
+/// changes underneath it — the same key is printed `Alt` on a PC and `⌥ Alt` on a Mac,
+/// and neither of those is a name to match a test on. What each one draws comes from
+/// `keycap(on:)`.
+enum KeyboardPanelModifier: String, CaseIterable, Identifiable {
     case control = "Ctrl"
     case shift = "Shift"
     case alt = "Alt"
@@ -54,7 +69,27 @@ private enum KeyboardPanelModifier: String, CaseIterable, Identifiable {
     /// A key that is on the board because the board is a picture of a computer keyboard,
     /// not because pressing it would do anything. Every one of these is dimmed and
     /// answers with the refusal haptic; none of them is silently inert.
+    ///
+    /// The fourth key is one of them on both platforms: macOS's terminal consumes `⌘`
+    /// (⌘C copies, ⌘V pastes, ⌘K clears) and no byte of it reaches the PTY, and Windows
+    /// keeps `⊞` for itself the same way.
     var isDead: Bool { self == .command }
+
+    /// 这颗修饰键在这台电脑的键帽上印什么。
+    ///
+    /// `symbol` 是用户在终端里读到的那个字形，`name` 是这颗键叫什么。两个一起印，
+    /// 符号与名字才接得上：终端说「按 ⌥ + ↑」，他照着 `⌥` 找到这颗键，旁边就写着
+    /// `Alt`。PC 键盘上没有 `⌥` 这些字形，所以那一边只印名字，第四颗键在那一边叫
+    /// `Win` —— 同一个位置，两台电脑各自的叫法。见 `DesktopPlatform`。
+    func keycap(on platform: DesktopPlatform) -> (symbol: String?, name: String) {
+        let printsSymbol = platform.printsModifierSymbols
+        switch self {
+        case .control: return (printsSymbol ? "⌃" : nil, "Ctrl")
+        case .shift: return (printsSymbol ? "⇧" : nil, "Shift")
+        case .alt: return (printsSymbol ? "⌥" : nil, "Alt")
+        case .command: return (printsSymbol ? "⌘" : nil, platform == .windows ? "Win" : "Cmd")
+        }
+    }
 }
 
 // MARK: - What a letter sends while Ctrl is latched
@@ -368,6 +403,11 @@ struct TerminalKeyboardPanel: View {
     /// this — portrait hands it the whole screen, landscape hands it something shorter and
     /// the board scrolls inside (see `KeyboardPanelMetrics.height(fitting:)`).
     let maxHeight: CGFloat
+    /// 这块键盘画的是哪台电脑的键盘。
+    ///
+    /// 它影响修饰键行那四颗键印什么（`⌥ Alt` 还是 `Alt`），不影响任何一颗键发什么 ——
+    /// 面板的契约是「发一个按键」，那不随电脑的操作系统变。见 `DesktopPlatform`。
+    let hostPlatform: DesktopPlatform
     let onActions: ([MobileKeyAction]) -> Void
 
     @State private var page: Int = 0
@@ -495,6 +535,7 @@ struct TerminalKeyboardPanel: View {
     private func modifierKey(_ modifier: KeyboardPanelModifier) -> some View {
         let isLatched = effectiveModifier == modifier
         let isLocked = lockedModifier == modifier
+        let keycap = modifier.keycap(on: hostPlatform)
         return Button {
             guard !modifier.isDead else {
                 Haptics.warning()
@@ -504,8 +545,31 @@ struct TerminalKeyboardPanel: View {
             tapModifier(modifier)
         } label: {
             ZStack(alignment: .topTrailing) {
-                Text(modifier.rawValue)
-                    .frame(maxWidth: .infinity)
+                // 符号与名字并排。符号是从终端里认回来的那一个，名字是这颗键叫什么，
+                // 而名字在这一行里是二号 —— 面板是照真键盘摆的，真键盘的键帽也是这么
+                // 印的（`⌥ option`），而符号才是他在终端里读到的那个字形。
+                //
+                // 四颗键分的是屏宽除以四，`⌃ Shift` 在窄机型上差几个点，所以两个都
+                // 自带缩字：**缩字而不是截断**，这一行里没有一个字是可以丢的。
+                HStack(spacing: 4) {
+                    if let symbol = keycap.symbol {
+                        Text(symbol)
+                            .font(.system(size: 15, weight: .medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    Text(keycap.name)
+                        .font(.system(size: keycap.symbol == nil ? 14 : 10.5, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        // 锁上时整颗键反色，名字跟着走 —— 这里只能自己说，因为 pill
+                        // 给的标签色被这一句盖掉了。`systemBackground` 就是 pill 在
+                        // 反色态下用的那个颜色（`TerminalKeyPill.labelColor`）。
+                        .foregroundStyle(
+                            isLatched ? Color(uiColor: .systemBackground) : Color.secondary
+                        )
+                }
+                .frame(maxWidth: .infinity)
                 // The dot marks a modifier that stays down after the key it combines
                 // with, which is what makes repeated Ctrl+C possible.
                 if isLocked {
@@ -515,7 +579,6 @@ struct TerminalKeyboardPanel: View {
                         .padding(.top, 4)
                 }
             }
-            .font(.system(size: 14, weight: .medium))
             .terminalKeyPill(
                 minWidth: 0,
                 prominent: isLatched,
@@ -527,6 +590,10 @@ struct TerminalKeyboardPanel: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .opacity(isEnabled ? (modifier.isDead ? 0.35 : 1) : 0.4)
+        // 读屏读名字，不读字形：`⌘` 会被读成「关注点标志」，`⌥` 读出来也不是这颗键
+        // 叫什么。锁存是这颗键唯一的第二种状态，也就是说出来。
+        .accessibilityLabel(keycap.name)
+        .accessibilityAddTraits(isLatched ? .isSelected : [])
         .accessibilityIdentifier("panelkey-modifier-\(modifier.rawValue)")
     }
 

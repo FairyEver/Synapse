@@ -1435,7 +1435,10 @@ struct TerminalScreen: View {
                 // 面板自己定高（346），这里只给上限：竖屏给满，横屏压下来。横屏那一档
                 // 加上顶栏会超出屏幕，顶栏会被挤出画面 —— 而面板本身两页同高，
                 // 横屏翻页也仍然不动。
-                maxHeight: availableHeight
+                maxHeight: availableHeight,
+                // 键帽照正在驱动的这台电脑印：终端里写着 `⌥ + ↑`，面板上那颗键就得
+                // 印着 `⌥`。电脑说了算，手机不猜。
+                hostPlatform: model.viewedDesktopPlatform
             ) { actions in
                 model.sendKeys(sessionId, actions)
                 // 按一颗键也是操作：面板本身让栏收不了，但按完这一下之后应当从头计时。

@@ -23,8 +23,8 @@ describe("MobileLiveController", () => {
    */
   it("lists reachable computers as both ids and named entries", async () => {
     const onlineDesktops = vi.fn(() => [
-      { clientInstanceId: "desktop-a", deviceName: "MacBook Pro" },
-      { clientInstanceId: "desktop-b", deviceName: "iMac" },
+      { clientInstanceId: "desktop-a", deviceName: "MacBook Pro", platform: "darwin-arm64" },
+      { clientInstanceId: "desktop-b", deviceName: "iMac", platform: "win32-x64" },
     ])
     const controller = controllerWith(onlineDesktops)
 
@@ -32,8 +32,8 @@ describe("MobileLiveController", () => {
 
     expect(response.clientInstanceIds).toEqual(["desktop-a", "desktop-b"])
     expect(response.desktops).toEqual([
-      { clientInstanceId: "desktop-a", deviceName: "MacBook Pro" },
-      { clientInstanceId: "desktop-b", deviceName: "iMac" },
+      { clientInstanceId: "desktop-a", deviceName: "MacBook Pro", platform: "darwin-arm64" },
+      { clientInstanceId: "desktop-b", deviceName: "iMac", platform: "win32-x64" },
     ])
   })
 

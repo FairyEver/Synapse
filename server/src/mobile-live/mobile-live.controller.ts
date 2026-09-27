@@ -86,8 +86,8 @@ export class MobileLiveController {
    * Both shapes are returned on purpose. `clientInstanceIds` is what every shipped
    * build reads, and dropping it would leave those phones unable to see a single
    * computer — they would say "电脑不在线" while one is running right in front of
-   * the user. `desktops` adds the names that make the picker usable, and is ignored
-   * by any build that predates it.
+   * the user. `desktops` adds the names that make the picker usable and the platform
+   * each computer reported, and is ignored by any build that predates it.
    */
   @Get("/desktops")
   async listDesktops(@Req() request: AuthedRequest): Promise<{

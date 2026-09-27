@@ -1588,19 +1588,26 @@ describe("LiveDesktopGateway online desktop list", () => {
    * this projection, and it has to be the registry's own field rather than
    * anything this method invents.
    */
-  it("carries each reachable computer's name", () => {
+  it("carries each reachable computer's name and platform", () => {
     const gateway = createGateway({
       registry: {
         listOnlineByUser: vi.fn().mockReturnValue([
           createClient({ clientInstanceId: "client-a", deviceName: "MacBook Pro" }),
-          createClient({ clientInstanceId: "client-b", deviceName: "iMac" }),
+          createClient({
+            clientInstanceId: "client-b",
+            deviceName: "iMac",
+            platform: "win32-x64",
+          }),
         ]),
       },
     })
 
+    // The platform is passed through verbatim, and it is per computer: the phone
+    // draws its keyboard's keycaps from this, so one entry flattening to a default
+    // would silently print Apple's ⌥ on a PC.
     expect(gateway.listOnlineDesktops("user-1")).toEqual([
-      { clientInstanceId: "client-a", deviceName: "MacBook Pro" },
-      { clientInstanceId: "client-b", deviceName: "iMac" },
+      { clientInstanceId: "client-a", deviceName: "MacBook Pro", platform: "darwin-arm64" },
+      { clientInstanceId: "client-b", deviceName: "iMac", platform: "win32-x64" },
     ])
   })
 

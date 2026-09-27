@@ -248,7 +248,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
   }
 
   /**
-   * The same computers, with the names their users gave them.
+   * The same computers, with the names their users gave them and the platform
+   * each one reported.
    *
    * A separate method rather than a richer `listOnlineClientInstanceIds`: that one
    * also feeds the presence fingerprint below, which must stay ids-only so that a
@@ -258,6 +259,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     return this.registry.listOnlineByUser(userId).map((entry) => ({
       clientInstanceId: entry.clientInstanceId,
       deviceName: entry.deviceName,
+      platform: entry.platform,
     }))
   }
 
