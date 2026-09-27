@@ -148,7 +148,9 @@ describe("synapse tool router search", () => {
 
     // 用拼接字符串断言：数组 diff 会被 vitest 截断成 [ …(N) ]，看不到具体是哪几条。
     expect(misses.join("\n")).toBe("")
-  })
+    // 这条跑在最前面，整个 Fuse 索引的构建成本都记在它头上：本机约 3 秒，CI 上会顶穿
+    // vitest 默认的 5 秒。和下面那条同理，给足余量。
+  }, 60_000)
 
   it("keeps the english control group within the top-5 results", async () => {
     const misses: string[] = []
