@@ -43,6 +43,29 @@ struct TerminalResourcesTests {
         #expect(store.resources.count == 2)
     }
 
+    @Test func stopsBeforeChineseProseAfterALink() throws {
+        let store = TerminalStore()
+        let url = "https://synapse.d2.pub/share/shr_XEHW8REMAG3QR4SYFATZ3CW0JEBAGTZV"
+        store.apply(frame([try line("站内信网页方案（\(url)），原分享链接不变。")], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == [url])
+    }
+
+    @Test func stopsBeforeChineseProseAfterAWrappedLink() throws {
+        let store = TerminalStore()
+        let url = "https://synapse.d2.pub/share/shr_XEHW8REMAG3QR4SYFATZ3CW0JEBAGTZV"
+        store.apply(frame([
+            try line("站内信网页方案（https://synapse.d2.pub/share/shr_XEHW8REMAG3QR4SYF", wrapFlags: 2),
+            try line("ATZ3CW0JEBAGTZV），原分享链接不变。", wrapFlags: 1),
+        ], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == [url])
+    }
+
+    @Test func keepsChineseCharactersInsideARealURLPath() throws {
+        let store = TerminalStore()
+        store.apply(frame([try line("文档 https://example.org/路径），继续说明")], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/%E8%B7%AF%E5%BE%84"])
+    }
+
     @Test func waitsForSoftWrappedContinuationAcrossFrames() throws {
         let store = TerminalStore()
         store.apply(frame([try line("https://example.org/very/", wrapFlags: 2)], kind: "reset", total: 2))
@@ -65,6 +88,18 @@ struct TerminalResourcesTests {
         #expect(store.resources.isEmpty)
 
         store.apply(frame([try line("  ZedD2W6_c33jYd")], from: 1, total: 2))
+        #expect(store.resources.map(\.url.absoluteString) == [
+            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
+        ])
+    }
+
+    @Test func hardWrappedLinkDoesNotIncludeFollowingChineseProse() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        store.apply(frame([
+            try line("  https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR"),
+            try line("  ZedD2W6_c33jYd），原分享链接不变。"),
+        ], kind: "reset"))
         #expect(store.resources.map(\.url.absoluteString) == [
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
         ])

@@ -41,7 +41,9 @@ struct TerminalResource: Identifiable, Hashable {
 /// resource, which is worse than not being there: the list is only worth reading if
 /// everything on it can be opened.
 struct TerminalResourceCollector {
-    private static let pattern = try! NSRegularExpression(pattern: #"https?://[^\s<>"'`]+"#, options: .caseInsensitive)
+    /// The system detector ends a link at prose punctuation, including Chinese
+    /// punctuation. A non-whitespace regex swallowed "），原分享链接不变" as URL text.
+    private static let detector = try! NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
     private static let trailing = CharacterSet(charactersIn: "，。！？；、,.!?;)）]}>")
     /// Characters URL text keeps going with. A cut token's tail is made of these; a
     /// fresh line of prose is not.
@@ -135,9 +137,9 @@ struct TerminalResourceCollector {
     private static func endsInsideURL(_ text: String) -> Bool {
         guard !text.isEmpty else { return false }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = pattern.matches(in: text, range: range).last,
+        guard let match = detector.matches(in: text, range: range).last,
               let matched = Range(match.range, in: text) else { return false }
-        return matched.upperBound == text.endIndex
+        return matched.upperBound == text.endIndex && isWebURL(match.url)
     }
 
     /// Whether the row was filled to the grid's last column — what a token cut in the
@@ -169,15 +171,20 @@ struct TerminalResourceCollector {
 
     private static func urls(in text: String) -> [URL] {
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return pattern.matches(in: text, range: range).compactMap { match in
+        return detector.matches(in: text, range: range).compactMap { match in
             guard let matchRange = Range(match.range, in: text) else { return nil }
             let candidate = String(text[matchRange]).trimmingCharacters(in: trailing)
             guard let url = URL(string: candidate),
-                  let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+                  isWebURL(url),
                   let host = url.host, !host.isEmpty,
                   !isLocalOnly(host) else { return nil }
             return url
         }
+    }
+
+    private static func isWebURL(_ url: URL?) -> Bool {
+        guard let scheme = url?.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
     }
 
     /// Whether the host points at the machine that printed it rather than at anything a
