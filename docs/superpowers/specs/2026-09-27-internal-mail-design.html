@@ -35,7 +35,7 @@
       <section class="py-9" aria-labelledby="context-title">
         <h2 id="context-title" class="text-xl font-semibold">现有能力与新增边界</h2>
         <div class="mt-5 grid gap-4 md:grid-cols-3">
-          <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">团队</h3><p class="mt-2 text-sm leading-6 text-neutral-700">服务端已有 Team 与 TeamMembership。成员由管理员维护，用户可加入多个团队。当前普通用户没有团队查询入口，也没有团队协作权限。</p></div>
+          <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">团队</h3><p class="mt-2 text-sm leading-6 text-neutral-700">代码中已有 Team 与 TeamMembership，成员由管理员维护，用户可加入多个团队。这只是关系模型，不代表当前已配置任何具体团队；页面中的团队名和成员都是演示占位。当前普通用户没有团队查询入口，也没有团队协作权限。</p></div>
           <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">云盘与 Agent</h3><p class="mt-2 text-sm leading-6 text-neutral-700">云盘能保存文件、版本与分享；Agent 已有文档生成及云盘 MCP。站内信附件应引用发送时的文件版本，并给收件人独立的信件访问权。</p></div>
           <div class="border-t border-neutral-300 pt-3"><h3 class="font-medium">通知与跨端</h3><p class="mt-2 text-sm leading-6 text-neutral-700">账号消息中心负责提醒和未读，桌面与手机可接收实时变化及推送。信件正文、收发记录和已读状态需要单独持久化，通知只负责引导打开信件。</p></div>
         </div>
@@ -50,7 +50,7 @@
 
         <div class="mt-6 hidden overflow-hidden rounded-lg border border-neutral-300 bg-white md:block" aria-label="桌面端站内信预览">
           <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-3">
-            <div class="flex items-center gap-3"><span class="text-base font-semibold">站内信</span><span class="text-xs text-neutral-600">产品组 · 研发组</span></div>
+            <div class="flex items-center gap-3"><span class="text-base font-semibold">站内信</span><span class="text-xs text-neutral-600">仅演示数据</span></div>
             <div class="flex items-center gap-2"><button id="desktop-drafts" type="button" class="rounded-md px-3 py-2 text-sm font-medium hover:bg-neutral-100">草稿</button><button id="desktop-compose" type="button" class="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900">写信</button></div>
           </div>
           <div class="grid min-h-128 grid-cols-5">
@@ -155,35 +155,35 @@
           <div><h3 class="font-semibold">实施顺序</h3><ol class="mt-3 space-y-2 text-sm leading-6 text-neutral-700"><li>1. 先定团队成员查询、信件 ACL、附件快照与数据库迁移。</li><li>2. 上线服务端 API、实时事件、推送与审计，再接桌面和 iOS 共享契约。</li><li>3. 桌面独立应用与 iOS 主页功能同时覆盖收、发、读、回复、草稿。</li><li>4. 注册 MCP、系统 Skill、能力清单并补齐 Agent 指南；同步修订团队旧规格。</li></ol></div>
           <div><h3 class="font-semibold">必须通过的场景</h3><ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-neutral-700"><li>一人或多人同团队发送成功；跨团队混选、禁用账号、离团成员整体发送失败且保留草稿。</li><li>零团队用户能读历史且不能发；多团队用户只看到选中团队成员；同名用户按 handle 区分。</li><li>桌面写草稿、手机继续编辑；并发改稿发生版本冲突时不覆盖内容。</li><li>本机文件与云盘文档都可附；源文档更新、删除版本或撤销分享后，收件人仍能读取已发附件。</li><li>回复、回复全部和同团队转发保留正确参与者；失效成员需要显式处理。</li><li>桌面发送后手机离线重连可收到；搜索、未读与按人删除跨端一致；通知点击精确定位。</li><li>手机在 iPhone、iPad 全屏、半窗和窄窗均能写信、读信、返回原列表。</li><li>Agent 能查询、读正文、下载附件、写草稿、发送、回复、设已读和删除；工具重试不重复发送，失败不声称成功。</li></ul></div>
         </div>
-        <p class="mt-8 text-xs text-neutral-600">此页面用于评审目标方案与交互，不代表功能已经接入 Synapse。演示中的姓名与信件均为虚构。</p>
+        <p class="mt-8 text-xs text-neutral-600">此页面用于评审目标方案与交互，不代表功能已经接入 Synapse。团队、成员与信件均为虚构演示数据，不代表当前账号或组织。</p>
       </section>
     </main>
   </div>
 
   <script>
 const teams = {
-  product: { name: '产品组', members: [
+  sampleA: { name: '演示团队 A', members: [
     { id: 'lin', name: '林槿', handle: '@linjin' },
     { id: 'zhou', name: '周恬', handle: '@zhoutian' },
   ] },
-  engineering: { name: '研发组', members: [
+  sampleB: { name: '演示团队 B', members: [
     { id: 'wang', name: '王珂', handle: '@wangke' },
     { id: 'chen', name: '陈岚', handle: '@chenlan' },
   ] },
 };
 const received = [
-  { id: 'r1', team: 'product', sender: '林槿', senderId: 'lin', otherIds: ['zhou'], to: '我、周恬', subject: '迭代评审材料', body: '评审稿已整理好，请看附件中的需求变更和待确认项。', time: '今天 10:42', unread: true, attachment: '迭代评审.md' },
-  { id: 'r2', team: 'engineering', sender: '王珂', senderId: 'wang', otherIds: [], to: '我', subject: '数据接口说明', body: '接口字段已更新。请确认移动端的展示顺序。', time: '昨天 16:18', unread: true, attachment: '接口说明.pdf' },
-  { id: 'r3', team: 'product', sender: '周恬', senderId: 'zhou', otherIds: [], to: '我', subject: '签收稿件确认', body: '这版内容可以进入下一轮评审。', time: '周三 09:26', unread: false },
+  { id: 'r1', team: 'sampleA', sender: '林槿', senderId: 'lin', otherIds: ['zhou'], to: '我、周恬', subject: '迭代评审材料', body: '评审稿已整理好，请看附件中的需求变更和待确认项。', time: '今天 10:42', unread: true, attachment: '迭代评审.md' },
+  { id: 'r2', team: 'sampleB', sender: '王珂', senderId: 'wang', otherIds: [], to: '我', subject: '数据接口说明', body: '接口字段已更新。请确认移动端的展示顺序。', time: '昨天 16:18', unread: true, attachment: '接口说明.pdf' },
+  { id: 'r3', team: 'sampleA', sender: '周恬', senderId: 'zhou', otherIds: [], to: '我', subject: '签收稿件确认', body: '这版内容可以进入下一轮评审。', time: '周三 09:26', unread: false },
 ];
 const sent = [
-  { id: 's1', team: 'product', sender: '我', to: '林槿、周恬', subject: '本周方案草稿', body: '请查看本周的方案草稿。', time: '今天 09:15', attachment: '方案草稿.md' },
-  { id: 's2', team: 'engineering', sender: '我', to: '王珂', subject: '流程说明', body: '流程说明已更新。', time: '周二 14:32' },
+  { id: 's1', team: 'sampleA', sender: '我', to: '林槿、周恬', subject: '本周方案草稿', body: '请查看本周的方案草稿。', time: '今天 09:15', attachment: '方案草稿.md' },
+  { id: 's2', team: 'sampleB', sender: '我', to: '王珂', subject: '流程说明', body: '流程说明已更新。', time: '周二 14:32' },
 ];
 const drafts = [];
 const state = {
   box: 'inbox', selected: 'r1', screen: 'list', composing: false,
-  team: 'product', recipients: [], prefill: {}, attachment: null,
+  team: 'sampleA', recipients: [], prefill: {}, attachment: null,
   draftId: null, fixedTeam: false, query: '', deleted: null,
 };
 const $ = (id) => document.getElementById(id);
@@ -295,7 +295,7 @@ document.addEventListener('click', (event) => {
   if (button.id === 'mobile-back') { state.screen = 'list'; state.composing = false; render(); return; }
   if (button.id === 'demo-undo') return restoreDeleted();
   if (button.id === 'demo-notify') { const item = received.find((entry) => entry.id === 'r1') || received[0]; if (!item) return; state.box = 'inbox'; state.selected = item.id; state.screen = 'detail'; state.composing = false; item.unread = false; render(); say('已按信件 ID 打开新信（演示）。'); return; }
-  if (button.id === 'agent-draft') { openCompose({ subject: '需求方案初稿', body: '林槿，附件是刚生成的需求方案初稿，请查收。', attachment: '需求方案初稿.md' }, { team: 'product', recipients: ['lin'] }); saveDraft(); say('已填入 Agent 生成文档的发送草稿（演示）。'); return; }
+  if (button.id === 'agent-draft') { openCompose({ subject: '需求方案初稿', body: '林槿，附件是刚生成的需求方案初稿，请查收。', attachment: '需求方案初稿.md' }, { team: 'sampleA', recipients: ['lin'] }); saveDraft(); say('已填入 Agent 生成文档的发送草稿（演示）。'); return; }
   if (button.dataset.open) {
     state.selected = button.dataset.open;
     if (state.box === 'drafts') {
