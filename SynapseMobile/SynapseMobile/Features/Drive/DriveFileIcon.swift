@@ -26,10 +26,22 @@ struct DriveFileIcon: View {
     private var pageHeight: CGFloat { box * 0.96 }
     private var pageWidth: CGFloat { pageHeight * 0.76 }
     /// 折角那一块。跟着纸宽走，纸放大时折角不会变成一片小三角。
-    private var fold: CGFloat { pageWidth * 0.36 }
-    /// 角标那几个字母。**下到 7pt 就不再缩**：再小只是一团灰，不是字 —— 列表行的图标比网格
-    /// 小一半，按比例算出来只有 4pt 出头。
-    private var badgeSize: CGFloat { max(7, pageHeight * 0.21) }
+    private var fold: CGFloat { pageWidth * 0.30 }
+    /// 纸上那枚字形：中心落在纸高这一点上，字号占纸高的三成。
+    ///
+    /// **三成 + `.light` 是一起调的，缺一个都不够。** 这些符号默认的笔画比系统文档图标里那枚
+    /// 粗一档，而且 `</>`、`tablecells` 这类是「填满方框」的形状（系统那枚通用文档图标里的字形
+    /// 四周留白多），所以同一个字号下看着就是更大更重。原先按四成、默认粗细画，真机上是一屏
+    /// 又大又厚的图标。
+    private var glyphSize: CGFloat { pageHeight * 0.30 }
+    private var glyphCenterY: CGFloat { pageHeight * 0.46 }
+    /// 角标那几个字母：中心落在纸高的七成八，字号占纸高的一成一。
+    ///
+    /// **比字形小得多是刻意的**：它是一行小字，不是第二个标题。原先按两成一画，真机上比系统
+    /// 「文件」App 那行字大了一倍多（那边占纸高约零点五成），一整屏全是加粗大写字母，很吵。
+    /// 下到 6.5pt 就不再缩了——再小只是一团灰，不是字。
+    private var badgeSize: CGFloat { max(6.5, pageHeight * 0.11) }
+    private var badgeCenterY: CGFloat { pageHeight * 0.78 }
 
     /// 这一类的字形。`unknown` 没有字形，纸上就只留扩展名那行字。
     private var glyph: String? { DriveText.glyph(of: DriveText.kind(of: name)) }
@@ -57,9 +69,12 @@ struct DriveFileIcon: View {
 
     /// 一页纸：折角、字形、扩展名。
     ///
-    /// 字形与扩展名的位置照系统那枚图标量出来的比例摆（那边字形重心在纸高的四成七、扩展名在
-    /// 八成；上下两档留白摆出来是四成四与八成二，差的那一点是行高，看不出来）。纸比方框窄，
-    /// 所以整页居中摆在方框里 —— 与文件夹那枚方框同宽，两者在同一行里才对得齐。
+    /// 字形与扩展名的位置照系统那枚图标量出来的比例摆：字形中心在纸高的四成六、扩展名在七成八。
+    ///
+    /// 两样各自 `position`，不叠成一个 `VStack`：那样两行的高度会互相牵动，字形变小时扩展名
+    /// 跟着往上跑。两个中心点钉死了，改哪一样都不会动到另一样。
+    ///
+    /// 纸比方框窄，所以整页居中摆在方框里 —— 与文件夹那枚方框同宽，两者在同一行里才对得齐。
     private var page: some View {
         ZStack {
             DriveFilePageShape(fold: fold)
@@ -67,25 +82,24 @@ struct DriveFileIcon: View {
             // 折起来的那一小块比纸深一档：不画它的话切掉的那个角只是一道直线，看不出是折角。
             DriveFileFoldShape(fold: fold)
                 .fill(Color(uiColor: .systemGray5))
-            VStack(spacing: 0) {
-                if let glyph {
-                    Image(systemName: glyph)
-                        .font(.system(size: pageHeight * 0.40))
-                        .foregroundStyle(tint)
-                }
-                if !badge.isEmpty {
-                    Text(badge)
-                        .font(.system(size: badgeSize, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        // 「HTML」在最小的那两档上正好抵到纸边，缩一点比换行好。
-                        .minimumScaleFactor(0.7)
-                        .frame(width: pageWidth * 0.82)
-                        .padding(.top, pageHeight * 0.02)
-                }
+            if let glyph {
+                Image(systemName: glyph)
+                    // `.light` 是这个图标「精致」的那一半：这些符号默认的笔画比系统文档图标
+                    // 里那枚粗一档，缩到同一个大小之后仍然显得重。
+                    .font(.system(size: glyphSize, weight: .light))
+                    .foregroundStyle(tint)
+                    .position(x: pageWidth / 2, y: glyphCenterY)
             }
-            .padding(.top, pageHeight * 0.20)
-            .padding(.bottom, pageHeight * 0.10)
+            if !badge.isEmpty {
+                Text(badge)
+                    .font(.system(size: badgeSize, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    // 「MARK」这类四个字母的在后三位数那一档上正好抵到纸边，缩一点比换行好。
+                    .minimumScaleFactor(0.7)
+                    .frame(width: pageWidth * 0.86)
+                    .position(x: pageWidth / 2, y: badgeCenterY)
+            }
         }
         .frame(width: pageWidth, height: pageHeight)
         .frame(width: box, height: box)
@@ -99,7 +113,8 @@ private struct DriveFilePageShape: Shape {
     let fold: CGFloat
 
     func path(in rect: CGRect) -> Path {
-        let radius = min(rect.width, rect.height) * 0.12
+        // 圆角比系统那枚再收一点：那边画在 77pt 高的纸上，圆角约占纸高的百分之四点五。
+        let radius = min(rect.width, rect.height) * 0.075
         // 折角不能大过纸：极小的图标上那 36% 还是画得出来的，但算式上不能让它越过中线。
         let cut = min(fold, min(rect.width, rect.height) * 0.5)
         var path = Path()
