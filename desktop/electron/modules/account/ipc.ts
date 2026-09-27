@@ -1141,7 +1141,7 @@ export const accountIpcModule: IpcModule = {
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDelete", ...mailIdInputSchema.parse(input) }),
     },
     mailDraftList: {
-      kind: "invoke", operationId: "app.mail.draft.list", request: z.object({}).strict(), response: z.object({ items: z.array(mailDraftSchema) }),
+      kind: "invoke", operationId: "app.mail.draft.list", request: z.void(), response: z.object({ items: z.array(mailDraftSchema) }),
       handler: async () => accountService.executeMailOperation({ kind: "draftList" }),
     },
     mailDraftCreate: {

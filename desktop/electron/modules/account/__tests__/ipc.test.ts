@@ -172,6 +172,8 @@ describe("accountIpcModule", () => {
     expect(accountIpcModule.methods.mailMessageList.operationId).toBe("app.mail.message.list")
     expect(accountIpcModule.methods.mailMessageSend.operationId).toBe("app.mail.message.send")
     expect(accountIpcModule.methods.mailAttachmentLocalCreate.operationId).toBe("app.mail.attachment.local_create")
+    assertParseableSchema(accountIpcModule.methods.mailDraftList.request)
+    expect(accountIpcModule.methods.mailDraftList.request.parse(undefined)).toBeUndefined()
     expect(accountIpcModule.methods.mailMessageList.response?.parse({ items: [], nextCursor: null })).toEqual({ items: [], nextCursor: null })
     expect(() => accountIpcModule.methods.mailMessageList.response?.parse({ items: "invalid", nextCursor: null })).toThrow()
     await accountIpcModule.methods.mailMessageList.handler({} as IpcHandlerContext, { box: "inbox" })
