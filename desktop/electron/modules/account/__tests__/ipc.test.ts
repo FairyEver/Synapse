@@ -57,6 +57,7 @@ vi.mock("../../../services/account-service", () => ({
     refreshFromStorage: async () => ({ status: "unauthenticated" }),
     logout: async () => ({ status: "unauthenticated" }),
     listWebhooks: async () => [],
+    executeMailOperation: vi.fn(async () => ({ items: [], nextCursor: null })),
     listDriveItems: async () => [],
     listDriveItemsPage: vi.fn(async () => ({ items: [], page: { offset: 0, limit: 100, hasMore: false, nextOffset: null } })),
     prepareDriveUpload: async () => ({}),
@@ -164,6 +165,17 @@ describe("accountIpcModule", () => {
     expect(accountIpcModule.methods.refresh.operationId).toBe("app.account.operation.refresh")
     expect(accountIpcModule.methods.logout.operationId).toBe("app.account.operation.logout")
     expect(accountIpcModule.methods.listWebhooks.operationId).toBe("app.account.webhooks.list")
+  })
+
+  it("uses capability-aligned mail channels and validates their results", async () => {
+    expect(accountIpcModule.methods.mailRecipientList.operationId).toBe("app.mail.recipient.list")
+    expect(accountIpcModule.methods.mailMessageList.operationId).toBe("app.mail.message.list")
+    expect(accountIpcModule.methods.mailMessageSend.operationId).toBe("app.mail.message.send")
+    expect(accountIpcModule.methods.mailAttachmentLocalCreate.operationId).toBe("app.mail.attachment.local_create")
+    expect(accountIpcModule.methods.mailMessageList.response?.parse({ items: [], nextCursor: null })).toEqual({ items: [], nextCursor: null })
+    expect(() => accountIpcModule.methods.mailMessageList.response?.parse({ items: "invalid", nextCursor: null })).toThrow()
+    await accountIpcModule.methods.mailMessageList.handler({} as IpcHandlerContext, { box: "inbox" })
+    expect(accountService.executeMailOperation).toHaveBeenCalledWith({ kind: "messageList", box: "inbox" })
   })
 
   it("validates account webhook responses", () => {

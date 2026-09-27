@@ -1,5 +1,12 @@
 import SwiftUI
 
+private func mailDate(_ value: String) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let date = formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value) else { return value }
+    return date.formatted(date: .abbreviated, time: .shortened)
+}
+
 struct MailView: View {
     @Environment(SynapseAppModel.self) private var model
     @Binding var selection: String?
@@ -18,7 +25,7 @@ struct MailView: View {
                             store.box = box
                             selection = nil
                             store.detail = nil
-                            Task { await store.load(using: model) }
+                            Task { await store.load(using: model, query: search) }
                         } label: {
                             Label(box.title, systemImage: symbol(for: box))
                                 .fontWeight(store.box == box ? .semibold : .regular)
@@ -47,7 +54,7 @@ struct MailView: View {
                                         Text(store.box == .inbox ? message.sender.name : message.recipients.map(\.name).joined(separator: "、"))
                                             .fontWeight(message.readAt == nil ? .semibold : .regular)
                                         Spacer()
-                                        Text(message.sentAt.prefix(10)).font(.caption).foregroundStyle(.secondary)
+                                        Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Text(message.subject).font(.subheadline)
                                     Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -71,8 +78,13 @@ struct MailView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button("写信", systemImage: "square.and.pencil") { compose = MailComposeStart() }.labelStyle(.iconOnly) }
             }
         } detail: { id in
-            MailDetailView(messageId: id, message: store.detail, error: store.error, onReply: reply, onRead: { read in Task { await store.setRead(id: id, read: read, using: model); await store.open(id: id, using: model) } }, onDelete: { selection = nil; Task { await store.delete(id: id, using: model) } })
-                .task(id: id) { await store.open(id: id, using: model) }
+            MailDetailView(messageId: id, message: store.detail, error: store.error, onReply: reply, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { selection = nil; Task { await store.delete(id: id, using: model) } })
+                .task(id: id) {
+                    if !(await store.open(id: id, using: model)), selection == id {
+                        selection = nil
+                        await store.load(using: model, query: search)
+                    }
+                }
         }
         .task { await store.load(using: model) }
         .task {
@@ -89,6 +101,7 @@ struct MailView: View {
         }
         .sheet(item: $compose) { start in
             MailComposeView(start: start) { Task { await store.load(using: model, query: search) } }
+                .presentationDetents([.large])
         }
     }
 
@@ -136,7 +149,7 @@ private struct MailDetailView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(message.subject).font(.title2).fontWeight(.semibold)
                         Text("\(message.sender.name) → \(message.recipients.map(\.name).joined(separator: "、"))").font(.subheadline)
-                        Text(message.sentAt).font(.caption).foregroundStyle(.secondary)
+                        Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
                         Text(message.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.top)
                         if !message.attachments.isEmpty {
                             Divider()

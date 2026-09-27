@@ -769,7 +769,26 @@ const synapseBridge: SynapseBridge = {
     },
   },
   mail: {
-    execute: invoke(IPC_CHANNELS.account.mailOperation),
+    recipient: { list: invoke(IPC_CHANNELS.account.mailRecipientList) },
+    message: {
+      list: invoke(IPC_CHANNELS.account.mailMessageList),
+      get: invoke(IPC_CHANNELS.account.mailMessageGet),
+      update: invoke(IPC_CHANNELS.account.mailMessageUpdate),
+      delete: invoke(IPC_CHANNELS.account.mailMessageDelete),
+      send: invoke(IPC_CHANNELS.account.mailMessageSend),
+    },
+    draft: {
+      list: invoke(IPC_CHANNELS.account.mailDraftList),
+      create: invoke(IPC_CHANNELS.account.mailDraftCreate),
+      update: invoke(IPC_CHANNELS.account.mailDraftUpdate),
+      delete: invoke(IPC_CHANNELS.account.mailDraftDelete),
+    },
+    attachment: {
+      create: invoke(IPC_CHANNELS.account.mailAttachmentCreate),
+      localCreate: invoke(IPC_CHANNELS.account.mailAttachmentLocalCreate),
+      downloadFile: invoke(IPC_CHANNELS.account.mailAttachmentDownloadFile),
+    },
+    send: { preview: invoke(IPC_CHANNELS.account.mailSendPreview) },
   },
   drive: {
     item: {

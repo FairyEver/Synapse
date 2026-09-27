@@ -22,6 +22,8 @@ struct MailComposeView: View {
     let onDone: () -> Void
 
     @State private var recipients: [MailPerson] = []
+    @State private var unresolvedRecipientIds: [String] = []
+    @State private var showCloseConfirmation = false
     @State private var search = ""
     @State private var candidates: [MailRecipientCandidate] = []
     @State private var subject: String
@@ -53,6 +55,7 @@ struct MailComposeView: View {
                     ForEach(candidates) { person in
                         Button {
                             if !recipients.contains(where: { $0.userId == person.userId }) { recipients.append(person.person) }
+                            unresolvedRecipientIds.removeAll { $0 == person.userId }
                             search = ""
                             candidates = []
                         } label: {
@@ -61,6 +64,12 @@ struct MailComposeView: View {
                     }
                     ForEach(recipients) { person in
                         HStack { Text(person.name); Spacer(); Button("移除", systemImage: "minus.circle") { recipients.removeAll { $0.userId == person.userId } }.labelStyle(.iconOnly) }
+                    }
+                    if !unresolvedRecipientIds.isEmpty {
+                        Text("收件人无法确认，请移除或重新搜索").foregroundStyle(.red)
+                        ForEach(unresolvedRecipientIds, id: \.self) { id in
+                            HStack { Text(id); Spacer(); Button("移除", systemImage: "minus.circle") { unresolvedRecipientIds.removeAll { $0 == id } }.labelStyle(.iconOnly) }
+                        }
                     }
                 }
                 Section("主题") { TextField("主题", text: $subject) }
@@ -77,9 +86,15 @@ struct MailComposeView: View {
             .navigationTitle("写信")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { requestClose() } }
                 ToolbarItem(placement: .topBarTrailing) { Button("存草稿") { Task { await saveDraft() } }.disabled(busy) }
-                ToolbarItem(placement: .confirmationAction) { Button("发送") { Task { await send() } }.disabled(busy || recipients.isEmpty || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                ToolbarItem(placement: .confirmationAction) { Button("发送") { Task { await send() } }.disabled(busy || recipients.isEmpty || !unresolvedRecipientIds.isEmpty || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+            }
+            .interactiveDismissDisabled()
+            .confirmationDialog("保存这封草稿？", isPresented: $showCloseConfirmation, titleVisibility: .visible) {
+                Button("存草稿") { Task { await saveDraft() } }
+                Button("不保存", role: .destructive) { dismiss() }
+                Button("继续编辑", role: .cancel) { }
             }
             .task { await restoreRecipients() }
             .task(id: search) { await findRecipients() }
@@ -92,17 +107,27 @@ struct MailComposeView: View {
     }
 
     private func content(includeReply: Bool = true) -> MailContent {
-        MailContent(recipientIds: recipients.map(\.userId), subject: subject, body: messageBody, attachmentIds: attachments.map(\.attachmentId), replyToId: includeReply ? (start.replyToId ?? start.draft?.replyToId) : nil)
+        MailContent(recipientIds: recipients.map(\.userId) + unresolvedRecipientIds, subject: subject, body: messageBody, attachmentIds: attachments.map(\.attachmentId), replyToId: includeReply ? (start.replyToId ?? start.draft?.replyToId) : nil)
+    }
+
+    private func requestClose() {
+        if busy { return }
+        if !recipients.isEmpty || !unresolvedRecipientIds.isEmpty || !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty {
+            showCloseConfirmation = true
+        } else { dismiss() }
     }
 
     private func restoreRecipients() async {
         let ids = start.draft?.recipientIds ?? start.recipientIds
+        var unresolved: [String] = []
         for id in ids {
             do {
                 let page = try await model.mailRecipients(query: id)
                 if let person = page.items.first(where: { $0.userId == id }), !recipients.contains(where: { $0.userId == id }) { recipients.append(person.person) }
-            } catch { self.error = error.localizedDescription }
+                else { unresolved.append(id) }
+            } catch { unresolved.append(id); self.error = error.localizedDescription }
         }
+        unresolvedRecipientIds = unresolved
     }
 
     private func findRecipients() async {
@@ -145,6 +170,7 @@ struct MailComposeView: View {
     }
 
     private func send() async {
+        guard unresolvedRecipientIds.isEmpty else { error = "请确认未识别的收件人。"; return }
         busy = true
         defer { busy = false }
         do {

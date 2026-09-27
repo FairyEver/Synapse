@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
+import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
@@ -12,6 +13,7 @@ export const MAIL_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
 const MAX_RECIPIENTS = 50
 const PREVIEW_TTL_MS = 10 * 60 * 1000
+const PENDING_ATTACHMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 type Content = { recipientIds: string[]; subject: string; body: string; attachmentIds: string[]; replyToId?: string }
 type DraftContent = Content
@@ -51,7 +53,6 @@ export class MailService {
     const users = await this.prisma.user.findMany({
       where: { id: { not: userId }, status: "active", teamMemberships: { some: { teamId: { in: teamIds } } } },
       select: { id: true, nickname: true, handle: true, teamMemberships: { where: { teamId: { in: teamIds } }, select: { teamId: true } } },
-      take: 1000,
     })
     const items = users.map((user) => {
       const match = recipientMatch(term, [user.id, user.nickname, user.handle])
@@ -118,7 +119,13 @@ export class MailService {
     const attachments = await this.prisma.mailAttachment.findMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } })
     if (attachments.length !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
     if (raw.replyToId) await this.getMessage(userId, raw.replyToId)
-    const preview = await this.prisma.mailSendPreview.create({ data: { userId, recipientIds, attachmentIds, teamIdSnapshot: team.id, teamNameSnapshot: team.name, subject, body, replyToId: raw.replyToId, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } })
+    const preview = await this.prisma.$transaction(async (tx) => {
+      if (attachmentIds.length) {
+        const reserved = await tx.mailAttachment.updateMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null }, data: { lastReferencedAt: new Date() } })
+        if (reserved.count !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
+      }
+      return tx.mailSendPreview.create({ data: { userId, recipientIds, attachmentIds, teamIdSnapshot: team.id, teamNameSnapshot: team.name, subject, body, replyToId: raw.replyToId, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     return { previewId: preview.id, expiresAt: preview.expiresAt, team: { id: team.id, name: team.name }, recipients: recipientIds.map((id) => exposedUser(participants.find((user) => user.id === id)!)), subject, body, attachments: attachmentIds.map((id) => { const row = attachments.find((item) => item.id === id)!; return { attachmentId: id, fileName: row.fileName, size: Number(row.size), versionId: row.sourceVersionId } }) }
   }
 
@@ -128,7 +135,7 @@ export class MailService {
     if (previous) {
       if (previous.previewId !== previewId) throw new ConflictException("请求标识已用于另一封信。")
       const result = { messageId: previous.id, recipientIds: previous.recipients.map((row) => row.userId), sentAt: previous.sentAt }
-      await this.notifyRecipients(result)
+      await this.deliverPendingNotifications(previous.id)
       return result
     }
     const preview = await this.prisma.mailSendPreview.findFirst({ where: { id: previewId, userId, expiresAt: { gt: new Date() } } })
@@ -147,6 +154,7 @@ export class MailService {
             const claimed = await tx.mailAttachment.updateMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null }, data: { messageId: message.id } })
             if (claimed.count !== attachmentIds.length) throw new ConflictException("附件已被使用，请重新添加。")
           }
+          await tx.mailNotificationOutbox.createMany({ data: recipientIds.map((recipientId) => ({ messageId: message.id, recipientId })) })
           return { messageId: message.id, recipientIds, sentAt: message.sentAt }
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
         break
@@ -164,24 +172,46 @@ export class MailService {
       }
     }
     if (!result) throw new ConflictException("发送遇到并发冲突，请重试。")
-    await this.notifyRecipients(result)
+    await this.deliverPendingNotifications(result.messageId)
     return result
   }
 
-  private async notifyRecipients(result: { messageId: string; recipientIds: string[] }) {
-    for (const recipientId of result.recipientIds) {
-      try {
-        await this.notifications.create({ userId: recipientId, source: "mail", sourceKey: `mail:${result.messageId}`, title: "新站内信", body: "你收到一封站内信。", group: "mail", targetId: result.messageId, url: `synapse://mail/${result.messageId}` })
-      } catch (error) {
-        this.logger.warn({ recipientId, messageId: result.messageId, reason: error instanceof Error ? error.name : typeof error }, "Mail notification failed")
+  @Cron("*/5 * * * *")
+  async retryPendingNotifications(): Promise<void> {
+    try { await this.deliverPendingNotifications() }
+    catch (error) { this.logger.warn({ reason: error instanceof Error ? error.name : typeof error }, "Mail notification retry failed") }
+  }
+
+  private async deliverPendingNotifications(messageId?: string): Promise<void> {
+    let cursor: { createdAt: Date; id: string } | undefined
+    do {
+      const pending = await this.prisma.mailNotificationOutbox.findMany({
+        where: {
+          ...(messageId ? { messageId } : {}),
+          ...(cursor ? { OR: [{ createdAt: { gt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { gt: cursor.id } }] } : {}),
+        },
+        include: { message: { select: { sender: { select: { nickname: true, handle: true } } } } },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 100,
+      })
+      for (const item of pending) {
+        try {
+          const senderName = item.message.sender.nickname || item.message.sender.handle || "团队成员"
+          await this.notifications.create({ userId: item.recipientId, source: "mail", sourceKey: `mail:${item.messageId}`, title: "新站内信", body: `来自 ${senderName}。`, group: "mail", targetId: item.messageId, url: `synapse://mail/${item.messageId}` })
+          await this.prisma.mailNotificationOutbox.deleteMany({ where: { id: item.id } })
+        } catch (error) {
+          this.logger.warn({ recipientId: item.recipientId, messageId: item.messageId, reason: error instanceof Error ? error.name : typeof error }, "Mail notification failed")
+        }
       }
-    }
+      if (pending.length < 100) break
+      cursor = { createdAt: pending.at(-1)!.createdAt, id: pending.at(-1)!.id }
+    } while (true)
   }
 
   async listMessages(userId: string, box: "inbox" | "sent", query = "", cursor?: string) {
     const search = query.trim()
     if (search.length > 120) throw new BadRequestException("搜索词过长。")
-    const cursorRow = cursor ? await this.prisma.mailMessage.findUnique({ where: { id: cursor }, select: { id: true, sentAt: true } }) : null
+    const cursorRow = cursor ? await this.prisma.mailMessage.findFirst({ where: { id: cursor, ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null } } }) }, select: { id: true, sentAt: true } }) : null
     if (cursor && !cursorRow) throw new BadRequestException("无效的分页位置。")
     const rows = await this.prisma.mailMessage.findMany({
       where: {
@@ -231,7 +261,7 @@ export class MailService {
   }
 
   async listDrafts(userId: string) {
-    const rows = await this.prisma.mailDraft.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, take: 100 })
+    const rows = await this.prisma.mailDraft.findMany({ where: { userId }, orderBy: { updatedAt: "desc" } })
     const attachmentIds = rows.flatMap((row) => ids(row.attachmentIds, MAX_ATTACHMENTS))
     const attachments = await this.prisma.mailAttachment.findMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } })
     return { items: rows.map((row) => ({ ...this.draftDto(row), attachments: ids(row.attachmentIds, MAX_ATTACHMENTS).flatMap((id) => { const item = attachments.find((candidate) => candidate.id === id); return item ? [{ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size), versionId: item.sourceVersionId }] : [] }) })) }
@@ -242,20 +272,97 @@ export class MailService {
   }
 
   async createDraft(userId: string, raw: DraftContent) {
-    const row = await this.prisma.mailDraft.create({ data: { userId, recipientIds: ids(raw.recipientIds, MAX_RECIPIENTS), subject: raw.subject ?? "", body: raw.body ?? "", attachmentIds: ids(raw.attachmentIds, MAX_ATTACHMENTS), replyToId: raw.replyToId } })
+    const attachmentIds = ids(raw.attachmentIds, MAX_ATTACHMENTS)
+    const row = await this.prisma.$transaction(async (tx) => {
+      await this.reserveDraftAttachments(tx, userId, attachmentIds)
+      return tx.mailDraft.create({ data: { userId, recipientIds: ids(raw.recipientIds, MAX_RECIPIENTS), subject: raw.subject ?? "", body: raw.body ?? "", attachmentIds, replyToId: raw.replyToId } })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     return this.draftDto(row)
   }
 
   async updateDraft(userId: string, id: string, baseVersion: number, raw: DraftContent) {
-    const result = await this.prisma.mailDraft.updateMany({ where: { id, userId, version: baseVersion }, data: { recipientIds: ids(raw.recipientIds, MAX_RECIPIENTS), subject: raw.subject, body: raw.body, attachmentIds: ids(raw.attachmentIds, MAX_ATTACHMENTS), replyToId: raw.replyToId, version: { increment: 1 } } })
-    if (!result.count) throw new ConflictException("草稿已在其他设备更新，请刷新后再编辑。")
-    const row = await this.prisma.mailDraft.findUniqueOrThrow({ where: { id } })
+    const attachmentIds = ids(raw.attachmentIds, MAX_ATTACHMENTS)
+    const row = await this.prisma.$transaction(async (tx) => {
+      await this.reserveDraftAttachments(tx, userId, attachmentIds)
+      const result = await tx.mailDraft.updateMany({ where: { id, userId, version: baseVersion }, data: { recipientIds: ids(raw.recipientIds, MAX_RECIPIENTS), subject: raw.subject, body: raw.body, attachmentIds, replyToId: raw.replyToId, version: { increment: 1 } } })
+      if (!result.count) throw new ConflictException("草稿已在其他设备更新，请刷新后再编辑。")
+      return tx.mailDraft.findUniqueOrThrow({ where: { id } })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     return this.draftDto(row)
+  }
+
+  private async reserveDraftAttachments(tx: Prisma.TransactionClient, userId: string, attachmentIds: string[]): Promise<void> {
+    if (!attachmentIds.length) return
+    const result = await tx.mailAttachment.updateMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null }, data: { lastReferencedAt: new Date() } })
+    if (result.count !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
   }
 
   async deleteDraft(userId: string, id: string) {
     const result = await this.prisma.mailDraft.deleteMany({ where: { id, userId } })
     if (!result.count) throw new NotFoundException("草稿不存在。")
     return { deleted: true }
+  }
+
+  @Cron("0 * * * *")
+  async scheduledCleanup(): Promise<void> {
+    try { await this.cleanupExpiredMail() }
+    catch (error) { this.logger.warn({ reason: error instanceof Error ? error.name : typeof error }, "Mail cleanup failed") }
+  }
+
+  async cleanupExpiredMail(now = new Date()): Promise<void> {
+    await this.prisma.mailSendPreview.deleteMany({ where: { expiresAt: { lt: now } } })
+    const cutoff = new Date(now.getTime() - PENDING_ATTACHMENT_RETENTION_MS)
+    let cursor: { lastReferencedAt: Date; id: string } | undefined
+    do {
+      const candidates = await this.prisma.mailAttachment.findMany({
+        where: {
+          messageId: null,
+          lastReferencedAt: { lt: cutoff },
+          ...(cursor ? { OR: [{ lastReferencedAt: { gt: cursor.lastReferencedAt } }, { lastReferencedAt: cursor.lastReferencedAt, id: { gt: cursor.id } }] } : {}),
+        },
+        select: { id: true, ownerId: true, storageKey: true, lastReferencedAt: true },
+        orderBy: [{ lastReferencedAt: "asc" }, { id: "asc" }],
+        take: 100,
+      })
+      const ownerIds = [...new Set(candidates.map((item) => item.ownerId))]
+      if (ownerIds.length) {
+        const [drafts, previews] = await Promise.all([
+          this.prisma.mailDraft.findMany({ where: { userId: { in: ownerIds } }, select: { attachmentIds: true } }),
+          this.prisma.mailSendPreview.findMany({ where: { userId: { in: ownerIds }, expiresAt: { gt: now } }, select: { attachmentIds: true } }),
+        ])
+        const referenced = new Set([...drafts, ...previews].flatMap((row) => Array.isArray(row.attachmentIds) ? row.attachmentIds.filter((id): id is string => typeof id === "string") : []))
+        for (const item of candidates) {
+          if (referenced.has(item.id)) continue
+          try {
+            await this.prisma.$transaction(async (tx) => {
+              const deleted = await tx.mailAttachment.deleteMany({ where: { id: item.id, messageId: null, lastReferencedAt: { lt: cutoff } } })
+              if (deleted.count) await tx.mailStorageDeletion.create({ data: { storageKey: item.storageKey } })
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+          } catch (error) {
+            this.logger.warn({ attachmentId: item.id, reason: error instanceof Error ? error.name : typeof error }, "Mail attachment cleanup failed")
+          }
+        }
+      }
+      if (candidates.length < 100) break
+      cursor = { lastReferencedAt: candidates.at(-1)!.lastReferencedAt, id: candidates.at(-1)!.id }
+    } while (true)
+    let deletionCursor: { createdAt: Date; id: string } | undefined
+    do {
+      const deletions = await this.prisma.mailStorageDeletion.findMany({
+        where: deletionCursor ? { OR: [{ createdAt: { gt: deletionCursor.createdAt } }, { createdAt: deletionCursor.createdAt, id: { gt: deletionCursor.id } }] } : undefined,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 100,
+      })
+      for (const item of deletions) {
+        try {
+          await this.storage.delete(item.storageKey)
+          await this.prisma.mailStorageDeletion.deleteMany({ where: { id: item.id } })
+        } catch (error) {
+          this.logger.warn({ deletionId: item.id, reason: error instanceof Error ? error.name : typeof error }, "Mail storage deletion failed")
+        }
+      }
+      if (deletions.length < 100) break
+      deletionCursor = { createdAt: deletions.at(-1)!.createdAt, id: deletions.at(-1)!.id }
+    } while (true)
   }
 }

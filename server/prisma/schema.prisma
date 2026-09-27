@@ -1289,6 +1289,7 @@ model MailMessage {
   sentAt          DateTime        @default(now())
   recipients      MailRecipient[]
   attachments     MailAttachment[]
+  notificationOutbox MailNotificationOutbox[]
 
   @@unique([senderId, clientRequestId])
   @@index([senderId, senderDeletedAt, sentAt, id])
@@ -1306,6 +1307,17 @@ model MailRecipient {
 
   @@unique([messageId, userId])
   @@index([userId, deletedAt, messageId])
+}
+
+model MailNotificationOutbox {
+  id          String      @id @default(cuid())
+  messageId   String
+  message     MailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  recipientId String
+  createdAt   DateTime    @default(now())
+
+  @@unique([messageId, recipientId])
+  @@index([createdAt])
 }
 
 model MailDraft {
@@ -1354,6 +1366,16 @@ model MailAttachment {
   sourceItemId String?
   sourceVersionId String?
   createdAt   DateTime     @default(now())
+  lastReferencedAt DateTime @default(now())
 
   @@index([ownerId, messageId, createdAt])
+  @@index([messageId, lastReferencedAt, id])
+}
+
+model MailStorageDeletion {
+  id         String   @id @default(cuid())
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
 }

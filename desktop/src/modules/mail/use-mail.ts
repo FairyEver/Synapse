@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { mailRequest } from "@/lib/mail-api"
 import type { MailDraft, MailMessage, MailSummary } from "@/types/mail"
 
@@ -13,6 +13,10 @@ export function useMail(box: MailBox, query: string) {
   const [error, setError] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
+  const [loadedKey, setLoadedKey] = useState("")
+  const listKey = `${box}:${query}`
+  const currentListKey = useRef(listKey)
+  currentListKey.current = listKey
 
   const refresh = useCallback(() => setRevision((value) => value + 1), [])
 
@@ -26,28 +30,34 @@ export function useMail(box: MailBox, query: string) {
     setLoading(true)
     setError(null)
     const run = box === "drafts"
-      ? mailRequest({ kind: "draftList" }).then((result) => { if (active) { setDrafts(result.items); setMessages([]); setNextCursor(null) } })
-      : mailRequest({ kind: "messageList", box, query }).then((result) => { if (active) { setMessages(result.items); setNextCursor(result.nextCursor); setDrafts([]) } })
-    void run.catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "加载失败。") }).finally(() => { if (active) setLoading(false) })
+      ? mailRequest({ kind: "draftList" }).then((result) => { if (active) { setDrafts(result.items); setMessages([]); setNextCursor(null); setLoadedKey(listKey) } })
+      : mailRequest({ kind: "messageList", box, query }).then((result) => { if (active) { setMessages(result.items); setNextCursor(result.nextCursor); setDrafts([]); setLoadedKey(listKey) } })
+    void run.catch((cause: unknown) => { if (active) { setLoadedKey(""); setError(cause instanceof Error ? cause.message : "加载失败。") } }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [box, query, revision])
+  }, [box, query, revision, listKey])
 
   useEffect(() => {
-    if (box === "drafts") { setDetail(null); return }
-    if (!selectedId) { setSelectedId(messages[0]?.messageId ?? null); return }
+    setDetail(null)
+    if (box === "drafts" || !selectedId) return
     let active = true
     void mailRequest({ kind: "messageGet", messageId: selectedId })
       .then((result) => { if (active) setDetail(result) })
-      .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "读取失败。") })
+      .catch((cause: unknown) => {
+        if (!active) return
+        const message = cause instanceof Error ? cause.message : "读取失败。"
+        if (message.includes("HTTP 404") || message.includes("信件不存在")) { setSelectedId(null); refresh() }
+        else setError(message)
+      })
     return () => { active = false }
-  }, [box, messages, selectedId, revision])
+  }, [box, selectedId, revision, refresh])
 
   const loadMore = useCallback(async () => {
-    if (box === "drafts" || !nextCursor) return
+    if (box === "drafts" || !nextCursor || loadedKey !== listKey) return
     const result = await mailRequest({ kind: "messageList", box, query, cursor: nextCursor })
+    if (currentListKey.current !== listKey) return
     setMessages((current) => [...current, ...result.items])
     setNextCursor(result.nextCursor)
-  }, [box, nextCursor, query])
+  }, [box, loadedKey, listKey, nextCursor, query])
 
-  return { messages, drafts, selectedId, setSelectedId, detail, loading, error, nextCursor, loadMore, refresh }
+  return { messages: loadedKey === listKey ? messages : [], drafts: loadedKey === listKey ? drafts : [], selectedId, setSelectedId, detail: detail?.messageId === selectedId ? detail : null, loading, error, nextCursor: loadedKey === listKey ? nextCursor : null, loadMore, refresh }
 }

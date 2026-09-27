@@ -21,3 +21,4 @@
 | `app_mail_message_send` | `previewId`, `clientRequestId`, `confirmed: true` | `messageId`、实际收件人、发送时间 |
 
 附件最大 20 MB，最多 10 个；一封信最多 50 位具体收件人。`previewId` 有效 10 分钟；失效后重做预览并重新获得用户确认。服务端在发送时重新校验当前登录用户、所有收件人的共同团队及附件状态。
+未发出的附件若七天未被草稿或有效预览引用，会由服务端回收；长时间保留的待发内容应先保存为草稿。`confirmed: true` 仅是调用者声明，不是对话确认凭证。

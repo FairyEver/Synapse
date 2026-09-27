@@ -84,22 +84,23 @@ const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pe
 
 const mailContentSchema = z.object({ recipientIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), replyToId: z.string().optional() }).strict()
 const mailIdSchema = z.string().min(1)
-const mailOperationSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("recipientSearch"), query: z.string().min(1).max(100) }),
-  z.object({ kind: z.literal("messageList"), box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: z.string().optional() }),
-  z.object({ kind: z.literal("messageGet"), messageId: mailIdSchema }),
-  z.object({ kind: z.literal("messageSetRead"), messageId: mailIdSchema, read: z.boolean() }),
-  z.object({ kind: z.literal("messageDelete"), messageId: mailIdSchema }),
-  z.object({ kind: z.literal("draftList") }),
-  z.object({ kind: z.literal("draftCreate"), content: mailContentSchema }),
-  z.object({ kind: z.literal("draftUpdate"), draftId: mailIdSchema, baseVersion: z.number().int().positive(), content: mailContentSchema }),
-  z.object({ kind: z.literal("draftDelete"), draftId: mailIdSchema }),
-  z.object({ kind: z.literal("attachmentPrepare"), driveItemId: mailIdSchema, versionId: mailIdSchema.optional() }),
-  z.object({ kind: z.literal("attachmentLocal"), filePath: z.string().min(1) }),
-  z.object({ kind: z.literal("attachmentDownload"), messageId: mailIdSchema, attachmentId: mailIdSchema, outputPath: z.string().min(1).optional() }),
-  z.object({ kind: z.literal("sendPreview"), content: mailContentSchema }),
-  z.object({ kind: z.literal("send"), previewId: mailIdSchema, clientRequestId: mailIdSchema }),
-])
+const mailPersonSchema = z.object({ userId: z.string(), nickname: z.string().nullable(), handle: z.string().nullable() })
+const mailAttachmentSchema = z.object({ attachmentId: z.string(), fileName: z.string(), mimeType: z.string().nullable().optional(), size: z.number(), versionId: z.string().nullable().optional() })
+const mailSummarySchema = z.object({ messageId: z.string(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
+const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body: z.string(), team: z.object({ id: z.string(), name: z.string() }), replyToId: z.string().nullable(), attachments: z.array(mailAttachmentSchema) })
+const mailDraftSchema = z.object({ draftId: z.string(), recipientIds: z.array(z.string()), subject: z.string(), body: z.string(), attachmentIds: z.array(z.string()), attachments: z.array(mailAttachmentSchema).optional(), replyToId: z.string().nullable(), version: z.number().int(), updatedAt: z.string() })
+const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
+const mailDraftIdInputSchema = z.object({ draftId: mailIdSchema }).strict()
+const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
+const mailDeletedSchema = z.object({ deleted: z.literal(true) })
+const mailRecipientListInputSchema = z.object({ query: z.string().min(1).max(100) }).strict()
+const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional() }).strict()
+const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
+const mailDraftUpdateInputSchema = mailContentInputSchema.extend({ draftId: mailIdSchema, baseVersion: z.number().int().positive() })
+const mailAttachmentCreateInputSchema = z.object({ driveItemId: mailIdSchema, versionId: mailIdSchema.optional() }).strict()
+const mailAttachmentLocalInputSchema = z.object({ filePath: z.string().min(1) }).strict()
+const mailAttachmentDownloadInputSchema = mailIdInputSchema.extend({ attachmentId: mailIdSchema, outputPath: z.string().min(1).optional() })
+const mailMessageSendInputSchema = z.object({ previewId: mailIdSchema, clientRequestId: mailIdSchema }).strict()
 
 const driveItemSchema = z.object({
   id: z.string(),
@@ -1114,33 +1115,89 @@ export const accountIpcModule: IpcModule = {
       response: z.object({ ok: z.literal(true) }),
       handler: async (_ctx, input) => accountService.deleteAllNotifications(notificationDeleteAllRequestSchema.parse(input).filter),
     },
-    mailOperation: {
-      kind: "invoke",
-      operationId: "app.mail.operation.execute",
-      request: mailOperationSchema,
-      response: z.unknown(),
+    mailRecipientList: {
+      kind: "invoke", operationId: "app.mail.recipient.list",
+      request: mailRecipientListInputSchema,
+      response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })) }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "recipientSearch", ...mailRecipientListInputSchema.parse(input) }),
+    },
+    mailMessageList: {
+      kind: "invoke", operationId: "app.mail.message.list",
+      request: mailMessageListInputSchema,
+      response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable() }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageList", ...mailMessageListInputSchema.parse(input) }),
+    },
+    mailMessageGet: {
+      kind: "invoke", operationId: "app.mail.message.get", request: mailIdInputSchema, response: mailMessageSchema,
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageGet", ...mailIdInputSchema.parse(input) }),
+    },
+    mailMessageUpdate: {
+      kind: "invoke", operationId: "app.mail.message.update",
+      request: mailMessageUpdateInputSchema, response: z.object({ read: z.boolean() }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageSetRead", ...mailMessageUpdateInputSchema.parse(input) }),
+    },
+    mailMessageDelete: {
+      kind: "invoke", operationId: "app.mail.message.delete", request: mailIdInputSchema, response: mailDeletedSchema,
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDelete", ...mailIdInputSchema.parse(input) }),
+    },
+    mailDraftList: {
+      kind: "invoke", operationId: "app.mail.draft.list", request: z.object({}).strict(), response: z.object({ items: z.array(mailDraftSchema) }),
+      handler: async () => accountService.executeMailOperation({ kind: "draftList" }),
+    },
+    mailDraftCreate: {
+      kind: "invoke", operationId: "app.mail.draft.create", request: mailContentInputSchema, response: mailDraftSchema,
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "draftCreate", ...mailContentInputSchema.parse(input) }),
+    },
+    mailDraftUpdate: {
+      kind: "invoke", operationId: "app.mail.draft.update",
+      request: mailDraftUpdateInputSchema, response: mailDraftSchema,
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "draftUpdate", ...mailDraftUpdateInputSchema.parse(input) }),
+    },
+    mailDraftDelete: {
+      kind: "invoke", operationId: "app.mail.draft.delete", request: mailDraftIdInputSchema, response: mailDeletedSchema,
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "draftDelete", ...mailDraftIdInputSchema.parse(input) }),
+    },
+    mailAttachmentCreate: {
+      kind: "invoke", operationId: "app.mail.attachment.create",
+      request: mailAttachmentCreateInputSchema,
+      response: mailAttachmentSchema.extend({ attachmentToken: z.string(), state: z.literal("ready") }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "attachmentPrepare", ...mailAttachmentCreateInputSchema.parse(input) }),
+    },
+    mailAttachmentLocalCreate: {
+      kind: "invoke", operationId: "app.mail.attachment.local_create",
+      request: mailAttachmentLocalInputSchema,
+      response: mailAttachmentSchema.extend({ attachmentToken: z.string(), state: z.literal("ready") }),
       handler: async (ctx, input) => {
-        const operation = mailOperationSchema.parse(input)
-        if (operation.kind === "attachmentDownload") {
-          const message = await accountService.executeMailOperation({ kind: "messageGet", messageId: operation.messageId })
-          const attachment = message.attachments.find((item) => item.attachmentId === operation.attachmentId)
-          if (!attachment) throw new Error("附件不存在。")
-          const destination = operation.outputPath ?? (await dialog.showSaveDialog({ defaultPath: attachment.fileName })).filePath
-          if (!destination) return null
-          await checkAccountPermission({
-            ctx,
-            action: "fs.write",
-            resource: destination,
-            source: "account.mail.attachmentDownload",
-            context: { kind: operation.kind, messageId: operation.messageId, attachmentId: operation.attachmentId },
-          })
-          return accountService.executeMailOperation({ ...operation, outputPath: destination })
-        }
-        if (operation.kind === "attachmentLocal") {
-          await checkAccountPermission({ ctx, action: "fs.read.outside-userdata", resource: operation.filePath, source: "account.mail.attachmentLocal", context: { kind: operation.kind } })
-        }
-        return accountService.executeMailOperation(operation)
+        const parsed = mailAttachmentLocalInputSchema.parse(input)
+        await checkAccountPermission({ ctx, action: "fs.read.outside-userdata", resource: parsed.filePath, source: "account.mail.attachmentLocal", context: { kind: "attachmentLocal" } })
+        return accountService.executeMailOperation({ kind: "attachmentLocal", ...parsed })
       },
+    },
+    mailAttachmentDownloadFile: {
+      kind: "invoke", operationId: "app.mail.attachment.download_file",
+      request: mailAttachmentDownloadInputSchema,
+      response: z.object({ path: z.string() }).nullable(),
+      handler: async (ctx, input) => {
+        const parsed = mailAttachmentDownloadInputSchema.parse(input)
+        const message = await accountService.executeMailOperation({ kind: "messageGet", messageId: parsed.messageId })
+        const attachment = message.attachments.find((item) => item.attachmentId === parsed.attachmentId)
+        if (!attachment) throw new Error("附件不存在。")
+        const destination = parsed.outputPath ?? (await dialog.showSaveDialog({ defaultPath: attachment.fileName })).filePath
+        if (!destination) return null
+        await checkAccountPermission({ ctx, action: "fs.write", resource: destination, source: "account.mail.attachmentDownload", context: { kind: "attachmentDownload", messageId: parsed.messageId, attachmentId: parsed.attachmentId } })
+        return accountService.executeMailOperation({ kind: "attachmentDownload", ...parsed, outputPath: destination })
+      },
+    },
+    mailSendPreview: {
+      kind: "invoke", operationId: "app.mail.send.preview", request: mailContentInputSchema,
+      response: z.object({ previewId: z.string(), expiresAt: z.string(), team: z.object({ id: z.string(), name: z.string() }), recipients: z.array(mailPersonSchema), subject: z.string(), body: z.string(), attachments: z.array(mailAttachmentSchema) }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "sendPreview", ...mailContentInputSchema.parse(input) }),
+    },
+    mailMessageSend: {
+      kind: "invoke", operationId: "app.mail.message.send",
+      request: mailMessageSendInputSchema,
+      response: z.object({ messageId: z.string(), recipientIds: z.array(z.string()), sentAt: z.string() }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "send", ...mailMessageSendInputSchema.parse(input) }),
     },
     listDriveItems: {
       kind: "invoke",

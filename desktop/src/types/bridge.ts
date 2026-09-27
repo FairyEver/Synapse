@@ -1399,7 +1399,26 @@ export type SynapseBridge = {
     }
   }
   mail: {
-    execute: (operation: import("./mail").MailOperation) => Promise<unknown>
+    recipient: { list: (input: { query: string }) => Promise<import("./mail").MailOperationResult["recipientSearch"]> }
+    message: {
+      list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["messageList"]>
+      get: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageGet"]>
+      update: (input: { messageId: string; read: boolean }) => Promise<import("./mail").MailOperationResult["messageSetRead"]>
+      delete: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageDelete"]>
+      send: (input: { previewId: string; clientRequestId: string }) => Promise<import("./mail").MailOperationResult["send"]>
+    }
+    draft: {
+      list: () => Promise<import("./mail").MailOperationResult["draftList"]>
+      create: (input: { content: import("./mail").MailContent }) => Promise<import("./mail").MailOperationResult["draftCreate"]>
+      update: (input: { draftId: string; baseVersion: number; content: import("./mail").MailContent }) => Promise<import("./mail").MailOperationResult["draftUpdate"]>
+      delete: (input: { draftId: string }) => Promise<import("./mail").MailOperationResult["draftDelete"]>
+    }
+    attachment: {
+      create: (input: { driveItemId: string; versionId?: string }) => Promise<import("./mail").MailOperationResult["attachmentPrepare"]>
+      localCreate: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
+      downloadFile: (input: { messageId: string; attachmentId: string; outputPath?: string }) => Promise<import("./mail").MailOperationResult["attachmentDownload"]>
+    }
+    send: { preview: (input: { content: import("./mail").MailContent }) => Promise<import("./mail").MailOperationResult["sendPreview"]> }
   }
   drive: {
     item: {
