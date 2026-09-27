@@ -191,8 +191,8 @@ private struct MailRecipientPicker: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(person.name)
-                                if let handle = person.handle, handle != person.name {
-                                    Text(handle).font(.subheadline).foregroundStyle(.secondary)
+                                if let handle = person.handle {
+                                    Text(handle).font(.footnote).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
