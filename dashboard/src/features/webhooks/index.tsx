@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
   type FormEvent,
@@ -66,13 +65,6 @@ export default function WebhooksPage() {
 
   const webhooksPage = webhooksQuery.data
   const total = webhooksPage?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / Math.max(1, pageSize)))
-
-  useEffect(() => {
-    if (page > pageCount) {
-      setPage(pageCount)
-    }
-  }, [page, pageCount])
 
   const createMutation = useMutation({
     mutationFn: (input: { name: string }) => dashboardApi.createWebhook(input),
