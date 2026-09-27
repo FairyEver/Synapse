@@ -59,5 +59,5 @@ export function useMail(box: MailBox, query: string) {
     setNextCursor(result.nextCursor)
   }, [box, loadedKey, listKey, nextCursor, query])
 
-  return { messages: loadedKey === listKey ? messages : [], drafts: loadedKey === listKey ? drafts : [], selectedId, setSelectedId, detail: detail?.messageId === selectedId ? detail : null, loading, error, nextCursor: loadedKey === listKey ? nextCursor : null, loadMore, refresh }
+  return { messages: loadedKey === listKey ? messages : [], drafts: loadedKey === listKey ? drafts : [], ready: loadedKey === listKey, selectedId, setSelectedId, detail: detail?.messageId === selectedId ? detail : null, loading, error, nextCursor: loadedKey === listKey ? nextCursor : null, loadMore, refresh }
 }
