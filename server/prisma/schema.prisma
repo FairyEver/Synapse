@@ -1281,7 +1281,10 @@ model MailMessage {
   teamNameSnapshot String         @db.VarChar(30)
   subject         String          @db.VarChar(120)
   body            String          @db.Text
+  conversationId  String          @db.VarChar(100)
   replyToId       String?
+  forwardOfId     String?
+  quoteSnapshot   Json?
   clientRequestId String          @db.VarChar(100)
   previewId       String          @unique
   senderDeletedAt DateTime?
@@ -1293,6 +1296,7 @@ model MailMessage {
   @@unique([senderId, clientRequestId])
   @@index([senderId, senderDeletedAt, sentAt, id])
   @@index([teamIdSnapshot, sentAt])
+  @@index([conversationId, sentAt, id])
 }
 
 model MailRecipient {
@@ -1301,6 +1305,7 @@ model MailRecipient {
   message   MailMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   userId    String
   user      User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role      String       @default("to") @db.VarChar(2)
   readAt    DateTime?
   deletedAt DateTime?
 
@@ -1321,15 +1326,20 @@ model MailNotificationOutbox {
 
 model MailSendPreview {
   id             String   @id @default(cuid())
+  formatVersion  Int      @default(1)
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   recipientIds   Json
+  ccIds          Json     @default("[]")
   attachmentIds  Json
   teamIdSnapshot String
   teamNameSnapshot String @db.VarChar(30)
   subject        String   @db.VarChar(120)
   body           String   @db.Text
   replyToId      String?
+  forwardOfId    String?
+  conversationId String   @db.VarChar(100)
+  quoteSnapshot  Json?
   expiresAt      DateTime
   createdAt      DateTime @default(now())
 

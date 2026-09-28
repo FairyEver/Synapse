@@ -17,7 +17,7 @@ function deferred<T>() {
 
 function message(messageId: string): MailSummary {
   const person = { userId: "person", nickname: "成员", handle: "member" }
-  return { messageId, sender: person, recipients: [person], subject: messageId, snippet: "正文", sentAt: "2026-09-27T00:00:00.000Z", readAt: null, attachmentCount: 0 }
+  return { messageId, sender: person, recipients: [person], toRecipients: [person], ccRecipients: [], relationKind: null, subject: messageId, snippet: "正文", sentAt: "2026-09-27T00:00:00.000Z", readAt: null, attachmentCount: 0 }
 }
 
 let root: Root | null = null
@@ -70,5 +70,19 @@ describe("useMail", () => {
     expect(current.selectedId).toBeNull()
     expect(current.detail).toBeNull()
     expect(current.error).toBeNull()
+  })
+
+  it("marks only the opened deep-linked message as read", async () => {
+    let detailReads = 0
+    mocks.request.mockImplementation((operation: { kind: string }) => {
+      if (operation.kind === "messageGet") return Promise.resolve({ ...message("opened"), viewerId: "reader", sender: { userId: "writer" }, body: "正文", readAt: detailReads++ ? "2026-09-28T00:00:00.000Z" : null })
+      if (operation.kind === "messageSetRead") return Promise.resolve({ read: true })
+      return Promise.resolve({ items: [message("opened"), message("other")], nextCursor: null })
+    })
+    render("inbox")
+    await act(async () => { current.setSelectedId("opened") })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "opened", read: true })
+    expect(mocks.request).not.toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "other", read: true })
   })
 })

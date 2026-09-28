@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
     "mailRecipientList": "synapse:app:mail:recipient:list",
     "mailMessageList": "synapse:app:mail:message:list",
     "mailMessageGet": "synapse:app:mail:message:get",
+    "mailMessageContext": "synapse:app:mail:message:context",
     "mailMessageUpdate": "synapse:app:mail:message:update",
     "mailMessageDelete": "synapse:app:mail:message:delete",
     "mailAttachmentCreate": "synapse:app:mail:attachment:create",

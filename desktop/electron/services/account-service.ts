@@ -496,6 +496,7 @@ export class AccountService {
         return await json("GET", `/messages?${query}`)
       }
       case "messageGet": return await json("GET", `/messages/${id(operation.messageId)}`)
+      case "messageContext": return await json("GET", `/messages/${id(operation.messageId)}/context${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`)
       case "messageSetRead": return await json("PATCH", `/messages/${id(operation.messageId)}/read`, { read: operation.read })
       case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}`)
       case "attachmentLocal": {

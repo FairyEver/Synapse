@@ -20,6 +20,7 @@ async function fixture() {
   const mail = {
     searchRecipients: vi.fn(async () => ({ items: [] })),
     createPreview: vi.fn(async () => ({ previewId: "preview-1", recipients: [], subject: "报告", body: "完整正文", attachments: [] })),
+    listContext: vi.fn(async () => ({ items: [], nextCursor: null })),
     send: vi.fn(async () => ({ messageId: "message-1", recipientIds: ["teammate"] })),
     prepareLocalAttachment: vi.fn(async () => ({ attachmentId: "attachment-1" })),
   }
@@ -43,14 +44,26 @@ describe("internal mail HTTP routes", () => {
       expect(mail.searchRecipients).toHaveBeenCalledWith("sender", "", "person-49")
 
       await request(app.getHttpServer()).post("/api/mail/send-previews")
-        .send({ recipientIds: ["teammate"], subject: "报告", body: "完整正文", attachmentIds: [] })
+        .send({ formatVersion: 2, toIds: ["teammate"], ccIds: [], subject: "报告", body: "完整正文", attachmentIds: [], forwardAttachmentIds: [] })
         .expect(201)
-      expect(mail.createPreview).toHaveBeenCalledWith("sender", expect.objectContaining({ recipientIds: ["teammate"], body: "完整正文" }))
+      expect(mail.createPreview).toHaveBeenCalledWith("sender", expect.objectContaining({ toIds: ["teammate"], body: "完整正文" }))
 
       await request(app.getHttpServer()).post("/api/mail/messages")
         .send({ previewId: "preview-1", clientRequestId: "request-1" })
         .expect(201)
       expect(mail.send).toHaveBeenCalledWith("sender", "preview-1", "request-1")
+    } finally { await app.close() }
+  })
+
+  it("rejects legacy send previews and routes context through the authenticated user", async () => {
+    const { app, mail } = await fixture()
+    try {
+      await request(app.getHttpServer()).post("/api/mail/send-previews")
+        .send({ recipientIds: ["teammate"], subject: "旧信", body: "正文", attachmentIds: [] })
+        .expect(426)
+      expect(mail.createPreview).not.toHaveBeenCalled()
+      await request(app.getHttpServer()).get("/api/mail/messages/message-1/context?cursor=older-1").expect(200)
+      expect(mail.listContext).toHaveBeenCalledWith("sender", "message-1", "older-1")
     } finally { await app.close() }
   })
 

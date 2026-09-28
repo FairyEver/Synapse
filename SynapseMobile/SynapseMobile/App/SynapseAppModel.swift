@@ -682,6 +682,7 @@ final class SynapseAppModel {
     func mailRecipients(query: String, cursor: String? = nil) async throws -> MailRecipientPage { try await apiClient.mailRecipients(query: query, cursor: cursor) }
     func mailMessages(box: String, query: String = "", cursor: String? = nil) async throws -> MailMessagePage { try await apiClient.mailMessages(box: box, query: query, cursor: cursor) }
     func mailMessage(id: String) async throws -> MailMessage { try await apiClient.mailMessage(id: id) }
+    func mailContext(id: String, cursor: String? = nil) async throws -> MailMessagePage { try await apiClient.mailContext(id: id, cursor: cursor) }
     func mailSetRead(id: String, read: Bool) async throws { try await apiClient.mailSetRead(id: id, read: read) }
     func mailDelete(id: String) async throws { try await apiClient.mailDelete(id: id) }
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment { try await apiClient.mailPrepareLocalAttachment(url: url) }

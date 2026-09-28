@@ -1,6 +1,6 @@
 import SwiftUI
 
-private func mailDate(_ value: String) -> String {
+func mailDate(_ value: String) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     guard let date = formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value) else { return value }
@@ -46,6 +46,7 @@ struct MailView: View {
                                     Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
                                 }
                                 Text(message.subject).font(.subheadline)
+                                if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption2).foregroundStyle(.secondary) }
                                 Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
@@ -65,7 +66,7 @@ struct MailView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button("写信", systemImage: "square.and.pencil") { compose = MailComposeStart() }.labelStyle(.iconOnly) }
             }
         } detail: { id in
-            MailDetailView(messageId: id, message: store.detail, error: store.error, onReply: reply, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { selection = nil; Task { await store.delete(id: id, using: model) } })
+            MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { selection = nil; Task { await store.delete(id: id, using: model) } })
                 .task(id: id) {
                     if !(await store.open(id: id, using: model)), selection == id {
                         selection = nil
@@ -100,15 +101,16 @@ struct MailView: View {
         let ids: [String]
         switch kind {
         case .reply:
-            ids = message.sender.userId == message.viewerId ? message.recipients.map(\.userId) : [message.sender.userId]
+            ids = message.sender.userId == message.viewerId ? message.toRecipients.map(\.userId) : [message.sender.userId]
         case .replyAll:
-            ids = [message.sender.userId] + message.recipients.map(\.userId)
+            ids = [message.sender.userId] + message.toRecipients.map(\.userId)
         case .forward:
             ids = []
         }
         var seen = Set<String>()
-        let recipientIds = ids.filter { $0 != message.viewerId && seen.insert($0).inserted }
-        compose = MailComposeStart(recipientIds: recipientIds, subject: kind == .forward ? "转发：\(message.subject)" : "回复：\(message.subject)", body: kind == .forward ? "\n\n\(message.body)" : "", replyToId: message.messageId)
+        let toIds = ids.filter { $0 != message.viewerId && seen.insert($0).inserted }
+        let ccIds = kind == .replyAll ? message.ccRecipients.map(\.userId).filter { $0 != message.viewerId && seen.insert($0).inserted } : []
+        compose = MailComposeStart(toIds: toIds, ccIds: ccIds, subject: kind == .forward ? "转发：\(message.subject)" : "回复：\(message.subject)", relation: MailRelation(kind: kind == .forward ? "forward" : "reply", messageId: message.messageId), source: message)
     }
 }
 
@@ -117,8 +119,13 @@ private struct MailDetailView: View {
     @Environment(SynapseAppModel.self) private var model
     let messageId: String
     let message: MailMessage?
+    let context: [MailSummary]
+    let hasMoreContext: Bool
+    let contextError: String?
     let error: String?
     let onReply: (ReplyKind, MailMessage) -> Void
+    let onOpenContext: (String) -> Void
+    let onLoadMoreContext: () -> Void
     let onRead: (Bool) -> Void
     let onDelete: () -> Void
     @State private var downloaded: [String: URL] = [:]
@@ -130,9 +137,25 @@ private struct MailDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(message.subject).font(.title2).fontWeight(.semibold)
-                        Text("\(message.sender.name) → \(message.recipients.map(\.name).joined(separator: "、"))").font(.subheadline)
+                        if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption).foregroundStyle(.secondary) }
+                        Text("发件人：\(message.sender.name)").font(.subheadline)
+                        Text("收件人：\(message.toRecipients.map(\.name).joined(separator: "、"))").font(.subheadline)
+                        if !message.ccRecipients.isEmpty { Text("抄送：\(message.ccRecipients.map(\.name).joined(separator: "、"))").font(.subheadline) }
                         Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
                         Text(message.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.top)
+                        if let quote = message.quote {
+                            DisclosureGroup(message.relationKind == "forward" ? "转发原文" : "回复原文") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("发件人：\(quote.sender.name)")
+                                    Text("收件人：\(quote.toRecipients.map(\.name).joined(separator: "、"))")
+                                    if !quote.ccRecipients.isEmpty { Text("抄送：\(quote.ccRecipients.map(\.name).joined(separator: "、"))") }
+                                    Text("时间：\(mailDate(quote.sentAt))")
+                                    Text("主题：\(quote.subject)")
+                                    Text(quote.body).textSelection(.enabled)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
                         if !message.attachments.isEmpty {
                             Divider()
                             Text("附件").font(.headline)
@@ -145,6 +168,21 @@ private struct MailDetailView: View {
                             }
                         }
                         if let downloadError { Text(downloadError).foregroundStyle(.red) }
+                        if context.count > 1 || hasMoreContext || contextError != nil {
+                            Divider()
+                            Text("关联往来").font(.headline)
+                            if let contextError { Text(contextError).foregroundStyle(.red) }
+                            ForEach(context.filter { $0.messageId != messageId }) { item in
+                                Button { onOpenContext(item.messageId) } label: {
+                                    HStack {
+                                        Text("\(item.sender.name) · \(item.subject)").lineLimit(1)
+                                        Spacer()
+                                        Text(mailDate(item.sentAt)).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            if hasMoreContext { Button("加载更早往来", action: onLoadMoreContext) }
+                        }
                     }
                     .padding()
                     .frame(maxWidth: 720, alignment: .leading)

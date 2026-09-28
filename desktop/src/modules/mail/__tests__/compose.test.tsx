@@ -2,7 +2,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { MailCompose } from "../compose"
+import { MailCompose, type ComposeStart } from "../compose"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
@@ -33,12 +33,12 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-async function renderCompose() {
+async function renderCompose(start: ComposeStart = {}) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(<MailCompose start={{}} onClose={() => {}} onSent={() => {}} />)
+    root?.render(<MailCompose start={start} onClose={() => {}} onSent={() => {}} />)
   })
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -59,6 +59,42 @@ afterEach(() => {
 })
 
 describe("MailCompose recipients", () => {
+  it("keeps a forwarded source readable and lets the sender remove its default attachment", async () => {
+    mocks.request.mockImplementation((operation: { kind: string; query?: string }) => {
+      if (operation.kind === "recipientSearch") return Promise.resolve({ items: people.filter((person) => person.userId === operation.query), nextCursor: null })
+      if (operation.kind === "sendPreview") return Promise.resolve({ previewId: "preview-1" })
+      return Promise.resolve({ messageId: "message-1" })
+    })
+    const source = {
+      messageId: "original", viewerId: "owner", sender: people[0], recipients: [people[1]], toRecipients: [people[1]], ccRecipients: [],
+      relationKind: null, subject: "原信", body: "原文", sentAt: "2026-09-27T00:00:00.000Z", readAt: null,
+      conversationId: "old", replyToId: null, relation: null, quote: null,
+      attachments: [{ attachmentId: "original-file", fileName: "报告.pdf", mimeType: "application/pdf", size: 100 }],
+    } as const
+    await renderCompose({ toIds: ["a"], subject: "转发：原信", relation: { kind: "forward", messageId: "original" }, source: source as never })
+    expect(document.body.textContent).toContain("原文")
+    const attachment = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("移除 报告.pdf"))
+    expect(attachment).toBeDefined()
+    await act(async () => { attachment?.click() })
+    const send = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "发送")
+    await act(async () => { send?.click(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "sendPreview", content: expect.objectContaining({ body: "", forwardAttachmentIds: [] }) })
+  })
+
+  it("keeps To and Cc separate in the send preview", async () => {
+    mocks.request.mockImplementation((operation: { kind: string; query?: string }) => {
+      if (operation.kind === "recipientSearch") return Promise.resolve({ items: people.filter((person) => person.userId === operation.query), nextCursor: null })
+      if (operation.kind === "sendPreview") return Promise.resolve({ previewId: "preview-1" })
+      return Promise.resolve({ messageId: "message-1" })
+    })
+    await renderCompose({ toIds: ["a"], ccIds: ["b"], subject: "报告", body: "正文" })
+    expect(document.querySelector('[aria-label="已选收件人"]')?.textContent).toContain("甲")
+    expect(document.querySelector('[aria-label="已选抄送"]')?.textContent).toContain("乙")
+    const send = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "发送")
+    await act(async () => { send?.click(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "sendPreview", content: expect.objectContaining({ formatVersion: 2, toIds: ["a"], ccIds: ["b"] }) })
+  })
+
   it("allows wheel scrolling through a long recipient list", async () => {
     mocks.request.mockResolvedValue({ items: Array.from({ length: 12 }, (_, index) => ({ ...people[0], userId: `person-${index}` })), nextCursor: null })
     await renderCompose()

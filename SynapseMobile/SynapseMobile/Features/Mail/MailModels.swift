@@ -30,6 +30,20 @@ struct MailAttachment: Decodable, Identifiable {
     var id: String { attachmentId }
 }
 
+struct MailRelation: Codable, Equatable {
+    let kind: String
+    let messageId: String
+}
+
+struct MailQuote: Decodable {
+    let sender: MailPerson
+    let toRecipients: [MailPerson]
+    let ccRecipients: [MailPerson]
+    let subject: String
+    let body: String
+    let sentAt: String
+}
+
 struct MailPreparedAttachment: Decodable {
     let attachmentId: String
     let attachmentToken: String
@@ -44,6 +58,9 @@ struct MailSummary: Decodable, Identifiable {
     let messageId: String
     let sender: MailPerson
     let recipients: [MailPerson]
+    let toRecipients: [MailPerson]
+    let ccRecipients: [MailPerson]
+    let relationKind: String?
     let subject: String
     let snippet: String
     let sentAt: String
@@ -57,30 +74,42 @@ struct MailMessage: Decodable {
     let viewerId: String
     let sender: MailPerson
     let recipients: [MailPerson]
+    let toRecipients: [MailPerson]
+    let ccRecipients: [MailPerson]
+    let relationKind: String?
     let subject: String
     let body: String
     let sentAt: String
     let readAt: String?
     let replyToId: String?
+    let conversationId: String
+    let relation: MailRelation?
+    let quote: MailQuote?
     let attachments: [MailAttachment]
 }
 
 struct MailMessagePage: Decodable { let items: [MailSummary]; let nextCursor: String? }
 
 struct MailContent: Encodable, Equatable {
-    let recipientIds: [String]
+    let formatVersion: Int
+    let toIds: [String]
+    let ccIds: [String]
     let subject: String
     let body: String
     let attachmentIds: [String]
-    let replyToId: String?
+    let forwardAttachmentIds: [String]
+    let relation: MailRelation?
 }
 
 struct MailPreview: Decodable {
     let previewId: String
     let expiresAt: String
     let recipients: [MailPerson]
+    let toRecipients: [MailPerson]
+    let ccRecipients: [MailPerson]
     let subject: String
     let body: String
+    let quote: MailQuote?
     let attachments: [MailAttachment]
 }
 

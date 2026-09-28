@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, HttpException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
@@ -7,7 +7,7 @@ import { attachmentContentDisposition } from "../common/content-disposition"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { MAIL_MAX_ATTACHMENT_BYTES, MailService } from "./mail.service"
 
-const content = z.object({ recipientIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10).default([]), replyToId: z.string().min(1).optional() }).strict()
+const content = z.object({ formatVersion: z.literal(2), toIds: z.array(z.string().min(1)).max(50), ccIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -38,6 +38,11 @@ export class MailController {
   @Get("messages/:id")
   getMessage(@Req() request: AuthenticatedUserRequest, @Param("id") id: string) {
     return this.mail.getMessage(userId(request), id)
+  }
+
+  @Get("messages/:id/context")
+  listContext(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query("cursor") cursor?: string) {
+    return this.mail.listContext(userId(request), id, cursor)
   }
 
   @Patch("messages/:id/read")
@@ -78,6 +83,7 @@ export class MailController {
 
   @Post("send-previews")
   createPreview(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
+    if (!body || typeof body !== "object" || (body as Record<string, unknown>).formatVersion !== 2) throw new HttpException("请更新客户端后再发送站内信。", 426)
     return this.mail.createPreview(userId(request), parse(content, body))
   }
 

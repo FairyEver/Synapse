@@ -773,6 +773,7 @@ const synapseBridge: SynapseBridge = {
     message: {
       list: invoke(IPC_CHANNELS.account.mailMessageList),
       get: invoke(IPC_CHANNELS.account.mailMessageGet),
+      context: invoke(IPC_CHANNELS.account.mailMessageContext),
       update: invoke(IPC_CHANNELS.account.mailMessageUpdate),
       delete: invoke(IPC_CHANNELS.account.mailMessageDelete),
       send: invoke(IPC_CHANNELS.account.mailMessageSend),

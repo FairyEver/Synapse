@@ -9,13 +9,14 @@ type MailAccount = { executeMailOperation: (operation: MailOperation) => Promise
 type MailDeps = { accountService: MailAccount; permissionGuard?: PermissionGuard; auditSink?: AuditSink }
 const actor: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const id = z.string().min(1)
-const content = z.object({ recipientIds: z.array(id).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(id).max(10), replyToId: id.optional() }).strict()
+const content = z.object({ formatVersion: z.literal(2), toIds: z.array(id).max(50), ccIds: z.array(id).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(id).max(10), forwardAttachmentIds: z.array(id).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: id }).strict().optional() }).strict()
 
 function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
   switch (action) {
     case "app.mail.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.list": return { kind: "messageList", ...z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.get": return { kind: "messageGet", ...z.object({ messageId: id }).strict().parse(params) }
+    case "app.mail.message.context": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
     case "app.mail.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id }).strict().parse(params) }
     case "app.mail.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }

@@ -38,7 +38,18 @@ export function useMail(box: MailBox, query: string) {
     if (!selectedId) return
     let active = true
     void mailRequest({ kind: "messageGet", messageId: selectedId })
-      .then((result) => { if (active) setDetail(result) })
+      .then(async (result) => {
+        if (!active) return
+        setDetail(result)
+        if (result.sender.userId !== result.viewerId && !result.readAt) {
+          try {
+            await mailRequest({ kind: "messageSetRead", messageId: selectedId, read: true })
+            if (active) refresh()
+          } catch (cause) {
+            if (active) setError(cause instanceof Error ? cause.message : "已读状态更新失败。")
+          }
+        }
+      })
       .catch((cause: unknown) => {
         if (!active) return
         const message = cause instanceof Error ? cause.message : "读取失败。"

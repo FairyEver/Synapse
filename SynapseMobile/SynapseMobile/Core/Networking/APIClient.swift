@@ -1218,6 +1218,11 @@ actor APIClient {
         try await send(path: "/mail/messages/\(escaped(id))", method: "GET")
     }
 
+    func mailContext(id: String, cursor: String? = nil) async throws -> MailMessagePage {
+        let query = cursor.map { mailQuery([URLQueryItem(name: "cursor", value: $0)]) } ?? ""
+        return try await send(path: "/mail/messages/\(escaped(id))/context" + query, method: "GET")
+    }
+
     func mailSetRead(id: String, read: Bool) async throws {
         struct Body: Encodable { let read: Bool }
         let _: MailReadResult = try await send(path: "/mail/messages/\(escaped(id))/read", method: "PATCH", body: Body(read: read))

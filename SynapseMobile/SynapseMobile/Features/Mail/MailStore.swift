@@ -14,6 +14,9 @@ final class MailStore {
     var box: Box = .inbox
     var messages: [MailSummary] = []
     var detail: MailMessage?
+    var context: [MailSummary] = []
+    var nextContextCursor: String?
+    var contextError: String?
     var loading = false
     var error: String?
     var nextCursor: String?
@@ -58,17 +61,41 @@ final class MailStore {
             let message = try await model.mailMessage(id: id)
             guard generation == openGeneration else { return true }
             detail = message
-            if box == .inbox && message.readAt == nil {
-                try await model.mailSetRead(id: id, read: true)
-                applyReadState(id: id, readAt: ISO8601DateFormatter().string(from: Date()))
+            context = []
+            nextContextCursor = nil
+            contextError = nil
+            if message.sender.userId != message.viewerId && message.readAt == nil {
+                do {
+                    try await model.mailSetRead(id: id, read: true)
+                    applyReadState(id: id, readAt: ISO8601DateFormatter().string(from: Date()))
+                } catch { if generation == openGeneration { self.error = error.localizedDescription } }
             }
+            do {
+                let page = try await model.mailContext(id: id)
+                guard generation == openGeneration else { return true }
+                context = page.items
+                nextContextCursor = page.nextCursor
+            } catch { if generation == openGeneration { contextError = error.localizedDescription } }
             return true
         } catch {
             guard generation == openGeneration else { return true }
             detail = nil
+            context = []
+            nextContextCursor = nil
+            contextError = nil
             self.error = error.localizedDescription
             return (error as? APIError)?.status != 404
         }
+    }
+
+    func loadMoreContext(id: String, using model: SynapseAppModel) async {
+        guard let cursor = nextContextCursor else { return }
+        do {
+            let page = try await model.mailContext(id: id, cursor: cursor)
+            guard detail?.messageId == id else { return }
+            context = page.items + context
+            nextContextCursor = page.nextCursor
+        } catch { if detail?.messageId == id { contextError = error.localizedDescription } }
     }
 
     func setRead(id: String, read: Bool, using model: SynapseAppModel) async {
@@ -82,10 +109,10 @@ final class MailStore {
     private func applyReadState(id: String, readAt: String?) {
         messages = messages.map { item in
             guard item.messageId == id else { return item }
-            return MailSummary(messageId: item.messageId, sender: item.sender, recipients: item.recipients, subject: item.subject, snippet: item.snippet, sentAt: item.sentAt, readAt: readAt, attachmentCount: item.attachmentCount)
+            return MailSummary(messageId: item.messageId, sender: item.sender, recipients: item.recipients, toRecipients: item.toRecipients, ccRecipients: item.ccRecipients, relationKind: item.relationKind, subject: item.subject, snippet: item.snippet, sentAt: item.sentAt, readAt: readAt, attachmentCount: item.attachmentCount)
         }
         if let message = detail, message.messageId == id {
-            detail = MailMessage(messageId: message.messageId, viewerId: message.viewerId, sender: message.sender, recipients: message.recipients, subject: message.subject, body: message.body, sentAt: message.sentAt, readAt: readAt, replyToId: message.replyToId, attachments: message.attachments)
+            detail = MailMessage(messageId: message.messageId, viewerId: message.viewerId, sender: message.sender, recipients: message.recipients, toRecipients: message.toRecipients, ccRecipients: message.ccRecipients, relationKind: message.relationKind, subject: message.subject, body: message.body, sentAt: message.sentAt, readAt: readAt, replyToId: message.replyToId, conversationId: message.conversationId, relation: message.relation, quote: message.quote, attachments: message.attachments)
         }
     }
 

@@ -42,6 +42,12 @@ export class MailStorageService {
     return createReadStream(this.localPath(key))
   }
 
+  async copy(sourceKey: string, targetKey: string, mimeType?: string | null): Promise<void> {
+    const chunks: Buffer[] = []
+    for await (const chunk of await this.open(sourceKey)) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    await this.put(targetKey, Buffer.concat(chunks), mimeType)
+  }
+
   async delete(key: string): Promise<void> {
     if (this.cos) {
       await new Promise<void>((resolve, reject) => {

@@ -13,11 +13,29 @@ const MAX_RECIPIENTS = 50
 const PREVIEW_TTL_MS = 10 * 60 * 1000
 const PENDING_ATTACHMENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
-type Content = { recipientIds: string[]; subject: string; body: string; attachmentIds: string[]; replyToId?: string }
+type Content = {
+  toIds: string[]
+  ccIds: string[]
+  subject: string
+  body: string
+  attachmentIds: string[]
+  forwardAttachmentIds: string[]
+  relation?: { kind: "reply" | "forward"; messageId: string }
+}
+
+type QuoteSnapshot = {
+  sender: ReturnType<typeof exposedUser>
+  toRecipients: ReturnType<typeof exposedUser>[]
+  ccRecipients: ReturnType<typeof exposedUser>[]
+  subject: string
+  body: string
+  sentAt: string
+}
 
 function ids(value: unknown, max: number): string[] {
   if (!Array.isArray(value) || value.length > max || value.some((id) => typeof id !== "string" || !id)) throw new BadRequestException("无效的用户或附件列表。")
-  return [...new Set(value as string[])]
+  if (new Set(value).size !== value.length) throw new BadRequestException("收件人或附件不能重复。")
+  return value as string[]
 }
 
 function exposedUser(user: { id: string; nickname: string | null; handle: string | null }) {
@@ -90,11 +108,20 @@ export class MailService {
   }
 
   async createPreview(userId: string, raw: Content) {
-    const recipientIds = ids(raw.recipientIds, MAX_RECIPIENTS)
+    const toIds = ids(raw.toIds, MAX_RECIPIENTS)
+    const ccIds = ids(raw.ccIds, MAX_RECIPIENTS)
+    const recipientIds = [...toIds, ...ccIds]
     const attachmentIds = ids(raw.attachmentIds, MAX_ATTACHMENTS)
+    const forwardAttachmentIds = ids(raw.forwardAttachmentIds, MAX_ATTACHMENTS)
     const subject = raw.subject?.trim()
     const body = raw.body?.trim()
-    if (!recipientIds.length || !subject || subject.length > 120 || !body || body.length > 100_000 || recipientIds.includes(userId)) throw new BadRequestException("请填写收件人、主题和正文。")
+    if (!toIds.length || recipientIds.length > MAX_RECIPIENTS || new Set(recipientIds).size !== recipientIds.length || recipientIds.includes(userId)) throw new BadRequestException("请确认收件人和抄送人，合计不能超过 50 人。")
+    if (!subject || subject.length > 120 || (raw.relation?.kind !== "forward" && !body) || (body?.length ?? 0) > 100_000) throw new BadRequestException("请填写主题和正文。")
+    if (attachmentIds.length + forwardAttachmentIds.length > MAX_ATTACHMENTS || (forwardAttachmentIds.length && raw.relation?.kind !== "forward")) throw new BadRequestException("附件无效或超过 10 个。")
+    const source = raw.relation ? await this.getMessage(userId, raw.relation.messageId) : null
+    if (raw.relation && !source) throw new NotFoundException("原信不存在。")
+    if (source && raw.relation?.kind === "forward" && forwardAttachmentIds.some((id) => !source.attachments.some((item) => item.attachmentId === id))) throw new ForbiddenException("原信附件已失效。")
+    const quote: QuoteSnapshot | null = source ? { sender: source.sender, toRecipients: source.toRecipients, ccRecipients: source.ccRecipients, subject: source.subject, body: source.body, sentAt: new Date(source.sentAt).toISOString() } : null
     const participants = await this.prisma.user.findMany({
       where: { id: { in: [userId, ...recipientIds] }, status: "active" },
       select: { id: true, nickname: true, handle: true, teamMemberships: { select: { teamId: true } } },
@@ -102,19 +129,46 @@ export class MailService {
     if (participants.length !== recipientIds.length + 1) throw new ForbiddenException("收件人已失效。")
     const common = participants.reduce<string[]>((shared, user, index) => index === 0 ? user.teamMemberships.map((row) => row.teamId) : shared.filter((id) => user.teamMemberships.some((row) => row.teamId === id)), [])
     if (!common.length) throw new ForbiddenException("所有收件人必须与发件人在同一团队。")
-    const team = await this.prisma.team.findFirst({ where: { id: { in: common } }, orderBy: { id: "asc" } })
+    if (source && !common.includes(source.team.id)) throw new ForbiddenException("原信团队成员关系已变化。")
+    const team = await this.prisma.team.findFirst({ where: { id: source ? source.team.id : { in: common } }, orderBy: { id: "asc" } })
     if (!team) throw new ForbiddenException("团队不存在。")
     const attachments = await this.prisma.mailAttachment.findMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } })
     if (attachments.length !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
-    if (raw.replyToId) await this.getMessage(userId, raw.replyToId)
-    const preview = await this.prisma.$transaction(async (tx) => {
-      if (attachmentIds.length) {
-        const reserved = await tx.mailAttachment.updateMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null }, data: { lastReferencedAt: new Date() } })
-        if (reserved.count !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
+    const copied: typeof attachments = []
+    try {
+      for (const id of forwardAttachmentIds) {
+        const original = await this.prisma.mailAttachment.findFirst({ where: { id, messageId: source!.messageId } })
+        if (!original) throw new ForbiddenException("原信附件已失效。")
+        const key = `mail/attachments/${randomUUID()}`
+        try { await this.storage.copy(original.storageKey, key, original.mimeType) }
+        catch (error) {
+          await this.prisma.mailStorageDeletion.create({ data: { storageKey: key } })
+          throw error
+        }
+        try {
+          copied.push(await this.prisma.mailAttachment.create({ data: { ownerId: userId, fileName: original.fileName, mimeType: original.mimeType, size: original.size, storageKey: key } }))
+        } catch (error) {
+          await this.prisma.mailStorageDeletion.create({ data: { storageKey: key } })
+          throw error
+        }
       }
-      return tx.mailSendPreview.create({ data: { userId, recipientIds, attachmentIds, teamIdSnapshot: team.id, teamNameSnapshot: team.name, subject, body, replyToId: raw.replyToId, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } })
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
-    return { previewId: preview.id, expiresAt: preview.expiresAt, team: { id: team.id, name: team.name }, recipients: recipientIds.map((id) => exposedUser(participants.find((user) => user.id === id)!)), subject, body, attachments: attachmentIds.map((id) => { const row = attachments.find((item) => item.id === id)!; return { attachmentId: id, fileName: row.fileName, size: Number(row.size) } }) }
+      const allAttachments = [...attachments, ...copied]
+      const allAttachmentIds = [...attachmentIds, ...copied.map((item) => item.id)]
+      const preview = await this.prisma.$transaction(async (tx) => {
+        if (allAttachmentIds.length) {
+          const reserved = await tx.mailAttachment.updateMany({ where: { id: { in: allAttachmentIds }, ownerId: userId, messageId: null }, data: { lastReferencedAt: new Date() } })
+          if (reserved.count !== allAttachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
+        }
+        return tx.mailSendPreview.create({ data: { userId, formatVersion: 2, recipientIds, ccIds, attachmentIds: allAttachmentIds, teamIdSnapshot: team.id, teamNameSnapshot: team.name, subject, body: body ?? "", replyToId: raw.relation?.kind === "reply" ? source!.messageId : null, forwardOfId: raw.relation?.kind === "forward" ? source!.messageId : null, conversationId: raw.relation?.kind === "reply" ? source!.conversationId : randomUUID(), quoteSnapshot: quote ? quote as Prisma.InputJsonValue : Prisma.JsonNull, expiresAt: new Date(Date.now() + PREVIEW_TTL_MS) } })
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+      const person = (id: string) => exposedUser(participants.find((user) => user.id === id)!)
+      return { previewId: preview.id, expiresAt: preview.expiresAt, team: { id: team.id, name: team.name }, recipients: recipientIds.map(person), toRecipients: toIds.map(person), ccRecipients: ccIds.map(person), subject, body: body ?? "", quote, attachments: allAttachments.map((row) => ({ attachmentId: row.id, fileName: row.fileName, size: Number(row.size) })) }
+    } catch (error) {
+      for (const item of copied) {
+        await this.prisma.$transaction([this.prisma.mailAttachment.delete({ where: { id: item.id } }), this.prisma.mailStorageDeletion.create({ data: { storageKey: item.storageKey } })]).catch((cleanupError: unknown) => this.logger.warn({ attachmentId: item.id, reason: cleanupError instanceof Error ? cleanupError.name : typeof cleanupError }, "Forward attachment cleanup failed"))
+      }
+      throw error
+    }
   }
 
   async send(userId: string, previewId: string, clientRequestId: string) {
@@ -128,7 +182,9 @@ export class MailService {
     }
     const preview = await this.prisma.mailSendPreview.findFirst({ where: { id: previewId, userId, expiresAt: { gt: new Date() } } })
     if (!preview) throw new ConflictException("发送预览已过期，请重新确认。")
+    if (preview.formatVersion !== 2) throw new ConflictException("请更新客户端后重新写信。")
     const recipientIds = ids(preview.recipientIds, MAX_RECIPIENTS)
+    const ccIds = ids(preview.ccIds, MAX_RECIPIENTS)
     const attachmentIds = ids(preview.attachmentIds, MAX_ATTACHMENTS)
     let result: { messageId: string; recipientIds: string[]; sentAt: Date } | undefined
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -136,8 +192,13 @@ export class MailService {
         result = await this.prisma.$transaction(async (tx) => {
           const validUsers = await tx.user.count({ where: { id: { in: [userId, ...recipientIds] }, status: "active", teamMemberships: { some: { teamId: preview.teamIdSnapshot } } } })
           if (validUsers !== recipientIds.length + 1) throw new ForbiddenException("团队成员已变化，请重新确认。")
+          const sourceId = preview.replyToId ?? preview.forwardOfId
+          if (sourceId) {
+            const source = await tx.mailMessage.findFirst({ where: { id: sourceId, teamIdSnapshot: preview.teamIdSnapshot, OR: [{ senderId: userId, senderDeletedAt: null }, { recipients: { some: { userId, deletedAt: null } } }] }, select: { id: true, conversationId: true } })
+            if (!source || (preview.replyToId && source.conversationId !== preview.conversationId)) throw new ForbiddenException("原信已不可用，请重新确认。")
+          }
           if (await tx.mailAttachment.count({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } }) !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
-          const message = await tx.mailMessage.create({ data: { senderId: userId, teamIdSnapshot: preview.teamIdSnapshot, teamNameSnapshot: preview.teamNameSnapshot, subject: preview.subject, body: preview.body, replyToId: preview.replyToId, clientRequestId, previewId, recipients: { create: recipientIds.map((id) => ({ userId: id })) } } })
+          const message = await tx.mailMessage.create({ data: { senderId: userId, teamIdSnapshot: preview.teamIdSnapshot, teamNameSnapshot: preview.teamNameSnapshot, subject: preview.subject, body: preview.body, conversationId: preview.conversationId, replyToId: preview.replyToId, forwardOfId: preview.forwardOfId, quoteSnapshot: preview.quoteSnapshot === null ? Prisma.JsonNull : preview.quoteSnapshot as Prisma.InputJsonValue, clientRequestId, previewId, recipients: { create: recipientIds.map((id) => ({ userId: id, role: ccIds.includes(id) ? "cc" : "to" })) } } })
           if (attachmentIds.length) {
             const claimed = await tx.mailAttachment.updateMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null }, data: { messageId: message.id } })
             if (claimed.count !== attachmentIds.length) throw new ConflictException("附件已被使用，请重新添加。")
@@ -219,11 +280,26 @@ export class MailService {
       include: { sender: { select: { id: true, nickname: true, handle: true } }, recipients: { include: { user: { select: { id: true, nickname: true, handle: true } } } }, attachments: true },
     })
     if (!row) throw new NotFoundException("信件不存在。")
-    return { ...this.summary(row, userId), viewerId: userId, body: row.body, team: { id: row.teamIdSnapshot, name: row.teamNameSnapshot }, replyToId: row.replyToId, attachments: row.attachments.map((item) => ({ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) })) }
+    return { ...this.summary(row, userId), viewerId: userId, body: row.body, team: { id: row.teamIdSnapshot, name: row.teamNameSnapshot }, conversationId: row.conversationId, replyToId: row.replyToId, relation: row.forwardOfId ? { kind: "forward" as const, messageId: row.forwardOfId } : row.replyToId ? { kind: "reply" as const, messageId: row.replyToId } : null, quote: row.quoteSnapshot as QuoteSnapshot | null, attachments: row.attachments.map((item) => ({ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) })) }
   }
 
-  private summary(row: { id: string; senderId: string; sender: { id: string; nickname: string | null; handle: string | null }; recipients: { userId: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; subject: string; body: string; sentAt: Date; attachments: { id: string }[] }, userId: string) {
-    return { messageId: row.id, sender: exposedUser(row.sender), recipients: row.recipients.map((item) => exposedUser(item.user)), subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
+  async listContext(userId: string, id: string, cursor?: string) {
+    const anchor = await this.getMessage(userId, id)
+    const visible = { OR: [{ senderId: userId, senderDeletedAt: null }, { recipients: { some: { userId, deletedAt: null } } }] }
+    const cursorRow = cursor ? await this.prisma.mailMessage.findFirst({ where: { id: cursor, conversationId: anchor.conversationId, ...visible }, select: { id: true, sentAt: true } }) : null
+    if (cursor && !cursorRow) throw new BadRequestException("无效的分页位置。")
+    const rows = await this.prisma.mailMessage.findMany({
+      where: { conversationId: anchor.conversationId, ...visible, ...(cursorRow ? { AND: [{ OR: [{ sentAt: { lt: cursorRow.sentAt } }, { sentAt: cursorRow.sentAt, id: { lt: cursorRow.id } }] }] } : {}) },
+      include: { sender: { select: { id: true, nickname: true, handle: true } }, recipients: { include: { user: { select: { id: true, nickname: true, handle: true } } } }, attachments: { select: { id: true } } },
+      orderBy: [{ sentAt: "desc" }, { id: "desc" }], take: 51,
+    })
+    return { items: rows.slice(0, 50).map((row) => this.summary(row, userId)).reverse(), nextCursor: rows.length > 50 ? rows[49]!.id : null }
+  }
+
+  private summary(row: { id: string; senderId: string; sender: { id: string; nickname: string | null; handle: string | null }; recipients: { userId: string; role: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; subject: string; body: string; sentAt: Date; attachments: { id: string }[]; replyToId: string | null; forwardOfId: string | null }, userId: string) {
+    const toRecipients = row.recipients.filter((item) => item.role === "to").map((item) => exposedUser(item.user))
+    const ccRecipients = row.recipients.filter((item) => item.role === "cc").map((item) => exposedUser(item.user))
+    return { messageId: row.id, sender: exposedUser(row.sender), recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
   }
 
   async setRead(userId: string, id: string, read: boolean) {

@@ -1403,6 +1403,7 @@ export type SynapseBridge = {
     message: {
       list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["messageList"]>
       get: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageGet"]>
+      context: (input: { messageId: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["messageContext"]>
       update: (input: { messageId: string; read: boolean }) => Promise<import("./mail").MailOperationResult["messageSetRead"]>
       delete: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageDelete"]>
       send: (input: { previewId: string; clientRequestId: string }) => Promise<import("./mail").MailOperationResult["send"]>

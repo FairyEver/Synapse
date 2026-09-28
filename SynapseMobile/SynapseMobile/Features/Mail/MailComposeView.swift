@@ -3,13 +3,16 @@ import UniformTypeIdentifiers
 
 struct MailComposeStart: Identifiable {
     let id = UUID()
-    var recipientIds: [String] = []
+    var toIds: [String] = []
+    var ccIds: [String] = []
     var subject = ""
     var body = ""
-    var replyToId: String?
+    var relation: MailRelation?
+    var source: MailMessage?
 }
 
 struct MailComposeView: View {
+    private enum RecipientRole: String, Identifiable { case to, cc; var id: String { rawValue } }
     private struct PendingSend {
         let content: MailContent
         let previewId: String
@@ -21,11 +24,15 @@ struct MailComposeView: View {
     let onDone: () -> Void
 
     @State private var recipients: [MailPerson] = []
+    @State private var ccRecipients: [MailPerson] = []
     @State private var unresolvedRecipientIds: [String] = []
-    @State private var recipientPicker = false
+    @State private var unresolvedCcIds: [String] = []
+    @State private var recipientPicker: RecipientRole?
     @State private var subject: String
     @State private var messageBody: String
     @State private var attachments: [MailAttachment]
+    @State private var forwardAttachmentIds: [String]
+    @State private var quoteExpanded = true
     @State private var importing = false
     @State private var busy = false
     @State private var error: String?
@@ -37,13 +44,14 @@ struct MailComposeView: View {
         _subject = State(initialValue: start.subject)
         _messageBody = State(initialValue: start.body)
         _attachments = State(initialValue: [])
+        _forwardAttachmentIds = State(initialValue: start.relation?.kind == "forward" ? start.source?.attachments.map(\.attachmentId) ?? [] : [])
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("收件人") {
-                    Button(recipients.isEmpty ? "选择收件人" : "添加收件人", systemImage: "person.crop.circle.badge.plus") { recipientPicker = true }
+                    Button(recipients.isEmpty ? "选择收件人" : "添加收件人", systemImage: "person.crop.circle.badge.plus") { recipientPicker = .to }
                     ForEach(recipients) { person in
                         HStack {
                             Text(person.name)
@@ -59,26 +67,68 @@ struct MailComposeView: View {
                         }
                     }
                 }
+                Section("抄送") {
+                    Button(ccRecipients.isEmpty ? "选择抄送" : "添加抄送", systemImage: "person.crop.circle.badge.plus") { recipientPicker = .cc }
+                    ForEach(ccRecipients) { person in
+                        HStack { Text(person.name); Spacer(); Button("移除 \(person.name)", systemImage: "minus.circle") { ccRecipients.removeAll { $0.userId == person.userId } }.labelStyle(.iconOnly) }
+                    }
+                    if !unresolvedCcIds.isEmpty {
+                        Text("抄送人无法确认，请移除或重新搜索").foregroundStyle(.red)
+                        ForEach(unresolvedCcIds, id: \.self) { id in
+                            HStack { Text(id); Spacer(); Button("移除", systemImage: "minus.circle") { unresolvedCcIds.removeAll { $0 == id } }.labelStyle(.iconOnly) }
+                        }
+                    }
+                }
                 Section("主题") { TextField("主题", text: $subject) }
                 Section("正文") { TextEditor(text: $messageBody).frame(minHeight: 180) }
+                if let source = start.source {
+                    Section {
+                        DisclosureGroup(start.relation?.kind == "forward" ? "转发原文" : "回复原文", isExpanded: $quoteExpanded) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("发件人：\(source.sender.name)")
+                                Text("收件人：\(source.toRecipients.map(\.name).joined(separator: "、"))")
+                                if !source.ccRecipients.isEmpty { Text("抄送：\(source.ccRecipients.map(\.name).joined(separator: "、"))") }
+                                Text("时间：\(mailDate(source.sentAt))")
+                                Text("主题：\(source.subject)")
+                                Text(source.body).textSelection(.enabled)
+                            }
+                        }
+                    }
+                }
                 Section("附件") {
                     Button("选取文件", systemImage: "paperclip") { importing = true }
+                        .disabled(attachments.count + forwardAttachmentIds.count >= 10)
                     ForEach(attachments) { attachment in
                         HStack { Text(attachment.fileName); Spacer(); Button("移除", systemImage: "minus.circle") { attachments.removeAll { $0.id == attachment.id } }.labelStyle(.iconOnly) }
+                    }
+                    if start.relation?.kind == "forward", let source = start.source {
+                        ForEach(source.attachments) { attachment in
+                            HStack {
+                                Text(attachment.fileName)
+                                Spacer()
+                                if forwardAttachmentIds.contains(attachment.id) {
+                                    Button("移除", systemImage: "minus.circle") { forwardAttachmentIds.removeAll { $0 == attachment.id } }.labelStyle(.iconOnly)
+                                } else {
+                                    Button("附上", systemImage: "plus.circle") { forwardAttachmentIds.append(attachment.id) }
+                                        .labelStyle(.iconOnly)
+                                        .disabled(attachments.count + forwardAttachmentIds.count >= 10)
+                                }
+                            }
+                        }
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
             }
-            .navigationTitle("写信")
+            .navigationTitle(start.relation?.kind == "reply" ? "回复" : start.relation?.kind == "forward" ? "转发" : "写信")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { if !busy { dismiss() } } }
-                ToolbarItem(placement: .confirmationAction) { Button("发送") { Task { await send() } }.disabled(busy || recipients.isEmpty || !unresolvedRecipientIds.isEmpty || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                ToolbarItem(placement: .confirmationAction) { Button("发送") { Task { await send() } }.disabled(busy || recipients.isEmpty || !unresolvedRecipientIds.isEmpty || !unresolvedCcIds.isEmpty || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (start.relation?.kind != "forward" && messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)) }
             }
             .interactiveDismissDisabled(busy)
             .task { await restoreRecipients() }
-            .sheet(isPresented: $recipientPicker) {
-                MailRecipientPicker(recipients: $recipients, unresolvedRecipientIds: $unresolvedRecipientIds)
+            .sheet(item: $recipientPicker) { role in
+                MailRecipientPicker(role: role.rawValue, toRecipients: $recipients, ccRecipients: $ccRecipients, unresolvedToIds: $unresolvedRecipientIds, unresolvedCcIds: $unresolvedCcIds)
                     .presentationDetents([.large])
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
@@ -89,33 +139,38 @@ struct MailComposeView: View {
     }
 
     private func content() -> MailContent {
-        MailContent(recipientIds: recipients.map(\.userId) + unresolvedRecipientIds, subject: subject, body: messageBody, attachmentIds: attachments.map(\.attachmentId), replyToId: start.replyToId)
+        MailContent(formatVersion: 2, toIds: recipients.map(\.userId) + unresolvedRecipientIds, ccIds: ccRecipients.map(\.userId) + unresolvedCcIds, subject: subject, body: messageBody, attachmentIds: attachments.map(\.attachmentId), forwardAttachmentIds: forwardAttachmentIds, relation: start.relation)
     }
 
     private func restoreRecipients() async {
-        let ids = start.recipientIds
-        var unresolved: [String] = []
-        for id in ids {
+        for id in start.toIds + start.ccIds {
             do {
                 let page = try await model.mailRecipients(query: id)
-                if let person = page.items.first(where: { $0.userId == id }), !recipients.contains(where: { $0.userId == id }) { recipients.append(person.person) }
-                else { unresolved.append(id) }
-            } catch { unresolved.append(id); self.error = error.localizedDescription }
+                if let person = page.items.first(where: { $0.userId == id }) {
+                    if start.toIds.contains(id) { recipients.append(person.person) }
+                    else { ccRecipients.append(person.person) }
+                } else if start.toIds.contains(id) { unresolvedRecipientIds.append(id) }
+                else { unresolvedCcIds.append(id) }
+            } catch {
+                if start.toIds.contains(id) { unresolvedRecipientIds.append(id) }
+                else { unresolvedCcIds.append(id) }
+                self.error = error.localizedDescription
+            }
         }
-        unresolvedRecipientIds = unresolved.filter { id in !recipients.contains(where: { $0.userId == id }) }
     }
 
     private func addFiles(_ urls: [URL]) async {
         busy = true
         defer { busy = false }
         for url in urls {
+            if attachments.count + forwardAttachmentIds.count >= 10 { error = "附件不能超过 10 个。"; break }
             do { attachments.append(try await model.mailPrepareLocalAttachment(url: url).attachment) }
             catch { self.error = error.localizedDescription }
         }
     }
 
     private func send() async {
-        guard unresolvedRecipientIds.isEmpty else { error = "请确认未识别的收件人。"; return }
+        guard unresolvedRecipientIds.isEmpty && unresolvedCcIds.isEmpty else { error = "请确认未识别的收件人。"; return }
         busy = true
         defer { busy = false }
         do {
@@ -139,8 +194,11 @@ struct MailComposeView: View {
 private struct MailRecipientPicker: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Binding var recipients: [MailPerson]
-    @Binding var unresolvedRecipientIds: [String]
+    let role: String
+    @Binding var toRecipients: [MailPerson]
+    @Binding var ccRecipients: [MailPerson]
+    @Binding var unresolvedToIds: [String]
+    @Binding var unresolvedCcIds: [String]
     @State private var search = ""
     @State private var people: [MailRecipientCandidate] = []
     @State private var nextCursor: String?
@@ -163,14 +221,14 @@ private struct MailRecipientPicker: View {
                                 }
                             }
                             Spacer()
-                            if recipients.contains(where: { $0.userId == person.userId }) {
+                            if selected.contains(where: { $0.userId == person.userId }) {
                                 Image(systemName: "checkmark.circle.fill")
                             }
                         }
                         .contentShape(Rectangle())
                     }
                     .foregroundStyle(.primary)
-                    .accessibilityValue(recipients.contains(where: { $0.userId == person.userId }) ? "已选" : "未选")
+                    .accessibilityValue(selected.contains(where: { $0.userId == person.userId }) ? "已选" : "未选")
                 }
                 if let nextCursor {
                     Button("加载更多") { Task { await loadMore(after: nextCursor) } }
@@ -187,11 +245,11 @@ private struct MailRecipientPicker: View {
             .searchable(text: $search, prompt: "搜索姓名或账号")
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .navigationTitle("选择收件人")
+            .navigationTitle(role == "to" ? "选择收件人" : "选择抄送")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(recipients.isEmpty ? "完成" : "完成（\(recipients.count)）") { dismiss() }
+                    Button(selected.isEmpty ? "完成" : "完成（\(selected.count)）") { dismiss() }
                 }
             }
             .task(id: search) { await load() }
@@ -201,12 +259,20 @@ private struct MailRecipientPicker: View {
         }
     }
 
+    private var selected: [MailPerson] { role == "to" ? toRecipients : ccRecipients }
+
     private func toggle(_ person: MailRecipientCandidate) {
-        if recipients.contains(where: { $0.userId == person.userId }) {
-            recipients.removeAll { $0.userId == person.userId }
-        } else if recipients.count + unresolvedRecipientIds.filter({ $0 != person.userId }).count < 50 {
-            recipients.append(person.person)
-            unresolvedRecipientIds.removeAll { $0 == person.userId }
+        if role == "to", toRecipients.contains(where: { $0.userId == person.userId }) {
+            toRecipients.removeAll { $0.userId == person.userId }
+        } else if role == "cc", ccRecipients.contains(where: { $0.userId == person.userId }) {
+            ccRecipients.removeAll { $0.userId == person.userId }
+        } else if toRecipients.count + ccRecipients.count + unresolvedToIds.count + unresolvedCcIds.count - (role == "to" ? ccRecipients.filter { $0.userId == person.userId }.count : toRecipients.filter { $0.userId == person.userId }.count) < 50 {
+            toRecipients.removeAll { $0.userId == person.userId }
+            ccRecipients.removeAll { $0.userId == person.userId }
+            if role == "to" { toRecipients.append(person.person) }
+            else { ccRecipients.append(person.person) }
+            unresolvedToIds.removeAll { $0 == person.userId }
+            unresolvedCcIds.removeAll { $0 == person.userId }
         } else {
             selectionLimitReached = true
         }

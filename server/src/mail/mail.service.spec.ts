@@ -9,11 +9,11 @@ function harness() {
     teamMembership: { findMany: vi.fn(async () => [{ teamId: "team-1" }]) },
     user: { findMany: vi.fn(async (_query?: { take?: number }) => [sender, teammate]), findFirst: vi.fn(async () => teammate), count: vi.fn(async () => 2) },
     team: { findFirst: vi.fn(async () => ({ id: "team-1", name: "团队一" })) },
-    mailAttachment: { create: vi.fn(async (input: { data: { fileName: string; size: bigint } }) => ({ id: "attachment-1", fileName: input.data.fileName, mimeType: "application/octet-stream", size: input.data.size })), findMany: vi.fn(async () => []), count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })), deleteMany: vi.fn(async () => ({ count: 1 })) },
+    mailAttachment: { create: vi.fn(async (input: { data: { fileName: string; size: bigint; storageKey: string } }) => ({ id: "attachment-1", fileName: input.data.fileName, mimeType: "application/octet-stream", size: input.data.size, storageKey: input.data.storageKey })), findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []), count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })), deleteMany: vi.fn(async () => ({ count: 1 })), delete: vi.fn(async () => ({ id: "attachment-1" })) },
     mailStorageDeletion: { create: vi.fn(async () => ({ id: "deletion-1" })), findMany: vi.fn(async () => []), deleteMany: vi.fn(async () => ({ count: 1 })) },
     mailSendPreview: {
       create: vi.fn(async () => ({ id: "preview-1", expiresAt: new Date(Date.now() + 60_000) })),
-      findFirst: vi.fn(async () => ({ id: "preview-1", userId: "sender", teamIdSnapshot: "team-1", teamNameSnapshot: "团队一", recipientIds: ["teammate"], attachmentIds: [], subject: "报告", body: "正文", replyToId: null })),
+      findFirst: vi.fn(async () => ({ id: "preview-1", userId: "sender", formatVersion: 2, teamIdSnapshot: "team-1", teamNameSnapshot: "团队一", recipientIds: ["teammate"], ccIds: [], attachmentIds: [], subject: "报告", body: "正文", conversationId: "conversation-1", quoteSnapshot: null, replyToId: null, forwardOfId: null })),
       findMany: vi.fn(async () => []),
       deleteMany: vi.fn(async () => ({ count: 0 })),
     },
@@ -25,12 +25,13 @@ function harness() {
     mailMessage: {
       findUnique: vi.fn(async () => null),
       findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
       create: vi.fn(async () => ({ id: "message-1", sentAt: new Date() })),
     },
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   }
   const notifications = { create: vi.fn(async () => ({ id: "notice-1" })) }
-  const storage = { put: vi.fn(async () => undefined), delete: vi.fn(async () => undefined) }
+  const storage = { put: vi.fn(async () => undefined), copy: vi.fn(async () => undefined), delete: vi.fn(async () => undefined) }
   const service = new MailService(prisma as never, storage as never, notifications as never)
   return { service, prisma, notifications, storage, sender, teammate }
 }
@@ -84,14 +85,62 @@ describe("MailService", () => {
 
   it("previews a shared-team recipient and exposes the complete fixed content", async () => {
     const { service } = harness()
-    const preview = await service.createPreview("sender", { recipientIds: ["teammate"], subject: "报告", body: "完整正文", attachmentIds: [] })
+    const preview = await service.createPreview("sender", { toIds: ["teammate"], ccIds: [], subject: "报告", body: "完整正文", attachmentIds: [], forwardAttachmentIds: [] })
     expect(preview).toMatchObject({ previewId: "preview-1", recipients: [{ userId: "teammate" }], subject: "报告", body: "完整正文", attachments: [] })
+  })
+
+  it("stores To and Cc separately and rejects duplicates across both fields", async () => {
+    const { service, prisma } = harness()
+    prisma.user.findMany.mockResolvedValueOnce([
+      { id: "sender", nickname: "李杨", handle: "liyang", teamMemberships: [{ teamId: "team-1" }] },
+      { id: "teammate", nickname: "王明", handle: "wangming", teamMemberships: [{ teamId: "team-1" }] },
+      { id: "observer", nickname: "小陈", handle: "chen", teamMemberships: [{ teamId: "team-1" }] },
+    ] as never)
+    const preview = await service.createPreview("sender", { toIds: ["teammate"], ccIds: ["observer"], subject: "报告", body: "正文", attachmentIds: [], forwardAttachmentIds: [] })
+    expect(preview.toRecipients).toEqual([expect.objectContaining({ userId: "teammate" })])
+    expect(preview.ccRecipients).toEqual([expect.objectContaining({ userId: "observer" })])
+    expect(prisma.mailSendPreview.create).toHaveBeenCalledWith({ data: expect.objectContaining({ recipientIds: ["teammate", "observer"], ccIds: ["observer"], formatVersion: 2 }) })
+    await expect(service.createPreview("sender", { toIds: ["teammate"], ccIds: ["teammate"], subject: "报告", body: "正文", attachmentIds: [], forwardAttachmentIds: [] })).rejects.toThrow("合计不能超过 50 人")
+  })
+
+  it("copies selected forward attachments and keeps a fixed source quote", async () => {
+    const { service, prisma, storage } = harness()
+    vi.spyOn(service, "getMessage").mockResolvedValue({ messageId: "original", conversationId: "old-conversation", sender: { userId: "teammate", nickname: "王明", handle: "wangming" }, toRecipients: [{ userId: "sender", nickname: "李杨", handle: "liyang" }], ccRecipients: [], subject: "原信", body: "原文", sentAt: new Date("2026-09-28T00:00:00Z"), team: { id: "team-1", name: "团队一" }, attachments: [{ attachmentId: "source-file", fileName: "report.txt", size: 20 }] } as never)
+    prisma.mailAttachment.findFirst.mockResolvedValueOnce({ id: "source-file", messageId: "original", fileName: "report.txt", mimeType: "text/plain", size: 20n, storageKey: "mail/attachments/source" } as never)
+    prisma.mailAttachment.updateMany.mockResolvedValueOnce({ count: 1 })
+    const preview = await service.createPreview("sender", { toIds: ["teammate"], ccIds: [], subject: "转发：原信", body: "", attachmentIds: [], forwardAttachmentIds: ["source-file"], relation: { kind: "forward", messageId: "original" } })
+    expect(storage.copy).toHaveBeenCalledWith("mail/attachments/source", expect.stringMatching(/^mail\/attachments\//u), "text/plain")
+    expect(preview.quote).toMatchObject({ subject: "原信", body: "原文" })
+    expect(prisma.mailSendPreview.create).toHaveBeenCalledWith({ data: expect.objectContaining({ forwardOfId: "original", replyToId: null, quoteSnapshot: expect.objectContaining({ body: "原文" }) }) })
+  })
+
+  it("filters conversation pages by the current viewer's visible copies", async () => {
+    const { service, prisma } = harness()
+    vi.spyOn(service, "getMessage").mockResolvedValue({ conversationId: "conversation-1" } as never)
+    const page = await service.listContext("reader", "message-1")
+    expect(page).toEqual({ items: [], nextCursor: null })
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversationId: "conversation-1", OR: [{ senderId: "reader", senderDeletedAt: null }, { recipients: { some: { userId: "reader", deletedAt: null } } }] }) }))
+  })
+
+  it("reads the stored quote without loading a deleted source message", async () => {
+    const { service, prisma } = harness()
+    const quote = { sender: { userId: "teammate", nickname: "王明", handle: "wangming" }, toRecipients: [{ userId: "sender", nickname: "李杨", handle: "liyang" }], ccRecipients: [], subject: "原信", body: "固定原文", sentAt: "2026-09-27T00:00:00.000Z" }
+    prisma.mailMessage.findFirst.mockResolvedValueOnce({
+      id: "reply-1", senderId: "sender", sender: { id: "sender", nickname: "李杨", handle: "liyang" },
+      recipients: [{ userId: "teammate", role: "to", readAt: null, user: { id: "teammate", nickname: "王明", handle: "wangming" } }],
+      subject: "回复：原信", body: "回复正文", sentAt: new Date("2026-09-28T00:00:00Z"), attachments: [],
+      conversationId: "conversation-1", teamIdSnapshot: "team-1", teamNameSnapshot: "团队一",
+      replyToId: "deleted-original", forwardOfId: null, quoteSnapshot: quote,
+    } as never)
+    const result = await service.getMessage("sender", "reply-1")
+    expect(result.quote).toEqual(quote)
+    expect(prisma.mailMessage.findFirst).toHaveBeenCalledOnce()
   })
 
   it("rejects a recipient with no team in common", async () => {
     const { service, prisma, teammate } = harness()
     prisma.user.findMany.mockResolvedValueOnce([{ id: "sender", nickname: "李杨", handle: "liyang", teamMemberships: [{ teamId: "team-1" }] }, { ...teammate, teamMemberships: [{ teamId: "team-2" }] }])
-    await expect(service.createPreview("sender", { recipientIds: ["teammate"], subject: "报告", body: "正文", attachmentIds: [] })).rejects.toThrow("同一团队")
+    await expect(service.createPreview("sender", { toIds: ["teammate"], ccIds: [], subject: "报告", body: "正文", attachmentIds: [], forwardAttachmentIds: [] })).rejects.toThrow("同一团队")
     expect(prisma.mailSendPreview.create).not.toHaveBeenCalled()
   })
 
@@ -100,6 +149,29 @@ describe("MailService", () => {
     prisma.user.count.mockResolvedValueOnce(1)
     await expect(service.send("sender", "preview-1", "request-1")).rejects.toThrow("团队成员已变化")
     expect(prisma.mailMessage.create).not.toHaveBeenCalled()
+  })
+
+  it("refuses to send when the source became invisible after preview", async () => {
+    const { service, prisma } = harness()
+    prisma.mailSendPreview.findFirst.mockResolvedValueOnce({ id: "preview-1", userId: "sender", formatVersion: 2, teamIdSnapshot: "team-1", teamNameSnapshot: "团队一", recipientIds: ["teammate"], ccIds: [], attachmentIds: [], subject: "回复：报告", body: "收到", conversationId: "conversation-1", quoteSnapshot: { body: "原文" }, replyToId: "original", forwardOfId: null } as never)
+    await expect(service.send("sender", "preview-1", "request-1")).rejects.toThrow("原信已不可用")
+    expect(prisma.mailMessage.create).not.toHaveBeenCalled()
+  })
+
+  it("requires a fresh preview after it expires", async () => {
+    const { service, prisma } = harness()
+    prisma.mailSendPreview.findFirst.mockResolvedValueOnce(null as never)
+    await expect(service.send("sender", "preview-1", "request-1")).rejects.toThrow("发送预览已过期")
+    expect(prisma.mailMessage.create).not.toHaveBeenCalled()
+  })
+
+  it("persists Cc roles and notifies both recipient groups once", async () => {
+    const { service, prisma } = harness()
+    prisma.user.count.mockResolvedValueOnce(3)
+    prisma.mailSendPreview.findFirst.mockResolvedValueOnce({ id: "preview-1", userId: "sender", formatVersion: 2, teamIdSnapshot: "team-1", teamNameSnapshot: "团队一", recipientIds: ["teammate", "observer"], ccIds: ["observer"], attachmentIds: [], subject: "报告", body: "正文", conversationId: "conversation-1", quoteSnapshot: null, replyToId: null, forwardOfId: null } as never)
+    await service.send("sender", "preview-1", "request-1")
+    expect(prisma.mailMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ recipients: { create: [{ userId: "teammate", role: "to" }, { userId: "observer", role: "cc" }] } }) })
+    expect(prisma.mailNotificationOutbox.createMany).toHaveBeenCalledWith({ data: [{ messageId: "message-1", recipientId: "teammate" }, { messageId: "message-1", recipientId: "observer" }] })
   })
 
   it("sends only once for the same preview and request key", async () => {
