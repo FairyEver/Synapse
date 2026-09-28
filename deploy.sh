@@ -442,7 +442,7 @@ preflight_remote_release() {
 }
 
 preflight_remote_migrations() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ONLINE_BACKUP_FILE='$ONLINE_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ONLINE_BACKUP_FILE='$ONLINE_BACKUP_FILE' MAIL_LEGACY_CUTOVER='${MAIL_LEGACY_CUTOVER:-}' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 preflight_db="synapse_preflight_${DEPLOY_ID}"
@@ -463,12 +463,26 @@ docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$pr
 database_url="postgresql://${postgres_user}:${postgres_password}@postgres:5432/${preflight_db}"
 SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps --entrypoint sh -e DATABASE_URL="$database_url" server -c "cd /app/server && npx prisma migrate deploy"
 
+if [ "$MAIL_LEGACY_CUTOVER" = 1 ]; then
+  docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$preflight_db" < scripts/purge-legacy-mail.sql
+  echo "preflight legacy mail purge ok"
+fi
+
 printf "preflight migration ok: %s\n" "$preflight_db"
 REMOTE_SCRIPT
 }
 
 deploy_remote_migrations() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && npx prisma migrate deploy'"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && npx prisma migrate deploy'" || return 1
+  if [ "${MAIL_LEGACY_CUTOVER:-}" = 1 ]; then
+    ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT' || return 1
+set -euo pipefail
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$postgres_db" < scripts/purge-legacy-mail.sql
+echo "legacy mail purge completed before new service start"
+REMOTE_SCRIPT
+  fi
 }
 
 verify_final_backup_restore() {

@@ -6,7 +6,7 @@ BEGIN;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM "MailMessage" WHERE "conversationId" <> "id")
-     OR EXISTS (SELECT 1 FROM "MailSendPreview" WHERE "formatVersion" = 2) THEN
+     OR EXISTS (SELECT 1 FROM "MailSendPreview" WHERE "formatVersion" >= 2) THEN
     RAISE EXCEPTION 'New-format mail exists; legacy purge must run before reopening mail writes';
   END IF;
 END $$;
