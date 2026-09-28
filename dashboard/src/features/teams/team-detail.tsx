@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AddMembersDialog } from './add-members-dialog'
 import { TeamNameDialog } from './team-dialogs'
+import { Organizations } from './organizations'
 
 export default function TeamDetailPage() {
   const { teamId } = useParams({ from: '/_authenticated/teams/$teamId' })
@@ -230,6 +231,7 @@ export default function TeamDetailPage() {
             </div>
           }
         />
+        <Organizations teamId={teamId} />
         <AddMembersDialog
           open={addMembersOpen}
           teamId={teamId}

@@ -74,6 +74,7 @@ model User {
   clientTelemetryEvents          ClientTelemetryEvent[]
   meetings                       Meeting[]
   teamMemberships                TeamMembership[]
+  organizationMemberships        OrganizationMembership[]
   mailMessagesSent               MailMessage[]                   @relation("MailSender")
   mailRecipients                 MailRecipient[]
   mailPreviews                    MailSendPreview[]
@@ -1259,6 +1260,7 @@ model Team {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   members   TeamMembership[]
+  organizations Organization[]
 }
 
 model TeamMembership {
@@ -1268,9 +1270,40 @@ model TeamMembership {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  organizations OrganizationMembership[]
 
   @@unique([teamId, userId])
   @@index([userId])
+}
+
+model Organization {
+  id        String @id @default(cuid())
+  teamId    String
+  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Organization? @relation("OrganizationTree", fields: [parentId, teamId], references: [id, teamId], onDelete: Cascade, onUpdate: NoAction)
+  children  Organization[] @relation("OrganizationTree")
+  name      String @db.VarChar(30)
+  members   OrganizationMembership[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, name])
+  @@unique([id, teamId])
+  @@index([parentId, teamId])
+}
+
+model OrganizationMembership {
+  organizationId String
+  teamId String
+  userId String
+  organization Organization @relation(fields: [organizationId, teamId], references: [id, teamId], onDelete: Cascade)
+  teamMembership TeamMembership @relation(fields: [teamId, userId], references: [teamId, userId], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([organizationId, userId])
+  @@index([teamId, userId])
 }
 
 model MailMessage {
@@ -1285,6 +1318,7 @@ model MailMessage {
   replyToId       String?
   forwardOfId     String?
   quoteSnapshot   Json?
+  addressSnapshot Json?
   clientRequestId String          @db.VarChar(100)
   previewId       String          @unique
   senderDeletedAt DateTime?
@@ -1331,6 +1365,8 @@ model MailSendPreview {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   recipientIds   Json
   ccIds          Json     @default("[]")
+  toOrganizationIds Json @default("[]")
+  ccOrganizationIds Json @default("[]")
   attachmentIds  Json
   teamIdSnapshot String
   teamNameSnapshot String @db.VarChar(30)

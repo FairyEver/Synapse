@@ -1211,6 +1211,15 @@ actor APIClient {
         return try await send(path: "/mail/recipients" + mailQuery(items), method: "GET")
     }
 
+    func mailOrganizations(query: String) async throws -> MailOrganizationPage {
+        try await send(path: "/mail/organizations" + mailQuery([URLQueryItem(name: "query", value: query)]), method: "GET")
+    }
+
+    func mailOrganizationMembers(id: String, cursor: String? = nil) async throws -> MailOrganizationMemberPage {
+        let query = cursor.map { mailQuery([URLQueryItem(name: "cursor", value: $0)]) } ?? ""
+        return try await send(path: "/mail/organizations/\(escaped(id))/members" + query, method: "GET")
+    }
+
     func mailMessages(box: String, query: String = "", cursor: String? = nil, unreadOnly: Bool = false) async throws -> MailMessagePage {
         var items = [URLQueryItem(name: "box", value: box)]
         if !query.isEmpty { items.append(URLQueryItem(name: "query", value: query)) }

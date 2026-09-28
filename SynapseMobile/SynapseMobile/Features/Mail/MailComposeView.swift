@@ -25,6 +25,8 @@ struct MailComposeView: View {
 
     @State private var recipients: [MailPerson] = []
     @State private var ccRecipients: [MailPerson] = []
+    @State private var toOrganizations: [MailOrganization] = []
+    @State private var ccOrganizations: [MailOrganization] = []
     @State private var unresolvedRecipientIds: [String] = []
     @State private var unresolvedCcIds: [String] = []
     @State private var recipientPicker: RecipientRole?
@@ -37,6 +39,7 @@ struct MailComposeView: View {
     @State private var busy = false
     @State private var error: String?
     @State private var pendingSend: PendingSend?
+    @State private var confirmation: MailPreview?
 
     init(start: MailComposeStart, onDone: @escaping () -> Void) {
         self.start = start
@@ -51,7 +54,7 @@ struct MailComposeView: View {
         NavigationStack {
             Form {
                 Section("收件人") {
-                    Button(recipients.isEmpty ? "选择收件人" : "添加收件人", systemImage: "person.crop.circle.badge.plus") { recipientPicker = .to }
+                    Button(recipients.isEmpty && toOrganizations.isEmpty ? "选择收件人" : "添加收件人", systemImage: "person.crop.circle.badge.plus") { recipientPicker = .to }
                     ForEach(recipients) { person in
                         HStack {
                             Text(person.name)
@@ -59,6 +62,9 @@ struct MailComposeView: View {
                             Spacer()
                             Button("移除 \(person.name)", systemImage: "minus.circle") { recipients.removeAll { $0.userId == person.userId } }.labelStyle(.iconOnly)
                         }
+                    }
+                    ForEach(toOrganizations) { organization in
+                        HStack { Text(organization.name); Spacer(); Button("移除组织 \(organization.name)", systemImage: "minus.circle") { toOrganizations.removeAll { $0.id == organization.id } }.labelStyle(.iconOnly) }
                     }
                     if !unresolvedRecipientIds.isEmpty {
                         Text("收件人无法确认，请移除或重新搜索").foregroundStyle(.red)
@@ -71,6 +77,9 @@ struct MailComposeView: View {
                     Button(ccRecipients.isEmpty ? "选择抄送" : "添加抄送", systemImage: "person.crop.circle.badge.plus") { recipientPicker = .cc }
                     ForEach(ccRecipients) { person in
                         HStack { Text(person.name); Spacer(); Button("移除 \(person.name)", systemImage: "minus.circle") { ccRecipients.removeAll { $0.userId == person.userId } }.labelStyle(.iconOnly) }
+                    }
+                    ForEach(ccOrganizations) { organization in
+                        HStack { Text(organization.name); Spacer(); Button("移除组织 \(organization.name)", systemImage: "minus.circle") { ccOrganizations.removeAll { $0.id == organization.id } }.labelStyle(.iconOnly) }
                     }
                     if !unresolvedCcIds.isEmpty {
                         Text("抄送人无法确认，请移除或重新搜索").foregroundStyle(.red)
@@ -86,8 +95,8 @@ struct MailComposeView: View {
                         DisclosureGroup(start.relation?.kind == "forward" ? "转发原文" : "回复原文", isExpanded: $quoteExpanded) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("发件人：\(source.sender.name)")
-                                Text("收件人：\(source.toRecipients.map(\.name).joined(separator: "、"))")
-                                if !source.ccRecipients.isEmpty { Text("抄送：\(source.ccRecipients.map(\.name).joined(separator: "、"))") }
+                                Text("收件人：\(source.toAddresses?.map(\.name).joined(separator: "、") ?? source.toRecipients.map(\.name).joined(separator: "、"))")
+                                if !(source.ccAddresses?.isEmpty ?? source.ccRecipients.isEmpty) { Text("抄送：\(source.ccAddresses?.map(\.name).joined(separator: "、") ?? source.ccRecipients.map(\.name).joined(separator: "、"))") }
                                 Text("时间：\(mailDate(source.sentAt))")
                                 Text("主题：\(source.subject)")
                                 Text(source.body).textSelection(.enabled)
@@ -118,17 +127,18 @@ struct MailComposeView: View {
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
+                if let confirmation { Section("发送确认") { Text("收件人：\(confirmation.toAddresses?.map(\.name).joined(separator: "、") ?? confirmation.toRecipients.map(\.name).joined(separator: "、"))"); if let cc = confirmation.ccAddresses, !cc.isEmpty { Text("抄送：\(cc.map(\.name).joined(separator: "、"))") }; if let count = confirmation.recipientCount { Text("当前可投递 \(count) 人") } } }
             }
             .navigationTitle(start.relation?.kind == "reply" ? "回复" : start.relation?.kind == "forward" ? "转发" : "写信")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { if !busy { dismiss() } } }
-                ToolbarItem(placement: .confirmationAction) { Button("发送") { Task { await send() } }.disabled(busy || recipients.isEmpty || !unresolvedRecipientIds.isEmpty || !unresolvedCcIds.isEmpty || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (start.relation?.kind != "forward" && messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)) }
+                ToolbarItem(placement: .confirmationAction) { Button(confirmation == nil ? "预览发送" : "确认发送") { Task { await send() } }.disabled(busy || (recipients.isEmpty && toOrganizations.isEmpty) || !unresolvedRecipientIds.isEmpty || !unresolvedCcIds.isEmpty || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (start.relation?.kind != "forward" && messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)) }
             }
             .interactiveDismissDisabled(busy)
             .task { await restoreRecipients() }
             .sheet(item: $recipientPicker) { role in
-                MailRecipientPicker(role: role.rawValue, toRecipients: $recipients, ccRecipients: $ccRecipients, unresolvedToIds: $unresolvedRecipientIds, unresolvedCcIds: $unresolvedCcIds)
+                MailRecipientPicker(role: role.rawValue, toRecipients: $recipients, ccRecipients: $ccRecipients, toOrganizations: $toOrganizations, ccOrganizations: $ccOrganizations, unresolvedToIds: $unresolvedRecipientIds, unresolvedCcIds: $unresolvedCcIds)
                     .presentationDetents([.large])
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
@@ -139,7 +149,7 @@ struct MailComposeView: View {
     }
 
     private func content() -> MailContent {
-        MailContent(formatVersion: 2, toIds: recipients.map(\.userId) + unresolvedRecipientIds, ccIds: ccRecipients.map(\.userId) + unresolvedCcIds, subject: subject, body: messageBody, attachmentIds: attachments.map(\.attachmentId), forwardAttachmentIds: forwardAttachmentIds, relation: start.relation)
+        MailContent(formatVersion: 3, toIds: recipients.map(\.userId) + unresolvedRecipientIds, ccIds: ccRecipients.map(\.userId) + unresolvedCcIds, toOrganizationIds: toOrganizations.map(\.organizationId), ccOrganizationIds: ccOrganizations.map(\.organizationId), subject: subject, body: messageBody, attachmentIds: attachments.map(\.attachmentId), forwardAttachmentIds: forwardAttachmentIds, relation: start.relation)
     }
 
     private func restoreRecipients() async {
@@ -178,14 +188,17 @@ struct MailComposeView: View {
             if pendingSend?.content != current {
                 let preview = try await model.mailPreview(current)
                 pendingSend = PendingSend(content: current, previewId: preview.previewId, clientRequestId: UUID().uuidString)
+                confirmation = preview
+                return
             }
             guard let pendingSend else { return }
             _ = try await model.mailSend(previewId: pendingSend.previewId, clientRequestId: pendingSend.clientRequestId)
             self.pendingSend = nil
+            confirmation = nil
             onDone()
             dismiss()
         } catch {
-            if let apiError = error as? APIError, apiError.status == 409 { pendingSend = nil }
+            if let apiError = error as? APIError, apiError.status == 409 { pendingSend = nil; confirmation = nil }
             self.error = error.localizedDescription
         }
     }
@@ -197,14 +210,19 @@ private struct MailRecipientPicker: View {
     let role: String
     @Binding var toRecipients: [MailPerson]
     @Binding var ccRecipients: [MailPerson]
+    @Binding var toOrganizations: [MailOrganization]
+    @Binding var ccOrganizations: [MailOrganization]
     @Binding var unresolvedToIds: [String]
     @Binding var unresolvedCcIds: [String]
     @State private var search = ""
     @State private var people: [MailRecipientCandidate] = []
+    @State private var organizations: [MailOrganization] = []
+    @State private var expandedOrganizationId: String?
+    @State private var organizationMembers: [MailPerson] = []
+    @State private var organizationMemberCursor: String?
     @State private var nextCursor: String?
     @State private var loading = false
     @State private var loadingMore = false
-    @State private var selectionLimitReached = false
     @State private var error: String?
 
     var body: some View {
@@ -230,6 +248,20 @@ private struct MailRecipientPicker: View {
                     .foregroundStyle(.primary)
                     .accessibilityValue(selected.contains(where: { $0.userId == person.userId }) ? "已选" : "未选")
                 }
+                Section("组织") {
+                    ForEach(organizations) { organization in
+                        HStack {
+                            Button { toggleOrganization(organization) } label: {
+                                HStack { Text(organization.name); Text(organization.teamName).foregroundStyle(.secondary); Spacer(); Text("\(organization.memberCount) 人").foregroundStyle(.secondary); if selectedOrganizations.contains(where: { $0.id == organization.id }) { Image(systemName: "checkmark.circle.fill") } }
+                            }.foregroundStyle(.primary)
+                            Button("查看成员", systemImage: "person.2") { Task { await showMembers(organization.id) } }.labelStyle(.iconOnly)
+                        }
+                        if expandedOrganizationId == organization.id {
+                            ForEach(organizationMembers) { member in Text(member.name).font(.subheadline) }
+                            if let cursor = organizationMemberCursor { Button("加载更多成员") { Task { await showMembers(organization.id, cursor: cursor) } } }
+                        }
+                    }
+                }
                 if let nextCursor {
                     Button("加载更多") { Task { await loadMore(after: nextCursor) } }
                         .disabled(loadingMore)
@@ -238,8 +270,8 @@ private struct MailRecipientPicker: View {
                     Text(error).foregroundStyle(.red)
                     Button("重试") { Task { await load() } }
                 }
-                if !loading && error == nil && people.isEmpty {
-                    ContentUnavailableView(search.isEmpty ? "没有可选成员" : "没有匹配的成员", systemImage: "person.crop.circle")
+                if !loading && error == nil && people.isEmpty && organizations.isEmpty {
+                    ContentUnavailableView(search.isEmpty ? "没有可选成员或组织" : "没有匹配的成员或组织", systemImage: "person.crop.circle")
                 }
             }
             .searchable(text: $search, prompt: "搜索姓名或账号")
@@ -253,37 +285,52 @@ private struct MailRecipientPicker: View {
                 }
             }
             .task(id: search) { await load() }
-            .alert("最多选择 50 位收件人", isPresented: $selectionLimitReached) {
-                Button("知道了", role: .cancel) { }
-            }
         }
     }
 
     private var selected: [MailPerson] { role == "to" ? toRecipients : ccRecipients }
+    private var selectedOrganizations: [MailOrganization] { role == "to" ? toOrganizations : ccOrganizations }
 
     private func toggle(_ person: MailRecipientCandidate) {
         if role == "to", toRecipients.contains(where: { $0.userId == person.userId }) {
             toRecipients.removeAll { $0.userId == person.userId }
         } else if role == "cc", ccRecipients.contains(where: { $0.userId == person.userId }) {
             ccRecipients.removeAll { $0.userId == person.userId }
-        } else if toRecipients.count + ccRecipients.count + unresolvedToIds.count + unresolvedCcIds.count
-            - toRecipients.filter({ $0.userId == person.userId }).count
-            - ccRecipients.filter({ $0.userId == person.userId }).count
-            - unresolvedToIds.filter({ $0 == person.userId }).count
-            - unresolvedCcIds.filter({ $0 == person.userId }).count < 50 {
+        } else {
             toRecipients.removeAll { $0.userId == person.userId }
             ccRecipients.removeAll { $0.userId == person.userId }
             if role == "to" { toRecipients.append(person.person) }
             else { ccRecipients.append(person.person) }
             unresolvedToIds.removeAll { $0 == person.userId }
             unresolvedCcIds.removeAll { $0 == person.userId }
-        } else {
-            selectionLimitReached = true
         }
+    }
+
+    private func toggleOrganization(_ organization: MailOrganization) {
+        if selectedOrganizations.contains(where: { $0.id == organization.id }) {
+            if role == "to" { toOrganizations.removeAll { $0.id == organization.id } }
+            else { ccOrganizations.removeAll { $0.id == organization.id } }
+            return
+        }
+        if (toOrganizations + ccOrganizations).contains(where: { $0.teamId != organization.teamId }) { error = "一封信只能选择同一团队的组织。"; return }
+        toOrganizations.removeAll { $0.id == organization.id }
+        ccOrganizations.removeAll { $0.id == organization.id }
+        if role == "to" { toOrganizations.append(organization) }
+        else { ccOrganizations.append(organization) }
+    }
+
+    private func showMembers(_ id: String, cursor: String? = nil) async {
+        if cursor == nil { expandedOrganizationId = id; organizationMembers = [] }
+        do {
+            let page = try await model.mailOrganizationMembers(id: id, cursor: cursor)
+            organizationMembers = cursor == nil ? page.items : organizationMembers + page.items
+            organizationMemberCursor = page.nextCursor
+        } catch { self.error = error.localizedDescription }
     }
 
     private func load() async {
         people = []
+        organizations = []
         nextCursor = nil
         error = nil
         loading = true
@@ -294,9 +341,12 @@ private struct MailRecipientPicker: View {
             catch { return }
         }
         do {
-            let page = try await model.mailRecipients(query: query)
+            async let peoplePage = model.mailRecipients(query: query)
+            async let organizationPage = model.mailOrganizations(query: query)
+            let (page, groups) = try await (peoplePage, organizationPage)
             guard !Task.isCancelled, search.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
             people = page.items
+            organizations = groups.items
             nextCursor = page.nextCursor
         } catch {
             guard !Task.isCancelled, search.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }

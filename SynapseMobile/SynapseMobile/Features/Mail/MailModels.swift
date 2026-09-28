@@ -8,6 +8,26 @@ struct MailPerson: Decodable, Identifiable, Hashable {
     var name: String { nickname ?? handle ?? userId }
 }
 
+struct MailAddress: Decodable, Hashable {
+    let kind: String
+    let userId: String?
+    let organizationId: String?
+    let name: String
+}
+
+struct MailOrganization: Decodable, Identifiable, Hashable {
+    let organizationId: String
+    let teamId: String
+    let teamName: String
+    let parentId: String?
+    let name: String
+    let memberCount: Int
+    var id: String { organizationId }
+}
+
+struct MailOrganizationPage: Decodable { let items: [MailOrganization] }
+struct MailOrganizationMemberPage: Decodable { let items: [MailPerson]; let nextCursor: String? }
+
 struct MailRecipientCandidate: Decodable, Identifiable {
     let userId: String
     let nickname: String?
@@ -39,6 +59,8 @@ struct MailQuote: Decodable {
     let sender: MailPerson
     let toRecipients: [MailPerson]
     let ccRecipients: [MailPerson]
+    let toAddresses: [MailAddress]?
+    let ccAddresses: [MailAddress]?
     let subject: String
     let body: String
     let sentAt: String
@@ -60,6 +82,8 @@ struct MailSummary: Decodable, Identifiable {
     let recipients: [MailPerson]
     let toRecipients: [MailPerson]
     let ccRecipients: [MailPerson]
+    let toAddresses: [MailAddress]?
+    let ccAddresses: [MailAddress]?
     let relationKind: String?
     let subject: String
     let snippet: String
@@ -70,7 +94,7 @@ struct MailSummary: Decodable, Identifiable {
 }
 
 private enum MailReadKey: String, CodingKey {
-    case messageId, viewerId, sender, recipients, toRecipients, ccRecipients, relationKind
+    case messageId, viewerId, sender, recipients, toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind
     case subject, snippet, body, sentAt, readAt, attachmentCount, replyToId, conversationId
     case relation, quote, attachments, team
 }
@@ -84,6 +108,8 @@ extension MailSummary {
         let legacy = !values.contains(.toRecipients) && !values.contains(.ccRecipients) && !values.contains(.relationKind)
         toRecipients = legacy ? recipients : try values.decode([MailPerson].self, forKey: .toRecipients)
         ccRecipients = legacy ? [] : try values.decode([MailPerson].self, forKey: .ccRecipients)
+        toAddresses = try values.decodeIfPresent([MailAddress].self, forKey: .toAddresses)
+        ccAddresses = try values.decodeIfPresent([MailAddress].self, forKey: .ccAddresses)
         if !legacy && !values.contains(.relationKind) {
             throw DecodingError.keyNotFound(MailReadKey.relationKind, .init(codingPath: decoder.codingPath, debugDescription: "Missing relation kind"))
         }
@@ -103,6 +129,8 @@ struct MailMessage: Decodable {
     let recipients: [MailPerson]
     let toRecipients: [MailPerson]
     let ccRecipients: [MailPerson]
+    let toAddresses: [MailAddress]?
+    let ccAddresses: [MailAddress]?
     let relationKind: String?
     let subject: String
     let body: String
@@ -131,6 +159,8 @@ extension MailMessage {
         recipients = summary.recipients
         toRecipients = summary.toRecipients
         ccRecipients = summary.ccRecipients
+        toAddresses = summary.toAddresses
+        ccAddresses = summary.ccAddresses
         relationKind = summary.relationKind
         subject = summary.subject
         body = try values.decode(String.self, forKey: .body)
@@ -154,6 +184,8 @@ struct MailContent: Encodable, Equatable {
     let formatVersion: Int
     let toIds: [String]
     let ccIds: [String]
+    let toOrganizationIds: [String]
+    let ccOrganizationIds: [String]
     let subject: String
     let body: String
     let attachmentIds: [String]
@@ -167,10 +199,13 @@ struct MailPreview: Decodable {
     let recipients: [MailPerson]
     let toRecipients: [MailPerson]
     let ccRecipients: [MailPerson]
+    let toAddresses: [MailAddress]?
+    let ccAddresses: [MailAddress]?
+    let recipientCount: Int?
     let subject: String
     let body: String
     let quote: MailQuote?
     let attachments: [MailAttachment]
 }
 
-struct MailReceipt: Decodable { let messageId: String; let recipientIds: [String]; let sentAt: String }
+struct MailReceipt: Decodable { let messageId: String; let recipientCount: Int?; let sentAt: String }

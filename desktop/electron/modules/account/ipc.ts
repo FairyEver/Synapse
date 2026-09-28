@@ -82,12 +82,14 @@ const notificationListRequestSchema = z.object({
 const notificationIdSchema = z.object({ id: z.string().min(1) })
 const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pending"]) })
 
-const mailContentSchema = z.object({ formatVersion: z.literal(2), toIds: z.array(z.string().min(1)).max(50), ccIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
+const mailContentSchema = z.object({ formatVersion: z.literal(3), toIds: z.array(z.string().min(1)), ccIds: z.array(z.string().min(1)), toOrganizationIds: z.array(z.string().min(1)), ccOrganizationIds: z.array(z.string().min(1)), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
 const mailIdSchema = z.string().min(1)
 const mailPersonSchema = z.object({ userId: z.string(), nickname: z.string().nullable(), handle: z.string().nullable() })
+const mailAddressSchema = z.union([z.object({ kind: z.literal("user"), userId: z.string(), name: z.string() }), z.object({ kind: z.literal("organization"), organizationId: z.string(), name: z.string() })])
+const mailOrganizationSchema = z.object({ organizationId: z.string(), teamId: z.string(), teamName: z.string(), parentId: z.string().nullable(), name: z.string(), memberCount: z.number() })
 const mailAttachmentSchema = z.object({ attachmentId: z.string(), fileName: z.string(), mimeType: z.string().nullable().optional(), size: z.number() })
-const mailQuoteSchema = z.object({ sender: mailPersonSchema, toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), subject: z.string(), body: z.string(), sentAt: z.string() })
-const mailSummarySchema = z.object({ messageId: z.string(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), relationKind: z.enum(["reply", "forward"]).nullable(), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
+const mailQuoteSchema = z.object({ sender: mailPersonSchema, toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema).optional(), ccAddresses: z.array(mailAddressSchema).optional(), subject: z.string(), body: z.string(), sentAt: z.string() })
+const mailSummarySchema = z.object({ messageId: z.string(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema).optional(), ccAddresses: z.array(mailAddressSchema).optional(), relationKind: z.enum(["reply", "forward"]).nullable(), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
 const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body: z.string(), team: z.object({ id: z.string(), name: z.string() }), conversationId: z.string(), replyToId: z.string().nullable(), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string() }).nullable(), quote: mailQuoteSchema.nullable(), attachments: z.array(mailAttachmentSchema), legacyFormat: z.boolean().optional() })
 const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
 const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
@@ -1122,6 +1124,18 @@ export const accountIpcModule: IpcModule = {
       response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy", "browse"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "recipientSearch", ...mailRecipientListInputSchema.parse(input) }),
     },
+    mailOrganizationList: {
+      kind: "invoke", operationId: "app.mail.organization.list",
+      request: z.object({ query: z.string().max(100) }).strict(),
+      response: z.object({ items: z.array(mailOrganizationSchema) }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(input) }),
+    },
+    mailOrganizationMembers: {
+      kind: "invoke", operationId: "app.mail.organization_members.list",
+      request: z.object({ organizationId: mailIdSchema, cursor: mailIdSchema.optional() }).strict(),
+      response: z.object({ items: z.array(mailPersonSchema), nextCursor: z.string().nullable() }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "organizationMembers", ...z.object({ organizationId: mailIdSchema, cursor: mailIdSchema.optional() }).strict().parse(input) }),
+    },
     mailMessageList: {
       kind: "invoke", operationId: "app.mail.message.list",
       request: mailMessageListInputSchema,
@@ -1203,13 +1217,13 @@ export const accountIpcModule: IpcModule = {
     },
     mailSendPreview: {
       kind: "invoke", operationId: "app.mail.send.preview", request: mailContentInputSchema,
-      response: z.object({ previewId: z.string(), expiresAt: z.string(), team: z.object({ id: z.string(), name: z.string() }), recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), subject: z.string(), body: z.string(), quote: mailQuoteSchema.nullable(), attachments: z.array(mailAttachmentSchema) }),
+      response: z.object({ previewId: z.string(), expiresAt: z.string(), team: z.object({ id: z.string(), name: z.string() }), recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema), ccAddresses: z.array(mailAddressSchema), recipientCount: z.number(), subject: z.string(), body: z.string(), quote: mailQuoteSchema.nullable(), attachments: z.array(mailAttachmentSchema) }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "sendPreview", ...mailContentInputSchema.parse(input) }),
     },
     mailMessageSend: {
       kind: "invoke", operationId: "app.mail.message.send",
       request: mailMessageSendInputSchema,
-      response: z.object({ messageId: z.string(), recipientIds: z.array(z.string()), sentAt: z.string() }),
+      response: z.object({ messageId: z.string(), recipientCount: z.number(), sentAt: z.string() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "send", ...mailMessageSendInputSchema.parse(input) }),
     },
     listDriveItems: {

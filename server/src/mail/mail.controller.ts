@@ -7,7 +7,7 @@ import { attachmentContentDisposition } from "../common/content-disposition"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { MAIL_MAX_ATTACHMENT_BYTES, MailService } from "./mail.service"
 
-const content = z.object({ formatVersion: z.literal(2), toIds: z.array(z.string().min(1)).max(50), ccIds: z.array(z.string().min(1)).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
+const content = z.object({ formatVersion: z.union([z.literal(2), z.literal(3)]), toIds: z.array(z.string().min(1)), ccIds: z.array(z.string().min(1)), toOrganizationIds: z.array(z.string().min(1)).optional(), ccOrganizationIds: z.array(z.string().min(1)).optional(), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
@@ -27,6 +27,16 @@ export class MailController {
   @Get("recipients")
   searchRecipients(@Req() request: AuthenticatedUserRequest, @Query("query") query?: string, @Query("cursor") cursor?: string) {
     return this.mail.searchRecipients(userId(request), query ?? "", cursor)
+  }
+
+  @Get("organizations")
+  searchOrganizations(@Req() request: AuthenticatedUserRequest, @Query("query") query?: string) {
+    return this.mail.searchOrganizations(userId(request), query ?? "")
+  }
+
+  @Get("organizations/:id/members")
+  listOrganizationMembers(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query("cursor") cursor?: string) {
+    return this.mail.listOrganizationMembers(userId(request), id, cursor)
   }
 
   @Get("messages")
@@ -107,7 +117,7 @@ export class MailController {
 
   @Post("send-previews")
   createPreview(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
-    if (!body || typeof body !== "object" || (body as Record<string, unknown>).formatVersion !== 2) throw new HttpException("请更新客户端后再发送站内信。", 426)
+    if (!body || typeof body !== "object" || ![2, 3].includes((body as Record<string, unknown>).formatVersion as number)) throw new HttpException("请更新客户端后再发送站内信。", 426)
     return this.mail.createPreview(userId(request), parse(content, body))
   }
 

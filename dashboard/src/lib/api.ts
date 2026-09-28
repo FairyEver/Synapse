@@ -271,6 +271,17 @@ export type AdminTeamCandidateRow = {
   status: 'active' | 'disabled'
 }
 
+export type AdminOrganizationRow = {
+  id: string
+  teamId: string
+  parentId: string | null
+  name: string
+  directCount: number
+  memberCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export type LiveClientRow = {
   userId?: string
   clientInstanceId: string
@@ -1533,6 +1544,22 @@ export const adminApi = {
       `${adminTeamBasePath}/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
       { method: 'DELETE' }
     ),
+  listOrganizations: (teamId: string) =>
+    request<AdminOrganizationRow[]>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations`),
+  createOrganization: (teamId: string, name: string, parentId: string | null) =>
+    request<AdminOrganizationRow>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations`, { method: 'POST', body: JSON.stringify({ name, parentId }) }),
+  updateOrganization: (teamId: string, id: string, name: string, parentId: string | null) =>
+    request<AdminOrganizationRow>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name, parentId }) }),
+  deleteOrganization: (teamId: string, id: string) =>
+    request<{ ok: true }>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  listOrganizationMembers: (teamId: string, id: string, options: PaginationOptions = {}) =>
+    request<PaginatedResponse<AdminTeamMemberRow>>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations/${encodeURIComponent(id)}/members${paginationSuffix(options)}`),
+  listOrganizationCandidates: (teamId: string, id: string, options: AdminTeamCandidateListQuery = {}) =>
+    request<PaginatedResponse<AdminTeamCandidateRow>>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations/${encodeURIComponent(id)}/member-candidates${adminTeamCandidateQuerySuffix(options)}`),
+  addOrganizationMembers: (teamId: string, id: string, userIds: string[]) =>
+    request<{ added: number }>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations/${encodeURIComponent(id)}/members`, { method: 'POST', body: JSON.stringify({ userIds }) }),
+  removeOrganizationMember: (teamId: string, id: string, userId: string) =>
+    request<{ ok: true }>(`${adminTeamBasePath}/${encodeURIComponent(teamId)}/organizations/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${adminApiBasePath}/live-clients`),
   listDevices: (options: PaginationOptions = {}) =>

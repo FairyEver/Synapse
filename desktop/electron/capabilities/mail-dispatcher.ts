@@ -9,11 +9,13 @@ type MailAccount = { executeMailOperation: (operation: MailOperation) => Promise
 type MailDeps = { accountService: MailAccount; permissionGuard?: PermissionGuard; auditSink?: AuditSink }
 const actor: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const id = z.string().min(1)
-const content = z.object({ formatVersion: z.literal(2), toIds: z.array(id).max(50), ccIds: z.array(id).max(50), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(id).max(10), forwardAttachmentIds: z.array(id).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: id }).strict().optional() }).strict()
+const content = z.object({ formatVersion: z.literal(3), toIds: z.array(id), ccIds: z.array(id), toOrganizationIds: z.array(id), ccOrganizationIds: z.array(id), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(id).max(10), forwardAttachmentIds: z.array(id).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: id }).strict().optional() }).strict()
 
 function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
   switch (action) {
     case "app.mail.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
+    case "app.mail.organization.list": return { kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(params) }
+    case "app.mail.organization_members.list": return { kind: "organizationMembers", ...z.object({ organizationId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.list": {
       const parsed = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: id.optional(), unreadOnly: z.boolean().optional() }).strict().parse(params)
       if (parsed.box === "sent" && parsed.unreadOnly) throw new Error("Unread filter is only available for inbox.")

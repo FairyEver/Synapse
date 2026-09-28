@@ -171,7 +171,7 @@ struct MailView: View {
     private func messageRow(_ message: MailSummary) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(store.box == .inbox ? message.sender.name : message.recipients.map(\.name).joined(separator: "、"))
+                Text(store.box == .inbox ? message.sender.name : (message.toAddresses?.map(\.name).joined(separator: "、") ?? message.toRecipients.map(\.name).joined(separator: "、")))
                     .fontWeight(message.readAt == nil ? .semibold : .regular)
                 Spacer()
                 Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
@@ -191,20 +191,18 @@ struct MailView: View {
         switch kind {
         case .reply:
             ids = message.sender.userId == message.viewerId ? message.toRecipients.map(\.userId) : [message.sender.userId]
-        case .replyAll:
-            ids = [message.sender.userId] + message.toRecipients.map(\.userId)
         case .forward:
             ids = []
         }
         var seen = Set<String>()
         let toIds = ids.filter { $0 != message.viewerId && seen.insert($0).inserted }
-        let ccIds = kind == .replyAll ? message.ccRecipients.map(\.userId).filter { $0 != message.viewerId && seen.insert($0).inserted } : []
+        let ccIds: [String] = []
         compose = MailComposeStart(toIds: toIds, ccIds: ccIds, subject: kind == .forward ? "转发：\(message.subject)" : "回复：\(message.subject)", relation: MailRelation(kind: kind == .forward ? "forward" : "reply", messageId: message.messageId), source: message)
     }
 }
 
 private struct MailDetailView: View {
-    enum ReplyKind { case reply, replyAll, forward }
+    enum ReplyKind { case reply, forward }
     @Environment(SynapseAppModel.self) private var model
     let messageId: String
     let message: MailMessage?
@@ -228,16 +226,16 @@ private struct MailDetailView: View {
                         Text(message.subject).font(.title2).fontWeight(.semibold)
                         if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption).foregroundStyle(.secondary) }
                         Text("发件人：\(message.sender.name)").font(.subheadline)
-                        Text("收件人：\(message.toRecipients.map(\.name).joined(separator: "、"))").font(.subheadline)
-                        if !message.ccRecipients.isEmpty { Text("抄送：\(message.ccRecipients.map(\.name).joined(separator: "、"))").font(.subheadline) }
+                        Text("收件人：\(message.toAddresses?.map(\.name).joined(separator: "、") ?? message.toRecipients.map(\.name).joined(separator: "、"))").font(.subheadline)
+                        if !(message.ccAddresses?.isEmpty ?? message.ccRecipients.isEmpty) { Text("抄送：\(message.ccAddresses?.map(\.name).joined(separator: "、") ?? message.ccRecipients.map(\.name).joined(separator: "、"))").font(.subheadline) }
                         Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
                         Text(message.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.top)
                         if let quote = message.quote {
                             DisclosureGroup(message.relationKind == "forward" ? "转发原文" : "回复原文") {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("发件人：\(quote.sender.name)")
-                                    Text("收件人：\(quote.toRecipients.map(\.name).joined(separator: "、"))")
-                                    if !quote.ccRecipients.isEmpty { Text("抄送：\(quote.ccRecipients.map(\.name).joined(separator: "、"))") }
+                                    Text("收件人：\(quote.toAddresses?.map(\.name).joined(separator: "、") ?? quote.toRecipients.map(\.name).joined(separator: "、"))")
+                                    if !(quote.ccAddresses?.isEmpty ?? quote.ccRecipients.isEmpty) { Text("抄送：\(quote.ccAddresses?.map(\.name).joined(separator: "、") ?? quote.ccRecipients.map(\.name).joined(separator: "、"))") }
                                     Text("时间：\(mailDate(quote.sentAt))")
                                     Text("主题：\(quote.subject)")
                                     Text(quote.body).textSelection(.enabled)
@@ -282,7 +280,6 @@ private struct MailDetailView: View {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Menu {
                             Button("回复", systemImage: "arrowshape.turn.up.left") { onReply(.reply, message) }
-                            Button("回复全部", systemImage: "arrowshape.turn.up.left.2") { onReply(.replyAll, message) }
                             Button("转发", systemImage: "arrowshape.turn.up.right") { onReply(.forward, message) }
                             if message.sender.userId != message.viewerId { Button(message.readAt == nil ? "设为已读" : "设为未读") { onRead(message.readAt == nil) } }
                             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)

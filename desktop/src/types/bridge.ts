@@ -1400,6 +1400,10 @@ export type SynapseBridge = {
   }
   mail: {
     recipient: { list: (input: { query: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["recipientSearch"]> }
+    organization: {
+      list: (input: { query: string }) => Promise<import("./mail").MailOperationResult["organizationSearch"]>
+      members: (input: { organizationId: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["organizationMembers"]>
+    }
     message: {
       list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean }) => Promise<import("./mail").MailOperationResult["messageList"]>
       count: () => Promise<import("./mail").MailOperationResult["messageCount"]>

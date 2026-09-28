@@ -53,10 +53,10 @@ struct MailModelsTests {
     }
 
     @Test func encodesVersionedForwardWithSelectedAttachments() throws {
-        let content = MailContent(formatVersion: 2, toIds: ["new-reader"], ccIds: [], subject: "转发：原信", body: "", attachmentIds: ["new-file"], forwardAttachmentIds: ["original-file"], relation: MailRelation(kind: "forward", messageId: "original"))
+        let content = MailContent(formatVersion: 3, toIds: ["new-reader"], ccIds: [], toOrganizationIds: [], ccOrganizationIds: [], subject: "转发：原信", body: "", attachmentIds: ["new-file"], forwardAttachmentIds: ["original-file"], relation: MailRelation(kind: "forward", messageId: "original"))
         let data = try JSONEncoder().encode(content)
         let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(object["formatVersion"] as? Int == 2)
+        #expect(object["formatVersion"] as? Int == 3)
         #expect(object["toIds"] as? [String] == ["new-reader"])
         #expect(object["forwardAttachmentIds"] as? [String] == ["original-file"])
         #expect((object["relation"] as? [String: String])?["kind"] == "forward")

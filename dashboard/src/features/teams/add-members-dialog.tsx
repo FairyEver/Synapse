@@ -21,12 +21,14 @@ const candidatePageSize = 50
 type AddMembersDialogProps = {
   open: boolean
   teamId: string
+  organizationId?: string
   onOpenChange: (open: boolean) => void
 }
 
 export function AddMembersDialog({
   open,
   teamId,
+  organizationId,
   onOpenChange,
 }: AddMembersDialogProps) {
   const queryClient = useQueryClient()
@@ -48,13 +50,17 @@ export function AddMembersDialog({
   }, [open])
 
   const candidatesQuery = useQuery({
-    queryKey: ['admin-team-candidates', teamId, debouncedQuery.trim(), page],
+    queryKey: ['admin-team-candidates', teamId, organizationId, debouncedQuery.trim(), page],
     queryFn: () =>
-      adminApi.listTeamMemberCandidates(teamId, {
+      (organizationId ? adminApi.listOrganizationCandidates(teamId, organizationId, {
         page,
         pageSize: candidatePageSize,
         query: debouncedQuery.trim() || undefined,
-      }),
+      }) : adminApi.listTeamMemberCandidates(teamId, {
+        page,
+        pageSize: candidatePageSize,
+        query: debouncedQuery.trim() || undefined,
+      })),
     enabled: open,
   })
 
@@ -74,8 +80,12 @@ export function AddMembersDialog({
   }, [candidateRows, candidatesQuery.data?.total, page])
 
   const addMembers = useMutation({
-    mutationFn: (userIds: string[]) => adminApi.addTeamMembers(teamId, userIds),
+    mutationFn: (userIds: string[]) => organizationId ? adminApi.addOrganizationMembers(teamId, organizationId, userIds) : adminApi.addTeamMembers(teamId, userIds),
     onSuccess: (result) => {
+      if (organizationId) {
+        void queryClient.invalidateQueries({ queryKey: ['admin-organizations', teamId] })
+        void queryClient.invalidateQueries({ queryKey: ['admin-organization-members', teamId, organizationId] })
+      }
       void queryClient.invalidateQueries({ queryKey: ['admin-team-members', teamId] })
       void queryClient.invalidateQueries({ queryKey: ['admin-teams'] })
       void queryClient.invalidateQueries({ queryKey: ['admin-team', teamId] })

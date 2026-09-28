@@ -3,6 +3,8 @@ import type { CapabilityId } from "./naming"
 
 const definitions = [
   ["app_mail_recipient_list", "app.mail.recipient.list", "Browse or search active users sharing a team with the current user. An exact unique result can be provisional; ask the user to choose when names are ambiguous."],
+  ["app_mail_organization_list", "app.mail.organization.list", "Search organizations in the current user's teams; selecting a parent includes all descendant members. Pagination: none; returns all matching organizations."],
+  ["app_mail_organization_members_list", "app.mail.organization_members.list", "List active direct and descendant members of one organization visible to the current user. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_message_list", "app.mail.message.list", "List the current user's received or sent internal mail. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_message_count", "app.mail.message.count", "Get exact received, sent, and unread inbox mail counts for the current user."],
   ["app_mail_message_read_all", "app.mail.message.read_all", "Mark all current user's unread inbox mail as read."],
@@ -14,8 +16,8 @@ const definitions = [
   ["app_mail_message_delete", "app.mail.message.delete", "Hide one mail from the current user's mailbox only."],
   ["app_mail_attachment_create", "app.mail.attachment.create", "Upload a local file as an internal mail attachment without adding it to Synapse Drive."],
   ["app_mail_attachment_download_file", "app.mail.attachment.download_file", "Download an attachment from a mail the current user may read to an absolute local path."],
-  ["app_mail_send_preview", "app.mail.send.preview", "Fix recipients, complete subject and body, attachments, and team for final confirmation. Show the full preview to the user before sending."],
-  ["app_mail_message_send", "app.mail.message.send", "Send a previously previewed internal mail only after the user explicitly confirms that exact recipients, subject, complete body, and attachments in conversation. Does not open a compose UI."],
+  ["app_mail_send_preview", "app.mail.send.preview", "Fix recipient addresses, complete subject and body, attachments, and team for final confirmation. Organization membership is expanded again at send time."],
+  ["app_mail_message_send", "app.mail.message.send", "Send a previously previewed internal mail only after the user explicitly confirms its addresses, subject, complete body, and attachments in conversation. Organization members may change before send. Does not open a compose UI."],
 ] as const satisfies readonly (readonly [string, CapabilityId, string])[]
 
 export const MAIL_DOMAIN: CapabilityDomainDefinition = {
@@ -28,9 +30,11 @@ export const MAIL_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
 const text = (description: string) => ({ type: "string", description })
 const ids = (description: string) => ({ type: "array", items: { type: "string" }, description })
 const content = {
-  formatVersion: { type: "integer", enum: [2], description: "Required mail format version." },
+  formatVersion: { type: "integer", enum: [3], description: "Required mail format version." },
   toIds: ids("Primary recipients' resolved userIds. Select each person individually."),
   ccIds: ids("Cc recipients' resolved userIds, or empty array."),
+  toOrganizationIds: ids("Primary organization IDs; recipients include active members of every descendant organization at send time."),
+  ccOrganizationIds: ids("Cc organization IDs; recipients include active members of every descendant organization at send time."),
   subject: text("Mail subject, at most 120 characters."),
   body: text("Complete plain-text mail body, at most 100000 characters."),
   attachmentIds: ids("Ready attachmentTokens returned by app_mail_attachment_create, or empty when sharing a Drive link in the body."),
@@ -40,6 +44,8 @@ const content = {
 
 const schemas: Record<string, { properties: Record<string, unknown>; required?: readonly string[] }> = {
   app_mail_recipient_list: { properties: { query: text("Recipient name, handle, or known userId; use an empty string to browse shared-team members."), cursor: text("Next cursor from a browse page.") }, required: ["query"] },
+  app_mail_organization_list: { properties: { query: text("Organization or team name; use an empty string to browse organizations in the current user's teams.") }, required: ["query"] },
+  app_mail_organization_members_list: { properties: { organizationId: text("Visible organization ID."), cursor: text("Next cursor from the prior member page.") }, required: ["organizationId"] },
   app_mail_message_list: { properties: { box: { type: "string", enum: ["inbox", "sent"] }, query: text("Optional subject or body search."), cursor: text("Next cursor from prior page."), unreadOnly: { type: "boolean", description: "Only unread inbox mail; invalid for sent." } }, required: ["box"] },
   app_mail_message_count: { properties: {} },
   app_mail_message_read_all: { properties: {} },
@@ -51,7 +57,7 @@ const schemas: Record<string, { properties: Record<string, unknown>; required?: 
   app_mail_message_delete: { properties: { messageId: text("Mail id.") }, required: ["messageId"] },
   app_mail_attachment_create: { properties: { filePath: text("Absolute path to a local file to upload directly as a mail attachment.") }, required: ["filePath"] },
   app_mail_attachment_download_file: { properties: { messageId: text("Mail id."), attachmentId: text("Attachment id in the mail."), outputPath: text("Absolute destination path.") }, required: ["messageId", "attachmentId", "outputPath"] },
-  app_mail_send_preview: { properties: content, required: ["formatVersion", "toIds", "ccIds", "subject", "body", "attachmentIds", "forwardAttachmentIds"] },
+  app_mail_send_preview: { properties: content, required: ["formatVersion", "toIds", "ccIds", "toOrganizationIds", "ccOrganizationIds", "subject", "body", "attachmentIds", "forwardAttachmentIds"] },
   app_mail_message_send: { properties: { previewId: text("Unexpired previewId from app_mail_send_preview; do not modify the preview after user confirmation."), clientRequestId: text("Stable UUID for retries of this exact send."), confirmed: { type: "boolean", description: "True only after the user explicitly confirms the complete preview in this conversation." } }, required: ["previewId", "clientRequestId", "confirmed"] },
 }
 

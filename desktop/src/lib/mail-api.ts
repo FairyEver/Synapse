@@ -8,6 +8,8 @@ export async function mailRequest<K extends MailOperation["kind"]>(operation: Ex
   let result: unknown
   switch (request.kind) {
     case "recipientSearch": result = await bridge.mail.recipient.list({ query: request.query, cursor: request.cursor }); break
+    case "organizationSearch": result = await bridge.mail.organization.list({ query: request.query }); break
+    case "organizationMembers": result = await bridge.mail.organization.members({ organizationId: request.organizationId, cursor: request.cursor }); break
     case "messageList": result = await bridge.mail.message.list({ box: request.box, query: request.query, cursor: request.cursor, unreadOnly: request.unreadOnly }); break
     case "messageCount": result = await bridge.mail.message.count(); break
     case "messageReadAll": result = await bridge.mail.message.readAll(); break

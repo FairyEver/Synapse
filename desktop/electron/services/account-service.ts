@@ -490,6 +490,8 @@ export class AccountService {
         if (operation.cursor) query.set("cursor", operation.cursor)
         return await json("GET", `/recipients?${query}`)
       }
+      case "organizationSearch": return await json("GET", `/organizations?${new URLSearchParams({ query: operation.query })}`)
+      case "organizationMembers": return await json("GET", `/organizations/${id(operation.organizationId)}/members${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`)
       case "messageList": {
         const query = new URLSearchParams({ box: operation.box })
         if (operation.query) query.set("query", operation.query)

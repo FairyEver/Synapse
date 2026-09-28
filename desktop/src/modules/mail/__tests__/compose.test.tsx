@@ -4,8 +4,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { MailCompose, type ComposeStart } from "../compose"
 
-const mocks = vi.hoisted(() => ({ request: vi.fn() }))
-vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
+const mocks = vi.hoisted(() => ({ request: vi.fn(), organizations: vi.fn() }))
+vi.mock("@/lib/mail-api", () => ({ mailRequest: (operation: { kind: string }) => operation.kind === "organizationSearch" ? mocks.organizations(operation) : mocks.request(operation) }))
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const people = [
@@ -16,6 +16,7 @@ const people = [
 let root: Root | null = null
 
 beforeEach(() => {
+  mocks.organizations.mockResolvedValue({ items: [] })
   HTMLElement.prototype.scrollIntoView ??= vi.fn()
   HTMLElement.prototype.hasPointerCapture ??= vi.fn(() => false)
   HTMLElement.prototype.setPointerCapture ??= vi.fn()
@@ -56,13 +57,15 @@ afterEach(() => {
   root = null
   document.body.innerHTML = ""
   mocks.request.mockReset()
+  mocks.organizations.mockReset()
+  mocks.organizations.mockResolvedValue({ items: [] })
 })
 
 describe("MailCompose recipients", () => {
   it("keeps a forwarded source readable and lets the sender remove its default attachment", async () => {
     mocks.request.mockImplementation((operation: { kind: string; query?: string }) => {
       if (operation.kind === "recipientSearch") return Promise.resolve({ items: people.filter((person) => person.userId === operation.query), nextCursor: null })
-      if (operation.kind === "sendPreview") return Promise.resolve({ previewId: "preview-1" })
+      if (operation.kind === "sendPreview") return Promise.resolve({ previewId: "preview-1", toAddresses: [{ kind: "user", userId: "a", name: "甲" }], ccAddresses: [], recipientCount: 1 })
       return Promise.resolve({ messageId: "message-1" })
     })
     const source = {
@@ -76,7 +79,7 @@ describe("MailCompose recipients", () => {
     const attachment = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("移除 报告.pdf"))
     expect(attachment).toBeDefined()
     await act(async () => { attachment?.click() })
-    const send = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "发送")
+    const send = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "预览发送")
     await act(async () => { send?.click(); await Promise.resolve() })
     expect(mocks.request).toHaveBeenCalledWith({ kind: "sendPreview", content: expect.objectContaining({ body: "", forwardAttachmentIds: [] }) })
   })
@@ -84,15 +87,30 @@ describe("MailCompose recipients", () => {
   it("keeps To and Cc separate in the send preview", async () => {
     mocks.request.mockImplementation((operation: { kind: string; query?: string }) => {
       if (operation.kind === "recipientSearch") return Promise.resolve({ items: people.filter((person) => person.userId === operation.query), nextCursor: null })
-      if (operation.kind === "sendPreview") return Promise.resolve({ previewId: "preview-1" })
+      if (operation.kind === "sendPreview") return Promise.resolve({ previewId: "preview-1", toAddresses: [{ kind: "user", userId: "a", name: "甲" }], ccAddresses: [{ kind: "user", userId: "b", name: "乙" }], recipientCount: 2 })
       return Promise.resolve({ messageId: "message-1" })
     })
     await renderCompose({ toIds: ["a"], ccIds: ["b"], subject: "报告", body: "正文" })
     expect(document.querySelector('[aria-label="已选收件人"]')?.textContent).toContain("甲")
     expect(document.querySelector('[aria-label="已选抄送"]')?.textContent).toContain("乙")
-    const send = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "发送")
+    const send = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "预览发送")
     await act(async () => { send?.click(); await Promise.resolve() })
-    expect(mocks.request).toHaveBeenCalledWith({ kind: "sendPreview", content: expect.objectContaining({ formatVersion: 2, toIds: ["a"], ccIds: ["b"] }) })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "sendPreview", content: expect.objectContaining({ formatVersion: 3, toIds: ["a"], ccIds: ["b"], toOrganizationIds: [], ccOrganizationIds: [] }) })
+  })
+
+  it("selects an organization as an address and confirms its current audience", async () => {
+    mocks.request.mockImplementation((operation: { kind: string }) => operation.kind === "sendPreview"
+      ? Promise.resolve({ previewId: "preview-org", toAddresses: [{ kind: "organization", organizationId: "org-1", name: "开发中心" }], ccAddresses: [], recipientCount: 12 })
+      : Promise.resolve({ items: [], nextCursor: null }))
+    mocks.organizations.mockResolvedValue({ items: [{ organizationId: "org-1", teamId: "team", teamName: "研发组", name: "开发中心", parentId: null, memberCount: 12 }] })
+    await renderCompose({ subject: "通知", body: "正文" })
+    await openPicker()
+    const organization = Array.from(document.querySelectorAll<HTMLElement>("[cmdk-item]")).find((item) => item.textContent?.includes("开发中心"))
+    await act(async () => { organization?.click() })
+    const preview = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "预览发送")
+    await act(async () => { preview?.click(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "sendPreview", content: expect.objectContaining({ toOrganizationIds: ["org-1"], toIds: [] }) })
+    expect(document.body.textContent).toContain("当前可投递 12 人")
   })
 
   it("allows wheel scrolling through a long recipient list", async () => {

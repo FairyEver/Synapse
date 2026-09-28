@@ -707,6 +707,8 @@ final class SynapseAppModel {
     // MARK: - 站内信
 
     func mailRecipients(query: String, cursor: String? = nil) async throws -> MailRecipientPage { try await apiClient.mailRecipients(query: query, cursor: cursor) }
+    func mailOrganizations(query: String) async throws -> MailOrganizationPage { try await apiClient.mailOrganizations(query: query) }
+    func mailOrganizationMembers(id: String, cursor: String? = nil) async throws -> MailOrganizationMemberPage { try await apiClient.mailOrganizationMembers(id: id, cursor: cursor) }
     func mailMessages(box: String, query: String = "", cursor: String? = nil, unreadOnly: Bool = false) async throws -> MailMessagePage { try await apiClient.mailMessages(box: box, query: query, cursor: cursor, unreadOnly: unreadOnly) }
     func mailCounts() async throws -> MailCounts { try await apiClient.mailCounts() }
     func mailReadAll() async throws -> MailBulkReadResult { try await apiClient.mailReadAll() }
