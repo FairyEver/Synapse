@@ -12,6 +12,7 @@ import { useAccount } from "@/app-shell/account"
 import { mailRequest } from "@/lib/mail-api"
 import type { MailMessage, MailPerson } from "@/types/mail"
 import { MailCompose, type ComposeStart } from "./compose"
+import { MailLayout } from "./layout"
 import { useMail, type MailBox } from "./use-mail"
 import type { SynapseSystemAppMailOpenRequest } from "../apps/types"
 
@@ -100,13 +101,9 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
   }
 
   return <SystemAppWindowShell left={<h2 className="text-sm font-semibold">站内信</h2>} actions={<><SystemAppTopBarActionButton iconOnly aria-label="刷新" onClick={mail.refresh}><RefreshCw /></SystemAppTopBarActionButton><SystemAppTopBarActionButton onClick={() => setCompose({})}><Pencil />写信</SystemAppTopBarActionButton></>}>
-    <div className="@container/mail h-full min-h-0 bg-background">
-      <div className="flex h-full min-h-0 flex-col @3xl/mail:grid @3xl/mail:grid-cols-[11rem_minmax(0,1fr)]">
-        <nav aria-label="信箱" className="flex shrink-0 overflow-x-auto border-b bg-sidebar p-2 @3xl/mail:block @3xl/mail:border-r @3xl/mail:border-b-0 @3xl/mail:p-3">
+    <MailLayout navigation={<nav aria-label="信箱" className="flex shrink-0 overflow-x-auto border-b bg-sidebar p-2 @3xl/mail:block @3xl/mail:h-full @3xl/mail:border-b-0 @3xl/mail:p-3">
           {boxes.map((entry) => <Button key={entry.id} type="button" variant={box === entry.id ? "secondary" : "ghost"} className="min-w-0 flex-1 justify-center @3xl/mail:mb-1 @3xl/mail:w-full @3xl/mail:justify-start" onClick={() => { setBox(entry.id); mail.setSelectedId(null) }}><entry.icon />{entry.name}</Button>)}
-        </nav>
-        <div className={`${showMessageColumns ? "@3xl/mail:grid @3xl/mail:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]" : ""} flex min-h-0 min-w-0 flex-1 flex-col`}>
-          <section aria-label={boxes.find((entry) => entry.id === box)?.name} className={`${mail.selectedId ? "hidden @3xl/mail:flex" : "flex"} min-h-0 min-w-0 flex-1 flex-col ${showMessageColumns ? "@3xl/mail:border-r" : ""}`}>
+        </nav>} list={<section aria-label={boxes.find((entry) => entry.id === box)?.name} className={`${mail.selectedId ? "hidden @3xl/mail:flex" : "flex"} min-h-0 min-w-0 flex-1 flex-col`}>
             <form className="flex items-center gap-2 border-b px-4 py-3" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()) }}>
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <Input type="search" aria-label="搜索信件" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索主题或正文" className="min-w-0 max-w-xl flex-1" />
@@ -126,8 +123,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
               </button>)}
               {mail.nextCursor && <Button type="button" variant="ghost" className="w-full" onClick={() => void mail.loadMore().catch((error: unknown) => toast.error(error instanceof Error ? error.message : "加载失败。"))}>加载更多</Button>}
             </ScrollArea>}
-          </section>
-          {showMessageColumns && <section aria-label="信件内容" className={`${mail.selectedId ? "block" : "hidden @3xl/mail:flex"} min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-6`}>
+          </section>} detail={showMessageColumns ? <section aria-label="信件内容" className={`${mail.selectedId ? "block" : "hidden @3xl/mail:flex"} min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-6`}>
             {mail.selectedId && <Button type="button" variant="ghost" className="mb-4 self-start @3xl/mail:hidden" onClick={() => mail.setSelectedId(null)}><ArrowLeft />返回列表</Button>}
             {mail.detail ? <article className="mx-auto w-full max-w-3xl">
               <h3 className="text-xl font-semibold">{mail.detail.subject}</h3>
@@ -137,10 +133,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
               <p className="mt-6 whitespace-pre-wrap text-sm leading-7">{mail.detail.body}</p>
               {!!mail.detail.attachments.length && <div className="mt-8 border-t pt-4"><h4 className="text-sm font-medium">附件</h4>{mail.detail.attachments.map((attachment) => <Button key={attachment.attachmentId} variant="ghost" className="mt-2" onClick={() => void download(mail.detail!, attachment.attachmentId)}><Paperclip />{attachment.fileName}</Button>)}</div>}
             </article> : mail.selectedId ? mail.error ? <Empty><EmptyHeader><EmptyTitle>信件加载失败</EmptyTitle><EmptyDescription role="alert">{mail.error}</EmptyDescription></EmptyHeader><EmptyContent><Button type="button" variant="outline" onClick={mail.refresh}><RefreshCw />重试</Button></EmptyContent></Empty> : <div role="status" aria-label="加载信件内容中" className="mx-auto w-full max-w-3xl space-y-3"><Skeleton className="h-7 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-24 w-full" /></div> : <Empty><EmptyHeader><EmptyMedia variant="icon"><MailOpen /></EmptyMedia><EmptyTitle>选择一封信件</EmptyTitle></EmptyHeader></Empty>}
-          </section>}
-        </div>
-      </div>
-    </div>
+          </section> : null} showDetail={showMessageColumns} />
     <MailCompose start={compose} onClose={() => setCompose(null)} onSent={() => { mail.setSelectedId(null); setBox("sent"); mail.refresh() }} />
   </SystemAppWindowShell>
 }
