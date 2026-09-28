@@ -1463,9 +1463,11 @@ struct TerminalScreen: View {
 
     /// The one bar under the terminal, in two modes: typing, or talking.
     ///
-    /// Voice is a mode of this bar rather than a button on it (设计文档 §3.2), so both
-    /// modes keep their slots aligned — the toggle, the field, expand, ＋ and send.
-    /// Expand is invisible in voice mode, so the other controls do not shift.
+    /// Voice is a mode of this bar rather than a button on it (设计文档 §3.2), so the
+    /// toggle, ＋ and send keep their places in both modes. Expand is not one of them:
+    /// it belongs to the text field, so voice mode drops the slot outright instead of
+    /// holding it open — 按住 说话 then takes the whole width, the way it looks without
+    /// a hole on its right (2026-09-28).
     private var inputBar: some View {
         HStack(spacing: 8) {
             modeToggle(voicePresentation)
@@ -1474,13 +1476,6 @@ struct TerminalScreen: View {
                 holdToTalk(voicePresentation)
             } else {
                 commandField
-            }
-
-            if voicePresentation.barIsVoice {
-                Color.clear
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                    .accessibilityHidden(true)
-            } else {
                 expandInputButton
             }
 

@@ -1,10 +1,11 @@
 import XCTest
 
-/// 输入栏本身：两种模式、四个位置。
+/// 输入栏本身：两种模式，以及切换模式时哪些东西不许动。
 ///
-/// 手点不出来的是「位置有没有动」—— 设计文档 §8 第 2 条要的是四个元素的 x 坐标逐
-/// 格相同，而「四个不搬家」正是这次重构最容易做坏的一处。所以这里量的是 frame，
-/// 不是眼睛；截图只是留证。
+/// 手点不出来的是「位置有没有动」—— 设计文档 §8 第 2 条要的是**切换键、＋、发送**
+/// 三个的 x 坐标逐格相同、宽度一样，这三个不搬家正是这次重构最容易做坏的一处。
+/// 输入框那一格是另一回事：它左边缘不动、语音态变宽（展开键那一格被「按住 说话」
+/// 接走，2026-09-28）。所以这里量的是 frame，不是眼睛；截图只是留证。
 ///
 /// 凭据从环境里来，测试文件不带密钥：
 ///
@@ -32,16 +33,21 @@ final class InputBarUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// §8 第 1～4 条：两种模式下四个元素逐格同位，输入栏高度不变。
-    func testTheTwoModesDoNotMoveTheFourSlots() throws {
+    /// §8 第 1～4 条：两种模式下切换键、＋、发送逐格同位，输入栏高度不变；输入框那一格
+    /// 左边缘不动、语音态变宽并顶掉展开键。
+    func testTheTwoModesKeepTheControlsInPlace() throws {
         let app = openTerminal()
         let toggle = app.buttons["voice-mode-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10), "输入栏上没有切换键")
 
-        // 键盘态：切换键、输入框、＋、发送，从左到右。
+        // 键盘态：切换键、输入框、展开、＋、发送，从左到右。
         XCTAssertEqual(toggle.value as? String, "keyboard", "开局不是键盘态")
         let keyboardField = app.textFields.firstMatch
         XCTAssertTrue(keyboardField.waitForExistence(timeout: 5), "键盘态没有输入框")
+        let keyboardExpand = app.buttons["terminal-expand-input"]
+        XCTAssertTrue(keyboardExpand.exists, "键盘态没有展开键")
+        // 展开键这一格的位置现在就要留下来：语音态那一格的右边缘要落在这里。
+        let expandFrame = keyboardExpand.frame
         shot(app, "10-keyboard-mode")
 
         let keyboard = slots(
@@ -62,6 +68,9 @@ final class InputBarUITests: XCTestCase {
         XCTAssertFalse(keyboardField.exists, "语音态还把文本域留在屏幕上")
         // 点 🎤 开始的那套已经删干净了。
         XCTAssertFalse(app.buttons["voice-start"].exists, "点击式的麦克风键还在")
+        // 展开键只属于输入框：语音态里它连同那一格一起消失（2026-09-28），
+        // 「按住 说话」把宽度整个接过去 —— 不是隐藏了再拿一个空位占着。
+        XCTAssertFalse(app.buttons["terminal-expand-input"].exists, "语音态还留着展开键")
         shot(app, "11-voice-mode")
 
         let voice = slots(
@@ -72,23 +81,46 @@ final class InputBarUITests: XCTestCase {
             bar: app
         )
 
-        for name in Slot.allCases {
+        // 切换键、＋、发送在两种模式下逐格同位、同宽 —— 它们的位置与输入框怎么变无关。
+        for name in [Slot.toggle, .attach, .send] {
             guard let before = keyboard[name], let after = voice[name] else {
                 XCTFail("\(name) 在两种模式里没有都量到")
                 continue
             }
-            // §8 第 2 条要的就是这两个：x 逐个相同、宽度一样。y 不比 —— 输入框那一格
-            // 在键盘态是 22pt 高的文本域、在语音态是 44pt 高的按钮，它们占的是同一个
-            // 格子，但那不是一个能逐点相同的量。栏高有没有变由终端高度作证。
             XCTAssertEqual(before.minX, after.minX, accuracy: slack, "\(name) 的 x 搬了家")
             XCTAssertEqual(before.width, after.width, accuracy: slack, "\(name) 的宽度变了")
-        }
-        // 三个按钮在两种模式下连 y 和高度都一样，所以这一条也钉住。
-        for name in [Slot.toggle, .attach, .send] {
-            guard let before = keyboard[name], let after = voice[name] else { continue }
             XCTAssertEqual(before.minY, after.minY, accuracy: slack, "\(name) 的 y 搬了家")
             XCTAssertEqual(before.height, after.height, accuracy: slack, "\(name) 的高度变了")
         }
+
+        // 输入框那一格：左边缘不动，语音态变宽。y 不比 —— 键盘态是 22pt 高的文本域、
+        // 语音态是 44pt 高的按钮，它们占的是同一个格子，但那不是一个能逐点相同的量。
+        guard let fieldBefore = keyboard[.field], let fieldAfter = voice[.field] else {
+            XCTFail("输入框那一格在两种模式里没有都量到")
+            return
+        }
+        XCTAssertEqual(fieldBefore.minX, fieldAfter.minX, accuracy: slack, "输入框那一格的左边搬了家")
+        // 右边缘正好落在键盘态展开键的右边缘上：展开键那一格被整个接走，而不是只长到
+        // 一半、右边还留一段洞。左边缘相同 + 右边缘相同 ⇒ 宽度差正好是展开键加它两侧间距。
+        XCTAssertEqual(
+            fieldAfter.maxX,
+            expandFrame.maxX,
+            accuracy: slack,
+            "「按住 说话」的右边缘没有落在键盘态展开键的右边缘上"
+        )
+        XCTAssertGreaterThan(
+            fieldAfter.width,
+            fieldBefore.width,
+            "语音态的「按住 说话」没有接走展开键让出的宽度"
+        )
+        // 两种模式下这一格都顶到 ＋ 前面那一道间距上：右边缘一样，与 ＋ 的关系也就一样。
+        guard let attachAfter = voice[.attach], let attachBefore = keyboard[.attach] else { return }
+        XCTAssertEqual(
+            attachBefore.minX - expandFrame.maxX,
+            attachAfter.minX - fieldAfter.maxX,
+            accuracy: slack,
+            "「按住 说话」与 ＋ 之间的间距和键盘态不一样"
+        )
 
         // 输入栏没长高：终端的高度就是这条栏有没有抢走空间的证据。
         XCTAssertEqual(keyboard.barHeight, voice.barHeight, accuracy: slack, "两种模式的输入栏高度不一样")
