@@ -83,8 +83,9 @@ export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | 
       setSelected((current) => current.filter((item) => item.userId !== person.userId))
       return
     }
-    const alreadyInOtherRole = (role === "to" ? ccRecipients : recipients).some((item) => item.userId === person.userId)
-    if (recipients.length + ccRecipients.length + unresolvedIds.length + unresolvedCcIds.length - Number(alreadyInOtherRole) >= 50) {
+    const occupied = [...recipients, ...ccRecipients].filter((item) => item.userId === person.userId).length
+      + [...unresolvedIds, ...unresolvedCcIds].filter((id) => id === person.userId).length
+    if (recipients.length + ccRecipients.length + unresolvedIds.length + unresolvedCcIds.length - occupied >= 50) {
       toast.error("最多选择 50 位收件人。")
       return
     }

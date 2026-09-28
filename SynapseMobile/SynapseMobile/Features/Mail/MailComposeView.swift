@@ -266,7 +266,11 @@ private struct MailRecipientPicker: View {
             toRecipients.removeAll { $0.userId == person.userId }
         } else if role == "cc", ccRecipients.contains(where: { $0.userId == person.userId }) {
             ccRecipients.removeAll { $0.userId == person.userId }
-        } else if toRecipients.count + ccRecipients.count + unresolvedToIds.count + unresolvedCcIds.count - (role == "to" ? ccRecipients.filter { $0.userId == person.userId }.count : toRecipients.filter { $0.userId == person.userId }.count) < 50 {
+        } else if toRecipients.count + ccRecipients.count + unresolvedToIds.count + unresolvedCcIds.count
+            - toRecipients.filter({ $0.userId == person.userId }).count
+            - ccRecipients.filter({ $0.userId == person.userId }).count
+            - unresolvedToIds.filter({ $0 == person.userId }).count
+            - unresolvedCcIds.filter({ $0 == person.userId }).count < 50 {
             toRecipients.removeAll { $0.userId == person.userId }
             ccRecipients.removeAll { $0.userId == person.userId }
             if role == "to" { toRecipients.append(person.person) }
