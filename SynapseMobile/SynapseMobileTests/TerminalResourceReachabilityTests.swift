@@ -37,6 +37,12 @@ final class TerminalResourceReachabilityTests {
         #expect(!TerminalResourceReachabilityChecker.isCheckable(foreign))
     }
 
+    @Test func anotherPortIsNotChecked() {
+        var foreign = URLComponents(url: url("share/shr_abc"), resolvingAgainstBaseURL: false)!
+        foreign.port = foreign.port == 8443 ? 8444 : 8443
+        #expect(!TerminalResourceReachabilityChecker.isCheckable(foreign.url!))
+    }
+
     // MARK: - 什么算失效
 
     @Test func aGoneLinkIsMissing() async {
@@ -47,6 +53,19 @@ final class TerminalResourceReachabilityTests {
     @Test func aLiveLinkIsReachable() async {
         let answer = await checker().check(url("share/shr_ok_abc"))
         #expect(answer == .reachable)
+    }
+
+    @Test func aHardWrappedShareHasOneValidCandidate() async {
+        let probe = checker()
+        let prefix = url("share/shr_wrapped_first_row")
+        let complete = url("share/shr_wrapped_first_rowTAIL")
+        #expect(await probe.check(prefix) == .missing)
+        #expect(await probe.check(complete) == .reachable)
+    }
+
+    @Test func aMissingSharedItemIsMissing() async {
+        let answer = await checker().check(url("share/shr_ok_abc/items/item_missing"))
+        #expect(answer == .missing)
     }
 
     /// 服务器自己的毛病不是这条链接的毛病。
@@ -69,11 +88,8 @@ final class TerminalResourceReachabilityTests {
 
     // MARK: - Fixtures
 
-    /// 当前配置的服务器 —— 换服务器时这组测试跟着走，不写死域名。
-    private var host: String { AppConfiguration.apiBaseURL.host ?? "synapse.d2.pub" }
-
     private func url(_ path: String) -> URL {
-        URL(string: "https://\(host)/\(path)")!
+        URL(string: "\(AppConfiguration.apiOrigin.absoluteString)/\(path)")!
     }
 
     /// 传输层照着路径里的名字回答，所以不需要一份共享的剧本。
@@ -84,7 +100,7 @@ final class TerminalResourceReachabilityTests {
     }
 }
 
-/// 按路径里的名字回一个状态码：`…missing…` 404，`…denied…` 403，`…boom…` 500，其余 200。
+/// 网页入口无论分享 ID 是否存在都返回 200；只有分享 API 会校验 ID。
 private final class StagedURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
 
@@ -94,6 +110,9 @@ private final class StagedURLProtocol: URLProtocol {
         let path = request.url?.path ?? ""
         let status: Int
         switch true {
+        case path.hasPrefix("/share/"): status = 200
+        case path.hasPrefix("/api/drive/browser/shares/") && request.httpMethod != "GET": status = 405
+        case path.hasSuffix("/shr_wrapped_first_row"): status = 404
         case path.contains("missing"): status = 404
         case path.contains("denied"): status = 403
         case path.contains("boom"): status = 500

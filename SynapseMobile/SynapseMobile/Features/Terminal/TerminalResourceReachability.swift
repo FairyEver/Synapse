@@ -71,17 +71,58 @@ actor TerminalResourceReachabilityChecker {
     /// 服务器 + 分享路径」上：别的域名既不该被这个 App 去探，答案也无从判断 —— 一个 404
     /// 的博客文章和一条坏掉的分享链接不是同一件事。
     static func isCheckable(_ url: URL) -> Bool {
-        guard let host = url.host, host == AppConfiguration.apiBaseURL.host else { return false }
-        return url.path.hasPrefix("/share/") || url.path.hasPrefix("/sites/")
+        checkRequest(for: url) != nil
+    }
+
+    private static func checkRequest(for url: URL) -> URLRequest? {
+        guard SynapseWebLink.isTrusted(url) else { return nil }
+        let originPath = AppConfiguration.apiOrigin.path
+        let path: String
+        if originPath.isEmpty || originPath == "/" {
+            path = url.path
+        } else {
+            path = String(url.path.dropFirst(originPath.count))
+        }
+        let parts = path.split(separator: "/")
+
+        if parts.first == "share", parts.count >= 2 {
+            let itemId: Substring?
+            switch parts.count {
+            case 2:
+                itemId = nil
+            case 3 where ["reader", "download", "render"].contains(parts[2]):
+                itemId = nil
+            case 4 where parts[2] == "items":
+                itemId = parts[3]
+            case 5 where parts[2] == "items" && ["reader", "download", "render"].contains(parts[4]):
+                itemId = parts[3]
+            default:
+                return nil
+            }
+            var endpoint = AppConfiguration.apiBaseURL
+                .appendingPathComponent("drive")
+                .appendingPathComponent("browser")
+                .appendingPathComponent("shares")
+                .appendingPathComponent(String(parts[1]))
+            if let itemId {
+                endpoint = endpoint.appendingPathComponent("items").appendingPathComponent(String(itemId))
+            }
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "GET"
+            return request
+        }
+
+        guard parts.first == "sites", parts.count >= 2 else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        return request
     }
 
     func check(_ url: URL) async -> TerminalResourceReachability {
-        guard Self.isCheckable(url) else { return .unknown }
+        guard var request = Self.checkRequest(for: url) else { return .unknown }
         if let answer = answers[url.absoluteString] { return answer }
 
-        var request = URLRequest(url: url)
-        // 只要状态码，不要页面。分享页是整页 HTML，而 HEAD 拿到的状态码和 GET 一样。
-        request.httpMethod = "HEAD"
+        // `/share/:id` 是网页入口，失效的 ID 也返回 200 页面壳。分享 API 才校验 ID。
         request.timeoutInterval = Self.checkTimeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
 

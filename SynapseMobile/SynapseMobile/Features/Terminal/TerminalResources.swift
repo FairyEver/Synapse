@@ -7,7 +7,7 @@ struct TerminalResource: Identifiable, Hashable {
     let needsConfirmation: Bool
 
     var id: String { url.absoluteString }
-    var candidateURLs: [URL] { alternatives + [url] }
+    var candidateURLs: [URL] { [url] + alternatives }
 
     var name: String {
         let host = url.host ?? url.absoluteString

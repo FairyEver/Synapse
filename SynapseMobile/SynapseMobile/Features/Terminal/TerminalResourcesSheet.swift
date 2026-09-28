@@ -26,7 +26,12 @@ struct TerminalResourcesSheet: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         if resource.needsConfirmation {
-                            Text(resource.url.host ?? resource.name)
+                            Text(resource.name).lineLimit(2)
+                            Text(resource.url.absoluteString)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                             Text("链接边界待确认")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

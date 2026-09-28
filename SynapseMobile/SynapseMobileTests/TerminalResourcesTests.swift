@@ -108,8 +108,8 @@ struct TerminalResourcesTests {
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
         ])
         #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
-            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR",
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
+            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR",
         ])
     }
 
@@ -133,7 +133,7 @@ struct TerminalResourcesTests {
             try line("  \(url)"),
             try line("  README updated"),
         ], kind: "reset"))
-        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [url, url + "README"])
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [url + "README", url])
         #expect(store.resources.first?.needsConfirmation == true)
     }
 
@@ -146,7 +146,7 @@ struct TerminalResourcesTests {
             try line("  路径"),
         ], kind: "reset"))
         #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
-            prefix, prefix + "%E8%B7%AF%E5%BE%84",
+            prefix + "%E8%B7%AF%E5%BE%84", prefix,
         ])
     }
 
@@ -212,8 +212,8 @@ struct TerminalResourcesTests {
 
         store.apply(frame([try line("  后续说明继续写下去")], from: 1, total: 2))
         #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
-            prefix,
             prefix + "后续说明继续写下去".addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!,
+            prefix,
         ])
         #expect(store.resources.first?.needsConfirmation == true)
     }
@@ -234,9 +234,9 @@ struct TerminalResourcesTests {
             "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51) + "cccc",
         ])
         #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
+            "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51) + "cccc",
             "https://example.org/" + String(repeating: "a", count: 31),
             "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51),
-            "https://example.org/" + String(repeating: "a", count: 31) + String(repeating: "b", count: 51) + "cccc",
         ])
     }
 
