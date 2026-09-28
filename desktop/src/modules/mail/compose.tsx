@@ -27,6 +27,7 @@ export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | 
   const [body, setBody] = useState("")
   const [attachments, setAttachments] = useState<MailAttachment[]>([])
   const [busy, setBusy] = useState(false)
+  const dialogContent = useRef<HTMLDivElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const pendingSend = useRef<{ fingerprint: string; previewId: string; clientRequestId: string } | null>(null)
 
@@ -113,7 +114,7 @@ export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | 
   }
 
   return <Dialog open={start !== null} onOpenChange={(open) => { if (!open && !busy) onClose() }}>
-    <DialogContent aria-describedby={undefined} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+    <DialogContent ref={dialogContent} aria-describedby={undefined} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
       <DialogHeader><DialogTitle>写信</DialogTitle></DialogHeader>
       <div className="space-y-4">
         <div className="space-y-2">
@@ -125,7 +126,7 @@ export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | 
                 <ChevronsUpDown className="text-muted-foreground" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1.5">
+            <PopoverContent portalContainer={dialogContent.current} align="start" className="w-(--radix-popover-trigger-width) p-1.5">
               <Command shouldFilter={false}>
                 <CommandInput aria-label="搜索收件人" maxLength={100} value={recipientSearch} onValueChange={setRecipientSearch} placeholder="搜索姓名或账号" />
                 <CommandList aria-label="可选收件人" className="max-h-56">

@@ -59,6 +59,26 @@ afterEach(() => {
 })
 
 describe("MailCompose recipients", () => {
+  it("allows wheel scrolling through a long recipient list", async () => {
+    mocks.request.mockResolvedValue({ items: Array.from({ length: 12 }, (_, index) => ({ ...people[0], userId: `person-${index}` })), nextCursor: null })
+    await renderCompose()
+    await openPicker()
+
+    const list = document.querySelector<HTMLElement>('[cmdk-list]')!
+    expect(list.querySelectorAll('[cmdk-item]')).toHaveLength(12)
+    list.style.overflowY = "auto"
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, value: 480 },
+      clientHeight: { configurable: true, value: 224 },
+    })
+    const outsideWheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 40 })
+    document.body.dispatchEvent(outsideWheel)
+    expect(outsideWheel.defaultPrevented).toBe(true)
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 40 })
+    list.dispatchEvent(wheel)
+    expect(wheel.defaultPrevented).toBe(false)
+  })
+
   it("opens a searchable dropdown and keeps multiple selections visible", async () => {
     mocks.request.mockResolvedValue({ items: people, nextCursor: null })
     await renderCompose()
