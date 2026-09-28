@@ -26,6 +26,7 @@ import {
   ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
   ACCOUNT_STATE_GET_MCP_TOOL_NAME,
 } from "../../app-capabilities/account/shared/capability"
+import { buildNotificationTools } from "../../app-capabilities/account/shared/notification-mcp"
 import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_MCP_TOOL_NAMES,
@@ -118,6 +119,7 @@ describe("App capability domain", () => {
       "app_desktop_restart",
       ACCOUNT_STATE_GET_MCP_TOOL_NAME,
       ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
+      ...buildNotificationTools().map((tool) => tool.name),
       ...AGENT_CONVERSATION_CAPABILITY_CATALOG.map((capability) => capability.toolName),
       TEXT_EXTRACTOR_MCP_TOOL_NAME,
       TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,

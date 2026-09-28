@@ -111,10 +111,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(261)
-    expect(APP_DOMAIN.capabilities).toHaveLength(86)
-    expect(buildAppTools()).toHaveLength(82)
-    expect(toolNames).toHaveLength(257)
+    expect(allCapabilityIds()).toHaveLength(275)
+    expect(APP_DOMAIN.capabilities).toHaveLength(93)
+    expect(buildAppTools()).toHaveLength(89)
+    expect(toolNames).toHaveLength(271)
     expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual(["extend_portal_headless_credential_get"])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -126,8 +126,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(257)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(257)
+    expect(buildAllMcpTools()).toHaveLength(271)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(271)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
@@ -235,7 +235,7 @@ describe("API and MCP capability surface", () => {
       && !file.path.startsWith("skill-authoring/")
     ))
 
-    expect(routingDocs).toHaveLength(27)
+    expect(routingDocs).toHaveLength(29)
     for (const doc of routingDocs) {
       expect(doc.content, doc.path).toContain("Reaching Synapse tools")
       expect(doc.content, doc.path).toContain("publishes only two tools")
@@ -308,14 +308,15 @@ describe("API and MCP capability surface", () => {
     expect(skill).toContain("reaching the user through System Notifier (提醒、通知、推到手机)")
     expect(appGuide).toContain("「提醒我」「到点提醒我」「完事提醒我一声」「给我手机发消息」「推到我手机上」")
     // 两个易混邻居各有一条边界，缺一条就会有说法被抢走；并须说明不存在第二条通知能力
-    expect(appGuide).toContain("It is the only one that reaches the user's other devices")
+    expect(appGuide).toContain("It is the only tool that sends a new account notification to the user's devices")
     expect(appGuide).toContain("there is no separate local-only sound tool")
     expect(appGuide).toContain("给某个 Agent 对话发消息 -> `app_agent_message_send`")
     expect(appGuide).toContain("每天 / 到点自动做什么 -> Automation")
     // 会话内的延时：等到了再调一次，不能提前发占位
     expect(appGuide).toContain("wait for that moment and then call once")
     expect(appApi).toContain("Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上")
-    expect(appApi).toContain("It is the only notification capability; there is no separate local-only sound tool")
+    expect(appApi).toContain("It is the only tool for sending a new account notification")
+    expect(appApi).toContain("There is no separate local-only sound tool")
   })
 
   it("marks historical superpowers docs before mentioning retired Synapse CLI entrypoints", () => {

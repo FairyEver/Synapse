@@ -1,5 +1,7 @@
 # 通知 MCP 工具
 
+> **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` for the user's intent or an exact `app_*` name, then call `invoke` with the returned tool name and `inputSchema`. Never guess tool arguments.
+
 调用前先用 MCP `search` 取得完整 `inputSchema`。
 
 | 工具 | 参数 | 结果或作用 |

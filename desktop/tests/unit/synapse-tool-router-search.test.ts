@@ -93,6 +93,8 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "收件箱站内信全部设已读", expect: "app_mail_message_read_all" },
   { intent: "站内信按 ID 批量删除", expect: "app_mail_message_delete_batch" },
   { intent: "清空已发送站内信", expect: "app_mail_message_delete_all" },
+  { intent: "查看站内信可选组织", expect: "app_mail_organization_list" },
+  { intent: "查看站内信组织成员", expect: "app_mail_organization_members_list" },
 ]
 
 /**

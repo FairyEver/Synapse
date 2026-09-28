@@ -103,6 +103,8 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["附件", "attachment"],
   ["收件人", "recipient"],
   ["收信人", "recipient"],
+  ["组织", "organization"],
+  ["成员", "members"],
   ["往来", "context"],
 
   // ---------------- 名词：terminal ----------------

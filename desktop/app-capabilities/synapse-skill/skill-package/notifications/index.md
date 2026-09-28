@@ -1,5 +1,7 @@
 # Synapse 通知清单
 
+> **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` for the user's intent or an exact `app_*` name, then call `invoke` with the returned tool name and `inputSchema`. Never guess tool arguments.
+
 通过 Synapse MCP `search` 查询 `app_account_notification_*` 的实时 schema，再用 `invoke` 操作。完整工具表见 `api-reference.md`。发送一条新通知属于 System Notifier，走 `app/index.md`；这里管理账号里已有的通知。
 
 - 用 `app_account_notification_count` 取得精确未读数。`list` 按 `all`、`unread`、`pending` 筛选；有 `nextCursor` 就继续翻页，不能把第一页当作全部。
