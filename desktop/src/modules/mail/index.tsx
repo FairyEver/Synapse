@@ -3,7 +3,7 @@ import { ArrowLeft, Inbox, MailOpen, Paperclip, Pencil, RefreshCw, Search, Send 
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
@@ -104,13 +104,9 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
     <MailLayout navigation={<nav aria-label="信箱" className="flex shrink-0 overflow-x-auto border-b bg-sidebar p-2 @3xl/mail:block @3xl/mail:h-full @3xl/mail:border-b-0 @3xl/mail:p-3">
           {boxes.map((entry) => <Button key={entry.id} type="button" variant={box === entry.id ? "secondary" : "ghost"} className="min-w-0 flex-1 justify-center @3xl/mail:mb-1 @3xl/mail:w-full @3xl/mail:justify-start" onClick={() => { setBox(entry.id); mail.setSelectedId(null) }}><entry.icon />{entry.name}</Button>)}
         </nav>} list={<section aria-label={boxes.find((entry) => entry.id === box)?.name} className={`${mail.selectedId ? "hidden @3xl/mail:flex" : "flex"} min-h-0 min-w-0 flex-1 flex-col`}>
-            <form className="border-b px-2 py-1" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()) }}>
-              <InputGroup className="h-11">
-                <InputGroupInput type="search" aria-label="搜索信件" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索主题或正文" className="h-full" />
-                <InputGroupAddon align="inline-end" className="py-0">
-                  <InputGroupButton type="submit" size="icon-sm" className="size-10 rounded-md" aria-label="搜索"><Search /></InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
+            <form className="flex h-10 items-center border-b px-2 focus-within:border-foreground focus-within:bg-muted" onSubmit={(event) => { event.preventDefault(); setSearch(query.trim()) }}>
+              <Input type="search" aria-label="搜索信件" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索主题或正文" className="h-full flex-1 rounded-none border-0 px-2 focus-visible:ring-0 dark:bg-transparent" />
+              <Button type="submit" variant="ghost" size="icon" className="size-10" aria-label="搜索"><Search /></Button>
             </form>
             {!mail.error && (mail.loading || !mail.ready) && !hasListItems ? <div role="status" aria-label="加载信件中" className="w-full max-w-3xl space-y-3 p-4"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div> : null}
             {mail.error && !mail.messages.length ? <Empty>
