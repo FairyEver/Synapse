@@ -20,7 +20,7 @@
 ## 三端与 AI
 
 - 桌面端沿用 System App 三栏与 shadcn 主题；iOS 沿用主页入口、`AdaptiveFeatureNavigation` 和系统写信 sheet。窄窗、宽窗共用数据和选中信件 ID；引用使用可折叠的只读区域。
-- MCP 新增 `app.mail.message.context`；现有预览工具升级为 v2 输入。系统 Skill 必须把 To/Cc、全文引用及实际附件纳入对话确认，`confirmed: true` 仍不构成服务端验证的用户确认凭证。
+- MCP 新增 `app.mail.context.list`；现有预览工具升级为 v2 输入。系统 Skill 必须把 To/Cc、全文引用及实际附件纳入对话确认，`confirmed: true` 仍不构成服务端验证的用户确认凭证。
 - 旧客户端可继续读取新信；旧格式发送预览得到更新提示，防止写入语义不完整的信件。
 
 ## 正式环境切换

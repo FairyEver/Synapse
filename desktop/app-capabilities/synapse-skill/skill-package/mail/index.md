@@ -21,4 +21,4 @@
 
 ## 读信
 
-用 `app_mail_message_list` 和 `app_mail_message_get` 查看当前用户可见信件，`app_mail_message_context` 查看当前账号可见的关联往来；下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。回复只选原发件人；回复全部覆盖原发件人及原 To/Cc 并排除自己；转发重新选择 To/Cc，默认把原附件 ID 放入 `forwardAttachmentIds`，用户可要求移除。三种操作都通过新预览执行完整确认流程。标记已读或删除只影响当前用户的状态。
+用 `app_mail_message_list` 和 `app_mail_message_get` 查看当前用户可见信件，`app_mail_context_list` 查看当前账号可见的关联往来；下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。回复只选原发件人；回复全部覆盖原发件人及原 To/Cc 并排除自己；转发重新选择 To/Cc，默认把原附件 ID 放入 `forwardAttachmentIds`，用户可要求移除。三种操作都通过新预览执行完整确认流程。标记已读或删除只影响当前用户的状态。

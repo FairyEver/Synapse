@@ -5,18 +5,18 @@ const definitions = [
   ["app_mail_recipient_list", "app.mail.recipient.list", "Browse or search active users sharing a team with the current user. An exact unique result can be provisional; ask the user to choose when names are ambiguous."],
   ["app_mail_message_list", "app.mail.message.list", "List the current user's received or sent internal mail."],
   ["app_mail_message_get", "app.mail.message.get", "Read one internal mail visible to the current user."],
-  ["app_mail_message_context", "app.mail.message.context", "List only the current user's visible messages in the same mail conversation. Pagination: cursor-based. Continue with nextCursor."],
+  ["app_mail_context_list", "app.mail.context.list", "List only the current user's visible messages in the same mail conversation. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_message_update", "app.mail.message.update", "Mark one received mail read or unread for the current user."],
   ["app_mail_message_delete", "app.mail.message.delete", "Hide one mail from the current user's mailbox only."],
   ["app_mail_attachment_create", "app.mail.attachment.create", "Upload a local file as an internal mail attachment without adding it to Synapse Drive."],
   ["app_mail_attachment_download_file", "app.mail.attachment.download_file", "Download an attachment from a mail the current user may read to an absolute local path."],
   ["app_mail_send_preview", "app.mail.send.preview", "Fix recipients, complete subject and body, attachments, and team for final confirmation. Show the full preview to the user before sending."],
   ["app_mail_message_send", "app.mail.message.send", "Send a previously previewed internal mail only after the user explicitly confirms that exact recipients, subject, complete body, and attachments in conversation. Does not open a compose UI."],
-] as const
+] as const satisfies readonly (readonly [string, CapabilityId, string])[]
 
 export const MAIL_DOMAIN: CapabilityDomainDefinition = {
   id: "mail",
-  capabilities: definitions.map(([, id, description]) => ({ id: id as CapabilityId, title: description, description, mutates: !id.endsWith(".list") && !id.endsWith(".get") && !id.endsWith(".context") && !id.endsWith(".preview") })),
+  capabilities: definitions.map(([, id, description]) => ({ id, title: description, description, mutates: !id.endsWith(".list") && !id.endsWith(".get") && !id.endsWith(".preview") })),
 }
 
 export const MAIL_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(definitions.map(([name, id]) => [name, id]))
@@ -38,7 +38,7 @@ const schemas: Record<string, { properties: Record<string, unknown>; required?: 
   app_mail_recipient_list: { properties: { query: text("Recipient name, handle, or known userId; use an empty string to browse shared-team members."), cursor: text("Next cursor from a browse page.") }, required: ["query"] },
   app_mail_message_list: { properties: { box: { type: "string", enum: ["inbox", "sent"] }, query: text("Optional subject or body search."), cursor: text("Next cursor from prior page.") }, required: ["box"] },
   app_mail_message_get: { properties: { messageId: text("Mail id.") }, required: ["messageId"] },
-  app_mail_message_context: { properties: { messageId: text("Mail id."), cursor: text("Next cursor from prior context page.") }, required: ["messageId"] },
+  app_mail_context_list: { properties: { messageId: text("Mail id."), cursor: text("Next cursor from prior context page.") }, required: ["messageId"] },
   app_mail_message_update: { properties: { messageId: text("Mail id."), read: { type: "boolean" } }, required: ["messageId", "read"] },
   app_mail_message_delete: { properties: { messageId: text("Mail id.") }, required: ["messageId"] },
   app_mail_attachment_create: { properties: { filePath: text("Absolute path to a local file to upload directly as a mail attachment.") }, required: ["filePath"] },

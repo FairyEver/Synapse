@@ -1130,8 +1130,8 @@ export const accountIpcModule: IpcModule = {
       kind: "invoke", operationId: "app.mail.message.get", request: mailIdInputSchema, response: mailMessageSchema,
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageGet", ...mailIdInputSchema.parse(input) }),
     },
-    mailMessageContext: {
-      kind: "invoke", operationId: "app.mail.message.context", request: mailMessageContextInputSchema,
+    mailContextList: {
+      kind: "invoke", operationId: "app.mail.context.list", request: mailMessageContextInputSchema,
       response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageContext", ...mailMessageContextInputSchema.parse(input) }),
     },

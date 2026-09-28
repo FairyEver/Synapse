@@ -52,4 +52,13 @@ describe("mail capability dispatcher", () => {
     await expect(dispatcher.dispatch("app.mail.attachment.create", { filePath: "/tmp/local.txt" }, { source: "api" })).resolves.toMatchObject({ ok: true })
     expect(executeMailOperation).toHaveBeenCalledWith({ kind: "attachmentLocal", filePath: "/tmp/local.txt" })
   })
+
+  it("routes the canonical conversation list action", async () => {
+    const executeMailOperation = vi.fn(async () => ({ items: [], nextCursor: null }))
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })
+
+    await expect(dispatcher.dispatch("app.mail.context.list", { messageId: "mail-1" }, {}))
+      .resolves.toEqual({ ok: true, data: { items: [], nextCursor: null } })
+    expect(executeMailOperation).toHaveBeenCalledWith({ kind: "messageContext", messageId: "mail-1" })
+  })
 })

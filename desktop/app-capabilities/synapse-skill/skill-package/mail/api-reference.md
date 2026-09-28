@@ -9,7 +9,7 @@
 | `app_mail_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、匹配类型、共同团队、`nextCursor` |
 | `app_mail_message_list` | `box: inbox \| sent` | 当前用户分页列表；可选 `query`、`cursor` |
 | `app_mail_message_get` | `messageId` | 完整正文、参与者、附件 |
-| `app_mail_message_context` | `messageId`，可选 `cursor` | 仅返回当前账号可见的关联往来，使用 `nextCursor` 续页 |
+| `app_mail_context_list` | `messageId`，可选 `cursor` | 仅返回当前账号可见的关联往来，使用 `nextCursor` 续页 |
 | `app_mail_message_update` | `messageId`, `read` | 当前收件人已读状态 |
 | `app_mail_message_delete` | `messageId` | 只隐藏当前用户的信件 |
 | `app_mail_attachment_create` | 本地文件绝对路径 `filePath` | 直接上传并返回 `attachmentToken`、文件名 |

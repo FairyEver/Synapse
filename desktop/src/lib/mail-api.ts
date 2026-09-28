@@ -10,7 +10,7 @@ export async function mailRequest<K extends MailOperation["kind"]>(operation: Ex
     case "recipientSearch": result = await bridge.mail.recipient.list({ query: request.query, cursor: request.cursor }); break
     case "messageList": result = await bridge.mail.message.list({ box: request.box, query: request.query, cursor: request.cursor }); break
     case "messageGet": result = await bridge.mail.message.get({ messageId: request.messageId }); break
-    case "messageContext": result = await bridge.mail.message.context({ messageId: request.messageId, cursor: request.cursor }); break
+    case "messageContext": result = await bridge.mail.context.list({ messageId: request.messageId, cursor: request.cursor }); break
     case "messageSetRead": result = await bridge.mail.message.update({ messageId: request.messageId, read: request.read }); break
     case "messageDelete": result = await bridge.mail.message.delete({ messageId: request.messageId }); break
     case "attachmentLocal": result = await bridge.mail.attachment.localCreate({ filePath: request.filePath }); break
