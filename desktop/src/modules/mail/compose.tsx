@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, Paperclip, Search, Send, X } from "lucide-react"
+import { ChevronsUpDown, Paperclip, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogFrame, DialogFrameBody, DialogFrameFooter, DialogFrameHeader } from "@/components/ui/dialog"
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { mailRequest } from "@/lib/mail-api"
@@ -17,25 +18,26 @@ export type ComposeStart = { recipientIds?: string[]; subject?: string; body?: s
 function personName(person: MailPerson): string { return person.nickname || person.handle || person.userId }
 
 export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | null; onClose: () => void; onSent: () => void }) {
+  const [recipientPickerOpen, setRecipientPickerOpen] = useState(false)
   const [recipientSearch, setRecipientSearch] = useState("")
-  const candidates = useRecipients(start !== null, recipientSearch)
+  const candidates = useRecipients(start !== null && recipientPickerOpen, recipientSearch)
   const [recipients, setRecipients] = useState<MailPerson[]>([])
   const [unresolvedIds, setUnresolvedIds] = useState<string[]>([])
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [attachments, setAttachments] = useState<MailAttachment[]>([])
   const [busy, setBusy] = useState(false)
-  const recipientInput = useRef<HTMLInputElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const pendingSend = useRef<{ fingerprint: string; previewId: string; clientRequestId: string } | null>(null)
 
   useEffect(() => {
-    if (!start) return
+    if (!start) { setRecipientPickerOpen(false); return }
     setSubject(start.subject ?? "")
     setBody(start.body ?? "")
     setAttachments([])
     setRecipients([])
     setUnresolvedIds([])
+    setRecipientPickerOpen(false)
     setRecipientSearch("")
     pendingSend.current = null
   }, [start])
@@ -111,44 +113,46 @@ export function MailCompose({ start, onClose, onSent }: { start: ComposeStart | 
   }
 
   return <Dialog open={start !== null} onOpenChange={(open) => { if (!open && !busy) onClose() }}>
-    <DialogContent showCloseButton={false} aria-describedby={undefined} onOpenAutoFocus={(event) => { event.preventDefault(); recipientInput.current?.focus() }} className="h-[48rem] max-h-[90vh] gap-0 p-0 sm:max-w-2xl">
-      <DialogFrame>
-        <DialogFrameHeader title="写信" bordered showCloseButton={false} actions={<DialogClose asChild><Button type="button" variant="ghost" size="icon" className="size-10" disabled={busy} aria-label="关闭"><X /></Button></DialogClose>} />
-        <DialogFrameBody className="space-y-5 overflow-y-auto px-5 py-4">
-          <section className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="mail-recipient-search">收件人</Label>
-              <span className="text-xs tabular-nums text-muted-foreground">已选 {recipients.length}/50</span>
-            </div>
-            <InputGroup className="h-10">
-              <InputGroupAddon><Search /></InputGroupAddon>
-              <InputGroupInput ref={recipientInput} id="mail-recipient-search" type="search" maxLength={100} value={recipientSearch} onChange={(event) => setRecipientSearch(event.target.value)} placeholder="搜索姓名或账号" />
-            </InputGroup>
-            <div role="group" aria-label="可选收件人" className="max-h-48 min-h-24 overflow-y-auto rounded-lg border">
-              {candidates.items.map((person) => {
-                const selected = recipients.some((item) => item.userId === person.userId)
-                return <Button key={person.userId} type="button" variant="ghost" aria-pressed={selected} className={`h-auto min-h-11 w-full justify-start rounded-none px-3 py-2 text-left whitespace-normal ${selected ? "bg-muted" : ""}`} onClick={() => toggleRecipient(person)}>
-                  <span className="min-w-0 flex-1 truncate">{personName(person)}</span>
-                  {person.handle && person.handle !== personName(person) && <span className="min-w-0 truncate text-xs text-muted-foreground">{person.handle}</span>}
-                  <Check className={`ml-auto size-4 shrink-0 ${selected ? "opacity-100" : "opacity-0"}`} />
-                </Button>
-              })}
-              {candidates.loading && <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">加载成员中…</p>}
-              {!candidates.loading && !candidates.error && !candidates.items.length && <p className="px-3 py-6 text-center text-sm text-muted-foreground">{recipientSearch.trim() ? "没有匹配的成员" : "没有可选成员"}</p>}
-              {candidates.error && <div role="alert" className="flex items-center justify-between gap-2 px-3 py-2 text-sm"><span className="text-destructive">{candidates.error}</span><Button type="button" variant="ghost" className="min-h-10" onClick={candidates.retry}>重试</Button></div>}
-              {candidates.nextCursor && <div className="p-1 text-center"><Button type="button" variant="ghost" className="min-h-10" disabled={candidates.loadingMore} onClick={candidates.loadMore}>{candidates.loadingMore ? "加载中…" : "加载更多"}</Button></div>}
-            </div>
-            {!!recipients.length && <div className="flex flex-wrap gap-2" aria-label="已选收件人">{recipients.map((person) => <Button key={person.userId} type="button" variant="secondary" className="max-w-full min-h-10" aria-label={`移除 ${personName(person)}`} onClick={() => toggleRecipient(person)}><span className="truncate">{personName(person)}</span><X /></Button>)}</div>}
-            {!!unresolvedIds.length && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">收件人无法确认，请移除或重新搜索{unresolvedIds.map((id) => <Button key={id} type="button" variant="outline" className="min-h-10" onClick={() => setUnresolvedIds((current) => current.filter((item) => item !== id))}>{id}<X /></Button>)}</div>}
-          </section>
-          <div className="space-y-2"><Label htmlFor="mail-subject">主题</Label><Input id="mail-subject" className="h-10" maxLength={120} value={subject} onChange={(event) => setSubject(event.target.value)} /></div>
-          <div className="space-y-2"><Label htmlFor="mail-body">正文</Label><Textarea id="mail-body" className="min-h-40 resize-y" rows={6} value={body} onChange={(event) => setBody(event.target.value)} /></div>
-          <div className="space-y-2"><Label htmlFor="mail-attachment">附件</Label><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="min-h-10" disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip />添加附件</Button><input ref={fileInput} id="mail-attachment" type="file" className="sr-only" tabIndex={-1} onChange={(event) => { void attachLocal(event.target.files?.[0]); event.currentTarget.value = "" }} />
-            {attachments.map((attachment) => <Button key={attachment.attachmentId} type="button" variant="secondary" className="max-w-full min-h-10" aria-label={`移除附件 ${attachment.fileName}`} onClick={() => setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId))}><span className="truncate">{attachment.fileName}</span><X /></Button>)}</div>
-          </div>
-        </DialogFrameBody>
-        <DialogFrameFooter><Button type="button" className="min-h-10" disabled={busy || !recipients.length || !!unresolvedIds.length || !subject.trim() || !body.trim()} onClick={() => void send()}><Send />发送</Button></DialogFrameFooter>
-      </DialogFrame>
+    <DialogContent aria-describedby={undefined} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogHeader><DialogTitle>写信</DialogTitle></DialogHeader>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="mail-recipient-picker">收件人</Label>
+          <Popover open={recipientPickerOpen} onOpenChange={(open) => { setRecipientPickerOpen(open); if (!open) setRecipientSearch("") }}>
+            <PopoverTrigger asChild>
+              <Button id="mail-recipient-picker" type="button" variant="outline" role="combobox" aria-expanded={recipientPickerOpen} className="w-full justify-between font-normal">
+                <span className="text-muted-foreground">{recipients.length ? "添加收件人" : "选择收件人"}</span>
+                <ChevronsUpDown className="text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1.5">
+              <Command shouldFilter={false}>
+                <CommandInput aria-label="搜索收件人" maxLength={100} value={recipientSearch} onValueChange={setRecipientSearch} placeholder="搜索姓名或账号" />
+                <CommandList aria-label="可选收件人" className="max-h-56">
+                  <CommandGroup>
+                    {candidates.items.map((person) => <CommandItem key={person.userId} value={person.userId} data-checked={recipients.some((item) => item.userId === person.userId)} className="min-h-10" onSelect={() => toggleRecipient(person)}>
+                      <span className="min-w-0 flex-1 truncate">{personName(person)}</span>
+                      {person.handle && person.handle !== personName(person) && <span className="truncate text-xs text-muted-foreground">{person.handle}</span>}
+                    </CommandItem>)}
+                  </CommandGroup>
+                  {candidates.loading && <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">加载成员中…</p>}
+                  {!candidates.loading && !candidates.error && !candidates.items.length && <p className="px-3 py-6 text-center text-sm text-muted-foreground">{recipientSearch.trim() ? "没有匹配的成员" : "没有可选成员"}</p>}
+                  {candidates.error && <div role="alert" className="flex items-center justify-between gap-2 px-3 py-2 text-sm"><span className="text-destructive">{candidates.error}</span><Button type="button" variant="ghost" onClick={candidates.retry}>重试</Button></div>}
+                  {candidates.nextCursor && <div className="p-1 text-center"><Button type="button" variant="ghost" disabled={candidates.loadingMore} onClick={candidates.loadMore}>{candidates.loadingMore ? "加载中…" : "加载更多"}</Button></div>}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {!!recipients.length && <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto" aria-label="已选收件人">{recipients.map((person) => <Button key={person.userId} type="button" variant="secondary" size="sm" className="max-w-full" aria-label={`移除 ${personName(person)}`} onClick={() => toggleRecipient(person)}><span className="truncate">{personName(person)}</span><X /></Button>)}</div>}
+          {!!unresolvedIds.length && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">收件人无法确认，请移除或重新搜索{unresolvedIds.map((id) => <Button key={id} type="button" variant="outline" size="sm" onClick={() => setUnresolvedIds((current) => current.filter((item) => item !== id))}>{id}<X /></Button>)}</div>}
+        </div>
+        <div className="space-y-2"><Label htmlFor="mail-subject">主题</Label><Input id="mail-subject" maxLength={120} value={subject} onChange={(event) => setSubject(event.target.value)} /></div>
+        <div className="space-y-2"><Label htmlFor="mail-body">正文</Label><Textarea id="mail-body" rows={6} value={body} onChange={(event) => setBody(event.target.value)} /></div>
+        <div className="space-y-2"><Label htmlFor="mail-attachment">附件</Label><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip />添加附件</Button><input ref={fileInput} id="mail-attachment" type="file" className="sr-only" tabIndex={-1} onChange={(event) => { void attachLocal(event.target.files?.[0]); event.currentTarget.value = "" }} />
+          {attachments.map((attachment) => <Button key={attachment.attachmentId} type="button" variant="secondary" size="sm" className="max-w-full" aria-label={`移除附件 ${attachment.fileName}`} onClick={() => setAttachments((current) => current.filter((item) => item.attachmentId !== attachment.attachmentId))}><span className="truncate">{attachment.fileName}</span><X /></Button>)}</div>
+        </div>
+      </div>
+      <DialogFooter><Button type="button" disabled={busy || !recipients.length || !!unresolvedIds.length || !subject.trim() || !body.trim()} onClick={() => void send()}>发送</Button></DialogFooter>
     </DialogContent>
   </Dialog>
 }

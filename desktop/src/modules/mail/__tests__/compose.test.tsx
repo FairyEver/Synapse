@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { MailCompose } from "../compose"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }))
@@ -14,6 +14,18 @@ const people = [
 ]
 
 let root: Root | null = null
+
+beforeEach(() => {
+  HTMLElement.prototype.scrollIntoView ??= vi.fn()
+  HTMLElement.prototype.hasPointerCapture ??= vi.fn(() => false)
+  HTMLElement.prototype.setPointerCapture ??= vi.fn()
+  HTMLElement.prototype.releasePointerCapture ??= vi.fn()
+  globalThis.ResizeObserver ??= class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+})
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -33,6 +45,12 @@ async function renderCompose() {
   })
 }
 
+async function openPicker() {
+  const trigger = document.querySelector<HTMLButtonElement>('#mail-recipient-picker')
+  await act(async () => { trigger?.click() })
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+}
+
 afterEach(() => {
   if (root) act(() => root?.unmount())
   root = null
@@ -41,46 +59,52 @@ afterEach(() => {
 })
 
 describe("MailCompose recipients", () => {
-  it("lists members before searching and keeps multiple selections visible", async () => {
+  it("opens a searchable dropdown and keeps multiple selections visible", async () => {
     mocks.request.mockResolvedValue({ items: people, nextCursor: null })
     await renderCompose()
 
+    expect(document.querySelector('[data-slot="dialog-frame"]')).toBeNull()
+    expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull()
+    expect(document.querySelector('[cmdk-list]')).toBeNull()
+    expect(mocks.request).not.toHaveBeenCalled()
+    await openPicker()
     expect(mocks.request).toHaveBeenCalledWith({ kind: "recipientSearch", query: "" })
-    expect(document.activeElement?.id).toBe("mail-recipient-search")
-    const list = document.querySelector('[aria-label="可选收件人"]')
-    const choices = list?.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')
+    expect(document.activeElement?.hasAttribute("cmdk-input")).toBe(true)
+    const list = document.querySelector('[cmdk-list]')
+    const choices = list?.querySelectorAll<HTMLElement>('[cmdk-item]')
     expect(choices).toHaveLength(2)
 
     await act(async () => { choices?.[0].click(); choices?.[1].click() })
-    expect(Array.from(list?.querySelectorAll('button[aria-pressed="true"]') ?? [])).toHaveLength(2)
+    expect(list?.querySelectorAll('[cmdk-item][data-checked="true"]')).toHaveLength(2)
     expect(document.querySelector('[aria-label="已选收件人"]')?.textContent).toContain("甲")
     expect(document.querySelector('[aria-label="已选收件人"]')?.textContent).toContain("乙")
-    expect(document.body.textContent).toContain("已选 2/50")
+    expect(document.querySelector('#mail-recipient-picker')?.textContent).toContain("添加收件人")
 
-    await act(async () => { list?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.click() })
-    expect(Array.from(list?.querySelectorAll('button[aria-pressed="true"]') ?? [])).toHaveLength(1)
-    expect(document.body.textContent).toContain("已选 1/50")
+    await act(async () => { list?.querySelector<HTMLElement>('[cmdk-item][data-checked="true"]')?.click() })
+    expect(list?.querySelectorAll('[cmdk-item][data-checked="true"]')).toHaveLength(1)
   })
 
   it("loads the next page without losing the existing selection", async () => {
     mocks.request.mockImplementation(({ cursor }: { cursor?: string }) => Promise.resolve(cursor ? { items: [people[1]], nextCursor: null } : { items: [people[0]], nextCursor: "a" }))
     await renderCompose()
-    const list = document.querySelector('[aria-label="可选收件人"]')
-    await act(async () => { list?.querySelector<HTMLButtonElement>('button[aria-pressed]')?.click() })
+    await openPicker()
+    const list = document.querySelector('[cmdk-list]')
+    await act(async () => { list?.querySelector<HTMLElement>('[cmdk-item]')?.click() })
     const more = Array.from(list?.querySelectorAll<HTMLButtonElement>("button") ?? []).find((button) => button.textContent === "加载更多")
     await act(async () => { more?.click(); await Promise.resolve() })
 
     expect(mocks.request).toHaveBeenCalledWith({ kind: "recipientSearch", query: "", cursor: "a" })
-    expect(list?.querySelectorAll('button[aria-pressed]')).toHaveLength(2)
-    expect(list?.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(1)
+    expect(list?.querySelectorAll('[cmdk-item]')).toHaveLength(2)
+    expect(list?.querySelectorAll('[cmdk-item][data-checked="true"]')).toHaveLength(1)
   })
 
   it("shows only the newest search results when an older request finishes late", async () => {
     const stale = deferred<{ items: typeof people; nextCursor: null }>()
     mocks.request.mockImplementation(({ query }: { query: string }) => query === "乙" ? stale.promise : Promise.resolve({ items: query ? [people[0]] : people, nextCursor: null }))
     await renderCompose()
+    await openPicker()
 
-    const input = document.querySelector<HTMLInputElement>("#mail-recipient-search")!
+    const input = document.querySelector<HTMLInputElement>("[cmdk-input]")!
     const changeSearch = async (value: string) => {
       await act(async () => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value)
@@ -92,8 +116,8 @@ describe("MailCompose recipients", () => {
     await changeSearch("乙")
     expect(mocks.request).toHaveBeenCalledWith({ kind: "recipientSearch", query: "乙" })
     await changeSearch("甲")
-    const list = document.querySelector('[aria-label="可选收件人"]')
-    expect(list?.querySelectorAll('button[aria-pressed]')).toHaveLength(1)
+    const list = document.querySelector('[cmdk-list]')
+    expect(list?.querySelectorAll('[cmdk-item]')).toHaveLength(1)
     expect(list?.textContent).toContain("甲")
 
     await act(async () => { stale.resolve({ items: [people[1]], nextCursor: null }); await stale.promise })
@@ -104,11 +128,12 @@ describe("MailCompose recipients", () => {
   it("offers a retry when the member list fails to load", async () => {
     mocks.request.mockRejectedValueOnce(new Error("成员加载失败")).mockResolvedValue({ items: people, nextCursor: null })
     await renderCompose()
+    await openPicker()
     expect(document.querySelector('[role="alert"]')?.textContent).toContain("成员加载失败")
 
     const retry = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "重试")
     await act(async () => { retry?.click() })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
-    expect(document.querySelector('[aria-label="可选收件人"]')?.querySelectorAll('button[aria-pressed]')).toHaveLength(2)
+    expect(document.querySelector('[cmdk-list]')?.querySelectorAll('[cmdk-item]')).toHaveLength(2)
   })
 })
