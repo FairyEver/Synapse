@@ -1399,7 +1399,7 @@ export type SynapseBridge = {
     }
   }
   mail: {
-    recipient: { list: (input: { query: string }) => Promise<import("./mail").MailOperationResult["recipientSearch"]> }
+    recipient: { list: (input: { query: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["recipientSearch"]> }
     message: {
       list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["messageList"]>
       get: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageGet"]>

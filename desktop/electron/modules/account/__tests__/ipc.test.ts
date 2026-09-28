@@ -169,6 +169,8 @@ describe("accountIpcModule", () => {
 
   it("uses capability-aligned mail channels and validates their results", async () => {
     expect(accountIpcModule.methods.mailRecipientList.operationId).toBe("app.mail.recipient.list")
+    expect(accountIpcModule.methods.mailRecipientList.request.parse({ query: "", cursor: "person-50" })).toEqual({ query: "", cursor: "person-50" })
+    expect(accountIpcModule.methods.mailRecipientList.response?.parse({ items: [], nextCursor: "person-100" })).toEqual({ items: [], nextCursor: "person-100" })
     expect(accountIpcModule.methods.mailMessageList.operationId).toBe("app.mail.message.list")
     expect(accountIpcModule.methods.mailMessageSend.operationId).toBe("app.mail.message.send")
     expect(accountIpcModule.methods.mailAttachmentLocalCreate.operationId).toBe("app.mail.attachment.local_create")

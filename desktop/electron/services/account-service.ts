@@ -484,7 +484,11 @@ export class AccountService {
     const id = (value: string) => encodeURIComponent(value)
     const json = <T>(method: string, path: string, body?: unknown) => this.requestAuthenticatedJson<T>(method, `${base}${path}`, body, "站内信操作失败。")
     switch (operation.kind) {
-      case "recipientSearch": return await json("GET", `/recipients?query=${id(operation.query)}`)
+      case "recipientSearch": {
+        const query = new URLSearchParams({ query: operation.query })
+        if (operation.cursor) query.set("cursor", operation.cursor)
+        return await json("GET", `/recipients?${query}`)
+      }
       case "messageList": {
         const query = new URLSearchParams({ box: operation.box })
         if (operation.query) query.set("query", operation.query)

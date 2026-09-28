@@ -6,7 +6,7 @@
 
 | 工具 | 必填参数 | 返回或作用 |
 |---|---|---|
-| `app_mail_recipient_list` | `query` | `userId`、昵称、handle、匹配类型、共同团队 |
+| `app_mail_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、匹配类型、共同团队、`nextCursor` |
 | `app_mail_message_list` | `box: inbox \| sent` | 当前用户分页列表；可选 `query`、`cursor` |
 | `app_mail_message_get` | `messageId` | 完整正文、参与者、附件 |
 | `app_mail_message_update` | `messageId`, `read` | 当前收件人已读状态 |

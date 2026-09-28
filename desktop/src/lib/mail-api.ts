@@ -7,7 +7,7 @@ export async function mailRequest<K extends MailOperation["kind"]>(operation: Ex
   const request = operation as MailOperation
   let result: unknown
   switch (request.kind) {
-    case "recipientSearch": result = await bridge.mail.recipient.list({ query: request.query }); break
+    case "recipientSearch": result = await bridge.mail.recipient.list({ query: request.query, cursor: request.cursor }); break
     case "messageList": result = await bridge.mail.message.list({ box: request.box, query: request.query, cursor: request.cursor }); break
     case "messageGet": result = await bridge.mail.message.get({ messageId: request.messageId }); break
     case "messageSetRead": result = await bridge.mail.message.update({ messageId: request.messageId, read: request.read }); break

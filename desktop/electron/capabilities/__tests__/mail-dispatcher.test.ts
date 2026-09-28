@@ -3,6 +3,16 @@ import { buildMailTools } from "../../../synapse-capabilities/shared/mail-domain
 import { createMailCapabilityDispatcher } from "../mail-dispatcher"
 
 describe("mail capability dispatcher", () => {
+  it("allows browsing and paging shared-team recipients", async () => {
+    const executeMailOperation = vi.fn(async () => ({ items: [], nextCursor: null }))
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })
+    const tool = buildMailTools().find((entry) => entry.name === "app_mail_recipient_list")
+    expect(tool?.inputSchema.properties).toHaveProperty("cursor")
+
+    await expect(dispatcher.dispatch("app.mail.recipient.list", { query: "", cursor: "person-50" }, { source: "api" })).resolves.toMatchObject({ ok: true })
+    expect(executeMailOperation).toHaveBeenCalledWith({ kind: "recipientSearch", query: "", cursor: "person-50" })
+  })
+
   it("does not expose retired draft operations", async () => {
     const executeMailOperation = vi.fn()
     const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })

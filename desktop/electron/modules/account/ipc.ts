@@ -91,7 +91,7 @@ const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body:
 const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
 const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
 const mailDeletedSchema = z.object({ deleted: z.literal(true) })
-const mailRecipientListInputSchema = z.object({ query: z.string().min(1).max(100) }).strict()
+const mailRecipientListInputSchema = z.object({ query: z.string().max(100), cursor: mailIdSchema.optional() }).strict()
 const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional() }).strict()
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
 const mailAttachmentCreateInputSchema = z.object({ filePath: z.string().min(1) }).strict()
@@ -1115,7 +1115,7 @@ export const accountIpcModule: IpcModule = {
     mailRecipientList: {
       kind: "invoke", operationId: "app.mail.recipient.list",
       request: mailRecipientListInputSchema,
-      response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy", "browse"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })) }),
+      response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy", "browse"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "recipientSearch", ...mailRecipientListInputSchema.parse(input) }),
     },
     mailMessageList: {

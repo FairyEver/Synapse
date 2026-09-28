@@ -13,7 +13,7 @@ const content = z.object({ recipientIds: z.array(id).max(50), subject: z.string(
 
 function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
   switch (action) {
-    case "app.mail.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().min(1).max(100) }).strict().parse(params) }
+    case "app.mail.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.list": return { kind: "messageList", ...z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.get": return { kind: "messageGet", ...z.object({ messageId: id }).strict().parse(params) }
     case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }

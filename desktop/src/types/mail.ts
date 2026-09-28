@@ -13,7 +13,7 @@ export type MailSummary = {
 export type MailMessage = MailSummary & { viewerId: string; body: string; team: { id: string; name: string }; replyToId: string | null; attachments: MailAttachment[] }
 export type MailContent = { recipientIds: string[]; subject: string; body: string; attachmentIds: string[]; replyToId?: string }
 export type MailOperation =
-  | { kind: "recipientSearch"; query: string }
+  | { kind: "recipientSearch"; query: string; cursor?: string }
   | { kind: "messageList"; box: "inbox" | "sent"; query?: string; cursor?: string }
   | { kind: "messageGet"; messageId: string }
   | { kind: "messageSetRead"; messageId: string; read: boolean }
@@ -24,7 +24,7 @@ export type MailOperation =
   | { kind: "send"; previewId: string; clientRequestId: string }
 
 export type MailOperationResult = {
-  recipientSearch: { items: (MailPerson & { matchKind: "exact" | "prefix" | "partial" | "fuzzy" | "browse"; similarity: number; sharedTeamIds: string[] })[] }
+  recipientSearch: { items: (MailPerson & { matchKind: "exact" | "prefix" | "partial" | "fuzzy" | "browse"; similarity: number; sharedTeamIds: string[] })[]; nextCursor: string | null }
   messageList: { items: MailSummary[]; nextCursor: string | null }
   messageGet: MailMessage
   messageSetRead: { read: boolean }
