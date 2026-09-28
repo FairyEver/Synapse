@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { HttpException, Inject, Injectable, Logger, OnModuleDestroy } from "@nestjs/common"
 import type { Catalog } from "@synapse/portal-headless" with { "resolution-mode": "import" }
 import type { z } from "zod"
-import { catalogInput, describeInput, readInput, type PortalCredentials } from "./contract"
+import { catalogInput, describeInput, readInput, type PortalCredentials, type PortalEnvironment } from "./contract"
 
 export const PORTAL_SDK_LOADER = "PORTAL_HEADLESS_SDK_LOADER"
 export type PortalSdk = typeof import("@synapse/portal-headless", { with: { "resolution-mode": "import" } })
@@ -11,9 +11,9 @@ type Operation = { op: "context" }
   | { op: "describe"; input: z.infer<typeof describeInput> }
   | { op: "read"; input: z.infer<typeof readInput> }
   | { op: "invoke"; input: z.infer<typeof readInput> }
-const baseUrl = "https://biz-api-test.wodecorp.cn"
+const baseUrls = { test: "https://biz-api-test.wodecorp.cn", prod: "https://biz-api.wodecorp.cn" } as const
 const protocolVersion = 1
-const catalogRevision = "0dae0247f34ee503d6086c58a5f6243f3665fb3d:full-test-v1"
+const catalogRevision = "0dae0247f34ee503d6086c58a5f6243f3665fb3d"
 type CapabilityDescription = Extract<ReturnType<Catalog["describe"]>, { ok: true }>
 type ExecutableCapabilityDescription = CapabilityDescription & { invoke: NonNullable<CapabilityDescription["invoke"]> }
 const jsonSchemaTypes = new Set(["array", "boolean", "integer", "null", "number", "object", "string"])
@@ -42,7 +42,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
 
   onModuleDestroy() { for (const controller of this.active.keys()) controller.abort() }
 
-  async run(identity: { owner: string; credential: PortalCredentials }, operation: Operation) {
+  async run(identity: { owner: string; environment: PortalEnvironment; credential: PortalCredentials }, operation: Operation) {
     if (this.active.size >= 16 || [...this.active.values()].filter((owner) => owner === identity.owner).length >= 4) {
       throw failure(429, "EXTENSION_BUSY", "扩展查询繁忙，请稍后重试。")
     }
@@ -53,7 +53,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
     try {
       this.loading ??= this.load().catch(() => { this.loading = undefined; throw failure(503, "SDK_UNAVAILABLE", "Portal SDK 暂不可用。") })
       const sdk = await this.loading
-      const config = { baseUrl, timeoutMs: 10_000 }
+      const config = { baseUrl: baseUrls[identity.environment], timeoutMs: 10_000 }
       const requestFactory = sdk.createPortalRequestFactory(config)
       server = sdk.createPortalServer({ ...config, sessionOptions: {
         maxSessions: 1, idleTtlMs: 30_000, absoluteTtlMs: 30_000,
@@ -77,7 +77,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
         const user = await scoped.baseShell.getUserInfo()
         const capabilities = server.catalog.index.capabilities
         data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
-          environment: "test", now: new Date().toISOString(), timeZone: "Asia/Shanghai",
+          environment: identity.environment, now: new Date().toISOString(), timeZone: "Asia/Shanghai",
           capabilityAccess: { mode: "all", total: capabilities.length,
             read: capabilities.filter((entry) => !entry.write).length, write: capabilities.filter((entry) => entry.write).length } }
       } else {
@@ -95,7 +95,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
         }
       }
       if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
-      return { protocolVersion, catalogRevision, data }
+      return { protocolVersion, catalogRevision: `${catalogRevision}:full-${identity.environment}-v1`, data }
     } catch (error) {
       if (error instanceof HttpException) throw error
       throw normalizePortalError(error, signal.aborted)

@@ -6,7 +6,7 @@ Synapse 连接器中的 **Portal Headless Test** 永久用于测试环境。打�
 
 2026-09-22 已在本机开发环境验证：SY 登录回调成功，用户完成 Portal 授权后连接器显示已连接，AI 通过扩展查询到真实会议室数据。生产与其它平台尚未验收；下方保留授权页接入契约。 不提供手填 token、浏览器数据库读取、Cookie 抓取或模拟成功入口。
 
-未来正式连接器名称为 **Portal Headless**、ID 为 `portal-headless`；本次不注册它、不猜测生产地址，也不会将测试连接器改名覆盖。两个连接器分别绑定环境，长期共存。
+正式环境另有独立的 **Portal Headless** 连接器（`portal-headless`），两者分别绑定环境并长期共存；正式配置见 [Portal Headless 正式连接器](portal-headless.md)。
 
 ## 固定环境与 Web 契约
 

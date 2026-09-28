@@ -5,6 +5,7 @@ import { parseDeclaredAppDeepLink } from "../app-deep-link"
 import { CAPABILITY_DOMAINS } from "../../../synapse-capabilities/shared/registry"
 const token = "synthetic-callback-token"
 const raw = `synapse://portal-headless-test/callback?status=success&state=${"s".repeat(43)}&token=${token}&tenantId=2&portalUserId=42`
+const prodRaw = raw.replace("portal-headless-test", "portal-headless")
 function harness(error?: Error) {
   const handleCallback = vi.fn(async () => { if (error) throw error })
   const registry = { get: vi.fn(() => ({ handleCallback })) }
@@ -34,6 +35,11 @@ describe("private Portal protocol dispatch", () => {
     await createProtocolUrlRouter(h.deps, [raw, raw + "&token=duplicate", "synapse://app/connectors/callback?token=" + token]).start()
     expect(h.handleCallback).toHaveBeenCalledTimes(1)
     expect(JSON.stringify([h.deps.logger.warn.mock.calls, h.deps.showAppDeepLinkError.mock.calls])).not.toContain(token)
+    expect(h.deps.dispatchAppAction).not.toHaveBeenCalled()
+  })
+  it("routes the production callback to its own connector", async () => {
+    const h = harness(); await createProtocolUrlRouter(h.deps, [prodRaw]).start()
+    expect(h.handleCallback).toHaveBeenCalledWith("portal-headless", prodRaw)
     expect(h.deps.dispatchAppAction).not.toHaveBeenCalled()
   })
 })

@@ -10,15 +10,16 @@ let sdk: PortalSdk
 // 这个包有 17 MB 编译产物，冷加载要数百毫秒；全量并行跑时 CPU 被占满会更慢，
 // 默认的 10 秒 hook 超时会偶发性地判它失败。放宽到 30 秒，避免误报。
 beforeAll(async () => { sdk = await import("@synapse/portal-headless") }, 30_000)
-const identity = { owner: "owner-one", credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
+const identity = { owner: "owner-one", environment: "test" as const, credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
 function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]> } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []
   const runtimes: ReturnType<PortalSdk["createPortalServer"]>[] = []
+  const factoryBaseUrls: string[] = []
   const loader = async () => ({ ...sdk,
     createPortalServer: (config: Parameters<PortalSdk["createPortalServer"]>[0]) => {
       const runtime = sdk.createPortalServer(config); runtimes.push(runtime); return runtime
     },
-    createPortalRequestFactory: () => (context: { credential: { token: string; tenantId: string } }) => async (request: Record<string, unknown>) => {
+    createPortalRequestFactory: (config: { baseUrl: string }) => { factoryBaseUrls.push(config.baseUrl); return (context: { credential: { token: string; tenantId: string } }) => async (request: Record<string, unknown>) => {
       calls.push({ ...context.credential, request })
       if (options.error) throw options.error
       const url = String(request.url)
@@ -42,9 +43,9 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
       }
       if (url.endsWith("/dict-data/grouped-list")) return [{ dictType: "protocol_status", dataList: [{ label: "已签订", value: "1" }] }]
       throw new Error(`Unexpected synthetic request: ${url}`)
-    },
+    } },
   }) as unknown as PortalSdk
-  return { service: new PortalHeadlessService(loader), calls, runtimes }
+  return { service: new PortalHeadlessService(loader), calls, runtimes, factoryBaseUrls }
 }
 
 describe("Portal Headless backend extension", () => {
@@ -58,6 +59,12 @@ describe("Portal Headless backend extension", () => {
     expect(calls.every((call) => call.request.maxRedirects === 0 && call.request.timeout === 10_000 && call.request.signal instanceof AbortSignal)).toBe(true)
     expect(runtimes).toHaveLength(1)
     expect(calls.every((call) => (call.request.signal as AbortSignal).aborted)).toBe(true)
+  })
+  it("selects only the production API for production credentials", async () => {
+    const { service, factoryBaseUrls } = fixture()
+    const result = await service.run({ ...identity, environment: "prod" }, { op: "context" })
+    expect(result).toMatchObject({ catalogRevision: expect.stringContaining(":full-prod-v1"), data: { environment: "prod" } })
+    expect(factoryBaseUrls).toEqual(["https://biz-api.wodecorp.cn"])
   })
   it("uses real SDK discovery/contract/invoke for the same read capability", async () => {
     const { service } = fixture()
@@ -110,7 +117,7 @@ describe("Portal Headless backend extension", () => {
     const { service, calls } = fixture()
     await Promise.all([
       service.run(identity, { op: "context" }),
-      service.run({ owner: "owner-two", credential: { ...identity.credential, tenantId: "tenant-two", token: "other-canary" } }, { op: "context" }),
+      service.run({ owner: "owner-two", environment: "test", credential: { ...identity.credential, tenantId: "tenant-two", token: "other-canary" } }, { op: "context" }),
     ])
     expect(calls.every((call) => call.token === "portal-canary" ? call.tenantId === "tenant-one" : call.token === "other-canary" && call.tenantId === "tenant-two")).toBe(true)
   })
@@ -145,8 +152,8 @@ describe("SY extension authorization", () => {
   }
   it("issues a five-minute extension-only token for the authenticated SY owner", async () => {
     const { service } = auth()
-    const grant = service.issue("owner-one")
-    expect(await service.verify(`Bearer ${grant.accessToken}`)).toBe("owner-one")
+    const grant = service.issue("owner-one", "test")
+    expect(await service.verify(`Bearer ${grant.accessToken}`)).toEqual({ owner: "owner-one", environment: "test" })
     expect(Date.parse(grant.expiresAt) - Date.now()).toBeGreaterThan(298_000)
     const normalJwt = new JwtService({ secret: "synthetic-sy-test-secret-not-real" })
     expect(() => normalJwt.verify(grant.accessToken)).toThrow()
@@ -156,7 +163,7 @@ describe("SY extension authorization", () => {
   it("rejects missing, tampered, expired or disabled-user grants", async () => {
     const { service, prisma } = auth()
     await expect(service.verify(undefined)).rejects.toThrow("扩展授权")
-    const grant = service.issue("owner-one")
+    const grant = service.issue("owner-one", "test")
     await expect(service.verify(`Bearer ${grant.accessToken}broken`)).rejects.toThrow("扩展授权")
     const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 301_000)
     try { await expect(service.verify(`Bearer ${grant.accessToken}`)).rejects.toThrow("扩展授权") } finally { clock.mockRestore() }
@@ -167,7 +174,7 @@ describe("SY extension authorization", () => {
     const { service: access } = auth()
     const { service: portal, calls } = fixture()
     const controller = new PortalHeadlessController(access, portal)
-    const headers = { authorization: `Bearer ${access.issue(identity.owner).accessToken}`,
+    const headers = { authorization: `Bearer ${access.issue(identity.owner, "test").accessToken}`,
       "x-portal-token": identity.credential.token, "x-portal-tenant-id": identity.credential.tenantId }
     const operations = [
       (h: typeof headers) => controller.context(h, {}),
@@ -187,9 +194,20 @@ describe("SY extension authorization", () => {
     await expect(new PortalHeadlessController(access, invalid.service).context(headers, {}))
       .rejects.toMatchObject({ status: 401, response: { code: "PORTAL_CREDENTIAL_INVALID" } })
   })
+  it("binds the requested environment to the grant and rejects unsupported environments", async () => {
+    const { service: access } = auth()
+    const { service: portal, factoryBaseUrls } = fixture()
+    const controller = new PortalHeadlessController(access, portal)
+    const grant = controller.issue({ user: { id: identity.owner } } as never, { environment: "prod" })
+    expect(await access.verify(`Bearer ${grant.accessToken}`)).toEqual({ owner: identity.owner, environment: "prod" })
+    await controller.context({ authorization: `Bearer ${grant.accessToken}`, "x-portal-token": identity.credential.token,
+      "x-portal-tenant-id": identity.credential.tenantId }, {})
+    expect(factoryBaseUrls).toEqual(["https://biz-api.wodecorp.cn"])
+    expect(() => controller.issue({ user: { id: identity.owner } } as never, { environment: "other" })).toThrow()
+  })
   it("revokes existing grants after a SY password change", async () => {
     const { service, prisma } = auth()
-    const grant = service.issue("owner-one")
+    const grant = service.issue("owner-one", "test")
     prisma.user.findUnique.mockResolvedValue({ status: "active", passwordChangedAt: new Date() } as never)
     await expect(service.verify(`Bearer ${grant.accessToken}`)).rejects.toThrow("账号不可用")
   })

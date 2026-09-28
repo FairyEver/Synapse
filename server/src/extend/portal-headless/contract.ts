@@ -12,6 +12,9 @@ export const catalogInput = z.discriminatedUnion("op", [
 ])
 export const describeInput = z.object({ kind: z.enum(["capability", "schema", "method"]), capabilityId: id, id: id.optional() }).strict()
 export const readInput = z.object({ capabilityId: id, arguments: z.record(z.string(), z.unknown()).default({}) }).strict()
+export const portalEnvironment = z.enum(["test", "prod"])
+export type PortalEnvironment = z.infer<typeof portalEnvironment>
+export const accessInput = z.object({ environment: portalEnvironment.default("test") }).strict()
 export const portalHeaders = z.object({
   token: z.string().min(1).max(16384).regex(/^[^\r\n]+$/),
   tenantId: z.string().min(1).max(128).regex(/^[^\r\n]+$/),
@@ -36,4 +39,4 @@ export function parseInput<T>(schema: z.ZodType<T>, input: unknown): T {
   return parsed.data
 }
 
-const requestFieldNames = new Set(["op", "offset", "limit", "domain", "pageId", "query", "kind", "capabilityId", "id", "arguments", "token", "tenantId", "language", "date", "pageNo", "pageSize", "dictType"])
+const requestFieldNames = new Set(["op", "offset", "limit", "domain", "pageId", "query", "kind", "capabilityId", "id", "arguments", "environment", "token", "tenantId", "language", "date", "pageNo", "pageSize", "dictType"])

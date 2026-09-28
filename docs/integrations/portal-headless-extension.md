@@ -8,9 +8,9 @@ Skill 引导用户自己的 AI 从本机 MCP 获取凭证，AI 使用自己的 H
 
 ## 双重认证
 
-1. 本机读取当前已验证 `portal-headless-test` 的凭证，检查 `secret.read` 权限。
+1. 本机按 `environment` 读取当前已验证的 `portal-headless-test`（`test`）或 `portal-headless`（`prod`）凭证，检查 `secret.read` 权限；省略参数沿用 `test`。
 2. 经 `network.connect` 权限与 AccountService 的现有认证客户端请求 `/api/extend/portal-headless/access`；该路由使用 UserAuthGuard。
-3. 服务端签发五分钟、issuer `synapse.extend`、audience `portal-headless`、scope `read` 的 SY 扩展 JWT。签名密钥从现有用户 JWT 密钥经固定领域分隔 HMAC 派生，不能用于普通 SY 登录接口；不新增密钥环境变量。
+3. 服务端签发五分钟、issuer `synapse.extend`、audience `portal-headless`、scope `read`、包含 `environment` 的 SY 扩展 JWT。签名密钥从现有用户 JWT 密钥经固定领域分隔 HMAC 派生，不能用于普通 SY 登录接口；不新增密钥环境变量。
 4. 本机再次比对当前用户及连接尝试代次，然后向调用方 AI 返回短期 SY 授权、Portal token、tenantId、语言和固定扩展 API 基址。SY refresh token 不出本机。
 5. AI 以 Authorization Bearer 传 SY 扩展授权，以 X-Portal-Token / X-Portal-Tenant-Id 传 Portal 凭证。后端验证签名、用途、过期、SY 账号状态和密码修改时间，再通过 SDK 验证 Portal 用户与企业。
 
@@ -36,13 +36,13 @@ SDK 源码就在本仓库内，是 `extend/portal-headless` 下的 workspace 子
 
 ## 运行范围与限制
 
-仅测试 API `https://biz-api-test.wodecorp.cn`；不允许客户端覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。
+测试 API 固定为 `https://biz-api-test.wodecorp.cn`，正式 API 固定为 `https://biz-api.wodecorp.cn`；后端从已验证的短期授权中读取环境，不允许业务请求覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。正式环境真实授权与业务调用尚未验收。
 
-测试扩展直接发布固定版本 SDK 的完整能力目录，不设置 Synapse capability allowlist，也不按 Portal 页面权限收窄目录。`describe` 只接受目录中的精确 capability/method 引用并返回 SDK 契约与顶层参数 schema；`/invoke` 和兼容 `/read` 只调用 SDK 已登记的 `capabilities.invoke` 绑定，不接受客户端指定 URL、header 或任意方法路径。读写能力均可执行，Portal 后端业务鉴权仍是最终权限边界。
+两个环境的扩展都发布固定版本 SDK 的完整能力目录，不设置 Synapse capability allowlist，也不按 Portal 页面权限收窄目录。`describe` 只接受目录中的精确 capability/method 引用并返回 SDK 契约与顶层参数 schema；`/invoke` 和兼容 `/read` 只调用 SDK 已登记的 `capabilities.invoke` 绑定，不接受客户端指定 URL、header 或任意方法路径。读写能力均可执行，Portal 后端业务鉴权仍是最终权限边界。
 
-全量目录是测试发现面，不表示当前账号具备每项业务权限；执行仍使用当前用户与企业绑定的 Portal 凭据，由目标业务接口返回真实授权结果。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。每次 HTTP 请求仍使用独立会话，不跨用户或企业缓存。
+全量目录是能力发现面，不表示当前账号具备每项业务权限；执行仍使用当前用户与企业绑定的 Portal 凭据，由目标业务接口返回真实授权结果。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。每次 HTTP 请求仍使用独立会话，不跨用户或企业缓存。
 
-`context.capabilityAccess` 返回 `mode=all` 及固定 SDK 的总数、读能力数和写能力数；具体清单通过分页目录读取。`catalogRevision` 在 SDK 提交号后加 `:full-test-v1`，标识当前测试扩展采用全量目录规则。
+`context.capabilityAccess` 返回 `mode=all` 及固定 SDK 的总数、读能力数和写能力数；具体清单通过分页目录读取。`catalogRevision` 在 SDK 提交号后加 `:full-test-v1` 或 `:full-prod-v1`，分别标识环境与全量目录规则。
 
 年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。目录不存在某项能力表示固定 SDK 未发布它；目录中存在但执行返回 `PORTAL_FORBIDDEN` 表示当前 Portal 身份或企业被业务接口拒绝。
 

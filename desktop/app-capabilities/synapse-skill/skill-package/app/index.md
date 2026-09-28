@@ -225,9 +225,9 @@ Rules:
 
 所有结果都不得复述反馈正文；只有新的确认稿可以完整展示正文。成功后同一问题不得重复提交，除非用户明确要求形成一条新反馈并再次确认。
 
-## Portal Headless Test connector boundary
+## Portal Headless connector boundary
 
-Portal Headless Test remains in Connectors for authorization and encrypted local storage. Its dedicated credential tool is registered in the separate `extend` domain, not as an App capability. Read `../extend/portal-headless/index.md` for the MCP credential → AI HTTP → backend SDK flow. Do not invoke the private authorization callback or assume the Portal Web authorization page has already been deployed.
+Portal Headless Test and Portal Headless remain separate Connectors for test and production authorization and encrypted local storage. Their dedicated credential tool is registered in the separate `extend` domain, not as an App capability. Read `../extend/portal-headless/index.md` for the MCP credential → AI HTTP → backend SDK flow. Do not invoke a private authorization callback or assume the production Portal Web authorization page has already been deployed.
 
 ## Desktop device name
 

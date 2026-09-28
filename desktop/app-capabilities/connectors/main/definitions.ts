@@ -27,8 +27,21 @@ export const portalTestConnector = {
   },
 } as const satisfies BuiltinConnectorDefinition
 
-// portal-headless is reserved for a separately configured production connector.
-export const builtinConnectors = [figmaConnector, portalTestConnector] as const satisfies readonly BuiltinConnectorDefinition[]
+export const portalConnector = {
+  id: "portal-headless",
+  name: "Portal Headless",
+  integration: {
+    kind: "portal-session",
+    environmentId: "prod",
+    baseUrl: "https://biz-api.wodecorp.cn",
+    portalWebUrl: "https://portal.wodecorp.cn/#/",
+    authorizationUrl: "https://portal.wodecorp.cn/#/connect/synapse",
+    callbackUrl: "synapse://portal-headless/callback",
+    language: "zh-CN",
+  },
+} as const satisfies BuiltinConnectorDefinition
+
+export const builtinConnectors = [figmaConnector, portalTestConnector, portalConnector] as const satisfies readonly BuiltinConnectorDefinition[]
 
 const definitionsById = new Map<string, BuiltinConnectorDefinition>()
 for (const definition of builtinConnectors) {

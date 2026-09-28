@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ConnectorCredentialEntryV1, ConnectorStateStoreV1 } from "../../../../electron/runtime/data-repo/schemas/connectors"
 import type { SynapseAccountState } from "../../../../src/types/account"
-import { portalTestConnector } from "../definitions"
+import { portalConnector, portalTestConnector } from "../definitions"
 import { PortalConnectionError } from "../portal-errors"
 import { createPortalSessionDriver } from "../portal-session-driver"
 import type { PortalProfile } from "../portal-verifier"
@@ -72,7 +72,7 @@ describe("Portal session connector", () => {
     expect(publicItem).toMatchObject({ connectionStatus: "connected", account: profile })
     expect(JSON.stringify([publicItem, [...h.state.entries.values()], h.auditSink.record.mock.calls])).not.toContain(token)
     const sdkInput = await h.driver.getSessionInput(portalTestConnector.id)
-    expect(sdkInput).toEqual({ connectionGeneration: expect.any(String), baseUrl: portalTestConnector.integration.baseUrl, userId: "owner-a", language: "zh-CN", credential: { token, tenantId: profile.tenantId } })
+    expect(sdkInput).toEqual({ connectionGeneration: expect.any(String), baseUrl: portalTestConnector.integration.baseUrl, environmentId: "test", userId: "owner-a", language: "zh-CN", credential: { token, tenantId: profile.tenantId } })
     expect(h.driver.createAgentContribution(portalTestConnector)).toEqual({ mcpServers: [], skillPackageIds: [] })
   })
   it("cancels without storing credentials and rejects replay", async () => {
@@ -206,6 +206,26 @@ describe("Portal session connector", () => {
     await other.lifecycle!.disconnect(alternate)
     expect((await h.driver.getSessionInput(portalTestConnector.id)).credential.token).toBe(token)
     expect(h.credentials.entries.size).toBe(1)
+  })
+  it("connects production independently through its own authorization URL and callback", async () => {
+    const h = harness()
+    const driver = createPortalSessionDriver({ ...h.deps, definitions: [portalTestConnector, portalConnector] })
+    disposers.push(() => driver.lifecycle!.dispose())
+    await driver.lifecycle!.initialize(h.notify)
+    await driver.lifecycle!.connect(portalConnector)
+    const opened = new URL(h.openExternal.mock.calls.at(-1)![0])
+    expect(opened.origin).toBe("https://portal.wodecorp.cn")
+    expect(opened.hash).toContain("#/connect/synapse?")
+    const params = new URLSearchParams(opened.hash.split("?")[1])
+    expect(params.get("environment")).toBe("prod")
+    expect(params.get("callback")).toBe("synapse://portal-headless/callback")
+    const raw = `${portalConnector.integration.callbackUrl}?${new URLSearchParams({ status: "success", state: params.get("state")!, token, tenantId: profile.tenantId, portalUserId: profile.portalUserId })}`
+    await expect(driver.handleCallback(raw.replace("portal-headless/callback", "portal-headless-test/callback"))).rejects.toThrow()
+    await driver.handleCallback(raw)
+    expect(await driver.getSessionInput(portalConnector.id)).toMatchObject({ baseUrl: "https://biz-api.wodecorp.cn", environmentId: "prod" })
+    await expect(driver.getSessionInput(portalTestConnector.id)).rejects.toThrow()
+    await driver.lifecycle!.disconnect(portalConnector)
+    expect(h.credentials.entries.size).toBe(0)
   })
   it("never sends a callback credential into verification after switching SY accounts", async () => {
     const h = harness(); await h.init(); const state = await h.start()

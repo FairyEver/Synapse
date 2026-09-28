@@ -3,7 +3,7 @@ import { Throttle } from "@nestjs/throttler"
 import { z } from "zod"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../../auth/user-auth.guard"
 import { PortalHeadlessAccessService } from "./access.service"
-import { catalogInput, describeInput, parseInput, portalHeaders, readInput } from "./contract"
+import { accessInput, catalogInput, describeInput, parseInput, portalHeaders, readInput } from "./contract"
 import { PortalHeadlessService } from "./portal-headless.service"
 
 @Controller("api/extend/portal-headless")
@@ -14,16 +14,16 @@ export class PortalHeadlessController {
   @Post("access")
   @HttpCode(200)
   @UseGuards(UserAuthGuard)
-  issue(@Req() request: AuthenticatedUserRequest) {
-    return this.access.issue(request.user!.id)
+  issue(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
+    return this.access.issue(request.user!.id, parseInput(accessInput, body ?? {}).environment)
   }
 
   private async identity(headers: Record<string, string | string[] | undefined>) {
-    const owner = await this.access.verify(typeof headers.authorization === "string" ? headers.authorization : undefined)
+    const { owner, environment } = await this.access.verify(typeof headers.authorization === "string" ? headers.authorization : undefined)
     const credential = parseInput(portalHeaders, {
       token: headers["x-portal-token"], tenantId: headers["x-portal-tenant-id"], language: headers["accept-language"],
     })
-    return { owner, credential }
+    return { owner, environment, credential }
   }
 
   @Post("context")

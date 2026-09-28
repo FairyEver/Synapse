@@ -11,7 +11,7 @@ function setup() {
     getApiBaseUrlForLive: () => "https://synapse.example/api",
     fetchAuthenticated: vi.fn(async () => new Response(JSON.stringify({ accessToken: "sy-extension-canary", expiresAt: "2026-09-22T12:30:00.000Z" }))),
   }
-  const connectors = { getSessionInput: vi.fn(async () => ({ connectionGeneration: generation, userId: "owner", baseUrl: "https://portal.example", language: "zh-CN", credential: { token: "portal-canary", tenantId: "tenant" } })) }
+  const connectors = { getSessionInput: vi.fn(async (id: string) => ({ connectionGeneration: generation, userId: "owner", environmentId: id === "portal-headless" ? "prod" : "test", baseUrl: "https://portal.example", language: "zh-CN", credential: { token: "portal-canary", tenantId: "tenant" } })) }
   const auditSink = { record: vi.fn() }
   const permissionGuard = { check: vi.fn(async () => ({ allowed: true as const })), registerPolicy: vi.fn() }
   const dispatch = createPortalHeadlessDispatcher({ account, connectors, auditSink, permissionGuard } as never).dispatch
@@ -28,6 +28,13 @@ describe("Portal Headless extension credentials", () => {
     expect(audit).not.toContain("canary")
     expect(t.permissionGuard.check.mock.calls).toHaveLength(2)
     expect(t.account.fetchAuthenticated).toHaveBeenCalledWith("/extend/portal-headless/access", expect.objectContaining({ redirect: "error" }), expect.any(String))
+    expect(t.connectors.getSessionInput).toHaveBeenCalledWith("portal-headless-test")
+  })
+  it("selects the production connection and requests a production-bound grant", async () => {
+    const t = setup()
+    expect(await t.dispatch(PORTAL_CREDENTIAL_ACTION, { environment: "prod" }, context)).toMatchObject({ ok: true, data: { environment: "prod" } })
+    expect(t.connectors.getSessionInput).toHaveBeenCalledWith("portal-headless")
+    expect(t.account.fetchAuthenticated).toHaveBeenCalledWith("/extend/portal-headless/access", expect.objectContaining({ body: JSON.stringify({ environment: "prod" }) }), expect.any(String))
   })
   it("rejects a connection changed while the SY grant was being issued", async () => {
     const t = setup()

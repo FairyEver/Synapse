@@ -2,7 +2,7 @@
 
 ## Reaching Synapse tools
 
-Synapse publishes only two tools: `search` and `invoke`. Search for `extend_portal_headless_credential_get` in domain `extend`, then invoke its exact returned name and schema. Business calls use the returned HTTP base URL; they are not MCP tools.
+Synapse publishes only two tools: `search` and `invoke`. Search for `extend_portal_headless_credential_get` in domain `extend`, then invoke its exact returned name and schema with `environment: "test"` or `"prod"`. Omission defaults to `test` for compatibility. Business calls use the returned HTTP base URL; they are not MCP tools.
 
 Base URL: use `apiBaseUrl` returned by the credential tool, ending in `/api/extend/portal-headless`. Production uses HTTPS; only the configured local development loopback address may use HTTP. Do not follow redirects.
 
@@ -46,7 +46,7 @@ The credential result has this structure (placeholders, not working credentials)
 {
   "extensionId": "portal-headless",
   "protocolVersion": 1,
-  "environment": "test",
+  "environment": "test or prod, matching the requested connection",
   "apiBaseUrl": "https://<configured-sy-host>/api/extend/portal-headless",
   "authorization": { "scheme": "Bearer", "accessToken": "<short-lived-sy-extension-token>", "expiresAt": "<ISO timestamp>" },
   "portal": { "token": "<portal-session-token>", "tenantId": "<tenant-id>", "language": "zh-CN" }

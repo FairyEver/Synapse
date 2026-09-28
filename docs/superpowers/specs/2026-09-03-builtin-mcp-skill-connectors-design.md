@@ -61,7 +61,7 @@ type ConnectorStateStore = {
 ## Portal 授权连接扩展（2026-09-22）
 
 - 保留原 MCP probe/contribution 驱动，新增 `portal-session` lifecycle 驱动；`skillPackageId` 对仅连接型定义可省略，此类连接器不进入 Agent 快照。
-- 当前只注册 Portal Headless Test。测试连接器永久保留，生产 Portal Headless 后续单独注册，绝不通过回调覆盖环境地址。
+- 2026-09-28 已独立注册 Portal Headless Test 与正式 Portal Headless。测试连接器永久保留，两者各用固定可信环境定义，绝不通过回调覆盖环境地址。正式网页授权路由尚待部署。
 - 授权页由 Portal Web 另行实现。SY 一次性 state 与绑定代次只在内存保留五分钟，主进程真实读取用户/企业数据后才保存加密凭据；回调/网络失败不能模拟连接成功。
 - `app.connectors.state` 兼容保留原 singleton，新增同 namespace 的账号/环境独立记录；`app.connectors.credentials` 复用 encrypted-json，加可选 Portal 绑定元数据。普通状态不保存 token，恢复必须重新验证。
 - Deep Link 使用既有声明式路由的私有 `mainHandlerId`，不进入 ActionRouter/MCP/HTTP。Renderer 状态通过 EventBus `connector/item.changed` 发送，回调凭据不进入 IPC。

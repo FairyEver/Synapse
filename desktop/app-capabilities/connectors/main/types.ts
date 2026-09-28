@@ -55,7 +55,7 @@ export type ConnectorDriver = {
   readonly lifecycle?: ConnectorLifecycle
   handleCallback?(url: string): Promise<void>
   getSessionInput?(connectorId: string): Promise<{
-    connectionGeneration: string; baseUrl: string; userId: string; language: string; credential: { token: string; tenantId: string }
+    connectionGeneration: string; baseUrl: string; environmentId: string; userId: string; language: string; credential: { token: string; tenantId: string }
   }>
   probe(definition: BuiltinConnectorDefinition): Promise<ProbeResult>
   createAgentContribution(definition: BuiltinConnectorDefinition): AgentContribution
