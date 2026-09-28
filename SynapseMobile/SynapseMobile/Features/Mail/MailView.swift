@@ -7,6 +7,41 @@ func mailDate(_ value: String) -> String {
     return date.formatted(date: .abbreviated, time: .shortened)
 }
 
+struct MailBulkSelection {
+    private(set) var isActive = false
+    private(set) var ids: Set<String> = []
+
+    mutating func begin() { isActive = true }
+    mutating func toggle(_ id: String) {
+        if ids.contains(id) { ids.remove(id) }
+        else { ids.insert(id) }
+    }
+    mutating func reset() { isActive = false; ids.removeAll() }
+    mutating func finishDeletion(success: Bool) { if success { reset() } }
+}
+
+enum MailDeleteScope: Equatable {
+    case selected([String])
+    case all(String)
+
+    private var boxTitle: String {
+        guard case .all(let box) = self else { return "" }
+        return box == "inbox" ? "收件箱" : "已发送"
+    }
+    var title: String {
+        switch self {
+        case .selected(let ids): "删除选中的 \(ids.count) 封信件？"
+        case .all: "清空\(boxTitle)？"
+        }
+    }
+    var explanation: String {
+        switch self {
+        case .selected: "只从你的信箱隐藏选中的信件。"
+        case .all: "将清空整个\(boxTitle)，包括搜索结果和未加载的信件。"
+        }
+    }
+}
+
 struct MailView: View {
     @Environment(SynapseAppModel.self) private var model
     @Binding var selection: String?
@@ -15,6 +50,8 @@ struct MailView: View {
     @State private var store = MailStore()
     @State private var search = ""
     @State private var compose: MailComposeStart?
+    @State private var bulkSelection = MailBulkSelection()
+    @State private var pendingDelete: MailDeleteScope?
 
     var body: some View {
         AdaptiveFeatureNavigation(selection: $selection, emptyTitle: "选择信件", emptySymbol: "envelope") {
@@ -23,6 +60,8 @@ struct MailView: View {
                     ForEach(MailStore.Box.allCases) { box in
                         Button {
                             store.box = box
+                            store.unreadOnly = false
+                            bulkSelection.reset()
                             selection = nil
                             store.detail = nil
                             Task { await store.load(using: model, query: search) }
@@ -37,20 +76,22 @@ struct MailView: View {
                     if let error = store.error { Text(error).foregroundStyle(.red) }
                     if store.loading && store.messages.isEmpty { ProgressView() }
                     ForEach(store.messages) { message in
-                        NavigationLink(value: message.messageId) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(store.box == .inbox ? message.sender.name : message.recipients.map(\.name).joined(separator: "、"))
-                                        .fontWeight(message.readAt == nil ? .semibold : .regular)
-                                    Spacer()
-                                    Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
+                        Group {
+                            if bulkSelection.isActive {
+                                Button {
+                                    bulkSelection.toggle(message.messageId)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: bulkSelection.ids.contains(message.messageId) ? "checkmark.circle.fill" : "circle")
+                                        messageRow(message)
+                                    }
                                 }
-                                Text(message.subject).font(.subheadline)
-                                if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption2).foregroundStyle(.secondary) }
-                                Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                .accessibilityAddTraits(bulkSelection.ids.contains(message.messageId) ? [.isSelected] : [])
+                            } else {
+                                NavigationLink(value: message.messageId) { messageRow(message) }
+                                    .tag(message.messageId)
                             }
                         }
-                        .tag(message.messageId)
                         .onAppear {
                             if store.messages.last?.messageId == message.messageId { Task { await store.loadMore(using: model, query: search) } }
                         }
@@ -63,7 +104,22 @@ struct MailView: View {
             .refreshable { await store.load(using: model, query: search) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("主页", systemImage: "chevron.left", action: onExit).labelStyle(.iconOnly) }
-                ToolbarItem(placement: .topBarTrailing) { Button("写信", systemImage: "square.and.pencil") { compose = MailComposeStart() }.labelStyle(.iconOnly) }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if bulkSelection.isActive {
+                        Button("删除选中（\(bulkSelection.ids.count)）", role: .destructive) { pendingDelete = .selected(Array(bulkSelection.ids)) }.disabled(bulkSelection.ids.isEmpty)
+                        Button("完成") { bulkSelection.reset() }
+                    } else {
+                        Menu {
+                            Button("选择信件", systemImage: "checkmark.circle") { bulkSelection.begin(); selection = nil }
+                            if store.box == .inbox {
+                                Button(store.unreadOnly ? "显示全部" : "只看未读") { store.unreadOnly.toggle(); bulkSelection.reset(); Task { await store.load(using: model, query: search) } }
+                                Button("全部设已读") { Task { await store.readAll(using: model) } }.disabled(store.counts?.unread == 0)
+                            }
+                            Button("清空\(store.box.title)", systemImage: "trash", role: .destructive) { pendingDelete = .all(store.box.rawValue) }
+                        } label: { Image(systemName: "ellipsis.circle") }
+                        Button("写信", systemImage: "square.and.pencil") { compose = MailComposeStart() }.labelStyle(.iconOnly)
+                    }
+                }
             }
         } detail: { id in
             MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { selection = nil; Task { await store.delete(id: id, using: model) } })
@@ -83,6 +139,7 @@ struct MailView: View {
             }
         }
         .task(id: search) {
+            bulkSelection.reset()
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             await store.load(using: model, query: search)
@@ -90,6 +147,38 @@ struct MailView: View {
         .sheet(item: $compose) { start in
             MailComposeView(start: start) { Task { await store.load(using: model, query: search) } }
                 .presentationDetents([.large])
+        }
+        .confirmationDialog(pendingDelete?.title ?? "删除信件？", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                let scope = pendingDelete
+                pendingDelete = nil
+                Task {
+                    let success: Bool
+                    switch scope {
+                    case .selected(let ids): success = await store.deleteBatch(ids: ids, using: model)
+                    case .all(let box): success = await store.deleteAll(box: box, using: model)
+                    case nil: return
+                    }
+                    bulkSelection.finishDeletion(success: success)
+                    if success { selection = nil }
+                }
+            }
+        } message: {
+            Text(pendingDelete?.explanation ?? "")
+        }
+    }
+
+    private func messageRow(_ message: MailSummary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(store.box == .inbox ? message.sender.name : message.recipients.map(\.name).joined(separator: "、"))
+                    .fontWeight(message.readAt == nil ? .semibold : .regular)
+                Spacer()
+                Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
+            }
+            Text(message.subject).font(.subheadline)
+            if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption2).foregroundStyle(.secondary) }
+            Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
     }
 

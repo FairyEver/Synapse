@@ -19,7 +19,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 ## `desktop/app-capabilities` 产品表面
 
-账号消息中心是桌面全局壳层面板与 iOS 主页右上角铃铛打开的通知面板，未注册新的 System App、Dock、Workflow、Automation、MCP 或 Deep Link；下表数量不变。System Notifier 的既有能力是用户已登录且在线时把正式触发内容同步到消息中心，测试通知仍仅本机显示。
+账号消息中心是桌面全局壳层面板与 iOS 主页右上角铃铛打开的通知面板；其列表、详情、统计和管理操作注册为账号 MCP 能力，不另注册 System App、Dock、Workflow、Automation 或 Deep Link。System Notifier 的既有能力是用户已登录且在线时把正式触发内容同步到消息中心，测试通知仍仅本机显示。
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
@@ -29,6 +29,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 |---|---:|---:|---:|---:|---:|---:|
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 11 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
+| Account Message Center | 否 | 否 | — | — | 7 | — |
 | Connectors | 是 | 否 | — | — | — | 2 个私有授权回调 |
 | Clipboard | 否 | 否 | 2 | — | — | — |
 | Desktop Update / Restart | 否 | 否 | — | — | 4 | — |
@@ -37,7 +38,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail | 是 | 否 | — | — | 10 | `open` |
+| Mail | 是 | 否 | — | — | 14 | `open` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -57,7 +58,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 - System Notifier 的注册表面不变（1 个 MCP 工具、1 个 Workflow 节点），它是「通知用户」这一个能力：一次触发只把消息写进账号消息中心（桌面端入口是 `POST /api/notifications/desktop`），服务端再投递给该账号所有在线桌面（包括发起的那台）并随 APNs 推到用户手机。走桌面登录态，不需要用户新建 API 密钥，也不经过开放 API。System Notifier 同时负责这台电脑的原生呈现：实时连接收到账号消息后交给它，按 `localEnabled` / `silent` 两颗开关决定弹不弹、静不静音；`sendEnabled` 是发送总闸，关掉则完全不发。未登录或离线时发不出去，那就什么都不发生，本机也不另弹一条，但会留下 `notification_sync` 固定诊断。测试通知仅本机显示且永不发送，成功响应仍不承诺送达或显示。
 
-- Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发和处理附件。桌面 IPC 按 `app.mail.<resource>.<action>` 分开并在 preload 中按资源嵌套；本机文件附件另有不注册 MCP 的 UI 专用操作。10 个 MCP 工具包含按信件分页读取当前账号可见往来的 `app.mail.context.list`；Synapse Skill 引导 AI 搜索团队成员、分别确定收件人与抄送人、固定完整预览并取得用户明确确认后后台发送。当前 `confirmed: true` 是调用者声明，不构成服务端可验证的对话确认凭证。附件不从云盘复制；转发原信附件由站内信存储自行复制，云盘文件仍以分享链接放入正文。信件查看与下载只允许发件人或该信收件人。桌面 `synapse://mail/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。没有团队内子组或群组地址。
+- Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发、处理附件和批量整理信箱。桌面 IPC 按 `app.mail.<resource>.<action>` 分开并在 preload 中按资源嵌套；本机文件附件另有不注册 MCP 的 UI 专用操作。14 个 MCP 工具包含当前账号可见往来、精确统计、全部已读、选中信件批量删除和按信箱清空。Synapse Skill 引导 AI 搜索团队成员、分别确定收件人与抄送人、固定完整预览并取得用户明确确认后后台发送。当前 `confirmed: true` 是调用者声明，不构成服务端可验证的对话确认凭证。附件不从云盘复制；转发原信附件由站内信存储自行复制，云盘文件仍以分享链接放入正文。信件查看与下载只允许发件人或该信收件人。桌面 `synapse://mail/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。没有团队内子组或群组地址。
 
 - Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。
 
@@ -127,7 +128,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 86 | 82 |
+| `app` | 93 | 89 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -136,13 +137,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 65 | 65 |
-| `mail` | 10 | 10 |
+| `mail` | 14 | 14 |
 | `extend` | 1 | 1 |
-| 合计 | 262 | 258 |
+| 合计 | 273 | 269 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 258 个工具（257 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 269 个工具（268 个 `app_*` 和 1 个 `extend_*`）仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

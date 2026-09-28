@@ -257,14 +257,14 @@ export class MailService {
     } while (true)
   }
 
-  async listMessages(userId: string, box: "inbox" | "sent", query = "", cursor?: string) {
+  async listMessages(userId: string, box: "inbox" | "sent", query = "", cursor?: string, unreadOnly = false) {
     const search = query.trim()
     if (search.length > 120) throw new BadRequestException("搜索词过长。")
     const cursorRow = cursor ? await this.prisma.mailMessage.findFirst({ where: { id: cursor, ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null } } }) }, select: { id: true, sentAt: true } }) : null
     if (cursor && !cursorRow) throw new BadRequestException("无效的分页位置。")
     const rows = await this.prisma.mailMessage.findMany({
       where: {
-        ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null } } }),
+        ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null, ...(unreadOnly ? { readAt: null } : {}) } } }),
         ...(search ? { OR: [{ subject: { contains: search, mode: "insensitive" } }, { body: { contains: search, mode: "insensitive" } }] } : {}),
         ...(cursorRow ? { AND: [{ OR: [{ sentAt: { lt: cursorRow.sentAt } }, { sentAt: cursorRow.sentAt, id: { lt: cursorRow.id } }] }] } : {}),
       },
@@ -272,6 +272,42 @@ export class MailService {
       orderBy: [{ sentAt: "desc" }, { id: "desc" }], take: 51,
     })
     return { items: rows.slice(0, 50).map((row) => this.summary(row, userId)), nextCursor: rows.length > 50 ? rows[49]!.id : null }
+  }
+
+  async countMessages(userId: string) {
+    const [inboxTotal, sentTotal, unread] = await Promise.all([
+      this.prisma.mailRecipient.count({ where: { userId, deletedAt: null } }),
+      this.prisma.mailMessage.count({ where: { senderId: userId, senderDeletedAt: null } }),
+      this.prisma.mailRecipient.count({ where: { userId, deletedAt: null, readAt: null } }),
+    ])
+    return { inboxTotal, sentTotal, unread }
+  }
+
+  async readAllMessages(userId: string) {
+    const result = await this.prisma.mailRecipient.updateMany({ where: { userId, deletedAt: null, readAt: null }, data: { readAt: new Date() } })
+    return { updated: result.count }
+  }
+
+  async deleteMessages(userId: string, messageIds: string[]) {
+    return this.prisma.$transaction(async (tx) => {
+      const [received, sent] = await Promise.all([
+        tx.mailRecipient.findMany({ where: { userId, messageId: { in: messageIds }, deletedAt: null }, select: { messageId: true } }),
+        tx.mailMessage.findMany({ where: { id: { in: messageIds }, senderId: userId, senderDeletedAt: null }, select: { id: true } }),
+      ])
+      const visible = new Set([...received.map((item) => item.messageId), ...sent.map((item) => item.id)])
+      await tx.mailRecipient.updateMany({ where: { userId, messageId: { in: messageIds }, deletedAt: null }, data: { deletedAt: new Date() } })
+      await tx.mailMessage.updateMany({ where: { id: { in: messageIds }, senderId: userId, senderDeletedAt: null }, data: { senderDeletedAt: new Date() } })
+      return { deleted: visible.size, skippedIds: messageIds.filter((id) => !visible.has(id)) }
+    })
+  }
+
+  async deleteAllMessages(userId: string, box: "inbox" | "sent") {
+    if (box === "inbox") {
+      const result = await this.prisma.mailRecipient.updateMany({ where: { userId, deletedAt: null }, data: { deletedAt: new Date() } })
+      return { deleted: result.count }
+    }
+    const result = await this.prisma.mailMessage.updateMany({ where: { senderId: userId, senderDeletedAt: null }, data: { senderDeletedAt: new Date() } })
+    return { deleted: result.count }
   }
 
   async getMessage(userId: string, id: string) {

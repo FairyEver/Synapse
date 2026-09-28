@@ -3,7 +3,11 @@ import type { CapabilityId } from "./naming"
 
 const definitions = [
   ["app_mail_recipient_list", "app.mail.recipient.list", "Browse or search active users sharing a team with the current user. An exact unique result can be provisional; ask the user to choose when names are ambiguous."],
-  ["app_mail_message_list", "app.mail.message.list", "List the current user's received or sent internal mail."],
+  ["app_mail_message_list", "app.mail.message.list", "List the current user's received or sent internal mail. Pagination: cursor-based. Continue with nextCursor."],
+  ["app_mail_message_count", "app.mail.message.count", "Get exact received, sent, and unread inbox mail counts for the current user."],
+  ["app_mail_message_read_all", "app.mail.message.read_all", "Mark all current user's unread inbox mail as read."],
+  ["app_mail_message_delete_batch", "app.mail.message.delete_batch", "Hide up to 100 selected mail messages visible to the current user. Returns deleted count and skipped IDs."],
+  ["app_mail_message_delete_all", "app.mail.message.delete_all", "Clear the current user's entire inbox or sent mailbox, regardless of search or pagination."],
   ["app_mail_message_get", "app.mail.message.get", "Read one internal mail visible to the current user."],
   ["app_mail_context_list", "app.mail.context.list", "List only the current user's visible messages in the same mail conversation. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_message_update", "app.mail.message.update", "Mark one received mail read or unread for the current user."],
@@ -16,7 +20,7 @@ const definitions = [
 
 export const MAIL_DOMAIN: CapabilityDomainDefinition = {
   id: "mail",
-  capabilities: definitions.map(([, id, description]) => ({ id, title: description, description, mutates: !id.endsWith(".list") && !id.endsWith(".get") && !id.endsWith(".preview") })),
+  capabilities: definitions.map(([, id, description]) => ({ id, title: description, description, mutates: !id.endsWith(".list") && !id.endsWith(".get") && !id.endsWith(".count") && !id.endsWith(".preview"), ...(id.endsWith(".delete_batch") || id.endsWith(".delete_all") ? { risk: "high" as const } : {}) })),
 }
 
 export const MAIL_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(definitions.map(([name, id]) => [name, id]))
@@ -36,7 +40,11 @@ const content = {
 
 const schemas: Record<string, { properties: Record<string, unknown>; required?: readonly string[] }> = {
   app_mail_recipient_list: { properties: { query: text("Recipient name, handle, or known userId; use an empty string to browse shared-team members."), cursor: text("Next cursor from a browse page.") }, required: ["query"] },
-  app_mail_message_list: { properties: { box: { type: "string", enum: ["inbox", "sent"] }, query: text("Optional subject or body search."), cursor: text("Next cursor from prior page.") }, required: ["box"] },
+  app_mail_message_list: { properties: { box: { type: "string", enum: ["inbox", "sent"] }, query: text("Optional subject or body search."), cursor: text("Next cursor from prior page."), unreadOnly: { type: "boolean", description: "Only unread inbox mail; invalid for sent." } }, required: ["box"] },
+  app_mail_message_count: { properties: {} },
+  app_mail_message_read_all: { properties: {} },
+  app_mail_message_delete_batch: { properties: { messageIds: { ...ids("1 to 100 distinct mail IDs selected by the caller. Hidden or inaccessible IDs are returned in skippedIds."), minItems: 1, maxItems: 100, uniqueItems: true } }, required: ["messageIds"] },
+  app_mail_message_delete_all: { properties: { box: { type: "string", enum: ["inbox", "sent"], description: "Clear the complete mailbox, not just current search results or page." } }, required: ["box"] },
   app_mail_message_get: { properties: { messageId: text("Mail id.") }, required: ["messageId"] },
   app_mail_context_list: { properties: { messageId: text("Mail id."), cursor: text("Next cursor from prior context page.") }, required: ["messageId"] },
   app_mail_message_update: { properties: { messageId: text("Mail id."), read: { type: "boolean" } }, required: ["messageId", "read"] },

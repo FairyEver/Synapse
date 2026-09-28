@@ -93,7 +93,9 @@ const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
 const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
 const mailDeletedSchema = z.object({ deleted: z.literal(true) })
 const mailRecipientListInputSchema = z.object({ query: z.string().max(100), cursor: mailIdSchema.optional() }).strict()
-const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional() }).strict()
+const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional(), unreadOnly: z.boolean().optional() }).strict()
+const mailMessageBatchInputSchema = z.object({ messageIds: z.array(mailIdSchema).min(1).max(100).refine((items) => new Set(items).size === items.length) }).strict()
+const mailBoxInputSchema = z.object({ box: z.enum(["inbox", "sent"]) }).strict()
 const mailMessageContextInputSchema = mailIdInputSchema.extend({ cursor: mailIdSchema.optional() })
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
 const mailAttachmentCreateInputSchema = z.object({ filePath: z.string().min(1) }).strict()
@@ -1125,6 +1127,26 @@ export const accountIpcModule: IpcModule = {
       request: mailMessageListInputSchema,
       response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageList", ...mailMessageListInputSchema.parse(input) }),
+    },
+    mailMessageCount: {
+      kind: "invoke", operationId: "app.mail.message.count", request: z.object({}).strict(),
+      response: z.object({ inboxTotal: z.number(), sentTotal: z.number(), unread: z.number() }),
+      handler: async () => accountService.executeMailOperation({ kind: "messageCount" }),
+    },
+    mailMessageReadAll: {
+      kind: "invoke", operationId: "app.mail.message.read_all", request: z.object({}).strict(),
+      response: z.object({ updated: z.number() }),
+      handler: async () => accountService.executeMailOperation({ kind: "messageReadAll" }),
+    },
+    mailMessageDeleteBatch: {
+      kind: "invoke", operationId: "app.mail.message.delete_batch", request: mailMessageBatchInputSchema,
+      response: z.object({ deleted: z.number(), skippedIds: z.array(z.string()) }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDeleteBatch", ...mailMessageBatchInputSchema.parse(input) }),
+    },
+    mailMessageDeleteAll: {
+      kind: "invoke", operationId: "app.mail.message.delete_all", request: mailBoxInputSchema,
+      response: z.object({ deleted: z.number() }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDeleteAll", ...mailBoxInputSchema.parse(input) }),
     },
     mailMessageGet: {
       kind: "invoke", operationId: "app.mail.message.get", request: mailIdInputSchema, response: mailMessageSchema,

@@ -38,6 +38,7 @@ import {
   ACCOUNT_STATE_GET_CAPABILITY_ID,
   ACCOUNT_STATE_GET_MCP_TOOL_NAME,
 } from "../../app-capabilities/account/shared/capability"
+import { notificationCapabilities, notificationToolActions, buildNotificationTools } from "../../app-capabilities/account/shared/notification-mcp"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import {
   FILE_OPENER_CAPABILITY_ID,
@@ -133,6 +134,7 @@ const appCapabilities: readonly CapabilityDefinition[] = [
     description: "Start the desktop account login, or resume one already in flight. Opens the login page in the default browser and returns immediately; the sign-in itself completes separately.",
     mutates: true,
   },
+  ...notificationCapabilities,
   ...AGENT_CONVERSATION_CAPABILITY_CATALOG,
   {
     id: TEXT_EXTRACTOR_CAPABILITY_ID,
@@ -256,6 +258,7 @@ export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
   [DESKTOP_RESTART_MCP_TOOL_NAME]: DESKTOP_RESTART_CAPABILITY_ID,
   [ACCOUNT_STATE_GET_MCP_TOOL_NAME]: ACCOUNT_STATE_GET_CAPABILITY_ID,
   [ACCOUNT_LOGIN_START_MCP_TOOL_NAME]: ACCOUNT_LOGIN_START_CAPABILITY_ID,
+  ...notificationToolActions,
   ...AGENT_CONVERSATION_MCP_TOOL_ACTIONS,
   [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
   [TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME]: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
@@ -326,6 +329,7 @@ export function buildAppTools(): McpToolDefinition[] {
       description: "Open the Synapse account login page in the default browser, exactly as pressing the sign-in button would. Returns as soon as the page is opened — the sign-in itself happens in the browser and finishes later, so poll `app_account_state_get` until `status` is `authenticated` (roughly every 2 seconds, for up to about 2 minutes) rather than assuming this call completed the login. Calling it again is safe: an account that is already signed in and online is left untouched, and a login already in flight is resumed instead of restarted. Returns `outcome` (`opened`, `reused_attempt`, `already_authenticated`, `open_failed`, or `start_failed`) plus the `loginUrl` that was opened.",
       inputSchema: strictEmptyInputSchema,
     },
+    ...buildNotificationTools(),
     ...buildAgentConversationMcpTools(),
     {
       name: TEXT_EXTRACTOR_MCP_TOOL_NAME,

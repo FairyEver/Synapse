@@ -1731,7 +1731,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       auditSink,
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
-    const accountDispatcher = createAccountCapabilityDispatcher({ service: accountService })
+    const accountDispatcher = createAccountCapabilityDispatcher({ service: accountService, notifications: accountService, permissionGuard, auditSink })
     const desktopControl = new DesktopControlService({
       update: updateService,
       permissionGuard,

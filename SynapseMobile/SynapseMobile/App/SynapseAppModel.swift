@@ -602,6 +602,10 @@ final class SynapseAppModel {
         await notifications.delete(id, using: apiClient)
     }
 
+    func deleteAllNotifications() async {
+        await notifications.deleteAll(using: apiClient)
+    }
+
     func loadMeetingDetail(_ meetingId: String) async {
         _ = await meetings.loadDetail(meetingId, using: apiClient)
     }
@@ -680,7 +684,11 @@ final class SynapseAppModel {
     // MARK: - 站内信
 
     func mailRecipients(query: String, cursor: String? = nil) async throws -> MailRecipientPage { try await apiClient.mailRecipients(query: query, cursor: cursor) }
-    func mailMessages(box: String, query: String = "", cursor: String? = nil) async throws -> MailMessagePage { try await apiClient.mailMessages(box: box, query: query, cursor: cursor) }
+    func mailMessages(box: String, query: String = "", cursor: String? = nil, unreadOnly: Bool = false) async throws -> MailMessagePage { try await apiClient.mailMessages(box: box, query: query, cursor: cursor, unreadOnly: unreadOnly) }
+    func mailCounts() async throws -> MailCounts { try await apiClient.mailCounts() }
+    func mailReadAll() async throws -> MailBulkReadResult { try await apiClient.mailReadAll() }
+    func mailDeleteBatch(ids: [String]) async throws -> MailBulkDeleteResult { try await apiClient.mailDeleteBatch(ids: ids) }
+    func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult { try await apiClient.mailDeleteAll(box: box) }
     func mailMessage(id: String) async throws -> MailMessage { try await apiClient.mailMessage(id: id) }
     func mailContext(id: String, cursor: String? = nil) async throws -> MailMessagePage { try await apiClient.mailContext(id: id, cursor: cursor) }
     func mailSetRead(id: String, read: Bool) async throws { try await apiClient.mailSetRead(id: id, read: read) }

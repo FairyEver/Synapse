@@ -494,8 +494,13 @@ export class AccountService {
         const query = new URLSearchParams({ box: operation.box })
         if (operation.query) query.set("query", operation.query)
         if (operation.cursor) query.set("cursor", operation.cursor)
+        if (operation.unreadOnly) query.set("unreadOnly", "true")
         return normalizeMailPage(await json("GET", `/messages?${query}`))
       }
+      case "messageCount": return await json("GET", "/messages/count")
+      case "messageReadAll": return await json("PATCH", "/messages/read-all")
+      case "messageDeleteBatch": return await json("POST", "/messages/delete-batch", { messageIds: operation.messageIds })
+      case "messageDeleteAll": return await json("DELETE", `/messages?box=${operation.box}`)
       case "messageGet": return normalizeMailMessage(await json("GET", `/messages/${id(operation.messageId)}`))
       case "messageContext": return normalizeMailPage(await json("GET", `/messages/${id(operation.messageId)}/context${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`))
       case "messageSetRead": return await json("PATCH", `/messages/${id(operation.messageId)}/read`, { read: operation.read })

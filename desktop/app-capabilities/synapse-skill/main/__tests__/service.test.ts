@@ -268,6 +268,8 @@ describe("SynapseSkillService", () => {
       "mail/index.md",
       "model-price/api-reference.md",
       "model-price/index.md",
+      "notifications/api-reference.md",
+      "notifications/index.md",
       "repository/api-reference.md",
       "repository/index.md",
       "secrets/api-reference.md",

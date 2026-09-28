@@ -20,6 +20,8 @@ final class MailStore {
     var loading = false
     var error: String?
     var nextCursor: String?
+    var counts: MailCounts?
+    var unreadOnly = false
     private var loadGeneration = 0
     private var openGeneration = 0
     private var loadedQuery = ""
@@ -32,11 +34,13 @@ final class MailStore {
         error = nil
         defer { if generation == loadGeneration { loading = false } }
         do {
-            let page = try await model.mailMessages(box: requestedBox.rawValue, query: query)
+            let page = try await model.mailMessages(box: requestedBox.rawValue, query: query, unreadOnly: requestedBox == .inbox && unreadOnly)
             guard generation == loadGeneration, box == requestedBox else { return }
             messages = page.items
             nextCursor = page.nextCursor
             loadedQuery = query
+            let latestCounts = try? await model.mailCounts()
+            if generation == loadGeneration { counts = latestCounts }
         } catch { if generation == loadGeneration { self.error = error.localizedDescription } }
     }
 
@@ -47,7 +51,7 @@ final class MailStore {
         loading = true
         defer { if generation == loadGeneration { loading = false } }
         do {
-            let page = try await model.mailMessages(box: requestedBox.rawValue, query: query, cursor: nextCursor)
+            let page = try await model.mailMessages(box: requestedBox.rawValue, query: query, cursor: nextCursor, unreadOnly: requestedBox == .inbox && unreadOnly)
             guard generation == loadGeneration, box == requestedBox else { return }
             messages += page.items
             self.nextCursor = page.nextCursor
@@ -119,7 +123,31 @@ final class MailStore {
     }
 
     func delete(id: String, using model: SynapseAppModel) async {
-        do { try await model.mailDelete(id: id); detail = nil; await load(using: model) }
+        do { try await model.mailDelete(id: id); detail = nil; await load(using: model, query: loadedQuery) }
         catch { self.error = error.localizedDescription }
+    }
+
+    func readAll(using model: SynapseAppModel) async {
+        do { _ = try await model.mailReadAll(); await load(using: model, query: loadedQuery) }
+        catch { self.error = error.localizedDescription }
+    }
+
+    func deleteBatch(ids: [String], using model: SynapseAppModel) async -> Bool {
+        do {
+            var skipped = 0
+            for start in stride(from: 0, to: ids.count, by: 100) {
+                let result = try await model.mailDeleteBatch(ids: Array(ids[start..<min(start + 100, ids.count)]))
+                skipped += result.skippedIds?.count ?? 0
+            }
+            detail = nil
+            await load(using: model, query: loadedQuery)
+            if skipped > 0 { error = "\(skipped) 封信件未处理" }
+            return true
+        } catch { await load(using: model, query: loadedQuery); self.error = error.localizedDescription; return false }
+    }
+
+    func deleteAll(box targetBox: String, using model: SynapseAppModel) async -> Bool {
+        do { _ = try await model.mailDeleteAll(box: targetBox); detail = nil; await load(using: model, query: loadedQuery); return true }
+        catch { self.error = error.localizedDescription; return false }
     }
 }

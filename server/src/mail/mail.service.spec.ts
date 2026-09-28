@@ -26,7 +26,14 @@ function harness() {
       findUnique: vi.fn(async () => null),
       findFirst: vi.fn(async () => null),
       findMany: vi.fn(async () => []),
+      count: vi.fn(async () => 0),
+      updateMany: vi.fn(async () => ({ count: 0 })),
       create: vi.fn(async () => ({ id: "message-1", sentAt: new Date() })),
+    },
+    mailRecipient: {
+      findMany: vi.fn(async () => [] as { messageId: string }[]),
+      count: vi.fn(async () => 0),
+      updateMany: vi.fn(async () => ({ count: 0 })),
     },
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   }
@@ -37,6 +44,43 @@ function harness() {
 }
 
 describe("MailService", () => {
+  it("filters unread inbox mail and counts only the current user's visible copies", async () => {
+    const { service, prisma } = harness()
+    prisma.mailRecipient.count.mockResolvedValueOnce(5).mockResolvedValueOnce(2)
+    prisma.mailMessage.count.mockResolvedValueOnce(3)
+    await service.listMessages("reader", "inbox", "", undefined, true)
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ recipients: { some: { userId: "reader", deletedAt: null, readAt: null } } }) }))
+    expect(await service.countMessages("reader")).toEqual({ inboxTotal: 5, sentTotal: 3, unread: 2 })
+    expect(prisma.mailRecipient.count).toHaveBeenCalledWith({ where: { userId: "reader", deletedAt: null, readAt: null } })
+  })
+
+  it("marks only visible unread inbox mail read", async () => {
+    const { service, prisma } = harness()
+    prisma.mailRecipient.updateMany.mockResolvedValueOnce({ count: 2 })
+    expect(await service.readAllMessages("reader")).toEqual({ updated: 2 })
+    expect(prisma.mailRecipient.updateMany).toHaveBeenCalledWith({ where: { userId: "reader", deletedAt: null, readAt: null }, data: { readAt: expect.any(Date) } })
+  })
+
+  it("deletes selected visible copies and reports inaccessible or already-deleted IDs", async () => {
+    const { service, prisma } = harness()
+    prisma.mailRecipient.findMany.mockResolvedValueOnce([{ messageId: "received" }])
+    prisma.mailMessage.findMany.mockResolvedValueOnce([{ id: "sent" }] as never)
+    const result = await service.deleteMessages("reader", ["received", "sent", "other"])
+    expect(result).toEqual({ deleted: 2, skippedIds: ["other"] })
+    expect(prisma.mailRecipient.updateMany).toHaveBeenCalledWith({ where: { userId: "reader", messageId: { in: ["received", "sent", "other"] }, deletedAt: null }, data: { deletedAt: expect.any(Date) } })
+    expect(prisma.mailMessage.updateMany).toHaveBeenCalledWith({ where: { id: { in: ["received", "sent", "other"] }, senderId: "reader", senderDeletedAt: null }, data: { senderDeletedAt: expect.any(Date) } })
+    expect(await service.deleteMessages("reader", ["received", "sent", "other"])).toEqual({ deleted: 0, skippedIds: ["received", "sent", "other"] })
+  })
+
+  it("clears inbox and sent mail separately for the current user", async () => {
+    const { service, prisma } = harness()
+    prisma.mailRecipient.updateMany.mockResolvedValueOnce({ count: 4 })
+    prisma.mailMessage.updateMany.mockResolvedValueOnce({ count: 3 })
+    expect(await service.deleteAllMessages("reader", "inbox")).toEqual({ deleted: 4 })
+    expect(await service.deleteAllMessages("reader", "sent")).toEqual({ deleted: 3 })
+    expect(prisma.mailRecipient.updateMany).toHaveBeenCalledWith({ where: { userId: "reader", deletedAt: null }, data: { deletedAt: expect.any(Date) } })
+    expect(prisma.mailMessage.updateMany).toHaveBeenCalledWith({ where: { senderId: "reader", senderDeletedAt: null }, data: { senderDeletedAt: expect.any(Date) } })
+  })
   it("stores a directly uploaded file without a Drive source", async () => {
     const { service, prisma, storage } = harness()
     const body = Buffer.from("local file")

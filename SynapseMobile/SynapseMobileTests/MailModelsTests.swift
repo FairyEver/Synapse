@@ -3,6 +3,31 @@ import Testing
 @testable import SynapseMobile
 
 struct MailModelsTests {
+    @Test func preservesCrossPageSelectionAfterFailureAndKeepsClearScopeIndependentOfSearch() {
+        var selection = MailBulkSelection()
+        selection.begin()
+        selection.toggle("first-page")
+        selection.toggle("next-page")
+        #expect(selection.ids == ["first-page", "next-page"])
+        selection.finishDeletion(success: false)
+        #expect(selection.isActive)
+        #expect(selection.ids.count == 2)
+        #expect(MailDeleteScope.selected(Array(selection.ids)).title.contains("2"))
+        #expect(MailDeleteScope.all("inbox").explanation.contains("搜索结果和未加载的信件"))
+        selection.finishDeletion(success: true)
+        #expect(!selection.isActive)
+        #expect(selection.ids.isEmpty)
+    }
+
+    @Test func decodesExactCountsAndPartialBulkDeleteResult() throws {
+        let counts = try JSONDecoder().decode(MailCounts.self, from: Data(#"{"inboxTotal":7,"sentTotal":3,"unread":2}"#.utf8))
+        let result = try JSONDecoder().decode(MailBulkDeleteResult.self, from: Data(#"{"deleted":1,"skippedIds":["hidden"]}"#.utf8))
+        #expect(counts.inboxTotal == 7)
+        #expect(counts.sentTotal == 3)
+        #expect(counts.unread == 2)
+        #expect(result.deleted == 1)
+        #expect(result.skippedIds == ["hidden"])
+    }
     @Test func decodesGroupedRecipientsAndDirectSourceQuote() throws {
         let json = """
         {
@@ -11,12 +36,12 @@ struct MailModelsTests {
           "recipients":[{"userId":"reader","nickname":"收件人","handle":null},{"userId":"observer","nickname":"抄送人","handle":null}],
           "toRecipients":[{"userId":"reader","nickname":"收件人","handle":null}],
           "ccRecipients":[{"userId":"observer","nickname":"抄送人","handle":null}],
-          "relationKind":"reply", "subject":"回复：原信", "body":"回复正文",
+          "relationKind":"reply", "subject":"回复：原信", "snippet":"回复正文", "body":"回复正文",
           "sentAt":"2026-09-28T08:00:00.000Z", "readAt":null,
           "replyToId":"original", "conversationId":"conversation-1",
           "relation":{"kind":"reply","messageId":"original"},
           "quote":{"sender":{"userId":"observer","nickname":"原发件人","handle":null},"toRecipients":[{"userId":"sender","nickname":"发件人","handle":null}],"ccRecipients":[],"subject":"原信","body":"原文","sentAt":"2026-09-27T08:00:00.000Z"},
-          "attachments":[]
+          "attachmentCount":0, "attachments":[]
         }
         """
         let message = try JSONDecoder().decode(MailMessage.self, from: Data(json.utf8))

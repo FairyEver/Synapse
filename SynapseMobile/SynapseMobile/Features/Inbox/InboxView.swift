@@ -22,6 +22,7 @@ struct InboxView: View {
     /// 一条通知被点了。去向由调用方决定 —— 列表自己不做路由。
     let onOpen: (SynapseNotification) -> Void
     @State private var filter = "pending"
+    @State private var confirmingClear = false
 
     var body: some View {
         List {
@@ -91,6 +92,12 @@ struct InboxView: View {
                 Button("全部已读") { Task { await model.readAllNotifications() } }
                     .disabled(model.notifications.unreadCount == 0)
             }
+            if filter == "all" {
+                Button("全部清空", role: .destructive) { confirmingClear = true }
+            }
+        }
+        .confirmationDialog("清空所有通知？", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("全部清空", role: .destructive) { Task { await model.deleteAllNotifications() } }
         }
         .onChange(of: filter) { _, selected in
             if selected != "pending" { Task { await model.reloadNotifications(filter: selected) } }

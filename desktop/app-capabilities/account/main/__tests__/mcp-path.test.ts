@@ -65,6 +65,36 @@ async function callTool(
 }
 
 describe("account MCP tools", () => {
+  it("registers notification management with strict scopes and no body in audit metadata", async () => {
+    const { buildNotificationTools } = await import("../../shared/notification-mcp")
+    const { createAccountCapabilityDispatcher } = await import("../dispatcher")
+    const notifications = {
+      listNotifications: vi.fn(async () => ({ items: [], nextCursor: null })),
+      notificationUnreadCount: vi.fn(async () => ({ unread: 2 })),
+      getNotification: vi.fn(async () => ({ id: "n1", body: "private body" })),
+      markNotificationRead: vi.fn(async () => ({ ok: true })),
+      markAllNotificationsRead: vi.fn(async () => ({ ok: true })),
+      deleteNotification: vi.fn(async () => ({ ok: true })),
+      deleteAllNotifications: vi.fn(async () => ({ ok: true })),
+    }
+    const auditSink = { record: vi.fn() }
+    const dispatcher = createAccountCapabilityDispatcher({ service: { getState: () => ({ status: "unauthenticated" }), startLogin: vi.fn() }, notifications, auditSink: auditSink as never })
+    expect(buildNotificationTools()).toHaveLength(7)
+    expect(MCP_TOOL_ACTIONS.app_account_notification_delete_all).toBe("app.account.notification.delete_all")
+    await expect(dispatcher.dispatch("app.account.notification.list", { filter: "unread" })).resolves.toMatchObject({ ok: true })
+    await expect(dispatcher.dispatch("app.account.notification.delete_all", { filter: "unread" })).rejects.toThrow()
+    await dispatcher.dispatch("app.account.notification.get", { id: "n1" })
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("private body")
+    const denied = createAccountCapabilityDispatcher({
+      service: { getState: () => ({ status: "unauthenticated" }), startLogin: vi.fn() },
+      notifications,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: false, reason: "denied" })) } as never,
+      auditSink: auditSink as never,
+    })
+    await expect(denied.dispatch("app.account.notification.delete", { id: "n1" })).rejects.toThrow("denied")
+    expect(notifications.deleteNotification).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({ outcome: "denied" }))
+  })
   it("serves the account state through the tool an Agent is given", async () => {
     const state: SynapseAccountState = { status: "unauthenticated" }
     const { router } = createMcpPath(state)

@@ -14,7 +14,15 @@ const content = z.object({ formatVersion: z.literal(2), toIds: z.array(id).max(5
 function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
   switch (action) {
     case "app.mail.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
-    case "app.mail.message.list": return { kind: "messageList", ...z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: id.optional() }).strict().parse(params) }
+    case "app.mail.message.list": {
+      const parsed = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: id.optional(), unreadOnly: z.boolean().optional() }).strict().parse(params)
+      if (parsed.box === "sent" && parsed.unreadOnly) throw new Error("Unread filter is only available for inbox.")
+      return { kind: "messageList", ...parsed }
+    }
+    case "app.mail.message.count": z.object({}).strict().parse(params); return { kind: "messageCount" }
+    case "app.mail.message.read_all": z.object({}).strict().parse(params); return { kind: "messageReadAll" }
+    case "app.mail.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length) }).strict().parse(params) }
+    case "app.mail.message.delete_all": return { kind: "messageDeleteAll", ...z.object({ box: z.enum(["inbox", "sent"]) }).strict().parse(params) }
     case "app.mail.message.get": return { kind: "messageGet", ...z.object({ messageId: id }).strict().parse(params) }
     case "app.mail.context.list": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }

@@ -146,6 +146,9 @@ extension MailMessage {
 }
 
 struct MailMessagePage: Decodable { let items: [MailSummary]; let nextCursor: String? }
+struct MailCounts: Decodable { let inboxTotal: Int; let sentTotal: Int; let unread: Int }
+struct MailBulkReadResult: Decodable { let updated: Int }
+struct MailBulkDeleteResult: Decodable { let deleted: Int; let skippedIds: [String]? }
 
 struct MailContent: Encodable, Equatable {
     let formatVersion: Int

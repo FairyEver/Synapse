@@ -3,6 +3,23 @@ import { buildMailTools } from "../../../synapse-capabilities/shared/mail-domain
 import { createMailCapabilityDispatcher } from "../mail-dispatcher"
 
 describe("mail capability dispatcher", () => {
+  it("exposes counts and guarded bulk operations without embedding mail content in audit metadata", async () => {
+    const executeMailOperation = vi.fn(async () => ({ deleted: 1, skippedIds: ["hidden"] }))
+    const auditSink = { record: vi.fn() }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true, reason: "allowed" })) }
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation }, permissionGuard: permissionGuard as never, auditSink: auditSink as never })
+    expect(buildMailTools().find((item) => item.name === "app_mail_message_list")?.inputSchema.properties).toHaveProperty("unreadOnly")
+    expect(buildMailTools().find((item) => item.name === "app_mail_message_delete_batch")?.inputSchema.properties?.messageIds).toMatchObject({ minItems: 1, maxItems: 100, uniqueItems: true })
+    await dispatcher.dispatch("app.mail.message.delete_batch", { messageIds: ["visible", "hidden"] }, { source: "mcp-http" })
+    expect(executeMailOperation).toHaveBeenCalledWith({ kind: "messageDeleteBatch", messageIds: ["visible", "hidden"] })
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("visible")
+    await expect(dispatcher.dispatch("app.mail.message.delete_batch", { messageIds: ["a", "a"] }, {})).rejects.toThrow()
+    await expect(dispatcher.dispatch("app.mail.message.list", { box: "sent", unreadOnly: true }, {})).rejects.toThrow()
+    await expect(dispatcher.dispatch("app.mail.message.count", { extra: true }, {})).rejects.toThrow()
+    const denied = createMailCapabilityDispatcher({ accountService: { executeMailOperation }, permissionGuard: { check: vi.fn(async () => ({ allowed: false, reason: "denied" })) } as never, auditSink: auditSink as never })
+    await expect(denied.dispatch("app.mail.message.delete_all", { box: "inbox" }, {})).rejects.toThrow("denied")
+    expect(executeMailOperation).toHaveBeenCalledTimes(1)
+  })
   it("allows browsing and paging shared-team recipients", async () => {
     const executeMailOperation = vi.fn(async () => ({ items: [], nextCursor: null }))
     const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })

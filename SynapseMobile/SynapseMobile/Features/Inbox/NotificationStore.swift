@@ -86,6 +86,13 @@ final class NotificationStore {
         } catch { self.error = "删除失败" }
     }
 
+    func deleteAll(using client: APIClient) async {
+        do {
+            try await client.deleteAllNotifications()
+            await load(using: client, filter: filter)
+        } catch { self.error = "清空失败" }
+    }
+
     func clear() {
         items = []
         nextCursor = nil

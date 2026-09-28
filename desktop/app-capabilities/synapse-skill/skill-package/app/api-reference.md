@@ -254,7 +254,7 @@ Output:
 
 Notify the user with fire-and-forget semantics. The call writes one message into the user's account; Synapse then delivers it to every signed-in desktop of that account and pushes it to the user's registered phones. It travels on the desktop login, so no API key or open API call is needed.
 
-Reach for it when the user asks to be notified or reminded — now or at a later point, when something finishes, or on their phone or another device; such a request counts even when the user never names this tool. `Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上.` It is the only notification capability; there is no separate local-only sound tool.
+Reach for it when the user asks to be notified or reminded — now or at a later point, when something finishes, or on their phone or another device; such a request counts even when the user never names this tool. `Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上.` It is the only tool for sending a new account notification; existing notifications are managed with `app_account_notification_*` tools. There is no separate local-only sound tool.
 
 Input:
 

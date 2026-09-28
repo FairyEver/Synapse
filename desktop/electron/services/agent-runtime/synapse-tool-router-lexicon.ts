@@ -103,6 +103,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["附件", "attachment"],
   ["收件人", "recipient"],
   ["收信人", "recipient"],
+  ["往来", "context"],
 
   // ---------------- 名词：terminal ----------------
   ["会话", "session"],
@@ -125,10 +126,13 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["记录", "row"],
   ["数据", "row"],
   ["批量", "rows"],
+  ["批量", "batch"],
   ["状态", "state"],
   ["选项", "choice"],
   ["概览", "overview"],
   ["数量", "count"],
+  ["未读数", "count"],
+  ["全部", "all"],
   ["日志", "log"],
   ["摘要", "summary"],
   ["SQL", "sql"],
@@ -163,11 +167,13 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["权限", "permission"],
   ["通知", "notifier"],
   ["通知", "notification"],
+  ["消息中心", "notification"],
   // 口语里「找我」的说法不止「通知」一种。「提醒」「推送」都指同一条能力。
   // 排在「通知」之后，「通知」仍是这两个 token 的反查首选词。
   ["提醒", "notifier"],
   ["提醒", "notification"],
   ["推送", "notification"],
+  ["推送", "notifier"],
   // 「叫我一声」是同类说法里唯一不含「提醒 / 通知 / 推送」的，index.md 一直拿它举例，
   // 但检索层不认，那句话就只是写给 AI 看的空话。
   ["叫我一声", "notifier"],
@@ -179,6 +185,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   // `message` 段有 9 个工具顶着，补了会把「我的消息」这类查询从站内信带到通知上去。
   // 「手机」只在"发到我手机上"这类说法里出现，误伤面小得多。
   ["手机", "notification"],
+  ["手机", "notifier"],
   ["系统", "system"],
   ["问题", "problem"],
   ["反馈", "feedback"],
@@ -212,6 +219,8 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["插入", "upsert"],
   ["删除", "delete"],
   ["清空", "clear"],
+  ["清空已发送", "delete"],
+  ["清空已发送", "all"],
   ["移除", "remove"],
   ["改名", "rename"],
   ["重命名", "rename"],

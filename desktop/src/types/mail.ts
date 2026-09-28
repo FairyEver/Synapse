@@ -19,7 +19,11 @@ export type MailMessage = MailSummary & { viewerId: string; body: string; team: 
 export type MailContent = { formatVersion: 2; toIds: string[]; ccIds: string[]; subject: string; body: string; attachmentIds: string[]; forwardAttachmentIds: string[]; relation?: MailRelation }
 export type MailOperation =
   | { kind: "recipientSearch"; query: string; cursor?: string }
-  | { kind: "messageList"; box: "inbox" | "sent"; query?: string; cursor?: string }
+  | { kind: "messageList"; box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean }
+  | { kind: "messageCount" }
+  | { kind: "messageReadAll" }
+  | { kind: "messageDeleteBatch"; messageIds: string[] }
+  | { kind: "messageDeleteAll"; box: "inbox" | "sent" }
   | { kind: "messageGet"; messageId: string }
   | { kind: "messageContext"; messageId: string; cursor?: string }
   | { kind: "messageSetRead"; messageId: string; read: boolean }
@@ -32,6 +36,10 @@ export type MailOperation =
 export type MailOperationResult = {
   recipientSearch: { items: (MailPerson & { matchKind: "exact" | "prefix" | "partial" | "fuzzy" | "browse"; similarity: number; sharedTeamIds: string[] })[]; nextCursor: string | null }
   messageList: { items: MailSummary[]; nextCursor: string | null }
+  messageCount: { inboxTotal: number; sentTotal: number; unread: number }
+  messageReadAll: { updated: number }
+  messageDeleteBatch: { deleted: number; skippedIds: string[] }
+  messageDeleteAll: { deleted: number }
   messageGet: MailMessage
   messageContext: { items: MailSummary[]; nextCursor: string | null }
   messageSetRead: { read: boolean }

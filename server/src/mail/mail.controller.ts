@@ -30,9 +30,33 @@ export class MailController {
   }
 
   @Get("messages")
-  listMessages(@Req() request: AuthenticatedUserRequest, @Query("box") box?: string, @Query("query") query?: string, @Query("cursor") cursor?: string) {
+  listMessages(@Req() request: AuthenticatedUserRequest, @Query("box") box?: string, @Query("query") query?: string, @Query("cursor") cursor?: string, @Query("unreadOnly") unreadOnly?: string) {
     if (box !== "inbox" && box !== "sent") throw new BadRequestException("无效的信箱。")
-    return this.mail.listMessages(userId(request), box, query, cursor)
+    if (unreadOnly !== undefined && unreadOnly !== "true" && unreadOnly !== "false") throw new BadRequestException("无效的未读筛选。")
+    if (box === "sent" && unreadOnly === "true") throw new BadRequestException("已发送信箱不能筛选未读。")
+    return this.mail.listMessages(userId(request), box, query, cursor, unreadOnly === "true")
+  }
+
+  @Get("messages/count")
+  countMessages(@Req() request: AuthenticatedUserRequest) {
+    return this.mail.countMessages(userId(request))
+  }
+
+  @Patch("messages/read-all")
+  readAllMessages(@Req() request: AuthenticatedUserRequest) {
+    return this.mail.readAllMessages(userId(request))
+  }
+
+  @Post("messages/delete-batch")
+  deleteMessages(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
+    const { messageIds } = parse(z.object({ messageIds: z.array(z.string().min(1)).min(1).max(100).refine((items) => new Set(items).size === items.length, "信件不能重复。") }).strict(), body)
+    return this.mail.deleteMessages(userId(request), messageIds)
+  }
+
+  @Delete("messages")
+  deleteAllMessages(@Req() request: AuthenticatedUserRequest, @Query("box") box?: string) {
+    if (box !== "inbox" && box !== "sent") throw new BadRequestException("无效的信箱。")
+    return this.mail.deleteAllMessages(userId(request), box)
   }
 
   @Get("messages/:id")

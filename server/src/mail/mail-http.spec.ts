@@ -21,6 +21,11 @@ async function fixture() {
     searchRecipients: vi.fn(async () => ({ items: [] })),
     createPreview: vi.fn(async () => ({ previewId: "preview-1", recipients: [], subject: "报告", body: "完整正文", attachments: [] })),
     listContext: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listMessages: vi.fn(async () => ({ items: [], nextCursor: null })),
+    countMessages: vi.fn(async () => ({ inboxTotal: 0, sentTotal: 0, unread: 0 })),
+    readAllMessages: vi.fn(async () => ({ updated: 0 })),
+    deleteMessages: vi.fn(async () => ({ deleted: 0, skippedIds: [] })),
+    deleteAllMessages: vi.fn(async () => ({ deleted: 0 })),
     send: vi.fn(async () => ({ messageId: "message-1", recipientIds: ["teammate"] })),
     prepareLocalAttachment: vi.fn(async () => ({ attachmentId: "attachment-1" })),
   }
@@ -34,6 +39,23 @@ async function fixture() {
 }
 
 describe("internal mail HTTP routes", () => {
+  it("routes counts, unread filtering and bulk changes through the authenticated user", async () => {
+    const { app, mail } = await fixture()
+    try {
+      await request(app.getHttpServer()).get("/api/mail/messages?box=inbox&unreadOnly=true").expect(200)
+      expect(mail.listMessages).toHaveBeenCalledWith("sender", "inbox", undefined, undefined, true)
+      await request(app.getHttpServer()).get("/api/mail/messages?box=sent&unreadOnly=true").expect(400)
+      await request(app.getHttpServer()).get("/api/mail/messages/count").expect(200)
+      expect(mail.countMessages).toHaveBeenCalledWith("sender")
+      await request(app.getHttpServer()).patch("/api/mail/messages/read-all").send({}).expect(200)
+      expect(mail.readAllMessages).toHaveBeenCalledWith("sender")
+      await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["a", "b"] }).expect(201)
+      expect(mail.deleteMessages).toHaveBeenCalledWith("sender", ["a", "b"])
+      await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["a", "a"] }).expect(400)
+      await request(app.getHttpServer()).delete("/api/mail/messages?box=sent").expect(200)
+      expect(mail.deleteAllMessages).toHaveBeenCalledWith("sender", "sent")
+    } finally { await app.close() }
+  })
   it("routes recipient search, fixed preview and send using the authenticated user", async () => {
     const { app, mail } = await fixture()
     try {

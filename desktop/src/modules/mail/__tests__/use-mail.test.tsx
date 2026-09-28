@@ -22,18 +22,18 @@ function message(messageId: string): MailSummary {
 
 let root: Root | null = null
 let current: ReturnType<typeof useMail>
-function Harness({ box }: { box: MailBox }) {
-  current = useMail(box, "")
+function Harness({ box, query = "", unreadOnly = false }: { box: MailBox; query?: string; unreadOnly?: boolean }) {
+  current = useMail(box, query, unreadOnly)
   return null
 }
 
-function render(box: MailBox) {
+function render(box: MailBox, query = "", unreadOnly = false) {
   if (!root) {
     const container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
   }
-  act(() => root?.render(<Harness box={box} />))
+  act(() => root?.render(<Harness box={box} query={query} unreadOnly={unreadOnly} />))
 }
 
 afterEach(() => {
@@ -44,6 +44,21 @@ afterEach(() => {
 })
 
 describe("useMail", () => {
+  it("keeps unread and search filters through pagination, then starts a new list when search changes", async () => {
+    mocks.request.mockImplementation(async (operation: { kind: string; query?: string; cursor?: string }) => {
+      if (operation.kind === "messageCount") return { inboxTotal: 3, sentTotal: 1, unread: 2 }
+      return operation.cursor ? { items: [message("second")], nextCursor: null } : { items: [message(operation.query === "new" ? "new" : "first")], nextCursor: "page-2" }
+    })
+    render("inbox", "old", true)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(current.counts?.unread).toBe(2)
+    await act(async () => { await current.loadMore() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageList", box: "inbox", query: "old", cursor: "page-2", unreadOnly: true })
+    expect(current.messages.map((item) => item.messageId)).toEqual(["first", "second"])
+    render("inbox", "new", true)
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(current.messages.map((item) => item.messageId)).toEqual(["new"])
+  })
   it("does not show a previous mailbox while the new mailbox loads", async () => {
     const inbox = deferred<{ items: MailSummary[]; nextCursor: null }>()
     const sent = deferred<{ items: MailSummary[]; nextCursor: null }>()

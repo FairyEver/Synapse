@@ -23,4 +23,11 @@ export const ACCOUNT_LOGIN_START_MCP_TOOL_NAME = "app_account_login_start" as co
 export const ACCOUNT_CAPABILITY_IDS = [
   ACCOUNT_STATE_GET_CAPABILITY_ID,
   ACCOUNT_LOGIN_START_CAPABILITY_ID,
+  "app.account.notification.list",
+  "app.account.notification.count",
+  "app.account.notification.get",
+  "app.account.notification.read",
+  "app.account.notification.read_all",
+  "app.account.notification.delete",
+  "app.account.notification.delete_all",
 ] as const

@@ -165,7 +165,7 @@ Use it when the user explicitly asks to be notified at some point, or when an ex
 
 Pick the channel by what the user said, not by what is easiest to call:
 
-- 提醒 / 通知 / 推送 / 手机 / 别的设备 -> this tool. It is the only one that reaches the user's other devices, and it is the only notification capability: there is no separate local-only sound tool.
+- 提醒 / 发送通知 / 推送 / 手机 / 别的设备 -> this tool. It is the only tool that sends a new account notification to the user's devices; there is no separate local-only sound tool. Reading or clearing existing notifications uses `notifications/index.md`.
 - 给某个 Agent 对话发消息 -> `app_agent_message_send`. That writes into a conversation; it does not reach the user.
 - 每天 / 到点自动做什么 -> Automation. A one-off notification is not a scheduled item.
 

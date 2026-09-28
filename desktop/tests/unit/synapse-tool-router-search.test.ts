@@ -54,6 +54,9 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "新增一个密钥", expect: "app_secrets_item_create" },
   { intent: "当前登录的是哪个账号", expect: "app_account_state_get" },
   { intent: "帮我登录一下 Synapse", expect: "app_account_login_start" },
+  { intent: "查看我的通知清单", expect: "app_account_notification_list" },
+  { intent: "通知未读数", expect: "app_account_notification_count" },
+  { intent: "清空全部通知", expect: "app_account_notification_delete_all" },
   { intent: "新建一个 Agent 对话", expect: "app_agent_conversation_create" },
   { intent: "Agent 对话能用哪些供应商和模型", expect: "app_agent_provider_list" },
   { intent: "让 Agent 把当前这一轮停下", expect: "app_agent_turn_stop" },
@@ -86,6 +89,10 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "模型价格规则有哪些", expect: "app_model_price_rule_list" },
   { intent: "最近用过哪些模型", expect: "app_model_price_used_model_list" },
   { intent: "设置仓库里有什么", expect: "app_settings_repository_item_list" },
+  { intent: "站内信未读数", expect: "app_mail_message_count" },
+  { intent: "收件箱站内信全部设已读", expect: "app_mail_message_read_all" },
+  { intent: "站内信按 ID 批量删除", expect: "app_mail_message_delete_batch" },
+  { intent: "清空已发送站内信", expect: "app_mail_message_delete_all" },
 ]
 
 /**

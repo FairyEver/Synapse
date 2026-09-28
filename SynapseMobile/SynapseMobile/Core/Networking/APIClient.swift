@@ -406,6 +406,10 @@ actor APIClient {
         let _: EmptyResponse = try await send(path: "/notifications/\(id)", method: "DELETE")
     }
 
+    func deleteAllNotifications() async throws {
+        let _: EmptyResponse = try await send(path: "/notifications?filter=all", method: "DELETE")
+    }
+
     /// 平台有没有开语音识别。
     ///
     /// 这是服务端的部署事实——腾讯云密钥在服务端，不是每台设备的设置——所以麦克风
@@ -1207,11 +1211,29 @@ actor APIClient {
         return try await send(path: "/mail/recipients" + mailQuery(items), method: "GET")
     }
 
-    func mailMessages(box: String, query: String = "", cursor: String? = nil) async throws -> MailMessagePage {
+    func mailMessages(box: String, query: String = "", cursor: String? = nil, unreadOnly: Bool = false) async throws -> MailMessagePage {
         var items = [URLQueryItem(name: "box", value: box)]
         if !query.isEmpty { items.append(URLQueryItem(name: "query", value: query)) }
         if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if unreadOnly { items.append(URLQueryItem(name: "unreadOnly", value: "true")) }
         return try await send(path: "/mail/messages" + mailQuery(items), method: "GET")
+    }
+
+    func mailCounts() async throws -> MailCounts {
+        try await send(path: "/mail/messages/count", method: "GET")
+    }
+
+    func mailReadAll() async throws -> MailBulkReadResult {
+        try await send(path: "/mail/messages/read-all", method: "PATCH", body: EmptyBody())
+    }
+
+    func mailDeleteBatch(ids: [String]) async throws -> MailBulkDeleteResult {
+        struct Body: Encodable { let messageIds: [String] }
+        return try await send(path: "/mail/messages/delete-batch", method: "POST", body: Body(messageIds: ids))
+    }
+
+    func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult {
+        try await send(path: "/mail/messages" + mailQuery([URLQueryItem(name: "box", value: box)]), method: "DELETE")
     }
 
     func mailMessage(id: String) async throws -> MailMessage {
