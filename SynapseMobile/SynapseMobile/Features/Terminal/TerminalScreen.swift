@@ -45,6 +45,7 @@ struct TerminalScreen: View {
     /// Whether the command panel is open. The bar's right-hand key owns this, and the
     /// panel that reads it is presented as a sheet at the end of the screen.
     @State private var shortcutPanelPresented = false
+    @State private var expandedInputPresented = false
     @State private var resourcesPresented = false
     /// 这一页的 Git 面板。非空＝面板开着，它同时是这一个弹窗的状态机（见 `TerminalGitFlow`）。
     ///
@@ -75,7 +76,7 @@ struct TerminalScreen: View {
     @State private var showingBusyConfirm = false
     @State private var voice = VoiceInputController()
     /// 输入栏现在是哪一种模式。语音不是栏上的一个按钮，而是这条栏的一个状态
-    /// （设计文档 §3.2），所以它由这一格决定 —— 四个位置在两种模式下都不搬家。
+    /// （设计文档 §3.2），所以它由这一格决定 —— 输入栏的位置在两种模式下都不搬家。
     @State private var voiceMode = false
     /// 用户**上次选定的**是哪种模式，跨终端、跨启动记着。
     ///
@@ -314,7 +315,7 @@ struct TerminalScreen: View {
             isVoiceBusy: holdLatched || voice.phase != .idle || voiceGrid.isLocked,
             isOverlayUp: showingRename || showingStopConfirm || showingBusyConfirm
                 || showingPhotoPicker || showingDocumentPicker || showingCamera
-                || shortcutPanelPresented || resourcesPresented || gitFlow != nil,
+                || shortcutPanelPresented || expandedInputPresented || resourcesPresented || gitFlow != nil,
             isPhotoBubbleUp: recentPhoto != nil,
             isPortrait: !isCompactHeight,
             isSettling: chromeIsSettling,
@@ -810,6 +811,9 @@ struct TerminalScreen: View {
             // 会话的句子照样不该出现在这里。
             .noticeOverlay(model, forSession: sessionId)
         }
+        .sheet(isPresented: $expandedInputPresented) {
+            TerminalExpandedInputSheet(draft: $draft, sessionId: sessionId)
+        }
         .inspector(isPresented: $resourcesPresented) {
             TerminalResourcesSheet(store: store)
                 .inspectorColumnWidth(min: 280, ideal: 360, max: 440)
@@ -916,7 +920,7 @@ struct TerminalScreen: View {
                 onRetry: { model.retryRelay($0) }
             )
             // One bar, two modes: typing, or talking. Voice is a mode of this bar rather
-            // than a button on it, so the four slots hold still and only what the field
+            // than a button on it, so the slots hold still and only what the field
             // *is* changes. `accessoryBar` above stays live throughout — dictating and
             // pressing a command are not mutually exclusive.
             //
@@ -1460,10 +1464,8 @@ struct TerminalScreen: View {
     /// The one bar under the terminal, in two modes: typing, or talking.
     ///
     /// Voice is a mode of this bar rather than a button on it (设计文档 §3.2), so both
-    /// modes are the same four slots at the same four widths — the toggle, the field,
-    /// ＋ and send. Only what the field *is* changes. That is what keeps the toggle
-    /// under the same thumb when the mode changes back, and what makes the bar's
-    /// height the same in both.
+    /// modes keep their slots aligned — the toggle, the field, expand, ＋ and send.
+    /// Expand is invisible in voice mode, so the other controls do not shift.
     private var inputBar: some View {
         HStack(spacing: 8) {
             modeToggle(voicePresentation)
@@ -1472,6 +1474,14 @@ struct TerminalScreen: View {
                 holdToTalk(voicePresentation)
             } else {
                 commandField
+            }
+
+            if voicePresentation.barIsVoice {
+                Color.clear
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                    .accessibilityHidden(true)
+            } else {
+                expandInputButton
             }
 
             attachMenu(voicePresentation)
@@ -1519,7 +1529,7 @@ struct TerminalScreen: View {
         .opacity(presentation.controlsEnabled ? 1 : 0.4)
         .accessibilityIdentifier("voice-mode-toggle")
         .accessibilityLabel(presentation.barIsVoice ? "切换到键盘" : "切换到语音")
-        // 模式报在这一格上，而不是包着四格的 HStack 上：`accessibilityIdentifier`
+        // 模式报在这一格上，而不是包着整条 HStack：`accessibilityIdentifier`
         // 加在容器上会向下盖掉每一个子元素的标识 —— 那样 `attach` 和 `send` 会连同
         // 它们的测试一起消失，而屏幕上看起来什么都没变。
         .accessibilityValue(presentation.barIsVoice ? "voice" : "keyboard")
@@ -1667,6 +1677,23 @@ struct TerminalScreen: View {
                 emptyVoiceMessage = nil
                 noteChromeActivity()
             }
+    }
+
+    private var expandInputButton: some View {
+        Button {
+            Haptics.select()
+            noteChromeActivity()
+            inputFocused = false
+            expandedInputPresented = true
+        } label: {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.system(size: 20))
+                .foregroundStyle(Theme.ink)
+                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
+        }
+        .accessibilityIdentifier("terminal-expand-input")
+        .accessibilityLabel("展开输入框")
     }
 
     private func attachMenu(_ presentation: HoldToTalkPresentation) -> some View {

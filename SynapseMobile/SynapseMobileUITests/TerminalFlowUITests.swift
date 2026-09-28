@@ -633,6 +633,67 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "09-preempted-send-replayed")
     }
 
+    /// The sheet edits the bar's draft, and a confirmed multiline send folds it away.
+    func testExpandedInputKeepsDraftOnCloseAndClosesAfterSend() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        selectMockDesktop(app)
+        openClaudeCodeTerminal(app)
+
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the compact input is missing")
+        field.tap()
+        field.typeText("expanded-input-first")
+
+        let expand = app.buttons["terminal-expand-input"]
+        XCTAssertTrue(expand.exists, "the input has no manual expand control")
+        expand.tap()
+
+        let editor = app.textViews["terminal-expanded-input"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the multiline editor did not open")
+        XCTAssertTrue((editor.value as? String ?? "").contains("expanded-input-first"))
+        editor.tap()
+        editor.typeText("\nexpanded-input-second")
+        app.buttons["terminal-expanded-close"].tap()
+
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 10), "closing left the editor open")
+        XCTAssertTrue(waitForValue(containing: "expanded-input-second", in: field, timeout: 10), "the compact input lost the edited draft")
+
+        expand.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "the edited draft could not be reopened")
+        XCTAssertTrue((editor.value as? String ?? "").contains("expanded-input-first"))
+        XCTAssertTrue((editor.value as? String ?? "").contains("expanded-input-second"))
+        app.buttons["terminal-expanded-send"].tap()
+
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 15), "the editor stayed open after the desktop accepted the command")
+        XCTAssertFalse((field.value as? String ?? "").contains("expanded-input-"), "the accepted command remained in the compact input")
+        XCTAssertTrue(waitForLabel(containing: "expanded-input-second", in: app, timeout: 10), "the multiline command did not reach the desktop")
+    }
+
+    func testExpandedInputWaitsForLeaseReplayBeforeClosing() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+
+        XCTAssertTrue(app.staticTexts["build"].waitForExistence(timeout: 25))
+        app.staticTexts["build"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 15))
+        app.buttons["terminal-expand-input"].tap()
+
+        let editor = app.textViews["terminal-expanded-input"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        editor.tap()
+        editor.typeText("expanded-input-lease")
+        app.buttons["terminal-expanded-send"].tap()
+
+        XCTAssertTrue(waitForLabel(containing: "desktop took the lease", in: app, timeout: 10))
+        XCTAssertTrue(waitForLabel(containing: "mock desktop received: expanded-input-lease", in: app, timeout: 20))
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 10), "the editor did not close after the replay was accepted")
+    }
+
     /// 按工具栏上的指令不唤起系统键盘。
     ///
     /// 产品负责人 2026-09-21 在真机上点的：按「回车」把手机键盘抬起来了。根因是每颗指令

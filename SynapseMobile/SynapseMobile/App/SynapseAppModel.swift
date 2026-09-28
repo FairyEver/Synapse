@@ -94,6 +94,29 @@ final class SynapseAppModel {
         let intent: MobileIntentRequest
         /// Set on the replay itself, so a write is never replayed twice.
         let replayed: Bool
+        /// The expanded editor waits for the same result and lease replay as other writes.
+        let confirmation: CommandConfirmation?
+    }
+
+    enum CommandSendOutcome {
+        case sent
+        case notSent(String)
+        case uncertain(String)
+    }
+
+    private final class CommandConfirmation {
+        let continuation: CheckedContinuation<CommandSendOutcome, Never>
+        private(set) var isFinished = false
+
+        init(_ continuation: CheckedContinuation<CommandSendOutcome, Never>) {
+            self.continuation = continuation
+        }
+
+        func finish(_ outcome: CommandSendOutcome) {
+            guard !isFinished else { return }
+            isFinished = true
+            continuation.resume(returning: outcome)
+        }
     }
 
     private var pendingWrites: [String: PendingWrite] = [:]
@@ -1077,13 +1100,18 @@ final class SynapseAppModel {
             if result.code == "lease_preempted",
                let write = self.pendingWrites.removeValue(forKey: result.intentId) {
                 self.preemptedSessions.insert(write.sessionId)
+                // A timed-out editor no longer waits. Replaying its late refusal could
+                // run a command after the reader has already decided what to do next.
+                if write.confirmation?.isFinished == true { return }
                 if write.replayed {
                     // The one replay already happened and was refused too. Staying
                     // quiet here would be dropping the user's input for real.
-                    self.raiseTerminalMessage(
-                        result.message ?? "命令没有发送，请重试。",
-                        sessionId: write.sessionId
-                    )
+                    let message = result.message ?? "命令没有发送，请重试。"
+                    if let confirmation = write.confirmation {
+                        confirmation.finish(.notSent(message))
+                    } else {
+                        self.raiseTerminalMessage(message, sessionId: write.sessionId)
+                    }
                 } else {
                     Task { await self.replay(write) }
                 }
@@ -1103,6 +1131,16 @@ final class SynapseAppModel {
             }
 
             let write = self.pendingWrites.removeValue(forKey: result.intentId)
+            if let confirmation = write?.confirmation {
+                if result.isAccepted {
+                    confirmation.finish(.sent)
+                } else if result.code == "no_result" || result.code == "delivery_uncertain" {
+                    confirmation.finish(.uncertain(result.message ?? "电脑是否收到不确定，请确认后再试。"))
+                } else {
+                    confirmation.finish(.notSent(result.message ?? "电脑拒绝了这次操作，但没有说明原因。"))
+                }
+                return
+            }
             if !result.isAccepted, !result.isNoOp, result.code != "no_result" {
                 // The computer writes this one, and every refusal it can name comes
                 // with its own reason. The fallback says what is known here — who
@@ -1708,6 +1746,43 @@ final class SynapseAppModel {
         }
     }
 
+    /// Wait for acceptance before the expanded editor clears a long draft. A missing
+    /// reply is uncertain: the command may have run, so it is never retried here.
+    func sendCommandConfirming(_ sessionId: String, text: String) async -> CommandSendOutcome {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .notSent("没有可发送的内容。")
+        }
+        if preemptedSessions.contains(sessionId) {
+            await reclaimControl(sessionId)
+            guard !preemptedSessions.contains(sessionId) else {
+                return .notSent("电脑正在使用这个会话，命令没有发送。")
+            }
+        }
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+            return .notSent("电脑离线，命令没有发送。")
+        }
+        let intent = MobileIntentRequest(
+            intentId: UUID().uuidString,
+            kind: "command",
+            sessionId: sessionId,
+            text: text
+        )
+        return await withCheckedContinuation { continuation in
+            let confirmation = CommandConfirmation(continuation)
+            pendingWrites[intent.intentId] = PendingWrite(
+                sessionId: sessionId,
+                intent: intent,
+                replayed: false,
+                confirmation: confirmation
+            )
+            send(intent, to: desktop)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(10))
+                confirmation.finish(.uncertain("电脑是否收到不确定，请确认后再试。"))
+            }
+        }
+    }
+
     /// Asks the computer for a signed realtime-ASR URL.
     ///
     /// The phone never sees the cloud key: the desktop signs the whole URL and this
@@ -1905,7 +1980,8 @@ final class SynapseAppModel {
         pendingWrites[intent.intentId] = PendingWrite(
             sessionId: sessionId,
             intent: intent,
-            replayed: false
+            replayed: false,
+            confirmation: nil
         )
         send(intent, to: desktop)
     }
@@ -1926,13 +2002,23 @@ final class SynapseAppModel {
     /// Interrupting someone mid-keystroke is worth one silent retry; it is not
     /// worth turning into a loop.
     private func replay(_ write: PendingWrite) async {
+        guard write.confirmation?.isFinished != true else { return }
         guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
-            raiseTerminalMessage("电脑离线，命令没有发送。", sessionId: write.sessionId)
+            if let confirmation = write.confirmation {
+                confirmation.finish(.notSent("电脑离线，命令没有发送。"))
+            } else {
+                raiseTerminalMessage("电脑离线，命令没有发送。", sessionId: write.sessionId)
+            }
             return
         }
         await reclaimControl(write.sessionId)
+        guard write.confirmation?.isFinished != true else { return }
         guard !preemptedSessions.contains(write.sessionId) else {
-            raiseTerminalMessage("电脑正在使用这个会话，命令没有发送。", sessionId: write.sessionId)
+            if let confirmation = write.confirmation {
+                confirmation.finish(.notSent("电脑正在使用这个会话，命令没有发送。"))
+            } else {
+                raiseTerminalMessage("电脑正在使用这个会话，命令没有发送。", sessionId: write.sessionId)
+            }
             return
         }
         // The gateway answers a repeated intentId from its cache, which would hand
@@ -1943,7 +2029,8 @@ final class SynapseAppModel {
         pendingWrites[resent.intentId] = PendingWrite(
             sessionId: write.sessionId,
             intent: resent,
-            replayed: true
+            replayed: true,
+            confirmation: write.confirmation
         )
         send(resent, to: desktop)
     }
