@@ -42,7 +42,7 @@ struct TerminalRelayStrip: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .frame(minHeight: Metrics.minimumTapTarget)
         }
         .background(Color(uiColor: .systemBackground))
         .overlay(alignment: .top) { Divider().opacity(0.3) }
