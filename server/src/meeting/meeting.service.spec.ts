@@ -120,6 +120,18 @@ beforeEach(() => {
   )
 })
 
+describe("录音列表", () => {
+  it("只显示已收尾的录音，录制中的任务不提前显示为转写中", async () => {
+    await service.list("user-1")
+    expect(prisma.meeting.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        userId: "user-1",
+        recording: { is: { status: { in: ["ready", "deleted"] } } },
+      },
+    }))
+  })
+})
+
 describe("开始录音", () => {
   it("建好会议、录音和任务三张表再开启分块上传", async () => {
     const result = await service.startRecording("user-1", { title: "Q3 评审" })

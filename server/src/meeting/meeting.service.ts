@@ -194,7 +194,8 @@ export class MeetingService {
 
   async list(userId: string): Promise<{ readonly items: readonly MeetingSummaryDto[] }> {
     const meetings = await this.prisma.meeting.findMany({
-      where: { userId },
+      // 尚在录制或收尾的条目没有可转写的音频，不能先以「转写中」进入历史列表。
+      where: { userId, recording: { is: { status: { in: [UPLOAD_STATUS_READY, "deleted"] } } } },
       orderBy: { startedAt: "desc" },
       take: 200,
       include: { recording: true },

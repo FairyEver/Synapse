@@ -15,11 +15,16 @@ final class MeetingLiveActivityController {
     private(set) var isLive = false
 
     private weak var session: MeetingRecordingSession?
+    private var followedMeetingId: String?
     private var activity: Activity<RecordingActivityAttributes>?
     private var pump: Task<Void, Never>?
 
     /// 开始跟着这一条录音。
     func follow(_ session: MeetingRecordingSession) {
+        // 上一条刚完成就立刻开始下一条时，旧活动的 1 秒同步循环可能还没看到结束。
+        // 先收掉旧活动，新计时不能复用旧录音的灵动岛。
+        if followedMeetingId != session.meetingId { end() }
+        followedMeetingId = session.meetingId
         self.session = session
         guard pump == nil else { return }
         pump = Task { [weak self] in
@@ -77,6 +82,7 @@ final class MeetingLiveActivityController {
         pump?.cancel()
         pump = nil
         session = nil
+        followedMeetingId = nil
         isLive = false
         guard let activity else { return }
         self.activity = nil

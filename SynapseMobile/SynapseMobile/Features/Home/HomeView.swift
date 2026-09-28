@@ -38,9 +38,9 @@ struct HomeView: View {
             Section {
                 row(
                     title: "录音",
-                    subtitle: "会议录音、转写与回听",
+                    subtitle: recordingSubtitle,
                     symbol: "waveform",
-                    value: recordingCount,
+                    value: model.recording.isRecording ? nil : recordingCount,
                     action: onOpenRecordings
                 )
                 row(
@@ -240,6 +240,11 @@ struct HomeView: View {
     }
 
     /// 录音条数。为 0 时不显示值 —— 一个写着「0 条」的入口是在报告空，不是在报告有什么。
+    private var recordingSubtitle: String {
+        if model.recording.phase == .paused { return "录音已暂停" }
+        return model.recording.isRecording ? "正在录音" : "会议录音、转写与回听"
+    }
+
     private var recordingCount: String? {
         let count = model.meetings.meetings.count
         return count > 0 ? "\(count) 条" : nil

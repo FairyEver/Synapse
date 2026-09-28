@@ -242,6 +242,19 @@ describe("提交转写任务", () => {
     expect(prisma.meeting.update.mock.calls[0][0].data).toMatchObject({ status: "failed" })
   })
 
+  it("录制或上传未完成时保持待处理，不发送转写失败通知", async () => {
+    for (const status of ["pending", "uploading"]) {
+      vi.clearAllMocks()
+      prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({
+        meeting: { recording: { status, storageKey: "meeting-recordings/rec-1", size: BigInt(0) } },
+      }))
+      await service.submit("meeting-1")
+      expect(createRecTaskMock).not.toHaveBeenCalled()
+      expect(prisma.meetingTranscriptionJob.update).not.toHaveBeenCalled()
+      expect(prisma.meeting.update).not.toHaveBeenCalled()
+    }
+  })
+
   it("提交失败先重试，不立刻判死", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
     createRecTaskMock.mockRejectedValue(new Error("网络抖动"))

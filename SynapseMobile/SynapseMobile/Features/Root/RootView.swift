@@ -4,8 +4,7 @@ import UserNotifications
 struct RootView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
-    /// 胶囊的浮出与收起是纯装饰，别的地方（`NoticeBar`、终端那几条栏）都已经照这个
-    /// 开关做了，这一处漏了。
+    /// 功能页切换尊重系统的减弱动态效果设置。
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab = Tab.home
     @State private var terminalSelection: String?
@@ -49,29 +48,6 @@ struct RootView: View {
                 LoginView()
             case .signedIn:
                 tabs
-                    // 录音页收起之后，录音还在继续。这枚胶囊是「还在录、而且随时能停」
-                    // 唯一的落点——没有它，用户收起那一屏就再也找不到自己在录的那条了。
-                    //
-                    // `safeAreaInset` 而不是 `overlay`：胶囊要**占自己的一条带子**，不能
-                    // 盖在别人身上。`.overlay(alignment: .top)` 是贴在 `TabView` 的顶边
-                    // 往下 4pt，落到的正是四个 tab 各自的导航栏那一带——录着音切到「终端」
-                    // 压住的是大标题和右上角的加号，切到某个终端会话压住的是那一屏自绘的
-                    // 标题栏。原型把它放在 `top:59px`（状态栏正下方），要的是那个位置；
-                    // 区别只在：那样画是盖着，这样画是让开。
-                    //
-                    // 代价是整个 `TabView` 的内容在录音期间下移一条带子。终端的画布也跟着
-                    // 变矮，于是会照常向电脑报一次网格——和开关键盘面板时走的是同一条路。
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        // 只在真的在录的时候浮出来。`.saving` 不是——那会儿录音页已经
-                        // 收了、界面也回了列表，留一枚按不动的「完成」在顶上只是碍事。
-                        if model.recording.isRecording {
-                            RecordingCapsule()
-                                .padding(.top, 4)
-                                .padding(.bottom, 8)
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                    }
-                    .animation(reduceMotion ? nil : .snappy, value: model.recording.phase)
             }
         }
         .task {
@@ -211,7 +187,7 @@ struct RootView: View {
                 NavigationStack(path: $homePath) {
                     HomeView(
                         onOpenNotifications: { isNotificationPanelPresented = true },
-                        onOpenRecordings: { openRecording(nil) },
+                        onOpenRecordings: openRecordingsFromHome,
                         onOpenDrive: { openDrive() },
                         onOpenMail: { homePath = [.mail] },
                         onOpenClipboard: { homePath.append(.clipboard) },
@@ -447,6 +423,11 @@ struct RootView: View {
         selectedTab = .home
         meetingSelection = meetingId
         homePath = [.recordings]
+    }
+
+    private func openRecordingsFromHome() {
+        openRecording(nil)
+        if model.recording.isRecording { model.isRecordingPresented = true }
     }
 
     /// 把人送到主页那一格 → 云盘。

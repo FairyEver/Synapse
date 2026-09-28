@@ -83,14 +83,17 @@ export class MeetingTranscriptionService {
     if (!job) throw new NotFoundException("转写任务不存在。")
     if (job.status === JOB_STATUS_SUCCEEDED || job.status === JOB_STATUS_RUNNING) return
 
+    const recording = job.meeting.recording
+    if (!recording || recording.status === "deleted") {
+      await this.failJob(job.id, meetingId, "这段录音已经没有了，无法转写。")
+      return
+    }
+    // 开始录音时任务就已建立；轮询碰到它时必须等「完成」把音频提交好。
+    // 录制中既不能启动识别，也不能发「转写失败」通知。
+    if (recording.status !== "ready") return
     const credentials = this.credentials()
     if (!credentials) {
       await this.failJob(job.id, meetingId, "语音识别未配置，暂时无法转写。")
-      return
-    }
-    const recording = job.meeting.recording
-    if (!recording || recording.status !== "ready") {
-      await this.failJob(job.id, meetingId, "这段录音已经没有了，无法转写。")
       return
     }
 

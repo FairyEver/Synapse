@@ -76,14 +76,16 @@ struct MeetingListView: View {
         // 再叠一句「还没有录音」就是自相矛盾——一边说读不出来，一边说没有。这时候
         // 唯一诚实的说法是失败加一条重试，而不是一个空态。
         .overlay {
-            if model.meetings.meetings.isEmpty {
+            if model.meetings.meetings.isEmpty && !model.recording.isRecording {
                 if model.meetings.isLoading {
                     ProgressView()
                 } else if model.meetings.errorMessage == nil {
                     ContentUnavailableView {
                         Label("还没有录音", systemImage: "waveform")
                     } actions: {
-                        Button("开始录音") { model.isRecordingPresented = true }
+                        Button("开始录音") {
+                            model.isRecordingPresented = true
+                        }
                     }
                 }
             }
@@ -94,12 +96,17 @@ struct MeetingListView: View {
                 Button {
                     model.isRecordingPresented = true
                 } label: {
-                    Image(systemName: "plus")
+                    if model.recording.isRecording {
+                        Text("返回录音")
+                    } else {
+                        Image(systemName: "plus")
+                    }
                 }
                 // 和终端那个加号长得一样，但**没有 `disabled`**：终端依赖一台电脑在线，
                 // 录音不依赖任何一台电脑——采在手机上，转写在服务端。照抄那个条件会把
                 // 这个按钮在离线时就置灰，而那时候它恰恰是唯一还能用的东西。
-                .accessibilityIdentifier("new-recording")
+                .accessibilityLabel(model.recording.isRecording ? "返回录音" : "开始录音")
+                .accessibilityIdentifier(model.recording.isRecording ? "resume-recording" : "new-recording")
             }
         }
         .refreshable { await model.reloadMeetings() }
@@ -110,9 +117,7 @@ struct MeetingListView: View {
         }
         .onChange(of: model.isRecordingPresented) { _, presented in
             startIfRequested()
-            // 录音页收起（点完成或取消）之后立刻把列表捞回来：那条录音在服务端从按下加号
-            // 那一刻就存在了，不收尾也要看得见它，否则用户点完「完成」回到列表是一片没变
-            // 的样子，会以为没录上。
+            // 收起只隐藏面板；完成/取消后的结果由收尾完成时的 phase 变化刷新。
             if !presented { Task { await model.reloadMeetings() } }
         }
         .onChange(of: model.recording.phase) { _, phase in
