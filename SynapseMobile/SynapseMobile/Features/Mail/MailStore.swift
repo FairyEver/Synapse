@@ -70,12 +70,14 @@ final class MailStore {
                     applyReadState(id: id, readAt: ISO8601DateFormatter().string(from: Date()))
                 } catch { if generation == openGeneration { self.error = error.localizedDescription } }
             }
-            do {
-                let page = try await model.mailContext(id: id)
-                guard generation == openGeneration else { return true }
-                context = page.items
-                nextContextCursor = page.nextCursor
-            } catch { if generation == openGeneration { contextError = error.localizedDescription } }
+            if !message.legacyFormat {
+                do {
+                    let page = try await model.mailContext(id: id)
+                    guard generation == openGeneration else { return true }
+                    context = page.items
+                    nextContextCursor = page.nextCursor
+                } catch { if generation == openGeneration { contextError = error.localizedDescription } }
+            }
             return true
         } catch {
             guard generation == openGeneration else { return true }
@@ -112,7 +114,7 @@ final class MailStore {
             return MailSummary(messageId: item.messageId, sender: item.sender, recipients: item.recipients, toRecipients: item.toRecipients, ccRecipients: item.ccRecipients, relationKind: item.relationKind, subject: item.subject, snippet: item.snippet, sentAt: item.sentAt, readAt: readAt, attachmentCount: item.attachmentCount)
         }
         if let message = detail, message.messageId == id {
-            detail = MailMessage(messageId: message.messageId, viewerId: message.viewerId, sender: message.sender, recipients: message.recipients, toRecipients: message.toRecipients, ccRecipients: message.ccRecipients, relationKind: message.relationKind, subject: message.subject, body: message.body, sentAt: message.sentAt, readAt: readAt, replyToId: message.replyToId, conversationId: message.conversationId, relation: message.relation, quote: message.quote, attachments: message.attachments)
+            detail = MailMessage(messageId: message.messageId, viewerId: message.viewerId, sender: message.sender, recipients: message.recipients, toRecipients: message.toRecipients, ccRecipients: message.ccRecipients, relationKind: message.relationKind, subject: message.subject, body: message.body, sentAt: message.sentAt, readAt: readAt, replyToId: message.replyToId, conversationId: message.conversationId, relation: message.relation, quote: message.quote, attachments: message.attachments, legacyFormat: message.legacyFormat)
         }
     }
 

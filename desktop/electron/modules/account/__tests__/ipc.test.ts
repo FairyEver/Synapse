@@ -116,6 +116,7 @@ vi.mock("../../../services/account-service", () => ({
 }))
 
 import { accountService } from "../../../services/account-service"
+import { normalizeMailMessage, normalizeMailPage } from "../../../services/mail-response"
 import { accountIpcModule } from "../ipc"
 
 function createDriveItemForDownload(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
@@ -178,6 +179,15 @@ describe("accountIpcModule", () => {
     expect(() => accountIpcModule.methods.mailMessageList.response?.parse({ items: "invalid", nextCursor: null })).toThrow()
     await accountIpcModule.methods.mailMessageList.handler({} as IpcHandlerContext, { box: "inbox" })
     expect(accountService.executeMailOperation).toHaveBeenCalledWith({ kind: "messageList", box: "inbox" })
+  })
+
+  it("accepts normalized old server mail through the same IPC response contract", () => {
+    const person = { userId: "reader", nickname: "读者", handle: null }
+    const summary = { messageId: "old-mail", sender: person, recipients: [person], subject: "原信", snippet: "正文", sentAt: "2026-09-27T00:00:00.000Z", readAt: null, attachmentCount: 0 }
+    const page = normalizeMailPage({ items: [summary], nextCursor: null })
+    expect(accountIpcModule.methods.mailMessageList.response?.parse(page)).toMatchObject({ items: [{ toRecipients: [person], ccRecipients: [], relationKind: null }] })
+    const detail = normalizeMailMessage({ ...summary, viewerId: "reader", body: "正文", team: { id: "team-1", name: "团队" }, replyToId: null, attachments: [] })
+    expect(accountIpcModule.methods.mailMessageGet.response?.parse(detail)).toMatchObject({ legacyFormat: true, relation: null, quote: null })
   })
 
   it("accepts only a local file path when creating a mail attachment", async () => {

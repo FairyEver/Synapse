@@ -69,6 +69,33 @@ struct MailSummary: Decodable, Identifiable {
     var id: String { messageId }
 }
 
+private enum MailReadKey: String, CodingKey {
+    case messageId, viewerId, sender, recipients, toRecipients, ccRecipients, relationKind
+    case subject, snippet, body, sentAt, readAt, attachmentCount, replyToId, conversationId
+    case relation, quote, attachments, team
+}
+
+extension MailSummary {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: MailReadKey.self)
+        messageId = try values.decode(String.self, forKey: .messageId)
+        sender = try values.decode(MailPerson.self, forKey: .sender)
+        recipients = try values.decode([MailPerson].self, forKey: .recipients)
+        let legacy = !values.contains(.toRecipients) && !values.contains(.ccRecipients) && !values.contains(.relationKind)
+        toRecipients = legacy ? recipients : try values.decode([MailPerson].self, forKey: .toRecipients)
+        ccRecipients = legacy ? [] : try values.decode([MailPerson].self, forKey: .ccRecipients)
+        if !legacy && !values.contains(.relationKind) {
+            throw DecodingError.keyNotFound(MailReadKey.relationKind, .init(codingPath: decoder.codingPath, debugDescription: "Missing relation kind"))
+        }
+        relationKind = try values.decodeIfPresent(String.self, forKey: .relationKind)
+        subject = try values.decode(String.self, forKey: .subject)
+        snippet = try values.decode(String.self, forKey: .snippet)
+        sentAt = try values.decode(String.self, forKey: .sentAt)
+        readAt = try values.decodeIfPresent(String.self, forKey: .readAt)
+        attachmentCount = try values.decode(Int.self, forKey: .attachmentCount)
+    }
+}
+
 struct MailMessage: Decodable {
     let messageId: String
     let viewerId: String
@@ -86,6 +113,36 @@ struct MailMessage: Decodable {
     let relation: MailRelation?
     let quote: MailQuote?
     let attachments: [MailAttachment]
+    var legacyFormat = false
+}
+
+extension MailMessage {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: MailReadKey.self)
+        let legacy = !values.contains(.toRecipients) && !values.contains(.ccRecipients) && !values.contains(.relationKind)
+            && !values.contains(.conversationId) && !values.contains(.relation) && !values.contains(.quote)
+        if !legacy, let missing = [MailReadKey.toRecipients, .ccRecipients, .relationKind, .conversationId, .relation, .quote].first(where: { !values.contains($0) }) {
+            throw DecodingError.keyNotFound(missing, .init(codingPath: decoder.codingPath, debugDescription: "Missing mail field"))
+        }
+        let summary = try MailSummary(from: decoder)
+        messageId = summary.messageId
+        viewerId = try values.decode(String.self, forKey: .viewerId)
+        sender = summary.sender
+        recipients = summary.recipients
+        toRecipients = summary.toRecipients
+        ccRecipients = summary.ccRecipients
+        relationKind = summary.relationKind
+        subject = summary.subject
+        body = try values.decode(String.self, forKey: .body)
+        sentAt = summary.sentAt
+        readAt = summary.readAt
+        replyToId = try values.decodeIfPresent(String.self, forKey: .replyToId)
+        conversationId = legacy ? messageId : try values.decode(String.self, forKey: .conversationId)
+        relation = try values.decodeIfPresent(MailRelation.self, forKey: .relation)
+        quote = try values.decodeIfPresent(MailQuote.self, forKey: .quote)
+        attachments = try values.decode([MailAttachment].self, forKey: .attachments)
+        legacyFormat = legacy
+    }
 }
 
 struct MailMessagePage: Decodable { let items: [MailSummary]; let nextCursor: String? }

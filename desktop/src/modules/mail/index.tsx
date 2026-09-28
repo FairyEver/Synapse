@@ -50,7 +50,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
   const [search, setSearch] = useState("")
   const [compose, setCompose] = useState<ComposeStart | null>(null)
   const mail = useMail(box, search)
-  const context = useMailContext(mail.selectedId)
+  const context = useMailContext(mail.detail?.messageId === mail.selectedId && !mail.detail.legacyFormat ? mail.selectedId : null)
   const hasListItems = mail.messages.length > 0 || !!mail.nextCursor
   const showMessageColumns = mail.messages.length > 0 || mail.selectedId !== null
   const isEmpty = mail.ready && !mail.loading && !mail.error && !mail.selectedId && !hasListItems

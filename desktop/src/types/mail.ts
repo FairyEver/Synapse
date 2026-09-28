@@ -15,7 +15,7 @@ export type MailSummary = {
   readAt: string | null
   attachmentCount: number
 }
-export type MailMessage = MailSummary & { viewerId: string; body: string; team: { id: string; name: string }; conversationId: string; replyToId: string | null; relation: MailRelation | null; quote: MailQuote | null; attachments: MailAttachment[] }
+export type MailMessage = MailSummary & { viewerId: string; body: string; team: { id: string; name: string }; conversationId: string; replyToId: string | null; relation: MailRelation | null; quote: MailQuote | null; attachments: MailAttachment[]; legacyFormat?: boolean }
 export type MailContent = { formatVersion: 2; toIds: string[]; ccIds: string[]; subject: string; body: string; attachmentIds: string[]; forwardAttachmentIds: string[]; relation?: MailRelation }
 export type MailOperation =
   | { kind: "recipientSearch"; query: string; cursor?: string }

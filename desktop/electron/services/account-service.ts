@@ -102,6 +102,7 @@ import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-confi
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
+import { normalizeMailMessage, normalizeMailPage } from "./mail-response"
 import { redactSensitiveText } from "../../src/lib/agent-redaction"
 
 const logger = createMainLogger("service.account")
@@ -493,10 +494,10 @@ export class AccountService {
         const query = new URLSearchParams({ box: operation.box })
         if (operation.query) query.set("query", operation.query)
         if (operation.cursor) query.set("cursor", operation.cursor)
-        return await json("GET", `/messages?${query}`)
+        return normalizeMailPage(await json("GET", `/messages?${query}`))
       }
-      case "messageGet": return await json("GET", `/messages/${id(operation.messageId)}`)
-      case "messageContext": return await json("GET", `/messages/${id(operation.messageId)}/context${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`)
+      case "messageGet": return normalizeMailMessage(await json("GET", `/messages/${id(operation.messageId)}`))
+      case "messageContext": return normalizeMailPage(await json("GET", `/messages/${id(operation.messageId)}/context${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`))
       case "messageSetRead": return await json("PATCH", `/messages/${id(operation.messageId)}/read`, { read: operation.read })
       case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}`)
       case "attachmentLocal": {

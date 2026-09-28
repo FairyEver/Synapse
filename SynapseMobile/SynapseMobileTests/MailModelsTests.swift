@@ -24,6 +24,7 @@ struct MailModelsTests {
         #expect(message.ccRecipients.map(\.userId) == ["observer"])
         #expect(message.quote?.body == "原文")
         #expect(message.relation?.messageId == "original")
+        #expect(!message.legacyFormat)
     }
 
     @Test func encodesVersionedForwardWithSelectedAttachments() throws {
@@ -34,5 +35,42 @@ struct MailModelsTests {
         #expect(object["toIds"] as? [String] == ["new-reader"])
         #expect(object["forwardAttachmentIds"] as? [String] == ["original-file"])
         #expect((object["relation"] as? [String: String])?["kind"] == "forward")
+    }
+
+    @Test func readsOldServerMailWithoutInventingRelations() throws {
+        let summary = """
+        {"messageId":"old-1","sender":{"userId":"sender","nickname":null,"handle":"sender"},
+         "recipients":[{"userId":"reader","nickname":null,"handle":"reader"}],
+         "subject":"原信","snippet":"正文","sentAt":"2026-09-27T08:00:00.000Z","readAt":null,"attachmentCount":0}
+        """
+        let page = try JSONDecoder().decode(MailMessagePage.self, from: Data("{\"items\":[\(summary)],\"nextCursor\":null}".utf8))
+        #expect(page.items[0].toRecipients.map(\.userId) == ["reader"])
+        #expect(page.items[0].ccRecipients.isEmpty)
+        #expect(page.items[0].relationKind == nil)
+
+        let object = try #require(JSONSerialization.jsonObject(with: Data(summary.utf8)) as? [String: Any])
+        var detail = object
+        detail["viewerId"] = "reader"
+        detail["body"] = "正文"
+        detail["team"] = ["id": "team-1", "name": "团队"]
+        detail["replyToId"] = "previous-mail"
+        detail["attachments"] = []
+        let data = try JSONSerialization.data(withJSONObject: detail)
+        let message = try JSONDecoder().decode(MailMessage.self, from: data)
+        #expect(message.legacyFormat)
+        #expect(message.relation == nil)
+        #expect(message.quote == nil)
+        #expect(message.toRecipients.map(\.userId) == ["reader"])
+    }
+
+    @Test func rejectsPartiallyUpgradedSummary() throws {
+        let json = """
+        {"messageId":"mail-1","sender":{"userId":"sender","nickname":null,"handle":null},
+         "recipients":[],"toRecipients":[],"subject":"原信","snippet":"正文",
+         "sentAt":"2026-09-27T08:00:00.000Z","readAt":null,"attachmentCount":0}
+        """
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(MailSummary.self, from: Data(json.utf8))
+        }
     }
 }

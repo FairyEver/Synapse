@@ -156,6 +156,21 @@ describe("AccountService", () => {
     vi.useRealTimers()
   })
 
+  it("reads a legacy mail page and detail from a server that has not upgraded", async () => {
+    const { service } = await createTestAccountService()
+    const person = { userId: "reader", nickname: "读者", handle: null }
+    const summary = { messageId: "old-mail", sender: person, recipients: [person], subject: "原信", snippet: "正文", sentAt: "2026-09-27T00:00:00.000Z", readAt: null, attachmentCount: 0 }
+    const request = vi.spyOn(service as unknown as {
+      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "requestAuthenticatedJson").mockResolvedValueOnce({ items: [summary], nextCursor: null }).mockResolvedValueOnce({ ...summary, viewerId: "reader", body: "正文", team: { id: "team-1", name: "团队" }, replyToId: null, attachments: [] })
+
+    await expect(service.executeMailOperation({ kind: "messageList", box: "inbox" }))
+      .resolves.toMatchObject({ items: [{ toRecipients: [person], ccRecipients: [], relationKind: null }] })
+    await expect(service.executeMailOperation({ kind: "messageGet", messageId: "old-mail" }))
+      .resolves.toMatchObject({ legacyFormat: true, relation: null, quote: null })
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
   it("reports why a desktop notification was not written", async () => {
     const signedOut = await createTestAccountService()
     await expect(signedOut.service.createInternalNotification({
