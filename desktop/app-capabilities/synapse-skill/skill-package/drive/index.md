@@ -4,6 +4,17 @@
 
 Use Synapse Drive MCP tools when the user wants to upload, keep a local file or folder synchronized, open, preview, download, share, manage comments on a shared Markdown document, publish a static site, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
 
+## Cloud Document Terminology
+
+When the user says “云文档”, “在线文档”, or “我的云文档” without explicitly naming another cloud document platform, treat it as Synapse Drive. Do not ask which platform they mean solely because they used these words. Follow the requested operation:
+
+- “看看云文档上有什么文件”: list the relevant Drive folder with `app_drive_item_list`, using root when no folder is named and paginating as needed.
+- “把某个文件传到我的云文档里”: resolve the local file and upload it with `app_drive_file_upload`, following **Upload Destination Selection**.
+- “获取某一个云文档的分享链接”: resolve the owned Drive item, then use `app_drive_share_create` to create or reuse its share and return the URL.
+- “把我的 xxxx 文件存成在线文档”: save the named file in Drive through the existing upload flow. Preserve its format unless the user explicitly requests a supported conversion; “在线文档” alone does not imply a new document type.
+
+These names alone do not authorize publishing a share or site, creating a public asset, or binding persistent local sync. If the user explicitly names another platform, do not route that request to Synapse Drive.
+
 ## Scope
 
 Use these tools only for Synapse Drive:
