@@ -120,20 +120,20 @@ pnpm --filter @synapse/desktop run test
 
 装上去的是开发包，代价见上一节：**收不到推送**。这是已知且接受的，装机时不必重新讨论，更不要为此去动网关。只出 ipa 用 `pnpm mobile:build`（App Store 签名，装不上机），上传 TestFlight 用 `pnpm mobile:release`；发版细节见 `.claude/skills/ios-release`。
 
-## 「静默发版」/「静默部署」
+## 完整发版
 
-GitHub 的 `CI` 和 `Release` 工作流仅接受手动 `workflow_dispatch`。日常推送和 PR 更新不触发它们；只有用户明确要求运行 CI、发版或静默发版时才启动相应工作流。发版时先运行 CI，成功后再运行 Release。
+GitHub 的 `CI` 和 `Release` 工作流仅接受手动 `workflow_dispatch`。日常推送和 PR 更新不触发它们；只有用户明确要求运行 CI 或发版时才启动相应工作流。发版时先运行 CI，成功后再运行 Release。
 
-用户说「静默发版」或「静默部署」时，这是一条完整指令，按顺序做完四件事，不要拆开问：
+用户说「发版」「发布新版」「静默发版」或「静默部署」时，按同一套完整流程做完，不要拆开问。旧「静默」说法只是兼容别名，**不再跳过用户通知**；收到旧说法时说明已无静默模式。
 
-1. 需要的话先把当前仓库的改动全部提交。发版命令自己会 `git add -A`（`bump-version-commit-push.mjs`），不先提交，未提交的东西会被安静地卷进那句 `chore: bump version` 里。**只提交，不要 push** —— 紧接着的发版命令会把它一起推上去。
-2. 按 `synapse-release-publisher` skill 跑完整发版流程：推送版本提交后显式启动 CI，CI 成功后才显式启动 Release；**跳过第 11 节的企业微信通知**。第 0 节的 destination 校验只是为了让第 11 节能发出去，一并不做 —— 不发通知时，通知配置有问题不该拦下一次发版。
-3. 发版成功后把最新 iOS 包传到 TestFlight：`pnpm mobile:release`。
-4. 最后执行服务器部署脚本：`bash deploy.sh`。
+1. 按 `synapse-release-publisher` skill 先校验待发布说明、生产站内信 API 和完整信文。任一失败就在版本提交前停止。
+2. 需要的话先把当前仓库的改动全部提交，**只提交，不要 push**。发版命令会 `git add -A`（`bump-version-commit-push.mjs`），未提交的改动会被卷入版本提交。
+3. 按 skill 推送版本提交后显式启动 CI，CI 成功后显式启动 Release；发布并归档说明，核对下载链接。
+4. 上传最新 iOS 包到 TestFlight：`pnpm mobile:release`；部署服务器：`bash deploy.sh`。两个命令均成功结束后，使用归档说明向发送时的全站活跃账号投递一封站内信。
 
-第 3 步开始上传后就可以并行跑第 4 步，不必等构建处理完：`deploy.sh` 的 `sync_remote_code` 是 `--include` 白名单且收在 `--exclude='*'`，名单里没有 `SynapseMobile/`（也没有 `desktop/`），iOS 产物不会上服务器，两边不碰同一个东西。
+上传与部署可以并行，但必须等待两者完成才发站内信；不等待 Apple 后续处理。`deploy.sh` 的 `sync_remote_code` 白名单没有 `SynapseMobile/` 或 `desktop/`，两边不碰同一产物。
 
-「静默」的边界只有通知。归档 Release 正文、写 `docs/releases/`、打开 Release 页面都照做，只是不发企业微信。结束时明说一句「通知已按静默要求跳过」，别让人以为漏了。
+发版成功即授权发送站内信，不另行询问。用 `release:<版本>` 作为稳定请求标识；后续步骤失败时按同一版本从失败处续跑，不重新 bump 或重复群发。
 
 ## 开发命令
 

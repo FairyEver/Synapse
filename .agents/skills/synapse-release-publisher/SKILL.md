@@ -1,13 +1,13 @@
 ---
 name: synapse-release-publisher
-description: Use when working in the Synapse repository and the user asks to release, publish a new version, 发版, 发布新版, 发布新版本, 打包发布, 静默发版, 静默部署, run release, or continue the CI/Release publish loop for FairyEver/Synapse, including the success-only Enterprise WeChat update notification.
+description: Use when working in the Synapse repository and the user asks to release, publish a new version, 发版, 发布新版, 发布新版本, 打包发布, 静默发版, 静默部署, run release, or continue the CI/Release publish loop for FairyEver/Synapse, including TestFlight, server deploy, and an all-user release mail.
 ---
 
 # Synapse Release Publisher
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, explicitly dispatch CI, dispatch Release only after CI succeeds, fix failures, repeat until both pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body, open the matching GitHub Release page, and send the configured Enterprise WeChat group a versioned update notification with product notes and a one-click update entry. A release the user asked for as 「静默发版」/「静默部署」 runs the same loop without the notification and continues into TestFlight and a server deploy — see Silent Release.
+Run one complete Synapse release loop: commit outstanding work separately, bump and push the version, explicitly dispatch CI, dispatch Release only after CI succeeds, publish and archive product notes, upload the iOS build to TestFlight, deploy the server, then send one all-user release mail. The release request authorizes that final mail; do not pause for a second confirmation. 「静默发版」/「静默部署」 are legacy aliases for the same complete flow, including the mail. Tell the user that a silent mode no longer exists.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
@@ -25,30 +25,30 @@ Use this skill only for release/publish commands in `/Users/liyang/Documents/cod
 - CDN base URL: `https://desktop.release.synapse.d2.pub/`
 - COS bucket: `synapse-desktop-release-1252371654`
 - One-click update URL: `https://synapse.d2.pub/desktop/update`
-- WeCom notification command: `node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs`
-- WeCom destination configuration: local ignored `.env` keys `SYNAPSE_RELEASE_WECOM_WEBHOOK_URL` and `SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL`
+- Release mail command: `node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-mail.mjs`
+- Release mail credentials: local `server/.env.server` values `APP_PUBLIC_URL` and `ADMIN_ACCESS_SECRET`; never print either secret or the temporary session Cookie.
 
-CI and Release have only `workflow_dispatch` triggers. Ordinary pushes and PR updates start neither workflow. A user request to release or silently release authorizes the explicit CI and Release dispatches below; do not dispatch either workflow during ordinary development or merely because a push succeeded.
+CI and Release have only `workflow_dispatch` triggers. Ordinary pushes and PR updates start neither workflow. A release request authorizes the explicit CI and Release dispatches below; do not dispatch either workflow during ordinary development or merely because a push succeeded.
 
 The current Release workflow no longer stores installer binaries as GitHub Release assets. It builds platform artifacts as short-lived GitHub Actions artifacts, prepares `cdn-release/`, uploads installers, update metadata, `manifest.json`, and `release-body.md` to Tencent Cloud COS, refreshes/verifies CDN, then creates or edits the GitHub Release body in `FairyEver/SynapseAppRelease`. An empty GitHub `assets` array is expected and must not be treated as a release failure.
 
 ## Release Loop
 
-Track the current loop number, latest `EXPECTED_TAG`, tested `HEAD_SHA`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, `NOTIFICATION_NOTES_FILE`, and the most recent failure summary.
+Track the current loop number, latest `EXPECTED_TAG`, tested `HEAD_SHA`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, `RELEASE_MAIL_NOTES_FILE`, and the most recent failure summary.
 
-### 0. Validate The Enterprise WeChat Destinations
+### 0. Validate Release Mail Before Bumping
 
-Before changing the version or pushing commits, validate both configured destinations, pending release notes, and Markdown payload shape without sending a message. Both destinations are required and must be different. Use the current package version only as the preview title; the final notification uses `EXPECTED_TAG` after the version bump:
+Before changing the version or pushing commits, validate nonempty pending notes, the mail length, production HTTPS configuration, and availability of the protected broadcast API. Print the current active-user count and complete mail text without sending. Preview the next version computed by the bump command; the final mail uses `EXPECTED_TAG` after the version bump. If this check fails, stop before the version commit. The API must be deployed and verified separately before first use:
 
 ```bash
-CURRENT_VERSION=$(node -p "require('/Users/liyang/Documents/code/github/Synapse/desktop/package.json').version")
-node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs \
+NEXT_VERSION=$(node -e "const v=require('/Users/liyang/Documents/code/github/Synapse/desktop/package.json').version.split('.');v[v.length-1]=String(Number(v.at(-1))+1);process.stdout.write(v.join('.'))")
+node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-mail.mjs \
   --check \
-  --version "v${CURRENT_VERSION}" \
+  --version "v${NEXT_VERSION}" \
   --notes-file /Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md
 ```
 
-If either destination check fails, report the configuration or helper error and stop before starting the release.
+The script reads `server/.env.server`, exchanges `ADMIN_ACCESS_SECRET` for a temporary administrator Cookie, checks the audience, then logs out. Do not use a normal user's API key or call the per-account notification API for the broadcast.
 
 ### 1. Collect Pending Release Notes
 
@@ -59,15 +59,15 @@ Before bumping the version, read `/Users/liyang/Documents/code/github/Synapse/RE
 - `问题修复`
 - `技术调整`
 
-Keep the original pending notes content as the release-note input for this release attempt. If the file is missing, report that the pending release notes file is missing and stop before bumping the version. If the file exists but has no meaningful bullets, continue the release and state that no pending release notes were found.
+Keep the original pending notes content as the release-note input for this release attempt. If the file is missing or has no meaningful bullets, stop before bumping the version.
 
-Set `NOTIFICATION_NOTES_FILE` to `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md`. When meaningful notes are archived successfully in section 9, replace it with the matching archive path.
+Set `RELEASE_MAIL_NOTES_FILE` to `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md`. When notes are archived successfully in section 9, replace it with the matching archive path.
 
 Do not modify, clear, reset, or archive `RELEASE_NOTES_PENDING.md` at this stage.
 
 ### 2. Commit And Record Version
 
-From `/Users/liyang/Documents/code/github/Synapse/desktop`, run:
+Commit outstanding repository work separately without pushing before the version bump. `pnpm bump:commit:push` runs `git add -A` and would otherwise fold that work into the version commit. From `/Users/liyang/Documents/code/github/Synapse/desktop`, run:
 
 ```bash
 pnpm bump:commit:push
@@ -304,7 +304,7 @@ After `gh release edit` succeeds:
 
 1. Create `/Users/liyang/Documents/code/github/Synapse/docs/releases` if needed.
 2. Copy the consumed pending notes to `/Users/liyang/Documents/code/github/Synapse/docs/releases/$EXPECTED_TAG.md`.
-3. Set `NOTIFICATION_NOTES_FILE` to `/Users/liyang/Documents/code/github/Synapse/docs/releases/$EXPECTED_TAG.md`.
+3. Set `RELEASE_MAIL_NOTES_FILE` to `/Users/liyang/Documents/code/github/Synapse/docs/releases/$EXPECTED_TAG.md`.
 4. Reset `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md` to the empty template:
 
    ```markdown
@@ -330,7 +330,7 @@ After `gh release edit` succeeds:
 
 This consume commit must happen after the package release succeeds. It must not be folded into the version bump commit that is checked and released. If archive, reset, commit, or push fails, report the exact state and do not claim the pending notes were consumed.
 
-If pending release notes were empty at release start, do not edit the Release body; keep the workflow-generated CDN body and say that no pending release notes were consumed.
+An empty pending-notes state cannot reach this section because section 0 stops before bumping.
 
 ### 10. Open The GitHub Release Page
 
@@ -340,7 +340,7 @@ Only run this section after:
 - Release succeeded.
 - The matching GitHub Release for `EXPECTED_TAG` was found in `FairyEver/SynapseAppRelease`.
 - CDN links were found in the matching release body.
-- Pending release notes were either published while preserving CDN links and consumed successfully, or were empty at release start.
+- Pending release notes were published while preserving CDN links and consumed successfully.
 
 Open the matching release page in the user's system default browser. Do not use the Codex in-app browser, Browser plugin, browser MCP, or `node_repl` browser session for this step; on the user's Mac, `open "$RELEASE_URL"` should normally launch Google Chrome because it is the default browser.
 
@@ -359,62 +359,42 @@ fi
 
 If opening the browser fails or no opener command exists, keep the release successful and include the release URL in the final response.
 
-### 11. Send The Enterprise WeChat Update Notification
+### 11. Upload iOS And Deploy The Server
 
-Run this section only after all release success conditions in section 10 are satisfied. Read and follow `/Users/liyang/.agents/skills/wecom-notification/SKILL.md`, then use the bundled command with the final release version and recorded release notes source. The command delegates delivery to that Skill's helper and passes each configured webhook through stdin:
+After the matching desktop Release and release-note archive succeed, upload the iOS build and deploy the server. They may run concurrently, but wait for **both commands to finish successfully** before section 12. Apple processing after the upload command returns is not required.
 
 ```bash
-node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-notification.mjs \
+pnpm mobile:release
+bash deploy.sh
+```
+
+If either command fails, report the package release as successful and the complete release as unfinished. Resume the failed step for the **same `EXPECTED_TAG`** after fixing its cause; do not bump, rerun CI/Release, republish notes, or clear notes again.
+
+### 12. Send The All-User Release Mail
+
+Use the archived notes in `RELEASE_MAIL_NOTES_FILE`. The script builds one plain-text mail from nonempty sections in their original order, appends `https://synapse.d2.pub/desktop/update`, and uses `release:$EXPECTED_TAG` as the stable request ID. Do not send before both section 11 commands succeed.
+
+```bash
+node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-mail.mjs \
+  --send \
   --version "$EXPECTED_TAG" \
-  --notes-file "$NOTIFICATION_NOTES_FILE"
+  --notes-file "$RELEASE_MAIL_NOTES_FILE"
 ```
 
-The notification must use WeCom `markdown` and include:
+The admin API stores one mail and one visible recipient copy per active user, then queues the usual new-mail reminder. Its success response confirms database acceptance and recipient count, not device display. If the command fails or its response is ambiguous, rerun this step with the same tag and archived notes; the server returns the existing mail and rejects a changed body under the same request ID. Never rerun the package release to retry mail delivery.
 
-```markdown
-## Synapse vX.Y.Z 更新内容（1/1）
+## Legacy Silent Phrases
 
-### 新增功能
+「静默发版」 and 「静默部署」 now mean the full release above, including the all-user mail. Tell the user that the silent mode no longer exists. Do not skip the preflight or the mail.
 
-- ...
+## Resume An Incomplete Release
 
-[一键更新](https://synapse.d2.pub/desktop/update)
-```
-
-Include only non-empty sections from `新增功能`, `功能优化`, `问题修复`, and `技术调整`, preserving their order and bullet order. If no meaningful bullets exist, include `本次未记录更新内容。` instead of section headings.
-
-Keep every message at or below 4096 UTF-8 bytes. The bundled command splits long notes across sequential messages, repeats the version title with `(current/total)`, and includes the one-click update entry only in the final message. It removes links from release-note text while preserving Markdown link labels, so the one-click update URL is the only URL in the Enterprise WeChat notification. Do not add GitHub repository or Release links, installer or metadata links, timestamps, mentions, or other content.
-
-The bundled command sends all message chunks to the first robot, then all chunks to the second robot. If any message fails, it stops before sending later messages or destinations. Do not rerun or roll back the successful release, do not change pending release notes again, and do not retry either destination. Report that the release succeeded but the Enterprise WeChat notification failed, including the failed robot position, failed message position, status, `errcode`, and `errmsg` when available.
-
-## Silent Release
-
-「静默发版」/「静默部署」 is one instruction covering four steps, not four separate requests. Work through them in order without asking between steps.
-
-Skip exactly two things from the loop above. Both exist only to get a notification delivered, so neither has anything to do when there is none:
-
-- **Section 0** — destination validation. Its only job is to prove section 11 can deliver, and a broken webhook must not be able to block a release that will not notify anyone.
-- **Section 11** — the Enterprise WeChat notification.
-
-Everything else is unchanged: the version bump and push, the CI/Release loop, publishing the product notes into the GitHub Release body, archiving to `docs/releases/`, and opening the Release page.
-
-Before starting, commit whatever is outstanding in the repository — commit it only, do not push. `bump-version-commit-push.mjs` runs `git add -A` at the repo root and pushes what it finds, so anything left uncommitted is quietly folded into the `chore: bump version` commit instead of becoming a commit of its own. Ordinary pushes do not start CI or Release; the explicit dispatches in steps 3 and 7 do.
-
-After the release succeeds, two further steps belong to the same instruction:
-
-```bash
-pnpm mobile:release    # upload the iOS build for the new version to TestFlight
-bash deploy.sh         # deploy the server
-```
-
-Start `deploy.sh` as soon as the TestFlight upload has begun; there is no reason to wait for the build to finish processing. `deploy.sh`'s `sync_remote_code` is an `--include` whitelist closed by `--exclude='*'`, and `SynapseMobile/` — like `desktop/` — is not on it, so neither iOS nor desktop artifacts ever reach the server and the two do not contend for anything.
-
-Say in the final response that the notification was skipped as required, so its absence is not read as an omission.
+When a package release already succeeded but publishing or archiving its notes, TestFlight upload, server deployment, or mail failed, locate the matching tag and verify the previous successful steps. Resume from the first failed step without bumping again or rerunning CI/Release. If the notes were archived, use `docs/releases/<tag>.md`; if section 9 stopped before archival, finish that section using the original pending notes and the matching Release body. Do not replace the archived notes with newly accumulated pending notes. The stable `release:<tag>` request ID prevents duplicate mail.
 
 ## Exit Conditions
 
-- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, the Enterprise WeChat versioned update notification was delivered to both configured robots, and the final response includes version and download links. In a silent release the notification is deliberately absent instead, and the run additionally uploads the iOS build to TestFlight and runs the server deploy script — see Silent Release.
-- Notification failure: keep the package release successful, stop after reporting the Enterprise WeChat delivery failure, and do not claim the complete release workflow succeeded.
+- Success: CI and Release pass, the matching GitHub Release and CDN links are verified, product notes are archived, TestFlight upload and server deployment complete, and the all-user mail is accepted. Report the tag, CDN links, and actual mail recipient count.
+- Mail failure: keep the package release successful, report the complete release as unfinished, and resume the same tag with its archived notes.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
 - Download-link failure: if the matching Release exists but expected CDN links are missing from the body, report the body state and do not consume pending notes.
