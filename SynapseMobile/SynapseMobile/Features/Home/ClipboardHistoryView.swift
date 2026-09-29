@@ -19,6 +19,7 @@ struct ClipboardHistoryView: View {
             onClear: { model.clearClipboardHistory(for: model.selectedDesktopClientInstanceId) }
         )
         .navigationTitle("剪贴板历史")
+        .navigationBarTitleDisplayMode(.inline)
         .noticeOverlay(model)
     }
 }

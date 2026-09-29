@@ -83,7 +83,7 @@ struct ClipboardList: View {
         // closing the preview comes back to the list still open and still scrolled —
         // the reader was looking at one item, not leaving the list.
         .sheet(item: $previewing) { entry in
-            ClipboardPreviewSheet(entry: entry)
+            TextPreviewSheet(text: entry.text, accessibilityIdentifier: "clipboard-preview-text")
                 .presentationDetents([.fraction(0.32), .medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -103,7 +103,9 @@ struct ClipboardList: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemBackground))
         // 空态铺在列表**上面**，而不是当作 `List` 里的一行：`ContentUnavailableView`
         // 要的是整块内容区，塞进列表会先被压成一条窄行。
         //
@@ -131,31 +133,30 @@ struct ClipboardList: View {
     }
 
     private func row(_ entry: MobileClipboardEntry) -> some View {
-        HStack(spacing: 8) {
+        let timeLabel = relativeLabel(entry)
+        return HStack(spacing: 12) {
             Button {
                 onCopy(entry)
                 copiedId = entry.id
             } label: {
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(entry.text)
-                        // Two lines distinguish similar commands or paragraphs.
                         .lineLimit(2)
                         .truncationMode(.tail)
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.body)
 
                     if copiedId == entry.id {
-                        Text("已复制")
+                        Label("已复制", systemImage: "checkmark")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    } else {
-                        Text(relativeLabel(entry))
+                    } else if !timeLabel.isEmpty {
+                        Text(timeLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
                     }
                 }
-                .frame(minHeight: Metrics.minimumTapTarget)
+                .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -168,48 +169,42 @@ struct ClipboardList: View {
                 Haptics.select()
                 previewing = entry
             } label: {
-                Image(systemName: "eye")
-                    .font(.system(size: 19))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30, height: 30)
-                    // 画的是 30×30，能点的是 44×44。加在画完之后：圆圈大小不变，长的
-                    // 只有可点的框——`Metrics.minimumTapTarget` 是手指的下限。
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                Text("全文")
+                    .font(.subheadline)
+                    .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .accessibilityLabel("看全文")
             .accessibilityIdentifier("clipboard-preview-\(entry.id)")
         }
     }
 }
 
-/// One copied item, in full, read-only.
-///
-/// The answer to the row's truncation: whether this is the text the reader wants is
-/// usually decided by the part that did not fit.
-///
-/// No copy button, deliberately — the same choice `PhrasePreviewSheet` makes. The row
-/// behind already does that, and a second way in would make reading an item an act with
-/// consequences.
-private struct ClipboardPreviewSheet: View {
-    let entry: MobileClipboardEntry
+/// Read-only full text shared by clipboard history and quick phrases.
+struct TextPreviewSheet: View {
+    let text: String
+    let accessibilityIdentifier: String
+
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            Text(entry.text)
-                .font(.body)
-                // Ordinary selectable text, so the system supplies long-press selection
-                // and copy. That is the whole interaction: the only thing to do with a
-                // copied line here is read it, and with a part of it, take it.
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                // Room for the sheet's drag indicator, which draws over this content
-                // rather than above it — the same clearance the phrase preview takes.
-                .padding(.top, 24)
-                .padding(.bottom, 16)
-                .accessibilityIdentifier("clipboard-preview-text")
+        NavigationStack {
+            ScrollView {
+                Text(text)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .accessibilityIdentifier(accessibilityIdentifier)
+            }
+            .navigationTitle("全文")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
         }
     }
 }

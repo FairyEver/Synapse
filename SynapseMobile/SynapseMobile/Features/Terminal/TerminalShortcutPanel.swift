@@ -112,12 +112,9 @@ struct TerminalShortcutPanel: View {
         // 工具栏这一个位置。它由剪贴板那一段并进来（见 `ClipboardList`），所以栏本身
         // 画在这里。
         NavigationStack { panel }
-            // The sheet's own base is the grouped grey, and it is set out here rather than
-            // inside either section so that switching segments cannot change it — and so that
-            // the bar, which draws over nothing of its own, has the same grey behind it as the
-            // list below. It is also what the command pills stand on: their resting fill is the
-            // plain background, and on a plain sheet they would have no edge at all.
-            .background(Color(uiColor: .systemGroupedBackground))
+            // Keep the navigation bar and each list on the same system surface when
+            // switching segments.
+            .background(Color(uiColor: .systemBackground))
             // Fixed detents rather than a height that follows the content: switching segments
             // must not move the sheet, and a sheet sized to its content would jump every time
             // a shorter segment was chosen.
@@ -127,7 +124,7 @@ struct TerminalShortcutPanel: View {
             // preview comes back to the panel still open and still on the same segment — the
             // reader was looking at one sentence, not leaving the list.
             .sheet(item: $previewing) { phrase in
-                PhrasePreviewSheet(phrase: phrase)
+                TextPreviewSheet(text: phrase.content, accessibilityIdentifier: "phrase-preview-text")
                     // 从贴合内容的高度起，而不是半屏。一句话通常只有一两行，半屏的弹窗会
                     // 有九成是空的 —— 用户看到的是「一句话浮在一大片灰里」。往上拖还是能
                     // 到半屏和全屏，长句子照样读得完（内容是滚动视图）。
@@ -246,7 +243,7 @@ struct TerminalShortcutPanel: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
         // 空态铺在列表上面：`ContentUnavailableView` 要的是整块内容区，塞进 `List`
         // 会先被压成一条窄行。标识符挂在说明那行——它才是用例查的 `staticTexts`，
         // 挂在容器上元素类型会变成 other。
@@ -282,9 +279,10 @@ struct TerminalShortcutPanel: View {
                 }
             }
         }
-        // The look of the list is the system's own — row height, corner radius, the
-        // separator's inset — rather than a set of numbers written out to imitate it.
-        .listStyle(.insetGrouped)
+        // Use the system's plain text list, matching the clipboard segment.
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemBackground))
         // 只有「电脑答过、但它没有」才叫空。电脑根本没答过（`phrases == nil`）不是空，
         // 是不知道——那种情况这一段压根不会被画出来，`shown` 会落到剪贴板那一段。
         .overlay {
@@ -299,19 +297,19 @@ struct TerminalShortcutPanel: View {
         }
     }
 
-    /// One sentence, and the key that shows the part of it a single line cannot.
+    /// One sentence, and the action that shows the part the list cannot fit.
     ///
     /// The sentence and preview are sibling buttons: inserting and reading are distinct
     /// actions, and both can be activated without a touch gesture.
     private func row(_ phrase: MobileQuickPhrase) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Button {
                 Haptics.select()
                 onInsert(phrase)
             } label: {
                 Text(phrase.content)
-                    // Keep the list scannable; the preview shows the full sentence.
-                    .lineLimit(1)
+                    .font(.body)
+                    .lineLimit(2)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
                     .contentShape(Rectangle())
@@ -324,50 +322,14 @@ struct TerminalShortcutPanel: View {
                 Haptics.select()
                 previewing = phrase
             } label: {
-                Image(systemName: "eye")
-                    .font(.system(size: 19))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30, height: 30)
-                    // 同剪贴板那一枚：画 30×30，点 44×44。
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                Text("全文")
+                    .font(.subheadline)
+                    .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .accessibilityLabel("看全文")
             .accessibilityIdentifier("phrase-preview-\(phrase.id)")
-        }
-    }
-}
-
-/// One sentence, in full, read-only.
-///
-/// The answer to the ellipsis in the list: the part a single line could not hold is
-/// usually the part that decides whether this is the sentence you wanted.
-///
-/// No "use this" button, deliberately. The row behind already does that, and a second
-/// way in — from a sheet that is meant to be a glance — would make reading a sentence
-/// an act with consequences.
-private struct PhrasePreviewSheet: View {
-    let phrase: MobileQuickPhrase
-
-    var body: some View {
-        ScrollView {
-            Text(phrase.content)
-                .font(.body)
-                // Ordinary selectable text, so the system supplies long-press selection
-                // and copy. That is the whole interaction: the only thing to do with a
-                // sentence here is read it, and the only thing to do with a part of it
-                // is take it.
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                // Room for the sheet's drag indicator, which is drawn over this content
-                // rather than above it — the same clearance the panel itself takes, and
-                // for the same reason. Without it the sentence starts underneath the
-                // grabber.
-                .padding(.top, 24)
-                .padding(.bottom, 16)
-                .accessibilityIdentifier("phrase-preview-text")
         }
     }
 }
