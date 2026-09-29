@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synapse 桌面通知中心 · 交互演示</title>
+  <style>
+    /* 与 desktop/src/styles/globals.css 的浅色主题 token 保持一致。 */
+    :root {
+      --background: oklch(1 0 0);
+      --foreground: oklch(0.145 0 0);
+      --primary: oklch(0.205 0 0);
+      --primary-foreground: oklch(0.985 0 0);
+      --muted: oklch(0.97 0 0);
+      --muted-foreground: oklch(0.556 0 0);
+      --border: oklch(0.922 0 0);
+      --ring: oklch(0.708 0 0);
+      --selected: oklch(0.945 0 0);
+      --destructive: oklch(0.577 0.245 27.325);
+      --sidebar: oklch(0.985 0 0);
+      --radius: 0.625rem;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; margin: 0; }
+    body { background: var(--background); color: var(--foreground); font: 14px/1.5 "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button { font: inherit; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    svg { width: 16px; height: 16px; flex: none; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .app { height: 100%; display: flex; flex-direction: column; }
+    .app-topbar { height: 56px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 600; font-size: 15px; }
+    .brand-mark { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--primary); color: var(--primary-foreground); font-size: 13px; }
+    .app-layout { display: grid; grid-template-columns: 218px minmax(0, 1fr); min-height: 0; flex: 1; }
+    .app-nav { padding: 24px 12px; background: var(--sidebar); border-right: 1px solid var(--border); }
+    .app-nav p { margin: 0 12px 15px; color: var(--muted-foreground); font-size: 12px; }
+    .nav-item { display: block; padding: 8px 12px; border-radius: var(--radius); color: var(--muted-foreground); }
+    .nav-item.current { color: var(--foreground); background: var(--selected); font-weight: 500; }
+    .workspace { padding: 42px 52px; overflow: auto; }
+    .workspace h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.25; font-weight: 600; }
+    .workspace p { color: var(--muted-foreground); margin: 0 0 28px; }
+    .workspace-location { margin-top: 28px !important; }
+    .workspace-body { max-width: 700px; }
+    .work-line { height: 56px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; max-width: 700px; }
+    .work-line span:last-child { color: var(--muted-foreground); }
+    .icon-button, .button { border-radius: var(--radius); border: 1px solid transparent; background: transparent; color: var(--foreground); height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; font-weight: 500; white-space: nowrap; }
+    .icon-button { width: 32px; padding: 0; position: relative; }
+    .icon-button:hover, .button.ghost:hover { background: var(--muted); }
+    .button.outline { border-color: var(--border); background: var(--background); }
+    .button.outline:hover { background: var(--muted); }
+    .button.primary { background: var(--primary); color: var(--primary-foreground); }
+    .button.primary:hover { opacity: .9; }
+    .button.danger { color: var(--destructive); }
+    .count { min-width: 19px; height: 19px; border-radius: 999px; display: inline-grid; place-items: center; padding: 0 5px; background: var(--primary); color: var(--primary-foreground); font-size: 11px; font-weight: 600; }
+    .top-count { position: absolute; top: -7px; right: -8px; }
+    dialog { color: var(--foreground); font: inherit; }
+    dialog::backdrop { background: color-mix(in oklch, var(--foreground) 40%, transparent); }
+    .center { border: 0; border-left: 1px solid var(--border); background: var(--background); padding: 0; margin: 0 0 0 auto; width: min(1080px, calc(100vw - 72px)); max-width: none; height: 100dvh; max-height: none; }
+    .center[open] { display: flex; flex-direction: column; }
+    .center-head { height: 68px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid var(--border); }
+    .head-title { display: flex; align-items: center; gap: 10px; }
+    .head-title h2 { margin: 0; font-size: 18px; font-weight: 600; }
+    .center-tools { display: flex; align-items: center; gap: 8px; }
+    .center-body { display: grid; grid-template-columns: 386px minmax(0, 1fr); flex: 1; min-height: 0; }
+    .list-pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+    .list-tools { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 15px 0 20px; border-bottom: 1px solid var(--border); }
+    .tabs { display: flex; align-items: center; gap: 2px; background: var(--muted); border-radius: var(--radius); padding: 3px; }
+    .tab { border: 0; background: transparent; border-radius: calc(var(--radius) * .75); padding: 5px 9px; color: var(--muted-foreground); font-weight: 500; white-space: nowrap; }
+    .tab[aria-selected="true"] { background: var(--background); color: var(--foreground); }
+    .tab small { font-size: 11px; margin-left: 3px; }
+    .list-scroll, .detail-pane { overflow-y: auto; min-height: 0; }
+    .section-label { margin: 0; padding: 19px 20px 7px; color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+    .message-row { width: 100%; border: 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 9px; padding: 14px 19px; text-align: left; background: var(--background); color: var(--foreground); }
+    .message-row:hover { background: var(--muted); }
+    .message-row[aria-current="true"] { background: var(--selected); }
+    .unread-dot { width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; background: var(--primary); }
+    .message-row.read .unread-dot { background: transparent; }
+    .row-main { min-width: 0; }
+    .row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .row-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .message-row:not(.read) .row-title { font-weight: 650; }
+    .row-time, .row-meta { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
+    .row-meta { margin: 4px 0 2px; }
+    .row-preview { margin: 0; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .state-label { color: var(--foreground); font-weight: 500; }
+    .empty { padding: 70px 22px; text-align: center; color: var(--muted-foreground); }
+    .empty strong { display: block; color: var(--foreground); font-size: 14px; font-weight: 500; }
+    .detail-pane { padding: 27px 38px 48px; }
+    .detail-inner { max-width: 680px; margin: 0 auto; }
+    .detail-top { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin-bottom: 29px; }
+    .eyebrow { color: var(--muted-foreground); font-size: 12px; }
+    .detail-title { margin: 10px 0 15px; font-size: 23px; font-weight: 600; line-height: 1.35; text-wrap: balance; }
+    .detail-meta { display: grid; grid-template-columns: 52px 1fr; gap: 6px 12px; margin: 0 0 29px; font-size: 13px; }
+    .detail-meta dt { color: var(--muted-foreground); }
+    .detail-meta dd { margin: 0; }
+    .detail-content { border-top: 1px solid var(--border); padding-top: 25px; font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+    .detail-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
+    .detail-placeholder { height: 100%; min-height: 320px; display: grid; place-items: center; color: var(--muted-foreground); }
+    .menu-wrap { position: relative; }
+    .menu { position: absolute; right: 0; top: 37px; width: 178px; padding: 4px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius); z-index: 2; }
+    .menu[hidden] { display: none; }
+    .menu button { display: block; width: 100%; padding: 7px 9px; border: 0; border-radius: calc(var(--radius) * .65); background: transparent; color: var(--foreground); text-align: left; }
+    .menu button:hover { background: var(--muted); }
+    .menu button.danger { color: var(--destructive); }
+    .confirm { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin: auto; background: var(--background); }
+    .confirm h2 { margin: 0 0 9px; font-size: 18px; }
+    .confirm p { color: var(--muted-foreground); margin: 0 0 24px; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 18px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); z-index: 5; }
+    .toast.show { display: flex; }
+    .toast button { border: 0; background: transparent; color: var(--foreground); font-weight: 600; }
+    .mobile-back { display: none; }
+    @media (max-width: 850px) {
+      .center { width: 100vw; border-left: 0; }
+      .center-body { display: block; }
+      .list-pane { height: 100%; border-right: 0; }
+      .detail-pane { display: none; height: 100%; padding: 18px 22px 42px; }
+      .center-body.show-detail .list-pane { display: none; }
+      .center-body.show-detail .detail-pane { display: block; }
+      .mobile-back { display: inline-flex; }
+      .app-layout { grid-template-columns: 1fr; }
+      .app-nav { display: none; }
+      .workspace { padding: 28px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; } }
+  </style>
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true"><defs>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m6 6-6-6 6-6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m3 0-1 15H6L5 6m5 4v7m4-7v7"/></symbol>
+  </defs></svg>
+  <div class="app">
+    <header class="app-topbar">
+      <div class="brand"><span class="brand-mark">S</span>Synapse AI Studio</div>
+      <button id="open-center" class="icon-button" aria-label="打开通知中心"><svg><use href="#i-bell"/></svg><span id="top-count" class="count top-count"></span></button>
+    </header>
+    <div class="app-layout">
+      <nav class="app-nav" aria-label="应用导航"><p>工作区</p><span class="nav-item current">工作台</span><span class="nav-item">Agent 会话</span><span class="nav-item">站内信</span><span class="nav-item">工作流</span><span class="nav-item">设置</span></nav>
+      <main id="workspace" class="workspace"></main>
+    </div>
+  </div>
+
+  <dialog id="center" class="center" aria-labelledby="center-title">
+    <header class="center-head">
+      <div class="head-title"><h2 id="center-title">通知</h2><span id="header-count" class="count"></span></div>
+      <div class="center-tools">
+        <button id="read-all" class="button ghost">全部设为已读</button>
+        <div class="menu-wrap"><button id="center-more" class="icon-button" aria-label="更多操作" aria-expanded="false"><svg><use href="#i-more"/></svg></button><div id="center-menu" class="menu" hidden><button id="clear-all" class="danger">清空全部通知…</button><button id="api-guide">通知 API 文档</button></div></div>
+        <button id="close-center" class="icon-button" aria-label="关闭通知中心"><svg><use href="#i-x"/></svg></button>
+      </div>
+    </header>
+    <div id="center-body" class="center-body">
+      <section class="list-pane" aria-label="通知列表">
+        <div class="list-tools"><div class="tabs" role="tablist" aria-label="筛选通知"><button class="tab" role="tab" data-filter="all">全部</button><button class="tab" role="tab" data-filter="unread">未读 <small id="unread-tab-count"></small></button><button class="tab" role="tab" data-filter="pending">待处理 <small id="pending-tab-count"></small></button></div><button id="filter-action" class="button ghost"></button></div>
+        <div id="message-list" class="list-scroll"></div>
+      </section>
+      <section id="detail" class="detail-pane" aria-label="通知内容"></section>
+    </div>
+    <div id="toast" class="toast" role="status"><span id="toast-text"></span><button id="undo" hidden>撤销</button></div>
+  </dialog>
+
+  <dialog id="confirm" class="confirm" aria-labelledby="confirm-title">
+    <h2 id="confirm-title"></h2><p id="confirm-copy"></p>
+    <div class="confirm-actions"><button id="cancel-confirm" class="button outline">取消</button><button id="accept-confirm" class="button danger">确认清空</button></div>
+  </dialog>
+
+  <script>
+    // 静态演示数据。正式应用中的站内信正文应在选择通知后按 targetId 读取站内信。
+    const messages = [
+      { id: "mail-platform", source: "mail", title: "新站内信", preview: "来自 Synapse。", time: "18:39", date: "今天", fullTime: "2026 年 9 月 29 日 18:39", read: false, sender: "Synapse", subject: "Synapse AI Studio 1.0.42 发布通知", recipient: "所有用户", body: "Synapse AI Studio 1.0.42 已发布。\n\n本次更新改进了桌面端的稳定性，并修复了已知问题。更新后，你可以在设置中查看当前版本。\n\n如需下载新版，请前往应用内的更新页面。" },
+      { id: "terminal-pending", source: "terminal-attention", title: "Claude Code · Synapse 需要你确认", preview: "有一个终端正在等待你的操作。", time: "18:07", date: "今天", fullTime: "2026 年 9 月 29 日 18:07", read: false, pending: true, session: "Claude Code · Synapse", body: "有一个终端正在等待你的操作。前往会话查看具体请求。" },
+      { id: "terminal-complete", source: "terminal-complete", title: "Claude Code", preview: "“Claude Code · Synapse”本轮回复结束", time: "18:06", date: "今天", fullTime: "2026 年 9 月 29 日 18:06", read: true, session: "Claude Code · Synapse", body: "“Claude Code · Synapse”本轮回复结束。" },
+      { id: "external", source: "external", title: "构建完成", preview: "桌面端 CI 已通过。", time: "17:42", date: "今天", fullTime: "2026 年 9 月 29 日 17:42", read: false, group: "构建", body: "桌面端 CI 已通过。可以查看构建记录和产物。", url: "https://example.com/builds/42" },
+      { id: "mail-personal", source: "mail", title: "新站内信", preview: "来自 产品团队。", time: "11:24", date: "今天", fullTime: "2026 年 9 月 29 日 11:24", read: true, sender: "产品团队", subject: "下周评审安排", recipient: "我", body: "下周的通知中心评审安排在周三 14:00。\n\n请在评审前查看交互稿，并把需要讨论的问题整理到会议文档。" },
+      { id: "terminal-pending-2", source: "terminal-attention", title: "项目: Synapse #4 需要你确认", preview: "有一个终端正在等待你的操作。", time: "09:15", date: "今天", fullTime: "2026 年 9 月 29 日 09:15", read: true, pending: true, session: "项目: Synapse #4", body: "有一个终端正在等待你的操作。前往会话查看具体请求。" },
+      { id: "notifier", source: "desktop", title: "定时任务已完成", preview: "资料同步已结束。", time: "16:20", date: "昨天", fullTime: "2026 年 9 月 28 日 16:20", read: true, body: "资料同步已结束。" }
+    ];
+    const $ = (id) => document.getElementById(id);
+    const icon = (name) => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+    const state = { filter: "all", selected: "mail-platform", confirmation: null, lastRemoved: null, toastTimer: null };
+    const labels = { mail: "站内信", "terminal-attention": "终端", "terminal-complete": "终端", external: "外部通知", desktop: "Synapse" };
+
+    function visibleMessages() {
+      if (state.filter === "unread") return messages.filter((message) => !message.read);
+      if (state.filter === "pending") return messages.filter((message) => message.pending);
+      return messages;
+    }
+    function counts() {
+      return { unread: messages.filter((message) => !message.read).length, pending: messages.filter((message) => message.pending).length };
+    }
+    function renderWorkspace(content) {
+      $("workspace").innerHTML = content || '<h1>工作台</h1><p>最近使用</p><div class="work-line"><span>Agent 会话</span><span>4 个进行中</span></div><div class="work-line"><span>站内信</span><span>查看收件箱</span></div><div class="work-line"><span>工作流</span><span>2 个正在运行</span></div>';
+    }
+    function renderList() {
+      const items = visibleMessages();
+      const parts = [];
+      let currentDate = null;
+      for (const message of items) {
+        if (message.date !== currentDate) { currentDate = message.date; parts.push(`<h3 class="section-label">${currentDate}</h3>`); }
+        parts.push(`<button type="button" class="message-row ${message.read ? "read" : ""}" data-id="${message.id}" aria-current="${state.selected === message.id}"><span class="unread-dot" aria-hidden="true"></span><span class="row-main"><span class="row-top"><span class="row-title">${escapeHtml(message.title)}</span><time class="row-time">${message.time}</time></span><span class="row-meta">${labels[message.source]}${message.pending ? ' · <span class="state-label">待处理</span>' : ""}</span><span class="row-preview">${escapeHtml(message.preview)}</span></span></button>`);
+      }
+      $("message-list").innerHTML = parts.length ? parts.join("") : '<div class="empty"><strong>这里没有通知</strong><span>切换筛选可查看其他通知</span></div>';
+    }
+    function renderDetail() {
+      const message = messages.find((item) => item.id === state.selected);
+      if (!message) { $("detail").innerHTML = '<div class="detail-placeholder">选择一条通知查看内容</div>'; $("center-body").classList.remove("show-detail"); return; }
+      const isMail = message.source === "mail";
+      const metadata = isMail
+        ? `<dt>发件人</dt><dd>${escapeHtml(message.sender)}</dd><dt>收件人</dt><dd>${escapeHtml(message.recipient)}</dd><dt>时间</dt><dd>${message.fullTime}</dd>`
+        : `<dt>来源</dt><dd>${labels[message.source]}${message.group ? ` · ${escapeHtml(message.group)}` : ""}</dd><dt>时间</dt><dd>${message.fullTime}</dd>`;
+      const primaryAction = isMail ? "在站内信中打开" : message.pending ? "前往处理" : message.session ? "打开会话" : message.url ? "打开链接" : "";
+      $("detail").innerHTML = `<div class="detail-inner"><div class="detail-top"><button class="button ghost mobile-back" data-action="back">${icon("back")}返回列表</button><span class="eyebrow">${isMail ? "站内信" : labels[message.source]}${message.pending ? " · 待处理" : ""}</span><div class="menu-wrap"><button class="icon-button" data-action="detail-menu" aria-label="通知操作" aria-expanded="false">${icon("more")}</button><div class="menu" id="detail-menu" hidden><button data-action="toggle-read">标记为${message.read ? "未读" : "已读"}</button><button class="danger" data-action="remove">删除通知</button></div></div></div><h3 class="detail-title" tabindex="-1">${escapeHtml(isMail ? message.subject : message.title)}</h3><dl class="detail-meta">${metadata}</dl><div class="detail-content">${escapeHtml(message.body)}</div><div class="detail-actions">${primaryAction ? `<button class="button primary" data-action="navigate">${primaryAction}${icon("arrow")}</button>` : ""}<button class="button outline" data-action="remove">${icon("trash")}删除通知</button></div></div>`;
+    }
+    function render() {
+      const { unread, pending } = counts();
+      $("top-count").textContent = unread > 99 ? "99+" : unread;
+      $("top-count").hidden = unread === 0;
+      $("header-count").textContent = unread;
+      $("header-count").hidden = unread === 0;
+      $("read-all").disabled = unread === 0;
+      $("clear-all").disabled = messages.length === 0;
+      $("unread-tab-count").textContent = unread || "";
+      $("pending-tab-count").textContent = pending || "";
+      document.querySelectorAll(".tab").forEach((tab) => { tab.setAttribute("aria-selected", String(tab.dataset.filter === state.filter)); });
+      $("filter-action").textContent = state.filter === "pending" ? "忽略全部…" : state.filter === "unread" ? "全部设为已读" : "";
+      $("filter-action").hidden = state.filter === "all" || visibleMessages().length === 0;
+      renderList(); renderDetail();
+    }
+    function selectMessage(id) {
+      const message = messages.find((item) => item.id === id);
+      if (!message) return;
+      state.selected = id;
+      message.read = true;
+      render();
+      $("center-body").classList.add("show-detail");
+      $("detail").scrollTop = 0;
+      $("detail").querySelector(".detail-title")?.focus({ preventScroll: true });
+    }
+    function toast(copy, allowUndo = false) {
+      clearTimeout(state.toastTimer);
+      $("toast-text").textContent = copy;
+      $("undo").hidden = !allowUndo;
+      $("toast").classList.add("show");
+      state.toastTimer = setTimeout(() => { $("toast").classList.remove("show"); state.lastRemoved = null; }, 5500);
+    }
+    function askToClear(scope) {
+      const quantity = scope === "pending" ? messages.filter((message) => message.pending).length : messages.length;
+      if (!quantity) return;
+      state.confirmation = scope;
+      $("confirm-title").textContent = scope === "pending" ? `忽略 ${quantity} 条待处理通知？` : `清空全部 ${quantity} 条通知？`;
+      $("confirm-copy").textContent = scope === "pending" ? "通知会从列表中移除，终端中的待处理状态不会改变。" : "这些通知会从当前账号的所有设备中移除。";
+      $("accept-confirm").textContent = scope === "pending" ? "确认忽略" : "确认清空";
+      $("confirm").showModal();
+    }
+    $("open-center").addEventListener("click", () => { render(); $("center").showModal(); });
+    $("close-center").addEventListener("click", () => $("center").close());
+    $("center").addEventListener("click", (event) => { if (event.target === $("center")) $("center").close(); });
+    $("center").addEventListener("close", () => { $("center-menu").hidden = true; $("center-more").setAttribute("aria-expanded", "false"); });
+    $("center-more").addEventListener("click", () => { $("center-menu").hidden = !$("center-menu").hidden; $("center-more").setAttribute("aria-expanded", String(!$("center-menu").hidden)); });
+    $("clear-all").addEventListener("click", () => { $("center-menu").hidden = true; askToClear("all"); });
+    $("api-guide").addEventListener("click", () => { $("center-menu").hidden = true; toast("演示稿未连接 API 文档"); });
+    function markAllRead() { messages.forEach((message) => { message.read = true; }); if (state.filter === "unread") state.selected = null; render(); toast("已全部设为已读"); }
+    $("read-all").addEventListener("click", markAllRead);
+    $("filter-action").addEventListener("click", () => { if (state.filter === "pending") askToClear("pending"); else markAllRead(); });
+    document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => { state.filter = tab.dataset.filter; if (!visibleMessages().some((message) => message.id === state.selected)) state.selected = null; $("center-body").classList.remove("show-detail"); render(); }));
+    $("message-list").addEventListener("click", (event) => { const row = event.target.closest("[data-id]"); if (row) selectMessage(row.dataset.id); });
+    $("detail").addEventListener("click", (event) => {
+      const action = event.target.closest("[data-action]")?.dataset.action;
+      const message = messages.find((item) => item.id === state.selected);
+      if (action === "back") { $("center-body").classList.remove("show-detail"); return; }
+      if (!message) return;
+      if (action === "detail-menu") { const menu = $("detail-menu"); menu.hidden = !menu.hidden; event.target.closest("button").setAttribute("aria-expanded", String(!menu.hidden)); }
+      if (action === "toggle-read") { message.read = !message.read; if (state.filter === "unread" && message.read) state.selected = null; render(); }
+      if (action === "remove") { const index = messages.findIndex((item) => item.id === message.id); state.lastRemoved = { message, index }; messages.splice(index, 1); state.selected = null; render(); toast("通知已删除", true); }
+      if (action === "navigate") {
+        if (message.url) { toast("演示稿未连接外部链接"); return; }
+        $("center").close();
+        if (message.source === "mail") renderWorkspace(`<button class="button ghost" id="return-workspace">${icon("back")}返回工作台</button><p class="workspace-location">站内信 · 来自 ${escapeHtml(message.sender)}</p><h1>${escapeHtml(message.subject)}</h1><div class="detail-content workspace-body">${escapeHtml(message.body)}</div>`);
+        else if (message.session) renderWorkspace(`<button class="button ghost" id="return-workspace">${icon("back")}返回工作台</button><p class="workspace-location">Agent 会话</p><h1>${escapeHtml(message.session)}</h1><div class="work-line"><span>${message.pending ? "等待你的操作" : "本轮回复结束"}</span><span>已定位到会话</span></div>`);
+      }
+    });
+    $("workspace").addEventListener("click", (event) => { if (event.target.closest("#return-workspace")) renderWorkspace(); });
+    $("cancel-confirm").addEventListener("click", () => $("confirm").close());
+    $("accept-confirm").addEventListener("click", () => { const removed = state.confirmation === "pending" ? messages.filter((message) => message.pending) : [...messages]; for (const message of removed) messages.splice(messages.indexOf(message), 1); state.selected = null; state.lastRemoved = null; $("confirm").close(); render(); toast(state.confirmation === "pending" ? "已忽略待处理通知" : "已清空通知"); state.confirmation = null; });
+    $("undo").addEventListener("click", () => { if (state.lastRemoved) { messages.splice(state.lastRemoved.index, 0, state.lastRemoved.message); state.selected = state.lastRemoved.message.id; state.lastRemoved = null; render(); $("toast").classList.remove("show"); } });
+    renderWorkspace(); render(); $("center").showModal(); selectMessage("mail-platform");
+  </script>
+</body>
+</html>
