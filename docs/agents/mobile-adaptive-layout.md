@@ -53,3 +53,4 @@ Apple 依据：[Layout](https://developer.apple.com/design/human-interface-guide
 - 受保护的站内链接在加载前用 WebKit Cookie 单独查询 Console 会话，不能把原生 Bearer 带入这项检查。网页身份与当前 Remote 身份相同时直接进入；缺失或不同则展示系统弹窗，用户确认后才签发网页会话。
 - 服务端用当前原生 Bearer 和仍有效的 refresh token 双重校验，签发普通用户 Web 会话，并将它关联到原生会话。App 把会话写入 WebKit 的 HttpOnly Cookie（API 与 Drive 路径，包含自托管地址的路径前缀），不放入 URL 或 JavaScript。原生退出时服务端撤销关联的 Web 会话，App 清理本机 Cookie。
 - iPhone 使用底部确认面板；iPadOS 可缩放窗口使用系统自适应面板。加载、失败、取消和关闭都要有明确出口，动态字体与 VoiceOver 使用系统控件语义。
+- 站内那一页的顶栏尾端有一枚分享键，把手上的网页交给系统分享面板（`square.and.arrow.up`）；面板自己带「拷贝」，不另做复制链接的按钮。交出去的是**当前那一页**的地址，不是进来时那一条 —— 网页版云盘是单页应用，从一份分享里进一个目录不会重新加载。地址只能从 `WKWebView.url` 这一条 KVO 上拿：`WKNavigationDelegate` 里没有「同文档导航」那一条（旧 `WebView` 的 `didSameDocumentNavigation` 在 `WKWebView` 上不存在，写出来能编译、WebKit 一次都不调它），旁听委托拿到的会一直是进来时那一条。回归在 `LinkBrowserWebViewTests`。站外链接仍走 `SFSafariViewController`，分享键是它自己带的。

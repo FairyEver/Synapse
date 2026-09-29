@@ -1,5 +1,6 @@
 import SafariServices
 import SwiftUI
+import UIKit
 import WebKit
 
 struct WebLink: Identifiable {
@@ -120,9 +121,22 @@ private struct SynapseSiteBrowser: View {
         let existingEmail: String?
     }
 
+    /// 顶上那枚分享键交出去的那一条。
+    ///
+    /// 包一层身份是 `sheet(item:)` 要的：同一页连着分享两次，也该各弹一次面板。
+    private struct Share: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
     @State private var phase: Phase = .checking
     @State private var consent: Consent?
     @State private var consentAccepted = false
+    /// 网页当前那一页的地址。跟着网页走而不是钉在进来时那一条上：网页版云盘是单页应用，
+    /// 从一份分享里进一个目录不重新加载，那时屏幕上已经不是进来时那一页了。还没报回来
+    /// 之前是 nil，分享退回进来时那一条。
+    @State private var liveURL: URL?
+    @State private var sharing: Share?
 
     var body: some View {
         NavigationStack {
@@ -132,7 +146,11 @@ private struct SynapseSiteBrowser: View {
                     ProgressView("正在检查登录状态")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .ready:
-                    SynapseWebView(url: url, onLoginRequired: { Task { await prepare() } })
+                    SynapseWebView(
+                        url: url,
+                        onLoginRequired: { Task { await prepare() } },
+                        onURLChange: { liveURL = $0 }
+                    )
                 case .failed(let message):
                     ContentUnavailableView {
                         Label("无法打开网页", systemImage: "wifi.exclamationmark")
@@ -149,6 +167,16 @@ private struct SynapseSiteBrowser: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: onFinish) { Label("关闭", systemImage: "xmark") }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { sharing = Share(url: liveURL ?? url) } label: {
+                        Label("分享", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+            // 分享面板挂在栈里，登录那张挂在栈外：同一片视图上挂两片 sheet 只有一片会
+            // 出来（云盘那一屏踩过，见 `DriveBrowserView`）。
+            .sheet(item: $sharing) { target in
+                WebShareSheet(url: target.url)
             }
         }
         .task(id: url) { await prepare() }
@@ -282,16 +310,24 @@ private struct WebLoginConsentSheet: View {
     }
 }
 
-private struct SynapseWebView: UIViewRepresentable {
+/// `internal` 而不是 `private`：这一层是「网页换了页也要知道换到哪」唯一测得着的地方
+/// （`LinkBrowserWebViewTests` 拿一个真的 `WKWebView` 驱动它），而顶栏那枚分享键交出去的
+/// 是哪一条，全看这里报回来的地址。
+struct SynapseWebView: UIViewRepresentable {
     let url: URL
     let onLoginRequired: () -> Void
+    /// 网页当前那一页的地址，整页加载与网页自己换页都报。
+    let onURLChange: (URL) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onLoginRequired: onLoginRequired) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onLoginRequired: onLoginRequired, onURLChange: onURLChange)
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
+        context.coordinator.followAddress(of: webView)
         webView.load(URLRequest(url: url))
         return webView
     }
@@ -300,8 +336,28 @@ private struct SynapseWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         let onLoginRequired: () -> Void
+        let onURLChange: (URL) -> Void
+        /// 地址那一条观察。得持有它才一直在 —— `NSKeyValueObservation` 一放就停。
+        private var address: NSKeyValueObservation?
 
-        init(onLoginRequired: @escaping () -> Void) { self.onLoginRequired = onLoginRequired }
+        init(onLoginRequired: @escaping () -> Void, onURLChange: @escaping (URL) -> Void) {
+            self.onLoginRequired = onLoginRequired
+            self.onURLChange = onURLChange
+        }
+
+        /// 网页换了地址就报一次。
+        ///
+        /// 不听委托：`WKNavigationDelegate` 里没有「同文档导航」那一条 —— 旧 `WebView` 的
+        /// `didSameDocumentNavigation` 在 `WKWebView` 的委托上不存在，照那个名字写一个方法
+        /// 出来能编译、也能站在这个类里，但 WebKit 一次都不会调它。网页版云盘是单页应用，
+        /// 从一份分享里进一个目录、点开另一份文件都不重新加载，那样写的结果是分享的一直停在
+        /// 进来时那一条。`url` 是地址变化的唯一出口，整页加载与单页换页都落在它上面。
+        func followAddress(of webView: WKWebView) {
+            address = webView.observe(\.url, options: [.new]) { [weak self] webView, _ in
+                guard let url = webView.url else { return }
+                self?.onURLChange(url)
+            }
+        }
 
         func webView(
             _ webView: WKWebView,
@@ -324,6 +380,21 @@ private struct SynapseWebView: UIViewRepresentable {
             }
         }
     }
+}
+
+/// 系统分享面板，交出去的是一条链接。
+///
+/// 自己写一份，不与 `DiagnosticLogView`、`DriveFileExport` 里那两份共用：一份是 `private`，
+/// 另一份那个 `items` 收的是「下下来的文件」。面板自己带「拷贝」，那就是复制这条链接，
+/// 所以这里不再另做一枚复制键。
+private struct WebShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private struct SafariLinkBrowser: UIViewControllerRepresentable {
