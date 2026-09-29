@@ -3,7 +3,7 @@ import Testing
 
 @testable import SynapseMobile
 
-/// 键盘面板的几何（设计文档 `2026-09-20-terminal-keyboard-high-frequency-design.md` §5）。
+/// 验证当前键盘面板的几何；后续界面调整按 apple-design 重新核对 Apple 原文。
 ///
 /// 这一条钉的是**面板只有一个高度**，以及它和键、行距之间的关系。它一度是两档（第一页
 /// 306、第二页 390，随页走），2026-09-19 面板上面那三行 —— 分页器、工具栏、输入栏 ——

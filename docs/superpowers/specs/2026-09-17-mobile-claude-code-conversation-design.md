@@ -1,5 +1,7 @@
 # 手机端创建 Claude Code 对话 · 设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 日期：2026-09-17
 状态：待评审
 原型：`docs/prototypes/2026-09-17-mobile-claude-code-conversation.html`

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apple Design"
+  short_description: "按 Apple 官方规范设计和审查 iPhone、iPadOS 界面"
+  default_prompt: "Use $apple-design to locate and read the relevant Apple guidance before designing this iOS interface."

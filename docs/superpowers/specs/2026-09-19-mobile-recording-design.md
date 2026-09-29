@@ -1,5 +1,7 @@
 # 手机端录音
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 原型（可点，浏览器打开）：`~/Desktop/手机端录音/原型.html`
 > 状态：2026-09-19 设计定稿待实施
 > 界面用词、状态口径全部沿用电脑端 `docs/superpowers/specs/2026-09-19-meeting-recording-redesign-design.md`。两份文档冲突时以电脑端那份为准，除了本文件第 3 节明确推翻的两条。

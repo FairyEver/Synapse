@@ -1,9 +1,11 @@
 # 手机端终端工具栏改造 · 产品设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 状态：**定稿，可实施。** 边界已由产品负责人逐条拍板（见 §3）。
 > 界面原型：`docs/prototypes/2026-09-18-mobile-terminal-toolbar.html`（仓库内路径，用浏览器打开，可直接点）
 > 实施计划：`docs/superpowers/plans/2026-09-18-mobile-terminal-toolbar.md`
-> 相邻两轮：`docs/superpowers/specs/2026-09-18-mobile-input-bar-design.md`（输入栏）、`docs/superpowers/specs/2026-09-18-terminal-keyboard-slot-design.md`（键盘面板）。关系见 §7。
+> 相邻两轮：`docs/superpowers/specs/2026-09-18-mobile-input-bar-design.md`（输入栏）及已移除的键盘槽位旧界面稿。关系见 §7。
 
 ---
 
@@ -47,7 +49,7 @@ ScrollView(.horizontal, showsIndicators: false) {
 
 ⌨ 打开的是**按键面板**：一个键位格，装着系统键盘打不出来的键（esc、⇧tab、tab、⌫、回车、方向键、home/end/pgup/pgdn、del、Ctrl 组合）。它是"输入"的东西，不是"指令"。
 
-面板的**形态**归另一份文档管（`2026-09-18-terminal-keyboard-slot-design.md`：从浮层改成占版面的一个槽位）。本轮**不动它的形态和内容**，只换它入口那颗键的图标和位置。
+面板从浮层改成键盘槽位属于此前的界面改版（旧稿已移除）。本轮当时只换了入口那颗键的图标和位置。
 
 ### 2.4 「快捷输入」在电脑上是什么
 
@@ -299,7 +301,7 @@ insetGrouped：灰底、白卡片、圆角 10、行高 44、分隔线左缩 16�
 | 那一份 | 关系 |
 |---|---|
 | `2026-09-18-mobile-input-bar-design.md`（输入栏重构） | 输入栏四格、语音、按住说话全部不动。左端那颗键盘图标是它的，本轮**不碰输入栏一个像素**。 |
-| `2026-09-18-terminal-keyboard-slot-design.md`（键盘面板改槽位） | 那份写的是「工具栏最左边那颗 ⌨」。本轮把那颗键的**图标**换成 ⌘、**位置**从"横滑区里的第一个"变成"左固定块里的唯一一个"。两份都改 `accessoryBar`（同一个函数体），**后落地的那份要手工 rebase**：槽位那轮改的是"面板是浮层还是占版面"，与本轮的左右固定不冲突，但代码在同一个地方。 |
+| 键盘槽位旧界面改版（稿件已移除） | 当时两轮都改 `accessoryBar`；这段只记录实施历史，当前形制以 Apple 原文和现有实现重新核对。 |
 | 本轮的面板 vs 键盘面板 | 一个是浮层、一个是槽位。**不要顺手统一**——理由见 §5.8，是产品负责人分别确认过的两个决定。 |
 
 ---

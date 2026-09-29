@@ -1,5 +1,7 @@
 # 手机端云盘实施计划
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 Spec：`docs/prototypes/2026-09-25-mobile-drive-design.html`（设计规格与可交互原型）。
 Spec 是权威；本计划是它的论证。冲突以 Spec 为准，并在 ledger 里记 `Ruling:`。
 

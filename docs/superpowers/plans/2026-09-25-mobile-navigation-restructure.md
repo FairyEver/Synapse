@@ -1,5 +1,7 @@
 # 手机端导航改版 Implementation Plan
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 手机端底栏从「终端 / 录音 / 消息 / 我的」四格收敛为「主页 / 终端 / 我的」三格，录音与剪贴板历史进入主页的「功能」清单，通知降级为主页右上角铃铛加覆盖面板，「我的」从平铺四段改为七个分类的二级下钻。

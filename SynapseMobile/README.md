@@ -2,11 +2,11 @@
 
 用同一个 Synapse 账号在 iPhone 或 iPad 上查看和控制电脑上的终端。
 
-iPadOS 的可缩放窗口使用系统自适应标签栏和列表 / 详情分栏；窗口变窄时自动折叠为单列。移动端新页面的布局要求见[移动端布局规则](../docs/agents/mobile-adaptive-layout.md)。
+当前 iPadOS 界面会随窗口宽度调整导航。新页面的组件和组织方式须先按 [apple-design](../.agents/skills/apple-design/SKILL.md) 阅读 Apple 官方原文；业务状态与尺寸归属见[移动端运行时约束](../docs/agents/mobile-runtime-contracts.md)。
 
 ## 导航结构
 
-底栏三格，**不再增加**：
+当前底栏三格：
 
 | 位置 | 放什么 |
 |---|---|
@@ -150,7 +150,7 @@ xcodebuild test -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMo
 还有一格是这套用例**够不到**的：iPadOS 半窗 / 三分之一窗。`simctl`、Stage Manager 与
 XCUITest 都改不了模拟器的窗口尺寸，所以窗口矩阵只有 iPhone 竖 ↔ 横、iPad 全屏竖 ↔ 横
 实测过，`regular → compact` 的运行时转场没有证据（缺口与判据的边界记在
-`docs/agents/mobile-adaptive-layout.md`）。
+`docs/agents/mobile-runtime-contracts.md`）。
 
 ## 推送（可选，但这是核心场景）
 

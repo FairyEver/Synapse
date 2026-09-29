@@ -1,5 +1,7 @@
 # 手机端输入栏重构 · 产品设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 状态：**定稿，可实施。** 四条待拍板已全部拍板（§3.1、§3.6、§4.9），原 §10 已并进正文。
 > 界面原型：`docs/prototypes/2026-09-18-mobile-input-bar.html`（仓库内路径，用浏览器打开，可直接点）
 > 实施计划：`docs/superpowers/plans/2026-09-18-mobile-input-bar.md`

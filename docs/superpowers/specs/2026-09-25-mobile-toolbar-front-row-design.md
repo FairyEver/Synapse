@@ -1,9 +1,11 @@
 # 手机终端工具栏：前段各自定义 · 产品设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 状态：**定稿，已实施**（2026-09-25）。
 > 相关：`2026-09-18-mobile-terminal-toolbar-design.md`（工具栏的形制：左固定 · 中横滑 · 右固定）、
 > `2026-09-17-terminal-shortcut-sync-design.md`（手机上的按钮由电脑下发）、
-> `2026-09-20-terminal-keyboard-high-frequency-design.md`（键盘面板第一页的高频键）。
+> 键盘面板第一页的高频键（旧界面稿已移除，现状以代码与测试为准）。
 >
 > **本文档改写的条文**：`2026-09-18-mobile-terminal-toolbar-design.md` §2.1「按钮来自电脑」、
 > §3.2 里「中间横滑区就是电脑的按钮」、§9 里把「手机上的按钮」整件事当作电脑侧的一条。

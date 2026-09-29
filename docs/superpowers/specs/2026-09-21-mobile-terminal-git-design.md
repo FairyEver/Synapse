@@ -1,5 +1,7 @@
 # 手机端终端 · Git 操作 · 产品设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 状态：**定稿，可实施。** 三轮提问的口径已由产品负责人拍板，见 §7。
 > 界面原型：`docs/prototypes/2026-09-21-mobile-terminal-git.html`（仓库内路径，用浏览器打开，可直接点；六种现场可切）
 > 实施计划：`docs/superpowers/plans/2026-09-21-mobile-terminal-git.md`

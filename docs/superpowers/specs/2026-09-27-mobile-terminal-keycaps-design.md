@@ -1,7 +1,9 @@
 # 终端键盘面板：键帽照那台电脑印 · 产品设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 日期：2026-09-27。上游：`2026-09-17-terminal-full-keyboard-design.md`（修饰键行）、
-`2026-09-20-terminal-keyboard-high-frequency-design.md`（面板现状）。
+键盘面板现状以代码与测试为准（旧界面稿已移除）。
 
 ## 1. 要解决什么
 

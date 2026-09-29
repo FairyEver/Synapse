@@ -48,29 +48,28 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | Knowledge Base、Agent Runtime、Claude SDK、MCP 诊断 | `docs/agents/knowledge-base.md`、`docs/agents/agent-runtime-security.md` |
 | 模型上下文、Provider 模型匹配、模型能力目录更新 | `docs/agents/model-capability-catalog.md` |
 | macOS 自动更新、ShipIt/Squirrel、`quitAndInstall`、更新退出与恢复 | `docs/superpowers/specs/2026-07-21-desktop-update-handoff-design.md` |
-| UI、样式、交互、产品文案 | `docs/agents/ui-and-product.md`、`.claude/rules/design.md`、`.claude/rules/ui-rules.md` |
-| iOS / iPadOS 页面、导航、弹窗、终端尺寸、移动端新功能 | `docs/agents/mobile-adaptive-layout.md` |
+| 桌面 Renderer UI、样式、交互、产品文案 | `docs/agents/ui-and-product.md`、`.claude/rules/design.md`、`.claude/rules/ui-rules.md` |
+| iOS / iPadOS 界面设计、开发、审查 | `.agents/skills/apple-design/SKILL.md`；再按 Skill 打开相关 Apple 官方原文 |
+| 移动端业务状态、终端尺寸、网页身份等运行时约束 | `docs/agents/mobile-runtime-contracts.md` |
 | 后续规划 | `docs/agents/future-plans.md` |
 | System Notifier | `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md` |
 | Rule / Skill / Prompt 编辑器兼容 | `docs/reference/editor-integration-matrix.md` |
 | Issue / PRD | `docs/agents/issue-tracker.md`、`docs/agents/triage-labels.md` |
 | 领域模型 / ADR | `CONTEXT.md`、`docs/agents/domain.md`、`docs/adr/` |
 
-修改带产品边界的模块前，还要用模块名、目录名、能力名和即将修改的路径在 `docs/` 中搜索相关设计文档，重点检查 `docs/agent-guides/`、`docs/superpowers/specs/`、`docs/superpowers/plans/`。相关文档中的 `Hard Rules`、`Non-Goals` 以及“禁止 / 不允许 / 必须 / 不支持 / 不新增”均为强约束。
+修改带产品边界的模块前，还要用模块名、目录名、能力名和即将修改的路径在 `docs/` 中搜索相关设计文档，重点检查 `docs/agent-guides/`、`docs/superpowers/specs/`、`docs/superpowers/plans/`。相关文档中的 `Hard Rules`、`Non-Goals` 以及“禁止 / 不允许 / 必须 / 不支持 / 不新增”均为强约束。历史 iOS 界面稿中的视觉、组件形制和页面组织描述只作历史记录；当前 iOS 界面规范由 `apple-design` 引导阅读 Apple 官方原文。历史稿中的业务协议、安全和运行时约束不因此失效。
 
-## UI 与产品文案底线
+## 桌面 Renderer UI 与产品文案底线
 
 - 使用当前 shadcn/Radix 组件、主题 token 和现有模块实现；禁止自定义颜色、hex/rgb/hsl、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和普通场景的内联样式。
 - UI 文案只保留必要标题、label、操作和空/错/加载状态；禁止功能介绍、实现解释、重复状态、营销文案和 AI 自称。
 - 写 UI 前必须检查 `desktop/components.json`、`desktop/src/styles/globals.css`、`desktop/src/components/ui/` 和当前模块实现。
 
-## iPhone 与 iPadOS 共用界面
+## iPhone 与 iPadOS 界面
 
-- `SynapseMobile/` 的每项用户可操作功能都必须同时考虑 iPhone 与 iPadOS 可缩放窗口；不得只把 iPhone 页面等比放大，或以设备型号代替窗口可用空间判断布局。
-- 有列表和详情的功能必须复用 `AdaptiveFeatureNavigation` 的选择与折叠模式：宽窗口列表、详情并排，紧凑窗口单列下钻；选中项和深链目标在旋转、窗口缩放、切 Tab 后保持一致。顶层功能导航使用系统自适应 Tab / Sidebar。
-- iPadOS 设置采用分类列表与详情；终端主画布按实际可用尺寸计算网格，窗口拖动中不得向桌面反复发送过渡尺寸。录音、通知和终端的现有业务状态不可因栏位折叠丢失。
-- 使用 SwiftUI 和系统控件、系统颜色、安全区与呈现方式；支持动态字体、VoiceOver、硬件键盘和指针。任何新的 iOS 页面都按 `docs/agents/mobile-adaptive-layout.md` 的宽窗、半窗、紧凑窗矩阵设计与验证。旧专题规格中的「不做 iPad 专门适配」仅代表当次范围，不再是后续功能的豁免。
-- 显示通知未读数的地方一律封顶：99 条以内照实写，超过写「99+」（App 图标角标只收数字，封在 99）。新增显示未读数的地方同样适用；四处现状、写法与理由见 `docs/agents/mobile-adaptive-layout.md` 的「通知数量显示」。
+- 设计、实现或审查 `SynapseMobile/` 的界面时必须使用 `.agents/skills/apple-design/SKILL.md`，按任务阅读相关 Apple HIG 原文和框架文档。组件、视觉与页面组织的结论要注明对应官方依据；不得从旧项目界面规则、原型或个人偏好推断 Apple 的要求。
+- 同时核对 iPhone 与 iPadOS 可缩放窗口、项目最低部署版本和无障碍。旧专题规格中的「不做 iPad 专门适配」仅描述当次范围，不是后续功能的豁免。
+- 移动端的业务状态、深链、通知数量、终端尺寸和网页身份等约束见 `docs/agents/mobile-runtime-contracts.md`；界面适配不能改变这些行为。
 
 ## Phase 0 架构硬约束
 

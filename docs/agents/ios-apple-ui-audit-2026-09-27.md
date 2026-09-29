@@ -21,5 +21,5 @@
 
 ## 尚需验收
 
-- 终端键盘翻页圆点当前约 22×22pt。Apple 的[触控目标指南](https://developer.apple.com/design/tips/)建议至少 44×44pt，但本仓 `2026-09-20-terminal-keyboard-high-frequency-design.md` 固定了 346pt 面板高度；扩大点击区的布局取舍已向用户确认，收到选择后再改动该规格。
+- 终端键盘翻页圆点当时约 22×22pt。Apple 的[触控目标指南](https://developer.apple.com/design/tips/)建议至少 44×44pt；当时的 346pt 面板高度是旧界面稿的取舍。后续调整须按 [apple-design](../../.agents/skills/apple-design/SKILL.md) 重新阅读官方原文并验证当前实现。
 - 在 iPad 宽窗、半窗、紧凑窗以及大字号下，核对分栏切换、录音面板滚动与页脚。使用 VoiceOver 核对剪贴板、快捷输入及两个分段控件；这些需要运行应用，当前仅完成编译与源码检查。

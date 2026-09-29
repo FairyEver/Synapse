@@ -8,9 +8,9 @@
 - 即将修改的路径片段，例如 `desktop/src/modules/workflow`、`desktop/electron/services/agent-runtime`。
 - 重点目录：`docs/agent-guides/`、`docs/superpowers/specs/`、`docs/superpowers/plans/`、模块专属目录和 `docs/adr/`。
 
-优先阅读与当前改动直接相关的文档，不批量加载无关长文。文档中的 `Hard Rules`、`Non-Goals` 和明确的“禁止 / 不允许 / 必须 / 不支持 / 不新增”是强约束。没有搜到可信文档时继续遵守根规则和现有代码边界，不得编造路径。
+优先阅读与当前改动直接相关的文档，不批量加载无关长文。文档中的 `Hard Rules`、`Non-Goals` 和明确的“禁止 / 不允许 / 必须 / 不支持 / 不新增”是强约束；历史 iOS 界面稿中的视觉、组件和页面组织规定不再作为现行约束，按 `apple-design` 阅读 Apple 原文。没有搜到可信文档时继续遵守根规则和现有代码边界，不得编造路径。
 
-UI 任务必须额外阅读 `.claude/rules/design.md`、`.claude/rules/ui-rules.md`、`desktop/components.json`、`desktop/src/styles/globals.css` 和当前模块实现。编辑器集成任务必须阅读 `docs/reference/editor-integration-matrix.md`。
+桌面 Renderer UI 任务必须额外阅读 `.claude/rules/design.md`、`.claude/rules/ui-rules.md`、`desktop/components.json`、`desktop/src/styles/globals.css` 和当前模块实现。iOS / iPadOS 界面任务必须阅读 `.agents/skills/apple-design/SKILL.md` 指向的 Apple 官方原文。编辑器集成任务必须阅读 `docs/reference/editor-integration-matrix.md`。
 
 ## 编码前
 

@@ -1,5 +1,7 @@
 # 手机端终端 · 分组快捷命令 · 产品设计文档
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 状态：**待评审。**
 > 上游文档：`docs/superpowers/specs/2026-09-17-mobile-claude-code-conversation-design.md` —— 它的 §7
 > 把本功能显式列为「这次不做、将来一并收口」，理由是「协议里已有 `launchCommand`，但手机端既没有

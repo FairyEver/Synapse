@@ -1,5 +1,7 @@
 # 手机端终端工具栏改造 · 实施计划
 
+> 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
+
 > 设计（权威）：`docs/superpowers/specs/2026-09-18-mobile-terminal-toolbar-design.md`
 > 原型（可点）：`docs/prototypes/2026-09-18-mobile-terminal-toolbar.html`
 > **冲突时以设计文档为准。**
@@ -185,7 +187,7 @@ xcodebuild test -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMo
 - **标识符一个都不能改**：`toolbar-scroll` 留在中间那个 `ScrollView` 上（现有 UI 测试按 `app.scrollViews["toolbar-scroll"]` 找它），`toolbar-keyboard` 留在 ⌘ 上（现有测试按名字点它开面板）。新的 ⇧ 用 `toolbar-all`。
 - **两侧不进 `ScrollView`。** 横滑区给一个最小宽度（约一条最宽胶囊 + 24），窗口更窄时优先压缩它，两侧永不压缩、永不隐藏。
 - **键盘面板的开关行为一个字不改**：点的还是 `toggleKeyboardPanel()`，无障碍标签还是「打开键盘」，只是脸换了。
-- **和键盘槽位那轮的 rebase。** 那份文档（`2026-09-18-terminal-keyboard-slot-design.md`）改的是同一个函数体，它写的是「工具栏最左边那颗 ⌨」。谁后落地谁手工合，别指望自动合得上。
+- **和键盘槽位那轮的历史交叉。** 两轮当时都改了 `accessoryBar`；旧界面稿已移除，本条只供追溯当期实施顺序。
 - 现有一条 UI 断言会红：`TerminalFlowUITests` 里数 `identifier BEGINSWITH 'toolbar-'` 的按钮数 == 7。多了一颗真的多了一颗，**改数字**，不要改标识符去绕开它。
 
 ### 涉及文件
