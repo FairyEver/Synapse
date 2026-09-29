@@ -3,8 +3,7 @@ import SwiftUI
 /// 通知面板。
 ///
 /// 它是一个**覆盖层，不是底栏的一个位置**：从主页右上角的铃铛打开，点一条就按它自己的
-/// 目标去（会话、录音、外链），面板同时关掉。所以这一屏没有详情页 —— 一条通知的价值在
-/// 「带你去哪」，不在读它的全文；正文进到行里。
+/// 目标去（会话、录音、外链），面板同时关掉。正文摘要进到行里，全文由通知面板单独呈现。
 ///
 /// 筛选栏是列表里**自己一段**：这一行清了底色，于是它不成卡片，只在页面底色上占一条
 /// 带子，和下面那张卡片之间只隔着这条带子自己的下边距。分段控件切换的是这一屏的**子视图**
@@ -21,6 +20,7 @@ struct InboxView: View {
     let onOpenTerminal: (String) -> Void
     /// 一条通知被点了。去向由调用方决定 —— 列表自己不做路由。
     let onOpen: (SynapseNotification) -> Void
+    let onViewContent: (SynapseNotification) -> Void
     @State private var filter = "pending"
     @State private var confirmingClear = false
 
@@ -132,14 +132,20 @@ struct InboxView: View {
     }
 
     private func notificationRow(_ item: SynapseNotification) -> some View {
-        // 行不是 `NavigationLink`：点它是**离开这一屏**，去这条通知记着的那个地方，
-        // 而不是往栈里再推一层。没有详情页可推，见这一屏的文档注释。
-        Button {
-            onOpen(item)
-        } label: {
-            NotificationRow(item: item)
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                onOpen(item)
+            } label: {
+                NotificationRow(item: item)
+            }
+            .buttonStyle(.plain)
+            if NotificationDestination.resolve(item) != .none {
+                Button("全文") { onViewContent(item) }
+                    .font(.subheadline)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("查看\(item.title)全文")
+            }
         }
-        .buttonStyle(.plain)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 Haptics.warning()
@@ -236,10 +242,9 @@ private struct NotificationRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(item.body)
+                MarkdownContent(item.body, mode: .preview(lines: 2))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
             }
         }
     }

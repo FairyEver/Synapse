@@ -2,28 +2,34 @@ import SwiftUI
 
 /// 通知面板。主页右上角那枚铃铛打开的就是它。
 ///
-/// 它是一个**覆盖层**，不是一个位置 —— 通知的意义是「带你去某个地方」，读完它本身没有
-/// 价值。所以点一条就把它收起来，直接去往目标：比「进一个消息位置 → 列表 → 详情 → 再跳转」
-/// 少两步。
-///
-/// 取消详情页的代价是正文只能进到行里（最多两行）。这是划算的：通知的正文几乎总是
-/// 一句话能说完的，而它要换来的那两步，是每一次点通知都要付的。
+/// 有目标的行直接去目标；无目标的行和独立的「全文」操作打开 Markdown 正文。
 struct NotificationPanel: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var openedWebLink: WebLink?
+    @State private var readingNotification: SynapseNotification?
 
     /// 「待处理」段里的行打开一个终端会话。
     let onOpenTerminal: (String) -> Void
 
     var body: some View {
         NavigationStack {
-            InboxView(onOpenTerminal: openTerminal) { item in
-                open(item)
-            }
+            InboxView(
+                onOpenTerminal: openTerminal,
+                onOpen: open,
+                onViewContent: viewContent
+            )
             .navigationTitle("通知")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: Binding(
+                get: { readingNotification != nil },
+                set: { if !$0 { readingNotification = nil } }
+            )) {
+                if let item = readingNotification {
+                    NotificationFullTextView(item: item)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("关闭") { dismiss() }
@@ -61,13 +67,38 @@ struct NotificationPanel: View {
                 openURL(url)
             }
         case .none:
-            // 没有去处的那一类留在原地读 —— 收起面板等于把它从眼前拿走。
-            break
+            readingNotification = item
         }
+    }
+
+    private func viewContent(_ item: SynapseNotification) {
+        Task { await model.readNotification(item.id) }
+        readingNotification = item
     }
 
     private func openTerminal(_ sessionId: String) {
         dismiss()
         onOpenTerminal(sessionId)
+    }
+}
+
+private struct NotificationFullTextView: View {
+    let item: SynapseNotification
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(item.title).font(.title2).fontWeight(.semibold)
+                Text(NotificationText.timestamp(item.createdAt))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                MarkdownContent(item.body)
+            }
+            .padding()
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .navigationTitle("通知")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

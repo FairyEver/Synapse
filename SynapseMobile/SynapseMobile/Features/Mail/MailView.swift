@@ -195,7 +195,9 @@ struct MailView: View {
             }
             Text(message.subject).font(.subheadline)
             if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption2).foregroundStyle(.secondary) }
-            Text(message.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            MarkdownContent(message.snippet, mode: .preview(lines: 1))
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -247,7 +249,7 @@ private struct MailDetailView: View {
                         Text("收件人：\(message.toAddresses?.map(\.name).joined(separator: "、") ?? message.toRecipients.map(\.name).joined(separator: "、"))").font(.subheadline)
                         if !(message.ccAddresses?.isEmpty ?? message.ccRecipients.isEmpty) { Text("抄送：\(message.ccAddresses?.map(\.name).joined(separator: "、") ?? message.ccRecipients.map(\.name).joined(separator: "、"))").font(.subheadline) }
                         Text(mailDate(message.sentAt)).font(.caption).foregroundStyle(.secondary)
-                        Text(message.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(.top)
+                        MarkdownContent(message.body).padding(.top)
                         if let quote = message.quote {
                             DisclosureGroup(message.relationKind == "forward" ? "转发原文" : "回复原文") {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -256,7 +258,7 @@ private struct MailDetailView: View {
                                     if !(quote.ccAddresses?.isEmpty ?? quote.ccRecipients.isEmpty) { Text("抄送：\(quote.ccAddresses?.map(\.name).joined(separator: "、") ?? quote.ccRecipients.map(\.name).joined(separator: "、"))") }
                                     Text("时间：\(mailDate(quote.sentAt))")
                                     Text("主题：\(quote.subject)")
-                                    Text(quote.body).textSelection(.enabled)
+                                    MarkdownContent(quote.body)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }

@@ -74,8 +74,8 @@
 
 ### 4.3 其余沿用设计稿的决策
 
-- **通知详情页取消。** 正文进到行里显示（`NotificationRow` 已经在做），通知的价值在「带你去哪」。`NotificationDetailView` 删除。
-- **通知面板的行点击 = 标记已读 + 关闭面板 + 去往目标**，比「消息 tab → 列表 → 详情 → 再跳转」少两步。
+- **2026-09-29 补充：通知支持全文阅读。** 行内保留两行摘要；无目标的通知点行进入 Markdown 全文，有目标的通知仍点行直达目标，并提供独立「全文」操作。此处取代原先“通知详情页取消”的决定。
+- **有目标的通知点行仍直达目标**，同时标记已读并关闭面板；无目标通知点行进入全文。
 - **常驻性由三处承担**：主页右上角常驻铃铛、底栏主页 tab 上的未读数、已有的系统推送与 App 图标角标。注意终端会话页会隐藏底栏（`TerminalScreen.swift:600`），所以终端里看不见底栏角标——这与现状一致，会话行上的琥珀「等待输入」徽章承担那里的提示。
 - **「我的」外层只放分类，值放二级页。** 例外只有两行：账号（显示邮箱）、电脑（显示当前电脑名 + 在线圆点）。这两个值是「你现在处在什么状态」，不是「一个可以调的设置」。
   - **注意：设计稿原型的「昵称」在代码里不存在。** `SynapseAppModel` 只有 `email`（`App/SynapseAppModel.swift:20`），没有昵称字段。账号行右侧显示邮箱。
@@ -132,8 +132,8 @@
 
 - 顶部分段：**待处理 / 未读 / 全部**，默认落「待处理」（与现状一致，`InboxView.swift:18`）。
 - 右上角「全部已读」，未读为 0 时置灰。
-- 行：标题、正文（最多两行）、时间、未读点。正文进到行里，这是取消详情页的代价与收获。
-- 行点击：`readNotification(id)` → `dismiss()` → 按 §7.5 解析出的 target 路由。target 无法解析（普通通知、无 `targetId`、或只有一条外部 HTTPS 链接）→ 不 dismiss，留给用户自己读。
+- 行：标题、Markdown 正文摘要（最多两行）、时间、未读点。有目标的行另有「全文」操作。
+- 行点击：有目标时 `readNotification(id)` → 按 §7.5 解析 target 并打开；无目标时标记已读并进入 Markdown 全文。外部 HTTPS 链接仍按原浏览入口处理。
 - 左滑删除，系统红（`InboxView.swift:139` 的既有做法）。
 - 「加载更多」按钮与分页照旧。
 - sheet 里**必须再挂一次 `.noticeOverlay(model)`**：`noticeOverlay` 是显式传 model 的修饰符（`Features/Root/NoticeBar.swift:193`），每个屏幕各自挂一条，sheet 会盖住底层那条。现有剪贴板 sheet 就是这么做的（`SessionListView.swift:331`）。
@@ -298,9 +298,9 @@ private enum Tab: Hashable { case home, terminals, settings }
 
 `InboxView` 从「分栏里的列表」改为「sheet 里的面板」，改动集中在三处：
 
-1. **去掉选中与详情导航**。`@Binding var selection` 与 `NavigationLink(value: item.id)`（`InboxView.swift:16,122`）删掉。列表行变 `Button`，行为见 §6.2。
-2. **删掉 `NotificationDetailView`**，以及 `RootView` 里它作为 detail 的那处装配（`RootView.swift:208-210`）。
-3. **`.navigationTitle("消息")` 去掉**（`InboxView.swift:81`）——面板有自己的标题，不叫「消息」。`NotificationDetailView` 那处 `.navigationTitle("消息")`（`:320`）随文件一起消失。
+1. **去掉旧分栏的选中与详情导航**。`@Binding var selection` 与 `NavigationLink(value: item.id)`（`InboxView.swift:16,122`）删掉；当前面板内由独立全文导航承载 Markdown 正文，行为见 §6.2。
+2. **删掉旧 `NotificationDetailView`** 及 `RootView` 的旧装配（`RootView.swift:208-210`）；2026-09-29 新增的全文页只负责阅读，不恢复原先的中转路由。
+3. **`.navigationTitle("消息")` 去掉**（`InboxView.swift:81`）——面板和全文页统一使用「通知」。
 
 `onOpenTerminal` 回调的语义变了：原来是「切到终端 tab 并打开会话」，现在是「关闭面板、切到终端、打开会话」——多一点是 dismiss。它仍要经过 `requestTerminal` 那道闸门（待处理行取自列表，可能在画行与落指之间结束掉，`RootView.swift:203-207` 的原有理由成立）。
 
