@@ -1,5 +1,7 @@
 # Release Notes Pending Workflow Design
 
+> 2026-09-29 修订：现行 `synapse-release-publisher` 在版本提交前要求非空待发布说明及可用的管理员群发 API；桌面发布、TestFlight 上传和服务器部署成功后，以同一版本号去重发送全站站内信。下文的空说明继续发版与旧通知流程是历史设计，以当前 skill 和 `AGENTS.md` 为准。
+
 ## Background
 
 Synapse already has a working release loop driven by `.agents/skills/synapse-release-publisher/SKILL.md`: bump version, push, watch CI and Release, fix failures, repeat, and report download links after success.

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { descendantIds } from "../team/organization-tree"
 
-export type MailAddress = { kind: "user"; userId: string; name: string } | { kind: "organization"; organizationId: string; name: string }
+export type MailAddress = { kind: "user"; userId: string; name: string } | { kind: "organization"; organizationId: string; name: string } | { kind: "audience"; name: string }
 export type MailAddressSnapshot = { to: MailAddress[]; cc: MailAddress[] }
 
 export async function resolveMailAddresses(

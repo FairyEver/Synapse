@@ -152,9 +152,10 @@ export class MailService {
     if (attachmentIds.length + forwardAttachmentIds.length > MAX_ATTACHMENTS || (forwardAttachmentIds.length && raw.relation?.kind !== "forward")) throw new BadRequestException("附件无效或超过 10 个。")
     const source = raw.relation ? await this.getMessage(userId, raw.relation.messageId) : null
     if (raw.relation && !source) throw new NotFoundException("原信不存在。")
+    if (source && (source.kind === "platform_broadcast" || !source.team)) throw new ForbiddenException("平台公告不能回复或转发。")
     if (source && raw.relation?.kind === "forward" && forwardAttachmentIds.some((id) => !source.attachments.some((item) => item.attachmentId === id))) throw new ForbiddenException("原信附件已失效。")
     const quote: QuoteSnapshot | null = source ? { sender: source.sender, toRecipients: source.toRecipients, ccRecipients: source.ccRecipients, toAddresses: source.toAddresses, ccAddresses: source.ccAddresses, subject: source.subject, body: source.body, sentAt: new Date(source.sentAt).toISOString() } : null
-    const resolved = await resolveMailAddresses(this.prisma as unknown as Prisma.TransactionClient, userId, toIds, ccIds, toOrganizationIds, ccOrganizationIds, source?.team.id)
+    const resolved = await resolveMailAddresses(this.prisma as unknown as Prisma.TransactionClient, userId, toIds, ccIds, toOrganizationIds, ccOrganizationIds, source?.team?.id)
     const team = resolved.team
     const attachments = await this.prisma.mailAttachment.findMany({ where: { id: { in: attachmentIds }, ownerId: userId, messageId: null } })
     if (attachments.length !== attachmentIds.length) throw new ConflictException("附件已失效，请重新添加。")
@@ -259,7 +260,7 @@ export class MailService {
     return result
   }
 
-  private queueNotificationDelivery(messageId: string): void {
+  queueNotificationDelivery(messageId: string): void {
     void this.deliverPendingNotifications(messageId).catch((error: unknown) => this.logger.warn({ messageId, reason: error instanceof Error ? error.name : typeof error }, "Mail notification delivery failed"))
   }
 
@@ -283,7 +284,7 @@ export class MailService {
       })
       for (const item of pending) {
         try {
-          const senderName = item.message.sender.nickname || item.message.sender.handle || "团队成员"
+          const senderName = item.message.sender?.nickname || item.message.sender?.handle || "Synapse 官方"
           await this.notifications.create({ userId: item.recipientId, source: "mail", sourceKey: `mail:${item.messageId}`, title: "新站内信", body: `来自 ${senderName}。`, group: "mail", targetId: item.messageId, url: `synapse://mail/${item.messageId}` })
           await this.prisma.mailNotificationOutbox.deleteMany({ where: { id: item.id } })
         } catch (error) {
@@ -354,7 +355,7 @@ export class MailService {
       include: { sender: { select: { id: true, nickname: true, handle: true } }, recipients: { where: { OR: [{ userId }, { message: { addressSnapshot: { equals: Prisma.DbNull } } }] }, include: { user: { select: { id: true, nickname: true, handle: true } } } }, attachments: true },
     })
     if (!row) throw new NotFoundException("信件不存在。")
-    return { ...this.summary(row, userId), viewerId: userId, body: row.body, team: { id: row.teamIdSnapshot, name: row.teamNameSnapshot }, conversationId: row.conversationId, replyToId: row.replyToId, relation: row.forwardOfId ? { kind: "forward" as const, messageId: row.forwardOfId } : row.replyToId ? { kind: "reply" as const, messageId: row.replyToId } : null, quote: row.quoteSnapshot as QuoteSnapshot | null, attachments: row.attachments.map((item) => ({ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) })) }
+    return { ...this.summary(row, userId), viewerId: userId, body: row.body, team: row.teamIdSnapshot && row.teamNameSnapshot ? { id: row.teamIdSnapshot, name: row.teamNameSnapshot } : null, conversationId: row.conversationId, replyToId: row.replyToId, relation: row.forwardOfId ? { kind: "forward" as const, messageId: row.forwardOfId } : row.replyToId ? { kind: "reply" as const, messageId: row.replyToId } : null, quote: row.quoteSnapshot as QuoteSnapshot | null, attachments: row.attachments.map((item) => ({ attachmentId: item.id, fileName: item.fileName, mimeType: item.mimeType, size: Number(item.size) })) }
   }
 
   async listContext(userId: string, id: string, cursor?: string) {
@@ -370,13 +371,13 @@ export class MailService {
     return { items: rows.slice(0, 50).map((row) => this.summary(row, userId)).reverse(), nextCursor: rows.length > 50 ? rows[49]!.id : null }
   }
 
-  private summary(row: { id: string; senderId: string; sender: { id: string; nickname: string | null; handle: string | null }; recipients: { userId: string; role: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; addressSnapshot?: Prisma.JsonValue | null; subject: string; body: string; sentAt: Date; attachments: { id: string }[]; replyToId: string | null; forwardOfId: string | null }, userId: string) {
+  private summary(row: { id: string; senderId: string | null; sender: { id: string; nickname: string | null; handle: string | null } | null; kind: string; recipients: { userId: string; role: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; addressSnapshot?: Prisma.JsonValue | null; subject: string; body: string; sentAt: Date; attachments: { id: string }[]; replyToId: string | null; forwardOfId: string | null }, userId: string) {
     const stored = row.addressSnapshot as MailAddressSnapshot | null | undefined
     const toRecipients = stored ? stored.to.filter((item) => item.kind === "user").map((item) => ({ userId: item.userId, nickname: item.name, handle: null })) : row.recipients.filter((item) => item.role === "to").map((item) => exposedUser(item.user))
     const ccRecipients = stored ? stored.cc.filter((item) => item.kind === "user").map((item) => ({ userId: item.userId, nickname: item.name, handle: null })) : row.recipients.filter((item) => item.role === "cc").map((item) => exposedUser(item.user))
     const toAddresses = stored?.to ?? toRecipients.map((person) => ({ kind: "user" as const, userId: person.userId, name: person.nickname || person.handle || person.userId }))
     const ccAddresses = stored?.cc ?? ccRecipients.map((person) => ({ kind: "user" as const, userId: person.userId, name: person.nickname || person.handle || person.userId }))
-    return { messageId: row.id, sender: exposedUser(row.sender), recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
+    return { messageId: row.id, kind: row.kind, sender: row.sender ? exposedUser(row.sender) : { userId: "platform", nickname: "Synapse 官方", handle: null }, recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
   }
 
   async setRead(userId: string, id: string, read: boolean) {

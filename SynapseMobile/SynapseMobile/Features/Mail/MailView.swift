@@ -204,6 +204,7 @@ struct MailView: View {
     }
 
     private func reply(_ kind: MailDetailView.ReplyKind, _ message: MailMessage) {
+        guard message.kind != "platform_broadcast" else { return }
         let ids: [String]
         switch kind {
         case .reply:
@@ -296,8 +297,10 @@ private struct MailDetailView: View {
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Menu {
-                            Button("回复", systemImage: "arrowshape.turn.up.left") { onReply(.reply, message) }
-                            Button("转发", systemImage: "arrowshape.turn.up.right") { onReply(.forward, message) }
+                            if message.kind != "platform_broadcast" {
+                                Button("回复", systemImage: "arrowshape.turn.up.left") { onReply(.reply, message) }
+                                Button("转发", systemImage: "arrowshape.turn.up.right") { onReply(.forward, message) }
+                            }
                             if message.sender.userId != message.viewerId { Button(message.readAt == nil ? "设为已读" : "设为未读") { onRead(message.readAt == nil) } }
                             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
                         } label: { Image(systemName: "ellipsis.circle") }

@@ -269,7 +269,7 @@ has since gone.」同时 `live-desktop.gateway.ts` 的 `LiveMobileRelayHandler` 
 - 桌面端再升：否则没有这份列表可发。
 - 手机端最后：它读的就是前两端提供的东西。
 
-**落地要求（2026-09-23）**：静默发版的固定顺序是「桌面发版 → iOS 上 TestFlight → 服务器部署」，而
+**落地要求（2026-09-23；2026-09-29 起「静默发版」并入完整发版，详见 `AGENTS.md`）**：当时的固定顺序是「桌面发版 → iOS 上 TestFlight → 服务器部署」，而
 TestFlight 的构建与上传要跑几十分钟。为了把上面那个窗口从「几十分钟」压到「几分钟」，
 **服务器部署紧跟在 Release 发布之后执行**，与 iOS 上传并行（`deploy.sh` 与 `SynapseMobile/` 不碰同一批
 文件 —— 这一点 CLAUDE.md 自己也写明了，两个步骤本来就允许并行）。这不是改发版流程，只是把并行的那一步

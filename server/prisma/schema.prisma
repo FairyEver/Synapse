@@ -1308,10 +1308,12 @@ model OrganizationMembership {
 
 model MailMessage {
   id              String          @id @default(cuid())
-  senderId        String
-  sender          User            @relation("MailSender", fields: [senderId], references: [id], onDelete: Restrict)
-  teamIdSnapshot  String
-  teamNameSnapshot String         @db.VarChar(30)
+  senderId        String?
+  sender          User?           @relation("MailSender", fields: [senderId], references: [id], onDelete: Restrict)
+  kind            String          @default("user") @db.VarChar(24)
+  teamIdSnapshot  String?
+  teamNameSnapshot String?        @db.VarChar(30)
+  broadcastRequestId String?      @unique @db.VarChar(100)
   subject         String          @db.VarChar(120)
   body            String          @db.Text
   conversationId  String          @db.VarChar(100)

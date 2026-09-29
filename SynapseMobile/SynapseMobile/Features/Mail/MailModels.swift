@@ -78,6 +78,7 @@ struct MailPreparedAttachment: Decodable {
 
 struct MailSummary: Decodable, Identifiable {
     let messageId: String
+    let kind: String
     let sender: MailPerson
     let recipients: [MailPerson]
     let toRecipients: [MailPerson]
@@ -94,7 +95,7 @@ struct MailSummary: Decodable, Identifiable {
 }
 
 private enum MailReadKey: String, CodingKey {
-    case messageId, viewerId, sender, recipients, toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind
+    case messageId, kind, viewerId, sender, recipients, toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind
     case subject, snippet, body, sentAt, readAt, attachmentCount, replyToId, conversationId
     case relation, quote, attachments, team
 }
@@ -103,6 +104,7 @@ extension MailSummary {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: MailReadKey.self)
         messageId = try values.decode(String.self, forKey: .messageId)
+        kind = try values.decodeIfPresent(String.self, forKey: .kind) ?? "user"
         sender = try values.decode(MailPerson.self, forKey: .sender)
         recipients = try values.decode([MailPerson].self, forKey: .recipients)
         let legacy = !values.contains(.toRecipients) && !values.contains(.ccRecipients) && !values.contains(.relationKind)
@@ -124,6 +126,7 @@ extension MailSummary {
 
 struct MailMessage: Decodable {
     let messageId: String
+    let kind: String
     let viewerId: String
     let sender: MailPerson
     let recipients: [MailPerson]
@@ -154,6 +157,7 @@ extension MailMessage {
         }
         let summary = try MailSummary(from: decoder)
         messageId = summary.messageId
+        kind = summary.kind
         viewerId = try values.decode(String.self, forKey: .viewerId)
         sender = summary.sender
         recipients = summary.recipients

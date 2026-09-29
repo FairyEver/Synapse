@@ -115,10 +115,10 @@ final class MailStore {
     private func applyReadState(id: String, readAt: String?) {
         messages = messages.map { item in
             guard item.messageId == id else { return item }
-            return MailSummary(messageId: item.messageId, sender: item.sender, recipients: item.recipients, toRecipients: item.toRecipients, ccRecipients: item.ccRecipients, toAddresses: item.toAddresses, ccAddresses: item.ccAddresses, relationKind: item.relationKind, subject: item.subject, snippet: item.snippet, sentAt: item.sentAt, readAt: readAt, attachmentCount: item.attachmentCount)
+            return MailSummary(messageId: item.messageId, kind: item.kind, sender: item.sender, recipients: item.recipients, toRecipients: item.toRecipients, ccRecipients: item.ccRecipients, toAddresses: item.toAddresses, ccAddresses: item.ccAddresses, relationKind: item.relationKind, subject: item.subject, snippet: item.snippet, sentAt: item.sentAt, readAt: readAt, attachmentCount: item.attachmentCount)
         }
         if let message = detail, message.messageId == id {
-            detail = MailMessage(messageId: message.messageId, viewerId: message.viewerId, sender: message.sender, recipients: message.recipients, toRecipients: message.toRecipients, ccRecipients: message.ccRecipients, toAddresses: message.toAddresses, ccAddresses: message.ccAddresses, relationKind: message.relationKind, subject: message.subject, body: message.body, sentAt: message.sentAt, readAt: readAt, replyToId: message.replyToId, conversationId: message.conversationId, relation: message.relation, quote: message.quote, attachments: message.attachments, legacyFormat: message.legacyFormat)
+            detail = MailMessage(messageId: message.messageId, kind: message.kind, viewerId: message.viewerId, sender: message.sender, recipients: message.recipients, toRecipients: message.toRecipients, ccRecipients: message.ccRecipients, toAddresses: message.toAddresses, ccAddresses: message.ccAddresses, relationKind: message.relationKind, subject: message.subject, body: message.body, sentAt: message.sentAt, readAt: readAt, replyToId: message.replyToId, conversationId: message.conversationId, relation: message.relation, quote: message.quote, attachments: message.attachments, legacyFormat: message.legacyFormat)
         }
     }
 

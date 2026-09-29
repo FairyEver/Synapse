@@ -10,5 +10,6 @@ import { MailStorageService } from "./mail-storage.service"
   imports: [UserAuthModule, PrismaModule, NotificationModule],
   controllers: [MailController],
   providers: [MailService, MailStorageService],
+  exports: [MailService],
 })
 export class MailModule {}

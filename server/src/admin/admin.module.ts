@@ -2,17 +2,20 @@ import { Module } from "@nestjs/common"
 import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { AuditLogService } from "../common/audit-log.service"
 import { LiveModule } from "../live/live.module"
+import { MailModule } from "../mail/mail.module"
 import { WebhookModule } from "../webhooks/webhook.module"
 import { AdminController } from "./admin.controller"
 import { AdminService } from "./admin.service"
+import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
 import { LogFileController } from "./log-file.controller"
 import { LogFileService } from "./log-file.service"
 
 @Module({
-  imports: [AdminAuthModule, LiveModule, WebhookModule],
+  imports: [AdminAuthModule, LiveModule, MailModule, WebhookModule],
   controllers: [AdminController, LogFileController],
   providers: [
     AdminService,
+    AdminMailBroadcastService,
     AuditLogService,
     LogFileService,
   ],

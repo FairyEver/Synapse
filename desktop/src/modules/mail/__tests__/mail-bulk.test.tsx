@@ -2,12 +2,12 @@
 import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import type { MailSummary } from "@/types/mail"
+import type { MailMessage, MailSummary } from "@/types/mail"
 
-const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), messages: [] as MailSummary[] }))
+const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
 vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
-vi.mock("../use-mail", () => ({ useMail: () => ({ messages: mocks.messages, ready: true, loading: false, error: null, selectedId: null, detail: null, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId }) }))
+vi.mock("../use-mail", () => ({ useMail: () => ({ messages: mocks.messages, ready: true, loading: false, error: null, selectedId: mocks.selectedId, detail: mocks.detail, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId }) }))
 vi.mock("../use-mail-context", () => ({ useMailContext: () => ({ items: [], nextCursor: null, error: null }) }))
 vi.mock("../compose", () => ({ MailCompose: () => null }))
 vi.mock("../layout", () => ({ MailLayout: ({ navigation, list, detail }: { navigation: ReactNode; list: ReactNode; detail: ReactNode }) => <div>{navigation}{list}{detail}</div> }))
@@ -47,9 +47,25 @@ function click(label: string) {
   act(() => button.click())
 }
 
-afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); mocks.messages = [] })
+afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null })
 
 describe("mail bulk controls", () => {
+  it("shows platform announcements without reply or forward actions", () => {
+    mocks.messages = [{ ...message("broadcast-1"), kind: "platform_broadcast", sender: { userId: "platform", nickname: "Synapse 官方", handle: null } }]
+    mocks.selectedId = "broadcast-1"
+    mocks.detail = {
+      ...mocks.messages[0], viewerId: "reader", body: "更新正文", team: null, conversationId: "broadcast-1",
+      replyToId: null, relation: null, quote: null, attachments: [],
+    }
+    render()
+    expect(document.body.textContent).toContain("Synapse 官方")
+    const labels = [...document.querySelectorAll("button")].map((item) => item.textContent?.trim())
+    expect(labels).not.toContain("回复")
+    expect(labels).not.toContain("转发")
+    expect(labels).toContain("设为已读")
+    expect(labels).toContain("删除")
+  })
+
   it("keeps selection across loaded pages and sends only selected IDs", async () => {
     mocks.request.mockResolvedValue({ deleted: 2, skippedIds: [] })
     mocks.messages = [message("first")]

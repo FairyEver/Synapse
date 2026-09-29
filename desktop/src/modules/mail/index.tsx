@@ -124,7 +124,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
 
   function reply() {
     const message = mail.detail
-    if (!message) return
+    if (!message || message.kind === "platform_broadcast") return
     const to = message.sender.userId === myId ? message.toRecipients : [message.sender]
     const toIds = [...new Set(to.map((person) => person.userId))].filter((id) => id !== myId)
     const ccIds: string[] = []
@@ -132,7 +132,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
   }
 
   function forward() {
-    if (!mail.detail) return
+    if (!mail.detail || mail.detail.kind === "platform_broadcast") return
     setCompose({ subject: `转发：${mail.detail.subject}`, relation: { kind: "forward", messageId: mail.detail.messageId }, source: mail.detail })
   }
 
@@ -184,7 +184,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
               <p className="mt-1 text-sm">收件人：{addressNames(mail.detail.toAddresses, mail.detail.toRecipients)}</p>
               {!!(mail.detail.ccAddresses?.length ?? mail.detail.ccRecipients.length) && <p className="mt-1 text-sm">抄送：{addressNames(mail.detail.ccAddresses, mail.detail.ccRecipients)}</p>}
               <p className="mt-1 text-xs text-muted-foreground">{new Date(mail.detail.sentAt).toLocaleString()}</p>
-              <div className="mt-5 flex flex-wrap gap-1 border-b pb-4"><Button size="sm" variant="ghost" onClick={reply}>回复</Button><Button size="sm" variant="ghost" onClick={forward}>转发</Button>{box === "inbox" && <Button size="sm" variant="ghost" onClick={() => void setRead(!mail.detail?.readAt)}>{mail.detail.readAt ? "设为未读" : "设为已读"}</Button>}<Button size="sm" variant="destructive" onClick={() => void remove()}>删除</Button></div>
+              <div className="mt-5 flex flex-wrap gap-1 border-b pb-4">{mail.detail.kind !== "platform_broadcast" && <><Button size="sm" variant="ghost" onClick={reply}>回复</Button><Button size="sm" variant="ghost" onClick={forward}>转发</Button></>}{box === "inbox" && <Button size="sm" variant="ghost" onClick={() => void setRead(!mail.detail?.readAt)}>{mail.detail.readAt ? "设为未读" : "设为已读"}</Button>}<Button size="sm" variant="destructive" onClick={() => void remove()}>删除</Button></div>
               <p className="mt-6 whitespace-pre-wrap text-sm leading-7">{mail.detail.body}</p>
               {mail.detail.quote && <details className="mt-6 text-sm"><summary className="cursor-pointer font-medium">{mail.detail.relationKind === "forward" ? "转发原文" : "回复原文"}</summary><div className="mt-2 space-y-1 text-muted-foreground"><p>发件人：{personName(mail.detail.quote.sender)}</p><p>收件人：{addressNames(mail.detail.quote.toAddresses, mail.detail.quote.toRecipients)}</p>{!!(mail.detail.quote.ccAddresses?.length ?? mail.detail.quote.ccRecipients.length) && <p>抄送：{addressNames(mail.detail.quote.ccAddresses, mail.detail.quote.ccRecipients)}</p>}<p>时间：{new Date(mail.detail.quote.sentAt).toLocaleString()}</p><p>主题：{mail.detail.quote.subject}</p><p className="whitespace-pre-wrap text-foreground">{mail.detail.quote.body}</p></div></details>}
               {!!mail.detail.attachments.length && <div className="mt-8 border-t pt-4"><h4 className="text-sm font-medium">附件</h4>{mail.detail.attachments.map((attachment) => <Button key={attachment.attachmentId} variant="ghost" className="mt-2" onClick={() => void download(mail.detail!, attachment.attachmentId)}><Paperclip />{attachment.fileName}</Button>)}</div>}

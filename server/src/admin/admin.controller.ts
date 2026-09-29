@@ -11,6 +11,7 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import { LiveDeviceService } from "../live/live-device.service"
 import { WebhookService } from "../webhooks/webhook.service"
 import { AdminService } from "./admin.service"
+import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
 
 const userStatusSchema = z.object({
   status: z.enum(["active", "disabled"]),
@@ -33,6 +34,12 @@ const userNicknameSchema = z.object({
   }),
 }).strict()
 
+const mailBroadcastSchema = z.object({
+  requestId: z.string().regex(/^[A-Za-z0-9:._-]{8,100}$/u),
+  subject: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(100_000),
+}).strict()
+
 const userSortFields = ["createdAt", "updatedAt", "email", "handle", "status"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
@@ -49,7 +56,22 @@ export class AdminController {
     private readonly auditLog: AuditLogService,
     private readonly devices: LiveDeviceService,
     private readonly webhooks: WebhookService,
+    private readonly mailBroadcast: AdminMailBroadcastService,
   ) {}
+
+  @Get("/mail/broadcasts/audience")
+  @Header("Cache-Control", "no-store")
+  audience() {
+    return this.mailBroadcast.audience()
+  }
+
+  @Post("/mail/broadcasts")
+  @Header("Cache-Control", "no-store")
+  sendMailBroadcast(@Body() body: unknown, @Req() request: AdminRequest) {
+    const parsed = mailBroadcastSchema.safeParse(body)
+    if (!parsed.success) throw badRequestFromZodError(parsed.error, "平台公告无效。")
+    return this.mailBroadcast.send(parsed.data, request.admin!.sessionId, request.ip ?? "")
+  }
 
   @Get("/audit-logs")
   async listAuditLogs(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {

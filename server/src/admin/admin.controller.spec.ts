@@ -6,24 +6,28 @@ import type { AdminService } from "./admin.service"
 import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
 import type { LiveDeviceService } from "../live/live-device.service"
 import type { WebhookService } from "../webhooks/webhook.service"
+import type { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
 
 function createController(
   service: Partial<AdminService>,
   auditLog: Partial<AuditLogService> = {},
   devices: Partial<LiveDeviceService> = {},
   webhooks: Partial<WebhookService> = {},
+  mailBroadcast: Partial<AdminMailBroadcastService> = {},
 ) {
   const ControllerCtor = AdminController as new (
     service: AdminService,
     auditLog: AuditLogService,
     devices: LiveDeviceService,
     webhooks: WebhookService,
+    mailBroadcast: AdminMailBroadcastService,
   ) => AdminController
   return new ControllerCtor(
     service as AdminService,
     { record: vi.fn().mockResolvedValue(undefined), ...auditLog } as AuditLogService,
     devices as LiveDeviceService,
     webhooks as WebhookService,
+    mailBroadcast as AdminMailBroadcastService,
   )
 }
 
@@ -46,6 +50,17 @@ describe("AdminController", () => {
 
   it("keeps admin routes behind the admin auth guard", () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, AdminController)).toContain(AdminAuthGuard)
+  })
+
+  it("accepts a validated broadcast only under an administrator session", async () => {
+    const audience = vi.fn().mockResolvedValue({ activeUsers: 2 })
+    const send = vi.fn().mockResolvedValue({ messageId: "mail-1", recipientCount: 2 })
+    const controller = createController({}, {}, {}, {}, { audience, send })
+    const adminRequest = { admin: { sessionId: "admin-session" }, ip: "203.0.113.10" } as never
+    await expect(controller.audience()).resolves.toEqual({ activeUsers: 2 })
+    await expect(controller.sendMailBroadcast({ requestId: "release:v1.0.0", subject: "  更新  ", body: "  正文  " }, adminRequest)).resolves.toMatchObject({ messageId: "mail-1" })
+    expect(send).toHaveBeenCalledWith({ requestId: "release:v1.0.0", subject: "更新", body: "正文" }, "admin-session", "203.0.113.10")
+    expect(() => controller.sendMailBroadcast({ requestId: "short", subject: "更新", body: "正文" }, adminRequest)).toThrow("平台公告无效")
   })
 
   it("creates password reset links with the configured public app URL", async () => {
