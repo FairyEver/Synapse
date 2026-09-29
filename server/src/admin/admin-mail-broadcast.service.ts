@@ -41,7 +41,7 @@ export class AdminMailBroadcastService {
             conversationId: randomUUID(),
             clientRequestId: input.requestId,
             previewId: randomUUID(),
-            addressSnapshot: { to: [{ kind: "audience", name: "全站用户" }], cc: [] },
+            addressSnapshot: { to: [{ kind: "audience", name: "所有用户" }], cc: [] },
           },
         })
         for (let index = 0; index < users.length; index += 500) {

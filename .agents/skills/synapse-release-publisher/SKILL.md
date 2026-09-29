@@ -372,7 +372,7 @@ If either command fails, report the package release as successful and the comple
 
 ### 12. Send The All-User Release Mail
 
-Use the archived notes in `RELEASE_MAIL_NOTES_FILE`. The script builds one plain-text mail from nonempty sections in their original order, appends `https://synapse.d2.pub/desktop/update`, and uses `release:$EXPECTED_TAG` as the stable request ID. Do not send before both section 11 commands succeed.
+Use the archived notes in `RELEASE_MAIL_NOTES_FILE`. The script builds one plain-text mail with subject `Synapse $EXPECTED_TAG 更新内容` from nonempty sections in their original order, appends `https://synapse.d2.pub/desktop/update`, and uses `release:$EXPECTED_TAG` as the stable request ID. Recipients see sender `Synapse` and recipient address `所有用户`. Do not send before both section 11 commands succeed.
 
 ```bash
 node /Users/liyang/Documents/code/github/Synapse/.agents/skills/synapse-release-publisher/scripts/send-release-mail.mjs \

@@ -26,7 +26,7 @@ test("builds one plain-text mail with a stable version request id", () => {
   assert.deepEqual(parseReleaseNotes(notes).map((entry) => entry.section), ["新增功能", "问题修复"])
   const mail = buildReleaseMail("v1.2.3", notes)
   assert.equal(mail.requestId, "release:v1.2.3")
-  assert.equal(mail.subject, "Synapse v1.2.3 更新")
+  assert.equal(mail.subject, "Synapse v1.2.3 更新内容")
   assert.match(mail.body, /^新增功能\n- 新增同步能力\n\n问题修复\n- 修复启动问题/u)
   assert.match(mail.body, /更新地址：https:\/\/synapse\.d2\.pub\/desktop\/update$/u)
   assert.doesNotMatch(mail.body, /example\.com/u)

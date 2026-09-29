@@ -51,14 +51,14 @@ afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.
 
 describe("mail bulk controls", () => {
   it("shows platform announcements without reply or forward actions", () => {
-    mocks.messages = [{ ...message("broadcast-1"), kind: "platform_broadcast", sender: { userId: "platform", nickname: "Synapse 官方", handle: null } }]
+    mocks.messages = [{ ...message("broadcast-1"), kind: "platform_broadcast", sender: { userId: "platform", nickname: "Synapse", handle: null } }]
     mocks.selectedId = "broadcast-1"
     mocks.detail = {
       ...mocks.messages[0], viewerId: "reader", body: "更新正文", team: null, conversationId: "broadcast-1",
       replyToId: null, relation: null, quote: null, attachments: [],
     }
     render()
-    expect(document.body.textContent).toContain("Synapse 官方")
+    expect(document.body.textContent).toContain("Synapse")
     const labels = [...document.querySelectorAll("button")].map((item) => item.textContent?.trim())
     expect(labels).not.toContain("回复")
     expect(labels).not.toContain("转发")

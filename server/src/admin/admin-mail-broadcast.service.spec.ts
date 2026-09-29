@@ -3,7 +3,7 @@ import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
 
 function fixture() {
   const users = [{ id: "team-a-user" }, { id: "team-b-user" }]
-  const stored = { id: "mail-1", subject: "Synapse v1 更新", body: "更新内容", sentAt: new Date("2026-09-29T00:00:00Z"), _count: { recipients: 2 } }
+  const stored = { id: "mail-1", subject: "Synapse v1.0.42 更新内容", body: "更新内容", sentAt: new Date("2026-09-29T00:00:00Z"), _count: { recipients: 2 } }
   const prisma = {
     user: {
       count: vi.fn(async () => users.length),
@@ -34,7 +34,7 @@ describe("AdminMailBroadcastService", () => {
     expect(prisma.user.findMany).toHaveBeenCalledWith({ where: { status: "active" }, select: { id: true }, orderBy: { id: "asc" } })
     expect(prisma.mailMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       kind: "platform_broadcast", broadcastRequestId: input.requestId, subject: input.subject, body: input.body,
-      addressSnapshot: { to: [{ kind: "audience", name: "全站用户" }], cc: [] },
+      addressSnapshot: { to: [{ kind: "audience", name: "所有用户" }], cc: [] },
     }) })
     expect(prisma.mailRecipient.createMany).toHaveBeenCalledWith({ data: [
       { messageId: "mail-1", userId: "team-a-user" },

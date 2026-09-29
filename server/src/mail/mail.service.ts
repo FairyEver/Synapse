@@ -284,7 +284,7 @@ export class MailService {
       })
       for (const item of pending) {
         try {
-          const senderName = item.message.sender?.nickname || item.message.sender?.handle || "Synapse 官方"
+          const senderName = item.message.sender?.nickname || item.message.sender?.handle || "Synapse"
           await this.notifications.create({ userId: item.recipientId, source: "mail", sourceKey: `mail:${item.messageId}`, title: "新站内信", body: `来自 ${senderName}。`, group: "mail", targetId: item.messageId, url: `synapse://mail/${item.messageId}` })
           await this.prisma.mailNotificationOutbox.deleteMany({ where: { id: item.id } })
         } catch (error) {
@@ -377,7 +377,7 @@ export class MailService {
     const ccRecipients = stored ? stored.cc.filter((item) => item.kind === "user").map((item) => ({ userId: item.userId, nickname: item.name, handle: null })) : row.recipients.filter((item) => item.role === "cc").map((item) => exposedUser(item.user))
     const toAddresses = stored?.to ?? toRecipients.map((person) => ({ kind: "user" as const, userId: person.userId, name: person.nickname || person.handle || person.userId }))
     const ccAddresses = stored?.cc ?? ccRecipients.map((person) => ({ kind: "user" as const, userId: person.userId, name: person.nickname || person.handle || person.userId }))
-    return { messageId: row.id, kind: row.kind, sender: row.sender ? exposedUser(row.sender) : { userId: "platform", nickname: "Synapse 官方", handle: null }, recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
+    return { messageId: row.id, kind: row.kind, sender: row.sender ? exposedUser(row.sender) : { userId: "platform", nickname: "Synapse", handle: null }, recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
   }
 
   async setRead(userId: string, id: string, read: boolean) {

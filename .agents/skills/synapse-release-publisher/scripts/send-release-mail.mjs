@@ -55,7 +55,7 @@ export function buildReleaseMail(version, markdown) {
   const tag = normalizeVersion(version)
   const entries = parseReleaseNotes(markdown)
   if (!entries.length) throw new Error("待发布说明没有有效条目，发版已停止。")
-  const subject = `Synapse ${tag} 更新`
+  const subject = `Synapse ${tag} 更新内容`
   const lines = []
   let previousSection = null
   for (const entry of entries) {

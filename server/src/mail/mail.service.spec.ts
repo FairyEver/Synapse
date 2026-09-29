@@ -52,13 +52,13 @@ describe("MailService", () => {
     prisma.mailMessage.findFirst.mockResolvedValueOnce({
       id: "broadcast-1", kind: "platform_broadcast", senderId: null, sender: null,
       recipients: [{ userId: "reader", role: "to", readAt: null, user: { id: "reader", nickname: "收件人", handle: "reader" } }],
-      addressSnapshot: { to: [{ kind: "audience", name: "全站用户" }], cc: [] },
+      addressSnapshot: { to: [{ kind: "audience", name: "所有用户" }], cc: [] },
       subject: "版本更新", body: "更新正文", sentAt: new Date("2026-09-29T00:00:00Z"),
       teamIdSnapshot: null, teamNameSnapshot: null, conversationId: "broadcast-1", replyToId: null, forwardOfId: null,
       quoteSnapshot: null, attachments: [],
     } as never)
     const detail = await service.getMessage("reader", "broadcast-1")
-    expect(detail).toMatchObject({ kind: "platform_broadcast", sender: { nickname: "Synapse 官方" }, toAddresses: [{ name: "全站用户" }], recipients: [], team: null })
+    expect(detail).toMatchObject({ kind: "platform_broadcast", sender: { nickname: "Synapse" }, toAddresses: [{ name: "所有用户" }], recipients: [], team: null })
     vi.spyOn(service, "getMessage").mockResolvedValue(detail)
     await expect(service.createPreview("reader", {
       toIds: ["teammate"], ccIds: [], subject: "回复：版本更新", body: "正文", attachmentIds: [], forwardAttachmentIds: [],
@@ -72,7 +72,7 @@ describe("MailService", () => {
       id: "outbox-platform", messageId: "broadcast-1", recipientId: "reader", message: { sender: null },
     }] as never)
     await service.retryPendingNotifications()
-    expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "reader", source: "mail", sourceKey: "mail:broadcast-1", body: "来自 Synapse 官方。" }))
+    expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "reader", source: "mail", sourceKey: "mail:broadcast-1", body: "来自 Synapse。" }))
     expect(prisma.mailNotificationOutbox.deleteMany).toHaveBeenCalledWith({ where: { id: "outbox-platform" } })
   })
 
