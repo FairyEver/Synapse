@@ -122,9 +122,16 @@ final class MailStore {
         }
     }
 
-    func delete(id: String, using model: SynapseAppModel) async {
-        do { try await model.mailDelete(id: id); detail = nil; await load(using: model, query: loadedQuery) }
-        catch { self.error = error.localizedDescription }
+    func delete(id: String, using model: SynapseAppModel) async -> Bool {
+        do {
+            try await model.mailDelete(id: id)
+            detail = nil
+            await load(using: model, query: loadedQuery)
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
     }
 
     func readAll(using model: SynapseAppModel) async {

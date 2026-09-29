@@ -115,6 +115,7 @@ struct DriveBrowserView: View {
             .task {
                 await enter()
             }
+            .onDisappear { export.cancel() }
             .noticeOverlay(model)
     }
 

@@ -61,6 +61,7 @@ struct MeetingAudioCache {
     }
 
     private static let indexFileName = "audio-cache.json"
+    private static let incompleteDownloadPrefix = ".meeting-download-"
 
     var indexURL: URL {
         directory.appendingPathComponent(Self.indexFileName)
@@ -70,6 +71,21 @@ struct MeetingAudioCache {
     /// 收尾成功后改名归入这里（见 `adopt`）。
     func audioURL(meetingId: String) -> URL {
         directory.appendingPathComponent("\(Self.sanitized(meetingId)).m4a")
+    }
+
+    func stagingAudioURL() -> URL {
+        directory.appendingPathComponent("\(Self.incompleteDownloadPrefix)\(UUID().uuidString).m4a")
+    }
+
+    /// A terminated download has no index entry, so remove its private staging file.
+    func removeIncompleteDownloads() {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        ) else { return }
+        for url in urls where url.lastPathComponent.hasPrefix(Self.incompleteDownloadPrefix)
+            && url.pathExtension == "m4a" {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     // MARK: - 索引
@@ -223,6 +239,7 @@ struct MeetingAudioCache {
     /// **只删索引里记着的那几个文件**，不是把目录清空：同一个目录里还躺着录音中途那份按
     /// recordingId 命名的音频，那是异常退出之后唯一的依据，有别的路子在管，不归这里删。
     func clearAll() {
+        removeIncompleteDownloads()
         for entry in loadIndex() {
             try? FileManager.default.removeItem(at: audioURL(meetingId: entry.meetingId))
         }

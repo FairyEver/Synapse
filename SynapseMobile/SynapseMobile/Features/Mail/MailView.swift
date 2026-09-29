@@ -1,9 +1,19 @@
 import SwiftUI
 
+@MainActor
+private enum MailDateFormatters {
+    static let fractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    static let standard = ISO8601DateFormatter()
+}
+
+@MainActor
 func mailDate(_ value: String) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    guard let date = formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value) else { return value }
+    guard let date = MailDateFormatters.fractional.date(from: value)
+        ?? MailDateFormatters.standard.date(from: value) else { return value }
     return date.formatted(date: .abbreviated, time: .shortened)
 }
 
@@ -122,7 +132,7 @@ struct MailView: View {
                 }
             }
         } detail: { id in
-            MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { selection = nil; Task { await store.delete(id: id, using: model) } })
+            MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { deleteMessage(id) })
                 .task(id: id) {
                     if !(await store.open(id: id, using: model)), selection == id {
                         selection = nil
@@ -165,6 +175,13 @@ struct MailView: View {
             }
         } message: {
             Text(pendingDelete?.explanation ?? "")
+        }
+    }
+
+    private func deleteMessage(_ id: String) {
+        Task {
+            guard await store.delete(id: id, using: model), selection == id else { return }
+            selection = nil
         }
     }
 

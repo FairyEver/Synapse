@@ -363,6 +363,7 @@ final class SynapseAppModel {
     private var relayLedger = RelayLedger()
     private let uploader = FileUploader()
     private var relayDrainTask: Task<Void, Never>?
+    private var accountGeneration = 0
 
     var clientInstanceId: String { tokens.clientInstanceId }
 
@@ -454,6 +455,7 @@ final class SynapseAppModel {
 
     func bootstrap() async {
         email = tokens.accountEmail
+        MeetingAudioCache.shared.removeIncompleteDownloads()
         switch await apiClient.restoreSession() {
         case .restored:
             authState = .signedIn
@@ -531,15 +533,23 @@ final class SynapseAppModel {
     }
 
     func signOut() async {
+        guard authState == .signedIn else { return }
+        accountGeneration += 1
+        authState = .restoring
         stopKeepAlive()
         realtime.disconnect(reason: .unauthenticated)
+        notifications.clear()
+        releaseViewing()
+        let drainingRelay = relayDrainTask
+        relayAttachments.removeAll()
+        relayByIntent.removeAll()
+        drainingRelay?.cancel()
         terminalStores.removeAll()
         preemptedSessions.removeAll()
         pendingWrites.removeAll()
-        openSessions.removeAll()
-        pendingHistory.removeAll()
         terminalMessages.removeAll()
         summary = nil
+        onlineDesktops = []
         widgetHasLiveSummary = false
         terminalWidgetPublisher.clear()
         gridClaims = GridClaimLedger()
@@ -570,13 +580,18 @@ final class SynapseAppModel {
         meetings.clear()
         // 云盘同理，而且它连着的是一整棵目录：换个人登进来不该看到上一个人的文件夹名。
         drive.clear()
+        await driveUploader.clear()
         // 正在录的那条也是。录着的时候退出登录，本机那份音频留在盘上等下次启动收尾——
         // 但那个账号已经登不上了，收尾会失败，文件也就一直躺着。
-        if recording.isRecording { recording.cancel() }
+        recording.clearForAccountExit()
         // 正在播的那一段也是。它会连着一条已经不属于这个账号的 URL 继续放。
-        playback.stop()
+        playback.clear()
         // 听过留在本机的那些音频同理：它们是这个账号的录音，换个人登进来不该还在盘上。
         MeetingAudioCache.shared.clearAll()
+        await drainingRelay?.value
+        relayDrainTask = nil
+        for id in Array(relayPendingFiles.keys) { discardLocalCopy(id) }
+        await cleanupRelaysBeforeLogout()
         // 这台手机上的推送归属也得一起交出去，而且要在 `logout()` 之前 —— 那一步会把凭据
         // 清掉，之后就没有身份可以说这句话了。
         //
@@ -592,7 +607,6 @@ final class SynapseAppModel {
         }
         await apiClient.logout()
         await SynapseWebCookies.clear(origin: AppConfiguration.apiOrigin)
-        notifications.clear()
         authState = .signedOut
     }
 
@@ -637,10 +651,12 @@ final class SynapseAppModel {
         await meetings.rename(meetingId, to: title, using: apiClient)
     }
 
-    func deleteMeeting(_ meetingId: String) async {
+    @discardableResult
+    func deleteMeeting(_ meetingId: String) async -> Bool {
         let deleted = await meetings.delete(meetingId, using: apiClient)
         // 删除不可恢复，做完了要说一声。
         if deleted { notice("已删除") }
+        return deleted
     }
 
     func retryMeetingTranscription(_ meetingId: String) async {
@@ -871,6 +887,10 @@ final class SynapseAppModel {
     /// `apiClient`，也不该自己起一条上传通路。
 
     func driveEnqueueUploads(_ files: [PickedFile], parentId: String?) {
+        guard authState == .signedIn else {
+            files.forEach(DriveFileIntake.discard)
+            return
+        }
         driveUploader.enqueue(files: files, parentId: parentId, using: apiClient)
     }
 
@@ -986,8 +1006,11 @@ final class SynapseAppModel {
     }
 
     private func startLiveSession() async {
+        let account = accountGeneration
         await refreshDesktops()
+        guard account == accountGeneration, authState == .signedIn else { return }
         await reloadNotifications()
+        guard account == accountGeneration, authState == .signedIn else { return }
         realtime.connect()
         #if targetEnvironment(simulator)
         // The simulator cannot obtain a real APNs token; registration is a no-op
@@ -1366,12 +1389,14 @@ final class SynapseAppModel {
     /// being viewed.
     private func refreshDesktopDetails() async {
         guard !onlineDesktopIds.isEmpty else { return }
+        let account = accountGeneration
         guard let listed = try? await apiClient.onlineDesktops() else {
             // The ids from presence are still right; only the details are missing, and
             // each of them has a fallback of its own — the id for a name, the board
             // this phone has always drawn for a platform.
             return
         }
+        guard account == accountGeneration else { return }
         let details = listed.reduce(into: [String: ReachableDesktop]()) { details, desktop in
             details[desktop.clientInstanceId] = desktop
         }
@@ -1394,9 +1419,12 @@ final class SynapseAppModel {
     }
 
     func refreshDesktops() async {
-        defer { publishTerminalWidgetSnapshot() }
+        let account = accountGeneration
+        defer { if account == accountGeneration { publishTerminalWidgetSnapshot() } }
         do {
-            onlineDesktops = try await apiClient.onlineDesktops()
+            let listed = try await apiClient.onlineDesktops()
+            guard account == accountGeneration else { return }
+            onlineDesktops = listed
             for desktop in onlineDesktops {
                 guard let name = desktop.deviceName else { continue }
                 viewedDesktops.remember(name: name, for: desktop.clientInstanceId)
@@ -1408,7 +1436,10 @@ final class SynapseAppModel {
             // when the computer is there to open those terminals: a stale list whose
             // every row leads to a terminal that cannot attach is worse than none.
             if summary == nil, onlineDesktopIds.contains(desktop) {
-                summary = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
+                let cached = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
+                guard account == accountGeneration,
+                      selectedDesktopClientInstanceId == desktop else { return }
+                summary = cached
                 if let name = summary?.desktopName {
                     viewedDesktops.remember(name: name, for: desktop)
                 }
@@ -2439,6 +2470,7 @@ final class SynapseAppModel {
     // MARK: - Push
 
     func registerPushToken(_ token: String) async {
+        guard authState == .signedIn else { return }
         do {
             try await apiClient.registerPushToken(
                 token,
@@ -2559,6 +2591,10 @@ final class SynapseAppModel {
             discardLocalCopy(attachmentId)
             return
         }
+        guard !Task.isCancelled else {
+            try? await apiClient.cancelDriveUpload(sessionId: ticket.sessionId)
+            return
+        }
 
         do {
             try await uploader.upload(
@@ -2568,7 +2604,12 @@ final class SynapseAppModel {
             ) { [weak self] fraction in
                 Task { @MainActor in self?.update(attachmentId) { $0.state = .uploading(fraction) } }
             }
+            try Task.checkCancellation()
             _ = try await apiClient.completeDriveUpload(sessionId: ticket.sessionId)
+            relayLedger.record(itemId: ticket.item.id, ownerEmail: tokens.accountEmail)
+            if Task.isCancelled {
+                return
+            }
         } catch {
             // The reservation is released so a half-written object does not sit in
             // the bucket waiting for the server's own expiry sweep.
@@ -2581,7 +2622,6 @@ final class SynapseAppModel {
         discardLocalCopy(attachmentId)
         // The item id is recorded before the intent is sent, so a transfer that is
         // never confirmed is still reclaimable.
-        relayLedger.record(itemId: ticket.item.id)
         update(attachmentId) {
             $0.driveItemId = ticket.item.id
             $0.state = .waitingForComputer
@@ -2793,7 +2833,7 @@ final class SynapseAppModel {
     /// Only the phone knows which uploads are still owed a delivery, so only the
     /// phone can decide they have waited long enough.
     private func sweepRelayLedger() async {
-        for entry in relayLedger.expired() {
+        for entry in relayLedger.expired(ownerEmail: tokens.accountEmail) {
             do {
                 try await apiClient.permanentlyDeleteDriveItem(itemId: entry.itemId)
                 relayLedger.resolve(itemId: entry.itemId)
@@ -2804,6 +2844,33 @@ final class SynapseAppModel {
                 // Left in the ledger so the next sweep tries again; nothing about the
                 // user's file has been lost by failing to clean up.
                 continue
+            }
+        }
+    }
+
+    /// Remove this account's undelivered cloud copies while its credentials still work.
+    /// Failed deletions remain in the account-scoped ledger for a later sign-in.
+    private func cleanupRelaysBeforeLogout() async {
+        let pending = relayLedger.entries(forAccount: tokens.accountEmail)
+        guard !pending.isEmpty else { return }
+        let client: APIClient = apiClient
+        await withTaskGroup(of: (String, Bool).self) { group in
+            for entry in pending {
+                group.addTask {
+                    do {
+                        try await client.permanentlyDeleteDriveItem(itemId: entry.itemId)
+                        return (entry.itemId, true)
+                    } catch {
+                        return (entry.itemId, false)
+                    }
+                }
+            }
+            for await (itemId, deleted) in group {
+                if deleted {
+                    relayLedger.resolve(itemId: itemId)
+                } else {
+                    AppLog.network.warning("undelivered file cleanup failed during sign-out")
+                }
             }
         }
     }

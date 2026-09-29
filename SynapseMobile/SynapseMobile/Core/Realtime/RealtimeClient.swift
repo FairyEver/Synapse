@@ -142,6 +142,7 @@ final class RealtimeClient {
     private var task: URLSessionWebSocketTask?
     private var receiveLoop: Task<Void, Never>?
     private var heartbeatLoop: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempt = 0
     private var shouldStayConnected = false
     private var generation = 0
@@ -166,7 +167,7 @@ final class RealtimeClient {
 
     func connect() {
         shouldStayConnected = true
-        guard task == nil else { return }
+        guard task == nil, state != .connecting else { return }
         openSocket()
     }
 
@@ -498,6 +499,7 @@ final class RealtimeClient {
             state = .idle
             return
         }
+        let scheduledGeneration = generation
         reconnectAttempt += 1
         // Mirrors the desktop policy: exponential with a 30s cap and jitter, so a
         // server restart does not bring every device back at the same instant.
@@ -513,16 +515,22 @@ final class RealtimeClient {
         if let status { fields.append(.init(.status, .int(status))) }
         DiagnosticLog.record(.reconnectScheduled, fields)
 
-        Task { [weak self] in
+        reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            guard let self, self.shouldStayConnected else { return }
-            await MainActor.run { self.openSocket() }
+            guard !Task.isCancelled, let self,
+                  self.shouldStayConnected,
+                  self.generation == scheduledGeneration,
+                  self.task == nil else { return }
+            self.reconnectTask = nil
+            self.openSocket()
         }
     }
 
     private func teardown(keepIntent: Bool = false) {
         if !keepIntent { shouldStayConnected = false }
         generation += 1
+        reconnectTask?.cancel()
+        reconnectTask = nil
         receiveLoop?.cancel()
         heartbeatLoop?.cancel()
         receiveLoop = nil

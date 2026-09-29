@@ -12,6 +12,15 @@ import Testing
 /// the app reporting an offline computer until it was relaunched by hand.
 @MainActor
 struct RealtimeAuthTests {
+    private actor TokenRequests {
+        private(set) var count = 0
+
+        func request() -> APIClient.LiveTokenOutcome {
+            count += 1
+            return .unreachable
+        }
+    }
+
     private func makeClient(_ outcome: APIClient.LiveTokenOutcome) -> RealtimeClient {
         RealtimeClient(
             clientInstanceId: "mobile-test",
@@ -56,6 +65,44 @@ struct RealtimeAuthTests {
         let stopped = await waitUntil { client.state == .unauthenticated }
 
         #expect(stopped, "state was \(client.state)")
+        client.disconnect()
+    }
+
+    /// A retry scheduled before backgrounding must not open a second socket after
+    /// the foreground path has already started a fresh connection.
+    @Test func oldRetryDoesNotSurviveDisconnectAndReconnect() async {
+        let requests = TokenRequests()
+        let client = RealtimeClient(
+            clientInstanceId: "mobile-test",
+            deviceName: "test-device",
+            appVersion: "0",
+            tokenProvider: { await requests.request() }
+        )
+        client.connect()
+        #expect(await waitUntil { client.state.isWaiting })
+        client.disconnect()
+        client.connect()
+        #expect(await waitUntil { client.state.isWaiting })
+
+        // The first retry fires in 2–2.6 seconds. The fresh connection's retry
+        // is at least 4 seconds away, so only a stale task could make a third call.
+        try? await Task.sleep(for: .seconds(3))
+        #expect(await requests.count == 2)
+        client.disconnect()
+    }
+
+    @Test func repeatedConnectDuringTokenRequestDoesNotStartAnotherRequest() async {
+        let requests = TokenRequests()
+        let client = RealtimeClient(
+            clientInstanceId: "mobile-test",
+            deviceName: "test-device",
+            appVersion: "0",
+            tokenProvider: { await requests.request() }
+        )
+        client.connect()
+        client.connect()
+        #expect(await waitUntil { client.state.isWaiting })
+        #expect(await requests.count == 1)
         client.disconnect()
     }
 }

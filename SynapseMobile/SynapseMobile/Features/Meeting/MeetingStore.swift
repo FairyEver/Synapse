@@ -14,6 +14,8 @@ final class MeetingStore {
     private(set) var meetings: [MeetingSummary] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    private var accountGeneration = 0
+    private var loadGeneration = 0
 
     /// 详情里那两栏。
     enum ViewMode: String {
@@ -44,10 +46,15 @@ final class MeetingStore {
     var hasTranscribing: Bool { meetings.contains { $0.status == "transcribing" } }
 
     func load(using client: APIClient) async {
+        loadGeneration += 1
+        let requestGeneration = loadGeneration
+        let account = accountGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer { if requestGeneration == loadGeneration, account == accountGeneration { isLoading = false } }
         do {
-            meetings = try await client.listMeetings()
+            let listed = try await client.listMeetings()
+            guard requestGeneration == loadGeneration, account == accountGeneration else { return }
+            meetings = listed
             errorMessage = nil
             // 别的设备上删掉的那几条，本机不该还留着一份能播的副本——「删除」要跨端一致。
             // 判据在缓存里：只在**返回条数少于上限**时才判，条数正好等于上限说明还有更早的
@@ -55,9 +62,9 @@ final class MeetingStore {
             let cache = MeetingAudioCache.shared
             cache.pruneAgainstList(meetings.map(\.id), limit: MeetingAudioCache.listLimit)
         } catch let error as APIError {
-            errorMessage = error.message
+            if requestGeneration == loadGeneration, account == accountGeneration { errorMessage = error.message }
         } catch {
-            errorMessage = "读取录音失败。"
+            if requestGeneration == loadGeneration, account == accountGeneration { errorMessage = "读取录音失败。" }
         }
     }
 
@@ -69,14 +76,18 @@ final class MeetingStore {
 
     @discardableResult
     func loadDetail(_ meetingId: String, using client: APIClient) async -> MeetingDetail? {
+        let account = accountGeneration
         do {
             let detail = try await client.meetingDetail(meetingId)
+            guard account == accountGeneration else { return nil }
             details[meetingId] = detail
             return detail
         } catch let error as APIError {
+            guard account == accountGeneration else { return nil }
             errorMessage = error.message
             return details[meetingId]
         } catch {
+            guard account == accountGeneration else { return nil }
             errorMessage = "读取录音详情失败。"
             return details[meetingId]
         }
@@ -86,14 +97,17 @@ final class MeetingStore {
     func rename(_ meetingId: String, to title: String, using client: APIClient) async {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let account = accountGeneration
         do {
             try await client.renameMeeting(meetingId, to: trimmed)
+            guard account == accountGeneration else { return }
             await load(using: client)
+            guard account == accountGeneration else { return }
             _ = await loadDetail(meetingId, using: client)
         } catch let error as APIError {
-            errorMessage = error.message
+            if account == accountGeneration { errorMessage = error.message }
         } catch {
-            errorMessage = "改名失败。"
+            if account == accountGeneration { errorMessage = "改名失败。" }
         }
     }
 
@@ -103,8 +117,10 @@ final class MeetingStore {
     /// 都不说，用户会不确定它到底删没删。
     @discardableResult
     func delete(_ meetingId: String, using client: APIClient) async -> Bool {
+        let account = accountGeneration
         do {
             try await client.deleteMeeting(meetingId)
+            guard account == accountGeneration else { return false }
             // 本地先抹掉再拉一遍：等下一次请求回来才消失的话，删掉的那一行会在原地多
             // 待半秒，看着像没删掉。
             meetings.removeAll { $0.id == meetingId }
@@ -112,12 +128,12 @@ final class MeetingStore {
             // 本机那份音频也跟着消失：「删除」必须真的删干净，不能这台设备删了、那台还能听。
             MeetingAudioCache.shared.remove(meetingId: meetingId)
             await load(using: client)
-            return true
+            return account == accountGeneration
         } catch let error as APIError {
-            errorMessage = error.message
+            if account == accountGeneration { errorMessage = error.message }
             return false
         } catch {
-            errorMessage = "删除失败。"
+            if account == accountGeneration { errorMessage = "删除失败。" }
             return false
         }
     }
@@ -139,21 +155,27 @@ final class MeetingStore {
 
     /// 转写失败之后的「重试」。**不需要重新上传音频**：音频已经在服务端了。
     func retryTranscription(_ meetingId: String, using client: APIClient) async {
+        let account = accountGeneration
         do {
             try await client.retryMeetingTranscription(meetingId)
+            guard account == accountGeneration else { return }
             _ = await loadDetail(meetingId, using: client)
+            guard account == accountGeneration else { return }
             await load(using: client)
         } catch let error as APIError {
-            errorMessage = error.message
+            if account == accountGeneration { errorMessage = error.message }
         } catch {
-            errorMessage = "重试失败。"
+            if account == accountGeneration { errorMessage = "重试失败。" }
         }
     }
 
     /// 退出登录时清干净：下一个账号不该看到上一个账号的录音。
     func clear() {
+        accountGeneration += 1
+        loadGeneration += 1
         meetings = []
         details = [:]
         errorMessage = nil
+        isLoading = false
     }
 }

@@ -49,9 +49,11 @@ final class MeetingPlayback {
     /// 本机那份缓存在哪、索引里怎么记。
     private let cache: MeetingAudioCache
     private var retryTask: Task<Void, Never>?
+    private var downloadTask: Task<Void, Error>?
     private var retryDelay = MeetingPlayback.initialRetryDelay
     /// 正在试一次（下载在路上）。离开这一屏又回来时靠它判断要不要接着试。
     private var isAttempting = false
+    private var loadGeneration = 0
 
     init(cache: MeetingAudioCache = .shared) {
         self.cache = cache
@@ -68,6 +70,8 @@ final class MeetingPlayback {
     /// `recording.size`——命中判据三件套里的一件就是它。
     func load(meetingId: String, serverSize: Int, using client: APIClient) async {
         if loadedMeetingId != meetingId {
+            loadGeneration += 1
+            downloadTask?.cancel()
             loadedMeetingId = meetingId
             self.serverSize = serverSize
             teardownPlayer()
@@ -97,6 +101,8 @@ final class MeetingPlayback {
     /// 只是给等急了的人一个出口，顺手让「10 秒」那个计时重新起算，按下去看得见反应。
     func retry(using client: APIClient) async {
         guard let meetingId = loadedMeetingId, isLoading else { return }
+        loadGeneration += 1
+        downloadTask?.cancel()
         retryTask?.cancel()
         retryTask = nil
         retryDelay = Self.initialRetryDelay
@@ -110,8 +116,9 @@ final class MeetingPlayback {
     /// 状态。原因落进日志，界面上仍然只是「正在下载」——所以这里没有失败字段可读，界面也
     /// 不该有：文案表里根本没有「播放失败」这一条。
     private func attempt(meetingId: String, using client: APIClient) async {
+        let generation = loadGeneration
         isAttempting = true
-        defer { isAttempting = false }
+        defer { if generation == loadGeneration { isAttempting = false } }
 
         // 命中判据三件套过了：播本机那份，一个字都不用联网。
         if let cached = cache.cachedAudio(meetingId: meetingId, serverSize: serverSize) {
@@ -132,23 +139,40 @@ final class MeetingPlayback {
             // 这一趟就不再属于这一屏：接着往下走会把上一条的波形和音频装到当前这条上，
             // 而 `isLoading = false` 还会替它把「正在下载」收掉。
             // `scheduleRetry` 那条路一直是这么防的（`:160`），只有这条正在飞的没防。
-            guard loadedMeetingId == meetingId else { return }
+            guard loadedMeetingId == meetingId, generation == loadGeneration else { return }
             peaks = MeetingPeaks.decode(encoded)
-            guard let url = try await address, let remote = URL(string: url) else {
+            let audioURL = try await address
+            guard loadedMeetingId == meetingId, generation == loadGeneration else { return }
+            guard let audioURL, let remote = URL(string: audioURL) else {
                 // 地址是 nil 代表录音已经不在服务端了。这不是错误，是一个要说明的状态。
                 isUnavailable = true
                 isLoading = false
                 return
             }
             let destination = cache.audioURL(meetingId: meetingId)
-            try await client.downloadMeetingAudio(from: remote, to: destination)
+            let staging = cache.stagingAudioURL()
+            do {
+                let download = Task { try await client.downloadMeetingAudio(from: remote, to: staging) }
+                downloadTask = download
+                defer { if generation == loadGeneration { downloadTask = nil } }
+                try await download.value
+                guard loadedMeetingId == meetingId, generation == loadGeneration else {
+                    try? FileManager.default.removeItem(at: staging)
+                    return
+                }
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: staging, to: destination)
+            } catch {
+                try? FileManager.default.removeItem(at: staging)
+                throw error
+            }
             // 下载是这一趟里最长的一段，回来时再确认一次。缓存那一步照旧做（文件已经
             // 在本机了，留着下回直接播），只是不能再往这一屏上装。
-            guard loadedMeetingId == meetingId else { return }
             cache.store(meetingId: meetingId, size: byteCount(destination), peaks: encoded ?? "")
             attachPlayer(destination)
             isLoading = false
         } catch {
+            guard loadedMeetingId == meetingId, generation == loadGeneration else { return }
             let message = (error as? APIError)?.message ?? "读不到这段录音的音频。"
             AppLog.recording.warning("meeting audio load failed, retrying: \(message, privacy: .public)")
             scheduleRetry(meetingId: meetingId, using: client)
@@ -225,11 +249,29 @@ final class MeetingPlayback {
         retryTask = nil
     }
 
+    /// Account exit invalidates every in-flight fetch before the cache is removed.
+    func clear() {
+        loadGeneration += 1
+        loadedMeetingId = nil
+        downloadTask?.cancel()
+        downloadTask = nil
+        retryTask?.cancel()
+        retryTask = nil
+        teardownPlayer()
+        peaks = []
+        isUnavailable = false
+        isLoading = false
+        isAttempting = false
+    }
+
     /// 那一条被删掉之后，播放器要跟着消失——留着一个播放一条不存在的音频的界面，比
     /// 说清楚它没了更糟。
     func forget(meetingId: String) {
         guard loadedMeetingId == meetingId else { return }
+        loadGeneration += 1
         loadedMeetingId = nil
+        downloadTask?.cancel()
+        downloadTask = nil
         retryTask?.cancel()
         retryTask = nil
         teardownPlayer()

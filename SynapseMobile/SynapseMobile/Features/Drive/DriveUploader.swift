@@ -120,6 +120,7 @@ final class DriveUploader {
     private var tasks: [String: Task<Void, Never>] = [:]
     /// 每一项此刻占着的上传会话。取消时拿它去放配额。
     private var sessions: [String: String] = [:]
+    private var clearing = false
 
     /// App 最近一次被切到后台的时刻。
     ///
@@ -199,6 +200,7 @@ final class DriveUploader {
             task.cancel()
             await task.value
         }
+        guard !clearing else { return }
         // 被取消的那一趟自己不放会话（见 `run` 里取消那一段），留到这里放：这里不在
         // 取消状态里，请求发得出去。
         if let sessionId = sessions[id] {
@@ -216,12 +218,29 @@ final class DriveUploader {
         discard(id)
     }
 
+    /// Account exit owns the whole queue, including uploads and overwrite prompts.
+    func clear() async {
+        clearing = true
+        let active = Array(tasks.values)
+        active.forEach { $0.cancel() }
+        for task in active { await task.value }
+        for sessionId in Set(sessions.values) { await release(sessionId) }
+        for item in items { DriveFileIntake.discard(item.file) }
+        items.removeAll()
+        tasks.removeAll()
+        sessions.removeAll()
+        transport = nil
+        running = 0
+        clearing = false
+    }
+
     // MARK: - 队列
 
     /// 有空位就往下放。
     ///
     /// 每一项在 `start` 里**同步**改成 `.uploading`，所以这个循环不会把同一项放两遍。
     private func pump() {
+        guard !clearing else { return }
         while running < maxConcurrent, let next = items.first(where: { $0.state == .queued }) {
             start(next.id)
         }

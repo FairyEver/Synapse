@@ -160,12 +160,12 @@ final class RelayLedgerTests {
     @Test func aRecordedItemSurvivesAndIsSweptOnlyAfterTheWindow() throws {
         var ledger = try freshLedger()
         let uploaded = Date(timeIntervalSince1970: 1_000_000)
-        ledger.record(itemId: "item-1", at: uploaded)
+        ledger.record(itemId: "item-1", ownerEmail: "owner@example.com", at: uploaded)
 
         #expect(ledger.all.count == 1)
-        #expect(ledger.expired(now: uploaded.addingTimeInterval(60)).isEmpty)
-        #expect(ledger.expired(now: uploaded.addingTimeInterval(AppConfiguration.relayPendingExpiry - 1)).isEmpty)
-        #expect(ledger.expired(now: uploaded.addingTimeInterval(AppConfiguration.relayPendingExpiry)).count == 1)
+        #expect(ledger.expired(now: uploaded.addingTimeInterval(60), ownerEmail: "owner@example.com").isEmpty)
+        #expect(ledger.expired(now: uploaded.addingTimeInterval(AppConfiguration.relayPendingExpiry - 1), ownerEmail: "owner@example.com").isEmpty)
+        #expect(ledger.expired(now: uploaded.addingTimeInterval(AppConfiguration.relayPendingExpiry), ownerEmail: "owner@example.com").count == 1)
     }
 
     @Test func aConfirmedDeliveryIsForgotten() throws {
@@ -196,6 +196,27 @@ final class RelayLedgerTests {
         // what it left in the drive when it comes back.
         let second = RelayLedger(defaults: defaults)
         #expect(second.all.map(\.itemId) == ["item-1"])
+    }
+
+    @Test func pendingItemsStayWithTheirAccount() throws {
+        var ledger = try freshLedger()
+        ledger.record(itemId: "first", ownerEmail: "first@example.com")
+        ledger.record(itemId: "second", ownerEmail: "second@example.com")
+
+        #expect(ledger.entries(forAccount: "first@example.com").map(\.itemId) == ["first"])
+        #expect(ledger.entries(forAccount: "second@example.com").map(\.itemId) == ["second"])
+        #expect(RelayLedger(defaults: try #require(UserDefaults(suiteName: Self.suiteName)))
+            .entries(forAccount: "first@example.com").map(\.itemId) == ["first"])
+    }
+
+    @Test func olderLedgerEntriesRemainReadable() throws {
+        let defaults = try #require(UserDefaults(suiteName: Self.suiteName))
+        defaults.removePersistentDomain(forName: Self.suiteName)
+        defaults.set(Data(#"[{"itemId":"legacy","uploadedAt":0}]"#.utf8), forKey: "SynapseRelayLedger")
+
+        let ledger = RelayLedger(defaults: defaults)
+        #expect(ledger.all.map(\.itemId) == ["legacy"])
+        #expect(ledger.entries(forAccount: "another@example.com").map(\.itemId) == ["legacy"])
     }
 }
 

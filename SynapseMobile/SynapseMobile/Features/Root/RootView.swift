@@ -260,7 +260,9 @@ struct RootView: View {
                     }
                 }
         } detail: { meetingId in
-            MeetingDetailView(meetingId: meetingId) { meetingSelection = nil }
+            MeetingDetailView(meetingId: meetingId) {
+                if meetingSelection == meetingId { meetingSelection = nil }
+            }
         }
     }
 

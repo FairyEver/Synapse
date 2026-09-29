@@ -39,7 +39,7 @@ struct MeetingDetailView: View {
             Button("删除", role: .destructive) {
                 Haptics.warning()
                 Task {
-                    await model.deleteMeeting(meetingId)
+                    guard await model.deleteMeeting(meetingId) else { return }
                     model.playback.forget(meetingId: meetingId)
                     // 行已经没了，这一屏也就没有可返回的地方——自己退出去。
                     onDeleted()

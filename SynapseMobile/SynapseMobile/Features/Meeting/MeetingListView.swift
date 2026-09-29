@@ -143,7 +143,7 @@ struct MeetingListView: View {
             Button("删除", role: .destructive) {
                 Haptics.warning()
                 Task {
-                    await model.deleteMeeting(meeting.id)
+                    guard await model.deleteMeeting(meeting.id) else { return }
                     if selection == meeting.id { selection = nil }
                 }
             }

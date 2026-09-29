@@ -228,6 +228,20 @@ struct DriveUploaderTests {
         #expect(server.completed.count == 5)
     }
 
+    @Test func accountExitCancelsUploadsWithoutStartingQueuedFiles() async {
+        let server = FakeDrive()
+        server.holdPuts = true
+        let uploader = uploader(server)
+
+        uploader.enqueue(files: [file("a.md"), file("b.md"), file("c.md")], parentId: nil, using: client)
+        await waitUntil { server.inFlight == 2 }
+        await uploader.clear()
+
+        #expect(uploader.items.isEmpty)
+        #expect(server.prepares.count == 2)
+        #expect(Set(server.released) == ["s1-a.md", "s1-b.md"])
+    }
+
     // MARK: - 逐项
 
     /// 一项失败不牵连其余项，失败的那一项留在列表里等重试。

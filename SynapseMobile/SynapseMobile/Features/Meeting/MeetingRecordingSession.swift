@@ -52,6 +52,7 @@ final class MeetingRecordingSession {
     private var client: APIClient?
     private var ticker: Task<Void, Never>?
     private var persistedParts = 0
+    private var accountGeneration = 0
     /// 正在起一条新的。
     ///
     /// `phase` 要等服务端回来才变成 `.recording`，而进录音页的入口不止一个（列表的加号
@@ -78,6 +79,7 @@ final class MeetingRecordingSession {
         // 收尾（`.saving`）期间也允许开新的一条：两条各自抓着自己那套采集器和上传器，
         // 互不干扰。拦住的话，用户点完「完成」马上再点加号会什么也没发生。
         guard !isRecording, !isStarting else { return }
+        let generation = accountGeneration
         isStarting = true
         didHitDurationLimit = false
         defer { isStarting = false }
@@ -91,6 +93,7 @@ final class MeetingRecordingSession {
         // 会有音频的记录，而用户这边连个解释都看不到。
         if MeetingPermission.microphone != .granted {
             let granted = await MeetingPermission.requestMicrophone()
+            guard generation == accountGeneration else { return }
             guard granted else {
                 // **不阻断**：录音页照常留着，只是明说这一条波形不作数。iOS 在没有权限
                 // 时一点音频都不给，画一条平线并把原因写出来，比拿假波形冒充真的诚实。
@@ -101,6 +104,10 @@ final class MeetingRecordingSession {
 
         do {
             let started = try await client.startMeetingRecording(title: nil, startedAt: Date())
+            guard generation == accountGeneration else {
+                try? await client.cancelMeetingRecording(recordingId: started.recordingId)
+                return
+            }
             title = started.title
             meetingId = started.meetingId
             let record = PendingMeetingRecording(
@@ -135,9 +142,11 @@ final class MeetingRecordingSession {
             phase = .recording
             startTicker()
         } catch let error as APIError {
+            guard generation == accountGeneration else { return }
             hint = .uploadFailed(error.message)
             abandonFailedStart()
         } catch {
+            guard generation == accountGeneration else { return }
             hint = .uploadFailed("录音没能开始，请稍后再试。")
             abandonFailedStart()
         }
@@ -194,6 +203,7 @@ final class MeetingRecordingSession {
         let record = pending
         let durationMs = recorder?.durationMs ?? 0
         let peaks = peakStore.encode()
+        let generation = accountGeneration
         stopCapture()
         phase = .saving
         self.recorder = nil
@@ -205,7 +215,8 @@ final class MeetingRecordingSession {
                 recorder: recorder,
                 uploader: uploader,
                 durationMs: durationMs,
-                peaks: peaks
+                peaks: peaks,
+                generation: generation
             )
         }
     }
@@ -215,7 +226,8 @@ final class MeetingRecordingSession {
         recorder: MeetingRecorder?,
         uploader: MeetingUploader?,
         durationMs: Int,
-        peaks: String
+        peaks: String,
+        generation: Int
     ) async {
         guard let record, let client else {
             finishSaving(recordingId: record?.recordingId)
@@ -225,6 +237,10 @@ final class MeetingRecordingSession {
         // 那片尾巴。补上它，服务端拼出来的才是一条完整的音频。
         if let tail = await recorder?.remainingBytesAfterStop() {
             uploader?.enqueue(tail)
+        }
+        guard generation == accountGeneration else {
+            discardLocalFiles(record.recordingId)
+            return
         }
         let fileURL = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId)
         // 尾片没送出去就**不要提交**。收尾那几个字节里带着索引，服务端拼出来的会是一段读不
@@ -242,6 +258,10 @@ final class MeetingRecordingSession {
             finishSaving(recordingId: record.recordingId)
             return
         }
+        guard generation == accountGeneration else {
+            discardLocalFiles(record.recordingId)
+            return
+        }
 
         do {
             try await client.completeMeetingRecording(
@@ -249,10 +269,15 @@ final class MeetingRecordingSession {
                 durationMs: durationMs,
                 peaks: peaks
             )
+            guard generation == accountGeneration else {
+                discardLocalFiles(record.recordingId)
+                return
+            }
             // 收尾成功才动本机那份：在那之前，它是异常退出之后唯一的依据。这时候它不是被
             // 删掉，是归入缓存——刚录完的这条回听要秒开。
             keepRecordedAudio(record, peaks: peaks)
         } catch {
+            guard generation == accountGeneration else { return }
             // 音频已经在服务端了，这一步失败只是晚一点开始。留好本机文件，下次启动
             // 自动收尾，界面上不出现任何询问。
             AppLog.recording.warning(
@@ -284,6 +309,26 @@ final class MeetingRecordingSession {
             }
             self.finishSaving(recordingId: record?.recordingId)
         }
+    }
+
+    /// Invalidate older start and finish requests before another account can sign in.
+    func clearForAccountExit() {
+        accountGeneration += 1
+        if isRecording { cancel() }
+        for record in PendingMeetingRecordingStore.loadAll() {
+            discardLocalFiles(record.recordingId)
+        }
+        client = nil
+        pending = nil
+        phase = .idle
+        hint = .none
+        levels = []
+        elapsedMs = 0
+        title = ""
+        meetingId = nil
+        peakStore = MeetingPeakStore()
+        persistedParts = 0
+        didHitDurationLimit = false
     }
 
     /// 收尾跑完了，把这一条留下来的状态清掉。
@@ -407,8 +452,10 @@ final class MeetingRecordingSession {
     /// 界面上不出现任何询问：用户不需要知道发生过异常退出。
     func resolvePendingRecordings(using client: APIClient) async {
         guard phase == .idle else { return }
+        let generation = accountGeneration
         for record in PendingMeetingRecordingStore.loadAll() {
-            await finalize(record, using: client)
+            guard generation == accountGeneration else { return }
+            await finalize(record, using: client, generation: generation)
         }
     }
 
@@ -436,7 +483,7 @@ final class MeetingRecordingSession {
         return apiError.status == 404 ? .giveUp : .retryLater
     }
 
-    private func finalize(_ record: PendingMeetingRecording, using client: APIClient) async {
+    private func finalize(_ record: PendingMeetingRecording, using client: APIClient, generation: Int) async {
         guard let fileURL = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId) else {
             PendingMeetingRecordingStore.remove(recordingId: record.recordingId)
             return
@@ -448,6 +495,7 @@ final class MeetingRecordingSession {
         // 的收尾），5 小时的录音有六百多万个采样窗，占着主 actor 就是几十秒白屏，还
         // 可能被 watchdog 直接打死。
         let peaks = await MeetingAudioFilePeaks.compute(from: fileURL)
+        guard generation == accountGeneration else { return }
         let durationMs = MeetingDurationEstimate.fromBytes(byteCount(fileURL))
 
         let uploader = MeetingUploader(
@@ -462,6 +510,7 @@ final class MeetingRecordingSession {
             abort: { try? await client.cancelMeetingRecording(recordingId: record.recordingId) }
         )
         await uploadFromFile(fileURL, skipping: record.uploadedParts, into: uploader)
+        guard generation == accountGeneration else { return }
         // **不能只从断点往后补，第 1 片也要过一遍。** 接着传的那些分片（第 2 片起）里，中间
         // 的字节确实不会再变，但第 1 片不是：录音期间磁盘上写的是分片 m4a，`finishWriting()`
         // 收尾时会把开头那段初始化重排掉。上一个进程里发出去的第 1 片拿到的还是分片形态的
@@ -471,6 +520,7 @@ final class MeetingRecordingSession {
         // （第 1 片正属此类），有摘要且对得上的不重传。收尾路径上那些已经传过的分片因此只多
         // 出一次读盘，不会重传。
         guard await uploader.finish(audioFile: fileURL) else { return }
+        guard generation == accountGeneration else { return }
 
         do {
             let encodedPeaks = MeetingPeaks.encode(peaks)
@@ -479,9 +529,11 @@ final class MeetingRecordingSession {
                 durationMs: durationMs,
                 peaks: encodedPeaks
             )
+            guard generation == accountGeneration else { return }
             // 同样归入缓存：这条也是刚录完的，回听要秒开。
             keepRecordedAudio(record, peaks: encodedPeaks)
         } catch {
+            guard generation == accountGeneration else { return }
             switch Self.recoveryOutcome(for: error) {
             case .giveUp:
                 // 服务端已经没有这条录音了（见 `recoveryOutcome`）：这次收尾不可能成功，

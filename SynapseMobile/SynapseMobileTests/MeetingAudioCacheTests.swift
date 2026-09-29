@@ -193,6 +193,8 @@ struct MeetingAudioCacheTests {
         let second = try put(cache, meetingId: "m-2", bytes: 16)
         let recordingInProgress = cache.directory.appendingPathComponent("rec-not-in-index.m4a")
         try Data(repeating: 0x42, count: 16).write(to: recordingInProgress)
+        let unfinished = cache.stagingAudioURL()
+        try Data(repeating: 0x43, count: 16).write(to: unfinished)
 
         cache.clearAll()
 
@@ -200,6 +202,7 @@ struct MeetingAudioCacheTests {
         #expect(!exists(second))
         #expect(cache.loadIndex().isEmpty)
         #expect(exists(recordingInProgress))
+        #expect(!exists(unfinished))
     }
 
     @Test func anEmptyListStillCountsAsFewerThanTheLimit() throws {

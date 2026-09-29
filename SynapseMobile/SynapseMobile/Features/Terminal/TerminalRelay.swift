@@ -215,6 +215,8 @@ struct RelayLedger {
     struct Entry: Codable, Equatable {
         let itemId: String
         let uploadedAt: Date
+        /// Nil belongs to the pre-account format; server ownership checks protect it.
+        let ownerEmail: String?
     }
 
     private static let key = "SynapseRelayLedger"
@@ -229,10 +231,14 @@ struct RelayLedger {
 
     var all: [Entry] { entries }
 
-    mutating func record(itemId: String, at date: Date = Date()) {
+    mutating func record(itemId: String, ownerEmail: String? = nil, at date: Date = Date()) {
         guard !entries.contains(where: { $0.itemId == itemId }) else { return }
-        entries.append(Entry(itemId: itemId, uploadedAt: date))
+        entries.append(Entry(itemId: itemId, uploadedAt: date, ownerEmail: ownerEmail))
         save()
+    }
+
+    func entries(forAccount email: String?) -> [Entry] {
+        entries.filter { $0.ownerEmail == nil || $0.ownerEmail == email }
     }
 
     /// The delivery landed, so the item is gone from the drive and owes nothing.
@@ -244,8 +250,12 @@ struct RelayLedger {
 
     /// Entries old enough to give up on. The caller still has to delete them; this
     /// only says which ones.
-    func expired(now: Date = Date(), after: TimeInterval = AppConfiguration.relayPendingExpiry) -> [Entry] {
-        entries.filter { now.timeIntervalSince($0.uploadedAt) >= after }
+    func expired(
+        now: Date = Date(),
+        after: TimeInterval = AppConfiguration.relayPendingExpiry,
+        ownerEmail: String? = nil
+    ) -> [Entry] {
+        entries(forAccount: ownerEmail).filter { now.timeIntervalSince($0.uploadedAt) >= after }
     }
 
     private mutating func save() {
