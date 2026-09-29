@@ -1902,7 +1902,8 @@ final class TerminalFlowUITests: XCTestCase {
     ///
     /// The one thing this test is really about is what tapping a sentence must *not* do.
     /// A command is an act and a sentence is text, so a tap puts the sentence in the
-    /// composer and stops there — it is not sent, and it does not raise the keyboard.
+    /// composer and switches the bar out of voice mode — it is not sent, and it does
+    /// not raise the keyboard.
     /// Getting that wrong would send, unread, a message the user had not looked at yet.
     func testThePhraseSegmentFillsTheFieldWithoutSending() throws {
         let app = XCUIApplication()
@@ -1911,6 +1912,10 @@ final class TerminalFlowUITests: XCTestCase {
         signIn(app)
         selectMockDesktop(app)
         openClaudeCodeTerminal(app)
+
+        let toggle = app.buttons["voice-mode-toggle"]
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "voice", "the input bar did not enter voice mode")
 
         app.buttons["toolbar-all"].tap()
         let segment = app.segmentedControls["shortcut-panel-segment"]
@@ -1924,7 +1929,8 @@ final class TerminalFlowUITests: XCTestCase {
 
         row.tap()
 
-        // In the field, exactly as the computer wrote it.
+        // The field replaces the voice bar and shows exactly what the computer wrote.
+        XCTAssertEqual(toggle.value as? String, "keyboard", "the phrase left its draft hidden in voice mode")
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10), "the input field is missing")
         let expected = "这次改动整理成提交说明，中文，说清楚改了什么、为什么改"
@@ -1932,6 +1938,8 @@ final class TerminalFlowUITests: XCTestCase {
             waitForValue(containing: expected, in: field, timeout: 10),
             "the sentence did not reach the input field: \(field.value as? String ?? "(nil)")"
         )
+        XCTAssertTrue(app.buttons["send"].isEnabled, "the filled draft cannot be sent")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "selecting a phrase raised the system keyboard")
         // Not sent. The computer echoes every command it receives, so an echo is proof
         // one went out — and there must not be one. Matched on the sentence rather than
         // on the echo prefix: the mock outlives this test and its terminal still holds

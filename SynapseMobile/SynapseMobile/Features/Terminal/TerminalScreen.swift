@@ -414,7 +414,8 @@ struct TerminalScreen: View {
 
     /// 用户对模式的一次表态：改当下，也记住。
     ///
-    /// **切换键是唯一该调它的地方**（§3.3）。说完一句、滑走取消、固定态里收摊，都是
+    /// **切换键是唯一该调它的地方**（§3.3）。快捷输入只临时切到文字栏，
+    /// 不改这里记住的偏好。说完一句、滑走取消、固定态里收摊，都是
     /// 在这一轮里走到哪一步，不是用户改了自己的模式，所以那些路径一并不碰这一格。
     /// 这里多一个调用方，就等于多一条「用户没让它切、它自己切走了」的路，而症状要
     /// 等到他下次进终端才看得见。
@@ -778,12 +779,11 @@ struct TerminalScreen: View {
                 onInsert: { phrase in
                     noteChromeActivity()
                     shortcutPanelPresented = false
-                    // Into the field and nowhere else. Not sent, because a sentence is
-                    // text rather than an act and the user is about to read it back
-                    // before deciding; and not focused, because focusing is what raises
-                    // the system keyboard — which would cover the terminal at the exact
-                    // moment the reader is deciding whether to send.
+                    // Show the filled field even when the bar was in voice mode. Do not
+                    // send or focus it: the reader decides when to send, and focusing
+                    // would raise the system keyboard over the terminal.
                     draft = phrase.content
+                    voiceMode = false
                 },
                 // The reader's own list for the computer being viewed. Empty rather
                 // than optional: a computer never answers "I have no clipboard", so
