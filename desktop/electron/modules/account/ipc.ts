@@ -80,17 +80,18 @@ const notificationListRequestSchema = z.object({
 })
 
 const notificationIdSchema = z.object({ id: z.string().min(1) })
+const notificationReadSchema = notificationIdSchema.extend({ read: z.boolean().optional() })
 const notificationDeleteAllRequestSchema = z.object({ filter: z.enum(["all", "pending"]) })
 
 const mailContentSchema = z.object({ formatVersion: z.literal(3), toIds: z.array(z.string().min(1)), ccIds: z.array(z.string().min(1)), toOrganizationIds: z.array(z.string().min(1)), ccOrganizationIds: z.array(z.string().min(1)), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
 const mailIdSchema = z.string().min(1)
 const mailPersonSchema = z.object({ userId: z.string(), nickname: z.string().nullable(), handle: z.string().nullable() })
-const mailAddressSchema = z.union([z.object({ kind: z.literal("user"), userId: z.string(), name: z.string() }), z.object({ kind: z.literal("organization"), organizationId: z.string(), name: z.string() })])
+const mailAddressSchema = z.union([z.object({ kind: z.literal("user"), userId: z.string(), name: z.string() }), z.object({ kind: z.literal("organization"), organizationId: z.string(), name: z.string() }), z.object({ kind: z.literal("audience"), name: z.string() })])
 const mailOrganizationSchema = z.object({ organizationId: z.string(), teamId: z.string(), teamName: z.string(), parentId: z.string().nullable(), name: z.string(), memberCount: z.number() })
 const mailAttachmentSchema = z.object({ attachmentId: z.string(), fileName: z.string(), mimeType: z.string().nullable().optional(), size: z.number() })
 const mailQuoteSchema = z.object({ sender: mailPersonSchema, toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema).optional(), ccAddresses: z.array(mailAddressSchema).optional(), subject: z.string(), body: z.string(), sentAt: z.string() })
-const mailSummarySchema = z.object({ messageId: z.string(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema).optional(), ccAddresses: z.array(mailAddressSchema).optional(), relationKind: z.enum(["reply", "forward"]).nullable(), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
-const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body: z.string(), team: z.object({ id: z.string(), name: z.string() }), conversationId: z.string(), replyToId: z.string().nullable(), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string() }).nullable(), quote: mailQuoteSchema.nullable(), attachments: z.array(mailAttachmentSchema), legacyFormat: z.boolean().optional() })
+const mailSummarySchema = z.object({ messageId: z.string(), kind: z.enum(["user", "platform_broadcast"]).optional(), sender: mailPersonSchema, recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema).optional(), ccAddresses: z.array(mailAddressSchema).optional(), relationKind: z.enum(["reply", "forward"]).nullable(), subject: z.string(), snippet: z.string(), sentAt: z.string(), readAt: z.string().nullable(), attachmentCount: z.number() })
+const mailMessageSchema = mailSummarySchema.extend({ viewerId: z.string(), body: z.string(), team: z.object({ id: z.string(), name: z.string() }).nullable(), conversationId: z.string(), replyToId: z.string().nullable(), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string() }).nullable(), quote: mailQuoteSchema.nullable(), attachments: z.array(mailAttachmentSchema), legacyFormat: z.boolean().optional() })
 const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
 const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
 const mailDeletedSchema = z.object({ deleted: z.literal(true) })
@@ -1093,9 +1094,12 @@ export const accountIpcModule: IpcModule = {
     markNotificationRead: {
       kind: "invoke",
       operationId: "app.account.notification.read",
-      request: notificationIdSchema,
+      request: notificationReadSchema,
       response: z.object({ ok: z.literal(true) }),
-      handler: async (_ctx, input) => accountService.markNotificationRead(notificationIdSchema.parse(input).id),
+      handler: async (_ctx, input) => {
+        const request = notificationReadSchema.parse(input)
+        return accountService.markNotificationRead(request.id, request.read)
+      },
     },
     markAllNotificationsRead: {
       kind: "invoke",

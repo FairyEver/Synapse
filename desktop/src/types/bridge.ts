@@ -1392,7 +1392,7 @@ export type SynapseBridge = {
       onChanged: (listener: (event: { notificationId: string }) => void) => () => void
       list: (input: { cursor?: string; filter?: "all" | "unread" | "pending" }) => Promise<import("./notification-center").NotificationPage>
       count: () => Promise<{ unread: number }>
-      read: (input: { id: string }) => Promise<{ ok: true }>
+      read: (input: { id: string; read?: boolean }) => Promise<{ ok: true }>
       readAll: () => Promise<{ ok: true }>
       delete: (input: { id: string }) => Promise<{ ok: true }>
       deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>

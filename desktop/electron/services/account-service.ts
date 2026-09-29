@@ -554,8 +554,8 @@ export class AccountService {
     return this.getAuthenticatedJson<{ unread: number }>(`${apiBaseUrl()}/notifications/count`, "未读数加载失败。")
   }
 
-  async markNotificationRead(id: string) {
-    return this.requestAuthenticatedJson<{ ok: true }>("PATCH", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}/read`, undefined, "标记已读失败。")
+  async markNotificationRead(id: string, read = true) {
+    return this.requestAuthenticatedJson<{ ok: true }>("PATCH", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}/read`, read ? undefined : { read: false }, "更新已读状态失败。")
   }
 
   async markAllNotificationsRead() {

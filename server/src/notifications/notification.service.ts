@@ -128,8 +128,11 @@ export class NotificationService implements OnModuleInit {
     return this.prisma.userNotification.count({ where: { userId, readAt: null, deletedAt: null, createdAt: { gte: new Date(Date.now() - retentionMs) } } })
   }
 
-  async markRead(userId: string, id: string): Promise<void> {
-    await this.prisma.userNotification.updateMany({ where: { id, userId, readAt: null, deletedAt: null }, data: { readAt: new Date() } })
+  async markRead(userId: string, id: string, read = true): Promise<void> {
+    await this.prisma.userNotification.updateMany({
+      where: { id, userId, readAt: read ? null : { not: null }, deletedAt: null },
+      data: { readAt: read ? new Date() : null },
+    })
     this.publish(userId, id)
   }
 

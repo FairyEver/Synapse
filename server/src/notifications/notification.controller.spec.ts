@@ -14,6 +14,19 @@ function controller(scopes: string[] = ["notification.send"]) {
   return { controller: new OpenNotificationController(service as never), service, request }
 }
 
+describe("NotificationController", () => {
+  it("keeps old mark-read calls working and accepts an explicit mark-unread request", async () => {
+    const service = { markRead: vi.fn(async () => undefined) }
+    const endpoint = new NotificationController(service as never)
+    const request = { user: { id: "reader" } }
+    await endpoint.markRead(request as never, "n1", undefined)
+    await endpoint.markRead(request as never, "n1", { read: false })
+    expect(service.markRead).toHaveBeenNthCalledWith(1, "reader", "n1", true)
+    expect(service.markRead).toHaveBeenNthCalledWith(2, "reader", "n1", false)
+    await expect(endpoint.markRead(request as never, "n1", { read: "false" })).rejects.toMatchObject({ status: 400 })
+  })
+})
+
 describe("OpenNotificationController", () => {
   it("sends with the key and message in one request body", async () => {
     const { controller: endpoint, request, service } = controller()

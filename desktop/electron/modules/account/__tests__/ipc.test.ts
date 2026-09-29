@@ -190,6 +190,23 @@ describe("accountIpcModule", () => {
     expect(accountIpcModule.methods.mailMessageGet.response?.parse(detail)).toMatchObject({ legacyFormat: true, relation: null, quote: null })
   })
 
+  it("accepts a platform announcement with all users as the audience and a full body", () => {
+    const sender = { userId: "synapse", nickname: "Synapse", handle: null }
+    const announcement = {
+      messageId: "broadcast-1", kind: "platform_broadcast", sender,
+      recipients: [], toRecipients: [], ccRecipients: [], toAddresses: [{ kind: "audience", name: "所有用户" }], ccAddresses: [],
+      relationKind: null, subject: "版本公告", snippet: "摘要", sentAt: "2026-09-29T10:00:00.000Z", readAt: null, attachmentCount: 0,
+      viewerId: "reader", body: "完整正文", team: null, conversationId: "broadcast-1", replyToId: null, relation: null, quote: null, attachments: [],
+    }
+    expect(accountIpcModule.methods.mailMessageGet.response?.parse(announcement)).toMatchObject({
+      kind: "platform_broadcast", toAddresses: [{ name: "所有用户" }], body: "完整正文", team: null,
+    })
+  })
+
+  it("accepts an explicit unread update through the existing notification channel", () => {
+    expect(accountIpcModule.methods.markNotificationRead.request.parse({ id: "n1", read: false })).toEqual({ id: "n1", read: false })
+  })
+
   it("accepts only a local file path when creating a mail attachment", async () => {
     const method = accountIpcModule.methods.mailAttachmentCreate
     assertParseableSchema(method.request)

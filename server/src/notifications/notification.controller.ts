@@ -43,6 +43,7 @@ const listSchema = z.object({
 })
 
 const deleteAllSchema = z.object({ filter: z.enum(["all", "pending"]) })
+const readSchema = z.object({ read: z.boolean().optional() }).strict()
 
 const desktopWriteSchema = z.object({
   source: z.enum(DESKTOP_NOTIFICATION_SOURCES),
@@ -102,8 +103,10 @@ export class NotificationController {
   }
 
   @Patch(":id/read")
-  async markRead(@Req() request: AuthedRequest, @Param("id") id: string) {
-    await this.notifications.markRead(request.user.id, id)
+  async markRead(@Req() request: AuthedRequest, @Param("id") id: string, @Body() body: unknown) {
+    const parsed = readSchema.safeParse(body ?? {})
+    if (!parsed.success) throw badRequestFromZodError(parsed.error, "已读状态无效。")
+    await this.notifications.markRead(request.user.id, id, parsed.data.read ?? true)
     return { ok: true }
   }
 

@@ -66,6 +66,16 @@ describe("NotificationService", () => {
     expect(Math.abs(Date.now() - cutoff.getTime() - 90 * 24 * 60 * 60 * 1000)).toBeLessThan(2_000)
   })
 
+  it("lets the owner mark a notification unread again without changing its pending state", async () => {
+    const { service, prisma, desktops } = harness()
+    await service.markRead("user-1", "message-1", false)
+    expect(prisma.userNotification.updateMany).toHaveBeenCalledWith({
+      where: { id: "message-1", userId: "user-1", readAt: { not: null }, deletedAt: null },
+      data: { readAt: null },
+    })
+    expect(desktops.broadcastToUser).toHaveBeenCalledOnce()
+  })
+
   it("withdraws the open-terminal handle for a session that is gone", async () => {
     // 会话结束之后，它留下的那条「打开终端」不再指向任何东西。清的是 `targetId`，不是
     // 删记录：那条消息说的是「那一轮跑完了」，这件事发生过，历史要留着。
