@@ -75,11 +75,30 @@ describe("mail bulk controls", () => {
     }
     render()
     expect(document.body.textContent).toContain("Synapse")
-    const labels = [...document.querySelectorAll("button")].map((item) => item.textContent?.trim())
+    const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')
+    expect(trigger).not.toBeNull()
+    act(() => trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())
     expect(labels).not.toContain("回复")
     expect(labels).not.toContain("转发")
     expect(labels).toContain("设为已读")
     expect(labels).toContain("删除")
+  })
+
+  it("uses the row target for context actions and the open message for detail actions", async () => {
+    mocks.request.mockResolvedValue(undefined)
+    mocks.messages = [message("first"), message("second")]
+    mocks.selectedId = "first"
+    mocks.detail = { ...mocks.messages[0], viewerId: "reader", body: "正文", team: null, conversationId: "first", replyToId: null, relation: null, quote: null, attachments: [] }
+    render()
+    const second = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("second"))!
+    act(() => second.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "设为已读")?.click(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "second", read: true })
+
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "设为已读")?.click(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "first", read: true })
   })
 
   it("keeps selection across loaded pages and sends only selected IDs", async () => {

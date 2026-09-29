@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, Check, Inbox, MailOpen, Paperclip, Pencil, RefreshCw, Search, Send } from "lucide-react"
+import { ArrowLeft, Check, Inbox, MailOpen, MoreHorizontal, Paperclip, Pencil, RefreshCw, Search, Send } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { useAccount } from "@/app-shell/account"
 import { mailRequest } from "@/lib/mail-api"
-import type { MailAddress, MailMessage, MailPerson } from "@/types/mail"
+import type { MailAddress, MailMessage, MailPerson, MailSummary } from "@/types/mail"
 import { MailCompose, type ComposeStart } from "./compose"
 import { MailLayout } from "./layout"
 import { useMail, type MailBox } from "./use-mail"
@@ -106,35 +108,44 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
     onOpenRequestConsumed?.(openRequest.requestId)
   }, [openRequest, onOpenRequestConsumed, mail.setSelectedId])
 
-  async function setRead(read: boolean) {
-    if (!mail.detail) return
+  async function setRead(message: MailSummary) {
     try {
-      await mailRequest({ kind: "messageSetRead", messageId: mail.detail.messageId, read })
+      await mailRequest({ kind: "messageSetRead", messageId: message.messageId, read: !message.readAt })
       mail.refresh()
     } catch (error) { toast.error(error instanceof Error ? error.message : "状态更新失败。") }
   }
 
-  async function remove() {
-    if (!mail.detail) return
+  async function remove(message: MailSummary) {
     try {
-      await mailRequest({ kind: "messageDelete", messageId: mail.detail.messageId })
-      mail.setSelectedId(null)
+      await mailRequest({ kind: "messageDelete", messageId: message.messageId })
+      if (mail.selectedId === message.messageId) mail.setSelectedId(null)
       mail.refresh()
     } catch (error) { toast.error(error instanceof Error ? error.message : "删除失败。") }
   }
 
-  function reply() {
-    const message = mail.detail
-    if (!message || message.kind === "platform_broadcast") return
-    const to = message.sender.userId === myId ? message.toRecipients : [message.sender]
-    const toIds = [...new Set(to.map((person) => person.userId))].filter((id) => id !== myId)
-    const ccIds: string[] = []
-    setCompose({ toIds, ccIds, subject: `回复：${message.subject}`, relation: { kind: "reply", messageId: message.messageId }, source: message })
+  async function composeFrom(message: MailSummary, kind: "reply" | "forward") {
+    try {
+      const source = mail.detail?.messageId === message.messageId ? mail.detail : await mailRequest({ kind: "messageGet", messageId: message.messageId })
+      if (source.kind === "platform_broadcast") return
+      if (kind === "forward") {
+        setCompose({ subject: `转发：${source.subject}`, relation: { kind, messageId: source.messageId }, source })
+        return
+      }
+      const to = source.sender.userId === myId ? source.toRecipients : [source.sender]
+      const toIds = [...new Set(to.map((person) => person.userId))].filter((id) => id !== myId)
+      setCompose({ toIds, ccIds: [], subject: `回复：${source.subject}`, relation: { kind, messageId: source.messageId }, source })
+    } catch (error) { toast.error(error instanceof Error ? error.message : "读取信件失败。") }
   }
 
-  function forward() {
-    if (!mail.detail || mail.detail.kind === "platform_broadcast") return
-    setCompose({ subject: `转发：${mail.detail.subject}`, relation: { kind: "forward", messageId: mail.detail.messageId }, source: mail.detail })
+  function messageActions(message: MailSummary) {
+    return [
+      ...(message.kind === "platform_broadcast" ? [] : [
+        { id: "reply", label: "回复", run: () => { void composeFrom(message, "reply") } },
+        { id: "forward", label: "转发", run: () => { void composeFrom(message, "forward") } },
+      ]),
+      ...(box === "inbox" ? [{ id: "read", label: message.readAt ? "设为未读" : "设为已读", run: () => { void setRead(message) } }] : []),
+      { id: "delete", label: "删除", destructive: true, run: () => { void remove(message) } },
+    ]
   }
 
   async function download(message: MailMessage, attachmentId: string) {
@@ -169,24 +180,23 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
             {isEmpty && <MailEmptyState box={box} searched={!!search} onClearSearch={() => { setQuery(""); setSearch("") }} onCompose={() => setCompose({})} />}
             {hasListItems && <ScrollArea className="min-h-0 min-w-0 flex-1" viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full">
               {mail.error && <p role="alert" className="p-3 text-sm text-destructive">{mail.error}</p>}
-              {mail.messages.map((message) => <button key={message.messageId} type="button" aria-current={!selecting && mail.selectedId === message.messageId ? "true" : undefined} aria-pressed={selecting ? selectedIds.has(message.messageId) : undefined} className={`block w-full border-b px-4 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring ${mail.selectedId === message.messageId || selectedIds.has(message.messageId) ? "bg-selected" : ""}`} onClick={() => selecting ? toggleSelected(message.messageId) : openMessage(message.messageId)}>
+              {mail.messages.map((message) => <ContextMenu key={message.messageId}><ContextMenuTrigger asChild><button type="button" aria-current={!selecting && mail.selectedId === message.messageId ? "true" : undefined} aria-pressed={selecting ? selectedIds.has(message.messageId) : undefined} className={`block w-full border-b px-4 py-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring ${mail.selectedId === message.messageId || selectedIds.has(message.messageId) ? "bg-selected" : ""}`} onClick={() => selecting ? toggleSelected(message.messageId) : openMessage(message.messageId)}>
                 {selecting && <span className="mb-1 flex items-center gap-1 text-xs text-muted-foreground"><Check className={selectedIds.has(message.messageId) ? "size-3" : "size-3 opacity-0"} />{selectedIds.has(message.messageId) ? "已选中" : "选择"}</span>}
                 <div className="flex items-center justify-between gap-2"><span className={`flex min-w-0 flex-1 items-center gap-2 text-sm ${message.readAt ? "" : "font-semibold"}`}>{box === "inbox" && !message.readAt && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />}<span className="min-w-0 truncate">{box === "inbox" ? personName(message.sender) : addressNames(message.toAddresses, message.toRecipients)}</span></span><span className="shrink-0 text-xs text-muted-foreground">{new Date(message.sentAt).toLocaleDateString()}</span></div>
                 <span className={`block truncate text-sm ${message.readAt ? "" : "font-medium"}`}>{message.relationKind === "reply" ? "回复 · " : message.relationKind === "forward" ? "转发 · " : ""}{message.subject}</span><span className="block truncate text-xs text-muted-foreground">{message.snippet}</span>
-              </button>)}
+              </button></ContextMenuTrigger><ContextMenuContent>{messageActions(message).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>)}
               {mail.nextCursor && <Button type="button" variant="ghost" className="w-full" onClick={() => void mail.loadMore().catch((error: unknown) => toast.error(error instanceof Error ? error.message : "加载失败。"))}>加载更多</Button>}
             </ScrollArea>}
           </section>} detail={showMessageColumns ? <section aria-label="信件内容" className={`${mail.selectedId ? "block" : "hidden @3xl/mail:flex"} min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-6`}>
             {mail.selectedId && <Button type="button" variant="ghost" className="mb-4 self-start @3xl/mail:hidden" onClick={() => mail.setSelectedId(null)}><ArrowLeft />返回列表</Button>}
             {mail.detail ? <article className="mx-auto w-full max-w-3xl">
-              <h3 className="text-xl font-semibold">{mail.detail.subject}</h3>
+              <div className="flex items-start justify-between gap-2"><h3 className="text-xl font-semibold">{mail.detail.subject}</h3><DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="信件操作"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{messageActions(mail.detail).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu></div>
               {mail.detail.relationKind && <p className="mt-2 text-xs text-muted-foreground">{mail.detail.relationKind === "reply" ? "回复" : "转发"}</p>}
               <p className="mt-3 text-sm">发件人：{personName(mail.detail.sender)}</p>
               <p className="mt-1 text-sm">收件人：{addressNames(mail.detail.toAddresses, mail.detail.toRecipients)}</p>
               {!!(mail.detail.ccAddresses?.length ?? mail.detail.ccRecipients.length) && <p className="mt-1 text-sm">抄送：{addressNames(mail.detail.ccAddresses, mail.detail.ccRecipients)}</p>}
               <p className="mt-1 text-xs text-muted-foreground">{new Date(mail.detail.sentAt).toLocaleString()}</p>
-              <div className="mt-5 flex flex-wrap gap-1 border-b pb-4">{mail.detail.kind !== "platform_broadcast" && <><Button size="sm" variant="ghost" onClick={reply}>回复</Button><Button size="sm" variant="ghost" onClick={forward}>转发</Button></>}{box === "inbox" && <Button size="sm" variant="ghost" onClick={() => void setRead(!mail.detail?.readAt)}>{mail.detail.readAt ? "设为未读" : "设为已读"}</Button>}<Button size="sm" variant="destructive" onClick={() => void remove()}>删除</Button></div>
-              <div className="mt-6"><MarkdownViewer content={mail.detail.body} showTabs={false} surface="plain" /></div>
+              <div className="mt-6 border-t pt-6"><MarkdownViewer content={mail.detail.body} showTabs={false} surface="plain" /></div>
               {mail.detail.quote && <details className="mt-6 text-sm"><summary className="cursor-pointer font-medium">{mail.detail.relationKind === "forward" ? "转发原文" : "回复原文"}</summary><div className="mt-2 space-y-1 text-muted-foreground"><p>发件人：{personName(mail.detail.quote.sender)}</p><p>收件人：{addressNames(mail.detail.quote.toAddresses, mail.detail.quote.toRecipients)}</p>{!!(mail.detail.quote.ccAddresses?.length ?? mail.detail.quote.ccRecipients.length) && <p>抄送：{addressNames(mail.detail.quote.ccAddresses, mail.detail.quote.ccRecipients)}</p>}<p>时间：{new Date(mail.detail.quote.sentAt).toLocaleString()}</p><p>主题：{mail.detail.quote.subject}</p><MarkdownViewer content={mail.detail.quote.body} showTabs={false} surface="plain" /></div></details>}
               {!!mail.detail.attachments.length && <div className="mt-8 border-t pt-4"><h4 className="text-sm font-medium">附件</h4>{mail.detail.attachments.map((attachment) => <Button key={attachment.attachmentId} variant="ghost" className="mt-2" onClick={() => void download(mail.detail!, attachment.attachmentId)}><Paperclip />{attachment.fileName}</Button>)}</div>}
               {(context.items.length > 1 || context.nextCursor || context.error) && <section aria-label="关联往来" className="mt-8 border-t pt-4"><h4 className="text-sm font-medium">关联往来</h4>{context.error && <p role="alert" className="mt-2 text-sm text-destructive">{context.error}</p>}{context.items.filter((item) => item.messageId !== mail.selectedId).map((item) => <Button key={item.messageId} type="button" variant="ghost" className="mt-2 flex w-full justify-start gap-2" onClick={() => openMessage(item.messageId)}><span className="truncate">{personName(item.sender)} · {item.subject}</span><span className="ml-auto shrink-0 text-xs text-muted-foreground">{new Date(item.sentAt).toLocaleDateString()}</span></Button>)}{context.nextCursor && <Button type="button" variant="ghost" onClick={() => void context.loadMore().catch((error: unknown) => toast.error(error instanceof Error ? error.message : "加载失败。"))}>加载更早往来</Button>}</section>}

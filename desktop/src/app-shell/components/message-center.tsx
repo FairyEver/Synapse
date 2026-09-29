@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, Trash2, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { useMessageCenter, type MessageFilter } from "@/app-shell/hooks/use-message-center"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -51,6 +52,13 @@ function primaryAction(item: SynapseNotification): string | null {
   return null
 }
 
+function notificationActions(center: Center, item: SynapseNotification) {
+  return [
+    { id: "read", label: item.readAt ? "标记为未读" : "标记为已读", run: () => { void center.setRead(item, !item.readAt) } },
+    { id: "delete", label: "删除通知", destructive: true, run: () => center.remove(item) },
+  ]
+}
+
 function MessageDetail({ center }: { center: Center }) {
   const item = center.selected
   if (!item) return <div className="flex h-full min-h-48 items-center justify-center text-sm text-muted-foreground">选择一条通知查看内容</div>
@@ -65,8 +73,7 @@ function MessageDetail({ center }: { center: Center }) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="通知操作"><MoreHorizontal /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => { void center.setRead(item, !item.readAt) }}>{item.readAt ? "标记为未读" : "标记为已读"}</DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => center.remove(item)}>删除通知</DropdownMenuItem>
+          {notificationActions(center, item).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -85,10 +92,7 @@ function MessageDetail({ center }: { center: Center }) {
         <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
-      <div className="mt-7 flex flex-wrap gap-2">
-        {action && <Button type="button" size="sm" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}
-        <Button type="button" variant="outline" size="sm" onClick={() => center.remove(item)}><Trash2 />删除通知</Button>
-      </div>
+      {action && <div className="mt-7 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button></div>}
     </>}
   </article>
 }
@@ -128,10 +132,10 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                 previousDate = date
                 return <div key={item.id}>
                   {showDate && <h3 className="px-5 pb-2 pt-5 text-xs font-medium text-muted-foreground">{date}</h3>}
-                  <button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : ""}`} onClick={() => { void center.openItem(item) }}>
+                  <ContextMenu><ContextMenuTrigger asChild><button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : ""}`} onClick={() => { void center.openItem(item) }}>
                     <span className={`mt-1.5 size-2 rounded-full ${item.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden="true" />
                     <span className="min-w-0"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="mt-1 block text-xs text-muted-foreground">{sourceName(item)}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span><span className="mt-0.5 block truncate text-sm text-muted-foreground">{item.body}</span></span>
-                  </button>
+                  </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}
               {center.cursor && <Button type="button" variant="ghost" className="w-full" onClick={() => { void center.loadMore() }}>加载更多</Button>}
