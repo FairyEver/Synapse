@@ -1500,7 +1500,7 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
       return true
     case "command":
       return boundedString(value.sessionId, 120) &&
-        boundedString(value.text, MOBILE_FRAME_LIMITS.maxIntentTextLength)
+        nonEmptyString(value.text)
     case "keys":
       return boundedString(value.sessionId, 120) &&
         boundedArray(value.actions, MOBILE_FRAME_LIMITS.maxKeyActions) &&

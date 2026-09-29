@@ -954,6 +954,23 @@ describe("MobileGatewayService", () => {
     expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
   })
 
+  it("delivers a long pasted prompt through the terminal without losing its ending", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    const text = `${"提示词内容\n".repeat(20_000)}末尾标记`
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-long-command",
+      kind: "command",
+      sessionId: "sess-1",
+      text,
+    }))
+
+    expect(harness.terminal.pasteCommands).toEqual([text])
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
   it("tells the phone why a multi-line sentence could not go in", async () => {
     const harness = createHarness()
     await attach(harness)

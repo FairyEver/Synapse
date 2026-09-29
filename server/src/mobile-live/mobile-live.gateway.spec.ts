@@ -8,7 +8,7 @@ import { LiveClientRegistry } from "../live/live-client-registry"
 import type { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobileLiveGateway, parseMobileMessage } from "./mobile-live.gateway"
 import { MobileLiveRelayService } from "./mobile-live-relay.service"
-import { MOBILE_LIVE_RATE_MESSAGES_PER_WINDOW } from "./mobile-live.types"
+import { MOBILE_LIVE_MAX_PAYLOAD_BYTES, MOBILE_LIVE_RATE_MESSAGES_PER_WINDOW } from "./mobile-live.types"
 
 class FakeSocket extends EventEmitter {
   readonly sent: string[] = []
@@ -261,6 +261,18 @@ describe("MobileLiveGateway", () => {
       sentAt: new Date().toISOString(),
       payload: { deliveryId: "d1" },
     }))).toBeNull()
+  })
+
+  it("accepts a long command within the phone socket's frame budget", () => {
+    const text = `${"提示词内容\n".repeat(20_000)}末尾标记`
+    const message = JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "desktop-1",
+      mobileClientInstanceId: "phone-1",
+      intent: { v: 1, intentId: "long-command", kind: "command", sessionId: "session-1", text },
+    }, { id: "long-message", sentAt: new Date().toISOString() }))
+
+    expect(Buffer.byteLength(message, "utf8")).toBeLessThan(MOBILE_LIVE_MAX_PAYLOAD_BYTES)
+    expect(parseMobileMessage(message)).toMatchObject({ payload: { intent: { text } } })
   })
 
 })

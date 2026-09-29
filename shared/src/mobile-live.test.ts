@@ -427,14 +427,16 @@ describe("mobile live protocol", () => {
     })).toBe(true)
   })
 
-  it("bounds intent text", () => {
+  it("accepts a long terminal command without truncating its text", () => {
+    const text = `${"提示词内容\n".repeat(20_000)}末尾标记`
     expect(isMobileIntent({
       v: 1,
       intentId: "i1",
       kind: "command",
       sessionId: "s1",
-      text: "x".repeat(MOBILE_FRAME_LIMITS.maxIntentTextLength + 1),
-    })).toBe(false)
+      text,
+    })).toBe(true)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "command", sessionId: "s1", text: "" })).toBe(false)
   })
 
   it("validates intent results and rejects unknown outcomes", () => {

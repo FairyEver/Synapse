@@ -39,8 +39,9 @@ export const MOBILE_LIVE_HEARTBEAT_TIMEOUT_MS = 45_000
 
 /**
  * Phones send far less than desktops: a few intents and a keepalive, plus the
- * occasional pasted command. 32 KiB is generous for that while staying far below
- * what an abusive client could use to pin memory.
+ * occasional pasted command. The command text has no character cap, so the socket
+ * needs room for a large prompt and its JSON envelope. The byte ceiling still
+ * bounds memory used by one inbound frame.
  *
  * This bounds what a phone may *send*. It deliberately does not bound the summary
  * the cloud relays *to* a phone — `maxPayload` only applies to received messages,
@@ -49,7 +50,7 @@ export const MOBILE_LIVE_HEARTBEAT_TIMEOUT_MS = 45_000
  * `live/live-desktop.gateway.ts`; raising this one would loosen the inbound guard
  * without unblocking a single byte of summary.
  */
-export const MOBILE_LIVE_MAX_PAYLOAD_BYTES = 32 * 1024
+export const MOBILE_LIVE_MAX_PAYLOAD_BYTES = 2 * 1024 * 1024
 
 /** Inbound message budget per connection. The desktop channel has no equivalent. */
 export const MOBILE_LIVE_RATE_WINDOW_MS = 10_000
