@@ -209,9 +209,7 @@ struct MeetingListView: View {
     private func copyTranscript(_ meeting: MeetingSummary) {
         Task {
             guard let text = await model.meetingTranscript(meeting.id) else { return }
-            UIPasteboard.general.string = text
-            Haptics.success()
-            model.notice("已复制全文")
+            Clipboard.copy(text, saying: "已复制全文", on: model)
         }
     }
 }

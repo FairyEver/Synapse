@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 import SwiftUI
-import UIKit
 import os
 
 /// 导出：把云盘里的字节下到临时目录，再交给系统分享面板。
@@ -324,36 +323,4 @@ final class DriveFileExport {
             index += 1
         }
     }
-}
-
-/// 系统分享面板。
-///
-/// 自己写一份，不去够 `DiagnosticLogView` 里那个：那个是 `private`，跨文件拿不到。
-/// 名字里不带 sheet：`DriveShareSheet` 是「分享这一项」那张表单与结果页
-/// （`DriveShareSheet.swift`），它跟这里这个系统面板是两件事。
-/// 「存储到文件」就在面板里，所以导出不需要第二个按钮（Spec §5.4）。
-///
-/// 收起由调用方的 `.sheet(onDismiss:)` 接：面板自己那个 `completionWithItemsHandler`
-/// 只在它被 present 出来时保证会到，嵌在 sheet 里时不保证。
-struct DriveActivityView: UIViewControllerRepresentable {
-    let items: [URL]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        // iPad 上它会以 popover 出现，没有锚点 UIKit 会直接抛异常。`sourceView` 就在
-        // 自己身上，取中间那一点——呈现出来是整幅面板，箭头指哪都一样。
-        if let popover = controller.popoverPresentationController {
-            popover.sourceView = controller.view
-            popover.sourceRect = CGRect(
-                x: controller.view.bounds.midX,
-                y: controller.view.bounds.midY,
-                width: 0,
-                height: 0
-            )
-            popover.permittedArrowDirections = []
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

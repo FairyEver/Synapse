@@ -273,12 +273,10 @@ struct DrivePublicAssetsView: View {
     /// 拷一段东西进剪贴板。
     ///
     /// 直链**只**进剪贴板：不写日志、不进 `AppLog` —— 它离开这一屏就是这一页唯一的结果，
-    /// 所以给一声嗡 + 一句提示。一个固定的 id：连着拷两条时重启这一句，而不是排两句
-    /// 一模一样的「已复制」。
+    /// 所以嗡一声、说一句话，与全 App 其它几处拷贝同走 `Clipboard`。一个固定的 id：
+    /// 连着拷两条时重启这一句，而不是排两句一模一样的「已复制」。
     private func copy(_ value: String) {
-        UIPasteboard.general.string = value
-        Haptics.success()
-        model.notice("已复制直链", tone: .success, id: "drive.asset.copied")
+        Clipboard.copy(value, saying: "已复制直链", id: "drive.asset.copied", on: model)
     }
 
     /// 相册选中的一批。

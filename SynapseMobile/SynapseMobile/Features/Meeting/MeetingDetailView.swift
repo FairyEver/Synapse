@@ -505,9 +505,7 @@ private struct MeetingTextPane: View {
     /// 悬浮在底部：一场会四十分钟，跟着内容滚就找不到了。
     private var copyCapsule: some View {
         Button {
-            Haptics.success()
-            UIPasteboard.general.string = paragraphs.joined(separator: "\n\n")
-            model.notice("已复制全文")
+            Clipboard.copy(paragraphs.joined(separator: "\n\n"), saying: "已复制全文", on: model)
         } label: {
             Text("复制全文")
                 .font(.subheadline)

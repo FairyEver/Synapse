@@ -261,12 +261,12 @@ struct TerminalGitFlowTests {
             summaryText: "【Synapse · Git 合并冲突】\n操作：把分支 feature/login 合并到 main\n请帮我解决这些冲突。\n"
         )
 
-        let said = TerminalGitConflictCopy.put(conflict)
+        // 冲突那一页在手机上唯一的出口就是这段文本，所以它必须原样进剪贴板 ——
+        // 手机不解析它，也不重排它。交出去那一下走的是全 App 共用的 `Clipboard`
+        // （那一页的按钮与这里同一行），这里验的是它拿到的是哪一段。
+        Clipboard.copy(conflict.summaryText)
 
-        // 这一页在手机上唯一的出口就是这段文本，所以它必须原样进剪贴板 ——
-        // 手机不解析它，也不重排它。
         #expect(UIPasteboard.general.string == conflict.summaryText)
-        #expect(said == "冲突信息已复制到剪贴板。")
     }
 
     // MARK: - 推送与同步

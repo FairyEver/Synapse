@@ -44,6 +44,7 @@
 2. 在设计和代码审查中列出 iPhone 竖 / 横屏、iPadOS 全屏横 / 竖屏、半窗和最窄窗口的结构与操作入口；检查大字号、深色外观、VoiceOver、键盘和指针。
 3. 对深链、选择保持、窗口宽度变化、删除当前项、断线、录音进行中和终端尺寸上报补适当的行为验证。若新功能包含自定义坐标 / 拖动，必须测量目标视图实际尺寸。
 4. 修改移动端适配框架或新功能的分栏行为时，同时检查本文件、`AGENTS.md`、相关移动端专题规格、`SynapseMobile/README.md` 和用户可感知的待发布说明。
+5. 把东西交给系统这一族只有两处，加新的照着用，不要再写一份：系统分享面板 `DesignSystem/SystemShare.swift`（SwiftUI 里走 `.sheet` 放 `SystemShareSheet`；UIKit 那边发起的走 `SystemShareSheet.present`，它管最上层控制器与 iPad 锚点），剪贴板 `DesignSystem/Clipboard.swift`（`Clipboard.copy` 一次把「放进剪贴板 + 嗡一声 + 说一句」办完，说什么、哪个 id 由调用方给）。从前分享面板四处各写一份、剪贴板九处各写一份：四份里凑不齐一套 iPad 锚点与收尾，九处里缺的不是同一件事。
 
 Apple 依据：[Layout](https://developer.apple.com/design/human-interface-guidelines/layout)、[Split views](https://developer.apple.com/design/human-interface-guidelines/split-views)、[Sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars)、[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview)、[SidebarAdaptableTabViewStyle](https://developer.apple.com/documentation/swiftui/sidebaradaptabletabviewstyle)。
 

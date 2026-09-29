@@ -1239,14 +1239,10 @@ struct TerminalScreen: View {
                 // key follows. A terminal opened a moment ago has no output yet.
                 guard !store.plainText.isEmpty else { return }
                 noteChromeActivity()
-                UIPasteboard.general.string = store.plainText
-                // Copying is the archetype of a result the screen does not show:
-                // the text leaves for the clipboard and nothing moves here.
-                Haptics.success()
                 // The one message on this screen that is not a problem. It carries
                 // its own id so copying twice restarts one second rather than
                 // queueing a second confirmation.
-                model.notice("已复制会话输出。", tone: .success, id: "terminal.copied")
+                Clipboard.copy(store.plainText, saying: "已复制会话输出。", id: "terminal.copied", on: model)
             } label: {
                 Text("复制全部输出")
             }

@@ -125,9 +125,11 @@ struct DriveBrowserView: View {
             page(.root)
                 .navigationDestination(for: DriveRoute.self) { destination($0) }
         }
-        // 导出那一趟的两片（系统面板与超过阈值那一问）挂在这儿。
+        // 导出那一趟的两片（系统面板与超过阈值那一问）挂在这儿。收起走 `onDismiss`：面板
+        // 自己那个 `completionWithItemsHandler` 只在它被 present 出来时保证会到，嵌在
+        // sheet 里时不保证。「存储到文件」就在面板里，所以导出没有第二个按钮（Spec §5.4）。
         .sheet(item: $export.shareRequest, onDismiss: exportDismissed) { request in
-            DriveActivityView(items: request.files)
+            SystemShareSheet(items: request.files)
         }
         .alert(
             exportTitle,

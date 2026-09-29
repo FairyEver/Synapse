@@ -1945,15 +1945,13 @@ final class SynapseAppModel {
     ///
     /// One implementation for both places the list appears, for the same reason the list
     /// itself is one view: what the reader feels afterwards — the buzz and the
-    /// confirmation — must not depend on which door they came in through.
+    /// confirmation — must not depend on which door they came in through. The buzz and
+    /// the sentence go out through `Clipboard`, which is where the rest of the app's
+    /// copies send theirs.
     func copyClipboardEntry(_ entry: MobileClipboardEntry) {
-        UIPasteboard.general.string = entry.text
-        // The buzz is the call site's to send; `notice` only buzzes on its own for a
-        // failure. Sending both would make one outcome fire twice.
-        Haptics.success()
         // The id is what makes a second tap restart this banner instead of queueing a
         // second one, which is the whole of what the reader needs to see.
-        notice("已复制", tone: .success, id: "clipboard.copied")
+        Clipboard.copy(entry.text, saying: "已复制", id: "clipboard.copied", on: self)
     }
 
     /// Runs one of the toolbar's buttons against a terminal.

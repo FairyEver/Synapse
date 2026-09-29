@@ -34,13 +34,13 @@ struct TerminalGitConflictSheet: View {
 
                 Section {
                     Button {
-                        Haptics.success()
                         // 复制**不关这一页**：文本已经进剪贴板了，而用户可能想再复制一次，
                         // 或者先把这一段读一遍再走。出口只有右上角那颗「好」。
-                        model.notice(
-                            TerminalGitConflictCopy.put(conflict),
-                            tone: .success,
-                            id: "git.conflict.copied"
+                        Clipboard.copy(
+                            conflict.summaryText,
+                            saying: "冲突信息已复制到剪贴板。",
+                            id: "git.conflict.copied",
+                            on: model
                         )
                     } label: {
                         Text("复制冲突信息")
@@ -63,17 +63,5 @@ struct TerminalGitConflictSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-    }
-}
-
-/// 把那段拼好的文本放进剪贴板。
-///
-/// 单独抽出来是为了它能被单测钉住：这一页在手机上只有这一个结果，而「复制了没有」
-/// 是唯一能验的东西 —— 加上弹出面板的那一下，整条路就走完了。
-enum TerminalGitConflictCopy {
-    /// - Returns: 要说给用户的那句话。
-    static func put(_ conflict: MobileGitConflict) -> String {
-        UIPasteboard.general.string = conflict.summaryText
-        return "冲突信息已复制到剪贴板。"
     }
 }

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// 分享结果页上那几行字（Spec §4.5）。
 enum DriveShareSummary {
@@ -388,12 +387,10 @@ struct DriveShareSheet: View {
     /// 拷贝一行里的东西。
     ///
     /// 链接与密码**只**进剪贴板：不写日志、不进 `AppLog`，它们离开这一屏就是这一页唯一的
-    /// 结果，所以给一声嗡 + 一句提示（本仓其它几处拷贝都是这么做的）。
+    /// 结果 —— 嗡一声、说一句话，与全 App 其它几处拷贝同走 `Clipboard`。
     private func copy(_ value: String) {
-        UIPasteboard.general.string = value
-        Haptics.success()
         // 一个固定的 id：连着拷两行时重启这一句，而不是排两句一模一样的「已复制」。
-        model.notice("已复制", tone: .success, id: "drive.share.copied")
+        Clipboard.copy(value, saying: "已复制", id: "drive.share.copied", on: model)
     }
 
     // MARK: - 表单的判据

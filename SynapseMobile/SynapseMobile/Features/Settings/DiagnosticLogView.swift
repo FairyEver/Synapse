@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// 诊断日志的详情页：看状态、导出、删除。
 ///
@@ -114,7 +113,7 @@ struct DiagnosticLogView: View {
         .task { refresh() }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) {
             if let exportURL {
-                ActivityView(url: exportURL) { self.exportURL = nil }
+                SystemShareSheet(items: [exportURL])
             }
         }
         .alert("这份压缩包里包含终端屏幕内容", isPresented: $showingContentExportConfirm) {
@@ -162,22 +161,4 @@ struct DiagnosticLogView: View {
         formatter.dateFormat = "M月d日 HH:mm"
         return formatter.string(from: date)
     }
-}
-
-/// 系统分享面板。
-///
-/// 用 `UIViewControllerRepresentable` 而不是去 responder chain 上找那个最顶层的
-/// 控制器：在 SwiftUI 里后者随时可能因为弹出层级变化而找错人，而这个是系统自己
-/// 给的挂法。
-private struct ActivityView: UIViewControllerRepresentable {
-    let url: URL
-    let onFinish: () -> Void
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, _, _, _ in onFinish() }
-        return controller
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

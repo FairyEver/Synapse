@@ -267,11 +267,10 @@ private struct DriveShareDetailView: View {
         }
     }
 
-    /// 拷一行里的东西。与 `DriveShareSheet` 里那颗同一条：嗡一声 + 一句提示，固定 id。
+    /// 拷一行里的东西。与 `DriveShareSheet` 里那颗同一条：同一个 id，连着拷两行时重启
+    /// 那一句，而不是排两句一模一样的「已复制」。
     private func copy(_ value: String) {
-        UIPasteboard.general.string = value
-        Haptics.success()
-        model.notice("已复制", tone: .success, id: "drive.share.copied")
+        Clipboard.copy(value, saying: "已复制", id: "drive.share.copied", on: model)
     }
 
     /// 停止分享：链接立刻失效，记录还在（`DriveStore.disableShare`）。

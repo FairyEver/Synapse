@@ -176,7 +176,7 @@ private struct SynapseSiteBrowser: View {
             // 分享面板挂在栈里，登录那张挂在栈外：同一片视图上挂两片 sheet 只有一片会
             // 出来（云盘那一屏踩过，见 `DriveBrowserView`）。
             .sheet(item: $sharing) { target in
-                WebShareSheet(url: target.url)
+                SystemShareSheet(items: [target.url])
             }
         }
         .task(id: url) { await prepare() }
@@ -380,21 +380,6 @@ struct SynapseWebView: UIViewRepresentable {
             }
         }
     }
-}
-
-/// 系统分享面板，交出去的是一条链接。
-///
-/// 自己写一份，不与 `DiagnosticLogView`、`DriveFileExport` 里那两份共用：一份是 `private`，
-/// 另一份那个 `items` 收的是「下下来的文件」。面板自己带「拷贝」，那就是复制这条链接，
-/// 所以这里不再另做一枚复制键。
-private struct WebShareSheet: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: [url], applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 private struct SafariLinkBrowser: UIViewControllerRepresentable {

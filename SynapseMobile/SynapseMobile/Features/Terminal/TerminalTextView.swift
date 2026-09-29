@@ -1702,51 +1702,29 @@ extension TerminalCollectionView: UIEditMenuInteractionDelegate {
     }
 
     /// Puts the selected cells on the pasteboard.
+    ///
+    /// The text leaves for the clipboard and the selection goes with it: nothing stays on
+    /// screen to say the copy happened, which is why `Clipboard` sends a buzz with every
+    /// one of them. No sentence on top of that — the selection disappearing is the
+    /// receipt.
     private func copySelection() {
         guard !selectedText.isEmpty else { return }
-        UIPasteboard.general.string = selectedText
-        // The text leaves for the clipboard and the selection disappears, so the one
-        // thing that happened is the one thing this screen cannot show.
-        Haptics.success()
+        Clipboard.copy(selectedText)
         clearSelection()
     }
 
     /// Hands the selected cells to the system share sheet.
     ///
-    /// Presented on the next runloop turn: the edit menu is still animating away when
-    /// its action fires, and asking for a sheet while that happens is how it ends up
-    /// never appearing. The selection is deliberately left in place — cancelling the
-    /// sheet is common, and it should not cost the reader their selection.
+    /// The selection is deliberately left in place — cancelling the sheet is common, and
+    /// it should not cost the reader their selection. The anchor is the cell the
+    /// selection ends on: on iPad the panel grows out of the place that was pressed, not
+    /// out of the middle of the screen.
     private func shareSelection() {
-        guard let presenter = topmostViewController() else { return }
-        let controller = UIActivityViewController(
-            activityItems: [selectedText],
-            applicationActivities: nil
+        SystemShareSheet.present(
+            items: [selectedText],
+            from: self,
+            anchor: selection.map { caretRect(for: $0.end) } ?? bounds
         )
-        // A popover needs somewhere to point; without an anchor iPad raises instead of
-        // laying the sheet out.
-        let anchor = selection.map { caretRect(for: $0.end) } ?? bounds
-        controller.popoverPresentationController?.sourceView = self
-        controller.popoverPresentationController?.sourceRect = anchor
-        DispatchQueue.main.async {
-            presenter.present(controller, animated: true)
-        }
-    }
-
-    /// The nearest view controller, with whatever it is presenting on top.
-    ///
-    /// The sheet has to be presented by the frontmost controller, not by the screen
-    /// sitting underneath an already-open one.
-    private func topmostViewController() -> UIViewController? {
-        var responder: UIResponder? = self
-        while let current = responder, !(current is UIViewController) {
-            responder = current.next
-        }
-        var top = (responder as? UIViewController) ?? window?.rootViewController
-        while let presented = top?.presentedViewController {
-            top = presented
-        }
-        return top
     }
 
     private func selectAllRows() {
