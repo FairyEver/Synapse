@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { MailMessage, MailSummary } from "@/types/mail"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
+const openExternal = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
 vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
 vi.mock("../use-mail", () => ({ useMail: () => ({ messages: mocks.messages, ready: true, loading: false, error: null, selectedId: mocks.selectedId, detail: mocks.detail, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId }) }))
@@ -47,9 +49,23 @@ function click(label: string) {
   act(() => button.click())
 }
 
-afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null })
+afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); openExternal.mockClear(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null })
 
 describe("mail bulk controls", () => {
+  it("opens Markdown links from a mail message with the system browser", async () => {
+    mocks.messages = [message("mail-1")]
+    mocks.selectedId = "mail-1"
+    mocks.detail = {
+      ...mocks.messages[0], viewerId: "reader", body: "[查看更新](https://synapse.d2.pub/desktop/update)",
+      team: null, conversationId: "mail-1", replyToId: null, relation: null, quote: null, attachments: [],
+    }
+    render()
+    const link = document.querySelector<HTMLAnchorElement>('a[href="https://synapse.d2.pub/desktop/update"]')
+    expect(link?.textContent).toBe("查看更新")
+    await act(async () => { link?.click() })
+    expect(openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/desktop/update")
+  })
+
   it("shows platform announcements without reply or forward actions", () => {
     mocks.messages = [{ ...message("broadcast-1"), kind: "platform_broadcast", sender: { userId: "platform", nickname: "Synapse", handle: null } }]
     mocks.selectedId = "broadcast-1"

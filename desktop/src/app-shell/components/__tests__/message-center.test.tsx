@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+const openExternal = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
+
 const mockCenter = vi.hoisted(() => ({
   authenticated: true, open: true, filter: "all", items: [], cursor: null, unread: 0,
   selected: {
@@ -28,7 +31,7 @@ vi.mock("@/app-shell/hooks/use-message-center", () => ({ useMessageCenter: () =>
 
 import { MessageCenter } from "../message-center"
 
-afterEach(() => { document.body.innerHTML = "" })
+afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文" })
 
 describe("MessageCenter", () => {
   it("shows the actual broadcast subject, audience, and full body instead of its safe notification preview", async () => {
@@ -39,6 +42,19 @@ describe("MessageCenter", () => {
     expect(document.body.textContent).toContain("版本公告")
     expect(document.body.textContent).toContain("所有用户")
     expect(document.body.textContent).toContain("管理员发送的完整正文")
+    await act(async () => { root.unmount() })
+  })
+
+  it("opens a bare URL in the full mail body with the system browser", async () => {
+    mockCenter.mail.body = "更新地址：https://synapse.d2.pub/desktop/update"
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    const link = document.querySelector<HTMLAnchorElement>('a[href="https://synapse.d2.pub/desktop/update"]')
+    expect(link).not.toBeNull()
+    await act(async () => { link?.click() })
+    expect(openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/desktop/update")
     await act(async () => { root.unmount() })
   })
 })
