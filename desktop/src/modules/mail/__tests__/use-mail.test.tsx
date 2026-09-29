@@ -100,4 +100,32 @@ describe("useMail", () => {
     expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "opened", read: true })
     expect(mocks.request).not.toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "other", read: true })
   })
+
+  it("keeps the selected message unread until another message is opened and it is reopened", async () => {
+    let openedReadAt: string | null = "2026-09-28T00:00:00.000Z"
+    mocks.request.mockImplementation(async (operation: { kind: string; messageId?: string; read?: boolean }) => {
+      if (operation.kind === "messageGet") return { ...message(operation.messageId!), viewerId: "reader", sender: { userId: "writer" }, body: "正文", readAt: operation.messageId === "opened" ? openedReadAt : "2026-09-28T00:00:00.000Z" }
+      if (operation.kind === "messageSetRead") {
+        openedReadAt = operation.read ? "2026-09-29T00:00:00.000Z" : null
+        return { read: operation.read }
+      }
+      if (operation.kind === "messageCount") return { inboxTotal: 2, sentTotal: 0, unread: openedReadAt ? 0 : 1 }
+      return { items: [message("opened"), message("other")], nextCursor: null }
+    })
+    render("inbox")
+    await act(async () => { current.setSelectedId("opened") })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+
+    await act(async () => { await mocks.request({ kind: "messageSetRead", messageId: "opened", read: false }); current.refresh() })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(openedReadAt).toBeNull()
+    expect(current.detail?.readAt).toBeNull()
+    expect(mocks.request).not.toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "opened", read: true })
+
+    await act(async () => { current.setSelectedId("other") })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    await act(async () => { current.setSelectedId("opened") })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "opened", read: true })
+  })
 })

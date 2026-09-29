@@ -16,6 +16,7 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
   const [loadedKey, setLoadedKey] = useState("")
   const listKey = `${box}:${query}:${unreadOnly}`
   const currentListKey = useRef(listKey)
+  const handledSelectedRead = useRef(false)
   currentListKey.current = listKey
 
   const refresh = useCallback(() => setRevision((value) => value + 1), [])
@@ -40,6 +41,8 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
     return () => { active = false }
   }, [box, query, unreadOnly, revision, listKey])
 
+  useEffect(() => { handledSelectedRead.current = false }, [box, selectedId])
+
   useEffect(() => {
     setDetail(null)
     if (!selectedId) return
@@ -48,7 +51,9 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
       .then(async (result) => {
         if (!active) return
         setDetail(result)
-        if (result.sender.userId !== result.viewerId && !result.readAt) {
+        const shouldMarkRead = !handledSelectedRead.current && result.sender.userId !== result.viewerId && !result.readAt
+        handledSelectedRead.current = true
+        if (shouldMarkRead) {
           try {
             await mailRequest({ kind: "messageSetRead", messageId: selectedId, read: true })
             if (active) refresh()
