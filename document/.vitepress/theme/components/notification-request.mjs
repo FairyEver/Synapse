@@ -20,29 +20,30 @@ function normalizeInput(input) {
 }
 
 function validateInput(input) {
-  const errors = []
-  if (!API_KEY_PATTERN.test(input.key)) errors.push('API 密钥格式无效。')
-  if (input.title.length < 1 || input.title.length > 64) errors.push('标题须为 1–64 字符。')
-  if (input.body.length < 1 || input.body.length > 512) errors.push('正文须为 1–512 字符。')
-  if (input.group && input.group.length > 64) errors.push('分组最多 64 字符。')
+  const issues = {}
+  if (!API_KEY_PATTERN.test(input.key)) issues.key = 'API 密钥格式无效。'
+  if (input.title.length < 1 || input.title.length > 64) issues.title = '标题须为 1–64 字符。'
+  if (input.body.length < 1 || input.body.length > 512) issues.body = '正文须为 1–512 字符。'
+  if (input.group && input.group.length > 64) issues.group = '分组最多 64 字符。'
   if (input.url) {
     try {
       if (input.url.length > 2048 || !input.url.startsWith('https://') || new URL(input.url).protocol !== 'https:') {
-        errors.push('链接须为不超过 2048 字符的 HTTPS 地址。')
+        issues.url = '链接须为不超过 2048 字符的 HTTPS 地址。'
       }
     } catch {
-      errors.push('链接须为不超过 2048 字符的 HTTPS 地址。')
+      issues.url = '链接须为不超过 2048 字符的 HTTPS 地址。'
     }
   }
   if (input.idempotencyKey && !IDEMPOTENCY_KEY_PATTERN.test(input.idempotencyKey)) {
-    errors.push('去重键须为 8–120 位字母、数字、下划线或连字符。')
+    issues.idempotencyKey = '去重键须为 8–120 位字母、数字、下划线或连字符。'
   }
   if (input.shape === 'path' && ['.', '..'].some((value) => input.title === value || input.body === value)) {
-    errors.push('路径式标题和正文不能仅为 . 或 ..；请选择 POST。')
+    if (input.title === '.' || input.title === '..') issues.title = '路径式标题不能仅为 . 或 ..；请选择 POST。'
+    if (input.body === '.' || input.body === '..') issues.body = '路径式正文不能仅为 . 或 ..；请选择 POST。'
   }
-  if (!['json', 'form', 'path'].includes(input.shape)) errors.push('请求形状无效。')
-  if (!['active', 'passive', 'timeSensitive'].includes(input.level)) errors.push('提醒级别无效。')
-  return errors
+  if (!['json', 'form', 'path'].includes(input.shape)) issues.shape = '请求形状无效。'
+  if (!['active', 'passive', 'timeSensitive'].includes(input.level)) issues.level = '提醒级别无效。'
+  return issues
 }
 
 function messageFields(input) {
@@ -109,14 +110,21 @@ function fetchCode(input, url, fields) {
 
 export function buildNotificationRequest(rawInput) {
   const input = normalizeInput(rawInput)
-  const errors = validateInput(input)
-  if (errors.length) return { errors, curl: '', fetch: '', url: '' }
-  const url = requestUrl(input)
-  const fields = messageFields(input)
+  const issues = validateInput(input)
+  const errors = Object.values(issues)
+  const previewInput = {
+    ...input,
+    key: input.key || 'syn_sk_...',
+    title: input.title || '通知标题',
+    body: input.body || '通知正文'
+  }
+  const url = requestUrl(previewInput)
+  const fields = messageFields(previewInput)
   return {
+    issues,
     errors,
-    curl: curlCommand(input, url, fields),
-    fetch: fetchCode(input, url, fields),
+    curl: curlCommand(previewInput, url, fields),
+    fetch: fetchCode(previewInput, url, fields),
     url: input.shape === 'path' ? url : ''
   }
 }

@@ -76,7 +76,7 @@ test('path GET encodes segments and query, while URL output cannot carry the ret
   new Function(`return (async () => { ${result.fetch} })`)
 })
 
-test('rejects invalid required and optional values before generating output', () => {
+test('keeps the preview visible while identifying invalid fields', () => {
   const result = buildNotificationRequest({
     ...base,
     key: 'invalid',
@@ -88,8 +88,10 @@ test('rejects invalid required and optional values before generating output', ()
   })
 
   assert.equal(result.errors.length, 6)
-  assert.equal(result.curl, '')
-  assert.equal(result.fetch, '')
+  assert.equal(result.issues.key, 'API 密钥格式无效。')
+  assert.equal(result.issues.url, '链接须为不超过 2048 字符的 HTTPS 地址。')
+  assert.match(result.curl, /--request POST/u)
+  assert.match(result.fetch, /body: JSON\.stringify/u)
   assert.equal(result.url, '')
 })
 
@@ -102,11 +104,19 @@ test('rejects malformed HTTPS links and unknown request settings', () => {
   })
 
   assert.equal(result.errors.length, 3)
-  assert.equal(result.curl, '')
+  assert.equal(result.issues.shape, '请求形状无效。')
 })
 
 test('rejects dot-only path segments that URL clients normalize away', () => {
   const result = buildNotificationRequest({ ...base, shape: 'path', title: '..' })
   assert.equal(result.errors.length, 1)
-  assert.equal(result.url, '')
+  assert.equal(result.issues.title, '路径式标题不能仅为 . 或 ..；请选择 POST。')
+})
+
+test('uses visible placeholders before the required fields are complete', () => {
+  const result = buildNotificationRequest({ ...base, key: '', title: '', body: '' })
+  assert.equal(result.errors.length, 3)
+  assert.match(result.curl, /syn_sk_\.\.\./u)
+  assert.match(result.curl, /通知标题/u)
+  assert.match(result.curl, /通知正文/u)
 })

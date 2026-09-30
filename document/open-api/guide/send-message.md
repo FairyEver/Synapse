@@ -39,17 +39,11 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications' \
 | 表单式 | `POST /api/open/v1/notifications/{key}`，消息在请求体 | 只能提交表单编码的环境 |
 | 路径式 | `GET /api/open/v1/notifications/{key}/{title}/{body}` | 书签、快捷指令、webhook：不接受请求头和请求体 |
 
+标题和正文是 URL 路径段，必须 URL 编码。这条形状只接受 `GET`：`HEAD` 探测请求返回 `405`，不会发出通知。`GET` 会写入数据，且整条 URL 等同密钥：任何真正抓取它的链接预览、爬虫或浏览器预取都会发出通知。按密钥保管它。
+
 ## 请求构建器
 
 <NotificationRequestBuilder />
-
-路径式只需要一条 URL：
-
-```bash
-curl --request GET '{{APP_PUBLIC_URL}}/api/open/v1/notifications/syn_sk_.../%E9%83%A8%E7%BD%B2%E5%AE%8C%E6%88%90?level=active'
-```
-
-标题和正文是 URL 路径段，必须 URL 编码。这条形状只接受 `GET`：`HEAD` 等探测性请求返回 `405`，不会发出通知。`GET` 会写入数据，且整条 URL 等同密钥：任何真正抓取它的链接预览、爬虫或浏览器预取都会发出通知。按密钥保管它。
 
 ## 设置分组、链接和提醒级别
 
