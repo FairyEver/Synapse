@@ -86,10 +86,17 @@ export function DriveSyncDialog({
     : null
 
   const requestRemove = (binding: DriveSyncBindingDto) => setRemoveTarget(binding)
-  const openWizard = () => setView({
-    kind: "wizard",
-    entry: { mode: "local", targetParentId: null, drivePathHint: null },
-  })
+  const openWizard = () => {
+    // 只读时不让用户把三步走完再吃一个主进程报错，入口直接拦住。
+    if (controller.readOnly) {
+      toast(controller.offline ? "联网后可新建同步。" : "登录后可新建同步。")
+      return
+    }
+    setView({
+      kind: "wizard",
+      entry: { mode: "local", targetParentId: null, drivePathHint: null },
+    })
+  }
 
   return (
     <>
@@ -99,7 +106,9 @@ export function DriveSyncDialog({
             ? "max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-2xl"
             : "h-[36rem] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"}
           showCloseButton={false}
-          aria-describedby={undefined}
+          // 详情视图渲染了 DialogDescription，交给 Radix 自动关联；其余视图没有描述，
+          // 显式传 undefined 是为了不触发「缺少描述」的无障碍告警。
+          {...(view.kind === "detail" && detailBinding ? {} : { "aria-describedby": undefined })}
         >
           <DialogFrame className={view.kind === "wizard" ? "max-h-[calc(100vh-2rem)]" : "h-full"}>
             {view.kind === "center" ? (
@@ -169,7 +178,21 @@ export function DriveSyncDialog({
               </>
             ) : view.kind === "detail" ? (
               <>
-                <DialogFrameHeader bordered title="云盘同步" />
+                <DialogFrameHeader
+                  bordered
+                  title="云盘同步"
+                  leading={(
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="返回同步列表"
+                      onClick={() => setView({ kind: "center", selectedBindingId: null })}
+                    >
+                      <ArrowLeft />
+                    </Button>
+                  )}
+                />
                 <div className="flex min-h-0 flex-1 items-center justify-center px-5 text-sm text-muted-foreground">
                   这条同步已经不存在了。
                 </div>

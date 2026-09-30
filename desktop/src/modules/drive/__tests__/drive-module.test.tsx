@@ -1494,11 +1494,12 @@ describe("DriveModule", () => {
     await flushAct()
     await openRowMenu("report.txt")
     await clickMenuItemText("同步")
-    await clickText("选择位置")
+    await clickText("保存到…")
 
+    // 「保存到…」才走保存对话框，能选一个还不存在的路径；这是把云端文件下载到新位置的唯一入口。
     expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({
       kind: "file",
-      mode: "bind_existing",
+      mode: "remote_to_local",
       defaultName: "report.txt",
     })
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
@@ -1546,7 +1547,7 @@ describe("DriveModule", () => {
     await flushAct()
     await openRowMenu("report.txt")
     await clickMenuItemText("同步")
-    await clickText("选择位置")
+    await clickText("保存到…")
 
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(2)
     expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1580,7 +1581,7 @@ describe("DriveModule", () => {
     await flushAct()
     await openRowMenu("report.txt")
     await clickMenuItemText("同步")
-    await clickText("选择位置")
+    await clickText("保存到…")
 
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
     const dialog = document.querySelector('[role="dialog"]')
@@ -1884,7 +1885,7 @@ describe("DriveModule", () => {
     await flushAct()
     await openRowMenu("report.txt")
     await clickMenuItemText("同步")
-    await clickText("选择位置")
+    await clickText("保存到…")
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync binding dialog not found")
@@ -1893,7 +1894,7 @@ describe("DriveModule", () => {
       .find((button) => button.textContent === "下一步")
     expect(dialog.textContent).toContain("不能同步")
     expect(dialog.textContent).toContain("本地文件和云盘上的文件大小不一致")
-    expect(dialog.textContent).toContain("改选一个空的电脑位置")
+    expect(dialog.textContent).toContain("保存到新位置")
     expect((nextButton as HTMLButtonElement | undefined)?.disabled).toBe(true)
   })
 
@@ -4322,8 +4323,8 @@ async function clickSyncFilter(label: string): Promise<void> {
     .find((candidate) => candidate.textContent?.trim().startsWith(label))
   if (!element) throw new Error(`Sync filter not found: ${label}`)
   await act(async () => {
-    element.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
-    element.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+    // Radix 的 Tabs 用 mousedown 激活，pointerdown 不够。
+    element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
     element.click()
     await flushPromises()
   })

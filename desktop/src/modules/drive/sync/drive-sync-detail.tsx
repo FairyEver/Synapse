@@ -5,10 +5,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import {
-  activeTransferOf,
+  activeWorkOf,
   bindingPrimaryAction,
   bindingStateDetail,
   bindingStateText,
+  conflictResolutionToast,
   formatBytes,
   formatRelativeTime,
   operationActivityText,
@@ -39,9 +40,15 @@ export function DriveSyncDetail({
   const state = bindingStateText(binding, operations, conflicts)
   const detail = bindingStateDetail(binding, operations, conflicts)
   const action = bindingPrimaryAction(binding, operations, conflicts, controller.readOnly)
-  const transfer = activeTransferOf(operations)
+  const work = activeWorkOf(operations)
   const pending = controller.isPending(binding.id)
   const readOnly = controller.readOnly
+  // 同一条规则可能同时出现在多个规则组里，展示时按规则去重，避免重复的 React key。
+  const excludedRules = Array.from(new Set([
+    ...binding.excludeRules.defaults,
+    ...binding.excludeRules.user,
+    ...binding.excludeRules.importedGitignore,
+  ]))
   const activity = [...operations]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, ACTIVITY_LIMIT)
@@ -63,6 +70,7 @@ export function DriveSyncDetail({
   }
 
   const runStatusAction = () => {
+    if (action.kind === "view") return
     if (action.kind === "retry") {
       void controller.runBindingAction("drive.sync.binding.retry", binding.id, () => controller.resume(binding.id), "已重试同步")
       return
@@ -76,7 +84,7 @@ export function DriveSyncDetail({
       return
     }
     if (action.kind === "conflicts") return
-    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步")
+    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
   }
 
   return (
@@ -90,7 +98,6 @@ export function DriveSyncDetail({
                 <Button
                   type="button"
                   variant={action.variant}
-                  size="sm"
                   aria-label={`${action.label} ${binding.driveItemName}`}
                   onClick={runStatusAction}
                 >
@@ -100,7 +107,6 @@ export function DriveSyncDetail({
                 <Button
                   type="button"
                   variant={action.variant}
-                  size="sm"
                   aria-label={`${action.label} ${binding.driveItemName}`}
                   disabled={pending}
                   onClick={runStatusAction}
@@ -111,10 +117,9 @@ export function DriveSyncDetail({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   disabled={pending || binding.status === "initializing"}
                   onClick={() => {
-                    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步")
+                    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
                   }}
                 >
                   暂停同步
@@ -123,11 +128,11 @@ export function DriveSyncDetail({
             </div>
           </div>
           {detail ? <div className="mt-1.5 text-sm text-muted-foreground">{detail}</div> : null}
-          {transfer && transfer.percent !== null ? (
+          {work?.kind === "transfer" && work.percent !== null ? (
             <div className="mt-3 grid gap-1">
-              <Progress value={transfer.percent} aria-label={`${binding.driveItemName} 同步进度`} />
+              <Progress value={work.percent} aria-label={`${binding.driveItemName} 同步进度`} />
               <div className="text-xs tabular-nums text-muted-foreground">
-                {formatBytes(transfer.completedBytes)} / {formatBytes(transfer.totalBytes ?? 0)}
+                {formatBytes(work.completedBytes)} / {formatBytes(work.totalBytes ?? 0)}
               </div>
             </div>
           ) : null}
@@ -163,7 +168,7 @@ export function DriveSyncDetail({
         {conflicts.length > 0 ? (
           <section className="mt-5">
             <div className="flex items-center gap-2">
-              <h3 className="font-medium">需要你处理</h3>
+              <h3 className="font-medium">需要处理</h3>
               <Badge variant="destructive">{conflicts.length}</Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">这些文件两边都有内容，同步不会自动覆盖。选一个版本后继续。</p>
@@ -178,7 +183,8 @@ export function DriveSyncDetail({
                       `drive.sync.conflict.${resolution}`,
                       binding.id,
                       () => controller.resolveConflict({ conflictId: target.id, action: resolution }),
-                      "已处理冲突",
+                      conflictResolutionToast(resolution),
+                      false,
                     )
                   }}
                 />
@@ -192,7 +198,7 @@ export function DriveSyncDetail({
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-medium">同步范围</h3>
               {editingExcludes ? null : (
-                <Button type="button" variant="outline" size="sm" onClick={openExcludeEditor}>管理</Button>
+                <Button type="button" variant="outline" onClick={openExcludeEditor}>管理</Button>
               )}
             </div>
             {editingExcludes ? (
@@ -217,14 +223,13 @@ export function DriveSyncDetail({
               </div>
             ) : (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">.git/ 始终排除</span>
-                {[...binding.excludeRules.defaults, ...binding.excludeRules.user, ...binding.excludeRules.importedGitignore]
-                  .map((rule) => (
-                    <span key={rule} className="rounded-md border px-2 py-1 font-mono text-xs">{rule}</span>
-                  ))}
-                {binding.excludeRules.defaults.length === 0
-                  && binding.excludeRules.user.length === 0
-                  && binding.excludeRules.importedGitignore.length === 0
+                <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  始终排除 {binding.excludeRules.forced.length} 项
+                </span>
+                {excludedRules.map((rule) => (
+                  <span key={rule} className="rounded-md border px-2 py-1 font-mono text-xs">{rule}</span>
+                ))}
+                {excludedRules.length === 0
                   ? <span className="text-sm text-muted-foreground">除始终排除的内容外，全部参与同步。</span>
                   : null}
               </div>

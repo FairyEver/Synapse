@@ -1,11 +1,9 @@
 import type {
   DriveSyncBindingDto,
-  DriveSyncBindingStatus,
   DriveSyncConflictDto,
   DriveSyncConflictResolutionAction,
   DriveSyncOperationDto,
   DriveSyncOperationKind,
-  DriveSyncOperationStatus,
 } from "@synapse/shared"
 
 /**
@@ -20,7 +18,7 @@ export interface DriveSyncStateText {
   readonly tone: DriveSyncTone
 }
 
-export type DriveSyncPrimaryActionKind = "conflicts" | "retry" | "resume" | "progress" | "open"
+export type DriveSyncPrimaryActionKind = "conflicts" | "retry" | "resume" | "progress" | "open" | "view"
 
 export interface DriveSyncPrimaryAction {
   readonly kind: DriveSyncPrimaryActionKind
@@ -28,13 +26,34 @@ export interface DriveSyncPrimaryAction {
   readonly variant: "default" | "outline"
 }
 
-export interface DriveSyncActiveTransfer {
-  readonly direction: "upload" | "download"
+type DriveSyncTransferKind = "upload" | "download"
+
+/** 正在进行的同步工作。传输和核对要分开说，核对不是「正在下载 N 个文件」。 */
+export interface DriveSyncActiveWork {
+  readonly kind: "transfer" | "other"
+  readonly direction: DriveSyncTransferKind
+  readonly label: string
   readonly fileCount: number
   readonly completedBytes: number
   readonly totalBytes: number | null
   readonly currentPath: string
   readonly percent: number | null
+}
+
+const TRANSFER_KINDS: ReadonlySet<string> = new Set(["upload", "download"])
+
+/** 进行中的动作说法，用于「正在上传 / 正在核对 / 正在删除」。 */
+function actingLabelOf(kind: DriveSyncOperationKind): string {
+  switch (kind) {
+    case "upload": return "正在上传"
+    case "download": return "正在下载"
+    case "scan":
+    case "resync": return "正在核对"
+    case "delete_local":
+    case "delete_remote": return "正在删除"
+    case "move_local":
+    case "move_remote": return "正在移动"
+  }
 }
 
 export type DriveSyncFilter = "all" | "active" | "attention" | "paused"
@@ -50,24 +69,28 @@ function isInFlight(operation: DriveSyncOperationDto): boolean {
   return operation.status === "running" || operation.status === "pending"
 }
 
-/** 正在传输的形态：方向、文件数、已传/总字节、当前文件。没有进行中的传输时为 null。 */
-export function activeTransferOf(
+/** 正在进行的同步工作：是传输还是别的动作、方向、文件数、已传/总字节、当前路径。 */
+export function activeWorkOf(
   operations: readonly DriveSyncOperationDto[],
-): DriveSyncActiveTransfer | null {
+): DriveSyncActiveWork | null {
   const inFlight = operations.filter(isInFlight)
   if (inFlight.length === 0) return null
   const download = inFlight.find((operation) => operation.kind === "download")
   const upload = inFlight.find((operation) => operation.kind === "upload")
   const lead = download ?? upload ?? inFlight[0]
-  const direction = lead.kind === "upload" ? "upload" : "download"
-  const known = inFlight.filter((operation) => operation.totalBytes !== null && operation.totalBytes > 0)
+  const transfers = inFlight.filter((operation) => TRANSFER_KINDS.has(operation.kind))
+  const isTransfer = TRANSFER_KINDS.has(lead.kind)
+  const counted = isTransfer ? transfers : inFlight
+  const known = counted.filter((operation) => operation.totalBytes !== null && operation.totalBytes > 0)
   const completedBytes = known.reduce((total, operation) => total + (operation.completedBytes ?? 0), 0)
   const totalBytes = known.length === 0
     ? null
     : known.reduce((total, operation) => total + (operation.totalBytes ?? 0), 0)
   return {
-    direction,
-    fileCount: inFlight.length,
+    kind: isTransfer ? "transfer" : "other",
+    direction: lead.kind === "upload" ? "upload" : "download",
+    label: actingLabelOf(lead.kind),
+    fileCount: counted.length,
     completedBytes,
     totalBytes,
     currentPath: lead.relativePath,
@@ -88,6 +111,7 @@ export function bindingStateText(
   conflicts: readonly DriveSyncConflictDto[],
 ): DriveSyncStateText {
   const openConflicts = conflicts
+  // 状态字段是权威的：error 的绑定即使还留着旧的冲突记录，也该先重试而不是去处理冲突。
   if (binding.status === "error") return { text: "同步出错", tone: "attention" }
   if (binding.status === "conflict" || openConflicts.length > 0) {
     const count = openConflicts.length
@@ -102,12 +126,10 @@ export function bindingStateText(
   if (binding.status === "initializing") return { text: "正在准备", tone: "normal" }
   if (binding.status === "removed") return { text: "已移除", tone: "normal" }
 
-  const transfer = activeTransferOf(operations)
-  if (transfer) {
+  const work = activeWorkOf(operations)
+  if (work) {
     return {
-      text: transfer.direction === "upload"
-        ? `正在上传 ${transfer.fileCount} 个文件`
-        : `正在下载 ${transfer.fileCount} 个文件`,
+      text: work.kind === "transfer" ? `${work.label} ${work.fileCount} 个文件` : work.label,
       tone: "normal",
     }
   }
@@ -129,12 +151,13 @@ export function bindingStateDetail(
   if (binding.status === "conflict" || conflicts.length > 0) return "选一个版本后继续。"
   if (binding.status === "paused") return `最近同步 ${formatRelativeTime(binding.lastSyncedAt ?? binding.updatedAt)}`
   if (binding.status === "initializing") return "正在比对本机与云盘的内容，完成后自动开始。"
-  const transfer = activeTransferOf(operations)
-  if (transfer) {
-    const size = transfer.totalBytes !== null
-      ? `${formatBytes(transfer.completedBytes)} / ${formatBytes(transfer.totalBytes)}`
-      : formatBytes(transfer.completedBytes)
-    return transfer.currentPath ? `${size} · ${transfer.currentPath}` : size
+  const work = activeWorkOf(operations)
+  if (work) {
+    if (work.kind === "other") return work.currentPath ? `${work.currentPath} · 内容多时需要较长时间。` : "内容多时需要较长时间。"
+    const size = work.totalBytes !== null
+      ? `${formatBytes(work.completedBytes)} / ${formatBytes(work.totalBytes)}`
+      : formatBytes(work.completedBytes)
+    return work.currentPath ? `${size} · ${work.currentPath}` : size
   }
   const retry = retryOperationOf(operations)
   if (retry) return `${retry.relativePath || "内容"} · 稍后自动继续。`
@@ -151,24 +174,21 @@ export function bindingPrimaryAction(
   conflicts: readonly DriveSyncConflictDto[],
   readOnly: boolean,
 ): DriveSyncPrimaryAction {
+  // 只读时不做写操作，统一给「查看」并真的打开详情，而不是给一个点了只弹一句提示的按钮。
+  if (readOnly) {
+    if (binding.status === "error" || binding.status === "conflict" || conflicts.length > 0 || binding.status === "paused") {
+      return { kind: "view", label: "查看", variant: "outline" }
+    }
+  }
+  if (binding.status === "error") return { kind: "retry", label: "重试", variant: "default" }
   if (binding.status === "conflict" || conflicts.length > 0) {
-    return readOnly
-      ? { kind: "conflicts", label: "查看", variant: "outline" }
-      : { kind: "conflicts", label: "处理冲突", variant: "default" }
+    return { kind: "conflicts", label: "处理冲突", variant: "default" }
   }
-  if (binding.status === "error") {
-    return readOnly
-      ? { kind: "retry", label: "查看", variant: "outline" }
-      : { kind: "retry", label: "重试", variant: "default" }
-  }
-  if (binding.status === "paused") {
-    return readOnly
-      ? { kind: "resume", label: "查看", variant: "outline" }
-      : { kind: "resume", label: "继续同步", variant: "default" }
-  }
-  if (binding.status === "initializing" || activeTransferOf(operations) || retryOperationOf(operations)) {
+  if (binding.status === "paused") return { kind: "resume", label: "继续同步", variant: "default" }
+  if (binding.status === "initializing" || activeWorkOf(operations) || retryOperationOf(operations)) {
     return { kind: "progress", label: "查看进度", variant: "outline" }
   }
+  if (binding.kind === "file") return { kind: "open", label: "在文件夹中显示", variant: "outline" }
   return { kind: "open", label: "打开文件夹", variant: "outline" }
 }
 
@@ -182,27 +202,13 @@ export function bindingMarkText(
   if (state.tone === "attention") return { text: "需要处理", tone: "attention" }
   if (binding.status === "paused") return { text: "已暂停", tone: "normal" }
   if (binding.status === "initializing") return { text: "正在准备", tone: "normal" }
-  const transfer = activeTransferOf(operations)
-  if (transfer) return { text: transfer.direction === "upload" ? "正在上传" : "正在下载", tone: "normal" }
+  const work = activeWorkOf(operations)
+  if (work) return { text: work.label.replace(/^正在/, "正在"), tone: "normal" }
   if (retryOperationOf(operations)) return { text: "正在重试", tone: "normal" }
   if (binding.status === "active") return { text: "已同步", tone: "normal" }
   return { text: "已移除", tone: "normal" }
 }
 
-export function bindingKindText(kind: DriveSyncBindingDto["kind"]): string {
-  return kind === "folder" ? "文件夹" : "文件"
-}
-
-export function bindingStatusText(status: DriveSyncBindingStatus): string {
-  switch (status) {
-    case "initializing": return "正在准备"
-    case "active": return "已启用"
-    case "paused": return "已暂停"
-    case "conflict": return "需要处理"
-    case "error": return "同步出错"
-    case "removed": return "已移除"
-  }
-}
 
 /** 实际只会产出三种冲突类型；metadata_mismatch 与 path_conflict 是历史死枚举，兜底显示原值。 */
 export function conflictTypeText(type: string): string {
@@ -226,6 +232,17 @@ export function conflictResolutionText(action: DriveSyncConflictResolutionAction
   }
 }
 
+/** 冲突处理完成后的提示，每个动作各说各的，不用一句「已处理冲突」糊过去。 */
+export function conflictResolutionToast(action: DriveSyncConflictResolutionAction): string {
+  switch (action) {
+    case "keep_local": return "已用电脑上的版本"
+    case "keep_remote": return "已用云盘上的版本"
+    case "keep_both": return "已保留两份"
+    case "confirm_delete": return "已确认删除"
+    case "skip": return "已留待稍后处理"
+  }
+}
+
 export function operationKindText(kind: DriveSyncOperationKind): string {
   switch (kind) {
     case "download": return "下载"
@@ -239,16 +256,6 @@ export function operationKindText(kind: DriveSyncOperationKind): string {
   }
 }
 
-export function operationStatusText(status: DriveSyncOperationStatus): string {
-  switch (status) {
-    case "pending": return "等待中"
-    case "running": return "进行中"
-    case "succeeded": return "已完成"
-    case "retry_wait": return "等待重试"
-    case "conflict": return "需要处理"
-    case "error": return "失败"
-  }
-}
 
 /** 一条已完成的操作描述成一句人话，用于详情里的「最近活动」。 */
 export function operationActivityText(operation: DriveSyncOperationDto): string {
@@ -277,7 +284,7 @@ export function isBindingInFilter(
     case "paused": return binding.status === "paused"
     case "attention": return binding.status === "conflict" || binding.status === "error" || conflicts.length > 0
     case "active": return binding.status === "initializing"
-      || (binding.status === "active" && (activeTransferOf(operations) !== null || retryOperationOf(operations) !== null))
+      || (binding.status === "active" && (activeWorkOf(operations) !== null || retryOperationOf(operations) !== null))
   }
 }
 
@@ -303,14 +310,6 @@ export function filterCounts(
 }
 
 /** 异步任务的状态词。用于顶栏按钮的无障碍标签，不进正文。 */
-export function syncSummaryText(
-  bindings: readonly DriveSyncBindingDto[],
-  conflicts: readonly DriveSyncConflictDto[],
-): string {
-  const attention = filterCounts(bindings, [], conflicts).attention
-  if (attention > 0) return `${attention} 个同步项目需要处理`
-  return bindings.length === 0 ? "暂无同步项目" : `${bindings.length} 个同步项目`
-}
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE

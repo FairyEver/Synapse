@@ -40,8 +40,6 @@ export interface DriveSyncController {
   readonly snapshot: DriveSyncSnapshotDto | null
   readonly error: string | null
   readonly loading: boolean
-  /** 有登录账号且在线，写操作可用。 */
-  readonly ready: boolean
   /** 离线或未登录，界面只读。 */
   readonly readOnly: boolean
   readonly offline: boolean
@@ -68,6 +66,8 @@ export interface DriveSyncController {
     bindingId: string,
     run: () => Promise<unknown>,
     success: string,
+    /** 动作成功但绑定落到需要处理的状态时，是否用绑定自己的原因提示用户。 */
+    checkBindingState?: boolean,
   ) => Promise<boolean>
 }
 
@@ -122,11 +122,12 @@ export function useDriveSync(): DriveSyncController {
 
   const isPending = useCallback((bindingId: string) => pendingIds.has(bindingId), [pendingIds])
 
-  const readOnly = snapshot?.health.readOnly ?? true
+  // 快照还没加载时不能下只读结论，否则会先摆出一句「未登录」并把新建入口锁掉。
+  const readOnly = snapshot?.health.readOnly ?? false
   const offline = snapshot?.health.connectivity === "offline"
 
   const runBindingAction = useCallback<DriveSyncController["runBindingAction"]>(
-    async (eventKey, bindingId, run, success) => {
+    async (eventKey, bindingId, run, success, checkBindingState = true) => {
       const finishTracking = startTrackedOperation({ component: "drive", eventKey })
       if (readOnly) {
         toast(offline ? "联网后可管理同步。" : "登录后可管理同步。")
@@ -142,7 +143,8 @@ export function useDriveSync(): DriveSyncController {
       try {
         await run()
         const next = await refresh()
-        const actionError = bindingActionError(next, bindingId)
+        // 处理冲突或暂停这类动作不该因为「还有别的冲突没处理」被判成失败。
+        const actionError = checkBindingState ? bindingActionError(next, bindingId) : null
         if (actionError) {
           toast(actionError)
           finishTracking("failure")
@@ -169,12 +171,21 @@ export function useDriveSync(): DriveSyncController {
     snapshot,
     error,
     loading,
-    ready: snapshot !== null && !readOnly,
     readOnly,
     offline,
     refresh,
-    preview: (input) => bridge.previewBinding(input),
-    chooseLocalPath: (input) => bridge.chooseLocalPath(input),
+    preview: (input) => {
+      const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.sync.binding.preview" })
+      return bridge.previewBinding(input)
+        .then((result) => { finishTracking("success"); return result })
+        .catch((cause: unknown) => { finishTracking("failure"); throw cause })
+    },
+    chooseLocalPath: (input) => {
+      const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.sync.local-path.choose" })
+      return bridge.chooseLocalPath(input)
+        .then((result) => { finishTracking(result ? "success" : "cancelled"); return result })
+        .catch((cause: unknown) => { finishTracking("failure"); throw cause })
+    },
     createBinding: (input) => bridge.createSafeBinding(input),
     pause: (bindingId) => bridge.pauseBinding({ id: bindingId }).then(() => undefined),
     resume: (bindingId) => bridge.resumeBinding({ id: bindingId }).then(() => undefined),

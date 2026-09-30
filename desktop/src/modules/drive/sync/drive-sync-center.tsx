@@ -22,9 +22,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import {
   DRIVE_SYNC_FILTERS,
-  activeTransferOf,
+  activeWorkOf,
   bindingPrimaryAction,
   bindingStateDetail,
   bindingStateText,
@@ -51,22 +53,16 @@ export function DriveSyncFilterBar({
     snapshot?.conflicts ?? [],
   )
   return (
-    <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="同步筛选">
-      {DRIVE_SYNC_FILTERS.map((item) => (
-        <Button
-          key={item.value}
-          type="button"
-          role="tab"
-          aria-selected={filter === item.value}
-          variant={filter === item.value ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onFilterChange(item.value)}
-        >
-          {item.label}
-          <span className="tabular-nums text-muted-foreground">{counts[item.value]}</span>
-        </Button>
-      ))}
-    </div>
+    <Tabs value={filter} onValueChange={(value) => onFilterChange(value as DriveSyncFilter)}>
+      <TabsList aria-label="同步筛选">
+        {DRIVE_SYNC_FILTERS.map((item) => (
+          <TabsTrigger key={item.value} value={item.value}>
+            {item.label}
+            <span className="tabular-nums text-muted-foreground">{counts[item.value]}</span>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }
 
@@ -87,6 +83,7 @@ export function DriveSyncCenter({
 }) {
   const snapshot = controller.snapshot
   const [rescanTarget, setRescanTarget] = useState<DriveSyncBindingDto | null>(null)
+  const [retrying, setRetrying] = useState(false)
   const bindings = snapshot?.bindings ?? []
   const conflicts = snapshot?.conflicts ?? []
   const operations = snapshot?.operations ?? []
@@ -107,13 +104,21 @@ export function DriveSyncCenter({
             <Button
               type="button"
               variant="outline"
-              onClick={() => { void controller.refresh().catch(() => undefined) }}
+              disabled={retrying}
+              onClick={() => {
+                const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.sync.snapshot.retry" })
+                setRetrying(true)
+                void controller.refresh()
+                  .then(() => { finishTracking("success") })
+                  .catch(() => { finishTracking("failure") })
+                  .finally(() => setRetrying(false))
+              }}
             >
               重试
             </Button>
           </div>
         ) : null}
-        {controller.readOnly ? (
+        {controller.readOnly && snapshot ? (
           <div className="mb-3 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
             {controller.offline
               ? "当前离线，同步已暂停。联网后会自动继续。"
@@ -126,11 +131,18 @@ export function DriveSyncCenter({
             <Button
               type="button"
               variant="outline"
-              disabled={controller.readOnly}
+              disabled={controller.readOnly || retrying}
               onClick={() => {
-                void controller.pollRemoteChanges().then(() => controller.refresh()).catch((cause: unknown) => {
-                  toast(cause instanceof Error ? cause.message : "重试失败")
-                })
+                const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.sync.global.retry" })
+                setRetrying(true)
+                void controller.pollRemoteChanges()
+                  .then(() => controller.refresh())
+                  .then(() => { finishTracking("success") })
+                  .catch((cause: unknown) => {
+                    finishTracking("failure")
+                    toast(cause instanceof Error ? cause.message : "重试失败")
+                  })
+                  .finally(() => setRetrying(false))
               }}
             >
               重试
@@ -208,7 +220,7 @@ function DriveSyncCard({
   const state = bindingStateText(binding, operations, conflicts)
   const detail = bindingStateDetail(binding, operations, conflicts)
   const action = bindingPrimaryAction(binding, operations, conflicts, controller.readOnly)
-  const transfer = activeTransferOf(operations)
+  const work = activeWorkOf(operations)
   const pending = controller.isPending(binding.id)
   const readOnly = controller.readOnly
 
@@ -216,6 +228,7 @@ function DriveSyncCard({
     switch (action.kind) {
       case "conflicts":
       case "progress":
+      case "view":
         onSelect()
         return
       case "open":
@@ -229,7 +242,8 @@ function DriveSyncCard({
     }
   }
 
-  const manualDisabled = readOnly || pending || binding.status === "paused" || binding.status === "initializing"
+  const manualDisabled = readOnly || pending
+    || binding.status === "paused" || binding.status === "initializing" || binding.status === "error"
   const canPause = binding.status === "active" || binding.status === "conflict"
 
   return (
@@ -241,6 +255,8 @@ function DriveSyncCard({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(event) => {
+        // 卡片里的按钮自己处理键盘事件，不能被整行的跳转吃掉。
+        if (event.target !== event.currentTarget) return
         if (event.key !== "Enter" && event.key !== " ") return
         event.preventDefault()
         onSelect()
@@ -257,12 +273,12 @@ function DriveSyncCard({
           <span className="truncate">电脑 {binding.localPath}</span>
         </div>
         {detail ? <div className="mt-1.5 truncate text-sm text-muted-foreground">{detail}</div> : null}
-        {transfer ? (
+        {work?.kind === "transfer" ? (
           <div className="mt-2 grid gap-1">
-            <Progress value={transfer.percent ?? 0} aria-label={`${binding.driveItemName} 同步进度`} />
-            {transfer.percent === null ? (
-              <div className="text-xs tabular-nums text-muted-foreground">{formatBytes(transfer.completedBytes)}</div>
+            {work.percent !== null ? (
+              <Progress value={work.percent} aria-label={`${binding.driveItemName} 同步进度`} />
             ) : null}
+            <div className="text-xs tabular-nums text-muted-foreground">{formatBytes(work.completedBytes)}</div>
           </div>
         ) : null}
       </div>
@@ -270,6 +286,7 @@ function DriveSyncCard({
         className="flex flex-wrap items-center gap-1 sm:justify-end"
         onClick={(event) => { event.stopPropagation() }}
       >
+        {/* 列表行内操作，与右侧 28px 的更多按钮对齐，属于规范允许的紧凑区域。 */}
         <Button
           type="button"
           variant={action.variant}
@@ -312,12 +329,12 @@ function DriveSyncCard({
               <DropdownMenuItem
                 disabled={readOnly || pending}
                 onSelect={() => {
-                  void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步")
+                  void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
                 }}
               >
                 暂停同步
               </DropdownMenuItem>
-            ) : (
+            ) : binding.status === "paused" || binding.status === "error" ? (
               <DropdownMenuItem
                 disabled={readOnly || pending}
                 onSelect={() => {
@@ -326,7 +343,7 @@ function DriveSyncCard({
               >
                 继续同步
               </DropdownMenuItem>
-            )}
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" disabled={readOnly || pending} onSelect={onRequestStop}>
               移除同步

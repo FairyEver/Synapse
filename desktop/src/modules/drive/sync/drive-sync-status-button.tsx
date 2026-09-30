@@ -1,7 +1,7 @@
 import type { DriveSyncSnapshotDto } from "@synapse/shared"
 import { Badge } from "@/components/ui/badge"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
-import { activeTransferOf } from "./drive-sync-copy"
+import { activeWorkOf } from "./drive-sync-copy"
 
 /**
  * 云盘顶栏的同步入口。
@@ -48,7 +48,7 @@ function countTransferring(snapshot: DriveSyncSnapshotDto | null): number {
   return snapshot.bindings.filter((binding) => {
     if (binding.status === "initializing") return true
     if (binding.status !== "active") return false
-    return activeTransferOf(snapshot.operations.filter((operation) => operation.bindingId === binding.id)) !== null
+    return activeWorkOf(snapshot.operations.filter((operation) => operation.bindingId === binding.id)) !== null
   }).length
 }
 

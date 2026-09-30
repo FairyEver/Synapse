@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 /**
- * 同步范围管理。推荐规则可勾选、自定义规则可增删、导入的 .gitignore 只读展示。
+ * 同步范围管理。推荐规则可勾选、导入的 .gitignore 与自定义规则可增删。
  * 强制项不提供任何开启入口。
  *
  * 保存时必须把三个规则组一起交回服务端，漏传任何一组等于清空那一组。
@@ -32,9 +32,12 @@ export function DriveSyncExcludeEditor({
   }) => void
 }) {
   const [defaults, setDefaults] = useState<ReadonlySet<string>>(() => new Set(binding.excludeRules.defaults))
+  const [imported, setImported] = useState<ReadonlySet<string>>(() => new Set(binding.excludeRules.importedGitignore))
   const [user, setUser] = useState<readonly string[]>(binding.excludeRules.user)
   const [draft, setDraft] = useState("")
+  // 已被「导入的 .gitignore」占用的规则不再出现在推荐列表里，避免同一条规则列两次。
   const options = Array.from(new Set([...candidates, ...binding.excludeRules.defaults]))
+    .filter((rule) => !imported.has(rule))
 
   const addRule = () => {
     const value = draft.trim()
@@ -122,9 +125,21 @@ export function DriveSyncExcludeEditor({
       {binding.excludeRules.importedGitignore.length > 0 ? (
         <div className="grid gap-2">
           <Label>已导入的 .gitignore 规则</Label>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid gap-2 sm:grid-cols-2">
             {binding.excludeRules.importedGitignore.map((rule) => (
-              <span key={rule} className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">{rule}</span>
+              <label key={rule} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={imported.has(rule)}
+                  disabled={readOnly}
+                  onCheckedChange={(checked) => {
+                    const next = new Set(imported)
+                    if (checked === true) next.add(rule)
+                    else next.delete(rule)
+                    setImported(next)
+                  }}
+                />
+                <span className="truncate font-mono text-xs">{rule}</span>
+              </label>
             ))}
           </div>
           <p className="text-xs text-muted-foreground">创建同步时一次性导入，之后改动 .gitignore 不再影响同步。</p>
@@ -138,7 +153,7 @@ export function DriveSyncExcludeEditor({
           disabled={readOnly || pending}
           onClick={() => onSave({
             defaults: options.filter((rule) => defaults.has(rule)),
-            importedGitignore: binding.excludeRules.importedGitignore,
+            importedGitignore: binding.excludeRules.importedGitignore.filter((rule) => imported.has(rule)),
             user,
           })}
         >

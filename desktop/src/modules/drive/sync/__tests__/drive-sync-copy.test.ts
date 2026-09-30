@@ -5,7 +5,7 @@ import type {
   DriveSyncOperationDto,
 } from "@synapse/shared"
 import {
-  activeTransferOf,
+  activeWorkOf,
   bindingMarkText,
   bindingPrimaryAction,
   bindingStateDetail,
@@ -179,13 +179,15 @@ describe("主操作", () => {
       .toEqual({ kind: "progress", label: "查看进度", variant: "outline" })
   })
 
-  it("离线只读：需要写操作的主操作降级成「查看」，不给出点了没反应的按钮", () => {
+  it("离线只读：需要写操作的主操作统一成「查看」，并且真的打开详情", () => {
     expect(bindingPrimaryAction(binding({ status: "paused" }), [], [], true))
-      .toEqual({ kind: "resume", label: "查看", variant: "outline" })
+      .toEqual({ kind: "view", label: "查看", variant: "outline" })
     expect(bindingPrimaryAction(binding({ status: "error" }), [], [], true))
-      .toEqual({ kind: "retry", label: "查看", variant: "outline" })
+      .toEqual({ kind: "view", label: "查看", variant: "outline" })
     expect(bindingPrimaryAction(binding({ status: "conflict" }), [], [conflict()], true))
-      .toEqual({ kind: "conflicts", label: "查看", variant: "outline" })
+      .toEqual({ kind: "view", label: "查看", variant: "outline" })
+    // 只读下健康的同步仍然可以打开本地位置，不需要降级。
+    expect(bindingPrimaryAction(binding(), [], [], true).kind).toBe("open")
   })
 })
 
@@ -220,14 +222,16 @@ describe("筛选", () => {
   })
 })
 
-describe("传输进度", () => {
+describe("进行中的工作", () => {
   it("汇总进行中操作的字节数并给出百分比", () => {
-    const transfer = activeTransferOf([
+    const work = activeWorkOf([
       operation({ id: "o1", completedBytes: 4, totalBytes: 10 }),
       operation({ id: "o2", completedBytes: 6, totalBytes: 10 }),
     ])
-    expect(transfer).toEqual({
+    expect(work).toEqual({
+      kind: "transfer",
       direction: "upload",
+      label: "正在上传",
       fileCount: 2,
       completedBytes: 10,
       totalBytes: 20,
@@ -236,14 +240,23 @@ describe("传输进度", () => {
     })
   })
 
+  it("核对不是传输：不能说成「正在下载 N 个文件」", () => {
+    const work = activeWorkOf([operation({ kind: "resync", completedBytes: 0, totalBytes: null })])
+    expect(work?.kind).toBe("other")
+    expect(work?.label).toBe("正在核对")
+    expect(bindingStateText(binding(), [operation({ kind: "resync" })], []).text).toBe("正在核对")
+    expect(bindingStateDetail(binding(), [operation({ kind: "resync", relativePath: "docs" })], []))
+      .toBe("docs · 内容多时需要较长时间。")
+  })
+
   it("没有进行中的操作时为 null，不会凭空造出进度", () => {
-    expect(activeTransferOf([])).toBeNull()
-    expect(activeTransferOf([operation({ status: "succeeded" })])).toBeNull()
+    expect(activeWorkOf([])).toBeNull()
+    expect(activeWorkOf([operation({ status: "succeeded" })])).toBeNull()
     expect(retryOperationOf([operation({ status: "succeeded" })])).toBeNull()
   })
 
   it("总字节未知时不给出百分比", () => {
-    const transfer = activeTransferOf([operation({ completedBytes: 4, totalBytes: null })])
+    const transfer = activeWorkOf([operation({ completedBytes: 4, totalBytes: null })])
     expect(transfer?.totalBytes).toBeNull()
     expect(transfer?.percent).toBeNull()
   })

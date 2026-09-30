@@ -116,7 +116,9 @@ const driveSyncBindingPreviewSchema = z.object({
   defaultExcludeRules: z.array(z.string()),
   importedGitignoreRules: z.array(z.string()),
   detectedGitignoreRules: z.array(z.string()),
-  initialTransfer: driveSyncInitialTransferSchema.nullable(),
+  // 与 shared 的 DTO 一致：阻断的预览不产出这个键，只有 ready 的预览才有。
+  // 写成必填会让所有阻断预览在响应校验处抛错，渲染层再也拿不到 blocked 结果。
+  initialTransfer: driveSyncInitialTransferSchema.nullable().optional(),
 })
 
 const driveSyncPreviewBindingInputSchema = z.object({

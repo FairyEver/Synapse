@@ -302,6 +302,24 @@ describe("driveSyncIpcModule", () => {
       .toEqual(bindExisting)
   })
 
+  it("accepts a blocked preview, which carries no initial transfer plan at all", () => {
+    // 阻断的预览由校验器直接产出，不带 initialTransfer 键。写成必填会让响应校验抛错，
+    // 渲染层就拿不到 blocked 结果，阻断态界面整个不可达。
+    const blocked = {
+      status: "blocked",
+      direction: null,
+      reason: "云盘上是文件，但这里选中的是文件夹。",
+      localPath: "/tmp/project",
+      localKind: "folder",
+      localEmpty: true,
+      forcedExcludeRules: [".git/**"],
+      defaultExcludeRules: [],
+      importedGitignoreRules: [],
+      detectedGitignoreRules: [],
+    }
+    expect(driveSyncIpcModule.methods.previewBinding.response?.parse(blocked)).toEqual(blocked)
+  })
+
   it("chooses local paths with mode-specific dialogs", async () => {
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: ["/Users/me/Desktop/spec.md"] })
     await expect(driveSyncIpcModule.methods.chooseLocalPath.handler({} as never, {

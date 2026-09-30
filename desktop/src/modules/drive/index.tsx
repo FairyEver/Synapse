@@ -967,11 +967,17 @@ function DriveModuleContent() {
         onUploadFolder={() => folderInputRef.current?.click()}
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
-        onOpenLocalSync={() => setSyncDialog({
-          mode: "wizard-local",
-          targetParentId: parentId,
-          drivePathHint: formatDriveBreadcrumbPath(path),
-        })}
+        onOpenLocalSync={() => {
+          if (driveSync.readOnly) {
+            toast(driveSync.offline ? "联网后可新建同步。" : "登录后可新建同步。")
+            return
+          }
+          setSyncDialog({
+            mode: "wizard-local",
+            targetParentId: parentId,
+            drivePathHint: formatDriveBreadcrumbPath(path),
+          })
+        }}
         onOpenSyncStatus={() => setSyncDialog({ mode: "center" })}
         onRefresh={() => { void refreshDriveView() }}
       >
@@ -1081,9 +1087,15 @@ function DriveModuleContent() {
         onShare={handleShare}
         onOpenSyncBinding={(item, drivePathHint) => {
           const binding = syncSnapshot?.bindings.find((candidate) => candidate.driveItemId === item.id)
-          setSyncDialog(binding
-            ? { mode: "center", bindingId: binding.id }
-            : { mode: "wizard-item", item, drivePathHint })
+          if (binding) {
+            setSyncDialog({ mode: "center", bindingId: binding.id })
+            return
+          }
+          if (driveSync.readOnly) {
+            toast(driveSync.offline ? "联网后可新建同步。" : "登录后可新建同步。")
+            return
+          }
+          setSyncDialog({ mode: "wizard-item", item, drivePathHint })
         }}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
