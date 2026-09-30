@@ -19,6 +19,10 @@ interface SynapseSkillMeta {
 }
 const UNIQUE_SUFFIX_LIMIT = 999
 
+function isTransientSkillInstallDirectoryName(name: string): boolean {
+  return name.startsWith(".synapse-install-")
+}
+
 function isSamePath(left: string, right: string): boolean {
   return arePathsEqualForCompare(left, right, {
     platform: process.platform,
@@ -149,7 +153,7 @@ async function findSkillDirectoryByContentId(
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) {
+    if (!entry.isDirectory() || isTransientSkillInstallDirectoryName(entry.name)) {
       continue
     }
 
@@ -247,6 +251,7 @@ export {
   areSkillContentIdsEquivalent,
   checkSkillNameConflict,
   findSkillDirectoryByContentId,
+  isTransientSkillInstallDirectoryName,
   isSkillDirectoryOwnedByContentId,
   readSkillIdFile,
   resolveSkillTargetPath,

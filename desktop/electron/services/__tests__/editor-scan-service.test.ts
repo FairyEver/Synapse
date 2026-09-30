@@ -402,6 +402,20 @@ describe("editor scan quick publish", () => {
     expect(result.duplicateSkillNames).toEqual(["reviewer"])
   })
 
+  it("excludes retained install directories from Skill status scans", async () => {
+    const root = await createTempDir()
+    for (const name of [".synapse-install-dir-abcd", ".synapse-install-backup-synapse-skill-1", "synapse-skill"]) {
+      const skillDir = path.join(root, name)
+      await mkdir(skillDir, { recursive: true })
+      await writeFile(path.join(skillDir, "SKILL.md"), "# Synapse Skill\n")
+      await writeFile(path.join(skillDir, ".synapse.json"), JSON.stringify({ id: "synapse-skill" }))
+    }
+
+    const result = await scanSkillDirectories([root], undefined, { preserveDuplicateNames: true })
+
+    expect(result.skills.map((skill) => skill.name)).toEqual(["synapse-skill"])
+  })
+
   it("keeps global scans non-fatal when an editor detection directory is inaccessible", async () => {
     const root = await createTempDir()
     const blockedHome = path.join(root, "blocked-home")

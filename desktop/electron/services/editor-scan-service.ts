@@ -21,6 +21,7 @@ import type {
 import type { SynapseEditorId } from "../../src/types/editor"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { editorAdapters } from "./editor-adapters"
+import { isTransientSkillInstallDirectoryName } from "./editor-adapters/skill-identity"
 import { editorScanStrategyById } from "./definitions/generated/main-registry"
 import { pathExists } from "./editor-adapters/utils"
 import { configStore } from "./config-store"
@@ -477,7 +478,7 @@ async function scanSkillsDirectory(dirPath: string, signal?: AbortSignal): Promi
       break
     }
     rootEntryCount += 1
-    if (!entry.isDirectory()) continue
+    if (!entry.isDirectory() || isTransientSkillInstallDirectoryName(entry.name)) continue
     if (candidateCount >= EDITOR_SCAN_SKILL_PREVIEW_LIMITS.maxSkillsPerRoot) {
       truncated = true
       break

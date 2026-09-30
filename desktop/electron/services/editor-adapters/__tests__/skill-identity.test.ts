@@ -31,6 +31,16 @@ afterEach(async () => {
 })
 
 describe("checkSkillNameConflict", () => {
+  it("ignores retained install directories when finding the owned Skill", async () => {
+    const root = await createTempRoot()
+    await createSkillDirectoryWithId(root, ".synapse-install-dir-abcd", "synapse-skill")
+    await createSkillDirectoryWithId(root, ".synapse-install-backup-synapse-skill-1", "synapse-skill")
+    const installedPath = await createSkillDirectoryWithId(root, "synapse-skill", "synapse-skill")
+
+    await expect(findSkillDirectoryByContentId(root, "synapse-skill"))
+      .resolves.toBe(installedPath)
+  })
+
   it("treats a corrupt skill identity file as a controlled target conflict", async () => {
     const parentDirectoryPath = await createTempRoot()
     const skillDirectoryPath = path.join(parentDirectoryPath, "review-helper")
