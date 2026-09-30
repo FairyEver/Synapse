@@ -148,7 +148,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                   </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}
-              {center.cursor && <Button type="button" variant="ghost" className="w-full" onClick={() => { void center.loadMore() }}>加载更多</Button>}
+              {center.cursor && <Button type="button" variant="ghost" className="h-12 w-full rounded-none" onClick={() => { void center.loadMore() }}>加载更多</Button>}
             </div>
           </section>
           <section aria-label="通知内容" className={`${center.selected ? "block" : "hidden @3xl/message-center:block"} min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-7 @3xl/message-center:px-9`}><MessageDetail center={center} /></section>
