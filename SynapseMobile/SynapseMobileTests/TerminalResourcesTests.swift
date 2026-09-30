@@ -109,8 +109,22 @@ struct TerminalResourcesTests {
         ])
         #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
-            "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR",
         ])
+        #expect(store.resources.first?.needsConfirmation == true)
+    }
+
+    @Test func replacesAnEarlierTruncatedShareWithTheCompleteLink() throws {
+        let store = TerminalStore()
+        let prefix = "https://synapse.d2.pub/share/shr_ZYTGDZKX1C4Q9SYS7F"
+        let complete = prefix + "BW4YQ1403XWEVT"
+        store.apply(frame([try line(prefix)], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString) == [prefix])
+
+        store.apply(frame([try line(complete)], from: 1))
+        #expect(store.resources.map(\.url.absoluteString) == [complete])
+
+        store.apply(frame([try line(prefix)], from: 2))
+        #expect(store.resources.map(\.url.absoluteString) == [complete])
     }
 
     @Test func hardWrappedLinkDoesNotIncludeFollowingChineseProse() throws {

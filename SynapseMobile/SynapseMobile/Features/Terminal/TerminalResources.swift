@@ -27,7 +27,7 @@ struct TerminalResource: Identifiable, Hashable {
 /// arrives as two rows the terminal never marks as wrapped — the wire flags stay 0, the
 /// first half reads as a whole line, and the reader is handed a link that 404s. Where
 /// the flags are silent, a full row followed by a hanging indent suggests a possible
-/// continuation. Both URL boundaries are retained for the user to choose from.
+/// continuation. Valid URL boundaries are retained for the user to choose from.
 ///
 /// An address that only means something on the desktop is not collected at all. A dev
 /// server announces itself as `http://localhost:5173` and the API next to it as
@@ -89,6 +89,10 @@ struct TerminalResourceCollector {
             }
             waiting.remove(start)
             for resource in Self.resources(in: text) where seen.insert(resource.id).inserted {
+                if resources.contains(where: { Self.isIncompleteSharePrefix(resource.url, of: $0.url) }) {
+                    continue
+                }
+                resources.removeAll { Self.isIncompleteSharePrefix($0.url, of: resource.url) }
                 resources.insert(resource, at: 0)
                 changed = true
             }
@@ -201,8 +205,31 @@ struct TerminalResourceCollector {
                       !alternatives.contains(prefixURL) else { continue }
                 alternatives.append(prefixURL)
             }
+            if alternatives.contains(where: { isIncompleteSharePrefix($0, of: url) }) {
+                alternatives = []
+            }
             return TerminalResource(url: url, alternatives: alternatives, needsConfirmation: needsConfirmation)
         }
+    }
+
+    /// Share IDs issued by both the old and current server are 32 characters. A shorter
+    /// prefix of the same ID is a broken wrap, not a second link to offer or confirm.
+    private static func isIncompleteSharePrefix(_ shorter: URL, of complete: URL) -> Bool {
+        guard let shortID = shareRootID(shorter), let completeID = shareRootID(complete),
+              completeID.count == 36, shortID.count < completeID.count else { return false }
+        return completeID.hasPrefix(shortID)
+    }
+
+    private static func shareRootID(_ url: URL) -> String? {
+        guard SynapseWebLink.isTrusted(url), url.query == nil, url.fragment == nil else { return nil }
+        let originPath = AppConfiguration.apiOrigin.path
+        let path = originPath.isEmpty || originPath == "/"
+            ? url.path : String(url.path.dropFirst(originPath.count))
+        let parts = path.split(separator: "/")
+        guard parts.count == 2, parts[0] == "share", parts[1].hasPrefix("shr_") else { return nil }
+        let id = String(parts[1])
+        guard id.dropFirst(4).allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }) else { return nil }
+        return id
     }
 
     private static func webURL(_ candidate: String) -> URL? {

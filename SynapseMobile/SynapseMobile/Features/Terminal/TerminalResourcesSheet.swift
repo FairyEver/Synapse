@@ -16,52 +16,24 @@ struct TerminalResourcesSheet: View {
 
     var body: some View {
         NavigationStack {
-            List(store.resources) { resource in
-                Button {
-                    if resource.needsConfirmation {
-                        pending = resource
-                    } else {
-                        opened = WebLink(url: resource.url)
-                    }
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if resource.needsConfirmation {
-                            Text(resource.name).lineLimit(2)
-                            Text(resource.url.absoluteString)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Text("链接边界待确认")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(resource.name).lineLimit(2)
-                            Text(resource.url.absoluteString)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            if reachability[resource.url.absoluteString] == .missing {
-                                Label("链接已失效", systemImage: "exclamationmark.triangle")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 3)
-                    .contentShape(Rectangle())
+            Group {
+                if let pending {
+                    candidateList(pending)
+                } else {
+                    resourceList
                 }
-                .buttonStyle(.plain)
             }
-            .navigationDestination(item: $pending) { resource in
-                candidateList(resource)
-            }
-            .navigationTitle("会话资源")
+            .navigationTitle(pending == nil ? "会话资源" : "选择链接")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                if pending != nil {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("返回") { pending = nil }
+                    }
+                } else {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("关闭") { dismiss() }
+                    }
                 }
             }
         }
@@ -69,6 +41,47 @@ struct TerminalResourcesSheet: View {
         .presentationDragIndicator(.visible)
         .linkBrowser($opened)
         .task(id: urlsToCheck) { await checkReachability() }
+    }
+
+    private var resourceList: some View {
+        List(store.resources) { resource in
+            Button {
+                if resource.needsConfirmation {
+                    pending = resource
+                } else {
+                    opened = WebLink(url: resource.url)
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if resource.needsConfirmation {
+                        Text(resource.name).lineLimit(2)
+                        Text(resource.url.absoluteString)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text("链接边界待确认")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(resource.name).lineLimit(2)
+                        Text(resource.url.absoluteString)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if reachability[resource.url.absoluteString] == .missing {
+                            Label("链接已失效", systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.vertical, 3)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func candidateList(_ resource: TerminalResource) -> some View {
@@ -94,8 +107,6 @@ struct TerminalResourcesSheet: View {
             }
             .buttonStyle(.plain)
         }
-        .navigationTitle("选择链接")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// 把列表上的链接问一遍，失效的标出来。
