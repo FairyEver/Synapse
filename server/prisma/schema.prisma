@@ -63,6 +63,8 @@ model User {
   driveChanges                   DriveChange[]
   driveAnnotationThreads         DriveAnnotationThread[]
   driveAnnotationComments        DriveAnnotationComment[]
+  driveMessages                  DriveMessage[]
+  driveMessageComments           DriveMessageComment[]
   publicAssets                   PublicAsset[]
   driveSites                     DriveSite[]
   userHandleRedirects            UserHandleRedirect[]
@@ -469,6 +471,7 @@ model DriveItem {
   changes               DriveChange[]
   annotationThreads     DriveAnnotationThread[]
   annotationAnchors     DriveAnnotationAnchor[]
+  messages              DriveMessage[]
   collaborationDocument DriveCollaborationDocument?
   collaborationSegments DriveCollaborationSegment[]
   markdownProjections   DriveMarkdownProjection[]
@@ -844,6 +847,41 @@ model DriveAnnotationComment {
   @@index([threadId, createdAt])
   @@index([parentCommentId])
   @@index([createdByUserId, createdAt])
+}
+
+model DriveMessage {
+  id              String                @id @default(cuid())
+  itemId          String
+  item            DriveItem             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  body            String
+  createdByUserId String
+  createdByUser   User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  editedAt        DateTime?
+  deletedAt       DateTime?
+  comments        DriveMessageComment[]
+
+  @@index([itemId, deletedAt, createdAt, id])
+}
+
+model DriveMessageComment {
+  id              String                @id @default(cuid())
+  messageId       String
+  message         DriveMessage          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  parentCommentId String?
+  parentComment   DriveMessageComment?  @relation("DriveMessageReplies", fields: [parentCommentId], references: [id], onDelete: Restrict)
+  replies         DriveMessageComment[] @relation("DriveMessageReplies")
+  body            String
+  createdByUserId String
+  createdByUser   User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  editedAt        DateTime?
+  deletedAt       DateTime?
+
+  @@index([messageId, deletedAt, createdAt, id])
+  @@index([parentCommentId])
 }
 
 model DriveCollaborationDocument {

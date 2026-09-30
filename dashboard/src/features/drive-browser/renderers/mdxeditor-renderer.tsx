@@ -29,16 +29,19 @@ import {
 import '@mdxeditor/editor/style.css'
 import type { JsxComponentDescriptor, MDXEditorMethods, ViewMode } from '@mdxeditor/editor'
 import {
+  isDriveCommentableMarkdownItem,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
 } from '@synapse/shared'
-import { ImagePlus, ListTree, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
+import { ImagePlus, ListTree, LogIn, MessageSquare, MessageSquarePlus, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import type { DriveDocumentImageUploadContext } from '@/lib/api'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
+import { useDriveMessages } from '../use-drive-messages'
+import { DriveMessagesSection } from '../drive-messages-section'
 import {
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
   observeDriveHierarchicalListMarkers,
@@ -121,6 +124,7 @@ export function DriveMDXeditorRenderer({
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const listMarkerObserverCleanupRef = useRef<(() => void) | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const messagesSectionRef = useRef<HTMLElement | null>(null)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
@@ -222,6 +226,7 @@ export function DriveMDXeditorRenderer({
     stateResetKey: initialText,
     preserveStateOnReset: saveAcknowledged,
   })
+  const messages = useDriveMessages(isDriveCommentableMarkdownItem(current) ? annotationContext : undefined)
   const outline = useDriveMdxEditorOutline({
     enabled: !sourceMode,
     isCompact: comments.isCompact,
@@ -433,6 +438,18 @@ export function DriveMDXeditorRenderer({
         onPressedChange: setCommentPanelOpen,
       })
     }
+    if (comments.annotationsEnabled) {
+      items.push({
+        kind: 'button', id: 'mdxeditor-messages', label: `留言 ${messages.messages.length}`,
+        icon: MessageSquarePlus, compactPlacement: 'primary', variant: 'ghost',
+        onClick: () => {
+          const section = messagesSectionRef.current
+          if (!section) return
+          section.scrollIntoView({ block: 'start', behavior: 'smooth' })
+          section.focus({ preventScroll: true })
+        },
+      })
+    }
     if (loginRequired) {
       items.push({
         kind: 'button',
@@ -477,6 +494,7 @@ export function DriveMDXeditorRenderer({
     comments.commentsOpen,
     comments.compactCommentsOpen,
     comments.isCompact,
+    messages.messages.length,
     comments.railThreads.length,
     dirty,
     editContext?.reloading,
@@ -558,6 +576,7 @@ export function DriveMDXeditorRenderer({
         comments={comments}
         dataAttributes={MDXEDITOR_COMMENTS_DATA_ATTRIBUTES}
         editorView={editorView}
+        afterEditorView={comments.annotationsEnabled ? <DriveMessagesSection messages={messages} sectionRef={messagesSectionRef} /> : null}
         onEditorContentHostChange={outline.handleContentHostChange}
         onEditorContainerChange={handleEditorContainerChange}
         outline={{ ...outline, setPanelOpen: setOutlinePanelOpen }}

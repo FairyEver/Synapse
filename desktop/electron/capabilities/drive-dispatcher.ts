@@ -30,6 +30,7 @@ import type {
   DriveLinkAnnotationThreadCreateInput,
   DriveLinkAnnotationThreadDeleteInput,
   DriveLinkAnnotationThreadListInput,
+  DriveMessageTarget,
   DriveLinkListDto,
   DriveLinkListInput,
   DriveLinkMaterializeDto,
@@ -148,6 +149,13 @@ type DriveAccountServicePort = {
   readonly updateDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentUpdateInput) => Promise<unknown>
   readonly deleteDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentDeleteInput) => Promise<unknown>
   readonly deleteDriveLinkAnnotationThread: (input: DriveLinkAnnotationThreadDeleteInput) => Promise<unknown>
+  readonly listDriveMessages: (input: { target: DriveMessageTarget }) => Promise<unknown>
+  readonly createDriveMessage: (input: { target: DriveMessageTarget; body: string }) => Promise<unknown>
+  readonly updateDriveMessage: (input: { target: DriveMessageTarget; messageId: string; body: string }) => Promise<unknown>
+  readonly deleteDriveMessage: (input: { target: DriveMessageTarget; messageId: string }) => Promise<unknown>
+  readonly createDriveMessageComment: (input: { target: DriveMessageTarget; messageId: string; parentCommentId: string | null; body: string }) => Promise<unknown>
+  readonly updateDriveMessageComment: (input: { target: DriveMessageTarget; commentId: string; body: string }) => Promise<unknown>
+  readonly deleteDriveMessageComment: (input: { target: DriveMessageTarget; commentId: string }) => Promise<unknown>
   readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
   readonly listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
   readonly getDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
@@ -436,6 +444,20 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             ok: true,
             data: await deps.accountService.deleteDriveLinkAnnotationThread(parseDriveLinkAnnotationThreadDeleteInput(params)),
           }))
+        case "app.drive.message.list":
+          return dispatchDriveRead(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.listDriveMessages({ target: parseDriveMessageTarget(params.target) }) }))
+        case "app.drive.message.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.createDriveMessage({ target: parseDriveMessageTarget(params.target), body: requireString(params, "body") }) }))
+        case "app.drive.message.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.updateDriveMessage({ target: parseDriveMessageTarget(params.target), messageId: requireString(params, "messageId"), body: requireString(params, "body") }) }))
+        case "app.drive.message.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.deleteDriveMessage({ target: parseDriveMessageTarget(params.target), messageId: requireString(params, "messageId") }) }))
+        case "app.drive.message.comment.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.createDriveMessageComment({ target: parseDriveMessageTarget(params.target), messageId: requireString(params, "messageId"), parentCommentId: optionalNullableString(params.parentCommentId), body: requireString(params, "body") }) }))
+        case "app.drive.message.comment.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.updateDriveMessageComment({ target: parseDriveMessageTarget(params.target), commentId: requireString(params, "commentId"), body: requireString(params, "body") }) }))
+        case "app.drive.message.comment.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({ ok: true, data: await deps.accountService.deleteDriveMessageComment({ target: parseDriveMessageTarget(params.target), commentId: requireString(params, "commentId") }) }))
         case "app.drive.link.materialize":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const input = parseDriveLinkMaterializeInput(params)
@@ -1775,6 +1797,17 @@ function parseDriveLinkAnnotationBaseInput(params: Record<string, unknown>): Dri
     path: optionalString(params.path),
     itemId: optionalString(params.itemId),
   }
+}
+
+function parseDriveMessageTarget(value: unknown): DriveMessageTarget {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Missing or invalid 'target': expected object")
+  const target = value as Record<string, unknown>
+  if (target.kind === "owned") return { kind: "owned", itemId: requireString(target, "itemId") }
+  if (target.kind === "share") return {
+    kind: "share", url: requireString(target, "url"),
+    password: optionalString(target.password), itemId: optionalString(target.itemId), path: optionalString(target.path),
+  }
+  throw new Error("Missing or invalid 'target.kind': expected owned or share")
 }
 
 function parseDriveLinkAnnotationThreadCreateInput(params: Record<string, unknown>): DriveLinkAnnotationThreadCreateInput {

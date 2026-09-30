@@ -28,6 +28,8 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { useDriveAnnotations } from '../use-drive-annotations'
+import { useDriveMessages } from '../use-drive-messages'
+import { DriveMessagesSection } from '../drive-messages-section'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { DriveCodeRenderer } from './code-renderer'
 import {
@@ -140,6 +142,7 @@ function DriveMarkdownBody({
   const documentScrollSourceRef = useRef<MarkdownDocumentScrollSource>('idle')
   const userDocumentScrollIdleTimerRef = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const messagesSectionRef = useRef<HTMLElement | null>(null)
   const selectionRangeRef = useRef<Range | null>(null)
   const commentsTouchedRef = useRef(false)
   const layoutMode = useFilePreviewLayoutMode()
@@ -150,6 +153,7 @@ function DriveMarkdownBody({
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotationStateKey = driveMarkdownAnnotationStateKey(current.id, edit?.currentVersionId ?? null, effectiveAnnotationContext)
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
+  const messages = useDriveMessages(effectiveAnnotationContext)
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [compactPanel, setCompactPanel] = useState<'outline' | 'comments' | null>(null)
@@ -335,7 +339,8 @@ function DriveMarkdownBody({
       const contentHeight = documentContentRef.current?.getBoundingClientRect().height ?? 0
       const documentInnerStyle = documentInnerRef.current ? window.getComputedStyle(documentInnerRef.current) : null
       const paddingBottom = documentInnerStyle ? Number.parseFloat(documentInnerStyle.paddingBottom) || 0 : 0
-      const nextNaturalHeight = Math.ceil(nextBaseOffset + contentHeight + paddingBottom)
+      const messagesHeight = messagesSectionRef.current?.getBoundingClientRect().height ?? 0
+      const nextNaturalHeight = Math.ceil(nextBaseOffset + contentHeight + messagesHeight + paddingBottom)
       setDocumentNaturalHeight((current) => current === nextNaturalHeight ? current : nextNaturalHeight)
     }
     const renderedTextModel = createMarkdownRenderedTextModel(root, projection)
@@ -388,6 +393,11 @@ function DriveMarkdownBody({
     void annotations.refresh()
   }, [liveCollaboration.state?.annotationRevision])
 
+  useEffect(() => {
+    if (!liveCollaboration.state?.messageRevision) return
+    void messages.refresh()
+  }, [liveCollaboration.state?.messageRevision])
+
   useLayoutEffect(() => {
     measureAnnotationLayout()
   }, [commentsOpen, measureAnnotationLayout, outlineOpen, widthMode])
@@ -405,6 +415,7 @@ function DriveMarkdownBody({
     }
     const observer = new ResizeObserver(scheduleMeasurement)
     observer.observe(root)
+    if (messagesSectionRef.current) observer.observe(messagesSectionRef.current)
     root.addEventListener('scroll', scheduleMeasurement, { capture: true, passive: true })
     return () => {
       observer.disconnect()
@@ -494,6 +505,22 @@ function DriveMarkdownBody({
         }
       )
     }
+    if (annotationsEnabled) {
+      items.push({
+        kind: 'button',
+        id: 'markdown-messages',
+        label: `留言 ${messages.messages.length}`,
+        icon: MessageSquarePlus,
+        compactPlacement: 'primary',
+        variant: 'ghost',
+        onClick: () => {
+          const section = messagesSectionRef.current
+          if (!section) return
+          section.scrollIntoView({ block: 'start', behavior: 'smooth' })
+          section.focus({ preventScroll: true })
+        },
+      })
+    }
     if (!isCompact) {
       items.push({
         kind: 'menu',
@@ -515,6 +542,7 @@ function DriveMarkdownBody({
     commentsOpen,
     compactPanel,
     isCompact,
+    messages.messages.length,
     outline.length,
     outlineOpen,
     setCommentPanelOpen,
@@ -897,6 +925,7 @@ function DriveMarkdownBody({
             <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
           ) : null}
         </div>
+        {annotationsEnabled ? <DriveMessagesSection messages={messages} sectionRef={messagesSectionRef} /> : null}
         {commentBottomCompensation > 0 ? (
           <div
             aria-hidden

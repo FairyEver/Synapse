@@ -5,6 +5,7 @@ import { AuditLogService } from "../common/audit-log.service"
 import { PrismaModule } from "../prisma/prisma.module"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController, PlatformMediaLocalStorageController } from "./drive.controller"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import { DriveMessageService } from "./drive-message.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
@@ -27,6 +28,7 @@ import { PlatformMediaStorage } from "./platform-media-storage"
     DriveLifecycleService,
     DriveChangeLogService,
     DriveAnnotationService,
+    DriveMessageService,
     DriveMarkdownProjectionService,
     DriveMarkdownPdfExportService,
     DriveCollaborationService,
@@ -45,15 +47,17 @@ import { PlatformMediaStorage } from "./platform-media-storage"
         publicAssets: DrivePublicAssetService,
         storage: LocalDriveStorage | CosDriveStorage,
         annotations: DriveAnnotationService,
+        messages: DriveMessageService,
       ) => new DriveLinkIntakeService({
         drive,
         sites,
         publicAssets,
         storage,
         annotations,
+        messages,
         publicAppUrl: process.env.APP_PUBLIC_URL ?? "http://localhost:3000",
       }),
-      inject: [DriveService, DriveSiteService, DrivePublicAssetService, "DriveStoragePort", DriveAnnotationService],
+      inject: [DriveService, DriveSiteService, DrivePublicAssetService, "DriveStoragePort", DriveAnnotationService, DriveMessageService],
     },
     AuditLogService,
     CosDriveStorage,
@@ -64,6 +68,6 @@ import { PlatformMediaStorage } from "./platform-media-storage"
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveMarkdownPdfExportService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentHostedImageService, DriveLinkIntakeService],
+  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMessageService, DriveMarkdownProjectionService, DriveMarkdownPdfExportService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentHostedImageService, DriveLinkIntakeService],
 })
 export class DriveModule {}

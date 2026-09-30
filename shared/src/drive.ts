@@ -1073,6 +1073,55 @@ export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
 export type DriveAnnotationPositionStatus = "attached" | "source_deleted" | "ambiguous" | "orphaned" | "unavailable"
 export type DriveAnnotationQuoteStatus = "exact" | "modified" | "deleted"
 export const DRIVE_ANNOTATION_COMMENT_MAX_LENGTH = 4000
+export const DRIVE_MESSAGE_BODY_MAX_LENGTH = 4000
+
+export interface DriveMessageAuthorDto {
+  readonly id: string
+  readonly email: string | null
+  readonly handle: string | null
+}
+
+export interface DriveMessageCommentDto {
+  readonly id: string
+  readonly messageId: string
+  readonly parentCommentId: string | null
+  readonly body: string
+  readonly author: DriveMessageAuthorDto
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly editedAt: string | null
+  readonly permissions: { readonly canEdit: boolean; readonly canDelete: boolean }
+}
+
+export interface DriveMessageDto {
+  readonly id: string
+  readonly itemId: string
+  readonly body: string
+  readonly author: DriveMessageAuthorDto
+  readonly createdAt: string
+  readonly updatedAt: string
+  readonly editedAt: string | null
+  readonly comments: readonly DriveMessageCommentDto[]
+  readonly permissions: { readonly canEdit: boolean; readonly canDelete: boolean }
+}
+
+export interface DriveMessageListDto {
+  readonly itemId: string
+  readonly canPost: boolean
+  readonly messages: readonly DriveMessageDto[]
+}
+
+export type DriveMessageTarget =
+  | { readonly kind: "owned"; readonly itemId: string }
+  | { readonly kind: "share"; readonly url: string; readonly password?: string; readonly itemId?: string; readonly path?: string }
+
+export interface DriveMessageAgentInput {
+  readonly target: DriveMessageTarget
+  readonly messageId?: string
+  readonly commentId?: string
+  readonly parentCommentId?: string | null
+  readonly body?: string
+}
 export const DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH = 1000
 export const DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH = 200
 
@@ -1321,6 +1370,7 @@ export type DriveCollaborationControlMessage =
   | { readonly type: "permission_changed"; readonly canWrite: boolean; readonly reason: string }
   | { readonly type: "epoch_replaced"; readonly epoch: string; readonly checkpointVersionId: string }
   | { readonly type: "annotation.changed"; readonly itemId: string }
+  | { readonly type: "message.changed"; readonly itemId: string }
   | { readonly type: "preview.changed"; readonly itemId: string; readonly epoch: string; readonly stateVector: string; readonly html: string; readonly outline: readonly DriveMarkdownOutlineItemDto[]; readonly projection: DriveMarkdownProjectionDto }
   | { readonly type: "error"; readonly code: string; readonly message: string }
 

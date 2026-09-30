@@ -324,6 +324,10 @@ Additional input: `commentId`. The author or file owner can delete the selected 
 
 Additional input: `threadId`. The file owner can delete any thread; the thread creator can delete it only when all visible comments belong to that creator. Call only when the user explicitly identifies the thread to delete.
 
+### Document message tools
+
+`app_drive_message_list`, `app_drive_message_create`, `app_drive_message_update`, `app_drive_message_delete`, `app_drive_message_comment_create`, `app_drive_message_comment_update`, and `app_drive_message_comment_delete` manage unanchored messages below Markdown documents. All take `target: { kind: "owned", itemId }` or `target: { kind: "share", url, password?, itemId?, path? }`. Create/update operations take a plain-text `body` of 1–4000 characters. Message update/delete take `messageId`; comment update/delete take `commentId`; comment create takes `messageId` and optional `parentCommentId`. List returns `canPost`, messages, nested replies and per-entry permissions. Sharing redacts author email. A delete removes the selected entry and every descendant reply.
+
 ### `app_drive_link_materialize`
 
 Input:

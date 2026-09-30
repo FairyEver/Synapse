@@ -33,6 +33,10 @@ import type {
   DesktopNotificationSource,
   DriveAnnotationCommentDto,
   DriveAnnotationThreadDto,
+  DriveMessageAgentInput,
+  DriveMessageCommentDto,
+  DriveMessageDto,
+  DriveMessageListDto,
   DriveAccessSettingsUpdateInput,
   DriveBrowserSnapshotDto,
   DriveChangeListInput,
@@ -750,6 +754,34 @@ export class AccountService {
 
   async deleteDriveLinkAnnotationThread(input: DriveLinkAnnotationThreadDeleteInput) {
     return this.requestAuthenticatedJson<{ readonly ok: true }>("DELETE", `${apiBaseUrl()}/drive/link-intake/annotations/threads`, input, "删除评论线程失败。")
+  }
+
+  async listDriveMessages(input: Pick<DriveMessageAgentInput, "target">): Promise<DriveMessageListDto> {
+    return this.requestAuthenticatedJson<DriveMessageListDto>("POST", `${apiBaseUrl()}/drive/message-intake/list`, input, "留言列表加载失败。")
+  }
+
+  async createDriveMessage(input: Pick<DriveMessageAgentInput, "target" | "body">): Promise<DriveMessageDto> {
+    return this.requestAuthenticatedJson<DriveMessageDto>("POST", `${apiBaseUrl()}/drive/message-intake/messages`, input, "新建留言失败。")
+  }
+
+  async updateDriveMessage(input: Pick<DriveMessageAgentInput, "target" | "messageId" | "body">): Promise<DriveMessageDto> {
+    return this.requestAuthenticatedJson<DriveMessageDto>("PATCH", `${apiBaseUrl()}/drive/message-intake/messages`, input, "编辑留言失败。")
+  }
+
+  async deleteDriveMessage(input: Pick<DriveMessageAgentInput, "target" | "messageId">) {
+    return this.requestAuthenticatedJson<{ readonly ok: true }>("DELETE", `${apiBaseUrl()}/drive/message-intake/messages`, input, "删除留言失败。")
+  }
+
+  async createDriveMessageComment(input: Pick<DriveMessageAgentInput, "target" | "messageId" | "parentCommentId" | "body">): Promise<DriveMessageCommentDto> {
+    return this.requestAuthenticatedJson<DriveMessageCommentDto>("POST", `${apiBaseUrl()}/drive/message-intake/comments`, input, "回复留言失败。")
+  }
+
+  async updateDriveMessageComment(input: Pick<DriveMessageAgentInput, "target" | "commentId" | "body">): Promise<DriveMessageCommentDto> {
+    return this.requestAuthenticatedJson<DriveMessageCommentDto>("PATCH", `${apiBaseUrl()}/drive/message-intake/comments`, input, "编辑回复失败。")
+  }
+
+  async deleteDriveMessageComment(input: Pick<DriveMessageAgentInput, "target" | "commentId">) {
+    return this.requestAuthenticatedJson<{ readonly ok: true }>("DELETE", `${apiBaseUrl()}/drive/message-intake/comments`, input, "删除回复失败。")
   }
 
   async materializeDriveLink(input: DriveLinkMaterializeInput): Promise<DriveLinkMaterializeDto> {

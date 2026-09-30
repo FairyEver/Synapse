@@ -273,6 +273,7 @@ export function DriveDocumentEditorCommentsFrame({
   comments,
   dataAttributes,
   editorView,
+  afterEditorView,
   onEditorContentHostChange,
   onEditorContainerChange,
   outline,
@@ -281,6 +282,7 @@ export function DriveDocumentEditorCommentsFrame({
   readonly comments: DriveDocumentEditorCommentsController
   readonly dataAttributes: DriveDocumentEditorCommentsDataAttributes
   readonly editorView: ReactNode
+  readonly afterEditorView?: ReactNode
   readonly onEditorContentHostChange?: (element: HTMLDivElement | null) => void
   readonly onEditorContainerChange?: (element: HTMLDivElement | null) => void
   readonly outline?: DriveDocumentEditorOutlineController
@@ -341,6 +343,7 @@ export function DriveDocumentEditorCommentsFrame({
           </div>
         ) : null}
       </div>
+      {afterEditorView}
       {comments.commentBottomCompensation > 0 ? (
         <div
           aria-hidden

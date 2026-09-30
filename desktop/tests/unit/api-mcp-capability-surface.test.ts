@@ -31,6 +31,13 @@ const RETIRED_MCP_PREFIXES = [
   ["app_drive_", "drive_"],
 ] as const
 const CURRENT_ONLY_MCP_TOOL_NAMES = new Set([
+  "app_drive_message_list",
+  "app_drive_message_create",
+  "app_drive_message_update",
+  "app_drive_message_delete",
+  "app_drive_message_comment_create",
+  "app_drive_message_comment_update",
+  "app_drive_message_comment_delete",
   "app_drive_sync_snapshot_get",
   "app_drive_sync_binding_preview",
   "app_drive_sync_binding_create",
@@ -111,10 +118,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(275)
+    expect(allCapabilityIds()).toHaveLength(282)
     expect(APP_DOMAIN.capabilities).toHaveLength(93)
     expect(buildAppTools()).toHaveLength(89)
-    expect(toolNames).toHaveLength(271)
+    expect(toolNames).toHaveLength(278)
     expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual(["extend_portal_headless_credential_get"])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -126,8 +133,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(271)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(271)
+    expect(buildAllMcpTools()).toHaveLength(278)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(278)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {

@@ -153,6 +153,7 @@
 - Markdown 评论锚点独立于讨论串和评论删除状态，服务端投影与解析结果是权威。证据不足只能进入未定位状态，不得由 Renderer 自行搜索并猜测重挂。
 - Anchor V2 首次上线会一次性清理旧版评论，不转换 UTF-16 旧坐标；文档、分享标识和历史版本不得随评论清理发生变化。上线后的新评论同时保留 V2 权威锚点与回滚兼容投影。
 - Markdown 实时协同仅属于浏览器 Monaco/阅读界面；Drive MCP 内容写入继续走版本化服务，不加入协同房间。分享评论支持文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文件，并只能通过 `app.drive.link.annotation.*` 能力读取和管理；不得扩展为 presence、协同房间控制或分享正文编辑旁路。
+- Markdown 文末留言独立于正文锚点评论与文件版本，阅读器和 MDXEditor 在正文后展示。`app.drive.message.*` 可按自有 itemId 或当前 `/share/...` 链接访问；分享可读者能查看，已登录可读者能发布。作者可编辑和删除自己的留言或回复；文件所有者仅可额外删除他人的内容。删除目标时连同全部后代回复移除，MCP 不修改正文或协同状态。
 
 ## Agent 与 Knowledge Base
 

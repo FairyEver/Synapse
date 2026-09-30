@@ -78,6 +78,15 @@ vi.mock('../use-drive-annotations', () => ({
   },
 }))
 
+vi.mock('../use-drive-messages', () => ({
+  useDriveMessages: () => ({ messages: [], canPost: false, refresh: vi.fn(async () => undefined) }),
+}))
+
+vi.mock('../drive-messages-section', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return { DriveMessagesSection: ({ sectionRef }: { sectionRef: React.Ref<HTMLElement> }) => React.createElement('section', { ref: sectionRef, 'data-drive-messages-section': 'true' }) }
+})
+
 vi.mock('@/features/file-browser/preview/file-preview-layout', () => ({
   useFilePreviewLayoutMode: () => layoutModeMock.value,
 }))
@@ -324,6 +333,17 @@ afterEach(() => {
 })
 
 describe('DriveMDXeditorRenderer', () => {
+  it('places messages after the editor content and jumps there from the toolbar', () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    renderRenderer()
+    const content = document.querySelector('[data-drive-mdxeditor-content-host]')
+    const section = document.querySelector('[data-drive-messages-section]')
+    expect(content?.compareDocumentPosition(section as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    act(() => buttonWithText('留言 0').click())
+    expect(scroll).toHaveBeenCalled()
+  })
+
   it('shows the live outline in the default left panel', async () => {
     renderRenderer({ preview: { ...basePreview(), text: '# Notes\n\n## Details' } })
 
@@ -441,6 +461,8 @@ describe('DriveMDXeditorRenderer', () => {
     })
     await flushOutlineFrame()
 
+    expect(document.querySelector('[data-drive-messages-section]')).not.toBeNull()
+    expect(buttonWithText('留言 0')).not.toBeNull()
     expect(document.querySelector('[data-mdxeditor-sheet="comments"]')).not.toBeNull()
     await click(buttonWithText('目录'))
 

@@ -35,6 +35,13 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.annotation.comment.update" as CapabilityId, title: "Update Drive link annotation comment", description: "Edit the current user's annotation comment in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one permitted annotation comment with its descendant replies; deleting the first comment removes the thread.", mutates: true },
   { id: "app.drive.link.annotation.thread.delete" as CapabilityId, title: "Delete Drive link annotation thread", description: "Delete one annotation thread when the current user has permission.", mutates: true },
+  { id: "app.drive.message.list" as CapabilityId, title: "List Drive document messages", description: "List unanchored messages and replies on an owned or shared Markdown document.", mutates: false },
+  { id: "app.drive.message.create" as CapabilityId, title: "Create Drive document message", description: "Post an unanchored message below an owned or shared Markdown document.", mutates: true },
+  { id: "app.drive.message.update" as CapabilityId, title: "Update Drive document message", description: "Edit one message authored by the current user.", mutates: true },
+  { id: "app.drive.message.delete" as CapabilityId, title: "Delete Drive document message", description: "Delete a permitted message and every descendant reply.", mutates: true },
+  { id: "app.drive.message.comment.create" as CapabilityId, title: "Reply to Drive document message", description: "Reply to a message or to any depth of reply.", mutates: true },
+  { id: "app.drive.message.comment.update" as CapabilityId, title: "Update Drive document message reply", description: "Edit one reply authored by the current user.", mutates: true },
+  { id: "app.drive.message.comment.delete" as CapabilityId, title: "Delete Drive document message reply", description: "Delete a permitted reply and its descendants.", mutates: true },
   { id: "app.drive.link.materialize" as CapabilityId, title: "Materialize Drive link", description: "Download a Synapse Drive link into a local cache directory for local Agent tools.", mutates: true },
   { id: "app.drive.link.download_file" as CapabilityId, title: "Download Drive link file", description: "Download one file or public asset from a Synapse Drive link to a local path or cache.", mutates: true },
   { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
@@ -122,6 +129,14 @@ const driveLinkAnnotationBaseProperties = {
   path: stringField("Optional share-relative path to a Markdown file. Ignored when itemId is supplied."),
   itemId: stringField("Optional Drive item id inside the share. Takes precedence over path."),
 }
+const driveMessageTargetProperty = {
+  description: "Owned Markdown item or current Synapse /share URL. Choose exactly one kind.",
+  oneOf: [
+    { type: "object", properties: { kind: { type: "string", enum: ["owned"] }, itemId: stringField("Owned Drive item id.") }, required: ["kind", "itemId"], additionalProperties: false },
+    { type: "object", properties: { kind: { type: "string", enum: ["share"] }, url: stringField("Current Synapse /share URL."), password: stringField("Optional share password."), itemId: stringField("Optional item id within a folder share; takes precedence over path."), path: stringField("Optional share-relative Markdown path.") }, required: ["kind", "url"], additionalProperties: false },
+  ],
+}
+const driveMessageBodyProperty = { type: "string", minLength: 1, maxLength: 4000, description: "Plain-text body; line breaks are preserved." }
 const driveLinkAnnotationTargetProperty = {
   description: "Visible Markdown text or a whole Markdown image. Obtain imageId from drive_link_read_text immediately before creating an image thread.",
   oneOf: [
@@ -502,6 +517,41 @@ export function buildDriveTools(): McpToolDefinition[] {
         properties: { ...driveLinkAnnotationBaseProperties, threadId: stringField("Annotation thread id to delete.") },
         required: ["url", "threadId"],
       },
+    },
+    {
+      name: "drive_message_list",
+      description: "List messages and nested replies on an owned or shared Markdown document. Unlike annotations, messages have no text or image anchor. Returns per-entry permissions; shared author emails are redacted.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty }, required: ["target"] },
+    },
+    {
+      name: "drive_message_create",
+      description: "Post a plain-text message below an owned or shared Markdown document.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, body: driveMessageBodyProperty }, required: ["target", "body"] },
+    },
+    {
+      name: "drive_message_update",
+      description: "Edit one message authored by the current user. List messages first to obtain its id and permission.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, messageId: stringField("Message id."), body: driveMessageBodyProperty }, required: ["target", "messageId", "body"] },
+    },
+    {
+      name: "drive_message_delete",
+      description: "Delete a permitted message and all descendant replies. Call only when the user explicitly identifies the message to delete.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, messageId: stringField("Message id.") }, required: ["target", "messageId"] },
+    },
+    {
+      name: "drive_message_comment_create",
+      description: "Reply to a message; parentCommentId optionally targets an existing reply. Arbitrary reply depth is supported.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, messageId: stringField("Message id."), parentCommentId: { anyOf: [{ type: "string" }, { type: "null" }], description: "Optional parent reply id." }, body: driveMessageBodyProperty }, required: ["target", "messageId", "body"] },
+    },
+    {
+      name: "drive_message_comment_update",
+      description: "Edit one reply authored by the current user.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, commentId: stringField("Reply id."), body: driveMessageBodyProperty }, required: ["target", "commentId", "body"] },
+    },
+    {
+      name: "drive_message_comment_delete",
+      description: "Delete a permitted reply and all descendants. Call only when the user explicitly identifies the reply to delete.",
+      inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, commentId: stringField("Reply id.") }, required: ["target", "commentId"] },
     },
     {
       name: "drive_link_materialize",

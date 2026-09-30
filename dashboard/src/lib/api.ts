@@ -6,6 +6,9 @@ import type {
   DriveAnnotationCreateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
+  DriveMessageCommentDto,
+  DriveMessageDto,
+  DriveMessageListDto,
   DriveAccessSettingsInput,
   DriveAccessSettingsUpdateInput,
   DriveBrowserPasswordRequiredDto,
@@ -635,6 +638,7 @@ function isProtectedDriveShareBrowserPath(path: string) {
     || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/document-images/uploads/[^?#]*(?:[?#].*)?$`, 'u').test(path)
     || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/collaboration/checkpoint(?:[?#].*)?$`, 'u').test(path)
     || isProtectedDriveShareAnnotationPath(path)
+    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/messages(?:/[^/?#]+/comments|/comments/[^/?#]+|/[^/?#]+)?(?:[?#].*)?$`, 'u').test(path)
 }
 
 function isProtectedDriveShareAnnotationPath(path: string) {
@@ -1439,6 +1443,29 @@ export const driveAnnotationApi = {
     request<{ ok: true }>(shareAnnotationPath(shareId, itemId, `/comments/${encodeURIComponent(commentId)}`), { method: 'DELETE' }),
   deleteShareThread: (shareId: string, itemId: string | null | undefined, threadId: string) =>
     request<{ ok: true }>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}`), { method: 'DELETE' }),
+}
+
+export type DriveMessageApiContext =
+  | { readonly context: 'owner'; readonly itemId: string }
+  | { readonly context: 'share'; readonly shareId: string; readonly itemId?: string | null }
+
+function driveMessagePath(context: DriveMessageApiContext, suffix = ''): string {
+  const base = context.context === 'owner'
+    ? `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(context.itemId)}`
+    : context.itemId
+      ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/items/${encodeURIComponent(context.itemId)}`
+      : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}`
+  return `${base}/messages${suffix}`
+}
+
+export const driveMessageApi = {
+  list: (context: DriveMessageApiContext) => request<DriveMessageListDto>(driveMessagePath(context), { cache: 'no-store' }),
+  create: (context: DriveMessageApiContext, body: string) => request<DriveMessageDto>(driveMessagePath(context), { method: 'POST', body: JSON.stringify({ body }) }),
+  update: (context: DriveMessageApiContext, messageId: string, body: string) => request<DriveMessageDto>(driveMessagePath(context, `/${encodeURIComponent(messageId)}`), { method: 'PATCH', body: JSON.stringify({ body }) }),
+  delete: (context: DriveMessageApiContext, messageId: string) => request<{ ok: true }>(driveMessagePath(context, `/${encodeURIComponent(messageId)}`), { method: 'DELETE' }),
+  reply: (context: DriveMessageApiContext, messageId: string, parentCommentId: string | null, body: string) => request<DriveMessageCommentDto>(driveMessagePath(context, `/${encodeURIComponent(messageId)}/comments`), { method: 'POST', body: JSON.stringify({ parentCommentId, body }) }),
+  updateComment: (context: DriveMessageApiContext, commentId: string, body: string) => request<DriveMessageCommentDto>(driveMessagePath(context, `/comments/${encodeURIComponent(commentId)}`), { method: 'PATCH', body: JSON.stringify({ body }) }),
+  deleteComment: (context: DriveMessageApiContext, commentId: string) => request<{ ok: true }>(driveMessagePath(context, `/comments/${encodeURIComponent(commentId)}`), { method: 'DELETE' }),
 }
 
 type DriveFileVersionListOptions = {

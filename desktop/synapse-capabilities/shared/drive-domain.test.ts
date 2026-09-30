@@ -34,6 +34,13 @@ describe("Drive capability domain", () => {
       "app_drive_link_annotation_comment_update",
       "app_drive_link_annotation_comment_delete",
       "app_drive_link_annotation_thread_delete",
+      "app_drive_message_list",
+      "app_drive_message_create",
+      "app_drive_message_update",
+      "app_drive_message_delete",
+      "app_drive_message_comment_create",
+      "app_drive_message_comment_update",
+      "app_drive_message_comment_delete",
       "app_drive_link_materialize",
       "app_drive_link_download_file",
       "app_drive_folder_zip_create",
@@ -97,6 +104,7 @@ describe("Drive capability domain", () => {
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_item_restore).toBe("app.drive.item.restore")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_link_resolve).toBe("app.drive.link.resolve")
     expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_link_annotation_thread_list).toBe("app.drive.link.annotation.thread.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.app_drive_message_list).toBe("app.drive.message.list")
     expect(DRIVE_MCP_TOOL_ACTIONS).not.toHaveProperty("drive_item_list")
     expect(getActionDomainId("app.drive.item.list")).toBe("drive")
   })

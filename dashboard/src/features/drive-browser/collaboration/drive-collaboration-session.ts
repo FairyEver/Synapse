@@ -41,6 +41,7 @@ export type DriveCollaborationSnapshot = {
   readonly onlineCount: number
   readonly preview: DriveCollaborationPreview | null
   readonly annotationRevision: number
+  readonly messageRevision: number
   readonly epochTransition: 'reload' | 'preserve_local' | null
 }
 
@@ -77,6 +78,7 @@ export class DriveCollaborationSession {
       onlineCount: 0,
       preview: null,
       annotationRevision: 0,
+      messageRevision: 0,
       epochTransition: null,
     }
     this.persistence = input.capability.canWrite && typeof indexedDB !== 'undefined'
@@ -225,6 +227,10 @@ export class DriveCollaborationSession {
     }
     if (message.type === 'annotation.changed') {
       this.setState({ annotationRevision: this.state.annotationRevision + 1 })
+      return
+    }
+    if (message.type === 'message.changed') {
+      this.setState({ messageRevision: this.state.messageRevision + 1 })
       return
     }
     if (message.type === 'permission_changed') {

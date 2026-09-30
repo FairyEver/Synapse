@@ -109,6 +109,13 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_link_annotation_comment_update",
       "app_drive_link_annotation_comment_delete",
       "app_drive_link_annotation_thread_delete",
+      "app_drive_message_list",
+      "app_drive_message_create",
+      "app_drive_message_update",
+      "app_drive_message_delete",
+      "app_drive_message_comment_create",
+      "app_drive_message_comment_update",
+      "app_drive_message_comment_delete",
       "app_drive_link_materialize",
       "app_drive_link_download_file",
       "app_drive_folder_zip_create",
@@ -491,6 +498,23 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(audit).not.toContain("private reply body")
     expect(audit).not.toContain("private edited body")
     expect(audit).not.toContain("可见原文")
+  })
+
+  it("routes owned and shared document messages through distinct targets", async () => {
+    const listDriveMessages = vi.fn(async () => ({ itemId: "doc", canPost: true, messages: [] }))
+    const createDriveMessageComment = vi.fn(async () => ({ id: "reply" }))
+    const accountService = createAccountService({ listDriveMessages, createDriveMessageComment })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink: createAuditSink() })
+    await dispatcher.dispatch("app.drive.message.list", { target: { kind: "owned", itemId: "doc" } }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.message.comment.create", {
+      target: { kind: "share", url: "https://synapse.test/share/share", password: "private", path: "note.md" },
+      messageId: "message", parentCommentId: "reply-1", body: "hello",
+    }, { source: "mcp-stdio" })
+    expect(listDriveMessages).toHaveBeenCalledWith({ target: { kind: "owned", itemId: "doc" } })
+    expect(createDriveMessageComment).toHaveBeenCalledWith({
+      target: { kind: "share", url: "https://synapse.test/share/share", password: "private", itemId: undefined, path: "note.md" },
+      messageId: "message", parentCommentId: "reply-1", body: "hello",
+    })
   })
 
   it("authorizes Drive link materialize as a local write", async () => {
@@ -2532,6 +2556,13 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     updateDriveLinkAnnotationComment: vi.fn(),
     deleteDriveLinkAnnotationComment: vi.fn(),
     deleteDriveLinkAnnotationThread: vi.fn(),
+    listDriveMessages: vi.fn(),
+    createDriveMessage: vi.fn(),
+    updateDriveMessage: vi.fn(),
+    deleteDriveMessage: vi.fn(),
+    createDriveMessageComment: vi.fn(),
+    updateDriveMessageComment: vi.fn(),
+    deleteDriveMessageComment: vi.fn(),
     materializeDriveLink: vi.fn(),
     downloadDriveLinkFile: vi.fn(),
     downloadDriveFolderZip: vi.fn(),

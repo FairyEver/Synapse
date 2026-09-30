@@ -3,12 +3,14 @@ import {
   driveApi,
   driveBrowserApi,
   driveFileVersionsApi,
+  driveMessageApi,
 } from '@/lib/api'
 import { startDriveOperation } from './drive-telemetry'
 
 export const trackedDriveApi = trackApi(driveApi, 'items')
 export const trackedDriveBrowserApi = trackApi(driveBrowserApi, 'browser')
 export const trackedDriveAnnotationApi = trackApi(driveAnnotationApi, 'annotations')
+export const trackedDriveMessageApi = trackApi(driveMessageApi, 'messages')
 export const trackedDriveFileVersionsApi = trackApi(driveFileVersionsApi, 'versions')
 
 function trackApi<Api extends Record<string, unknown>>(api: Api, namespace: string): Api {

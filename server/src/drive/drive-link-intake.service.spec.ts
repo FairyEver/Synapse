@@ -289,6 +289,26 @@ describe("DriveLinkIntakeService", () => {
     }))
   })
 
+  it("routes owned and shared Markdown messages to their respective access targets", async () => {
+    const messages = {
+      list: vi.fn(async () => ({ itemId: "item-1", canPost: true, messages: [] })),
+      createComment: vi.fn(async () => ({ id: "reply-1" })),
+    }
+    const { service, drive } = createService({ messages: messages as never })
+    await service.listMessages({ kind: "owned", itemId: "item-1" }, "owner-1")
+    expect(messages.list).toHaveBeenCalledWith({ kind: "owned", itemId: "item-1" }, "owner-1")
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
+
+    await service.createMessageComment({ kind: "share", url: `${publicAppUrl}/share/shr_123?password=query-secret`, password: "explicit-secret", itemId: "item-1" }, "user-1", "message-1", "reply-0", "nested", "127.0.0.1")
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      shareId: "shr_123", itemId: "item-1", password: "explicit-secret", actorUserId: "user-1",
+    }))
+    expect(messages.createComment).toHaveBeenCalledWith(
+      { kind: "share", shareId: "shr_123", itemId: "item-1", password: "explicit-secret" },
+      "user-1", "message-1", "reply-0", "nested", "127.0.0.1",
+    )
+  })
+
   it("resolves a share folder child path for annotation management", async () => {
     const { service, drive, annotations } = createService()
     drive.getShareBrowserSnapshot

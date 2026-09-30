@@ -25,6 +25,15 @@ vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }));
 
+vi.mock('../use-drive-messages', () => ({
+  useDriveMessages: () => ({ messages: [], canPost: false, refresh: vi.fn(async () => undefined) }),
+}))
+
+vi.mock('../drive-messages-section', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return { DriveMessagesSection: ({ sectionRef }: { sectionRef: React.Ref<HTMLElement> }) => React.createElement('section', { ref: sectionRef, 'data-drive-messages-section': 'true' }) }
+})
+
 let collaborationPreviewHtml: string | null = null
 
 vi.mock('../collaboration/use-drive-collaboration', () => ({
@@ -148,6 +157,15 @@ afterEach(() => {
 })
 
 describe('DriveMarkdownRenderer', () => {
+  it('keeps messages after the rendered article and jumps there from the toolbar', () => {
+    renderMarkdown({ previewData: preview({ html: '<p>Article end</p>' }) })
+    const section = document.querySelector('[data-drive-messages-section]')
+    const article = document.querySelector('[data-testid="markdown-body"]')
+    expect(article?.compareDocumentPosition(section as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    act(() => buttonWithText('留言 0').click())
+    expect(scrollIntoViewMock).toHaveBeenCalled()
+  })
+
   it('does not parse plain markdown html through the relative image rewriter', () => {
     const createElement = vi.spyOn(document, 'createElement')
 
@@ -654,6 +672,8 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(390)
 
     expect(queryButtonWithText('宽度')).toBeNull()
+    expect(document.querySelector('[data-drive-messages-section]')).not.toBeNull()
+    expect(buttonWithText('留言 0')).not.toBeNull()
 
     await setPreviewWidth(1280)
 
@@ -800,7 +820,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('评论')
     expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('Comment body')
-    expect(toolbarButtonTexts()).toEqual(['目录', '评论 1', '宽度'])
+    expect(toolbarButtonTexts()).toEqual(['目录', '评论 1', '留言 0', '宽度'])
     expect(commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')).not.toBeNull()
     expect(commentRailShell()?.className).not.toContain('border-l')
     expect(commentRailPanelGroup()?.previousElementSibling?.childElementCount).toBe(0)
@@ -1001,7 +1021,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(toolbarButtonTexts()).toEqual(['评论 1', '宽度'])
+    expect(toolbarButtonTexts()).toEqual(['评论 1', '留言 0', '宽度'])
     expect(document.body.textContent).toContain('Reply body')
   })
 

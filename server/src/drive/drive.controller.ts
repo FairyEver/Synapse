@@ -29,6 +29,7 @@ import {
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import { DriveMessageService, parseDriveMessageBody } from "./drive-message.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
@@ -213,6 +214,22 @@ const driveLinkAnnotationCommentDeleteSchema = driveLinkAnnotationBaseSchema.ext
 const driveLinkAnnotationThreadDeleteSchema = driveLinkAnnotationBaseSchema.extend({
   threadId: z.string().min(1),
 }).strict()
+const driveMessageBodySchema = z.object({ body: z.string() }).strict()
+const driveMessageReplySchema = driveMessageBodySchema.extend({ parentCommentId: z.string().min(1).nullable().optional() }).strict()
+const driveMessageAgentTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("owned"), itemId: z.string().min(1) }).strict(),
+  z.object({
+    kind: z.literal("share"), url: z.string().url(), password: z.string().min(1).max(256).optional(),
+    itemId: z.string().min(1).optional(), path: z.string().min(1).max(1024).optional(),
+  }).strict(),
+])
+const driveMessageAgentBaseSchema = z.object({ target: driveMessageAgentTargetSchema }).strict()
+const driveMessageAgentCreateSchema = driveMessageAgentBaseSchema.extend({ body: z.string() }).strict()
+const driveMessageAgentUpdateSchema = driveMessageAgentCreateSchema.extend({ messageId: z.string().min(1) }).strict()
+const driveMessageAgentDeleteSchema = driveMessageAgentBaseSchema.extend({ messageId: z.string().min(1) }).strict()
+const driveMessageAgentReplySchema = driveMessageAgentUpdateSchema.extend({ parentCommentId: z.string().min(1).nullable().optional() }).strict()
+const driveMessageAgentCommentUpdateSchema = driveMessageAgentCreateSchema.extend({ commentId: z.string().min(1) }).strict()
+const driveMessageAgentCommentDeleteSchema = driveMessageAgentBaseSchema.extend({ commentId: z.string().min(1) }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
@@ -253,7 +270,45 @@ export class DriveUserController {
     @Optional() private readonly sites?: DriveSiteService,
     @Optional() private readonly changes?: DriveChangeLogService,
     @Optional() private readonly pdfExports?: DriveMarkdownPdfExportService,
+    @Optional() private readonly messages?: DriveMessageService,
   ) {}
+
+  @Get("/browser/owner/items/:itemId/messages")
+  @Header("Cache-Control", "no-store")
+  listOwnerMessages(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).list({ kind: "owned", itemId }, request.user!.id)
+  }
+
+  @Post("/browser/owner/items/:itemId/messages")
+  createOwnerMessage(@Param("itemId") itemId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).create({ kind: "owned", itemId }, request.user!.id, parseMessageBody(body), request.ip)
+  }
+
+  @Patch("/browser/owner/items/:itemId/messages/:messageId")
+  updateOwnerMessage(@Param("itemId") itemId: string, @Param("messageId") messageId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).update({ kind: "owned", itemId }, request.user!.id, messageId, parseMessageBody(body), request.ip)
+  }
+
+  @Delete("/browser/owner/items/:itemId/messages/:messageId")
+  deleteOwnerMessage(@Param("itemId") itemId: string, @Param("messageId") messageId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).delete({ kind: "owned", itemId }, request.user!.id, messageId, request.ip)
+  }
+
+  @Post("/browser/owner/items/:itemId/messages/:messageId/comments")
+  replyOwnerMessage(@Param("itemId") itemId: string, @Param("messageId") messageId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(driveMessageReplySchema, body, "回复请求无效。")
+    return requireDriveMessageService(this.messages).createComment({ kind: "owned", itemId }, request.user!.id, messageId, parsed.parentCommentId ?? null, parseDriveMessageBody(parsed.body), request.ip)
+  }
+
+  @Patch("/browser/owner/items/:itemId/messages/comments/:commentId")
+  updateOwnerMessageComment(@Param("itemId") itemId: string, @Param("commentId") commentId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).updateComment({ kind: "owned", itemId }, request.user!.id, commentId, parseMessageBody(body), request.ip)
+  }
+
+  @Delete("/browser/owner/items/:itemId/messages/comments/:commentId")
+  deleteOwnerMessageComment(@Param("itemId") itemId: string, @Param("commentId") commentId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).deleteComment({ kind: "owned", itemId }, request.user!.id, commentId, request.ip)
+  }
 
   @Get("/public-assets")
   listPublicAssets(
@@ -1274,7 +1329,104 @@ export class DrivePublicController {
     @Optional() private readonly hostedDocumentImages?: DriveDocumentHostedImageService,
     @Optional() private readonly linkIntake?: DriveLinkIntakeService,
     @Optional() private readonly pdfExports?: DriveMarkdownPdfExportService,
+    @Optional() private readonly messages?: DriveMessageService,
   ) {}
+
+  @Get(["/api/drive/browser/shares/:shareId/messages", "/api/drive/browser/shares/:shareId/items/:itemId/messages"])
+  @Header("Cache-Control", "no-store")
+  async listShareMessages(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Req() request: Request) {
+    return requireDriveMessageService(this.messages).list(this.messageShareAccess(shareId, itemId, request), await this.resolveOptionalUserId(request))
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post(["/api/drive/browser/shares/:shareId/messages", "/api/drive/browser/shares/:shareId/items/:itemId/messages"])
+  createShareMessage(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).create(this.messageShareAccess(shareId, itemId, request), request.user!.id, parseMessageBody(body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch(["/api/drive/browser/shares/:shareId/messages/:messageId", "/api/drive/browser/shares/:shareId/items/:itemId/messages/:messageId"])
+  updateShareMessage(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("messageId") messageId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).update(this.messageShareAccess(shareId, itemId, request), request.user!.id, messageId, parseMessageBody(body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete(["/api/drive/browser/shares/:shareId/messages/:messageId", "/api/drive/browser/shares/:shareId/items/:itemId/messages/:messageId"])
+  deleteShareMessage(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("messageId") messageId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).delete(this.messageShareAccess(shareId, itemId, request), request.user!.id, messageId, request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post(["/api/drive/browser/shares/:shareId/messages/:messageId/comments", "/api/drive/browser/shares/:shareId/items/:itemId/messages/:messageId/comments"])
+  replyShareMessage(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("messageId") messageId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(driveMessageReplySchema, body, "回复请求无效。")
+    return requireDriveMessageService(this.messages).createComment(this.messageShareAccess(shareId, itemId, request), request.user!.id, messageId, parsed.parentCommentId ?? null, parseDriveMessageBody(parsed.body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch(["/api/drive/browser/shares/:shareId/messages/comments/:commentId", "/api/drive/browser/shares/:shareId/items/:itemId/messages/comments/:commentId"])
+  updateShareMessageComment(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("commentId") commentId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).updateComment(this.messageShareAccess(shareId, itemId, request), request.user!.id, commentId, parseMessageBody(body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete(["/api/drive/browser/shares/:shareId/messages/comments/:commentId", "/api/drive/browser/shares/:shareId/items/:itemId/messages/comments/:commentId"])
+  deleteShareMessageComment(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("commentId") commentId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).deleteComment(this.messageShareAccess(shareId, itemId, request), request.user!.id, commentId, request.ip)
+  }
+
+  private messageShareAccess(shareId: string, itemId: string | undefined, request: Request) {
+    return { kind: "share" as const, shareId, itemId, cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }) }
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/message-intake/list")
+  listAgentMessages(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const { target } = parseBody(driveMessageAgentBaseSchema, body, "留言列表请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).listMessages(target, request.user!.id)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/message-intake/messages")
+  createAgentMessage(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(driveMessageAgentCreateSchema, body, "新建留言请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).createMessage(input.target, request.user!.id, parseDriveMessageBody(input.body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/message-intake/messages")
+  updateAgentMessage(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(driveMessageAgentUpdateSchema, body, "编辑留言请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).updateMessage(input.target, request.user!.id, input.messageId, parseDriveMessageBody(input.body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/message-intake/messages")
+  deleteAgentMessage(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(driveMessageAgentDeleteSchema, body, "删除留言请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).deleteMessage(input.target, request.user!.id, input.messageId, request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/message-intake/comments")
+  createAgentMessageComment(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(driveMessageAgentReplySchema, body, "回复留言请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).createMessageComment(input.target, request.user!.id, input.messageId, input.parentCommentId ?? null, parseDriveMessageBody(input.body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/message-intake/comments")
+  updateAgentMessageComment(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(driveMessageAgentCommentUpdateSchema, body, "编辑回复请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).updateMessageComment(input.target, request.user!.id, input.commentId, parseDriveMessageBody(input.body), request.ip)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Delete("/api/drive/message-intake/comments")
+  deleteAgentMessageComment(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(driveMessageAgentCommentDeleteSchema, body, "删除回复请求无效。")
+    return requireDriveLinkIntakeService(this.linkIntake).deleteMessageComment(input.target, request.user!.id, input.commentId, request.ip)
+  }
 
   @Post("/api/drive/link-intake/resolve")
   resolveDriveLink(@Body() body: unknown) {
@@ -2482,6 +2634,15 @@ function requireHostedDocumentImageService(service: DriveDocumentHostedImageServ
 function requireDriveAnnotationService(annotations: DriveAnnotationService | undefined): DriveAnnotationService {
   if (!annotations) throw new Error("DriveAnnotationService is not available.")
   return annotations
+}
+
+function requireDriveMessageService(messages: DriveMessageService | undefined): DriveMessageService {
+  if (!messages) throw new Error("DriveMessageService is not available.")
+  return messages
+}
+
+function parseMessageBody(body: unknown): string {
+  return parseDriveMessageBody(parseBody(driveMessageBodySchema, body, "留言请求无效。").body)
 }
 
 function requireDriveSiteService(sites: DriveSiteService | undefined): DriveSiteService {

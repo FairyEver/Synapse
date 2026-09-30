@@ -20,6 +20,7 @@ import {
   type DriveLinkAnnotationThreadDeleteInput,
   type DriveLinkAnnotationThreadListDto,
   type DriveLinkAnnotationThreadListInput,
+  type DriveMessageTarget,
   type DriveLinkListDto,
   type DriveLinkListInput,
   type DriveLinkPreviewKind,
@@ -31,6 +32,7 @@ import {
   type DriveLinkType,
 } from "@synapse/shared"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import { DriveMessageService, type DriveMessageAccess } from "./drive-message.service"
 import {
   DriveOpenApiDownloadPreparationError,
   type DriveOpenApiDownloadArtifact,
@@ -135,6 +137,7 @@ export type DriveLinkIntakeDeps = {
     }>
   }
   readonly annotations: DriveAnnotationService
+  readonly messages?: DriveMessageService
   readonly publicAppUrl: string
 }
 
@@ -151,6 +154,45 @@ type ParsedDriveLink =
 @Injectable()
 export class DriveLinkIntakeService {
   constructor(private readonly deps: DriveLinkIntakeDeps) {}
+
+  private async resolveMessageTarget(target: DriveMessageTarget, actorUserId: string | null): Promise<DriveMessageAccess> {
+    if (target.kind === "owned") return target
+    const resolved = await this.resolveAnnotationShareTarget(target, actorUserId, "留言管理")
+    return { kind: "share", ...resolved }
+  }
+
+  private get messageService(): DriveMessageService {
+    if (!this.deps.messages) throw new Error("DriveMessageService is not available.")
+    return this.deps.messages
+  }
+
+  async listMessages(target: DriveMessageTarget, actorUserId: string) {
+    return this.messageService.list(await this.resolveMessageTarget(target, actorUserId), actorUserId)
+  }
+
+  async createMessage(target: DriveMessageTarget, actorUserId: string, body: string, ipAddress?: string) {
+    return this.messageService.create(await this.resolveMessageTarget(target, actorUserId), actorUserId, body, ipAddress)
+  }
+
+  async updateMessage(target: DriveMessageTarget, actorUserId: string, messageId: string, body: string, ipAddress?: string) {
+    return this.messageService.update(await this.resolveMessageTarget(target, actorUserId), actorUserId, messageId, body, ipAddress)
+  }
+
+  async deleteMessage(target: DriveMessageTarget, actorUserId: string, messageId: string, ipAddress?: string) {
+    return this.messageService.delete(await this.resolveMessageTarget(target, actorUserId), actorUserId, messageId, ipAddress)
+  }
+
+  async createMessageComment(target: DriveMessageTarget, actorUserId: string, messageId: string, parentCommentId: string | null, body: string, ipAddress?: string) {
+    return this.messageService.createComment(await this.resolveMessageTarget(target, actorUserId), actorUserId, messageId, parentCommentId, body, ipAddress)
+  }
+
+  async updateMessageComment(target: DriveMessageTarget, actorUserId: string, commentId: string, body: string, ipAddress?: string) {
+    return this.messageService.updateComment(await this.resolveMessageTarget(target, actorUserId), actorUserId, commentId, body, ipAddress)
+  }
+
+  async deleteMessageComment(target: DriveMessageTarget, actorUserId: string, commentId: string, ipAddress?: string) {
+    return this.messageService.deleteComment(await this.resolveMessageTarget(target, actorUserId), actorUserId, commentId, ipAddress)
+  }
 
   async resolve(input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
     const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
@@ -581,9 +623,10 @@ export class DriveLinkIntakeService {
   private async resolveAnnotationShareTarget(
     input: DriveLinkAnnotationThreadListInput,
     actorUserId: string | null,
+    subject = "评论管理",
   ): Promise<{ readonly shareId: string; readonly itemId: string; readonly password?: string }> {
     const parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
-    if (parsed.linkType !== "share") throw new BadRequestException("评论管理仅支持 Synapse 分享链接。")
+    if (parsed.linkType !== "share") throw new BadRequestException(`${subject}仅支持 Synapse 分享链接。`)
     await this.assertShareLinkAccessible(parsed, input.password)
     const itemId = await this.resolveShareItemIdByPath(parsed, input)
     const password = driveLinkPassword(input.password, parsed.password)
@@ -595,7 +638,7 @@ export class DriveLinkIntakeService {
       actorUserId,
     })
     if (!isDriveCommentableMarkdownItem(snapshot.current)) {
-      throw new BadRequestException("评论管理仅支持 .md 或 Markdown MIME 文档。")
+      throw new BadRequestException(`${subject}仅支持 .md 或 Markdown MIME 文档。`)
     }
     return { shareId: parsed.shareId, itemId: snapshot.current.id, password }
   }

@@ -52,6 +52,16 @@ describe('DriveCollaborationSession epoch replacement', () => {
   })
 })
 
+describe('DriveCollaborationSession message changes', () => {
+  it('increments the message revision without changing the document epoch', () => {
+    const session = createSession(vi.fn())
+    const epoch = session.getSnapshot().epoch
+    sendControl(session, { type: 'message.changed', itemId: 'item-1' })
+    expect(session.getSnapshot()).toMatchObject({ messageRevision: 1, epoch })
+    session.destroy()
+  })
+})
+
 const joinedMessage: DriveCollaborationControlMessage = {
   type: 'joined',
   protocolVersion: 1,

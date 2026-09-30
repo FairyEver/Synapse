@@ -47,6 +47,13 @@ Use these tools only for Synapse Drive:
 - `app_drive_link_annotation_comment_update`
 - `app_drive_link_annotation_comment_delete`
 - `app_drive_link_annotation_thread_delete`
+- `app_drive_message_list`
+- `app_drive_message_create`
+- `app_drive_message_update`
+- `app_drive_message_delete`
+- `app_drive_message_comment_create`
+- `app_drive_message_comment_update`
+- `app_drive_message_comment_delete`
 - `app_drive_link_materialize`
 - `app_drive_link_download_file`
 - `app_drive_folder_zip_create`
@@ -158,6 +165,8 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
 5. For one specific linked file or public asset, call `app_drive_link_download_file`. For `/share` children, prefer the listed `itemId`; for `/sites`, pass the site-relative `path`.
 
 For comments on a `/share/...` Markdown document identified by a `.md` name or Markdown MIME type, use the annotation tools with the same `url`, optional `password`, and optional `itemId` or `path`. `itemId` takes precedence over `path`.
+
+For unanchored messages below an owned or shared Markdown document, use `app_drive_message_*` tools. Pass `target: { kind: "owned", itemId }` for your own file or `target: { kind: "share", url, password?, itemId?, path? }` for a shared file. List first to obtain message/reply ids and permissions. Message and reply bodies are plain text, at most 4000 characters. Reply with `messageId` and optional `parentCommentId` for any depth. Editing requires authorship; deletion requires authorship or file ownership and removes all descendants. Confirm the exact target before deletion.
 
 - List threads before acting so ids and current permissions are fresh. The list includes all visible cross-version threads, nested comments, anchors, and per-comment permissions.
 - Treat `thread.anchor` as the current authoritative position. `thread.target` preserves the original text or image snapshot. Link annotation list and mutation results always return `author.email: null`; use the author id or handle for identity.
