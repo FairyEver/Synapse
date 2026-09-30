@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -133,7 +134,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
               {center.filter === "unread" && center.items.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => { void center.markAllRead() }}>全部已读</Button>}
             </div>
             {center.error && <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm text-destructive">{center.error}<Button type="button" variant="outline" size="default" onClick={() => { void center.refresh() }}>重试</Button></div>}
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <ScrollArea className="min-h-0 flex-1">
               {center.loading && center.items.length === 0 && <div role="status" aria-label="加载通知中" className="space-y-3 p-4"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>}
               {!center.loading && !center.error && center.items.length === 0 && <div className="py-16 text-center text-sm text-muted-foreground">这里没有通知</div>}
               {center.items.map((item) => {
@@ -149,9 +150,11 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                 </div>
               })}
               {center.cursor && <Button type="button" variant="ghost" className="h-12 w-full rounded-none" onClick={() => { void center.loadMore() }}>加载更多</Button>}
-            </div>
+            </ScrollArea>
           </section>
-          <section aria-label="通知内容" className={`${center.selected ? "block" : "hidden @3xl/message-center:block"} min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-7 @3xl/message-center:px-9`}><MessageDetail center={center} /></section>
+          <section aria-label="通知内容" className={`${center.selected ? "block" : "hidden @3xl/message-center:block"} min-h-0 min-w-0 flex-1`}>
+            <ScrollArea className="h-full" viewportClassName="px-6 py-7 @3xl/message-center:px-9"><MessageDetail center={center} /></ScrollArea>
+          </section>
         </div>
       </SheetContent>
     </Sheet>
