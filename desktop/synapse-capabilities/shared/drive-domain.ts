@@ -595,7 +595,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_list",
-      description: "List current user's Drive share links for /share/... access without returning share passwords. Shares let others browse, render previewable HTML, or download shared files and folders.",
+      description: "List current user's Drive share links for /share/... access without returning share passwords. Shares let others browse, render previewable HTML, or download shared files and folders. Show each URL to the user on a line of its own — never inside a table, which breaks a long URL where the phone cannot put it back together.",
       inputSchema: {
         type: "object",
         properties: shareSearchablePageInputProperties,
@@ -603,7 +603,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_create",
-      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Prefer this route for a standalone HTML file; it does not grant sibling relative-resource access. Use a webpage share only when the user explicitly asks to publish the whole containing folder; merely naming an upload destination folder or casually saying page, website, or site is not explicit folder-publishing intent. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link.",
+      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Prefer this route for a standalone HTML file; it does not grant sibling relative-resource access. Use a webpage share only when the user explicitly asks to publish the whole containing folder; merely naming an upload destination folder or casually saying page, website, or site is not explicit folder-publishing intent. Existing shares keep their password, expiry, and access mode unless access settings are supplied. accessMode controls read/edit permission without changing the share link. Show the returned URL to the user as the URL itself, on a line of its own — never inside a table, which breaks a long URL where the phone cannot put it back together.",
       inputSchema: {
         type: "object",
         properties: {
