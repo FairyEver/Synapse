@@ -54,6 +54,7 @@ describe("driveSyncIpcModule", () => {
       operations: [],
       health: {
         status: "error",
+        connectivity: "online",
         readOnly: false,
         lastError: "network unavailable",
         updatedAt: "2026-06-28T00:00:00.000Z",
@@ -102,6 +103,7 @@ describe("driveSyncIpcModule", () => {
       }],
       health: {
         status: "retrying",
+        connectivity: "offline",
         readOnly: true,
         lastError: "offline",
         updatedAt: "2026-06-28T00:00:00.000Z",
@@ -243,6 +245,61 @@ describe("driveSyncIpcModule", () => {
     expect(service.rescanBinding).toHaveBeenCalledWith("binding-1")
     expect(service.pollRemoteChanges).toHaveBeenCalledWith("binding-1")
     expect(service.resolveConflict).toHaveBeenCalledWith({ conflictId: "conflict-1", action: "keep_local" })
+  })
+
+  it("preserves health connectivity so the renderer can tell offline apart from logged out", () => {
+    const snapshot = {
+      bindings: [],
+      conflicts: [],
+      operations: [],
+      health: {
+        status: "paused",
+        connectivity: "offline",
+        readOnly: true,
+        lastError: null,
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      },
+      summary: {
+        activeBindingCount: 0,
+        runningOperationCount: 0,
+        retryWaitingOperationCount: 0,
+        conflictCount: 0,
+        errorCount: 0,
+      },
+    }
+    expect(driveSyncIpcModule.methods.getSnapshot.response?.parse(snapshot)).toEqual(snapshot)
+  })
+
+  it("preserves the initial transfer plan so the wizard can show what will be copied", () => {
+    const initialTransfer = {
+      totalEntries: 2,
+      fileCount: 1,
+      folderCount: 1,
+      totalBytes: "1024",
+      entries: [
+        { action: "create_local_folder", relativePath: "docs", size: null },
+        { action: "download_file", relativePath: "docs/spec.md", size: "1024" },
+      ],
+      truncated: false,
+    }
+    const preview = {
+      status: "ready",
+      direction: "remote_to_local",
+      reason: null,
+      localPath: "/tmp/project",
+      localKind: "missing",
+      localEmpty: null,
+      forcedExcludeRules: [".git/**"],
+      defaultExcludeRules: ["node_modules/"],
+      importedGitignoreRules: [],
+      detectedGitignoreRules: [],
+      initialTransfer,
+    }
+    expect(driveSyncIpcModule.methods.previewBinding.response?.parse(preview)).toEqual(preview)
+
+    const bindExisting = { ...preview, direction: "bind_existing", initialTransfer: null }
+    expect(driveSyncIpcModule.methods.previewBinding.response?.parse(bindExisting))
+      .toEqual(bindExisting)
   })
 
   it("chooses local paths with mode-specific dialogs", async () => {

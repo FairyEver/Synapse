@@ -76,6 +76,7 @@ const driveSyncSnapshotSchema = z.object({
   operations: z.array(driveSyncOperationSchema),
   health: z.object({
     status: z.enum(DRIVE_SYNC_HEALTH_STATUSES),
+    connectivity: z.enum(["online", "offline"]),
     readOnly: z.boolean(),
     lastError: z.string().nullable(),
     updatedAt: z.string().min(1),
@@ -89,6 +90,21 @@ const driveSyncSnapshotSchema = z.object({
   }),
 })
 
+const driveSyncInitialTransferEntrySchema = z.object({
+  action: z.enum(["upload_file", "download_file", "create_remote_folder", "create_local_folder"]),
+  relativePath: z.string(),
+  size: z.string().nullable(),
+})
+
+const driveSyncInitialTransferSchema = z.object({
+  totalEntries: z.number().int().nonnegative(),
+  fileCount: z.number().int().nonnegative(),
+  folderCount: z.number().int().nonnegative(),
+  totalBytes: z.string(),
+  entries: z.array(driveSyncInitialTransferEntrySchema),
+  truncated: z.boolean(),
+})
+
 const driveSyncBindingPreviewSchema = z.object({
   status: driveSyncBindingPreviewStatusSchema,
   direction: driveSyncInitialDirectionSchema.nullable(),
@@ -100,6 +116,7 @@ const driveSyncBindingPreviewSchema = z.object({
   defaultExcludeRules: z.array(z.string()),
   importedGitignoreRules: z.array(z.string()),
   detectedGitignoreRules: z.array(z.string()),
+  initialTransfer: driveSyncInitialTransferSchema.nullable(),
 })
 
 const driveSyncPreviewBindingInputSchema = z.object({
