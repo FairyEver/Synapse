@@ -116,7 +116,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
   return <>
     <Sheet open={center.open} onOpenChange={center.changeOpen}>
       <SheetTrigger asChild><Button variant="ghost" size="sm" aria-label={`通知，${center.unread} 条未读`} className="h-9 gap-1.5 px-3"><Bell className="size-4" />通知{center.unread > 0 && <Badge variant="secondary">{center.unread > 99 ? "99+" : center.unread}</Badge>}</Button></SheetTrigger>
-      <SheetContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => event.preventDefault()} className="@container/message-center gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-5xl">
+      <SheetContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => event.preventDefault()} className="@container/message-center gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-4xl">
         <SheetHeader className="flex h-16 shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-0">
           <div className="flex items-center gap-2"><SheetTitle className="text-lg font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</div>
           <div className="flex items-center gap-1">
@@ -126,7 +126,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
           </div>
         </SheetHeader>
         <div className="flex min-h-0 flex-1">
-          <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-96 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
+          <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-88 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
             <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-3">
               <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}><TabsList><TabsTrigger value="all">全部</TabsTrigger><TabsTrigger value="unread">未读{center.unread > 0 && ` ${center.unread}`}</TabsTrigger><TabsTrigger value="pending">待处理</TabsTrigger></TabsList></Tabs>
               {center.filter === "pending" && center.items.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => setClearScope("pending")}>忽略全部…</Button>}
