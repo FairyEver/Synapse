@@ -53,6 +53,7 @@ export default defineConfig({
   },
 
   themeConfig: {
+    appPublicUrl,
     logo: '/synapse-logo.png',
 
     notFound: {

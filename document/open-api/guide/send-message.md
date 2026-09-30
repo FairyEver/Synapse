@@ -39,6 +39,10 @@ curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/notifications' \
 | 表单式 | `POST /api/open/v1/notifications/{key}`，消息在请求体 | 只能提交表单编码的环境 |
 | 路径式 | `GET /api/open/v1/notifications/{key}/{title}/{body}` | 书签、快捷指令、webhook：不接受请求头和请求体 |
 
+## 请求构建器
+
+<NotificationRequestBuilder />
+
 路径式只需要一条 URL：
 
 ```bash
