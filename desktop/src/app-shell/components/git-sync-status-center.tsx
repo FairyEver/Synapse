@@ -132,12 +132,12 @@ function GitSyncStatusCenter({
           ) : null}
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={onOpenSettings}>
+            <Button variant="outline" size="default" onClick={onOpenSettings}>
               <Settings data-icon="inline-start" />
               仓库设置
             </Button>
             {canRetry ? (
-              <Button size="sm" onClick={onRetry}>
+              <Button size="default" onClick={onRetry}>
                 立即同步
               </Button>
             ) : null}

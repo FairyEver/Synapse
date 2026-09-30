@@ -218,7 +218,7 @@ export function WorkspaceFileTree({
       {failedPath !== null ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-3 text-sm text-muted-foreground">
           <span>无法读取目录</span>
-          <Button type="button" variant="outline" size="sm" onClick={handleRetry}>
+          <Button type="button" variant="outline" size="default" onClick={handleRetry}>
             重试
           </Button>
         </div>

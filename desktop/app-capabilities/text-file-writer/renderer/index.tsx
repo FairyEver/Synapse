@@ -202,7 +202,7 @@ function WriteSummary({ busy, path, status, onReveal }: {
     return (
       <div className="flex min-h-8 min-w-0 flex-1 items-center justify-between gap-3" role="status">
         <p className="min-w-0 truncate text-sm text-muted-foreground">已写入 {status.result.size} 字节</p>
-        <Button type="button" variant="ghost" size="sm" onClick={() => void onReveal()}>在文件夹中显示</Button>
+        <Button type="button" variant="ghost" size="default" onClick={() => void onReveal()}>在文件夹中显示</Button>
       </div>
     )
   }

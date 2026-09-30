@@ -283,7 +283,7 @@ export function GitCloneDialog({ open, busy, phase, environment, onOpenChange, o
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="default"
                   className="self-start"
                   onClick={() => onFailureAction?.({
                     cloneInput: {

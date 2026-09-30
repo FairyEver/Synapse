@@ -350,7 +350,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="default"
                     className="self-start"
                     onClick={() => {
                       if (operationFailure.primaryAction === "retry" && retryActionRef.current) {

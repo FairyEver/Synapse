@@ -54,7 +54,7 @@ function AutomationCardGrid({
           <EmptyDescription>新建后会按触发器执行。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button size="sm" disabled={createDisabled} onClick={onCreateNew}>
+          <Button size="default" disabled={createDisabled} onClick={onCreateNew}>
             <Plus />
             新建自动化
           </Button>

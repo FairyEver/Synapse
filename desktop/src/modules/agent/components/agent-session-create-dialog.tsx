@@ -274,7 +274,7 @@ function AgentSessionCreateDialog({
               {selectedPersona?.providerModel && providersError ? (
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-destructive">读取 Provider 失败</p>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void reloadProviders()}>
+                  <Button type="button" variant="outline" size="default" onClick={() => void reloadProviders()}>
                     重试
                   </Button>
                 </div>

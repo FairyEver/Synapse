@@ -1594,7 +1594,7 @@ export function TerminalModule({
       className="min-h-0 bg-background"
     >
       <div className="flex items-center justify-start">
-        <Button ref={createGroupActionRef} type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
+        <Button ref={createGroupActionRef} type="button" size="default" variant="outline" onClick={openCreateGroupDialog}>
           <Plus data-icon="inline-start" />
           新建分组
         </Button>
@@ -2157,7 +2157,7 @@ export function TerminalModule({
                 <EmptyTitle>暂无命令</EmptyTitle>
               </EmptyHeader>
               <EmptyContent>
-                <Button type="button" size="sm" onClick={openCreateCommandDialog}>
+                <Button type="button" size="default" onClick={openCreateCommandDialog}>
                   新增命令
                 </Button>
               </EmptyContent>

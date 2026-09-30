@@ -176,7 +176,7 @@ function McpSettingsPanel() {
         {serverStatusError ? (
           <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             <span>{serverStatusError}</span>
-            <Button variant="outline" size="sm" onClick={() => void refreshServerStatus()}>
+            <Button variant="outline" size="default" onClick={() => void refreshServerStatus()}>
               重试
             </Button>
           </div>
@@ -186,7 +186,7 @@ function McpSettingsPanel() {
             <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
               {serverStatus.url}
             </code>
-            <Button variant="outline" size="sm" onClick={handleCopyMcpUrl}>
+            <Button variant="outline" size="default" onClick={handleCopyMcpUrl}>
               <Copy data-icon="inline-start" />
               复制
             </Button>
@@ -221,7 +221,7 @@ function McpSettingsPanel() {
             <div className="flex shrink-0 items-center gap-2">
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 disabled={!server.settingsFileExists}
                 onClick={() => handleOpenSettings(server.id)}
               >
@@ -229,7 +229,7 @@ function McpSettingsPanel() {
               </Button>
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 disabled={Boolean(server.readError) || registrationDisabled}
                 onClick={() => handleRegisterMcp(server.id)}
               >

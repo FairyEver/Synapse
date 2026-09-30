@@ -1946,7 +1946,7 @@ function TerminalPane({
                 <p className="font-medium">正在被 {mobileOwner.deviceLabel} 使用</p>
                 <Button
                   type="button"
-                  size="sm"
+                  size="default"
                   variant="secondary"
                   data-track="terminal-pane-size-owner-reset"
                   onClick={(event) => {

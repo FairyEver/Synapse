@@ -317,7 +317,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit, restoreFocusRef }: Cr
                 </div>
               ))}
             </div>
-            <Button variant="outline" size="sm" data-track="database-create-column-add" onClick={databaseColumnCreate}>
+            <Button variant="outline" size="default" data-track="database-create-column-add" onClick={databaseColumnCreate}>
               + 添加列
             </Button>
           </div>

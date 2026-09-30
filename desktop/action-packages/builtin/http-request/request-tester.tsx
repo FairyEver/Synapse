@@ -43,12 +43,12 @@ export function RequestTester({ config }: { readonly config: HttpRequestActionCo
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        className="w-full h-8 text-xs gap-1"
+        size="default"
+        className="w-full"
         onClick={handleTest}
         disabled={loading}
       >
-        {loading ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+        {loading ? <Loader2 className="animate-spin" /> : <Play />}
         {loading ? "发送中…" : "发送测试"}
       </Button>
 

@@ -127,7 +127,7 @@ function AgentTimelineItem({
             <AlertDescription className="whitespace-pre-wrap break-words">{item.message}</AlertDescription>
             {onContinue ? (
               <AlertAction>
-                <Button type="button" variant="outline" size="sm" onClick={onContinue}>
+                <Button type="button" variant="outline" size="default" onClick={onContinue}>
                   继续
                 </Button>
               </AlertAction>
@@ -217,7 +217,7 @@ function AgentFileCheckpointCard({ item }: { readonly item: SynapseAgentFileChec
           <Button
             id={`agent-file-checkpoint-${item.checkpointId}-rewind`}
             type="button"
-            size="sm"
+            size="default"
             variant="ghost"
             onClick={() => openPanel({
               panelId: "agent.file-diff",
@@ -230,7 +230,7 @@ function AgentFileCheckpointCard({ item }: { readonly item: SynapseAgentFileChec
         {item.files.length > 0 ? <Button
           id={`agent-file-checkpoint-${item.checkpointId}-review`}
           type="button"
-          size="sm"
+          size="default"
           variant="outline"
           onClick={() => openPanel({
             panelId: "agent.file-diff",

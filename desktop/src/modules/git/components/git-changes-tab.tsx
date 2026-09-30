@@ -320,7 +320,7 @@ export function GitChangesTab({
                 <AlertDescription className="flex flex-wrap items-center gap-2">
                   <span>{commitNotice.text}</span>
                   {commitNotice.canPush && onPush ? (
-                    <Button type="button" variant="outline" size="sm" disabled={pushDisabled} onClick={onPush}>
+                    <Button type="button" variant="outline" size="default" disabled={pushDisabled} onClick={onPush}>
                       推送
                     </Button>
                   ) : null}

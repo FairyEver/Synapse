@@ -301,7 +301,7 @@ function DriveSiteBundledGuideBanner({ onOpen }: { readonly onOpen: () => void }
       <AlertTitle>打包网页需要相对路径</AlertTitle>
       <AlertDescription>分享前检查构建配置。</AlertDescription>
       <AlertAction>
-        <Button type="button" size="sm" variant="outline" onClick={onOpen}>查看设置</Button>
+        <Button type="button" size="default" variant="outline" onClick={onOpen}>查看设置</Button>
       </AlertAction>
     </Alert>
   )
@@ -362,11 +362,11 @@ function DriveSiteCreatedContent({ site }: { readonly site: DriveSiteDto }) {
         </div>
       ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copySiteUrl(site) }}>
+        <Button type="button" size="default" variant="outline" className="w-full sm:w-auto" onClick={() => { void copySiteUrl(site) }}>
           <Copy data-icon="inline-start" />
           复制链接
         </Button>
-        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void openExternal(site.urlWithPassword) }}>
+        <Button type="button" size="default" variant="outline" className="w-full sm:w-auto" onClick={() => { void openExternal(site.urlWithPassword) }}>
           <ExternalLink data-icon="inline-start" />
           打开网页
         </Button>

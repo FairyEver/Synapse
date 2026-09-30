@@ -175,7 +175,7 @@ function RepositoryListItem({
             {!isActive && (
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 disabled={isBusy || hasRunningRepositoryOperation || isSwitchingRepository}
                 onClick={() => void handleSwitch()}
               >
@@ -184,7 +184,7 @@ function RepositoryListItem({
             )}
             {hasRepositoryBridge && (
               <Button
-                size="sm"
+                size="default"
                 disabled={isBusy || !canSync}
                 onClick={() => void handleSync()}
               >
@@ -194,7 +194,7 @@ function RepositoryListItem({
             {canInitialize && (
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 disabled={isBusy}
                 onClick={() => onInitialize(repository)}
               >
@@ -203,7 +203,7 @@ function RepositoryListItem({
             )}
             <Button
               variant="ghost"
-              size="sm"
+              size="default"
               disabled={isBusy}
               onClick={() => onEdit(repository)}
             >
@@ -213,7 +213,7 @@ function RepositoryListItem({
         )}
         <Button
           variant="ghost"
-          size="sm"
+          size="default"
           disabled={isBusy}
           onClick={() => onRemove(repository.uuid)}
         >

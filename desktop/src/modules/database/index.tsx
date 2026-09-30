@@ -490,7 +490,7 @@ function DatabaseTablesView() {
                 <p className="text-xs text-muted-foreground">{loadError.message}</p>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="default"
                   onClick={handleRetryLoad}
                 >
                   重试
@@ -540,7 +540,7 @@ function DatabaseTablesView() {
                 <p className="text-xs text-muted-foreground">创建一张表开始使用</p>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="default"
                   onClick={() => {
                     void handleOpenCreateDialog().catch((error) => {
                       logger.warn("Open create dialog failed.", { error })

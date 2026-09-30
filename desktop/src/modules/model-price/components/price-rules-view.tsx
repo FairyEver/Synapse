@@ -237,7 +237,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
         <div data-price-rules-actions className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:justify-end">
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" disabled={busy}>
+              <Button type="button" variant="outline" size="default" disabled={busy}>
                 导入预设
               </Button>
             </DialogTrigger>
@@ -272,7 +272,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
           </Dialog>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" disabled={busy}>
+              <Button type="button" variant="outline" size="default" disabled={busy}>
                 <Trash2 data-icon="inline-start" />
                 清空
               </Button>
@@ -290,11 +290,11 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button ref={addButtonRef} type="button" variant="outline" size="sm" onClick={addRow} disabled={busy}>
+          <Button ref={addButtonRef} type="button" variant="outline" size="default" onClick={addRow} disabled={busy}>
             <Plus data-icon="inline-start" />
             添加
           </Button>
-          <Button type="button" size="sm" onClick={() => void save()} disabled={busy}>
+          <Button type="button" size="default" onClick={() => void save()} disabled={busy}>
             {saving ? "保存中" : "保存"}
           </Button>
         </div>

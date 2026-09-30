@@ -70,7 +70,7 @@ function DockPanel({ workflowEntryVisible }: DockPanelProps) {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="default"
                     disabled={dock.saving}
                     onClick={() => void dock.addDockApp(app.id)}
                   >

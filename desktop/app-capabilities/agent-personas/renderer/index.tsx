@@ -351,7 +351,7 @@ export function AgentPersonasModule() {
               <CircleAlert />
               <AlertTitle className="text-balance">加载失败</AlertTitle>
               <AlertDescription className="break-words">{loadError}</AlertDescription>
-              <Button type="button" variant="outline" size="sm" className="mt-2 w-fit" onClick={() => void reload()}>
+              <Button type="button" variant="outline" size="default" className="mt-2 w-fit" onClick={() => void reload()}>
                 <RefreshCw data-icon="inline-start" />
                 重试
               </Button>

@@ -92,7 +92,7 @@ export function WebhookTriggerConfigForm({
                 <span className="text-sm text-muted-foreground">
                   {savedWebhookLabel ? "列表加载失败" : "加载失败"}
                 </span>
-                <Button type="button" variant="outline" size="sm" onClick={loadWebhooks}>
+                <Button type="button" variant="outline" size="default" onClick={loadWebhooks}>
                   重试
                 </Button>
               </div>

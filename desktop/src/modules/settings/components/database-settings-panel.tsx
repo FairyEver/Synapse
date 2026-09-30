@@ -141,12 +141,12 @@ function DatabaseManagementCard({ status, onRefreshStatus }: DatabaseManagementC
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="default" onClick={handleExport}>
             导出数据库
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="default">
                 导入数据库
               </Button>
             </AlertDialogTrigger>

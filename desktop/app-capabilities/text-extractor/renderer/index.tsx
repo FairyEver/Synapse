@@ -113,11 +113,11 @@ export function TextExtractorModule() {
                   <CardDescription>{formatResultSummary(result)}</CardDescription>
                 </div>
                 <CardAction className="flex items-center gap-2">
-                  <Button type="button" variant="outline" size="sm" disabled={!result.text} onClick={() => void copyText()}>
+                  <Button type="button" variant="outline" size="default" disabled={!result.text} onClick={() => void copyText()}>
                     <Copy data-icon="inline-start" />
                     复制文本
                   </Button>
-                  <Button type="button" variant="outline" size="sm" disabled={!result.text} onClick={() => void saveText()}>
+                  <Button type="button" variant="outline" size="default" disabled={!result.text} onClick={() => void saveText()}>
                     <Save data-icon="inline-start" />
                     保存文本
                   </Button>

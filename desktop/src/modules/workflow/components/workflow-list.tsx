@@ -382,7 +382,7 @@ export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => vo
         <AlertCircle className="size-4" />
         <AlertDescription className="text-xs">{error}</AlertDescription>
       </Alert>
-      <Button size="sm" variant="outline" onClick={refresh}>
+      <Button size="default" variant="outline" onClick={refresh}>
         <RefreshCw data-icon="inline-start" />重试
       </Button>
     </div>
@@ -394,7 +394,7 @@ export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => vo
         <EmptyTitle>暂无工作流</EmptyTitle>
       </EmptyHeader>
       <EmptyContent>
-        <Button size="sm" variant="outline" onClick={onCreate}>
+        <Button size="default" variant="outline" onClick={onCreate}>
           <Plus data-icon="inline-start" />创建第一个工作流
         </Button>
       </EmptyContent>

@@ -10,7 +10,7 @@ function AgentDetachedPlaceholder({ onShowWindow }: AgentDetachedPlaceholderProp
   return (
     <div className="flex flex-col items-center gap-3">
       <p className="text-sm font-medium">已经在新窗口打开</p>
-      <Button type="button" variant="outline" size="sm" onClick={onShowWindow}>
+      <Button type="button" variant="outline" size="default" onClick={onShowWindow}>
         <ExternalLink data-icon="inline-start" />
         显示窗口
       </Button>

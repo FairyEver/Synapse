@@ -495,8 +495,8 @@ export function WorkflowEditorApp() {
               <AlertTitle className="text-xs font-medium">加载失败</AlertTitle>
               <AlertDescription className="text-xs">{loadError}</AlertDescription>
             </Alert>
-            <Button size="sm" variant="outline" onClick={() => { void loadDefinition() }}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+            <Button size="default" variant="outline" onClick={() => { void loadDefinition() }}>
+              <RefreshCw />重试
             </Button>
           </div>
         </div>

@@ -285,7 +285,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background text-sm text-muted-foreground">
         <p>{loadState.message}</p>
         {mode.mode === "edit" ? (
-          <Button size="sm" variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
+          <Button size="default" variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
             <RefreshCw />
             重试
           </Button>

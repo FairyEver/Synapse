@@ -220,7 +220,7 @@ export function useGitRepositoryInitialization() {
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
+                      size="default"
                       className="self-start"
                       onClick={() => {
                         if (failure.primaryAction === "retry") {

@@ -161,7 +161,7 @@ function SkillEnvSecretConfigDialog({ item, onOpenChange }: SkillEnvSecretConfig
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
+                      size="default"
                       disabled={config.saving}
                       onClick={() => void config.retryScan().then(handleOutcome)}
                     >

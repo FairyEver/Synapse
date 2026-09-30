@@ -366,7 +366,7 @@ function RunSummary(props: {
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="default"
             className="col-start-2 w-fit sm:col-start-3 sm:row-start-1"
             onClick={() => void props.onRevealResult()}
           >

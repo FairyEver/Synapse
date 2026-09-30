@@ -372,7 +372,7 @@ function DataTableFilterDialog({
             })}
           </div>
 
-          <Button variant="ghost" size="sm" className="w-fit px-2" data-track="database-filter-condition-add" onClick={handleAddCondition} disabled={!firstColumn}>
+          <Button variant="ghost" size="default" className="w-fit px-2" data-track="database-filter-condition-add" onClick={handleAddCondition} disabled={!firstColumn}>
             <Plus />
             添加条件
           </Button>

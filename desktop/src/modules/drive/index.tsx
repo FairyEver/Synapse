@@ -1021,7 +1021,7 @@ function DriveModuleContent() {
           title="需要登录账号"
           description="登录后才能查看云盘。"
           action={(
-            <Button size="sm" disabled={pendingAction === "login"} onClick={() => { void startLogin() }}>
+            <Button size="default" disabled={pendingAction === "login"} onClick={() => { void startLogin() }}>
               <CircleUserRound data-icon="inline-start" />
               登录
             </Button>
@@ -1038,7 +1038,7 @@ function DriveModuleContent() {
             title="需要登录账号"
             description="登录后才能查看云盘。"
             action={(
-              <Button size="sm" disabled={pendingAction === "login"} onClick={() => { void startLogin() }}>
+              <Button size="default" disabled={pendingAction === "login"} onClick={() => { void startLogin() }}>
                 <CircleUserRound data-icon="inline-start" />
                 登录
               </Button>
@@ -1053,7 +1053,7 @@ function DriveModuleContent() {
           title="云盘加载失败"
           description={error.message}
           action={(
-            <Button size="sm" variant="outline" onClick={() => { void loadItems() }}>
+            <Button size="default" variant="outline" onClick={() => { void loadItems() }}>
               <RefreshCw data-icon="inline-start" />
               重试
             </Button>
@@ -1850,7 +1850,7 @@ function DriveFileList({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="default"
                   disabled={loadingMoreItems}
                   onClick={onLoadMoreItems}
                 >
@@ -3014,7 +3014,7 @@ function DrivePublicLinkList({
       />
       {page?.hasMore ? (
         <div className="flex justify-center pt-1">
-          <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={() => { void onLoadMore() }}>
+          <Button type="button" size="default" variant="outline" disabled={loadingMore} onClick={() => { void onLoadMore() }}>
             {loadingMore ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
             加载更多
           </Button>
@@ -3152,7 +3152,7 @@ function DriveDialogErrorState({
         <EmptyDescription>{message}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button type="button" size="sm" variant="outline" onClick={() => { void onRetry() }}>
+        <Button type="button" size="default" variant="outline" onClick={() => { void onRetry() }}>
           <RefreshCw data-icon="inline-start" />
           重试
         </Button>
@@ -3234,10 +3234,10 @@ function DriveShareSuccessDialog({
               <InputGroupInput id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
             </InputGroup>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyDriveUrl(share.name, share.type, accessUrl) }}>
+              <Button type="button" size="default" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyDriveUrl(share.name, share.type, accessUrl) }}>
                 复制链接
               </Button>
-              <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void openDriveUrl(accessUrl) }}>
+              <Button type="button" size="default" variant="outline" className="w-full sm:w-auto" onClick={() => { void openDriveUrl(accessUrl) }}>
                 {isFolder ? "打开文件夹" : "打开文件"}
               </Button>
             </div>

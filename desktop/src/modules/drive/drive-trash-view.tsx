@@ -181,7 +181,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
             <EmptyTitle>读取失败</EmptyTitle>
           </EmptyHeader>
           <EmptyContent>
-            <Button type="button" size="sm" variant="outline" onClick={() => { void loadTrash() }}>
+            <Button type="button" size="default" variant="outline" onClick={() => { void loadTrash() }}>
               重试
             </Button>
           </EmptyContent>
@@ -247,7 +247,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
       {inlineToolbar ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="truncate text-base font-medium">回收站</h2>
-          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => { void loadTrash() }}>
+          <Button type="button" size="default" variant="outline" disabled={loading} onClick={() => { void loadTrash() }}>
             刷新
           </Button>
         </div>
@@ -258,7 +258,7 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
           {loadMoreError ? <span className="text-sm text-muted-foreground">{loadMoreError}</span> : null}
           <Button
             type="button"
-            size="sm"
+            size="default"
             variant="outline"
             disabled={loadingMore || nextOffset === null}
             onClick={() => {

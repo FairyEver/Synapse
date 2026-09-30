@@ -294,7 +294,7 @@ function TextView(props: {
         title="转写失败"
         description={meeting.failureReason ?? "未知原因。"}
         action={(
-          <Button variant="outline" size="sm" onClick={() => void props.onRetry()}>
+          <Button variant="outline" size="default" onClick={() => void props.onRetry()}>
             重试
           </Button>
         )}

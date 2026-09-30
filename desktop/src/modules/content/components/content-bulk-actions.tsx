@@ -62,22 +62,22 @@ function ContentBulkActions({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="default"
             disabled={filteredItemCount === 0 || isBatchBusy}
             onClick={() => onBatchActionChange("restore")}
           >
-            <RotateCcw className="mr-1 size-3.5" />
+            <RotateCcw />
             {busyBatchAction === "restore" ? "恢复中..." : "全部恢复"}
           </Button>
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="default"
             className="text-destructive hover:text-destructive"
             disabled={filteredItemCount === 0 || isBatchBusy}
             onClick={() => onBatchActionChange("purge")}
           >
-            <Trash2 className="mr-1 size-3.5" />
+            <Trash2 />
             {busyBatchAction === "purge" ? "删除中..." : "全部删除"}
           </Button>
         </div>

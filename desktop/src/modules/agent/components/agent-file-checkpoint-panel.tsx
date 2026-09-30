@@ -60,7 +60,7 @@ export function AgentFileCheckpointPanel({
           <Button
             ref={rewindButtonRef}
             type="button"
-            size="sm"
+            size="default"
             variant="outline"
             disabled={preparing}
             onClick={() => void prepareRewind()}

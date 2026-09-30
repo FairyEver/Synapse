@@ -335,8 +335,8 @@ function GlobalSettingsForm({ definition, projects, onChange, onLayoutDirectionC
           ) : (
             <p className="text-xs text-muted-foreground">暂无参数</p>
           )}
-          <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => setParamsOpen(true)}>
-            <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />
+          <Button size="default" variant="outline" className="w-full mt-1" onClick={() => setParamsOpen(true)}>
+            <SlidersHorizontal />
             编辑参数
           </Button>
         </div>

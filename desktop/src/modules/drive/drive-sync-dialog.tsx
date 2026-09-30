@@ -615,7 +615,7 @@ function DriveSyncStatusPanel({
       {snapshotError ? (
         <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm text-destructive">
           <span>{snapshotError}</span>
-          <Button type="button" size="sm" variant="outline" disabled={globalRetrying} onClick={() => { void retrySnapshotLoad() }}>重试</Button>
+          <Button type="button" size="default" variant="outline" disabled={globalRetrying} onClick={() => { void retrySnapshotLoad() }}>重试</Button>
         </div>
       ) : null}
       {readOnly ? (
@@ -626,7 +626,7 @@ function DriveSyncStatusPanel({
       {snapshot?.health.lastError ? (
         <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm text-destructive">
           <span>{snapshot.health.lastError}</span>
-          <Button type="button" size="sm" variant="outline" disabled={globalRetrying || readOnly} onClick={() => { void retryGlobalSync() }}>重试</Button>
+          <Button type="button" size="default" variant="outline" disabled={globalRetrying || readOnly} onClick={() => { void retryGlobalSync() }}>重试</Button>
         </div>
       ) : null}
       {snapshot ? (
@@ -893,7 +893,7 @@ function DriveSyncBindingDetailDialog({
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
+                          size="default"
                           disabled={readOnly || isBindingActionPending(binding.id)}
                           onClick={() => {
                             void runBindingAction(

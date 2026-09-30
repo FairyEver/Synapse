@@ -298,7 +298,7 @@ function EditorScanModule() {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-2">
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" onClick={() => void handleRefresh()}>
+          <Button variant="outline" size="default" onClick={() => void handleRefresh()}>
             重试
           </Button>
         </div>
@@ -334,7 +334,7 @@ function EditorScanModule() {
             <TriangleAlert />
             <AlertDescription>刷新失败，当前显示的可能是过期数据</AlertDescription>
             <AlertAction>
-              <Button variant="outline" size="sm" onClick={() => void handleRefresh()} disabled={loading}>
+              <Button variant="outline" size="default" onClick={() => void handleRefresh()} disabled={loading}>
                 重试
               </Button>
             </AlertAction>

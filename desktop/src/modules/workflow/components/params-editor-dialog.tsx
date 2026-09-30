@@ -266,12 +266,12 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
             ))}
             <Button
               type="button"
-              size="sm"
+              size="default"
               variant="ghost"
-              className="h-7 text-xs text-muted-foreground justify-start gap-1.5 px-2 border border-dashed w-fit"
+              className="text-muted-foreground justify-start border border-dashed w-fit"
               onClick={addOption}
             >
-              <Plus className="h-3 w-3" />添加选项
+              <Plus />添加选项
             </Button>
           </div>
         </div>
@@ -416,12 +416,12 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
             />
           ))}
           <Button
-            size="sm"
+            size="default"
             variant="ghost"
-            className="h-7 text-xs text-muted-foreground justify-start gap-1.5 px-2 border border-dashed w-fit"
+            className="text-muted-foreground justify-start border border-dashed w-fit"
             onClick={addParam}
           >
-            <Plus className="h-3 w-3" />添加参数
+            <Plus />添加参数
           </Button>
           </div>
         </ScrollArea>

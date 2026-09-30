@@ -86,7 +86,7 @@ function SortableDockItem({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="default"
           disabled={disabled}
           onClick={() => onRemove(app.id)}
         >

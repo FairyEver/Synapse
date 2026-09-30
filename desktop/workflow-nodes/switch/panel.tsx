@@ -263,7 +263,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
       <CollapsibleSection title="判断指令" summary={promptSummary}>
         <div className="grid gap-2">
           <div className="flex justify-end">
-            <Button type="button" size="sm" variant="outline" onClick={applyRoutePromptTemplate}>
+            <Button type="button" size="default" variant="outline" onClick={applyRoutePromptTemplate}>
               <FileText data-icon="inline-start" />
               套用路由模板
             </Button>

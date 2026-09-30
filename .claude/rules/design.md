@@ -104,6 +104,8 @@ primitive: radix-ui  # 组件底座，通过 package.json 依赖和组件实现�
 
 保持当前 Radix 基线，不要重新引入 `@base-ui/react` 或切回 Base UI。
 
+桌面端文字 `Button` 默认使用 `default`（32px）；纯图标按钮默认使用 `icon`。`sm`、`xs`、`icon-sm`、`icon-xs` 仅用于有明确行高、宽度或相邻控件对齐约束的紧凑区域，不能作为次要操作的默认尺寸。具体例外和检查方法见 `docs/agents/ui-and-product.md`。
+
 ## 6. App Shell
 
 App shell 与业务模块共享同一套视觉基线：

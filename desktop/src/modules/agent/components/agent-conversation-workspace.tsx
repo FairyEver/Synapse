@@ -794,7 +794,7 @@ function AgentConversationWorkspace({
         <Alert>
           <AlertDescription className="flex items-center justify-between gap-3">
             <span>该智能体不可用，请新建对话。</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => openCreateDialog()}>
+            <Button type="button" variant="outline" size="default" onClick={() => openCreateDialog()}>
               新建对话
             </Button>
           </AlertDescription>

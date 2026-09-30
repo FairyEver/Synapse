@@ -555,7 +555,7 @@ function ProviderPanelView({
         {error ? (
           <div className="flex items-center gap-2">
             <p className="text-sm text-destructive">{error}</p>
-            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            <Button type="button" variant="outline" size="default" onClick={onRetry}>
               重试
             </Button>
           </div>

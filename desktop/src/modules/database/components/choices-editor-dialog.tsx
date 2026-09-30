@@ -286,12 +286,12 @@ function ChoicesEditorDialog({
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="default"
               data-track="database-column-choice-add"
               onClick={handleAdd}
               disabled={!inputValue.trim() || saving}
             >
-              <Plus className="size-3.5" />
+              <Plus />
               添加
             </Button>
           </div>

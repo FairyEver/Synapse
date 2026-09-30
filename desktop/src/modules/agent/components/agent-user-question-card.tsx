@@ -181,7 +181,7 @@ function AgentUserQuestionCard({
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="default"
             className="relative after:absolute after:inset-x-0 after:-inset-y-1.5"
             disabled={submitting}
             onClick={() => void handleSkip()}
@@ -190,7 +190,7 @@ function AgentUserQuestionCard({
           </Button>
           <Button
             type="button"
-            size="sm"
+            size="default"
             className="relative after:absolute after:inset-x-0 after:-inset-y-1.5"
             disabled={!complete || submitting}
             onClick={() => void handleSubmit()}

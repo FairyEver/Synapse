@@ -366,16 +366,16 @@ export function GitAccessPanel({
             <AlertTitle>{selectedHost?.lastFailure?.title ?? selectedHost?.host ?? "待处理访问"}</AlertTitle>
             <AlertDescription>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button type="button" size="sm" disabled={retrying} onClick={() => void onRetryPendingAction()}>
+                <Button type="button" size="default" disabled={retrying} onClick={() => void onRetryPendingAction()}>
                   {retrying ? "重试中" : retryLabel(pendingAction)}
                 </Button>
                 {(pendingAction.protocol === "http" || pendingAction.protocol === "https") && activeHttpsHost && !isGithubHttps ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCredentialOpen(true)}>
+                  <Button type="button" variant="outline" size="default" onClick={() => setCredentialOpen(true)}>
                     登录仓库
                   </Button>
                 ) : null}
                 {pendingAction.protocol === "ssh" ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setSshKeyOpen(true)}>
+                  <Button type="button" variant="outline" size="default" onClick={() => setSshKeyOpen(true)}>
                     生成 SSH 密钥
                   </Button>
                 ) : null}
@@ -407,7 +407,7 @@ export function GitAccessPanel({
           <CardHeader>
             <CardTitle>凭据助手</CardTitle>
             <CardAction>
-              <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void onRefresh()}>
+              <Button type="button" variant="outline" size="default" disabled={loading} onClick={() => void onRefresh()}>
                 <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
                 重新检测
               </Button>

@@ -108,7 +108,7 @@ export function TriggerVariablesDialog({
   return (
     <Dialog data-track="automation-trigger-variables-dialog" open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
+        <Button type="button" variant="outline" size="default">
           变量
         </Button>
       </DialogTrigger>
@@ -252,7 +252,7 @@ function DynamicVariableRow({
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="default"
           disabled={!canCopy}
           onClick={() => onCopy(template)}
         >

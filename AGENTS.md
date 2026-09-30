@@ -62,6 +62,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 ## 桌面 Renderer UI 与产品文案底线
 
 - 使用当前 shadcn/Radix 组件、主题 token 和现有模块实现；禁止自定义颜色、hex/rgb/hsl、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和普通场景的内联样式。
+- 桌面文字按钮默认使用 `Button` 标准尺寸；仅在表格/列表行内、紧凑工具栏、附件标签等确有布局约束的位置使用 `sm`/`xs`。纯图标小按钮也必须有同类空间依据；不得因按钮是次要操作、ghost 或想让界面显得紧凑而缩小。具体判定见 `docs/agents/ui-and-product.md`。
 - UI 文案只保留必要标题、label、操作和空/错/加载状态；禁止功能介绍、实现解释、重复状态、营销文案和 AI 自称。
 - 写 UI 前必须检查 `desktop/components.json`、`desktop/src/styles/globals.css`、`desktop/src/components/ui/` 和当前模块实现。
 

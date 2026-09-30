@@ -315,7 +315,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
             <EmptyTitle>读取失败</EmptyTitle>
           </EmptyHeader>
           <EmptyContent>
-            <Button type="button" size="sm" variant="outline" onClick={() => { void loadAssets() }}>
+            <Button type="button" size="default" variant="outline" onClick={() => { void loadAssets() }}>
               重试
             </Button>
           </EmptyContent>
@@ -408,10 +408,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
             {uploading ? <Badge variant="outline">上传中</Badge> : null}
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => uploadInputRef.current?.click()}>
+            <Button type="button" size="default" variant="outline" disabled={uploading} onClick={() => uploadInputRef.current?.click()}>
               上传公开素材
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => { void loadAssets() }}>
+            <Button type="button" size="default" variant="outline" disabled={loading} onClick={() => { void loadAssets() }}>
               刷新
             </Button>
           </div>
@@ -436,7 +436,7 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
           {loadMoreError ? <span className="text-sm text-muted-foreground">{loadMoreError}</span> : null}
           <Button
             type="button"
-            size="sm"
+            size="default"
             variant="outline"
             disabled={loadingMore || nextOffset === null}
             onClick={() => {

@@ -81,7 +81,7 @@ function MessageDetail({ center }: { center: Center }) {
       <Button type="button" variant="ghost" size="sm" className="-ml-2 @3xl/message-center:hidden" onClick={center.closeDetail}><ArrowLeft />返回列表</Button>
       <span className="text-xs text-muted-foreground">{sourceName(item)}{isPending(item) && " · 待处理"}</span>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="通知操作"><MoreHorizontal /></Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="通知操作"><MoreHorizontal /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {notificationActions(center, item).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}
         </DropdownMenuContent>
@@ -98,11 +98,11 @@ function MessageDetail({ center }: { center: Center }) {
         <dt className="text-muted-foreground">时间</dt><dd>{new Date(item.createdAt).toLocaleString("zh-CN")}</dd>
       </dl>}
       <div className="mt-7 border-t pt-6">
-        {isMail && center.mailError && <div role="alert" className="mb-4 flex items-center gap-2 text-sm text-destructive">{center.mailError}<Button type="button" variant="outline" size="sm" onClick={center.retryMail}>重试</Button></div>}
+        {isMail && center.mailError && <div role="alert" className="mb-4 flex items-center gap-2 text-sm text-destructive">{center.mailError}<Button type="button" variant="outline" size="default" onClick={center.retryMail}>重试</Button></div>}
         <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
-      {action && <div className="mt-7 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button></div>}
+      {action && <div className="mt-7 flex flex-wrap gap-2"><Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button></div>}
     </>}
   </article>
 }
@@ -120,9 +120,9 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
         <SheetHeader className="flex h-16 shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-0">
           <div className="flex items-center gap-2"><SheetTitle className="text-lg font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</div>
           <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="sm" disabled={!center.unread} onClick={() => { void center.markAllRead() }}>全部设为已读</Button>
-            <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="更多操作"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem><DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="关闭通知中心" onClick={() => center.changeOpen(false)}><X /></Button>
+            <Button type="button" variant="ghost" size="default" disabled={!center.unread} onClick={() => { void center.markAllRead() }}>全部设为已读</Button>
+            <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="更多操作"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem><DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+            <Button type="button" variant="ghost" size="icon" aria-label="关闭通知中心" onClick={() => center.changeOpen(false)}><X /></Button>
           </div>
         </SheetHeader>
         <div className="flex min-h-0 flex-1">
@@ -132,7 +132,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
               {center.filter === "pending" && center.items.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => setClearScope("pending")}>忽略全部…</Button>}
               {center.filter === "unread" && center.items.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => { void center.markAllRead() }}>全部已读</Button>}
             </div>
-            {center.error && <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm text-destructive">{center.error}<Button type="button" variant="outline" size="sm" onClick={() => { void center.refresh() }}>重试</Button></div>}
+            {center.error && <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm text-destructive">{center.error}<Button type="button" variant="outline" size="default" onClick={() => { void center.refresh() }}>重试</Button></div>}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {center.loading && center.items.length === 0 && <div role="status" aria-label="加载通知中" className="space-y-3 p-4"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>}
               {!center.loading && !center.error && center.items.length === 0 && <div className="py-16 text-center text-sm text-muted-foreground">这里没有通知</div>}

@@ -81,18 +81,18 @@ function AutomationCard({
         </div>
         <div className="shrink-0">
           {activeRunning ? (
-            <Button variant="destructive" size="sm" onClick={onStop}>
-              <Square className="size-3.5" />
+            <Button variant="destructive" size="default" onClick={onStop}>
+              <Square />
               停止
             </Button>
           ) : (
             <Button
               variant={item.lastStatus === "failed" || item.lastStatus === "timeout" ? "default" : "secondary"}
-              size="sm"
+              size="default"
               disabled={disabled || pending || running}
               onClick={onRun}
             >
-              <Play className="size-3.5" />
+              <Play />
               {item.lastStatus === "failed" || item.lastStatus === "timeout" ? "重试" : "运行"}
             </Button>
           )}
@@ -130,16 +130,16 @@ function AutomationCard({
       <div className="mt-auto flex items-center justify-end gap-1 pt-4">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" disabled={pending} aria-label="编辑" onClick={onEdit}>
-              <Pencil className="size-3.5" />
+            <Button variant="ghost" size="icon" disabled={pending} aria-label="编辑" onClick={onEdit}>
+              <Pencil />
             </Button>
           </TooltipTrigger>
           <TooltipContent>编辑</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" disabled={pending} aria-label="历史" onClick={onHistory}>
-              <History className="size-3.5" />
+            <Button variant="ghost" size="icon" disabled={pending} aria-label="历史" onClick={onHistory}>
+              <History />
             </Button>
           </TooltipTrigger>
           <TooltipContent>历史</TooltipContent>
@@ -148,12 +148,12 @@ function AutomationCard({
           <TooltipTrigger asChild>
             <Button
               variant="destructive"
-              size="icon-sm"
+              size="icon"
               disabled={deleteDisabled}
               aria-label={activeRunning ? "运行中不能删除" : "删除"}
               onClick={onDelete}
             >
-              <Trash2 className="size-3.5" />
+              <Trash2 />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{activeRunning ? "先停止运行" : "删除"}</TooltipContent>

@@ -457,11 +457,11 @@ export function WorkflowRunnerApp() {
               <AlertDescription>{description}</AlertDescription>
             </Alert>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={handleRetry}>
+              <Button size="default" variant="outline" onClick={handleRetry}>
                 <RefreshCw data-icon="inline-start" />
                 重试
               </Button>
-              <Button size="sm" variant="outline" onClick={handleOpenEditor}>
+              <Button size="default" variant="outline" onClick={handleOpenEditor}>
                 打开当前工作流
               </Button>
             </div>
@@ -478,8 +478,8 @@ export function WorkflowRunnerApp() {
               <AlertTitle className="text-xs font-medium">无法加载运行结果</AlertTitle>
               <AlertDescription className="text-xs">{loadError}</AlertDescription>
             </Alert>
-            <Button size="sm" variant="outline" onClick={handleRetry}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+            <Button size="default" variant="outline" onClick={handleRetry}>
+              <RefreshCw />重试
             </Button>
           </div>
         </div>

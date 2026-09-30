@@ -199,7 +199,7 @@ function ContentStateView({ description, icon: Icon, onRetry, title }: ContentSt
         <EmptyTitle>{title}</EmptyTitle>
         {description ? <EmptyDescription>{description}</EmptyDescription> : null}
         {onRetry ? (
-          <Button variant="outline" size="sm" onClick={onRetry}>
+          <Button variant="outline" size="default" onClick={onRetry}>
             重试
           </Button>
         ) : null}

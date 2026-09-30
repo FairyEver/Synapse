@@ -252,7 +252,7 @@ function LogExportPanel() {
         <CardContent className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            size="sm"
+            size="default"
             disabled={isBusy}
             onClick={handleExport}
           >
@@ -269,7 +269,7 @@ function LogExportPanel() {
 
           <Button
             variant="outline"
-            size="sm"
+            size="default"
             disabled={isBusy}
             onClick={handleCopyToClipboard}
           >
@@ -283,7 +283,7 @@ function LogExportPanel() {
 
           <Button
             variant="destructive"
-            size="sm"
+            size="default"
             disabled={isBusy}
             onClick={() => {
               logger.info("Log clear confirm dialog opened.")

@@ -197,7 +197,7 @@ export function GitRepositoryList({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
+                        size="default"
                         className="self-start"
                         onClick={() => onHandleFailure?.(failure)}
                       >

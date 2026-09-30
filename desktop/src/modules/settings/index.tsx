@@ -254,7 +254,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
             <p className="text-sm text-destructive">{error}</p>
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               onClick={() => void refreshConfig()}
             >
               重试

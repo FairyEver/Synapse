@@ -123,7 +123,7 @@ export function ScriptAutomationConfigForm<T extends ScriptAutomationConfig>({
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="default"
           data-track="script-runtime.input.add"
           onClick={() => update({
             inputs: [...value.inputs, { name: "", source: { type: "static", value: null } }],

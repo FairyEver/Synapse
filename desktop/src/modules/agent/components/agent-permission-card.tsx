@@ -110,7 +110,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
         <div className="flex items-center gap-2 border-t border-border px-3 py-2">
           <Button
             variant="outline"
-            size="sm"
+            size="default"
             disabled={submitting}
             onClick={() => handleRespond("deny")}
           >
@@ -118,7 +118,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
             拒绝
           </Button>
           <Button
-            size="sm"
+            size="default"
             disabled={submitting}
             variant={item.sessionDirectoryGrantAvailable ? "outline" : "default"}
             onClick={() => handleRespond(
@@ -131,7 +131,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
           </Button>
           {item.sessionDirectoryGrantAvailable ? (
             <Button
-              size="sm"
+              size="default"
               disabled={submitting}
               onClick={() => handleRespond("allow", "session")}
             >

@@ -426,11 +426,11 @@ export function GitEnvironmentPanel({
           title="Git 环境"
           action={(
             <>
-                <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void onRefresh()}>
+                <Button type="button" variant="outline" size="default" disabled={loading} onClick={() => void onRefresh()}>
                   <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
                   重新检测
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void copyDiagnostics()}>
+                <Button type="button" variant="outline" size="default" onClick={() => void copyDiagnostics()}>
                   <ClipboardCheck data-icon="inline-start" />
                   复制诊断信息
                 </Button>

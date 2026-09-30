@@ -1076,7 +1076,7 @@ function ScanItemDetailDialog({
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm">
+                <Button type="button" variant="outline" size="default">
                   {isQuickPublishBusy ? (
                     <LoaderCircle className="animate-spin" data-icon="inline-start" />
                   ) : (

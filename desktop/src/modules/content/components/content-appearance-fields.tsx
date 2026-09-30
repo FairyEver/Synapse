@@ -128,7 +128,7 @@ function ContentImageField({
             <ImageCropDialog ref={cropDialogRef} onCropped={handleCropped}>
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 type="button"
                 data-track="content-icon-image-select"
               >
@@ -137,7 +137,7 @@ function ContentImageField({
             </ImageCropDialog>
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               type="button"
               data-track="content-icon-image-paste"
               onClick={handlePasteClick}
@@ -165,7 +165,7 @@ function ContentImageField({
           <ImageCropDialog ref={cropDialogRef} onCropped={handleCropped}>
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               type="button"
               data-track="content-icon-image-replace"
             >
@@ -175,7 +175,7 @@ function ContentImageField({
           </ImageCropDialog>
           <Button
             variant="outline"
-            size="sm"
+            size="default"
             type="button"
             data-track="content-icon-image-remove"
             onClick={onIconImageRemove}

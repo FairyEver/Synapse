@@ -64,7 +64,7 @@ function AgentAllowedDirectoriesPanel() {
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="default"
             className="shrink-0"
             onClick={() => void addDirectory()}
             disabled={isSelecting}

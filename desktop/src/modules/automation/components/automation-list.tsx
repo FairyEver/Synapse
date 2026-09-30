@@ -50,7 +50,7 @@ function AutomationList({
           <EmptyTitle>暂无自动化</EmptyTitle>
         </EmptyHeader>
         <EmptyContent>
-          <Button size="sm" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
+          <Button size="default" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
             <Plus data-icon="inline-start" />
             新建
           </Button>

@@ -87,7 +87,7 @@ export function GitHistoryTab({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="default"
                     disabled={history.loadingMore}
                     onClick={() => void history.loadMore()}
                   >

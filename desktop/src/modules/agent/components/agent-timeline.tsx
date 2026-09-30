@@ -83,7 +83,7 @@ function AgentTimeline({
             {loadingOlder ? (
               <p className="text-sm text-muted-foreground">加载中</p>
             ) : historyError || hasMore ? (
-              <Button type="button" variant="ghost" size="sm" onClick={onRetryHistory}>
+              <Button type="button" variant="ghost" size="default" onClick={onRetryHistory}>
                 {historyError ? "重试加载" : "加载历史消息"}
               </Button>
             ) : sending ? (
@@ -98,7 +98,7 @@ function AgentTimeline({
               <p className="py-2 text-center text-sm text-muted-foreground">加载中</p>
             ) : historyError || hasMore ? (
               <div className="flex justify-center py-1">
-                <Button type="button" variant="ghost" size="sm" onClick={onRetryHistory}>
+                <Button type="button" variant="ghost" size="default" onClick={onRetryHistory}>
                   {historyError ? "重试加载" : "加载历史消息"}
                 </Button>
               </div>

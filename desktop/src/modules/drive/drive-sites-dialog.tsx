@@ -285,7 +285,7 @@ function DriveSiteTableContent({
           <EmptyDescription>{error}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button type="button" size="sm" variant="outline" onClick={() => { void onReload() }}>
+          <Button type="button" size="default" variant="outline" onClick={() => { void onReload() }}>
             <RefreshCw data-icon="inline-start" />
             重试
           </Button>
@@ -323,7 +323,7 @@ function DriveSiteTableContent({
       </Table>
       {page?.hasMore ? (
         <div className="flex justify-center">
-          <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
+          <Button type="button" size="default" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
             {loadingMore ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
             加载更多
           </Button>

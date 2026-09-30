@@ -193,7 +193,7 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
             {providersError ? (
               <div className="flex items-center gap-2">
                 <p className="text-sm text-destructive">{providersError}</p>
-                <Button type="button" variant="outline" size="sm" onClick={() => void loadProviders()}>
+                <Button type="button" variant="outline" size="default" onClick={() => void loadProviders()}>
                   重试
                 </Button>
               </div>

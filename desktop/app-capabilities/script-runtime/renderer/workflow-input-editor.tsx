@@ -75,7 +75,7 @@ export function WorkflowScriptInputEditor({
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        size="default"
         data-track="script-runtime.input.add"
         onClick={() => onChange([
           ...value,

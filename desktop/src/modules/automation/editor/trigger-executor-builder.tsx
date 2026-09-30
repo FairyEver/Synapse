@@ -67,7 +67,7 @@ function BuilderHeader({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="default"
           className="-mr-2 shrink-0"
           aria-label={actionAriaLabel}
           onClick={onAction}

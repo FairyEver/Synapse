@@ -159,8 +159,8 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs">{error}</AlertDescription>
                 </Alert>
-                <Button size="sm" variant="outline" onClick={load}>
-                  <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+                <Button size="default" variant="outline" onClick={load}>
+                  <RefreshCw />重试
                 </Button>
               </div>
             ) : snapshots.length === 0 ? (

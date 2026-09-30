@@ -103,6 +103,7 @@ Tailwind 主要用于：
 - 需要定制时，优先调整主题 token 或共享组件层，而不是在页面里零散覆盖
 - 新建共享 UI 前，先确认现有 `desktop/src/components/ui/` 是否可直接使用或是否应先补一个 shadcn 组件
 - 不要为了单个页面或单个模块，在 `desktop/src/components/` 新建与 shadcn 等价的按钮、输入框、卡片、弹窗、标签等基础组件
+- `Button` 默认使用标准尺寸；只有表格/列表行内、附件标签、密集工具栏、System App 顶栏或对齐小控件等确有空间约束的位置，才能使用 `sm`/`xs` 及小图标尺寸。不能用 `h-6`/`h-7` 或 `text-xs` 把普通按钮伪装成小尺寸；详见 `docs/agents/ui-and-product.md`。
 
 优先使用的组件包括：
 

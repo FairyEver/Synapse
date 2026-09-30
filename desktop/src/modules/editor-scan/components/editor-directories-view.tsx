@@ -32,7 +32,7 @@ function EditorDirectoriesView({ selectedEditorId }: EditorDirectoriesViewProps)
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
         <p>{error}</p>
-        <Button variant="outline" size="sm" onClick={reload}>重试</Button>
+        <Button variant="outline" size="default" onClick={reload}>重试</Button>
       </div>
     )
   }

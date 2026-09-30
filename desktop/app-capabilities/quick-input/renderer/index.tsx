@@ -217,7 +217,7 @@ export function QuickInputModule() {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="default"
                 className="mt-2 w-fit"
                 onClick={() => void reload()}
               >

@@ -352,7 +352,7 @@ function AutomationModule() {
             <EmptyTitle>{error}</EmptyTitle>
           </EmptyHeader>
           <EmptyContent>
-            <Button size="sm" variant="outline" onClick={() => { void refresh() }}>
+            <Button size="default" variant="outline" onClick={() => { void refresh() }}>
               <RefreshCw data-icon="inline-start" />
               重试
             </Button>

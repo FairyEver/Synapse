@@ -136,7 +136,7 @@ export function GitInstallPanel({
           <CardHeader>
             <CardTitle>安装 Git</CardTitle>
             <CardAction>
-              <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void onRefresh()}>
+              <Button type="button" variant="outline" size="default" disabled={loading} onClick={() => void onRefresh()}>
                 <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
                 重新检测
               </Button>

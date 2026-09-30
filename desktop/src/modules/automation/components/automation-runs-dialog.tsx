@@ -135,7 +135,7 @@ function AutomationRunsDialog({
                 {error ? (
                   <div className="flex items-center gap-2 text-sm">
                     <p className="text-destructive">{error}</p>
-                    <Button size="sm" variant="outline" onClick={handleRetry}>
+                    <Button size="default" variant="outline" onClick={handleRetry}>
                       <RefreshCw />
                       重试
                     </Button>

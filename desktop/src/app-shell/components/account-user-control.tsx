@@ -136,23 +136,23 @@ function AccountUserControl({
             <>
               {isAccountOffline(state) ? (
                 <>
-                  <Button data-track="account.refresh.click" variant="outline" size="sm" disabled={isBusy} onClick={handleRefresh}>
+                  <Button data-track="account.refresh.click" variant="outline" size="default" disabled={isBusy} onClick={handleRefresh}>
                     <RefreshCw data-icon="inline-start" className={pendingAction === "refresh" ? "animate-spin" : undefined} />
                     重试连接
                   </Button>
-                  <Button data-track="account.login.click" variant="outline" size="sm" disabled={isBusy} onClick={handleLogin}>
+                  <Button data-track="account.login.click" variant="outline" size="default" disabled={isBusy} onClick={handleLogin}>
                     <LogIn data-icon="inline-start" />
                     重新登录
                   </Button>
                 </>
               ) : null}
-              <Button data-track="account.logout.click" variant="outline" size="sm" disabled={isBusy} onClick={handleLogout}>
+              <Button data-track="account.logout.click" variant="outline" size="default" disabled={isBusy} onClick={handleLogout}>
                 <LogOut data-icon="inline-start" />
                 退出
               </Button>
             </>
           ) : (
-            <Button data-track={isAuthenticating ? "account.login.cancel.click" : "account.login.click"} size="sm" disabled={isActionPending} onClick={isAuthenticating ? handleCancelLogin : handleLogin}>
+            <Button data-track={isAuthenticating ? "account.login.cancel.click" : "account.login.click"} size="default" disabled={isActionPending} onClick={isAuthenticating ? handleCancelLogin : handleLogin}>
               {isAuthenticating ? (
                 <LoaderCircle data-icon="inline-start" className="animate-spin" />
               ) : (

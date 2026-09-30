@@ -63,7 +63,7 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
             data-track="usage-analysis.refresh"
             type="button"
             variant="outline"
-            size="sm"
+            size="default"
             disabled={props.refreshing}
             aria-busy={props.refreshing}
             onClick={props.onRefresh}

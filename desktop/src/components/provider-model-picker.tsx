@@ -59,7 +59,7 @@ function ProviderModelPicker({
       <div className={cn("flex min-h-20 items-center gap-2 rounded-lg border px-3", className)}>
         <p className="text-sm text-destructive">{error}</p>
         {onRetry ? (
-          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onRetry}>
+          <Button type="button" variant="outline" size="default" disabled={disabled} onClick={onRetry}>
             重试
           </Button>
         ) : null}
