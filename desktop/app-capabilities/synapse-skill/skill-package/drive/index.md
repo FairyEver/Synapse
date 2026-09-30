@@ -168,6 +168,8 @@ For comments on a `/share/...` Markdown document identified by a `.md` name or M
 
 For unanchored messages below an owned or shared Markdown document, use `app_drive_message_*` tools. Pass `target: { kind: "owned", itemId }` for your own file or `target: { kind: "share", url, password?, itemId?, path? }` for a shared file. List first to obtain message/reply ids and permissions. Message and reply bodies are plain text, at most 4000 characters. Reply with `messageId` and optional `parentCommentId` for any depth. Editing requires authorship; deletion requires authorship or file ownership and removes all descendants. Confirm the exact target before deletion.
 
+In user requests, “留言” / “留个言” means an unanchored message below the document; “在这段原文上评论” / “正文批注” means an annotation anchored to selected text. Do not create an annotation thread for a request to leave a message below the document.
+
 - List threads before acting so ids and current permissions are fresh. The list includes all visible cross-version threads, nested comments, anchors, and per-comment permissions.
 - Treat `thread.anchor` as the current authoritative position. `thread.target` preserves the original text or image snapshot. Link annotation list and mutation results always return `author.email: null`; use the author id or handle for identity.
 - For a new text thread, pass visible text as `target.exact`; add `prefix` and/or `suffix` when the exact text repeats. For a whole-image thread, first call `app_drive_link_read_text`, take the current `imageId` from `markdownImages`, then pass `target: { kind: "image", imageId }`. If the server reports a missing or ambiguous target, reread the document or ask for more context. Never guess an anchor.
@@ -399,8 +401,9 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "整理我的云盘": call `app_drive_stats_get`, `app_drive_item_tree_list`, optional per-file inspect and relevant chunks, `app_drive_folder_path_ensure`, `app_drive_reorganization_preview`, then `app_drive_reorganization_apply` with the returned `planId`.
 - "分析这个云盘分享链接": call `app_drive_link_resolve`, then `app_drive_link_list` or `app_drive_link_read_text`.
 - "读取这个需求链接": call `app_drive_link_read_text`.
+- "在这个文档下加一些留言": call `app_drive_message_list` to check posting permission, then `app_drive_message_create` with the document target.
 - "读取并回复这个分享文档的评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_comment_create` with the selected thread or comment id.
-- "在这段原文上评论": call `app_drive_link_annotation_thread_create` with visible quote text and a stable idempotency key.
+- "在这段原文上评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_thread_create` with the exact visible text as the target and a stable idempotency key.
 - "评论这张 Markdown 图片": call `app_drive_link_read_text`, choose the matching entry from `markdownImages`, then call `app_drive_link_annotation_thread_create` with `{ kind: "image", imageId }` and a stable idempotency key.
 - "删除这条评论": list first, verify the explicitly identified target and returned permission, warn that its descendant replies will also be deleted (or that the whole thread will be removed for the first comment), then call `app_drive_link_annotation_comment_delete`.
 - "分析这个 HTML 原型站点": call `app_drive_link_resolve`, `app_drive_link_list`, then `app_drive_link_materialize` when local files are useful.

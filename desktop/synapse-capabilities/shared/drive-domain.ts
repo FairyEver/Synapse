@@ -461,7 +461,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_create",
-      description: "Create an annotation thread on visible text or one whole projected image in a shared Markdown document identified by a .md name or Markdown MIME type. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing.",
+      description: "Create an annotation thread on visible text or one whole projected image in a shared Markdown document identified by a .md name or Markdown MIME type. Chinese intent: 在这段正文上加评论, 在这段原文上评论, 给这段正文添加评论, 对这段原文发表评论. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing.",
       inputSchema: {
         type: "object",
         properties: {
@@ -525,7 +525,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_message_create",
-      description: "Post a plain-text message below an owned or shared Markdown document.",
+      description: "Post a plain-text message below an owned or shared Markdown document. Chinese intent: 在文档下留言, 给文档留个言. Unlike an annotation, this message has no text or image anchor.",
       inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, body: driveMessageBodyProperty }, required: ["target", "body"] },
     },
     {

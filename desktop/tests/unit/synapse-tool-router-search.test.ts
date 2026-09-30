@@ -145,6 +145,22 @@ async function topToolNames(intent: string): Promise<readonly string[]> {
 }
 
 describe("synapse tool router search", () => {
+  it("distinguishes document messages from anchored comment creation", async () => {
+    const cases = [
+      { query: "在这个文档下随便加一些留言", expected: "app_drive_message_create" },
+      { query: "给这个文档留个言", expected: "app_drive_message_create" },
+      { query: "在这段正文上加评论", expected: "app_drive_link_annotation_thread_create" },
+      { query: "在这段原文上评论", expected: "app_drive_link_annotation_thread_create" },
+      { query: "给这段正文添加评论", expected: "app_drive_link_annotation_thread_create" },
+      { query: "对这段原文发表评论", expected: "app_drive_link_annotation_thread_create" },
+    ] as const
+
+    for (const { query, expected } of cases) {
+      const result = await searchSynapseTools({ query, domain: "drive", limit: 5 })
+      expect(result.tools[0]?.name, query).toBe(expected)
+    }
+  })
+
   it("keeps every curated intent within the top-5 results", async () => {
     const misses: string[] = []
 
