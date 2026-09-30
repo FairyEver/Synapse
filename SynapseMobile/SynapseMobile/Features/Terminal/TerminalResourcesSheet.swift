@@ -3,15 +3,23 @@ import SwiftUI
 struct TerminalResourcesSheet: View {
     @Environment(\.dismiss) private var dismiss
     let store: TerminalStore
-    /// 要在浏览器里打开的那一条。装的是共用的那个打开链接的能力（`LinkBrowser`），
-    /// 与云盘点开一个文件走的是同一条。
-    @State private var opened: WebLink?
+    let onOpen: (URL) -> Void
     @State private var pending: TerminalResource?
     /// 每条链接问到的答案。没问到的就是没有键 —— 那时什么都不标，不拿「不知道」当失效。
     @State private var reachability: [String: TerminalResourceReachability] = [:]
 
     private var urlsToCheck: [URL] {
-        store.resources.filter { !$0.needsConfirmation }.map(\.url) + (pending?.candidateURLs ?? [])
+        var seen: Set<String> = []
+        return store.resources.flatMap(\.candidateURLs)
+            .filter { seen.insert($0.absoluteString).inserted }
+    }
+
+    private var shareResources: [TerminalResource] {
+        store.resources.filter { TerminalResourceCollector.shareRootID($0.url) != nil }
+    }
+
+    private var otherResources: [TerminalResource] {
+        store.resources.filter { TerminalResourceCollector.shareRootID($0.url) == nil }
     }
 
     var body: some View {
@@ -39,65 +47,77 @@ struct TerminalResourcesSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .linkBrowser($opened)
         .task(id: urlsToCheck) { await checkReachability() }
+        .onDisappear {
+            pending = nil
+            reachability.removeAll()
+        }
     }
 
     private var resourceList: some View {
-        List(store.resources) { resource in
-            Button {
-                if resource.needsConfirmation {
-                    pending = resource
-                } else {
-                    opened = WebLink(url: resource.url)
+        List {
+            ForEach(shareResources) { resource in
+                resourceRow(resource)
+            }
+            if shareResources.isEmpty {
+                ForEach(otherResources) { resource in
+                    resourceRow(resource)
                 }
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    if resource.needsConfirmation {
-                        Text(resource.name).lineLimit(2)
-                        Text(resource.url.absoluteString)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text("链接边界待确认")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(resource.name).lineLimit(2)
-                        Text(resource.url.absoluteString)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if reachability[resource.url.absoluteString] == .missing {
-                            Label("链接已失效", systemImage: "exclamationmark.triangle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+            } else if !otherResources.isEmpty {
+                Section("其他链接") {
+                    ForEach(otherResources) { resource in
+                        resourceRow(resource)
                     }
                 }
-                .padding(.vertical, 3)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
         }
+    }
+
+    private func resourceRow(_ resource: TerminalResource) -> some View {
+        Button {
+            if resource.candidateURLs.count > 1 {
+                pending = resource
+            } else {
+                onOpen(resource.url)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(resource.name).lineLimit(1)
+                Text(resource.url.absoluteString)
+                    .font(.subheadline.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                if resource.candidateURLs.count > 1 {
+                    Text("选择链接")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let status = statusText(for: resource.url) {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if resource.needsConfirmation {
+                    Text("待确认")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func candidateList(_ resource: TerminalResource) -> some View {
         List(resource.candidateURLs, id: \.absoluteString) { url in
             Button {
-                opened = WebLink(url: url)
+                onOpen(url)
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(url.absoluteString)
                         .font(.subheadline.monospaced())
-                    if reachability[url.absoluteString] == .reachable {
-                        Text("可访问")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if reachability[url.absoluteString] == .missing {
-                        Text("链接已失效")
+                    if let status = statusText(for: url) {
+                        Text(status)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -109,10 +129,22 @@ struct TerminalResourcesSheet: View {
         }
     }
 
+    /// Keep a status line in place while the request finishes so rows do not move
+    /// under a finger. A failed check says only that the result is unknown.
+    private func statusText(for url: URL) -> String? {
+        guard TerminalResourceReachabilityChecker.isCheckable(url) else { return nil }
+        switch reachability[url.absoluteString] {
+        case .reachable: return "可访问"
+        case .missing: return "链接已失效"
+        case .unknown: return "无法确认"
+        case nil: return "正在检查"
+        }
+    }
+
     /// 把列表上的链接问一遍，失效的标出来。
     ///
     /// 结果逐条落进 `reachability`，不等全部问完 —— 一条慢的链接不该把其余几条的标记一起
-    /// 压住。已经问过的不会重复问：`TerminalResourceReachabilityChecker` 自己记着答案。
+    /// 压住。面板关闭时清掉这批答案，下次打开重新核验。
     @MainActor
     private func checkReachability() async {
         let pending = urlsToCheck
@@ -129,6 +161,7 @@ struct TerminalResourcesSheet: View {
                 }
             }
             while let (key, answer) = await group.next() {
+                guard !Task.isCancelled else { break }
                 reachability[key] = answer
                 guard next < pending.count else { continue }
                 let url = pending[next]

@@ -47,6 +47,8 @@ struct TerminalScreen: View {
     @State private var shortcutPanelPresented = false
     @State private var expandedInputPresented = false
     @State private var resourcesPresented = false
+    @State private var pendingResourceURL: URL?
+    @State private var openedResource: WebLink?
     /// 这一页的 Git 面板。非空＝面板开着，它同时是这一个弹窗的状态机（见 `TerminalGitFlow`）。
     ///
     /// 由 `⋯` 菜单里那一行建起来，带上发 intent 与说话两件事 —— `model` 只在那一刻
@@ -815,9 +817,20 @@ struct TerminalScreen: View {
             TerminalExpandedInputSheet(draft: $draft, sessionId: sessionId)
         }
         .inspector(isPresented: $resourcesPresented) {
-            TerminalResourcesSheet(store: store)
+            TerminalResourcesSheet(store: store) { url in
+                pendingResourceURL = url
+                resourcesPresented = false
+            }
                 .inspectorColumnWidth(min: 280, ideal: 360, max: 440)
+                .onDisappear {
+                    // On iPhone the inspector is a sheet. Open the browser only after
+                    // that sheet has gone, so two presentations never overlap.
+                    guard let url = pendingResourceURL else { return }
+                    pendingResourceURL = nil
+                    openedResource = WebLink(url: url)
+                }
         }
+        .linkBrowser($openedResource)
         .sheet(item: $gitFlow) { flow in
             TerminalGitPanel(flow: flow)
                 // 面板盖在这一页上，这一页自己的提示条就在它下面 —— 而面板里每个动作的

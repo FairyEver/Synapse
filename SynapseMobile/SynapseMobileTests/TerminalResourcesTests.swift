@@ -43,6 +43,24 @@ struct TerminalResourcesTests {
         #expect(store.resources.count == 2)
     }
 
+    @Test func removesAProvisionalLinkWhenItsTerminalRowIsRewritten() throws {
+        let store = TerminalStore()
+        store.apply(frame([try line("https://example.org/draft")], kind: "reset"))
+        store.apply(frame([try line("https://example.org/final")]))
+        #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/final"])
+
+        store.apply(frame([try line("已提交")]))
+        #expect(store.resources.isEmpty)
+    }
+
+    @Test func keepsALinkSeenElsewhereWhenOneCopyIsRewritten() throws {
+        let store = TerminalStore()
+        let link = try line("https://example.org/shared")
+        store.apply(frame([link, link], kind: "reset"))
+        store.apply(frame([try line("已处理")], from: 1, total: 2))
+        #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/shared"])
+    }
+
     @Test func stopsBeforeChineseProseAfterALink() throws {
         let store = TerminalStore()
         let url = "https://synapse.d2.pub/share/shr_XEHW8REMAG3QR4SYFATZ3CW0JEBAGTZV"

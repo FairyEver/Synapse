@@ -10,6 +10,7 @@ struct TerminalResource: Identifiable, Hashable {
     var candidateURLs: [URL] { [url] + alternatives }
 
     var name: String {
+        if TerminalResourceCollector.shareRootID(url) != nil { return "云盘分享" }
         let host = url.host ?? url.absoluteString
         let last = url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
         return last.isEmpty || last == "/" ? host : "\(host) / \(last)"
@@ -51,6 +52,7 @@ struct TerminalResourceCollector {
 
     private struct Assembly {
         let text: String
+        let end: Int
         /// UTF-16 offsets where rows were joined without a terminal wrap flag.
         let hardBreaks: [Int]
         /// A link reaching the grid edge may still continue even when the next row
@@ -58,7 +60,16 @@ struct TerminalResourceCollector {
         let uncertainEnd: Bool
     }
 
-    private var seen: Set<String> = []
+    private struct Occurrence {
+        let end: Int
+        let ids: Set<String>
+    }
+
+    /// A terminal suffix can rewrite a row in place. Keep its links tied to the
+    /// physical rows until those rows are replaced; a screen reset archives them as
+    /// session history instead of making a brief TUI rewrite permanent history.
+    private var occurrences: [Int: Occurrence] = [:]
+    private var archivedIDs: Set<String> = []
     /// Rows whose link is not collected yet because the row they continue into has not
     /// arrived. They are looked at again when it does, so half a URL is never offered.
     private var waiting: Set<Int> = []
@@ -66,6 +77,22 @@ struct TerminalResourceCollector {
 
     mutating func accept(_ frame: MobileTerminalFrame, lines: [Int: TerminalLine], columns: Int) -> Bool {
         var starts: Set<Int> = []
+        if frame.isReset {
+            archivedIDs.formUnion(resources.map(\.id))
+            occurrences.removeAll()
+        } else {
+            let lastChanged = frame.from + frame.lines.count - 1
+            for (start, occurrence) in occurrences {
+                let wasRewritten = !frame.lines.isEmpty && start <= lastChanged && occurrence.end >= frame.from
+                let hasDisappeared = lines[start] == nil || lines[occurrence.end] == nil
+                guard wasRewritten || hasDisappeared else { continue }
+                if hasDisappeared && start < frame.from {
+                    archivedIDs.formUnion(occurrence.ids)
+                }
+                occurrences.removeValue(forKey: start)
+                if lines[start] != nil { starts.insert(start) }
+            }
+        }
         for offset in frame.lines.indices {
             let index = frame.from + offset
             guard lines[index] != nil else { continue }
@@ -82,21 +109,37 @@ struct TerminalResourceCollector {
         starts.formUnion(waiting)
 
         var changed = false
+        var listedIDs = Set(resources.map(\.id))
         for start in starts.sorted() {
-            guard let text = Self.assembly(from: start, lines: lines, columns: columns) else {
+            guard let assembly = Self.assembly(from: start, lines: lines, columns: columns) else {
                 waiting.insert(start)
                 continue
             }
             waiting.remove(start)
-            for resource in Self.resources(in: text) where seen.insert(resource.id).inserted {
+            var ids: Set<String> = []
+            for resource in Self.resources(in: assembly) {
                 if resources.contains(where: { Self.isIncompleteSharePrefix(resource.url, of: $0.url) }) {
                     continue
                 }
-                resources.removeAll { Self.isIncompleteSharePrefix($0.url, of: resource.url) }
+                let incomplete = resources.filter { Self.isIncompleteSharePrefix($0.url, of: resource.url) }
+                if !incomplete.isEmpty {
+                    let removedIDs = Set(incomplete.map(\.id))
+                    resources.removeAll { removedIDs.contains($0.id) }
+                    listedIDs.subtract(removedIDs)
+                    archivedIDs.subtract(removedIDs)
+                    changed = true
+                }
+                ids.insert(resource.id)
+                guard listedIDs.insert(resource.id).inserted else { continue }
                 resources.insert(resource, at: 0)
                 changed = true
             }
+            occurrences[start] = Occurrence(end: assembly.end, ids: ids)
         }
+        let activeIDs = archivedIDs.union(occurrences.values.flatMap(\.ids))
+        let previousCount = resources.count
+        resources.removeAll { !activeIDs.contains($0.id) }
+        if resources.count != previousCount { changed = true }
         return changed
     }
 
@@ -124,6 +167,7 @@ struct TerminalResourceCollector {
         }
         return Assembly(
             text: text,
+            end: end,
             hardBreaks: hardBreaks,
             uncertainEnd: !line.wrappedToNext && endsInsideURL(text) && fillsGrid(line.text, columns: columns)
         )
@@ -220,7 +264,7 @@ struct TerminalResourceCollector {
         return completeID.hasPrefix(shortID)
     }
 
-    private static func shareRootID(_ url: URL) -> String? {
+    static func shareRootID(_ url: URL) -> String? {
         guard SynapseWebLink.isTrusted(url), url.query == nil, url.fragment == nil else { return nil }
         let originPath = AppConfiguration.apiOrigin.path
         let path = originPath.isEmpty || originPath == "/"

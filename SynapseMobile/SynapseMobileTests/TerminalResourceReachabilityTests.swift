@@ -55,6 +55,15 @@ final class TerminalResourceReachabilityTests {
         #expect(answer == .reachable)
     }
 
+    @Test func checksTheSameShareAgainAfterItsStateChanges() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChangingShareURLProtocol.self]
+        let probe = TerminalResourceReachabilityChecker(session: URLSession(configuration: configuration))
+        let link = url("share/shr_changes")
+        #expect(await probe.check(link) == .missing)
+        #expect(await probe.check(link) == .reachable)
+    }
+
     @Test func aHardWrappedShareHasOneValidCandidate() async {
         let probe = checker()
         let prefix = url("share/shr_wrapped_first_row")
@@ -126,6 +135,39 @@ private final class StagedURLProtocol: URLProtocol {
                   httpVersion: "HTTP/1.1",
                   headerFields: nil
               )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data())
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class ChangingShareURLProtocol: URLProtocol {
+    private final class State: @unchecked Sendable {
+        private let lock = NSLock()
+        private var requests = 0
+
+        func nextStatus() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            requests += 1
+            return requests == 1 ? 404 : 200
+        }
+    }
+
+    private static let state = State()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: Self.state.nextStatus(), httpVersion: nil, headerFields: nil)
         else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return

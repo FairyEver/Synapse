@@ -20,10 +20,8 @@ enum TerminalResourceReachability: Equatable {
     case unknown
 }
 
-/// 问服务器要这个答案，并记住问过的。
-///
-/// 只缓存**确定的答案**（在 / 不在）。`unknown` 不留：它多半是网络一时的状态，记下来只会
-/// 让下一次打开面板继续显示同一个「不知道」。
+/// 问服务器要这个答案。每次打开资源面板都会重新检查：分享可以被取消或重新启用，
+/// 上次的「可访问」或「已失效」不能当作这次的结果。
 actor TerminalResourceReachabilityChecker {
     static let shared = TerminalResourceReachabilityChecker()
 
@@ -39,15 +37,7 @@ actor TerminalResourceReachabilityChecker {
     /// 整张列表的标记都会停在没有标记的样子上。
     static let checkTimeout: TimeInterval = 10
 
-    /// 记住的答案条数上限。
-    ///
-    /// 一个会话的资源通常只有个位数，但会话是长跑的（`tail -f` 能刷出很多链接），而这是
-    /// App 生命周期内的缓存，得有个头。到顶就整张丢掉：它的价值在最近打开的那个面板上，
-    /// 不在历史里。
-    private let answerLimit = 200
-
     private let session: URLSession
-    private var answers: [String: TerminalResourceReachability] = [:]
 
     /// 传输层可换，好让测试把答案编排出来 —— 状态码到三态的映射正是这里唯一会判错的
     /// 一步，而它错起来的方向很难看：把 403 读成失效，用户会开始怀疑这个标记本身。
@@ -120,7 +110,6 @@ actor TerminalResourceReachabilityChecker {
 
     func check(_ url: URL) async -> TerminalResourceReachability {
         guard var request = Self.checkRequest(for: url) else { return .unknown }
-        if let answer = answers[url.absoluteString] { return answer }
 
         // `/share/:id` 是网页入口，失效的 ID 也返回 200 页面壳。分享 API 才校验 ID。
         request.timeoutInterval = Self.checkTimeout
@@ -144,8 +133,6 @@ actor TerminalResourceReachabilityChecker {
             return .unknown
         }
 
-        if answers.count >= answerLimit { answers.removeAll() }
-        answers[url.absoluteString] = answer
         return answer
     }
 }
