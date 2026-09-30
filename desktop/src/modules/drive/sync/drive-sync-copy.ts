@@ -172,6 +172,23 @@ export function bindingPrimaryAction(
   return { kind: "open", label: "打开文件夹", variant: "outline" }
 }
 
+/** 云盘文件列表行内标记用的短标签。 */
+export function bindingMarkText(
+  binding: DriveSyncBindingDto,
+  operations: readonly DriveSyncOperationDto[],
+  conflicts: readonly DriveSyncConflictDto[],
+): DriveSyncStateText {
+  const state = bindingStateText(binding, operations, conflicts)
+  if (state.tone === "attention") return { text: "需要处理", tone: "attention" }
+  if (binding.status === "paused") return { text: "已暂停", tone: "normal" }
+  if (binding.status === "initializing") return { text: "正在准备", tone: "normal" }
+  const transfer = activeTransferOf(operations)
+  if (transfer) return { text: transfer.direction === "upload" ? "正在上传" : "正在下载", tone: "normal" }
+  if (retryOperationOf(operations)) return { text: "正在重试", tone: "normal" }
+  if (binding.status === "active") return { text: "已同步", tone: "normal" }
+  return { text: "已移除", tone: "normal" }
+}
+
 export function bindingKindText(kind: DriveSyncBindingDto["kind"]): string {
   return kind === "folder" ? "文件夹" : "文件"
 }

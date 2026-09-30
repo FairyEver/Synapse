@@ -129,6 +129,7 @@ function DialogFrameHeader({
   className,
   description,
   descriptionClassName,
+  leading,
   showCloseButton = true,
   title,
   titleClassName,
@@ -139,6 +140,8 @@ function DialogFrameHeader({
   readonly center?: React.ReactNode
   readonly description?: React.ReactNode
   readonly descriptionClassName?: string
+  /** 标题左侧的前导内容，用于返回上一级等导航动作。 */
+  readonly leading?: React.ReactNode
   readonly showCloseButton?: boolean
   readonly title?: React.ReactNode
   readonly titleClassName?: string
@@ -149,6 +152,12 @@ function DialogFrameHeader({
       {description ? <DialogDescription className={cn("mt-2 truncate", descriptionClassName)}>{description}</DialogDescription> : null}
     </div>
   ) : null
+  const leftBlock = leading ? (
+    <div className="flex min-w-0 items-center gap-2">
+      {leading}
+      {titleBlock}
+    </div>
+  ) : titleBlock
   const rightBlock = actions || showCloseButton ? (
     <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
       {actions}
@@ -176,7 +185,7 @@ function DialogFrameHeader({
     >
       {center ? (
         <>
-          {titleBlock ?? <div />}
+          {leftBlock ?? <div />}
           <div className="min-w-0">{center}</div>
           {rightBlock ?? <div />}
           {children ? <div className="col-span-full">{children}</div> : null}
@@ -184,7 +193,7 @@ function DialogFrameHeader({
       ) : (
         <>
           <div className="flex min-w-0 items-start justify-between gap-3">
-            {titleBlock}
+            {leftBlock}
             {rightBlock}
           </div>
           {children}

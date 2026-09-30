@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 import {
   ChevronRight,
@@ -38,7 +38,13 @@ import { FormDialog } from "@/components/form-dialog"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
 import { DriveSitesPanel } from "./drive-sites-dialog"
-import { DriveSyncDialog, type DriveSyncDialogState } from "./drive-sync-dialog"
+import {
+  DriveSyncDialog,
+  bindingMarkText,
+  useDriveSync,
+  type DriveSyncDialogState,
+  type DriveSyncStateText,
+} from "./sync"
 import { DriveTrashView, type DriveTrashViewActionState, type DriveTrashViewHandle } from "./drive-trash-view"
 import {
   DrivePublicAssetToolbarActions,
@@ -344,9 +350,9 @@ function DriveModuleContent() {
   const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
   const [uploadRetrying, setUploadRetrying] = useState(false)
-  const [syncSnapshot, setSyncSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
-  const [syncSnapshotError, setSyncSnapshotError] = useState<string | null>(null)
-  const [syncSnapshotLoading, setSyncSnapshotLoading] = useState(true)
+  const driveSync = useDriveSync()
+  const syncSnapshot = driveSync.snapshot
+  const syncMarks = useMemo(() => buildDriveSyncMarks(driveSync.snapshot), [driveSync.snapshot])
   const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
 
   useEffect(() => {
@@ -470,33 +476,6 @@ function DriveModuleContent() {
     }
     void refreshDriveView()
   }, [accountAuthenticated, parentId, refreshDriveView])
-
-  useEffect(() => {
-    const bridge = requireSynapseBridge()
-    let disposed = false
-    void bridge.driveSync.getSnapshot()
-      .then((snapshot) => {
-        if (!disposed) {
-          setSyncSnapshot(snapshot)
-          setSyncSnapshotError(null)
-        }
-      })
-      .catch((error) => {
-        if (!disposed) setSyncSnapshotError(errorMessage(error, "同步状态加载失败"))
-      })
-      .finally(() => {
-        if (!disposed) setSyncSnapshotLoading(false)
-      })
-    const unsubscribe = bridge.driveSync.onChanged((snapshot) => {
-      setSyncSnapshot(snapshot)
-      setSyncSnapshotError(null)
-      setSyncSnapshotLoading(false)
-    })
-    return () => {
-      disposed = true
-      unsubscribe()
-    }
-  }, [])
 
   useEffect(() => {
     const unsubscribe = requireSynapseBridge().drive.upload.onLocalProgress((event) => {
@@ -989,12 +968,11 @@ function DriveModuleContent() {
         onCreateFolder={handleCreateFolder}
         onOpenPublicLinks={() => setPublicLinksOpen(true)}
         onOpenLocalSync={() => setSyncDialog({
-          mode: "local",
-          item: null,
+          mode: "wizard-local",
           targetParentId: parentId,
           drivePathHint: formatDriveBreadcrumbPath(path),
         })}
-        onOpenSyncStatus={() => setSyncDialog({ mode: "status", item: null })}
+        onOpenSyncStatus={() => setSyncDialog({ mode: "center" })}
         onRefresh={() => { void refreshDriveView() }}
       >
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
@@ -1104,8 +1082,8 @@ function DriveModuleContent() {
         onOpenSyncBinding={(item, drivePathHint) => {
           const binding = syncSnapshot?.bindings.find((candidate) => candidate.driveItemId === item.id)
           setSyncDialog(binding
-            ? { mode: "status", item: null, bindingId: binding.id }
-            : { mode: "bind", item, drivePathHint })
+            ? { mode: "center", bindingId: binding.id }
+            : { mode: "wizard-item", item, drivePathHint })
         }}
         onOpenShareDetails={handleOpenShareDetails}
         onDisableShare={handleDisableShare}
@@ -1115,6 +1093,7 @@ function DriveModuleContent() {
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
         syncBindings={syncSnapshot?.bindings ?? []}
+        syncMarks={syncMarks}
       />
     )
   })()
@@ -1243,19 +1222,13 @@ function DriveModuleContent() {
               onCreated={() => undefined}
             />
             <DriveSyncDialog
+              controller={driveSync}
+              onBindingCreated={refreshDriveView}
               open={syncDialog !== null}
               state={syncDialog}
-              snapshot={syncSnapshot}
-              snapshotError={syncSnapshotError}
-              snapshotLoading={syncSnapshotLoading}
-              onDriveItemsChanged={refreshDriveView}
               onOpenDriveItem={openSyncDriveItem}
               onOpenChange={(open) => {
                 if (!open) setSyncDialog(null)
-              }}
-              onSnapshotChange={(nextSnapshot) => {
-                setSyncSnapshot(nextSnapshot)
-                setSyncSnapshotError(null)
               }}
             />
             <DriveAccessSettingsDialog
@@ -1720,6 +1693,7 @@ function DriveFileList({
   downloadingItemIds,
   onUploadDroppedFiles,
   syncBindings,
+  syncMarks,
   uploadDisabled,
 }: {
   readonly items: readonly DriveItemDto[]
@@ -1747,6 +1721,7 @@ function DriveFileList({
   readonly downloadingItemIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly syncBindings: DriveSyncSnapshotDto["bindings"]
+  readonly syncMarks: ReadonlyMap<string, DriveSyncStateText>
   readonly uploadDisabled: boolean
 }) {
   const [dragDepth, setDragDepth] = useState(0)
@@ -1837,6 +1812,7 @@ function DriveFileList({
                   deleting={deletingItemIds.has(item.id)}
                   downloading={downloadingItemIds.has(item.id)}
                   hasSyncBinding={syncBindingIds.has(item.id)}
+                  syncMark={syncMarks.get(item.id) ?? null}
                 />
               ))}
             </TableBody>
@@ -2095,6 +2071,7 @@ function DriveFileListRow({
   deleting,
   downloading,
   hasSyncBinding,
+  syncMark,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -2114,6 +2091,7 @@ function DriveFileListRow({
   readonly deleting: boolean
   readonly downloading: boolean
   readonly hasSyncBinding: boolean
+  readonly syncMark: DriveSyncStateText | null
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item)
@@ -2212,6 +2190,35 @@ function DriveFileListRow({
                 )}
               </DriveItemNameContextMenu>
               <DriveInlineBadges badges={statusBadges} />
+              {syncMark ? (
+                <span
+                  className={cn(
+                    "shrink-0 cursor-pointer rounded-sm text-xs whitespace-nowrap focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    syncMark.tone === "attention" ? "text-destructive" : "text-muted-foreground",
+                  )}
+                  data-drive-sync-mark="true"
+                  data-track="drive.file.sync.mark.open"
+                  data-track-native="true"
+                  role="button"
+                  tabIndex={0}
+                  title={`同步：${syncMark.text}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onOpenSyncBinding(item, drivePath)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onOpenSyncBinding(item, drivePath)
+                  }}
+                  onContextMenu={(event) => {
+                    event.stopPropagation()
+                  }}
+                >
+                  {syncMark.text}
+                </span>
+              ) : null}
             </div>
             <DriveShareInlineSummary item={item} onOpenShareDetails={onOpenShareDetails} />
           </div>
@@ -3913,6 +3920,20 @@ function driveLoadError(error: unknown): DriveLoadError {
   const message = errorMessage(error, "加载失败")
   if (message.includes("账号未登录")) return { type: "auth" }
   return { type: "load", message }
+}
+
+/** 云盘条目 id 到同步标记的映射，供文件列表行内显示。 */
+function buildDriveSyncMarks(snapshot: DriveSyncSnapshotDto | null): ReadonlyMap<string, DriveSyncStateText> {
+  const marks = new Map<string, DriveSyncStateText>()
+  if (!snapshot) return marks
+  for (const binding of snapshot.bindings) {
+    marks.set(binding.driveItemId, bindingMarkText(
+      binding,
+      snapshot.operations.filter((operation) => operation.bindingId === binding.id),
+      snapshot.conflicts.filter((conflict) => conflict.bindingId === binding.id),
+    ))
+  }
+  return marks
 }
 
 export { DriveModule }

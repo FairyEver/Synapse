@@ -6,6 +6,7 @@ import type {
 } from "@synapse/shared"
 import {
   activeTransferOf,
+  bindingMarkText,
   bindingPrimaryAction,
   bindingStateDetail,
   bindingStateText,
@@ -143,6 +144,23 @@ describe("同步状态文案", () => {
       .toBe("找不到本地文件夹，磁盘可能没有连接")
     expect(bindingStateDetail(binding({ status: "error", lastError: null }), [], []))
       .toBe("同步已停止，需要处理后才能继续。")
+  })
+})
+
+describe("云盘行内标记", () => {
+  it("用短标签，不把状态整句塞进行内", () => {
+    expect(bindingMarkText(binding({ status: "active" }), [], []).text).toBe("已同步")
+    expect(bindingMarkText(binding(), [operation({ kind: "upload" })], []).text).toBe("正在上传")
+    expect(bindingMarkText(binding(), [operation({ kind: "download" })], []).text).toBe("正在下载")
+    expect(bindingMarkText(binding({ status: "initializing" }), [], []).text).toBe("正在准备")
+    expect(bindingMarkText(binding({ status: "paused" }), [], []).text).toBe("已暂停")
+    expect(bindingMarkText(binding(), [operation({ status: "retry_wait" })], []).text).toBe("正在重试")
+  })
+
+  it("需要处理的行内标记用警示语气，且不含具体数量", () => {
+    const mark = bindingMarkText(binding({ status: "conflict" }), [], [conflict()])
+    expect(mark).toEqual({ text: "需要处理", tone: "attention" })
+    expect(bindingMarkText(binding({ status: "error" }), [], []).tone).toBe("attention")
   })
 })
 

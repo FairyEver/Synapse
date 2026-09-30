@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-import { DriveSyncStatusButton } from "./drive-sync-dialog"
+import { DriveSyncStatusButton } from "./sync"
 import type { DriveRendererAction } from "./markdown/drive-renderer-actions"
 
 function DriveToolbarActions({
@@ -82,7 +82,7 @@ function DriveToolbarActions({
           </SystemAppTopBarActionButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled={uploadDisabled} onSelect={onOpenLocalSync}>本地同步</DropdownMenuItem>
+          <DropdownMenuItem disabled={uploadDisabled} onSelect={onOpenLocalSync}>新建同步</DropdownMenuItem>
           <DropdownMenuItem disabled={publicLinksDisabled} onSelect={onOpenPublicLinks}>分享管理</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
