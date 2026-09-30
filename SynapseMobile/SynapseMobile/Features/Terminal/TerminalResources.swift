@@ -165,12 +165,98 @@ struct TerminalResourceCollector {
             line = next
             end += 1
         }
+        // The TUI also breaks a token inside a table cell, where neither of the two
+        // shapes above applies: the row does not end inside the URL (the cell's stroke
+        // does) and the terminal flags nothing. What is left of the token sits on the
+        // next line of the same column, between the same two strokes.
+        while let below = lines[end + 1], let continuation = cellContinuation(from: text, into: below.text) {
+            text.insert(contentsOf: continuation.text, at: continuation.at)
+            end += 1
+            if !continuation.carriesOn { break }
+        }
         return Assembly(
             text: text,
             end: end,
             hardBreaks: hardBreaks,
             uncertainEnd: !line.wrappedToNext && endsInsideURL(text) && fillsGrid(line.text, columns: columns)
         )
+    }
+
+    /// The strokes a table row is drawn with. Claude Code draws its tables with box
+    /// characters; a plain `|` table reads the same way.
+    private static let cellStrokes: Set<Character> = ["│", "┃", "|"]
+
+    /// The text the row below carries on with, when this row ends inside a share link
+    /// that was cut at a cell's last column.
+    ///
+    /// Two things have to agree, and together they are the whole of the evidence. The
+    /// cell is filled to its last column — the table pads its cells, so a cell only
+    /// reaches its stroke when the TUI had to break a token right there — and what it
+    /// holds ends in a share link that is not a whole one yet. A share link is issued at
+    /// one fixed total length, so how much of it is missing is known exactly, and the row
+    /// below can only be asked for that many URL characters.
+    private static func cellContinuation(
+        from text: String,
+        into below: String
+    ) -> (at: String.Index, text: String, carriesOn: Bool)? {
+        guard let row = cells(of: text), let following = cells(of: below), row.count == following.count else {
+            return nil
+        }
+        for (index, slice) in row.enumerated() {
+            guard let cell = cellContent(slice), cell.filled,
+                  let head = cutShareHead(String(cell.content)) else { continue }
+            let room = wholeShareLinkLength - head.count
+            guard room > 0 else { continue }
+            let carried = following[index].trimmingCharacters(in: .whitespaces)
+            let token = String(carried.prefix { isURLBody($0) }.prefix(room))
+            guard !token.isEmpty else { continue }
+            return (cell.content.endIndex, token, token.count < room && token == carried)
+        }
+        return nil
+    }
+
+    /// The share link a cell's text ends with, when it is not a whole one yet — the link
+    /// itself, which is what the missing characters are counted from.
+    ///
+    /// Two shapes count. The id may be short of its issued length, which makes the link
+    /// half of one on its face; or the path may not have reached `/share/shr_` yet, which
+    /// is what the first line of a broken link inside a cell looks like.
+    private static func cutShareHead(_ content: String) -> String? {
+        guard let text = trailingURLText(content), let url = URL(string: text),
+              SynapseWebLink.isTrusted(url), url.query == nil, url.fragment == nil else { return nil }
+        if let id = shareRootID(url) { return id.count < shareIDLength ? text : nil }
+        let originPath = AppConfiguration.apiOrigin.path
+        let path = originPath.isEmpty || originPath == "/"
+            ? url.path : String(url.path.dropFirst(originPath.count))
+        return "share/shr_".hasPrefix(String(path.drop { $0 == "/" })) ? text : nil
+    }
+
+    /// The length of a whole share link: the origin, the share path, and an id at its
+    /// issued length. A cut link is missing this much minus what it already has.
+    private static var wholeShareLinkLength: Int {
+        AppConfiguration.apiOrigin.absoluteString.count + "/share/".count + shareIDLength
+    }
+
+    private static func isURLBody(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy(urlBody.contains)
+    }
+
+    /// The cells of a table row, without the strokes themselves, or nil when the row is
+    /// not drawn as one.
+    private static func cells(of text: String) -> [Substring]? {
+        let parts = text.split(omittingEmptySubsequences: false) { cellStrokes.contains($0) }
+        guard parts.count >= 3 else { return nil }
+        return Array(parts.dropFirst().dropLast())
+    }
+
+    /// A cell's text without the table's padding, and whether it was filled to its last
+    /// column. One space on each side is what every cell carries; a cell with room left
+    /// over was broken at a space rather than at the column.
+    private static func cellContent(_ slice: Substring) -> (content: Substring, filled: Bool)? {
+        guard slice.hasPrefix(" "), slice.hasSuffix(" "), slice.count > 2 else { return nil }
+        let content = slice.dropFirst().dropLast()
+        guard !content.isEmpty else { return nil }
+        return (content, content.last != " ")
     }
 
     /// Whether the row can have a successor on the row below it. The terminal's own
@@ -197,11 +283,17 @@ struct TerminalResourceCollector {
     /// Whether `text` ends in the middle of a URL — its last URL match runs to the very
     /// end, with nothing after it.
     private static func endsInsideURL(_ text: String) -> Bool {
-        guard !text.isEmpty else { return false }
+        trailingURLText(text) != nil
+    }
+
+    /// The URL a string ends with, or nil when it does not end in one.
+    private static func trailingURLText(_ text: String) -> String? {
+        guard !text.isEmpty else { return nil }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         guard let match = detector.matches(in: text, range: range).last,
-              let matched = Range(match.range, in: text) else { return false }
-        return matched.upperBound == text.endIndex && isWebURL(match.url)
+              let matched = Range(match.range, in: text),
+              matched.upperBound == text.endIndex, isWebURL(match.url) else { return nil }
+        return String(text[matched])
     }
 
     /// Whether the row was filled to the grid's last column — what a token cut in the
@@ -256,11 +348,16 @@ struct TerminalResourceCollector {
         }
     }
 
+    /// Share ids are issued at one fixed length, the `shr_` prefix included. A link whose
+    /// id is shorter than that was cut on its way to the phone — it is not a second link,
+    /// and asking the server about it can only ever say 404.
+    static let shareIDLength = 36
+
     /// Share IDs issued by both the old and current server are 32 characters. A shorter
     /// prefix of the same ID is a broken wrap, not a second link to offer or confirm.
     private static func isIncompleteSharePrefix(_ shorter: URL, of complete: URL) -> Bool {
         guard let shortID = shareRootID(shorter), let completeID = shareRootID(complete),
-              completeID.count == 36, shortID.count < completeID.count else { return false }
+              completeID.count == shareIDLength, shortID.count < completeID.count else { return false }
         return completeID.hasPrefix(shortID)
     }
 

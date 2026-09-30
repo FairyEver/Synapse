@@ -92,6 +92,10 @@ struct TerminalResourcesSheet: View {
                     Text("选择链接")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else if isIncompleteShare(resource.url) {
+                    Text("链接不完整")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else if let status = statusText(for: resource.url) {
                     Text(status)
                         .font(.caption)
@@ -127,6 +131,14 @@ struct TerminalResourcesSheet: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    /// A share link whose id is short of its issued length is one the collector cut on the
+    /// way here. Its status is not the server's to give — the row says what it is instead
+    /// of reporting a 404 that belongs to no link at all.
+    private func isIncompleteShare(_ url: URL) -> Bool {
+        guard let id = TerminalResourceCollector.shareRootID(url) else { return false }
+        return id.count < TerminalResourceCollector.shareIDLength
     }
 
     /// Keep a status line in place while the request finishes so rows do not move

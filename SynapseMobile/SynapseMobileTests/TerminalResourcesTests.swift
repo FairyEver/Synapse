@@ -5,12 +5,15 @@ import Testing
 
 @MainActor
 struct TerminalResourcesTests {
-    /// 云盘分享 id 的识别只在**当前配置的服务器**上成立（`SynapseWebLink.isTrusted`），
-    /// 而基址是全局 `UserDefaults` 里的一个值：`SessionRestoreTests` 会临时换成不可达地址，
-    /// 那次运行要是没走到还原就结束，值就留在容器里了。之后跑这一套，截断前缀不再被认成
-    /// 同一条分享，两条用例会红得像功能坏掉。基址钉回默认值，这一套只考自己那句话。
-    init() {
+    /// 分享 id 的识别只在**当前配置的服务器**上成立（`SynapseWebLink.isTrusted`），而基址是
+    /// 全局 `UserDefaults` 里的一个值：别的用例会把它临时换成不可达地址，上一次运行没走到还
+    /// 原就留在容器里。要考分享链接的用例在钉住基址的这一小段里跑，跑完立刻还回去 —— 窗口只有
+    /// 几次调用那么长，不会压到同时在跑别的用例。
+    private func withHostedOrigin<T>(_ body: () throws -> T) rethrows -> T {
+        let previous = AppConfiguration.apiBaseURLString
+        defer { AppConfiguration.apiBaseURLString = previous }
         AppConfiguration.apiBaseURLString = AppConfiguration.defaultAPIBaseURL
+        return try body()
     }
 
     private func line(_ text: String, wrapFlags: Int = 0) throws -> TerminalLine {
@@ -125,11 +128,15 @@ struct TerminalResourcesTests {
     @Test func joinsAURLTheTUIBrokeMidToken() throws {
         let store = TerminalStore()
         store.update(columns: 53)
-        store.apply(frame([try line("  https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR")], kind: "reset", total: 2))
+        try withHostedOrigin {
+            store.apply(frame([try line("  https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqR")], kind: "reset", total: 2))
+        }
         // Half a URL is not a link. It waits rather than offering one that 404s.
         #expect(store.resources.isEmpty)
 
-        store.apply(frame([try line("  ZedD2W6_c33jYd")], from: 1, total: 2))
+        try withHostedOrigin {
+            store.apply(frame([try line("  ZedD2W6_c33jYd")], from: 1, total: 2))
+        }
         #expect(store.resources.map(\.url.absoluteString) == [
             "https://synapse.d2.pub/share/shr_xXoqbu0wbONgYNvuqRZedD2W6_c33jYd",
         ])
@@ -143,14 +150,66 @@ struct TerminalResourcesTests {
         let store = TerminalStore()
         let prefix = "https://synapse.d2.pub/share/shr_ZYTGDZKX1C4Q9SYS7F"
         let complete = prefix + "BW4YQ1403XWEVT"
-        store.apply(frame([try line(prefix)], kind: "reset"))
+        try withHostedOrigin {
+            store.apply(frame([try line(prefix)], kind: "reset"))
+        }
         #expect(store.resources.map(\.url.absoluteString) == [prefix])
 
-        store.apply(frame([try line(complete)], from: 1))
+        try withHostedOrigin {
+            store.apply(frame([try line(complete)], from: 1))
+        }
         #expect(store.resources.map(\.url.absoluteString) == [complete])
 
-        store.apply(frame([try line(prefix)], from: 2))
+        try withHostedOrigin {
+            store.apply(frame([try line(prefix)], from: 2))
+        }
         #expect(store.resources.map(\.url.absoluteString) == [complete])
+    }
+
+    /// The TUI also breaks a long token inside a table cell, at the cell's last column
+    /// rather than the grid's: the rest of the link is on the next line of the same
+    /// column, and the terminal flags nothing about it. Rows as the desktop printed them.
+    @Test func joinsAShareLinkTheTUIBrokeInsideATableCell() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        try withHostedOrigin {
+            store.apply(frame([
+                try line("  │ 工作流循环机制调 │ https://synapse.d2.pub/sh │"),
+                try line("  │ 研与头脑风暴.md  │ are/shr_8ETaz96PYTp2N6s3y │"),
+                try line("  │                  │ H2S7kzRoghH1XaG           │"),
+            ], kind: "reset"))
+        }
+        #expect(store.resources.map(\.url.absoluteString) == [
+            "https://synapse.d2.pub/share/shr_8ETaz96PYTp2N6s3yH2S7kzRoghH1XaG",
+        ])
+        #expect(store.resources.first?.needsConfirmation == false)
+    }
+
+    /// A cell that holds a whole share link is not the head of a longer one, whatever
+    /// the row below carries. Without that, a table of links would chain them together.
+    @Test func leavesAWholeShareLinkInATableCellAlone() throws {
+        let store = TerminalStore()
+        let url = "https://synapse.d2.pub/share/shr_3YjX53MBb3fgUQk9Gu91BLyEVf7oD27O"
+        store.apply(frame([
+            try line("  │ 甲 │ \(url) │"),
+            try line("  │ 乙 │ https://example.org/b │"),
+        ], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString).sorted() == [
+            "https://example.org/b", url,
+        ].sorted())
+    }
+
+    /// A row broken at a space ends in padding rather than at the cell's last column, so
+    /// the row below is a row of the table and not the rest of anything.
+    @Test func leavesARowBrokenAtASpaceAlone() throws {
+        let store = TerminalStore()
+        store.apply(frame([
+            try line("  │ 甲 │ https://example.org/a │"),
+            try line("  │ 乙 │ https://example.org/b │"),
+        ], kind: "reset"))
+        #expect(store.resources.map(\.url.absoluteString).sorted() == [
+            "https://example.org/a", "https://example.org/b",
+        ])
     }
 
     @Test func hardWrappedLinkDoesNotIncludeFollowingChineseProse() throws {

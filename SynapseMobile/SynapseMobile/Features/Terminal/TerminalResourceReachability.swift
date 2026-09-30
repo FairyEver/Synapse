@@ -61,7 +61,14 @@ actor TerminalResourceReachabilityChecker {
     /// 服务器 + 分享路径」上：别的域名既不该被这个 App 去探，答案也无从判断 —— 一个 404
     /// 的博客文章和一条坏掉的分享链接不是同一件事。
     static func isCheckable(_ url: URL) -> Bool {
-        checkRequest(for: url) != nil
+        // A share id short of its issued length is a link the phone cut on the way here,
+        // not one that stopped working. The server can only answer 404 about it, and 404
+        // would read as this link's own answer. The panel says what it is in words.
+        if let id = TerminalResourceCollector.shareRootID(url),
+           id.count < TerminalResourceCollector.shareIDLength {
+            return false
+        }
+        return checkRequest(for: url) != nil
     }
 
     private static func checkRequest(for url: URL) -> URLRequest? {

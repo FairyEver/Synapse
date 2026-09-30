@@ -15,7 +15,14 @@ final class TerminalResourceReachabilityTests {
     // MARK: - 探谁
 
     @Test func onesOwnShareLinkIsChecked() {
-        #expect(TerminalResourceReachabilityChecker.isCheckable(url("share/shr_abc")))
+        #expect(TerminalResourceReachabilityChecker.isCheckable(url(wholeSharePath)))
+    }
+
+    /// 自己拼残的分享链接不是「失效」，是「不完整」：id 不足发行长度时服务器只能回 404，
+    /// 而那个 404 不属于任何一条真的链接。
+    @Test func aCutShareLinkIsNotChecked() {
+        #expect(!TerminalResourceReachabilityChecker.isCheckable(url("share/shr_8ETaz96PYTp2N")))
+        #expect(!TerminalResourceReachabilityChecker.isCheckable(url("share/shr_abc")))
     }
 
     @Test func onesOwnSiteLinkIsChecked() {
@@ -38,7 +45,7 @@ final class TerminalResourceReachabilityTests {
     }
 
     @Test func anotherPortIsNotChecked() {
-        var foreign = URLComponents(url: url("share/shr_abc"), resolvingAgainstBaseURL: false)!
+        var foreign = URLComponents(url: url(wholeSharePath), resolvingAgainstBaseURL: false)!
         foreign.port = foreign.port == 8443 ? 8444 : 8443
         #expect(!TerminalResourceReachabilityChecker.isCheckable(foreign.url!))
     }
@@ -96,6 +103,9 @@ final class TerminalResourceReachabilityTests {
     }
 
     // MARK: - Fixtures
+
+    /// 一条长度合规的分享链接路径：id 是 32 位随机字符加 `shr_`。
+    private let wholeSharePath = "share/shr_3YjX53MBb3fgUQk9Gu91BLyEVf7oD27O"
 
     private func url(_ path: String) -> URL {
         URL(string: "\(AppConfiguration.apiOrigin.absoluteString)/\(path)")!
