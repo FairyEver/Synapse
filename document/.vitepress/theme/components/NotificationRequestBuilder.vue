@@ -40,7 +40,6 @@ watch(request, () => { copyStatus.value = '' })
 onBeforeUnmount(() => { apiKey.value = '' })
 
 async function copyRequest() {
-  if (hasErrors.value) return
   try {
     await navigator.clipboard.writeText(preview.value)
     copyStatus.value = '已复制请求'
@@ -121,10 +120,10 @@ async function copyRequest() {
             <button v-if="shape === 'path'" type="button" :aria-pressed="outputFormat === 'url'" @click="outputFormat = 'url'">纯链接</button>
           </div>
         </div>
-        <VPButton tag="button" type="button" theme="brand" :disabled="hasErrors" :text="copyStatus === '已复制请求' ? '已复制' : '复制请求'" @click="copyRequest" />
+        <VPButton tag="button" type="button" theme="brand" :text="copyStatus === '已复制请求' ? '已复制' : '复制请求'" @click="copyRequest" />
       </div>
       <p class="builder-note">
-        <template v-if="hasErrors">修正字段后可复制。</template>
+        <template v-if="hasErrors">字段有误，复制后需修正再发送。</template>
         <template v-else>生成结果包含完整密钥，请勿公开分享。</template>
         <template v-if="shape === 'path'">访问路径链接会直接发送消息。</template>
       </p>
@@ -256,11 +255,6 @@ async function copyRequest() {
   justify-content: space-between;
   align-items: end;
   gap: 16px;
-}
-
-.output-header :deep(.VPButton:disabled) {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .request-builder .builder-note {
