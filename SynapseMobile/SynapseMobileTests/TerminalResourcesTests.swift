@@ -5,6 +5,14 @@ import Testing
 
 @MainActor
 struct TerminalResourcesTests {
+    /// 云盘分享 id 的识别只在**当前配置的服务器**上成立（`SynapseWebLink.isTrusted`），
+    /// 而基址是全局 `UserDefaults` 里的一个值：`SessionRestoreTests` 会临时换成不可达地址，
+    /// 那次运行要是没走到还原就结束，值就留在容器里了。之后跑这一套，截断前缀不再被认成
+    /// 同一条分享，两条用例会红得像功能坏掉。基址钉回默认值，这一套只考自己那句话。
+    init() {
+        AppConfiguration.apiBaseURLString = AppConfiguration.defaultAPIBaseURL
+    }
+
     private func line(_ text: String, wrapFlags: Int = 0) throws -> TerminalLine {
         let value: [Any] = wrapFlags == 0 ? [text, []] : [text, [], wrapFlags]
         return try JSONDecoder().decode(TerminalLine.self, from: JSONSerialization.data(withJSONObject: value))
