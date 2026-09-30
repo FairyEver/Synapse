@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DriveMessageService, parseDriveMessageBody } from './drive-message.service'
 
@@ -20,7 +21,7 @@ const message = (createdByUserId = 'reader', comments = [reply('first')]) => ({
 describe('DriveMessageService', () => {
   const prisma = {
     driveItem: { findFirst: vi.fn() },
-    driveMessage: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    driveMessage: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     driveMessageComment: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
   }
@@ -33,6 +34,7 @@ describe('DriveMessageService', () => {
     prisma.driveItem.findFirst.mockResolvedValue(item)
     prisma.driveMessage.findMany.mockResolvedValue([message()])
     prisma.driveMessage.findFirst.mockResolvedValue(message())
+    prisma.driveMessage.findUnique.mockResolvedValue(null)
     prisma.driveMessage.create.mockResolvedValue(message('owner'))
     prisma.driveMessage.update.mockResolvedValue(message())
     prisma.driveMessageComment.findFirst.mockResolvedValue(reply('first'))
@@ -58,6 +60,49 @@ describe('DriveMessageService', () => {
     expect(result.messages[0]?.author.email).toBeNull()
     expect(result.messages[0]?.permissions).toEqual({ canEdit: false, canDelete: false })
     expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: null, shareId: 'share' }))
+  })
+
+  it('reuses an Open API comment for the same idempotency key and rejects changed content', async () => {
+    const access = { kind: 'share' as const, shareId: 'share', itemId: 'doc' }
+    const idempotency = { keyHash: 'key-hash', requestHash: 'request-hash' }
+    prisma.driveMessage.findUnique.mockResolvedValue({ ...message('reader', []), openApiRequestHash: 'request-hash' })
+
+    const replayed = await service.create(access, 'reader', 'hello', undefined, idempotency)
+    expect(replayed.id).toBe('message')
+    expect(prisma.driveMessage.create).not.toHaveBeenCalled()
+    expect(bus.publish).not.toHaveBeenCalled()
+
+    await expect(service.create(access, 'reader', 'different', undefined, {
+      ...idempotency, requestHash: 'different-hash',
+    })).rejects.toBeInstanceOf(ConflictException)
+    expect(prisma.driveMessage.create).not.toHaveBeenCalled()
+  })
+
+  it('stores only hashes for a newly created Open API comment', async () => {
+    const idempotency = { keyHash: 'key-hash', requestHash: 'request-hash' }
+    await service.create({ kind: 'share', shareId: 'share', itemId: 'doc' }, 'reader', ' hello ', undefined, idempotency)
+    expect(prisma.driveMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        body: 'hello', openApiIdempotencyHash: 'key-hash', openApiRequestHash: 'request-hash',
+      }),
+    }))
+    expect(bus.publish).toHaveBeenCalledWith('doc', { type: 'message.changed', itemId: 'doc' })
+  })
+
+  it('returns the original comment when two retries race to create it', async () => {
+    prisma.driveMessage.create.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed', { code: 'P2002', clientVersion: '6.19.3' },
+    ))
+    prisma.driveMessage.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...message('reader', []), openApiRequestHash: 'request-hash' })
+
+    const result = await service.create(
+      { kind: 'share', shareId: 'share', itemId: 'doc' }, 'reader', 'hello', undefined,
+      { keyHash: 'key-hash', requestHash: 'request-hash' },
+    )
+    expect(result.id).toBe('message')
+    expect(bus.publish).not.toHaveBeenCalled()
   })
 
   it('lets an authenticated share reader edit their own message and reply at any depth', async () => {

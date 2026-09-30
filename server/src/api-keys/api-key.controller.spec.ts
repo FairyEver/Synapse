@@ -50,6 +50,11 @@ describe("ApiKeyController", () => {
       description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
       documentationUrl: "http://localhost:19773/document/open-api/api/share-link-download",
     }, {
+      scope: "drive.public_link.comment.create",
+      name: "评论分享文章",
+      description: "允许通过开放接口给分享的 Markdown 文章添加文末评论。",
+      documentationUrl: "http://localhost:19773/document/open-api/api/article-comment-create",
+    }, {
       scope: "notification.send",
       name: "发送通知",
       description: "允许通过开放接口向账号设备发送通知。",

@@ -860,6 +860,8 @@ model DriveMessage {
   updatedAt       DateTime              @updatedAt
   editedAt        DateTime?
   deletedAt       DateTime?
+  openApiIdempotencyHash String? @unique @db.VarChar(64)
+  openApiRequestHash     String? @db.VarChar(64)
   comments        DriveMessageComment[]
 
   @@index([itemId, deletedAt, createdAt, id])

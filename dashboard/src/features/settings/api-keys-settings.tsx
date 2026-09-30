@@ -695,6 +695,7 @@ function ApiKeyUsageDialog({
 const usageOperationLabels = {
   grant_create: '创建下载地址',
   download: '下载',
+  comment_create: '添加文章评论',
 } as const
 
 const usageStatusLabels = {

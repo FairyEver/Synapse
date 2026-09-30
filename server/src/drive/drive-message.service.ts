@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import { DRIVE_MESSAGE_BODY_MAX_LENGTH, isDriveCommentableMarkdownItem, type DriveMessageCommentDto, type DriveMessageDto, type DriveMessageListDto } from "@synapse/shared"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
@@ -66,14 +67,49 @@ export class DriveMessageService {
     }
   }
 
-  async create(access: DriveMessageAccess, actorUserId: string, body: string, ipAddress?: string): Promise<DriveMessageDto> {
+  async create(
+    access: DriveMessageAccess,
+    actorUserId: string,
+    body: string,
+    ipAddress?: string,
+    idempotency?: { readonly keyHash: string; readonly requestHash: string },
+  ): Promise<DriveMessageDto> {
     const item = await this.resolveItem(access, actorUserId)
-    const message = await this.prisma.driveMessage.create({
-      data: { itemId: item.id, body: parseDriveMessageBody(body), createdByUserId: actorUserId },
-      include: messageInclude,
-    })
+    const content = parseDriveMessageBody(body)
+    if (idempotency) {
+      const previous = await this.prisma.driveMessage.findUnique({
+        where: { openApiIdempotencyHash: idempotency.keyHash }, include: messageInclude,
+      })
+      if (previous) return this.replayedMessage(previous, idempotency.requestHash, actorUserId, item.userId)
+    }
+    let message: MessageRecord
+    try {
+      message = await this.prisma.driveMessage.create({
+        data: {
+          itemId: item.id, body: content, createdByUserId: actorUserId,
+          ...(idempotency ? {
+            openApiIdempotencyHash: idempotency.keyHash,
+            openApiRequestHash: idempotency.requestHash,
+          } : {}),
+        },
+        include: messageInclude,
+      })
+    } catch (error) {
+      if (idempotency && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const previous = await this.prisma.driveMessage.findUnique({
+          where: { openApiIdempotencyHash: idempotency.keyHash }, include: messageInclude,
+        })
+        if (previous) return this.replayedMessage(previous, idempotency.requestHash, actorUserId, item.userId)
+      }
+      throw error
+    }
     await this.afterMutation(item.id, actorUserId, "drive.message.create", "drive.message", message.id, ipAddress)
     return toMessageDto(message, actorUserId, item.userId, access.kind === "share")
+  }
+
+  private replayedMessage(message: MessageRecord & { readonly openApiRequestHash: string | null }, requestHash: string, actorUserId: string, ownerId: string): DriveMessageDto {
+    if (message.openApiRequestHash !== requestHash) throw new ConflictException("去重键对应不同请求。")
+    return toMessageDto(message, actorUserId, ownerId, true)
   }
 
   async update(access: DriveMessageAccess, actorUserId: string, messageId: string, body: string, ipAddress?: string): Promise<DriveMessageDto> {

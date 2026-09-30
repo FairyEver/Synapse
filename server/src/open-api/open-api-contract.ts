@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { NOTIFICATION_SEND_SCOPE, PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
+import { DRIVE_MESSAGE_BODY_MAX_LENGTH } from "@synapse/shared"
+import { NOTIFICATION_SEND_SCOPE, PUBLIC_LINK_COMMENT_CREATE_SCOPE, PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
 import { apiKeySecretPatternSource } from "../api-keys/api-key-token"
 
 export const OPEN_API_CONTRACT_BASE_PATH = "/api/open"
@@ -12,6 +13,7 @@ export const OPEN_API_NOTIFICATION_SEND_PATH = OPEN_API_NOTIFICATION_ROUTE
 export const OPEN_API_NOTIFICATION_KEY_SEND_PATH = `${OPEN_API_NOTIFICATION_ROUTE}/{key}`
 export const OPEN_API_NOTIFICATION_PATH_SEND_PATH = `${OPEN_API_NOTIFICATION_KEY_SEND_PATH}/{title}/{body}`
 export const OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH = "/drive/public-links/downloads"
+export const OPEN_API_ARTICLE_COMMENT_PATH = "/drive/public-links/comments"
 export const OPEN_API_LEGACY_SHARE_LINK_DOWNLOAD_PATH = "/drive/share-links/downloads"
 export const OPEN_API_DOWNLOAD_PATH = "/downloads/{grantId}"
 export const OPEN_API_CREATE_DOWNLOAD_PATHS = [
@@ -70,9 +72,24 @@ export const createDownloadRequestSchema = z.object({
     .describe("完整的同源 Synapse Drive 公共 URL，支持 /share、/sites 和 /files。"),
 }).strict()
 
+export const createArticleCommentRequestSchema = z.object({
+  url: z.url().max(2048).describe("当前 Synapse 的完整 /share 链接。").optional(),
+  shareId: z.string().regex(/^shr_[A-Za-z0-9]+$/u).describe("分享链接中的公开 shareId。").optional(),
+  password: z.string().min(1).max(1024).optional(),
+  body: z.string().trim().min(1).max(DRIVE_MESSAGE_BODY_MAX_LENGTH),
+}).strict().refine((value) => Boolean(value.url || value.shareId), {
+  message: "url 和 shareId 至少提供一个。",
+})
+
+export type CreateArticleCommentRequest = z.infer<typeof createArticleCommentRequestSchema>
+
 const notificationMessageJsonSchema = toContractJsonSchema(openApiNotificationMessageSchema, "input")
 const notificationKeyedMessageJsonSchema = toContractJsonSchema(openApiNotificationKeyedMessageSchema, "input")
 const createDownloadRequestJsonSchema = toContractJsonSchema(createDownloadRequestSchema, "output")
+const createArticleCommentRequestJsonSchema = {
+  ...toContractJsonSchema(createArticleCommentRequestSchema, "input"),
+  anyOf: [{ required: ["url"] }, { required: ["shareId"] }],
+}
 
 /**
  * 生成契约里的 JSON Schema。`io: "input"` 让带 `.default()` 的字段保持可选，
@@ -209,8 +226,42 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
       name: "Public links",
       description: "将 Synapse Drive 公共链接转换为临时下载制品。",
     },
+    { name: "Article comments", description: "给分享的 Markdown 文章添加文末评论。" },
   ],
   paths: {
+    [OPEN_API_ARTICLE_COMMENT_PATH]: {
+      post: {
+        tags: ["Article comments"],
+        summary: "评论分享文章",
+        operationId: "createPublicLinkArticleComment",
+        security: [{ ApiKeyBearer: [] }],
+        "x-required-scope": PUBLIC_LINK_COMMENT_CREATE_SCOPE,
+        description: "url 与 shareId 至少提供一个；都提供时必须指向同一分享和同一文章。shareId 单独使用时只指向分享根文件。",
+        parameters: [idempotencyKeyParameter],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArticleCommentRequest" } } },
+        },
+        responses: {
+          "201": {
+            description: "评论已创建，或去重键命中了同一请求。",
+            headers: {
+              "X-Request-Id": { $ref: "#/components/headers/RequestId" },
+              "Cache-Control": { $ref: "#/components/headers/NoStore" },
+            },
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArticleCommentResponse" } } },
+          },
+          "400": errorResponse("请求体或去重键无效，或 url 与 shareId 都未提供。"),
+          "401": errorResponse("API 密钥无效（INVALID_API_KEY）。"),
+          "403": errorResponse("缺少权限、分享密码错误或无法评论。"),
+          "404": errorResponse("分享链接不存在或已失效（LINK_NOT_FOUND）。"),
+          "409": errorResponse("双字段目标不一致或去重键对应不同请求。"),
+          "422": errorResponse("目标不是可评论的 Markdown 文章。"),
+          "503": errorResponse("用量记录暂不可用（USAGE_LOG_UNAVAILABLE）。"),
+          "500": errorResponse("服务端内部错误（INTERNAL_ERROR）。"),
+        },
+      },
+    },
     [OPEN_API_NOTIFICATION_SEND_PATH]: {
       post: {
         tags: ["Notifications"],
@@ -358,6 +409,17 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
       NoStore: noStoreHeader,
     },
     schemas: {
+      CreateArticleCommentRequest: createArticleCommentRequestJsonSchema,
+      CreateArticleCommentResponse: {
+        type: "object", required: ["requestId", "data"], additionalProperties: false,
+        properties: {
+          requestId: { type: "string" },
+          data: {
+            type: "object", required: ["id", "createdAt"], additionalProperties: false,
+            properties: { id: { type: "string" }, createdAt: { type: "string", format: "date-time" } },
+          },
+        },
+      },
       SendNotificationRequest: notificationMessageJsonSchema,
       SendNotificationWithKeyRequest: notificationKeyedMessageJsonSchema,
       SendNotificationResponse: {
@@ -432,6 +494,11 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
                 type: "string",
                 enum: [
                   "INVALID_REQUEST",
+                  "TARGET_REQUIRED",
+                  "TARGET_MISMATCH",
+                  "TARGET_NOT_ARTICLE",
+                  "IDEMPOTENCY_CONFLICT",
+                  "COMMENT_FORBIDDEN",
                   "INVALID_IDEMPOTENCY_KEY",
                   "RATE_LIMITED",
                   "METHOD_NOT_ALLOWED",

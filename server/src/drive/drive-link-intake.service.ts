@@ -161,6 +161,11 @@ export class DriveLinkIntakeService {
     return { kind: "share", ...resolved }
   }
 
+  async resolveSharedMessageTarget(input: { readonly url: string; readonly password?: string }, actorUserId: string): Promise<{ readonly kind: "share"; readonly shareId: string; readonly itemId: string; readonly password?: string }> {
+    const resolved = await this.resolveAnnotationShareTarget(input, actorUserId, "留言")
+    return { kind: "share", ...resolved }
+  }
+
   private get messageService(): DriveMessageService {
     if (!this.deps.messages) throw new Error("DriveMessageService is not available.")
     return this.deps.messages

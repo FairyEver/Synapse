@@ -104,6 +104,10 @@ export default defineConfig({
               link: '/open-api/api/share-link-download'
             },
             {
+              text: '评论分享文章',
+              link: '/open-api/api/article-comment-create'
+            },
+            {
               text: '发送通知',
               link: '/open-api/api/notification-send'
             }

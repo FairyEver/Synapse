@@ -1,6 +1,7 @@
 import { buildPublicDocumentUrl } from "../common/public-document-url"
 
 export const PUBLIC_LINK_DOWNLOAD_SCOPE = "drive.public_link.download"
+export const PUBLIC_LINK_COMMENT_CREATE_SCOPE = "drive.public_link.comment.create"
 export const NOTIFICATION_SEND_SCOPE = "notification.send"
 export const LEGACY_SHARE_LINK_DOWNLOAD_SCOPE = "drive.share_link.download"
 
@@ -10,6 +11,12 @@ export const API_KEY_CAPABILITIES = [
     name: "获取公共链接文件",
     description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
     documentationPath: "/open-api/api/share-link-download",
+  },
+  {
+    scope: PUBLIC_LINK_COMMENT_CREATE_SCOPE,
+    name: "评论分享文章",
+    description: "允许通过开放接口给分享的 Markdown 文章添加文末评论。",
+    documentationPath: "/open-api/api/article-comment-create",
   },
   {
     scope: NOTIFICATION_SEND_SCOPE,
