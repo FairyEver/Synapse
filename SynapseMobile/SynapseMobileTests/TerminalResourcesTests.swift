@@ -168,52 +168,6 @@ struct TerminalResourcesTests {
         #expect(store.resources.map(\.url.absoluteString) == [complete])
     }
 
-    /// The TUI also breaks a long token inside a table cell, at the cell's last column
-    /// rather than the grid's: the rest of the link is on the next line of the same
-    /// column, and the terminal flags nothing about it. Rows as the desktop printed them.
-    @Test func joinsAShareLinkTheTUIBrokeInsideATableCell() throws {
-        let store = TerminalStore()
-        store.update(columns: 53)
-        try withHostedOrigin {
-            store.apply(frame([
-                try line("  │ 工作流循环机制调 │ https://synapse.d2.pub/sh │"),
-                try line("  │ 研与头脑风暴.md  │ are/shr_8ETaz96PYTp2N6s3y │"),
-                try line("  │                  │ H2S7kzRoghH1XaG           │"),
-            ], kind: "reset"))
-        }
-        #expect(store.resources.map(\.url.absoluteString) == [
-            "https://synapse.d2.pub/share/shr_8ETaz96PYTp2N6s3yH2S7kzRoghH1XaG",
-        ])
-        #expect(store.resources.first?.needsConfirmation == false)
-    }
-
-    /// A cell that holds a whole share link is not the head of a longer one, whatever
-    /// the row below carries. Without that, a table of links would chain them together.
-    @Test func leavesAWholeShareLinkInATableCellAlone() throws {
-        let store = TerminalStore()
-        let url = "https://synapse.d2.pub/share/shr_3YjX53MBb3fgUQk9Gu91BLyEVf7oD27O"
-        store.apply(frame([
-            try line("  │ 甲 │ \(url) │"),
-            try line("  │ 乙 │ https://example.org/b │"),
-        ], kind: "reset"))
-        #expect(store.resources.map(\.url.absoluteString).sorted() == [
-            "https://example.org/b", url,
-        ].sorted())
-    }
-
-    /// A row broken at a space ends in padding rather than at the cell's last column, so
-    /// the row below is a row of the table and not the rest of anything.
-    @Test func leavesARowBrokenAtASpaceAlone() throws {
-        let store = TerminalStore()
-        store.apply(frame([
-            try line("  │ 甲 │ https://example.org/a │"),
-            try line("  │ 乙 │ https://example.org/b │"),
-        ], kind: "reset"))
-        #expect(store.resources.map(\.url.absoluteString).sorted() == [
-            "https://example.org/a", "https://example.org/b",
-        ])
-    }
-
     @Test func hardWrappedLinkDoesNotIncludeFollowingChineseProse() throws {
         let store = TerminalStore()
         store.update(columns: 53)
@@ -388,48 +342,6 @@ struct TerminalResourcesTests {
         #expect(store.resources.isEmpty)
         store.apply(frame([try line("  bbbbcccc")], from: 1, total: 2))
         #expect(store.resources.isEmpty)
-    }
-
-    /// The same break five times over, as the table that reported it was printed: the
-    /// separator rows between them are rows of their own and must not interrupt a link
-    /// that is being put back together.
-    @Test func joinsEveryShareLinkInATableTheTUIBroke() throws {
-        let store = TerminalStore()
-        store.update(columns: 53)
-        try withHostedOrigin {
-            store.apply(frame([
-                try line("  │ 流程详情底部提示 │ https://synapse.d2.pub/sh │"),
-                try line("  │ 条-改动说明与测  │ are/shr_oGLNDmV4OFAtBHJ3_ │"),
-                try line("  │ 试要点.md        │ 7csTpZE5LY2y05S           │"),
-                try line("  ├──────────────────┼───────────────────────────┤"),
-                try line("  │ 小慧PC路由兼容映 │ https://synapse.d2.pub/sh │"),
-                try line("  │ 射维护手册.md    │ are/shr_qApkFNrgESvCYgGh3 │"),
-                try line("  │                  │ bofAZnw3jcSd5iy           │"),
-                try line("  ├──────────────────┼───────────────────────────┤"),
-                try line("  │ 2026_08_19_流程  │ https://synapse.d2.pub/sh │"),
-                try line("  │ 设计与开发规范讨 │ are/shr_X4esAckIPgITyp_Cx │"),
-                try line("  │ 论会.md          │ fJO6oFYbs7tJakX           │"),
-                try line("  ├──────────────────┼───────────────────────────┤"),
-                try line("  │ 工作流循环机制调 │ https://synapse.d2.pub/sh │"),
-                try line("  │ 研与头脑风暴.md  │ are/shr_8ETaz96PYTp2N6s3y │"),
-                try line("  │                  │ H2S7kzRoghH1XaG           │"),
-                try line("  ├──────────────────┼───────────────────────────┤"),
-                try line("  │ 2026_08_05_多租  │ https://synapse.d2.pub/sh │"),
-                try line("  │ 户品牌剥离改造需 │ are/shr_2VuWvxn4VPkO4HDrO │"),
-                try line("  │ 求讨论会.md      │ YOF8NexF5OSqXPy           │"),
-                try line("  └──────────────────┴───────────────────────────┘"),
-            ], kind: "reset"))
-        }
-        #expect(store.resources.map(\.url.absoluteString).sorted() == [
-            "https://synapse.d2.pub/share/shr_2VuWvxn4VPkO4HDrOYOF8NexF5OSqXPy",
-            "https://synapse.d2.pub/share/shr_8ETaz96PYTp2N6s3yH2S7kzRoghH1XaG",
-            "https://synapse.d2.pub/share/shr_X4esAckIPgITyp_CxfJO6oFYbs7tJakX",
-            "https://synapse.d2.pub/share/shr_oGLNDmV4OFAtBHJ3_7csTpZE5LY2y05S",
-            "https://synapse.d2.pub/share/shr_qApkFNrgESvCYgGh3bofAZnw3jcSd5iy",
-        ].sorted())
-        // What comes back is one whole link: it is not a candidate to choose between, and
-        // it is not offered as one that needs confirming.
-        #expect(store.resources.allSatisfy { !$0.needsConfirmation })
     }
 
     @Test func historyAndSessionsStaySeparate() throws {

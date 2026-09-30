@@ -256,11 +256,16 @@ struct TerminalResourceCollector {
         }
     }
 
+    /// Share ids are issued at one fixed length, the `shr_` prefix included. A link whose
+    /// id is shorter than that was cut on its way to the phone — it is not a second link,
+    /// and asking the server about it can only ever say 404.
+    static let shareIDLength = 36
+
     /// Share IDs issued by both the old and current server are 32 characters. A shorter
     /// prefix of the same ID is a broken wrap, not a second link to offer or confirm.
     private static func isIncompleteSharePrefix(_ shorter: URL, of complete: URL) -> Bool {
         guard let shortID = shareRootID(shorter), let completeID = shareRootID(complete),
-              completeID.count == 36, shortID.count < completeID.count else { return false }
+              completeID.count == shareIDLength, shortID.count < completeID.count else { return false }
         return completeID.hasPrefix(shortID)
     }
 
