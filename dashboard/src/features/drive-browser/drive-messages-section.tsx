@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode, type Ref } from 'react'
 import type { DriveMessageCommentDto, DriveMessageDto } from '@synapse/shared'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { startDriveOperation } from './shared/drive-telemetry'
 import type { useDriveMessages } from './use-drive-messages'
 
 type Messages = ReturnType<typeof useDriveMessages>
@@ -20,6 +21,13 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
   const submit = async () => {
     const value = editor?.value ?? draft
     if (!value.trim() || busy) return
+    const finish = startDriveOperation(
+      !editor ? 'web.drive.message.create'
+        : editor.kind === 'message' ? 'web.drive.message.update'
+          : editor.kind === 'comment' ? 'web.drive.message.update-comment'
+            : 'web.drive.message.reply',
+      'drive-messages',
+    )
     setBusy(true)
     setError(null)
     try {
@@ -37,7 +45,9 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
         await messages.reply({ messageId: editor.messageId, parentCommentId: editor.parentCommentId, body: value })
         setEditor(null)
       }
+      finish('success')
     } catch (cause) {
+      finish('failure')
       setError(cause instanceof Error ? cause.message : '提交失败。')
     } finally {
       setBusy(false)
