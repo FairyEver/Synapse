@@ -85,7 +85,7 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
   )
 
   return (
-    <section ref={sectionRef} tabIndex={-1} aria-labelledby='drive-messages-heading' className='mx-auto w-full max-w-3xl py-6 outline-none' data-drive-messages-section>
+    <section ref={sectionRef} tabIndex={-1} aria-labelledby='drive-messages-heading' className='mx-auto mt-12 w-full max-w-3xl border-t border-border pt-8 pb-10 outline-none' data-drive-messages-section>
       <h2 id='drive-messages-heading' className='mb-4 text-lg font-semibold'>留言</h2>
       {messages.loading ? <p className='text-sm text-muted-foreground'>加载中</p> : null}
       {messages.error ? <p role='alert' className='text-sm text-destructive'>{messages.error}</p> : null}
