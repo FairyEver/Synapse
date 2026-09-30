@@ -4,9 +4,41 @@ import { parse } from "yaml"
 import { describe, expect, it } from "vitest"
 
 const desktopRoot = path.resolve(__dirname, "../..")
+const ciWorkflowPath = path.join(desktopRoot, "../.github/workflows/ci.yml")
 const releaseWorkflowPath = path.join(desktopRoot, "../.github/workflows/release.yml")
 
 describe("desktop release workflow", () => {
+  it("runs macOS tests alongside typecheck while keeping both CI gates", () => {
+    const workflow = parse(readFileSync(ciWorkflowPath, "utf8")) as {
+      readonly jobs: Record<string, { readonly steps: Array<{ readonly name?: string; readonly run?: string }> }>
+    }
+    const checks = workflow.jobs["desktop-macos"].steps
+    const tests = workflow.jobs["desktop-macos-tests"].steps
+
+    expect(checks.some((step) => step.name === "Typecheck")).toBe(true)
+    expect(checks.some((step) => step.name === "Verify Phase 0 hard constraints")).toBe(true)
+    expect(checks.some((step) => step.name === "Run tests")).toBe(false)
+    expect(tests.some((step) => step.name === "Run tests")).toBe(true)
+    expect(tests.some((step) => step.name === "Run Portal Headless client contracts")).toBe(true)
+    expect(tests.some((step) => step.name === "Run local service shutdown contracts")).toBe(true)
+  })
+
+  it("bundles release preparation during the installer build so publish needs no dependency install", () => {
+    const workflow = parse(readFileSync(releaseWorkflowPath, "utf8")) as {
+      readonly jobs: Record<string, { readonly steps: Array<{ readonly name?: string; readonly run?: string }> }>
+    }
+    const buildSteps = workflow.jobs["build-installers"].steps
+    const publishSteps = workflow.jobs.publish.steps
+    const bundleIndex = buildSteps.findIndex((step) => step.name === "Bundle release preparation script")
+    const uploadIndex = buildSteps.findIndex((step) => step.name === "Upload release artifacts")
+
+    expect(bundleIndex).toBeGreaterThan(-1)
+    expect(bundleIndex).toBeLessThan(uploadIndex)
+    expect(publishSteps.some((step) => step.name === "Install publish dependencies")).toBe(false)
+    expect(publishSteps.find((step) => step.name === "Prepare CDN release artifacts")?.run)
+      .toContain("node ../release-artifacts/prepare-cdn-release-artifacts.mjs")
+  })
+
   it("embeds the production public app URL during installer builds", () => {
     const workflow = parse(readFileSync(releaseWorkflowPath, "utf8")) as {
       readonly jobs?: {

@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process"
-import { access, mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises"
+import { access, mkdtemp, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
+import { build } from "esbuild"
 import { parse } from "yaml"
 import { describe, expect, it } from "vitest"
 
@@ -43,6 +44,37 @@ async function writeFixtureArtifacts(dir: string): Promise<void> {
 }
 
 describe("prepare-cdn-release-artifacts", () => {
+  it("runs the bundled publish script without workspace dependencies", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-bundle-"))
+    const artifactsDir = path.join(root, "release-artifacts")
+    const bundledOutDir = path.join(root, "bundled-output")
+    const sourceOutDir = path.join(root, "source-output")
+    const bundledScript = path.join(artifactsDir, "prepare-cdn-release-artifacts.mjs")
+    await writeFixtureArtifacts(artifactsDir)
+    await build({
+      entryPoints: [scriptPath],
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node22",
+      banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+      outfile: bundledScript,
+    })
+
+    const args = [
+      "--artifacts-dir", artifactsDir,
+      "--version", "0.2.214",
+      "--cdn-base-url", "https://desktop.release.synapse.d2.pub/",
+    ]
+    await execFileAsync(process.execPath, [scriptPath, ...args, "--out-dir", sourceOutDir])
+    await execFileAsync(process.execPath, [await realpath(bundledScript), ...args, "--out-dir", bundledOutDir], { cwd: root })
+
+    for (const fileName of ["manifest.json", "release-body.md", "latest.yml", "latest-windows.yml", "latest-mac.yml"]) {
+      expect(await readFile(path.join(bundledOutDir, fileName), "utf8"))
+        .toBe(await readFile(path.join(sourceOutDir, fileName), "utf8"))
+    }
+  })
+
   it("disables generic provider multi-range requests for Tencent CDN differential updates", async () => {
     const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"))
     const [publishConfig] = packageJson.build.publish

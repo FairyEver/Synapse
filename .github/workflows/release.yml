@@ -54,6 +54,17 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.22.0 --activate
 
+      - name: Locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Prepare Apple notarization key
         if: matrix.os == 'macos-latest'
         env:
@@ -351,6 +362,10 @@ jobs:
           ls -la release-artifacts
           test -n "$(ls -A release-artifacts)"
 
+      - name: Bundle release preparation script
+        if: matrix.label == 'macOS'
+        run: pnpm --filter @synapse/desktop exec esbuild scripts/release/prepare-cdn-release-artifacts.mjs --bundle --platform=node --format=esm --target=node22 --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=../release-artifacts/prepare-cdn-release-artifacts.mjs
+
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -383,14 +398,6 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.22.0 --activate
-
-      - name: Install publish dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Read package version
         id: version
         run: |
@@ -411,7 +418,7 @@ jobs:
           CDN_BASE_URL: https://${{ env.TENCENT_CLOUD_CDN_DOMAIN }}/
         run: |
           cd desktop
-          pnpm exec node scripts/release/prepare-cdn-release-artifacts.mjs \
+          node ../release-artifacts/prepare-cdn-release-artifacts.mjs \
             --artifacts-dir ../release-artifacts \
             --out-dir ../cdn-release \
             --version "$VERSION" \
@@ -532,7 +539,7 @@ jobs:
         run: |
           set -euo pipefail
           cd desktop
-          pnpm exec node scripts/release/prune-cos-release-versions.mjs \
+          node scripts/release/prune-cos-release-versions.mjs \
             --coscli "$RUNNER_TEMP/coscli" \
             --cos-config "$RUNNER_TEMP/cos.yaml"
 

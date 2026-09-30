@@ -36,6 +36,16 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@10.22.0 --activate
+      - name: Locate pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build desktop
@@ -61,7 +71,7 @@ jobs:
         run: pnpm --filter @synapse/desktop run check:script-runtime:packaged
 
   desktop-macos:
-    name: Desktop macOS typecheck + tests + hard-constraints
+    name: Desktop macOS typecheck + build + hard-constraints
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -83,6 +93,16 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@10.22.0 --activate
+      - name: Locate pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck
@@ -91,12 +111,6 @@ jobs:
         run: pnpm --filter @synapse/desktop run typecheck
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build
-      - name: Run tests
-        run: pnpm --filter @synapse/desktop run test
-      - name: Run Portal Headless client contracts
-        run: node --test desktop/tests/portal-headless-client.test.mjs
-      - name: Run local service shutdown contracts
-        run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
       - name: Verify IPC codegen drift
         run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints
@@ -108,6 +122,39 @@ jobs:
       # drifted; this one was not, and did.
       - name: Verify UI tracking coverage
         run: pnpm --filter @synapse/desktop run check:ui-tracking-coverage
+
+  desktop-macos-tests:
+    name: Desktop macOS tests
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.22.0 --activate
+      - name: Locate pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run tests
+        run: pnpm --filter @synapse/desktop run test
+      - name: Run Portal Headless client contracts
+        run: node --test desktop/tests/portal-headless-client.test.mjs
+      - name: Run local service shutdown contracts
+        run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
 
   desktop-windows:
     name: Desktop Windows typecheck + Agent/Git tests + package
@@ -132,6 +179,16 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@10.22.0 --activate
+      - name: Locate pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck
