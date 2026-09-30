@@ -7,6 +7,85 @@ import Foundation
 ///
 /// 角标上那个数字也是同一类东西：写多长直接决定它盖不盖住铃铛、会不会被顶栏裁掉。
 enum NotificationText {
+    struct DayGroup: Identifiable {
+        let id: Date?
+        let title: String
+        var items: [SynapseNotification]
+    }
+
+    static func dayGroups(
+        _ items: [SynapseNotification],
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [DayGroup] {
+        var groups: [DayGroup] = []
+        let today = calendar.startOfDay(for: now)
+        for item in items {
+            let day = ISO8601DateFormatter.parseWireTimestamp(item.createdAt)
+                .map { min(calendar.startOfDay(for: $0), today) }
+            if groups.last?.id == day {
+                groups[groups.count - 1].items.append(item)
+            } else {
+                groups.append(DayGroup(
+                    id: day,
+                    title: day.map { dayTitle($0, now: now, calendar: calendar) } ?? "时间未知",
+                    items: [item]
+                ))
+            }
+        }
+        return groups
+    }
+
+    static func timeOfDay(_ raw: String, calendar: Calendar = .current) -> String {
+        guard let date = ISO8601DateFormatter.parseWireTimestamp(raw) else { return "" }
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        guard let hour = components.hour, let minute = components.minute else { return "" }
+        return String(format: "%02d:%02d", hour, minute)
+    }
+
+    static func fullTimestamp(_ raw: String, calendar: Calendar = .current) -> String {
+        guard let date = ISO8601DateFormatter.parseWireTimestamp(raw) else { return "" }
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = components.year, let month = components.month,
+              let day = components.day else { return "" }
+        return "\(year)年\(month)月\(day)日 \(timeOfDay(raw, calendar: calendar))"
+    }
+
+    static func status(_ item: SynapseNotification) -> String? {
+        guard item.source == "terminal-attention" || item.source == "terminal-complete" else { return nil }
+        if item.targetId == nil { return "会话已结束" }
+        if item.source == "terminal-attention", item.resolvedAt != nil { return "已不再待处理" }
+        return nil
+    }
+
+    static func displayTitle(_ item: SynapseNotification) -> String {
+        guard item.source == "terminal-attention", status(item) != nil,
+              item.title.hasSuffix(" 需要你确认") else { return item.title }
+        return String(item.title.dropLast(" 需要你确认".count))
+    }
+
+    static func detailMeta(_ item: SynapseNotification, calendar: Calendar = .current) -> String {
+        [fullTimestamp(item.createdAt, calendar: calendar), status(item)]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    private static func dayTitle(_ day: Date, now: Date, calendar: Calendar) -> String {
+        let today = calendar.startOfDay(for: now)
+        if day >= today { return "今天" }
+        if calendar.isDate(day, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: today) ?? today) {
+            return "昨天"
+        }
+        let components = calendar.dateComponents([.year, .month, .day], from: day)
+        guard let year = components.year, let month = components.month, let dayNumber = components.day else {
+            return "时间未知"
+        }
+        let dateLabel = "\(month)月\(dayNumber)日"
+        return calendar.isDate(day, equalTo: today, toGranularity: .year)
+            ? dateLabel : "\(year)年\(dateLabel)"
+    }
+
     /// 消息行右上角那一小段时间。
     ///
     /// 只写到现在这一档为止：今天写时刻，昨天写「昨天」，一周内写星期几，再往前写

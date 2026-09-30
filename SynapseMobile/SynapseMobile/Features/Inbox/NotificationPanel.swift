@@ -9,6 +9,7 @@ struct NotificationPanel: View {
     @Environment(\.openURL) private var openURL
     @State private var openedWebLink: WebLink?
     @State private var readingNotification: SynapseNotification?
+    @State private var selectedDetent: PresentationDetent = .medium
 
     /// 「待处理」段里的行打开一个终端会话。
     let onOpenTerminal: (String) -> Void
@@ -18,7 +19,8 @@ struct NotificationPanel: View {
             InboxView(
                 onOpenTerminal: openTerminal,
                 onOpen: open,
-                onViewContent: viewContent
+                onViewContent: viewContent,
+                selectedDetent: $selectedDetent
             )
             .navigationTitle("通知")
             .navigationBarTitleDisplayMode(.inline)
@@ -32,11 +34,14 @@ struct NotificationPanel: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("关闭")
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
         // sheet 会盖住底层屏幕挂的那条通知覆盖层，所以这一层要自己再挂一次 ——
         // 与剪贴板 sheet 同一个做法。
@@ -88,8 +93,8 @@ private struct NotificationFullTextView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(item.title).font(.title2).fontWeight(.semibold)
-                Text(NotificationText.timestamp(item.createdAt))
+                Text(NotificationText.displayTitle(item)).font(.title2).fontWeight(.semibold)
+                Text(NotificationText.detailMeta(item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 MarkdownContent(item.body)

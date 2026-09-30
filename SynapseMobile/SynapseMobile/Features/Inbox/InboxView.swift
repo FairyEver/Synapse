@@ -16,24 +16,18 @@ import SwiftUI
 /// 那两屏没有这条带子，标题都好好的——标题比钉住重要，带子回到列表里。
 struct InboxView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// 「待处理」段里的行打开一个终端会话。那一段读的不是通知记录，是实时会话列表。
     let onOpenTerminal: (String) -> Void
     /// 一条通知被点了。去向由调用方决定 —— 列表自己不做路由。
     let onOpen: (SynapseNotification) -> Void
     let onViewContent: (SynapseNotification) -> Void
+    @Binding var selectedDetent: PresentationDetent
     @State private var filter = "pending"
     @State private var confirmingClear = false
 
     var body: some View {
         List {
-            if let error = model.notifications.error {
-                Section {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.failure)
-                }
-            }
-
             // 筛选带子自己占一段。
             //
             // 它不能排在消息那一段里。`insetGrouped` 的卡片背景是**逐行**画的：一段的
@@ -48,8 +42,17 @@ struct InboxView: View {
             }
             .listSectionSpacing(.custom(0))
 
-            Section {
-                if filter == "pending" {
+            if filter != "pending", let error = model.notifications.error {
+                Section {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.failure)
+                }
+                .listSectionSpacing(.custom(0))
+            }
+
+            if filter == "pending" {
+                Section {
                     ForEach(model.waitingSessions) { session in
                         Button {
                             onOpenTerminal(session.id)
@@ -63,17 +66,27 @@ struct InboxView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                } else {
-                    ForEach(visibleItems) { item in
-                        notificationRow(item)
+                } header: {
+                    if let desktopId = model.selectedDesktopClientInstanceId {
+                        Text("当前电脑 · \(model.desktopName(desktopId))")
                     }
                 }
+                .listSectionSpacing(.custom(0))
+            } else if model.notifications.filter == filter {
+                ForEach(NotificationText.dayGroups(visibleItems)) { group in
+                    Section(group.title) {
+                        ForEach(group.items) { item in
+                            notificationRow(item)
+                        }
+                    }
+                    .listSectionSpacing(.custom(0))
+                }
             }
-            .listSectionSpacing(.custom(0))
 
             // 「加载更多」自己占一段。留在消息那一段里的话，它清掉底色会在卡片上戳出
             // 一个洞——最后一行下面的圆角是画在这一行身上的，而这一行是透明的。
-            if filter != "pending" && model.notifications.nextCursor != nil {
+            if filter != "pending", model.notifications.filter == filter,
+               model.notifications.nextCursor != nil {
                 Section { loadMoreRow }
             }
         }
@@ -89,18 +102,29 @@ struct InboxView: View {
         // 标题由宿主给：面板那一层画的是「通知」，而这一屏不知道自己是被谁画出来的。
         .toolbar {
             if filter != "pending" {
-                Button("全部已读") { Task { await model.readAllNotifications() } }
-                    .disabled(model.notifications.unreadCount == 0)
-            }
-            if filter == "all" {
-                Button("全部清空", role: .destructive) { confirmingClear = true }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("将所有通知标为已读") { Task { await model.readAllNotifications() } }
+                            .disabled(model.notifications.unreadCount == 0)
+                        if filter == "all" {
+                            Button("清空全部通知", role: .destructive) { confirmingClear = true }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .accessibilityLabel("通知操作")
+                    }
+                }
             }
         }
         .confirmationDialog("清空所有通知？", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("全部清空", role: .destructive) { Task { await model.deleteAllNotifications() } }
         }
         .onChange(of: filter) { _, selected in
-            if selected != "pending" { Task { await model.reloadNotifications(filter: selected) } }
+            if selected == "pending" {
+                selectedDetent = .medium
+            } else {
+                Task { await model.reloadNotifications(filter: selected) }
+            }
         }
         .noticeOverlay(model)
     }
@@ -113,37 +137,81 @@ struct InboxView: View {
     /// 那张卡片同宽。上下各 8 是这条带子自己的留白，也是它和卡片之间全部的间距。行下
     /// 的那条分隔线也去掉：带子不是一条内容行，不该在结尾处横一道。
     private var filterBar: some View {
-        Picker("筛选", selection: $filter) {
-            Text("待处理").tag("pending")
-            Text("全部").tag("all")
-            Text("未读").tag("unread")
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                Menu {
+                    filterOption("待处理", value: "pending")
+                    filterOption("全部通知", value: "all")
+                    filterOption("未读通知", value: "unread")
+                } label: {
+                    HStack {
+                        Text(filterTitle)
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityLabel("筛选：\(filterTitle)")
+            } else {
+                filterPicker.pickerStyle(.segmented)
+            }
         }
-        .pickerStyle(.segmented)
         .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
     }
 
-    /// 「未读」是这一屏唯一的客户端筛选。服务端也认 `filter=unread`，而列表里拿到的
-    /// 这批已经可以就地筛，不必为切一个分段再问一次。
+    private var filterPicker: some View {
+        Picker("筛选", selection: $filter) {
+            Text("待处理").tag("pending")
+            Text("全部通知").tag("all")
+            Text("未读通知").tag("unread")
+        }
+    }
+
+    private func filterOption(_ title: String, value: String) -> some View {
+        Button { filter = value } label: {
+            if filter == value {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
+    }
+
+    private var filterTitle: String {
+        switch filter {
+        case "all": "全部通知"
+        case "unread": "未读通知"
+        default: "待处理"
+        }
+    }
+
+    /// 分页由服务端按筛选条件返回；这一层让刚标记已读的行立即从未读列表消失，
+    /// 并在切换筛选的请求完成前隐藏上一档的记录。
     private var visibleItems: [SynapseNotification] {
+        guard model.notifications.filter == filter else { return [] }
         guard filter == "unread" else { return model.notifications.items }
         return model.notifications.items.filter { $0.readAt == nil }
     }
 
     private func notificationRow(_ item: SynapseNotification) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: 8) {
             Button {
                 onOpen(item)
             } label: {
-                NotificationRow(item: item)
+                NotificationRow(item: item, desktopName: notificationDesktopName(item))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
-            if NotificationDestination.resolve(item) != .none {
-                Button("全文") { onViewContent(item) }
-                    .font(.subheadline)
+            .accessibilityHint(NotificationDestination.actionLabel(for: item))
+            if NotificationDestination.resolve(item) != .none, !item.body.isEmpty {
+                Button { onViewContent(item) } label: {
+                    Image(systemName: "text.alignleft")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("查看\(item.title)全文")
+                    .accessibilityLabel("查看\(item.title)正文")
             }
         }
         .swipeActions(edge: .trailing) {
@@ -159,6 +227,12 @@ struct InboxView: View {
             // 明暗两套外观都对。终端列表和录音列表都已指定，这一处漏了。
             .tint(Color(uiColor: .systemRed))
         }
+    }
+
+    private func notificationDesktopName(_ item: SynapseNotification) -> String? {
+        guard let id = item.deviceId else { return nil }
+        let name = model.desktopName(id)
+        return name == id ? nil : name
     }
 
     /// 触底之前不自动取下一页，留着这颗按钮。
@@ -185,7 +259,7 @@ struct InboxView: View {
                 ContentUnavailableView("暂无待处理事项", systemImage: "checkmark.circle")
             }
         } else if model.notifications.error == nil && visibleItems.isEmpty {
-            if model.notifications.loading {
+            if model.notifications.loading || model.notifications.filter != filter {
                 ProgressView()
             } else {
                 ContentUnavailableView(
@@ -199,13 +273,14 @@ struct InboxView: View {
 
 /// 一条消息。
 ///
-/// 三样东西，按它们对读的人的重要程度分三个位置：标题说「这是什么」，时间说「什么时候」
-/// 并因此落在标题那一行的末尾，正文说细节。
+/// 标题、时刻和正文摘要承担扫读；底行交代来源、历史状态和整行点按的去向。
 ///
 /// 时间不再单占一行。原来它是第三行，和标题、正文一起挤在 `spacing: 4` 里，三行字
 /// 号各不相同又挨得极近，读起来是一团。
 private struct NotificationRow: View {
     let item: SynapseNotification
+    let desktopName: String?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var isUnread: Bool { item.readAt == nil }
 
@@ -223,7 +298,7 @@ private struct NotificationRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(item.title)
+                    Text(NotificationText.displayTitle(item))
                         // 字重变、字号不变：换字号会让未读和已读的行高不一样，一屏
                         // 读下来就会跳。`.headline` 本身已经是 semibold。
                         .font(.headline.weight(isUnread ? .semibold : .regular))
@@ -237,7 +312,7 @@ private struct NotificationRow: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 8)
-                    Text(NotificationText.timestamp(item.createdAt))
+                    Text(NotificationText.timeOfDay(item.createdAt))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -245,8 +320,32 @@ private struct NotificationRow: View {
                 MarkdownContent(item.body, mode: .preview(lines: 2))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let contextLabel { Text(contextLabel) }
+                        Text(NotificationDestination.actionLabel(for: item))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    HStack(spacing: 8) {
+                        if let contextLabel {
+                            Text(contextLabel).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Text(NotificationDestination.actionLabel(for: item))
+                            .lineLimit(1)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
         }
+    }
+
+    private var contextLabel: String? {
+        let parts = [desktopName, NotificationText.status(item)].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -267,16 +366,9 @@ private struct WaitingSessionRow: View {
                 .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(session.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(session.elapsedLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(session.title)
+                    .font(.headline)
+                    .lineLimit(1)
                 Text(waitingReason)
                     .font(.subheadline)
                     .foregroundStyle(Theme.attention)

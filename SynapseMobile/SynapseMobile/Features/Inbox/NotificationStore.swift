@@ -69,8 +69,7 @@ final class NotificationStore {
             try await client.markNotificationRead(id)
             let item = try await client.notification(id)
             guard account == accountGeneration else { return }
-            items.removeAll { $0.id == id }
-            items.insert(item, at: 0)
+            items = Self.itemsAfterReading(item, in: items, filter: filter)
             let count = try await client.notificationUnreadCount()
             guard account == accountGeneration else { return }
             unreadCount = count
@@ -130,5 +129,20 @@ final class NotificationStore {
         unreadCount = 0
         error = nil
         loading = false
+    }
+
+    static func itemsAfterReading(
+        _ item: SynapseNotification,
+        in currentItems: [SynapseNotification],
+        filter: String
+    ) -> [SynapseNotification] {
+        var updated = currentItems
+        guard let index = updated.firstIndex(where: { $0.id == item.id }) else { return updated }
+        if filter == "unread" {
+            updated.remove(at: index)
+        } else {
+            updated[index] = item
+        }
+        return updated
     }
 }

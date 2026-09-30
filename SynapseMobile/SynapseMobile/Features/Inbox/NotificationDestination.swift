@@ -41,4 +41,15 @@ enum NotificationDestination {
         }
         return .none
     }
+
+    static func actionLabel(for item: SynapseNotification) -> String {
+        switch resolve(item) {
+        case .route(.terminal): return "打开终端"
+        case .route(.meeting): return "查看转写"
+        case .route(.mail): return "查看站内信"
+        case .route: return "查看通知"
+        case .externalURL: return "打开链接"
+        case .none: return "查看通知"
+        }
+    }
 }

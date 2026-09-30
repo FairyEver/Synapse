@@ -128,16 +128,17 @@
 
 ### 6.2 通知面板
 
-`.sheet` 承载，形态照现有 `InboxView` 的内容：
+`.sheet` 承载。2026-09-30 的通知面板修正保持以下行为；界面依据为 Apple 的 [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)、[Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars)、[Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables) 与 [Segmented controls](https://developer.apple.com/design/human-interface-guidelines/segmented-controls)：
 
-- 顶部分段：**待处理 / 未读 / 全部**，默认落「待处理」（与现状一致，`InboxView.swift:18`）。
-- 右上角「全部已读」，未读为 0 时置灰。
-- 行：标题、Markdown 正文摘要（最多两行）、时间、未读点。有目标的行另有「全文」操作。
+- 顶部分段：**待处理 / 全部通知 / 未读通知**，默认落「待处理」。前者是当前电脑的实时会话，后两者是账号通知记录；大字号下用菜单选择。
+- 右上角操作菜单包含「将所有通知标为已读」（未读为 0 时置灰）和「清空全部通知」（仅全部通知，仍需确认）。关闭入口使用系统关闭符号。
+- 通知按日期分组，每行显示具体时刻、标题、最多两行 Markdown 摘要、未读点和目标操作提示；有目标的行用独立正文按钮阅读，避免重复文字行。已解除待处理或目标失效的终端记录明确显示状态，能解析电脑名称时标出电脑。
+- 待处理行不显示没有标明含义的会话运行时长。
 - 行点击：有目标时 `readNotification(id)` → 按 §7.5 解析 target 并打开；无目标时标记已读并进入 Markdown 全文。外部 HTTPS 链接仍按原浏览入口处理。
 - 左滑删除，系统红（`InboxView.swift:139` 的既有做法）。
 - 「加载更多」按钮与分页照旧。
 - sheet 里**必须再挂一次 `.noticeOverlay(model)`**：`noticeOverlay` 是显式传 model 的修饰符（`Features/Root/NoticeBar.swift:193`），每个屏幕各自挂一条，sheet 会盖住底层那条。现有剪贴板 sheet 就是这么做的（`SessionListView.swift:331`）。
-- 呈现 detents：`.medium` 与 `.large`。
+- 呈现 detents：`.medium` 与 `.large`；打开及切回待处理时选 `.medium`，仍允许手动展开。
 
 ### 6.3 主页导航栈
 

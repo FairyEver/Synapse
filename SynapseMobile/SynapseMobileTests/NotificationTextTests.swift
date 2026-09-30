@@ -31,6 +31,47 @@ struct NotificationTextTests {
         NotificationText.meta(group: group, createdAt: iso, now: now, calendar: calendar)
     }
 
+    private func item(
+        _ id: String,
+        at createdAt: String,
+        source: String = "external",
+        targetId: String? = nil,
+        resolvedAt: String? = nil
+    ) -> SynapseNotification {
+        SynapseNotification(
+            id: id, source: source, title: id, body: "正文", group: nil,
+            url: nil, level: "active", targetId: targetId, deviceId: nil,
+            readAt: nil, resolvedAt: resolvedAt, createdAt: createdAt
+        )
+    }
+
+    @Test func groupsKeepDayOrderAndExactRowTimes() throws {
+        let now = try now()
+        let items = [
+            item("recent", at: "2026-09-23T09:25:00.000Z"),
+            item("yesterday-late", at: "2026-09-22T15:50:00.000Z"),
+            item("yesterday-early", at: "2026-09-22T09:25:00.000Z"),
+        ]
+        let groups = NotificationText.dayGroups(items, now: now, calendar: calendar)
+        #expect(groups.map(\.title) == ["今天", "昨天"])
+        #expect(groups[1].items.map(\.id) == ["yesterday-late", "yesterday-early"])
+        #expect(NotificationText.timeOfDay(items[1].createdAt, calendar: calendar) == "23:50")
+        #expect(NotificationText.fullTimestamp(items[1].createdAt, calendar: calendar) == "2026年9月22日 23:50")
+    }
+
+    @Test func resolvedTerminalNotificationsDoNotLookActionable() {
+        let createdAt = "2026-09-23T09:25:00.000Z"
+        #expect(NotificationText.status(item("waiting", at: createdAt, source: "terminal-attention", targetId: "session")) == nil)
+        #expect(NotificationText.status(item("resolved", at: createdAt, source: "terminal-attention", targetId: "session", resolvedAt: createdAt)) == "已不再待处理")
+        #expect(NotificationText.status(item("ended", at: createdAt, source: "terminal-attention", resolvedAt: createdAt)) == "会话已结束")
+        #expect(NotificationText.status(item("external", at: createdAt)) == nil)
+        let oldTitle = item("升级 需要你确认", at: createdAt, source: "terminal-attention", targetId: "session", resolvedAt: createdAt)
+        #expect(NotificationText.displayTitle(oldTitle) == "升级")
+        #expect(NotificationText.detailMeta(oldTitle, calendar: calendar) == "2026年9月23日 17:25 · 已不再待处理")
+        let liveTitle = item("升级 需要你确认", at: createdAt, source: "terminal-attention", targetId: "session")
+        #expect(NotificationText.displayTitle(liveTitle) == "升级 需要你确认")
+    }
+
     @Test func todayKeepsOnlyTheClock() throws {
         // 六分钟前那一条不该把年月日一起写出来——它和现在只差六分钟。
         let now = try now()
