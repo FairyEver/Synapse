@@ -97,7 +97,7 @@ describe("drive sync binding validator", () => {
     })).resolves.toMatchObject({
       status: "blocked",
       direction: null,
-      reason: "本地文件与云盘文件大小不一致，不能直接建立绑定。",
+      reason: "本地文件和云盘上的文件大小不一致，不能直接建立同步。",
     })
   })
 
@@ -175,7 +175,7 @@ describe("drive sync binding validator", () => {
       localPath: path.join(tempDir, "other.md"),
       remoteExists: true,
       activeBindings,
-    })).resolves.toMatchObject({ status: "blocked", reason: "云盘条目已绑定。" })
+    })).resolves.toMatchObject({ status: "blocked", reason: "云盘上这个条目已经在同步了。" })
     await expect(previewDriveSyncBinding({
       driveItemId: "folder-2",
       driveItemName: "Docs",
@@ -183,7 +183,7 @@ describe("drive sync binding validator", () => {
       localPath: path.join(tempDir, "BOUND"),
       remoteExists: true,
       activeBindings,
-    })).resolves.toMatchObject({ status: "blocked", reason: "本地路径已绑定。" })
+    })).resolves.toMatchObject({ status: "blocked", reason: "这个本地路径已经在同步了。" })
     await expect(previewDriveSyncBinding({
       driveItemId: "folder-3",
       driveItemName: "Nested",
@@ -191,7 +191,7 @@ describe("drive sync binding validator", () => {
       localPath: path.join(tempDir, "bound", "Nested"),
       remoteExists: true,
       activeBindings,
-    })).resolves.toMatchObject({ status: "blocked", reason: "本地路径已绑定。" })
+    })).resolves.toMatchObject({ status: "blocked", reason: "这个本地路径已经在同步了。" })
   })
 
   it("blocks symlink aliases that resolve to an already bound local folder", async () => {
@@ -210,7 +210,7 @@ describe("drive sync binding validator", () => {
       activeBindings: [createBinding({ driveItemId: "folder-1", localPath: targetFolder })],
     })).resolves.toMatchObject({
       status: "blocked",
-      reason: "本地路径已绑定。",
+      reason: "这个本地路径已经在同步了。",
     })
   })
 

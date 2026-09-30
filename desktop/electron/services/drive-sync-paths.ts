@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { lstat, mkdir, realpath, rename, rm } from "node:fs/promises"
 import path from "node:path"
 
-const PATH_OUTSIDE_BINDING_MESSAGE = "同步路径超出绑定目录。"
+const PATH_OUTSIDE_BINDING_MESSAGE = "同步路径超出了同步目录。"
 const PATH_CONTAINS_SYMLINK_MESSAGE = "同步路径包含符号链接，已停止写入。"
 
 export function normalizeLocalPath(input: string): string {

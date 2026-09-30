@@ -28,8 +28,8 @@ describe("drive sync path utilities", () => {
   })
 
   it("rejects paths outside the binding root", () => {
-    expect(() => assertInsideBindingRoot("/Users/me/docs", "/Users/me/other/a.md")).toThrow("同步路径超出绑定目录。")
-    expect(() => resolveBindingChildPath("/Users/me/docs", "../secret.md")).toThrow("同步路径超出绑定目录。")
+    expect(() => assertInsideBindingRoot("/Users/me/docs", "/Users/me/other/a.md")).toThrow("同步路径超出了同步目录。")
+    expect(() => resolveBindingChildPath("/Users/me/docs", "../secret.md")).toThrow("同步路径超出了同步目录。")
   })
 
   it("resolves child paths inside the binding root", () => {

@@ -41,12 +41,12 @@ export async function previewDriveSyncBinding(input: {
     if (input.remoteExists && input.directionHint === "bind_existing") {
       if (local.kind !== "file") {
         const reason = local.kind === "folder"
-          ? "本地路径是文件夹，不能绑定云盘文件。"
-          : "本地文件不存在，不能和已有云盘文件建立绑定。"
+          ? "云盘上是文件，但这里选中的是文件夹。"
+          : "本地文件不存在，不能和云盘上已有的文件建立同步。"
         return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
       }
       if (!await localFileSizeMatchesRemote(localPath, input.remoteSize)) {
-        return blocked(localPath, local.kind, local.empty, "本地文件与云盘文件大小不一致，不能直接建立绑定。", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
+        return blocked(localPath, local.kind, local.empty, "本地文件和云盘上的文件大小不一致，不能直接建立同步。", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
       }
       return ready(localPath, local.kind, local.empty, "bind_existing", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
     }
@@ -57,10 +57,10 @@ export async function previewDriveSyncBinding(input: {
       return ready(localPath, local.kind, local.empty, "local_to_remote", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
     }
     const reason = local.kind === "folder"
-      ? "本地路径是文件夹，不能绑定云盘文件。"
+      ? "云盘上是文件，但这里选中的是文件夹。"
       : input.remoteExists
-        ? "本地文件已存在，不能和已有云盘文件直接合并。"
-        : "本地文件不存在，不能创建云盘绑定。"
+        ? "本地文件已存在，不能和云盘上已有的文件直接合并。"
+        : "本地文件不存在，不能新建同步。"
     return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
   }
 
@@ -68,8 +68,8 @@ export async function previewDriveSyncBinding(input: {
     if (input.directionHint === "bind_existing") {
       if (local.kind !== "folder") {
         const reason = local.kind === "file"
-          ? "本地路径是文件，不能绑定云盘文件夹。"
-          : "本地文件夹不存在，不能和已有云盘文件夹建立绑定。"
+          ? "云盘上是文件夹，但这里选中的是文件。"
+          : "本地文件夹不存在，不能和云盘上已有的文件夹建立同步。"
         return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
       }
       return ready(localPath, local.kind, local.empty, "bind_existing", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
@@ -86,8 +86,8 @@ export async function previewDriveSyncBinding(input: {
       return ready(localPath, local.kind, local.empty, "remote_to_local", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
     }
     const reason = local.kind === "file"
-      ? "本地路径是文件，不能绑定云盘文件夹。"
-      : "本地文件夹已有内容，不能和已有云盘文件夹直接合并。"
+      ? "云盘上是文件夹，但这里选中的是文件。"
+      : "本地文件夹已有内容，不能和云盘上已有的文件夹直接合并。"
     return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
   }
 
@@ -96,8 +96,8 @@ export async function previewDriveSyncBinding(input: {
   }
 
   const reason = local.kind === "file"
-    ? "本地路径是文件，不能创建云盘文件夹绑定。"
-    : "本地文件夹不存在，不能上传到新的云盘文件夹。"
+    ? "云盘上要新建的是文件夹，但这里选中的是文件。"
+    : "本地文件夹不存在，不能上传。"
   return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
 }
 
@@ -162,10 +162,10 @@ async function findDuplicateBindingReason(
   activeBindings: readonly DriveSyncBindingEntryV1[],
 ): Promise<string | null> {
   const active = activeBindings.filter((binding) => binding.status !== "removed")
-  if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘条目已绑定。"
+  if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘上这个条目已经在同步了。"
   for (const binding of active) {
     if (await localPathIdentitiesOverlap(binding.localPath, localPath)) {
-      return "本地路径已绑定。"
+      return "这个本地路径已经在同步了。"
     }
   }
   return null

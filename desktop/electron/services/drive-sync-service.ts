@@ -441,10 +441,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
     const activeBindings = (await listOwnerBindings()).filter((binding) => binding.status !== "removed")
     if (activeBindings.some((binding) => binding.driveItemId === driveItemId)) {
-      throw new Error("云盘条目已绑定。")
+      throw new Error("云盘上这个条目已经在同步了。")
     }
     if (await hasOverlappingLocalBinding(activeBindings, localPath)) {
-      throw new Error("本地路径已绑定。")
+      throw new Error("这个本地路径已经在同步了。")
     }
 
     const now = timestamp()
@@ -1184,7 +1184,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     activeBindings: readonly DriveSyncBindingEntryV1[],
   ): Promise<string | null> {
     const active = activeBindings.filter((binding) => binding.status !== "removed")
-    if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘条目已绑定。"
+    if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘上这个条目已经在同步了。"
     if (active.length === 0) return null
 
     const candidateAncestors = await collectRemoteAncestorIds(driveItemId)
@@ -1222,7 +1222,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function assertRemoteToLocalTargetStillSafe(input: DriveSyncCreateSafeBindingInput): Promise<void> {
     const remoteItem = await getDriveItemFromAccountService(deps.accountService, input.driveItemId)
-    if (remoteItem.type !== input.kind) throw new Error("云盘条目类型与绑定类型不一致。")
+    if (remoteItem.type !== input.kind) throw new Error("云盘条目的类型和这次同步不一致。")
     const activeBindings = await listOwnerBindings()
     const remoteOverlapReason = await findRemoteBindingOverlapReason(input.driveItemId, activeBindings)
     if (remoteOverlapReason) throw new Error(remoteOverlapReason)
@@ -1240,7 +1240,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function createBindExistingBinding(input: DriveSyncCreateSafeBindingInput): Promise<DriveSyncBindingDto> {
     const remoteItem = await getDriveItemFromAccountService(deps.accountService, input.driveItemId)
-    if (remoteItem.type !== input.kind) throw new Error("云盘条目类型与绑定类型不一致。")
+    if (remoteItem.type !== input.kind) throw new Error("云盘条目的类型和这次同步不一致。")
     const activeBindings = await listOwnerBindings()
     const remoteOverlapReason = await findRemoteBindingOverlapReason(input.driveItemId, activeBindings)
     if (remoteOverlapReason) throw new Error(remoteOverlapReason)
@@ -1252,7 +1252,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       activeBindings,
     })
     if (preview.status !== "ready" || preview.direction !== "bind_existing") {
-      throw new Error(preview.reason ?? "本地路径不能和已有云盘条目建立绑定。")
+      throw new Error(preview.reason ?? "这个本地路径不能和云盘上已有的条目建立同步。")
     }
 
     const initialCursor = await currentRemoteCursor()
@@ -1389,7 +1389,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         || remoteBefore.size !== remoteAfter.size
         || remoteBefore.updatedAt !== remoteAfter.updatedAt
       ) throw new Error("校验期间内容发生变化，请重试。")
-      if (localHash !== remoteHash) throw new Error("本地与云盘文件内容不一致，无法直接绑定。")
+      if (localHash !== remoteHash) throw new Error("本地与云盘上的文件内容不一致，不能直接建立同步。")
     } finally {
       await rm(verificationDirectory, { recursive: true, force: true })
     }
@@ -1665,7 +1665,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           relativePath: "",
           localPath: binding.localPath,
           source: "initialization",
-          message: "本地文件在初始化恢复期间已变化。",
+          message: "本地文件在准备过程中发生了变化。",
         })
         return
       }
@@ -1882,7 +1882,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       const item = page.items.find((candidate) => isDirectRemoteItemMatch(candidate, parentId, name))
       if (item) {
         const itemLabel = item.type === "folder" ? "文件夹" : "文件"
-        throw new Error(`目标云盘位置已存在同名${itemLabel}，请改用绑定已有云盘条目，或选择新的名称或位置。`)
+        throw new Error(`目标云盘位置已存在同名${itemLabel}，请改为同步已有的云盘条目，或选择新的名称或位置。`)
       }
       offset = page.nextOffset ?? null
     }
@@ -2092,7 +2092,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           createdRemoteRootId = null
         } catch (cleanupError) {
           await updateBindingDriveItemId(binding.id, remoteRootId)
-          throw new Error("初始化上传未完成，云端临时文件夹清理失败。已保留同步绑定，请处理后重试。", {
+          throw new Error("首次上传没有完成，云端的临时文件夹也没能清理。同步关系已保留，请处理后重试。", {
             cause: cleanupError,
           })
         }
@@ -2161,7 +2161,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           await failInitialFolderUpload(error)
         }
         await progressWrites
-        if (!upload) throw new Error("初始化上传未返回结果。")
+        if (!upload) throw new Error("首次上传没有返回结果。")
         if (upload.failed > 0 || upload.completed === 0) {
           await failInitialFolderUpload(new Error(upload.message ?? "上传失败。"))
         }
@@ -4139,7 +4139,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       || binding.status === "removed"
       || binding.schemaVersion !== 3
       || binding.ownerUserId !== currentOwnerUserId()
-    ) throw new Error("同步绑定不存在。")
+    ) throw new Error("这条同步不存在。")
     return binding
   }
 

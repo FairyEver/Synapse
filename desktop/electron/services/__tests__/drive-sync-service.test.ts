@@ -871,7 +871,7 @@ describe("DriveSyncService", () => {
       kind: "folder",
       drivePathHint: "/产品文档",
       localPath: "/Users/me/other",
-    })).rejects.toThrow("云盘条目已绑定。")
+    })).rejects.toThrow("云盘上这个条目已经在同步了。")
     await expect(service.createBinding({
       driveItemId: "drive-item-2",
       driveItemName: "资料",
@@ -879,7 +879,7 @@ describe("DriveSyncService", () => {
       drivePathHint: "/资料",
       localPath: "/Users/me/docs",
       deferWatcher: true,
-    })).rejects.toThrow("本地路径已绑定。")
+    })).rejects.toThrow("这个本地路径已经在同步了。")
     await expect(service.createBinding({
       driveItemId: "drive-item-3",
       driveItemName: "资料",
@@ -887,7 +887,7 @@ describe("DriveSyncService", () => {
       drivePathHint: "/资料",
       localPath: "/users/me/DOCS",
       deferWatcher: true,
-    })).rejects.toThrow("本地路径已绑定。")
+    })).rejects.toThrow("这个本地路径已经在同步了。")
   })
 
   it("rejects symlink aliases that resolve to an already bound local folder", async () => {
@@ -922,7 +922,7 @@ describe("DriveSyncService", () => {
         directionHint: "bind_existing",
       })).resolves.toMatchObject({
         status: "blocked",
-        reason: "本地路径已绑定。",
+        reason: "这个本地路径已经在同步了。",
       })
       await expect(service.createSafeBinding({
         driveItemId: "drive-item-2",
@@ -931,7 +931,7 @@ describe("DriveSyncService", () => {
         drivePathHint: "/资料",
         localPath: aliasFolder,
         direction: "bind_existing",
-      })).rejects.toThrow("本地路径已绑定。")
+      })).rejects.toThrow("这个本地路径已经在同步了。")
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -1790,7 +1790,7 @@ describe("DriveSyncService", () => {
         kind: "file",
         localPath,
         direction: "bind_existing",
-      })).rejects.toThrow("本地文件与云盘文件大小不一致")
+      })).rejects.toThrow("本地文件和云盘上的文件大小不一致")
       await expect(harness.bindings.list()).resolves.toEqual([])
       await expect(harness.baseline.list()).resolves.toEqual([])
     } finally {
@@ -2803,7 +2803,7 @@ describe("DriveSyncService", () => {
       expect(binding).toMatchObject({
         driveItemId: "partial-root",
         status: "error",
-        lastError: expect.stringContaining("已保留同步绑定"),
+        lastError: expect.stringContaining("同步关系已保留"),
       })
       await expect(harness.bindings.list()).resolves.toHaveLength(1)
     } finally {
