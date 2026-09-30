@@ -48,6 +48,12 @@ If the user message contains `PH`, read it as Portal Headless and route to `exte
 
 For scheduled-task, scheduler, cron, interval, enable/disable, run-history, or runtime-state requests, use the current Automation domain. Legacy `scheduler_*` MCP tools are retired and are not supported aliases.
 
+## Showing Links To The User
+
+When the answer includes a Synapse link for the user to open — a share link, a Drive item link, a site or public asset link, or a `synapse://` deep link — write the URL itself out, on a line of its own or inside a plain sentence. Do not hide it behind Markdown link text, and never put it inside a table cell.
+
+The phone reads links out of the terminal rows it is sent, and a table is the one layout it cannot read: the terminal breaks a long URL at the cell's last column, and what arrives is a fragment of it. The phone then asks the server about that fragment and reports a link that works as 已失效. A list of links is a list — one link per line — not a table.
+
 ## Boundaries
 
 Use only the domain guidance that matches the current task. Do not apply Workflow rules to Automation items, Drive rules to local files unless the user asks for a Drive upload or sync operation, or Database SQL rules to Resource Repository resources.

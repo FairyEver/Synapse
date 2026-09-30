@@ -10,7 +10,7 @@ When the user says “云文档”, “在线文档”, “云盘”, “云存�
 
 - “看看云文档 / 网盘上有什么文件”: list the relevant Drive folder with `app_drive_item_list`, using root when no folder is named and paginating as needed.
 - “把某个文件传到我的云存储 / 云空间里”: resolve the local file and upload it with `app_drive_file_upload`, following **Upload Destination Selection**.
-- “获取某一个云文档的分享链接”: resolve the owned Drive item, then use `app_drive_share_create` to create or reuse its share and return the URL.
+- “获取某一个云文档的分享链接”: resolve the owned Drive item, then use `app_drive_share_create` to create or reuse its share and return the URL. Write the URL itself out as SKILL.md's link rule requires — on its own line, never inside a table.
 - “把我的 xxxx 文件存成在线文档”: save the named file in Drive through the existing upload flow. Preserve its format unless the user explicitly requests a supported conversion; “在线文档” alone does not imply a new document type.
 - “看看我的云空间还剩多少容量”: use `app_drive_usage_get`.
 
