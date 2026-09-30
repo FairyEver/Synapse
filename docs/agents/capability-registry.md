@@ -21,6 +21,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 账号消息中心是桌面全局壳层面板与 iOS 主页右上角铃铛打开的通知面板；其列表、详情、统计和管理操作注册为账号 MCP 能力，不另注册 System App、Dock、Workflow、Automation 或 Deep Link。System Notifier 的既有能力是用户已登录且在线时把正式触发内容同步到消息中心，测试通知仍仅本机显示。
 
+桌面通知列表和详情复制 `synapse:notification:<id>` 作为带类型的 MCP 定位 ID；现有 `app_account_notification_get` 接收完整 `reference`，读取仍受当前账号权限限制。这不是桌面 Deep Link，不增加账号消息中心的 7 个 MCP 工具或路由。站内信复制现有 `synapse://mail/<id>` 路由，`app_mail_message_get` 也可接收完整 `reference`；Mail 的 16 个 MCP 工具与 `open` 路由数量不变。两类读取都不因 MCP 调用自动设已读。
+
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
 下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 3 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>` 和 `synapse://mail/<message-id>`。Terminal 路由的 `desktop` / `session` 可省略，用于主屏幕组件进入终端列表或会话；它只解析当前仍在线且在实时摘要中存在的会话。Mail 路由进入站内信并按当前用户权限读取该信件。三条路由均由 iOS App 本地处理。

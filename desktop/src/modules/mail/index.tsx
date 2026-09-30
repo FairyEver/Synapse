@@ -14,6 +14,7 @@ import { SystemAppWindowShell } from "@/modules/apps/components/system-app-windo
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { useAccount } from "@/app-shell/account"
 import { mailRequest } from "@/lib/mail-api"
+import { buildMailMessageReference } from "../../../synapse-capabilities/shared/message-reference"
 import type { MailAddress, MailMessage, MailPerson, MailSummary } from "@/types/mail"
 import { MailCompose, type ComposeStart } from "./compose"
 import { MailLayout } from "./layout"
@@ -123,6 +124,13 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
     } catch (error) { toast.error(error instanceof Error ? error.message : "删除失败。") }
   }
 
+  async function copyId(message: MailSummary) {
+    try {
+      await navigator.clipboard.writeText(buildMailMessageReference(message.messageId))
+      toast("ID 已复制")
+    } catch { toast.error("复制失败") }
+  }
+
   async function composeFrom(message: MailSummary, kind: "reply" | "forward") {
     try {
       const source = mail.detail?.messageId === message.messageId ? mail.detail : await mailRequest({ kind: "messageGet", messageId: message.messageId })
@@ -144,6 +152,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
         { id: "forward", label: "转发", run: () => { void composeFrom(message, "forward") } },
       ]),
       ...(box === "inbox" ? [{ id: "read", label: message.readAt ? "设为未读" : "设为已读", run: () => { void setRead(message) } }] : []),
+      { id: "copy-id", label: "复制 ID", run: () => { void copyId(message) } },
       { id: "delete", label: "删除", destructive: true, run: () => { void remove(message) } },
     ]
   }

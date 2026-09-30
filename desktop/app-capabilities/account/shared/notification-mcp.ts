@@ -4,7 +4,7 @@ import type { CapabilityId } from "../../../synapse-capabilities/shared/naming"
 const entries = [
   ["list", "List account notifications by all, unread, or pending filter. Pagination: cursor-based. Continue with nextCursor."],
   ["count", "Get the exact unread notification count."],
-  ["get", "Read one notification by ID without marking it read."],
+  ["get", "Read one notification without marking it read. Pass either id or the complete copied synapse:notification:<id> reference."],
   ["read", "Mark one notification read."],
   ["read_all", "Mark every unread notification read."],
   ["delete", "Hide one notification for the current account."],
@@ -33,7 +33,9 @@ export function buildNotificationTools(): McpToolDefinition[] {
     description,
     inputSchema: action === "list" ? {
       type: "object", properties: { filter: { type: "string", enum: ["all", "unread", "pending"], description: "Defaults to all." }, cursor: { type: "string", description: "nextCursor from the prior page." } }, additionalProperties: false,
-    } : action === "get" || action === "read" || action === "delete" ? {
+    } : action === "get" ? {
+      type: "object", properties: { id: { ...id, description: "Notification ID. Use this or reference, not both." }, reference: { type: "string", description: "Complete copied synapse:notification:<id> reference. Pass unchanged; use this or id, not both." } }, additionalProperties: false,
+    } : action === "read" || action === "delete" ? {
       type: "object", properties: { id }, required: ["id"], additionalProperties: false,
     } : action === "delete_all" ? {
       type: "object", properties: { filter: { type: "string", enum: ["all", "pending"] } }, required: ["filter"], additionalProperties: false,

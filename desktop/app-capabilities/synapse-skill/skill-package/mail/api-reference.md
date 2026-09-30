@@ -14,7 +14,7 @@
 | `app_mail_message_read_all` | 无 | 当前用户的收件箱全部设已读，返回 `updated` |
 | `app_mail_message_delete_batch` | 1–100 个不同的 `messageIds` | 返回 `deleted` 与未处理的 `skippedIds` |
 | `app_mail_message_delete_all` | `box: inbox \| sent` | 清空当前用户的整个信箱，返回 `deleted` |
-| `app_mail_message_get` | `messageId` | 完整正文、参与者、附件 |
+| `app_mail_message_get` | `messageId` 或完整 `reference: "synapse://mail/<id>"`，二选一 | 完整正文、参与者、附件；不自动设已读 |
 | `app_mail_context_list` | `messageId`，可选 `cursor` | 仅返回当前账号可见的关联往来，使用 `nextCursor` 续页 |
 | `app_mail_message_update` | `messageId`, `read` | 当前收件人已读状态 |
 | `app_mail_message_delete` | `messageId` | 只隐藏当前用户的信件 |

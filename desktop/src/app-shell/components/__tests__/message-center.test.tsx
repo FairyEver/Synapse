@@ -76,4 +76,24 @@ describe("MessageCenter", () => {
     expect(mockCenter.remove).toHaveBeenCalledWith(mockCenter.selected)
     await act(async () => { root.unmount() })
   })
+
+  it("copies row and detail notification IDs with their type", async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    const other = { ...mockCenter.selected, id: "n2", readAt: null } as SynapseNotification
+    mockCenter.items = [mockCenter.selected as SynapseNotification, other]
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    const row = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("来自 Synapse") && item.getAttribute("aria-current") !== "true")!
+    act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
+    expect(writeText).toHaveBeenCalledWith("synapse:notification:n2")
+
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="通知操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
+    expect(writeText).toHaveBeenCalledWith("synapse:notification:n1")
+    await act(async () => { root.unmount() })
+  })
 })

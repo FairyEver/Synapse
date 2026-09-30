@@ -21,6 +21,8 @@
 
 ## 读信
 
+用户从站内信列表或正文菜单复制的 `synapse://mail/<id>` 可直接定位原信。使用 `app_mail_message_get` 的 `reference` 参数传入完整原文，不自行拆出 ID；该链接也可在桌面和 iOS 定位信件，但不是授权凭证。即使用户只说“看这个”，也由 `mail` 前缀选择站内信工具。读取仍受当前登录账号权限控制，`get` 不会自动设为已读。
+
 用 `app_mail_message_count` 取得收件箱、已发送箱和未读数的精确统计。`app_mail_message_list` 按发送时间倒序分页，收件箱可设 `unreadOnly: true`；持续使用 `nextCursor` 才能查全。列表包含发件人与摘要，需要判断正文时用 `app_mail_message_get` 读取完整信件；`app_mail_context_list` 查看当前账号可见的关联往来。AI 根据用户要求和这些内容自行选择需处理的信件，不能由 MCP 代它定义“没用”。
 
 单封设已读或未读用 `app_mail_message_update`；收件箱全部设已读用 `app_mail_message_read_all`。单封删除用 `app_mail_message_delete`，最多 100 个确定 ID 用 `app_mail_message_delete_batch`；检查返回的 `skippedIds`，不能把未处理项报告成已删除。`app_mail_message_delete_all` 按 `box` 清空完整收件箱或已发送箱，与当前搜索词和已加载页无关。删除只隐藏当前用户的副本。下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。

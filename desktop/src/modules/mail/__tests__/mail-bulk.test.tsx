@@ -101,6 +101,23 @@ describe("mail bulk controls", () => {
     expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "first", read: true })
   })
 
+  it("copies the selected row or open message as a typed mail reference", async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    mocks.messages = [message("first"), message("second")]
+    mocks.selectedId = "first"
+    mocks.detail = { ...mocks.messages[0], viewerId: "reader", body: "正文", team: null, conversationId: "first", replyToId: null, relation: null, quote: null, attachments: [] }
+    render()
+    const second = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("second"))!
+    act(() => second.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
+    expect(writeText).toHaveBeenCalledWith("synapse://mail/second")
+
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
+    expect(writeText).toHaveBeenCalledWith("synapse://mail/first")
+  })
+
   it("keeps selection across loaded pages and sends only selected IDs", async () => {
     mocks.request.mockResolvedValue({ deleted: 2, skippedIds: [] })
     mocks.messages = [message("first")]

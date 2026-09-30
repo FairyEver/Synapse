@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
+import { toast } from "sonner"
 import { useMessageCenter, type MessageFilter } from "@/app-shell/hooks/use-message-center"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { MailAddress, MailPerson } from "@/types/mail"
 import type { SynapseNotification } from "@/types/notification-center"
+import { buildNotificationReference } from "../../../synapse-capabilities/shared/message-reference"
 
 type Center = ReturnType<typeof useMessageCenter>
 
@@ -52,9 +54,17 @@ function primaryAction(item: SynapseNotification): string | null {
   return null
 }
 
+async function copyNotificationId(item: SynapseNotification) {
+  try {
+    await navigator.clipboard.writeText(buildNotificationReference(item.id))
+    toast("ID 已复制")
+  } catch { toast.error("复制失败") }
+}
+
 function notificationActions(center: Center, item: SynapseNotification) {
   return [
     { id: "read", label: item.readAt ? "标记为未读" : "标记为已读", run: () => { void center.setRead(item, !item.readAt) } },
+    { id: "copy-id", label: "复制 ID", run: () => { void copyNotificationId(item) } },
     { id: "delete", label: "删除通知", destructive: true, run: () => center.remove(item) },
   ]
 }

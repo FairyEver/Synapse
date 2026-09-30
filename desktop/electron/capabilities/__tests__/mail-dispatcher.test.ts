@@ -30,6 +30,21 @@ describe("mail capability dispatcher", () => {
     expect(executeMailOperation).toHaveBeenCalledWith({ kind: "recipientSearch", query: "", cursor: "person-50" })
   })
 
+  it("reads a copied mail reference through the existing get tool", async () => {
+    const executeMailOperation = vi.fn(async () => ({ body: "完整正文" }))
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })
+    const tool = buildMailTools().find((entry) => entry.name === "app_mail_message_get")
+    expect(tool?.inputSchema.properties).toHaveProperty("reference")
+    expect(tool?.description).toContain("synapse://mail/<id>")
+    await expect(dispatcher.dispatch("app.mail.message.get", { reference: "synapse://mail/mail-1" }, {}))
+      .resolves.toMatchObject({ ok: true, data: { body: "完整正文" } })
+    expect(executeMailOperation).toHaveBeenCalledWith({ kind: "messageGet", messageId: "mail-1" })
+    await expect(dispatcher.dispatch("app.mail.message.get", { messageId: "mail-1" }, {})).resolves.toMatchObject({ ok: true })
+    await expect(dispatcher.dispatch("app.mail.message.get", { reference: "synapse:notification:n1" }, {})).rejects.toThrow()
+    await expect(dispatcher.dispatch("app.mail.message.get", { messageId: "mail-1", reference: "synapse://mail/mail-1" }, {})).rejects.toThrow()
+    expect(executeMailOperation).toHaveBeenCalledTimes(2)
+  })
+
   it("does not expose retired draft operations", async () => {
     const executeMailOperation = vi.fn()
     const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })

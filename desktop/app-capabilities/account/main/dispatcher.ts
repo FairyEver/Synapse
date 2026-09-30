@@ -7,6 +7,7 @@ import {
   ACCOUNT_LOGIN_START_CAPABILITY_ID,
   ACCOUNT_STATE_GET_CAPABILITY_ID,
 } from "../shared/capability"
+import { parseNotificationReference } from "../../../synapse-capabilities/shared/message-reference"
 
 /** Only the surface this capability needs, so a test double stays honest and small. */
 export type AccountCapabilityService = {
@@ -29,6 +30,8 @@ type NotificationService = {
 }
 
 const idInput = z.object({ id: z.string().min(1) }).strict()
+const getInput = z.object({ id: z.string().min(1).optional(), reference: z.string().optional() }).strict()
+  .refine((input) => (input.id === undefined) !== (input.reference === undefined), "Provide exactly one notification locator.")
 const emptyInput = z.object({}).strict()
 const listInput = z.object({ filter: z.enum(["all", "unread", "pending"]).optional(), cursor: z.string().min(1).optional() }).strict()
 const deleteAllInput = z.object({ filter: z.enum(["all", "pending"]) }).strict()
@@ -55,7 +58,11 @@ export function createAccountCapabilityDispatcher(deps: {
           switch (action) {
             case "app.account.notification.list": data = await deps.notifications.listNotifications(listInput.parse(params)); break
             case "app.account.notification.count": emptyInput.parse(params); data = await deps.notifications.notificationUnreadCount(); break
-            case "app.account.notification.get": data = await deps.notifications.getNotification(idInput.parse(params).id); break
+            case "app.account.notification.get": {
+              const input = getInput.parse(params)
+              data = await deps.notifications.getNotification(input.reference === undefined ? input.id! : parseNotificationReference(input.reference))
+              break
+            }
             case "app.account.notification.read": data = await deps.notifications.markNotificationRead(idInput.parse(params).id); break
             case "app.account.notification.read_all": emptyInput.parse(params); data = await deps.notifications.markAllNotificationsRead(); break
             case "app.account.notification.delete": data = await deps.notifications.deleteNotification(idInput.parse(params).id); break

@@ -80,10 +80,15 @@ describe("account MCP tools", () => {
     const auditSink = { record: vi.fn() }
     const dispatcher = createAccountCapabilityDispatcher({ service: { getState: () => ({ status: "unauthenticated" }), startLogin: vi.fn() }, notifications, auditSink: auditSink as never })
     expect(buildNotificationTools()).toHaveLength(7)
+    expect(buildNotificationTools().find((tool) => tool.name === "app_account_notification_get")?.inputSchema.properties).toHaveProperty("reference")
     expect(MCP_TOOL_ACTIONS.app_account_notification_delete_all).toBe("app.account.notification.delete_all")
     await expect(dispatcher.dispatch("app.account.notification.list", { filter: "unread" })).resolves.toMatchObject({ ok: true })
     await expect(dispatcher.dispatch("app.account.notification.delete_all", { filter: "unread" })).rejects.toThrow()
     await dispatcher.dispatch("app.account.notification.get", { id: "n1" })
+    await expect(dispatcher.dispatch("app.account.notification.get", { reference: "synapse:notification:n1" })).resolves.toMatchObject({ ok: true, data: { body: "private body" } })
+    expect(notifications.getNotification).toHaveBeenCalledWith("n1")
+    await expect(dispatcher.dispatch("app.account.notification.get", { reference: "synapse://mail/n1" })).rejects.toThrow()
+    await expect(dispatcher.dispatch("app.account.notification.get", { id: "n1", reference: "synapse:notification:n1" })).rejects.toThrow()
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("private body")
     const denied = createAccountCapabilityDispatcher({
       service: { getState: () => ({ status: "unauthenticated" }), startLogin: vi.fn() },

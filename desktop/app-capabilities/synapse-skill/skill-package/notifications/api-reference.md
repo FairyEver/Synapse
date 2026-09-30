@@ -8,7 +8,7 @@
 |---|---|---|
 | `app_account_notification_list` | 可选 `filter: all \| unread \| pending`、`cursor` | 最多 50 条、`nextCursor` |
 | `app_account_notification_count` | 无 | `{ unread }`，精确未读数 |
-| `app_account_notification_get` | `id` | 单条通知全文，不改变已读状态 |
+| `app_account_notification_get` | `id` 或完整 `reference: "synapse:notification:<id>"`，二选一 | 单条通知全文，不改变已读状态 |
 | `app_account_notification_read` | `id` | 单条标已读 |
 | `app_account_notification_read_all` | 无 | 全部未读标为已读 |
 | `app_account_notification_delete` | `id` | 仅隐藏当前账号的单条通知 |

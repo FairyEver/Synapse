@@ -1,6 +1,7 @@
 import path from "node:path"
 import { z } from "zod"
 import type { MailOperation } from "../../src/types/mail"
+import { parseMailMessageReference } from "../../synapse-capabilities/shared/message-reference"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
@@ -10,6 +11,8 @@ type MailDeps = { accountService: MailAccount; permissionGuard?: PermissionGuard
 const actor: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const id = z.string().min(1)
 const content = z.object({ formatVersion: z.literal(3), toIds: z.array(id), ccIds: z.array(id), toOrganizationIds: z.array(id), ccOrganizationIds: z.array(id), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(id).max(10), forwardAttachmentIds: z.array(id).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: id }).strict().optional() }).strict()
+const getInput = z.object({ messageId: id.optional(), reference: z.string().optional() }).strict()
+  .refine((input) => (input.messageId === undefined) !== (input.reference === undefined), "Provide exactly one mail locator.")
 
 function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
   switch (action) {
@@ -25,7 +28,10 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
     case "app.mail.message.read_all": z.object({}).strict().parse(params); return { kind: "messageReadAll" }
     case "app.mail.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length) }).strict().parse(params) }
     case "app.mail.message.delete_all": return { kind: "messageDeleteAll", ...z.object({ box: z.enum(["inbox", "sent"]) }).strict().parse(params) }
-    case "app.mail.message.get": return { kind: "messageGet", ...z.object({ messageId: id }).strict().parse(params) }
+    case "app.mail.message.get": {
+      const input = getInput.parse(params)
+      return { kind: "messageGet", messageId: input.reference === undefined ? input.messageId! : parseMailMessageReference(input.reference) }
+    }
     case "app.mail.context.list": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
     case "app.mail.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id }).strict().parse(params) }
