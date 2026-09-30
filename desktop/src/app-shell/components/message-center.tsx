@@ -115,7 +115,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
   let previousDate = ""
   return <>
     <Sheet open={center.open} onOpenChange={center.changeOpen}>
-      <SheetTrigger asChild><Button variant="ghost" size="sm" aria-label={`通知，${center.unread} 条未读`} className="gap-1.5"><Bell className="size-4" />通知{center.unread > 0 && <Badge variant="secondary">{center.unread > 99 ? "99+" : center.unread}</Badge>}</Button></SheetTrigger>
+      <SheetTrigger asChild><Button variant="ghost" size="sm" aria-label={`通知，${center.unread} 条未读`} className="h-9 gap-1.5 px-3"><Bell className="size-4" />通知{center.unread > 0 && <Badge variant="secondary">{center.unread > 99 ? "99+" : center.unread}</Badge>}</Button></SheetTrigger>
       <SheetContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => event.preventDefault()} className="@container/message-center gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-5xl">
         <SheetHeader className="flex h-16 shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-0">
           <div className="flex items-center gap-2"><SheetTitle className="text-lg font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</div>
