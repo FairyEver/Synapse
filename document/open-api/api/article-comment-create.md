@@ -8,16 +8,22 @@
 POST /api/open/v1/drive/public-links/comments
 Authorization: Bearer syn_sk_...
 Content-Type: application/json
-Idempotency-Key: article-comment-001
 ```
 
 ```json
 {
   "url": "{{APP_PUBLIC_URL}}/share/shr_example",
-  "shareId": "shr_example",
   "body": "这篇文章的结论很有帮助。"
 }
 ```
+
+| 请求头 | 必填 | 说明 |
+|---|---|---|
+| `Authorization` | 是 | `Bearer syn_sk_...`，使用具有 `drive.public_link.comment.create` 权限的 API 密钥 |
+| `Content-Type` | 是 | `application/json` |
+| `Idempotency-Key` | 否 | 防止同一次请求重试时重复创建评论；正常发评论无需提供 |
+
+请求体参数：
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
@@ -42,7 +48,7 @@ Idempotency-Key: article-comment-001
 }
 ```
 
-可选的 `Idempotency-Key` 为 8–120 位字母、数字、下划线或连字符。同一 API 密钥和去重键重复提交到同一分享、同一文件且正文相同，返回原评论；改用该去重键提交不同目标或正文时返回 `409 IDEMPOTENCY_CONFLICT`。未提供去重键时，重复请求会新增评论。
+每次成功调用都可以创建一条新评论。未提供 `Idempotency-Key` 时，即使目标和正文相同，重复调用也会新增评论。提供时，其值须为 8–120 位字母、数字、下划线或连字符：同一 API 密钥使用相同去重键重试同一目标和正文，返回原评论；使用该键提交不同目标或正文，返回 `409 IDEMPOTENCY_CONFLICT`。要用去重键创建另一条评论，应换一个键。
 
 | HTTP | code | 说明 |
 |---:|---|---|
