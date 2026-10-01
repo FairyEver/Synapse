@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto, DriveAnnotationThreadStatus } from '@synapse/shared'
-import { Check, ChevronDown, ChevronRight, ChevronUp, Loader2, MapPinOff, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, CheckCheck, ChevronDown, ChevronRight, ChevronUp, Circle, Loader2, MapPinOff, MoreHorizontal, Pencil, Quote, RefreshCw, Reply, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { RelativeTime } from '@/components/relative-time'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -13,8 +13,10 @@ import {
   DialogFrameBody,
   DialogFrameHeader,
 } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn, getDisplayNameInitials } from '@/lib/utils'
 
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
@@ -553,6 +555,7 @@ function ThreadView({
   const composerSubmitting = composer.kind !== 'closed' && composer.submitting
   const quote = annotationQuoteExcerpt(thread)
   const resolved = thread.status === 'resolved'
+  const statusActionLabel = resolved ? '重新打开' : '标记为已解决'
 
   const changeStatus = async () => {
     if (statusSubmittingRef.current || composerSubmitting || !thread.permissions.canChangeStatus) return
@@ -632,8 +635,8 @@ function ThreadView({
   return (
     <section
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card px-3 pb-2 pt-3 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
-        emphasized && 'border-amber-400/70 bg-muted/30'
+        'relative cursor-default overflow-hidden rounded-lg border bg-card p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
+        emphasized ? 'border-ring' : 'border-border'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
@@ -641,53 +644,60 @@ function ThreadView({
       }}
     >
       {active ? <span className='sr-only'>当前评论</span> : null}
-      {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400' /> : null}
-      <div className='mb-2 space-y-1'>
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          <Badge variant={resolved ? 'secondary' : 'outline'}>{resolved ? '已解决' : '未解决'}</Badge>
+      <div className='mb-4 space-y-2'>
+        <div className='flex items-center gap-2'>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                variant='ghost'
+                size='sm'
+                className={cn('min-w-0 flex-1 justify-start', compact && 'min-h-11')}
+                aria-label={`查看评论：${quote}`}
+                aria-current={active ? 'true' : undefined}
+                onClick={() => onFocusThread(thread.id)}
+              >
+                <Quote aria-hidden className='text-muted-foreground' />
+                <span className='min-w-0 max-w-full flex-1 truncate text-left'>{quote}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className='max-w-sm break-all'>{quote}</TooltipContent>
+          </Tooltip>
+          <Badge variant={resolved ? 'secondary' : 'outline'}>
+            {resolved ? <CheckCheck aria-hidden /> : <Circle aria-hidden />}
+            {resolved ? '已解决' : '未解决'}
+          </Badge>
           {thread.permissions.canChangeStatus ? (
-            <Button
-              type='button'
-              variant='ghost'
-              size='sm'
-              className={compact ? 'min-h-11' : undefined}
-              data-drive-telemetry-event='web.drive.comment.status-update'
-              disabled={composerSubmitting || statusSubmitting}
-              aria-busy={statusSubmitting}
-              onClick={() => { void changeStatus() }}
-            >
-              {statusSubmitting ? <Loader2 className='animate-spin' /> : null}
-              {resolved ? '重新打开' : '标记为已解决'}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  className={compact ? 'size-11' : undefined}
+                  data-drive-telemetry-event='web.drive.comment.status-update'
+                  disabled={composerSubmitting || statusSubmitting}
+                  aria-label={statusActionLabel}
+                  aria-busy={statusSubmitting}
+                  onClick={() => { void changeStatus() }}
+                >
+                  {statusSubmitting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : resolved ? <RotateCcw aria-hidden /> : <Check aria-hidden />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{statusActionLabel}</TooltipContent>
+            </Tooltip>
           ) : null}
         </div>
         {statusError ? <p role='alert' className='text-xs text-destructive'>{statusError}</p> : null}
-        <div className='flex items-center gap-2'>
-          <span aria-hidden className='h-4 w-0.5 shrink-0 rounded-full bg-border' />
-          <Button
-            type='button'
-            variant='ghost'
-            size='sm'
-            className={cn(
-              'h-auto min-w-0 flex-1 justify-start whitespace-normal px-0 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground',
-              compact ? 'min-h-11' : 'min-h-7'
-            )}
-            aria-label={`查看评论：${quote}`}
-            aria-current={active ? 'true' : undefined}
-            onClick={() => onFocusThread(thread.id)}
-          >
-            <span className='line-clamp-2 min-w-0 max-w-full flex-1 break-all'>“{quote}”</span>
-          </Button>
-        </div>
         {thread.anchorStatus === 'orphaned' || positionUnavailable ? (
-          <div className='ml-2.5 flex flex-wrap items-center gap-1'>
+          <div className='flex flex-wrap items-center gap-1'>
             <span className='text-xs text-muted-foreground'>
               {positionUnavailable ? '编辑中暂未定位' : annotationPositionLabel(thread)}
             </span>
           </div>
         ) : null}
       </div>
-      <div className='space-y-3'>
+      <div className='space-y-4'>
         {thread.comments.map((comment) => (
           <CommentView
             key={comment.id}
@@ -780,29 +790,36 @@ function CommentView({
   readonly onSubmitEdit: () => void
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
+  const [deleteConfirming, setDeleteConfirming] = useState(false)
   const authorName = displayAuthor(comment.author)
   return (
     <article className='group/comment'>
-      <div className='flex items-start gap-2.5'>
+      <div className='flex items-start gap-3'>
         <Avatar className='size-8'>
           <AvatarFallback className='text-xs font-medium text-muted-foreground'>
             {getDisplayNameInitials(authorName)}
           </AvatarFallback>
         </Avatar>
         <div className='min-w-0 flex-1 space-y-1'>
-          <div className='flex items-start justify-between gap-2'>
+          <div className='flex min-h-9 items-center justify-between gap-2'>
             <div className='flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5'>
               <span className='truncate text-sm font-medium'>{authorName}</span>
               <RelativeTime value={comment.createdAt} className='text-xs text-muted-foreground' />
               {comment.editedAt ? <span className='text-xs text-muted-foreground'>已编辑</span> : null}
             </div>
-            {comment.permissions.canDelete && !actionsHidden ? (
+            {(comment.permissions.canEdit || comment.permissions.canDelete) && !actionsHidden ? (
               <div className='shrink-0'>
-                <CommentDeleteButton
+                <CommentActionsMenu
+                  authorName={authorName}
+                  canEdit={comment.permissions.canEdit}
+                  canDelete={comment.permissions.canDelete}
                   compact={compact}
                   disabled={actionsDisabled}
-                  deleteDescription={deleteDescription}
-                  onDeleteComment={() => onDeleteComment(comment.id)}
+                  onStartEdit={() => {
+                    setDeleteConfirming(false)
+                    onStartEdit()
+                  }}
+                  onStartDelete={() => setDeleteConfirming(true)}
                 />
               </div>
             ) : null}
@@ -826,19 +843,30 @@ function CommentView({
             />
           ) : (
             <>
-              <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
-              {!actionsHidden ? (
-                <div className={cn(
-                  '-ml-2 flex flex-wrap items-center gap-1 transition-opacity',
-                  !compact && 'opacity-70 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100'
-                )}>
-                  {canReply ? (
-                    <Button data-drive-telemetry-event='web.drive.comment.reply-open' type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartReply}>回复</Button>
-                  ) : null}
-                  {comment.permissions.canEdit ? (
-                    <Button data-drive-telemetry-event='web.drive.comment.edit-open' type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartEdit}>编辑</Button>
-                  ) : null}
+              <p className='whitespace-pre-wrap break-words text-sm leading-6'>{comment.body}</p>
+              {!actionsHidden && canReply ? (
+                <div className='-ml-3 pt-1'>
+                  <Button
+                    data-drive-telemetry-event='web.drive.comment.reply-open'
+                    type='button'
+                    variant='ghost'
+                    className={compact ? 'min-h-11' : undefined}
+                    disabled={actionsDisabled}
+                    onClick={() => {
+                      setDeleteConfirming(false)
+                      onStartReply()
+                    }}
+                  ><Reply aria-hidden />回复</Button>
                 </div>
+              ) : null}
+              {deleteConfirming && !actionsHidden ? (
+                <CommentDeleteConfirmation
+                  compact={compact}
+                  disabled={actionsDisabled}
+                  deleteDescription={deleteDescription}
+                  onCancel={() => setDeleteConfirming(false)}
+                  onDeleteComment={() => onDeleteComment(comment.id)}
+                />
               ) : null}
             </>
           )}
@@ -927,31 +955,72 @@ function CommentComposer({
   )
 }
 
-function CommentDeleteButton({
+function CommentActionsMenu({
+  authorName,
+  canEdit,
+  canDelete,
+  compact,
+  disabled,
+  onStartEdit,
+  onStartDelete,
+}: {
+  readonly authorName: string
+  readonly canEdit: boolean
+  readonly canDelete: boolean
+  readonly compact: boolean
+  readonly disabled: boolean
+  readonly onStartEdit: () => void
+  readonly onStartDelete: () => void
+}) {
+  const editingRef = useRef(false)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type='button' variant='ghost' size='icon' className={compact ? 'size-11' : undefined} aria-label={`评论操作：${authorName}`} disabled={disabled}><MoreHorizontal aria-hidden /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        data-drive-telemetry-scope='portal'
+        align='end'
+        onClick={(event) => event.stopPropagation()}
+        onCloseAutoFocus={(event) => {
+          if (editingRef.current) event.preventDefault()
+          editingRef.current = false
+        }}
+      >
+        {canEdit ? (
+          <DropdownMenuItem data-drive-telemetry-event='web.drive.comment.edit-open' disabled={disabled} onSelect={() => {
+            editingRef.current = true
+            onStartEdit()
+          }}><Pencil aria-hidden />编辑评论</DropdownMenuItem>
+        ) : null}
+        {canDelete ? <DropdownMenuItem variant='destructive' disabled={disabled} onSelect={onStartDelete}><Trash2 aria-hidden />删除评论</DropdownMenuItem> : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function CommentDeleteConfirmation({
   compact = false,
   disabled = false,
   deleteDescription,
+  onCancel,
   onDeleteComment,
 }: {
   readonly compact?: boolean
   readonly disabled?: boolean
   readonly deleteDescription: string
+  readonly onCancel: () => void
   readonly onDeleteComment: () => CommentActionPromise
 }) {
-  const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const handleDelete = async () => {
-    if (deleting) return
-    if (!confirming) {
-      setConfirming(true)
-      return
-    }
+    if (disabled || deleting) return
     setDeleting(true)
     try {
       await onDeleteComment()
-      setConfirming(false)
+      onCancel()
     } catch (cause) {
-      setConfirming(false)
+      onCancel()
       toast.error(getCommentActionErrorMessage(cause))
     } finally {
       setDeleting(false)
@@ -959,29 +1028,30 @@ function CommentDeleteButton({
   }
 
   return (
-    <Button
-      data-drive-telemetry-event='web.drive.comment.delete'
-      type='button'
-      variant='ghost'
-      size='icon'
-      className={cn(compact ? 'size-11' : 'h-7 w-7', 'text-muted-foreground hover:text-destructive', confirming && 'text-destructive')}
-      aria-label={confirming ? '确认删除评论' : '删除评论'}
-      aria-pressed={confirming}
-      title={confirming ? deleteDescription : '删除评论'}
-      disabled={disabled || deleting}
-      onBlur={() => {
-        if (!deleting) setConfirming(false)
-      }}
+    <div
+      role='group'
+      aria-label='删除评论确认'
+      className='mt-3 space-y-3'
+      onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') setConfirming(false)
-      }}
-      onClick={(event) => {
-        event.stopPropagation()
-        void handleDelete()
+        if (event.key === 'Escape' && !deleting) onCancel()
       }}
     >
-      {deleting ? <Loader2 className='animate-spin' /> : confirming ? <Check /> : <Trash2 />}
-    </Button>
+      <p className='text-sm'>{deleteDescription}</p>
+      <div className='flex justify-end gap-2'>
+        <Button type='button' variant='ghost' className={compact ? 'min-h-11' : undefined} disabled={disabled || deleting} onClick={onCancel}>取消</Button>
+        <Button
+          data-drive-telemetry-event='web.drive.comment.delete'
+          type='button'
+          variant='destructive'
+          className={compact ? 'min-h-11' : undefined}
+          aria-label='确认删除评论'
+          aria-busy={deleting}
+          disabled={disabled || deleting}
+          onClick={() => { void handleDelete() }}
+        >{deleting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : null}{deleting ? '删除中' : '删除评论'}</Button>
+      </div>
+    </div>
   )
 }
 
@@ -990,7 +1060,7 @@ function displayAuthor(author: { readonly handle: string | null; readonly email:
 }
 
 function isInteractiveCommentTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && Boolean(target.closest('button, textarea, input, select, a, [contenteditable="true"], [role="button"]'))
+  return target instanceof Element && Boolean(target.closest('button, textarea, input, select, a, [contenteditable="true"], [role="button"]'))
 }
 
 function hasSelectionWithin(element: HTMLElement): boolean {

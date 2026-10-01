@@ -25,31 +25,34 @@ describe('DriveCommentsRail', () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ onUpdateThreadStatus })
     expect(document.body.textContent).toContain('未解决')
-    await click(buttonWithText('标记为已解决'))
+    await click(requiredButtonWithLabel('标记为已解决'))
     expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
     rerenderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
     expect(document.body.textContent).toContain('已解决')
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
     expect(buttonWithText('回复')).not.toBeNull()
-    await click(buttonWithText('重新打开'))
+    await click(requiredButtonWithLabel('重新打开'))
     expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({ threadId: 'thread-1', status: 'open' })
   })
 
-  it('shows status without controls to non-owners, including comment authors', () => {
+  it('shows status without controls to non-owners, including comment authors', async () => {
     renderRail({ threads: [thread({ status: 'resolved', canChangeStatus: false, canEdit: true })] })
     expect(document.body.textContent).toContain('已解决')
     expect(document.body.textContent).not.toContain('重新打开')
     expect(document.body.textContent).not.toContain('标记为已解决')
-    expect(buttonWithText('编辑')).not.toBeNull()
+    expect(buttonWithLabel('重新打开')).toBeNull()
+    expect(buttonWithLabel('标记为已解决')).toBeNull()
+    await openCommentMenu()
+    expect(menuItemWithText('编辑评论')).not.toBeNull()
   })
 
   it('disables repeated status submissions, retains the old status on failure, and permits retry', async () => {
     let reject!: (error: Error) => void
     const onUpdateThreadStatus = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise }))
     renderRail({ onUpdateThreadStatus })
-    await click(buttonWithText('标记为已解决'))
-    const button = buttonWithText('标记为已解决')
+    await click(requiredButtonWithLabel('标记为已解决'))
+    const button = requiredButtonWithLabel('标记为已解决')
     expect(button.disabled).toBe(true)
     await click(button)
     expect(onUpdateThreadStatus).toHaveBeenCalledTimes(1)
@@ -67,7 +70,7 @@ describe('DriveCommentsRail', () => {
     const onReply = vi.fn(async () => undefined)
     renderRail({ activeThreadId: 'thread-1', onReply })
     await inputValue(textarea(), 'Unsent reply')
-    await click(buttonWithText('标记为已解决'))
+    await click(requiredButtonWithLabel('标记为已解决'))
     rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply })
     expect(textarea().value).toBe('Unsent reply')
     await click(buttonWithText('发送'))
@@ -81,28 +84,28 @@ describe('DriveCommentsRail', () => {
     renderRail({ activeThreadId: 'thread-1', onReply })
     await inputValue(textarea(), 'Reply')
     await click(buttonWithText('发送'))
-    expect(buttonWithText('标记为已解决').disabled).toBe(true)
+    expect(requiredButtonWithLabel('标记为已解决').disabled).toBe(true)
     await act(async () => { finishReply() })
-    expect(buttonWithText('标记为已解决').disabled).toBe(false)
-    await click(buttonWithText('编辑'))
+    expect(requiredButtonWithLabel('标记为已解决').disabled).toBe(false)
+    await editComment()
     await inputValue(textarea(), 'Edited draft')
-    await click(buttonWithText('标记为已解决'))
+    await click(requiredButtonWithLabel('标记为已解决'))
     rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply })
     expect(textarea().value).toBe('Edited draft')
     let finishEdit!: () => void
     const onUpdateComment = vi.fn(() => new Promise<void>((resolve) => { finishEdit = resolve }))
     rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply, onUpdateComment })
     await click(buttonWithText('保存'))
-    expect(buttonWithText('重新打开').disabled).toBe(true)
+    expect(requiredButtonWithLabel('重新打开').disabled).toBe(true)
     await act(async () => { finishEdit() })
-    expect(buttonWithText('重新打开').disabled).toBe(false)
+    expect(requiredButtonWithLabel('重新打开').disabled).toBe(false)
   })
 
   it('supports resolving unlocated discussions in the compact dialog', async () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ mode: 'list', threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })], onUpdateThreadStatus })
     await click(buttonWithText('未定位评论'))
-    await click(buttonWithText('标记为已解决'))
+    await click(requiredButtonWithLabel('标记为已解决'))
     expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
     expect(optionalDialogContent()?.textContent).toContain('First line')
   })
@@ -125,7 +128,7 @@ describe('DriveCommentsRail', () => {
     expect(optionalDialogContent()).not.toBeNull()
     expect(optionalDialogContent()?.textContent).toContain('1 条评论无法定位到当前文档')
     expect(document.body.textContent).toContain('原文已修改或删除')
-    expect(document.body.textContent).toContain('“Note”')
+    expect(document.body.textContent).toContain('Note')
     expect(document.body.textContent).not.toContain('重新关联')
     expect(document.body.innerHTML).not.toContain('<strong>unsafe</strong>')
   })
@@ -155,11 +158,11 @@ describe('DriveCommentsRail', () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ threads: [imageItem], onUpdateThreadStatus })
     await click(buttonWithText('未定位评论'))
-    await click(buttonWithText('标记为已解决'))
+    await click(requiredButtonWithLabel('标记为已解决'))
     expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
 
     expect(document.body.textContent).toContain('图片已替换或删除')
-    expect(document.body.textContent).toContain('“asset_1”')
+    expect(document.body.textContent).toContain('asset_1')
     expect(document.body.textContent).not.toContain('重新关联')
   })
 
@@ -239,7 +242,7 @@ describe('DriveCommentsRail', () => {
     expect(replyComposer('thread-1')).not.toBeNull()
     expect(optionalDialogContent()).toBeNull()
     expect(threadCard('thread-1').querySelector('textarea')).not.toBeNull()
-    expect(threadCard('thread-1').querySelector('.bg-amber-400')).not.toBeNull()
+    expect(threadCard('thread-1').className).toContain('border-ring')
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
@@ -334,10 +337,10 @@ describe('DriveCommentsRail', () => {
     renderRail({ onFocusThread })
 
     const action = requiredButtonWithLabel('查看评论：Note')
-    const quoteMarker = action.previousElementSibling
+    const quoteMarker = action.querySelector('.lucide-quote')
     expect(quoteMarker).not.toBeNull()
     expect(action.parentElement?.className).toContain('items-center')
-    expect(quoteMarker?.className).not.toContain('mt-')
+    expect(quoteMarker?.getAttribute('aria-hidden')).toBe('true')
     expect(action.getAttribute('aria-current')).toBeNull()
     await click(action)
 
@@ -356,7 +359,7 @@ describe('DriveCommentsRail', () => {
     expect(action.className).toContain('min-w-0')
     expect(action.className).toContain('flex-1')
     expect(excerpt?.className).toContain('max-w-full')
-    expect(excerpt?.className).toContain('break-all')
+    expect(excerpt?.className).toContain('truncate')
   })
 
   it('marks the active thread quote action as current', () => {
@@ -423,7 +426,7 @@ describe('DriveCommentsRail', () => {
     const onUpdateComment = vi.fn(async () => undefined)
     renderRail({ onUpdateComment })
 
-    await click(buttonWithText('编辑'))
+    await editComment()
 
     expect(textarea().value).toBe('First line\nSecond line\n<strong>unsafe</strong>')
     expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
@@ -440,7 +443,7 @@ describe('DriveCommentsRail', () => {
     renderRail({ activeThreadId: 'thread-1' })
 
     expect(replyComposer('thread-1')).not.toBeNull()
-    await click(buttonWithText('编辑'))
+    await editComment()
 
     const card = threadCard('thread-1')
     expect(replyComposer('thread-1')).toBeNull()
@@ -453,7 +456,7 @@ describe('DriveCommentsRail', () => {
 
   it('does not reopen reply mode when an edited thread becomes active again', async () => {
     renderRail({ activeThreadId: 'thread-1' })
-    await click(buttonWithText('编辑'))
+    await editComment()
 
     rerenderRail({ activeThreadId: null })
     rerenderRail({ activeThreadId: 'thread-1' })
@@ -469,7 +472,7 @@ describe('DriveCommentsRail', () => {
     })
     renderRail({ onUpdateComment })
 
-    await click(buttonWithText('编辑'))
+    await editComment()
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('保存'))
 
@@ -485,7 +488,7 @@ describe('DriveCommentsRail', () => {
     }))
     renderRail({ onUpdateComment })
 
-    await click(buttonWithText('编辑'))
+    await editComment()
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('保存'))
 
@@ -499,7 +502,7 @@ describe('DriveCommentsRail', () => {
     const onUpdateComment = vi.fn(async () => undefined)
     renderRail({ onUpdateComment })
 
-    await click(buttonWithText('编辑'))
+    await editComment()
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('取消'))
 
@@ -512,7 +515,7 @@ describe('DriveCommentsRail', () => {
     const onUpdateComment = vi.fn(async () => undefined)
     renderRail({ onUpdateComment })
 
-    await click(buttonWithText('编辑'))
+    await editComment()
     await inputValue(textarea(), 'Updated comment')
     await keyDown(textarea(), { key: 'Escape' })
 
@@ -548,14 +551,15 @@ describe('DriveCommentsRail', () => {
   it('uses restrained product styling for active cards and comment actions', () => {
     renderRail({ activeThreadId: 'thread-1' })
 
-    expect(threadCard('thread-1').className).toContain('border-amber-400/70')
+    expect(threadCard('thread-1').className).toContain('border-ring')
     expect(threadCard('thread-1').className).not.toContain('border-foreground')
-    expect(threadCard('thread-1').textContent).toContain('“Note”')
+    expect(threadCard('thread-1').textContent).toContain('Note')
     expect(threadCard('thread-1').querySelector('[data-slot="avatar"]')).not.toBeNull()
     expect(threadCard('thread-1').querySelector('time')).not.toBeNull()
-    expect(threadCard('thread-1').querySelector('.bg-amber-400')).not.toBeNull()
-    expect(buttonWithText('回复').className).toContain('text-xs')
-    expect(buttonWithText('回复').className).toContain('h-7')
+    expect(threadCard('thread-1').className).toContain('border-ring')
+    expect(threadCard('thread-1').querySelector('.bg-amber-400')).toBeNull()
+    expect(buttonWithText('回复').className).toContain('text-sm')
+    expect(buttonWithText('回复').className).toContain('h-9')
   })
 
   it('renders reply input inline and marks async errors as status text', async () => {
@@ -854,23 +858,22 @@ describe('DriveCommentsRail', () => {
     expect(threadTop('thread-2')).toBe(136)
   })
 
-  it('shows a direct delete icon and requires a second click to delete', async () => {
+  it('keeps edit and delete in the comment menu and requires explicit deletion confirmation', async () => {
     const onDeleteComment = vi.fn(async () => undefined)
     renderRail({
       onDeleteComment,
       threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: true })],
     })
 
-    expect(document.body.textContent).toContain('编辑')
+    expect(document.body.textContent).not.toContain('编辑评论')
     expect(document.body.textContent).not.toContain('删除评论')
     expect(optionalDialogContent()).toBeNull()
-    expect(requiredButtonWithLabel('删除评论').querySelector('.lucide-trash-2')).not.toBeNull()
-
-    await click(requiredButtonWithLabel('删除评论'))
-
     expect(buttonWithLabel('删除评论')).toBeNull()
-    expect(requiredButtonWithLabel('确认删除评论').querySelector('.lucide-check')).not.toBeNull()
-    expect(requiredButtonWithLabel('确认删除评论').title).toContain('整条讨论及原文标记将一并移除')
+    await openCommentMenu()
+    expect(menuItemWithText('编辑评论')).not.toBeNull()
+    await click(menuItemWithText('删除评论'))
+
+    expect(document.body.textContent).toContain('整条讨论及原文标记将一并移除')
     expect(optionalDialogContent()).toBeNull()
     expect(onDeleteComment).not.toHaveBeenCalled()
 
@@ -904,12 +907,11 @@ describe('DriveCommentsRail', () => {
       threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
     })
 
-    const actionButton = document.querySelector<HTMLButtonElement>('button[aria-label="删除评论"]')
-    if (!actionButton) throw new Error('Missing comment action button')
-    await click(actionButton)
+    await openCommentMenu()
+    await click(menuItemWithText('删除评论'))
 
-    expect(requiredButtonWithLabel('确认删除评论').title).toContain('整条讨论及原文标记将一并移除')
-    expect(requiredButtonWithLabel('确认删除评论').title).not.toContain('回复会保留')
+    expect(document.body.textContent).toContain('整条讨论及原文标记将一并移除')
+    expect(document.body.textContent).not.toContain('回复会保留')
   })
 
   it('explains that nested replies are deleted with a non-root parent comment', async () => {
@@ -931,12 +933,10 @@ describe('DriveCommentsRail', () => {
       threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, parent, child] } }],
     })
 
-    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="删除评论"]')
-    const parentActionButton = actionButtons[1]
-    if (!parentActionButton) throw new Error('Missing parent comment action button')
-    await click(parentActionButton)
+    await openCommentMenu(1)
+    await click(menuItemWithText('删除评论'))
 
-    expect(requiredButtonWithLabel('确认删除评论').title).toContain('该评论及其所有回复将一并删除')
+    expect(document.body.textContent).toContain('该评论及其所有回复将一并删除')
   })
 
   it('deletes the selected reply from its own action menu', async () => {
@@ -954,17 +954,68 @@ describe('DriveCommentsRail', () => {
       threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
     })
 
-    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="删除评论"]')
+    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label^="评论操作："]')
     expect(actionButtons).toHaveLength(2)
     expect(buttonWithLabel('讨论操作')).toBeNull()
-    const replyActionButton = actionButtons[1]
-    if (!replyActionButton) throw new Error('Missing reply action button')
-
-    await click(replyActionButton)
-
+    await openCommentMenu(1)
+    await click(menuItemWithText('删除评论'))
     await click(requiredButtonWithLabel('确认删除评论'))
 
     expect(onDeleteComment).toHaveBeenCalledWith('comment-2')
+  })
+
+  it('keeps quote, status and a named icon action on one header row', () => {
+    renderRail({ threads: [thread({ status: 'resolved' })] })
+    const quote = requiredButtonWithLabel('查看评论：Note')
+    const statusAction = requiredButtonWithLabel('重新打开')
+    expect(quote.parentElement).toBe(statusAction.parentElement)
+    expect(quote.parentElement?.querySelector('[data-slot="badge"]')?.textContent).toBe('已解决')
+    expect(quote.parentElement?.querySelector('.lucide-check-check')).not.toBeNull()
+    expect(statusAction.querySelector('.lucide-rotate-ccw')).not.toBeNull()
+    expect(statusAction.textContent).toBe('')
+  })
+
+  it('does not focus the thread when its status icon is clicked', async () => {
+    const onFocusThread = vi.fn()
+    const onUpdateThreadStatus = vi.fn(async () => undefined)
+    renderRail({ onFocusThread, onUpdateThreadStatus })
+    const icon = requiredButtonWithLabel('标记为已解决').querySelector('svg')
+    if (!icon) throw new Error('Missing status icon')
+    await act(async () => { icon.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
+    expect(onFocusThread).not.toHaveBeenCalled()
+  })
+
+  it('moves focus into the edit input without focusing the thread when the menu closes', async () => {
+    const onFocusThread = vi.fn()
+    renderRail({ onFocusThread })
+    await editComment()
+    expect(document.activeElement).toBe(textarea())
+    expect(onFocusThread).not.toHaveBeenCalled()
+  })
+
+  it('offers only permitted actions in the comment menu', async () => {
+    renderRail({ threads: [thread({ canEdit: true, canDelete: false })] })
+    await openCommentMenu()
+    expect(menuItemWithText('编辑评论')).not.toBeNull()
+    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent === '删除评论')).toBe(false)
+    await keyDown(menuItemWithText('编辑评论'), { key: 'Escape' })
+    rerenderRail({ threads: [thread({ canEdit: false, canDelete: true })] })
+    await openCommentMenu()
+    expect(menuItemWithText('删除评论')).not.toBeNull()
+    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent === '编辑评论')).toBe(false)
+  })
+
+  it('cancels deletion from the inline confirmation without deleting or focusing the thread', async () => {
+    const onDeleteComment = vi.fn(async () => undefined)
+    const onFocusThread = vi.fn()
+    renderRail({ onDeleteComment, onFocusThread })
+    await openCommentMenu()
+    await click(menuItemWithText('删除评论'))
+    await click(buttonWithText('取消'))
+    expect(buttonWithLabel('确认删除评论')).toBeNull()
+    expect(onDeleteComment).not.toHaveBeenCalled()
+    expect(onFocusThread).not.toHaveBeenCalled()
   })
 })
 
@@ -1101,6 +1152,23 @@ async function keyDown(element: HTMLElement, init: KeyboardEventInit) {
   await act(async () => {
     element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
   })
+}
+
+async function openCommentMenu(index = 0) {
+  const trigger = document.querySelectorAll<HTMLButtonElement>('button[aria-label^="评论操作："]')[index]
+  if (!trigger) throw new Error(`Missing comment menu ${index}`)
+  await keyDown(trigger, { key: 'Enter' })
+}
+
+function menuItemWithText(text: string) {
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) => item.textContent === text)
+  if (!item) throw new Error(`Missing comment menu item ${text}`)
+  return item
+}
+
+async function editComment(index = 0) {
+  await openCommentMenu(index)
+  await click(menuItemWithText('编辑评论'))
 }
 
 function buttonWithText(text: string) {
