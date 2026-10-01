@@ -169,6 +169,7 @@
 | `drive_link_annotation_comment_create` | `app_drive_link_annotation_comment_create` |
 | `drive_link_annotation_comment_update` | `app_drive_link_annotation_comment_update` |
 | `drive_link_annotation_comment_delete` | `app_drive_link_annotation_comment_delete` |
+| `drive_link_annotation_thread_status_update` | `app_drive_link_annotation_thread_status_update` |
 | `drive_link_annotation_thread_delete` | `app_drive_link_annotation_thread_delete` |
 | `drive_link_materialize` | `app_drive_link_materialize` |
 | `drive_link_download_file` | `app_drive_link_download_file` |

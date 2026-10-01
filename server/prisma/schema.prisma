@@ -789,6 +789,7 @@ model DriveAnnotationThread {
   targetKind      String                   @db.VarChar(64)
   target          Json
   anchorStatus    String                   @default("attached") @db.VarChar(32)
+  status          String                   @default("open") @db.VarChar(16)
   createdByUserId String
   createdByUser   User                     @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   createdAt       DateTime                 @default(now())

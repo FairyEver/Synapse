@@ -1042,6 +1042,11 @@ export interface DriveLinkAnnotationThreadDeleteInput extends DriveLinkAnnotatio
   readonly threadId: string
 }
 
+export interface DriveLinkAnnotationThreadStatusUpdateInput extends DriveLinkAnnotationBaseInput {
+  readonly threadId: string
+  readonly status: DriveAnnotationThreadStatus
+}
+
 export interface DriveLinkMaterializeInput extends DriveLinkResolveInput {
   readonly scope?: DriveLinkMaterializeScope
   readonly maxFiles?: number
@@ -1276,6 +1281,12 @@ export interface DriveAnnotationCommentDto {
   }
 }
 
+export type DriveAnnotationThreadStatus = "open" | "resolved"
+
+export interface DriveAnnotationThreadStatusUpdateInput {
+  readonly status: DriveAnnotationThreadStatus
+}
+
 export interface DriveAnnotationThreadDto {
   readonly id: string
   readonly itemId: string
@@ -1283,6 +1294,7 @@ export interface DriveAnnotationThreadDto {
   readonly targetKind: DriveAnnotationTargetKind
   readonly target: DriveAnnotationTargetDto
   readonly anchorStatus: DriveAnnotationAnchorStatus
+  readonly status: DriveAnnotationThreadStatus
   readonly anchor: DriveAnnotationAnchorDto | null
   readonly author: DriveAnnotationAuthorDto
   readonly comments: readonly DriveAnnotationCommentDto[]
@@ -1290,6 +1302,7 @@ export interface DriveAnnotationThreadDto {
   readonly updatedAt: string
   readonly permissions: {
     readonly canDelete: boolean
+    readonly canChangeStatus: boolean
   }
 }
 

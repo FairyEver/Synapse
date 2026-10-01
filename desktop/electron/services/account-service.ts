@@ -63,6 +63,7 @@ import type {
   DriveLinkAnnotationCommentUpdateInput,
   DriveLinkAnnotationThreadCreateInput,
   DriveLinkAnnotationThreadDeleteInput,
+  DriveLinkAnnotationThreadStatusUpdateInput,
   DriveLinkAnnotationThreadListDto,
   DriveLinkAnnotationThreadListInput,
   DriveLinkListDto,
@@ -750,6 +751,10 @@ export class AccountService {
 
   async deleteDriveLinkAnnotationComment(input: DriveLinkAnnotationCommentDeleteInput) {
     return this.requestAuthenticatedJson<{ readonly ok: true }>("DELETE", `${apiBaseUrl()}/drive/link-intake/annotations/comments`, input, "删除评论失败。")
+  }
+
+  async updateDriveLinkAnnotationThreadStatus(input: DriveLinkAnnotationThreadStatusUpdateInput): Promise<DriveAnnotationThreadDto> {
+    return this.requestAuthenticatedJson<DriveAnnotationThreadDto>("PATCH", `${apiBaseUrl()}/drive/link-intake/annotations/threads/status`, input, "评论状态更新失败。")
   }
 
   async deleteDriveLinkAnnotationThread(input: DriveLinkAnnotationThreadDeleteInput) {

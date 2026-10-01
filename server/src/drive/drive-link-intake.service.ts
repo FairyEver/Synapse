@@ -18,6 +18,7 @@ import {
   type DriveLinkAnnotationCommentUpdateInput,
   type DriveLinkAnnotationThreadCreateInput,
   type DriveLinkAnnotationThreadDeleteInput,
+  type DriveLinkAnnotationThreadStatusUpdateInput,
   type DriveLinkAnnotationThreadListDto,
   type DriveLinkAnnotationThreadListInput,
   type DriveMessageTarget,
@@ -306,6 +307,17 @@ export class DriveLinkIntakeService {
       ...target,
       actorUserId: context.actorUserId,
       commentId: input.commentId,
+      auditContext: context.auditContext,
+    })
+  }
+
+  async updateAnnotationThreadStatus(input: DriveLinkAnnotationThreadStatusUpdateInput, context: DriveLinkAnnotationContext) {
+    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
+    return this.deps.annotations.updateShareThreadStatus({
+      ...target,
+      actorUserId: context.actorUserId,
+      threadId: input.threadId,
+      status: input.status,
       auditContext: context.auditContext,
     })
   }

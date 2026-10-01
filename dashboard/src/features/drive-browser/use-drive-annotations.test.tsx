@@ -10,6 +10,10 @@ import { useDriveAnnotations } from './use-drive-annotations'
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/lib/api', () => ({
+  driveApi: {},
+  driveBrowserApi: {},
+  driveMessageApi: {},
+  driveFileVersionsApi: {},
   driveAnnotationApi: {
     createOwner: vi.fn(),
     createShare: vi.fn(),
@@ -20,6 +24,8 @@ vi.mock('@/lib/api', () => ({
     replyOwner: vi.fn(),
     replyShare: vi.fn(),
     updateOwnerComment: vi.fn(),
+    updateOwnerThreadStatus: vi.fn(),
+    updateShareThreadStatus: vi.fn(),
     updateShareComment: vi.fn(),
   },
 }))
@@ -43,6 +49,27 @@ afterEach(() => {
 })
 
 describe('useDriveAnnotations', () => {
+  it.each(['owner', 'share'] as const)('updates %s discussion status and refreshes its query', async (context) => {
+    mockedDriveAnnotationApi.listOwner.mockResolvedValue([])
+    mockedDriveAnnotationApi.listShare.mockResolvedValue([])
+    const updated = { id: 'thread-1', status: 'resolved' } as Awaited<ReturnType<typeof driveAnnotationApi.updateOwnerThreadStatus>>
+    mockedDriveAnnotationApi.updateOwnerThreadStatus.mockResolvedValue(updated)
+    mockedDriveAnnotationApi.updateShareThreadStatus.mockResolvedValue(updated)
+    const { result } = renderDriveAnnotationsHook(context === 'owner'
+      ? { context, itemId: 'item-1' }
+      : { context, shareId: 'share-1', itemId: 'item-1' })
+    await act(async () => {
+      await result.current.updateThreadStatus({ threadId: 'thread-1', status: 'resolved' })
+    })
+    if (context === 'owner') {
+      expect(mockedDriveAnnotationApi.updateOwnerThreadStatus).toHaveBeenCalledWith('item-1', 'thread-1', { status: 'resolved' })
+      expect(mockedDriveAnnotationApi.listOwner.mock.calls.length).toBeGreaterThan(1)
+    } else {
+      expect(mockedDriveAnnotationApi.updateShareThreadStatus).toHaveBeenCalledWith('share-1', 'item-1', 'thread-1', { status: 'resolved' })
+      expect(mockedDriveAnnotationApi.listShare.mock.calls.length).toBeGreaterThan(1)
+    }
+  })
+
   it('sends only the comment update body to the owner update endpoint', async () => {
     mockedDriveAnnotationApi.listOwner.mockResolvedValue([])
     mockedDriveAnnotationApi.updateOwnerComment.mockResolvedValue(comment())

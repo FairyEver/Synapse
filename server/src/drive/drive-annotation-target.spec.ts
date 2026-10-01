@@ -3,10 +3,19 @@ import { DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH } from "@synapse/shared"
 import {
   isCommentableMarkdownItem,
   parseDriveAnnotationCreateBody,
+  parseDriveAnnotationThreadStatusUpdateBody,
   resolveDriveAnnotationTarget,
 } from "./drive-annotation-target"
 
 describe("drive annotation target helpers", () => {
+  it("accepts only explicit discussion statuses and rejects additional fields", () => {
+    expect(parseDriveAnnotationThreadStatusUpdateBody({ status: "resolved" })).toEqual({ status: "resolved" })
+    expect(parseDriveAnnotationThreadStatusUpdateBody({ status: "open" })).toEqual({ status: "open" })
+    for (const input of [{}, { status: "done" }, { status: null }, { status: "open", anchorStatus: "orphaned" }]) {
+      expect(() => parseDriveAnnotationThreadStatusUpdateBody(input)).toThrow("评论状态更新请求无效。")
+    }
+  })
+
   it("allows comment creation for .md files and Markdown MIME types", () => {
     expect(isCommentableMarkdownItem({ name: "notes.md", type: "file", mimeType: "text/markdown" })).toBe(true)
     expect(isCommentableMarkdownItem({ name: "NOTES.MD", type: "file", mimeType: null })).toBe(true)

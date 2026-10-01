@@ -21,6 +21,92 @@ afterEach(() => {
 })
 
 describe('DriveCommentsRail', () => {
+  it('lets the owner resolve and reopen an entire discussion without removing its comments', async () => {
+    const onUpdateThreadStatus = vi.fn(async () => undefined)
+    renderRail({ onUpdateThreadStatus })
+    expect(document.body.textContent).toContain('未解决')
+    await click(buttonWithText('标记为已解决'))
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
+    rerenderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    expect(document.body.textContent).toContain('已解决')
+    expect(document.body.textContent).toContain('First line')
+    expect(document.body.textContent).toContain('Second line')
+    expect(buttonWithText('回复')).not.toBeNull()
+    await click(buttonWithText('重新打开'))
+    expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({ threadId: 'thread-1', status: 'open' })
+  })
+
+  it('shows status without controls to non-owners, including comment authors', () => {
+    renderRail({ threads: [thread({ status: 'resolved', canChangeStatus: false, canEdit: true })] })
+    expect(document.body.textContent).toContain('已解决')
+    expect(document.body.textContent).not.toContain('重新打开')
+    expect(document.body.textContent).not.toContain('标记为已解决')
+    expect(buttonWithText('编辑')).not.toBeNull()
+  })
+
+  it('disables repeated status submissions, retains the old status on failure, and permits retry', async () => {
+    let reject!: (error: Error) => void
+    const onUpdateThreadStatus = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise }))
+    renderRail({ onUpdateThreadStatus })
+    await click(buttonWithText('标记为已解决'))
+    const button = buttonWithText('标记为已解决')
+    expect(button.disabled).toBe(true)
+    await click(button)
+    expect(onUpdateThreadStatus).toHaveBeenCalledTimes(1)
+    await act(async () => { reject(new Error('保存失败，请重试')) })
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('保存失败，请重试')
+    expect(document.body.textContent).toContain('未解决')
+    expect(button.disabled).toBe(false)
+    onUpdateThreadStatus.mockResolvedValueOnce(undefined)
+    await click(button)
+    expect(onUpdateThreadStatus).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('keeps an unsent reply through status changes and still permits replies to resolved discussions', async () => {
+    const onReply = vi.fn(async () => undefined)
+    renderRail({ activeThreadId: 'thread-1', onReply })
+    await inputValue(textarea(), 'Unsent reply')
+    await click(buttonWithText('标记为已解决'))
+    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply })
+    expect(textarea().value).toBe('Unsent reply')
+    await click(buttonWithText('发送'))
+    expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: null, body: 'Unsent reply' })
+    expect(document.body.textContent).toContain('已解决')
+  })
+
+  it('preserves an edit draft and disables status changes while a reply or edit is submitting', async () => {
+    let finishReply!: () => void
+    const onReply = vi.fn(() => new Promise<void>((resolve) => { finishReply = resolve }))
+    renderRail({ activeThreadId: 'thread-1', onReply })
+    await inputValue(textarea(), 'Reply')
+    await click(buttonWithText('发送'))
+    expect(buttonWithText('标记为已解决').disabled).toBe(true)
+    await act(async () => { finishReply() })
+    expect(buttonWithText('标记为已解决').disabled).toBe(false)
+    await click(buttonWithText('编辑'))
+    await inputValue(textarea(), 'Edited draft')
+    await click(buttonWithText('标记为已解决'))
+    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply })
+    expect(textarea().value).toBe('Edited draft')
+    let finishEdit!: () => void
+    const onUpdateComment = vi.fn(() => new Promise<void>((resolve) => { finishEdit = resolve }))
+    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply, onUpdateComment })
+    await click(buttonWithText('保存'))
+    expect(buttonWithText('重新打开').disabled).toBe(true)
+    await act(async () => { finishEdit() })
+    expect(buttonWithText('重新打开').disabled).toBe(false)
+  })
+
+  it('supports resolving unlocated discussions in the compact dialog', async () => {
+    const onUpdateThreadStatus = vi.fn(async () => undefined)
+    renderRail({ mode: 'list', threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })], onUpdateThreadStatus })
+    await click(buttonWithText('未定位评论'))
+    await click(buttonWithText('标记为已解决'))
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
+    expect(optionalDialogContent()?.textContent).toContain('First line')
+  })
+
   it('opens unlocated comments in a dialog instead of the normal comment flow', async () => {
     renderRail({
       threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })],
@@ -66,8 +152,11 @@ describe('DriveCommentsRail', () => {
       },
     } as DriveCommentsRailItem
 
-    renderRail({ threads: [imageItem] })
+    const onUpdateThreadStatus = vi.fn(async () => undefined)
+    renderRail({ threads: [imageItem], onUpdateThreadStatus })
     await click(buttonWithText('未定位评论'))
+    await click(buttonWithText('标记为已解决'))
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
 
     expect(document.body.textContent).toContain('图片已替换或删除')
     expect(document.body.textContent).toContain('“asset_1”')
@@ -897,6 +986,7 @@ function renderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> 
         onFocusThread={vi.fn()}
         onReply={vi.fn(async () => undefined)}
         onUpdateComment={vi.fn(async () => undefined)}
+        onUpdateThreadStatus={vi.fn(async () => undefined)}
         onDeleteComment={vi.fn(async () => undefined)}
         {...overrides}
       />
@@ -914,6 +1004,7 @@ function rerenderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]
         onFocusThread={vi.fn()}
         onReply={vi.fn(async () => undefined)}
         onUpdateComment={vi.fn(async () => undefined)}
+        onUpdateThreadStatus={vi.fn(async () => undefined)}
         onDeleteComment={vi.fn(async () => undefined)}
         {...overrides}
       />
@@ -948,6 +1039,8 @@ function thread(input: {
   readonly canEdit?: boolean
   readonly canDelete?: boolean
   readonly canDeleteThread?: boolean
+  readonly canChangeStatus?: boolean
+  readonly status?: 'open' | 'resolved'
   readonly handle?: string | null
   readonly email?: string | null
   readonly quote?: string
@@ -970,6 +1063,7 @@ function thread(input: {
         quote: { exact: input.quote ?? 'Note', prefix: '', suffix: '' },
       },
       anchorStatus: input.anchorStatus ?? 'attached' as const,
+      status: input.status ?? 'open',
       author: { id: 'user-1', email, handle },
       comments: [{
         id: 'comment-1',
@@ -986,7 +1080,7 @@ function thread(input: {
       }],
       createdAt: '2026-06-21T00:00:00.000Z',
       updatedAt: input.updatedAt ?? '2026-06-21T00:00:00.000Z',
-      permissions: { canDelete: input.canDeleteThread ?? true },
+      permissions: { canDelete: input.canDeleteThread ?? true, canChangeStatus: input.canChangeStatus ?? true },
     },
     placement: typeof input.anchorTop === 'number'
       ? { status: 'positioned' as const, anchorTop: input.anchorTop }

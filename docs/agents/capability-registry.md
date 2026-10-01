@@ -138,14 +138,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
-| `drive` | 72 | 72 |
+| `drive` | 73 | 73 |
 | `mail` | 16 | 16 |
 | `extend` | 1 | 1 |
-| 合计 | 282 | 278 |
+| 合计 | 283 | 279 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 278 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 279 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -156,9 +156,9 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问设置时均创建公开、永久的新分享；网页分享创建工具只要求来源文件夹与名称。该契约调整不改变 `drive` domain 的 capability 或 MCP tool 数量。
 
-Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`，用于用户明确选择一端为准的首次对齐与替换；仍为 9 个同步工具，Drive 总计 72 个 capability / MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量均不变。原生选择器和公共向导组件仍属 UI 私有表面。
+Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`，用于用户明确选择一端为准的首次对齐与替换；仍为 9 个同步工具，Drive 总计 73 个 capability / MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量均不变。原生选择器和公共向导组件仍属 UI 私有表面。
 
-Drive 分享评论通过 6 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论和删除线程。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
+Drive 分享评论通过 7 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论、删除线程和讨论状态更新。仅文件所有者可通过 `app.drive.link.annotation.thread.status.update` 设置 `open`（未解决）或 `resolved`（已解决）；列表与变更结果返回 `status` 和 `permissions.canChangeStatus`。状态独立于定位与删除，解决后保留原位及所有回复，回复不自动重新打开，同状态重试不产生额外变化。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
 
 Drive 文末留言通过 7 个 `app.drive.message.*` capability 暴露给 MCP：列表、留言新建/编辑/删除、回复新建/编辑/删除。目标明确为自己的 Markdown 文件 `itemId` 或当前 Synapse `/share/...` URL；分享目标可提供密码、子文件 ID 或相对路径。留言不带正文锚点，不进入 Markdown 内容或版本历史。作者仅能编辑自己写的内容；作者与文档所有者可删除，删除时连带全部后代回复。分享返回的作者邮箱被隐藏。
 

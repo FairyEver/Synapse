@@ -331,7 +331,8 @@ function thread(input: {
     comments: [],
     createdAt: '2026-06-21T00:00:00.000Z',
     updatedAt: '2026-06-21T00:00:00.000Z',
-    permissions: { canDelete: true },
+    status: 'open',
+    permissions: { canDelete: true, canChangeStatus: true },
   }
 }
 

@@ -286,7 +286,7 @@ Protected `/share` and `/sites` links require `password`; without it, this tool 
 
 ### Shared Markdown annotation tools
 
-All six tools accept:
+All seven tools accept:
 
 - `url` required: current Synapse `/share/...` URL.
 - `password` optional: used only for this request and never returned.
@@ -299,7 +299,7 @@ All list and mutation results redact author email addresses as `author.email: nu
 
 ### `app_drive_link_annotation_thread_list`
 
-Returns `{ itemId, canComment, threads }`. `threads` includes every visible cross-version thread, nested comments, authoritative anchors, author-safe metadata with email addresses redacted, and projected thread/comment permissions.
+Returns `{ itemId, canComment, threads }`. `threads` includes every visible cross-version thread, nested comments, authoritative anchors, author-safe metadata with email addresses redacted, and projected thread/comment permissions including `permissions.canChangeStatus`. Every thread has `status: "open" | "resolved"`, independent from anchor position and deletion.
 
 ### `app_drive_link_annotation_thread_create`
 
@@ -322,6 +322,10 @@ Additional input: `commentId` and replacement `body` up to 4000 characters. Only
 ### `app_drive_link_annotation_comment_delete`
 
 Additional input: `commentId`. The author or file owner can delete the selected comment. Deletion also removes all descendant replies regardless of author; deleting the first comment removes the entire thread. Call only when the user explicitly identifies the comment to delete.
+
+### `app_drive_link_annotation_thread_status_update`
+
+Additional input: `threadId` and `status: "open" | "resolved"`. List first and confirm the requested discussion and `permissions.canChangeStatus`. Only the file owner can resolve or reopen a discussion, including unlocated threads; comment authors and users with document edit access cannot. Returns the updated thread with `status` and projected permissions. Repeating the same status is idempotent. Resolving preserves comments, replies and anchors; later replies or source changes never reopen it automatically. This does not update document content or document messages.
 
 ### `app_drive_link_annotation_thread_delete`
 

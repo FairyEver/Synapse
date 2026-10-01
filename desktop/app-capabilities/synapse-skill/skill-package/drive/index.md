@@ -46,6 +46,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_link_annotation_comment_create`
 - `app_drive_link_annotation_comment_update`
 - `app_drive_link_annotation_comment_delete`
+- `app_drive_link_annotation_thread_status_update`
 - `app_drive_link_annotation_thread_delete`
 - `app_drive_message_list`
 - `app_drive_message_create`
@@ -95,7 +96,7 @@ Use these tools only for Synapse Drive:
 
 Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
 
-Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room. Edits to an owned saved text file use `app_drive_file_content_patch` on its inspected version.
+Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the seven `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room. Edits to an owned saved text file use `app_drive_file_content_patch` on its inspected version.
 
 Images pasted, dropped, or selected in the browser Markdown/MDX editor use a separate platform-owned `/object/<objectId>` store and do not consume user Drive quota. This browser-only convenience has no MCP upload, list, migration, or ownership tool. MCP uploads continue to follow the local Markdown, HTML, and explicit public-asset rules below.
 
@@ -175,6 +176,7 @@ In user requests, “留言” / “留个言” means an unanchored message bel
 - For a new text thread, pass visible text as `target.exact`; add `prefix` and/or `suffix` when the exact text repeats. For a whole-image thread, first call `app_drive_link_read_text`, take the current `imageId` from `markdownImages`, then pass `target: { kind: "image", imageId }`. If the server reports a missing or ambiguous target, reread the document or ask for more context. Never guess an anchor.
 - Reuse the same stable `idempotencyKey` when retrying the same thread creation.
 - Comments cannot be manually reassociated. When text is deleted or an image resource is replaced or deleted, the thread remains visible as unlocated.
+- Resolve or reopen only an explicitly identified discussion with `permissions.canChangeStatus`, using `app_drive_link_annotation_thread_status_update` and `status: "resolved"` or `"open"`. Only the file owner has this permission. Resolved threads retain all comments and accept replies without changing status; source or anchor changes never reopen them automatically. This status does not apply to document messages.
 - Reply with `parentCommentId` only when targeting a specific comment. Comment bodies are limited to 4000 characters.
 - Edit only comments whose returned permissions allow editing. Delete only after the user explicitly identifies the exact comment or thread target, even though deletion is registered as an ordinary mutation.
 - Do not use annotation tools for `/sites`, `/files`, folders, files without either a `.md` name or Markdown MIME type, document editing, presence, or collaboration-room control.
@@ -405,6 +407,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "读取并回复这个分享文档的评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_comment_create` with the selected thread or comment id.
 - "在这段原文上评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_thread_create` with the exact visible text as the target and a stable idempotency key.
 - "评论这张 Markdown 图片": call `app_drive_link_read_text`, choose the matching entry from `markdownImages`, then call `app_drive_link_annotation_thread_create` with `{ kind: "image", imageId }` and a stable idempotency key.
+- "把这条正文评论标记为已解决": list the threads, verify the target and `permissions.canChangeStatus`, then call `app_drive_link_annotation_thread_status_update` with `status: "resolved"`. For "重新打开评论", set `status: "open"`.
 - "删除这条评论": list first, verify the explicitly identified target and returned permission, warn that its descendant replies will also be deleted (or that the whole thread will be removed for the first comment), then call `app_drive_link_annotation_comment_delete`.
 - "分析这个 HTML 原型站点": call `app_drive_link_resolve`, `app_drive_link_list`, then `app_drive_link_materialize` when local files are useful.
 - "下载这个公开素材": call `app_drive_link_download_file`.

@@ -4,6 +4,7 @@ import type {
   DriveAnnotationCreateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
+  DriveAnnotationThreadStatusUpdateInput,
 } from '@synapse/shared'
 import { trackedDriveAnnotationApi as driveAnnotationApi } from './shared/drive-telemetry-api'
 import { startDriveOperation } from './shared/drive-telemetry'
@@ -64,6 +65,21 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     },
     onSuccess: invalidate,
   })
+  const updateStatusMutation = useMutation({
+    mutationFn: (variables: { readonly threadId: string } & DriveAnnotationThreadStatusUpdateInput) => {
+      if (!input) throw new Error('Drive annotation context is missing.')
+      const { threadId, ...body } = variables
+      return trackAnnotationOperation('web.drive.comment.status-update', () => input.context === 'owner'
+        ? driveAnnotationApi.updateOwnerThreadStatus(input.itemId, threadId, body)
+        : driveAnnotationApi.updateShareThreadStatus(input.shareId, input.itemId, threadId, body))
+    },
+    onSuccess: async (thread) => {
+      // Replace only the changed discussion without dropping any mounted composers.
+      queryClient.setQueryData<DriveAnnotationThreadDto[]>(queryKey, (threads) =>
+        threads?.map((current) => current.id === thread.id ? thread : current))
+      await invalidate()
+    },
+  })
   const deleteCommentMutation = useMutation({
     mutationFn: (commentId: string) => {
       if (!input) throw new Error('Drive annotation context is missing.')
@@ -83,6 +99,7 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     reply: replyMutation.mutateAsync,
     replying: replyMutation.isPending,
     updateComment: updateMutation.mutateAsync,
+    updateThreadStatus: updateStatusMutation.mutateAsync,
     updatingComment: updateMutation.isPending,
     deleteComment: deleteCommentMutation.mutateAsync,
     deletingComment: deleteCommentMutation.isPending,

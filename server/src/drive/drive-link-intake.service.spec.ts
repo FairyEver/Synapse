@@ -134,6 +134,7 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
     replyShareAnnotation: vi.fn(async () => ({ id: "comment-2" })),
     updateShareComment: vi.fn(async () => ({ id: "comment-2" })),
     deleteShareComment: vi.fn(async () => ({ ok: true })),
+    updateShareThreadStatus: vi.fn(async () => ({ id: "thread-1", status: "resolved" })),
     deleteShareThread: vi.fn(async () => ({ ok: true })),
   }
 
@@ -264,6 +265,8 @@ describe("DriveLinkIntakeService", () => {
     await service.updateAnnotationComment({ ...base, commentId: "comment-2", body: "编辑" }, { actorUserId: "user-1" })
     await service.deleteAnnotationComment({ ...base, commentId: "comment-2" }, { actorUserId: "user-1" })
     await service.deleteAnnotationThread({ ...base, threadId: "thread-1" }, { actorUserId: "user-1" })
+    await service.updateAnnotationThreadStatus({ ...base, threadId: "thread-1", status: "resolved" }, { actorUserId: "user-1" })
+    expect(annotations.updateShareThreadStatus).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: "user-1", shareId: "shr_123", itemId: "item-1", password: "explicit-secret", threadId: "thread-1", status: "resolved" }))
 
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
       shareId: "shr_123",

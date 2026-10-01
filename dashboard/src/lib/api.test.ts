@@ -77,6 +77,27 @@ describe('driveAnnotationApi', () => {
     vi.restoreAllMocks()
   })
 
+  it('sets explicit statuses through owner and protected-share endpoints with encoded ids', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ id: 'thread/id', status: 'resolved' }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
+    ))
+    await driveAnnotationApi.updateOwnerThreadStatus('item/id', 'thread/id', { status: 'resolved' })
+    await driveAnnotationApi.updateShareThreadStatus('share/id', 'item/id', 'thread/id', { status: 'open' })
+    await driveAnnotationApi.updateShareThreadStatus('share/id', null, 'thread/id', { status: 'resolved' })
+    const base = { credentials: 'include', method: 'PATCH' }
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/drive/browser/owner/items/item%2Fid/annotations/thread%2Fid/status', expect.objectContaining({ ...base, body: JSON.stringify({ status: 'resolved' }) }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/drive/browser/shares/share%2Fid/items/item%2Fid/annotations/thread%2Fid/status', expect.objectContaining({ ...base, body: JSON.stringify({ status: 'open' }) }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/drive/browser/shares/share%2Fid/annotations/thread%2Fid/status', expect.objectContaining({ ...base, body: JSON.stringify({ status: 'resolved' }) }))
+    for (const route of [
+      '/api/drive/browser/shares/share%2Fid/annotations/thread%2Fid/status',
+      '/api/drive/browser/shares/share%2Fid/items/item%2Fid/annotations/thread%2Fid/status',
+    ]) {
+      expect(shouldNotifyAuthExpired(route, 403)).toBe(false)
+      expect(shouldNotifyAuthExpired(route, 401, 'DRIVE_SHARE_UNLOCK_REQUIRED')).toBe(false)
+      expect(shouldNotifyAuthExpired(route, 401)).toBe(true)
+    }
+  })
+
   it('bypasses the browser cache when refreshing annotation lists', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify([]), {

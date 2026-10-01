@@ -962,6 +962,7 @@ function DriveMarkdownBody({
       onRefresh={() => { void annotations.refresh() }}
       onReply={annotations.reply}
       onUpdateComment={annotations.updateComment}
+      onUpdateThreadStatus={annotations.updateThreadStatus}
       onDeleteComment={annotations.deleteComment}
     />
   )

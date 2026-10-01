@@ -49,6 +49,7 @@ import {
   parseDriveAnnotationCommentUpdateBody,
   parseDriveAnnotationCreateBody,
   parseDriveAnnotationReplyBody,
+  parseDriveAnnotationThreadStatusUpdateBody,
 } from "./drive-annotation-target"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { driveSiteCacheControl, driveSiteContentType, renderDriveSiteNotFoundPage } from "./drive-site-public"
@@ -213,6 +214,9 @@ const driveLinkAnnotationCommentDeleteSchema = driveLinkAnnotationBaseSchema.ext
 }).strict()
 const driveLinkAnnotationThreadDeleteSchema = driveLinkAnnotationBaseSchema.extend({
   threadId: z.string().min(1),
+}).strict()
+const driveLinkAnnotationThreadStatusUpdateSchema = driveLinkAnnotationThreadDeleteSchema.extend({
+  status: z.enum(["open", "resolved"]),
 }).strict()
 const driveMessageBodySchema = z.object({ body: z.string() }).strict()
 const driveMessageReplySchema = driveMessageBodySchema.extend({ parentCommentId: z.string().min(1).nullable().optional() }).strict()
@@ -848,6 +852,18 @@ export class DriveUserController {
     @Req() request: AuthenticatedUserRequest,
   ) {
     return requireDriveAnnotationService(this.annotations).deleteOwnerComment(request.user!.id, itemId, commentId, driveAuditContext(request))
+  }
+
+  @Patch("/browser/owner/items/:itemId/annotations/:threadId/status")
+  updateOwnerAnnotationThreadStatus(
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateOwnerThreadStatus(
+      request.user!.id, itemId, threadId, parseDriveAnnotationThreadStatusUpdateBody(body).status, driveAuditContext(request),
+    )
   }
 
   @Delete("/browser/owner/items/:itemId/annotations/:threadId")
@@ -1511,6 +1527,15 @@ export class DrivePublicController {
     )
   }
 
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/link-intake/annotations/threads/status")
+  updateDriveLinkAnnotationThreadStatus(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveLinkIntakeService(this.linkIntake).updateAnnotationThreadStatus(
+      parseBody(driveLinkAnnotationThreadStatusUpdateSchema, body, "评论状态更新请求无效。"),
+      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
+    )
+  }
+
   @Get("/files/:assetId")
   @Head("/files/:assetId")
   async sendPublicAsset(@Param("assetId") assetId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
@@ -1957,6 +1982,41 @@ export class DrivePublicController {
       itemId,
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/annotations/:threadId/status")
+  updateShareRootAnnotationThreadStatus(
+    @Param("shareId") shareId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateShareThreadStatus({
+      shareId, threadId,
+      actorUserId: request.user!.id,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      status: parseDriveAnnotationThreadStatusUpdateBody(body).status,
+      auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Patch("/api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/status")
+  updateShareItemAnnotationThreadStatus(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Param("threadId") threadId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requireDriveAnnotationService(this.annotations).updateShareThreadStatus({
+      shareId, itemId, threadId,
+      actorUserId: request.user!.id,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      status: parseDriveAnnotationThreadStatusUpdateBody(body).status,
       auditContext: driveAuditContext(request),
     })
   }

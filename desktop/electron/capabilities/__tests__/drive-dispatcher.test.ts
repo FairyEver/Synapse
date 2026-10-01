@@ -108,6 +108,7 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_link_annotation_comment_create",
       "app_drive_link_annotation_comment_update",
       "app_drive_link_annotation_comment_delete",
+      "app_drive_link_annotation_thread_status_update",
       "app_drive_link_annotation_thread_delete",
       "app_drive_message_list",
       "app_drive_message_create",
@@ -489,6 +490,11 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })
     await dispatcher.dispatch("app.drive.link.annotation.comment.delete", { ...base, commentId: "comment-2" }, { source: "mcp-stdio" })
     await dispatcher.dispatch("app.drive.link.annotation.thread.delete", { ...base, threadId: "thread-1" }, { source: "mcp-stdio" })
+    vi.mocked(accountService.updateDriveLinkAnnotationThreadStatus).mockResolvedValue({ id: "thread-1", status: "resolved" })
+    await expect(dispatcher.dispatch("app.drive.link.annotation.thread.status.update", { ...base, threadId: "thread-1", status: "resolved" }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true, data: { status: "resolved" } })
+    expect(accountService.updateDriveLinkAnnotationThreadStatus).toHaveBeenCalledWith({ ...base, threadId: "thread-1", status: "resolved" })
+    await expect(dispatcher.dispatch("app.drive.link.annotation.thread.status.update", { ...base, threadId: "thread-1", status: "done" }, { source: "mcp-stdio" })).rejects.toThrow("Invalid 'status'")
+    expect(accountService.updateDriveLinkAnnotationThreadStatus).toHaveBeenCalledTimes(1)
     expect(createDriveLinkAnnotationThread).toHaveBeenCalledWith(expect.objectContaining({
       itemId: "item-1",
       path: "ignored.md",
@@ -2563,6 +2569,7 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     createDriveLinkAnnotationComment: vi.fn(),
     updateDriveLinkAnnotationComment: vi.fn(),
     deleteDriveLinkAnnotationComment: vi.fn(),
+    updateDriveLinkAnnotationThreadStatus: vi.fn(),
     deleteDriveLinkAnnotationThread: vi.fn(),
     listDriveMessages: vi.fn(),
     createDriveMessage: vi.fn(),

@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException } from "@nestjs/common"
+import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DriveAnnotationService } from "./drive-annotation.service"
 
@@ -6,7 +6,8 @@ describe("DriveAnnotationService", () => {
   const prisma = createPrismaMock()
   const drive = createDriveServiceMock()
   const auditLog = { record: vi.fn() }
-  const service = new DriveAnnotationService(prisma as never, drive as never, auditLog as never)
+  const collaborationBus = { publish: vi.fn() }
+  const service = new DriveAnnotationService(prisma as never, drive as never, auditLog as never, collaborationBus as never)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -16,6 +17,7 @@ describe("DriveAnnotationService", () => {
     prisma.driveAnnotationThread.findMany.mockResolvedValue([threadRecord()])
     prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord())
     prisma.driveAnnotationThread.create.mockResolvedValue(threadRecord())
+    prisma.driveAnnotationThread.updateMany.mockResolvedValue({ count: 1 })
     prisma.driveAnnotationThread.update.mockResolvedValue({ ...threadRecord(), deletedAt: new Date("2026-06-21T00:00:00.000Z") })
     prisma.driveAnnotationComment.create.mockResolvedValue(commentRecord({ createdByUserId: "owner-1" }))
     prisma.driveAnnotationComment.findFirst.mockResolvedValue(commentRecord())
@@ -45,6 +47,84 @@ describe("DriveAnnotationService", () => {
     expect(result[0]?.comments[0]?.author.email).toBe("reader-1@example.com")
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)
+  })
+
+  it("resolves, persists, and reopens a discussion without moving it or changing its comments", async () => {
+    let stored = threadRecord()
+    prisma.driveAnnotationThread.findFirst.mockImplementation(async () => stored)
+    prisma.driveAnnotationThread.findMany.mockImplementation(async () => [stored])
+    prisma.driveAnnotationThread.updateMany.mockImplementation(async ({ data }) => {
+      const changed = stored.status !== data.status
+      stored = { ...stored, ...data }
+      return { count: changed ? 1 : 0 }
+    })
+
+    const result = await service.updateOwnerThreadStatus("owner-1", "item-1", "thread-1", "resolved")
+    expect(result).toMatchObject({ status: "resolved", permissions: { canChangeStatus: true } })
+    expect(result.updatedAt).toBe(threadRecord().updatedAt.toISOString())
+    expect(result.comments).toHaveLength(1)
+    expect((await service.listOwnerAnnotations("owner-1", "item-1"))[0]?.status).toBe("resolved")
+    expect(collaborationBus.publish).toHaveBeenCalledWith("item-1", { type: "annotation.changed", itemId: "item-1" })
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.annotation.thread.status.update",
+      detail: expect.objectContaining({ previousStatus: "open", status: "resolved" }),
+    }))
+
+    await service.updateOwnerThreadStatus("owner-1", "item-1", "thread-1", "resolved")
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
+    expect(collaborationBus.publish).toHaveBeenCalledTimes(1)
+    await expect(service.updateOwnerThreadStatus("owner-1", "item-1", "thread-1", "open"))
+      .resolves.toMatchObject({ status: "open" })
+    expect(auditLog.record).toHaveBeenCalledTimes(2)
+  })
+
+  it("allows only the file owner to change shared discussion status and redacts author emails", async () => {
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ status: "resolved" }))
+    const base = { shareId: "share-1", itemId: "item-1", threadId: "thread-1", status: "resolved" as const, password: "private-password" }
+    await expect(service.updateShareThreadStatus({ ...base, actorUserId: "reader-1" })).rejects.toBeInstanceOf(ForbiddenException)
+    await expect(service.updateShareThreadStatus({ ...base, actorUserId: "editor-1" })).rejects.toBeInstanceOf(ForbiddenException)
+    expect(prisma.driveAnnotationThread.updateMany).not.toHaveBeenCalled()
+
+    const result = await service.updateShareThreadStatus({ ...base, actorUserId: "owner-1" })
+    expect(result).toMatchObject({ status: "resolved", author: { email: null }, permissions: { canChangeStatus: true } })
+    expect(result.comments[0]?.author.email).toBeNull()
+    expect(drive.resolveShareAnnotationAccess).toHaveBeenLastCalledWith(expect.objectContaining({ password: "private-password", actorUserId: "owner-1" }))
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("private-password")
+  })
+
+  it("projects status permission independently from comment authorship and document editing", async () => {
+    for (const actorUserId of [null, "reader-1", "editor-1", "owner-1"]) {
+      const result = await service.listShareAnnotations({ shareId: "share-1", actorUserId })
+      expect(result[0]).toMatchObject({ status: "open", permissions: { canChangeStatus: actorUserId === "owner-1" } })
+    }
+  })
+
+  it("rejects unavailable shares, non-owned files, missing or deleted discussions, and failed writes", async () => {
+    drive.resolveShareAnnotationAccess.mockRejectedValueOnce(new ForbiddenException("分享不可访问"))
+    await expect(service.updateShareThreadStatus({ actorUserId: "owner-1", shareId: "share-1", threadId: "thread-1", status: "resolved" })).rejects.toThrow("分享不可访问")
+    prisma.driveItem.findFirst.mockResolvedValueOnce(null)
+    await expect(service.updateOwnerThreadStatus("reader-1", "item-1", "thread-1", "resolved")).rejects.toBeInstanceOf(NotFoundException)
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(null)
+    await expect(service.updateOwnerThreadStatus("owner-1", "item-1", "other-file-thread", "resolved")).rejects.toBeInstanceOf(NotFoundException)
+    expect(prisma.driveAnnotationThread.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "other-file-thread", itemId: "item-1", deletedAt: null } }))
+    prisma.driveAnnotationThread.updateMany.mockRejectedValueOnce(new Error("write failed"))
+    await expect(service.updateOwnerThreadStatus("owner-1", "item-1", "thread-1", "resolved")).rejects.toThrow("write failed")
+    expect(collaborationBus.publish).not.toHaveBeenCalled()
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("keeps resolved discussions resolved after replies and loss of their source position", async () => {
+    const stored = { ...threadRecord({ status: "resolved" }), anchorStatus: "orphaned" }
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(stored)
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([stored])
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Changed source"))
+    await service.replyShareAnnotation({ actorUserId: "reader-1", shareId: "share-1", threadId: "thread-1", body: { body: "Follow-up", parentCommentId: null } })
+    expect(prisma.driveAnnotationThread.updateMany).not.toHaveBeenCalled()
+    const result = await service.listOwnerAnnotations("owner-1", "item-1")
+    expect(result[0]?.status).toBe("resolved")
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(stored).mockResolvedValueOnce({ ...stored, status: "open" })
+    await expect(service.updateOwnerThreadStatus("owner-1", "item-1", "thread-1", "open")).resolves.toMatchObject({ status: "open" })
+    expect(prisma.driveAnnotationThread.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: { status: "open", updatedAt: stored.updatedAt } }))
   })
 
   it("keeps annotations from multiple document versions visible", async () => {
@@ -965,6 +1045,7 @@ function markdownItem() {
 
 function threadRecord(input: {
   readonly baseVersionId?: string | null
+  readonly status?: "open" | "resolved"
   readonly comments?: readonly ReturnType<typeof commentRecord>[]
 } = {}) {
   const createdAt = new Date("2026-06-21T00:00:00.000Z")
@@ -975,6 +1056,7 @@ function threadRecord(input: {
     targetKind: "textRange",
     target: createInput().target,
     anchorStatus: "attached",
+    status: input.status ?? "open",
     createdByUserId: "reader-1",
     createdByUser: { id: "reader-1", email: "reader@example.com", handle: "reader" },
     createdAt,
@@ -1019,6 +1101,7 @@ function createPrismaMock() {
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     driveAnnotationComment: {
       create: vi.fn(),

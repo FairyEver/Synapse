@@ -6,6 +6,7 @@ import type {
   DriveAnnotationCreateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
+  DriveAnnotationThreadStatusUpdateInput,
   DriveMessageCommentDto,
   DriveMessageDto,
   DriveMessageListDto,
@@ -642,7 +643,7 @@ function isProtectedDriveShareBrowserPath(path: string) {
 }
 
 function isProtectedDriveShareAnnotationPath(path: string) {
-  return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/annotations(?:/[^/?#]+/comments|/comments/[^/?#]+|/[^/?#]+)?(?:[?#].*)?$`, 'u').test(path)
+  return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/annotations(?:/[^/?#]+/(?:comments|status)|/comments/[^/?#]+|/[^/?#]+)?(?:[?#].*)?$`, 'u').test(path)
 }
 
 type PaginationOptions = {
@@ -1420,6 +1421,11 @@ export const driveAnnotationApi = {
     }),
   deleteOwnerComment: (itemId: string, commentId: string) =>
     request<{ ok: true }>(ownerAnnotationPath(itemId, `/comments/${encodeURIComponent(commentId)}`), { method: 'DELETE' }),
+  updateOwnerThreadStatus: (itemId: string, threadId: string, input: DriveAnnotationThreadStatusUpdateInput) =>
+    request<DriveAnnotationThreadDto>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}/status`), {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
   deleteOwnerThread: (itemId: string, threadId: string) =>
     request<{ ok: true }>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}`), { method: 'DELETE' }),
   listShare: (shareId: string, itemId?: string | null) =>
@@ -1441,6 +1447,11 @@ export const driveAnnotationApi = {
     }),
   deleteShareComment: (shareId: string, itemId: string | null | undefined, commentId: string) =>
     request<{ ok: true }>(shareAnnotationPath(shareId, itemId, `/comments/${encodeURIComponent(commentId)}`), { method: 'DELETE' }),
+  updateShareThreadStatus: (shareId: string, itemId: string | null | undefined, threadId: string, input: DriveAnnotationThreadStatusUpdateInput) =>
+    request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}/status`), {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
   deleteShareThread: (shareId: string, itemId: string | null | undefined, threadId: string) =>
     request<{ ok: true }>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}`), { method: 'DELETE' }),
 }

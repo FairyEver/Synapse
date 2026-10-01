@@ -75,6 +75,7 @@ app_drive_link_annotation_thread_create
 app_drive_link_annotation_comment_create
 app_drive_link_annotation_comment_update
 app_drive_link_annotation_comment_delete
+app_drive_link_annotation_thread_status_update
 app_drive_link_annotation_thread_delete
 app_drive_link_materialize
 app_drive_link_download_file
@@ -505,3 +506,8 @@ Template tests or content checks should cover:
 - Synapse skill Drive guide mentions the link intake flow.
 - API reference documents all twelve Drive Link tools.
 - Capability naming matrix includes the new capabilities.
+
+
+### Discussion resolution (2026-10-01)
+
+`app_drive_link_annotation_thread_status_update` accepts the usual share URL/password/item/path selection plus `threadId` and `status: open | resolved`. It reuses the authenticated annotation service; only the file owner may resolve or reopen a discussion, regardless of comment authorship or document edit permission. Thread responses include `status` and `permissions.canChangeStatus`. The action retains comments, anchors and replies, supports unlocated discussions, is idempotent for an unchanged status, records an audit and publishes `annotation.changed` without joining a collaboration room. It never edits document content or document messages.

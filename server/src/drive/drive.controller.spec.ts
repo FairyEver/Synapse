@@ -81,12 +81,14 @@ describe("DriveController", () => {
     createOwnerAnnotation: vi.fn(),
     replyOwnerAnnotation: vi.fn(),
     updateOwnerComment: vi.fn(),
+    updateOwnerThreadStatus: vi.fn(),
     deleteOwnerComment: vi.fn(),
     deleteOwnerThread: vi.fn(),
     listShareAnnotations: vi.fn(),
     createShareAnnotation: vi.fn(),
     replyShareAnnotation: vi.fn(),
     updateShareComment: vi.fn(),
+    updateShareThreadStatus: vi.fn(),
     deleteShareComment: vi.fn(),
     deleteShareThread: vi.fn(),
   }
@@ -180,12 +182,14 @@ describe("DriveController", () => {
     annotations.createOwnerAnnotation.mockReset()
     annotations.replyOwnerAnnotation.mockReset()
     annotations.updateOwnerComment.mockReset()
+    annotations.updateOwnerThreadStatus.mockReset()
     annotations.deleteOwnerComment.mockReset()
     annotations.deleteOwnerThread.mockReset()
     annotations.listShareAnnotations.mockReset()
     annotations.createShareAnnotation.mockReset()
     annotations.replyShareAnnotation.mockReset()
     annotations.updateShareComment.mockReset()
+    annotations.updateShareThreadStatus.mockReset()
     annotations.deleteShareComment.mockReset()
     annotations.deleteShareThread.mockReset()
     sites.preflightSite.mockReset()
@@ -227,6 +231,19 @@ describe("DriveController", () => {
     app = null
     vi.unstubAllGlobals()
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
+  })
+
+  it("requires authentication for every discussion status endpoint", async () => {
+    for (const route of [
+      "/api/drive/browser/owner/items/item-1/annotations/thread-1/status",
+      "/api/drive/browser/shares/shr_file/annotations/thread-1/status",
+      "/api/drive/browser/shares/shr_file/items/item-1/annotations/thread-1/status",
+      "/api/drive/link-intake/annotations/threads/status",
+    ]) {
+      await request(app!.getHttpServer()).patch(route).send({ status: "resolved" }).expect(401)
+    }
+    expect(annotations.updateOwnerThreadStatus).not.toHaveBeenCalled()
+    expect(annotations.updateShareThreadStatus).not.toHaveBeenCalled()
   })
 
   it("requires user auth for /api/drive/items", async () => {
@@ -664,6 +681,7 @@ describe("DriveController", () => {
       annotations.updateOwnerComment.mockResolvedValue(createAnnotationComment())
       annotations.deleteOwnerComment.mockResolvedValue({ ok: true })
       annotations.deleteOwnerThread.mockResolvedValue({ ok: true })
+      annotations.updateOwnerThreadStatus.mockResolvedValue({ ...createAnnotationThread(), status: "resolved" })
 
       const ownerAnnotationResponse = await request(userApp.getHttpServer())
         .get("/api/drive/browser/owner/items/item-1/annotations")
@@ -683,6 +701,11 @@ describe("DriveController", () => {
         .expect(200)
       await request(userApp.getHttpServer()).delete("/api/drive/browser/owner/items/item-1/annotations/comments/comment-1").expect(200)
       await request(userApp.getHttpServer()).delete("/api/drive/browser/owner/items/item-1/annotations/thread-1").expect(200)
+      const updatedStatus = await request(userApp.getHttpServer()).patch("/api/drive/browser/owner/items/item-1/annotations/thread-1/status").send({ status: "resolved" }).expect(200)
+      expect(updatedStatus.body).toMatchObject({ status: "resolved" })
+      expect(annotations.updateOwnerThreadStatus).toHaveBeenCalledWith("user-1", "item-1", "thread-1", "resolved", expect.objectContaining({ ipAddress: expect.any(String) }))
+      await request(userApp.getHttpServer()).patch("/api/drive/browser/owner/items/item-1/annotations/thread-1/status").send({ status: "done" }).expect(400)
+      expect(annotations.updateOwnerThreadStatus).toHaveBeenCalledTimes(1)
 
       expect(annotations.listOwnerAnnotations).toHaveBeenCalledWith("user-1", "item-1")
       expect(annotations.createOwnerAnnotation).toHaveBeenCalledWith(
@@ -1318,6 +1341,7 @@ describe("DriveController", () => {
     annotations.updateShareComment.mockResolvedValue(createAnnotationComment())
     annotations.deleteShareComment.mockResolvedValue({ ok: true })
     annotations.deleteShareThread.mockResolvedValue({ ok: true })
+    annotations.updateShareThreadStatus.mockResolvedValue({ ...createAnnotationThread(), status: "resolved" })
 
     const cookieHeader = `${driveAccessCookieName("share", "shr_file")}=file-cookie`
     const shareAnnotationResponse = await request(app!.getHttpServer())
@@ -1436,6 +1460,16 @@ describe("DriveController", () => {
         commentId: "comment-1",
         auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
       }))
+      for (const route of ["/api/drive/browser/shares/shr_file/annotations/thread-1/status", "/api/drive/browser/shares/shr_file/items/file-1/annotations/thread-1/status"]) {
+        await request(shareApp.getHttpServer()).patch(route).set("Cookie", cookieHeader).send({ status: "resolved" }).expect(200)
+      }
+      expect(annotations.updateShareThreadStatus).toHaveBeenLastCalledWith({
+        actorUserId: "user-1", shareId: "shr_file", itemId: "file-1", threadId: "thread-1",
+        status: "resolved", cookie: "file-cookie", auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
+      })
+      await request(shareApp.getHttpServer()).patch("/api/drive/browser/shares/shr_file/annotations/thread-1/status").send({ status: "resolved", userId: "owner-1" }).expect(400)
+      expect(annotations.updateShareThreadStatus).toHaveBeenCalledTimes(2)
+
       expect(annotations.deleteShareThread).toHaveBeenCalledWith(expect.objectContaining({
         threadId: "thread-1",
         auditContext: expect.objectContaining({ ipAddress: expect.any(String) }),
@@ -2479,7 +2513,8 @@ function createAnnotationThread() {
     comments: [createAnnotationComment()],
     createdAt: "2026-06-21T00:00:00.000Z",
     updatedAt: "2026-06-21T00:00:00.000Z",
-    permissions: { canDelete: true },
+    status: "open",
+    permissions: { canDelete: true, canChangeStatus: true },
   }
 }
 

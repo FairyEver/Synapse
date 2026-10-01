@@ -29,6 +29,7 @@ import type {
   DriveLinkAnnotationCommentUpdateInput,
   DriveLinkAnnotationThreadCreateInput,
   DriveLinkAnnotationThreadDeleteInput,
+  DriveLinkAnnotationThreadStatusUpdateInput,
   DriveLinkAnnotationThreadListInput,
   DriveMessageTarget,
   DriveLinkListDto,
@@ -148,6 +149,7 @@ type DriveAccountServicePort = {
   readonly createDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentCreateInput) => Promise<unknown>
   readonly updateDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentUpdateInput) => Promise<unknown>
   readonly deleteDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentDeleteInput) => Promise<unknown>
+  readonly updateDriveLinkAnnotationThreadStatus: (input: DriveLinkAnnotationThreadStatusUpdateInput) => Promise<unknown>
   readonly deleteDriveLinkAnnotationThread: (input: DriveLinkAnnotationThreadDeleteInput) => Promise<unknown>
   readonly listDriveMessages: (input: { target: DriveMessageTarget }) => Promise<unknown>
   readonly createDriveMessage: (input: { target: DriveMessageTarget; body: string }) => Promise<unknown>
@@ -438,6 +440,11 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.deleteDriveLinkAnnotationComment(parseDriveLinkAnnotationCommentDeleteInput(params)),
+          }))
+        case "app.drive.link.annotation.thread.status.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.updateDriveLinkAnnotationThreadStatus(parseDriveLinkAnnotationThreadStatusUpdateInput(params)),
           }))
         case "app.drive.link.annotation.thread.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
@@ -1849,6 +1856,12 @@ function parseDriveLinkAnnotationCommentDeleteInput(params: Record<string, unkno
     ...parseDriveLinkAnnotationBaseInput(params),
     commentId: requireString(params, "commentId"),
   }
+}
+
+function parseDriveLinkAnnotationThreadStatusUpdateInput(params: Record<string, unknown>): DriveLinkAnnotationThreadStatusUpdateInput {
+  const status = requireString(params, "status")
+  if (status !== "open" && status !== "resolved") throw new Error("Invalid 'status': expected open or resolved")
+  return { ...parseDriveLinkAnnotationBaseInput(params), threadId: requireString(params, "threadId"), status }
 }
 
 function parseDriveLinkAnnotationThreadDeleteInput(params: Record<string, unknown>): DriveLinkAnnotationThreadDeleteInput {

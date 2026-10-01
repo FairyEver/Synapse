@@ -2003,7 +2003,8 @@ function thread({
     }],
     createdAt,
     updatedAt: createdAt,
-    permissions: { canDelete: true },
+    status: 'open',
+    permissions: { canDelete: true, canChangeStatus: true },
   }
 }
 

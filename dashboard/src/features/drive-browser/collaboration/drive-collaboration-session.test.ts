@@ -52,6 +52,24 @@ describe('DriveCollaborationSession epoch replacement', () => {
   })
 })
 
+describe('DriveCollaborationSession discussion status changes', () => {
+  it('invalidates comments on every connected page without changing document state', () => {
+    const sessions = [createSession(vi.fn()), createSession(vi.fn())]
+    for (const session of sessions) {
+      sendControl(session, joinedMessage)
+      const before = session.getSnapshot()
+      sendControl(session, { type: 'annotation.changed', itemId: 'item-1' })
+      expect(session.getSnapshot()).toMatchObject({
+        annotationRevision: before.annotationRevision + 1,
+        epoch: before.epoch,
+        checkpointVersionId: before.checkpointVersionId,
+        messageRevision: before.messageRevision,
+      })
+      session.destroy()
+    }
+  })
+})
+
 describe('DriveCollaborationSession message changes', () => {
   it('increments the message revision without changing the document epoch', () => {
     const session = createSession(vi.fn())

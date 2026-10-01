@@ -201,6 +201,12 @@ export function parseDriveAnnotationCommentUpdateBody(value: unknown): { readonl
   return { body }
 }
 
+export function parseDriveAnnotationThreadStatusUpdateBody(value: unknown): { readonly status: "open" | "resolved" } {
+  const parsed = z.object({ status: z.enum(["open", "resolved"]) }).strict().safeParse(value)
+  if (!parsed.success) throw new BadRequestException("评论状态更新请求无效。")
+  return parsed.data
+}
+
 export function resolveDriveAnnotationTarget(input: {
   readonly target: DriveAnnotationTextRangeTargetV1
   readonly renderedText: string

@@ -2,7 +2,7 @@
 
 ## Summary
 
-This design adds public discussion comments with conservative stable anchors to cloud drive Markdown files identified by a `.md` name or a Markdown MIME type (`text/markdown` or `text/x-markdown`). Comments stay outside the Markdown source. Markdown Render owns comment creation and its authoritative browsing geometry; MDXEditor can display and operate existing comments through a separate editing geometry model. Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and targets outside Markdown rendered text and whole images remain out of scope.
+This design adds public discussion comments with conservative stable anchors to cloud drive Markdown files identified by a `.md` name or a Markdown MIME type (`text/markdown` or `text/x-markdown`). Comments stay outside the Markdown source. Markdown Render owns comment creation and its authoritative browsing geometry; MDXEditor can display and operate existing comments through a separate editing geometry model. Monaco may edit the same source through realtime Yjs collaboration. Discussion resolution status is supported; cross-renderer controls and targets outside Markdown rendered text and whole images remain out of scope.
 
 The implementation scope is intentionally small:
 
@@ -73,7 +73,7 @@ Important boundary:
 - Image point or region selection and Mermaid comments.
 - Insert-point comment UI.
 - Paragraph comment UI.
-- Comment status such as open, resolved, done, rejected, assigned.
+- Additional workflow states beyond open/resolved, assignments, and batch resolution.
 - Persisted outline or comment rail preferences.
 - Markdown rendering inside comments.
 - Attachments, mentions, emoji reactions, tasks, and assignments.
@@ -803,3 +803,15 @@ Future target examples:
 ```
 
 `imageRegion` is distinct from the implemented whole-image Markdown target. Future renderers should own their positioning model while reusing the shared comment rail when its interaction model fits.
+
+
+## Discussion resolution (2026-10-01)
+
+- Each discussion has `status: open | resolved`, independently of anchor position and soft deletion. New discussions and existing rows default to `open`; the additive migration preserves all content and anchors.
+- Only the file owner may change status. Thread DTOs project `permissions.canChangeStatus`; comment authorship or document edit access does not grant this permission. Owner and protected-share routes validate the live file, discussion membership, share access and authentication on the server.
+- The shared rail shows `未解决` / `已解决` in the quote header. Owners see `标记为已解决` / `重新打开`. The action applies to the entire discussion, including text, image and unlocated threads in reading, rich editing and compact layouts.
+- The action submits directly without confirmation. Disable it while it or a reply/edit is submitting, retain the prior state on failure, display an inline error and permit retry. Preserve unsent reply/edit drafts and keyboard focus.
+- Keep all threads, document markers, navigation, counts, ordering and replies visible in place. Resolving never edits Markdown or removes a highlight. Replies, comment edits, source edits, anchor refreshes and source deletion do not implicitly change status.
+- Status changes preserve comment-activity ordering, record an audit and publish the existing `annotation.changed` event after persistence. Repeating the same desired status does not write, audit or publish again. Concurrent writes never restore a deleted discussion.
+- PATCH the owner/share annotation `/:threadId/status` with `{ status }` and return the updated DTO. MCP uses `app.drive.link.annotation.thread.status.update` via the authenticated link-intake `annotations/threads/status` endpoint and the same service/permissions.
+- This addition does not include document-message status, filters, batch actions, tasks, assignments or notifications.

@@ -8,6 +8,7 @@ import type {
   DriveAnnotationReplyInput,
   DriveAnnotationTargetDto,
   DriveAnnotationThreadDto,
+  DriveAnnotationThreadStatus,
   DriveAnnotationSelectorsV2,
   DriveAnnotationTextPositionSelector,
   DriveAnnotationTextSelectorsV2,
@@ -47,6 +48,7 @@ type AnnotationThreadRecord = {
   readonly targetKind: string
   readonly target: unknown
   readonly anchorStatus: string
+  readonly status: string
   readonly createdByUserId: string
   readonly createdByUser: { readonly id: string; readonly email: string; readonly handle: string | null }
   readonly createdAt: Date
@@ -516,6 +518,58 @@ export class DriveAnnotationService {
     })
     this.notifyAnnotationChanged(item.id)
     return { ok: true }
+  }
+
+  async updateOwnerThreadStatus(userId: string, itemId: string, threadId: string, status: DriveAnnotationThreadStatus, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationThreadDto> {
+    const item = await this.requireOwnerItem(userId, itemId)
+    assertCommentableItem(item)
+    return this.updateThreadStatus(item, userId, threadId, status, auditContext)
+  }
+
+  async updateShareThreadStatus(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string
+    readonly cookie?: string | null
+    readonly password?: string
+    readonly threadId: string
+    readonly status: DriveAnnotationThreadStatus
+    readonly auditContext?: DriveAuditContext
+  }): Promise<DriveAnnotationThreadDto> {
+    const item = await this.requireCommentableShareItem(input)
+    return this.updateThreadStatus(item, input.actorUserId, input.threadId, input.status, input.auditContext ?? {}, input.shareId)
+  }
+
+  private async updateThreadStatus(
+    item: DriveAnnotationItem,
+    actorUserId: string,
+    threadId: string,
+    status: DriveAnnotationThreadStatus,
+    auditContext: DriveAuditContext,
+    shareId?: string,
+  ): Promise<DriveAnnotationThreadDto> {
+    if (actorUserId !== item.userId) throw new ForbiddenException("仅文件所有者可更改评论状态。")
+    const thread = await this.requireThread(item.id, threadId)
+    const changed = await this.prisma.driveAnnotationThread.updateMany({
+      where: { id: threadId, itemId: item.id, deletedAt: null, status: { not: status } },
+      // Status changes do not reorder unlocated discussions by latest comment activity.
+      data: { status, updatedAt: thread.updatedAt },
+    })
+    const updated = await this.requireThread(item.id, threadId)
+    if (changed.count > 0) {
+      const audit = {
+        actorUserId,
+        action: shareId ? "drive.share_annotation.thread.status.update" : "drive.annotation.thread.status.update",
+        targetType: "drive.annotationThread",
+        targetId: threadId,
+        detail: { ownerId: item.userId, itemId: item.id, threadId, previousStatus: status === "resolved" ? "open" : "resolved", status },
+        ipAddress: auditContext.ipAddress,
+      }
+      if (shareId) await this.recordShareAnnotationAudit({ ...audit, shareId })
+      else await this.recordAnnotationAudit(audit)
+      this.notifyAnnotationChanged(item.id)
+    }
+    return toThreadDto(updated, actorUserId, item.userId, true, Boolean(shareId))
   }
 
   private async requireOwnerItem(userId: string, itemId: string): Promise<DriveAnnotationItem> {
@@ -1036,6 +1090,7 @@ function toThreadDto(
     baseVersionId: record.baseVersionId,
     targetKind: record.targetKind === "image" ? "image" : "textRange",
     target: record.target as DriveAnnotationTargetDto,
+    status: record.status === "resolved" ? "resolved" : "open",
     anchorStatus: record.anchor?.positionStatus === "attached"
       ? "attached"
       : record.anchor
@@ -1046,7 +1101,10 @@ function toThreadDto(
     comments: comments.map((comment) => toCommentDto(comment, actorUserId, fileOwnerUserId, canWrite, redactAuthorEmail)),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
-    permissions: { canDelete: canDeleteThread(record, comments, actorUserId, fileOwnerUserId, canWrite) },
+    permissions: {
+      canDelete: canDeleteThread(record, comments, actorUserId, fileOwnerUserId, canWrite),
+      canChangeStatus: canWrite && actorUserId !== null && actorUserId === fileOwnerUserId,
+    },
   }
 }
 

@@ -259,6 +259,7 @@ export function useDriveDocumentEditorComments({
       onRefresh: () => { void annotations.refresh() },
       onReply: annotations.reply,
       onUpdateComment: annotations.updateComment,
+      onUpdateThreadStatus: annotations.updateThreadStatus,
       threads: railThreads,
     },
     scheduleGeometry,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
+import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto, DriveAnnotationThreadStatus } from '@synapse/shared'
 import { Check, ChevronDown, ChevronRight, ChevronUp, Loader2, MapPinOff, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { RelativeTime } from '@/components/relative-time'
@@ -96,6 +96,7 @@ export function DriveCommentsRail({
   onNavigateNext,
   onReply,
   onUpdateComment,
+  onUpdateThreadStatus,
   onDeleteComment,
   anchorLayerRef,
   onAnchoredHeightChange,
@@ -113,6 +114,7 @@ export function DriveCommentsRail({
   readonly onNavigatePrevious?: () => void
   readonly onNavigateNext?: () => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
+  readonly onUpdateThreadStatus: (input: { readonly threadId: string; readonly status: DriveAnnotationThreadStatus }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly anchorLayerRef?: (element: HTMLDivElement | null) => void
@@ -195,6 +197,7 @@ export function DriveCommentsRail({
       onOpenChange={setUnlocatedDialogOpen}
       onFocusThread={onFocusThread}
       onReply={onReply}
+      onUpdateThreadStatus={onUpdateThreadStatus}
       onUpdateComment={onUpdateComment}
       onDeleteComment={onDeleteComment}
     />
@@ -233,6 +236,7 @@ export function DriveCommentsRail({
                   compact
                   onFocusThread={onFocusThread}
                   onReply={onReply}
+                  onUpdateThreadStatus={onUpdateThreadStatus}
                   onUpdateComment={onUpdateComment}
                   onDeleteComment={onDeleteComment}
                 />
@@ -293,6 +297,7 @@ export function DriveCommentsRail({
                       compact={false}
                       onFocusThread={onFocusThread}
                       onReply={onReply}
+                      onUpdateThreadStatus={onUpdateThreadStatus}
                       onUpdateComment={onUpdateComment}
                       onDeleteComment={onDeleteComment}
                     />
@@ -359,6 +364,7 @@ function UnlocatedCommentsDialog({
   onFocusThread,
   onReply,
   onUpdateComment,
+  onUpdateThreadStatus,
   onDeleteComment,
 }: {
   readonly open: boolean
@@ -369,6 +375,7 @@ function UnlocatedCommentsDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onFocusThread: (threadId: string) => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
+  readonly onUpdateThreadStatus: (input: { readonly threadId: string; readonly status: DriveAnnotationThreadStatus }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
@@ -399,6 +406,7 @@ function UnlocatedCommentsDialog({
                       compact={compact}
                       onFocusThread={onFocusThread}
                       onReply={onReply}
+                      onUpdateThreadStatus={onUpdateThreadStatus}
                       onUpdateComment={onUpdateComment}
                       onDeleteComment={onDeleteComment}
                     />
@@ -514,6 +522,7 @@ function ThreadView({
   onFocusThread,
   onReply,
   onUpdateComment,
+  onUpdateThreadStatus,
   onDeleteComment,
 }: {
   readonly thread: DriveAnnotationThreadDto
@@ -523,12 +532,16 @@ function ThreadView({
   readonly compact: boolean
   readonly onFocusThread: (threadId: string) => void
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
+  readonly onUpdateThreadStatus: (input: { readonly threadId: string; readonly status: DriveAnnotationThreadStatus }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
   const [composer, setComposer] = useState<ThreadComposerState>(() => active
     ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
     : { kind: 'closed' })
+  const [statusSubmitting, setStatusSubmitting] = useState(false)
+  const statusSubmittingRef = useRef(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const previousActiveRef = useRef(active)
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
   const replyingToComment = composer.kind === 'reply'
@@ -539,6 +552,22 @@ function ThreadView({
   const emphasized = active || composerVisible
   const composerSubmitting = composer.kind !== 'closed' && composer.submitting
   const quote = annotationQuoteExcerpt(thread)
+  const resolved = thread.status === 'resolved'
+
+  const changeStatus = async () => {
+    if (statusSubmittingRef.current || composerSubmitting || !thread.permissions.canChangeStatus) return
+    statusSubmittingRef.current = true
+    setStatusSubmitting(true)
+    setStatusError(null)
+    try {
+      await onUpdateThreadStatus({ threadId: thread.id, status: resolved ? 'open' : 'resolved' })
+    } catch (cause) {
+      setStatusError(getCommentActionErrorMessage(cause))
+    } finally {
+      statusSubmittingRef.current = false
+      setStatusSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     if (active && !previousActiveRef.current) {
@@ -614,6 +643,25 @@ function ThreadView({
       {active ? <span className='sr-only'>当前评论</span> : null}
       {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400' /> : null}
       <div className='mb-2 space-y-1'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <Badge variant={resolved ? 'secondary' : 'outline'}>{resolved ? '已解决' : '未解决'}</Badge>
+          {thread.permissions.canChangeStatus ? (
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className={compact ? 'min-h-11' : undefined}
+              data-drive-telemetry-event='web.drive.comment.status-update'
+              disabled={composerSubmitting || statusSubmitting}
+              aria-busy={statusSubmitting}
+              onClick={() => { void changeStatus() }}
+            >
+              {statusSubmitting ? <Loader2 className='animate-spin' /> : null}
+              {resolved ? '重新打开' : '标记为已解决'}
+            </Button>
+          ) : null}
+        </div>
+        {statusError ? <p role='alert' className='text-xs text-destructive'>{statusError}</p> : null}
         <div className='flex items-center gap-2'>
           <span aria-hidden className='h-4 w-0.5 shrink-0 rounded-full bg-border' />
           <Button
