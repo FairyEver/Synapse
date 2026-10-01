@@ -36,6 +36,8 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "回滚到上一个版本", expect: "app_drive_file_version_restore" },
   { intent: "从回收站还原这个文件", expect: "app_drive_item_restore" },
   { intent: "分享链接的评论线程有哪些", expect: "app_drive_link_annotation_thread_list" },
+  { intent: "把正文评论标记为已解决", expect: "app_drive_link_annotation_thread_status_update" },
+  { intent: "重新打开正文评论", expect: "app_drive_link_annotation_thread_status_update" },
   { intent: "把我分享出去的链接列出来", expect: "app_drive_share_list" },
 
   // ---- app (18)：terminal 49 个工具分 session/workspace/group/group_command 四组 ----
