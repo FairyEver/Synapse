@@ -683,6 +683,7 @@ function ThreadView({
                     ref={statusButtonRef}
                     type='button'
                     variant='secondary'
+                    size='sm'
                     className={compact ? 'min-h-11' : undefined}
                     disabled={composerSubmitting || statusSubmitting}
                     aria-label='已解决'
@@ -710,6 +711,7 @@ function ThreadView({
                 ref={statusButtonRef}
                 type='button'
                 variant='secondary'
+                size='sm'
                 className={compact ? 'min-h-11' : undefined}
                 data-drive-telemetry-event='web.drive.comment.status-update'
                 disabled={composerSubmitting || statusSubmitting}
