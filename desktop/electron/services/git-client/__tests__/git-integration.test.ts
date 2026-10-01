@@ -19,6 +19,8 @@ import { createGitSyncService } from "../git-sync-service"
 
 const runFile = promisify(execFile)
 const roots: string[] = []
+// Remote fixtures start many real Git processes; Windows startup can exceed the 5-second default.
+const REMOTE_FIXTURE_TIMEOUT_MS = 30_000
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
   const result = await runFile("git", args, { cwd, env: { ...process.env, LANG: "C", LC_ALL: "C" } })
@@ -125,7 +127,7 @@ describe("Git client real repository integration", () => {
       .resolves.toBe("local secret\n")
     await expect(git(repository.localPath, "show-ref", "--verify", "--quiet", "refs/heads/tracks-private"))
       .rejects.toThrow()
-  })
+  }, REMOTE_FIXTURE_TIMEOUT_MS)
 
   it("blocks sync before a remote fast-forward would overwrite an ignored file", async () => {
     const root = await createRoot()
@@ -160,7 +162,7 @@ describe("Git client real repository integration", () => {
     await expect(sync.sync(repository)).rejects.toThrow("private.txt")
     await expect(readFile(path.join(localPath, "private.txt"), "utf8")).resolves.toBe("local secret\n")
     await expect(git(localPath, "rev-parse", "HEAD")).resolves.not.toBe(await git(localPath, "rev-parse", "@{u}"))
-  })
+  }, REMOTE_FIXTURE_TIMEOUT_MS)
 
   it("clones into a child directory of the selected parent", async () => {
     const root = await createRoot()
