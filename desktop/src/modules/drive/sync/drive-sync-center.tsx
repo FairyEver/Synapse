@@ -346,9 +346,9 @@ function DriveSyncCard({
         </div>
         <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 text-sm">
           <dt className="flex items-center gap-1.5 text-muted-foreground"><Cloud className="size-3.5" aria-hidden="true" />云盘{" "}</dt>
-          <dd className="min-w-0 truncate" title={driveSyncRemotePath(binding)}>{driveSyncRemotePath(binding)}</dd>
+          <dd className="min-w-0 break-all text-left" title={driveSyncRemotePath(binding)}>{driveSyncRemotePath(binding)}</dd>
           <dt className="flex items-center gap-1.5 text-muted-foreground"><Monitor className="size-3.5" aria-hidden="true" />电脑{" "}</dt>
-          <dd className="min-w-0 truncate" title={binding.localPath} dir="rtl"><span dir="ltr">{binding.localPath}</span></dd>
+          <dd className="min-w-0 break-all text-left" title={binding.localPath}>{binding.localPath}</dd>
         </dl>
         {detail ? <p className={state.tone === "attention" ? "break-words text-sm text-destructive" : "break-words text-sm text-muted-foreground"}>{detail}</p> : null}
         {work?.kind === "transfer" && work.percent !== null ? (
