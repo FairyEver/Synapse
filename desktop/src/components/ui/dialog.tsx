@@ -147,19 +147,19 @@ function DialogFrameHeader({
   readonly titleClassName?: string
 }) {
   const titleBlock = title || description ? (
-    <div className="min-w-0">
+    <div className="min-w-0 flex-1">
       {title ? <DialogTitle className={cn("truncate", titleClassName)}>{title}</DialogTitle> : null}
       {description ? <DialogDescription className={cn("mt-2 truncate", descriptionClassName)}>{description}</DialogDescription> : null}
     </div>
   ) : null
   const leftBlock = leading ? (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 flex-1 items-center gap-2">
       {leading}
       {titleBlock}
     </div>
   ) : titleBlock
   const rightBlock = actions || showCloseButton ? (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+    <div className="flex shrink-0 items-center justify-end gap-2">
       {actions}
       {showCloseButton ? (
         <DialogClose asChild>
