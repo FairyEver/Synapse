@@ -134,7 +134,7 @@ export function bindingStateText(
     }
   }
   const retry = retryOperationOf(operations)
-  if (retry) return { text: `网络不稳定，正在重试（第 ${retry.attemptCount} 次）`, tone: "normal" }
+  if (retry) return { text: `同步暂未完成，等待重试（第 ${retry.attemptCount} 次）`, tone: "normal" }
   return { text: `已同步 · ${formatRelativeTime(binding.lastSyncedAt ?? binding.updatedAt)}`, tone: "normal" }
 }
 
@@ -160,7 +160,7 @@ export function bindingStateDetail(
     return work.currentPath ? `${size} · ${work.currentPath}` : size
   }
   const retry = retryOperationOf(operations)
-  if (retry) return `${retry.relativePath || "内容"} · 稍后自动继续。`
+  if (retry) return [retry.relativePath, retry.message || "稍后自动继续。"].filter(Boolean).join(" · ")
   return ""
 }
 

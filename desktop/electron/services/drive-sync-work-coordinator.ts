@@ -18,6 +18,9 @@ export interface DriveSyncWorkCoordinator {
 }
 
 export function createDriveSyncWorkCoordinator(): DriveSyncWorkCoordinator {
+  let activeCount = 0
+  const slotWaiters: Array<() => void> = []
+
   const tails = new Map<string, Promise<void>>()
   const generations = new Map<string, number>()
   const activeControllers = new Map<string, AbortController>()
@@ -34,7 +37,11 @@ export function createDriveSyncWorkCoordinator(): DriveSyncWorkCoordinator {
     })
     tails.set(bindingId, tail)
     if (previous) await previous.catch(() => undefined)
+    // Reserve a shared slot only after this binding reaches the front of its queue.
+    if (activeCount >= 2) await new Promise<void>((resolve) => slotWaiters.push(resolve))
+    else activeCount += 1
     if (generation !== currentGeneration(bindingId)) {
+      releaseSlot()
       releaseTail(bindingId, tail, release)
       throw new DriveSyncWorkCancelledError(bindingId)
     }
@@ -45,8 +52,15 @@ export function createDriveSyncWorkCoordinator(): DriveSyncWorkCoordinator {
       return await work(controller.signal)
     } finally {
       if (activeControllers.get(bindingId) === controller) activeControllers.delete(bindingId)
+      releaseSlot()
       releaseTail(bindingId, tail, release)
     }
+  }
+
+  function releaseSlot(): void {
+    const next = slotWaiters.shift()
+    if (next) next()
+    else activeCount -= 1
   }
 
   function run<T>(bindingId: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> {

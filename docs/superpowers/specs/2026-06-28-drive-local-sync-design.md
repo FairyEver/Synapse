@@ -190,6 +190,13 @@ Use a server-side Drive change log plus a desktop-side watcher and sync engine.
 
 The server records remote Drive changes as facts. The desktop sync engine decides what to do by comparing remote state, local state, and the binding baseline.
 
+## Retry Scheduling
+
+- At most two bindings execute sync work concurrently; work within each binding stays serialized.
+- Automatic remote polling skips bindings whose retry deadline has not arrived and preserves retrying health.
+- Retry delays respect the server's `Retry-After` minimum, including waits longer than the client's five-minute backoff cap. Reusing a pending retry preserves its deadline.
+- Retry UI describes waiting and shows the stored failure reason without assuming a network fault.
+
 ## Server Drive Change Log
 
 Drive mutations should write ordered change records. The client stores a cursor and asks for changes after that cursor.

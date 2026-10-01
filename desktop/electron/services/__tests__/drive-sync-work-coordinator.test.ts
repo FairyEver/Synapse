@@ -48,6 +48,26 @@ describe("DriveSyncWorkCoordinator", () => {
     await Promise.all(work)
   })
 
+  it("limits concurrent work across bindings and releases slots after failure", async () => {
+    const coordinator = createDriveSyncWorkCoordinator()
+    let active = 0
+    let peak = 0
+    const work = Array.from({ length: 8 }, (_, index) => coordinator.run(String(index), async () => {
+      active += 1
+      peak = Math.max(peak, active)
+      try {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1))
+        if (index === 0) throw new Error("failed")
+      } finally {
+        active -= 1
+      }
+    }))
+    const results = await Promise.allSettled(work)
+    expect(peak).toBe(2)
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(7)
+    await coordinator.waitForIdle()
+  })
+
   it("aborts active work and skips queued work before a lifecycle action", async () => {
     const coordinator = createDriveSyncWorkCoordinator()
     const order: string[] = []

@@ -3532,7 +3532,7 @@ describe("DriveSyncService", () => {
     const stagingRootPath = path.join(tempDir, "staging")
     try {
       await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
-      const transient = Object.assign(new Error("rate limited"), { status: 429 })
+      const transient = Object.assign(new Error("rate limited"), { status: 429, retryAfterMs: 600_000 })
       const harness = createHarness({
         stagingRootPath,
         accountService: {
@@ -3562,6 +3562,15 @@ describe("DriveSyncService", () => {
         snapshotPath: expect.any(String),
         snapshotHash: expect.any(String),
       }))
+      expect(Date.parse(retryOperation!.nextRetryAt!)).toBeGreaterThanOrEqual(
+        harness.deps.now!().getTime() + 600_000,
+      )
+      const callsBeforePoll = harness.deps.accountService.getDriveItem.mock.calls.length
+      await service.pollRemoteChanges()
+      expect(harness.deps.accountService.getDriveItem.mock.calls).toHaveLength(callsBeforePoll)
+      await service.stopLocalWatcher()
+      await service.startLocalWatcher()
+      expect(harness.deps.accountService.getDriveItem.mock.calls).toHaveLength(callsBeforePoll)
       await expect(lstat(retryOperation!.snapshotPath!)).resolves.toMatchObject({ size: 5 })
       await expect(service.getSnapshot()).resolves.toMatchObject({
         health: { status: "retrying", lastError: "rate limited" },
@@ -4578,6 +4587,14 @@ describe("DriveSyncService", () => {
 
       service.startRemotePolling(5)
 
+      await waitForExpect(async () => {
+        expect((await harness.operations.list()).some((operation) => operation.status === "retry_wait")).toBe(true)
+      })
+      const callsBeforeDeadline = harness.deps.accountService.listDriveChanges.mock.calls.length
+      await waitForTimeout(25)
+      expect(harness.deps.accountService.listDriveChanges.mock.calls).toHaveLength(callsBeforeDeadline)
+      // Move the injected clock beyond the stored deadline; the next poll can catch up.
+      harness.deps.now = () => new Date("2026-06-28T00:10:00.000Z")
       await waitForExpect(() => {
         expect(harness.deps.accountService.listDriveChanges.mock.calls.length).toBeGreaterThanOrEqual(2)
       })
@@ -4586,6 +4603,7 @@ describe("DriveSyncService", () => {
       })
     } finally {
       if (typeof service?.stopRemotePolling === "function") await service.stopRemotePolling()
+      await service?.stopLocalWatcher()
       await rm(tempDir, { recursive: true, force: true })
     }
   })

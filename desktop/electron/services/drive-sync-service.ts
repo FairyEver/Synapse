@@ -641,10 +641,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
     if (!isCurrentAccountOnline()) return
     const bindings = (await listOwnerBindings()).filter(isAutomaticallySyncableBinding)
+    let waitingForRetry = false
     const results = await Promise.allSettled(bindings.map((binding) =>
       runBindingActionSingleFlight(binding.id, async () => {
         const current = await requireBinding(binding.id)
         if (!isAutomaticallySyncableBinding(current)) return
+        if (await isBindingWaitingForRetry(binding.id)) {
+          waitingForRetry = true
+          return
+        }
         await catchUpBinding(current, false)
       }),
     ))
@@ -661,7 +666,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       }
     }
     if (failures.length > 0) throw failures[0]
-    if (bindings.length > 0) {
+    if (bindings.length > 0 && !waitingForRetry) {
       await setHealth({ health: "idle", lastError: null })
     }
   }
@@ -770,6 +775,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       localChangedPaths,
       shouldIgnoreChange: (change, relativePath) => consumePendingRemoteEcho(binding.id, change, relativePath),
     })
+  }
+
+  async function isBindingWaitingForRetry(bindingId: string): Promise<boolean> {
+    const nowMs = (deps.now?.() ?? new Date()).getTime()
+    return (await deps.operations.list({ bindingId })).some((operation) =>
+      operation.status === "retry_wait" && typeof operation.nextRetryAt === "string"
+      && Date.parse(operation.nextRetryAt) > nowMs,
+    )
   }
 
   async function catchUpBinding(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean): Promise<void> {
@@ -3607,7 +3620,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     for (const binding of bindings) {
       await runBindingActionSingleFlight(binding.id, async () => {
         const current = await requireBinding(binding.id)
-        if (!isAutomaticallySyncableBinding(current)) return
+        if (!isAutomaticallySyncableBinding(current) || await isBindingWaitingForRetry(binding.id)) return
         const rootReady = await ensureBindingRootReady(current, { checkRemote: true, throwOnIssue: false })
         if (!rootReady) return
         await scanBindingForLocalChanges(current, { throwOnScanError: false })
@@ -3930,6 +3943,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const bindingIds = new Set((await listOwnerBindings()).map((binding) => binding.id))
     const operations = (await deps.operations.list()).filter((operation) => bindingIds.has(operation.bindingId))
     for (const operation of operations) {
+      if (operation.status === "retry_wait" && typeof operation.nextRetryAt === "string") {
+        const remainingMs = Date.parse(operation.nextRetryAt) - (deps.now?.() ?? new Date()).getTime()
+        if (remainingMs > 0) {
+          if (online) scheduleBindingRetry(operation.bindingId, operation.attemptCount ?? 0, remainingMs)
+          continue
+        }
+      }
       if (
         online
         && (operation.status === "running" || operation.status === "retry_wait")
@@ -4221,7 +4241,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       .filter((entry) => entry.relativePath === operation.relativePath && entry.kind === operation.kind)
       .sort(compareUpdatedDesc)[0]
     const attemptCount = (recent?.attemptCount ?? 0) + 1
-    const delayMs = retryDelayMs(attemptCount)
+    const delayMs = retryDelayMs(attemptCount, error)
     const nextRetryAt = new Date((deps.now?.() ?? new Date()).getTime() + delayMs).toISOString()
     await recordOperation({
       id: recent?.id,
@@ -4254,12 +4274,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       .sort(compareUpdatedDesc)[0]
     if (existing && !incrementExisting) {
       await setHealth({ health: "retrying", lastError: errorMessage(error) })
-      scheduleBindingRetry(bindingId, Math.max(1, existing.attemptCount ?? 1))
+      scheduleBindingRetry(bindingId, Math.max(1, existing.attemptCount ?? 1),
+        existing.nextRetryAt ? Math.max(0, Date.parse(existing.nextRetryAt) - (deps.now?.() ?? new Date()).getTime()) : undefined)
       return
     }
     const binding = await requireBinding(bindingId)
     const attemptCount = (existing?.attemptCount ?? 0) + 1
-    const delayMs = retryDelayMs(attemptCount)
+    const delayMs = retryDelayMs(attemptCount, error)
     const nextRetryAt = new Date((deps.now?.() ?? new Date()).getTime() + delayMs).toISOString()
     await recordOperation({
       id: existing?.id,
@@ -4768,10 +4789,14 @@ function errorMessage(error: unknown): string {
   return sanitizeRequiredDriveSyncMessage(error instanceof Error ? error.message : "同步操作失败。", "同步操作失败。")
 }
 
-function retryDelayMs(attemptCount: number): number {
+function retryDelayMs(attemptCount: number, error?: unknown): number {
+  const retryAfterMs = error instanceof Error
+    ? (error as Error & { readonly retryAfterMs?: unknown }).retryAfterMs : undefined
+  const serverDelayMs = typeof retryAfterMs === "number" && Number.isFinite(retryAfterMs)
+    ? Math.max(0, retryAfterMs) : 0
   const base = Math.min(RETRY_MAX_DELAY_MS, 1_000 * 2 ** Math.max(0, attemptCount - 1))
   const jitter = 0.8 + Math.random() * 0.4
-  return Math.min(RETRY_MAX_DELAY_MS, Math.max(1_000, Math.round(base * jitter)))
+  return Math.max(serverDelayMs, Math.min(RETRY_MAX_DELAY_MS, Math.max(1_000, Math.round(base * jitter))))
 }
 
 function isRetryableSyncError(error: unknown): boolean {

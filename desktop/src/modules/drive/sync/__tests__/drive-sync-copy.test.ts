@@ -98,9 +98,15 @@ describe("同步状态文案", () => {
       [operation({ status: "retry_wait", attemptCount: 3 })],
       [],
     )
-    expect(state).toEqual({ text: "网络不稳定，正在重试（第 3 次）", tone: "normal" })
+    expect(state).toEqual({ text: "同步暂未完成，等待重试（第 3 次）", tone: "normal" })
     expect(bindingStateDetail(binding(), [operation({ status: "retry_wait", relativePath: "课件/第 3 讲.pdf" })], []))
       .toBe("课件/第 3 讲.pdf · 稍后自动继续。")
+  })
+
+  it("等待重试时保留服务端失败原因", () => {
+    expect(bindingStateDetail(binding(), [operation({
+      status: "retry_wait", message: "云盘条目加载失败。 HTTP 429", relativePath: "",
+    })], [])).toBe("云盘条目加载失败。 HTTP 429")
   })
 
   it("已同步：带相对时间", () => {
