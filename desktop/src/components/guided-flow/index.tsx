@@ -87,12 +87,16 @@ export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "�
       <DialogFrameBody className="overflow-auto px-5 py-5" aria-busy={busy}>
         {children}
       </DialogFrameBody>
-      <DialogFrameFooter>
-        <Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button>
-        {onBack && <Button variant="outline" disabled={busy} onClick={onBack}>上一步</Button>}
-        {!hideNext && <Button disabled={busy || !canNext} variant={destructive ? "destructive" : "default"} onClick={onNext}>
-          {busy ? "正在处理…" : nextLabel}
-        </Button>}
+      <DialogFrameFooter className="flex-row items-center justify-between sm:justify-between">
+        <div>
+          {onBack && <Button variant="ghost" disabled={busy} onClick={onBack}>上一步</Button>}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button>
+          {!hideNext && <Button disabled={busy || !canNext} variant={destructive ? "destructive" : "default"} onClick={onNext}>
+            {busy ? "正在处理…" : nextLabel}
+          </Button>}
+        </div>
       </DialogFrameFooter>
     </>
   )
