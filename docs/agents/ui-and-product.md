@@ -56,7 +56,7 @@
 
 ## 逐步选择与配置向导
 
-- 多步骤、带说明选项的配置流程统一使用 `components/guided-flow`，遵循 `docs/reference/guided-flow.md`。选项只修改草稿，由「下一步」推进；分支和异步校验放业务 hook。
+- 多步骤、带说明选项的配置流程统一使用 `components/guided-flow`，遵循 `docs/reference/guided-flow.md`。默认选项只修改草稿，由「下一步」推进；同步向导的纯单选步骤点击即确认并推进，左侧显示语义图标，输入与最终执行仍显式确认。分支和异步校验放业务 hook。
 
 ## Dialog
 

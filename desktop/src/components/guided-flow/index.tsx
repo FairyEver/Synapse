@@ -9,21 +9,34 @@ export interface GuidedChoice {
   readonly title: string
   readonly description?: string
   readonly disabled?: boolean
+  readonly icon?: ReactNode
 }
 
-/** 单选决策：整行可点，说明关联到控件，选择本身不推进或产生业务副作用。 */
-export function GuidedChoices({ title, value, options, onChange, disabled = false }: {
+/** 单选决策：默认更新草稿；onSelect 使用按钮立即确认选择，由业务 hook 推进。 */
+export function GuidedChoices({ title, value, options, onChange, onSelect, disabled = false }: {
   readonly title: string
   readonly value: string
   readonly options: readonly GuidedChoice[]
-  readonly onChange: (value: string) => void
+  readonly onSelect?: (value: string) => void
+  readonly onChange?: (value: string) => void
   readonly disabled?: boolean
 }) {
   const id = useId()
   return (
     <FieldSet disabled={disabled}>
       <FieldLegend id={`${id}-title`}>{title}</FieldLegend>
-      <RadioGroup value={value} onValueChange={onChange} disabled={disabled} aria-labelledby={`${id}-title`}>
+      {onSelect ? <div className="grid gap-3" role="group" aria-labelledby={`${id}-title`}>
+        {options.map((option, index) => <Button key={option.value} type="button" variant="outline"
+          className="h-auto w-full justify-start gap-3 whitespace-normal px-4 py-4 text-left"
+          disabled={disabled || option.disabled} onClick={() => onSelect(option.value)}
+          aria-labelledby={`${id}-${index}-label`} aria-describedby={option.description ? `${id}-${index}-description` : undefined}>
+          {option.icon}
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span id={`${id}-${index}-label`}>{option.title}</span>
+            {option.description && <span id={`${id}-${index}-description`} className="font-normal text-muted-foreground">{option.description}</span>}
+          </span>
+        </Button>)}
+      </div> : <RadioGroup value={value} onValueChange={onChange} disabled={disabled} aria-labelledby={`${id}-title`}>
         {options.map((option, index) => {
           const optionId = `${id}-${index}`
           return (
@@ -31,6 +44,7 @@ export function GuidedChoices({ title, value, options, onChange, disabled = fals
               <Field orientation="horizontal" data-disabled={disabled || option.disabled} data-checked={value === option.value ? "" : undefined}>
                 <RadioGroupItem id={optionId} value={option.value} disabled={disabled || option.disabled}
                   aria-labelledby={`${optionId}-label`} aria-describedby={option.description ? `${optionId}-description` : undefined} />
+                {option.icon}
                 <FieldContent>
                   <FieldTitle id={`${optionId}-label`}>{option.title}</FieldTitle>
                   {option.description && <FieldDescription id={`${optionId}-description`}>{option.description}</FieldDescription>}
@@ -39,14 +53,14 @@ export function GuidedChoices({ title, value, options, onChange, disabled = fals
             </FieldLabel>
           )
         })}
-      </RadioGroup>
+      </RadioGroup>}
     </FieldSet>
   )
 }
 
 /** 壳仅负责进度、焦点和动作；分支、校验、异步请求由业务 hook 管理。 */
 export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "下一步", canNext = true, destructive,
-  onBack, onNext, onCancel }: {
+  onBack, onNext, onCancel, hideNext = false }: {
   readonly title: string
   readonly step: string
   readonly steps: readonly { readonly id: string; readonly title: string }[]
@@ -56,6 +70,7 @@ export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "�
   readonly canNext?: boolean
   readonly destructive?: boolean
   readonly onBack?: () => void
+  readonly hideNext?: boolean
   readonly onNext: () => void
   readonly onCancel: () => void
 }) {
@@ -75,9 +90,9 @@ export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "�
       <DialogFrameFooter>
         <Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button>
         {onBack && <Button variant="outline" disabled={busy} onClick={onBack}>上一步</Button>}
-        <Button disabled={busy || !canNext} variant={destructive ? "destructive" : "default"} onClick={onNext}>
+        {!hideNext && <Button disabled={busy || !canNext} variant={destructive ? "destructive" : "default"} onClick={onNext}>
           {busy ? "正在处理…" : nextLabel}
-        </Button>
+        </Button>}
       </DialogFrameFooter>
     </>
   )

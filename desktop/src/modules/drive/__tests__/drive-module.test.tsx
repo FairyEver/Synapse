@@ -1469,6 +1469,21 @@ describe("DriveModule", () => {
     expect(getSyncToolbarButton()).toBeTruthy()
   })
 
+  it("advances again when reselecting the same type and scenario after going back", async () => {
+    await render(<DriveModule />); await flushAct(); await clickDriveToolbarMenuItem("更多", "新建同步")
+    const choices = document.querySelectorAll('[role="dialog"] button[aria-labelledby]')
+    expect(choices).toHaveLength(3)
+    choices.forEach((choice) => expect(choice.querySelector('svg[aria-hidden="true"]')).toBeTruthy())
+    await startSyncWizard("文件", "本地为基础，上传并同步")
+    await clickButtonText("上一步")
+    await chooseWizardOption("本地为基础，上传并同步")
+    expect(document.querySelector("#sync-local")).toBeTruthy()
+    await clickButtonText("上一步"); await clickButtonText("上一步")
+    await chooseWizardOption("文件")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("从哪边开始？")
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
+  })
+
   it("requires explicit type and scenario before selecting a local destination", async () => {
     mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
@@ -1494,7 +1509,7 @@ describe("DriveModule", () => {
     await startSyncWizard("文件", "本地和云端都存在")
     await clickButtonText("选择文件"); await clickButtonText("下一步"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
-    await chooseWizardOption("以本地为准，更新云端"); await clickButtonText("下一步")
+    await chooseWizardOption("以本地为准，更新云端")
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ authority: "local", directionHint: "bind_existing" }))
     await clickButtonText("更新云端并同步")
@@ -1583,7 +1598,7 @@ describe("DriveModule", () => {
     const binding = createDriveSyncBinding({ id: "selected-sync", driveItemName: "Docs" })
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
     await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonText("同步向导")
-    await chooseWizardOption("删除同步"); await clickButtonText("下一步"); await chooseWizardOption("Docs"); await clickButtonText("下一步")
+    await chooseWizardOption("删除同步"); await chooseWizardOption("Docs")
     expect(mocks.removeDriveSyncBinding).not.toHaveBeenCalled()
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("两边文件都会保留")
     await clickButtonText("删除同步")
@@ -1595,8 +1610,8 @@ describe("DriveModule", () => {
     const binding = createDriveSyncBinding({ id: "selected-sync", driveItemName: "Docs", excludeRules: { forced: [".git/"], defaults: ["node_modules/"], importedGitignore: ["private/"], user: ["*.tmp"] } })
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
     await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonText("同步向导")
-    await chooseWizardOption("修改同步"); await clickButtonText("下一步"); await chooseWizardOption("Docs"); await clickButtonText("下一步")
-    await chooseWizardOption("同步范围"); await clickButtonText("下一步"); await textAreaInput("sync-rules", "*.log")
+    await chooseWizardOption("修改同步"); await chooseWizardOption("Docs")
+    await chooseWizardOption("同步范围"); await textAreaInput("sync-rules", "*.log")
     await clickButtonText("下一步"); await clickButtonText("保存同步范围")
     expect(mocks.updateDriveSyncExcludeRules).toHaveBeenCalledWith({ id: "selected-sync", defaults: ["node_modules/"], importedGitignore: ["private/"], user: ["*.log"] })
   })
@@ -4617,14 +4632,17 @@ function createAuthenticatedState(): SynapseAccountState {
 }
 
 async function chooseWizardOption(title: string): Promise<void> {
-  const radio = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [role="radio"]')).find((element) => document.getElementById(element.getAttribute("aria-labelledby") ?? "")?.textContent === title)
+  const radio = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button[aria-labelledby]')).find((element) => document.getElementById(element.getAttribute("aria-labelledby") ?? "")?.textContent === title)
   if (!radio) throw new Error(`Wizard option not found: ${title}`)
   await act(async () => { radio.click(); await flushPromises() })
 }
 async function startSyncWizard(kind: string, scenario: string): Promise<void> {
-  await chooseWizardOption("新建同步"); await clickButtonText("下一步")
-  await chooseWizardOption(kind); await clickButtonText("下一步")
-  await chooseWizardOption(scenario); await clickButtonText("下一步")
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("下一步")
+  await chooseWizardOption("新建同步")
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步什么？")
+  await chooseWizardOption(kind)
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("从哪边开始？")
+  await chooseWizardOption(scenario)
 }
 
 async function clickWizardCheckbox(id: string): Promise<void> {

@@ -1,3 +1,4 @@
+import { Plus, Pencil, Unlink, Folder, File, Upload, Download, Link, ListFilter, FolderInput, Cloud, RefreshCw } from "lucide-react"
 import type { DriveSyncBindingDto } from "@synapse/shared"
 import { GuidedChoices, GuidedFlow } from "@/components/guided-flow"
 import { formatDriveBytes } from "@/lib/drive-format"
@@ -41,32 +42,32 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
     : flow.authority === "local" ? "更新云端并同步" : "更新本地并同步"
   return (
     <GuidedFlow title="同步向导" step={flow.step} steps={flow.steps} busy={flow.busy}
-      canNext={flow.canNext} nextLabel={flow.step === "confirm" ? finalLabel : "下一步"}
+      hideNext={flow.choiceStep} canNext={flow.canNext} nextLabel={flow.step === "confirm" ? finalLabel : "下一步"}
       destructive={flow.step === "confirm" && flow.operation === "remove"}
       onBack={flow.step === "action" ? undefined : flow.back} onNext={flow.next} onCancel={onClose}>
       <FieldSet disabled={flow.busy}><FieldGroup>
         {controller.readOnly && <Alert><AlertDescription>{controller.offline ? "联网后可管理同步" : "登录后可管理同步"}</AlertDescription></Alert>}
         {(flow.error || controller.error) && <FieldError>{flow.error || controller.error}</FieldError>}
-        {flow.step === "action" && <GuidedChoices title="要进行什么操作？" value={flow.operation}
-          onChange={(value) => flow.chooseOperation(value as SyncWizardOperation)} options={[
-            { value: "create", title: "新建同步", description: "连接一个本地对象与一个云端对象。" },
-            { value: "edit", title: "修改同步", description: flow.bindings.length ? "调整位置、同步范围或重新对齐内容。" : "暂无同步", disabled: !flow.bindings.length },
-            { value: "remove", title: "删除同步", description: flow.bindings.length ? "停止同步，保留本地和云端文件。" : "暂无同步", disabled: !flow.bindings.length },
+        {flow.step === "action" && <GuidedChoices disabled={!flow.canChoose} title="要进行什么操作？" value={flow.operation}
+          onSelect={(value) => flow.chooseOperation(value as SyncWizardOperation)} options={[
+            { value: "create", icon: <Plus aria-hidden="true" />, title: "新建同步", description: "连接一个本地对象与一个云端对象。" },
+            { value: "edit", icon: <Pencil aria-hidden="true" />, title: "修改同步", description: flow.bindings.length ? "调整位置、同步范围或重新对齐内容。" : "暂无同步", disabled: !flow.bindings.length },
+            { value: "remove", icon: <Unlink aria-hidden="true" />, title: "删除同步", description: flow.bindings.length ? "停止同步，保留本地和云端文件。" : "暂无同步", disabled: !flow.bindings.length },
           ]} />}
-        {flow.step === "kind" && <GuidedChoices title="同步什么？" value={flow.kind} onChange={(value) => flow.chooseKind(value as "file" | "folder")}
-          options={[{ value: "folder", title: "文件夹", description: "同步文件夹及其中的内容，可设置排除项。" }, { value: "file", title: "文件", description: "只同步选中的一个文件。" }]} />}
-        {flow.step === "scenario" && <GuidedChoices title="从哪边开始？" value={flow.scenario} onChange={(value) => flow.chooseScenario(value as SyncWizardScenario)} options={[
-          { value: "local_to_remote", title: "本地为基础，上传并同步", description: "选择本地内容，在云端新建对应对象。" },
-          { value: "remote_to_local", title: "云端为基础，下载并同步", description: "选择云端内容，下载到新的本地位置。" },
-          { value: "bind_existing", title: "本地和云端都存在", description: "选择两端已有对象，再选择一边更新另一边。" },
+        {flow.step === "kind" && <GuidedChoices disabled={!flow.canChoose} title="同步什么？" value={flow.kind} onSelect={(value) => flow.chooseKind(value as "file" | "folder")}
+          options={[{ value: "folder", icon: <Folder aria-hidden="true" />, title: "文件夹", description: "同步文件夹及其中的内容，可设置排除项。" }, { value: "file", icon: <File aria-hidden="true" />, title: "文件", description: "只同步选中的一个文件。" }]} />}
+        {flow.step === "scenario" && <GuidedChoices disabled={!flow.canChoose} title="从哪边开始？" value={flow.scenario} onSelect={(value) => flow.chooseScenario(value as SyncWizardScenario)} options={[
+          { value: "local_to_remote", icon: <Upload aria-hidden="true" />, title: "本地为基础，上传并同步", description: "选择本地内容，在云端新建对应对象。" },
+          { value: "remote_to_local", icon: <Download aria-hidden="true" />, title: "云端为基础，下载并同步", description: "选择云端内容，下载到新的本地位置。" },
+          { value: "bind_existing", icon: <Link aria-hidden="true" />, title: "本地和云端都存在", description: "选择两端已有对象，再选择一边更新另一边。" },
         ]} />}
-        {flow.step === "binding" && <GuidedChoices title="选择同步" value={flow.binding?.id ?? ""} onChange={flow.chooseBinding}
-          options={flow.bindings.map((item) => ({ value: item.id, title: item.driveItemName, description: `本地 ${item.localPath}；云端 ${item.drivePathHint ?? item.driveItemName}` }))} />}
-        {flow.step === "edit" && <GuidedChoices title="修改什么？" value={flow.edit} onChange={(value) => flow.chooseEdit(value as SyncWizardEdit)} options={[
-          { value: "range", title: "同步范围", description: "调整排除规则，已排除的文件保留原状。", disabled: flow.kind !== "folder" },
-          { value: "local", title: "本地位置", description: "选择另一个已有对象，原位置文件保留。" },
-          { value: "remote", title: "云端对象", description: "选择另一个已有对象，原云端内容保留。" },
-          { value: "align", title: "重新对齐", description: "重新选择一边为准，更新另一边。" },
+        {flow.step === "binding" && <GuidedChoices disabled={!flow.canChoose} title="选择同步" value={flow.binding?.id ?? ""} onSelect={flow.chooseBinding}
+          options={flow.bindings.map((item) => ({ value: item.id, icon: item.kind === "folder" ? <Folder aria-hidden="true" /> : <File aria-hidden="true" />, title: item.driveItemName, description: `本地 ${item.localPath}；云端 ${item.drivePathHint ?? item.driveItemName}` }))} />}
+        {flow.step === "edit" && <GuidedChoices disabled={!flow.canChoose} title="修改什么？" value={flow.edit} onSelect={(value) => flow.chooseEdit(value as SyncWizardEdit)} options={[
+          { value: "range", icon: <ListFilter aria-hidden="true" />, title: "同步范围", description: "调整排除规则，已排除的文件保留原状。", disabled: flow.kind !== "folder" },
+          { value: "local", icon: <FolderInput aria-hidden="true" />, title: "本地位置", description: "选择另一个已有对象，原位置文件保留。" },
+          { value: "remote", icon: <Cloud aria-hidden="true" />, title: "云端对象", description: "选择另一个已有对象，原云端内容保留。" },
+          { value: "align", icon: <RefreshCw aria-hidden="true" />, title: "重新对齐", description: "重新选择一边为准，更新另一边。" },
         ]} />}
         {flow.step === "local" && <Field>
           <FieldLabel htmlFor="sync-local">{flow.scenario === "remote_to_local" ? "本地保存位置" : `本地${flow.kind === "folder" ? "文件夹" : "文件"}`}</FieldLabel>
@@ -79,9 +80,9 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
           {flow.scenario === "local_to_remote" && <Field><FieldLabel htmlFor="sync-name">云端新建名称</FieldLabel><Input id="sync-name" value={flow.name} onChange={(event) => flow.setName(event.target.value)} /></Field>}
           <FieldDescription>已选云端位置：{flow.remotePath || "尚未选择"}</FieldDescription>
         </>}
-        {flow.step === "authority" && <GuidedChoices title="本次以哪边为准？" value={flow.authority} onChange={(value) => flow.setAuthority(value as "local" | "remote")} options={[
-          { value: "local", title: "以本地为准，更新云端", description: "覆盖云端不同内容；云端独有内容移入回收站。" },
-          { value: "remote", title: "以云端为准，更新本地", description: "替换本地不同内容；本地旧内容和独有内容移入回收站。" },
+        {flow.step === "authority" && <GuidedChoices disabled={!flow.canChoose} title="本次以哪边为准？" value={flow.authority} onSelect={(value) => flow.chooseAuthority(value as "local" | "remote")} options={[
+          { value: "local", icon: <FolderInput aria-hidden="true" />, title: "以本地为准，更新云端", description: "覆盖云端不同内容；云端独有内容移入回收站。" },
+          { value: "remote", icon: <Cloud aria-hidden="true" />, title: "以云端为准，更新本地", description: "替换本地不同内容；本地旧内容和独有内容移入回收站。" },
         ]} />}
         {flow.step === "range" && <FieldSet><FieldLegend>同步范围</FieldLegend><FieldGroup>
           <Field orientation="horizontal"><Checkbox id="sync-defaults" checked={flow.defaults} onCheckedChange={(value) => flow.setDefaults(value === true)} /><FieldLabel htmlFor="sync-defaults">{flow.operation === "edit" ? "保留当前默认排除项" : "排除依赖、构建产物和日志"}</FieldLabel></Field>
