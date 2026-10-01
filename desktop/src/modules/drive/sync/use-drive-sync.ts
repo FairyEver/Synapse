@@ -77,15 +77,26 @@ export interface DriveSyncController {
   ) => Promise<boolean>
 }
 
-export function useDriveSync(): DriveSyncController {
+export function useDriveSync(autoRefresh = true): DriveSyncController {
   const [snapshot, setSnapshot] = useState<DriveSyncSnapshotDto | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set())
+  const autoRefreshRef = useRef(autoRefresh)
+  const latestSnapshotRef = useRef<DriveSyncSnapshotDto | null>(null)
+  const [health, setHealth] = useState<DriveSyncSnapshotDto["health"] | null>(null)
+  autoRefreshRef.current = autoRefresh
+
+  useEffect(() => {
+    if (autoRefresh && latestSnapshotRef.current) setSnapshot(latestSnapshotRef.current)
+  }, [autoRefresh])
+
   const pendingIdsRef = useRef<Set<string>>(new Set())
 
   const refresh = useCallback(async (): Promise<DriveSyncSnapshotDto> => {
     const next = await requireSynapseBridge().driveSync.getSnapshot()
+    latestSnapshotRef.current = next
+    setHealth(next.health)
     setSnapshot(next)
     setError(null)
     setLoading(false)
@@ -97,6 +108,8 @@ export function useDriveSync(): DriveSyncController {
     void requireSynapseBridge().driveSync.getSnapshot()
       .then((next) => {
         if (disposed) return
+        latestSnapshotRef.current = next
+        setHealth(next.health)
         setSnapshot(next)
         setError(null)
       })
@@ -108,6 +121,9 @@ export function useDriveSync(): DriveSyncController {
       })
     const unsubscribe = requireSynapseBridge().driveSync.onChanged((next) => {
       if (disposed) return
+      latestSnapshotRef.current = next
+      setHealth(next.health)
+      if (!autoRefreshRef.current) return
       setSnapshot(next)
       setError(null)
       setLoading(false)
@@ -129,8 +145,8 @@ export function useDriveSync(): DriveSyncController {
   const isPending = useCallback((bindingId: string) => pendingIds.has(bindingId), [pendingIds])
 
   // 快照还没加载时不能下只读结论，否则会先摆出一句「未登录」并把新建入口锁掉。
-  const readOnly = snapshot?.health.readOnly ?? false
-  const offline = snapshot?.health.connectivity === "offline"
+  const readOnly = health?.readOnly ?? false
+  const offline = health?.connectivity === "offline"
 
   const runBindingAction = useCallback<DriveSyncController["runBindingAction"]>(
     async (eventKey, bindingId, run, success, checkBindingState = true) => {

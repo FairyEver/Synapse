@@ -904,6 +904,43 @@ describe("DriveModule", () => {
     expect(dialog.textContent).not.toContain("spec.md")
   })
 
+  it("keeps sync lists stable until manual refresh and searches both lists by path", async () => {
+    const initial = createDriveSyncSnapshot({}, { bindings: [
+      createDriveSyncBinding({ id: "binding-1", driveItemName: "Docs", localPath: "/Users/me/Docs" }),
+      createDriveSyncBinding({ id: "binding-2", driveItemName: "Notes", localPath: "/Users/me/Notes", drivePathHint: "/Projects/Notes" }),
+    ] })
+    mocks.getDriveSyncSnapshot.mockResolvedValue(initial)
+    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton()
+    const changed = createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ driveItemName: "Updated" })] })
+    await act(async () => { driveSyncChangedListener?.(changed); await flushPromises() })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Docs")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Updated")
+    async function search(value: string) {
+      const input = document.querySelector('[role="dialog"] input[aria-label="搜索同步"]') as HTMLInputElement
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value)
+        input.dispatchEvent(new Event("input", { bubbles: true })); await flushPromises()
+      })
+    }
+    await search(" /projects/NOTES ")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Notes")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Docs")
+    await search("missing")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("没有匹配的同步项目")
+    await search("")
+    await clickButtonText("同步向导"); await chooseWizardOption("修改同步")
+    await search("/users/me/notes")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Notes")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Docs")
+    await act(async () => { driveSyncChangedListener?.(changed); await flushPromises() })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Notes")
+    mocks.getDriveSyncSnapshot.mockResolvedValue(changed)
+    await clickButtonText("刷新")
+    await search("")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Updated")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Notes")
+  })
+
   it("opens drive sync binding details with scoped conflicts and operations", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 2, conflictCount: 2 },

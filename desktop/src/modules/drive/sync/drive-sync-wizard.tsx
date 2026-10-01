@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Plus, Pencil, Unlink, Folder, File, Upload, Download, Link, ListFilter, FolderInput, Cloud, RefreshCw } from "lucide-react"
 import type { DriveSyncBindingDto } from "@synapse/shared"
 import { GuidedChoices, GuidedFlow } from "@/components/guided-flow"
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DriveSyncRemotePicker } from "./drive-sync-remote-picker"
+import { matchesDriveSyncSearch } from "./drive-sync-copy"
 import { alignmentActionLabels, type SyncWizardEdit, type SyncWizardOperation, type SyncWizardScenario } from "./drive-sync-flow"
 import { useDriveSyncWizard, type DriveSyncWizardEntry } from "./use-drive-sync-wizard"
 import type { DriveSyncController } from "./use-drive-sync"
@@ -23,7 +25,9 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
   readonly onClose: () => void
   readonly onViewBinding: (bindingId: string) => void
 }) {
+  const [bindingQuery, setBindingQuery] = useState("")
   const flow = useDriveSyncWizard(controller, entry, onBindingCreated)
+  const visibleBindings = flow.bindings.filter((binding) => matchesDriveSyncSearch(binding, bindingQuery))
   if (flow.result) return <>
     <DialogFrameHeader bordered title={flow.result.title} />
     <DialogFrameBody className="overflow-auto px-5 py-5">
@@ -61,8 +65,14 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
           { value: "remote_to_local", icon: <Download aria-hidden="true" />, title: "云端为基础，下载并同步", description: "选择云端内容，下载到新的本地位置。" },
           { value: "bind_existing", icon: <Link aria-hidden="true" />, title: "本地和云端都存在", description: "选择两端已有对象，再选择一边更新另一边。" },
         ]} />}
-        {flow.step === "binding" && <GuidedChoices disabled={!flow.canChoose} title="选择同步" value={flow.binding?.id ?? ""} onSelect={flow.chooseBinding}
-          options={flow.bindings.map((item) => ({ value: item.id, icon: item.kind === "folder" ? <Folder aria-hidden="true" /> : <File aria-hidden="true" />, title: item.driveItemName, description: `本地 ${item.localPath}；云端 ${item.drivePathHint ?? item.driveItemName}` }))} />}
+        {flow.step === "binding" && <>
+          <div className="flex items-center gap-2">
+          <Input type="search" aria-label="搜索同步" placeholder="搜索名称或路径" value={bindingQuery} onChange={(event) => setBindingQuery(event.target.value)} />
+          <Button variant="outline" disabled={flow.busy} onClick={() => { void flow.refreshBindings() }}>刷新</Button>
+          </div>
+          {visibleBindings.length === 0 && <FieldDescription>没有匹配的同步项目</FieldDescription>}
+          <GuidedChoices disabled={!flow.canChoose} title="选择同步" value={flow.binding?.id ?? ""} onSelect={flow.chooseBinding}
+          options={visibleBindings.map((item) => ({ value: item.id, icon: item.kind === "folder" ? <Folder aria-hidden="true" /> : <File aria-hidden="true" />, title: item.driveItemName, description: `本地 ${item.localPath}；云端 ${item.drivePathHint ?? item.driveItemName}` }))} /></>}
         {flow.step === "edit" && <GuidedChoices disabled={!flow.canChoose} title="修改什么？" value={flow.edit} onSelect={(value) => flow.chooseEdit(value as SyncWizardEdit)} options={[
           { value: "range", icon: <ListFilter aria-hidden="true" />, title: "同步范围", description: "调整排除规则，已排除的文件保留原状。", disabled: flow.kind !== "folder" },
           { value: "local", icon: <FolderInput aria-hidden="true" />, title: "本地位置", description: "选择另一个已有对象，原位置文件保留。" },

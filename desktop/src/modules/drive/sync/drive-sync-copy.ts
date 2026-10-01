@@ -352,3 +352,10 @@ export function formatBytes(bytes: number): string {
   }
   return `${value >= 100 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`
 }
+
+/** 按名称、本地路径和云端路径匹配同步关系。 */
+export function matchesDriveSyncSearch(binding: DriveSyncBindingDto, query: string): boolean {
+  const keyword = query.trim().toLocaleLowerCase()
+  return !keyword || [binding.driveItemName, binding.localPath, binding.drivePathHint ?? ""]
+    .some((value) => value.toLocaleLowerCase().includes(keyword))
+}

@@ -350,10 +350,10 @@ function DriveModuleContent() {
   const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
   const [uploadRetrying, setUploadRetrying] = useState(false)
-  const driveSync = useDriveSync()
+  const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
+  const driveSync = useDriveSync(syncDialog === null)
   const syncSnapshot = driveSync.snapshot
   const syncMarks = useMemo(() => buildDriveSyncMarks(driveSync.snapshot), [driveSync.snapshot])
-  const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
 
   useEffect(() => {
     if (!deleteFocusTargetId) return

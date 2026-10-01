@@ -33,6 +33,7 @@ import {
   filterCounts,
   formatBytes,
   isBindingInFilter,
+  matchesDriveSyncSearch,
   type DriveSyncFilter,
 } from "./drive-sync-copy"
 import { driveSyncRemotePath, type DriveSyncController } from "./use-drive-sync"
@@ -69,6 +70,7 @@ export function DriveSyncFilterBar({
 export function DriveSyncCenter({
   controller,
   filter,
+  query = "",
   onCreate,
   onOpenDriveItem,
   onRequestRemove,
@@ -76,6 +78,7 @@ export function DriveSyncCenter({
 }: {
   readonly controller: DriveSyncController
   readonly filter: DriveSyncFilter
+  readonly query?: string
   readonly onCreate: () => void
   readonly onOpenDriveItem?: (binding: DriveSyncBindingDto) => void | Promise<void>
   readonly onRequestRemove: (binding: DriveSyncBindingDto) => void
@@ -87,7 +90,7 @@ export function DriveSyncCenter({
   const bindings = snapshot?.bindings ?? []
   const conflicts = snapshot?.conflicts ?? []
   const operations = snapshot?.operations ?? []
-  const visible = bindings.filter((binding) => isBindingInFilter(
+  const visible = bindings.filter((binding) => matchesDriveSyncSearch(binding, query) && isBindingInFilter(
     binding,
     operations.filter((operation) => operation.bindingId === binding.id),
     conflicts.filter((conflict) => conflict.bindingId === binding.id),
@@ -152,7 +155,7 @@ export function DriveSyncCenter({
         {snapshot && visible.length === 0 ? (
           bindings.length === 0
             ? <CenterEmpty onCreate={onCreate} />
-            : <CenterPlaceholder title="这一分类下没有同步项目" />
+            : <CenterPlaceholder title={query.trim() ? "没有匹配的同步项目" : "这一分类下没有同步项目"} />
         ) : null}
         <div className="grid gap-2">
           {visible.map((binding) => (

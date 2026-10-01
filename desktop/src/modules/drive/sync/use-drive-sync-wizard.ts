@@ -36,6 +36,13 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
   const bindings = (controller.snapshot?.bindings ?? []).filter((item) => item.status !== "removed")
   const rules = rulesText.split("\n").filter((rule) => rule.trim().length > 0)
   const remotePath = scenario === "local_to_remote" ? syncRemotePath(parent.path, name) : remote?.path ?? ""
+  async function refreshBindings() {
+    if (busyRef.current) return
+    busyRef.current = true; setBusy(true); setError(null)
+    try { await controller.refresh() }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "加载同步状态失败") }
+    finally { busyRef.current = false; setBusy(false) }
+  }
   function invalidate() { setPreview(null); setConfirmed(false); setError(null) }
   function chooseOperation(value: SyncWizardOperation) {
     if (!canChoose) return
@@ -165,7 +172,7 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
       ? Boolean(binding && bindings.some((item) => item.id === binding.id))
       : preview?.status === "ready" && (!preview.alignment?.changes.length || confirmed),
   }[step])
-  return { operation, step, kind, scenario, binding, bindings, edit, localPath, remote, parent, name, authority, defaults, importGitignore, rulesText,
+  return { refreshBindings, operation, step, kind, scenario, binding, bindings, edit, localPath, remote, parent, name, authority, defaults, importGitignore, rulesText,
     preview, confirmed, busy, error, result, steps, remotePath, canNext, canChoose, choiceStep, chooseAuthority, chooseOperation, chooseKind, chooseScenario, chooseBinding, chooseEdit,
     next, pickLocal, recheck: () => { void run(() => check()) }, back: () => { invalidate(); setStep(steps[currentIndex - 1]?.id ?? "action") },
     setLocalPath: (value: string) => { invalidate(); setLocalPath(value) },

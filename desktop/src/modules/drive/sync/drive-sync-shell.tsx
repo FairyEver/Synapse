@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -52,6 +53,7 @@ export function DriveSyncDialog({
   readonly state: DriveSyncDialogState | null
 }) {
   const [view, setView] = useState<DriveSyncView>({ kind: "center", selectedBindingId: null })
+  const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<DriveSyncFilter>("all")
   const [removeTarget, setRemoveTarget] = useState<DriveSyncBindingDto | null>(null)
 
@@ -74,6 +76,7 @@ export function DriveSyncDialog({
 
   useEffect(() => {
     if (open) return
+    setQuery("")
     setFilter("all")
     setRemoveTarget(null)
     setView({ kind: "center", selectedBindingId: null })
@@ -138,9 +141,13 @@ export function DriveSyncDialog({
                   )}
                 />
                 <DialogFrameBody className="flex flex-col">
+                  <div className="px-5 pt-4">
+                    <Input type="search" aria-label="搜索同步" placeholder="搜索名称或路径" value={query} onChange={(event) => setQuery(event.target.value)} />
+                  </div>
                   <DriveSyncCenter
                     controller={controller}
                     filter={filter}
+                    query={query}
                     onCreate={openWizard}
                     onOpenDriveItem={onOpenDriveItem}
                     onRequestRemove={requestRemove}
