@@ -123,7 +123,8 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
       if (disposed) return
       latestSnapshotRef.current = next
       setHealth(next.health)
-      if (!autoRefreshRef.current) return
+      // 用户主动操作期间展示进度；普通后台通知仍保持阅读快照。
+      if (!autoRefreshRef.current && pendingIdsRef.current.size === 0) return
       setSnapshot(next)
       setError(null)
       setLoading(false)

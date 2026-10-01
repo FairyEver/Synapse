@@ -1179,6 +1179,30 @@ describe("DriveModule", () => {
     expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
   })
 
+  it("updates the open sync list during manual sync and freezes it again after completion", async () => {
+    const sync = createDeferred<void>()
+    const initial = createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] })
+    const running = createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ driveItemName: "Docs", status: "error", lastError: "正在重试" })] })
+    const completed = createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ driveItemName: "Docs", lastError: null })] })
+    mocks.getDriveSyncSnapshot.mockResolvedValueOnce(initial).mockResolvedValueOnce(completed)
+    mocks.pollDriveSyncRemoteChanges.mockReturnValueOnce(sync.promise)
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickSyncToolbarButton()
+    await clickButtonByLabel("更多同步操作 Docs")
+    await clickMenuItemText("立即同步一次")
+    await act(async () => { driveSyncChangedListener?.(running); await flushPromises() })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("正在重试")
+
+    await act(async () => { sync.resolve(undefined); await flushPromises() })
+    await flushAct()
+    expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("正在重试")
+    await act(async () => { driveSyncChangedListener?.(running); await flushPromises() })
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("正在重试")
+  })
+
   it("disables manual sync checks for paused bindings", async () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot(
       { activeBindingCount: 0 },
