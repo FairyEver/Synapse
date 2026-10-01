@@ -25,7 +25,7 @@ import { DriveSyncCenter, DriveSyncFilterBar } from "./drive-sync-center"
 import { DriveSyncDetail } from "./drive-sync-detail"
 import type { DriveSyncFilter } from "./drive-sync-copy"
 import { DriveSyncWizard, type DriveSyncWizardEntry } from "./drive-sync-wizard"
-import { driveSyncRemotePath, type DriveSyncController } from "./use-drive-sync"
+import type { DriveSyncController } from "./use-drive-sync"
 
 export type DriveSyncDialogState =
   | { readonly mode: "center"; readonly bindingId?: string | null }
@@ -172,7 +172,7 @@ export function DriveSyncDialog({
                   )}
                   actions={<Button disabled={controller.readOnly} onClick={() => setView({ kind: "wizard", entry: { mode: "edit", binding: detailBinding } })}>修改同步</Button>}
                   title={detailBinding.driveItemName}
-                  description={`云盘 ${driveSyncRemotePath(detailBinding)} · 电脑 ${detailBinding.localPath}`}
+                  description={detailBinding.kind === "folder" ? "文件夹同步" : "文件同步"}
                 />
                 <DialogFrameBody className="flex flex-col">
                   <DriveSyncDetail

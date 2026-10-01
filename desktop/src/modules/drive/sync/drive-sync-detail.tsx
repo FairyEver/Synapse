@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import type { DriveSyncBindingDto, DriveSyncConflictDto } from "@synapse/shared"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DialogFrameFooter } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import {
   activeWorkOf,
@@ -89,8 +90,8 @@ export function DriveSyncDetail({
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-        <div className="rounded-lg border p-3">
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
+        <section aria-label="同步状态" className="grid gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={state.tone === "attention" ? "destructive" : "secondary"}>{state.text}</Badge>
             <div className="ml-auto">
@@ -127,7 +128,7 @@ export function DriveSyncDetail({
               )}
             </div>
           </div>
-          {detail ? <div className="mt-1.5 text-sm text-muted-foreground">{detail}</div> : null}
+          {detail ? <div className="max-w-prose break-words text-sm leading-relaxed">{detail}</div> : null}
           {work?.kind === "transfer" && work.percent !== null ? (
             <div className="mt-3 grid gap-1">
               <Progress value={work.percent} aria-label={`${binding.driveItemName} 同步进度`} />
@@ -136,34 +137,41 @@ export function DriveSyncDetail({
               </div>
             </div>
           ) : null}
-        </div>
+        </section>
 
-        <div className="mt-3 rounded-lg border p-3 text-sm">
-          <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-2">
-            <span className="text-muted-foreground">云盘</span>
-            <span className="truncate">{driveSyncRemotePath(binding)}</span>
-            <span className="text-muted-foreground">电脑</span>
-            <span className="truncate">{binding.localPath}</span>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {onOpenDriveItem ? (
+        <section aria-labelledby="sync-locations-heading" className="mt-6">
+          <h3 id="sync-locations-heading" className="font-medium">同步位置</h3>
+          <dl className="mt-3 grid gap-4 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 basis-48">
+                <dt className="text-muted-foreground">云盘</dt>
+                <dd className="mt-1 break-all leading-relaxed">{driveSyncRemotePath(binding)}</dd>
+              </div>
+              {onOpenDriveItem ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { void Promise.resolve(onOpenDriveItem(binding)).catch(() => toast("无法打开云端位置")) }}
+                >
+                  打开云盘位置
+                </Button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 basis-48">
+                <dt className="text-muted-foreground">电脑</dt>
+                <dd className="mt-1 break-all leading-relaxed">{binding.localPath}</dd>
+              </div>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { void Promise.resolve(onOpenDriveItem(binding)).catch(() => toast("无法打开云端位置")) }}
+                onClick={() => { void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置")) }}
               >
-                打开云盘位置
+                打开本地位置
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置")) }}
-            >
-              打开本地位置
-            </Button>
-          </div>
-        </div>
+            </div>
+          </dl>
+        </section>
 
         {conflicts.length > 0 ? (
           <section className="mt-5">
@@ -242,27 +250,25 @@ export function DriveSyncDetail({
           {activity.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">还没有同步记录。</p>
           ) : (
-            <ul className="mt-2 grid gap-1.5">
+            <ul className="mt-3 grid gap-3">
               {activity.map((operation) => (
-                <li key={operation.id} className="flex gap-3 text-sm">
-                  <span className="w-28 shrink-0 tabular-nums text-muted-foreground">
+                <li key={operation.id} className="grid gap-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-3">
+                  <time dateTime={operation.updatedAt} className="tabular-nums text-muted-foreground">
                     {formatRelativeTime(operation.updatedAt)}
-                  </span>
-                  <span className="min-w-0 truncate">{operationActivityText(operation)}</span>
+                  </time>
+                  <span className="min-w-0 break-words leading-relaxed">{operationActivityText(operation)}</span>
                 </li>
               ))}
             </ul>
           )}
         </section>
-
-        <section className="mt-6 border-t pt-4">
-          <h3 className="font-medium">移除同步</h3>
-          <p className="mt-1 text-sm text-muted-foreground">移除后不再自动同步。云盘和电脑上的文件都会保留。</p>
-          <Button type="button" variant="outline" className="mt-3" disabled={readOnly || pending} onClick={onRequestRemove}>
-            移除同步
-          </Button>
-        </section>
       </div>
+      <DialogFrameFooter className="sm:justify-between">
+        <p className="text-sm text-muted-foreground">移除同步后，两端文件均保留。</p>
+        <Button type="button" variant="destructive" disabled={readOnly || pending} onClick={onRequestRemove}>
+          移除同步
+        </Button>
+      </DialogFrameFooter>
     </>
   )
 }
