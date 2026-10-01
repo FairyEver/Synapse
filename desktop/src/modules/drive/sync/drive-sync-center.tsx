@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { MoreHorizontal } from "lucide-react"
+import { Cloud, File, Folder, Monitor, MoreHorizontal } from "lucide-react"
 import type { DriveSyncBindingDto, DriveSyncConflictDto } from "@synapse/shared"
 import {
   AlertDialog,
@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Item, ItemGroup, ItemHeader } from "@/components/ui/item"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +31,6 @@ import {
   bindingStateDetail,
   bindingStateText,
   filterCounts,
-  formatBytes,
   isBindingInFilter,
   matchesDriveSyncSearch,
   type DriveSyncFilter,
@@ -157,7 +156,7 @@ export function DriveSyncCenter({
             ? <CenterEmpty onCreate={onCreate} />
             : <CenterPlaceholder title={query.trim() ? "没有匹配的同步项目" : "这一分类下没有同步项目"} />
         ) : null}
-        <div className="grid gap-2">
+        <ItemGroup>
           {visible.map((binding) => (
             <DriveSyncCard
               key={binding.id}
@@ -170,7 +169,7 @@ export function DriveSyncCenter({
               onSelect={() => onSelectBinding(binding.id)}
             />
           ))}
-        </div>
+        </ItemGroup>
       </div>
 
       <AlertDialog open={rescanTarget !== null} onOpenChange={(next) => { if (!next) setRescanTarget(null) }}>
@@ -250,8 +249,9 @@ function DriveSyncCard({
   const canPause = binding.status === "active" || binding.status === "conflict"
 
   return (
-    <div
-      className="grid cursor-pointer gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+    <Item
+      variant="outline"
+      className="cursor-pointer gap-3 hover:bg-muted/50"
       data-track="drive.sync.card.open"
       data-track-native="true"
       role="button"
@@ -265,96 +265,97 @@ function DriveSyncCard({
         onSelect()
       }}
     >
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate font-medium">{binding.driveItemName}</span>
-          <Badge variant={state.tone === "attention" ? "destructive" : "secondary"}>{state.text}</Badge>
+      <ItemHeader className="items-start gap-3">
+        <div className="flex min-w-0 items-start gap-2">
+          {binding.kind === "folder" ? <Folder className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> : <File className="mt-0.5 size-4 shrink-0" aria-hidden="true" />}
+          <span className="min-w-0 break-all font-medium">{binding.driveItemName}</span>
         </div>
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="truncate">云盘 {driveSyncRemotePath(binding)}</span>
-          <span aria-hidden="true">⇄</span>
-          <span className="truncate">电脑 {binding.localPath}</span>
+        <div
+          className="flex shrink-0 items-center gap-1"
+          onClick={(event) => { event.stopPropagation() }}
+        >
+          {/* 列表行内操作，与右侧 28px 的更多按钮对齐，属于规范允许的紧凑区域。 */}
+          <Button
+            type="button"
+            variant={action.variant}
+            size="sm"
+            aria-label={`${action.label} ${binding.driveItemName}`}
+            disabled={pending}
+            onClick={runPrimary}
+          >
+            {action.label}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon-sm" disabled={pending} aria-label={`更多同步操作 ${binding.driveItemName}`}>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              {onOpenDriveItem ? (
+                <DropdownMenuItem onSelect={() => { void Promise.resolve(onOpenDriveItem(binding)).catch(() => toast("无法打开云端位置")) }}>
+                  打开云盘位置
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem onSelect={() => { void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置")) }}>
+                打开本地位置
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={manualDisabled}
+                onSelect={() => {
+                  void controller.runBindingAction("drive.sync.binding.sync-now", binding.id, () => controller.pollRemoteChanges(binding.id), "已同步云端变更")
+                }}
+              >
+                立即同步一次
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={manualDisabled} onSelect={onRequestRescan}>
+                重新核对两边内容
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {canPause ? (
+                <DropdownMenuItem
+                  disabled={readOnly || pending}
+                  onSelect={() => {
+                    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
+                  }}
+                >
+                  暂停同步
+                </DropdownMenuItem>
+              ) : binding.status === "paused" || binding.status === "error" ? (
+                <DropdownMenuItem
+                  disabled={readOnly || pending}
+                  onSelect={() => {
+                    void controller.runBindingAction("drive.sync.binding.resume", binding.id, () => controller.resume(binding.id), "已继续同步")
+                  }}
+                >
+                  继续同步
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" disabled={readOnly || pending} onSelect={onRequestStop}>
+                移除同步
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        {detail ? <div className="mt-1.5 truncate text-sm text-muted-foreground">{detail}</div> : null}
-        {work?.kind === "transfer" ? (
-          <div className="mt-2 grid gap-1">
-            {work.percent !== null ? (
-              <Progress value={work.percent} aria-label={`${binding.driveItemName} 同步进度`} />
-            ) : null}
-            <div className="text-xs tabular-nums text-muted-foreground">{formatBytes(work.completedBytes)}</div>
-          </div>
+      </ItemHeader>
+      <div className="grid w-full min-w-0 gap-2">
+        <div className={state.tone === "attention" ? "text-sm font-medium text-destructive" : "text-sm font-medium"}>
+          {state.text}
+        </div>
+        <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 text-sm">
+          <dt className="flex items-center gap-1.5 text-muted-foreground"><Cloud className="size-3.5" aria-hidden="true" />云盘{" "}</dt>
+          <dd className="min-w-0 truncate" title={driveSyncRemotePath(binding)}>{driveSyncRemotePath(binding)}</dd>
+          <dt className="flex items-center gap-1.5 text-muted-foreground"><Monitor className="size-3.5" aria-hidden="true" />电脑{" "}</dt>
+          <dd className="min-w-0 truncate" title={binding.localPath} dir="rtl"><span dir="ltr">{binding.localPath}</span></dd>
+        </dl>
+        {detail ? <p className={state.tone === "attention" ? "break-words text-sm text-destructive" : "break-words text-sm text-muted-foreground"}>{detail}</p> : null}
+        {work?.kind === "transfer" && work.percent !== null ? (
+          <Progress value={work.percent} aria-label={`${binding.driveItemName} 同步进度`} />
         ) : null}
       </div>
-      <div
-        className="flex flex-wrap items-center gap-1 sm:justify-end"
-        onClick={(event) => { event.stopPropagation() }}
-      >
-        {/* 列表行内操作，与右侧 28px 的更多按钮对齐，属于规范允许的紧凑区域。 */}
-        <Button
-          type="button"
-          variant={action.variant}
-          size="sm"
-          aria-label={`${action.label} ${binding.driveItemName}`}
-          disabled={pending}
-          onClick={runPrimary}
-        >
-          {action.label}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon-sm" disabled={pending} aria-label={`更多同步操作 ${binding.driveItemName}`}>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            {onOpenDriveItem ? (
-              <DropdownMenuItem onSelect={() => { void Promise.resolve(onOpenDriveItem(binding)).catch(() => toast("无法打开云端位置")) }}>
-                打开云盘位置
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem onSelect={() => { void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置")) }}>
-              打开本地位置
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={manualDisabled}
-              onSelect={() => {
-                void controller.runBindingAction("drive.sync.binding.sync-now", binding.id, () => controller.pollRemoteChanges(binding.id), "已同步云端变更")
-              }}
-            >
-              立即同步一次
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={manualDisabled} onSelect={onRequestRescan}>
-              重新核对两边内容
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {canPause ? (
-              <DropdownMenuItem
-                disabled={readOnly || pending}
-                onSelect={() => {
-                  void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
-                }}
-              >
-                暂停同步
-              </DropdownMenuItem>
-            ) : binding.status === "paused" || binding.status === "error" ? (
-              <DropdownMenuItem
-                disabled={readOnly || pending}
-                onSelect={() => {
-                  void controller.runBindingAction("drive.sync.binding.resume", binding.id, () => controller.resume(binding.id), "已继续同步")
-                }}
-              >
-                继续同步
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" disabled={readOnly || pending} onSelect={onRequestStop}>
-              移除同步
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
+    </Item>
   )
 }
 
