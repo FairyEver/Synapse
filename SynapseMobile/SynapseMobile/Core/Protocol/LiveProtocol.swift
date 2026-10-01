@@ -503,6 +503,7 @@ struct MobileIntentResult: Decodable {
     let createdSessionId: String?
     /// Desktop-generated Copy Reference text. The phone never reconstructs its fields.
     var referenceText: String? = nil
+    var workspaceId: String? = nil
     /// Set for `fileUpload`: where the file ended up on the computer. The phone
     /// cannot derive it, and needs it to undo the insertion it caused.
     let landedPath: String?
@@ -904,6 +905,8 @@ struct MobileIntentRequest: Encodable {
     var intentId: String
     let kind: String
     var sessionId: String?
+    /// `workspaceReference`: the tab to copy; sessionId optionally identifies its active pane.
+    var workspaceId: String?
     var text: String?
     var actions: [MobileKeyAction]?
     var title: String?

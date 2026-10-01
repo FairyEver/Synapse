@@ -96,7 +96,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 - Agent 侧栏项目分组顺序存放在全局配置 `global.agentProjectOrder`，只影响侧栏展示顺序，不重排 `config.global.projects`，不注册 MCP capability、tool 或 Deep Link，Agent Conversation 工具数量不变。
 - 手机端的 Git 操作走一个新的 `git` intent（`action` 是枚举：`status` / `branches` / `checkout` / `createBranch` / `commit` / `push` / `sync` / `merge`，不接受任意命令字符串），状态经 `mobile.gitStatus` 下行消息按会话推送，写操作的权限族是 `terminal.git.manage`（读走既有的 `terminal.state.read`）。它执行在**终端当前所在的目录**上：目录来自 shell 上报的 OSC 7 与 `process.cwd_probe` 兜底，**只认路径**，不接「代码仓库」注册表、不产生 `repositories.json` 条目，与 `app.git.*` 那套既有的 Git 应用没有产品关系（共享的只有底层命令封装与解析器）。冲突一律在电脑侧自动 `merge --abort` 回退、只回一段可复制的文本，手机端不解决冲突。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
 
-- 手机终端「复制引用」通过只读 `sessionReference` intent 按具体会话请求目标电脑，在主进程复用 PC 文本格式化函数，完整文本随既有 `mobile.intentResult` 的可选 `referenceText` 返回。权限与审计复用 `terminal.state.read`，无需 attach 或租约；手机只写本机剪贴板。它不注册 System App、Dock、Workflow Node、Automation Action、IPC operation、MCP capability/tool 或 Deep Link，上表数量不变，Terminal MCP 工具仍为 49。
+- 手机终端分别通过只读 `sessionReference` / `workspaceReference` intent 复制指定分屏/标签；标签可点名手机当前或最近查看分屏，未点名时由电脑取布局首格，并校验会话归属。主进程复用 PC 的五行格式化逻辑，完整文本随既有 `mobile.intentResult` 的 `referenceText` 返回，另带 `workspaceId` 与 `sessionId` 校验目标。权限与审计复用 `terminal.state.read`，无需 attach 或租约；手机只写本机剪贴板。无新增 System App、Dock、Workflow Node、Automation Action、IPC operation、MCP capability/tool 或 Deep Link，上表数量不变，Terminal MCP 工具仍为 49。
 
 ## 普通业务模块 System App
 

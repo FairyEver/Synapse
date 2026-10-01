@@ -453,12 +453,19 @@ describe("mobile live protocol", () => {
     expect(isMobileIntent(request)).toBe(true)
     expect(isMobileIntent({ ...request, sessionId: undefined })).toBe(false)
     expect(isMobileIntent({ ...request, sessionId: "" })).toBe(false)
+    const tabRequest = { v: 1, intentId: "i-tab", kind: "workspaceReference", workspaceId: "w1" }
+    expect(isMobileIntent(tabRequest)).toBe(true)
+    expect(isMobileIntent({ ...tabRequest, sessionId: "s2" })).toBe(true)
+    expect(isMobileIntent({ ...tabRequest, workspaceId: undefined })).toBe(false)
+    expect(isMobileIntent({ ...tabRequest, sessionId: "" })).toBe(false)
     const payload = { desktopClientInstanceId: "desktop-1", mobileClientInstanceId: "phone-1", intent: request }
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, payload, envelopeMeta)
     expect(isLiveMobileClientMessage(message)).toBe(true)
     expect(isLiveDesktopServerMessage(message)).toBe(true)
     const result = { intentId: "i-ref", outcome: "accepted", sessionId: "s1", referenceText: "session_id=s1" }
     expect(isMobileIntentResult(result)).toBe(true)
+    expect(isMobileIntentResult({ ...result, workspaceId: "w1" })).toBe(true)
+    expect(isMobileIntentResult({ ...result, workspaceId: "" })).toBe(false)
     expect(isMobileIntentResult({ ...result, referenceText: "" })).toBe(false)
     expect(isMobileIntentResult({ ...result, referenceText: 123 })).toBe(false)
     expect(isMobileIntentResult({ ...result, referenceText: "x".repeat(MOBILE_FRAME_LIMITS.maxIntentResultMessageLength + 1) }))

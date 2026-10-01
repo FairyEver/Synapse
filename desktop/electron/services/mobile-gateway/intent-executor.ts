@@ -11,6 +11,7 @@ import type { TerminalService } from "../../../app-capabilities/terminal/main/se
 import { terminalSessionReference } from "../../../app-capabilities/terminal/main/session-reference"
 import { TerminalContractError } from "../../../app-capabilities/terminal/shared/errors"
 import { buildTerminalSessionReferenceText } from "../../../app-capabilities/terminal/shared/session-reference"
+import { collectTerminalPaneLeaves } from "../../../app-capabilities/terminal/shared/workspace"
 import type { AuditSink, PermissionAction } from "../../runtime/security/permission-guard"
 import type { MobileAttachment } from "./attachment-registry"
 import { AttachmentRegistry, createAttachment } from "./attachment-registry"
@@ -430,12 +431,22 @@ export class MobileIntentExecutor {
         return accepted(intent.intentId, { sessionId: intent.sessionId })
       }
 
-      case "sessionReference": {
-        await this.deps.authorize("terminal.state.read", sessionResource(intent.sessionId))
-        const session = terminal.getSession({ sessionId: intent.sessionId })
-        const workspace = terminal.getWorkspaceForSession({ sessionId: session.id })
+      case "sessionReference":
+      case "workspaceReference": {
+        await this.deps.authorize("terminal.state.read", intent.kind === "sessionReference"
+          ? sessionResource(intent.sessionId) : `terminal.workspace:${intent.workspaceId}`)
+        const workspace = intent.kind === "sessionReference"
+          ? terminal.getWorkspaceForSession({ sessionId: intent.sessionId })
+          : terminal.getWorkspace({ workspaceId: intent.workspaceId })
+        const panes = collectTerminalPaneLeaves(workspace.layout)
+        const sessionId = intent.sessionId ?? panes[0]?.sessionId
+        if (!sessionId || !panes.some((pane) => pane.sessionId === sessionId)) {
+          throw new MobileIntentError("reference_target_changed", "这个分屏已不在该终端标签中，请重新选择。")
+        }
+        const session = terminal.getSession({ sessionId })
         return accepted(intent.intentId, {
           sessionId: session.id,
+          workspaceId: workspace.id,
           referenceText: buildTerminalSessionReferenceText({
             workspaceId: workspace.id,
             workspaceTitle: workspace.title,
@@ -941,7 +952,12 @@ export class MobileIntentError extends Error {
 
 function accepted(
   intentId: string,
-  extra: { readonly sessionId?: string; readonly createdSessionId?: string; readonly referenceText?: string } = {},
+  extra: {
+    readonly sessionId?: string
+    readonly createdSessionId?: string
+    readonly referenceText?: string
+    readonly workspaceId?: string
+  } = {},
 ): MobileIntentResult {
   return { intentId, outcome: "accepted", ...extra }
 }
@@ -1032,6 +1048,7 @@ const UNFINISHED_OPERATION_MESSAGES: Readonly<Record<MobileIntent["kind"], strin
   stopAll: "停止所有终端没有完成。",
   rename: "重命名这个终端没有完成。",
   sessionReference: "读取这个终端的会话引用没有完成。",
+  workspaceReference: "读取这个终端标签的引用没有完成。",
   resize: "调整终端大小没有完成。",
   releaseGrid: "还原电脑端布局没有完成。",
   create: "新建终端没有完成。",

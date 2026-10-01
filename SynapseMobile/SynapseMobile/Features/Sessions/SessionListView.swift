@@ -135,6 +135,15 @@ struct SessionListView: View {
                     }
                 } label: {
                     Text(title)
+                        .contextMenu {
+                            Button {
+                                Task { await model.copyWorkspaceReference(id) }
+                            } label: {
+                                Label("复制标签引用", systemImage: "doc.on.doc")
+                            }
+                            .disabled(!model.hasLiveTerminalSummary)
+                            .accessibilityIdentifier("workspace-copy-reference-\(id)")
+                        }
                 }
             }
         }
@@ -167,7 +176,7 @@ struct SessionListView: View {
             Button {
                 Task { await model.copySessionReference(session.id) }
             } label: {
-                Label("复制引用", systemImage: "doc.on.doc")
+                Label("复制会话引用", systemImage: "doc.on.doc")
             }
             .disabled(!model.hasLiveTerminalSummary)
             .accessibilityIdentifier("session-copy-reference-\(session.id)")

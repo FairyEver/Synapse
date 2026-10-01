@@ -46,6 +46,7 @@ final class SynapseAppModel {
     /// 终端当前目录的 Git 状态，按终端记。见 `TerminalGitStatusState` —— 它守的是
     /// 「不是仓库」与「还没收到回答」这条线。
     private var gitStatus = TerminalGitStatusState()
+    private var referenceSelection = TerminalWorkspaceReferenceSelection()
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
     private var preemptedSessions: Set<String> = []
@@ -1048,6 +1049,7 @@ final class SynapseAppModel {
             }
             guard payload.desktopClientInstanceId == self.selectedDesktopClientInstanceId else { return }
             self.summary = payload
+            self.referenceSelection.prune(keeping: payload.workspaces ?? [])
             self.widgetHasLiveSummary = true
             self.publishTerminalWidgetSnapshot()
             self.pruneTerminalStores(keeping: Set(payload.sessions.map(\.id)))
@@ -1511,6 +1513,7 @@ final class SynapseAppModel {
     /// computer's summary does not list, and doing it here as well would be a second
     /// implementation of the same rule.
     private func releaseViewing() {
+        referenceSelection = TerminalWorkspaceReferenceSelection()
         openSessions.removeAll()
         pendingWrites.removeAll()
         pendingAttachments.removeAll()
@@ -1597,6 +1600,10 @@ final class SynapseAppModel {
         sessions.first { $0.id == sessionId }
     }
 
+    func splitTab(containing sessionId: String) -> MobileSummaryWorkspace? {
+        summary?.workspaces?.first { $0.panes.contains(where: { $0.sessionId == sessionId }) }
+    }
+
     /// 这个终端还开不开得开。规则全在 `TerminalOpenability` 里，这里只把那份列表递过去。
     ///
     /// `desktopClientInstanceId` 不给就是「手机正看着的那台」——列表里的行、待处理里的行
@@ -1678,6 +1685,7 @@ final class SynapseAppModel {
     // MARK: - Terminal actions
 
     func openTerminal(_ sessionId: String) {
+        referenceSelection.select(sessionId, in: summary?.workspaces ?? [])
         openSessions.insert(sessionId)
         startKeepAlive()
         guard let desktop = selectedDesktopClientInstanceId else { return }
@@ -2092,8 +2100,19 @@ final class SynapseAppModel {
     }
 
     func copySessionReference(_ sessionId: String) async {
+        await copyTerminalReference(.session(sessionId))
+    }
+
+    func copyWorkspaceReference(_ workspaceId: String, activeSessionId: String? = nil) async {
+        await copyTerminalReference(.workspace(
+            id: workspaceId,
+            sessionId: activeSessionId ?? referenceSelection.sessionId(for: workspaceId)
+        ))
+    }
+
+    private func copyTerminalReference(_ target: TerminalReferenceCopyTarget) async {
         let fail: (String) -> Void = { message in
-            if self.openSessions.contains(sessionId) {
+            if let sessionId = target.sessionId, self.openSessions.contains(sessionId) {
                 self.raiseTerminalMessage(message, sessionId: sessionId, id: "terminal.reference:\(sessionId)")
             } else {
                 self.notice(message, tone: .failure, id: "terminal.reference")
@@ -2106,13 +2125,20 @@ final class SynapseAppModel {
         }
         let account = accountGeneration
         await TerminalSessionReferenceCopy.perform(
-            sessionId: sessionId,
+            target: target,
             send: { intent in
                 await self.awaitResult(of: intent, sentTo: desktop, timeoutSeconds: 10)
             },
             isCurrent: {
-                self.accountGeneration == account && self.selectedDesktopClientInstanceId == desktop
-                    && self.sessions.contains(where: { $0.id == sessionId })
+                guard self.accountGeneration == account, self.selectedDesktopClientInstanceId == desktop else { return false }
+                switch target {
+                case .session(let sessionId):
+                    return self.sessions.contains(where: { $0.id == sessionId })
+                case .workspace(let workspaceId, let sessionId):
+                    return self.summary?.workspaces?.contains(where: {
+                        $0.id == workspaceId && (sessionId == nil || $0.panes.contains(where: { $0.sessionId == sessionId }))
+                    }) == true
+                }
             },
             copy: { text in
                 Clipboard.copy(text, saying: "引用已复制，仅电脑本次运行有效", id: "terminal.reference", on: self)

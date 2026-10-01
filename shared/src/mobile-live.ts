@@ -985,6 +985,8 @@ export type MobileIntent =
   | (MobileIntentEnvelope<"rename"> & { readonly sessionId: string; readonly title: string })
   /** Read-only: the desktop formats the same reference its own Copy Reference action uses. */
   | (MobileIntentEnvelope<"sessionReference"> & { readonly sessionId: string })
+  /** Tab reference: prefer the phone's active session; absence uses the desktop layout's first pane. */
+  | (MobileIntentEnvelope<"workspaceReference"> & { readonly workspaceId: string; readonly sessionId?: string })
   /**
    * The phone sets the PTY grid, for the display mode where the phone drives the
    * size so its own rendering is exact rather than wrapped.
@@ -1188,8 +1190,10 @@ export interface MobileIntentResult {
   readonly code?: string
   readonly message?: string
   readonly sessionId?: string
-  /** Set for `sessionReference`: complete desktop-generated text, copied verbatim by the phone. */
+  /** Set for either reference request: complete desktop-generated text, copied verbatim by the phone. */
   readonly referenceText?: string
+  /** The tab resolved by either reference request. */
+  readonly workspaceId?: string
   /** Set for `create` and `launchCommand`, so the phone can open the new session immediately. */
   readonly createdSessionId?: string
   /**
@@ -1499,6 +1503,9 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
     case "delete":
     case "sessionReference":
       return boundedString(value.sessionId, 120)
+    case "workspaceReference":
+      return boundedString(value.workspaceId, 120) &&
+        (value.sessionId === undefined || boundedString(value.sessionId, 120))
     case "sync":
     case "ping":
     case "stopAll":
@@ -1578,6 +1585,7 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
   if (value.message !== undefined &&
     !boundedString(value.message, MOBILE_FRAME_LIMITS.maxIntentResultMessageLength)) return false
   if (value.sessionId !== undefined && !boundedString(value.sessionId, 120)) return false
+  if (value.workspaceId !== undefined && !boundedString(value.workspaceId, 120)) return false
   if (value.referenceText !== undefined && (
     value.outcome !== "accepted" || !boundedString(value.sessionId, 120) ||
     !boundedString(value.referenceText, MOBILE_FRAME_LIMITS.maxIntentResultMessageLength)

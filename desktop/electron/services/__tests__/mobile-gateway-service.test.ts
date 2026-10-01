@@ -157,6 +157,12 @@ class FakeTerminal {
     return [...this.workspaces.values()]
   }
 
+  getWorkspace(input: { workspaceId: string }): FakeWorkspace {
+    const workspace = this.workspaces.get(input.workspaceId)
+    if (!workspace) throw terminalContractError("not_found", "not_found")
+    return workspace
+  }
+
   getWorkspaceForSession(input: { sessionId: string }): FakeWorkspace {
     const workspace = this.listWorkspaces().find((item) => (
       collectTerminalPaneLeaves(item.layout).some((pane) => pane.sessionId === input.sessionId)
@@ -784,7 +790,7 @@ describe("MobileGatewayService", () => {
     expect(harness.results.at(-1)).toEqual({
       mobileClientInstanceId: "phone-1",
       result: {
-        intentId: "i-ref", outcome: "accepted", sessionId: "sess-2",
+        intentId: "i-ref", outcome: "accepted", sessionId: "sess-2", workspaceId: "ws-1",
         referenceText: [
           "workspace_id=ws-1", "workspace_title=前端开发",
           "session_id=sess-2", "session_title=构建 日志",
@@ -802,6 +808,51 @@ describe("MobileGatewayService", () => {
     // An uncertain retry replays the original answer rather than changing the clipboard payload.
     await harness.gateway.handleIntent("phone-1", request)
     expect(harness.results.at(-1)).toEqual(harness.results[0])
+  })
+
+  it("copies the tab with its phone-selected pane, or its first pane when none was selected", async () => {
+    const harness = createHarness()
+    addSession(harness, "sess-2", "日志")
+    seedWorkspace(harness, {
+      type: "split", splitId: "split-1", direction: "horizontal", ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: { type: "leaf", paneId: "pane-2", sessionId: "sess-2" },
+    })
+    for (const sessionId of [undefined, "sess-2"]) {
+      await harness.gateway.handleIntent("phone-1", intent({
+        v: 1, intentId: `i-tab-${sessionId}`, kind: "workspaceReference", workspaceId: "ws-1",
+        ...(sessionId === undefined ? {} : { sessionId }),
+      }))
+      const expectedSessionId = sessionId ?? "sess-1"
+      expect(harness.results.at(-1)).toMatchObject({ result: {
+        outcome: "accepted", workspaceId: "ws-1", sessionId: expectedSessionId,
+        referenceText: [
+          "workspace_id=ws-1", "workspace_title=前端开发",
+          `session_id=${expectedSessionId}`,
+          `session_title=${sessionId === undefined ? "dev-server" : "日志"}`,
+          `session_ref=${terminalSessionReference(expectedSessionId)}`,
+        ].join("\n"),
+      } })
+    }
+    expect(harness.terminal.leaseOwner).toBeNull()
+    expect(harness.audits).toContainEqual(expect.objectContaining({
+      action: "terminal.state.read", resource: "terminal.workspace:ws-1", outcome: "allowed",
+    }))
+  })
+
+  it("refuses a tab reference for a missing tab or a pane outside that tab", async () => {
+    const harness = createHarness()
+    seedWorkspace(harness, { type: "leaf", paneId: "pane-1", sessionId: "sess-1" })
+    for (const [workspaceId, sessionId, code] of [
+      ["gone", undefined, "not_found"], ["ws-1", "foreign-session", "reference_target_changed"],
+    ] as const) {
+      await harness.gateway.handleIntent("phone-1", intent({
+        v: 1, intentId: `i-${workspaceId}-${sessionId}`, kind: "workspaceReference", workspaceId,
+        ...(sessionId === undefined ? {} : { sessionId }),
+      }))
+      expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "rejected", code } })
+      expect(harness.results.at(-1)).not.toHaveProperty("result.referenceText")
+    }
   })
 
   it("rejects a session reference when permission or its session/workspace is missing", async () => {

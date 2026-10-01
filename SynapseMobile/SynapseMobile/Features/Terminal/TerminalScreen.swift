@@ -1251,10 +1251,20 @@ struct TerminalScreen: View {
                 noteChromeActivity()
                 Task { await model.copySessionReference(sessionId) }
             } label: {
-                Text("复制引用")
+                Text("复制会话引用")
             }
             .disabled(!model.hasLiveTerminalSummary)
             .accessibilityIdentifier("terminal-menu-copy-reference")
+            if let workspace = model.splitTab(containing: sessionId) {
+                Button {
+                    noteChromeActivity()
+                    Task { await model.copyWorkspaceReference(workspace.id, activeSessionId: sessionId) }
+                } label: {
+                    Text("复制标签引用")
+                }
+                .disabled(!model.hasLiveTerminalSummary)
+                .accessibilityIdentifier("terminal-menu-copy-workspace-reference")
+            }
             Button {
                 // Nothing copied is nothing to confirm — the same rule the send
                 // key follows. A terminal opened a moment ago has no output yet.

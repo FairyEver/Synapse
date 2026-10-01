@@ -199,6 +199,7 @@ nonisolated enum DiagnosticIntent: String, CaseIterable, Sendable {
     case command, keys, unlock
     case stop, delete, rename, create
     case sessionReference
+    case workspaceReference
     case createAgentConversation, launchCommand
     case resize, releaseGrid
     case fileUpload, ping
