@@ -179,21 +179,24 @@ Input:
 - `excludeRules` optional: user rules for a folder binding.
 - `useDefaultExcludes` optional: defaults to `true`.
 - `importGitignore` optional: import the current root `.gitignore` once. Defaults to `false`.
+- `authority` optional for `bind_existing`: `local` or `remote`, explicitly chosen by the user for initial alignment.
+- `replaceBindingId` optional with authority: existing owned same-kind binding to replace after successful alignment.
+- `confirmationToken` required for creation with authority: unchanged token from the approved preview.
 
 Output includes `status` (`ready`, `warning`, or `blocked`), selected `direction`, `reason`, local path facts, forced/default rules, and detected/imported `.gitignore` rules. Do not bypass `blocked`.
 
-A non-blocked preview also includes `initialTransfer`:
+A non-blocked preview without authority also includes `initialTransfer`:
 
 - `totalEntries`, `fileCount`, `folderCount`, and decimal-string `totalBytes` summarize the first transfer.
 - `entries` contains up to 200 `{ action, relativePath, size }` records. `relativePath: "."` is the binding root. Actions are `upload_file`, `download_file`, `create_remote_folder`, or `create_local_folder`.
 - `truncated: true` means `totalEntries` is authoritative but `entries` is only the first 200 records.
-- `bind_existing` has an empty transfer summary because creation validates and records the existing equal content instead of transferring it.
+- Without authority, `bind_existing` returns an empty transfer summary and validates equality. With authority, preview returns `alignment: { changes, unchanged }` and `confirmationToken`; actions are upload, download, delete_local and delete_remote. Explain target-only trash and overwrites before creating with the same token.
 
 ### `app_drive_sync_binding_create`
 
 Uses the same input as preview. It repeats the complete safety preflight before creating the binding. A blocked preflight returns `ok: false` with the preview in `data` and creates no binding.
 
-For `local_to_remote`, same-name Drive content is never overwritten or merged. Use `bind_existing` only when both sides already exist with the same type and exact content.
+For `local_to_remote`, same-name Drive content is never overwritten or merged. Use `bind_existing` for existing same-type objects. Without authority exact content equality is required; explicit authority allows reviewed alignment.
 
 Output is the created binding, including `id`, `driveItemId`, `driveItemName`, `kind`, `localPath`, `status`, exclude rules, timestamps, and error state.
 
@@ -696,3 +699,9 @@ Input:
 - Do not reveal COS AK, SK, Authorization headers, local secrets, share or site passwords from list results, or presigned upload URLs.
 - Before deleting a file, folder, public asset, trash item, or disabling a share, make sure the user asked for that operation clearly.
 - Use `app_drive_reorganization_preview` before `app_drive_reorganization_apply`; apply only with the returned `planId`.
+
+## Explicit Initial Alignment
+
+`authority: "local" | "remote"` is valid only with `direction: "bind_existing"`. Never infer authority from a generic sync request. The chosen side replaces differing included files and removes target-only included entries through recoverable trash. Subsequent sync remains bidirectional. Excluded entries are not touched; type collisions and trashing folders containing exclusions are blocked.
+
+Pass preview's `confirmationToken` unchanged to create after the user approves that plan. Account, scope, authority, identity, or content changes require a fresh preview. Optional `replaceBindingId` replaces an owned same-kind binding only after alignment succeeds. Interrupted authority execution remains paused and requires review again; an existing paused/error record is not a successful sync.

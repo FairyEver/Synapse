@@ -119,15 +119,24 @@ const driveSyncBindingPreviewSchema = z.object({
   // 与 shared 的 DTO 一致：阻断的预览不产出这个键，只有 ready 的预览才有。
   // 写成必填会让所有阻断预览在响应校验处抛错，渲染层再也拿不到 blocked 结果。
   initialTransfer: driveSyncInitialTransferSchema.nullable().optional(),
+  confirmationToken: z.string().optional(),
+  alignment: z.object({
+    changes: z.array(z.object({ relativePath: z.string(), action: z.enum(["upload", "download", "delete_local", "delete_remote"]), kind: driveItemKindSchema })),
+    unchanged: z.number().int().nonnegative(),
+  }).optional(),
 })
 
 const driveSyncPreviewBindingInputSchema = z.object({
+  authority: z.enum(["local", "remote"]).optional(),
+  confirmationToken: z.string().optional(),
+  replaceBindingId: z.string().min(1).optional(),
   driveItemId: z.string().min(1),
   driveItemName: z.string().min(1),
   kind: driveItemKindSchema,
   drivePathHint: z.string().nullable().optional(),
   localPath: z.string().min(1),
   remoteExists: z.boolean(),
+  targetParentId: z.string().nullable().optional(),
   directionHint: driveSyncInitialDirectionSchema.nullable().optional(),
   excludeRules: z.array(z.string()).optional(),
   useDefaultExcludes: z.boolean().optional(),
@@ -135,6 +144,9 @@ const driveSyncPreviewBindingInputSchema = z.object({
 })
 
 const driveSyncCreateSafeBindingInputSchema = z.object({
+  authority: z.enum(["local", "remote"]).optional(),
+  confirmationToken: z.string().optional(),
+  replaceBindingId: z.string().min(1).optional(),
   driveItemId: z.string().min(1),
   driveItemName: z.string().min(1),
   kind: driveItemKindSchema,

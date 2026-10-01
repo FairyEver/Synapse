@@ -323,6 +323,7 @@ describe("AccountService", () => {
       path: filePath,
       name: "report.txt",
       expectedItemId: "existing-file",
+      expectedVersionId: "reviewed-version",
     })).resolves.toEqual(completed)
 
     expect(service.prepareDriveUpload).toHaveBeenCalledWith({
@@ -331,6 +332,7 @@ describe("AccountService", () => {
       size: "5",
       mimeType: null,
       expectedItemId: "existing-file",
+      expectedVersionId: "reviewed-version",
     })
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-sync-1")
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()

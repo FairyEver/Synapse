@@ -171,11 +171,14 @@ const sitePasswordField = stringField("Optional custom webpage-share password. U
 const driveSyncDirectionValues = ["local_to_remote", "remote_to_local", "bind_existing"]
 const driveSyncConflictResolutionValues = ["keep_local", "keep_remote", "keep_both", "confirm_delete", "skip"]
 const driveSyncBindingProperties = {
+  authority: { type: "string", enum: ["local", "remote"], description: "One-time authority for bind_existing only. Mirrors the included tree, replacing differences and trashing target-only entries. Subsequent sync is bidirectional; never infer this choice." },
+  confirmationToken: stringField("For explicit authority creation, pass the token from the user-reviewed preview unchanged. Changed content or configuration invalidates it."),
+  replaceBindingId: stringField("Optional owned binding to replace through bind_existing with authority. Old configuration pauses before validation and is removed only after successful alignment. Failure retains it paused; never claim atomic rollback."),
   localPath: stringField("Stable absolute local file or folder path. Never pass a temporary attachment or cache path."),
   direction: {
     type: "string",
     enum: driveSyncDirectionValues,
-    description: "Initial sync direction. Use local_to_remote for a new Drive target, remote_to_local for a new local target, or bind_existing only when both sides already match exactly.",
+    description: "Initial sync direction. Use local_to_remote for a new Drive target, remote_to_local for a new local target, or bind_existing for existing sides: omit authority to require exact equality, or explicitly choose authority after reviewing the alignment plan.",
   },
   driveItemId: stringField("Existing owned Drive item id. Required for remote_to_local and bind_existing; omit for local_to_remote."),
   targetParentId: optionalParentId,
@@ -798,7 +801,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_sync_binding_preview",
-      description: "Preflight a persistent local file or folder sync binding without creating it. Always call this before drive_sync_binding_create. Ready previews include an initialTransfer summary and up to 200 planned file/folder entries; use totalEntries and truncated to detect an abbreviated list. A blocked preview must be reported or corrected rather than bypassed.",
+      description: "Preflight a persistent local file or folder sync binding without creating it. Always call this before drive_sync_binding_create. Ready previews include an initialTransfer summary and up to 200 planned file/folder entries; use totalEntries and truncated to detect an abbreviated list. Authority previews return alignment.changes and confirmationToken. Explain every overwrite and trash operation before creation. A blocked preview must be reported or corrected rather than bypassed.",
       inputSchema: {
         type: "object",
         properties: driveSyncBindingProperties,

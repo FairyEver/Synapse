@@ -1540,7 +1540,15 @@ async function prepareDriveSyncBindingInput(
   const excludeRules = optionalStringList(params.excludeRules, "excludeRules")
   const useDefaultExcludes = optionalBooleanValue(params.useDefaultExcludes, "useDefaultExcludes")
   const importGitignore = optionalBooleanValue(params.importGitignore, "importGitignore")
+  const authority = optionalString(params.authority)
+  if (authority && authority !== "local" && authority !== "remote") throw new Error("authority must be local or remote.")
+  const replaceBindingId = optionalString(params.replaceBindingId)
+  if ((authority || replaceBindingId) && direction !== "bind_existing") throw new Error("authority and replacement require bind_existing.")
+  if (replaceBindingId && !authority) throw new Error("Replacing a binding requires an explicit authority.")
   const ruleInput = {
+    ...(authority ? { authority: authority as "local" | "remote" } : {}),
+    ...(replaceBindingId ? { replaceBindingId } : {}),
+    ...(optionalString(params.confirmationToken) ? { confirmationToken: optionalString(params.confirmationToken)! } : {}),
     ...(excludeRules === undefined ? {} : { excludeRules }),
     ...(useDefaultExcludes === undefined ? {} : { useDefaultExcludes }),
     ...(importGitignore === undefined ? {} : { importGitignore }),

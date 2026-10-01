@@ -1426,14 +1426,10 @@ describe("DriveModule", () => {
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync binding dialog not found")
+    expect(dialog.textContent).toContain("同步向导")
     expect(dialog.textContent).toContain("新建同步")
-    expect(dialog.textContent).toContain("/report.txt")
-    expect(dialog.textContent).toContain("选择电脑上的位置")
-    expect(dialog.querySelector("input")?.getAttribute("placeholder")).toBe("选择保存位置")
-    expect(dialog.textContent).toContain("选择位置")
-    // 单个文件没有「同步范围」这一步。
-    expect(dialog.textContent).not.toContain("同步范围")
-    expect(dialog.textContent).not.toContain("本地路径")
+    expect(mocks.chooseDriveSyncLocalPath).not.toHaveBeenCalled()
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
   })
 
   it("opens sync details from an already bound drive row", async () => {
@@ -1473,429 +1469,136 @@ describe("DriveModule", () => {
     expect(getSyncToolbarButton()).toBeTruthy()
   })
 
-  it("selects a local path and reads the direction out of the preview", async () => {
-    mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
-    ])
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Desktop/report.txt")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "ready",
-      direction: "remote_to_local",
-      reason: null,
-      localPath: "/Users/me/Desktop/report.txt",
-      localKind: "missing",
-      localEmpty: null,
-      forcedExcludeRules: [".git/**", ".git"],
-      defaultExcludeRules: [],
-      importedGitignoreRules: [],
-    })
+  it("requires explicit type and scenario before selecting a local destination", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
+    await render(<DriveModule />); await flushAct()
+    await openRowMenu("report.txt"); await clickMenuItemText("同步")
+    await startSyncWizard("文件", "云端为基础，下载并同步")
+    expect(mocks.chooseDriveSyncLocalPath).not.toHaveBeenCalled()
+    await clickButtonText("下一步") // remote -> local
+    await clickButtonText("选择保存位置")
+    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({ kind: "file", mode: "remote_to_local", defaultName: "report.txt" })
+    expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
+    await clickButtonText("下一步")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ driveItemId: "file-1", directionHint: "remote_to_local", localPath: "/Users/me/report.txt" }))
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("双向同步")
+  })
 
-    await render(<DriveModule />)
-    await flushAct()
-    await openRowMenu("report.txt")
-    await clickMenuItemText("同步")
-    await clickText("保存到…")
-
-    // 「保存到…」才走保存对话框，能选一个还不存在的路径；这是把云端文件下载到新位置的唯一入口。
-    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({
-      kind: "file",
-      mode: "remote_to_local",
-      defaultName: "report.txt",
-    })
+  it("requires authority and explicit confirmation for two existing sides", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
+    mocks.previewDriveSyncBinding.mockResolvedValue({ status: "ready", direction: "bind_existing", confirmationToken: "reviewed-token", forcedExcludeRules: [], defaultExcludeRules: [], importedGitignoreRules: [], alignment: { unchanged: 0, changes: [{ relativePath: "", action: "upload", kind: "file" }] } })
+    await render(<DriveModule />); await flushAct()
+    await openRowMenu("report.txt"); await clickMenuItemText("同步")
+    await startSyncWizard("文件", "本地和云端都存在")
+    await clickButtonText("选择文件"); await clickButtonText("下一步"); await clickButtonText("下一步")
+    expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
+    await chooseWizardOption("以本地为准，更新云端"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
-    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
-      driveItemId: "file-1",
-      directionHint: "remote_to_local",
-      localPath: "/Users/me/Desktop/report.txt",
-    }))
-    const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Drive sync binding dialog not found")
-    expect(dialog.textContent).toContain("可以同步")
-    expect(dialog.textContent).toContain("云端没有需要下载的内容。")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ authority: "local", directionHint: "bind_existing" }))
+    await clickButtonText("更新云端并同步")
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
+    await clickWizardCheckbox("sync-confirm"); await clickButtonText("更新云端并同步")
+    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({ authority: "local", confirmationToken: "reviewed-token" }))
   })
 
-  it("previews again as binding existing content when both sides already have content", async () => {
-    mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
-    ])
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Desktop/report.txt")
-    mocks.previewDriveSyncBinding
-      .mockResolvedValueOnce({
-        status: "blocked",
-        direction: null,
-        reason: "本地文件已存在，不能和云盘上已有的文件直接合并。",
-        localPath: "/Users/me/Desktop/report.txt",
-        localKind: "file",
-        localEmpty: null,
-        forcedExcludeRules: [".git/**", ".git"],
-        defaultExcludeRules: [],
-        importedGitignoreRules: [],
-      })
-      .mockResolvedValueOnce({
-        status: "ready",
-        direction: "bind_existing",
-        reason: null,
-        localPath: "/Users/me/Desktop/report.txt",
-        localKind: "file",
-        localEmpty: null,
-        forcedExcludeRules: [".git/**", ".git"],
-        defaultExcludeRules: [],
-        importedGitignoreRules: [],
-      })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await openRowMenu("report.txt")
-    await clickMenuItemText("同步")
-    await clickText("保存到…")
-
-    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(2)
-    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({
-      directionHint: "bind_existing",
-    }))
-    const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Drive sync binding dialog not found")
-    // 预览阶段只做尺寸与类型检查，不能承诺两边内容相同。
-    expect(dialog.textContent).toContain("两边都有内容")
-    expect(dialog.textContent).toContain("建立同步后会先核对两边内容是否完全一致")
-  })
-
-  it("does not retry the preview when the block is a type mismatch", async () => {
-    mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
-    ])
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Desktop")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "blocked",
-      direction: null,
-      reason: "云盘上是文件，但这里选中的是文件夹。",
-      localPath: "/Users/me/Desktop",
-      localKind: "folder",
-      localEmpty: true,
-      forcedExcludeRules: [".git/**", ".git"],
-      defaultExcludeRules: [],
-      importedGitignoreRules: [],
-    })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await openRowMenu("report.txt")
-    await clickMenuItemText("同步")
-    await clickText("保存到…")
-
+  it("blocks mismatched types without silently changing the selected scenario", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/folder")
+    mocks.previewDriveSyncBinding.mockResolvedValue({ status: "blocked", direction: null, reason: "云盘上是文件，但这里选中的是文件夹。" })
+    await render(<DriveModule />); await flushAct()
+    await openRowMenu("report.txt"); await clickMenuItemText("同步")
+    await startSyncWizard("文件", "云端为基础，下载并同步")
+    await clickButtonText("下一步"); await clickButtonText("选择保存位置"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
-    const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Drive sync binding dialog not found")
-    expect(dialog.textContent).toContain("不能同步")
-    expect(dialog.textContent).toContain("云盘上是文件，但这里选中的是文件夹。")
-    expect(dialog.textContent).toContain("选择文件")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("云盘上是文件，但这里选中的是文件夹。")
+    await clickButtonText("下载并开始同步")
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
   })
 
-  it("passes full nested drive paths when creating sync bindings from row menus", async () => {
-    mocks.listDriveItems
-      .mockResolvedValueOnce([
-        createDriveItem({ id: "folder-projects", type: "folder", name: "Projects" }),
-      ])
-      .mockResolvedValueOnce([
-        createDriveItem({ id: "folder-docs", parentId: "folder-projects", type: "folder", name: "Docs" }),
-      ])
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Docs")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "ready",
-      direction: "bind_existing",
-      reason: null,
-      localPath: "/Users/me/Docs",
-      localKind: "folder",
-      localEmpty: true,
-      forcedExcludeRules: [".git/**", ".git"],
-      defaultExcludeRules: [],
-      importedGitignoreRules: [],
-    })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await act(async () => {
-      getTableRow("Projects").click()
-      await flushPromises()
-    })
-    await openRowMenu("Docs")
-    await clickMenuItemText("同步")
-    await clickText("选择文件夹")
-
-    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
-      driveItemId: "folder-docs",
-      drivePathHint: "/Projects/Docs",
-      kind: "folder",
-      localPath: "/Users/me/Docs",
-    }))
+  it("preserves the full nested cloud path selected from an item menu", async () => {
+    mocks.listDriveItems.mockResolvedValueOnce([createDriveItem({ id: "projects", type: "folder", name: "Projects" })])
+      .mockResolvedValue([createDriveItem({ id: "docs", parentId: "projects", type: "folder", name: "Docs" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/Docs")
+    await render(<DriveModule />); await flushAct()
+    await clickDriveRow("Projects"); await openRowMenu("Docs"); await clickMenuItemText("同步")
+    await startSyncWizard("文件夹", "云端为基础，下载并同步")
+    await clickButtonText("下一步"); await clickButtonText("选择保存位置"); await clickButtonText("下一步"); await clickButtonText("下一步")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ driveItemId: "docs", drivePathHint: "/Projects/Docs", kind: "folder" }))
   })
 
-  it("creates local-to-cloud drive sync bindings from the toolbar", async () => {
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "ready",
-      direction: "local_to_remote",
-      reason: null,
-      localPath: "/Users/me/LocalDocs",
-      localKind: "folder",
-      localEmpty: false,
-      forcedExcludeRules: [".git/**", ".git"],
-      defaultExcludeRules: [],
-      importedGitignoreRules: [],
-    })
+  it("creates a folder upload only after choosing scope and reviewing", async () => {
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/LocalDocs")
+    await render(<DriveModule />); await flushAct()
+    await clickSyncToolbarButton(); await clickButtonText("同步向导")
+    await startSyncWizard("文件夹", "本地为基础，上传并同步")
+    await clickButtonText("选择文件夹"); await clickButtonText("下一步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/LocalDocs")
+    await clickButtonText("下一步"); await clickButtonText("下一步")
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ targetParentId: null, directionHint: "local_to_remote", useDefaultExcludes: true, importGitignore: false }))
+    await clickButtonText("上传并开始同步")
+    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({ localPath: "/Users/me/LocalDocs", direction: "local_to_remote", drivePathHint: "/LocalDocs" }))
+  })
 
-    await render(<DriveModule />)
-    await flushAct()
+  it("retains the current Drive parent when uploading from its toolbar", async () => {
+    mocks.listDriveItems.mockResolvedValueOnce([createDriveItem({ id: "projects", type: "folder", name: "Projects" })]).mockResolvedValue([])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/LocalDocs")
+    await render(<DriveModule />); await flushAct(); await clickDriveRow("Projects")
     await clickDriveToolbarMenuItem("更多", "新建同步")
-
-    const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Local drive sync dialog not found")
-    expect(dialog.textContent).toContain("新建同步")
-    expect(dialog.textContent).toContain("选择电脑上的内容")
-    expect(dialog.textContent).toContain("选择文件夹")
-    expect(dialog.textContent).toContain("选择文件")
-
-    await clickText("选择文件夹")
-
-    expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({
-      kind: "folder",
-      mode: "local_to_remote",
-      defaultName: undefined,
-    })
-    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({
-      driveItemId: "local:/Users/me/LocalDocs",
-      driveItemName: "LocalDocs",
-      kind: "folder",
-      localPath: "/Users/me/LocalDocs",
-      remoteExists: false,
-      directionHint: "local_to_remote",
-      importGitignore: false,
-      useDefaultExcludes: true,
-    }))
-
-    const listCallsBeforeSubmit = mocks.listDriveItems.mock.calls.length
-    const usageCallsBeforeSubmit = mocks.getDriveUsage.mock.calls.length
-
-    await clickText("下一步")
-    await clickText("下一步")
-    await clickButtonText("开始同步")
-
-    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({
-      driveItemId: "local:/Users/me/LocalDocs",
-      driveItemName: "LocalDocs",
-      kind: "folder",
-      drivePathHint: "/LocalDocs",
-      targetParentId: null,
-      localPath: "/Users/me/LocalDocs",
-      direction: "local_to_remote",
-      importGitignore: false,
-      useDefaultExcludes: true,
-    }))
-    expect(mocks.listDriveItems).toHaveBeenCalledTimes(listCallsBeforeSubmit + 1)
-    expect(mocks.getDriveUsage).toHaveBeenCalledTimes(usageCallsBeforeSubmit + 1)
+    await startSyncWizard("文件夹", "本地为基础，上传并同步")
+    await clickButtonText("选择文件夹"); await clickButtonText("下一步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/Projects/LocalDocs")
+    await clickButtonText("下一步"); await clickButtonText("下一步"); await clickButtonText("上传并开始同步")
+    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({ targetParentId: "projects", drivePathHint: "/Projects/LocalDocs" }))
   })
 
-  it("uploads local-to-cloud sync roots into the current Drive folder", async () => {
-    mocks.listDriveItems
-      .mockResolvedValueOnce([
-        createDriveItem({ id: "folder-projects", type: "folder", name: "Projects" }),
-      ])
-      .mockResolvedValueOnce([])
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "ready",
-      direction: "local_to_remote",
-      reason: null,
-      localPath: "/Users/me/LocalDocs",
-      localKind: "folder",
-      localEmpty: false,
-      forcedExcludeRules: [".git/**", ".git"],
-      defaultExcludeRules: [],
-      importedGitignoreRules: [],
-    })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await act(async () => {
-      getTableRow("Projects").click()
-      await flushPromises()
-    })
+  it("sends ordered exclude rules and keeps gitignore import opt-in", async () => {
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/LocalDocs")
+    await render(<DriveModule />); await flushAct()
     await clickDriveToolbarMenuItem("更多", "新建同步")
-
-    const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Local drive sync dialog not found")
-    expect(dialog.textContent).toContain("/Projects")
-
-    await clickText("选择文件夹")
-    await clickText("下一步")
-    await clickText("下一步")
-    await clickButtonText("开始同步")
-
-    expect(mocks.createDriveSyncSafeBinding).toHaveBeenCalledWith(expect.objectContaining({
-      driveItemId: "local:/Users/me/LocalDocs",
-      driveItemName: "LocalDocs",
-      kind: "folder",
-      drivePathHint: "/Projects/LocalDocs",
-      targetParentId: "folder-projects",
-      localPath: "/Users/me/LocalDocs",
-      direction: "local_to_remote",
-      importGitignore: false,
-      useDefaultExcludes: true,
-    }))
+    await startSyncWizard("文件夹", "本地为基础，上传并同步")
+    await clickButtonText("选择文件夹"); await clickButtonText("下一步"); await clickButtonText("下一步")
+    expect(document.querySelector('#sync-gitignore')?.getAttribute("aria-checked")).toBe("false")
+    await textAreaInput("sync-rules", "*.tmp\n!important.tmp")
+    await clickWizardCheckbox("sync-gitignore"); await clickButtonText("下一步")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ excludeRules: ["*.tmp", "!important.tmp"], importGitignore: true }))
+    await clickButtonText("上一步")
+    expect((document.querySelector('#sync-rules') as HTMLTextAreaElement).value).toBe("*.tmp\n!important.tmp")
   })
 
-  it("sends folder exclude rules when previewing drive sync bindings", async () => {
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
-
-    await render(<DriveModule />)
-    await flushAct()
-    await clickDriveToolbarMenuItem("更多", "新建同步")
-    await clickText("选择文件夹")
-    await clickText("下一步")
-    mocks.previewDriveSyncBinding.mockClear()
-
-    await inputText("例如 *.psd 或 素材/大文件", "build/**")
-    await clickText("添加")
-    await inputText("例如 *.psd 或 素材/大文件", ".tmp/")
-    await clickText("添加")
-
-    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({
-      driveItemId: "local:/Users/me/LocalDocs",
-      kind: "folder",
-      localPath: "/Users/me/LocalDocs",
-      excludeRules: ["build/**", ".tmp/"],
-      importGitignore: false,
-      useDefaultExcludes: true,
-    }))
+  it("keeps a failed initial binding visible with a detail action", async () => {
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/file.txt")
+    mocks.createDriveSyncSafeBinding.mockResolvedValue(createDriveSyncBinding({ status: "error", lastError: "网络中断" }))
+    await render(<DriveModule />); await flushAct(); await clickDriveToolbarMenuItem("更多", "新建同步")
+    await startSyncWizard("文件", "本地为基础，上传并同步")
+    await clickButtonText("选择文件"); await clickButtonText("下一步"); await clickButtonText("下一步"); await clickButtonText("上传并开始同步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步需要处理")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("网络中断")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("查看同步")
   })
 
-  it("keeps gitignore import off by default and previews detected rules when enabled", async () => {
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "ready",
-      direction: "local_to_remote",
-      reason: null,
-      localPath: "/Users/me/LocalDocs",
-      localKind: "folder",
-      localEmpty: false,
-      forcedExcludeRules: [".git/"],
-      defaultExcludeRules: ["node_modules/"],
-      importedGitignoreRules: [],
-      detectedGitignoreRules: ["dist/", "!dist/keep.txt"],
-    }).mockResolvedValueOnce({
-      status: "ready",
-      direction: "local_to_remote",
-      reason: null,
-      localPath: "/Users/me/LocalDocs",
-      localKind: "folder",
-      localEmpty: false,
-      forcedExcludeRules: [".git/"],
-      defaultExcludeRules: ["node_modules/"],
-      importedGitignoreRules: ["dist/", "!dist/keep.txt"],
-      detectedGitignoreRules: ["dist/", "!dist/keep.txt"],
-    })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await clickDriveToolbarMenuItem("更多", "新建同步")
-    await clickText("选择文件夹")
-    await clickText("下一步")
-
-    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({
-      importGitignore: false,
-      useDefaultExcludes: true,
-    }))
-    const importLabel = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
-      .find((label) => label.textContent?.includes("导入这个文件夹里的 .gitignore 规则"))
-    if (!importLabel) throw new Error("Gitignore import control not found")
-    await act(async () => {
-      importLabel.click()
-      await flushPromises()
-    })
-
-    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({ importGitignore: true }))
-    expect(document.body.textContent).toContain("dist/")
-    expect(document.body.textContent).toContain("!dist/keep.txt")
-    expect(document.body.textContent).toContain("一次性导入")
+  it("deletes only the selected relationship after confirmation", async () => {
+    const binding = createDriveSyncBinding({ id: "selected-sync", driveItemName: "Docs" })
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
+    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonText("同步向导")
+    await chooseWizardOption("删除同步"); await clickButtonText("下一步"); await chooseWizardOption("Docs"); await clickButtonText("下一步")
+    expect(mocks.removeDriveSyncBinding).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("两边文件都会保留")
+    await clickButtonText("删除同步")
+    expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "selected-sync" })
+    expect(mocks.deleteDriveItem).not.toHaveBeenCalled()
   })
 
-  it("keeps the sync dialog open when initial safe create returns an error binding", async () => {
-    mocks.createDriveSyncSafeBinding.mockResolvedValueOnce(createDriveSyncBinding({
-      status: "error",
-      lastError: "初始下载失败",
-    }))
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/LocalDocs")
-    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
-      status: "ready",
-      direction: "local_to_remote",
-      reason: null,
-      localPath: "/Users/me/LocalDocs",
-      localKind: "folder",
-      localEmpty: false,
-      forcedExcludeRules: [".git/**", ".git"],
-      defaultExcludeRules: [],
-      importedGitignoreRules: [],
-    })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await clickDriveToolbarMenuItem("更多", "新建同步")
-    await clickText("选择文件夹")
-    await clickText("下一步")
-    await clickText("下一步")
-    await clickButtonText("开始同步")
-
-    // 创建成不成功都要留在窗里，并且不能把失败说成「已开始同步」。
-    const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? ""
-    expect(dialogText).toContain("同步没有开始")
-    expect(dialogText).toContain("初始下载失败")
-    expect(dialogText).not.toContain("已开始同步")
-  })
-
-  it("disables binding submit when the current preview is blocked", async () => {
-    mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
-    ])
-    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/Desktop/mismatch.txt")
-    mocks.previewDriveSyncBinding
-      .mockResolvedValueOnce({
-        status: "blocked",
-        direction: null,
-        reason: "本地文件已存在，不能和云盘上已有的文件直接合并。",
-        localPath: "/Users/me/Desktop/mismatch.txt",
-        localKind: "file",
-        localEmpty: null,
-        forcedExcludeRules: [".git/**", ".git"],
-        defaultExcludeRules: [],
-        importedGitignoreRules: [],
-      })
-      .mockResolvedValueOnce({
-        status: "blocked",
-        direction: null,
-        reason: "本地文件和云盘上的文件大小不一致，不能直接建立同步。",
-        localPath: "/Users/me/Desktop/mismatch.txt",
-        localKind: "file",
-        localEmpty: null,
-        forcedExcludeRules: [".git/**", ".git"],
-        defaultExcludeRules: [],
-        importedGitignoreRules: [],
-      })
-
-    await render(<DriveModule />)
-    await flushAct()
-    await openRowMenu("report.txt")
-    await clickMenuItemText("同步")
-    await clickText("保存到…")
-
-    const dialog = document.querySelector('[role="dialog"]')
-    if (!dialog) throw new Error("Drive sync binding dialog not found")
-    // 被阻断时下一步点不动，并且给出可以真的走通的出路。
-    const nextButton = Array.from(dialog.querySelectorAll("button"))
-      .find((button) => button.textContent === "下一步")
-    expect(dialog.textContent).toContain("不能同步")
-    expect(dialog.textContent).toContain("本地文件和云盘上的文件大小不一致")
-    expect(dialog.textContent).toContain("保存到新位置")
-    expect((nextButton as HTMLButtonElement | undefined)?.disabled).toBe(true)
+  it("edits scope while preserving existing imported rules", async () => {
+    const binding = createDriveSyncBinding({ id: "selected-sync", driveItemName: "Docs", excludeRules: { forced: [".git/"], defaults: ["node_modules/"], importedGitignore: ["private/"], user: ["*.tmp"] } })
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
+    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonText("同步向导")
+    await chooseWizardOption("修改同步"); await clickButtonText("下一步"); await chooseWizardOption("Docs"); await clickButtonText("下一步")
+    await chooseWizardOption("同步范围"); await clickButtonText("下一步"); await textAreaInput("sync-rules", "*.log")
+    await clickButtonText("下一步"); await clickButtonText("保存同步范围")
+    expect(mocks.updateDriveSyncExcludeRules).toHaveBeenCalledWith({ id: "selected-sync", defaults: ["node_modules/"], importedGitignore: ["private/"], user: ["*.log"] })
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -4521,19 +4224,6 @@ async function textAreaInput(id: string, value: string): Promise<void> {
   })
 }
 
-/** 按 placeholder 定位输入框并写入值。 */
-async function inputText(placeholder: string, value: string): Promise<void> {
-  const element = Array.from(document.querySelectorAll<HTMLInputElement>("input"))
-    .find((candidate) => candidate.getAttribute("placeholder") === placeholder)
-  if (!element) throw new Error(`Input not found: ${placeholder}`)
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
-    setter?.call(element, value)
-    element.dispatchEvent(new Event("input", { bubbles: true }))
-    await flushPromises()
-  })
-}
-
 async function clickDriveRow(rowText: string): Promise<void> {
   const row = getTableRow(rowText)
   await act(async () => {
@@ -4924,4 +4614,21 @@ function createAuthenticatedState(): SynapseAccountState {
       syncedAt: "2026-06-01T00:00:00.000Z",
     },
   }
+}
+
+async function chooseWizardOption(title: string): Promise<void> {
+  const radio = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [role="radio"]')).find((element) => document.getElementById(element.getAttribute("aria-labelledby") ?? "")?.textContent === title)
+  if (!radio) throw new Error(`Wizard option not found: ${title}`)
+  await act(async () => { radio.click(); await flushPromises() })
+}
+async function startSyncWizard(kind: string, scenario: string): Promise<void> {
+  await chooseWizardOption("新建同步"); await clickButtonText("下一步")
+  await chooseWizardOption(kind); await clickButtonText("下一步")
+  await chooseWizardOption(scenario); await clickButtonText("下一步")
+}
+
+async function clickWizardCheckbox(id: string): Promise<void> {
+  const element = document.getElementById(id)
+  if (!element) throw new Error(`Checkbox not found: ${id}`)
+  await act(async () => { element.click(); await flushPromises() })
 }

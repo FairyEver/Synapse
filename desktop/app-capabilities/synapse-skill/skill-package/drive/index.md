@@ -124,7 +124,7 @@ Use this flow for one or more local files, folders, or paths.
    - For `remote_to_local` or `bind_existing`, resolve the user's Drive name or path to an owned item id. Use `app_drive_item_tree_list` with pagination for a Drive-wide name/path lookup, or traverse the stated parent path with `app_drive_item_list`. Match the full path when one was given. If zero items match, report that; if multiple plausible items match, show the shortest distinguishing paths and ask which one instead of guessing.
 3. Check the selected Drive parent for an existing same-name item with `app_drive_item_list`, following pagination when needed.
    - When no same-name item exists, call `app_drive_sync_binding_preview` with `direction: "local_to_remote"`, then create only if the preview is not blocked.
-   - When a same-name item of the same type exists, call preview with `direction: "bind_existing"` and its `driveItemId`. Create only when the local and remote content match exactly.
+   - When a same-name item of the same type exists, call preview with `direction: "bind_existing"` and its `driveItemId`. Without authority, create only when content matches exactly. If the user explicitly chooses one side, pass authority (`local` or `remote`), show alignment changes, and pass the reviewed confirmationToken to create.
    - When content differs or file/folder types conflict, do not overwrite or merge. Ask the user to choose another Drive name/location or explicitly reconcile the two sides.
 4. Always call `app_drive_sync_binding_preview` before `app_drive_sync_binding_create`. Creation repeats the full preflight; a blocked create result is authoritative and must not be bypassed. For a ready preview, summarize `initialTransfer` before high-risk creation: report file/folder counts and total bytes, mention when `truncated` means only the first 200 entries are shown, and provide the entry list when the user asks what will change.
 5. A folder creates one recursive binding for its included subtree. `.git/` and Synapse transfer files remain forcibly excluded. Recommended defaults are enabled unless explicitly changed. `importGitignore: true` copies the root `.gitignore` rules once; later `.gitignore` edits do not change the stored rules.
@@ -149,7 +149,7 @@ Use `remote_to_local` only when the user selects an existing owned Drive item an
 - After lifecycle or conflict operations, call `app_drive_sync_snapshot_get` when the user needs the refreshed state.
 - For multiple bindings or conflicts, resolve the complete target set first, then apply the existing single-item tools sequentially. Keep successful operations when a later item fails and report successes, failures, and skipped items together. A request such as “所有当前冲突都以本地为准” is an explicit choice for that stated set, but apply it only where `keep_local` appears in each conflict's `availableActions`.
 
-There is no in-place MCP operation for changing a binding's local root, Drive target, or initial direction. When the user asks to move or retarget a binding, explain that Synapse must stop the old binding and create a new one. Snapshot and preserve its editable rules, confirm the non-atomic stop-and-recreate workflow unless the user already explicitly requested it, remove the old binding without deleting either side, then preview and create the replacement. If replacement creation fails, report clearly that both sides still exist but no active binding remains; never claim the old binding was migrated.
+To change a local root or Drive target, resolve existing same-type objects and use bind_existing with explicit authority and replaceBindingId. Preserve all editable rule groups. Preview the replacement and present its changes, then create with the reviewed confirmationToken. The service pauses the old binding before validation and removes it only after successful alignment. Failure keeps paused records; do not claim atomic rollback or resume overlapping bindings. Remove the unwanted relationship before retrying. A previously paused binding stays paused after replacement.
 
 ## Drive Link Intake Flow
 
@@ -408,3 +408,9 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "删除这条评论": list first, verify the explicitly identified target and returned permission, warn that its descendant replies will also be deleted (or that the whole thread will be removed for the first comment), then call `app_drive_link_annotation_comment_delete`.
 - "分析这个 HTML 原型站点": call `app_drive_link_resolve`, `app_drive_link_list`, then `app_drive_link_materialize` when local files are useful.
 - "下载这个公开素材": call `app_drive_link_download_file`.
+
+## Explicit Initial Alignment
+
+`authority: "local" | "remote"` is valid only with `direction: "bind_existing"`. Never infer authority from a generic sync request. The chosen side replaces differing included files and removes target-only included entries through recoverable trash. Subsequent sync remains bidirectional. Excluded entries are not touched; type collisions and trashing folders containing exclusions are blocked.
+
+Pass preview's `confirmationToken` unchanged to create after the user approves that plan. Account, scope, authority, identity, or content changes require a fresh preview. Optional `replaceBindingId` replaces an owned same-kind binding only after alignment succeeds. Interrupted authority execution remains paused and requires review again; an existing paused/error record is not a successful sync.

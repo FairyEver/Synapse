@@ -297,6 +297,11 @@ describe("driveSyncIpcModule", () => {
     }
     expect(driveSyncIpcModule.methods.previewBinding.response?.parse(preview)).toEqual(preview)
 
+    const alignment = { ...preview, direction: "bind_existing", initialTransfer: undefined,
+      confirmationToken: "review-token", alignment: { unchanged: 1, changes: [{ relativePath: "extra.md", action: "delete_remote", kind: "file" }] } }
+    expect(driveSyncIpcModule.methods.previewBinding.response?.parse(alignment)).toEqual(alignment)
+    const authorityInput = { driveItemId: "file-1", driveItemName: "file.md", kind: "file", localPath: "/tmp/file.md", direction: "bind_existing", authority: "local", confirmationToken: "review-token", replaceBindingId: "old-binding" }
+    expect(driveSyncIpcModule.methods.createSafeBinding.request?.parse(authorityInput)).toEqual(authorityInput)
     const bindExisting = { ...preview, direction: "bind_existing", initialTransfer: null }
     expect(driveSyncIpcModule.methods.previewBinding.response?.parse(bindExisting))
       .toEqual(bindExisting)

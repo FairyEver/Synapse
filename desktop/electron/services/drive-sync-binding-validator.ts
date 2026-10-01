@@ -13,6 +13,7 @@ export async function previewDriveSyncBinding(input: {
   readonly localPath: string
   readonly remoteExists: boolean
   readonly remoteSize?: string | null
+  readonly authority?: "local" | "remote"
   readonly directionHint?: DriveSyncInitialDirection | null
   readonly activeBindings: readonly DriveSyncBindingEntryV1[]
   readonly importGitignore?: boolean
@@ -45,7 +46,7 @@ export async function previewDriveSyncBinding(input: {
           : "本地文件不存在，不能和云盘上已有的文件建立同步。"
         return blocked(localPath, local.kind, local.empty, reason, importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
       }
-      if (!await localFileSizeMatchesRemote(localPath, input.remoteSize)) {
+      if (!input.authority && !await localFileSizeMatchesRemote(localPath, input.remoteSize)) {
         return blocked(localPath, local.kind, local.empty, "本地文件和云盘上的文件大小不一致，不能直接建立同步。", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)
       }
       return ready(localPath, local.kind, local.empty, "bind_existing", importedGitignoreRules, detectedGitignoreRules, input.useDefaultExcludes)

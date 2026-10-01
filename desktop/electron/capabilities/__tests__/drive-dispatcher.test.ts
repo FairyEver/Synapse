@@ -295,6 +295,14 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.previewDriveReorganization).not.toHaveBeenCalled()
   })
 
+  it("forwards explicit authority and the reviewed token through sync creation", async () => {
+    const driveSyncService = createDriveSyncService()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService: createAccountService({ getDriveItem: vi.fn(async () => driveItem({ id: "item-1", type: "file", name: "spec.md" })) }), driveSyncService })
+    const params = { localPath: "/workspace/spec.md", direction: "bind_existing", driveItemId: "item-1", authority: "remote", confirmationToken: "review-token", replaceBindingId: "old-binding" }
+    await dispatcher.dispatch("app.drive.sync.binding.create", params, { source: "mcp-stdio" })
+    expect(driveSyncService.createSafeBinding).toHaveBeenCalledWith(expect.objectContaining({ authority: "remote", confirmationToken: "review-token", replaceBindingId: "old-binding" }))
+  })
+
   it("previews and creates a local file sync binding with root defaults", async () => {
     const preview = driveSyncPreview()
     const binding = driveSyncBinding()

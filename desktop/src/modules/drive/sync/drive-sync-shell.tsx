@@ -133,7 +133,7 @@ export function DriveSyncDialog({
                       >
                         <RefreshCw />
                       </Button>
-                      <Button type="button" disabled={controller.readOnly} onClick={openWizard}>新建同步</Button>
+                      <Button type="button" disabled={controller.readOnly} onClick={openWizard}>同步向导</Button>
                     </>
                   )}
                 />
@@ -163,6 +163,7 @@ export function DriveSyncDialog({
                       <ArrowLeft />
                     </Button>
                   )}
+                  actions={<Button disabled={controller.readOnly} onClick={() => setView({ kind: "wizard", entry: { mode: "edit", binding: detailBinding } })}>修改同步</Button>}
                   title={detailBinding.driveItemName}
                   description={`云盘 ${driveSyncRemotePath(detailBinding)} · 电脑 ${detailBinding.localPath}`}
                 />
@@ -202,7 +203,7 @@ export function DriveSyncDialog({
                 controller={controller}
                 entry={view.entry}
                 onBindingCreated={onBindingCreated}
-                onClose={() => onOpenChange(false)}
+                onClose={() => setView({ kind: "center", selectedBindingId: null })}
                 onViewBinding={(bindingId) => setView({ kind: "detail", bindingId })}
               />
             )}

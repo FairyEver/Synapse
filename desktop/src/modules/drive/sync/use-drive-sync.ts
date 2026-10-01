@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import type {
+  DriveItemDto,
   DriveSyncBindingDto,
   DriveSyncBindingPreviewDto,
   DriveSyncConflictResolutionInput,
@@ -18,6 +19,9 @@ import { startTrackedOperation } from "@/lib/ui-tracking"
  */
 
 export interface DriveSyncPreviewInput {
+  readonly authority?: "local" | "remote"
+  readonly replaceBindingId?: string
+  readonly targetParentId?: string | null
   readonly driveItemId: string
   readonly driveItemName: string
   readonly kind: "file" | "folder"
@@ -37,6 +41,8 @@ export interface DriveSyncChooseLocalPathInput {
 }
 
 export interface DriveSyncController {
+  readonly listRemote: (parentId: string | null, offset?: number) => Promise<{ items: readonly DriveItemDto[]; nextOffset: number | null }>
+  readonly getRemote: (itemId: string) => Promise<DriveItemDto>
   readonly snapshot: DriveSyncSnapshotDto | null
   readonly error: string | null
   readonly loading: boolean
@@ -168,6 +174,11 @@ export function useDriveSync(): DriveSyncController {
   const bridge = requireSynapseBridge().driveSync
 
   return {
+    listRemote: async (parentId, offset = 0) => {
+      const result = await requireSynapseBridge().drive.item.list({ parentId, offset, limit: 100 })
+      return Array.isArray(result) ? { items: result, nextOffset: null } : { items: result.items, nextOffset: result.page.nextOffset }
+    },
+    getRemote: (itemId) => requireSynapseBridge().drive.item.get({ itemId }),
     snapshot,
     error,
     loading,

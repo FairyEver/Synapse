@@ -1187,6 +1187,7 @@ export class AccountService {
     readonly path: string
     readonly name: string
     readonly expectedItemId?: string | null
+    readonly expectedVersionId?: string | null
     readonly onProgress?: (completedBytes: number, totalBytes: number) => void
     readonly signal?: AbortSignal
   }): Promise<DriveItemDto> {
@@ -1203,6 +1204,7 @@ export class AccountService {
       size: String(fileStat.size),
       mimeType: null,
       expectedItemId: input.expectedItemId ?? null,
+      ...(input.expectedVersionId ? { expectedVersionId: input.expectedVersionId } : {}),
     }
     const prepared = input.signal
       ? await this.prepareDriveUpload(prepareInput, { signal: input.signal })

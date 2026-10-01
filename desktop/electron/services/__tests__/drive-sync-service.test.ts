@@ -5870,6 +5870,210 @@ function emitRawEvent(
   listener(eventType, filename)
 }
 
+describe("Drive sync authority confirmation", () => {
+  async function setup(localContent = "local", cloudContent = "cloud") {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "sync-authority-"))
+    const localPath = path.join(directory, "spec.md")
+    await writeFile(localPath, localContent)
+    let remoteContent = cloudContent
+    const harness = createHarness({
+      stagingRootPath: path.join(directory, "staging"),
+      watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+      accountService: {
+        getDriveItem: vi.fn(async (id: string) => ({ ...mockDriveItem(id), size: String(Buffer.byteLength(remoteContent)) })),
+        downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => { await writeFile(outputPath, remoteContent); return { ok: true as const, path: outputPath } }),
+        uploadDriveSyncFile: vi.fn(async (input: { path: string; expectedItemId: string }) => { remoteContent = await readFile(input.path, "utf8"); return { ...mockDriveItem(input.expectedItemId), size: String(Buffer.byteLength(remoteContent)) } }),
+      },
+    })
+    const trashLocalPath = vi.fn(async (target: string) => rename(target, `${target}.saved`))
+    const service = createDriveSyncService({ ...harness.deps, trashLocalPath })
+    const input = { driveItemId: "file-1", driveItemName: "spec.md", kind: "file" as const, localPath, direction: "bind_existing" as const, authority: "local" as const }
+    return { directory, localPath, harness, service, input, trashLocalPath, remote: () => remoteContent }
+  }
+  it("requires the reviewed token before overwriting and establishes a verified baseline", async () => {
+    const f = await setup()
+    try {
+      await expect(f.service.createSafeBinding(f.input)).rejects.toThrow("预览")
+      const preview = await f.service.previewBinding({ ...f.input, remoteExists: true, directionHint: "bind_existing" })
+      expect(preview).toMatchObject({ status: "ready", alignment: { changes: [{ action: "upload", relativePath: "" }] } })
+      expect(f.remote()).toBe("cloud")
+      const binding = await f.service.createSafeBinding({ ...f.input, confirmationToken: preview.confirmationToken })
+      expect(binding.status).toBe("active")
+      expect(f.remote()).toBe("local")
+      expect(f.harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ expectedVersionId: "version:file-1" }))
+      expect(await f.harness.baseline.list()).toMatchObject([{ localHash: await hashDriveSyncFile(f.localPath) }])
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("rejects changes after preview without uploading", async () => {
+    const f = await setup()
+    try {
+      const preview = await f.service.previewBinding({ ...f.input, remoteExists: true, directionHint: "bind_existing" })
+      await writeFile(f.localPath, "changed after approval")
+      await expect(f.service.createSafeBinding({ ...f.input, confirmationToken: preview.confirmationToken })).rejects.toThrow("变化")
+      expect(f.harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+      expect(await f.harness.bindings.list()).toHaveLength(0)
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("blocks cloud overwrite when the reviewed version is unavailable", async () => {
+    const f = await setup()
+    try {
+      f.harness.deps.accountService.listDriveFileVersions.mockResolvedValue({ items: [], page: { nextOffset: null } })
+      const preview = await f.service.previewBinding({ ...f.input, remoteExists: true, directionHint: "bind_existing" })
+      expect(preview).toMatchObject({ status: "blocked", reason: expect.stringContaining("当前版本") })
+      expect(f.harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("invalidates confirmation when the cloud version changes even with identical bytes", async () => {
+    const f = await setup()
+    try {
+      const preview = await f.service.previewBinding({ ...f.input, remoteExists: true, directionHint: "bind_existing" })
+      f.harness.deps.accountService.listDriveFileVersions.mockResolvedValue({ items: [{ id: "new-version", isCurrent: true }], page: { nextOffset: null } })
+      await expect(f.service.createSafeBinding({ ...f.input, confirmationToken: preview.confirmationToken })).rejects.toThrow("变化")
+      expect(f.harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("preserves overwritten local content in recoverable trash", async () => {
+    const f = await setup()
+    try {
+      const input = { ...f.input, authority: "remote" as const }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      const binding = await f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      expect(binding.status).toBe("active")
+      expect(await readFile(f.localPath, "utf8")).toBe("cloud")
+      expect(await readFile(`${f.localPath}.saved`, "utf8")).toBe("local")
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("does not overwrite when recoverable trash fails", async () => {
+    const f = await setup()
+    try {
+      f.trashLocalPath.mockRejectedValueOnce(new Error("trash unavailable"))
+      const input = { ...f.input, authority: "remote" as const }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      const binding = await f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      expect(binding).toMatchObject({ status: "paused", lastError: expect.stringContaining("trash unavailable") })
+      expect(await readFile(f.localPath, "utf8")).toBe("local")
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("rechecks local content after download before replacing it", async () => {
+    const f = await setup()
+    try {
+      const input = { ...f.input, authority: "remote" as const }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      f.harness.deps.accountService.downloadDriveFile.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+        await writeFile(outputPath, "cloud")
+        if (path.basename(outputPath).startsWith(".synapse-drive-sync-")) await writeFile(f.localPath, "edited while downloading")
+        return { ok: true as const, path: outputPath }
+      })
+      const binding = await f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      expect(binding).toMatchObject({ status: "paused", lastError: expect.stringContaining("本地内容已变化") })
+      expect(await readFile(f.localPath, "utf8")).toBe("edited while downloading")
+      expect(f.trashLocalPath).not.toHaveBeenCalled()
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("retains the previous configuration after replacement transfer fails", async () => {
+    const f = await setup()
+    try {
+      const old = await f.service.createBinding({ ...f.input, deferWatcher: true })
+      const input = { ...f.input, replaceBindingId: old.id }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      f.harness.deps.accountService.uploadDriveSyncFile.mockRejectedValueOnce(new Error("upload failed"))
+      const result = await f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      expect(result.status).toBe("paused")
+      expect(await f.harness.bindings.get(old.id)).toMatchObject({ status: "paused", localPath: f.localPath })
+      await expect(f.service.resumeBinding(old.id)).rejects.toThrow("重叠")
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("replaces a paused binding only after successful alignment and stays paused", async () => {
+    const f = await setup()
+    try {
+      const old = await f.service.createBinding({ ...f.input, deferWatcher: true })
+      await f.service.pauseBinding(old.id)
+      const input = { ...f.input, replaceBindingId: old.id }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      const binding = await f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      expect(binding.status).toBe("paused")
+      expect((await f.harness.bindings.get(old.id))?.status).toBe("removed")
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+})
+
+describe("Drive sync folder authority", () => {
+  async function setup() {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "sync-folder-authority-"))
+    const localPath = path.join(directory, "local")
+    await mkdir(localPath)
+    await mkdir(path.join(localPath, "nested"))
+    await writeFile(path.join(localPath, "nested", "local.txt"), "local")
+    await writeFile(path.join(localPath, "shared.txt"), "local version")
+    await writeFile(path.join(localPath, "keep.log"), "excluded local")
+    const remote = new Map<string, { name: string; parentId: string | null; type: "file" | "folder"; content: string }>([
+      ["root", { name: "Remote", parentId: null, type: "folder", content: "" }],
+      ["shared", { name: "shared.txt", parentId: "root", type: "file", content: "cloud version" }],
+      ["cloud-folder", { name: "cloud", parentId: "root", type: "folder", content: "" }],
+      ["cloud-file", { name: "cloud.txt", parentId: "cloud-folder", type: "file", content: "cloud" }],
+      ["keep", { name: "keep.log", parentId: "root", type: "file", content: "excluded remote" }],
+    ])
+    const item = (id: string) => {
+      const entry = remote.get(id)
+      if (!entry) throw new Error("not found")
+      const names = [entry.name]
+      let parent = entry.parentId
+      while (parent) { names.unshift(remote.get(parent)!.name); parent = remote.get(parent)!.parentId }
+      return { ...mockDriveItem(id), ...entry, id, path: names.join("/"), size: String(Buffer.byteLength(entry.content)) }
+    }
+    let sequence = 0
+    const harness = createHarness({ stagingRootPath: path.join(directory, "staging"), watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>, accountService: {
+      getDriveItem: vi.fn(async (id: string) => item(id)),
+      listDriveItemTree: vi.fn(async ({ parentId }: { parentId: string }) => ({ items: [...remote.keys()].filter((id) => {
+        let current = remote.get(id)?.parentId
+        while (current) { if (current === parentId) return true; current = remote.get(current)?.parentId }
+        return false
+      }).map(item) })),
+      listDriveItems: vi.fn(async ({ parentId }: { parentId: string }) => [...remote.keys()].filter((id) => remote.get(id)?.parentId === parentId).map(item)),
+      downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => { await writeFile(outputPath, remote.get(itemId)!.content); return { ok: true as const, path: outputPath } }),
+      uploadDriveSyncFile: vi.fn(async (input: { path: string; parentId: string; name: string; expectedItemId?: string }) => {
+        const id = input.expectedItemId ?? `new-file-${++sequence}`
+        remote.set(id, { name: input.name, parentId: input.parentId, type: "file", content: await readFile(input.path, "utf8") })
+        return item(id)
+      }),
+      createDriveFolder: vi.fn(async ({ parentId, name }: { parentId: string; name: string }) => { const id = `new-folder-${++sequence}`; remote.set(id, { name, parentId, type: "folder", content: "" }); return item(id) }),
+      deleteDriveItem: vi.fn(async (id: string) => { remote.delete(id); return { ok: true as const } }),
+    } })
+    const trash = path.join(directory, "trash"); await mkdir(trash)
+    const service = createDriveSyncService({ ...harness.deps, trashLocalPath: async (target) => { await rename(target, path.join(trash, `${++sequence}-${path.basename(target)}`)) } })
+    return { directory, localPath, remote, service, harness, input: { driveItemId: "root", driveItemName: "Remote", kind: "folder" as const, localPath, direction: "bind_existing" as const, excludeRules: ["*.log"], useDefaultExcludes: false } }
+  }
+  it.each(["local", "remote"] as const)("aligns nested folders with %s authority while preserving excluded content", async (authority) => {
+    const f = await setup()
+    try {
+      const input = { ...f.input, authority }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      expect(preview.status).toBe("ready")
+      expect(preview.alignment?.changes.some((change) => change.relativePath.includes("keep.log"))).toBe(false)
+      const binding = await f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      expect(binding).toMatchObject({ status: "active", lastError: null })
+      expect(await readFile(path.join(f.localPath, "keep.log"), "utf8")).toBe("excluded local")
+      expect(f.remote.get("keep")?.content).toBe("excluded remote")
+      if (authority === "local") {
+        expect(f.remote.has("cloud-folder")).toBe(false)
+        expect([...f.remote.values()].find((entry) => entry.name === "local.txt")?.content).toBe("local")
+      } else {
+        expect(await readFile(path.join(f.localPath, "cloud", "cloud.txt"), "utf8")).toBe("cloud")
+        await expect(lstat(path.join(f.localPath, "nested"))).rejects.toThrow()
+      }
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("blocks folder removal containing excluded descendants", async () => {
+    const f = await setup()
+    try {
+      f.remote.set("nested-excluded", { name: "keep.log", type: "file", parentId: "cloud-folder", content: "keep" })
+      const preview = await f.service.previewBinding({ ...f.input, authority: "local", remoteExists: true, directionHint: "bind_existing" })
+      expect(preview).toMatchObject({ status: "blocked", reason: expect.stringContaining("排除项") })
+      expect(f.harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+})
+
 function createHarness(overrides: {
   readonly accountService?: Record<string, unknown>
   readonly auditSink?: AuditSink
@@ -5884,6 +6088,7 @@ function createHarness(overrides: {
   const state = createMemoryNamespace<DriveSyncStateEntryV1>()
   const remoteContents = new Map<string, Buffer>()
   const accountService = {
+    listDriveFileVersions: vi.fn(async (itemId: string) => ({ items: [{ id: `version:${itemId}`, isCurrent: true }], page: { nextOffset: null } })),
     getDriveItem: vi.fn(async (itemId: string) => mockDriveItem(itemId)),
     downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
       await writeFile(outputPath, remoteContents.get(itemId) ?? Buffer.from("remote"))

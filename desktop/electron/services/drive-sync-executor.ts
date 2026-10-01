@@ -34,6 +34,11 @@ export interface DriveSyncExecutorDeps {
   readonly signal?: AbortSignal
   readonly onRemoteMutation?: (changeType: DriveChangeType) => void | Promise<void>
   readonly skipLocalPrecondition?: boolean
+  /** Initial authority must recheck and preserve the target after download, immediately before rename. */
+  readonly beforeLocalReplace?: (downloadedPath: string) => Promise<void>
+  readonly beforeRemoteUpload?: (hash: string, parentId: string | null, name: string) => Promise<void>
+  readonly uploadName?: string
+  readonly expectedRemoteVersionId?: string
   readonly uploadSnapshot?: UploadSnapshot | null
   readonly retainUploadSnapshotOnError?: (error: unknown) => boolean
 }
@@ -106,26 +111,30 @@ async function downloadFile(deps: DriveSyncExecutorDeps, operationRecordId: stri
     localPath = await writeDriveSyncFileTarget(
       driveSyncLocalWriteRootPath(deps.binding),
       requestedLocalPath,
-      (outputPath) => deps.accountService.downloadDriveFile({
-        itemId: driveItemId,
-        outputPath,
-        signal: deps.signal,
-        onProgress: (completedBytes, totalBytes) => {
-          progressWrites = progressWrites.then(() => deps.recordOperation({
-            id: operationRecordId,
-            bindingId: deps.binding.id,
-            kind: deps.operation.kind,
-            status: "running",
-            driveItemId,
-            relativePath: deps.operation.relativePath,
-            localPath: requestedLocalPath,
-            remotePathHint: deps.operation.remotePathHint,
-            remoteItemKind: deps.operation.remoteItemKind,
-            completedBytes,
-            totalBytes,
-          })).then(() => undefined)
-        },
-      }),
+      async (outputPath) => {
+        const result = await deps.accountService.downloadDriveFile({
+          itemId: driveItemId,
+          outputPath,
+          signal: deps.signal,
+          onProgress: (completedBytes, totalBytes) => {
+            progressWrites = progressWrites.then(() => deps.recordOperation({
+              id: operationRecordId,
+              bindingId: deps.binding.id,
+              kind: deps.operation.kind,
+              status: "running",
+              driveItemId,
+              relativePath: deps.operation.relativePath,
+              localPath: requestedLocalPath,
+              remotePathHint: deps.operation.remotePathHint,
+              remoteItemKind: deps.operation.remoteItemKind,
+              completedBytes,
+              totalBytes,
+            })).then(() => undefined)
+          },
+        })
+        await deps.beforeLocalReplace?.(outputPath)
+        return result
+      },
     )
   } finally {
     await progressWrites
@@ -345,11 +354,14 @@ async function uploadLocalItem(deps: DriveSyncExecutorDeps, operationRecordId: s
     let progressWrites = Promise.resolve()
     let item: DriveItemDto
     try {
+      const name = deps.uploadName ?? path.basename(localPath)
+      await deps.beforeRemoteUpload?.(snapshot.hash, parentId, name)
       item = await deps.accountService.uploadDriveSyncFile({
         parentId,
         path: snapshot.path,
-        name: path.basename(localPath),
+        name,
         expectedItemId: deps.operation.driveItemId ?? null,
+        ...(deps.expectedRemoteVersionId ? { expectedVersionId: deps.expectedRemoteVersionId } : {}),
         signal: deps.signal,
         onProgress: (completedBytes, totalBytes) => {
           progressWrites = progressWrites.then(async () => {

@@ -320,6 +320,13 @@ export interface DriveSyncBindingPreviewDto {
   readonly importedGitignoreRules: readonly string[]
   readonly detectedGitignoreRules: readonly string[]
   readonly initialTransfer?: DriveSyncInitialTransferPreviewDto | null
+  readonly confirmationToken?: string
+  readonly alignment?: DriveSyncAlignmentPreview
+}
+
+export interface DriveSyncAlignmentPreview {
+  readonly changes: readonly { readonly relativePath: string; readonly action: "upload" | "download" | "delete_local" | "delete_remote"; readonly kind: "file" | "folder" }[]
+  readonly unchanged: number
 }
 
 export type DriveSyncInitialTransferAction =
@@ -344,6 +351,11 @@ export interface DriveSyncInitialTransferPreviewDto {
 }
 
 export interface DriveSyncCreateSafeBindingInput {
+  /** Explicit one-time authority for bind_existing; omitted preserves exact-match binding. */
+  readonly authority?: "local" | "remote"
+  readonly confirmationToken?: string
+  readonly replaceBindingId?: string
+
   readonly driveItemId: string
   readonly driveItemName: string
   readonly kind: DriveItemType

@@ -3,6 +3,8 @@
 Date: 2026-06-28
 Scope: `server/`, `desktop/`, `shared/`, `docs/`
 
+> 2026-10-01 更新：显式首次对齐与替换流程以 `2026-10-01-drive-sync-guided-flow.md` 为准；未指定 authority 的已有对象绑定继续要求完全一致。
+
 ## Goal
 
 Add Drive file and folder sync between a user's own Synapse Drive items and local filesystem paths. A user can bind a Drive file to a local file, or a Drive folder to a local folder, then keep both sides synchronized while Synapse is running.
@@ -15,12 +17,12 @@ The first version should feel like an automatic sync client, but it must avoid u
 - The first version supports only the user's own Drive files and folders.
 - Shared items owned by other users are out of scope, even when the current user has edit permission.
 - Sync runs while Synapse is running. When Synapse exits, sync pauses. On the next launch, Synapse catches up using remote changes and a local scan.
-- Initial binding allows one side to contain content, or both sides when their included path/type trees and SHA-256 file hashes are exactly equal.
+- Initial binding allows one-sided transfer, exact-match binding, or explicit reviewed authority alignment as defined in the 2026-10-01 specification.
 - A Drive file can bind to a local file path only when the local file does not already exist.
 - A local file can bind to a new Drive file target only when the Drive target does not already exist.
 - A Drive folder can bind to a new or empty local folder.
 - A local folder can bind to a new Drive folder target.
-- Existing non-empty content on both sides is not merged during initial binding.
+- Existing non-empty content is never merged. Explicit one-time authority may mirror one side after a reviewed preview; without authority exact equality remains required.
 - Deletes propagate automatically, but they go to a recoverable trash location instead of being permanently deleted.
 - Conflicts pause the affected path and descendants while unrelated paths continue syncing.
 - Move and rename are first-class sync operations, not merely delete plus create.
@@ -283,7 +285,7 @@ Temporary attachment paths and Agent caches cannot become sync roots. Multiple i
 
 A ready binding preview includes the initial transfer summary and at most 200 ordered file/folder entries. The complete count remains available when the list is truncated, so an Agent can explain the first upload/download before requesting high-risk creation approval without returning an unbounded payload. `bind_existing` returns an empty transfer plan because it validates existing content rather than transferring it.
 
-Batch lifecycle and conflict requests are an Agent orchestration over the existing single-binding tools: resolve the full set first, execute sequentially, keep prior successes, and summarize partial failures. Changing a binding root, Drive target, or direction is intentionally not an in-place mutation; the Agent must disclose the non-atomic stop-and-recreate workflow, preserve editable rules, and never claim a failed replacement was migrated successfully.
+Batch lifecycle and conflict requests are an Agent orchestration over the existing single-binding tools: resolve the full set first, execute sequentially, keep prior successes, and summarize partial failures. Changing a binding root or Drive target uses bind_existing with authority and replaceBindingId. The old binding pauses before validation and remains until alignment succeeds. Preserve editable rules; partial failures retain paused records and recoverable content, not an atomic rollback.
 
 Site republish language remains distinct from local Drive sync. Updating or synchronizing an existing published site uses its remembered source folder and republish flow unless the user explicitly requests a continuing relationship with a local filesystem path.
 
