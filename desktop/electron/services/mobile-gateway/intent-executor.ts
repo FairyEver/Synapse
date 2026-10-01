@@ -8,7 +8,9 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
+import { terminalSessionReference } from "../../../app-capabilities/terminal/main/session-reference"
 import { TerminalContractError } from "../../../app-capabilities/terminal/shared/errors"
+import { buildTerminalSessionReferenceText } from "../../../app-capabilities/terminal/shared/session-reference"
 import type { AuditSink, PermissionAction } from "../../runtime/security/permission-guard"
 import type { MobileAttachment } from "./attachment-registry"
 import { AttachmentRegistry, createAttachment } from "./attachment-registry"
@@ -426,6 +428,22 @@ export class MobileIntentExecutor {
         await terminal.renameSession({ sessionId: intent.sessionId, title: intent.title })
         this.deps.requestSummary()
         return accepted(intent.intentId, { sessionId: intent.sessionId })
+      }
+
+      case "sessionReference": {
+        await this.deps.authorize("terminal.state.read", sessionResource(intent.sessionId))
+        const session = terminal.getSession({ sessionId: intent.sessionId })
+        const workspace = terminal.getWorkspaceForSession({ sessionId: session.id })
+        return accepted(intent.intentId, {
+          sessionId: session.id,
+          referenceText: buildTerminalSessionReferenceText({
+            workspaceId: workspace.id,
+            workspaceTitle: workspace.title,
+            sessionId: session.id,
+            sessionTitle: session.title,
+            sessionRef: terminalSessionReference(session.id),
+          }),
+        })
       }
 
       /**
@@ -923,7 +941,7 @@ export class MobileIntentError extends Error {
 
 function accepted(
   intentId: string,
-  extra: { readonly sessionId?: string; readonly createdSessionId?: string } = {},
+  extra: { readonly sessionId?: string; readonly createdSessionId?: string; readonly referenceText?: string } = {},
 ): MobileIntentResult {
   return { intentId, outcome: "accepted", ...extra }
 }
@@ -1013,6 +1031,7 @@ const UNFINISHED_OPERATION_MESSAGES: Readonly<Record<MobileIntent["kind"], strin
   history: "读取更早的输出没有完成。",
   stopAll: "停止所有终端没有完成。",
   rename: "重命名这个终端没有完成。",
+  sessionReference: "读取这个终端的会话引用没有完成。",
   resize: "调整终端大小没有完成。",
   releaseGrid: "还原电脑端布局没有完成。",
   create: "新建终端没有完成。",

@@ -1248,6 +1248,14 @@ struct TerminalScreen: View {
                 Text("重命名")
             }
             Button {
+                noteChromeActivity()
+                Task { await model.copySessionReference(sessionId) }
+            } label: {
+                Text("复制引用")
+            }
+            .disabled(!model.hasLiveTerminalSummary)
+            .accessibilityIdentifier("terminal-menu-copy-reference")
+            Button {
                 // Nothing copied is nothing to confirm — the same rule the send
                 // key follows. A terminal opened a moment ago has no output yet.
                 guard !store.plainText.isEmpty else { return }

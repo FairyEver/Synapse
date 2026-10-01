@@ -983,6 +983,8 @@ export type MobileIntent =
   })
   | MobileIntentEnvelope<"stopAll">
   | (MobileIntentEnvelope<"rename"> & { readonly sessionId: string; readonly title: string })
+  /** Read-only: the desktop formats the same reference its own Copy Reference action uses. */
+  | (MobileIntentEnvelope<"sessionReference"> & { readonly sessionId: string })
   /**
    * The phone sets the PTY grid, for the display mode where the phone drives the
    * size so its own rendering is exact rather than wrapped.
@@ -1186,6 +1188,8 @@ export interface MobileIntentResult {
   readonly code?: string
   readonly message?: string
   readonly sessionId?: string
+  /** Set for `sessionReference`: complete desktop-generated text, copied verbatim by the phone. */
+  readonly referenceText?: string
   /** Set for `create` and `launchCommand`, so the phone can open the new session immediately. */
   readonly createdSessionId?: string
   /**
@@ -1493,6 +1497,7 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
     case "unlock":
     case "stop":
     case "delete":
+    case "sessionReference":
       return boundedString(value.sessionId, 120)
     case "sync":
     case "ping":
@@ -1573,6 +1578,10 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
   if (value.message !== undefined &&
     !boundedString(value.message, MOBILE_FRAME_LIMITS.maxIntentResultMessageLength)) return false
   if (value.sessionId !== undefined && !boundedString(value.sessionId, 120)) return false
+  if (value.referenceText !== undefined && (
+    value.outcome !== "accepted" || !boundedString(value.sessionId, 120) ||
+    !boundedString(value.referenceText, MOBILE_FRAME_LIMITS.maxIntentResultMessageLength)
+  )) return false
   if (value.createdSessionId !== undefined && !boundedString(value.createdSessionId, 120)) return false
   if (value.landedPath !== undefined && !boundedString(value.landedPath, 512)) return false
   if (value.git !== undefined && !isMobileIntentGitResult(value.git)) return false

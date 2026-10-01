@@ -2091,6 +2091,36 @@ final class SynapseAppModel {
         ), to: desktop)
     }
 
+    func copySessionReference(_ sessionId: String) async {
+        let fail: (String) -> Void = { message in
+            if self.openSessions.contains(sessionId) {
+                self.raiseTerminalMessage(message, sessionId: sessionId, id: "terminal.reference:\(sessionId)")
+            } else {
+                self.notice(message, tone: .failure, id: "terminal.reference")
+            }
+        }
+        guard let desktop = selectedDesktopClientInstanceId,
+              realtime.state.isConnected, onlineDesktopIds.contains(desktop) else {
+            fail("电脑离线，无法复制会话引用。")
+            return
+        }
+        let account = accountGeneration
+        await TerminalSessionReferenceCopy.perform(
+            sessionId: sessionId,
+            send: { intent in
+                await self.awaitResult(of: intent, sentTo: desktop, timeoutSeconds: 10)
+            },
+            isCurrent: {
+                self.accountGeneration == account && self.selectedDesktopClientInstanceId == desktop
+                    && self.sessions.contains(where: { $0.id == sessionId })
+            },
+            copy: { text in
+                Clipboard.copy(text, saying: "引用已复制，仅电脑本次运行有效", id: "terminal.reference", on: self)
+            },
+            fail: fail
+        )
+    }
+
     /// Creates a terminal and returns its id once the desktop reports it, so the
     /// caller can navigate straight to a live session.
     func createSession(groupId: String, title: String? = nil) async -> String? {

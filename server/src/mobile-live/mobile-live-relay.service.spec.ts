@@ -59,6 +59,25 @@ function createHarness() {
   return { service, sendTerminalApproval, ...fanout }
 }
 
+describe("MobileLiveRelayService session references", () => {
+  it("forwards the desktop text unchanged to the requesting phone only", () => {
+    const { service, sendToMobile, sendToMobileClients } = createHarness()
+    const payload = {
+      mobileClientInstanceId: "phone-1",
+      result: {
+        intentId: "i-ref", outcome: "accepted" as const, sessionId: "sess-1",
+        referenceText: "workspace_id=ws-1\nworkspace_title=项目: Synapse\nsession_id=sess-1\nsession_title=构建 日志\nsession_ref=tsr_local.checksum",
+      },
+    }
+    service.handleIntentResult("user-1", payload)
+    expect(sendToMobile).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1", clientInstanceId: "phone-1",
+      message: expect.objectContaining({ type: "mobile.intentResult", payload }),
+    }))
+    expect(sendToMobileClients).not.toHaveBeenCalled()
+  })
+})
+
 /**
  * Progress is addressed, not broadcast.
  *

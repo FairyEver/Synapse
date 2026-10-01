@@ -14,9 +14,10 @@ import type {
 } from "@synapse/shared"
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
+import { terminalSessionReference } from "../../../app-capabilities/terminal/main/session-reference"
 import { terminalContractError } from "../../../app-capabilities/terminal/shared/errors"
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
-import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shared/workspace"
+import { collectTerminalPaneLeaves, type TerminalLayoutNode } from "../../../app-capabilities/terminal/shared/workspace"
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
 import {
   clampSummaryText,
@@ -154,6 +155,14 @@ class FakeTerminal {
 
   listWorkspaces(): FakeWorkspace[] {
     return [...this.workspaces.values()]
+  }
+
+  getWorkspaceForSession(input: { sessionId: string }): FakeWorkspace {
+    const workspace = this.listWorkspaces().find((item) => (
+      collectTerminalPaneLeaves(item.layout).some((pane) => pane.sessionId === input.sessionId)
+    ))
+    if (!workspace) throw terminalContractError("not_found", "not_found")
+    return workspace
   }
 
   /**
@@ -762,6 +771,55 @@ async function attach(
  * ------------------------------------------------------------------ */
 
 describe("MobileGatewayService", () => {
+  it("returns the desktop reference for the named split session without attaching or taking control", async () => {
+    const harness = createHarness()
+    addSession(harness, "sess-2", "构建 日志")
+    seedWorkspace(harness, {
+      type: "split", splitId: "split-1", direction: "horizontal", ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: { type: "leaf", paneId: "pane-2", sessionId: "sess-2" },
+    })
+    const request = intent({ v: 1, intentId: "i-ref", kind: "sessionReference", sessionId: "sess-2" })
+    await harness.gateway.handleIntent("phone-1", request)
+    expect(harness.results.at(-1)).toEqual({
+      mobileClientInstanceId: "phone-1",
+      result: {
+        intentId: "i-ref", outcome: "accepted", sessionId: "sess-2",
+        referenceText: [
+          "workspace_id=ws-1", "workspace_title=前端开发",
+          "session_id=sess-2", "session_title=构建 日志",
+          `session_ref=${terminalSessionReference("sess-2")}`,
+        ].join("\n"),
+      },
+    })
+    expect(harness.terminal.leaseOwner).toBeNull()
+    expect(harness.terminal.calls).not.toContain("acquireControl")
+    expect(harness.terminal.calls).not.toContain("sendCommand")
+    expect(harness.frames).toEqual([])
+    expect(harness.audits).toContainEqual(expect.objectContaining({
+      action: "terminal.state.read", resource: "terminal.session:sess-2", outcome: "allowed",
+    }))
+    // An uncertain retry replays the original answer rather than changing the clipboard payload.
+    await harness.gateway.handleIntent("phone-1", request)
+    expect(harness.results.at(-1)).toEqual(harness.results[0])
+  })
+
+  it("rejects a session reference when permission or its session/workspace is missing", async () => {
+    for (const failure of ["permission", "session", "workspace"] as const) {
+      const harness = createHarness()
+      harness.terminal.deny = failure === "permission"
+      if (failure === "session") harness.terminal.sessions.clear()
+      await harness.gateway.handleIntent("phone-1", intent({
+        v: 1, intentId: "i-ref", kind: "sessionReference", sessionId: "sess-1",
+      }))
+      expect(harness.results.at(-1)).toMatchObject({
+        result: { outcome: "rejected", code: failure === "permission" ? "permission_denied" : "not_found" },
+      })
+      expect(harness.results.at(-1)).not.toHaveProperty("result.referenceText")
+      expect(harness.terminal.leaseOwner).toBeNull()
+    }
+  })
+
   it("sends a full snapshot when a phone attaches", async () => {
     const harness = createHarness()
     await attach(harness)

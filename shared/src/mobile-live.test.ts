@@ -4,6 +4,7 @@ import {
   createLiveEnvelope,
   isLiveDesktopClientMessage,
   isLiveDesktopServerMessage,
+  isLiveMobileClientMessage,
   isLiveMobileServerMessage,
 } from "./live.js"
 import {
@@ -445,6 +446,31 @@ describe("mobile live protocol", () => {
       .toBe(true)
     expect(isMobileIntentResult({ intentId: "i1", outcome: "maybe" })).toBe(false)
     expect(isMobileIntentResult({ outcome: "accepted" })).toBe(false)
+  })
+
+  it("validates read-only session reference requests and bounded desktop replies", () => {
+    const request = { v: 1, intentId: "i-ref", kind: "sessionReference", sessionId: "s1" }
+    expect(isMobileIntent(request)).toBe(true)
+    expect(isMobileIntent({ ...request, sessionId: undefined })).toBe(false)
+    expect(isMobileIntent({ ...request, sessionId: "" })).toBe(false)
+    const payload = { desktopClientInstanceId: "desktop-1", mobileClientInstanceId: "phone-1", intent: request }
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, payload, envelopeMeta)
+    expect(isLiveMobileClientMessage(message)).toBe(true)
+    expect(isLiveDesktopServerMessage(message)).toBe(true)
+    const result = { intentId: "i-ref", outcome: "accepted", sessionId: "s1", referenceText: "session_id=s1" }
+    expect(isMobileIntentResult(result)).toBe(true)
+    expect(isMobileIntentResult({ ...result, referenceText: "" })).toBe(false)
+    expect(isMobileIntentResult({ ...result, referenceText: 123 })).toBe(false)
+    expect(isMobileIntentResult({ ...result, referenceText: "x".repeat(MOBILE_FRAME_LIMITS.maxIntentResultMessageLength + 1) }))
+      .toBe(false)
+    expect(isMobileIntentResult({ ...result, sessionId: undefined })).toBe(false)
+    expect(isMobileIntentResult({ ...result, outcome: "rejected" })).toBe(false)
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
+      mobileClientInstanceId: "phone-1", result,
+    }, envelopeMeta))).toBe(true)
+    expect(isLiveMobileServerMessage(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
+      mobileClientInstanceId: "phone-1", result,
+    }, envelopeMeta))).toBe(true)
   })
 
   it("validates transfer progress, where a zero total is a statement rather than a missing field", () => {

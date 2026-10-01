@@ -501,6 +501,8 @@ struct MobileIntentResult: Decodable {
     let message: String?
     let sessionId: String?
     let createdSessionId: String?
+    /// Desktop-generated Copy Reference text. The phone never reconstructs its fields.
+    var referenceText: String? = nil
     /// Set for `fileUpload`: where the file ended up on the computer. The phone
     /// cannot derive it, and needs it to undo the insertion it caused.
     let landedPath: String?

@@ -163,6 +163,15 @@ struct SessionListView: View {
     /// rule that only one row stays open.
     private func sessionRow(_ session: MobileSummarySession) -> some View {
         SessionRow(session: session)
+        .contextMenu {
+            Button {
+                Task { await model.copySessionReference(session.id) }
+            } label: {
+                Label("复制引用", systemImage: "doc.on.doc")
+            }
+            .disabled(!model.hasLiveTerminalSummary)
+            .accessibilityIdentifier("session-copy-reference-\(session.id)")
+        }
         // Swipe actions are the one place the app's tint is a *fill* rather than
         // an accent: the button paints its background with it and then draws the
         // icon and text on top in that same colour. The app-wide tint is

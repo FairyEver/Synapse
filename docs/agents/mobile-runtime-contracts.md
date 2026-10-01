@@ -25,6 +25,7 @@
 - 通知未读数的现有产品上限为 99：文字展示超过 99 时用「99+」，App 图标角标最多传 99；没有未读时不显示角标。统一使用 `NotificationText.badgeCount` 和 `NotificationBadgePreference.badgeLimit`，无障碍标签仍读真实条数。
 - 通知项打开对应目标后关闭面板；「待处理」数据来自实时会话列表，终端目标须选中对应会话。界面呈现方式由 `apple-design` 决定。
 - 剪贴板历史与快捷输入保留现有动作边界：点正文执行复制或填入，独立的全文操作只打开只读预览。系统分享复用 `DesignSystem/SystemShare.swift`，剪贴板写入复用 `DesignSystem/Clipboard.swift`，不在新入口复制实现。
+- 手机终端的「复制引用」只能按具体 `sessionId` 请求当前电脑：桌面主进程复用 PC 的格式化函数生成完整五行文本，手机不得根据摘要重建字段或生成 `session_ref`。列表长按菜单与终端更多菜单共用这一请求，复制无需 attach、控制租约或尺寸修改；失败不得覆盖手机剪贴板，切换电脑、退出账号或会话结束后丢弃迟到结果。引用只对生成它的电脑本次运行有效。协议新增 `sessionReference` intent 与可选 `referenceText` 回执字段，上线顺序为服务端 → 桌面端 → 手机端。
 
 ## 站内网页身份
 
