@@ -24,7 +24,8 @@ describe('DriveCommentsRail', () => {
   it('lets the owner resolve and reopen an entire discussion without removing its comments', async () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ onUpdateThreadStatus })
-    expect(document.body.textContent).toContain('未解决')
+    expect(requiredButtonWithLabel('标记为已解决').textContent).toBe('标记为已解决')
+    expect(document.body.textContent).not.toContain('未解决')
     await click(requiredButtonWithLabel('标记为已解决'))
     expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
     rerenderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
@@ -32,7 +33,9 @@ describe('DriveCommentsRail', () => {
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
     expect(buttonWithText('回复')).not.toBeNull()
-    await click(requiredButtonWithLabel('重新打开'))
+    await openStatusMenu()
+    expect(onUpdateThreadStatus).toHaveBeenCalledTimes(1)
+    await click(menuItemWithText('重新打开'))
     expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({ threadId: 'thread-1', status: 'open' })
   })
 
@@ -42,6 +45,7 @@ describe('DriveCommentsRail', () => {
     expect(document.body.textContent).not.toContain('重新打开')
     expect(document.body.textContent).not.toContain('标记为已解决')
     expect(buttonWithLabel('重新打开')).toBeNull()
+    expect(buttonWithLabel('已解决')).toBeNull()
     expect(buttonWithLabel('标记为已解决')).toBeNull()
     await openCommentMenu()
     expect(menuItemWithText('编辑评论')).not.toBeNull()
@@ -58,10 +62,30 @@ describe('DriveCommentsRail', () => {
     expect(onUpdateThreadStatus).toHaveBeenCalledTimes(1)
     await act(async () => { reject(new Error('保存失败，请重试')) })
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('保存失败，请重试')
-    expect(document.body.textContent).toContain('未解决')
+    expect(button.textContent).toBe('标记为已解决')
+    expect(buttonWithLabel('已解决')).toBeNull()
     expect(button.disabled).toBe(false)
     onUpdateThreadStatus.mockResolvedValueOnce(undefined)
     await click(button)
+    expect(onUpdateThreadStatus).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('keeps the resolved status when reopening fails and permits retry from its menu', async () => {
+    let reject!: (error: Error) => void
+    const onUpdateThreadStatus = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise }))
+    renderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    await openStatusMenu()
+    await click(menuItemWithText('重新打开'))
+    expect(requiredButtonWithLabel('已解决').disabled).toBe(true)
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'open' })
+    await act(async () => { reject(new Error('重新打开失败，请重试')) })
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('重新打开失败，请重试')
+    expect(requiredButtonWithLabel('已解决').disabled).toBe(false)
+    expect(buttonWithLabel('标记为已解决')).toBeNull()
+    onUpdateThreadStatus.mockResolvedValueOnce(undefined)
+    await openStatusMenu()
+    await click(menuItemWithText('重新打开'))
     expect(onUpdateThreadStatus).toHaveBeenCalledTimes(2)
     expect(document.querySelector('[role="alert"]')).toBeNull()
   })
@@ -96,9 +120,9 @@ describe('DriveCommentsRail', () => {
     const onUpdateComment = vi.fn(() => new Promise<void>((resolve) => { finishEdit = resolve }))
     rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply, onUpdateComment })
     await click(buttonWithText('保存'))
-    expect(requiredButtonWithLabel('重新打开').disabled).toBe(true)
+    expect(requiredButtonWithLabel('已解决').disabled).toBe(true)
     await act(async () => { finishEdit() })
-    expect(requiredButtonWithLabel('重新打开').disabled).toBe(false)
+    expect(requiredButtonWithLabel('已解决').disabled).toBe(false)
   })
 
   it('supports resolving unlocated discussions in the compact dialog', async () => {
@@ -964,26 +988,70 @@ describe('DriveCommentsRail', () => {
     expect(onDeleteComment).toHaveBeenCalledWith('comment-2')
   })
 
-  it('keeps quote, status and a named icon action on one header row', () => {
+  it('shows one resolved status menu beside the quote without a separate action or badge', () => {
     renderRail({ threads: [thread({ status: 'resolved' })] })
     const quote = requiredButtonWithLabel('查看评论：Note')
-    const statusAction = requiredButtonWithLabel('重新打开')
+    const statusAction = requiredButtonWithLabel('已解决')
     expect(quote.parentElement).toBe(statusAction.parentElement)
-    expect(quote.parentElement?.querySelector('[data-slot="badge"]')?.textContent).toBe('已解决')
-    expect(quote.parentElement?.querySelector('.lucide-check-check')).not.toBeNull()
-    expect(statusAction.querySelector('.lucide-rotate-ccw')).not.toBeNull()
-    expect(statusAction.textContent).toBe('')
+    expect(quote.parentElement?.querySelectorAll('button')).toHaveLength(2)
+    expect(quote.parentElement?.querySelector('[data-slot="badge"]')).toBeNull()
+    expect(buttonWithLabel('重新打开')).toBeNull()
+    expect(statusAction.textContent).toBe('已解决')
+    expect(statusAction.getAttribute('aria-haspopup')).toBe('menu')
   })
 
-  it('does not focus the thread when its status icon is clicked', async () => {
+  it('does not focus the thread when its status action or menu icon is clicked', async () => {
     const onFocusThread = vi.fn()
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ onFocusThread, onUpdateThreadStatus })
-    const icon = requiredButtonWithLabel('标记为已解决').querySelector('svg')
-    if (!icon) throw new Error('Missing status icon')
-    await act(async () => { icon.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await click(requiredButtonWithLabel('标记为已解决'))
     expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
     expect(onFocusThread).not.toHaveBeenCalled()
+    rerenderRail({ threads: [thread({ status: 'resolved' })], onFocusThread, onUpdateThreadStatus })
+    await openStatusMenu()
+    const icon = menuItemWithText('重新打开').querySelector('svg')
+    if (!icon) throw new Error('Missing reopen icon')
+    await act(async () => { icon.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({ threadId: 'thread-1', status: 'open' })
+    expect(onFocusThread).not.toHaveBeenCalled()
+  })
+
+  it('keeps keyboard focus on the status control after resolving', async () => {
+    const onUpdateThreadStatus = vi.fn(async () => {
+      rerenderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    })
+    renderRail({ onUpdateThreadStatus })
+    const action = requiredButtonWithLabel('标记为已解决')
+    await act(async () => { action.focus() })
+    await click(action)
+    expect(document.activeElement).toBe(requiredButtonWithLabel('已解决'))
+  })
+
+  it('returns keyboard focus to the resolve button after reopening from the menu', async () => {
+    const onUpdateThreadStatus = vi.fn(async () => {
+      rerenderRail({ onUpdateThreadStatus })
+    })
+    renderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    await openStatusMenu()
+    const reopen = menuItemWithText('重新打开')
+    await act(async () => { reopen.focus() })
+    await keyDown(reopen, { key: 'Enter' })
+    expect(document.activeElement).toBe(requiredButtonWithLabel('标记为已解决'))
+  })
+
+  it('does not take focus from a reply being written while the status update finishes', async () => {
+    let finish!: () => void
+    const onUpdateThreadStatus = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    renderRail({ activeThreadId: 'thread-1', onUpdateThreadStatus })
+    const action = requiredButtonWithLabel('标记为已解决')
+    await act(async () => { action.focus() })
+    await click(action)
+    await act(async () => { textarea().focus() })
+    await inputValue(textarea(), 'Still writing')
+    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onUpdateThreadStatus })
+    await act(async () => { finish() })
+    expect(document.activeElement).toBe(textarea())
+    expect(textarea().value).toBe('Still writing')
   })
 
   it('moves focus into the edit input without focusing the thread when the menu closes', async () => {
@@ -1152,6 +1220,10 @@ async function keyDown(element: HTMLElement, init: KeyboardEventInit) {
   await act(async () => {
     element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
   })
+}
+
+async function openStatusMenu() {
+  await keyDown(requiredButtonWithLabel('已解决'), { key: 'Enter' })
 }
 
 async function openCommentMenu(index = 0) {

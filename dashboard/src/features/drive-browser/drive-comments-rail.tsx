@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto, DriveAnnotationThreadStatus } from '@synapse/shared'
-import { Check, CheckCheck, ChevronDown, ChevronRight, ChevronUp, Circle, Loader2, MapPinOff, MoreHorizontal, Pencil, Quote, RefreshCw, Reply, RotateCcw, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Loader2, MapPinOff, MoreHorizontal, Pencil, Quote, RefreshCw, Reply, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { RelativeTime } from '@/components/relative-time'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -543,6 +543,9 @@ function ThreadView({
     : { kind: 'closed' })
   const [statusSubmitting, setStatusSubmitting] = useState(false)
   const statusSubmittingRef = useRef(false)
+  const statusButtonRef = useRef<HTMLButtonElement>(null)
+  const statusMenuRef = useRef<HTMLDivElement>(null)
+  const restoreStatusFocusRef = useRef(false)
   const [statusError, setStatusError] = useState<string | null>(null)
   const previousActiveRef = useRef(active)
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
@@ -555,10 +558,19 @@ function ThreadView({
   const composerSubmitting = composer.kind !== 'closed' && composer.submitting
   const quote = annotationQuoteExcerpt(thread)
   const resolved = thread.status === 'resolved'
-  const statusActionLabel = resolved ? '重新打开' : '标记为已解决'
+
+  useLayoutEffect(() => {
+    if (statusSubmitting || !restoreStatusFocusRef.current) return
+    if (document.activeElement === document.body || document.activeElement === statusButtonRef.current) {
+      statusButtonRef.current?.focus()
+    }
+    restoreStatusFocusRef.current = false
+  }, [resolved, statusSubmitting])
 
   const changeStatus = async () => {
     if (statusSubmittingRef.current || composerSubmitting || !thread.permissions.canChangeStatus) return
+    restoreStatusFocusRef.current = document.activeElement === statusButtonRef.current
+      || Boolean(statusMenuRef.current?.contains(document.activeElement))
     statusSubmittingRef.current = true
     setStatusSubmitting(true)
     setStatusError(null)
@@ -663,30 +675,55 @@ function ThreadView({
             </TooltipTrigger>
             <TooltipContent className='max-w-sm break-all'>{quote}</TooltipContent>
           </Tooltip>
-          <Badge variant={resolved ? 'secondary' : 'outline'}>
-            {resolved ? <CheckCheck aria-hidden /> : <Circle aria-hidden />}
-            {resolved ? '已解决' : '未解决'}
-          </Badge>
           {thread.permissions.canChangeStatus ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='icon'
-                  className={compact ? 'size-11' : undefined}
-                  data-drive-telemetry-event='web.drive.comment.status-update'
-                  disabled={composerSubmitting || statusSubmitting}
-                  aria-label={statusActionLabel}
-                  aria-busy={statusSubmitting}
-                  onClick={() => { void changeStatus() }}
-                >
-                  {statusSubmitting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : resolved ? <RotateCcw aria-hidden /> : <Check aria-hidden />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{statusActionLabel}</TooltipContent>
-            </Tooltip>
-          ) : null}
+            resolved ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    ref={statusButtonRef}
+                    type='button'
+                    variant='secondary'
+                    className={compact ? 'min-h-11' : undefined}
+                    disabled={composerSubmitting || statusSubmitting}
+                    aria-label='已解决'
+                    aria-busy={statusSubmitting}
+                  >
+                    {statusSubmitting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : null}
+                    已解决
+                    <ChevronDown aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent ref={statusMenuRef} align='end' data-drive-telemetry-scope='portal' onClick={(event) => event.stopPropagation()}>
+                  <DropdownMenuItem
+                    className={compact ? 'min-h-11' : undefined}
+                    data-drive-telemetry-event='web.drive.comment.status-update'
+                    disabled={composerSubmitting || statusSubmitting}
+                    onSelect={() => { void changeStatus() }}
+                  >
+                    <RotateCcw aria-hidden />
+                    重新打开
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                ref={statusButtonRef}
+                type='button'
+                variant='secondary'
+                className={compact ? 'min-h-11' : undefined}
+                data-drive-telemetry-event='web.drive.comment.status-update'
+                disabled={composerSubmitting || statusSubmitting}
+                aria-label='标记为已解决'
+                aria-busy={statusSubmitting}
+                onClick={() => { void changeStatus() }}
+              >
+                {statusSubmitting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : null}
+                标记为已解决
+              </Button>
+            )
+          ) : (
+            <Badge variant={resolved ? 'secondary' : 'outline'}>{resolved ? '已解决' : '未解决'}</Badge>
+          )}
         </div>
         {statusError ? <p role='alert' className='text-xs text-destructive'>{statusError}</p> : null}
         {thread.anchorStatus === 'orphaned' || positionUnavailable ? (
