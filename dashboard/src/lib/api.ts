@@ -1070,6 +1070,7 @@ type DriveBrowserSurface = 'standalone' | 'console'
 type DriveBrowserChildrenOptions = {
   childrenOffset?: number
   childrenLimit?: number
+  signal?: AbortSignal
 }
 
 type DriveChildrenPageOptions = {
@@ -1255,10 +1256,11 @@ export const driveBrowserApi = {
     options: DriveBrowserChildrenOptions = {}
   ) =>
     request<DriveBrowserSnapshotDto>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix(surface, options)}`
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix(surface, options)}`,
+      { signal: options.signal }
     ),
   getConsoleRoot: (options: DriveBrowserChildrenOptions = {}) =>
-    request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root${driveBrowserQuerySuffix('standalone', options)}`),
+    request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root${driveBrowserQuerySuffix('standalone', options)}`, { signal: options.signal }),
   updateOwnerText: (itemId: string, input: DriveFileTextUpdateInput) =>
     request<DriveFileContentUpdateResult>(
       `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/content`,
@@ -1279,11 +1281,13 @@ export const driveBrowserApi = {
     ),
   getShareRoot: (shareId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`,
+      { signal: normalizeDriveBrowserShareOptions(options).signal }
     ),
   getShareItem: (shareId: string, itemId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`,
+      { signal: normalizeDriveBrowserShareOptions(options).signal }
     ),
   unlockShare: (shareId: string, password: string, itemId?: string, options: DriveBrowserChildrenOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
@@ -1293,6 +1297,7 @@ export const driveBrowserApi = {
       {
         method: 'POST',
         body: JSON.stringify({ password }),
+        signal: options.signal,
       }
     ),
   updateShareText: (shareId: string, itemId: string | null | undefined, input: DriveFileTextUpdateInput) =>

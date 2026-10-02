@@ -37,14 +37,15 @@ function useAgentRuntimeStatus(projectId?: string) {
   const [error, setError] = useState<string | null>(null)
   const requestGuardRef = useRef(createLatestRequestGuard())
   const loadingRequestIdRef = useRef(0)
-  const loadingRefreshPendingRef = useRef(false)
+  const refreshRequestIdRef = useRef<number | null>(null)
 
   const refresh = useCallback((options: AgentRuntimeRefreshOptions = {}) => {
-    const request = requestGuardRef.current.begin()
     const showLoading = options.showLoading ?? true
+    if (!showLoading && refreshRequestIdRef.current !== null) return
+    const request = requestGuardRef.current.begin()
+    refreshRequestIdRef.current = request.id
     if (showLoading) {
       loadingRequestIdRef.current = request.id
-      loadingRefreshPendingRef.current = true
       setLoading(true)
       setError(null)
     }
@@ -70,8 +71,10 @@ function useAgentRuntimeStatus(projectId?: string) {
         }
       })
       .finally(() => {
+        if (refreshRequestIdRef.current === request.id) {
+          refreshRequestIdRef.current = null
+        }
         if (showLoading && loadingRequestIdRef.current === request.id) {
-          loadingRefreshPendingRef.current = false
           setLoading(false)
         }
       })
@@ -81,6 +84,8 @@ function useAgentRuntimeStatus(projectId?: string) {
     refresh()
     return () => {
       requestGuardRef.current.cancel()
+      refreshRequestIdRef.current = null
+      loadingRequestIdRef.current = 0
     }
   }, [refresh])
 
@@ -89,7 +94,7 @@ function useAgentRuntimeStatus(projectId?: string) {
 
     const refreshWhenVisible = () => {
       if (document.visibilityState === "hidden") return
-      if (loadingRefreshPendingRef.current) return
+      if (refreshRequestIdRef.current !== null) return
       // Debounce: coalesce rapid events from focus + visibilitychange
       // that fire in quick succession when user switches back to the tab.
       if (debounceTimer !== null) clearTimeout(debounceTimer)

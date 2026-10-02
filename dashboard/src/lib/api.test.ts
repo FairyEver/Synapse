@@ -847,6 +847,42 @@ describe('driveBrowserApi', () => {
     )
   })
 
+  it('passes cancellation signals to every browser snapshot endpoint without putting them in URLs', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+    const { signal } = new AbortController()
+
+    await driveBrowserApi.getOwnerItem('item-1', 'standalone', { signal })
+    await driveBrowserApi.getConsoleRoot({ signal })
+    await driveBrowserApi.getShareRoot('share-1', { signal })
+    await driveBrowserApi.getShareItem('share-1', 'item-1', { signal })
+    await driveBrowserApi.unlockShare('share-1', 'password', 'item-1', { signal })
+
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+    for (const [url, options] of fetchMock.mock.calls) {
+      expect(url).not.toContain('signal')
+      expect(options).toMatchObject({ credentials: 'include', signal })
+    }
+  })
+
+  it('propagates an aborted snapshot request without expiring the user session', async () => {
+    const controller = new AbortController()
+    const expired = vi.fn()
+    const unsubscribe = subscribeAuthExpired(expired)
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+
+    try {
+      const request = driveBrowserApi.getConsoleRoot({ signal: controller.signal })
+      const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' })
+      controller.abort()
+      await rejected
+      expect(expired).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('uses share browser endpoints and unlocks with POST JSON', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 

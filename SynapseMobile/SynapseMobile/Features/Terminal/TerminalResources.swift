@@ -82,10 +82,15 @@ struct TerminalResourceCollector {
             occurrences.removeAll()
         } else {
             let lastChanged = frame.from + frame.lines.count - 1
-            for (start, occurrence) in occurrences {
+            let invalidated = occurrences.compactMap { start, occurrence -> (Int, Occurrence, Bool)? in
                 let wasRewritten = !frame.lines.isEmpty && start <= lastChanged && occurrence.end >= frame.from
                 let hasDisappeared = lines[start] == nil || lines[occurrence.end] == nil
-                guard wasRewritten || hasDisappeared else { continue }
+                guard wasRewritten || hasDisappeared else { return nil }
+                return (start, occurrence, hasDisappeared)
+            }
+            // Mutate after the scan: an iterator retaining the dictionary's storage
+            // would copy all retained occurrences on its first removal.
+            for (start, occurrence, hasDisappeared) in invalidated {
                 if hasDisappeared && start < frame.from {
                     archivedIDs.formUnion(occurrence.ids)
                 }
@@ -93,14 +98,25 @@ struct TerminalResourceCollector {
                 if lines[start] != nil { starts.insert(start) }
             }
         }
+        var previousStart: Int?
         for offset in frame.lines.indices {
             let index = frame.from + offset
-            guard lines[index] != nil else { continue }
+            guard lines[index] != nil else {
+                previousStart = nil
+                continue
+            }
             var start = index
             while start > 0, let current = lines[start], let previous = lines[start - 1],
                   Self.continues(previous: previous, next: current, columns: columns) {
+                // Consecutive rows in this frame share the resolved head. Walking
+                // back from every row makes a long wrapped line quadratic.
+                if start == index, let previousStart {
+                    start = previousStart
+                    break
+                }
                 start -= 1
             }
+            previousStart = start
             // The phone has only the tail of this wrapped row; wait for history.
             if lines[start]?.wrappedFromPrevious == true, lines[start - 1] == nil { continue }
             starts.insert(start)
@@ -118,23 +134,29 @@ struct TerminalResourceCollector {
             waiting.remove(start)
             var ids: Set<String> = []
             for resource in Self.resources(in: assembly) {
-                if resources.contains(where: { Self.isIncompleteSharePrefix(resource.url, of: $0.url) }) {
-                    continue
-                }
-                let incomplete = resources.filter { Self.isIncompleteSharePrefix($0.url, of: resource.url) }
-                if !incomplete.isEmpty {
-                    let removedIDs = Set(incomplete.map(\.id))
-                    resources.removeAll { removedIDs.contains($0.id) }
-                    listedIDs.subtract(removedIDs)
-                    archivedIDs.subtract(removedIDs)
-                    changed = true
+                // Only this server's share URLs can replace a truncated share ID.
+                // Other links must not scan the entire resource history twice.
+                if Self.shareRootID(resource.url) != nil {
+                    if resources.contains(where: { Self.isIncompleteSharePrefix(resource.url, of: $0.url) }) {
+                        continue
+                    }
+                    let incomplete = resources.filter { Self.isIncompleteSharePrefix($0.url, of: resource.url) }
+                    if !incomplete.isEmpty {
+                        let removedIDs = Set(incomplete.map(\.id))
+                        resources.removeAll { removedIDs.contains($0.id) }
+                        listedIDs.subtract(removedIDs)
+                        archivedIDs.subtract(removedIDs)
+                        changed = true
+                    }
                 }
                 ids.insert(resource.id)
                 guard listedIDs.insert(resource.id).inserted else { continue }
                 resources.insert(resource, at: 0)
                 changed = true
             }
-            occurrences[start] = Occurrence(end: assembly.end, ids: ids)
+            // Ordinary output has no links to invalidate. Keeping an empty entry
+            // for every row made each subsequent frame scan the entire scrollback.
+            if !ids.isEmpty { occurrences[start] = Occurrence(end: assembly.end, ids: ids) }
         }
         let activeIDs = archivedIDs.union(occurrences.values.flatMap(\.ids))
         let previousCount = resources.count
@@ -169,7 +191,7 @@ struct TerminalResourceCollector {
             text: text,
             end: end,
             hardBreaks: hardBreaks,
-            uncertainEnd: !line.wrappedToNext && endsInsideURL(text) && fillsGrid(line.text, columns: columns)
+            uncertainEnd: !line.wrappedToNext && fillsGrid(line.text, columns: columns) && endsInsideURL(text)
         )
     }
 
@@ -178,13 +200,13 @@ struct TerminalResourceCollector {
     /// filled to the last column doing it.
     private static func mayContinue(_ text: String, row: TerminalLine, columns: Int) -> Bool {
         if row.wrappedToNext { return true }
-        return endsInsideURL(text) && fillsGrid(row.text, columns: columns)
+        return fillsGrid(row.text, columns: columns) && endsInsideURL(text)
     }
 
     /// Whether `next` is the row `previous` continues into.
     private static func continues(previous: TerminalLine, next: TerminalLine, columns: Int) -> Bool {
         if previous.wrappedToNext && next.wrappedFromPrevious { return true }
-        guard holdsURLTail(previous.text), fillsGrid(previous.text, columns: columns) else { return false }
+        guard fillsGrid(previous.text, columns: columns), holdsURLTail(previous.text) else { return false }
         return opensWithURLTail(next.text)
     }
 

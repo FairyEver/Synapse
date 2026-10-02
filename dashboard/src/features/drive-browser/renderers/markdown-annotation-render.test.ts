@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import type { DriveAnnotationThreadDto, DriveMarkdownProjectionDto } from '@synapse/shared'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderMarkdownAnnotationHtml } from './markdown-annotation-render'
 
 describe('renderMarkdownAnnotationHtml', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('resolves attached annotation ranges without changing rendered markdown html', () => {
     const html = '<p>这是 <strong>重点</strong> 内容</p>'
     const result = renderMarkdownAnnotationHtml(html, [thread()], 'version-1')
@@ -191,6 +193,55 @@ describe('renderMarkdownAnnotationHtml', () => {
     })
   })
 
+  it('scans Unicode text once for many cached anchors and preserves their DOM offsets', () => {
+    const text = '😀 Note '.repeat(100)
+    const iterator = String.prototype[Symbol.iterator]
+    let fullTextScans = 0
+    vi.spyOn(String.prototype, Symbol.iterator).mockImplementation(function (this: string) {
+      if (String(this) === text) fullTextScans += 1
+      return iterator.call(this)
+    })
+    const threads = Array.from({ length: 100 }, (_value, index): DriveAnnotationThreadDto => {
+      const base = unicodeAnchoredThread()
+      const start = index * 7 + 2
+      return {
+        ...base,
+        id: `thread-${index}`,
+        anchor: {
+          ...base.anchor!,
+          resolvedRenderedRange: { start, end: start + 4 },
+        },
+      }
+    })
+
+    const result = renderMarkdownAnnotationHtml(`<p>${text}</p>`, threads, 'version-1')
+
+    expect(fullTextScans).toBe(1)
+    expect(result.resolved).toHaveLength(100)
+    result.resolved.forEach((range, index) => {
+      expect(range).toMatchObject({ anchorStatus: 'attached', range: { start: index * 8 + 3, end: index * 8 + 7 } })
+    })
+  })
+
+  it.each([
+    { range: { start: -4, end: 100 }, quote: 'Note', expected: { start: 3, end: 7 } },
+    { range: { start: 100, end: 100 }, quote: '', expected: { start: 7, end: 7 } },
+    { range: { start: 2, end: 2 }, quote: '', expected: { start: 3, end: 3 } },
+    { range: { start: 2.9, end: 6.9 }, quote: 'Note', expected: { start: 3, end: 7 } },
+  ])('preserves code-point slicing semantics for cached range $range', ({ range, quote, expected }) => {
+    const base = unicodeAnchoredThread()
+    const result = renderMarkdownAnnotationHtml('<p>😀 Note</p>', [{
+      ...base,
+      anchor: {
+        ...base.anchor!,
+        selectors: { ...base.anchor!.selectors, quote: { exact: quote, prefix: '', suffix: '' } },
+        resolvedRenderedRange: range,
+      },
+    }], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({ anchorStatus: 'attached', range: expected })
+  })
+
   it('does not attach an exact cached anchor to different rendered text', () => {
     const result = renderMarkdownAnnotationHtml('<p>错误位置正确原文</p>', [anchoredThread()], 'version-1')
 
@@ -215,6 +266,27 @@ describe('renderMarkdownAnnotationHtml', () => {
       anchorStatus: 'attached',
       range: null,
     })
+  })
+
+  it('reads rendered image identities once for many image comments and keeps missing images orphaned', () => {
+    const querySelectorAll = vi.spyOn(DocumentFragment.prototype, 'querySelectorAll')
+    const threads = Array.from({ length: 100 }, (_value, index): DriveAnnotationThreadDto => ({
+      ...imageThread(),
+      id: `image-thread-${index}`,
+    }))
+    const missing = imageThread()
+    if (missing.target.kind !== 'image') throw new Error('image target expected')
+    threads.push({ ...missing, id: 'missing-image', target: { ...missing.target, imageId: 'missing' } })
+
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1"></p>',
+      threads,
+      'version-1',
+    )
+
+    expect(querySelectorAll.mock.calls.filter(([selector]) => selector === '[data-drive-markdown-image-id]')).toHaveLength(1)
+    expect(result.resolved.slice(0, 100).every((range) => range.anchorStatus === 'attached' && range.imageId === 'mdimg_1')).toBe(true)
+    expect(result.resolved[100]).toMatchObject({ threadId: 'missing-image', anchorStatus: 'orphaned', imageId: null })
   })
 
   it('orphans an image thread when the image resource identity changes', () => {

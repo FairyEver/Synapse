@@ -209,4 +209,40 @@ describe("useGitWorktreeStatus", () => {
 
     expect(bridge.git.getSnapshot).toHaveBeenCalledTimes(2)
   })
+
+  it("preserves selections in a 10,000-file refresh with linear path reads", async () => {
+    const paths = Array.from({ length: 10_000 }, (_, index) => `docs/file-${index}.md`)
+    let pathReads = 0
+    const nextChanges = [...paths].reverse().map((path) => ({
+      ...fileChange(path),
+      get path() {
+        pathReads += 1
+        return path
+      },
+    }))
+    bridge.git.getSnapshot
+      .mockResolvedValueOnce({ ...emptySnapshot(), changes: paths.map(fileChange) })
+      .mockResolvedValueOnce({ ...emptySnapshot(), changes: nextChanges })
+    bridge.git.getDiff.mockImplementation(({ path }: { readonly path: string }) => Promise.resolve(diffForPath(path)))
+    let status!: ReturnType<typeof useGitWorktreeStatus>
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookHarness onStatus={(next) => { status = next }} />)
+    })
+    await act(async () => {
+      status.togglePath(paths[100]!)
+    })
+    await act(async () => {
+      await status.refresh({ background: true })
+    })
+
+    expect(status.selectedPaths).toEqual(paths.filter((path) => path !== paths[100]))
+    expect(status.selectedFile?.path).toBe(paths[0])
+    // Counting reads keeps this regression independent of machine speed.
+    expect(pathReads).toBeLessThanOrEqual(paths.length * 3)
+  })
 })

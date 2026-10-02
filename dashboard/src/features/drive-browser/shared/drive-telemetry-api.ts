@@ -39,7 +39,7 @@ function trackApi<Api extends Record<string, unknown>>(api: Api, namespace: stri
             return resolved
           },
           (error) => {
-            finish('failure')
+            finish(error instanceof Error && error.name === 'AbortError' ? 'cancelled' : 'failure')
             throw error
           },
         )

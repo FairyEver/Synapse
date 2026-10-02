@@ -58,6 +58,7 @@ export type DriveBrowserState =
 type DriveBrowserLoadOptions = {
   childrenOffset?: number
   childrenLimit?: number
+  signal?: AbortSignal
 }
 
 type KeyedDriveBrowserSnapshot = {
@@ -92,7 +93,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
 
   const query = useQuery({
     queryKey,
-    queryFn: () => loadDriveBrowser(input),
+    queryFn: ({ signal }) => loadDriveBrowser(input, { signal }),
     enabled: unlockedSnapshot === null,
   })
   const unlockMutation = useMutation({

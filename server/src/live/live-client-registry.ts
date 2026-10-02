@@ -30,6 +30,8 @@ export class LiveClientRegistry {
   private readonly clients = new Map<string, LiveClientInstance>()
   /** Secondary index: connectionId -> client key, kept in sync with `clients`. */
   private readonly connectionKeys = new Map<string, string>()
+  /** Account-scoped reads must not scan the connections of every other user. */
+  private readonly userKeys = new Map<string, Set<string>>()
   private heartbeatTimeoutMs = 45_000
   private offlineRetentionMs = 60 * 60_000
   private staleGraceMs = 45_000
@@ -77,6 +79,9 @@ export class LiveClientRegistry {
     }
 
     this.clients.set(key, client)
+    const userKeys = this.userKeys.get(input.userId) ?? new Set<string>()
+    userKeys.add(key)
+    this.userKeys.set(input.userId, userKeys)
     this.linkConnection(input.connectionId, key)
     return client
   }
@@ -118,6 +123,9 @@ export class LiveClientRegistry {
         if (this.isOfflineExpired(client, now)) {
           this.unlinkConnection(client.connectionId, key)
           this.clients.delete(key)
+          const userKeys = this.userKeys.get(client.userId)
+          userKeys?.delete(key)
+          if (userKeys?.size === 0) this.userKeys.delete(client.userId)
         }
         continue
       }
@@ -155,10 +163,9 @@ export class LiveClientRegistry {
   listByUser(userId: string): LiveClientInstance[] {
     const matched: Array<[string, LiveClientInstance]> = []
 
-    for (const entry of this.clients) {
-      if (entry[1].userId === userId) {
-        matched.push(entry)
-      }
+    for (const key of this.userKeys.get(userId) ?? []) {
+      const client = this.clients.get(key)
+      if (client) matched.push([key, client])
     }
 
     return matched

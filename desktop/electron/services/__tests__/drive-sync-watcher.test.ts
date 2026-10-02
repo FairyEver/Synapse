@@ -301,7 +301,249 @@ describe("drive sync watcher", () => {
       error: expect.any(Error),
     })])
   })
+
+  it("reports path inspection errors and keeps processing later events without emitting deletes", async () => {
+    const changes: Array<readonly DriveSyncLocalChange[]> = []
+    const errors: unknown[] = []
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({
+      debounceMs: 1,
+      watch: fakeWatch.watch,
+      onChanges: (batch) => { changes.push(batch) },
+      onError: (input) => { errors.push(input) },
+    })
+    watcher.reconcile([binding({ localPath: tempDir })])
+    await writeFile(path.join(tempDir, "not-a-directory"), "file", "utf8")
+
+    expect(() => fakeWatch.emit(tempDir, "rename", "not-a-directory/child.md")).not.toThrow()
+    await vi.runAllTimersAsync()
+    expect(changes).toEqual([])
+    expect(errors).toEqual([expect.objectContaining({
+      bindingId: "binding-1",
+      localPath: tempDir,
+      error: expect.objectContaining({ code: "ENOTDIR" }),
+    })])
+
+    await writeFile(path.join(tempDir, "notes.md"), "hello", "utf8")
+    fakeWatch.emit(tempDir, "change", "notes.md")
+    await vi.runAllTimersAsync()
+    expect(changes).toEqual([[
+      expect.objectContaining({ relativePath: "notes.md", kind: "modified", localKind: "file" }),
+    ]])
+    watcher.stop()
+  })
+
+  it.each(["modified", "deleted"] as const)("keeps a newer %s event when an older batch fails", async (kind) => {
+    const firstFlush = deferredFlush()
+    const onChanges = vi.fn<(changes: readonly DriveSyncLocalChange[]) => Promise<void>>()
+      .mockReturnValueOnce(firstFlush.promise)
+      .mockResolvedValue(undefined)
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges })
+    watcher.reconcile([binding({ localPath: tempDir })])
+    const filePath = path.join(tempDir, "notes.md")
+    await writeFile(filePath, "first", "utf8")
+    fakeWatch.emit(tempDir, "rename", "notes.md")
+    await vi.advanceTimersByTimeAsync(1)
+
+    if (kind === "deleted") await unlink(filePath)
+    else await writeFile(filePath, "newer", "utf8")
+    fakeWatch.emit(tempDir, kind === "deleted" ? "rename" : "change", "notes.md")
+    firstFlush.reject(new Error("older batch failed"))
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(2)
+
+    expect(onChanges).toHaveBeenCalledTimes(2)
+    expect(onChanges.mock.calls[1]![0]).toEqual([
+      expect.objectContaining({ relativePath: "notes.md", kind, localKind: kind === "deleted" ? "missing" : "file" }),
+    ])
+    watcher.stop()
+  })
+
+  it.each(["resolve", "reject"] as const)("serializes slow flushes and processes newer events after the first batch %ss", async (outcome) => {
+    const firstFlush = deferredFlush()
+    const onChanges = vi.fn<(changes: readonly DriveSyncLocalChange[]) => Promise<void>>()
+      .mockReturnValueOnce(firstFlush.promise)
+      .mockResolvedValue(undefined)
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges })
+    watcher.reconcile([binding({ localPath: tempDir })])
+    await writeFile(path.join(tempDir, "notes.md"), "first", "utf8")
+    fakeWatch.emit(tempDir, "rename", "notes.md")
+    await vi.advanceTimersByTimeAsync(1)
+
+    await writeFile(path.join(tempDir, "notes.md"), "newer", "utf8")
+    fakeWatch.emit(tempDir, "change", "notes.md")
+    await writeFile(path.join(tempDir, "another.md"), "new", "utf8")
+    fakeWatch.emit(tempDir, "rename", "another.md")
+    await vi.advanceTimersByTimeAsync(10)
+    expect(onChanges).toHaveBeenCalledTimes(1)
+
+    if (outcome === "resolve") firstFlush.resolve()
+    else firstFlush.reject(new Error("older batch failed"))
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(outcome === "resolve" ? 1 : 2)
+    expect(onChanges).toHaveBeenCalledTimes(2)
+    expect(onChanges.mock.calls[1]![0]).toEqual([
+      expect.objectContaining({ relativePath: "another.md", kind: "created" }),
+      expect.objectContaining({ relativePath: "notes.md", kind: "modified" }),
+    ])
+    watcher.stop()
+  })
+
+  it.each(["resolve", "reject"] as const)("drops a stopped binding's in-flight batch when it %ss", async (outcome) => {
+    const firstFlush = deferredFlush()
+    const onChanges = vi.fn<(changes: readonly DriveSyncLocalChange[]) => Promise<void>>()
+      .mockReturnValueOnce(firstFlush.promise)
+      .mockResolvedValue(undefined)
+    const onFlushError = vi.fn()
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges, onFlushError })
+    watcher.reconcile([binding({ localPath: tempDir })])
+    await writeFile(path.join(tempDir, "notes.md"), "first", "utf8")
+    fakeWatch.emit(tempDir, "rename", "notes.md")
+    await vi.advanceTimersByTimeAsync(1)
+    watcher.reconcile([])
+
+    if (outcome === "resolve") firstFlush.resolve()
+    else firstFlush.reject(new Error("stopped batch failed"))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(onChanges).toHaveBeenCalledTimes(1)
+    expect(onFlushError).not.toHaveBeenCalled()
+  })
+
+  it.each(["resolve", "reject"] as const)("preserves a rebuilt binding's retry when its previous flush %ss late", async (outcome) => {
+    const previousFlush = deferredFlush()
+    const onChanges = vi.fn<(changes: readonly DriveSyncLocalChange[]) => Promise<void>>()
+      .mockReturnValueOnce(previousFlush.promise)
+      .mockRejectedValueOnce(new Error("new binding batch failed"))
+      .mockResolvedValue(undefined)
+    const onFlushError = vi.fn()
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges, onFlushError })
+    const original = binding({ localPath: tempDir })
+    watcher.reconcile([original])
+    await writeFile(path.join(tempDir, "old.md"), "old", "utf8")
+    fakeWatch.emit(tempDir, "rename", "old.md")
+    await vi.advanceTimersByTimeAsync(1)
+
+    watcher.reconcile([{ ...original, updatedAt: "2026-06-28T00:00:01.000Z" }])
+    await writeFile(path.join(tempDir, "fresh.md"), "fresh", "utf8")
+    fakeWatch.emit(tempDir, "rename", "fresh.md")
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onChanges).toHaveBeenCalledTimes(2)
+
+    if (outcome === "resolve") previousFlush.resolve()
+    else previousFlush.reject(new Error("previous binding batch failed"))
+    await vi.advanceTimersByTimeAsync(0)
+    await writeFile(path.join(tempDir, "later.md"), "later", "utf8")
+    fakeWatch.emit(tempDir, "rename", "later.md")
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onChanges).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onChanges).toHaveBeenCalledTimes(3)
+    expect(onChanges.mock.calls[2]![0].map((change) => change.relativePath)).toEqual(["fresh.md", "later.md"])
+    expect(onFlushError).toHaveBeenCalledTimes(1)
+    watcher.stop()
+  })
+
+  it("does not schedule a retry after stopping while the async error hook is pending", async () => {
+    const reporting = deferredFlush()
+    const onChanges = vi.fn().mockRejectedValue(new Error("batch failed"))
+    const onFlushError = vi.fn().mockReturnValue(reporting.promise)
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges, onFlushError })
+    watcher.reconcile([binding({ localPath: tempDir })])
+    await writeFile(path.join(tempDir, "notes.md"), "first", "utf8")
+    fakeWatch.emit(tempDir, "rename", "notes.md")
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onFlushError).toHaveBeenCalledTimes(1)
+    watcher.stop()
+
+    reporting.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(onChanges).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps newer events queued while the async flush error hook is pending", async () => {
+    const reporting = deferredFlush()
+    const onChanges = vi.fn<(changes: readonly DriveSyncLocalChange[]) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("first batch failed"))
+      .mockResolvedValue(undefined)
+    const onFlushError = vi.fn().mockReturnValue(reporting.promise)
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges, onFlushError })
+    watcher.reconcile([binding({ localPath: tempDir })])
+    await writeFile(path.join(tempDir, "notes.md"), "first", "utf8")
+    fakeWatch.emit(tempDir, "rename", "notes.md")
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onFlushError).toHaveBeenCalledTimes(1)
+
+    await writeFile(path.join(tempDir, "notes.md"), "newer", "utf8")
+    fakeWatch.emit(tempDir, "change", "notes.md")
+    await writeFile(path.join(tempDir, "another.md"), "new", "utf8")
+    fakeWatch.emit(tempDir, "rename", "another.md")
+    await vi.advanceTimersByTimeAsync(10)
+    expect(onChanges).toHaveBeenCalledTimes(1)
+
+    reporting.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(2)
+    expect(onChanges).toHaveBeenCalledTimes(2)
+    expect(onChanges.mock.calls[1]![0]).toEqual([
+      expect.objectContaining({ relativePath: "another.md", kind: "created" }),
+      expect.objectContaining({ relativePath: "notes.md", kind: "modified" }),
+    ])
+    watcher.stop()
+  })
+
+  it("preserves a rebuilt binding's backoff after the previous async error hook completes", async () => {
+    const reporting = deferredFlush()
+    const onChanges = vi.fn<(changes: readonly DriveSyncLocalChange[]) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("previous batch failed"))
+      .mockRejectedValueOnce(new Error("new binding batch failed"))
+      .mockResolvedValue(undefined)
+    const onFlushError = vi.fn().mockReturnValueOnce(reporting.promise).mockResolvedValue(undefined)
+    const fakeWatch = createFakeWatch()
+    const watcher = createDriveSyncWatcher({ debounceMs: 1, watch: fakeWatch.watch, onChanges, onFlushError })
+    const original = binding({ localPath: tempDir })
+    watcher.reconcile([original])
+    await writeFile(path.join(tempDir, "old.md"), "old", "utf8")
+    fakeWatch.emit(tempDir, "rename", "old.md")
+    await vi.advanceTimersByTimeAsync(1)
+
+    watcher.reconcile([{ ...original, updatedAt: "2026-06-28T00:00:01.000Z" }])
+    await writeFile(path.join(tempDir, "fresh.md"), "fresh", "utf8")
+    fakeWatch.emit(tempDir, "rename", "fresh.md")
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onChanges).toHaveBeenCalledTimes(2)
+    expect(onFlushError).toHaveBeenCalledTimes(2)
+
+    reporting.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onChanges).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(onChanges).toHaveBeenCalledTimes(3)
+    expect(onChanges.mock.calls[2]![0].map((change) => change.relativePath)).toEqual(["fresh.md"])
+    watcher.stop()
+  })
 })
+
+function deferredFlush() {
+  let resolve!: () => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<void>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
 
 function createFakeWatch() {
   const listeners = new Map<string, (eventType: string, filename: string | Buffer | null) => void>()

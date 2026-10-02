@@ -1,27 +1,28 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { createRootRouteWithContext, createRoute, Outlet, redirect } from '@tanstack/react-router'
+import { createRootRouteWithContext, createRoute, lazyRouteComponent, Outlet, redirect, type RouteComponent } from '@tanstack/react-router'
 import { z } from 'zod'
 import { AdminAuthenticatedLayout } from '@/components/layout/admin-authenticated-layout'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { Toaster } from '@/components/ui/sonner'
 import { AdminAccessPage } from '@/features/admin-access'
-import AuditLogsPage from '@/features/audit-logs'
-import BackupPage from '@/features/backup'
-import DevicesPage from '@/features/devices'
-import DriveAdminPage from '@/features/drive'
 import { NotFoundError } from '@/features/errors/not-found-error'
 import { GeneralError } from '@/features/errors/general-error'
-import LogsPage from '@/features/logs'
-import ProblemFeedbackPage from '@/features/problem-feedback'
-import { SkillRepositoryAdminPage } from '@/features/skill-repository'
-import SystemPage from '@/features/system'
-import TeamsPage from '@/features/teams'
-import TeamDetailPage from '@/features/teams/team-detail'
-import TelemetryPage from '@/features/telemetry'
-import UsersPage from '@/features/users'
-import WebhookDeliveriesPage from '@/features/webhook-deliveries'
 import { normalizeAdminRedirect } from '@/lib/admin-redirect'
 import { useAdminAuthStore } from '@/stores/admin-auth-store'
+
+const AuditLogsPage = lazyRouteComponent(() => import('@/features/audit-logs'))
+const BackupPage = lazyRouteComponent(() => import('@/features/backup'))
+const DevicesPage = lazyRouteComponent(() => import('@/features/devices'))
+const DriveAdminPage = lazyRouteComponent(() => import('@/features/drive'))
+const LogsPage = lazyRouteComponent(() => import('@/features/logs'))
+const ProblemFeedbackPage = lazyRouteComponent(() => import('@/features/problem-feedback'))
+const SkillRepositoryAdminPage = lazyRouteComponent(() => import('@/features/skill-repository'), 'SkillRepositoryAdminPage')
+const SystemPage = lazyRouteComponent(() => import('@/features/system'))
+const TeamsPage = lazyRouteComponent(() => import('@/features/teams'))
+const TeamDetailPage = lazyRouteComponent(() => import('@/features/teams/team-detail'))
+const TelemetryPage = lazyRouteComponent(() => import('@/features/telemetry'))
+const UsersPage = lazyRouteComponent(() => import('@/features/users'))
+const WebhookDeliveriesPage = lazyRouteComponent(() => import('@/features/webhook-deliveries'))
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: () => <><NavigationProgress /><Outlet /><Toaster duration={5000} /></>,
@@ -67,7 +68,7 @@ const authenticatedRoute = createRoute({
   component: AdminAuthenticatedLayout,
 })
 
-function adminPage<const TPath extends string>(path: TPath, component: () => React.ReactNode) {
+function adminPage<const TPath extends string>(path: TPath, component: RouteComponent) {
   return createRoute({ getParentRoute: () => authenticatedRoute, path, component })
 }
 

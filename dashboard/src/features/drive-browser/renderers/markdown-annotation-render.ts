@@ -8,7 +8,7 @@ import type {
   DriveAnnotationThreadDto,
   DriveMarkdownProjectionDto,
 } from '@synapse/shared'
-import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor, sliceByCodePoints } from '@synapse/shared'
+import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor } from '@synapse/shared'
 import { getMarkdownRenderedText } from './markdown-rendered-text'
 
 export type MarkdownAnnotationResolvedRange = {
@@ -45,12 +45,19 @@ export function renderMarkdownAnnotationHtml(
   const template = document.createElement('template')
   template.innerHTML = html
   const renderedText = getMarkdownRenderedText(template.content)
+  let utf16Offsets: readonly number[] | null = null
+  let imageIds: Set<string | undefined> | null = null
+  const toUtf16Range = (range: { readonly start: number; readonly end: number }) => {
+    utf16Offsets ??= codePointUtf16Offsets(renderedText)
+    return {
+      start: codePointOffsetToUtf16(utf16Offsets, range.start),
+      end: codePointOffsetToUtf16(utf16Offsets, range.end),
+    }
+  }
   const resolved = threads.map((thread) => {
     const refreshedSourceRange = thread.anchor?.resolvedSourceRange ?? null
     if (thread.target.kind === 'image') {
       const targetImageId = thread.target.imageId
-      const imageExists = Array.from(template.content.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))
-        .some((element) => element.dataset.driveMarkdownImageId === targetImageId)
       const imageProjection = liveDocument?.projection ?? currentProjection
       if (thread.anchor?.selectors.kind === 'image' && imageProjection) {
         const resolution = resolveDriveImageAnnotationAnchor({
@@ -77,9 +84,13 @@ export function renderMarkdownAnnotationHtml(
           confidence: resolution.confidence,
         }
       }
+      imageIds ??= new Set(Array.from(
+        template.content.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'),
+        (element) => element.dataset.driveMarkdownImageId,
+      ))
       const attached = thread.anchorStatus !== 'orphaned'
         && thread.anchor?.positionStatus === 'attached'
-        && imageExists
+        && imageIds.has(targetImageId)
       return {
         threadId: thread.id,
         imageId: attached ? targetImageId : null,
@@ -111,7 +122,7 @@ export function renderMarkdownAnnotationHtml(
           threadId: thread.id,
           anchorStatus: resolution.positionStatus === 'attached' ? 'attached' as const : 'orphaned' as const,
           range: resolution.positionStatus === 'attached' && resolution.renderedRange
-            ? codePointRangeToUtf16(renderedText, resolution.renderedRange)
+            ? toUtf16Range(resolution.renderedRange)
             : null,
           renderedRange: resolution.renderedRange,
           positionStatus: resolution.positionStatus,
@@ -121,14 +132,15 @@ export function renderMarkdownAnnotationHtml(
         }
       }
       const cachedRange = thread.anchor.resolvedRenderedRange
+      const cachedUtf16Range = cachedRange ? toUtf16Range(cachedRange) : null
       const exactRangeMatches = thread.anchor.quoteStatus !== 'exact'
-        || Boolean(cachedRange && sliceByCodePoints(renderedText, cachedRange.start, cachedRange.end) === thread.anchor.selectors.quote.exact)
+        || Boolean(cachedUtf16Range && renderedText.slice(cachedUtf16Range.start, cachedUtf16Range.end) === thread.anchor.selectors.quote.exact)
       const positionStatus = exactRangeMatches ? thread.anchor.positionStatus : 'orphaned' as const
       return {
         threadId: thread.id,
         anchorStatus: positionStatus === 'attached' && cachedRange ? 'attached' as const : 'orphaned' as const,
-        range: positionStatus === 'attached' && cachedRange
-          ? codePointRangeToUtf16(renderedText, cachedRange)
+        range: positionStatus === 'attached' && cachedUtf16Range
+          ? cachedUtf16Range
           : null,
         renderedRange: exactRangeMatches ? cachedRange : null,
         positionStatus,
@@ -146,15 +158,20 @@ export function renderMarkdownAnnotationHtml(
   return { html, resolved }
 }
 
-function codePointRangeToUtf16(
-  value: string,
-  range: { readonly start: number; readonly end: number },
-): { readonly start: number; readonly end: number } {
-  const codePoints = Array.from(value)
-  return {
-    start: codePoints.slice(0, range.start).join('').length,
-    end: codePoints.slice(0, range.end).join('').length,
+function codePointUtf16Offsets(value: string): readonly number[] {
+  const offsets = [0]
+  let offset = 0
+  for (const codePoint of value) {
+    offset += codePoint.length
+    offsets.push(offset)
   }
+  return offsets
+}
+
+function codePointOffsetToUtf16(offsets: readonly number[], offset: number): number {
+  const length = offsets.length - 1
+  const index = Math.trunc(offset) || 0
+  return offsets[index < 0 ? Math.max(0, length + index) : Math.min(index, length)]!
 }
 
 export function resolveMarkdownAnnotationTextRange(

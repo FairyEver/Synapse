@@ -76,11 +76,12 @@ export function useGitWorktreeStatus(
       if (snapshotRequestIdRef.current !== requestId) return null
       const wasLoaded = hasLoadedRef.current
       const currentSelectedFile = selectedFileRef.current
+      const nextPaths = new Set(next.changes.map((change) => change.path))
       setSnapshot(next)
       setError(null)
       setSelectedPaths((current) => (
         wasLoaded
-          ? current.filter((selectedPath) => next.changes.some((change) => change.path === selectedPath))
+          ? current.filter((selectedPath) => nextPaths.has(selectedPath))
           : next.changes.map((change) => change.path)
       ))
       const nextSelectedFile = currentSelectedFile

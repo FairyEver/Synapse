@@ -288,11 +288,11 @@ final class MeetingPlayback {
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
-        ) { [weak self] time in
+        ) { [weak self, weak player] time in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.currentSeconds = time.seconds.isFinite ? time.seconds : 0
-                if let duration = player.currentItem?.duration.seconds, duration.isFinite, duration > 0 {
+                if let duration = player?.currentItem?.duration.seconds, duration.isFinite, duration > 0 {
                     self.durationSeconds = duration
                 }
             }

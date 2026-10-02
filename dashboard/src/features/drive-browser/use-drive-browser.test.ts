@@ -12,6 +12,10 @@ import { loadDriveBrowser, toDriveBrowserQueryKey, useDriveBrowser, type DriveBr
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/lib/api', () => ({
+  driveApi: {},
+  driveAnnotationApi: {},
+  driveMessageApi: {},
+  driveFileVersionsApi: {},
   ApiError: class ApiError extends Error {
     readonly status: number
 
@@ -146,6 +150,34 @@ describe('toDriveBrowserQueryKey', () => {
       'console',
       { childrenOffset: 100, childrenLimit: 50 }
     )
+  })
+
+  it('cancels obsolete browser requests on navigation and cancels the active request on unmount', async () => {
+    const signals: AbortSignal[] = []
+    vi.mocked(driveBrowserApi.getOwnerItem)
+      .mockImplementationOnce((_itemId, _surface, options) => pendingBrowserRequest(options?.signal))
+      .mockImplementationOnce((_itemId, _surface, options) => pendingBrowserRequest(options?.signal))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const hook = createDriveBrowserHookRenderer(queryClient, 'folder-1')
+
+    await waitFor(() => expect(signals).toHaveLength(1))
+    hook.rerender('folder-2')
+    await waitFor(() => expect(signals).toHaveLength(2))
+
+    expect(signals[0].aborted).toBe(true)
+    expect(signals[1].aborted).toBe(false)
+    expect(hook.result.current.status).toBe('loading')
+    act(() => root?.unmount())
+    root = null
+    expect(signals[1].aborted).toBe(true)
+
+    function pendingBrowserRequest(signal?: AbortSignal) {
+      if (!signal) throw new Error('missing browser request cancellation signal')
+      signals.push(signal)
+      return new Promise<DriveBrowserSnapshotDto>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    }
   })
 
   it('clears stale load-more errors when the browser target changes', async () => {
@@ -719,7 +751,7 @@ describe('toDriveBrowserQueryKey', () => {
 
     expect(hook.result.current.status === 'ready' ? hook.result.current.snapshot.current.name : null)
       .toBe('unlocked.txt')
-    expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'link-password', undefined, {})
+    expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'link-password', undefined, { signal: expect.any(AbortSignal) })
     expect(driveBrowserApi.getShareRoot).not.toHaveBeenCalled()
   })
 
@@ -760,7 +792,7 @@ describe('toDriveBrowserQueryKey', () => {
     })
 
     expect(driveBrowserApi.unlockShare).toHaveBeenCalledTimes(2)
-    expect(driveBrowserApi.unlockShare).toHaveBeenLastCalledWith('share-1', 'new-password', undefined, {})
+    expect(driveBrowserApi.unlockShare).toHaveBeenLastCalledWith('share-1', 'new-password', undefined, { signal: expect.any(AbortSignal) })
     expect(hook.result.current.status === 'passwordRequired' ? hook.result.current.unlockError : null).toBe('密码错误。')
   })
 
@@ -784,7 +816,7 @@ describe('toDriveBrowserQueryKey', () => {
 
     expect(hook.result.current.status === 'passwordRequired' ? hook.result.current.unlockError : null)
       .toBe('请输入密码。')
-    expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'expired-password', undefined, {})
+    expect(driveBrowserApi.unlockShare).toHaveBeenCalledWith('share-1', 'expired-password', undefined, { signal: expect.any(AbortSignal) })
   })
 
   it('keeps a password-unlocked share ready after loading more children', async () => {

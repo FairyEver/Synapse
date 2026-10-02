@@ -17,6 +17,61 @@ function connectionIndexSize(registry: LiveClientRegistry): number {
 }
 
 describe("LiveClientRegistry", () => {
+  it("reads only the requested account's records when other accounts have many clients", () => {
+    const registry = new LiveClientRegistry()
+    const now = new Date("2026-10-02T00:00:00.000Z")
+    const register = (userId: string, clientInstanceId: string) => registry.register({
+      userId, clientInstanceId, connectionId: `${userId}-${clientInstanceId}`,
+      appVersion: "1", platform: "darwin-arm64", deviceName: "电脑", now,
+    })
+    for (let index = 0; index < 10_000; index += 1) {
+      register(`other-${index}`, "client")
+    }
+    register("target", "client-z")
+    register("target", "client-a")
+    const clients: Map<string, unknown> = Reflect.get(registry, "clients")
+    const reads = vi.spyOn(clients, "get")
+    const scans = vi.spyOn(clients, Symbol.iterator)
+    const entryScans = vi.spyOn(clients, "entries")
+
+    expect(registry.listOnlineByUser("target").map((client) => client.clientInstanceId)).toEqual([
+      "client-a", "client-z",
+    ])
+    expect(reads).toHaveBeenCalledTimes(2)
+    expect(scans).not.toHaveBeenCalled()
+    expect(entryScans).not.toHaveBeenCalled()
+    reads.mockClear()
+    expect(registry.listByUser("missing")).toEqual([])
+    expect(reads).not.toHaveBeenCalled()
+  })
+
+  it("keeps account lookups current through supersede, stale, heartbeat, expiry and reconnect", () => {
+    const registry = LiveClientRegistry.withOptions({
+      heartbeatTimeoutMs: 1_000, staleGraceMs: 1_000, offlineRetentionMs: 1_000,
+    })
+    const register = (connectionId: string, nowMs: number) => registry.register({
+      userId: "target", clientInstanceId: "client", connectionId,
+      appVersion: "1", platform: "darwin-arm64", deviceName: "电脑", now: new Date(nowMs),
+    })
+    register("old", 0)
+    register("new", 100)
+    expect(registry.listByUser("target")).toHaveLength(1)
+    expect(registry.touch("old", new Date(101))).toBeUndefined()
+    registry.markStaleClients(new Date(1_101))
+    expect(registry.listOnlineByUser("target")).toEqual([])
+    expect(registry.listByUser("target")[0]?.status).toBe("stale")
+    registry.touch("new", new Date(1_102))
+    expect(registry.listOnlineByUser("target")[0]?.lastSeenAt).toBe(new Date(1_102).toISOString())
+    registry.markDisconnected({ connectionId: "new", now: new Date(1_200), reason: "socket_close" })
+    expect(registry.listByUser("target")[0]?.status).toBe("offline")
+    registry.markStaleClients(new Date(2_201))
+    expect(registry.listByUser("target")).toEqual([])
+    const userKeys: Map<string, Set<string>> = Reflect.get(registry, "userKeys")
+    expect(userKeys.size).toBe(0)
+    register("reconnected", 2_202)
+    expect(registry.listOnlineByUser("target")[0]?.connectionId).toBe("reconnected")
+  })
+
   it("retains the private machine binding across heartbeat updates", () => {
     const registry = new LiveClientRegistry()
     const client = registry.register({

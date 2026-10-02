@@ -43,6 +43,7 @@ export function useMeetingList(refreshKey: number): MeetingLoadState<readonly Sy
         if (requestId.current !== current) return
         setState({ data: [], loading: false, error: error instanceof Error ? error.message : "读取录音列表失败。" })
       })
+    return () => { requestId.current += 1 }
   }, [refreshKey])
 
   return state
@@ -61,6 +62,7 @@ export function useMeetingDetail(
   const loadedId = useRef<string | null>(null)
 
   useEffect(() => {
+    const current = ++requestId.current
     if (!meetingId) {
       loadedId.current = null
       setState({ data: null, loading: false, error: null })
@@ -70,7 +72,6 @@ export function useMeetingDetail(
     // 同一条录音的定时刷新不能清，否则转写期间右栏每 5 秒闪一次空。
     const switched = loadedId.current !== meetingId
     loadedId.current = meetingId
-    const current = ++requestId.current
     setState((previous) => (switched ? { data: null, loading: true, error: null } : { ...previous, loading: true }))
     void requireSynapseBridge()
       .meeting.entry.get({ meetingId })
@@ -82,6 +83,7 @@ export function useMeetingDetail(
         if (requestId.current !== current) return
         setState({ data: null, loading: false, error: error instanceof Error ? error.message : "读取录音失败。" })
       })
+    return () => { requestId.current += 1 }
   }, [meetingId, refreshKey])
 
   return state

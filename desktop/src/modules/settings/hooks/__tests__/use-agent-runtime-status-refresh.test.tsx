@@ -103,10 +103,135 @@ describe("useAgentRuntimeStatus", () => {
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret SDK prompt detail")
   })
+
+  it("keeps one slow background request across polling intervals and applies its result", async () => {
+    const pending = deferred<SynapseAgentRuntimeStatus>()
+    const getRuntimeStatus = vi.fn()
+      .mockResolvedValueOnce(runtimeStatus("initial"))
+      .mockReturnValue(pending.promise)
+    installRuntimeBridge(getRuntimeStatus)
+    const root = mountProbe()
+    await act(async () => { root.render(<RuntimeStatusProbe />) })
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_300) })
+    expect(getRuntimeStatus).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"))
+      document.dispatchEvent(new Event("visibilitychange"))
+      await vi.advanceTimersByTimeAsync(20_000)
+    })
+    expect(getRuntimeStatus).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      pending.resolve(runtimeStatus("slow result"))
+      await pending.promise
+    })
+    expect(document.body.textContent).toContain("slow result")
+    getRuntimeStatus.mockResolvedValue(runtimeStatus("next"))
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(getRuntimeStatus).toHaveBeenCalledTimes(3)
+    expect(document.body.textContent).toContain("next")
+  })
+
+  it("releases the polling guard after a background failure", async () => {
+    const pending = deferred<SynapseAgentRuntimeStatus>()
+    const getRuntimeStatus = vi.fn()
+      .mockResolvedValueOnce(runtimeStatus("initial"))
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(runtimeStatus("recovered"))
+    installRuntimeBridge(getRuntimeStatus)
+    const root = mountProbe()
+    await act(async () => { root.render(<RuntimeStatusProbe />) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_300) })
+
+    await act(async () => {
+      pending.reject(new Error("temporary failure"))
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("initial")
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+
+    expect(getRuntimeStatus).toHaveBeenCalledTimes(3)
+    expect(document.body.textContent).toContain("recovered")
+  })
+
+  it("loads a newly selected project while a previous project request is still pending", async () => {
+    const pending = deferred<SynapseAgentRuntimeStatus>()
+    const getRuntimeStatus = vi.fn()
+      .mockResolvedValueOnce(runtimeStatus("first project"))
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(runtimeStatus("second project"))
+    installRuntimeBridge(getRuntimeStatus)
+    const root = mountProbe()
+    await act(async () => { root.render(<RuntimeStatusProbe projectId="first" />) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_300) })
+    await act(async () => { root.render(<RuntimeStatusProbe projectId="second" />) })
+
+    expect(getRuntimeStatus).toHaveBeenLastCalledWith({ projectId: "second" })
+    expect(document.body.textContent).toContain("second project")
+    await act(async () => {
+      pending.resolve(runtimeStatus("stale first project"))
+      await pending.promise
+    })
+    expect(document.body.textContent).toContain("second project")
+  })
+
+  it("lets an explicit refresh supersede a slow background request without losing its guard", async () => {
+    const background = deferred<SynapseAgentRuntimeStatus>()
+    const explicit = deferred<SynapseAgentRuntimeStatus>()
+    const getRuntimeStatus = vi.fn()
+      .mockResolvedValueOnce(runtimeStatus("initial"))
+      .mockReturnValueOnce(background.promise)
+      .mockReturnValueOnce(explicit.promise)
+    installRuntimeBridge(getRuntimeStatus)
+    const root = mountProbe()
+    let refresh!: ReturnType<typeof useAgentRuntimeStatus>["refresh"]
+    await act(async () => { root.render(<RuntimeStatusProbe onRefresh={(next) => { refresh = next }} />) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_300) })
+    await act(async () => { refresh() })
+    expect(getRuntimeStatus).toHaveBeenCalledTimes(3)
+
+    await act(async () => { background.resolve(runtimeStatus("stale")); await background.promise })
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(getRuntimeStatus).toHaveBeenCalledTimes(3)
+    expect(document.body.textContent).toContain("initial")
+
+    await act(async () => { explicit.resolve(runtimeStatus("explicit")); await explicit.promise })
+    expect(document.body.textContent).toContain("explicit")
+  })
 })
 
-function RuntimeStatusProbe({ projectId }: { readonly projectId?: string }) {
-  const { status } = useAgentRuntimeStatus(projectId)
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
+function installRuntimeBridge(getRuntimeStatus: ReturnType<typeof vi.fn>) {
+  Object.defineProperty(window, "synapse", {
+    configurable: true,
+    value: { agent: { getRuntimeStatus } },
+  })
+}
+
+function mountProbe(): Root {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  return root
+}
+
+function RuntimeStatusProbe({ projectId, onRefresh }: {
+  readonly projectId?: string
+  readonly onRefresh?: (refresh: ReturnType<typeof useAgentRuntimeStatus>["refresh"]) => void
+}) {
+  const { status, refresh } = useAgentRuntimeStatus(projectId)
+  onRefresh?.(refresh)
   return <div>{status?.agents[0]?.provider?.activeModel ?? "pending"}</div>
 }
 

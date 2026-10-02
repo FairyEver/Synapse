@@ -352,4 +352,74 @@ struct TerminalResourcesTests {
         #expect(second.resources.isEmpty)
     }
 
+    @Test func ordinaryRowsCanLaterBecomeLinksAndBeRewrittenAgain() throws {
+        let store = TerminalStore()
+        store.apply(frame(try (0..<200).map { try line("普通输出 \($0)") }, kind: "reset"))
+        #expect(store.resources.isEmpty)
+
+        store.apply(frame([try line("https://example.org/new")], from: 199, total: 200))
+        #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/new"])
+        store.apply(frame([try line("普通输出已更新")], from: 199, total: 200))
+        #expect(store.resources.isEmpty)
+    }
+
+    @Test func aLongSoftWrapAcrossFramesStillResolvesAndTracksItsRewrittenTail() throws {
+        let store = TerminalStore()
+        let head = "构建输出 "
+        let middle = "continuing output "
+        let tail = "https://example.org/original"
+        let count = 128
+        let start = 100
+        let wrapped = try (0..<count).map { index in
+            try line(index == 0 ? head : index == count - 1 ? tail : middle,
+                     wrapFlags: index == 0 ? 2 : index == count - 1 ? 1 : 3)
+        }
+        store.apply(frame(Array(wrapped.prefix(64)), kind: "reset", from: start, total: start + count))
+        #expect(store.resources.isEmpty)
+        store.apply(frame(Array(wrapped.dropFirst(64)), from: start + 64, total: start + count))
+        #expect(store.resources.map(\.url.absoluteString) == [tail])
+        #expect(store.resources.first?.needsConfirmation == false)
+
+        let replacement = "https://example.org/replacement"
+        store.apply(frame([try line(replacement, wrapFlags: 1)], from: start + count - 1, total: start + count))
+        #expect(store.resources.map(\.url.absoluteString) == [replacement])
+    }
+
+    @Test func rewritingSeveralLinksKeepsTheUntouchedOccurrences() throws {
+        let store = TerminalStore()
+        store.apply(frame(try (0..<100).map { try line("https://example.org/\($0)") }, kind: "reset"))
+        store.apply(frame(try (50..<100).map { try line("普通输出 \($0)") }, from: 50, total: 100))
+        #expect(Set(store.resources.map(\.url.absoluteString)) == Set((0..<50).map { "https://example.org/\($0)" }))
+        store.apply(frame(try (0..<50).map { try line("普通输出 \($0)") }, from: 0, total: 100))
+        #expect(store.resources.isEmpty)
+    }
+
+    @Test func anOrphanedSoftWrapWaitsForItsHeadToArriveAsHistory() throws {
+        let store = TerminalStore()
+        store.apply(frame([
+            try line("example.org/", wrapFlags: 3),
+            try line("waiting", wrapFlags: 1),
+        ], kind: "reset", from: 11, total: 13))
+        #expect(store.resources.isEmpty)
+
+        store.apply(frame([try line("https://", wrapFlags: 2)], kind: "history", from: 10, total: 13))
+        #expect(store.resources.map(\.url.absoluteString) == ["https://example.org/waiting"])
+    }
+
+    @Test func consecutiveHardWrappedRowsResolveFromANonzeroFrameStart() throws {
+        let store = TerminalStore()
+        store.update(columns: 53)
+        let head = "https://example.org/" + String(repeating: "a", count: 31)
+        let middle = String(repeating: "b", count: 51)
+        store.apply(frame([
+            try line("  " + head),
+            try line("  " + middle),
+            try line("  cccc"),
+        ], kind: "reset", from: 30, total: 33))
+        #expect(store.resources.first?.candidateURLs.map(\.absoluteString) == [
+            head + middle + "cccc", head, head + middle,
+        ])
+        #expect(store.resources.first?.needsConfirmation == true)
+    }
+
 }
