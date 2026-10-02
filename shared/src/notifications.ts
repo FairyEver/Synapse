@@ -1,6 +1,12 @@
-import notificationConstants from "./notification-constants.cjs"
-
-export const NOTIFICATION_SOURCES = notificationConstants.NOTIFICATION_SOURCES
+// ESM 与 Electron CommonJS 入口由这份定义构建，避免浏览器加载 CommonJS 模块。
+export const NOTIFICATION_SOURCES = [
+  "external",
+  "system-notifier",
+  "terminal-attention",
+  "terminal-complete",
+  "meeting-transcription",
+  "mail",
+] as const
 
 export type NotificationSource = (typeof NOTIFICATION_SOURCES)[number]
 

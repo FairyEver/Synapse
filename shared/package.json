@@ -30,14 +30,19 @@
       "default": "./dist/mobile-live-constants.cjs"
     },
     "./notification-constants": {
-      "types": "./dist/notification-constants.d.cts",
-      "import": "./dist/notification-constants.cjs",
-      "require": "./dist/notification-constants.cjs",
-      "default": "./dist/notification-constants.cjs"
+      "import": {
+        "types": "./dist/notifications.d.ts",
+        "default": "./dist/notifications.js"
+      },
+      "require": {
+        "types": "./dist/notification-constants.d.cts",
+        "default": "./dist/notification-constants.cjs"
+      },
+      "default": "./dist/notifications.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/build-notification-constants.mjs",
     "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

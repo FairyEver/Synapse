@@ -86,6 +86,7 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 
 ## 工程边界
 
+- 共享通知常量只在 `shared/src/notifications.ts` 定义；`@synapse/shared` 的构建同时生成 ESM 与 Electron CommonJS 产物。通知子入口按 `import` / `require` 分流运行时文件与类型声明，浏览器 ESM 依赖链不得导入 `.cjs`；不要手工维护第二份常量。
 - 严格保持 renderer、preload、主进程边界。
 - Renderer 只通过 `window.synapse.*` 使用特权能力，不暴露原始 `ipcRenderer`、`window.require` 或宽泛 Electron API。
 - 文件系统、Git、安装、下载、dialog、updater 和 OS 逻辑属于主进程。
