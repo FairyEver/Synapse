@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { NOTIFICATION_SOURCES } from "@synapse/shared"
 
 import { createSynapseActionRouter } from "../../../../electron/capabilities/action-router"
 import { MCP_TOOL_ACTIONS } from "../../../../synapse-capabilities/shared/registry"
@@ -82,7 +83,12 @@ describe("account MCP tools", () => {
     expect(buildNotificationTools()).toHaveLength(7)
     expect(buildNotificationTools().find((tool) => tool.name === "app_account_notification_get")?.inputSchema.properties).toHaveProperty("reference")
     expect(MCP_TOOL_ACTIONS.app_account_notification_delete_all).toBe("app.account.notification.delete_all")
-    await expect(dispatcher.dispatch("app.account.notification.list", { filter: "unread" })).resolves.toMatchObject({ ok: true })
+    const listTool = buildNotificationTools().find((tool) => tool.name === "app_account_notification_list")
+    expect(listTool?.inputSchema.properties).toHaveProperty("source", expect.objectContaining({ enum: [...NOTIFICATION_SOURCES] }))
+    await expect(dispatcher.dispatch("app.account.notification.list", { filter: "unread", source: "mail", cursor: "n1" })).resolves.toMatchObject({ ok: true })
+    expect(notifications.listNotifications).toHaveBeenCalledWith({ filter: "unread", source: "mail", cursor: "n1" })
+    await expect(dispatcher.dispatch("app.account.notification.list", { source: "unknown" })).rejects.toThrow()
+    expect(notifications.listNotifications).toHaveBeenCalledOnce()
     await expect(dispatcher.dispatch("app.account.notification.delete_all", { filter: "unread" })).rejects.toThrow()
     await dispatcher.dispatch("app.account.notification.get", { id: "n1" })
     await expect(dispatcher.dispatch("app.account.notification.get", { reference: "synapse:notification:n1" })).resolves.toMatchObject({ ok: true, data: { body: "private body" } })

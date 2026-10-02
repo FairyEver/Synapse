@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import type { NotificationSource } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -11,6 +12,7 @@ import type { SynapseNotification } from "@/types/notification-center"
 
 const logger = createRendererLogger("message-center")
 export type MessageFilter = "pending" | "all" | "unread"
+export type MessageSourceFilter = "all" | NotificationSource
 
 export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const { state } = useAccount()
@@ -18,6 +20,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const userId = state.status === "authenticated" ? state.profile.user.id : null
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState<MessageFilter>("all")
+  const [source, setSource] = useState<MessageSourceFilter>("all")
   const [items, setItems] = useState<readonly SynapseNotification[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [unread, setUnread] = useState(0)
@@ -80,7 +83,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     setLoading(true)
     try {
       const api = requireBridgeDomain("account").notifications
-      const [page, count] = await Promise.all([api.list({ filter }), api.count()])
+      const [page, count] = await Promise.all([api.list({ filter, ...(source === "all" ? {} : { source }) }), api.count()])
       if (requestId !== refreshId.current) return
       setItems(page.items)
       setCursor(page.nextCursor)
@@ -93,7 +96,10 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     } finally {
       if (requestId === refreshId.current) setLoading(false)
     }
-  }, [filter, userId])
+  }, [filter, source, userId])
+
+  const latestRefresh = useRef(refresh)
+  useLayoutEffect(() => { latestRefresh.current = refresh }, [refresh])
 
   useEffect(() => {
     if (!userId) return
@@ -119,7 +125,20 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }
 
   const changeFilter = (next: MessageFilter) => {
+    if (next === filter) return
+    refreshId.current += 1
     setFilter(next)
+    setItems([])
+    setCursor(null)
+    setSelected(null)
+  }
+
+  const changeSource = (next: MessageSourceFilter) => {
+    if (next === source) return
+    refreshId.current += 1
+    setSource(next)
+    setItems([])
+    setCursor(null)
     setSelected(null)
   }
 
@@ -128,7 +147,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     try {
       if (!item.readAt) await requireBridgeDomain("account").notifications.read({ id: item.id })
       setSelected((current) => current?.id === item.id ? { ...current, readAt: current.readAt ?? new Date().toISOString() } : current)
-      await refresh()
+      await latestRefresh.current()
     } catch (cause) {
       logger.warn("Message could not be marked read.", { cause })
       setError("操作失败")
@@ -172,7 +191,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     pendingDeletes.current.delete(id)
     try {
       await requireBridgeDomain("account").notifications.delete({ id })
-      await refresh()
+      await latestRefresh.current()
     } catch (cause) {
       logger.warn("Message could not be deleted.", { cause })
       setError("删除失败")
@@ -217,7 +236,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     try {
       await requireBridgeDomain("account").notifications.readAll()
       if (filter === "unread") setSelected(null)
-      await refresh()
+      await latestRefresh.current()
     } catch (cause) {
       logger.warn("Messages could not be marked read.", { cause })
       setError("操作失败")
@@ -230,7 +249,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
       setSelected((current) => current?.id === item.id
         ? (read && filter === "unread" ? null : { ...current, readAt: read ? new Date().toISOString() : null })
         : current)
-      await refresh()
+      await latestRefresh.current()
     } catch (cause) {
       logger.warn("Message read state could not be changed.", { cause })
       setError("操作失败")
@@ -244,7 +263,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
       pendingDeletes.current.clear()
       setHiddenIds(new Set())
       setSelected(null)
-      await refresh()
+      await latestRefresh.current()
     } catch (cause) {
       logger.warn("Messages could not be deleted.", { cause })
       setError(scope === "pending" ? "忽略失败" : "清空失败")
@@ -252,12 +271,15 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }
 
   const loadMore = async () => {
-    if (!cursor) return
+    if (!cursor || loading) return
+    const requestId = refreshId.current
     try {
-      const page = await requireBridgeDomain("account").notifications.list({ filter, cursor })
+      const page = await requireBridgeDomain("account").notifications.list({ filter, cursor, ...(source === "all" ? {} : { source }) })
+      if (requestId !== refreshId.current) return
       setItems((current) => [...current, ...page.items.filter((item) => !current.some((existing) => existing.id === item.id))])
       setCursor(page.nextCursor)
     } catch (cause) {
+      if (requestId !== refreshId.current) return
       logger.warn("More messages could not be loaded.", { cause })
       setError("消息加载失败")
     }
@@ -265,10 +287,10 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
 
   return {
     authenticated: state.status === "authenticated",
-    open, filter, items: items.filter((item) => !hiddenIds.has(item.id)), cursor,
+    open, filter, source, items: items.filter((item) => !hiddenIds.has(item.id)), cursor,
     unread: Math.max(0, unread - items.filter((item) => hiddenIds.has(item.id) && !item.readAt).length),
     selected, mail, mailLoading, mailError, loading, error,
-    changeOpen, changeFilter, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
+    changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
     closeDetail: () => setSelected(null),
   }

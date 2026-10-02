@@ -3,7 +3,7 @@ import { vi } from "vitest"
 import os from "node:os"
 import path from "node:path"
 import vm from "node:vm"
-import type { DriveItemDto } from "@synapse/shared"
+import { NOTIFICATION_SOURCES, type DriveItemDto } from "@synapse/shared"
 import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "../../../../src/lib/drive-local-upload-limits"
 
@@ -57,6 +57,7 @@ vi.mock("../../../services/account-service", () => ({
     refreshFromStorage: async () => ({ status: "unauthenticated" }),
     logout: async () => ({ status: "unauthenticated" }),
     listWebhooks: async () => [],
+    listNotifications: vi.fn(async () => ({ items: [], nextCursor: null })),
     executeMailOperation: vi.fn(async () => ({ items: [], nextCursor: null })),
     listDriveItems: async () => [],
     listDriveItemsPage: vi.fn(async () => ({ items: [], page: { offset: 0, limit: 100, hasMore: false, nextOffset: null } })),
@@ -205,6 +206,17 @@ describe("accountIpcModule", () => {
 
   it("accepts an explicit unread update through the existing notification channel", () => {
     expect(accountIpcModule.methods.markNotificationRead.request.parse({ id: "n1", read: false })).toEqual({ id: "n1", read: false })
+  })
+
+  it("validates notification sources and forwards source with the status filter and cursor", async () => {
+    const method = accountIpcModule.methods.listNotifications
+    assertParseableSchema(method.request)
+    for (const source of NOTIFICATION_SOURCES) {
+      expect(method.request.parse({ source })).toEqual({ source })
+    }
+    expect(() => method.request.parse({ source: "unknown" })).toThrow()
+    await method.handler({} as IpcHandlerContext, { source: "terminal-attention", filter: "pending", cursor: "n1" })
+    expect(accountService.listNotifications).toHaveBeenLastCalledWith({ source: "terminal-attention", filter: "pending", cursor: "n1" })
   })
 
   it("accepts only a local file path when creating a mail attachment", async () => {

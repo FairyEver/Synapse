@@ -1,6 +1,7 @@
 import path from "node:path"
 import { app, BrowserWindow, dialog } from "electron"
 import { z } from "zod"
+import { NOTIFICATION_SOURCES } from "@synapse/shared/notification-constants"
 
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
@@ -77,6 +78,7 @@ const notificationSchema = z.object({
 const notificationListRequestSchema = z.object({
   cursor: z.string().optional(),
   filter: z.enum(["all", "unread", "pending"]).optional(),
+  source: z.enum(NOTIFICATION_SOURCES).optional(),
 })
 
 const notificationIdSchema = z.object({ id: z.string().min(1) })

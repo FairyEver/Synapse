@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseNotification } from "@/types/notification-center"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -10,7 +10,7 @@ const openExternal = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
 
 const mockCenter = vi.hoisted(() => ({
-  authenticated: true, open: true, filter: "all", items: [] as SynapseNotification[], cursor: null, unread: 0,
+  authenticated: true, open: true, filter: "all", source: "all", items: [] as SynapseNotification[], cursor: null, unread: 0,
   selected: {
     id: "n1", source: "mail", title: "新站内信", body: "来自 Synapse。", group: "mail", url: null,
     level: "active", targetId: "broadcast-1", deviceId: null, readAt: "2026-09-29T10:00:00.000Z",
@@ -23,7 +23,7 @@ const mockCenter = vi.hoisted(() => ({
     sentAt: "2026-09-29T10:00:00.000Z", attachments: [],
   },
   mailLoading: false, mailError: null, loading: false, error: null,
-  changeOpen: vi.fn(), changeFilter: vi.fn(), openItem: vi.fn(), navigate: vi.fn(),
+  changeOpen: vi.fn(), changeFilter: vi.fn(), changeSource: vi.fn(), openItem: vi.fn(), navigate: vi.fn(),
   openApiGuide: vi.fn(), remove: vi.fn(), markAllRead: vi.fn(), setRead: vi.fn(),
   deleteAll: vi.fn(), loadMore: vi.fn(), refresh: vi.fn(), retryMail: vi.fn(), closeDetail: vi.fn(),
 }))
@@ -32,9 +32,36 @@ vi.mock("@/app-shell/hooks/use-message-center", () => ({ useMessageCenter: () =>
 
 import { MessageCenter } from "../message-center"
 
-afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear() })
+beforeEach(() => {
+  HTMLElement.prototype.scrollIntoView ??= vi.fn()
+  globalThis.ResizeObserver ??= class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+})
+
+afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear(); mockCenter.changeSource.mockClear() })
 
 describe("MessageCenter", () => {
+  it("defaults to all sources and offers each existing notification category", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="通知分类"]')!
+    expect(trigger.textContent).toBe("全部")
+
+    await act(async () => { trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })) })
+    const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+    expect(options.map((option) => option.textContent)).toEqual([
+      "全部", "系统通知", "Agent 待回复", "Agent 回复完成", "站内信", "录音转写", "外部通知",
+    ])
+    await act(async () => { options.find((option) => option.textContent === "Agent 待回复")?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })) })
+    expect(mockCenter.changeSource).toHaveBeenCalledWith("terminal-attention")
+    await act(async () => { root.unmount() })
+  })
+
   it("shows the actual broadcast subject, audience, and full body instead of its safe notification preview", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

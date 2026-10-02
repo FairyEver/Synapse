@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { NOTIFICATION_SOURCES } from "@synapse/shared/notification-constants"
+import type { NotificationSource } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DispatchContext, DispatchResult } from "../../../synapse-capabilities/shared/types"
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import { checkCapabilityPermission } from "../../../electron/capabilities/permission-audit"
@@ -20,7 +22,7 @@ export type AccountCapabilityDispatcher = {
 }
 
 type NotificationService = {
-  listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending" }): Promise<unknown>
+  listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }): Promise<unknown>
   notificationUnreadCount(): Promise<unknown>
   getNotification(id: string): Promise<unknown>
   markNotificationRead(id: string): Promise<unknown>
@@ -33,7 +35,7 @@ const idInput = z.object({ id: z.string().min(1) }).strict()
 const getInput = z.object({ id: z.string().min(1).optional(), reference: z.string().optional() }).strict()
   .refine((input) => (input.id === undefined) !== (input.reference === undefined), "Provide exactly one notification locator.")
 const emptyInput = z.object({}).strict()
-const listInput = z.object({ filter: z.enum(["all", "unread", "pending"]).optional(), cursor: z.string().min(1).optional() }).strict()
+const listInput = z.object({ filter: z.enum(["all", "unread", "pending"]).optional(), cursor: z.string().min(1).optional(), source: z.enum(NOTIFICATION_SOURCES).optional() }).strict()
 const deleteAllInput = z.object({ filter: z.enum(["all", "pending"]) }).strict()
 
 export function createAccountCapabilityDispatcher(deps: {

@@ -188,6 +188,19 @@ describe("AccountService", () => {
     })).resolves.toBe("offline")
   })
 
+  it("requests notification source and status together and omits source for all categories", async () => {
+    const { service } = await createTestAccountService()
+    const request = vi.spyOn(service as unknown as {
+      getAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
+    }, "getAuthenticatedJson").mockResolvedValue({ items: [], nextCursor: null })
+
+    await service.listNotifications({ source: "mail", filter: "unread", cursor: "n1" })
+    const url = new URL(request.mock.calls[0]?.[0] as string)
+    expect(Object.fromEntries(url.searchParams)).toEqual({ source: "mail", filter: "unread", cursor: "n1" })
+    await service.listNotifications({ filter: "all" })
+    expect(new URL(request.mock.calls[1]?.[0] as string).searchParams.has("source")).toBe(false)
+  })
+
   it("reports sent after the account accepts a desktop notification", async () => {
     const fetch = vi.fn(async (url: unknown) => {
       if (String(url).endsWith("/auth/refresh")) {

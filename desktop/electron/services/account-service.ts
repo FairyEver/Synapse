@@ -31,6 +31,7 @@ import type {
   DashboardWebhookDto,
   DesktopNotificationOutcome,
   DesktopNotificationSource,
+  NotificationSource,
   DriveAnnotationCommentDto,
   DriveAnnotationThreadDto,
   DriveMessageAgentInput,
@@ -474,10 +475,11 @@ export class AccountService {
     }
   }
 
-  async listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending" }) {
+  async listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) {
     const params = new URLSearchParams()
     if (input.cursor) params.set("cursor", input.cursor)
     if (input.filter) params.set("filter", input.filter)
+    if (input.source) params.set("source", input.source)
     const suffix = params.size ? `?${params}` : ""
     return this.getAuthenticatedJson<import("../../src/types/notification-center").NotificationPage>(
       `${apiBaseUrl()}/notifications${suffix}`, "消息加载失败。",

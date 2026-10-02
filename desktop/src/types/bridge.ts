@@ -222,6 +222,7 @@ import type {
   DriveTrashItemDto,
   DriveTrashListPageDto,
   DriveUploadPrepareResult,
+  NotificationSource,
   DriveSyncBindingPreviewDto,
   DriveSyncBindingDto,
   DriveSyncConflictResolutionInput,
@@ -1390,7 +1391,7 @@ export type SynapseBridge = {
     listWebhooks: () => Promise<DashboardWebhookDto[]>
     notifications: {
       onChanged: (listener: (event: { notificationId: string }) => void) => () => void
-      list: (input: { cursor?: string; filter?: "all" | "unread" | "pending" }) => Promise<import("./notification-center").NotificationPage>
+      list: (input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) => Promise<import("./notification-center").NotificationPage>
       count: () => Promise<{ unread: number }>
       read: (input: { id: string; read?: boolean }) => Promise<{ ok: true }>
       readAll: () => Promise<{ ok: true }>

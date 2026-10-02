@@ -37,6 +37,11 @@ let current: ReturnType<typeof useMessageCenter>
 
 function Harness() { current = useMessageCenter(); return null }
 async function flush() { await Promise.resolve(); await Promise.resolve() }
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => { resolve = done })
+  return { promise, resolve }
+}
 
 beforeEach(async () => {
   mocks.list.mockReset().mockResolvedValue({ items: [notice], nextCursor: null })
@@ -66,6 +71,82 @@ afterEach(async () => {
 })
 
 describe("useMessageCenter", () => {
+  it("defaults to all categories without sending a source restriction", () => {
+    expect(current.source).toBe("all")
+    expect(mocks.list).toHaveBeenCalledWith({ filter: "all" })
+    expect(mocks.count).toHaveBeenCalledWith()
+  })
+
+  it("combines the category and status filters and resets to all categories", async () => {
+    await act(async () => { current.changeFilter("unread"); current.changeSource("terminal-attention"); await flush() })
+    expect(current.filter).toBe("unread")
+    expect(current.source).toBe("terminal-attention")
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "terminal-attention" })
+
+    await act(async () => { current.changeFilter("pending"); await flush() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", source: "terminal-attention" })
+    await act(async () => { current.changeSource("system-notifier"); await flush() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", source: "system-notifier" })
+    await act(async () => { current.changeSource("all"); await flush() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending" })
+  })
+
+  it("clears the previous selection, list, and cursor while loading another category", async () => {
+    mocks.list.mockResolvedValueOnce({ items: [notice], nextCursor: "old-next" })
+    await act(async () => { await current.openItem(notice); await flush() })
+    expect(current.selected?.id).toBe(notice.id)
+    expect(current.cursor).toBe("old-next")
+    const nextPage = deferred<{ items: SynapseNotification[]; nextCursor: string | null }>()
+    mocks.list.mockReturnValueOnce(nextPage.promise)
+    await act(async () => { current.changeSource("system-notifier"); await flush() })
+    expect(current.selected).toBeNull()
+    expect(current.items).toEqual([])
+    expect(current.cursor).toBeNull()
+    expect(current.loading).toBe(true)
+    await act(async () => { nextPage.resolve({ items: [], nextCursor: null }); await flush() })
+  })
+
+  it("retains the category and status restrictions when loading another page", async () => {
+    const attention: SynapseNotification = { ...notice, id: "attention-1", source: "terminal-attention" }
+    const nextAttention: SynapseNotification = { ...attention, id: "attention-2" }
+    mocks.list.mockResolvedValueOnce({ items: [attention], nextCursor: "attention-next" })
+    await act(async () => { current.changeFilter("unread"); current.changeSource("terminal-attention"); await flush() })
+    mocks.list.mockResolvedValueOnce({ items: [attention, nextAttention], nextCursor: "attention-last" })
+    await act(async () => { await current.loadMore(); await flush() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "terminal-attention", cursor: "attention-next" })
+    expect(current.items).toEqual([attention, nextAttention])
+    expect(current.cursor).toBe("attention-last")
+  })
+
+  it("ignores an old page that arrives after the category changes", async () => {
+    const systemNotice: SynapseNotification = { ...notice, id: "system-1", source: "system-notifier" }
+    const oldPage = deferred<{ items: SynapseNotification[]; nextCursor: string | null }>()
+    mocks.list.mockResolvedValueOnce({ items: [notice], nextCursor: "mail-next" })
+    await act(async () => { current.changeSource("mail"); await flush() })
+    mocks.list.mockReturnValueOnce(oldPage.promise)
+    let loadingOldPage!: Promise<void>
+    await act(async () => { loadingOldPage = current.loadMore(); await flush() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "all", source: "mail", cursor: "mail-next" })
+
+    mocks.list.mockResolvedValueOnce({ items: [systemNotice], nextCursor: "system-next" })
+    await act(async () => { current.changeSource("system-notifier"); await flush() })
+    await act(async () => {
+      oldPage.resolve({ items: [{ ...notice, id: "old-mail-page" }], nextCursor: "old-mail-last" })
+      await loadingOldPage
+      await flush()
+    })
+    expect(current.items).toEqual([systemNotice])
+    expect(current.cursor).toBe("system-next")
+  })
+
+  it("keeps bulk read and deletion operations scoped to the account across category filters", async () => {
+    await act(async () => { current.changeFilter("unread"); current.changeSource("mail"); await flush() })
+    await act(async () => { await current.markAllRead(); await current.deleteAll("all"); await current.deleteAll("pending"); await flush() })
+    expect(mocks.readAll).toHaveBeenCalledWith()
+    expect(mocks.deleteAll.mock.calls).toEqual([[{ filter: "all" }], [{ filter: "pending" }]])
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "mail" })
+  })
+
   it("loads the full platform announcement only after opening its notification", async () => {
     expect(mocks.mailRequest).not.toHaveBeenCalled()
     await act(async () => { current.changeOpen(true); await flush() })
@@ -91,5 +172,17 @@ describe("useMessageCenter", () => {
     await act(async () => { current.remove(notice) })
     await act(async () => { vi.advanceTimersByTime(5_500); await flush() })
     expect(mocks.delete).toHaveBeenCalledWith({ id: "n1" })
+  })
+
+  it("refreshes the current category when a deletion timer finishes after a category change", async () => {
+    vi.useFakeTimers()
+    await act(async () => { current.remove(notice) })
+    await act(async () => { current.changeSource("mail"); await flush() })
+    mocks.list.mockClear()
+
+    await act(async () => { vi.advanceTimersByTime(5_500); await flush() })
+    expect(mocks.delete).toHaveBeenCalledWith({ id: "n1" })
+    expect(current.source).toBe("mail")
+    expect(mocks.list.mock.calls).toEqual([[{ filter: "all", source: "mail" }]])
   })
 })

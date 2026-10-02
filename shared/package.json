@@ -28,6 +28,12 @@
       "import": "./dist/mobile-live-constants.cjs",
       "require": "./dist/mobile-live-constants.cjs",
       "default": "./dist/mobile-live-constants.cjs"
+    },
+    "./notification-constants": {
+      "types": "./dist/notification-constants.d.cts",
+      "import": "./dist/notification-constants.cjs",
+      "require": "./dist/notification-constants.cjs",
+      "default": "./dist/notification-constants.cjs"
     }
   },
   "scripts": {

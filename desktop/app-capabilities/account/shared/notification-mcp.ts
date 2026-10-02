@@ -1,8 +1,9 @@
+import { NOTIFICATION_SOURCES } from "@synapse/shared/notification-constants"
 import type { CapabilityDefinition, McpToolDefinition } from "../../../synapse-capabilities/shared/types"
 import type { CapabilityId } from "../../../synapse-capabilities/shared/naming"
 
 const entries = [
-  ["list", "List account notifications by all, unread, or pending filter. Pagination: cursor-based. Continue with nextCursor."],
+  ["list", "List account notifications by all, unread, or pending filter and optional source. Both filters apply together. Pagination: cursor-based. Continue with nextCursor and the same filters; restart without cursor when a filter changes."],
   ["count", "Get the exact unread notification count."],
   ["get", "Read one notification without marking it read. Pass either id or the complete copied synapse:notification:<id> reference."],
   ["read", "Mark one notification read."],
@@ -32,7 +33,7 @@ export function buildNotificationTools(): McpToolDefinition[] {
     name: `app_account_notification_${action}`,
     description,
     inputSchema: action === "list" ? {
-      type: "object", properties: { filter: { type: "string", enum: ["all", "unread", "pending"], description: "Defaults to all." }, cursor: { type: "string", description: "nextCursor from the prior page." } }, additionalProperties: false,
+      type: "object", properties: { filter: { type: "string", enum: ["all", "unread", "pending"], description: "Defaults to all." }, source: { type: "string", enum: [...NOTIFICATION_SOURCES], description: "Optional notification source. Omit for all sources; pending only matches terminal-attention." }, cursor: { type: "string", description: "nextCursor from the prior page with the same filter and source." } }, additionalProperties: false,
     } : action === "get" ? {
       type: "object", properties: { id: { ...id, description: "Notification ID. Use this or reference, not both." }, reference: { type: "string", description: "Complete copied synapse:notification:<id> reference. Pass unchanged; use this or id, not both." } }, additionalProperties: false,
     } : action === "read" || action === "delete" ? {

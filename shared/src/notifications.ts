@@ -1,3 +1,9 @@
+import notificationConstants from "./notification-constants.cjs"
+
+export const NOTIFICATION_SOURCES = notificationConstants.NOTIFICATION_SOURCES
+
+export type NotificationSource = (typeof NOTIFICATION_SOURCES)[number]
+
 /**
  * 桌面端自己发起的账号通知。
  *

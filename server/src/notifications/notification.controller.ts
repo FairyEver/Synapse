@@ -3,7 +3,7 @@ import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
 import { createHash } from "node:crypto"
 import { z } from "zod"
-import { DESKTOP_NOTIFICATION_SOURCES } from "@synapse/shared"
+import { DESKTOP_NOTIFICATION_SOURCES, NOTIFICATION_SOURCES } from "@synapse/shared"
 import { NOTIFICATION_SEND_SCOPE } from "../api-keys/api-key-capabilities"
 import type { OpenApiPrincipal } from "../api-keys/api-key.service"
 import { UserAuthGuard } from "../auth/user-auth.guard"
@@ -40,6 +40,7 @@ const notificationThrottle = {
 const listSchema = z.object({
   cursor: z.string().min(1).max(120).optional(),
   filter: z.enum(["all", "unread", "pending"]).optional(),
+  source: z.enum(NOTIFICATION_SOURCES).optional(),
 })
 
 const deleteAllSchema = z.object({ filter: z.enum(["all", "pending"]) })

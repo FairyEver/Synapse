@@ -1,4 +1,5 @@
 import { Prisma, type UserNotification } from "@prisma/client"
+import { NOTIFICATION_SOURCES } from "@synapse/shared"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationService } from "./notification.service"
 
@@ -28,6 +29,47 @@ function harness() {
 }
 
 describe("NotificationService", () => {
+  it("applies the source before cursor pagination and retains the unread intersection", async () => {
+    const { service, prisma } = harness()
+    const mail = { ...record, source: "mail" }
+    const rows = Array.from({ length: 51 }, (_, index) => ({ ...mail, id: `mail-${index}` }))
+    prisma.userNotification.findMany.mockResolvedValueOnce(rows)
+
+    await expect(service.list("user-1", { source: "mail", filter: "unread", cursor: "message-1" }))
+      .resolves.toEqual({ items: rows.slice(0, 50), nextCursor: "mail-49" })
+    expect(prisma.userNotification.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) },
+        source: "mail", readAt: null,
+        OR: [{ createdAt: { lt: record.createdAt } }, { createdAt: record.createdAt, id: { lt: record.id } }],
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 51,
+    })
+  })
+
+  it("preserves all-source reads and restricts pending to unresolved terminal attention", async () => {
+    const { service, prisma } = harness()
+    await service.list("user-1", {})
+    expect(prisma.userNotification.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: { userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) } },
+    }))
+    await service.list("user-1", { source: "terminal-attention", filter: "pending" })
+    expect(prisma.userNotification.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: { userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) }, source: "terminal-attention", resolvedAt: null },
+    }))
+  })
+
+  it("returns an empty pending intersection for every other source", async () => {
+    const { service, prisma } = harness()
+    for (const source of NOTIFICATION_SOURCES.filter((source) => source !== "terminal-attention")) {
+      await expect(service.list("user-1", { source, filter: "pending", cursor: "message-1" }))
+        .resolves.toEqual({ items: [], nextCursor: null })
+    }
+    expect(prisma.userNotification.findFirst).not.toHaveBeenCalled()
+    expect(prisma.userNotification.findMany).not.toHaveBeenCalled()
+  })
+
   it("keeps a persisted message when APNs fails and publishes its ID", async () => {
     const { service, prisma, desktops, mobiles } = harness()
     await expect(service.create({ userId: "user-1", source: "external", title: "部署完成", body: "已更新" })).resolves.toEqual(record)

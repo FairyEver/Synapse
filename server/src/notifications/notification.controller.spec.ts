@@ -1,5 +1,6 @@
 import type { ExecutionContext } from "@nestjs/common"
 import { THROTTLER_KEY_GENERATOR } from "@nestjs/throttler/dist/throttler.constants"
+import { NOTIFICATION_SOURCES } from "@synapse/shared"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
 
@@ -15,6 +16,19 @@ function controller(scopes: string[] = ["notification.send"]) {
 }
 
 describe("NotificationController", () => {
+  it("accepts each existing notification source and rejects unknown categories", async () => {
+    const page = { items: [], nextCursor: null }
+    const service = { list: vi.fn(async () => page) }
+    const endpoint = new NotificationController(service as never)
+    const request = { user: { id: "reader" } }
+    for (const source of NOTIFICATION_SOURCES) {
+      await expect(endpoint.list(request as never, { source, filter: "unread", cursor: "n1" })).resolves.toEqual(page)
+      expect(service.list).toHaveBeenLastCalledWith("reader", { source, filter: "unread", cursor: "n1" })
+    }
+    await expect(endpoint.list(request as never, { source: "unknown" })).rejects.toMatchObject({ status: 400 })
+    expect(service.list).toHaveBeenCalledTimes(NOTIFICATION_SOURCES.length)
+  })
+
   it("keeps old mark-read calls working and accepts an explicit mark-unread request", async () => {
     const service = { markRead: vi.fn(async () => undefined) }
     const endpoint = new NotificationController(service as never)

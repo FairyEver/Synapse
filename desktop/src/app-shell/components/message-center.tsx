@@ -1,7 +1,8 @@
 import { useState } from "react"
+import type { NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
-import { useMessageCenter, type MessageFilter } from "@/app-shell/hooks/use-message-center"
+import { useMessageCenter, type MessageFilter, type MessageSourceFilter } from "@/app-shell/hooks/use-message-center"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,6 +10,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -17,6 +19,15 @@ import type { SynapseNotification } from "@/types/notification-center"
 import { buildNotificationReference } from "../../../synapse-capabilities/shared/message-reference"
 
 type Center = ReturnType<typeof useMessageCenter>
+
+const notificationSourceLabels: Record<NotificationSource, string> = {
+  "system-notifier": "系统通知",
+  "terminal-attention": "Agent 待回复",
+  "terminal-complete": "Agent 回复完成",
+  mail: "站内信",
+  "meeting-transcription": "录音转写",
+  external: "外部通知",
+}
 
 function sourceName(item: SynapseNotification): string {
   if (item.source === "mail") return "站内信"
@@ -122,16 +133,21 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
           <div className="flex items-center gap-2"><SheetTitle className="text-lg font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</div>
           <div className="flex items-center gap-1">
             <Button type="button" variant="ghost" size="default" disabled={!center.unread} onClick={() => { void center.markAllRead() }}>全部设为已读</Button>
-            <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="更多操作"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem><DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+            <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="更多操作"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem>{center.filter === "pending" && center.items.length > 0 && <DropdownMenuItem onSelect={() => setClearScope("pending")}>忽略全部待处理…</DropdownMenuItem>}<DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
             <Button type="button" variant="ghost" size="icon" aria-label="关闭通知中心" onClick={() => center.changeOpen(false)}><X /></Button>
           </div>
         </SheetHeader>
         <div className="flex min-h-0 flex-1">
           <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-88 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
-            <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-3">
+            <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
               <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}><TabsList><TabsTrigger value="all">全部</TabsTrigger><TabsTrigger value="unread">未读{center.unread > 0 && ` ${center.unread}`}</TabsTrigger><TabsTrigger value="pending">待处理</TabsTrigger></TabsList></Tabs>
-              {center.filter === "pending" && center.items.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => setClearScope("pending")}>忽略全部…</Button>}
-              {center.filter === "unread" && center.items.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => { void center.markAllRead() }}>全部已读</Button>}
+              <Select value={center.source} onValueChange={(value) => center.changeSource(value as MessageSourceFilter)} data-track="message-center-source">
+                <SelectTrigger aria-label="通知分类" className="ml-auto w-32"><SelectValue /></SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="all">全部</SelectItem>
+                  {Object.entries(notificationSourceLabels).map(([source, label]) => <SelectItem key={source} value={source}>{label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             {center.error && <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm text-destructive">{center.error}<Button type="button" variant="outline" size="default" onClick={() => { void center.refresh() }}>重试</Button></div>}
             <ScrollArea className="min-h-0 flex-1">

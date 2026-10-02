@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma, type UserNotification } from "@prisma/client"
-import { LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
+import { LIVE_MESSAGE_TYPES, createLiveEnvelope, type NotificationSource } from "@synapse/shared"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobileLiveGateway } from "../mobile-live/mobile-live.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
@@ -10,7 +10,7 @@ import { MobileLiveRelayService } from "../mobile-live/mobile-live-relay.service
 import { PrismaService } from "../prisma/prisma.service"
 
 export type NotificationLevel = "active" | "passive" | "timeSensitive"
-export type NotificationSource = "external" | "system-notifier" | "terminal-attention" | "terminal-complete" | "meeting-transcription" | "mail"
+export type { NotificationSource } from "@synapse/shared"
 
 export type CreateNotificationInput = {
   userId: string
@@ -101,7 +101,10 @@ export class NotificationService implements OnModuleInit {
     return record
   }
 
-  async list(userId: string, input: { cursor?: string; filter?: "all" | "unread" | "pending" }) {
+  async list(userId: string, input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) {
+    if (input.filter === "pending" && input.source && input.source !== "terminal-attention") {
+      return { items: [], nextCursor: null }
+    }
     const cursor = input.cursor
       ? await this.prisma.userNotification.findFirst({ where: { id: input.cursor, userId }, select: { createdAt: true, id: true } })
       : null
@@ -110,6 +113,7 @@ export class NotificationService implements OnModuleInit {
         userId,
         deletedAt: null,
         createdAt: { gte: new Date(Date.now() - retentionMs) },
+        ...(input.source ? { source: input.source } : {}),
         ...(input.filter === "unread" ? { readAt: null } : {}),
         ...(input.filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
         ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}),
