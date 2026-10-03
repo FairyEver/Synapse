@@ -1,6 +1,6 @@
 # 工作区文件 V1 验收记录
 
-日期：2026-10-03～04。状态：已完成下列限定场景的功能与Apple界面验收；原自动报告与未覆盖范围分别保留。完整发版待执行。
+日期：2026-10-03～04。状态：已完成下列限定场景的功能与Apple界面验收；原自动报告与未覆盖范围分别保留。完整发版进行中；v1.0.55第一轮CI失败尚未发布，正在修订测试夹具后重验。
 
 规格：[V1 spec](../specs/2026-10-03-mobile-workspace-files-and-changes-spec.md)。计划：[P00–P09](2026-10-03-mobile-workspace-files-and-changes-plan.md)。本记录区分真实运行证据、单元/静态检查和未覆盖场景，不以跳过或编译成功代替验收。
 
@@ -398,6 +398,20 @@ r142 最终R123 phone18受影响Browse/Composer两项109.842秒、0失败/0跳�
 ## 发布准备
 
 最终界面验收期间再次执行的发版前检查通过：预览下一版v1.0.55的完整更新说明，生产通知接口确认42个活跃账号。此时只检查，未发送站内信、未推进版本、未发布；正式版本号和通知人数以最终发版记录为准。
+
+### 第一轮发布与CI修订
+
+功能提交`03612ce07`；版本提交`357aa73d8e1b564429df58948d250aede68778ef`推进1.0.55、同步iOS八个MARKETING_VERSION配置并推送main。正式推送前完整通知预检再次通过，42个活跃账号，仅预览未发送，pending说明保持原样。
+
+CI于2026-10-03T23:00:10Z手动dispatch，精确run[37160313861](https://github.com/FairyEver/Synapse/actions/runs/37160313861)、workflow_dispatch/相同SHA/created23:00:12Z。最终四构建/运行时包检查job成功，Windows测试job与macOS完整tests失败，未dispatch Release。原日志`/tmp/synapse-files-release-v1.0.55-ci-windows-job.log`、`/tmp/synapse-files-release-v1.0.55-ci-macos-failure.log`保留；Windows八套106通过/5失败/11原POSIX跳过，212.93秒，不能计全绿；macOS完整983文件10024通过/1失败，468.23秒。
+
+按server→desktop→iOS顺序先行`bash deploy.sh`已exit0、420秒完成：globals/在线预演/最终切换前数据库备份、迁移预演及正式迁移、服务切换和第二次health检查均成功，healthz/console/admin/深链/桌面更新/文档/Drive/凭据服务检查通过。精确log`/tmp/synapse-files-release-v1.0.55-server-before-desktop.log`，deployId`20261004_070020`。桌面/iOS包与站内信未发布。
+
+六失败均对应测试契约与环境：Windows canary使用原始反斜杠写Git配置，原生Git同内容exit128 bad config；改slash后exit0并保clean/process完整命令，补真实`--no-includes`解析断言，仍要求external_filter_required和canary不执行。两个多次真实Git请求的集成case在Windows超过默认5秒测试总时限，仅局部设既有同类20秒，不改变生产单Git5秒/文件intent15秒或数量字节预算。Windows cmd mock原按大小写敏感且继承宿主PATHEXT；CI大写.CMD精确在Mac复现30/32，修订为Windows文件查询语义并显式覆盖fallback和大写分支，两个环境34/34绿，严格cmd.exe与完整转义仍保持。macOS旧registry预期88服务漏了已经实现的core.mobile-workspace-files；补完整89列表、terminal/guard/audit三依赖及gateway关联，registry/descriptors62/62绿。仅修测试，生产与R123 UI源码不变；原生Windows仍待新CI。
+
+独立代理只读复核接受三测试修补：未新增skip、放松功能期望或扩大产品预算，真实配置解析和注册依赖断言反而加强。原失败及POSIX专属skip继续记录，不将本机模拟Windows视为原生Windows通过。
+
+文件服务最终整套回归60/60通过、0失败/0跳过，101.36秒；日志`/tmp/synapse-files-windows-ci-fixture-fix-service-suite.log`，另三项针对性回归3/3通过。开发代理已冻结交接，仅修改上述测试文件。修订单独本地提交后，按发版流程推进v1.0.56并重新执行精确SHA的原生Windows及macOS CI；v1.0.55未发布，说明未归档、站内信未发送。
 
 ## Apple 依据
 

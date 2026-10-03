@@ -117,6 +117,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.logging",
         "core.meeting",
         "core.mobile-gateway",
+        "core.mobile-workspace-files",
         "core.model-price",
         "core.network-registry",
         "core.permission-guard",
@@ -181,6 +182,12 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.config")?.dependsOn).toEqual([])
     expect(byId.get("core.logging")?.dependsOn).toEqual([])
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
+    expect(byId.get("core.mobile-workspace-files")?.dependsOn).toEqual([
+      "core.terminal",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.mobile-gateway")?.dependsOn).toContain("core.mobile-workspace-files")
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
     expect(byId.get("core.data-maintenance")?.dependsOn).toEqual([
       "core.data-repository",

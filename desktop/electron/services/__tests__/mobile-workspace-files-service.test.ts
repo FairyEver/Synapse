@@ -724,9 +724,10 @@ describe("mobile workspace Git uses real bounded readonly repositories", () => {
 
   it("rejects global includes and external converters without following or executing them", async () => {
     const f = await fixture(true), config = path.join(f.home, ".gitconfig"), canary = path.join(f.home, "filter-executed")
+    const canaryCommand = `touch '${canary.split(path.sep).join("/")}'`
     await writeFile(path.join(f.root, "readable.txt"), "ordinary\n")
     const included = path.join(f.home, "unapproved-included-config")
-    await writeFile(included, `[filter "included"]\nclean = touch '${canary}'\n`)
+    await writeFile(included, `[filter "included"]\nclean = ${canaryCommand}\n`)
     const condition = `gitdir:${f.root.split(path.sep).join("/")}/.git/`
     for (const section of ["include", ...["includeIf", "includeif", "INCLUDEIF"].map(name => `${name} "${condition}"`)]) {
       await writeFile(config, `[${section}]\npath = ${included.split(path.sep).join("/")}\n`)
@@ -734,7 +735,9 @@ describe("mobile workspace Git uses real bounded readonly repositories", () => {
       expect(scope).toMatchObject({ gitAvailable: false, gitUnavailableReason: "git_unavailable" })
       expect(dataFor(await f.call({ operation: "directory", ...f.scoped(scope), directoryEntryId: scope.rootEntryId }), "directory").entries[0]?.name).toBe("readable.txt")
     }
-    await writeFile(config, `[filter "review"]\nclean = touch '${canary}'\nprocess = touch '${canary}'\n`)
+    await writeFile(config, `[filter "review"]\nclean = ${canaryCommand}\nprocess = ${canaryCommand}\n`)
+    expect((await f.command("config", "--file", config, "--no-includes", "--get", "filter.review.clean")).trim()).toBe(canaryCommand)
+    expect((await f.command("config", "--file", config, "--no-includes", "--get", "filter.review.process")).trim()).toBe(canaryCommand)
     expect(await f.open()).toMatchObject({ gitAvailable: false, gitUnavailableReason: "external_filter_required" })
     await expect(access(canary)).rejects.toThrow()
     await writeFile(config, "[core]\nautocrlf = true\n")
@@ -933,7 +936,7 @@ describe("mobile workspace Git uses real bounded readonly repositories", () => {
     expect(diff.hunks.flatMap(hunk => hunk.lines).every(line => line.kind === "addition")).toBe(true)
     const before = dataFor(await f.call({ operation: "preview", ...f.scoped(scope), target: { source: "change", changeId: changes.entries[0]!.changeId, changeSetVersion: changes.changeSetVersion, side: "before" } }), "preview")
     expect(before.contentState).toBe("absent")
-  })
+  }, 20_000)
 
   it("never executes a clean/process filter added after the change list", async () => {
     const f = await fixture(true)
@@ -972,7 +975,7 @@ describe("mobile workspace Git uses real bounded readonly repositories", () => {
       expect(result.contentState).toBe("limit_exceeded"); expect(result.hunks).toEqual([]); expect(result.statsComplete).toBe(false)
     }
     expect(f.service.facts().resultBytes).toBeLessThanOrEqual(2 * 1024 * 1024)
-  })
+  }, 20_000)
 
   it("uses the actual linked worktree and reports conflicts without choosing a side", async () => {
     const f = await fixture(true)

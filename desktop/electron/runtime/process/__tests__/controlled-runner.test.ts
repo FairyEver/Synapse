@@ -120,7 +120,10 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     ])
   })
 
-  it("resolves bare Windows commands to cmd shims before spawning", async () => {
+  it.each([
+    { pathext: "", extension: ".cmd" },
+    { pathext: ".COM;.EXE;.BAT;.CMD", extension: ".CMD" },
+  ])("resolves bare Windows commands to cmd shims before spawning (PATHEXT: $pathext)", async ({ pathext, extension }) => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()
     const stdout = new PassThrough()
@@ -145,7 +148,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       auditSink,
       spawnImpl,
       platform: "win32",
-      fileExists: (candidate) => candidate === "C:\\Tools\\codex.cmd",
+      fileExists: (candidate) => candidate.toLowerCase() === "c:\\tools\\codex.cmd",
     })
 
     await expect(runner.run({
@@ -155,6 +158,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       args: ["exec", "--json"],
       env: {
         PATH: "C:\\Tools",
+        PATHEXT: pathext,
         ComSpec: "C:\\Windows\\System32\\cmd.exe",
       },
       pathStrategy: "replace",
@@ -162,7 +166,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
 
     expect(spawnImpl).toHaveBeenCalledWith(
       "C:\\Windows\\System32\\cmd.exe",
-      ["/d", "/s", "/c", "C:\\Tools\\codex.cmd exec --json"],
+      ["/d", "/s", "/c", `C:\\Tools\\codex${extension} exec --json`],
       expect.objectContaining({
         shell: false,
         windowsHide: true,
@@ -177,7 +181,10 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     ])
   })
 
-  it("escapes quotes and cmd metacharacters for Windows cmd shims", async () => {
+  it.each([
+    { pathext: "", extension: ".cmd" },
+    { pathext: ".COM;.EXE;.BAT;.CMD", extension: ".CMD" },
+  ])("escapes quotes and cmd metacharacters for Windows cmd shims (PATHEXT: $pathext)", async ({ pathext, extension }) => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()
     const stdout = new PassThrough()
@@ -202,7 +209,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       auditSink,
       spawnImpl,
       platform: "win32",
-      fileExists: (candidate) => candidate === "C:\\Tools\\claude.cmd",
+      fileExists: (candidate) => candidate.toLowerCase() === "c:\\tools\\claude.cmd",
     })
 
     await expect(runner.run({
@@ -212,6 +219,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
       args: ["-p", "Use {\"mode\":\"fast\"} & keep \"quotes\""],
       env: {
         PATH: "C:\\Tools",
+        PATHEXT: pathext,
         ComSpec: "C:\\Windows\\System32\\cmd.exe",
       },
       pathStrategy: "replace",
@@ -223,7 +231,7 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
         "/d",
         "/s",
         "/c",
-        "C:\\Tools\\claude.cmd -p \"Use {\"\"mode\"\":\"\"fast\"\"} ^& keep \"\"quotes\"\"\"",
+        `C:\\Tools\\claude${extension} -p "Use {""mode"":""fast""} ^& keep ""quotes"""`,
       ],
       expect.objectContaining({
         shell: false,
