@@ -5,6 +5,8 @@ import {
   WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS,
   LIVE_DESKTOP_CLOSE_CODES,
   LIVE_MESSAGE_TYPES,
+  MOBILE_WORKSPACE_FILES_VERSION,
+  isMobileWorkspaceFilesEnvelopeWithinBudget,
   createLiveEnvelope,
   isLiveDesktopClientMessage,
   type LiveDesktopClientMessage,
@@ -70,7 +72,7 @@ export interface WebhookDeliveryAckHandler {
 export interface LiveMobileRelayHandler {
   readonly handleSummary: (userId: string, payload: MobileSummaryPayload) => void
   readonly handleFrame: (userId: string, payload: MobileFramePayload) => void
-  readonly handleIntentResult: (userId: string, payload: MobileIntentResultPayload) => void
+  readonly handleIntentResult: (userId: string, payload: MobileIntentResultPayload, authenticatedDesktopId?: string) => void
   /**
    * A computer's progress fetching a file a phone relayed. Arrives repeatedly
    * between the intent and its result, and is worthless once that result lands.
@@ -499,6 +501,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
           serverTime,
           heartbeatIntervalMs,
           heartbeatTimeoutMs,
+          mobileCapabilities: { workspaceFilesVersion: MOBILE_WORKSPACE_FILES_VERSION },
         }, { id: connectionId, sentAt: serverTime }))
         return
       }
@@ -561,7 +564,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         || message.type === LIVE_MESSAGE_TYPES.mobileGroupCommands) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
-        this.handleMobileRelayMessage(auth.userId, message)
+        this.handleMobileRelayMessage(auth.userId, message, (client ?? registeredClient)?.clientInstanceId)
         return
       }
 
@@ -752,7 +755,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     })
   }
 
-  private handleMobileRelayMessage(userId: string, message: LiveDesktopClientMessage): void {
+  private handleMobileRelayMessage(userId: string, message: LiveDesktopClientMessage, authenticatedDesktopId?: string): void {
     const relay = this.mobileRelayHandler
     if (!relay) {
       this.logger.warn({ messageType: message.type }, "Live mobile relay message dropped")
@@ -760,6 +763,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     }
     try {
       if (message.type === LIVE_MESSAGE_TYPES.mobileSummary) {
+        if (message.payload.workspaceFilesVersion !== undefined && message.payload.desktopClientInstanceId !== authenticatedDesktopId) return
         relay.handleSummary(userId, message.payload)
         return
       }
@@ -772,7 +776,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         return
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
-        relay.handleIntentResult(userId, message.payload)
+        if ((message.payload.result.workspaceFiles !== undefined || message.payload.desktopClientInstanceId !== undefined) && !isMobileWorkspaceFilesEnvelopeWithinBudget(message)) return
+        relay.handleIntentResult(userId, message.payload, authenticatedDesktopId)
         return
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileToolbar) {

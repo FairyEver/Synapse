@@ -11,6 +11,7 @@ import {
   LIVE_MESSAGE_TYPES,
   createLiveEnvelope,
   isLiveMobileClientMessage,
+  MOBILE_WORKSPACE_FILES_VERSION,
   type LiveMobileClientMessage,
   type LiveMobileServerMessage,
 } from "@synapse/shared"
@@ -18,6 +19,7 @@ import { RawData, WebSocket, WebSocketServer } from "ws"
 import { UserAuthService } from "../auth/user-auth.service"
 import { LiveClientRegistry } from "../live/live-client-registry"
 import type { LiveClientInstance } from "../live/live.types"
+import { WorkspaceFilesSendQueue } from "./workspace-files-send-queue"
 import { MobileLiveRelayService } from "./mobile-live-relay.service"
 import {
   MOBILE_CLIENT_REGISTRY,
@@ -56,6 +58,7 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
   private readonly socketsByConnectionId = new Map<string, WebSocket>()
   private server: WebSocketServer | null = null
   private staleInterval: NodeJS.Timeout | null = null
+  private readonly filesSendQueue = new WorkspaceFilesSendQueue()
 
   constructor(
     private readonly auth: UserAuthService,
@@ -104,6 +107,7 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
   }
 
   onApplicationShutdown(): void {
+    this.filesSendQueue.dispose()
     const sockets = [...this.socketsByConnectionId.entries()]
     this.socketsByConnectionId.clear()
     if (this.staleInterval) {
@@ -137,6 +141,16 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
    * a phone that dropped mid-frame is the normal case, and the desktop should not
    * see an error for it.
    */
+  ownsMobileClient(userId: string, clientInstanceId: string): boolean {
+    return this.registry.listByUser(userId).some(client => client.clientInstanceId === clientInstanceId)
+  }
+
+  sendWorkspaceFilesResult(input: { readonly userId: string; readonly clientInstanceId: string; readonly message: LiveMobileServerMessage }): "sent" | "queued" | "offline" | "send_failed" | "backpressure" {
+    const client = this.registry.listOnlineByUser(input.userId).find(client => client.clientInstanceId === input.clientInstanceId)
+    const socket = this.openSocket(client?.connectionId ?? undefined)
+    return socket ? this.filesSendQueue.send(socket, input.message) : "offline"
+  }
+
   sendToMobile(input: {
     readonly userId: string
     readonly clientInstanceId: string
@@ -279,7 +293,9 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
         deviceName: hello.deviceName,
         now,
         onSupersede: (oldConnectionId) => {
-          this.socketsByConnectionId.get(oldConnectionId)?.close(1000, "superseded")
+          const oldSocket = this.socketsByConnectionId.get(oldConnectionId)
+          if (oldSocket) this.filesSendQueue.remove(oldSocket)
+          oldSocket?.close(1000, "superseded")
           this.socketsByConnectionId.delete(oldConnectionId)
         },
       })
@@ -296,6 +312,7 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
         serverTime: now.toISOString(),
         heartbeatIntervalMs: MOBILE_LIVE_HEARTBEAT_INTERVAL_MS,
         heartbeatTimeoutMs: MOBILE_LIVE_HEARTBEAT_TIMEOUT_MS,
+        mobileCapabilities: { workspaceFilesVersion: MOBILE_WORKSPACE_FILES_VERSION },
       }))
       return
     }
@@ -315,25 +332,41 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
     if (message.type !== LIVE_MESSAGE_TYPES.mobileIntent) return
 
     const intentPayload = message.payload
+    if (intentPayload.mobileClientInstanceId !== entry.clientInstanceId) {
+      const rejection = envelope(LIVE_MESSAGE_TYPES.mobileIntentResult, { mobileClientInstanceId: entry.clientInstanceId, ...(intentPayload.intent.kind === "workspaceFiles" ? { desktopClientInstanceId: intentPayload.desktopClientInstanceId } : {}), result: { intentId: intentPayload.intent.intentId, outcome: "rejected", code: "permission_denied" } })
+      if (intentPayload.intent.kind === "workspaceFiles") this.filesSendQueue.send(socket, rejection)
+      else sendJson(socket, rejection)
+      return
+    }
     const outcome = await this.relay.deliverIntent({
       userId: entry.userId,
       mobileClientInstanceId: intentPayload.mobileClientInstanceId,
       desktopClientInstanceId: intentPayload.desktopClientInstanceId,
       intent: intentPayload.intent,
     })
-    if (outcome.delivery.status === "sent") return
+    if (outcome.delivery.status === "sent") {
+      if (outcome.result) {
+        const reply = envelope(LIVE_MESSAGE_TYPES.mobileIntentResult, { mobileClientInstanceId: entry.clientInstanceId, ...(intentPayload.intent.kind === "workspaceFiles" ? { desktopClientInstanceId: intentPayload.desktopClientInstanceId } : {}), result: outcome.result })
+        if (intentPayload.intent.kind === "workspaceFiles") this.filesSendQueue.send(socket, reply)
+        else sendJson(socket, reply)
+      }
+      return
+    }
 
     // Report delivery failure directly so the phone does not wait on a result
     // that can never arrive.
-    sendJson(socket, envelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
+    const failure = envelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
       mobileClientInstanceId: intentPayload.mobileClientInstanceId,
+      ...(intentPayload.intent.kind === "workspaceFiles" ? { desktopClientInstanceId: intentPayload.desktopClientInstanceId } : {}),
       result: {
         intentId: intentPayload.intent.intentId,
         outcome: "rejected",
         code: outcome.delivery.status === "desktop_offline" ? "desktop_offline" : "relay_failed",
         message: "电脑当前离线。",
       },
-    }))
+    })
+    if (intentPayload.intent.kind === "workspaceFiles") this.filesSendQueue.send(socket, failure)
+    else sendJson(socket, failure)
   }
 
   private acceptMessage(entry: ConnectedPhone): boolean {
@@ -352,6 +385,7 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
     registeredClient: LiveClientInstance | null,
     reason: string,
   ): LiveClientInstance | null {
+    this.filesSendQueue.remove(socket)
     if (!this.socketsByConnectionId.delete(entry.connectionId)) return null
     const client = this.registry.markDisconnected({
       connectionId: entry.connectionId,
@@ -371,6 +405,7 @@ export class MobileLiveGateway implements OnModuleInit, OnApplicationShutdown, M
     for (const client of this.registry.markStaleClients(now)) {
       if (client.status !== "offline" || !client.connectionId) continue
       const socket = this.socketsByConnectionId.get(client.connectionId)
+      if (socket) this.filesSendQueue.remove(socket)
       this.socketsByConnectionId.delete(client.connectionId)
       try {
         socket?.close(1000, MOBILE_DETACH_REASON_TIMEOUT)

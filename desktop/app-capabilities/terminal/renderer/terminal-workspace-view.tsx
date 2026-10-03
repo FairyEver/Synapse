@@ -23,6 +23,7 @@ import { Terminal } from "@xterm/xterm"
 import { Columns3, Copy, Folder, Link2, Maximize2, Minimize2, MoreHorizontal, Pencil, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
+import { formatDroppedTerminalPaths } from "../shared/path-reference"
 
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
@@ -1475,7 +1476,9 @@ function TerminalPane({
       toast.error("拖拽路径不可用")
       return
     }
-    const input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath), platform, session.shell)
+    let input: string
+    try { input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath), platform, session.shell) }
+    catch { toast.error("此路径无法安全插入终端"); return }
     void runTrackedOperation(
       { component: "terminal", eventKey },
       () => writeTerminalInputChunks({
@@ -2039,21 +2042,6 @@ export function resolveTerminalPaneDropEdge(
 
 function isValidDroppedTerminalPath(path: string | null): path is string {
   return typeof path === "string" && path.length > 0 && !/[\r\n]/.test(path)
-}
-
-function formatDroppedTerminalPaths(paths: readonly string[], platform: string | undefined, shell: string): string {
-  const shellName = platform === "win32" ? shell.split(/[\\/]/).pop()?.toLowerCase() : undefined
-  return `${paths.map((path) => {
-    if (shellName === "cmd" || shellName === "cmd.exe") return `"${path}"`
-    if (shellName === "powershell" || shellName === "powershell.exe" || shellName === "pwsh" || shellName === "pwsh.exe") {
-      return `'${path.replaceAll("'", "''")}'`
-    }
-    return escapeTerminalPath(path)
-  }).join(" ")} `
-}
-
-function escapeTerminalPath(path: string): string {
-  return path.replace(/([\\\s"'`$&;()<>|*?[\]{}!#~])/g, "\\$1")
 }
 
 async function writeTerminalInputChunks(options: {

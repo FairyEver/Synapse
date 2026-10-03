@@ -253,3 +253,26 @@ exports.MOBILE_KEYS = [
   "F12",
   "Insert",
 ]
+
+/** Generated workspace read budgets; edit mobile-workspace-files.ts. */
+exports.MOBILE_WORKSPACE_FILES_VERSION = 1
+exports.MOBILE_WORKSPACE_FILES_LIMITS = {
+  maxIdentifierLength: 120, maxCursorLength: 256, maxQueryLength: 256, maxQueryBytes: 1024,
+  maxPathBytes: 4096, maxReferenceBytes: 8192, maxTimestampLength: 48,
+  maxPageEntries: 100, maxPageDisplayBytes: 64 * 1024, maxEnvelopeBytes: 128 * 1024,
+  maxFileSideBytes: 2 * 1024 * 1024, maxLineBytes: 8 * 1024,
+  searchRequestMs: 2000, maxSearchRequestEntries: 20000, maxSearchEntries: 100000,
+  maxSearchMatches: 10000, maxSearchStateBytes: 2 * 1024 * 1024,
+  maxDirectoryEntries: 20000, maxDirectoryMetadataBytes: 2 * 1024 * 1024,
+  gitTimeoutMs: 5000, maxGitStdoutBytes: 4 * 1024 * 1024, maxGitStderrBytes: 64 * 1024,
+  maxDiffModelBytes: 4 * 1024 * 1024, maxDiffModelLines: 20000,
+  maxReadsPerMobile: 2, maxQueuedReadsPerMobile: 4, maxReads: 8, maxQueuedReads: 32,
+  queueTimeoutMs: 5000, maxScopesPerMobile: 1, maxScopes: 32,
+  maxHandlesPerScope: 20000, maxHandles: 100000, maxCursorsPerScope: 32, maxCursors: 256,
+  maxScopeMetadataBytes: 4 * 1024 * 1024, maxMetadataBytes: 16 * 1024 * 1024,
+  scopeIdleMs: 600000, cursorIdleMs: 60000, requestTimeoutMs: 15000,
+  maxMobileCacheBytes: 4 * 1024 * 1024, maxResultsPerMobile: 64, maxResults: 256,
+  maxResultBytesPerMobile: 2 * 1024 * 1024, maxResultBytes: 16 * 1024 * 1024, resultTtlMs: 30000,
+  maxControlsPerMobile: 128, maxControls: 512, maxControlBytes: 1024 * 1024, controlTtlMs: 30000,
+  maxSocketBufferedBytes: 512 * 1024, maxQueuedPages: 2, maxQueuedBytes: 256 * 1024, sendQueueTtlMs: 5000,
+}

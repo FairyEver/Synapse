@@ -2,7 +2,7 @@
 
 日期：2026-10-03
 
-状态：原始截图分析与设计依据，未实施。正式功能、协议、预算与验收条件以 [V1 spec](2026-10-03-mobile-workspace-files-and-changes-spec.md) 为准；实施顺序见[开发计划](../plans/2026-10-03-mobile-workspace-files-and-changes-plan.md)。本文保留设计推导，不再作为独立实现契约。
+状态：功能已开发，整体验收中，尚未发布。正式功能、协议、预算与验收条件以 [V1 spec](2026-10-03-mobile-workspace-files-and-changes-spec.md) 为准；实施顺序见[开发计划](../plans/2026-10-03-mobile-workspace-files-and-changes-plan.md)，实际证据和未关闭问题见[验收记录](../plans/2026-10-03-mobile-workspace-files-and-changes-acceptance.md)。本文保留设计推导，不再作为独立实现契约。
 
 范围：在现有手机终端内浏览桌面工作区、阅读 Git 差异、插入文件或目录引用。
 
@@ -12,7 +12,7 @@
 
 现有 SY iOS 的「创建对话」启动的是桌面 Claude Code **终端会话**，详情仍是终端画布。它没有 Codex 截图中的原生聊天消息时间线。因此首期完整实现工作区文件浏览与 Git 文件审查；截图里回复后的「本轮文件变化卡片」列为后续原生 Agent 会话设计，不能从终端文字推测轮次或冒充已具备能力。
 
-本提案明确接续旧 `2026-09-21-mobile-terminal-git-design.md` 的阶段范围：其 §3 决策六、§6 非目标、§7 已定口径第 6 项及验收第 40 项禁止下发文件清单和 diff。本次用户明确要求设计这些功能，新的按需只读范围拟取代这四处限制。现有全量提交、默认不推送、不提供文件级暂存、不解决合并冲突、Git 不登记仓库等边界继续保留。本文不修改运行代码；实施时同步修订旧规格与现行规则。
+本提案明确接续旧 `2026-09-21-mobile-terminal-git-design.md` 的阶段范围：其 §3 决策六、§6 非目标、§7 已定口径第 6 项及验收第 40 项禁止下发文件清单和 diff。本次用户明确要求实现这些功能，新的按需只读范围取代这四处限制，旧规格与现行规则已同步修订。现有全量提交、默认不推送、不提供文件级暂存、不解决合并冲突、Git 不登记仓库等边界继续保留。
 
 ## 2. 六张截图能说明什么
 
@@ -40,10 +40,10 @@ Swift 是语言，SwiftUI / UIKit 才是界面框架。两种框架都能实现�
 | 形态 | SY 可采用的模式 | Apple 依据 |
 | --- | --- | --- |
 | 可拖动、关闭、调高度的面板 | `.sheet`、`presentationDetents([.medium, .large], selection:)`、`presentationDragIndicator(.visible)`；扩大按钮改变 detent | [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)、[presentationDetents](https://developer.apple.com/documentation/swiftui/view/presentationdetents(_:selection:))：适用于与当前上下文相关的有限任务，可提供高度档位与抓手 |
-| 已修改 / 所有文件 | `Picker` 配 `.segmented` | [Segmented controls](https://developer.apple.com/design/human-interface-guidelines/segmented-controls)：切换紧密相关的视图 |
-| 文件夹、文件与差异展开 | `List` + 明确展开状态，适当使用 `DisclosureGroup`；远程树在展开时获取下一层 | [Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)、[DisclosureGroup](https://developer.apple.com/documentation/swiftui/disclosuregroup) |
+| 已修改 / 所有文件 | 原生 `Menu` 内用 `Picker` 保留选项和勾选，当前值为可换行系统 `Text`；显式显示「文件视图」与当前值 | [Menu](https://developer.apple.com/documentation/swiftui/menu)、[AnyLayout](https://developer.apple.com/documentation/swiftui/anylayout)：选择菜单使用系统label，最大字号下label/值纵排并保留同一子树。实际iOS18发现segmented标签不放大、内置menu Picker值在字号变化时裁切，采用此原生形制，仍切换同根的两个视图 |
+| 文件夹、文件与差异展开 | 明确展开状态，展开才获取下一层。iOS18与26共用原生`UITableViewDiffableDataSource`，普通文件/搜索文件为系统`UIListContentConfiguration`，目录、控件与Git行为`UIHostingConfiguration`。稳定ID快照保留独立操作与朗读，普通原生文件默认系统估算，明确定位意图最多一次冻结匹配当前完整布局的有限类别median；delegate纯读，布局或字号变化撤销且同意图不复活，失配交回系统。接续iPad定位后重排证据，最终定位及连续字号跨设备验收仍须通过 | [UIListContentConfiguration](https://developer.apple.com/documentation/uikit/uilistcontentconfiguration-swift.struct)、[UIHostingConfiguration](https://developer.apple.com/documentation/swiftui/uihostingconfiguration)、[estimatedRowHeight](https://developer.apple.com/documentation/uikit/uitableview/estimatedrowheight)：可使用系统表格承载原生和SwiftUI行，性能须以实际测量判断 |
 | 长按引用 | `.contextMenu`，详情提供同一操作 | [Context menus](https://developer.apple.com/design/human-interface-guidelines/context-menus)：内容相关动作也应有可发现入口 |
-| 搜索 | `.searchable`，用户提交搜索、取消旧请求 | [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)、[Performing a search operation](https://developer.apple.com/documentation/swiftui/performing-a-search-operation) |
+| 搜索 | 两版本共用列表上方原生`UITextField`搜索行及系统清除/提交Button，操作区域至少44pt、最大字号可增高。明确提交才搜索，编辑取消旧请求，清除复用Flow；iOS26原浮动搜索实测清除区域过小，改用此已有组件后须复验 | [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)、[Text fields](https://developer.apple.com/design/human-interface-guidelines/text-fields)、[Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) |
 | iPad 列表与详情 | 同一系统面板内 `NavigationSplitView`；窄窗口折叠为导航栈 | [Split views](https://developer.apple.com/design/human-interface-guidelines/split-views)、[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview) |
 | unified diff | 结构化行模型 + 等宽 `Text` + 有界懒渲染；没有 SwiftUI 内置 Git diff 控件 | [LazyVStack](https://developer.apple.com/documentation/swiftui/lazyvstack)、[Typography](https://developer.apple.com/design/human-interface-guidelines/typography) |
 
@@ -135,7 +135,7 @@ rename 的两端都在 scope 内时才显示完整旧新路径及比较；仅一
 
 正文等宽并支持 Dynamic Type，默认换行；换行后的视觉行共享原始代码行号。可切换不换行并水平滚动。插入/删除正文使用可读语义文字色，增删标记通过 Theme 集中映射系统语义色；同时保留符号和 VoiceOver 语义，不只靠红绿。
 
-SwiftUI 按有界行模型渲染；大 patch 解析在后台。若验收证明 List 性能不足，再采用 UIKit 虚拟化内容视图，不能直接把终端 ANSI 网格当 diff 控件。
+SwiftUI按有界行模型渲染，大patch解析在后台。iOS18与26浏览行共用原生UITableView复用与稳定ID快照，树、搜索和更改保留有限的阅读身份；不创建20,000个常驻行视图，也不按全部记录逐行测高。分页的100项网络上限不等于全视图只创建100行。系统self-sizing管理行高，环境字号、语言、布局方向、外观与禁用状态显式传入hosted行。这些选择仍须通过实际大集合、字号及窗口转换验收，不能宣称已测得性能改善，也不能直接把终端ANSI网格当diff控件。
 
 ### 6.3 失败与特殊状态
 
@@ -276,7 +276,7 @@ desktop live socket 有 512 KiB 发送缓冲边界，现有慢链路可丢消息
 
 只读缓存返回时标记读取时间与是否过期；断线保留已经看到的旧快照，并在原位置显示连接状态，禁止新读取和引用准备。重连后由用户刷新，不自动换电脑、不自动重放操作。明确结束/删除会话、切目标或退出则清除对应状态。
 
-文件读取错误在文件面板就地显示，插入失败在对应操作位置显示；无归属的短确认复用 NoticeBar，文件面板挂自己的 notice overlay。不得新开第三条通知通道，也不得遮挡返回、关闭或输入控件。
+文件读取和插入失败在文件面板就地显示；成功插入以关闭面板和更新草稿完成反馈。文件回执由同一 Flow 承接，不重复转入 NoticeBar；打开面板前的能力/离线拒绝及其他既有终端反馈沿用原 NoticeBar，不为 Files 另挂 overlay。不得新开第三条通知通道，也不得遮挡返回、关闭或输入控件。
 
 ## 11. 本轮卡片与后续扩展
 

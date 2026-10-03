@@ -120,6 +120,7 @@ export class MobileLiveController {
     readonly delivered: boolean
     readonly code?: string
     readonly result?: MobileIntentResult
+    readonly desktopClientInstanceId?: string
   }> {
     const input = parseBody(intentSchema, body, "终端操作请求无效。")
     const outcome = await this.relay.deliverIntent({
@@ -127,15 +128,17 @@ export class MobileLiveController {
       mobileClientInstanceId: input.clientInstanceId,
       desktopClientInstanceId: input.desktopClientInstanceId,
       intent: input.intent,
-      waitForResultMs: input.waitForResult ? 8_000 : 0,
+      waitForResultMs: input.waitForResult ? (input.intent.kind === "workspaceFiles" ? 15_000 : 8_000) : 0,
     })
+    const context = input.intent.kind === "workspaceFiles" ? { desktopClientInstanceId: input.desktopClientInstanceId } : {}
     if (outcome.delivery.status !== "sent") {
       return {
         delivered: false,
+        ...context,
         code: outcome.delivery.status === "desktop_offline" ? "desktop_offline" : "relay_failed",
       }
     }
-    return outcome.result ? { delivered: true, result: outcome.result } : { delivered: true }
+    return outcome.result ? { delivered: true, ...context, result: outcome.result } : { delivered: true, ...context }
   }
 }
 

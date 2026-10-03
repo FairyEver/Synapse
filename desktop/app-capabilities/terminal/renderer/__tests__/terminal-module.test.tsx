@@ -4057,6 +4057,7 @@ describe("TerminalModule", () => {
     ["cmd", "C:\\Windows\\System32\\cmd.exe", "C:\\Users\\Li Yang\\report & notes.txt", '"C:\\Users\\Li Yang\\report & notes.txt" '],
     ["PowerShell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "C:\\Users\\O'Neil\\report $final.txt", "'C:\\Users\\O''Neil\\report $final.txt' "],
     ["Git Bash", "C:\\Program Files\\Git\\bin\\bash.exe", "/c/Users/Li Yang/report.txt", "/c/Users/Li\\ Yang/report.txt "],
+    ["Git Bash native file producer", "C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Users\\Li Yang\\report & notes.txt", "C:\\\\Users\\\\Li\\ Yang\\\\report\\ \\&\\ notes.txt "],
   ])("inserts a dragged path for Windows %s without changing its shell syntax", async (_name, shell, filePath, expected) => {
     window.synapse = { ...window.synapse, platform: "win32" }
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
@@ -4099,6 +4100,22 @@ describe("TerminalModule", () => {
       data: "/Users/liyang/My\\ Files/first.ts /tmp/second.md ",
     })
     expect(document.body.textContent).not.toContain("松开插入路径")
+  })
+
+  it("inserts native Windows workspace-tree producer paths into Git Bash with the existing literal escaping", async () => {
+    window.synapse = { ...window.synapse, platform: "win32" }
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端", shell: "C:\\Program Files\\Git\\bin\\bash.exe" })]
+    terminalBridge.resolveWorkspaceTreePaths.mockResolvedValue({ scopeId: "scope-1", paths: ["C:\\Users\\Li Yang\\first.ts", "D:\\中文😀\\second.md"] })
+    const dragPayload = { scopeId: "scope-1", relativePaths: ["first.ts", "second.md"] }
+    writeWorkspaceFileTreeDrag({
+      effectAllowed: "none",
+      setData: vi.fn(),
+    } as unknown as DataTransfer, dragPayload)
+    await renderModule()
+    await dispatchTerminalWorkspaceTreeDragEvent("drop", "", [])
+    expect(terminalBridge.resolveWorkspaceTreePaths).toHaveBeenCalledWith({ scopeId: "scope-1", relativePaths: ["first.ts", "second.md"] })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({ sessionId: "session-1", data: "C:\\\\Users\\\\Li\\ Yang\\\\first.ts D:\\\\中文😀\\\\second.md " })
   })
 
   it("rejects dropped paths containing line breaks", async () => {

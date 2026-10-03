@@ -2,7 +2,7 @@
 
 日期：2026-10-03
 
-状态：开发规格，未实施。本文定义 V1 的产品行为与验收契约；新增字段、操作、预算和模块不是现有 API。
+状态：V1 实现与验收中，尚未发版。本文定义产品行为与验收契约；私有协议已进入实现，运行证据及平台缺口见[验收记录](../plans/2026-10-03-mobile-workspace-files-and-changes-acceptance.md)。
 
 设计来源：[截图分析及产品设计](2026-10-03-mobile-workspace-files-and-changes-design.md)
 
@@ -106,6 +106,8 @@ rename 两端均在 scope 内才返回旧/新路径及完整比较；仅一端�
 
 changes 首次仅拉文件概要。展开一个文件才请求 diff，默认只展开当前一个文件；收起保留滚动位置。文件全文是独立预览动作。
 
+每侧预览以桌面回传的canPreviewBefore/After为准。受比较的tracked side任一含NUL时整条为binary、双方不可预览；某侧超过2MiB时diff受限，另一有界普通文本侧仍可按桌面flags预览，手机不能凭limit_exceeded一律禁用双方。
+
 unified diff 返回有界结构化 hunk/line：稳定片段 ID、旧/新起始行与数量、行 kind（context/addition/deletion/meta）、旧/新行号或 `null`、文本、长行截断标记。每页带连续页位置；分页可在完整行边界切割一个 hunk，下一页明确携带同 hunk ID 与续接位置。不得把半个 JSON 结构或字节碎片交给 UI 自行猜。手机按版本与页位置接页，缺页/重页不能重复追加。
 
 源码和 diff 使用独立纯展示模型；UTF-8 预览分页，Markdown 复用 `MarkdownContent` 并受相同预算。其他编码/二进制显示元数据和原因。不得用 WebView 执行源文件、HTML/脚本，或启动桌面编辑器/程序来预览。
@@ -114,7 +116,7 @@ unified diff 返回有界结构化 hunk/line：稳定片段 ID、旧/新起始�
 
 ### 4.4 插入引用
 
-文件/目录长按菜单、文件详情工具栏和当前目录操作提供「插入到输入框」。scope 的 rootEntryId 可用于当前目录引用。操作只对可读取、在根内的普通文件/目录开放。
+文件/目录长按菜单和文件详情工具栏提供「插入到输入框」。当前scope根使用直接系统按钮「插入当前目录」或「插入仓库根目录」，无需为单个动作再开菜单；已有范围label保留根显示名。scope 的 rootEntryId 用于该根目录引用。操作只对可读取、在根内的普通文件/目录开放。
 
 1. 手机发 reference 请求，携带桌面下发的 scope/entry 句柄与 expectedContextVersion。
 2. 桌面重新校验 owner、session/cwd/root、节点和权限，使用当前平台 formatter 生成精确绝对目标路径引用。手机不拼绝对路径、不做 shell 转义。
@@ -137,7 +139,7 @@ unified diff 返回有界结构化 hunk/line：稳定片段 ID、旧/新起始�
 
 新增 `MobileIntentResult.workspaceFiles`，包含 `filesVersion`、`operation`、sessionId、适用时的 scopeId/contextVersion、readAt、操作数据。它不复用现有 `referenceText`（会话复制引用）或 `git`（既有 Git 操作）字段。读取结果走单个有界 `mobile.intentResult`；不塞入 summary/frame/gitStatus，不广播。
 
-现有result payload只有mobileClientInstanceId+result，没有desktop；RealtimeClient现有回调只交result，server pendingIntents仅按intentId关联。V1对workspaceFiles新增可选`MobileIntentResultPayload.desktopClientInstanceId`，文件回执必填。server将它与**发送回执的已认证desktop连接**核对并标记来源；relay自身失败回执以已认证pending目标填入。手机接收时保留这个typed context，并和当前账号/连接世代、desktop/mobile实例、session与pending参数核对，不能仅按intentId接受。server文件pending以账号+desktop+mobile+session+intentId复合关联，不让另一账号/电脑的同名intent完成本请求；保留旧intent的兼容行为。账号不新增可伪造的payload字段，仍取可信连接上下文。
+现有result payload只有mobileClientInstanceId+result，没有desktop；RealtimeClient现有回调只交result，server pendingIntents仅按intentId关联。V1对workspaceFiles新增可选`MobileIntentResultPayload.desktopClientInstanceId`，文件回执必填。server将它与**发送回执的已认证desktop连接**核对并标记来源；relay自身失败回执以已认证pending目标填入。手机接收时保留这个typed context，并和当前账号/连接世代、desktop/mobile实例、session与pending参数核对，不能仅按intentId接受。server文件pending的索引键为账号+desktop+mobile+intentId；记录的完整请求指纹绑定session与参数，接收时另核对session、operation与scope。不同session复用同一intentId返回request_conflict，另一账号/电脑的同名intent不能完成本请求；保留旧intent的兼容行为。账号不新增可伪造的payload字段，仍取可信连接上下文。
 
 ### 5.2 操作字段
 
@@ -147,7 +149,7 @@ unified diff 返回有界结构化 hunk/line：稳定片段 ID、旧/新起始�
 
 | operation | 必需输入 / 可选输入 | 成功数据 |
 | --- | --- | --- |
-| `open` | scopeMode=`currentDirectory`/`repository` | scopeId、rootEntryId、scopeMode、rootDisplayName、contextVersion、expiresAt、gitAvailable；只建上下文，不递归 |
+| `open` | scopeMode=`currentDirectory`/`repository` | scopeId、rootEntryId、scopeMode、rootDisplayName、contextVersion、expiresAt、gitAvailable；只建上下文，不递归。Git 不可读时可携带 gitUnavailableReason |
 | `refresh` | scopeId、expectedContextVersion | 根未变时返回新的 contextVersion 与 scope 描述，作废原目录/change/content版本与游标；根变返回 scope_stale |
 | `directory` | expectedContextVersion、directoryEntryId；可选 cursor | directoryVersion、entries、nextCursor、pageIndex、completion |
 | `search` | expectedContextVersion、query；可选 cursor | searchVersion、命中 entries、nextCursor、pageIndex、completion、scanComplete、scannedEntries |
@@ -167,6 +169,8 @@ cancel/close不占读取槽或排在被取消读取之后，重复请求幂等�
 其他cancel只有确认任务已停止才返回cancelled；原读取已完成返回alreadyCompleted，找不到同owner任务返回notFound，不能谎报取消。close的closed表示scope立即不可再读取，不等于所有子进程已退出；pendingCancellationCount明确尚待终止的任务，桌面在§7硬超时内终止。控制操作校验可信owner、目标任务/scope记录或完成tombstone，不要求scope仍可读取、session仍存活或cwd仍与原根一致，故过期/结束后的清理和重复close仍可完成；跨owner始终拒绝。手机关闭先增加generation并解除pending/展示状态，再尽力发送控制请求；任意已完成/迟到结果均不能再改变内容或草稿。
 
 ### 5.3 Owner、版本、游标与页完整性
+
+`gitAvailable=false` 不能等同于非仓库。可选 `gitUnavailableReason` 只在该值为 false 时出现，限定为 `not_git_repository`、`git_unavailable`、`external_filter_required`、`permission_denied`、`unsafe_path`、`limit_exceeded`。手机分别显示对应必要状态；旧回复缺少原因时显示通用的“无法查看 Git 更改”，不得伪称非仓库。Git 受限不阻断已经授权的所有文件浏览。
 
 - 内部 owner=`认证账号 + desktop实例 + mobile实例 + sessionId`。账号取已认证连接/桌面登录上下文；desktop 由账号路由确认；mobile 实例须等于握手注册实例。请求不能自报 userId 或 Electron sender.id。HTTP fallback 做等价认证与实例归属检查。
 - contextVersion 为不透明上下文 token，绑定 scope 根、真实 cwd、实际 worktree/session 身份和桌面运行世代。directoryVersion、searchVersion、changeSetVersion、contentVersion 分别绑定对应读取事实；Git 版本覆盖实际 HEAD/index 状态、目标文件身份和所选层。不得向手机导出对象表达式作为下一次读取输入。
@@ -200,18 +204,27 @@ cancel/close不占读取槽或排在被取消读取之后，重复请求幂等�
 
 Git派生读取需显式绑定桌面安全发现的精确gitDir/commonDir元数据资源（worktree可能把它们放在显示根外），并通过既有PermissionGuard/AuditSink；这只授权HEAD/index/本地对象等必要元数据，所有返回路径及可预览blob仍限当前scope。不能借此扩大可浏览工作树根或读取范围外blob；未获元数据资源授权时Git受限，合法目录浏览仍可用。外部对象目录/alternate不能绕过资源授权或触发隐式网络。
 
+objects/info/alternates与http-alternates只允许缺失或空文件；不能只在scope发现时检查。后续原生Git读取前后均用已授权、有界的安全FD路径复验，覆盖概要/指纹、blob各阶段与子模块HEAD；打开后创建、填充、替换或取消时拒绝/中止，结果不得先返回。此软件门控不等同于操作系统级进程文件系统沙箱，测试须明确并发插入的实际检查边界，不宣称覆盖所有系统级竞态。
+
+内置换行/文件模式比较还需考虑桌面用户的标准全局配置。只允许从桌面可信 homedir 和 XDG 配置位置确定 `~/.gitconfig`、`$XDG_CONFIG_HOME/git/config`（缺省为 `~/.config/git/config`），按 XDG→home→local 优先级提取 `core.autocrlf`、`core.filemode`；移动端不提供配置路径，任意 `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` 覆盖不成为读取入口。每个精确配置文件在检查/读取前单独授权并审计，校验祖先、普通文件和前后身份，使用不跟随链接的有界描述符读取，最多64KiB。固定字节只交给 `config --file - --no-includes` 的专用受控解析入口；include/includeIf及外部转换器使Git受限，不跟随或执行。配置正文和其他键不进入普通Git环境、回执、日志或审计。所有普通Git命令继续关闭global/system加载；配置缺失/存在、身份、内容与有效内置值绑定版本并在缓存命中前复查。V1不猜测系统配置安装路径；不能从已授权配置或显式属性确定语义，且未知系统规则会影响当前比较时返回`git_unavailable`，普通文件浏览仍可用，不能假定默认值并给出错误差异。
+
+V1只实现受控的内置换行比较，不实现`ident`或`working-tree-encoding`转换。preflight同时检查工作树与cached属性；范围内存在生效的上述转换时返回`git_unavailable`，不对未归一化的磁盘字节宣称精确Git变化。scope打开后属性新增/变更仍须在后续读取和缓存版本复验中检查。此限制保留普通文件浏览；不调用clean/filter、写index/对象或临时实现转码。
+
+桌面存在生效的非标准 `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`、`GIT_CONFIG_PARAMETERS` 或非零 `GIT_CONFIG_COUNT` 等覆盖时，V1直接标Git受限，不读取这些自定义路径，也不默默忽略后宣称差异与原生Git一致。
+
 所有目标双重校验词法与真实路径边界，按路径段判断后代，检查叶节点和祖先身份；禁止 `..`、绝对路径、NUL、跨根 symlink、symlink 祖先替换、Windows ADS/设备命名空间/重解析逃逸。V1 不跟随 symlink，不读 FIFO、socket、设备节点等特殊对象。若沿用网络/UNC 路径，必须同时满足既有网络授权和可终止硬超时，不能绕开网络策略。
 
 Git 用受控 runner 与 argv，不运行客户端字符串。scope 内路径绑定字面 pathspec；允许对象由桌面限定 HEAD/index 并校验类型/大小。严格只读要求：
 
 - 使用 `--no-optional-locks`、`--literal-pathspecs`，关闭 `core.fsmonitor`；diff 明确 `--no-ext-diff --no-textconv`。
+- 固定 `GIT_ATTR_NOSYSTEM=1`，关闭未经精确授权的system gitattributes隐式读取；全局attributesFile受限，不将任意全局属性文件接入scope。
 - 不写工作区/index、临时 index、对象、refs 或注册表，不跑 hook、shell、PTY，不联网或隐式 lazy-fetch。缺本地对象返回不可读取。
 - 工作树比较可能触发 clean/process filter。先用不执行filter的受控属性/配置读取检查范围；需要外部 filter 的文件只给可安全计算的摘要/受限状态，不能执行 filter。该规则覆盖Git发现、status、numstat和diff，不能先跑可能执行filter的概要命令再报受限。隔离Git发现自身的fsmonitor/扩展/隐式网络，并提供使用既有runner的最小受控Git隔离选项，禁止新增任意环境变量或通用shell API。
 - blob 比较只读本地受控对象，不用 `cat-file --filters/--textconv/--follow-symlinks`。无 HEAD 用不指定 commit 的 cached diff 空基线语义，不写树对象、不硬编码 SHA-1 空树 OID。
 - 高层 `getDiff` 的临时 index 投影、filter 或对象写入不能接到远端只读通道。只抽离复用 runner/路径/解析纯 helper，不复制另一套通用 Git 服务。
 - 每个子进程硬超时可终止，并限制 stdout/stderr/候选与后台解析量。Git 版本缺必要隔离能力时拒绝该操作，禁止以扩大权限、执行扩展或联网降级。
 
-依据沿用原设计核对的 [Git options](https://git-scm.com/docs/git/2.45.0)、[status](https://git-scm.com/docs/git-status)、[diff](https://git-scm.com/docs/git-diff)、[attributes](https://git-scm.com/docs/gitattributes)、[cat-file](https://git-scm.com/docs/git-cat-file.html)；实现时须验证 runner 能落实这些不变量。
+依据沿用原设计核对的 [Git options](https://git-scm.com/docs/git/2.45.0)、[status](https://git-scm.com/docs/git-status)、[diff](https://git-scm.com/docs/git-diff)、[attributes](https://git-scm.com/docs/gitattributes)、[cat-file](https://git-scm.com/docs/git-cat-file.html)，全局配置优先级及禁include依据[Git config](https://git-scm.com/docs/git-config/2.45.0)；实现时须验证 runner 能落实这些不变量。
 
 ## 7. 资源预算、背压与结果缓存
 
@@ -228,6 +241,7 @@ Git 用受控 runner 与 argv，不运行客户端字符串。scope 内路径绑
 | 同一搜索总量 | 全游标链最多100,000个已访问节点、10,000条命中、2MiB保留遍历状态；任一预算到达后truncated、无继续cursor，允许用户缩小查询 |
 | 单目录候选 | 20,000 项或候选元数据 2 MiB、2 秒枚举预算先到即停；不能完成稳定排序时返回 limit/truncated |
 | Git 子进程 | 单次 5 秒可终止硬超时，stdout 最多 4 MiB、stderr 最多 64 KiB；超限终止，不形成巨型内存字符串 |
+| Diff 解析模型 | 最多 20,000 个显示行、序列化模型 4 MiB；生成前检查行数，生成中累计字节，任一超限返回 limit_exceeded。预览只扫描当前页，不构造全文件行数组 |
 | 同一手机读取 | 最多 2 个在执行；最多 4 个待执行、排队等待最多 5 秒；前台 preview/diff 优先于 search |
 | 桌面全局读取 | 最多 8 个在执行、32 个待执行；控制类 cancel/close 不等在读取队列后 |
 | scope 与句柄 | 每手机最多 1 个活动 scope、桌面最多 32；每scope最多20,000 entry/change句柄、32 cursor，全局最多100,000句柄、256 cursor；scope 元数据最多 4 MiB、全局最多 16 MiB，任一上限先到即LRU回收对应 cursor/entry；旧cursor返回cursor_expired，旧entry/change返回content_stale，不按路径猜测恢复 |
@@ -248,7 +262,7 @@ Git 用受控 runner 与 argv，不运行客户端字符串。scope 内路径绑
 
 既有 MobileIntentExecutor 先按 mobile+intentId 命中结果，全网关条数最多 256；workspaceFiles 必须在该路径之前进入独立文件路由与专用检查，正文不原样落入它，也不触发普通executor执行后的requestSummary或重算常驻Git摘要。
 
-1. 从可信连接确认 owner、操作形状及请求参数指纹；同 owner/intentId 不同操作/参数返回 request_conflict。
+1. 从可信连接确认owner、操作形状及请求参数指纹；同owner/intentId不同操作/参数返回request_conflict。指纹按JSON语义计算：对象键递归排序，数组顺序保留，不能把顶层或target字段顺序变化当作参数变化。游标指纹同样遵守此规则，仍绑定原操作、scope/context与目标。
 2. 读取/刷新/引用检查session、scope、根/权限和读取版本，即使有正文缓存也不跳过。cancel/close依§5.2验证owner与任务/scope/tombstone而非active读取有效性，使失效后的清理和幂等close可执行。
 3. 同 intentId 正在执行时合并到同一任务；同 fingerprint 的缓存页满足有效版本/TTL时重发，否则返回过期状态，由用户使用新 intentId 重试。
 4. 完成结果按**字节、TTL和数量**有界记录；close/refresh/版本变化/owner失效立即清相应页。cancel/close可保留不含路径正文的短期完成记录以保证重试 no_op。
@@ -289,16 +303,32 @@ Git 用受控 runner 与 argv，不运行客户端字符串。scope 内路径绑
 | --- | --- |
 | 面板 | 系统 sheet，带关闭/刷新、必要 scope label；使用 [.medium,.large] 的有效档位与抓手。上下文内有限任务依据 [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)、[presentationDetents](https://developer.apple.com/documentation/swiftui/view/presentationdetents(_:selection:)) |
 | iPhone | 竖屏概要初始 medium；搜索、预览、展开代码进入 large。横屏垂直紧凑按系统适配，只有多个有效档位才显示切档动作；依据 [medium](https://developer.apple.com/documentation/swiftui/presentationdetent/medium)、[presentationCompactAdaptation](https://developer.apple.com/documentation/swiftui/view/presentationcompactadaptation(_:)) |
-| 两视图与行 | Picker(.segmented)、系统 List/DisclosureGroup；不用截图式卡片装饰。依据 [Segmented controls](https://developer.apple.com/design/human-interface-guidelines/segmented-controls)、[Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)、[DisclosureGroup](https://developer.apple.com/documentation/swiftui/disclosuregroup) |
-| 搜索与引用 | searchable按提交执行；contextMenu外还提供详情/当前目录动作以便发现。依据 [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)、[Performing a search](https://developer.apple.com/documentation/swiftui/performing-a-search-operation)、[Context menus](https://developer.apple.com/design/human-interface-guidelines/context-menus) |
+| 两视图与行 | 原生Menu内的Picker保留系统选项和勾选，当前值使用可换行的系统Text；显示「文件视图」与当前选择。范围、文件视图、更改范围在无障碍字号下纵排label/值，同一AnyLayout子树保留状态。iOS18与26共用原生UITableViewDiffableDataSource，普通文件/搜索文件使用系统UIListContentConfiguration，目录、控件与Git行使用UIHostingConfiguration。稳定ID快照复用独立行，保留展开、分页、完整文件名/父目录、操作与朗读，不用截图式卡片装饰。普通文件只由原生主操作调用原Flow，hosted Button不得同时触发table选择业务回调；上下文菜单创建时绑定owner/视图/行身份，执行前重新校验。不能合并而吞掉独立菜单或文本选择。选择菜单及行组织须有两版本实际最大字号/全项审计证据，不能宣称性能已改善或总共只创建100行。依据 [Menu](https://developer.apple.com/documentation/swiftui/menu)、[AnyLayout](https://developer.apple.com/documentation/swiftui/anylayout)、[UIListContentConfiguration](https://developer.apple.com/documentation/uikit/uilistcontentconfiguration-swift.struct)、[原生主操作](https://developer.apple.com/documentation/uikit/uitableviewdelegate/tableview(_:performprimaryactionforrowat:))、[UIHostingConfiguration](https://developer.apple.com/documentation/swiftui/uihostingconfiguration) |
+| 搜索与引用 | iOS18与26共用列表上方原生UITextField搜索行，系统清除/提交Button的操作区域至少44pt，最大字号自然增高。接续18搜索槽字号裁切和26浮动搜索清除按钮约19×19pt的实际证据；改动仍须通过最终审计。只在键盘或按钮明确提交时执行，清除/切范围/切tab复用同一Flow；不自动聚焦。contextMenu外还提供详情/当前目录动作。依据 [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)、[Text fields](https://developer.apple.com/design/human-interface-guidelines/text-fields)、[Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)、[Context menus](https://developer.apple.com/design/human-interface-guidelines/context-menus) |
 | iPadOS | 系统 page/form sheet自适应，实际内容空间足够时内部NavigationSplitView列表+详情，窄窗折叠导航栈；按可用空间，不按机型强制两栏。依据 [Layout](https://developer.apple.com/design/human-interface-guidelines/layout)、[Split views](https://developer.apple.com/design/human-interface-guidelines/split-views)、[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview) |
 | 内容与辅助功能 | 等宽字体、Dynamic Type、稳定焦点、键盘/指针、减弱动态；VoiceOver读状态、增删、旧新行号、展开与页完整性。依据 [Typography](https://developer.apple.com/design/human-interface-guidelines/typography)、[Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)、[VoiceOver](https://developer.apple.com/design/human-interface-guidelines/voiceover) |
 
+普通文件/搜索行的主要文件名、次级目录与图标，在浅深外观、初触、选中及持续焦点状态均须可读。原生默认配置不自动等于满足对比度。仅该cell的真实updateConfiguration统一生成系统content与defaultBackgroundConfiguration，selected或focused时用现有ink对应.label背景、paper对应.systemBackground文字/图标，其它状态保系统背景与.label文字。每次按当前cell.traitCollection通过[resolvedColor(with:)](https://developer.apple.com/documentation/uikit/uicolor/resolvedcolor(with:))解析这些系统token；两个init仅一次注册[systemTraitsAffectingColorAppearance](https://developer.apple.com/documentation/uikit/uitraitcollection/systemtraitsaffectingcolorappearance-64z7q)，变化后请求重新配置，不冻结旧外观。两项automatic configuration更新按官方override归属关闭，由真实state统一配置；保默认focusStyle、焦点引擎、highlight/selection反馈、自动字体、无限行、复用与唯一主操作。首次configure即时应用，reuse清旧entry/content/background/AX身份。不得自定义RGB/opacity、冻结字体、清focus、隐藏目录或过滤审计。小字至少4.5:1、大字至少3:1按[Apple官方Sufficient Contrast](https://developer.apple.com/help/app-store-connect/manage-app-accessibility/sufficient-contrast-evaluation-criteria/)核实际截图与完整触选过程，并验证同一打开面板的外观切换。此为项目基于公开配置API的修订，不宣称Apple规定该具体配对；试验失败和最终实物证据保留于[验收记录](../plans/2026-10-03-mobile-workspace-files-and-changes-acceptance.md)，不能由UIColor值或编译成功放行。
+
+新文件面板的columnVisibility初始为.all，打开即显示浏览入口，不沿用系统先前隐藏侧栏的automatic结果；compact折叠栈由系统忽略列可见性偏好。用户之后仍可手动隐藏侧栏。
+
+“在目录中显示”必须恢复实际目录可见性：compact折叠栈使用`preferredCompactColumn = .sidebar`，regular侧栏由独立`columnVisibility`绑定请求显示全部列。不能把清空详情或改变compact偏好视为已显示被用户隐藏的regular侧栏；两种状态使用系统[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview)组合初始化器。仍须目标真实表格已进入窗口视口后才消费定位回执，隐藏表格不得先确认。
+
+用户点选文件或更改行时，应激活详情导航，即使返回列表后再次选择同一条缓存内容。不能只依赖selected值变化触发导航；相同selection的缓存复用不等于取消用户的打开意图。导航仍留在Browser/Panel，由当前可读scope中的用户动作发起，不增加第二条UITableView业务主操作，也不能让迟到读取响应把用户已返回的列表强行推回详情。
+
 旋转、窗口伸缩、切tab和文件面板不改变底层终端画布尺寸归属，不新attach/租约/resize，不丢输入草稿、录音、播放和有效选择。既有Drive宽窗refreshable限制不机械复制或撤销；新列表按实际窗口单独验证，不能声称未跑的iPad半窗/窄窗已覆盖。不新增多scene业务实例。
+
+浏览表格按稳定真实行ID保留有限的树/搜索/更改阅读位置，scope context版本改变时清理，更改范围改变时重置更改位置。业务Flow、草稿和导航保留在UIKit行外，hosted body内建立观察依赖；字号由UIKit系统trait向cell及UIHostingConfiguration传递，不以额外的SwiftUI状态重复覆盖。Hosted行的语言、布局方向、外观和禁用环境显式传播；原生文件行遵循UIKit系统字体、外观与方向，并在主操作和菜单各边界校验禁用状态，依据[UIKit系统trait与SwiftUI桥接](https://developer.apple.com/videos/play/wwdc2023/10057/)。系统自动行高配合非零估算，不全量测高或操纵估算中的contentOffset/contentSize，依据[estimatedRowHeight](https://developer.apple.com/documentation/uikit/uitableview/estimatedrowheight)。新搜索结果回起点，清搜索回树保留树身份；定位事件绑定scope/context/generation，由ID解析当前indexPath后[scrollToRow](https://developer.apple.com/documentation/uikit/uitableview/scrolltorow(at:at:animated:))，目标真实行进入视口后一次消费；程序调用不保证scrollViewDidScroll回调，不能只依赖该回调确认。主动选择或离开该定位上下文即失效。inline搜索位于实际表格视口上方，不让文件行被覆盖后仍暴露为可操作内容。字号/角色/窗口转换须实际验证，不能仅凭原生API认定通过。
+
+只采集UIKit已呈现行的真实高度，exact缓存最多512条；普通文件与搜索文件分别取最多7个近期实测样本，供当前字号恢复使用。普通原生文件默认由系统估算；仅在一个明确定位意图中，可一次冻结当前角色的两类有限median。捕获前核当前scope/context、像素宽度、SwiftUI字号、native category、语言、方向与字体可读性均匹配采样布局，且SwiftUI与UIKit字号类别相互一致。按owner/角色/定位generation去重；定位回执不撤销该意图，同一意图不得滚动更新median。估算delegate纯读取冻结值，失配、未捕获或该类别无实测样本时返回automaticDimension，不刷新布局、写缓存、测量cell或操作contentOffset/contentSize。实际布局键变化撤销冻结值；公开[trait-change注册接口](https://developer.apple.com/documentation/uikit/uitraitchangeobservable-67e94/registerfortraitchanges(_:handler:))在每次字号trait变化即撤销冻结与待捕获状态，保留该意图标记，返回旧字号不能使旧估算复活。新意图重新核对当前布局；清理Coordinator时释放全部采样与冻结值。目录、加载、分页和其他动态控件继续采用系统估算。布局回调只采集可见cells，快照同步门槛由update/apply生命周期维护，不在每次滚动复制全部行ID。依据[估计高度delegate](https://developer.apple.com/documentation/uikit/uitableviewdelegate/tableview(_:estimatedheightforrowat:))；冻结median仍是近似估算，不是全表精确高度或cold snapshot稳定证明，不替代实际定位、连续字号和内存验收。此修订接续iPad真实定位后重排及持续更新median引发的字号回归，必须在最终源码重新验证四设备。
+
+字号过渡的采样必须核实际当前布局，不能把旧native bounds归入新字号。Hosted行用[onGeometryChange](https://developer.apple.com/documentation/swiftui/view/ongeometrychange(for:of:action:))传递稳定ID、布局revision、实际字号和本地尺寸，最多保留512份；普通原生文件配置启用系统自动字体调整，独立核当前行/revision及cell/table trait一致，不伪造Hosted DTO或宣称实测了内部字体metric。两者都仅对已显示cell使用有缓存的[systemLayoutSizeFitting](https://developer.apple.com/documentation/uikit/uiview/systemlayoutsizefitting(_:withhorizontalfittingpriority:verticalfittingpriority:))计算完整原生cell尺寸，并与同一cell的实际bounds比较，不把contentView拟合与cell高度混用或加固定补偿。它只证明该cell当前拟合相符，不代表全表后续self-sizing已结束。被动layout只初始化尚无阅读身份的角色，已有身份由真实拖动、显式定位或角色切换更新。字号变化前保留上一有效阅读身份，每epoch最多一次原生位置恢复；普通文件anchor还须当前角色对应类别的新字号实测估算已就绪，不能仅凭动态控件的布局提前恢复。新scope、视图、查询/范围重置、显式定位或用户拖动取消旧恢复。超高行没有完整可见行时，采用实际相交的行身份，不能沿用无关旧文件。此门槛须通过实际连续字号和大集合定位验收，不能仅凭一次布局或完成回调认定稳定。
 
 系统控件自行采用iOS18/26外观，不能为了模仿磨砂自造Liquid Glass或渐变。文案只有标题、必要label/动作和空/错/加载状态。
 
-文件错误在文件/列表内容就地显示；面板使用自己的既有NoticeBar overlay承接无归属短反馈，不能新增第三条通知通道，不遮挡返回/关闭/输入。source/patch/完整路径不进入普通日志、诊断正文、遥测或审计正文；审计记录既有资源身份、授权和结果。云端结果不入summary缓存、数据库、COS或广播。用户以后主动发送的引用仍遵守既有终端诊断脱敏开关，本功能不新建捕获通道。
+Files由原生sheet负责模态呈现，保留每个子控件的独立操作和朗读；终端背景仅在Files展示时[accessibilityHidden](https://developer.apple.com/documentation/swiftui/view/accessibilityhidden(_:))，关闭后恢复。采用系统[模态辅助导航语义](https://developer.apple.com/documentation/swiftui/accessibilitytraits/ismodal)，不额外将整页包装成Alert。不能将Files内容隐藏或合并成单个不可操作节点；完整XCUI树仍包含背景或背景不可点按，均不能代替实际VoiceOver焦点验收。
+
+文件请求和引用失败在文件/列表内容就地显示；成功引用以关闭面板和更新草稿完成反馈。文件回执由同一Flow承接，不重复转入NoticeBar；打开面板前的能力/离线拒绝以及其他既有终端反馈沿用原NoticeBar，不为Files另挂overlay或新增第三条通知通道，不遮挡返回/关闭/输入。source/patch/完整路径不进入普通日志、诊断正文、遥测或审计正文；审计记录既有资源身份、授权和结果。云端结果不入summary缓存、数据库、COS或广播。用户以后主动发送的引用仍遵守既有终端诊断脱敏开关，本功能不新建捕获通道。
 
 ## 10. 兼容、上线与验收
 
@@ -345,4 +375,4 @@ Git 用受控 runner 与 argv，不运行客户端字符串。scope 内路径绑
 
 实施按开发计划的依赖顺序：P00基线→P01共享契约；P02云relay、P03安全scope与安全Git发现、P06手机Flow可并行；P03后P04文件读取与P05Git审查可并行；依赖齐备后完成P07界面、P08引用/选区、P09最终组装与跨端验收。P03需要的Git发现隔离必须先落实，不能等到依赖P03的P05才保护根发现。每阶段提供AC映射证据；不可访问真实窗口或平台时记录缺口，不以静态检查冒充运行验收。
 
-必要检查覆盖shared/server/desktop专项测试、desktop typecheck与`check:hard-constraints`、Swift单元测试及上线前必要真机/模拟器验收。启动应用/浏览器/开发服务器遵守用户授权，不在本文档整理阶段启动。V1产品代码完成时更新`RELEASE_NOTES_PENDING.md`；当前只转规格与计划，无运行时变化，不添加发布说明。
+必要检查覆盖shared/server/desktop专项测试、desktop typecheck与`check:hard-constraints`、Swift单元测试及上线前必要真机/模拟器验收。本次用户已授权开发、运行验收和验收完成后的完整发版；实际结果必须写入验收记录，不将授权等同于已通过。V1 产品变化同步到 `RELEASE_NOTES_PENDING.md`。

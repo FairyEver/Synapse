@@ -571,6 +571,7 @@ describe("mobile live protocol", () => {
      */
     const limits = MOBILE_FRAME_LIMITS
     const payload: MobileSummaryPayload = {
+      workspaceFilesVersion: 1,
       desktopClientInstanceId: "d".repeat(120),
       desktopName: "d".repeat(120),
       revision: 1,

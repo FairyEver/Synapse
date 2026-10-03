@@ -218,6 +218,9 @@ interface CreateAsarBufferOptions {
   readonly includePreloadBundle?: boolean
   readonly includeScriptRuntime?: boolean
   readonly includeSharedPackage?: boolean
+  readonly includeWorkspaceFiles?: boolean
+  readonly includeWorkspaceFilesGitConfig?: boolean
+  readonly includeMobileFileConstants?: boolean
   readonly includeUsageAnalysisWorkers?: boolean
   readonly includeUnpackedSourceMaps?: boolean
   readonly omitTextExtractionIntegrity?: string
@@ -408,6 +411,9 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includePreloadBundle = true,
     includeScriptRuntime = true,
     includeSharedPackage = true,
+    includeWorkspaceFiles = true,
+    includeWorkspaceFilesGitConfig = true,
+    includeMobileFileConstants = true,
     includeUsageAnalysisWorkers = false,
     includeUnpackedSourceMaps = true,
     omitTextExtractionIntegrity,
@@ -422,6 +428,8 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const claudeSdkSession = Buffer.from("inspectPackagedClaudeRuntime(); queryOptions.pathToClaudeCodeExecutable = executablePath;\n", "utf8")
   const deploymentConfig = Buffer.from("exports.SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG = { apiBaseUrl: 'https://app.example.com/api' };\n", "utf8")
   const sharedIndex = Buffer.from("export const DESKTOP_CLIENT_ID = 'synapse-desktop';\n", "utf8")
+  const workspaceFiles = Buffer.from("exports.createMobileWorkspaceFilesService = () => {}\n", "utf8")
+  const mobileFileConstants = Buffer.from("exports.MOBILE_WORKSPACE_FILES_VERSION = 1; exports.MOBILE_WORKSPACE_FILES_LIMITS = { maxDiffModelBytes: 4194304, maxDiffModelLines: 20000 };\n", "utf8")
   const scriptRuntimeSmokeBootstrap = Buffer.from("exports.startScriptRuntimeSmokeBootstrap = async () => {}\n", "utf8")
   const scriptRuntimeSmoke = Buffer.from("exports.runScriptRuntimeSmoke = async () => {}\n", "utf8")
   const chromiumWorkerRunner = Buffer.from("exports.runChromiumWorkerScript = async () => ({ status: 'success' })\n", "utf8")
@@ -455,6 +463,10 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   if (includeSharedPackage) {
     offset += sharedIndex.length
   }
+  const workspaceFilesNode = createPackedFileNode(offset, workspaceFiles)
+  if (includeWorkspaceFiles) offset += workspaceFiles.length
+  const mobileFileConstantsNode = createPackedFileNode(offset, mobileFileConstants)
+  if (includeSharedPackage && includeMobileFileConstants) offset += mobileFileConstants.length
   const scriptRuntimeSmokeNode = createPackedFileNode(offset, scriptRuntimeSmoke)
   if (includeScriptRuntime) {
     offset += scriptRuntimeSmoke.length
@@ -536,6 +548,12 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                 : {}),
               services: {
                 files: {
+                  ...(includeWorkspaceFiles ? {
+                    "mobile-workspace-files-service.js": workspaceFilesNode,
+                    "mobile-workspace-files-git.js": workspaceFilesNode,
+                    "mobile-workspace-files-paths.js": workspaceFilesNode,
+                    ...(includeWorkspaceFilesGitConfig ? { "mobile-workspace-files-git-config.js": workspaceFilesNode } : {}),
+                  } : {}),
                   ...(includeClaudeRuntimeGuard
                     ? {
                         "diagnostics-service.js": diagnosticsNode,
@@ -620,6 +638,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                       ...(includeSharedPackage
                         ? {
                             "index.js": sharedIndexNode,
+                            ...(includeMobileFileConstants ? { "mobile-live-constants.cjs": mobileFileConstantsNode } : {}),
                           }
                         : {}),
                     },
@@ -753,6 +772,8 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     ...(includeClaudeRuntimeGuard ? [claudeSdkSession] : []),
     ...(includeDeploymentConfig ? [deploymentConfig] : []),
     ...(includeSharedPackage ? [sharedIndex] : []),
+    ...(includeWorkspaceFiles ? [workspaceFiles] : []),
+    ...(includeSharedPackage && includeMobileFileConstants ? [mobileFileConstants] : []),
     ...(includeScriptRuntime
       ? [scriptRuntimeSmoke, scriptRuntimeSmokeBootstrap, chromiumWorkerRunner, nodeCliRunner]
       : []),
@@ -899,6 +920,23 @@ describe("packaged asar verification", () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  it.each([
+    { options: { includeWorkspaceFiles: false }, missing: "mobile-workspace-files-service.js" },
+    { options: { includeWorkspaceFilesGitConfig: false }, missing: "mobile-workspace-files-git-config.js" },
+    { options: { includeMobileFileConstants: false }, missing: "mobile-live-constants.cjs" },
+  ])("rejects a package missing the mobile workspace runtime: $missing", async ({ options, missing }) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer(options))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root])).rejects.toMatchObject({ stderr: expect.stringContaining(missing) })
+    } finally { await rm(root, { recursive: true, force: true }) }
   })
 
   it("rejects packages missing the JSON Repair runtime", async () => {

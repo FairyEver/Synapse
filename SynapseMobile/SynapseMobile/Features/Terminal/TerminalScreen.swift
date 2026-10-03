@@ -18,6 +18,13 @@ struct TerminalScreen: View {
     let sessionId: String
     let onClose: () -> Void
     @State private var draft = ""
+    @State private var draftSelection: TextSelection?
+    @State private var draftInsertion = TerminalDraftInsertion()
+    @State private var filesFlow: WorkspaceFilesFlow?
+    @State private var pendingFilesMode: WorkspaceFilesScopeMode?
+    @State private var filesReturnGit: TerminalGitFlow?
+    @State private var filesReturnDesktopId: String?
+    @State private var filesDismissSettling = false
     /// Follows the density in force for this session rather than being held as view
     /// state: it is a setting, and a copy here is how the two drift apart.
     private var fontSize: CGFloat { display.density(for: sessionId).fontSize }
@@ -218,7 +225,7 @@ struct TerminalScreen: View {
     /// the two, and none of those is a size anybody chose.
     private func reportGridToDesktop() {
         guard displayMode == .phoneDriven, !inputFocused, !keyboardPanelPresented,
-              !panelIsSettling, !chromeIsSettling, store.visibleRows > 0 else { return }
+              !panelIsSettling, !chromeIsSettling, filesFlow == nil, pendingFilesMode == nil, !filesDismissSettling, store.visibleRows > 0 else { return }
         let grid = DesktopGrid(columns: store.columns, rows: store.visibleRows)
         // 锁定态进出那两次高度变化都不该进桌面（§4.9）。判定在 `VoiceGridHold` 里，
         // 单测逐条走完 —— 留在这里就只能靠人盯着电脑屏幕看。
@@ -317,7 +324,8 @@ struct TerminalScreen: View {
             isVoiceBusy: holdLatched || voice.phase != .idle || voiceGrid.isLocked,
             isOverlayUp: showingRename || showingStopConfirm || showingBusyConfirm
                 || showingPhotoPicker || showingDocumentPicker || showingCamera
-                || shortcutPanelPresented || expandedInputPresented || resourcesPresented || gitFlow != nil,
+                || shortcutPanelPresented || expandedInputPresented || resourcesPresented || gitFlow != nil
+                || filesFlow != nil || pendingFilesMode != nil || filesDismissSettling,
             isPhotoBubbleUp: recentPhoto != nil,
             isPortrait: !isCompactHeight,
             isSettling: chromeIsSettling,
@@ -814,7 +822,7 @@ struct TerminalScreen: View {
             .noticeOverlay(model, forSession: sessionId)
         }
         .sheet(isPresented: $expandedInputPresented) {
-            TerminalExpandedInputSheet(draft: $draft, sessionId: sessionId)
+            TerminalExpandedInputSheet(draft: $draft, selection: draftSelectionBinding, sessionId: sessionId)
         }
         .inspector(isPresented: $resourcesPresented) {
             TerminalResourcesSheet(store: store) { url in
@@ -831,12 +839,11 @@ struct TerminalScreen: View {
                 }
         }
         .linkBrowser($openedResource)
-        .sheet(item: $gitFlow) { flow in
-            TerminalGitPanel(flow: flow)
-                // 面板盖在这一页上，这一页自己的提示条就在它下面 —— 而面板里每个动作的
-                // 结果都是一句提示。少了这一条，用户按了「推送」什么也看不到。
-                .noticeOverlay(model, forSession: sessionId)
-        }
+        .modifier(TerminalGitFilesPresentation(flow: $gitFlow, sessionId: sessionId,
+            onDismiss: openPendingFiles, onReview: openFilesFromGit))
+        .modifier(TerminalFilesPresentation(flow: $filesFlow, draft: $draft, sessionId: sessionId,
+            onDismiss: returnFromFiles, onDraftChanged: trackDraftChange,
+            onReference: insertWorkspaceReference))
         .sheet(isPresented: $showingDocumentPicker) {
             DocumentPicker(
                 onPicked: { urls in
@@ -1211,6 +1218,8 @@ struct TerminalScreen: View {
                     Label("本会话显示密度", systemImage: "textformat.size")
                 }
             }
+            Button("工作区文件") { openWorkspaceFiles(.currentDirectory) }
+                .accessibilityIdentifier("terminal-menu-workspace-files")
             // Git：排在这几个动作的最前面，而且**不是仓库时不出现** —— 与「列表为空时
             // 入口不出现」同一条口径，不摆一个点开是空的入口。第二行显示分支用的也是
             // 同一个判据（`TerminalGitPresentation.isRepository`），两处不可能说岔。
@@ -1684,7 +1693,7 @@ struct TerminalScreen: View {
     private var commandField: some View {
         // 占位会被换成「没有听到声音」。识别为空是一次**就地**的说明，不是一件需要
         // 被知道的事：它落在输入框原来就写着字的地方，动一下键盘就没了（§5.3）。
-        TextField(emptyVoiceMessage ?? "输入命令", text: $draft)
+        TextField(emptyVoiceMessage ?? "输入命令", text: $draft, selection: draftSelectionBinding)
             .textFieldStyle(.plain)
             .font(.system(.body, design: .monospaced))
             .frame(minHeight: Metrics.minimumTapTarget)
@@ -1718,8 +1727,85 @@ struct TerminalScreen: View {
         .accessibilityLabel("展开输入框")
     }
 
+    private var draftSelectionBinding: Binding<TextSelection?> {
+        Binding(get: { draftSelection }, set: { selection in
+            // System focus loss sets nil; retain the last actual selection.
+            guard let selection else { draftSelection = nil; return }
+            if case .selection(let range) = selection.indices,
+               let offsets = TerminalDraftInsertion.utf16Selection(range, in: draft) {
+                draftSelection = selection
+                draftInsertion.update(text: draft, selection: offsets)
+            }
+        })
+    }
+
+    private func openWorkspaceFiles(_ mode: WorkspaceFilesScopeMode) {
+        noteChromeActivity()
+        if let failure = model.workspaceFilesAvailability(for: sessionId) {
+            model.raiseTerminalMessage(failure.message, sessionId: sessionId)
+            return
+        }
+        inputFocused = false
+        filesFlow = WorkspaceFilesFlow(sessionId: sessionId, mode: mode,
+            tab: mode == .repository ? .changed : .all,
+            client: model.workspaceFilesClient(for: sessionId))
+    }
+
+    private func trackDraftChange(_ text: String) {
+        if draftInsertion.text != text { draftInsertion.update(text: text, selection: nil) }
+    }
+
+    private func openFilesFromGit(_ flow: TerminalGitFlow) {
+        filesReturnGit = flow
+        filesReturnDesktopId = model.selectedDesktopClientInstanceId
+        pendingFilesMode = .repository
+        gitFlow = nil
+    }
+
+    private func openPendingFiles() {
+        guard let mode = pendingFilesMode else { return }
+        pendingFilesMode = nil
+        openWorkspaceFiles(mode)
+    }
+
+    private func returnFromFiles() {
+        filesDismissSettling = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(320))
+            filesDismissSettling = false
+        }
+        let returning = filesReturnGit
+        let originalDesktop = filesReturnDesktopId
+        filesReturnGit = nil; filesReturnDesktopId = nil
+        guard let returning, originalDesktop == model.selectedDesktopClientInstanceId,
+              model.summary?.sessions.contains(where: { $0.id == sessionId && $0.canBeOpened }) == true else { return }
+        gitFlow = returning
+    }
+
+    private func insertWorkspaceReference(_ entryId: String, from flow: WorkspaceFilesFlow) async -> Bool {
+        trackDraftChange(draft)
+        let ticket = draftInsertion.ticket()
+        guard let reference = await flow.reference(entryId), filesFlow?.id == flow.id,
+              flow.canRead, let inserted = draftInsertion.insert(reference, matching: ticket) else {
+            if flow.failure == nil {
+                flow.rejectReferenceInsertion()
+            }
+            return false
+        }
+        draft = inserted.text
+        if let range = Range(inserted.selection, in: draft) { draftSelection = TextSelection(range: range) }
+        voiceMode = false
+        filesReturnGit = nil; filesReturnDesktopId = nil
+        filesFlow = nil
+        return true
+    }
+
     private func attachMenu(_ presentation: HoldToTalkPresentation) -> some View {
         Menu {
+            Button { openWorkspaceFiles(.currentDirectory) } label: {
+                Label("工作区文件", systemImage: "folder.badge.gearshape")
+            }
+            .accessibilityIdentifier("terminal-attach-workspace-files")
             Button {
                 noteChromeActivity()
                 showingPhotoPicker = true

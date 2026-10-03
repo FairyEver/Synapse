@@ -11,6 +11,8 @@ import {
   type MobileIntent,
   type MobileIntentResult,
   type MobileIntentResultPayload,
+  MOBILE_WORKSPACE_FILES_VERSION,
+  isMobileWorkspaceFilesEnvelopeWithinBudget,
   type MobileQuickPhrasesPayload,
   type MobileSummaryPayload,
   type MobileToolbarPayload,
@@ -19,6 +21,7 @@ import {
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import type { LiveReachableDesktop } from "../live/live.types"
 import type { MobileLiveFanout } from "./mobile-live.types"
+import { WorkspaceFilesPending } from "./workspace-files-pending"
 import { MobilePushService } from "./mobile-push.service"
 import type { NotificationService } from "../notifications/notification.service"
 
@@ -52,6 +55,7 @@ export class MobileLiveRelayService implements OnModuleInit {
   private readonly logger = new Logger(MobileLiveRelayService.name)
   private readonly summaries = new Map<string, MobileSummaryPayload>()
   private readonly pendingIntents = new Map<string, PendingIntent>()
+  private readonly filePending = new WorkspaceFilesPending((owner, result) => this.sendFileResult(owner.userId, { desktopClientInstanceId: owner.desktopClientInstanceId, mobileClientInstanceId: owner.mobileClientInstanceId, result }))
   /**
    * Last attention state per session, so only transitions notify.
    *
@@ -94,7 +98,7 @@ export class MobileLiveRelayService implements OnModuleInit {
     this.desktopGateway.setMobileRelayHandler({
       handleSummary: (userId, payload) => this.handleSummary(userId, payload),
       handleFrame: (userId, payload) => this.handleFrame(userId, payload),
-      handleIntentResult: (userId, payload) => this.handleIntentResult(userId, payload),
+      handleIntentResult: (userId, payload, desktopClientInstanceId) => this.handleIntentResult(userId, payload, desktopClientInstanceId),
       handleTransferProgress: (userId, payload) => this.handleTransferProgress(userId, payload),
       handleToolbar: (userId, payload) => this.handleToolbar(userId, payload),
       handleGroupCommands: (userId, payload) => this.handleGroupCommands(userId, payload),
@@ -221,6 +225,14 @@ export class MobileLiveRelayService implements OnModuleInit {
    * phone of the user, because any of them could be the one being looked at.
    */
   handleDesktopPresence(userId: string, desktopClientInstanceIds: readonly string[]): void {
+    this.filePending.desktopPresence(userId, desktopClientInstanceIds)
+    const online = new Set(desktopClientInstanceIds)
+    for (const [key, summary] of this.summaries) {
+      if (key === summaryKey(userId, summary.desktopClientInstanceId) && !online.has(summary.desktopClientInstanceId) && summary.workspaceFilesVersion !== undefined) {
+        const { workspaceFilesVersion: _removed, ...withoutCapability } = summary
+        this.summaries.set(key, withoutCapability)
+      }
+    }
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobilePresence, {
       desktopClientInstanceIds,
     }, envelopeMeta())
@@ -340,7 +352,12 @@ export class MobileLiveRelayService implements OnModuleInit {
     })
   }
 
-  handleIntentResult(userId: string, payload: MobileIntentResultPayload): void {
+  handleIntentResult(userId: string, payload: MobileIntentResultPayload, authenticatedDesktopId?: string): void {
+    if (payload.result.workspaceFiles !== undefined || payload.desktopClientInstanceId !== undefined) {
+      if (!authenticatedDesktopId || !this.filePending.accept(userId, authenticatedDesktopId, payload)) return
+      this.sendFileResult(userId, payload)
+      return
+    }
     const pending = this.pendingIntents.get(payload.result.intentId)
     if (pending) {
       clearTimeout(pending.timer)
@@ -372,6 +389,7 @@ export class MobileLiveRelayService implements OnModuleInit {
     readonly intent: MobileIntent
     readonly waitForResultMs?: number
   }): Promise<{ readonly delivery: IntentDeliveryOutcome; readonly result?: MobileIntentResult }> {
+    if (input.intent.kind === "workspaceFiles") return this.deliverFileIntent({ ...input, intent: input.intent })
     const pending = this.waitFor(input.intent.intentId, input.waitForResultMs)
     const status = this.desktopGateway.sendToClientInstance({
       userId: input.userId,
@@ -416,6 +434,7 @@ export class MobileLiveRelayService implements OnModuleInit {
    * leases to release.
    */
   handleMobileDisconnect(userId: string, mobileClientInstanceId: string, reason: string): void {
+    this.filePending.disconnect(userId, mobileClientInstanceId)
     for (const desktop of this.onlineDesktops(userId)) {
       this.desktopGateway.sendToClientInstance({
         userId,
@@ -431,6 +450,36 @@ export class MobileLiveRelayService implements OnModuleInit {
   /* ---------------------------------------------------------------- *
    * Internals
    * ---------------------------------------------------------------- */
+
+  private sendFileResult(userId: string, payload: MobileIntentResultPayload): void {
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntentResult, payload, envelopeMeta())
+    if (!isMobileWorkspaceFilesEnvelopeWithinBudget(message)) return
+    if (this.fanout?.sendWorkspaceFilesResult) {
+      this.fanout.sendWorkspaceFilesResult({ userId, clientInstanceId: payload.mobileClientInstanceId, message })
+    } else {
+      this.fanout?.sendToMobile({ userId, clientInstanceId: payload.mobileClientInstanceId, message })
+    }
+  }
+
+  private async deliverFileIntent(input: {
+    readonly userId: string; readonly desktopClientInstanceId: string; readonly mobileClientInstanceId: string
+    readonly intent: import("@synapse/shared").MobileWorkspaceFilesIntent; readonly waitForResultMs?: number
+  }): Promise<{ readonly delivery: IntentDeliveryOutcome; readonly result?: MobileIntentResult }> {
+    const reject = (code: string) => ({ delivery: { status: "sent" as const }, result: { intentId: input.intent.intentId, sessionId: input.intent.sessionId, outcome: "rejected" as const, code } })
+    if (!this.fanout?.ownsMobileClient?.(input.userId, input.mobileClientInstanceId)) return reject("permission_denied")
+    if (this.cachedSummary(input.userId, input.desktopClientInstanceId)?.workspaceFilesVersion !== MOBILE_WORKSPACE_FILES_VERSION) return reject("unsupported_version")
+    const registration = this.filePending.register(input, Boolean(input.waitForResultMs))
+    if (registration.rejection) return { delivery: { status: "sent" }, result: registration.rejection }
+    if (registration.fresh) {
+      const status = this.desktopGateway.sendToClientInstance({ userId: input.userId, clientInstanceId: input.desktopClientInstanceId,
+        message: createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, { desktopClientInstanceId: input.desktopClientInstanceId, mobileClientInstanceId: input.mobileClientInstanceId, intent: input.intent }, envelopeMeta()) })
+      if (status !== "sent") {
+        this.filePending.abandon(input)
+        return { delivery: { status: status === "offline" ? "desktop_offline" : "send_failed" } }
+      }
+    }
+    return registration.result ? { delivery: { status: "sent" }, result: await registration.result } : { delivery: { status: "sent" } }
+  }
 
   private waitFor(intentId: string, waitMs: number | undefined): Promise<MobileIntentResult> | null {
     if (!waitMs || waitMs <= 0) return null

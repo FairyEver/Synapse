@@ -1056,6 +1056,7 @@ const UNFINISHED_OPERATION_MESSAGES: Readonly<Record<MobileIntent["kind"], strin
   createAgentConversation: "启动对话没有完成。",
   fileUpload: "文件没有送到终端。",
   git: "Git 操作没有完成。",
+  workspaceFiles: "工作区文件读取没有完成。",
 }
 
 function describeError(error: unknown, intent: MobileIntent): string {

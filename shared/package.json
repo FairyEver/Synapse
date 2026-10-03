@@ -42,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/build-notification-constants.mjs",
+    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs",
     "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

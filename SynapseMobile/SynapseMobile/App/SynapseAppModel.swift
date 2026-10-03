@@ -84,6 +84,16 @@ final class SynapseAppModel {
     private var realtime: RealtimeClient!
     private var keepAliveTask: Task<Void, Never>?
     private var pendingIntentResults: [String: (MobileIntentResult) -> Void] = [:]
+    @ObservationIgnored private var pendingWorkspaceResults: [String: WorkspacePendingResult] = [:]
+    @ObservationIgnored private var workspaceTimeoutTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var retiredWorkspaceIntents: [String] = []
+    @ObservationIgnored private var workspaceFallbackTasks: [String: Task<Void, Never>] = [:]
+    private struct WorkspacePendingResult {
+        let owner: WorkspaceFilesOwner
+        let request: MobileIntentRequest
+        let deadline: ContinuousClock.Instant
+        let complete: (Result<WorkspaceFilesResult, WorkspaceFilesFailure>) -> Void
+    }
 
     /// A write the desktop has not answered yet.
     ///
@@ -535,6 +545,7 @@ final class SynapseAppModel {
 
     func signOut() async {
         guard authState == .signedIn else { return }
+        invalidateWorkspaceRequests()
         accountGeneration += 1
         authState = .restoring
         stopKeepAlive()
@@ -1002,6 +1013,7 @@ final class SynapseAppModel {
             // A widget tap after backgrounding must wait for the next live summary,
             // while the shared snapshot remains available until it becomes stale.
             widgetHasLiveSummary = false
+            invalidateWorkspaceRequests()
             realtime.disconnect()
         }
     }
@@ -1031,6 +1043,9 @@ final class SynapseAppModel {
     }
 
     private func wireRealtime() {
+        realtime.onWorkspaceIntentResult = { [weak self] payload in
+            self?.receiveWorkspaceReceipt(payload) ?? true
+        }
         realtime.onSummary = { [weak self] payload in
             guard let self else { return }
             // Every computer's name, not just the one being viewed: the switch has to
@@ -1470,6 +1485,7 @@ final class SynapseAppModel {
     /// the behaviour this replaces.
     func selectDesktop(_ clientInstanceId: String) {
         guard clientInstanceId != selectedDesktopClientInstanceId else { return }
+        invalidateWorkspaceRequests()
         let outgoing = selectedDesktopClientInstanceId
         if let outgoing, realtime.state.isConnected {
             // The terminals being left are the outgoing computer's, and it holds a write
@@ -2398,6 +2414,152 @@ final class SynapseAppModel {
         return created
     }
 
+    // MARK: - Private workspace-file request facade
+    private func receiveWorkspaceReceipt(_ payload: MobileIntentResultPayload) -> Bool {
+        guard let pending = pendingWorkspaceResults[payload.result.intentId] else {
+            return payload.result.workspaceFiles != nil || retiredWorkspaceIntents.contains(payload.result.intentId)
+        }
+        // Wrong-source replies cannot complete a wait, even if intentId matches.
+        guard payload.matchesWorkspaceOwner(pending.owner,
+            current: workspaceFilesOwner(for: pending.owner.sessionId)) else { return true }
+        if payload.result.isAccepted, let files = payload.result.workspaceFiles {
+            do {
+                let validated = try files.validated(for: pending.request)
+                finishWorkspaceIntent(payload.result.intentId, with: .success(validated))
+            } catch {
+                finishWorkspaceIntent(payload.result.intentId, with: .failure(.invalid))
+            }
+        } else {
+            finishWorkspaceIntent(payload.result.intentId, with: .failure(WorkspaceFilesFailure(
+                code: payload.result.code ?? "relay_failed",
+                message: payload.result.message ?? "电脑没有完成读取，请重试。"
+            )))
+        }
+        return true
+    }
+
+
+    func workspaceFilesOwner(for sessionId: String) -> WorkspaceFilesOwner? {
+        // Target identity survives a temporarily absent summary. Session liveness
+        // is a separate three-state gate, matching the terminal's existing contract.
+        guard authState == .signedIn, let desktop = selectedDesktopClientInstanceId else { return nil }
+        return WorkspaceFilesOwner(accountGeneration: accountGeneration,
+            connectionGeneration: realtime.connectionGeneration, desktopId: desktop,
+            mobileId: realtime.mobileInstanceId, sessionId: sessionId)
+    }
+
+    func workspaceFilesAvailability(for sessionId: String) -> WorkspaceFilesFailure? {
+        guard realtime.state.isConnected, let desktop = selectedDesktopClientInstanceId,
+              onlineDesktopIds.contains(desktop) else { return .offline }
+        switch terminalOpenability(sessionId) {
+        case .unknown: return WorkspaceFilesFailure(code: "scope_stale", message: "等待电脑更新会话状态。")
+        case .ended: return WorkspaceFilesFailure(code: "session_ended", message: "这个终端已结束。")
+        case .openable: break
+        }
+        guard WorkspaceFilesCapabilities.supportsFiles(relayVersion: realtime.workspaceFilesRelayVersion,
+            desktopVersion: summary?.workspaceFilesVersion) else { return .unavailable }
+        return nil
+    }
+
+    func workspaceFilesClient(for sessionId: String) -> WorkspaceFilesClient {
+        WorkspaceFilesClient(
+            owner: { [weak self] in self?.workspaceFilesOwner(for: sessionId) },
+            availability: { [weak self] in
+                guard let self else { return .offline }
+                return self.workspaceFilesAvailability(for: sessionId)
+            },
+            send: { [weak self] request, owner in
+                guard let self else { throw WorkspaceFilesFailure.offline }
+                return try await self.requestWorkspaceFiles(request, owner: owner)
+            }
+        )
+    }
+
+    private func requestWorkspaceFiles(_ request: MobileIntentRequest, owner: WorkspaceFilesOwner) async throws -> WorkspaceFilesResult {
+        guard request.kind == "workspaceFiles", request.filesVersion == 1,
+              workspaceFilesOwner(for: owner.sessionId) == owner else { throw WorkspaceFilesFailure.cancelled }
+        let isControl = request.operation == .cancel || request.operation == .close
+        if isControl, !WorkspaceFilesCapabilities.supportsFiles(relayVersion: realtime.workspaceFilesRelayVersion,
+            desktopVersion: summary?.workspaceFilesVersion) { throw WorkspaceFilesFailure.unavailable }
+        if let failure = workspaceFilesAvailability(for: owner.sessionId),
+           !(isControl && ["session_ended", "scope_stale"].contains(failure.code)) { throw failure }
+        if request.operation == .cancel, let target = request.targetIntentId,
+           let waiting = pendingWorkspaceResults[target], waiting.owner == owner,
+           waiting.request.scopeId == request.scopeId {
+            finishWorkspaceIntent(target, with: .failure(.cancelled))
+        }
+        if request.operation == .close {
+            let ids = pendingWorkspaceResults.filter {
+                $0.value.owner == owner && $0.value.request.scopeId == request.scopeId
+            }.map(\.key)
+            for id in ids { finishWorkspaceIntent(id, with: .failure(.cancelled)) }
+        }
+        if !isControl && pendingWorkspaceResults.values.filter({ $0.request.operation != .cancel && $0.request.operation != .close }).count >= 2 {
+            throw WorkspaceFilesFailure(code: "busy", message: "电脑正在读取，请稍后重试。")
+        }
+        guard pendingWorkspaceResults.count < 130 else { throw WorkspaceFilesFailure(code: "busy", message: "请稍后重试。") }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pendingWorkspaceResults[request.intentId] = WorkspacePendingResult(owner: owner, request: request, deadline: .now.advanced(by: .seconds(15))) { result in
+                    continuation.resume(with: result.mapError { $0 as Error })
+                }
+                workspaceTimeoutTasks[request.intentId] = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(15))
+                    guard !Task.isCancelled, let self, self.pendingWorkspaceResults[request.intentId] != nil else { return }
+                    self.finishWorkspaceIntent(request.intentId, with: .failure(WorkspaceFilesFailure(code: "deadline_exceeded", message: "电脑没有回答，请重试。")))
+                }
+                send(request, to: owner.desktopId) { [weak self] failure in
+                    guard let self, let failure else { return }
+                    if failure == .transport { self.beginWorkspaceFallback(request.intentId) }
+                    else { self.finishWorkspaceIntent(request.intentId, with: .failure(failure == .unavailable ? .offline : .invalid)) }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.finishWorkspaceIntent(request.intentId, with: .failure(.cancelled))
+            }
+        }
+    }
+
+    private func beginWorkspaceFallback(_ id: String) {
+        guard let waiting = pendingWorkspaceResults[id], workspaceFallbackTasks[id] == nil else { return }
+        let duration = ContinuousClock.now.duration(to: waiting.deadline).components
+        let remaining = Double(duration.seconds) + Double(duration.attoseconds) / 1_000_000_000_000_000_000
+        guard WorkspaceFilesFallbackPolicy.allowsFallback(owner: waiting.owner,
+            current: workspaceFilesOwner(for: waiting.owner.sessionId),
+            available: workspaceFilesAvailability(for: waiting.owner.sessionId) == nil,
+            remainingSeconds: remaining) else {
+            finishWorkspaceIntent(id, with: .failure(.offline)); return
+        }
+        workspaceFallbackTasks[id] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let payload = try await self.apiClient.submitWorkspaceFilesIntent(
+                    desktopClientInstanceId: waiting.owner.desktopId, mobileClientInstanceId: waiting.owner.mobileId,
+                    intent: waiting.request, remainingSeconds: remaining)
+                guard !Task.isCancelled else { return }
+                _ = self.receiveWorkspaceReceipt(payload)
+            } catch {
+                guard !Task.isCancelled else { return }
+                let failure = error as? WorkspaceFilesFailure ?? WorkspaceFilesFailure(code: "relay_failed", message: "读取没有完成，请重试。")
+                self.finishWorkspaceIntent(id, with: .failure(failure))
+            }
+        }
+    }
+
+    private func finishWorkspaceIntent(_ id: String, with result: Result<WorkspaceFilesResult, WorkspaceFilesFailure>) {
+        guard let pending = pendingWorkspaceResults.removeValue(forKey: id) else { return }
+        workspaceFallbackTasks.removeValue(forKey: id)?.cancel()
+        workspaceTimeoutTasks.removeValue(forKey: id)?.cancel()
+        retiredWorkspaceIntents.append(id)
+        if retiredWorkspaceIntents.count > 128 { retiredWorkspaceIntents.removeFirst(retiredWorkspaceIntents.count - 128) }
+        pending.complete(result)
+    }
+
+    private func invalidateWorkspaceRequests() {
+        for id in Array(pendingWorkspaceResults.keys) { finishWorkspaceIntent(id, with: .failure(.cancelled)) }
+    }
+
     /// Sends one intent and waits for the desktop's answer, or resolves nil if the
     /// reply never arrives. Used wherever the next step depends on what it decided.
     private func awaitResult(
@@ -2424,7 +2586,8 @@ final class SynapseAppModel {
         }
     }
 
-    private func send(_ intent: MobileIntentRequest, to desktopClientInstanceId: String) {
+    private func send(_ intent: MobileIntentRequest, to desktopClientInstanceId: String,
+                      onSent: ((RealtimeIntentSendFailure?) -> Void)? = nil) {
         // **全部 17 种 intent 的唯一漏斗** —— 打字、按键、拉历史、切格数、建会话、
         // 删终端，一条都不落。和下面 `onIntentResult` 里那条配对，往返时延就是两条
         // 相邻记录的时间戳之差，不必再维护一张"什么时候发的"表（那种表要在六条清理
@@ -2439,7 +2602,7 @@ final class SynapseAppModel {
         DiagnosticLog.captureInput(kind: DiagnosticIntent.named(intent.kind), session: intent.sessionId) {
             Self.capturableText(of: intent)
         }
-        realtime.sendIntent(intent, desktopClientInstanceId: desktopClientInstanceId)
+        realtime.sendIntent(intent, desktopClientInstanceId: desktopClientInstanceId, onSent: onSent)
     }
 
     /// 一个 intent 里"用户发出去的东西"。没有用户输入的那种返回 nil —— 那正是

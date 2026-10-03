@@ -1,7 +1,9 @@
 import { EventEmitter } from "node:events"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { LIVE_DESKTOP_CLOSE_CODES, LIVE_MESSAGE_TYPES, MOBILE_FRAME_LIMITS, createLiveEnvelope } from "@synapse/shared"
-import type { MobileTerminalFrame } from "@synapse/shared"
+import type { MobileTerminalFrame, MobileIntentResult, LiveMobileServerMessage } from "@synapse/shared"
+import { MOBILE_WORKSPACE_FILES_LIMITS as FILE_LIMITS } from "@synapse/shared"
+import { WorkspaceFilesSendQueue } from "../../../../server/src/mobile-live/workspace-files-send-queue"
 import type { SynapseAccountState } from "../../../src/types/account"
 import { MAX_SOCKET_BUFFERED_BYTES, LiveConnectionService } from "../live-connection-service"
 import { buildTerminalFrames } from "../mobile-gateway/frame-builder"
@@ -202,6 +204,178 @@ function representativeFrames(): readonly MobileTerminalFrame[] {
     ...atLineLimit,
   ]
 }
+
+describe("LiveConnectionService workspace file ownership", () => {
+  function harness() {
+    const socket = new FakeSocket()
+    const timers = createTimerFns()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: () => socket as never,
+      setTimeout: timers.setTimeout as never, clearTimeout: timers.clearTimeout as never,
+    })
+    const handler = { handle: vi.fn(async () => {}), releaseClient: vi.fn(async () => {}), resetWorkspaceFiles: vi.fn() }
+    service.setMobileIntentHandler(handler)
+    return { service, socket, handler, timers }
+  }
+
+  it("keeps inbound keys, ordinary results and controls immediate while two congested file senders drain without loss", async () => {
+    const h = harness(), phone = new FakeSocket(), downstream = new WorkspaceFilesSendQueue()
+    await connectAndWelcome(h.service, h.socket)
+    h.socket.sent.length = 0
+    const write = h.socket.send.bind(h.socket)
+    h.socket.send = payload => {
+      write(payload)
+      const message = JSON.parse(payload) as LiveMobileServerMessage
+      if (message.type !== LIVE_MESSAGE_TYPES.mobileIntentResult) return
+      // Only the two production senders are under test; ordinary relay routing
+      // is covered in the server's gateway tests and is a direct transport here.
+      if (message.payload.result.workspaceFiles) downstream.send(phone, message)
+      else phone.send(payload)
+    }
+    const page = (intentId: string): MobileIntentResult => ({ intentId, sessionId: "s1", outcome: "accepted", workspaceFiles: {
+      filesVersion: 1, operation: "preview", sessionId: "s1", scopeId: "scope-1", contextVersion: "context-1", readAt: "2026-10-03T10:00:00.000Z",
+      data: { contentVersion: "content-1", source: "disk", name: "file.txt", relativePath: "file.txt", metadata: { sizeBytes: 16384, modifiedAt: null }, contentState: "available", lines: Array.from({ length: 4 }, (_, index) => ({ lineNumber: index + 1, text: "x".repeat(4096), truncated: false })), contentComplete: true, format: "text", pageIndex: 0, nextCursor: null, completion: "complete" },
+    } })
+    const records = () => phone.sent.map(text => JSON.parse(text) as LiveMobileServerMessage).filter(message => message.type === LIVE_MESSAGE_TYPES.mobileIntentResult)
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })
+    try {
+      phone.bufferedAmount = FILE_LIMITS.maxSocketBufferedBytes - 4096
+      await h.service.sendMobileWorkspaceFilesResult("phone-1", page("r1"))
+      expect(phone.sent).toEqual([])
+      h.socket.bufferedAmount = FILE_LIMITS.maxSocketBufferedBytes - 4096
+      const second = h.service.sendMobileWorkspaceFilesResult("phone-1", page("r2"))
+      const third = h.service.sendMobileWorkspaceFilesResult("phone-1", page("r3"))
+      let secondSent = false
+      void second.then(() => { secondSent = true })
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+      const interrupt = { v: 1, intentId: "interrupt", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "Ctrl+C" }] } as const
+      h.socket.emit("message", JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+        desktopClientInstanceId: "client-a", mobileClientInstanceId: "phone-1", intent: interrupt,
+      }, { id: "interrupt-message", sentAt: "2026-10-03T10:00:00.000Z" })))
+      await flushPromises()
+      expect(h.handler.handle).toHaveBeenCalledWith("phone-1", interrupt, { accountUserId: "user-1", desktopClientInstanceId: "client-a" })
+      expect(secondSent).toBe(false)
+      expect(phone.sent).toEqual([])
+      await h.service.sendMobileIntentResult("phone-1", { intentId: "ordinary", sessionId: "s1", outcome: "accepted" })
+      const control: MobileIntentResult = { intentId: "control", sessionId: "s1", outcome: "accepted", workspaceFiles: { filesVersion: 1, operation: "cancel", sessionId: "s1", readAt: "2026-10-03T10:00:00.000Z", data: { status: "cancelled" } } }
+      await h.service.sendMobileWorkspaceFilesResult("phone-1", control, undefined, true)
+      expect(records().map(message => message.payload.result.intentId)).toEqual(["ordinary", "control"])
+      expect(secondSent).toBe(false) // No timer or clock advancement has helped controls.
+      h.socket.bufferedAmount = 0
+      h.timers.timers.findLast(timer => timer.delay === 50)!.callback()
+      await Promise.all([second, third])
+      expect(records().find(message => message.payload.result.intentId === "r3")?.payload.result).toMatchObject({ outcome: "rejected", code: "transport_backpressure" })
+      expect(JSON.stringify(records().find(message => message.payload.result.intentId === "r3"))).not.toContain("xxxx")
+      phone.bufferedAmount = 0
+      await vi.advanceTimersByTimeAsync(25)
+      for (const id of ["r1", "r2"]) {
+        const received = records().filter(message => message.payload.result.intentId === id)
+        expect(received).toHaveLength(1)
+        expect(received[0]!.payload.result).toEqual(page(id))
+      }
+    } finally { downstream.dispose(); h.service.close(); vi.useRealTimers() }
+  })
+
+  it("drops file scopes immediately when the desktop relay disconnects", async () => {
+    const h = harness()
+    await connectAndWelcome(h.service, h.socket)
+    h.handler.resetWorkspaceFiles.mockClear()
+    h.socket.emit("close", 1006)
+    expect(h.handler.resetWorkspaceFiles).toHaveBeenCalledOnce()
+    expect(h.service.getState().status).toBe("reconnecting")
+    h.service.close()
+  })
+
+  it("rechecks identity after asynchronous protocol loading before handling a file intent", async () => {
+    const h = harness()
+    await connectAndWelcome(h.service, h.socket)
+    h.socket.emit("message", JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "client-a", mobileClientInstanceId: "phone-1", intent: {
+        v: 1, kind: "workspaceFiles", filesVersion: 1, intentId: "switching-account", sessionId: "s1", operation: "open", scopeMode: "currentDirectory",
+      },
+    }, { id: "switching-account-message", sentAt: "2026-10-03T10:00:00.000Z" })))
+    h.service.handleAccountState({ status: "unauthenticated" })
+    await flushPromises()
+    expect(h.handler.handle).not.toHaveBeenCalled()
+  })
+
+  it("replaces an in-flight connection after account change instead of relabeling its bearer token", async () => {
+    const socket = new FakeSocket()
+    const timers = createTimerFns()
+    const account = createAccountService({ token: "token-A" })
+    let releaseId!: (id: string) => void
+    const oldId = new Promise<string>(resolve => { releaseId = resolve })
+    const getOrCreate = vi.fn().mockReturnValueOnce(oldId).mockResolvedValue("client-b")
+    const createSocket = vi.fn((_url: string, _options: { headers: Record<string, string> }) => socket as never)
+    const service = new LiveConnectionService({
+      accountService: account as never,
+      clientIdStore: { getOrCreate, getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null } as never,
+      createSocket, setTimeout: timers.setTimeout as never, clearTimeout: timers.clearTimeout as never,
+    })
+    const handler = { handle: vi.fn(async () => {}), releaseClient: vi.fn(async () => {}), resetWorkspaceFiles: vi.fn() }
+    service.setMobileIntentHandler(handler)
+    service.handleAccountState(authenticatedState)
+    expect(getOrCreate).toHaveBeenCalledOnce()
+    account.getAccessTokenForLive.mockReturnValue("token-B")
+    service.handleAccountState({ ...authenticatedState, profile: { ...authenticatedState.profile, user: { ...authenticatedState.profile.user, id: "user-B" } } })
+    releaseId("client-a")
+    await flushPromises()
+    expect(createSocket).toHaveBeenCalledOnce()
+    expect(createSocket.mock.calls[0]?.[1]).toEqual({ headers: { Authorization: "Bearer token-B" } })
+    socket.emit("message", JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "client-b", mobileClientInstanceId: "phone-B", intent: { v: 1, kind: "workspaceFiles", filesVersion: 1, intentId: "new-account", sessionId: "s1", operation: "open", scopeMode: "currentDirectory" },
+    }, { id: "new-account-message", sentAt: "2026-10-03T10:00:00.000Z" })))
+    await flushPromises()
+    expect(handler.handle).toHaveBeenCalledWith("phone-B", expect.anything(), { accountUserId: "user-B", desktopClientInstanceId: "client-b" })
+    service.close()
+  })
+
+  it("passes the authenticated account and recipient desktop rather than payload user claims", async () => {
+    const h = harness()
+    await connectAndWelcome(h.service, h.socket)
+    const request = { v: 1, kind: "workspaceFiles", filesVersion: 1, intentId: "files-open", sessionId: "s1", operation: "open", scopeMode: "currentDirectory" } as const
+    h.socket.emit("message", JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "client-a", mobileClientInstanceId: "phone-1", intent: request,
+    }, { id: "relay-files-1", sentAt: "2026-10-03T10:00:00.000Z" })))
+    await flushPromises()
+    expect(h.handler.handle).toHaveBeenCalledWith("phone-1", request, { accountUserId: "user-1", desktopClientInstanceId: "client-a" })
+    h.socket.emit("message", JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "other-desktop", mobileClientInstanceId: "phone-1", intent: request,
+    }, { id: "relay-files-2", sentAt: "2026-10-03T10:00:00.000Z" })))
+    await flushPromises()
+    expect(h.handler.handle).toHaveBeenCalledTimes(1)
+    h.service.handleAccountState({ status: "unauthenticated" })
+  })
+
+  it("adds desktop context even to rejected file replies and refuses replies from a previous account", async () => {
+    const h = harness()
+    await connectAndWelcome(h.service, h.socket)
+    const result = { intentId: "files-read", sessionId: "s1", outcome: "rejected" as const, code: "content_stale" }
+    await h.service.sendMobileWorkspaceFilesResult("phone-1", result, { accountUserId: "user-1", desktopClientInstanceId: "client-a" })
+    expect(JSON.parse(h.socket.sent.at(-1)!)).toMatchObject({
+      type: LIVE_MESSAGE_TYPES.mobileIntentResult,
+      payload: { desktopClientInstanceId: "client-a", mobileClientInstanceId: "phone-1", result },
+    })
+    await expect(h.service.sendMobileWorkspaceFilesResult("phone-1", result, { accountUserId: "other-account", desktopClientInstanceId: "client-a" })).rejects.toThrow("permission_denied")
+    h.service.handleAccountState({ status: "unauthenticated" })
+    await expect(h.service.sendMobileWorkspaceFilesResult("phone-1", result, { accountUserId: "user-1", desktopClientInstanceId: "client-a" })).rejects.toThrow("desktop_offline")
+    expect(h.handler.resetWorkspaceFiles).toHaveBeenCalled()
+  })
+
+  it("drops late inbound messages after their socket was retired", async () => {
+    const h = harness()
+    await connectAndWelcome(h.service, h.socket)
+    h.service.handleAccountState({ status: "unauthenticated" })
+    h.socket.emit("message", JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "client-a", mobileClientInstanceId: "phone-1",
+      intent: { v: 1, kind: "workspaceFiles", filesVersion: 1, intentId: "late-open", sessionId: "s1", operation: "open", scopeMode: "currentDirectory" },
+    }, { id: "relay-files-late", sentAt: "2026-10-03T10:00:00.000Z" })))
+    await flushPromises()
+    expect(h.handler.handle).not.toHaveBeenCalled()
+  })
+})
 
 describe("LiveConnectionService", () => {
   it("refreshes the message center and suppresses a second native alert on the originating desktop", async () => {

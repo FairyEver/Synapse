@@ -7,6 +7,7 @@ import {
   isGitRebaseInProgress,
   resetGitCommandSecurityForTests,
   runGitCommand,
+  MOBILE_READ_ONLY_CONFIG_QUERY,
 } from "../git-command"
 
 const roots: string[] = []
@@ -30,6 +31,21 @@ describe("git-command helpers", () => {
   afterEach(async () => {
     resetGitCommandSecurityForTests()
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  it("restricts immutable config stdin to the fixed readonly built-in parser shapes", async () => {
+    const run = vi.fn(async () => ({ durationMs: 1, exitCode: 0, signal: null, stdout: "true\n", stderr: "", timedOut: false }))
+    configureGitCommandSecurity({ processRunner: { run } })
+    const snapshot = "[core]\nautocrlf = true\n"
+    const request = { cwd: "/repo", args: ["config", "--file", "-", "--no-includes", "--null", "--get-regexp", MOBILE_READ_ONLY_CONFIG_QUERY], fallbackMessage: "parse failed", readOnlyIsolation: { authorizationToken: "scope-token" }, readOnlyConfigSnapshot: snapshot }
+    await runGitCommand(request)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ stdin: snapshot, env: expect.objectContaining({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null", GIT_ATTR_NOSYSTEM: "1" }), metadata: expect.objectContaining({ source: "mobile-workspace-files", args: "[redacted]" }) }))
+    for (const args of [["config", "--file", "arbitrary", "--get", "core.autocrlf"], ["config", "--file", "-", "--includes", "--get", "core.autocrlf"], ["config", "--file", "-", "--no-includes", "--get", "credential.helper"], ["hash-object", "-w", "--stdin"]]) {
+      expect(() => runGitCommand({ ...request, args })).toThrow("Invalid read-only configuration request")
+    }
+    expect(() => runGitCommand({ ...request, readOnlyIsolation: undefined })).toThrow("Invalid read-only configuration request")
+    expect(() => runGitCommand({ ...request, readOnlyConfigSnapshot: "x".repeat(64 * 1024 + 1) })).toThrow("Invalid read-only configuration request")
+    expect(run).toHaveBeenCalledTimes(1)
   })
 
   it("routes git commands through the configured controlled process runner", async () => {

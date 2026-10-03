@@ -316,6 +316,29 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     }
   })
 
+  it("uses the requested shorter termination grace while retaining the default for other callers", async () => {
+    vi.useFakeTimers()
+    try {
+      const { child, kill } = createChildThatIgnoresSigterm()
+      const runner = createControlledProcessRunner({ permissionGuard: createPermissionGuard(), auditSink: new InMemoryAuditSink(), spawnImpl: () => child })
+      const result = runner.run({ actor: { kind: "user" }, action: "shell.exec", command: process.execPath, timeoutMs: 10, terminationGraceMs: 250 })
+      await vi.advanceTimersByTimeAsync(10)
+      expect(kill).toHaveBeenCalledWith("SIGTERM")
+      await vi.advanceTimersByTimeAsync(249)
+      expect(kill).not.toHaveBeenCalledWith("SIGKILL")
+      await vi.advanceTimersByTimeAsync(1)
+      expect(kill).toHaveBeenCalledWith("SIGKILL")
+      await expect(result).resolves.toMatchObject({ timedOut: true, signal: "SIGKILL" })
+    } finally { vi.useRealTimers() }
+  })
+
+  it("bounds stderr independently from the larger stdout capture", async () => {
+    const runner = createControlledProcessRunner({ permissionGuard: createPermissionGuard(), auditSink: new InMemoryAuditSink() })
+    const result = await runner.run({ actor: { kind: "user" }, action: "shell.exec", command: process.execPath, args: ["-e", "process.stdout.write('12345678');process.stderr.write('12345')"], output: { maxBufferBytes: 16, maxStderrBufferBytes: 4, overflow: "truncate" } })
+    expect(result.stdout).toBe("12345678"); expect(result.stdoutTruncated).toBe(false)
+    expect(result.stderr).toBe("1234"); expect(result.stderrTruncated).toBe(true)
+  })
+
   it.skipIf(process.platform === "win32")("terminates the process group on abort", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()

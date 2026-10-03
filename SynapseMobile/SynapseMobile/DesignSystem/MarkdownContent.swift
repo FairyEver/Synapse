@@ -3,11 +3,11 @@ import SwiftUI
 
 /// A shared, read-only Markdown document. Foundation supplies the syntax tree;
 /// SwiftUI's Text renders inline intents, while this model retains block intents.
-struct MarkdownDocument {
+nonisolated struct MarkdownDocument: Sendable {
     private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
-    struct Block {
-        nonisolated enum Kind: Equatable {
+    nonisolated struct Block: Sendable {
+        nonisolated enum Kind: Equatable, Sendable {
             case paragraph
             case heading(Int)
             case listItem(marker: String, depth: Int)
@@ -140,6 +140,11 @@ struct MarkdownContent: View {
 
     init(_ source: String, mode: Mode = .document) {
         document = MarkdownDocument(source)
+        self.mode = mode
+    }
+
+    init(document: MarkdownDocument, mode: Mode = .document) {
+        self.document = document
         self.mode = mode
     }
 

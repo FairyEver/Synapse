@@ -1,5 +1,7 @@
 # 手机端终端 · Git 操作 · 实施计划
 
+> 文件清单与 diff 的全局禁止已由 [工作区文件开发计划](2026-10-03-mobile-workspace-files-and-changes-plan.md) 取代。原 `git` 动作与全量提交/冲突文本规则保留；独立 `workspaceFiles` 通道承担只读文件审查。
+
 > 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
 
 > 权威设计见 `docs/superpowers/specs/2026-09-21-mobile-terminal-git-design.md`。**决策、非目标、验收基线都以它为准**，本文件只回答「分几步做、每步改哪、怎么验」。

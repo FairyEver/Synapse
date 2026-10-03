@@ -6,6 +6,7 @@ struct TerminalExpandedInputSheet: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Binding var draft: String
+    @Binding var selection: TextSelection?
     let sessionId: String
 
     @FocusState private var editorFocused: Bool
@@ -15,7 +16,7 @@ struct TerminalExpandedInputSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                TextEditor(text: $draft)
+                TextEditor(text: $draft, selection: $selection)
                     .font(.system(.body, design: .monospaced))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)

@@ -27,8 +27,8 @@ import { MobileIntentError } from "./intent-executor"
  * 2. **鉴权** —— 每个动作都自己过一遍权限，与既有 19 个 kind 的做法一致。读的走
  *    `terminal.state.read`，写的走 `terminal.git.manage`：借别的名字记审计，
  *    事后查的人会以为当时只是落了一个文件。
- * 3. **结果信封** —— 快照里的 `changes`（改动文件清单）**不许往手机上走**，
- *    所以这里从来不是「把服务的返回值原样转发」，而是挑出这个动作真正要回答的那一块。
+ * 3. **结果信封** —— 本 `git` 操作只投影动作结果，不原样转发快照里的 `changes`。
+ *    文件清单和 diff 由独立 `workspaceFiles` 只读 scope 路由按需返回。
  *
  * 它不认识 `repositoryId`，也不碰「代码仓库」注册表。
  */

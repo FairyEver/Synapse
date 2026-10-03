@@ -155,6 +155,7 @@ struct PayloadEnvelope<Payload: Decodable>: Decodable {
     let payload: Payload
 }
 
+
 // MARK: - Summary
 
 struct MobileSummaryGroup: Decodable, Identifiable, Hashable {
@@ -269,6 +270,7 @@ struct MobileSummaryAgentProvider: Decodable, Identifiable, Hashable {
 }
 
 struct MobileSummaryPayload: Decodable {
+    var workspaceFilesVersion: Int? = nil
     let desktopClientInstanceId: String
     let desktopName: String
     let revision: Int
@@ -413,7 +415,7 @@ struct MobileFramePayload: Decodable {
 
 // MARK: - Intent
 
-enum MobileKey: String, Codable, CaseIterable {
+nonisolated enum MobileKey: String, Codable, CaseIterable, Sendable {
     case enter = "Enter"
     case tab = "Tab"
     case escape = "Escape"
@@ -475,7 +477,7 @@ enum MobileKey: String, Codable, CaseIterable {
     case insert = "Insert"
 }
 
-enum MobileKeyAction: Encodable, Equatable {
+nonisolated enum MobileKeyAction: Encodable, Equatable, Sendable {
     case text(String)
     case key(MobileKey)
 
@@ -494,7 +496,7 @@ enum MobileKeyAction: Encodable, Equatable {
     }
 }
 
-struct MobileIntentResult: Decodable {
+nonisolated struct MobileIntentResult: Decodable, Sendable {
     let intentId: String
     let outcome: String
     let code: String?
@@ -511,13 +513,14 @@ struct MobileIntentResult: Decodable {
     /// effect. `status` 的回答**不在这里** —— 手机端的状态永远以 `mobile.gitStatus`
     /// 为准，两个来源写同一件事迟早会分叉。
     let git: MobileIntentGitResult?
+    var workspaceFiles: WorkspaceFilesResult? = nil
 
     var isAccepted: Bool { outcome == "accepted" }
     var isNoOp: Bool { outcome == "no_op" }
 }
 
 /// `git` 动作的回答里那几块**数据**，其余动作的回答是一句话。
-struct MobileIntentGitResult: Decodable, Equatable {
+nonisolated struct MobileIntentGitResult: Decodable, Equatable, Sendable {
     /// `branches` 的回答：只给名字与是否当前。
     let branches: [MobileGitBranch]?
     /// `remoteBranches` 的回答：平铺 + 已按「远端名 → 分支名」排好，分组是这一侧的事。
@@ -531,7 +534,7 @@ struct MobileIntentGitResult: Decodable, Equatable {
 }
 
 /// 一条本地分支，供分支列表画一行。
-struct MobileGitBranch: Decodable, Equatable, Identifiable {
+nonisolated struct MobileGitBranch: Decodable, Equatable, Identifiable, Sendable {
     let name: String
     let current: Bool
 
@@ -542,7 +545,7 @@ struct MobileGitBranch: Decodable, Equatable, Identifiable {
 ///
 /// 与电脑端分成两段而不是拼好的 `origin/dev`：分组要靠 `remote`，而拿一段拼字符串再拆回来
 /// 是个必然会写错的一步（远端名本身可以含 `/`）。给人看的那一份由 `qualifiedName` 拼。
-struct MobileGitRemoteBranch: Decodable, Equatable, Identifiable {
+nonisolated struct MobileGitRemoteBranch: Decodable, Equatable, Identifiable, Sendable {
     let remote: String
     let name: String
 
@@ -557,7 +560,7 @@ struct MobileGitRemoteBranch: Decodable, Equatable, Identifiable {
 /// 传的是**一段给人（以及别的 Agent）读的完整说明**，不是文件清单结构：手机端不解析
 /// 文件列表，只把 `summaryText` 放进剪贴板。`files` 仍然在，因为要在弹窗里说「有 N 个
 /// 文件冲突」，而它不该去数一段文本里的行。
-struct MobileGitConflict: Decodable, Equatable, Identifiable {
+nonisolated struct MobileGitConflict: Decodable, Equatable, Identifiable, Sendable {
     let source: String
     let target: String
     let files: [String]
@@ -567,7 +570,8 @@ struct MobileGitConflict: Decodable, Equatable, Identifiable {
     var id: String { "\(source)→\(target)" }
 }
 
-struct MobileIntentResultPayload: Decodable {
+nonisolated struct MobileIntentResultPayload: Decodable, Sendable {
+    var desktopClientInstanceId: String? = nil
     let mobileClientInstanceId: String
     let result: MobileIntentResult
 }
@@ -897,7 +901,7 @@ struct MobileIntentEcho: Decodable {
 
 // MARK: - Outbound
 
-struct MobileIntentRequest: Encodable {
+nonisolated struct MobileIntentRequest: Encodable, Sendable {
     let v = 1
     /// Mutable because a write that was rejected as preempted is replayed as a
     /// new intent: the gateway dedupes by this id and would answer the replay
@@ -961,6 +965,22 @@ struct MobileIntentRequest: Encodable {
     var remote: String?
     /// `checkoutRemote` 的另一个本地名；缺席＝与远端分支同名。
     var localBranch: String?
+    // Private, user-initiated workspace reads. Fields are mutually exclusive by operation.
+    var filesVersion: Int?
+    var operation: WorkspaceFilesOperation?
+    var scopeMode: WorkspaceFilesScopeMode?
+    var scopeId: String?
+    var expectedContextVersion: String?
+    var directoryEntryId: String?
+    var entryId: String?
+    var cursor: String?
+    var query: String?
+    var changeRange: WorkspaceFilesChangeRange?
+    var changeSetVersion: String?
+    var changeId: String?
+    var expectedContentVersion: String?
+    var target: WorkspaceFilesPreviewTarget?
+    var targetIntentId: String?
 }
 
 struct MobileIntentPayloadOut: Encodable {

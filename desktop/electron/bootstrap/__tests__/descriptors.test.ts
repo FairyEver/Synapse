@@ -79,6 +79,18 @@ async function importBootstrap() {
 }
 
 describe("bootstrap descriptors (T1.5)", () => {
+  it("injects scoped workspace reads into the mobile gateway and releases their permission policy", { timeout: bootstrapImportTimeoutMs }, async () => {
+    const { coreMobileWorkspaceFilesDescriptor, coreMobileGatewayDescriptor } = await importBootstrap()
+    expect(coreMobileWorkspaceFilesDescriptor.dependsOn).toEqual(["core.terminal", "core.permission-guard", "core.audit-sink"])
+    expect(coreMobileGatewayDescriptor.dependsOn).toContain("core.mobile-workspace-files")
+    const unregister = vi.fn()
+    const guard = { registerPolicy: vi.fn(() => unregister), onRevoked: vi.fn(() => vi.fn()) }
+    const ports = { "core.terminal": {}, "core.permission-guard": guard, "core.audit-sink": { record: vi.fn() } }
+    const service = await coreMobileWorkspaceFilesDescriptor.create({ registry: { get: (id: keyof typeof ports) => ports[id] } } as never)
+    expect(guard.registerPolicy).toHaveBeenCalledOnce()
+    await coreMobileWorkspaceFilesDescriptor.stop?.(service, {} as never, 1000)
+    expect(unregister).toHaveBeenCalledOnce()
+  })
   beforeEach(() => {
     vi.resetModules()
   })

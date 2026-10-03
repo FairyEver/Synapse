@@ -11,6 +11,9 @@ type GitClientRunInput = {
   readonly captureStdout?: boolean
   readonly fallbackMessage?: string
   readonly gitIndexFile?: string
+  readonly readOnlyIsolation?: { readonly authorizationToken: string }
+  readonly readOnlyAttributePaths?: readonly string[]
+  readonly readOnlyConfigSnapshot?: string
   readonly logFailure?: boolean
   readonly maxBufferBytes?: number
   readonly operation?: string
@@ -131,6 +134,9 @@ export function createGitClientCommandRunner(deps: {
           cwd: input.cwd,
           fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
           gitIndexFile: input.gitIndexFile,
+          readOnlyIsolation: input.readOnlyIsolation,
+          readOnlyAttributePaths: input.readOnlyAttributePaths,
+          readOnlyConfigSnapshot: input.readOnlyConfigSnapshot,
           maxBufferBytes: input.maxBufferBytes,
           outputOverflow: input.outputOverflow,
           onStdoutChunk: input.onStdoutChunk,

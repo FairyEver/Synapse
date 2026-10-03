@@ -1,6 +1,7 @@
 import os from "node:os"
 import { app } from "electron"
 import WebSocket from "ws"
+import { MOBILE_WORKSPACE_FILES_LIMITS } from "@synapse/shared/mobile-live-constants"
 import type {
   MobileIntentResult,
   MobileTransferProgressPayload,
@@ -15,11 +16,13 @@ import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler
 import { getLiveClientIdStore, type LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay, isStableLiveConnection } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
+import { MobileFileResultQueue } from "./mobile-gateway/file-result-queue"
 import type {
   MobileClipboardDraft,
   MobileGitStatusDraft,
   MobileGroupCommandsDraft,
   MobileIntentHandler,
+  MobileIntentContext,
   MobileQuickPhrasesDraft,
   MobileSummaryDraft,
   MobileToolbarDraft,
@@ -126,6 +129,7 @@ export class LiveConnectionService {
   private connectionGeneration = 0
   private closedIntentionally = false
   private authenticatedAccountUserId: string | null = null
+  private readonly fileResultQueue: MobileFileResultQueue
   private state: SynapseLiveState = {
     status: "unauthenticated",
     clientInstanceId: null,
@@ -145,6 +149,13 @@ export class LiveConnectionService {
     this.appVersion = deps.appVersion ?? (() => app.getVersion())
     this.platform = deps.platform ?? (() => `${process.platform}-${process.arch}`)
     this.deviceName = deps.deviceName ?? (() => os.hostname())
+    this.fileResultQueue = new MobileFileResultQueue({
+      socket: () => this.socket,
+      limits: MOBILE_WORKSPACE_FILES_LIMITS,
+      now: () => this.now().getTime(),
+      setTimeout: this.setTimer,
+      clearTimeout: this.clearTimer,
+    })
     this.webhookDeliveryHandler = deps.webhookDeliveryHandler ?? null
     this.meetingTranscriptionHandler = deps.meetingTranscriptionHandler ?? null
     this.notificationPresenter = deps.notificationPresenter ?? null
@@ -201,6 +212,7 @@ export class LiveConnectionService {
 
   handleAccountState(state: SynapseAccountState): void {
     if (state.status !== "authenticated") {
+      this.mobileIntentHandler?.resetWorkspaceFiles?.()
       this.authenticatedAccountUserId = null
       this.closeSocket("unauthenticated")
       this.setState({
@@ -215,7 +227,17 @@ export class LiveConnectionService {
 
     const nextUserId = state.profile.user.id
     const isSameAccount = this.authenticatedAccountUserId === nextUserId
+    const previousAttempt = !isSameAccount ? this.connectInFlight : null
+    if (!isSameAccount) this.closeSocket("account_changed")
     this.authenticatedAccountUserId = nextUserId
+    if (previousAttempt) {
+      const generation = this.connectionGeneration
+      this.closedIntentionally = false
+      void previousAttempt.then(() => {
+        if (this.isCurrentGeneration(generation) && this.authenticatedAccountUserId === nextUserId) void this.startConnect()
+      })
+      return
+    }
     if (isSameAccount && (
       this.socket
       || this.reconnectTimer
@@ -250,10 +272,12 @@ export class LiveConnectionService {
 
   async connect(): Promise<void> {
     const generation = this.nextConnectionGeneration()
+    const socketAccountUserId = this.authenticatedAccountUserId
+    const currentAttempt = () => this.isCurrentGeneration(generation) && socketAccountUserId === this.authenticatedAccountUserId
     let token = this.accountService.getAccessTokenForLive()
     if (!token) {
       await this.accountService.refreshFromStorage({ reason: "live-auth-failure" })
-      if (!this.isCurrentGeneration(generation)) return
+      if (!currentAttempt()) return
       token = this.accountService.getAccessTokenForLive()
       if (!token) {
         if (this.keepReconnectingForOfflineAccount()) return
@@ -268,12 +292,12 @@ export class LiveConnectionService {
     }
 
     const clientInstanceId = await this.clientIdStore.getOrCreate()
-    if (!this.isCurrentGeneration(generation)) return
+    if (!currentAttempt()) return
     await this.getDeviceSettings()
-    if (!this.isCurrentGeneration(generation)) return
+    if (!currentAttempt()) return
 
     const { LIVE_DESKTOP_CLOSE_CODES, buildLiveDesktopSocketUrl } = await liveProtocolPromise
-    if (!this.isCurrentGeneration(generation)) return
+    if (!currentAttempt()) return
     this.clientInstanceIdConflictCloseCode = LIVE_DESKTOP_CLOSE_CODES.clientInstanceIdConflict
     const socketUrl = buildLiveDesktopSocketUrl(this.accountService.getApiBaseUrlForLive())
     this.closeCurrentSocket("reconnect")
@@ -299,7 +323,8 @@ export class LiveConnectionService {
     })
 
     socket.on("message", (payload: unknown) => {
-      void this.handleMessage(String(payload), clientInstanceId).catch((error: unknown) => {
+      if (this.socket !== socket || socketAccountUserId !== this.authenticatedAccountUserId) return
+      void this.handleMessage(String(payload), clientInstanceId, socketAccountUserId, generation).catch((error: unknown) => {
         this.logLiveMessageError(error)
       })
     })
@@ -341,7 +366,7 @@ export class LiveConnectionService {
     })
   }
 
-  private async handleMessage(payload: string, clientInstanceId: string): Promise<void> {
+  private async handleMessage(payload: string, clientInstanceId: string, socketAccountUserId: string | null, generation: number): Promise<void> {
     let parsed: unknown
     try {
       parsed = JSON.parse(payload)
@@ -351,6 +376,7 @@ export class LiveConnectionService {
     }
 
     const { LIVE_MESSAGE_TYPES, isLiveDesktopServerMessage } = await liveProtocolPromise
+    if (!this.socket || !this.isCurrentGeneration(generation) || socketAccountUserId !== this.authenticatedAccountUserId) return
     if (!isLiveDesktopServerMessage(parsed)) {
       const messageType = parsed && typeof parsed === "object" && "type" in parsed
         ? (parsed as { readonly type?: unknown }).type
@@ -449,7 +475,10 @@ export class LiveConnectionService {
         logger.warn("Live mobile intent ignored.", { reason: "missing_handler" })
         return
       }
-      void this.mobileIntentHandler.handle(payload.mobileClientInstanceId, payload.intent)
+      const accountUserId = this.authenticatedAccountUserId
+      if (payload.intent.kind === "workspaceFiles" && !accountUserId) return
+      void this.mobileIntentHandler.handle(payload.mobileClientInstanceId, payload.intent,
+        accountUserId ? { accountUserId, desktopClientInstanceId: clientInstanceId } : undefined)
         .catch((error: unknown) => {
           logger.warn("Live mobile intent handler failed.", this.liveErrorMetadata(error))
         })
@@ -596,11 +625,26 @@ export class LiveConnectionService {
     mobileClientInstanceId: string,
     result: MobileIntentResult,
   ): Promise<void> {
+    if (result.workspaceFiles) return this.sendMobileWorkspaceFilesResult(mobileClientInstanceId, result)
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
       mobileClientInstanceId,
       result,
     }, this.envelopeMetadata()))
+  }
+
+  async sendMobileWorkspaceFilesResult(mobileClientInstanceId: string, result: MobileIntentResult, context?: MobileIntentContext, priority = false): Promise<void> {
+    const desktopClientInstanceId = this.state.clientInstanceId
+    const generation = this.connectionGeneration
+    if (!desktopClientInstanceId || !this.authenticatedAccountUserId) throw new Error("desktop_offline")
+    if (context && (context.accountUserId !== this.authenticatedAccountUserId || context.desktopClientInstanceId !== desktopClientInstanceId)) throw new Error("permission_denied")
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    if (generation !== this.connectionGeneration || desktopClientInstanceId !== this.state.clientInstanceId) throw new Error("desktop_offline")
+    if (context && context.accountUserId !== this.authenticatedAccountUserId) throw new Error("permission_denied")
+    const envelope = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
+      desktopClientInstanceId, mobileClientInstanceId, result,
+    }, this.envelopeMetadata())
+    await this.fileResultQueue.send(JSON.stringify(envelope), priority)
   }
 
   async sendMobileTransferProgress(payload: MobileTransferProgressPayload): Promise<void> {
@@ -795,6 +839,8 @@ export class LiveConnectionService {
       return
     }
 
+    this.fileResultQueue.reset()
+    this.mobileIntentHandler?.resetWorkspaceFiles?.()
     this.socket = null
     this.clearHeartbeat()
     this.clearServerTimeout()
@@ -857,6 +903,8 @@ export class LiveConnectionService {
   }
 
   private closeCurrentSocket(reason: string): void {
+    this.fileResultQueue.reset()
+    this.mobileIntentHandler?.resetWorkspaceFiles?.()
     this.closedIntentionally = true
     // The connection this timestamp belongs to ends here, and it must not be credited
     // to whatever socket comes next.
@@ -894,7 +942,8 @@ export class LiveConnectionService {
   private refreshAfterAuthFailure(): void {
     if (this.accountRefreshInFlight) return
     this.accountRefreshInFlight = true
-
+    this.fileResultQueue.reset()
+    this.mobileIntentHandler?.resetWorkspaceFiles?.()
     this.socket = null
     this.clearHeartbeat()
     // Same reason as `closeCurrentSocket`: this connection is over, and the credential

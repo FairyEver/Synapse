@@ -12,6 +12,7 @@ struct TerminalGitPanel: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Bindable var flow: TerminalGitFlow
+    var onReviewChanges: (() -> Void)? = nil
 
     private var desk: TerminalGitDesk { model.gitDesk }
 
@@ -117,7 +118,9 @@ struct TerminalGitPanel: View {
                 ) {
                     Task { await flow.sync(changeCount: status.changeCount, on: desk) }
                 }
-                LabeledContent("改动", value: TerminalGitPresentation.changeLabel(status))
+                TerminalGitActionRow(title: "改动", detail: TerminalGitPresentation.changeLabel(status),
+                    identifier: "git-panel-changes") { onReviewChanges?() }
+                    .accessibilityLabel("查看仓库更改，\(TerminalGitPresentation.changeLabel(status))")
             }
 
             Section("操作") {

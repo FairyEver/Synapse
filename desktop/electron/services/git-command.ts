@@ -4,6 +4,9 @@ import path from "node:path"
 import { StringDecoder } from "node:string_decoder"
 import type { ControlledProcessRunner } from "../runtime/process"
 import type { ActorIdentity } from "../runtime/security"
+import { MOBILE_WORKSPACE_FILES_LIMITS as L } from "@synapse/shared/mobile-live-constants"
+
+export const MOBILE_READ_ONLY_CONFIG_QUERY = "^(core\\.(autocrlf|filemode|attributesfile)|include\\.|includeif\\.|filter\\..*\\.(clean|process))"
 
 type GitCommandSource = "stderr" | "stdout"
 
@@ -50,6 +53,12 @@ type GitCommandOptions = {
   cwd: string
   fallbackMessage: string
   gitIndexFile?: string
+  /** Mobile's private read-only adapter. Fixed isolation, never caller-provided env. */
+  readOnlyIsolation?: { readonly authorizationToken: string }
+  /** NUL-delimited check-attr input; unavailable to ordinary/writing Git calls. */
+  readOnlyAttributePaths?: readonly string[]
+  /** Already authorized, bounded immutable bytes; only fixed config parser queries. */
+  readOnlyConfigSnapshot?: string
   formatFailureMessage?: (output: string, fallbackMessage: string) => string
   formatSpawnError?: (error: unknown) => string
   onLine?: (line: string, source: GitCommandSource) => void
@@ -67,6 +76,19 @@ type GitCommandSecurity = {
 }
 
 let gitCommandSecurity: GitCommandSecurity | null = null
+
+const READ_ONLY_NULL_PATH = process.platform === "win32" ? "NUL" : "/dev/null"
+const READ_ONLY_GIT_FLAGS = ["--no-optional-locks", "--no-lazy-fetch", "--literal-pathspecs", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${READ_ONLY_NULL_PATH}`, "-c", `core.excludesFile=${READ_ONLY_NULL_PATH}`, "-c", `core.attributesFile=${READ_ONLY_NULL_PATH}`, "-c", `diff.orderFile=${READ_ONLY_NULL_PATH}`, "-c", "core.pager=cat", "-c", "diff.external=", "-c", "protocol.allow=never"]
+const READ_ONLY_GIT_ENV = {
+  GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null", GIT_ATTR_NOSYSTEM: "1",
+  GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GIT_PAGER: "cat",
+  GIT_CONFIG_COUNT: "0", GIT_EXTERNAL_DIFF: "", GIT_DIFF_OPTS: "",
+}
+
+function readOnlyHostEnvironment(): NodeJS.ProcessEnv {
+  // Inherited GIT_DIR/index/alternate/config variables must not retarget the scope.
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(GIT_|SSH_|GCM_)/i.test(key)))
+}
 
 function configureGitCommandSecurity(security: GitCommandSecurity): void {
   gitCommandSecurity = security
@@ -123,6 +145,9 @@ function runGitCommand({
   cwd,
   fallbackMessage,
   gitIndexFile,
+  readOnlyIsolation,
+  readOnlyAttributePaths,
+  readOnlyConfigSnapshot,
   formatFailureMessage,
   formatSpawnError,
   onLine,
@@ -133,6 +158,16 @@ function runGitCommand({
   timeoutMessage,
   timeoutMs,
 }: GitCommandOptions): Promise<GitCommandResult> {
+  if (readOnlyAttributePaths && (!readOnlyIsolation || args[0] !== "check-attr" || !args.includes("--stdin"))) throw new Error("Invalid read-only attribute request")
+  if (readOnlyConfigSnapshot !== undefined) {
+    const queries = [
+      ["config", "--file", "-", "--no-includes", "--null", "--get-regexp", MOBILE_READ_ONLY_CONFIG_QUERY],
+      ["config", "--file", "-", "--no-includes", "--get", "core.autocrlf"],
+      ...["core.autocrlf", "core.filemode"].map(key => ["config", "--file", "-", "--no-includes", "--type=bool", "--get", key]),
+    ]
+    if (!readOnlyIsolation || readOnlyAttributePaths || Buffer.byteLength(readOnlyConfigSnapshot, "utf8") > L.maxGitStderrBytes || !queries.some(query => query.length === args.length && query.every((value, index) => value === args[index]))) throw new Error("Invalid read-only configuration request")
+  }
+  if (readOnlyIsolation) args = [...READ_ONLY_GIT_FLAGS, ...args]
   const security = gitCommandSecurity
   if (security) {
     return runControlledGitCommand({
@@ -143,6 +178,9 @@ function runGitCommand({
       cwd,
       fallbackMessage,
       gitIndexFile,
+      readOnlyIsolation,
+      readOnlyAttributePaths,
+      readOnlyConfigSnapshot,
       formatFailureMessage,
       formatSpawnError,
       onLine,
@@ -159,23 +197,32 @@ function runGitCommand({
     const childProcess = spawn("git", args, {
       cwd,
       env: {
-        ...process.env,
+        ...(readOnlyIsolation ? readOnlyHostEnvironment() : process.env),
         GIT_TERMINAL_PROMPT: "0",
         ...(gitIndexFile ? { GIT_INDEX_FILE: gitIndexFile } : {}),
         LANG: "C",
         LC_ALL: "C",
+        ...(readOnlyIsolation ? READ_ONLY_GIT_ENV : {}),
       },
     })
 
     const stdoutBuffer = new GitOutputBuffer(maxBufferBytes, outputOverflow)
-    const stderrBuffer = new GitOutputBuffer(maxBufferBytes, outputOverflow)
+    const stderrBuffer = new GitOutputBuffer(readOnlyIsolation ? 64 * 1024 : maxBufferBytes, outputOverflow)
     let settled = false
+    let killTimer: ReturnType<typeof setTimeout> | undefined
+    const terminate = () => {
+      childProcess.kill("SIGTERM")
+      if (!killTimer) {
+        killTimer = setTimeout(() => childProcess.kill("SIGKILL"), 500)
+        killTimer.unref()
+      }
+    }
     const stdoutProcessor = createLineProcessor("stdout", onLine)
     const stderrProcessor = createLineProcessor("stderr", onLine)
     const timeout = timeoutMs && timeoutMs > 0
       ? setTimeout(() => {
           settled = true
-          childProcess.kill("SIGTERM")
+          terminate()
           reject(new GitCommandError(timeoutMessage ?? fallbackMessage, {
             exitCode: null,
             output: `${stderrBuffer.text()}${stdoutBuffer.text()}`,
@@ -186,9 +233,11 @@ function runGitCommand({
           }))
         }, timeoutMs)
       : null
-    const onAbort = () => childProcess.kill("SIGTERM")
+    const onAbort = () => terminate()
     if (abortSignal?.aborted) onAbort()
     else abortSignal?.addEventListener("abort", onAbort, { once: true })
+    if (readOnlyAttributePaths) childProcess.stdin.end(readOnlyAttributePaths.join("\0") + "\0")
+    else if (readOnlyConfigSnapshot !== undefined) childProcess.stdin.end(readOnlyConfigSnapshot)
 
     childProcess.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8")
@@ -200,7 +249,7 @@ function runGitCommand({
         settled = true
         if (timeout) clearTimeout(timeout)
         abortSignal?.removeEventListener("abort", onAbort)
-        childProcess.kill("SIGTERM")
+        terminate()
         reject(error)
         return
       }
@@ -217,7 +266,7 @@ function runGitCommand({
         settled = true
         if (timeout) clearTimeout(timeout)
         abortSignal?.removeEventListener("abort", onAbort)
-        childProcess.kill("SIGTERM")
+        terminate()
         reject(error)
         return
       }
@@ -238,6 +287,7 @@ function runGitCommand({
     })
 
     childProcess.on("close", (code, signal) => {
+      if (killTimer) clearTimeout(killTimer)
       if (settled) {
         return
       }
@@ -279,6 +329,9 @@ async function runControlledGitCommand({
   cwd,
   fallbackMessage,
   gitIndexFile,
+  readOnlyIsolation,
+  readOnlyAttributePaths,
+  readOnlyConfigSnapshot,
   formatFailureMessage,
   formatSpawnError,
   onLine,
@@ -293,32 +346,36 @@ async function runControlledGitCommand({
   try {
     const result = await security.processRunner.run({
       action: "shell.exec",
-      actor: security.actor ?? { kind: "system", id: "git-command" },
+      actor: readOnlyIsolation ? { kind: "agent", id: "mobile-gateway" } : security.actor ?? { kind: "system", id: "git-command" },
       command: "git",
       args,
       abortSignal,
       cwd,
+      stdin: readOnlyAttributePaths ? readOnlyAttributePaths.join("\0") + "\0" : readOnlyConfigSnapshot,
       env: {
         GIT_TERMINAL_PROMPT: "0",
         ...(gitIndexFile ? { GIT_INDEX_FILE: gitIndexFile } : {}),
         LANG: "C",
         LC_ALL: "C",
+        ...(readOnlyIsolation ? READ_ONLY_GIT_ENV : {}),
       },
-      envAllowlist: ["GIT_INDEX_FILE", "GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
+      envAllowlist: [...(readOnlyIsolation ? [] : ["GIT_INDEX_FILE"]), "GIT_TERMINAL_PROMPT", "LANG", "LC_ALL", ...(readOnlyIsolation ? Object.keys(READ_ONLY_GIT_ENV) : [])],
       timeoutMs,
+      ...(readOnlyIsolation ? { terminationGraceMs: 250 } : {}),
       output: {
         stdout: captureStdout ? "buffer" : "ignore",
         stderr: "buffer",
         ...(maxBufferBytes === undefined ? {} : { maxBufferBytes }),
+        ...(readOnlyIsolation ? { maxStderrBufferBytes: 64 * 1024 } : {}),
         overflow: outputOverflow,
       },
       onStdoutLine: (line) => onLine?.(line, "stdout"),
       onStdoutChunk,
       onStderrLine: (line) => onLine?.(line, "stderr"),
-      metadata: {
-        source: "git-command",
-        gitArgs: args,
-      },
+      metadata: readOnlyIsolation ? {
+        source: "mobile-workspace-files", authorizationToken: readOnlyIsolation.authorizationToken,
+        args: "[redacted]", launchArgs: "[redacted]", cwd: "[scope]", error: "[redacted]",
+      } : { source: "git-command", gitArgs: args },
     })
     const stdout = result.stdout ?? ""
     const stderr = result.stderr ?? ""

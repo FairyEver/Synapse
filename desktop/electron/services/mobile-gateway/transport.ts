@@ -68,6 +68,8 @@ export type MobileGatewayTransport = {
    */
   readonly sendFrame: (mobileClientInstanceId: string, frameJson: string) => void
   readonly sendIntentResult: (mobileClientInstanceId: string, result: MobileIntentResult) => void
+  /** Reliable, bounded file replies have their own queue and never use droppable frames. */
+  readonly sendWorkspaceFilesResult?: (mobileClientInstanceId: string, result: MobileIntentResult, context?: MobileIntentContext, priority?: boolean) => Promise<void>
   /**
    * Fire-and-forget by design: progress that arrives late is worth less than the
    * next one, so nothing here waits on a send and nothing is retried.
@@ -123,7 +125,15 @@ export type MobileGatewayTransport = {
 
 /** Inbound side: the live connection hands cloud-delivered events to the gateway. */
 export type MobileIntentHandler = {
-  handle(mobileClientInstanceId: string, intent: MobileIntent): Promise<void>
+  handle(mobileClientInstanceId: string, intent: MobileIntent, context?: MobileIntentContext): Promise<void>
   /** The phone's connection dropped; its leases must not outlive it. */
   releaseClient(mobileClientInstanceId: string): Promise<void>
+  /** Authentication changed; no file scope from the previous account may survive. */
+  resetWorkspaceFiles?(): void
+}
+
+/** Supplied only by the authenticated desktop connection, never by a phone payload. */
+export type MobileIntentContext = {
+  readonly accountUserId: string
+  readonly desktopClientInstanceId: string
 }

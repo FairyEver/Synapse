@@ -14,7 +14,7 @@
 | 终端 | 电脑切换、会话列表、终端画布（进入后隐藏底栏） |
 | 我的 | 七个分类，点进去才是设置 |
 
-新能力一律进「主页 → 功能」，不为它开第四个槽位。通知是主页右上角铃铛打开的覆盖面板，
+独立功能进入「主页 → 功能」；工作区文件等依赖当前会话的操作留在终端，不为它开第四个槽位。通知是主页右上角铃铛打开的覆盖面板，
 不是一格 tab；通知详情页已取消，正文进到行里，点一条直接去往目标。
 
 主屏幕提供三种终端组件：小组件看待处理会话，中组件监看选定会话（最近输出需在组件设置中开启），大组件看当前电脑的会话概览。组件读取 App Group 中的只读摘要，点击后打开 App；状态超过 15 分钟未更新会提示待更新。WidgetKit 决定刷新时机，App 关闭后不会在后台持续连接终端。组件使用系统颜色，自动跟随浅色、深色与主屏幕着色模式。真机签名时，主 App 与 Widget 扩展的 App Group 均需开通 `group.com.liy.SynapseMobile`。
@@ -154,6 +154,29 @@ xcodebuild test -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMo
 XCUITest 都改不了模拟器的窗口尺寸，所以窗口矩阵只有 iPhone 竖 ↔ 横、iPad 全屏竖 ↔ 横
 实测过，`regular → compact` 的运行时转场没有证据（缺口与判据的边界记在
 `docs/agents/mobile-runtime-contracts.md`）。
+
+## 工作区文件验收
+
+`WorkspaceFilesUITests` 验证终端更多菜单、附件菜单、Git 变更入口、文件树、搜索、预览、分层差异与草稿引用。它要求真实认证 relay 与真实桌面文件适配器；缺少配置时失败，不用跳过冒充通过。
+
+仓库提供本机验收端点，先启动或复用 `pnpm dev:server`，再在两个终端运行：
+
+```bash
+pnpm --filter @synapse/desktop run build:electron
+node desktop/scripts/checks/mobile-workspace-files-acceptance.cjs
+```
+
+```bash
+node server/test/workspace-files-smoke.mjs
+```
+
+端点只连接 `http://127.0.0.1:3001`，在 `/tmp/synapse-workspace-files-acceptance` 准备 Git 夹具（`review.txt` 的 HEAD、index、disk 分别是 BASE、STAGED、WORKTREE），并通过本地注册/登录 API 创建验收账号。凭据仅写入权限为 0600 的 `/tmp/synapse-workspace-files-acceptance-credentials.json`，不提交或打印。复用夹具不会重置仓库。
+
+夹具还含长中文文件名与 `nested/paging` 的205个文本文件，用于目录三页、大集合定位、搜索后续页目标及定位回树验收；仅在夹具的 Git exclude 中排除分页目录，保留分层差异用例。已有同名夹具内容不符时端点明确失败，不覆盖。
+
+UI 测试环境需设置 `SYNAPSE_FILES_ACCEPTANCE=1`、`SYNAPSE_TEST_EMAIL`、`SYNAPSE_TEST_PASSWORD`、`SYNAPSE_TEST_BASE_URL=http://127.0.0.1:3001/api`，可选桌面名 `SYNAPSE_TEST_DESKTOP_NAME=Files Acceptance Mac` 与会话名 `SYNAPSE_FILES_SESSION_TITLE=Files acceptance`。用私有生成的 xctestrun 环境传入凭据，避免在命令输出中展开。Simulator 包需 ad-hoc 签名以使用 Keychain，不能以关闭签名或绕过登录获取验收成功。
+
+端点的终端帧是展示夹具；所有 `workspaceFiles` 结果由编译后的生产服务、PermissionGuard、受控 Git 与真实磁盘产生。零 PTY/租约/网格副作用另由真实 gateway 回归验证；此端点不证明真实 PTY 进程或真机窗口转场。iPad 全屏和旋转可用模拟器验收，半窗/窄窗的运行时伸缩、真实指针和 VoiceOver 手工走查须独立记录，不能称为已自动覆盖。
 
 ## 推送（可选，但这是核心场景）
 

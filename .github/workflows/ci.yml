@@ -211,6 +211,8 @@ jobs:
         run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
       - name: Run Git unit and integration tests
         run: pnpm --filter @synapse/desktop exec vitest run electron/services/git-client electron/modules/git src/modules/git
+      - name: Run mobile workspace read-only contracts on Windows
+        run: pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/mobile-workspace-files-service.test.ts electron/services/__tests__/mobile-workspace-files-git-config.test.ts electron/services/__tests__/mobile-workspace-files-session.test.ts electron/services/__tests__/mobile-file-result-queue.test.ts app-capabilities/terminal/shared/__tests__/path-reference.test.ts electron/services/__tests__/git-command.test.ts electron/services/git-client/__tests__/git-command-runner.test.ts electron/runtime/process/__tests__/controlled-runner.test.ts --maxWorkers=1
       - name: Build desktop
         run: pnpm --filter @synapse/desktop run build
       - name: Package Windows installer

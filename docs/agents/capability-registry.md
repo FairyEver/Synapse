@@ -100,6 +100,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 - 手机终端分别通过只读 `sessionReference` / `workspaceReference` intent 复制指定分屏/标签；标签可点名手机当前或最近查看分屏，未点名时由电脑取布局首格，并校验会话归属。主进程复用 PC 的五行格式化逻辑，完整文本随既有 `mobile.intentResult` 的 `referenceText` 返回，另带 `workspaceId` 与 `sessionId` 校验目标。权限与审计复用 `terminal.state.read`，无需 attach 或租约；手机只写本机剪贴板。无新增 System App、Dock、Workflow Node、Automation Action、IPC operation、MCP capability/tool 或 Deep Link，上表数量不变，Terminal MCP 工具仍为 49。
 
+- 手机终端的 `workspaceFiles` 是 UI 私有、只读 scope 协议：按需浏览目录、搜索文件、查看文本与 staged/unstaged diff，并准备插入本机草稿的 shell 引用。可信连接归属由云 relay 与桌面校验，读取由桌面 PermissionGuard/AuditSink 执行；内置Git转换仅另读精确授权的标准global/local配置，不形成通用配置读取能力；云端不持久化源码。它不注册 System App、Dock、Workflow Node、Automation Action、IPC operation、MCP capability/tool 或 Deep Link，上表数量不变，Terminal MCP 工具保持 49。
+
 ## 普通业务模块 System App
 
 | System App | 应用页 | 默认 Dock | 关联 MCP domain |

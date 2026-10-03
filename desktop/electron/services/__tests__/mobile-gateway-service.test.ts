@@ -25,6 +25,7 @@ import {
   MobileGatewayService,
   type MobileGatewayAgentGroup,
   type MobileGatewayAgentProvider,
+  type MobileWorkspaceFilesGateway,
 } from "../mobile-gateway-service"
 import type { ClipboardSyncEntry } from "../clipboard-sync-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
@@ -526,7 +527,7 @@ class FakeTerminalGit {
   }
 }
 
-function createHarness(options: { sessionLines?: number; lineWindowLines?: number } = {}) {
+function createHarness(options: { sessionLines?: number; lineWindowLines?: number; workspaceFiles?: MobileWorkspaceFilesGateway } = {}) {
   const terminal = new FakeTerminal()
   terminal.sessions.set("sess-1", {
     id: "sess-1",
@@ -568,6 +569,9 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
     sendIntentResult: (mobileClientInstanceId, result) => {
       results.push({ mobileClientInstanceId, result })
     },
+    ...(options.workspaceFiles ? { sendWorkspaceFilesResult: async (mobileClientInstanceId: string, result: unknown, context?: unknown) => {
+      results.push({ mobileClientInstanceId, result, context, fileReply: true })
+    } } : {}),
     sendTransferProgress: (payload) => progress.push(payload),
     sendToolbar: (draft) => toolbars.push(draft),
     sendQuickPhrases: (draft) => quickPhrases.push(draft),
@@ -681,6 +685,7 @@ function createHarness(options: { sessionLines?: number; lineWindowLines?: numbe
 
   const terminalGit = new FakeTerminalGit()
   const gateway = new MobileGatewayService({
+    workspaceFiles: options.workspaceFiles,
     terminal: terminal as unknown as TerminalService,
     terminalGit: terminalGit as unknown as TerminalGitService,
     fileRelay,
@@ -775,6 +780,65 @@ async function attach(
 /* ------------------------------------------------------------------ *
  * Tests
  * ------------------------------------------------------------------ */
+
+describe("MobileGatewayService workspace files route", () => {
+  function adapter(): MobileWorkspaceFilesGateway {
+    return {
+      runIntent: vi.fn(async (_owner, request) => ({ intentId: request.intentId, sessionId: request.sessionId, outcome: "rejected" as const, code: "permission_denied" })),
+      cleanupOwner: vi.fn(), cleanupSession: vi.fn(),
+    }
+  }
+
+  const context = { accountUserId: "account-1", desktopClientInstanceId: "desktop-1" }
+  const request = { v: 1, intentId: "files-open", kind: "workspaceFiles", filesVersion: 1, sessionId: "sess-1", operation: "open", scopeMode: "currentDirectory" } as const
+
+  it("routes every retry through the scoped reader instead of the old result cache", async () => {
+    const files = adapter()
+    const h = createHarness({ workspaceFiles: files })
+    await h.gateway.handleIntent("phone-1", request, context)
+    await h.gateway.handleIntent("phone-1", request, context)
+    expect(files.runIntent).toHaveBeenCalledTimes(2)
+    expect(files.runIntent).toHaveBeenCalledWith({ ...context, mobileClientInstanceId: "phone-1" }, request)
+    expect(h.results).toHaveLength(2)
+    expect(h.results[0]).toMatchObject({ fileReply: true, context, result: { code: "permission_denied" } })
+    expect(h.terminal.calls).not.toContain("sendCommand")
+    expect(h.terminal.leaseOwner).toBeNull()
+  })
+
+  it("requires authenticated connection context before reading and advertises only a complete route", async () => {
+    const files = adapter()
+    const h = createHarness({ workspaceFiles: files })
+    await h.gateway.handleIntent("phone-1", request)
+    expect(files.runIntent).not.toHaveBeenCalled()
+    expect(h.results.at(-1)).toMatchObject({ fileReply: true, result: { outcome: "rejected", code: "permission_denied" } })
+    await h.timers.advance(1000)
+    expect(h.summaries.at(-1)).toMatchObject({ workspaceFilesVersion: 1 })
+    const old = createHarness()
+    await old.timers.advance(1000)
+    expect(old.summaries.at(-1)).not.toHaveProperty("workspaceFilesVersion")
+  })
+
+  it("releases file state on phone disconnect, session removal, account change and stop", async () => {
+    const files = adapter()
+    const h = createHarness({ workspaceFiles: files })
+    await h.gateway.releaseClient("phone-1")
+    expect(files.cleanupOwner).toHaveBeenCalledWith({ mobileClientInstanceId: "phone-1" })
+    h.terminal.events.emit("sessionDeleted", { sessionId: "sess-1" })
+    expect(files.cleanupSession).toHaveBeenCalledWith("sess-1")
+    h.gateway.resetWorkspaceFiles()
+    await h.gateway.stop()
+    expect(files.cleanupOwner).toHaveBeenCalledWith({})
+  })
+
+  it("answers unexpected reader failures without exposing source or paths", async () => {
+    const files = adapter()
+    files.runIntent = vi.fn(async () => { throw new Error("CANARY_SOURCE /private/secret.txt") })
+    const h = createHarness({ workspaceFiles: files })
+    await h.gateway.handleIntent("phone-1", request, context)
+    expect(h.results.at(-1)).toMatchObject({ fileReply: true, result: { outcome: "rejected", code: "relay_failed" } })
+    expect(JSON.stringify(h.results)).not.toContain("CANARY_SOURCE")
+  })
+})
 
 describe("MobileGatewayService", () => {
   it("returns the desktop reference for the named split session without attaching or taking control", async () => {

@@ -1118,6 +1118,22 @@ async function verifyResources(resourcesPath, label) {
     failures,
     "shared workspace package is missing from packed app.asar",
   )
+  for (const name of ["service", "git", "git-config", "paths"]) {
+    verifyPackedNode(
+      header,
+      `dist-electron/electron/services/mobile-workspace-files-${name}.js`,
+      failures,
+      `mobile workspace files ${name} is missing from packed app.asar`,
+    )
+  }
+  for (const exported of ["exports.MOBILE_WORKSPACE_FILES_VERSION", "exports.MOBILE_WORKSPACE_FILES_LIMITS", "maxDiffModelBytes", "maxDiffModelLines"]) {
+    verifyPackedTextIncludes(
+      buffer, dataOffset, header,
+      "node_modules/@synapse/shared/dist/mobile-live-constants.cjs",
+      exported, failures,
+      `mobile workspace files CommonJS budget export is missing (${exported})`,
+    )
+  }
   for (const relativePath of [
     "dist-electron/electron/script-runtime-smoke-bootstrap.js",
     "dist-electron/electron/script-runtime-smoke.js",

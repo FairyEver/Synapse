@@ -68,6 +68,8 @@ export interface ControlledProcessOutputOptions {
   readonly stdout?: ControlledProcessOutputMode
   readonly stderr?: ControlledProcessOutputMode
   readonly maxBufferBytes?: number
+  /** A smaller diagnostic channel budget, independent of stdout data. */
+  readonly maxStderrBufferBytes?: number
   readonly overflow?: "error" | "truncate"
 }
 
@@ -85,6 +87,8 @@ export interface ControlledProcessRunRequest {
   /** Extends the default allowlist; it never means "pass the whole env". */
   readonly envAllowlist?: readonly string[]
   readonly timeoutMs?: number
+  /** Bound graceful termination separately from the command deadline. */
+  readonly terminationGraceMs?: number
   readonly abortSignal?: AbortSignal
   readonly output?: ControlledProcessOutputOptions
   readonly onStdoutLine?: ControlledProcessLineHandler
@@ -168,7 +172,7 @@ export class ControlledProcessOutputError extends Error {
 
 function createProcessTerminator(
   child: Pick<ChildProcessWithoutNullStreams, "kill" | "pid">,
-  options: { readonly processGroup: boolean },
+  options: { readonly processGroup: boolean; readonly graceMs?: number },
 ): ProcessTerminator {
   let forceKillTimeout: ReturnType<typeof setTimeout> | null = null
 
@@ -193,7 +197,7 @@ function createProcessTerminator(
       forceKillTimeout = setTimeout(() => {
         forceKillTimeout = null
         killProcess("SIGKILL")
-      }, TERMINATION_GRACE_MS)
+      }, Math.max(0, Math.min(TERMINATION_GRACE_MS, options.graceMs ?? TERMINATION_GRACE_MS)))
     },
     clear() {
       if (forceKillTimeout) {
@@ -336,8 +340,8 @@ export class ControlledProcessRunner {
 
     const overflow = output.overflow ?? "error"
     const stdoutCollector = new OutputCollector(output.stdout ?? "buffer", maxBufferBytes, overflow)
-    const stderrCollector = new OutputCollector(output.stderr ?? "buffer", maxBufferBytes, overflow)
-    const terminator = createProcessTerminator(child, { processGroup: launch.processGroup })
+    const stderrCollector = new OutputCollector(output.stderr ?? "buffer", output.maxStderrBufferBytes ?? maxBufferBytes, overflow)
+    const terminator = createProcessTerminator(child, { processGroup: launch.processGroup, graceMs: request.terminationGraceMs })
     let timedOut = false
     let outputError: Error | null = null
     let spawnError: Error | null = null
@@ -525,10 +529,10 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     )
     this.stderrCollector = new OutputCollector(
       deps.output.stderr ?? "buffer",
-      deps.maxBufferBytes,
+      deps.output.maxStderrBufferBytes ?? deps.maxBufferBytes,
       deps.output.overflow ?? "error",
     )
-    this.terminator = createProcessTerminator(this.child, { processGroup: deps.launch.processGroup })
+    this.terminator = createProcessTerminator(this.child, { processGroup: deps.launch.processGroup, graceMs: deps.request.terminationGraceMs })
     this.stdoutLines = new LineEmitter(deps.request.onStdoutLine, (error) => {
       this.outputError = error
       this.terminator.terminate()

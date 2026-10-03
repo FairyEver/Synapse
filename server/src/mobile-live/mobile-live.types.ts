@@ -13,6 +13,9 @@ import type { LiveMobileServerMessage } from "@synapse/shared"
 export const MOBILE_CLIENT_REGISTRY = "MOBILE_CLIENT_REGISTRY"
 
 export interface MobileLiveFanout {
+  /** A file fallback must refer to a mobile instance authenticated by hello in this process. */
+  readonly ownsMobileClient?: (userId: string, clientInstanceId: string) => boolean
+  readonly sendWorkspaceFilesResult?: (input: { readonly userId: string; readonly clientInstanceId: string; readonly message: LiveMobileServerMessage }) => "sent" | "queued" | "offline" | "send_failed" | "backpressure"
   readonly sendToMobile: (input: {
     readonly userId: string
     readonly clientInstanceId: string

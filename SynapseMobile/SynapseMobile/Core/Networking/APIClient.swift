@@ -1421,6 +1421,42 @@ actor APIClient {
         return try? JSONDecoder().decode(RiskBody.self, from: payload).data?.category
     }
 
+    /// Files fallback keeps the authenticated desktop context and a single deadline.
+    func submitWorkspaceFilesIntent(
+        desktopClientInstanceId: String, mobileClientInstanceId: String,
+        intent: MobileIntentRequest, remainingSeconds: TimeInterval
+    ) async throws -> MobileIntentResultPayload {
+        struct Body: Encodable {
+            let clientInstanceId: String
+            let desktopClientInstanceId: String
+            let intent: MobileIntentRequest
+            let waitForResult = true
+        }
+        struct Response: Decodable {
+            let delivered: Bool
+            let code: String?
+            let result: MobileIntentResult?
+            let desktopClientInstanceId: String?
+        }
+        let trustedMobileId = await tokens.clientInstanceId
+        guard intent.kind == "workspaceFiles", intent.filesVersion == 1,
+              mobileClientInstanceId == trustedMobileId, remainingSeconds > 0 else {
+            throw WorkspaceFilesFailure.cancelled
+        }
+        let response: Response = try await perform(path: "/mobile/terminal/intent", method: "POST",
+            encodedBody: JSONEncoder().encode(Body(clientInstanceId: mobileClientInstanceId,
+                desktopClientInstanceId: desktopClientInstanceId, intent: intent)),
+            authenticated: true, allowRefresh: true,
+            timeoutSeconds: min(15, remainingSeconds), workspaceFilesBudget: true)
+        guard response.desktopClientInstanceId == desktopClientInstanceId else { throw WorkspaceFilesFailure.invalid }
+        guard let result = response.result else {
+            throw WorkspaceFilesFailure(code: response.code ?? "relay_failed",
+                message: response.delivered ? "电脑没有回答，请重试。" : "电脑离线，请连接后重试。")
+        }
+        return MobileIntentResultPayload(desktopClientInstanceId: response.desktopClientInstanceId,
+            mobileClientInstanceId: mobileClientInstanceId, result: result)
+    }
+
     private func send<Response: Decodable>(
         path: String,
         method: String,
@@ -1458,7 +1494,9 @@ actor APIClient {
         encodedBody: Data?,
         contentType: String = "application/json",
         authenticated: Bool,
-        allowRefresh: Bool
+        allowRefresh: Bool,
+        timeoutSeconds: TimeInterval? = nil,
+        workspaceFilesBudget: Bool = false
     ) async throws -> Response {
         // 一次 REST 请求 ↔ 响应。**一个 `defer` 覆盖全部出口**（包括抛出去的那些），
         // 401 之后的重试会递归进这里，于是"重试过"这个事实白得一条记录。
@@ -1495,6 +1533,7 @@ actor APIClient {
             throw APIError(status: 0, code: "bad_url", message: "服务器地址无效。")
         }
         var request = URLRequest(url: url)
+        if let timeoutSeconds { request.timeoutInterval = timeoutSeconds }
         request.httpMethod = method
         if authenticated, let token = accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -1507,11 +1546,28 @@ actor APIClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            if workspaceFilesBudget {
+                let (bytes, receivedResponse) = try await session.bytes(for: request)
+                defer { bytes.task.cancel() }
+                guard receivedResponse.expectedContentLength <= 128 * 1024 else { throw WorkspaceFilesFailure.invalid }
+                var bounded = Data(); bounded.reserveCapacity(128 * 1024)
+                for try await byte in bytes {
+                    guard bounded.count < 128 * 1024 else { throw WorkspaceFilesFailure.invalid }
+                    bounded.append(byte)
+                }
+                data = bounded; response = receivedResponse
+            } else {
+                (data, response) = try await session.data(for: request)
+            }
+        } catch let failure as WorkspaceFilesFailure {
+            throw failure
         } catch {
             throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
         }
         recordedBytes = data.count
+        if workspaceFilesBudget, !WorkspaceFilesReceiptDecoder.httpWithinBudget(data) {
+            throw WorkspaceFilesFailure.invalid
+        }
 
         guard let http = response as? HTTPURLResponse else {
             throw APIError(status: 0, code: "network", message: "服务器返回的数据无法读取。")
@@ -1527,7 +1583,9 @@ actor APIClient {
                     encodedBody: encodedBody,
                     contentType: contentType,
                     authenticated: authenticated,
-                    allowRefresh: false
+                    allowRefresh: false,
+                    timeoutSeconds: timeoutSeconds,
+                    workspaceFilesBudget: workspaceFilesBudget
                 )
             }
         }

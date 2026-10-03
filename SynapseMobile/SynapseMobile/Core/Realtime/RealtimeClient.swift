@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+
+enum RealtimeIntentSendFailure { case unavailable, encoding, transport }
 import os
 
 enum RealtimeState: Equatable {
@@ -101,6 +103,11 @@ final class RealtimeClient {
     var onSummary: ((MobileSummaryPayload) -> Void)?
     var onFrame: ((MobileFramePayload) -> Void)?
     var onIntentResult: ((MobileIntentResult) -> Void)?
+    /// A private file receipt keeps its authenticated outer target context.
+    var onWorkspaceIntentResult: ((MobileIntentResultPayload) -> Bool)?
+    private(set) var workspaceFilesRelayVersion: Int?
+    var connectionGeneration: Int { generation }
+    var mobileInstanceId: String { clientInstanceId }
     /// The computer has begun fetching a file this phone relayed, or moved on with
     /// it. Arrives repeatedly between the intent and its answer, and means nothing
     /// once that answer is here.
@@ -196,8 +203,9 @@ final class RealtimeClient {
     }
 
     @discardableResult
-    func sendIntent(_ intent: MobileIntentRequest, desktopClientInstanceId: String) -> String {
-        guard let task, state.isConnected else { return intent.intentId }
+    func sendIntent(_ intent: MobileIntentRequest, desktopClientInstanceId: String,
+                    onSent: ((RealtimeIntentSendFailure?) -> Void)? = nil) -> String {
+        guard let task, state.isConnected else { onSent?(.unavailable); return intent.intentId }
         guard let text = LiveWire.text(
             LiveMessageType.mobileIntent,
             MobileIntentPayloadOut(
@@ -206,9 +214,10 @@ final class RealtimeClient {
                 intent: intent
             )
         ) else {
+            onSent?(.encoding)
             return intent.intentId
         }
-        send(text, kind: .intent, on: task)
+        send(text, kind: .intent, on: task, onSent: onSent)
         return intent.intentId
     }
 
@@ -217,12 +226,16 @@ final class RealtimeClient {
     /// 三个 `socket.send` 收在这里而不是在 `LiveWire`（那在 `Core/Protocol`，是协议的
     /// 编码层）上埋点 —— 诊断不该被引进一个只管编解码的地方。这里拿得到的是
     /// **序列化之后的字节数**，那正是要量的东西。
-    private func send(_ text: String, kind: DiagnosticFlag, on socket: URLSessionWebSocketTask) {
+    private func send(_ text: String, kind: DiagnosticFlag, on socket: URLSessionWebSocketTask,
+                      onSent: ((RealtimeIntentSendFailure?) -> Void)? = nil) {
         DiagnosticLog.record(.send, [
             .init(.kind, .flag(kind)),
             .init(.bytes, .int(text.utf8.count)),
         ])
-        socket.send(.string(text)) { _ in }
+        socket.send(.string(text)) { error in
+            guard let onSent else { return }
+            Task { @MainActor in onSent(error == nil ? nil : .transport) }
+        }
     }
 
     // MARK: - Socket lifecycle
@@ -328,7 +341,7 @@ final class RealtimeClient {
                 // 收到了东西就是活着 —— 哪怕下面解不出来。这是那条静默看门狗唯一的
                 // 输入，放在解码之前，免得协议漂移被读成断线。
                 lastServerTrafficAt = Date()
-                handle(message)
+                await handle(message)
             } catch {
                 guard generation == current else { return }
                 let status = reportFailure(of: socket, error: error)
@@ -397,7 +410,7 @@ final class RealtimeClient {
     /// 复用同一个解码器：每条下行消息都要解一次，而帧在终端持续输出时每秒到好几次。
     private static let decoder = JSONDecoder()
 
-    private func handle(_ message: URLSessionWebSocketTask.Message) {
+    private func handle(_ message: URLSessionWebSocketTask.Message) async {
         let data: Data
         switch message {
         case .string(let text): data = Data(text.utf8)
@@ -407,6 +420,7 @@ final class RealtimeClient {
         guard let header = try? Self.decoder.decode(LiveEnvelopeType.self, from: data) else { return }
 
         if header.type == LiveMessageType.welcome {
+            workspaceFilesRelayVersion = payload(WorkspaceFilesWelcome.self, from: data)?.mobileCapabilities?.workspaceFilesVersion
             reconnectAttempt = 0
             markConnected()
             onConnected?()
@@ -437,9 +451,17 @@ final class RealtimeClient {
                 onFrame?(payload)
             }
         case LiveMessageType.mobileIntentResult:
-            if let payload = payload(MobileIntentResultPayload.self, from: data) {
-                onIntentResult?(payload.result)
-            }
+            let receivingGeneration = generation
+            // Serial receive awaits background decoding: no unbounded task queue and no
+            // patch/Markdown model preparation on the main actor.
+            guard data.count <= 2 * 1024 * 1024 else { return }
+            let decoded = await Task.detached(priority: .userInitiated) {
+                WorkspaceFilesReceiptDecoder.decode(data)
+            }.value
+            guard receivingGeneration == generation, let decoded else { return }
+            if decoded.result.workspaceFiles != nil, data.count > 128 * 1024 { return }
+            if onWorkspaceIntentResult?(decoded) == true { return }
+            onIntentResult?(decoded.result)
         case LiveMessageType.mobileTransferProgress:
             if let payload = payload(MobileTransferProgressPayload.self, from: data) {
                 onTransferProgress?(payload)
@@ -529,6 +551,7 @@ final class RealtimeClient {
     private func teardown(keepIntent: Bool = false) {
         if !keepIntent { shouldStayConnected = false }
         generation += 1
+        workspaceFilesRelayVersion = nil
         reconnectTask?.cancel()
         reconnectTask = nil
         receiveLoop?.cancel()

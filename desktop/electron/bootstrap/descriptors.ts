@@ -279,6 +279,8 @@ import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, systemTerminalCwdProbePolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy, systemDataMaintenancePolicy } from "../runtime/security"
 import { createMobileGatewayService, type MobileGatewayService } from "../services/mobile-gateway-service"
+import { createMobileWorkspaceFilesService, MOBILE_WORKSPACE_FILES_SERVICE_ID, type MobileWorkspaceFilesService } from "../services/mobile-workspace-files-service"
+import { resolveMobileWorkspaceFilesSession } from "../services/mobile-gateway/workspace-files-session"
 import { createTerminalWorkingDirectoryProbe } from "../../app-capabilities/terminal/main/working-directory-probe"
 import {
   MOBILE_RELAY_DIRECTORY_NAME,
@@ -548,11 +550,29 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
  * Degraded rather than fatal: without it the desktop terminal works exactly as
  * before, only the remote view is unavailable.
  */
+export const coreMobileWorkspaceFilesDescriptor: ServiceDescriptor<MobileWorkspaceFilesService> = {
+  id: MOBILE_WORKSPACE_FILES_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    const terminal = ctx.registry.get<TerminalService>("core.terminal")
+    return createMobileWorkspaceFilesService({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      resolveSessionContext: (sessionId) => resolveMobileWorkspaceFilesSession(terminal, sessionId),
+    })
+  },
+  stop(instance) {
+    instance.dispose()
+  },
+}
+
 export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService> = {
   id: "core.mobile-gateway",
   criticality: "degraded",
   dependsOn: [
     "core.terminal",
+    MOBILE_WORKSPACE_FILES_SERVICE_ID,
     "core.permission-guard",
     "core.audit-sink",
     // 手机在终端当前目录上跑的 Git 操作。
@@ -568,6 +588,7 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
   create(ctx) {
     return createMobileGatewayService({
       terminal: ctx.registry.get<TerminalService>("core.terminal"),
+      workspaceFiles: ctx.registry.get<MobileWorkspaceFilesService>(MOBILE_WORKSPACE_FILES_SERVICE_ID),
       // 手机端看到的 Git 是「这个目录恰好是个 Git 仓库」，不是「用户添加过的仓库」——
       // 这一层只认路径，不碰注册表，也不产生那本账上的条目。
       terminalGit: ctx.registry.get<TerminalGitService>("terminal.git-service"),

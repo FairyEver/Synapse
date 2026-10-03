@@ -1,3 +1,6 @@
+import { isMobileWorkspaceFilesIntent, isMobileWorkspaceFilesResult, type MobileWorkspaceFilesIntent, type MobileWorkspaceFilesResult } from "./mobile-workspace-files.js"
+export * from "./mobile-workspace-files.js"
+
 /**
  * Wire protocol for the mobile terminal relay.
  *
@@ -630,6 +633,7 @@ export interface MobileSummarySession {
  * and the sockets are sized above that.
  */
 export interface MobileSummaryPayload {
+  readonly workspaceFilesVersion?: number
   readonly desktopClientInstanceId: string
   readonly desktopName: string
   readonly notificationsEnabled?: boolean
@@ -944,6 +948,7 @@ export type MobileKeyAction =
  * resend blindly on a flaky link without risking a duplicate keystroke or command.
  */
 export type MobileIntent =
+  | MobileWorkspaceFilesIntent
   | (MobileIntentEnvelope<"attach"> & { readonly sessionId: string })
   | (MobileIntentEnvelope<"detach"> & { readonly sessionId: string })
   | MobileIntentEnvelope<"sync">
@@ -1185,6 +1190,7 @@ export type MobileIntentKind = MobileIntent["kind"]
  * decision about an uncertain side effect.
  */
 export interface MobileIntentResult {
+  readonly workspaceFiles?: MobileWorkspaceFilesResult
   readonly intentId: string
   readonly outcome: "accepted" | "rejected" | "no_op"
   readonly code?: string
@@ -1277,6 +1283,8 @@ export interface MobileIntentPayload {
 }
 
 export interface MobileIntentResultPayload {
+  /** Authenticated sending desktop; mandatory for workspace file replies. */
+  readonly desktopClientInstanceId?: string
   readonly mobileClientInstanceId: string
   readonly result: MobileIntentResult
 }
@@ -1346,6 +1354,7 @@ export function isMobileSummaryPayload(value: unknown): value is MobileSummaryPa
   if (!boundedString(value.desktopClientInstanceId, 120)) return false
   if (!boundedString(value.desktopName, 120)) return false
   if (value.notificationsEnabled !== undefined && typeof value.notificationsEnabled !== "boolean") return false
+  if (value.workspaceFilesVersion !== undefined && !nonNegativeInteger(value.workspaceFilesVersion)) return false
   if (!nonNegativeInteger(value.revision)) return false
   if (!boundedArray(value.groups, MOBILE_FRAME_LIMITS.maxSummaryGroups)) return false
   if (!boundedArray(value.sessions, MOBILE_FRAME_LIMITS.maxSummarySessions)) return false
@@ -1384,7 +1393,10 @@ export function isMobileIntentPayload(value: unknown): value is MobileIntentPayl
 
 export function isMobileIntentResultPayload(value: unknown): value is MobileIntentResultPayload {
   if (!isRecord(value)) return false
-  return boundedString(value.mobileClientInstanceId, 120) && isMobileIntentResult(value.result)
+  return boundedString(value.mobileClientInstanceId, 120) &&
+    (value.desktopClientInstanceId === undefined || boundedString(value.desktopClientInstanceId, 120)) &&
+    isMobileIntentResult(value.result) &&
+    (value.result.workspaceFiles === undefined || boundedString(value.desktopClientInstanceId, 120))
 }
 
 export function isMobileTransferProgressPayload(value: unknown): value is MobileTransferProgressPayload {
@@ -1496,6 +1508,8 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
   if (value.v !== MOBILE_PROTOCOL_VERSION) return false
   if (!boundedString(value.intentId, 120)) return false
   switch (value.kind) {
+    case "workspaceFiles":
+      return isMobileWorkspaceFilesIntent(value)
     case "attach":
     case "detach":
     case "unlock":
@@ -1593,6 +1607,7 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
   if (value.createdSessionId !== undefined && !boundedString(value.createdSessionId, 120)) return false
   if (value.landedPath !== undefined && !boundedString(value.landedPath, 512)) return false
   if (value.git !== undefined && !isMobileIntentGitResult(value.git)) return false
+  if (value.workspaceFiles !== undefined && !isMobileWorkspaceFilesResult(value.workspaceFiles)) return false
   return true
 }
 

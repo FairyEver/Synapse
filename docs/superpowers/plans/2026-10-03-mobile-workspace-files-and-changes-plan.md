@@ -2,7 +2,7 @@
 
 日期：2026-10-03
 
-状态：开始实施。用户已授权按本计划开发、多代理检查、跨端功能与 Apple 界面验收，并在全部工作完成后执行完整发版；此状态不表示开发或验收已通过。
+状态：P00–P09已实现并完成下列验收；原自动报告和未覆盖范围见验收记录，完整发版待执行。用户已授权按本计划开发、多代理检查、跨端功能与 Apple 界面验收，并在全部工作完成后执行完整发版；实际结果见[验收记录](2026-10-03-mobile-workspace-files-and-changes-acceptance.md)，未通过项不算完成。
 
 权威规格：[V1 spec](../specs/2026-10-03-mobile-workspace-files-and-changes-spec.md)。截图与现状依据：[原设计分析](../specs/2026-10-03-mobile-workspace-files-and-changes-design.md)。范围、协议、预算与 AC 均以 spec 为准；本文回答改哪里、依赖什么、怎样验证。
 
@@ -38,16 +38,16 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 
 ## 3. P00：开工基线与接点
 
-- [ ] 核对工作区、分支与未提交改动；确定本任务文件边界。
-- [ ] 重读 spec，逐条检查 `workspaceFiles`、能力门控、owner、各操作与 AC；后续变更先同步 spec，再修改实现。
-- [ ] 确认当前 cwd 探测已存在，不重做旧计划里的 OSC 7 注入与进程探测。
-- [ ] 核对两处现有性能陷阱：桌面文件树打开即 watcher/整目录枚举；executor 的全局 256 条结果缓存先命中再执行，不能装文件正文。
-- [ ] 保存 capability registry 当前表格/数量作为比较基线，不抄历史 Terminal MCP 数量；本功能不增加公开 MCP、System App、Workflow 或 Deep Link。
-- [ ] 跑 shared typecheck、desktop hard constraints 基线；发现既有失败记录原因，不能为本任务放宽断言。
+- [x] 核对工作区、分支与未提交改动；确定本任务文件边界。
+- [x] 重读 spec，逐条检查 `workspaceFiles`、能力门控、owner、各操作与 AC；后续变更先同步 spec，再修改实现。
+- [x] 确认当前 cwd 探测已存在，不重做旧计划里的 OSC 7 注入与进程探测。
+- [x] 核对两处现有性能陷阱：桌面文件树打开即 watcher/整目录枚举；executor 的全局 256 条结果缓存先命中再执行，不能装文件正文。
+- [x] 保存 capability registry 当前表格/数量作为比较基线，不抄历史 Terminal MCP 数量；本功能不增加公开 MCP、System App、Workflow 或 Deep Link。
+- [x] 跑 shared typecheck、desktop hard constraints 基线；发现既有失败记录原因，不能为本任务放宽断言。
 
 真实接点：`shared/src/mobile-live.ts`；`desktop/electron/services/mobile-gateway-service.ts`；`desktop/electron/services/mobile-gateway/intent-executor.ts`；`desktop/app-capabilities/terminal/main/service.ts`；`SynapseMobile/SynapseMobile/Core/Protocol/LiveProtocol.swift`；`Features/Terminal/TerminalScreen.swift`。
 
-完成：接点、基线及环境限制有记录，不启动应用、不创建仓库登记项。
+完成：接点、基线及环境限制有记录；基线阶段未启动应用或创建仓库登记项。后续获授权的运行验收单独记录。
 
 ## 4. P01：协议与兼容契约
 
@@ -63,7 +63,7 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 2. 定义 welcome 的云端能力与 summary 的桌面能力两个可选字段，缺席为不支持；冻结新文件回执携带的桌面上下文，不能假设旧回执已有 desktop。
 3. 定义 scope/entry/change/cursor、before/after 预览目标、版本回显、取消/关闭状态及稳定错误；不接受根路径、revision/OID、任意命令或任意 env。
 4. 分开定义集合、统计、正文完整性；未知计数为 null，不得用 0 或空页表示未计算/截断。
-5. 将 spec 的硬预算集中到 `mobile-live-constants.cjs` 并由 TS 重导出，补 CJS/ESM 一致性与最终 UTF-8 信封预算测试，不改旧终端帧预算。
+5. 文件硬预算由 `shared/src/mobile-workspace-files.ts` 唯一定义，build 生成 `mobile-live-constants.cjs` 对应导出，补 CJS/ESM 一致性与最终 UTF-8 信封预算测试，不改旧终端帧预算。
 6. fixtures 覆盖旧字段缺席、合法各操作、互斥目标、额外越权字段、中文/转义字符边界、超限、不认识的 filesVersion。
 
 完成：TS 与 Swift 使用同一套语义；协议字段与 AC-12/14/18 能被测试逐条检验，尚未发布桌面可用能力。
@@ -102,7 +102,7 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 7. cancel/close 幂等，复用 AbortSignal；清理账号/电脑/session/scope 对应读取、游标、缓存。open 尚未返回 scopeId 时按可信 owner/session/targetIntentId 取消；用有界任务记录和 tombstone 处理迟到创建 scope 与重复关闭。清理不依赖已失效的读 context，控制操作不占读取并发；释放失败及竞态如实返回。
 8. 独立字节/TTL 缓存与全局资源配额，缓存命中仍验证 owner/scope/version；失效不得重放旧正文。
 
-测试：权限拒绝、跨 owner、伪造句柄、cwd 改变、父目录替换、scope 到期、opening 取消、重复关闭、会话结束后清理、迟到创建 scope、缓存回放及配额耗尽。用 canary 证明发现阶段不运行 Git 扩展，明确验证零新增 watcher、零 PTY 写入/租约/resize。
+测试：权限拒绝、跨owner、伪造句柄、cwd改变、父目录替换、scope到期、opening取消、重复关闭、会话结束后清理、迟到创建scope、缓存回放及配额耗尽。真实续页及同intent重传覆盖顶层/嵌套对象键重排，语义变化仍拒绝。用canary证明发现阶段不运行Git扩展，明确验证零新增watcher、零PTY写入/租约/resize。
 
 完成：scope/security 独立测试可绿；adapter 尚未接入时不广播 filesV1 可用能力，不用假成功占位。
 
@@ -140,6 +140,8 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 
 测试：真实临时 repo/worktree/submodule、unborn HEAD、staged-only、两层同时改、删除、rename 跨根、类型替换、二进制、冲突、CRLF、缺对象。外部 hook/filter/textconv 使用假 canary 验证**没有执行**；前后目录/index/object 状态验证只读，不只 mock 返回值。
 
+补充回归：真实原生Git的ident与working-tree-encoding干净checkout，在同内容重写造成stat失配后仍为空status；V1显式Git受限、普通浏览可用，不伪造modified。工作树与cached属性以及scope打开后新增属性均复验。
+
 完成：AC-03/04/07/11/12；命令隔离、统计与正文分页有独立证据，不用桌面 Git UI 冒烟替代。
 
 ## 9. P06：iOS 请求客户端与 FilesFlow/Store
@@ -161,7 +163,7 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 
 ## 10. P07：统一面板、入口与内容
 
-修改范围：`Features/Terminal/TerminalScreen.swift`、`Git/TerminalGitPanel.swift`、必要的 `TerminalGitFlow.swift` / `TerminalGitPresentation.swift`；拟新增 `Features/Terminal/Files/` 呈现与内容视图；复用 `DesignSystem/Theme.swift`、`MarkdownContent.swift`、NoticeBar。
+修改范围：`Features/Terminal/TerminalScreen.swift`、`Git/TerminalGitPanel.swift`、必要的 `TerminalGitFlow.swift` / `TerminalGitPresentation.swift`；拟新增 `Features/Terminal/Files/` 呈现与内容视图；复用 `DesignSystem/Theme.swift`、`MarkdownContent.swift`。文件请求/引用失败在同一Flow就地显示，成功引用关闭面板并更新草稿；开面板前的拒绝及其他既有终端反馈继续用原NoticeBar，不新增Files overlay或通知通道。
 
 工作：
 
@@ -171,9 +173,16 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 4. 所有文件按展开加载；搜索提交、续查及定位；已修改按文件展开 hunks，目录消歧义、数字对齐，正文与统计完整性清楚。
 5. iPhone 有效 detent、横屏 compact-height 自适应；iPad 宽窗口列表/详情、窄窗口折叠；保持同一 AppModel/选择/草稿，覆盖面板不改变底层终端网格。
 6. 等宽 Dynamic Type、换行与行号、VoiceOver 增删语义与焦点、44pt 触控目标、键盘/指针、减弱动态效果；系统语义 token，无自定义颜色/嵌套卡片。
-7. 首期先用有界 SwiftUI 行；只有性能证据要求时才补 UIKit 虚拟化，不能直接用 ANSI 终端渲染 diff。
+7. 首期使用有界行；iOS18与26共用UITableViewDiffableDataSource，普通文件/搜索文件用系统UIListContentConfiguration，目录、controls与Git行用UIHostingConfiguration。稳定ID快照、系统自动行高、非零有界估算和有限阅读身份，不创建20,000个常驻行或全量测高。原生行默认系统估算，明确定位意图最多一次冻结与当前完整layout匹配的两类有限median；delegate只读冻结值，失配采用automaticDimension，不在高度枚举内刷新或写缓存。定位ACK保留冻结值，布局/字号变化撤销；公开trait回调防止L→XL→L未经过采样时复活旧值，同意图不重新捕获。接续iPad定位回执后的真实重排及持续median导致字号空表的证据，须验证最终四设备目标与连续字号。Flow、草稿、导航留外层；分别核host观察/实际字号几何与原生文件当前trait/配置/完整cell fitting，不能伪造Hosted DTO。原生主操作只有一条调用路径，菜单绑定上下文后再取最新行/权限。定位按scope/context/generation一次消费，程序定位不能只靠scroll delegate确认。此修订接续真实200行的字号空表、视口外虚拟文本frame与查询崩溃证据，须重新验证搜索角色、定位、返回位置、原生菜单和最大字号全项审计。网络100项分页不代表只创建100行或已测得性能改善，不能直接用ANSI终端渲染diff。
+8. 两系统共用列表上方原生UITextField与44pt系统清除/提交Button，保留输入法组合、选区、显式提交和不自动聚焦。接续26原浮动搜索清除按钮实际约19×19pt的证据；不改变26 List或业务Flow，不把未定位Contrast归因颜色，修订后重新执行默认全项审计。
 
 测试：入口路由/presentation 纯状态测试、视图模型 tests、已有 TerminalGit/Resources/Relay 回归；Swift 编译。运行 UI 的验收另按 §13 授权条件执行。
+
+窗口验收补充：regular手动隐藏sidebar后详情菜单Reveal必须重新显示目录并使实际目标可点；combined columnVisibility/preferredCompactColumn绑定分别控制宽窗列与窄窗栈，保真实视口回执门槛。不能以detail清空或Simulator canvas zoom当作通过。
+
+窄窗验收还需返回列表后再次点选同一文件：相同selection缓存命中仍激活详情，不能仅靠selected的onChange；原生主操作仍只有一条，导航留外层且不由迟到读取响应重放。
+
+原生文件行验收补充：主/副文字及SF图标随真实selected/focused状态与系统背景配对，仅使用现有ink/paper对应UIKit语义token；按当前cell实际traits解析基础颜色，一次注册官方颜色外观traits集合，变化后请求重配。由公开updateConfiguration统一拥有两配置，保默认焦点引擎、真实触选反馈、自动字号、复用、唯一主动作和菜单，不操作私有label或写颜色/opacity常量。移除全部临时取证后，核浅深/默认及最大字号的初触、选中、持续focus、字体、菜单和同一面板外观切换；实际小字≥4.5、大字≥3才关闭。正常截图与原始失败分别保留在验收记录，不由系统默认、日志颜色或静态审查豁免。
 
 完成：AC-01/19/20/21/22 的源码与状态验证完成；iPad 实际窄窗和无障碍运行证据未取得前保持待验收。
 
@@ -211,11 +220,11 @@ P01 冻结后，P02、P03、P06 可并行；P03 后，P04 与 P05 可并行。Sw
 - 新 worker、运行资源或打包边界若确需变化，补 `check:packaged-asar` 和正式产物检查；没有这些变化不扩展打包任务。
 - 对 AC-01～24 填入验证结果/证据；未跑 hosted/UI/真机窗口验收明确留待验收，不勾选全部完成。
 
-完成：所有自动源码/协议/服务级检查通过，运行验收得到对应授权与证据，规则及发布说明一致。发版/部署只有后续明确请求才执行，上线顺序不得倒置。
+完成：所有自动源码/协议/服务级检查通过，运行验收得到对应授权与证据，规则及发布说明一致。本次已收到完整发版请求，验收结束后执行；上线顺序不得倒置。
 
 ## 13. 验证命令与运行边界
 
-以下是实现阶段已核实的现有命令，均从仓库根执行；**本次文档转换不运行这些构建或测试**。新增测试文件应加入相应专项列表，名称以实际落地文件为准。
+以下命令均从仓库根执行。实际测试文件、运行环境、结果与缺口以验收记录为准；编译或跳过不能替代行为验证。
 
 ### 13.1 无需启动应用的 TypeScript 验证
 
@@ -267,10 +276,10 @@ xcodebuild test \
 
 ## 14. 最终交付检查
 
-- [ ] 三入口、同根浏览、两层 Git、预览、搜索、引用与所有异常状态满足 spec，未加入非目标。
-- [ ] 新文件协议、云/桌面双能力门控、可信 owner/回执、两跳背压完整，旧终端行为回归通过。
-- [ ] 只读路径无 watcher/外部 Git 扩展/对象或 index 写入；跨根路径与跨身份拒绝。
-- [ ] 正文、候选、游标、缓存、队列均执行 spec 数量/字节/时间上限，过期页不可重放。
-- [ ] 草稿按 ticket 插入，无 PTY/回车副作用，无目标切换污染；终端尺寸和连接不受浏览影响。
-- [ ] 自动验证与获授权的运行验收分别记录，全部 AC 有可核查结果。
-- [ ] 规则、旧阶段范围、注册例外与发布说明同步；聚焦 diff 通过检查并完成本地 Git 提交。
+- [x] 三入口、同根浏览、两层 Git、预览、搜索、引用与所有异常状态满足 spec，未加入非目标。
+- [x] 新文件协议、云/桌面双能力门控、可信 owner/回执、两跳背压完整，旧终端行为回归通过。
+- [x] 只读路径无 watcher/外部 Git 扩展/对象或 index 写入；跨根路径与跨身份拒绝。
+- [x] 正文、候选、游标、缓存、队列均执行 spec 数量/字节/时间上限，过期页不可重放。
+- [x] 草稿按 ticket 插入，无 PTY/回车副作用，无目标切换污染；终端尺寸和连接不受浏览影响。
+- [x] 自动验证与获授权的运行验收分别记录，全部 AC 有可核查结果。
+- [x] 规则、旧阶段范围、注册例外与发布说明同步；聚焦 diff 通过检查并完成本地 Git 提交。

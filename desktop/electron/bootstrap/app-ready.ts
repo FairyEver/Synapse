@@ -182,8 +182,9 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     // payloads back to the connection that owns the socket and the device identity.
     const mobileGateway = registry.get<MobileGatewayService>("core.mobile-gateway")
     liveConnectionService.setMobileIntentHandler({
-      handle: (mobileClientInstanceId, intent) => mobileGateway.handleIntent(mobileClientInstanceId, intent),
+      handle: (mobileClientInstanceId, intent, context) => mobileGateway.handleIntent(mobileClientInstanceId, intent, context),
       releaseClient: (mobileClientInstanceId) => mobileGateway.releaseClient(mobileClientInstanceId),
+      resetWorkspaceFiles: () => mobileGateway.resetWorkspaceFiles(),
     })
     mobileGateway.setTransport({
       sendSummary: (draft) => {
@@ -202,6 +203,8 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       sendIntentResult: (mobileClientInstanceId, result) => {
         void liveConnectionService.sendMobileIntentResult(mobileClientInstanceId, result)
       },
+      sendWorkspaceFilesResult: (mobileClientInstanceId, result, context, priority) =>
+        liveConnectionService.sendMobileWorkspaceFilesResult(mobileClientInstanceId, result, context, priority),
       sendTransferProgress: (payload) => {
         void liveConnectionService.sendMobileTransferProgress(payload)
       },

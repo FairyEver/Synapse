@@ -7,6 +7,10 @@ import UIKit
 /// else is neutral, so the single amber badge on a session row is the only thing
 /// competing for attention.
 enum Theme {
+    /// Read-only code review uses semantic system fills; the +/− and VoiceOver
+    /// labels also communicate the change without relying on color.
+    static let diffAdditionFill = Color(uiColor: .tertiarySystemGroupedBackground)
+    static let diffDeletionFill = Color(uiColor: .secondarySystemGroupedBackground)
     /// The colour of every control that is not asking for a person: tab bar
     /// selection, toolbar buttons, prominent buttons, the send arrow.
     ///

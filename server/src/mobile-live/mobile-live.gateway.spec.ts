@@ -160,6 +160,25 @@ describe("MobileLiveGateway", () => {
     expect(socket.closeCalls[0]).toMatchObject({ code: 1008, reason: "hello_required" })
   })
 
+  it("advertises file relay support and rejects a forged mobile instance without detaching the terminal", async () => {
+    const harness = createHarness()
+    const socket = new FakeSocket()
+    harness.gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", Buffer.from(helloMessage()))
+    await settle()
+    expect(socket.json()[0]).toMatchObject({ type: LIVE_MESSAGE_TYPES.welcome, payload: { mobileCapabilities: { workspaceFilesVersion: 1 } } })
+    const forged = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntent, {
+      desktopClientInstanceId: "desktop-1", mobileClientInstanceId: "another-phone",
+      intent: { v: 1, kind: "workspaceFiles", filesVersion: 1, intentId: "file-1", sessionId: "session-1", operation: "open", scopeMode: "currentDirectory" },
+    }, { id: "message-2", sentAt: new Date().toISOString() })
+    socket.emit("message", Buffer.from(JSON.stringify(forged)))
+    await settle()
+    expect(harness.relay.deliverIntent).not.toHaveBeenCalled()
+    expect(socket.json()[1]).toMatchObject({ payload: { desktopClientInstanceId: "desktop-1", mobileClientInstanceId: "phone-1", result: { code: "permission_denied" } } })
+    expect(socket.closeCalls).toHaveLength(0)
+    harness.gateway.onApplicationShutdown()
+  })
+
   it("routes an intent to the desktop named in the payload", async () => {
     const harness = createHarness()
     const socket = new FakeSocket()

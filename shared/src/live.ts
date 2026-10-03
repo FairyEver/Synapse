@@ -82,6 +82,7 @@ export interface LiveDesktopHelloPayload {
 }
 
 export interface LiveDesktopWelcomePayload {
+  readonly mobileCapabilities?: { readonly workspaceFilesVersion?: number }
   readonly connectionId: string
   readonly serverTime: string
   readonly heartbeatIntervalMs: number
@@ -262,7 +263,10 @@ function isWelcomePayload(value: unknown): value is LiveDesktopWelcomePayload {
     nonEmptyString(value.connectionId) &&
     nonEmptyString(value.serverTime) &&
     positiveNumber(value.heartbeatIntervalMs) &&
-    positiveNumber(value.heartbeatTimeoutMs)
+    positiveNumber(value.heartbeatTimeoutMs) &&
+    (value.mobileCapabilities === undefined || (isRecord(value.mobileCapabilities) &&
+      (value.mobileCapabilities.workspaceFilesVersion === undefined ||
+        (Number.isSafeInteger(value.mobileCapabilities.workspaceFilesVersion) && (value.mobileCapabilities.workspaceFilesVersion as number) >= 0))))
 }
 
 function isPingPayload(value: unknown): value is LiveDesktopPingPayload {

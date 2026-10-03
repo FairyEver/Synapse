@@ -5,6 +5,7 @@ import type {
   MobileGroupCommandsEntry,
   MobileIntent,
   MobileIntentResult,
+  MobileWorkspaceFilesIntent,
   MobileModelTier,
   MobileQuickPhrase,
   MobileToolbarButton,
@@ -37,7 +38,7 @@ import { buildSnapshotFrames, buildTerminalFrames } from "./mobile-gateway/frame
 import type { ClaudeCodeConversationLaunch, MobileGatewayLogger } from "./mobile-gateway/intent-executor"
 import { createMobileGitIntentRunner, type MobileGitIntentRunner } from "./mobile-gateway/git-intent"
 import { MobileIntentError, MobileIntentExecutor } from "./mobile-gateway/intent-executor"
-import type { MobileGatewayTransport } from "./mobile-gateway/transport"
+import type { MobileGatewayTransport, MobileIntentContext } from "./mobile-gateway/transport"
 
 export type { MobileGatewayTransport, MobileSummaryDraft } from "./mobile-gateway/transport"
 
@@ -151,6 +152,7 @@ const SIZE_OWNERSHIP_IDLE_TIMEOUT_MS = 90_000
 
 export type MobileGatewayServiceDeps = {
   readonly terminal: TerminalService
+  readonly workspaceFiles?: MobileWorkspaceFilesGateway
   /**
    * 按终端当前目录跑 git 的那一层。
    *
@@ -209,6 +211,13 @@ export type MobileGatewayServiceDeps = {
   readonly setTimeout?: (callback: () => void, delayMs: number) => NodeJS.Timeout
   readonly clearTimeout?: (handle: NodeJS.Timeout) => void
   readonly lineWindowLines?: number
+}
+
+/** The read adapter is injected by bootstrap; the gateway never resolves disk paths. */
+export type MobileWorkspaceFilesGateway = {
+  runIntent(owner: MobileIntentContext & { readonly mobileClientInstanceId: string }, intent: MobileWorkspaceFilesIntent): Promise<MobileIntentResult>
+  cleanupOwner(owner: { readonly accountUserId?: string; readonly desktopClientInstanceId?: string; readonly mobileClientInstanceId?: string }): void
+  cleanupSession(sessionId: string): void
 }
 
 /**
@@ -399,6 +408,7 @@ export class MobileGatewayService {
   }
 
   async stop(): Promise<void> {
+    this.resetWorkspaceFiles()
     if (!this.started) return
     this.started = false
     const events = this.terminal.events
@@ -425,7 +435,32 @@ export class MobileGatewayService {
   }
 
   /** Called by the live connection when a phone sends an intent. */
-  async handleIntent(mobileClientInstanceId: string, intent: MobileIntent): Promise<void> {
+  async handleIntent(mobileClientInstanceId: string, intent: MobileIntent, context?: MobileIntentContext): Promise<void> {
+    if (intent.kind === "workspaceFiles") {
+      const adapter = this.deps.workspaceFiles
+      let result: MobileIntentResult
+      try {
+        result = !this.started || !adapter
+          ? { intentId: intent.intentId, outcome: "rejected", code: "unsupported_version", message: "需要更新电脑端。", sessionId: intent.sessionId }
+          : !context
+            ? { intentId: intent.intentId, outcome: "rejected", code: "permission_denied", message: "无法确认请求归属。", sessionId: intent.sessionId }
+            : await adapter.runIntent({ ...context, mobileClientInstanceId }, intent)
+      } catch (error) {
+        this.deps.logger.warn("Workspace files request failed.", { errorName: error instanceof Error ? error.name : typeof error })
+        result = { intentId: intent.intentId, outcome: "rejected", code: "relay_failed", message: "电脑读取失败。", sessionId: intent.sessionId }
+      }
+      // In particular, do not execute or cache this result in MobileIntentExecutor,
+      // whose automatic summary refresh would run Git work after every page read.
+      const send = this.transport?.sendWorkspaceFilesResult
+      if (send) {
+        try {
+          await send(mobileClientInstanceId, result, context, intent.operation === "cancel" || intent.operation === "close")
+        } catch (error) {
+          this.deps.logger.warn("Workspace files reply could not be sent.", { errorName: error instanceof Error ? error.name : typeof error })
+        }
+      }
+      return
+    }
     if (!this.started) {
       this.sendIntentResult(mobileClientInstanceId, {
         intentId: intent.intentId,
@@ -442,6 +477,7 @@ export class MobileGatewayService {
 
   /** Called when a phone's connection drops, so its leases are not held by nobody. */
   async releaseClient(mobileClientInstanceId: string): Promise<void> {
+    this.deps.workspaceFiles?.cleanupOwner({ mobileClientInstanceId })
     for (const attachment of this.registry.detachClient(mobileClientInstanceId)) {
       await this.releaseAttachmentLease(attachment)
     }
@@ -451,6 +487,10 @@ export class MobileGatewayService {
     this.executor.forgetClient(mobileClientInstanceId)
     this.bytesByClient.delete(mobileClientInstanceId)
     this.scheduleSummary()
+  }
+
+  resetWorkspaceFiles(): void {
+    this.deps.workspaceFiles?.cleanupOwner({})
   }
 
   getState(): MobileGatewayState {
@@ -506,6 +546,7 @@ export class MobileGatewayService {
 
   private readonly handleSessionDeleted = (payload: { readonly sessionId: string }): void => {
     try {
+      this.deps.workspaceFiles?.cleanupSession(payload.sessionId)
       this.lastLineCache.delete(payload.sessionId)
       this.lastLineDirty.delete(payload.sessionId)
       for (const attachment of this.registry.detachSession(payload.sessionId)) {
@@ -1030,6 +1071,7 @@ export class MobileGatewayService {
         this.summaryAgentProviders(),
       ])
       const content = this.fitSummaryToBudget({
+        ...(this.deps.workspaceFiles && transport.sendWorkspaceFilesResult ? { workspaceFilesVersion: 1 as const } : {}),
         groups: this.summaryGroups(),
         workspaces: this.summaryWorkspaces(sessions),
         sessions,
@@ -1074,6 +1116,7 @@ export class MobileGatewayService {
   private fitSummaryToBudget(content: MobileSummaryContent): MobileSummaryContent | null {
     if (summaryBytes(content) <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return content
     const withoutTabs: MobileSummaryContent = {
+      ...(content.workspaceFilesVersion === undefined ? {} : { workspaceFilesVersion: content.workspaceFilesVersion }),
       groups: content.groups,
       sessions: content.sessions,
       ...(content.agentGroups === undefined ? {} : { agentGroups: content.agentGroups }),
@@ -1085,6 +1128,7 @@ export class MobileGatewayService {
     // just cannot start a new Claude Code one until the list shrinks again. Dropping a
     // session would make a terminal disappear, which is the one thing this must never do.
     const withoutDirectories: MobileSummaryContent = {
+      ...(content.workspaceFilesVersion === undefined ? {} : { workspaceFilesVersion: content.workspaceFilesVersion }),
       groups: withoutTabs.groups,
       sessions: withoutTabs.sessions,
     }
@@ -1754,6 +1798,7 @@ export function createMobileGatewayService(deps: MobileGatewayServiceDeps): Mobi
 
 /** One summary's content, before the revision the transport assigns at send time. */
 type MobileSummaryContent = {
+  readonly workspaceFilesVersion?: 1
   readonly groups: readonly MobileSummaryGroup[]
   readonly workspaces?: readonly MobileSummaryWorkspace[]
   readonly sessions: readonly MobileSummarySession[]
