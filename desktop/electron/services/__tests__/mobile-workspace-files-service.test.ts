@@ -419,7 +419,9 @@ describe("mobile workspace files safety and real reads", () => {
   }, 20_000)
 })
 
-describe("mobile workspace Git uses real bounded readonly repositories", () => {
+// Each case includes repository setup and several native Git calls across multiple intents.
+// This total test timeout leaves the product's single-command and intent deadlines unchanged.
+describe("mobile workspace Git uses real bounded readonly repositories", { timeout: 20_000 }, () => {
   it("reports a binary index changing to text without contradictory preview metadata", async () => {
     const f = await fixture(true), target = path.join(f.root, "binary.dat")
     await writeFile(target, Buffer.from([65, 0, 66])); await f.command("add", "."); await f.command("commit", "-qm", "binary baseline")

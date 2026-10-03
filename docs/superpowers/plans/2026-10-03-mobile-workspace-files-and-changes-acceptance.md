@@ -413,6 +413,14 @@ CI于2026-10-03T23:00:10Z手动dispatch，精确run[37160313861](https://github.
 
 文件服务最终整套回归60/60通过、0失败/0跳过，101.36秒；日志`/tmp/synapse-files-windows-ci-fixture-fix-service-suite.log`，另三项针对性回归3/3通过。开发代理已冻结交接，仅修改上述测试文件。修订单独本地提交后，按发版流程推进v1.0.56并重新执行精确SHA的原生Windows及macOS CI；v1.0.55未发布，说明未归档、站内信未发送。
 
+### 第二轮发布与集成测试时限
+
+测试修订提交`5e7eba0ed`；版本提交`642dd92d66a86122b96500a630fa41eba07af60d`推进1.0.56并同步iOS八配置，通知预检再次通过（42活跃账号，未发送）。精确CI [37161155229](https://github.com/FairyEver/Synapse/actions/runs/37161155229)于23:15:01Z创建、workflow_dispatch与SHA相同，五job成功，只有Windows工作区协议测试job失败；未dispatch Release，pending说明保持不变。macOS完整983文件、10027测试全部通过，497.26秒；原日志`/tmp/synapse-files-release-v1.0.56-ci-macos-tests.log`。新版本先行服务端部署48秒exit0，deployId`20261004_071505`，第二次healthz及全部站点检查通过；log`/tmp/synapse-files-release-v1.0.56-server-before-desktop.log`。
+
+Windows原先六项失败均已通过；本轮八套112通过/1失败/11原POSIX跳过，233秒，唯一新增失败为small-before/oversized-after真实Git用例默认5000ms整体时限。此用例包括仓库设置四个原生Git命令、add/commit和open/changes/双侧preview四个intent；相邻对称测试本轮6254ms通过。整组AST核对32个声明/37个展开case，既有30case显式20秒、3case显式30秒，仅4case意外继承全局5秒。开发代理将真实Git describe默认设为20秒，保留所有显式20/30秒及原断言，非Git组不变；本地Vitest4.1.5声明/实现和仓库同类用法已核对，生产单命令5秒/intent15秒与性能预算均不变。原Windows日志`/tmp/synapse-files-release-v1.0.56-ci-windows-job.log`保留，本机整套回归与独立复核待完成后推进下一轮。
+
+后续独立复核接受该3行修订：同case在v55的4650ms通过、v56的5021ms被框架截断，其他真实Git用例普遍增加8%–12%，无对应产品deadline_exceeded；<1000ms取消断言与dispose路径仍保持。整套本地60/60通过、0失败/0跳过，102.61秒；日志`/tmp/synapse-files-windows-ci-suite-timeout-fix.log`。最终只改测试suite默认时限及验收记录，生产与12份R123 UI指纹不变，原生Windows仍待下一轮实际CI。
+
 ## Apple 依据
 
 系统 sheet、有效 detents 和紧凑高度遵循 [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)、[presentationDetents](https://developer.apple.com/documentation/swiftui/view/presentationdetents(_:selection:))、[medium](https://developer.apple.com/documentation/swiftui/presentationdetent/medium)。列表详情适配遵循 [NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview)；关闭动作按 [DismissAction](https://developer.apple.com/documentation/swiftui/dismissaction) 的 iOS 18 作用域处理。搜索、显式目录操作与行号朗读分别依据 [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)、[Context menus](https://developer.apple.com/design/human-interface-guidelines/context-menus)、[VoiceOver](https://developer.apple.com/design/human-interface-guidelines/voiceover)。这是实现与审查依据，不能推断 Codex 截图的内部框架或替代实际窗口验收。
