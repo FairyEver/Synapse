@@ -2,7 +2,7 @@
 
 日期：2026-10-03
 
-状态：P00–P09已实现并完成下列验收；原自动报告和未覆盖范围见验收记录，完整发版待执行。用户已授权按本计划开发、多代理检查、跨端功能与 Apple 界面验收，并在全部工作完成后执行完整发版；实际结果见[验收记录](2026-10-03-mobile-workspace-files-and-changes-acceptance.md)，未通过项不算完成。
+状态：P00–P09已实现并完成下列验收；v1.0.57桌面正式发布已成功，iOS上传与站内信正在收尾。原自动报告和未覆盖范围见验收记录。用户已授权按本计划开发、多代理检查、跨端功能与 Apple 界面验收，并在全部工作完成后执行完整发版；实际结果见[验收记录](2026-10-03-mobile-workspace-files-and-changes-acceptance.md)，未通过项不算完成。
 
 权威规格：[V1 spec](../specs/2026-10-03-mobile-workspace-files-and-changes-spec.md)。截图与现状依据：[原设计分析](../specs/2026-10-03-mobile-workspace-files-and-changes-design.md)。范围、协议、预算与 AC 均以 spec 为准；本文回答改哪里、依赖什么、怎样验证。
 
@@ -254,6 +254,20 @@ xcodebuild build-for-testing \
 ```
 
 此命令编译 App 与测试目标，不安装或运行 App。编译通过只证明编译，不证明单测/交互通过。
+
+发版前还要验证真机目标的 Release 优化编译，保留完整 stdout/stderr；Debug Simulator 编译不能覆盖 `-O`/WMO 优化器路径：
+
+```bash
+xcodebuild build \
+  -project SynapseMobile/SynapseMobile.xcodeproj \
+  -scheme SynapseMobile \
+  -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -derivedDataPath /tmp/synapse-mobile-workspace-files-release-build \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+这只验证 arm64 编译与链接；正式签名、归档及上传仍由 `pnpm mobile:release` 验证。
 
 ### 13.3 需要启动授权的 Swift/跨端验收
 

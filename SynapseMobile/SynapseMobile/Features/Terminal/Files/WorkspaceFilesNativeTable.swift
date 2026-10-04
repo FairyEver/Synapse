@@ -58,6 +58,10 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
     }
 
     final class Coordinator: NSObject, UITableViewDelegate {
+        // Avoid the Swift 6.3 Release optimizer crash on a synthesized
+        // deinitializer for this generic class; stored fields still release normally.
+        deinit {}
+
         private weak var table: WorkspaceFilesNativeTableView?
         private var dataSource: UITableViewDiffableDataSource<Int, String>?
         private var hostingSource: WorkspaceFilesNativeHostingSource<Row, Content>?
@@ -779,6 +783,9 @@ fileprivate final class WorkspaceFilesNativeTableView: UITableView {
 
 @Observable
 private final class WorkspaceFilesNativeHostingSource<Row, Content: View> {
+    // Keep this generic class on the same explicit-deinit compiler workaround.
+    deinit {}
+
     @ObservationIgnored var content: (Row) -> Content
     var dynamicTypeSize: DynamicTypeSize
     var locale: Locale

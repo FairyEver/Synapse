@@ -1,6 +1,6 @@
 # 工作区文件 V1 验收记录
 
-日期：2026-10-03～04。状态：已完成下列限定场景的功能与Apple界面验收；原自动报告与未覆盖范围分别保留。完整发版进行中；v1.0.55第一轮CI失败尚未发布，正在修订测试夹具后重验。
+日期：2026-10-03～04。状态：已完成下列限定场景的功能与Apple界面验收；原自动报告与未覆盖范围分别保留。v1.0.57 CI与正式桌面Release已成功，说明已归档；完整发版正在执行TestFlight、最终服务器部署与站内信。
 
 规格：[V1 spec](../specs/2026-10-03-mobile-workspace-files-and-changes-spec.md)。计划：[P00–P09](2026-10-03-mobile-workspace-files-and-changes-plan.md)。本记录区分真实运行证据、单元/静态检查和未覆盖场景，不以跳过或编译成功代替验收。
 
@@ -18,7 +18,7 @@
 | iOS 18实际最大字号/深色搜索 | r113：57.485秒通过；实际滚到结果、打开UTF-8、菜单关闭与Reveal可达，全项审计无报告 | `/tmp/synapse-files-ui-iphone18-r113-max-dark-search.log` |
 | iOS 26实际最大字号/深色引用与搜索 | r116：两项通过，0失败/跳过，195.069秒；长中文文件名、末行、菜单/关闭、两种引用与Reveal真实完成，全项审计无报告 | `/tmp/synapse-files-ui-iphone26-r116-max-dark.log` |
 
-尚未发版。iPad原始自动审计失败仍保留；相应实际字号/色对与菜单已经取得独立复核，不由旧轮通过、静态代码或编译成功覆盖。
+桌面v1.0.57已发布，完整发版收尾见下方发布记录。iPad原始自动审计失败仍保留；相应实际字号/色对与菜单已经取得独立复核，不由旧轮通过、静态代码或编译成功覆盖。
 
 ## 环境与修改边界
 
@@ -385,8 +385,8 @@ r142 最终R123 phone18受影响Browse/Composer两项109.842秒、0失败/0跳�
 | 20 | 单Flow与NavigationSplitView/Stack；r110实际宽834×1210→窄375×491→中798×1150.5→原宽，Back、同文件重开、搜索/Reveal、Menu与草稿实际完成，独立新片复核通过 | 真实iPad硬件窗口/指针未跑 |
 | 21 | 系统组件/语义token/±/两行号/自然AX标签，零过滤ALL；两phone默认/最大dark真实通过，Pad实际字号增长与浅深色分别独立核原片/像素 | 原始Pad ALL报告仍有失败，未宣称全App认证；R123原生行四组合与同App外观切换真实完成，原系统过渡帧另说明；物理VoiceOver/键盘指针/减弱动态手工证据未取得 |
 | 22 | gateway错误与audit不含源码/路径；relay只精准目标/无summary正文缓存；现有NoticeBar复用 | 四设备默认入口、详情/菜单、关闭与草稿均有真实片；数据库/COS/遥测无正文为源码审查 |
-| 23 | registry组装与dispose、Flow/client/后台模型分离、窄bridge、无依赖，typecheck/hard constraints；当前独立mac App真实ASAR及包内smoke通过 | 正式签名/公证/Windows包待发布gate；未做正式安装运行 |
-| 24 | 旧Git范围、runtime/module规则、private例外、README/notes同步；核对MCP/系统Skill/Agent指南，无公开能力变更、Terminal仍49 | 真正新包与native Windows CI、完整发布待执行 |
+| 23 | registry组装与dispose、Flow/client/后台模型分离、窄bridge、无依赖；v1.0.57正式macOS签名/公证、两平台ASAR/包内runtime/更新协议、typecheck/hard constraints均通过 | 未做正式桌面安装器在用户设备上的安装运行 |
+| 24 | 旧Git范围、runtime/module规则、private例外、README/notes同步；核对MCP/系统Skill/Agent指南，无公开能力变更、Terminal仍49；v1.0.57原生Windows CI和正式新包通过 | TestFlight、最终部署及站内信待当前发版步骤完成 |
 
 ## 最终验收结论与发布待办
 
@@ -420,6 +420,24 @@ CI于2026-10-03T23:00:10Z手动dispatch，精确run[37160313861](https://github.
 Windows原先六项失败均已通过；本轮八套112通过/1失败/11原POSIX跳过，233秒，唯一新增失败为small-before/oversized-after真实Git用例默认5000ms整体时限。此用例包括仓库设置四个原生Git命令、add/commit和open/changes/双侧preview四个intent；相邻对称测试本轮6254ms通过。整组AST核对32个声明/37个展开case，既有30case显式20秒、3case显式30秒，仅4case意外继承全局5秒。开发代理将真实Git describe默认设为20秒，保留所有显式20/30秒及原断言，非Git组不变；本地Vitest4.1.5声明/实现和仓库同类用法已核对，生产单命令5秒/intent15秒与性能预算均不变。原Windows日志`/tmp/synapse-files-release-v1.0.56-ci-windows-job.log`保留，本机整套回归与独立复核待完成后推进下一轮。
 
 后续独立复核接受该3行修订：同case在v55的4650ms通过、v56的5021ms被框架截断，其他真实Git用例普遍增加8%–12%，无对应产品deadline_exceeded；<1000ms取消断言与dispose路径仍保持。整套本地60/60通过、0失败/0跳过，102.61秒；日志`/tmp/synapse-files-windows-ci-suite-timeout-fix.log`。最终只改测试suite默认时限及验收记录，生产与12份R123 UI指纹不变，原生Windows仍待下一轮实际CI。
+
+### 第三轮正式发布v1.0.57
+
+时限修订独立提交`610da3798`；版本提交`2c6123c6884ccae49905597900d1dbb0ae1499bc`同步桌面/iOS 1.0.57。CI [37161828200](https://github.com/FairyEver/Synapse/actions/runs/37161828200)于23:27:25Z创建，精确SHA/workflow_dispatch匹配，六job全部成功；macOS 983文件10027/10027测试通过，473.89秒；Windows新增八套113通过、0失败、11原POSIX专属跳过，236.01秒，前两轮CI七个失败均已关闭，Windows安装器生成成功。日志`/tmp/synapse-files-release-v1.0.57-ci-macos-tests.log`、`/tmp/synapse-files-release-v1.0.57-ci-windows-job.log`，原55/56失败未改写。
+
+再次确认remote main仍为该已测SHA后手动dispatch正式Release [37162650898](https://github.com/FairyEver/Synapse/actions/runs/37162650898)，23:43:02Z创建、同一SHA，四job均成功。macOS notarization successful，正式两平台check:packaged-asar、JS/Node runtime与更新协议smoke通过；macOS真实包内node-pty、PDF/DOCX/HTML/JSON Repair验证成功。原日志`/tmp/synapse-files-release-v1.0.57-release-{macos,windows}.log`保留。两平台安装器已上传COS，CDN刷新/校验及发布页创建成功。
+
+精确[v1.0.57发布页](https://github.com/FairyEver/SynapseAppRelease/releases/tag/v1.0.57)已加入三节产品说明，readback逐字匹配生成正文，保留从原body提取的全部六条CDN URL和一键更新地址；assets数组为空符合当前分发方式。额外真实HTTP复核三安装器HEAD与三元数据GET全部200，三元数据version均1.0.57，证据`/tmp/synapse-files-release-v1.0.57-cdn-verification.json`。归档`docs/releases/v1.0.57.md`及pending重置的专门提交`e1bc3bc22`已push，未再dispatch CI/Release，并已用系统默认浏览器打开匹配发布页。
+
+先行服务器部署48秒exit0，deployId`20261004_072725`；正式包及说明归档成功后并行启动`pnpm mobile:release`（实际1.0.57、build70）与`bash deploy.sh`。最终部署47秒exit0，deployId`20261004_075802`、全部站点检查通过，log`/tmp/synapse-files-release-v1.0.57-server-final.log`。build70归档失败，未上传、未发送站内信；iOS恢复步骤见下段。该轮桌面发布时R123源码未变，产品请求/资源预算始终保持。
+
+### iOS Release编译规避与同版本恢复
+
+build70的正式归档exit65，脚本仅保留stdout尾部，活动日志为空。独立保留完整stdout/stderr的真机目标Release编译复现：Swift6.3.3/effective5.10的EarlyPerfInliner在`WorkspaceFilesNativeTable.Coordinator`合成析构崩溃；先给该类显式空析构后，原符号通过、同优化器继续在本文件泛型`WorkspaceFilesNativeHostingSource`合成析构崩溃。原log`/tmp/synapse-files-release-v57-release-compile.log`与`/tmp/synapse-files-release-v57-explicit-deinit.log`保留。
+
+最终仅`WorkspaceFilesNativeTable.swift`增加两处空`deinit {}`和原因注释，共7行；未关闭优化、修改actor/config、移除功能或更改字段销毁。独立复核确认ARC及父类析构仍执行，`dismantleUIView→detach`、弱捕获、回调/缓存清理、布局和所有动作原字节不变，依据[Swift官方析构语义](https://docs.swift.org/latest/documentation/the-swift-programming-language/deinitialization/)。最终同设置arm64/iOS18、Release `-O`/WMO完整compile/link/dSYM成功、exit0，日志`/tmp/synapse-files-release-v57-explicit-deinit-both.log`，没有编译错误/崩溃。该无签名产物版本1.0.57、默认build1，仅为编译验证，不冒充正式build70/71。
+
+最终源相对R123为11/12文件原指纹不变，NativeTable新SHA256为`e6ce48c30cf439ca1944c16a16374de2ff76032f98b74d69e2ce8492e8a115c7`；更新冻结记录`/tmp/synapse-files-ios-v57-final-handoff.json`。原12文件R123交接是当时事实，后续发布产物以此修訂指纹为准。独立检查已接受最小源码规避；不重复未变化的完整UI矩阵或桌面CI/Release，按同一v1.0.57恢复正式`pnpm mobile:release`，上传成功后再发送通知。
 
 ## Apple 依据
 
