@@ -102,6 +102,7 @@
 - 文件与目录统一使用 `UIListContentConfiguration`，继续由原生 diffable table 复用行。目录提供主展开动作及独立的 44pt ellipsis；独立操作不能因行合并而消失，长按菜单与引用权限沿用现有校验。[Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)、[UIListContentConfiguration](https://developer.apple.com/documentation/uikit/uilistcontentconfiguration-swift.struct)。
 - 文件名为主要内容；搜索父路径、Git 状态等使用 `secondaryLabel`。选择和 focus 的背景使用 `defaultBackgroundConfiguration`，不交换背景色与 label 的语义用途。[Color](https://developer.apple.com/design/human-interface-guidelines/color)、[defaultBackgroundConfiguration](https://developer.apple.com/documentation/uikit/uitableviewcell/defaultbackgroundconfiguration())。
 - 深层视觉缩进按实际栏宽减小，优先保留文件名的阅读空间。数据深度、目录展开、完整路径的无障碍名称和详情保持原有语义，不把视觉缩进当作真实路径。[Layout](https://developer.apple.com/design/human-interface-guidelines/layout)。
+- 2026-10-04 增补：展开树的视觉缩进由列表内容配置显式给出、每层一个统一节距——实测 iOS 18.6 系统子列表（`List`/`DisclosureGroup` 的 plain 与 sidebar 样式）为 59–61px@3x，即 20pt/层。不再经 `UITableViewCell.indentationLevel` 转写：那条路径把层级放大为 cell layout margins，再与内容配置自身的默认 leading 相叠，实测把浅层合并到同一列（0/13/16pt 而非均匀阶梯）。除窄栏收缩外，层级只能把内容单调右移。[OutlineGroup](https://developer.apple.com/documentation/swiftui/outlinegroup)、[Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)。
 - regular 分栏把 `selectedID` 同步到列表，保留右侧详情对应的选中反馈；compact 延续面板内的导航方式。窗口变化不重建业务 Flow 或制造第二份选择状态。[Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)、[Split views](https://developer.apple.com/design/human-interface-guidelines/split-views)。
 
 ### 辅助功能字号与已修改视图

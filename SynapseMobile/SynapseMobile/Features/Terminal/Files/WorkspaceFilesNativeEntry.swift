@@ -38,6 +38,38 @@ nonisolated struct WorkspaceFilesNativeMenuAction: Equatable {
     let isEnabled: Bool
 }
 
+/// Visual metrics for the directory tree's leading indentation.
+///
+/// The step matches the system outline rhythm measured on iOS 18.6
+/// (children-based `List`, plain and sidebar styles: 59–61px at 3x, i.e.
+/// 20pt per level). The level offset is owned here instead of UIKit's
+/// `indentationLevel`: that indentation only surfaces through the cell's
+/// layout margins, and mixing it with the list content's own default
+/// leading collapsed the lowest levels onto one position (0/13/16pt steps
+/// instead of a uniform staircase).
+nonisolated enum WorkspaceFilesTreeMetrics {
+    /// Visual indent added per tree level.
+    static let indentStep: CGFloat = 20
+    /// Filename width a deep row keeps free before the step shrinks.
+    static let readableWidth: CGFloat = 160
+    /// Deepest level that still earns its own step.
+    static let maximumVisualDepth = 12
+
+    static func visualDepth(_ depth: Int) -> Int {
+        min(max(depth, 0), maximumVisualDepth)
+    }
+
+    /// The step for one column width and depth. A narrow iPad split column
+    /// shrinks the step so a deep row keeps reading room for its filename.
+    static func step(forWidth width: CGFloat, depth: Int, traitCollection: UITraitCollection) -> CGFloat {
+        let levels = visualDepth(depth)
+        guard levels > 0 else { return indentStep }
+        let readable = UIFontMetrics(forTextStyle: .body)
+            .scaledValue(for: readableWidth, compatibleWith: traitCollection)
+        return min(indentStep, max(0, width - readable) / CGFloat(levels))
+    }
+}
+
 /// Files and directories share UIKit's list typography and image grid. The
 /// directory's accessory remains an independent menu and accessibility control.
 final class WorkspaceFilesNativeEntryCell: UITableViewCell {
@@ -51,6 +83,7 @@ final class WorkspaceFilesNativeEntryCell: UITableViewCell {
     private weak var boundImageGuide: UILayoutGuide?
     private var primaryAccessibilityConstraints: [NSLayoutConstraint] = []
     private var disclosureConstraints: [NSLayoutConstraint] = []
+    private var visualIndentStep = WorkspaceFilesTreeMetrics.indentStep
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -96,8 +129,11 @@ final class WorkspaceFilesNativeEntryCell: UITableViewCell {
     func configure(_ entry: WorkspaceFilesNativeEntry, menu: UIMenu?, isEnabled: Bool,
                    onAccessibilityPrimaryAction: @escaping () -> Bool) {
         presentedEntry = entry
-        indentationLevel = min(max(entry.depth, 0), 12)
-        indentationWidth = 16
+        // The visual indent belongs to the content configuration (see
+        // applyConfiguration); UIKit's cell indentation would reroute it
+        // through the cell's layout margins and collapse lower levels.
+        indentationLevel = 0
+        visualIndentStep = WorkspaceFilesTreeMetrics.indentStep
         accessibilityIdentifier = entry.accessibilityIdentifier
         primaryAccessibilityView.accessibilityIdentifier = entry.accessibilityIdentifier
         primaryAccessibilityView.accessibilityLabel = entry.accessibilityLabel
@@ -125,11 +161,17 @@ final class WorkspaceFilesNativeEntryCell: UITableViewCell {
 
     override func layoutSubviews() {
         // A narrow iPad column must leave room for the filename and accessory.
-        // Only visible, laid-out cells adjust indentation; the tree's actual
-        // depth and complete accessibility path remain unchanged.
-        let readableWidth = UIFontMetrics(forTextStyle: .body).scaledValue(for: 160, compatibleWith: traitCollection)
-        let width = min(16, max(0, bounds.width - readableWidth) / CGFloat(max(1, indentationLevel)))
-        if indentationWidth != width { indentationWidth = width }
+        // Only visible, laid-out cells adjust the step; the tree's actual
+        // depth and complete accessibility path remain unchanged. A changed
+        // step redisplays the configuration in one extra pass.
+        if let entry = presentedEntry {
+            let step = WorkspaceFilesTreeMetrics.step(forWidth: bounds.width, depth: entry.depth,
+                traitCollection: traitCollection)
+            if step != visualIndentStep {
+                visualIndentStep = step
+                setNeedsUpdateConfiguration()
+            }
+        }
         super.layoutSubviews()
     }
 
@@ -158,9 +200,13 @@ final class WorkspaceFilesNativeEntryCell: UITableViewCell {
         disclosureView.isHidden = !entry.isDirectory
         // Reserve the same disclosure column for files and folders; its symbol
         // grows with the current system text style rather than a fixed font.
-        configuration.directionalLayoutMargins.leading = max(configuration.directionalLayoutMargins.leading,
-            directionalLayoutMargins.leading) + max(collapsedImage?.size.width ?? 0,
-            expandedImage?.size.width ?? 0) + 8
+        // The level offset is one uniform step per depth on top of the list
+        // content's own default leading, so every level sits exactly one step
+        // right of its parent.
+        let disclosureColumn = max(collapsedImage?.size.width ?? 0, expandedImage?.size.width ?? 0) + 8
+        let levelOffset = CGFloat(WorkspaceFilesTreeMetrics.visualDepth(entry.depth)) * visualIndentStep
+        configuration.directionalLayoutMargins.leading =
+            configuration.directionalLayoutMargins.leading + levelOffset + disclosureColumn
         contentConfiguration = configuration
         backgroundConfiguration = background
         bindDisclosureToContent()
@@ -214,6 +260,7 @@ final class WorkspaceFilesNativeEntryCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         presentedEntry = nil
+        visualIndentStep = WorkspaceFilesTreeMetrics.indentStep
         contentConfiguration = nil
         backgroundConfiguration = nil
         accessibilityIdentifier = nil

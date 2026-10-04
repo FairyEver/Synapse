@@ -411,7 +411,7 @@ private struct WorkspaceFilesBrowser: View {
                 }
             }
         }
-        .padding(.leading, CGFloat(min(depth, 12)) * 16)
+        .padding(.leading, CGFloat(WorkspaceFilesTreeMetrics.visualDepth(depth)) * WorkspaceFilesTreeMetrics.indentStep)
     }
 
     @ViewBuilder private var searchContinuation: some View {
