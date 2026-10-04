@@ -685,7 +685,8 @@ private struct WorkspaceFilesSearch: ViewModifier {
             // An inline system field keeps the explicit submit and clearing
             // actions reachable at every supported content size.
             VStack(spacing: 0) {
-                inlineSearch
+                // The opaque table must not paint over the native field's shadow.
+                inlineSearch.zIndex(1)
                 content
             }
         } else { content }

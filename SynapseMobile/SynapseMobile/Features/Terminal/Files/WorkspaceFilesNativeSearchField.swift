@@ -15,6 +15,7 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UISearchTextField {
         let field = UISearchTextField()
+        field.backgroundColor = .tertiarySystemFill
         field.placeholder = "搜索文件"
         field.textColor = .label
         field.adjustsFontForContentSizeCategory = true
@@ -62,6 +63,7 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UISearchTextField, context: Context) -> CGSize? {
         // A size pass can precede updateUIView when Dynamic Type changes.
+        updateControlEnvironment(uiView, context: context)
         updateFont(uiView, dynamicTypeSize: context.environment.dynamicTypeSize)
         let proposedWidth = proposal.width ?? uiView.intrinsicContentSize.width
         guard proposedWidth.isFinite, proposedWidth > 0 else { return nil }
@@ -81,6 +83,8 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
     }
 
     private func updateControlEnvironment(_ field: UISearchTextField, context: Context) {
+        field.overrideUserInterfaceStyle = context.environment.colorScheme == .dark ? .dark : .light
+        field.traitOverrides.preferredContentSizeCategory = UIContentSizeCategory(context.environment.dynamicTypeSize)
         field.isEnabled = context.environment.isEnabled
         field.rightView?.isUserInteractionEnabled = context.environment.isEnabled
         field.semanticContentAttribute = context.environment.layoutDirection == .rightToLeft

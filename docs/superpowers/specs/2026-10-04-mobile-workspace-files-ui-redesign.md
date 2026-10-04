@@ -148,3 +148,24 @@
 - 实际检查普通 `large` 字号的 medium/large 面板：长目录名保持单行中间省略，范围 caption 左对齐，插入按钮独立可见。
 - 实际检查最大 `accessibility-extra-extra-extra-large` 字号：完整目录名和范围 caption 均左对齐换行，无横向裁切；原生列表的无障碍滚动动作可滚至文件行。截图后已恢复 `large`。这不是完整 VoiceOver 朗读验收。
 - 本次尚未运行 iPad 或可缩放窗口验收；标题修正尚未上传到新的 TestFlight 构建。
+
+## 8. 搜索框外观与阴影修正
+
+用户在截图网页中指出搜索框外观异常及下方阴影截断。展开面板时，原生搜索框与白色内容背景的边界不清；下方不透明的 UITableView 后绘制，遮住搜索框越出自身布局边界的系统阴影，形成水平切边。
+
+- 搜索框使用 UIKit 的 `tertiarySystemFill`。Apple 明确将该动态语义填充用于输入框、搜索栏和按钮等形状；不写固定颜色，不新建阴影、圆角或遮罩。[tertiarySystemFill](https://developer.apple.com/documentation/uikit/uicolor/tertiarysystemfill)、[Color](https://developer.apple.com/design/human-interface-guidelines/color)。
+- 搜索行在原 VStack 中设置 `zIndex(1)`，使原生阴影在列表上方完整绘制。只修正同级绘制顺序，不改变搜索位置、面板高度、滚动锚点或文件定位。[zIndex(_:)](https://developer.apple.com/documentation/swiftui/view/zindex(_:))。
+- 原生输入控件从 `UIViewRepresentableContext.environment` 同步深浅外观及内容字号，在创建、更新和测量时均应用。这样界面运行中切换外观时，输入框的图标及动态填充不会停留在浅色；最大辅助功能字号恢复普通字号后，内部自然高度也跟随恢复。[environment](https://developer.apple.com/documentation/swiftui/uiviewrepresentablecontext/environment)、[overrideUserInterfaceStyle](https://developer.apple.com/documentation/uikit/uiview/overrideuserinterfacestyle)、[UITraitOverrides](https://developer.apple.com/documentation/uikit/uitraitoverrides-swift.struct)。
+- `overrideUserInterfaceStyle` 自 iOS 13 可用，`traitOverrides` 自 iOS 17 可用，满足项目最低 iOS 18。原 UISearchTextField、44pt 清除按钮、组合态代理和显式提交协议均保留。
+
+本次没有关闭或仿制系统玻璃和阴影；采用语义填充并修正叠放顺序是针对当前面板的实现选择。官方搜索指南支持在列表附近呈现搜索，未规定此面板必须采用当前布局。[Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)。
+
+运行验收使用第 7 节同一个本机只读验收端点与独立仓库：
+
+- 最终源码的 Simulator `build-for-testing` 成功，日志 `/tmp/synapse-files-search-complete-build.log`，App、单元测试目标及 UI 测试目标编译通过；未运行自动 UI 测试。
+- 实际检查 medium/large 面板，系统填充沿原有圆角呈现，阴影没有列表上边缘的水平切边。第一行目录展开及独立菜单可操作。
+- 半屏输入 `notes` 后自动展开并保留文字与焦点；屏幕按钮及键盘 Return 均能提交，返回真实 `nested/notes.txt`；清除能恢复目录树。
+- 保持面板打开，检查深色到浅色、浅色到深色及恢复浅色，图标和填充均正确更新；最大辅助功能字号下搜索及长目录名完整显示，恢复 `large` 后搜索框高度恢复。
+- 网页重新截图 01–05、10、13，并增加 14 深色模式截图；详情和已修改视图未受本次修改影响。模拟器已恢复浅色、普通 `large` 字号。
+
+尚未执行完整 VoiceOver、iPad 或可缩放窗口验收。本次搜索修正尚未上传新的 TestFlight 构建。
