@@ -8,7 +8,7 @@ import { formatTerminalPathReference } from "../../app-capabilities/terminal/sha
 import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
 import { boundedLine, createMobileWorkspaceFilesGitAdapter, type MobileFilesGitChange, type MobileFilesGitContext, versionHash } from "./mobile-workspace-files-git"
 import { canonicalRoot, checkedNode, decodeText, enumerateDirectory, fileIdentity, isWithinRoot, MobileWorkspaceFilesError, readDiskFile, safeRelativePath, textLines, throwIfAborted, utf8Bytes } from "./mobile-workspace-files-paths"
-import { readGitMetadataSnapshot, type MobileFilesGitConfigurationLocations } from "./mobile-workspace-files-git-config"
+import { ensureGitWorktreeConfigurationEmpty, readGitMetadataSnapshot, type MobileFilesGitConfigurationLocations } from "./mobile-workspace-files-git-config"
 
 export const MOBILE_WORKSPACE_FILES_SERVICE_ID = "core.mobile-workspace-files"
 export interface MobileWorkspaceFilesOwner { accountUserId: string; desktopClientInstanceId: string; mobileClientInstanceId: string }
@@ -215,9 +215,10 @@ export function createMobileWorkspaceFilesService(deps: {
     return versionHash(values.join("|"))
   }
   async function discoverAuthorization(cwd: string, token: string, resources: Set<string>, sessionId: string, signal: AbortSignal) {
-    const readMetadata = (target: string, maxBytes: number) => readGitMetadataSnapshot(target, async resource => {
+    const authorizeMetadata = async (resource: string) => {
       resources.add(resource); await authorize(token, resource, sessionId)
-    }, signal, maxBytes)
+    }
+    const readMetadata = (target: string, maxBytes: number) => readGitMetadataSnapshot(target, authorizeMetadata, signal, maxBytes)
     let ancestor = cwd
     while (true) {
       throwIfAborted(signal)
@@ -237,6 +238,7 @@ export function createMobileWorkspaceFilesService(deps: {
           gitDir = await realpath(path.resolve(ancestor, value.slice(8)))
           resources.add(gitDir); await authorize(token, gitDir, sessionId)
         } else if (!stats.isDirectory()) throw new MobileWorkspaceFilesError("unsafe_path")
+        await ensureGitWorktreeConfigurationEmpty(gitDir, authorizeMetadata, signal)
         try {
           const config = await readMetadata(path.join(gitDir, "config"), L.maxGitStderrBytes)
           if (config && /^\s*\[\s*include(?:If)?(?:\s|\])/im.test(config.text)) throw new MobileWorkspaceFilesError("git_unavailable")

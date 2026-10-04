@@ -28,6 +28,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
     let dynamicTypeSize: DynamicTypeSize
     var estimateIntent: Int? = nil
     var resetTokens: [String: String] = [:]
+    var separatorStyle: UITableViewCell.SeparatorStyle = .singleLine
     var selectedRowID: String? = nil
     var keepsSelection = false
     let heightClass: (Row) -> WorkspaceFilesNativeHeightClass?
@@ -219,6 +220,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
 
         fileprivate func update(_ input: WorkspaceFilesNativeTable, environment: EnvironmentValues) {
             snapshotMatchesRows = false
+            table?.separatorStyle = input.separatorStyle
             let ownerChanged = ownerContext != input.ownerContext
             let viewChanged = viewContext != input.viewContext
             let changedResetContexts = input.resetTokens.keys.filter {

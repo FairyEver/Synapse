@@ -71,3 +71,9 @@ export async function readGitMetadataSnapshot(target: string, authorize: (target
 export async function readGitConfigurationSnapshot(target: string, authorize: (target: string) => Promise<void>, signal: AbortSignal): Promise<{ text: string; version: string }> {
   return await readGitMetadataSnapshot(target, authorize, signal, L.maxGitStderrBytes) ?? { text: "", version: `${target}:absent` }
 }
+
+/** An enabled worktreeConfig flag is safe without configuration bytes to load. */
+export async function ensureGitWorktreeConfigurationEmpty(gitDir: string, authorize: (target: string) => Promise<void>, signal: AbortSignal): Promise<void> {
+  const snapshot = await readGitMetadataSnapshot(path.join(gitDir, "config.worktree"), authorize, signal, L.maxGitStderrBytes)
+  if (snapshot && snapshot.sizeBytes !== 0) throw new MobileWorkspaceFilesError("git_unavailable")
+}

@@ -169,3 +169,26 @@
 - 网页重新截图 01–05、10、13，并增加 14 深色模式截图；详情和已修改视图未受本次修改影响。模拟器已恢复浅色、普通 `large` 字号。
 
 尚未执行完整 VoiceOver、iPad 或可缩放窗口验收。本次搜索修正尚未上传新的 TestFlight 构建。
+
+## 9. Git 不可用误判与空状态横线
+
+用户在 TestFlight 中发现：同一会话顶部已有分支信息，工作区文件切到「已修改」却显示「Git 不可用」，提示下方还有一条半宽横线。
+
+实际 Synapse 仓库启用了 `extensions.worktreeConfig=true`，但没有 `config.worktree`。桌面文件适配器此前将这个标志本身列为受限配置，因此误判；会话顶部的分支摘要使用另一条读取路径。修正后允许缺失或零字节的工作树配置文件，非空文件仍受限。每次读取继续精确授权、安全复验，不扩展独立工作树配置的解析或执行范围。业务边界见 [工作区文件 V1 spec](2026-10-03-mobile-workspace-files-and-changes-spec.md)。
+
+真实仓库有 7,431 个跟踪路径；恢复 Git 后，还暴露出串行路径校验和多次基线读取累计触发扫描超时。修正只对最多 8 条独立路径元数据做有界预取，保留完整祖先和 Git 元数据检查、结果顺序及原有上限；基线读取沿用自己的安全扫描与 Git 超时，不重复计入工作树扫描预算。任务总超时和取消不变。
+
+横线来自 `UITableView` 的行分隔。`UIHostingConfiguration` 会依据 SwiftUI 内首个文字的前缘自动调整分隔起点，居中的「Git 不可用」标题因此产生半宽横线。该空状态隐藏表格分隔，恢复文件列表时恢复系统单行分隔；不改变面板、玻璃材质或弹出方式。依据：[WWDC22：Use SwiftUI with UIKit](https://developer.apple.com/videos/play/wwdc2022/10072/?time=592)、[UITableView.separatorStyle](https://developer.apple.com/documentation/uikit/uitableview/separatorstyle)。这是针对空状态的实现选择，不是 Apple 规定的固定页面布局。
+
+运行复核使用 iPhone 17 Pro / iOS 26.5 Simulator 和本机独立验收仓库：
+
+- 最终 iOS 源码的签名 Simulator `build-for-testing` 成功，App、单元测试及 UI 测试目标编译通过，日志 `/tmp/synapse-git-unavailable-ios-signed-build.log`；未执行自动 UI 测试。
+- 验收仓库启用同一个标志且配置文件缺失时，「已修改」返回真实文件，差异预览显示暂存基线到工作区的真实内容。
+- 为验收空状态，临时在独立仓库创建非空工作树配置；提示出现但不再有半宽横线。切回「所有文件」后正常行分隔恢复；移除本次创建的配置后改动列表恢复。
+- 截图 `/tmp/synapse-git-empty-state-fixed.png` 为刻意受限的验收仓库，`/tmp/synapse-git-changes-fixed.png` 为恢复后的真实改动列表。没有修改用户仓库的 Git 配置或 index。
+
+桌面验证：三份工作区文件测试共 89 项通过；追加目录枚举前身份复验后，新增及 Git 安全核心回归共 26 项通过。覆盖大对象树、多基线、关联工作树、配置变化、撤权、链接替换、取消、15 秒总超时，以及子模块读取期间修改后续文件的缓存复验。最终 `build:electron`、desktop typecheck 和 `check:hard-constraints` 均通过。使用最终编译代码直接读取实际 Synapse 仓库：open 1,769ms，changes 13,388ms 返回 10 条改动，各自位于 15 秒任务限制内；960,448 字节的 Git index 完全不变。日志为 `/tmp/synapse-workspace-files-final-tests.log`、`/tmp/synapse-workspace-files-final-safety-tests.log` 和 `/tmp/synapse-workspace-files-final-timed-probe.log`。
+
+最终桌面编译产物重新连接本机验收端点后，模拟器重新打开面板；open、directory、changes、diff 均返回 accepted，改动列表及 `STAGED`→`WORKTREE` 差异可见，日志 `/tmp/synapse-git-final-acceptance.log`。
+
+本次未执行完整 VoiceOver、iPad 或可缩放窗口验收，也未发布新桌面版本或新的 TestFlight 构建。Git 读取修正位于电脑端，横线修正位于手机端。

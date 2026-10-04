@@ -208,6 +208,8 @@ objects/info/alternates与http-alternates只允许缺失或空文件；不能只
 
 内置换行/文件模式比较还需考虑桌面用户的标准全局配置。只允许从桌面可信 homedir 和 XDG 配置位置确定 `~/.gitconfig`、`$XDG_CONFIG_HOME/git/config`（缺省为 `~/.config/git/config`），按 XDG→home→local 优先级提取 `core.autocrlf`、`core.filemode`；移动端不提供配置路径，任意 `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` 覆盖不成为读取入口。每个精确配置文件在检查/读取前单独授权并审计，校验祖先、普通文件和前后身份，使用不跟随链接的有界描述符读取，最多64KiB。固定字节只交给 `config --file - --no-includes` 的专用受控解析入口；include/includeIf及外部转换器使Git受限，不跟随或执行。配置正文和其他键不进入普通Git环境、回执、日志或审计。所有普通Git命令继续关闭global/system加载；配置缺失/存在、身份、内容与有效内置值绑定版本并在缓存命中前复查。V1不猜测系统配置安装路径；不能从已授权配置或显式属性确定语义，且未知系统规则会影响当前比较时返回`git_unavailable`，普通文件浏览仍可用，不能假定默认值并给出错误差异。
 
+仅启用 `extensions.worktreeConfig` 不属于 Git 不可用原因。V1 允许当前工作树 `gitDir/config.worktree` 缺失或零字节；原生发现前和后续每次原生 Git 读取前后，复用精确授权、64KiB 上限、不跟随链接的安全描述符门控。非零字节（包括 BOM、空白和注释）、特殊文件、链接或撤权仍使 Git 受限，即使标志为 false 也保守拒绝；本次不扩展完整独立工作树配置解析。linked worktree 检查自己的 `gitDir/config.worktree`，不读取主工作树的 `commonDir/config.worktree`。scope 已打开后创建或填充此文件不得返回旧 Git 内容缓存；这些前后检查继续受上述软件门控的并发边界限制。路径和加载语义依据 [Git config](https://git-scm.com/docs/git-config/2.50.0) 与 [Git worktree](https://git-scm.com/docs/git-worktree#_configuration_file)。
+
 V1只实现受控的内置换行比较，不实现`ident`或`working-tree-encoding`转换。preflight同时检查工作树与cached属性；范围内存在生效的上述转换时返回`git_unavailable`，不对未归一化的磁盘字节宣称精确Git变化。scope打开后属性新增/变更仍须在后续读取和缓存版本复验中检查。此限制保留普通文件浏览；不调用clean/filter、写index/对象或临时实现转码。
 
 桌面存在生效的非标准 `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`、`GIT_CONFIG_PARAMETERS` 或非零 `GIT_CONFIG_COUNT` 等覆盖时，V1直接标Git受限，不读取这些自定义路径，也不默默忽略后宣称差异与原生Git一致。
@@ -255,6 +257,8 @@ Git 用受控 runner 与 argv，不运行客户端字符串。scope 内路径绑
 已核实 desktop→server 入站上限为 256 KiB，phone→server 为 2 MiB；文件下行由前者约束。每一跳都再次计算最终序列化 UTF-8 字节，中文、转义、元数据和 envelope 都计入。128 KiB 页面不能只用原文本长度证明。终端帧与文件页共链路，终端交互与控制优先；文件容量不足不得静默丢页后接后页。WS 与 HTTP fallback 都执行相同数据上限和有界待答，fallback 不把任务转成无限 HTTP 响应。
 
 目录枚举、排序、Git 收集、diff 解析、未跟踪数行受后台预算约束，分页不是先生成完整仓库后切片。相同文件连续点击合并 pending；查询改变取消旧搜索，不无界累积。
+
+Git 元数据安全扫描、工作树指纹与改动收集最多预取 8 条独立路径元数据，每条仍完整检查所有祖先；结果按原顺序处理，不缓存祖先信任、不并行 Git 子进程或文件正文读取。目录枚举前重新完整校验预取身份与祖先，变化时拒绝；子模块 HEAD 读取作为批次末项，完成后才捕获后续路径，避免缓存复验使用等待前的身份。完整 Git 元数据 roots 与节点、字节、2 秒扫描预算保持原样，不将对象检查缩窄到单个目标 OID。改动收集的工作树扫描 2 秒计时仅扣除严格串行基线 Git 读取的实际耗时；磁盘正文、归一化和哈希仍计入该扫描预算。基线读取自身的完整元数据安全扫描 2 秒、原生 Git 子进程 5 秒、文件任务 15 秒总超时与取消仍独立生效；搜索和目录预算不变。
 
 接纳open/读取前预留控制关联记录，不能预留时返回busy；cancel/close原地推进该记录，不分配无界新记录。配额回收不能移除仍执行任务的取消保护，终止失败须如实返回并继续受硬超时约束。
 

@@ -1,9 +1,12 @@
 import { execFile } from "node:child_process"
+import { createHash } from "node:crypto"
 import { promisify } from "node:util"
 import { constants } from "node:fs"
 import { access, chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from "node:fs/promises"
+import * as filesystem from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { deflateSync } from "node:zlib"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { MobileIntentResult, MobileWorkspaceFilesIntent, MobileWorkspaceFilesScope } from "@synapse/shared" with { "resolution-mode": "import" }
 import { isMobileWorkspaceFilesResult, isMobileWorkspaceFilesEnvelopeWithinBudget } from "../../../../shared/src/mobile-workspace-files"
@@ -46,6 +49,12 @@ async function fixture(git = false) {
   }
   const scoped = (scope: MobileWorkspaceFilesScope) => ({ scopeId: scope.scopeId, expectedContextVersion: scope.contextVersion })
   return { root, home, xdg, command, service, audit, guard, call, open, scoped, setContextGate(value: () => Promise<void>) { contextGate = value }, setCwd(value: string) { cwd = value }, end() { alive = false }, advance(value: number) { time += value } }
+}
+async function worktreeConfigurationFixture(enabled = true) {
+  const f = await fixture(true), target = path.join(f.root, "file.txt")
+  await writeFile(target, "base\n"); await f.command("add", "."); await f.command("commit", "-qm", "base")
+  await f.command("config", "extensions.worktreeConfig", String(enabled)); await writeFile(target, "changed\n")
+  return f
 }
 type OperationData<R, O> = R extends { operation: infer Operation; data: infer Data } ? O extends Operation ? Data : never : never
 type FilesData<O> = OperationData<NonNullable<MobileIntentResult["workspaceFiles"]>, O>
@@ -126,6 +135,90 @@ describe("mobile workspace files safety and real reads", () => {
     dataFor(await f.call({ operation: "close", scopeId: scope.scopeId }), "close")
     const closed = dataFor(await f.call({ operation: "close", scopeId: scope.scopeId }), "close")
     expect(closed.status).toBe("alreadyClosed")
+  })
+
+  it.each([true, false])("reads a worktree configuration flag (%s) without a worktree config file", async enabled => {
+    const f = await worktreeConfigurationFixture(enabled)
+    await expect(lstat(path.join(f.root, ".git", "config.worktree"))).rejects.toMatchObject({ code: "ENOENT" })
+    const scope = await f.open("repository")
+    expect(scope.gitAvailable).toBe(true)
+    const changes = dataFor(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" }), "changes")
+    expect(changes.entries.map(entry => entry.relativePath)).toEqual(["file.txt"])
+    const diff = dataFor(await f.call({ operation: "diff", ...f.scoped(scope), changeId: changes.entries[0]!.changeId, changeSetVersion: changes.changeSetVersion }), "diff")
+    expect(diff.hunks.flatMap(hunk => hunk.lines).map(line => line.text)).toEqual(["base", "changed"])
+  })
+
+  it("reads a worktree configuration flag with a zero-byte worktree config file", async () => {
+    const f = await worktreeConfigurationFixture()
+    await writeFile(path.join(f.root, ".git", "config.worktree"), "")
+    const scope = await f.open("repository"), changes = dataFor(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" }), "changes")
+    expect(changes.entries.map(entry => entry.relativePath)).toEqual(["file.txt"])
+    expect(dataFor(await f.call({ operation: "diff", ...f.scoped(scope), changeId: changes.entries[0]!.changeId, changeSetVersion: changes.changeSetVersion }), "diff").hunks.flatMap(hunk => hunk.lines).map(line => line.text)).toEqual(["base", "changed"])
+  })
+
+  it("reads a linked worktree configuration flag with no config file in its actual Git directory", async () => {
+    const f = await worktreeConfigurationFixture(), worktree = path.join(f.root, "linked")
+    await f.command("worktree", "add", "-q", "-b", "config-review", worktree)
+    const gitDir = (await f.command("-C", worktree, "rev-parse", "--absolute-git-dir")).trim()
+    expect(gitDir).not.toBe(path.join(f.root, ".git"))
+    await expect(lstat(path.join(gitDir, "config.worktree"))).rejects.toMatchObject({ code: "ENOENT" })
+    await writeFile(path.join(worktree, "file.txt"), "linked changed\n"); f.setCwd(worktree)
+    const scope = await f.open("repository")
+    expect(scope).toMatchObject({ gitAvailable: true, rootDisplayName: "linked" })
+    const changes = dataFor(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" }), "changes")
+    expect(changes.entries.map(entry => entry.relativePath)).toEqual(["file.txt"])
+    const diff = dataFor(await f.call({ operation: "diff", ...f.scoped(scope), changeId: changes.entries[0]!.changeId, changeSetVersion: changes.changeSetVersion }), "diff")
+    expect(diff.hunks.flatMap(hunk => hunk.lines).map(line => line.text)).toEqual(["base", "linked changed"])
+  }, 20_000)
+
+  it.each(["ordinary", "include", "filter"] as const)("rejects nonempty %s worktree configuration before Git discovery while preserving directory browsing", async kind => {
+    const f = await worktreeConfigurationFixture(), config = path.join(f.root, ".git", "config.worktree")
+    const included = path.join(f.home, "unapproved-worktree-config"), canary = path.join(f.home, "worktree-filter-executed")
+    const canaryCommand = `touch '${canary.split(path.sep).join("/")}'`
+    await writeFile(included, `[filter "review"]\nclean = ${canaryCommand}\nprocess = ${canaryCommand}\n`)
+    const text = kind === "include" ? `[include]\npath = ${included.split(path.sep).join("/")}\n`
+      : kind === "filter" ? `[filter "review"]\nclean = ${canaryCommand}\nprocess = ${canaryCommand}\n` : "[core]\nautocrlf = false\n"
+    await writeFile(config, text); await writeFile(path.join(f.root, ".gitattributes"), "file.txt filter=review\n")
+    const runner = createControlledProcessRunner({ permissionGuard: f.guard, auditSink: f.audit })
+    const launched: string[][] = [], checks = vi.spyOn(f.guard, "check")
+    configureGitCommandSecurity({ processRunner: { run: request => { launched.push([...(request.args ?? [])]); return runner.run(request) } } })
+    const scope = await f.open()
+    expect(scope).toMatchObject({ gitAvailable: false, gitUnavailableReason: "git_unavailable" })
+    expect(dataFor(await f.call({ operation: "directory", ...f.scoped(scope), directoryEntryId: scope.rootEntryId }), "directory").entries.some(entry => entry.name === "file.txt")).toBe(true)
+    expect((await f.call({ operation: "open", scopeMode: "repository" })).code).toBe("git_unavailable")
+    expect(launched).toEqual([])
+    expect(checks.mock.calls.some(([request]) => request.resource === included)).toBe(false)
+    expect(vi.mocked(open).mock.calls.some(([file]) => String(file) === included)).toBe(false)
+    await expect(access(canary)).rejects.toMatchObject({ code: "ENOENT" })
+  }, 20_000)
+
+  it.each(["created", "filled"] as const)("rejects worktree configuration %s after opening before returning changes", async mutation => {
+    const f = await worktreeConfigurationFixture(), config = path.join(f.root, ".git", "config.worktree")
+    if (mutation === "filled") await writeFile(config, "")
+    const scope = await f.open("repository")
+    await writeFile(config, "[core]\nautocrlf = true\n")
+    expect(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" })).toMatchObject({ outcome: "rejected", code: "git_unavailable" })
+    expect(dataFor(await f.call({ operation: "directory", ...f.scoped(scope), directoryEntryId: scope.rootEntryId }), "directory").entries.some(entry => entry.name === "file.txt")).toBe(true)
+  })
+
+  it.each(["created", "filled"] as const)("rejects cached diff replay after worktree configuration is %s", async mutation => {
+    const f = await worktreeConfigurationFixture(), config = path.join(f.root, ".git", "config.worktree")
+    if (mutation === "filled") await writeFile(config, "")
+    const scope = await f.open("repository"), changes = dataFor(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" }), "changes")
+    const request = { ...base(), operation: "diff", ...f.scoped(scope), changeId: changes.entries[0]!.changeId, changeSetVersion: changes.changeSetVersion } as const
+    expect(dataFor(await f.service.runIntent(owner, request), "diff").contentState).toBe("available")
+    await writeFile(config, "[core]\nautocrlf = true\n")
+    expect(await f.service.runIntent(owner, request)).toMatchObject({ outcome: "rejected", code: "git_unavailable" })
+    expect(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" })).toMatchObject({ outcome: "rejected", code: "git_unavailable" })
+  }, 20_000)
+
+  it("revokes the owned scope when exact worktree configuration permission is denied", async () => {
+    const f = await worktreeConfigurationFixture(), config = path.join(f.root, ".git", "config.worktree")
+    const scope = await f.open("repository"), originalCheck = f.guard.check.bind(f.guard)
+    vi.spyOn(f.guard, "check").mockImplementation(request => request.resource === config ? Promise.resolve({ allowed: false, reason: "fixture denied exact worktree configuration" }) : originalCheck(request))
+    expect(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" })).toMatchObject({ outcome: "rejected", code: "permission_denied" })
+    expect(f.audit.list().some(record => record.outcome === "denied")).toBe(true)
+    expect(f.service.facts()).toMatchObject({ scopes: 0, activeReads: 0, resultBytes: 0 })
   })
 
   it("keeps ordinary browsing available and distinguishes blocked Git metadata from a non-repository", async () => {
@@ -422,6 +515,149 @@ describe("mobile workspace files safety and real reads", () => {
 // Each case includes repository setup and several native Git calls across multiple intents.
 // This total test timeout leaves the product's single-command and intent deadlines unchanged.
 describe("mobile workspace Git uses real bounded readonly repositories", { timeout: 20_000 }, () => {
+  it("reads multiple baselines beside thousands of unrelated loose objects within independent budgets", async () => {
+    const f = await fixture(true), names = Array.from({ length: 8 }, (_, index) => `file-${index}.txt`)
+    for (const name of names) await writeFile(path.join(f.root, name), `base ${name}\n`)
+    await f.command("add", "."); await f.command("commit", "-qm", "baselines")
+    const objectsRoot = path.join(f.root, ".git", "objects")
+    const objects = Array.from({ length: 4000 }, (_, index) => {
+      const body = Buffer.from(`unrelated object ${index}\n`), bytes = Buffer.concat([Buffer.from(`blob ${body.length}\0`), body])
+      return { oid: createHash("sha1").update(bytes).digest("hex"), bytes: deflateSync(bytes) }
+    })
+    await Promise.all([...new Set(objects.map(object => object.oid.slice(0, 2)))].map(prefix => mkdir(path.join(objectsRoot, prefix), { recursive: true })))
+    for (let offset = 0; offset < objects.length; offset += 64) await Promise.all(objects.slice(offset, offset + 64).map(object => writeFile(path.join(objectsRoot, object.oid.slice(0, 2), object.oid.slice(2)), object.bytes)))
+    expect((await f.command("cat-file", "-t", objects[0]!.oid)).trim()).toBe("blob")
+    for (const name of names) await writeFile(path.join(f.root, name), `changed ${name}\n`)
+    const indexBefore = await readFile(path.join(f.root, ".git", "index")), objectsBefore = (await readdir(objectsRoot, { recursive: true })).sort()
+    const scope = await f.open("repository"), runner = createControlledProcessRunner({ permissionGuard: f.guard, auditSink: f.audit })
+    let nativeActive = 0, maxNativeActive = 0, baselineLatencyMs = 0
+    configureGitCommandSecurity({ processRunner: { run: async request => {
+      nativeActive++; maxNativeActive = Math.max(maxNativeActive, nativeActive)
+      try {
+        if (request.args?.includes("cat-file")) {
+          const started = performance.now()
+          await new Promise(resolve => setTimeout(resolve, 100))
+          baselineLatencyMs += performance.now() - started
+        }
+        return await runner.run(request)
+      } finally { nativeActive-- }
+    } } })
+    const changes = dataFor(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" }), "changes")
+    expect(changes.entries.map(entry => entry.relativePath)).toEqual(names)
+    expect(changes.entries.every(entry => entry.contentState === "available")).toBe(true)
+    expect(baselineLatencyMs).toBeGreaterThan(L.searchRequestMs)
+    expect(maxNativeActive).toBe(1)
+    expect(await readFile(path.join(f.root, ".git", "index"))).toEqual(indexBefore)
+    expect((await readdir(objectsRoot, { recursive: true })).sort()).toEqual(objectsBefore)
+  }, 30_000)
+
+  it.skipIf(process.platform === "win32").each(["loose", "pack", "info"] as const)("still rejects a replaced %s object path before native blob reads", async kind => {
+    const f = await fixture(true), target = path.join(f.root, "file.txt")
+    await writeFile(target, "base\n"); await f.command("add", "."); await f.command("commit", "-qm", "base"); await writeFile(target, "changed\n")
+    const oid = (await f.command("rev-parse", "HEAD:file.txt")).trim(), objectsRoot = path.join(f.root, ".git", "objects")
+    const scope = await f.open("repository"), metadata = kind === "loose" ? path.join(objectsRoot, oid.slice(0, 2), oid.slice(2)) : path.join(objectsRoot, kind)
+    const indexBefore = await readFile(path.join(f.root, ".git", "index")), saved = path.join(f.home, "saved-metadata")
+    await rename(metadata, saved); await symlink(saved, metadata)
+    const runner = createControlledProcessRunner({ permissionGuard: f.guard, auditSink: f.audit })
+    let blobRead = false
+    configureGitCommandSecurity({ processRunner: { run: async request => {
+      if (request.args?.includes("cat-file")) blobRead = true
+      return runner.run(request)
+    } } })
+    expect(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" })).toMatchObject({ outcome: "rejected", code: "unsafe_path" })
+    expect(blobRead).toBe(false)
+    expect(await readFile(path.join(f.root, ".git", "index"))).toEqual(indexBefore)
+  })
+
+  it("cancels in-flight metadata prefetch without retaining a read slot", async () => {
+    const f = await fixture(true)
+    await writeFile(path.join(f.root, "file.txt"), "base\n"); await f.command("add", "."); await f.command("commit", "-qm", "base")
+    const scope = await f.open("repository"), original = filePaths.checkedNode
+    let entered!: () => void, resume!: () => void, held = false
+    const reached = new Promise<void>(resolve => { entered = resolve }), ready = new Promise<void>(resolve => { resume = resolve })
+    vi.spyOn(filePaths, "checkedNode").mockImplementation(async (...args) => {
+      if (!held && args[0] === path.join(f.root, ".git")) { held = true; entered(); await ready }
+      return original(...args)
+    })
+    const request = { ...base(), operation: "changes", ...f.scoped(scope), changeRange: "unstaged" } as const
+    const pending = f.service.runIntent(owner, request)
+    await reached
+    const cancelling = f.call({ operation: "cancel", scopeId: scope.scopeId, targetIntentId: request.intentId })
+    resume()
+    const [cancelled, result] = await Promise.all([cancelling, pending])
+    expect(cancelled.workspaceFiles?.data).toMatchObject({ status: "cancelled" })
+    expect(result).toMatchObject({ outcome: "rejected", code: "cancelled" })
+    expect(f.service.facts().activeReads).toBe(0)
+  })
+
+  it("still aborts a serial baseline at the whole-intent deadline", async () => {
+    const f = await fixture(true), target = path.join(f.root, "file.txt")
+    await writeFile(target, "base\n"); await f.command("add", "."); await f.command("commit", "-qm", "base"); await writeFile(target, "changed\n")
+    const scope = await f.open("repository"), runner = createControlledProcessRunner({ permissionGuard: f.guard, auditSink: f.audit })
+    let entered!: () => void, resume!: () => void, baselineSignal: AbortSignal | undefined
+    const reached = new Promise<void>(resolve => { entered = resolve }), ready = new Promise<void>(resolve => { resume = resolve })
+    configureGitCommandSecurity({ processRunner: { run: async request => {
+      if (!baselineSignal && request.args?.includes("cat-file")) { baselineSignal = request.abortSignal; entered(); await ready }
+      return runner.run(request)
+    } } })
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    const pending = f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" })
+    await reached
+    await vi.advanceTimersByTimeAsync(L.requestTimeoutMs)
+    expect(baselineSignal?.aborted).toBe(true)
+    resume()
+    const result = await pending
+    expect(result.outcome).toBe("rejected")
+    expect(["cancelled", "deadline_exceeded"]).toContain(result.code)
+    expect(f.service.facts().activeReads).toBe(0)
+  })
+
+  it("rechecks a later tracked file after submodule HEAD before replaying a cached diff", async () => {
+    const child = await fixture(true)
+    await writeFile(path.join(child.root, "child.txt"), "child\n"); await child.command("add", "."); await child.command("commit", "-qm", "child")
+    const f = await fixture(true), moduleRoot = path.join(f.root, "a-module"), target = path.join(f.root, "z-later.txt")
+    await f.command("-c", "protocol.file.allow=always", "submodule", "add", "-q", child.root, "a-module")
+    await writeFile(target, "base\n"); await f.command("add", "."); await f.command("commit", "-qm", "parent"); await writeFile(target, "first\n")
+    const scope = await f.open("repository"), changes = dataFor(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" }), "changes")
+    const change = changes.entries.find(entry => entry.relativePath === "z-later.txt")!
+    const request = { ...base(), operation: "diff", ...f.scoped(scope), changeId: change.changeId, changeSetVersion: changes.changeSetVersion } as const
+    expect(dataFor(await f.service.runIntent(owner, request), "diff").contentState).toBe("available")
+    const indexBefore = await readFile(path.join(f.root, ".git", "index")), runner = createControlledProcessRunner({ permissionGuard: f.guard, auditSink: f.audit })
+    let entered!: () => void, resume!: () => void, paused = false
+    const reached = new Promise<void>(resolve => { entered = resolve }), ready = new Promise<void>(resolve => { resume = resolve })
+    configureGitCommandSecurity({ processRunner: { run: async native => {
+      if (!paused && native.cwd === moduleRoot && native.args?.includes("rev-parse") && native.args.includes("HEAD")) { paused = true; entered(); await ready }
+      return runner.run(native)
+    } } })
+    const pending = f.service.runIntent(owner, request)
+    await reached
+    await writeFile(target, "second changed while submodule HEAD was pending\n")
+    resume()
+    expect(await pending).toMatchObject({ outcome: "rejected", code: "content_stale" })
+    expect(await readFile(path.join(f.root, ".git", "index"))).toEqual(indexBefore)
+  })
+
+  it.skipIf(process.platform === "win32")("rechecks a prefetched metadata directory before opening a replaced symlink", async () => {
+    const outside = await fixture(), f = await fixture(true)
+    await writeFile(path.join(f.root, "file.txt"), "base\n"); await f.command("add", "."); await f.command("commit", "-qm", "base")
+    await writeFile(path.join(outside.root, "private.txt"), "outside\n")
+    const scope = await f.open("repository"), gitDir = path.join(f.root, ".git"), objectsRoot = path.join(gitDir, "objects")
+    const original = filesystem.opendir
+    let replaced = false, openedReplacedDirectory = false
+    vi.spyOn(filesystem, "opendir").mockImplementation(async (...args) => {
+      if (!replaced && String(args[0]) === path.join(gitDir, "info")) {
+        replaced = true
+        await rename(objectsRoot, path.join(f.home, "saved-objects")); await symlink(outside.root, objectsRoot)
+      }
+      if (replaced && String(args[0]) === objectsRoot) openedReplacedDirectory = true
+      return original(...args)
+    })
+    expect(await f.call({ operation: "changes", ...f.scoped(scope), changeRange: "unstaged" })).toMatchObject({ outcome: "rejected", code: "unsafe_path" })
+    expect(replaced).toBe(true)
+    expect(openedReplacedDirectory).toBe(false)
+    expect(f.service.facts().activeReads).toBe(0)
+  })
+
   it("reports a binary index changing to text without contradictory preview metadata", async () => {
     const f = await fixture(true), target = path.join(f.root, "binary.dat")
     await writeFile(target, Buffer.from([65, 0, 66])); await f.command("add", "."); await f.command("commit", "-qm", "binary baseline")

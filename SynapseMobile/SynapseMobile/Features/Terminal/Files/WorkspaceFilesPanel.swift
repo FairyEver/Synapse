@@ -150,6 +150,7 @@ private struct WorkspaceFilesBrowser: View {
                     viewContext: viewContext, location: location, dynamicTypeSize: dynamicTypeSize,
                     estimateIntent: estimateIntent,
                     resetTokens: ["search": flow.searchQuery, "changes": flow.range.rawValue],
+                    separatorStyle: rows.contains { $0.kind == .gitUnavailable } ? .none : .singleLine,
                     selectedRowID: horizontalSizeClass == .regular ? flow.selected?.entry.id : nil,
                     keepsSelection: horizontalSizeClass == .regular,
                     heightClass: { row in

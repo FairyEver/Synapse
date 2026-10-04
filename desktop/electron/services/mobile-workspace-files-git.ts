@@ -6,7 +6,7 @@ import { structuredPatch } from "diff"
 import type { MobileWorkspaceFilesChange, MobileWorkspaceFilesChangeRange, MobileWorkspaceFilesContentState, MobileWorkspaceFilesDiffHunk, MobileWorkspaceFilesStatistics } from "@synapse/shared" with { "resolution-mode": "import" }
 import { createGitClientCommandRunner } from "./git-client/git-command-runner"
 import { MOBILE_READ_ONLY_CONFIG_QUERY } from "./git-command"
-import { readGitConfigurationSnapshot, readGitMetadataSnapshot, standardGitConfigurationLocations, standardGitConfigurationPaths, type MobileFilesGitConfigurationLocations } from "./mobile-workspace-files-git-config"
+import { ensureGitWorktreeConfigurationEmpty, readGitConfigurationSnapshot, readGitMetadataSnapshot, standardGitConfigurationLocations, standardGitConfigurationPaths, type MobileFilesGitConfigurationLocations } from "./mobile-workspace-files-git-config"
 import { checkedNode, decodeText, fileIdentity, isWithinRoot, MobileWorkspaceFilesError, readDiskFile, safeRelativePath, textLines, throwIfAborted, utf8Bytes } from "./mobile-workspace-files-paths"
 
 export const versionHash = (value: string): string => createHash("sha256").update(value).digest("hex")
@@ -38,7 +38,10 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
     const cwd = typeof location === "string" ? location : location.root
     // Only version/root discovery lacks a metadata context. Recheck on each
     // subsequent native command, including the gaps between cat-file readers.
-    if (context) await ensureAlternatesSafe(context, signal)
+    if (context) {
+      await ensureGitWorktreeConfigurationEmpty(context.gitDir, deps.authorizeConfiguration, signal)
+      await ensureAlternatesSafe(context, signal)
+    }
     let result
     try {
       result = await runner.run({ cwd, args, readOnlyIsolation: { authorizationToken: token }, abortSignal: signal, logFailure: false, timeoutMs: L.gitTimeoutMs, maxBufferBytes: L.maxGitStdoutBytes, ...extra })
@@ -50,7 +53,10 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
     }
     // Fail before returning source derived while metadata changed. These checks
     // do not make Git's own filesystem reads atomic against system-level races.
-    if (context) await ensureAlternatesSafe(context, signal)
+    if (context) {
+      await ensureGitWorktreeConfigurationEmpty(context.gitDir, deps.authorizeConfiguration, signal)
+      await ensureAlternatesSafe(context, signal)
+    }
     return result
   }
 
@@ -104,7 +110,7 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
     if (commonDir !== gitDir) await deps.authorizeMetadata(commonDir)
     const context = { root, gitDir, commonDir }
     // Local includes/alternates can read beyond the authorized Git metadata. Fail closed.
-    const config = await run(context, ["config", "--local", "--no-includes", "--get-regexp", "^(include\\.|includeif\\.|extensions\\.partialclone|extensions\\.worktreeconfig)"], token, signal, { acceptedExitCodes: [0, 1], maxBufferBytes: L.maxGitStderrBytes })
+    const config = await run(context, ["config", "--local", "--no-includes", "--get-regexp", "^(include\\.|includeif\\.|extensions\\.partialclone)"], token, signal, { acceptedExitCodes: [0, 1], maxBufferBytes: L.maxGitStderrBytes })
     if (config.stdout.trim()) throw new MobileWorkspaceFilesError("git_unavailable")
     await configuration(context, token, signal)
     return context
@@ -112,7 +118,7 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
 
   async function preflight(context: MobileFilesGitContext, scopeRoot: string, token: string, signal: AbortSignal) {
     await ensureMetadataSafe(context, signal)
-    const includes = await run(context, ["config", "--local", "--no-includes", "--get-regexp", "^(include\\.|includeif\\.|extensions\\.partialclone|extensions\\.worktreeconfig)"], token, signal, { acceptedExitCodes: [0, 1], maxBufferBytes: L.maxGitStderrBytes })
+    const includes = await run(context, ["config", "--local", "--no-includes", "--get-regexp", "^(include\\.|includeif\\.|extensions\\.partialclone)"], token, signal, { acceptedExitCodes: [0, 1], maxBufferBytes: L.maxGitStderrBytes })
     if (includes.stdout.trim()) throw new MobileWorkspaceFilesError("git_unavailable")
     const filters = await run(context, ["config", "--local", "--no-includes", "--get-regexp", "^filter\\..*\\.(clean|process)$"], token, signal, { acceptedExitCodes: [0, 1], maxBufferBytes: L.maxGitStderrBytes })
     if (filters.stdout.trim()) throw new MobileWorkspaceFilesError("external_filter_required")
@@ -202,10 +208,14 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
     const hash = createHash("sha256").update(head.stdout).update(index.wireVersion).update(attributes.version)
     const gitlinks = new Set(index.entries.filter(entry => entry.mode === "160000").map(entry => entry.relativePath))
     const started = performance.now()
-    for (const relative of [...new Set([...index.entries.map(entry => entry.relativePath), ...index.others])]) {
+    const paths = [...new Set([...index.entries.map(entry => entry.relativePath), ...index.others])]
+    for await (const { entry: relative, result } of prefetchedWorktreeNodes(scopeRoot, paths, value => value, signal, value => gitlinks.has(value))) {
       throwIfAborted(signal)
       if (performance.now() - started > L.searchRequestMs) throw new MobileWorkspaceFilesError("limit_exceeded")
-      try { hash.update(`${relative}:${(await checkedNode(scopeRoot, relative, true)).identity}`) }
+      try {
+        if (result.status === "rejected") throw result.reason
+        hash.update(`${relative}:${result.value.identity}`)
+      }
       catch (error) {
         if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") hash.update(`${relative}:absent`)
         else throw error
@@ -231,15 +241,18 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
     const stats = await run(context, [...common.slice(0, -2), "--numstat", "-z", ...common.slice(-2)], token, signal)
     byRange.staged = parseRaw(raw.stdout, context.root, scopeRoot, "staged", parseNumstat(stats.stdout))
     const index = await readIndex(context, scopeRoot, token, signal)
-    const conflicted = new Set<string>()
+    const conflicted = new Set(index.entries.filter(entry => entry.stage !== 0).map(entry => entry.relativePath))
     const started = performance.now()
-    for (const cached of index.entries) {
+    let baselineReadMs = 0
+    const workingEntries = index.entries.filter(entry => entry.stage === 0 && !entry.skipWorktree)
+    for await (const { entry: cached, result } of prefetchedWorktreeNodes(scopeRoot, workingEntries, entry => entry.relativePath, signal, entry => entry.mode === "160000")) {
       throwIfAborted(signal)
-      if (performance.now() - started > L.searchRequestMs) throw new MobileWorkspaceFilesError("limit_exceeded")
-      if (cached.stage !== 0) { conflicted.add(cached.relativePath); continue }
-      if (cached.skipWorktree) continue
+      if (performance.now() - started - baselineReadMs > L.searchRequestMs) throw new MobileWorkspaceFilesError("limit_exceeded")
       let node
-      try { node = await checkedNode(scopeRoot, cached.relativePath, true) }
+      try {
+        if (result.status === "rejected") throw result.reason
+        node = result.value
+      }
       catch (error) {
         if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
           byRange.unstaged.push(makeChange("unstaged", cached.relativePath, "deleted", cached.oid, null, cached.mode, "000000", null)); continue
@@ -265,11 +278,15 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
           const policy = worktreeTextPolicy(conversion.attributes.get(cached.relativePath), conversion.autoCrlf)
           let baseline: Buffer | undefined, baselineLimited = false
           const readBaseline = async () => {
+            const baselineStarted = performance.now()
             try { baseline = await readBlob(context, cached.oid, token, signal) }
             catch (error) {
               if (error instanceof MobileWorkspaceFilesError && error.code === "limit_exceeded") baselineLimited = true
               else throw error
             }
+            // Baseline safety scans and Git retain their own deadlines, plus
+            // the intent's hard timeout. They are not working-tree scan time.
+            finally { baselineReadMs += performance.now() - baselineStarted }
           }
           if ((policy === "auto" || policy === "unknown") && disk.bytes.includes(Buffer.from("\r\n"))) await readBaseline()
           // A giant baseline cannot equal this bounded disk side. Preserve raw
@@ -368,6 +385,29 @@ export function createMobileWorkspaceFilesGitAdapter(deps: {
   return { discover, collect, fingerprint, side, diff, ensureMetadataSafe }
 }
 
+const METADATA_READ_CONCURRENCY = 8
+async function checkedNodeBatch(root: string, paths: readonly string[], signal: AbortSignal, allowSpecial = false): Promise<PromiseSettledResult<Awaited<ReturnType<typeof checkedNode>>>[]> {
+  throwIfAborted(signal)
+  return await Promise.allSettled(paths.map(relative => checkedNode(root, relative, allowSpecial)))
+}
+
+/** Only metadata is prefetched; native Git, file bytes and results stay ordered. */
+async function* prefetchedWorktreeNodes<T>(root: string, entries: readonly T[], relativePath: (entry: T) => string, signal: AbortSignal, endsBatch: (entry: T) => boolean) {
+  for (let offset = 0; offset < entries.length;) {
+    let batch = entries.slice(offset, offset + METADATA_READ_CONCURRENCY)
+    // A child HEAD lookup can wait on native Git. Capture later paths only
+    // after it finishes, especially when this fingerprint validates a cache.
+    const boundary = batch.findIndex(endsBatch)
+    if (boundary >= 0) batch = batch.slice(0, boundary + 1)
+    const results = await checkedNodeBatch(root, batch.map(relativePath), signal, true)
+    for (let index = 0; index < batch.length; index++) {
+      throwIfAborted(signal)
+      yield { entry: batch[index]!, result: results[index]! }
+    }
+    offset += batch.length
+  }
+}
+
 async function ensureMetadataSafe(context: MobileFilesGitContext, signal: AbortSignal): Promise<void> {
   const started = performance.now()
   let visited = 0
@@ -376,16 +416,30 @@ async function ensureMetadataSafe(context: MobileFilesGitContext, signal: AbortS
     const pending = [...roots]
     while (pending.length) {
       throwIfAborted(signal)
-      if (++visited > L.maxDirectoryEntries || performance.now() - started > L.searchRequestMs) throw new MobileWorkspaceFilesError("limit_exceeded")
-      const relative = pending.pop() as string
-      let node
-      try { node = await checkedNode(base, relative) }
-      catch (error) { if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") continue; throw error }
-      if (node.kind === "directory") {
-        const directory = await opendir(node.path)
-        for await (const value of directory) {
-          if (pending.length + visited > L.maxDirectoryEntries) throw new MobileWorkspaceFilesError("limit_exceeded")
-          pending.push(path.join(relative, value.name))
+      const batch = pending.splice(Math.max(0, pending.length - METADATA_READ_CONCURRENCY), METADATA_READ_CONCURRENCY).reverse()
+      visited += batch.length
+      if (visited > L.maxDirectoryEntries || performance.now() - started > L.searchRequestMs) throw new MobileWorkspaceFilesError("limit_exceeded")
+      const results = await checkedNodeBatch(base, batch, signal)
+      for (let index = 0; index < batch.length; index++) {
+        throwIfAborted(signal)
+        if (performance.now() - started > L.searchRequestMs) throw new MobileWorkspaceFilesError("limit_exceeded")
+        const result = results[index]!, relative = batch[index]!
+        if (result.status === "rejected") {
+          const error = result.reason as unknown
+          if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") continue
+          throw error
+        }
+        const node = result.value
+        if (node.kind === "directory") {
+          // Earlier batch entries may have awaited directory enumeration.
+          // Restore the adjacent check/use boundary before opening this path.
+          const fresh = await checkedNode(base, relative)
+          if (fresh.kind !== "directory" || fresh.identity !== node.identity || fresh.ancestors.join("|") !== node.ancestors.join("|")) throw new MobileWorkspaceFilesError("content_stale")
+          const directory = await opendir(fresh.path)
+          for await (const value of directory) {
+            if (pending.length + visited > L.maxDirectoryEntries) throw new MobileWorkspaceFilesError("limit_exceeded")
+            pending.push(path.join(relative, value.name))
+          }
         }
       }
     }
