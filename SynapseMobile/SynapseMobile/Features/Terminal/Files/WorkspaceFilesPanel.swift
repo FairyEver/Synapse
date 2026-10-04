@@ -112,15 +112,24 @@ private struct WorkspaceFilesBrowser: View {
     let onReference: (String) async -> Bool
     let onClose: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var appliedLocationGeneration: Int?
 
     private var browserRole: WorkspaceFilesBrowserRole {
         flow.tab == .changed ? .changes : flow.searchQuery.isEmpty ? .tree : .search
     }
 
+    private var scrollsControls: Bool {
+        dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact
+    }
+
     var body: some View {
         let locationGeneration = flow.locationGeneration
-        return browserList
+        return VStack(spacing: 0) {
+            if !scrollsControls { browserControls }
+            browserList
+        }
             .onChange(of: locationGeneration) { _, _ in
                 guard flow.locationState == .located else { return }
                 preferredColumn = .sidebar
@@ -141,6 +150,8 @@ private struct WorkspaceFilesBrowser: View {
                     viewContext: viewContext, location: location, dynamicTypeSize: dynamicTypeSize,
                     estimateIntent: estimateIntent,
                     resetTokens: ["search": flow.searchQuery, "changes": flow.range.rawValue],
+                    selectedRowID: horizontalSizeClass == .regular ? flow.selected?.entry.id : nil,
+                    keepsSelection: horizontalSizeClass == .regular,
                     heightClass: { row in
                         guard row.entry?.isDirectory == false else { return nil }
                         switch row.kind {
@@ -152,8 +163,13 @@ private struct WorkspaceFilesBrowser: View {
                     cellIdentifier: { $0.accessibilityIdentifier },
                     nativeItem: nativeItem,
                     onPrimaryAction: { row in
-                        guard let entry = row.entry else { return }
-                        onSelect(.disk(entry))
+                        guard flow.canRead, let entry = row.entry else { flow.checkConnectivity(); return }
+                        if entry.isDirectory {
+                            Task {
+                                if row.kind == .search { await flow.locate(entry) }
+                                else { await flow.toggleDirectory(entry) }
+                            }
+                        } else { onSelect(.disk(entry)) }
                     },
                     menuItems: nativeMenuItems,
                     onMenuAction: performNativeMenuAction,
@@ -172,7 +188,11 @@ private struct WorkspaceFilesBrowser: View {
 
     private var nativeRows: [WorkspaceFilesNativeBrowserRow] {
         var rows: [WorkspaceFilesNativeBrowserRow] = []
-        if flow.scope != nil { rows.append(.control(.controls)) }
+        if flow.scope != nil, scrollsControls {
+            rows += [.control(.scopeControls), .control(.viewControls)]
+            if flow.tab == .changed, flow.scope?.gitAvailable == true { rows.append(.control(.changeControls)) }
+            if flow.phase == .offlineSnapshot { rows.append(.control(.snapshot)) }
+        }
         if flow.failure != nil { rows.append(.control(.failure)) }
         if flow.phase == .opening { rows.append(.control(.opening)); return rows }
         guard flow.scope != nil else { return rows }
@@ -185,14 +205,19 @@ private struct WorkspaceFilesBrowser: View {
                     rows.append(.control(.searchContinuation))
                 }
             } else {
-                rows += flow.treeRows.map { .entry($0.entry, kind: .tree, depth: $0.depth) }
+                for row in flow.treeRows {
+                    rows.append(.entry(row.entry, kind: .tree, depth: row.depth, isExpanded: flow.expanded.contains(row.entry.id)))
+                    if row.entry.isDirectory, let id = row.entry.entryId, flow.expanded.contains(id),
+                       flow.directoryIsLoading(id) || flow.directoryPage(id).map(hasContinuation) == true {
+                        rows.append(.directoryContinuation(row.entry, depth: row.depth + 1))
+                    }
+                }
                 if let root = flow.scope?.rootEntryId,
                    flow.directoryIsLoading(root) || flow.directoryPage(root).map({
                        flow.treeRows.isEmpty && $0.collectionComplete == true || hasContinuation($0)
                    }) == true { rows.append(.control(.rootContinuation)) }
             }
         } else if flow.scope?.gitAvailable == true {
-            rows.append(.control(.changeControls))
             rows += flow.changes.map { .entry($0, kind: .change) }
             if flow.isReading || flow.changes.isEmpty && flow.changesLastPage?.collectionComplete == true
                 || flow.changesLastPage.map(hasContinuation) == true {
@@ -208,13 +233,17 @@ private struct WorkspaceFilesBrowser: View {
 
     private func nativeItem(_ row: WorkspaceFilesNativeBrowserRow) -> WorkspaceFilesNativeEntry? {
         guard row.kind == .tree || row.kind == .search,
-              let entry = row.entry, !entry.isDirectory else { return nil }
+              let entry = row.entry else { return nil }
         let parent = (entry.relativePath as NSString).deletingLastPathComponent
         return WorkspaceFilesNativeEntry(title: entry.name,
             parentPath: row.kind == .search && !parent.isEmpty ? parent : nil,
-            systemImage: entry.kind == "symlink" ? "link" : "doc.text", depth: row.depth,
+            systemImage: entry.isDirectory ? "folder" : entry.kind == "symlink" ? "link" : "doc.text", depth: row.depth,
             accessibilityIdentifier: row.accessibilityIdentifier,
-            accessibilityLabel: WorkspaceFilesContentLabels.entry(entry.relativePath, directory: false))
+            accessibilityLabel: WorkspaceFilesContentLabels.entry(entry.relativePath, directory: entry.isDirectory),
+            isDirectory: entry.isDirectory, isExpanded: row.isExpanded,
+            actionsIdentifier: entry.isDirectory ? "files-directory-actions-\(entry.relativePath)" : nil,
+            primaryActionHint: row.kind == .search && entry.isDirectory ? "在目录中显示" : nil,
+            isEnabled: flow.canRead)
     }
 
     private func nativeMenuItems(_ row: WorkspaceFilesNativeBrowserRow) -> [WorkspaceFilesNativeMenuAction] {
@@ -242,12 +271,15 @@ private struct WorkspaceFilesBrowser: View {
 
     @ViewBuilder private func nativeContent(_ row: WorkspaceFilesNativeBrowserRow) -> some View {
         switch row.kind {
-        case .controls: VStack(alignment: .leading) { controls }
+        case .scopeControls: scopeControls
+        case .viewControls: viewControls
+        case .snapshot: snapshot
         case .failure: VStack(alignment: .leading) { failureContent }
         case .opening: ProgressView("等待电脑").accessibilityIdentifier("files-loading")
         case .gitUnavailable: ContentUnavailableView(gitUnavailableTitle, systemImage: "arrow.triangle.branch")
-        case .search: if let entry = row.entry { entryRow(entry, depth: row.depth, searchResult: true) }
-        case .tree: if let entry = row.entry { treeRow(WorkspaceFileTreeRow(entry: entry, depth: row.depth)) }
+        case .search, .tree: EmptyView() // Native list content owns file and directory rows.
+        case .directoryContinuation:
+            if let entry = row.entry { directoryContinuation(entry, depth: row.depth) }
         case .change: if let entry = row.entry { changeRow(entry) }
         case .changeControls: VStack(alignment: .leading) { changeControls }
         case .searchContinuation: VStack(alignment: .leading) { searchContinuation }
@@ -270,54 +302,111 @@ private struct WorkspaceFilesBrowser: View {
         }
     }
 
-    @ViewBuilder private var controls: some View {
+    /// Keep ordinary controls compact; at accessibility sizes they become
+    /// separate scrolling rows so they never consume the entire sheet viewport.
+    private var browserControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if flow.scope != nil {
+                scopeControls
+                viewControls
+                if flow.tab == .changed, flow.scope?.gitAvailable == true { changeControls }
+                snapshot
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var scopeControls: some View {
         if let scope = flow.scope {
-            Section {
-                WorkspaceFilesPickerRow("范围", value: flow.mode == .repository ? "仓库" : "当前目录",
-                    selection: Binding(get: { flow.mode }, set: { mode in Task { await flow.switchScope(mode) } })) {
-                    Text("当前目录").tag(WorkspaceFilesScopeMode.currentDirectory)
-                    Text("仓库").tag(WorkspaceFilesScopeMode.repository)
+            HStack(alignment: .center, spacing: 8) {
+                Menu {
+                    Picker("范围", selection: scopeSelection) {
+                        Text("当前目录").tag(WorkspaceFilesScopeMode.currentDirectory)
+                        Text("仓库").tag(WorkspaceFilesScopeMode.repository)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder").accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(scope.rootDisplayName).font(.subheadline.weight(.semibold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(flow.mode == .repository ? "仓库" : "当前目录")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Image(systemName: "chevron.down").font(.caption).accessibilityHidden(true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
+                .menuIndicator(.hidden)
                 .disabled(!flow.canRead || flow.isReading)
+                .accessibilityLabel("范围")
+                .accessibilityValue("\(flow.mode == .repository ? "仓库" : "当前目录")，\(scope.rootDisplayName)")
                 .accessibilityIdentifier("files-scope")
-                WorkspaceFilesSelectableValue(value: scope.rootDisplayName).font(.footnote.monospaced()).foregroundStyle(.primary)
-                    .accessibilityLabel("范围根目录，\(scope.rootDisplayName)")
-                WorkspaceFilesPickerRow("文件视图", value: flow.tab == .changed ? "已修改" : "所有文件",
-                    selection: Binding(get: { flow.tab }, set: { tab in Task { await flow.selectTab(tab) } })) {
-                    Text("已修改").tag(WorkspaceFilesTab.changed)
-                    Text("所有文件").tag(WorkspaceFilesTab.all)
-                }
-                .accessibilityIdentifier("files-tabs")
                 Button { insert(scope.rootEntryId) } label: {
-                    Text(scope.mode == .repository ? "插入仓库根目录" : "插入当前目录")
-                        .font(.body).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
+                    Label(scope.mode == .repository ? "插入仓库根目录" : "插入当前目录", systemImage: "text.insert")
+                        .labelStyle(.iconOnly)
+                        .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!flow.canRead || flow.isReferencing)
-                .accessibilityLabel(scope.mode == .repository ? "插入仓库根目录" : "插入当前目录")
                 .accessibilityIdentifier("files-root-reference")
-                if flow.phase == .offlineSnapshot, let readAt = flow.readAt,
-                   let date = ISO8601DateFormatter.parseWireTimestamp(readAt) {
-                    Text("离线快照 · \(date.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.footnote).foregroundStyle(.primary)
-                }
             }
         }
     }
 
-    private func treeRow(_ row: WorkspaceFileTreeRow) -> some View {
-        VStack(alignment: .leading) {
-            entryRow(row.entry, depth: row.depth)
-            if row.entry.isDirectory, let id = row.entry.entryId, flow.expanded.contains(id) {
+    private var scopeSelection: Binding<WorkspaceFilesScopeMode> {
+        Binding(get: { flow.mode }, set: { mode in Task { await flow.switchScope(mode) } })
+    }
+
+    @ViewBuilder private var viewControls: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            WorkspaceFilesPickerRow("文件视图", value: flow.tab == .changed ? "已修改" : "所有文件", selection: tabSelection) {
+                fileViews
+            }
+            .accessibilityIdentifier("files-tabs")
+        } else {
+            Picker("文件视图", selection: tabSelection) { fileViews }
+                .pickerStyle(.segmented)
+                .frame(minHeight: Metrics.minimumTapTarget)
+                .accessibilityIdentifier("files-tabs")
+        }
+    }
+
+    private var tabSelection: Binding<WorkspaceFilesTab> {
+        Binding(get: { flow.tab }, set: { tab in Task { await flow.selectTab(tab) } })
+    }
+
+    private var fileViews: some View {
+        Group {
+            Text("所有文件").tag(WorkspaceFilesTab.all)
+            Text("已修改").tag(WorkspaceFilesTab.changed)
+        }
+    }
+
+    @ViewBuilder private var snapshot: some View {
+        if flow.phase == .offlineSnapshot, let readAt = flow.readAt,
+           let date = ISO8601DateFormatter.parseWireTimestamp(readAt) {
+            Text("离线快照 · \(date.formatted(date: .abbreviated, time: .shortened))")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+
+    private func directoryContinuation(_ entry: WorkspaceFileEntry, depth: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let id = entry.entryId {
                 if flow.directoryIsLoading(id) { ProgressView("等待电脑") }
                 if let last = flow.directoryPage(id) {
                     continuation(last) { await flow.loadDirectory(id, next: true) }
-                        .accessibilityIdentifier("files-directory-next-\(row.entry.relativePath)")
+                        .accessibilityIdentifier("files-directory-next-\(entry.relativePath)")
                 }
             }
         }
+        .padding(.leading, CGFloat(min(depth, 12)) * 16)
     }
 
     @ViewBuilder private var searchContinuation: some View {
@@ -343,67 +432,6 @@ private struct WorkspaceFilesBrowser: View {
         }
     }
 
-    private func entryRow(_ entry: WorkspaceFileEntry, depth: Int, searchResult: Bool = false) -> some View {
-        let primaryButton = Button {
-            Task {
-                if searchResult, entry.isDirectory { await flow.locate(entry) }
-                else if entry.isDirectory { await flow.toggleDirectory(entry) }
-                else { onSelect(.disk(entry)) }
-            }
-        } label: {
-            HStack {
-                if entry.isDirectory {
-                    Image(systemName: flow.expanded.contains(entry.id) ? "chevron.down" : "chevron.right")
-                        .accessibilityHidden(true)
-                }
-                Image(systemName: entry.isDirectory ? "folder" : entry.kind == "symlink" ? "link" : "doc.text")
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading) {
-                    Text(entry.name).foregroundStyle(.primary)
-                    if searchResult, !(entry.relativePath as NSString).deletingLastPathComponent.isEmpty {
-                        Text((entry.relativePath as NSString).deletingLastPathComponent)
-                            .font(.footnote).foregroundStyle(.primary)
-                    }
-                }
-                Spacer()
-            }
-            .padding(.leading, CGFloat(min(depth, 12)) * 16)
-            .frame(minHeight: Metrics.minimumTapTarget)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("\(searchResult ? "files-search-result" : "files-entry")-\(entry.relativePath)")
-        .accessibilityLabel(WorkspaceFilesContentLabels.entry(entry.relativePath, directory: entry.isDirectory))
-        .accessibilityValue(flow.expanded.contains(entry.id) ? "已展开" : "已折叠", isEnabled: entry.isDirectory)
-        .contextMenu { entryActions(entry, searchResult: searchResult) }
-        return Group {
-            if entry.isDirectory, entry.canReference == true {
-                HStack {
-                    primaryButton
-                    Menu { entryActions(entry, searchResult: searchResult) } label: {
-                        Label("目录操作", systemImage: "ellipsis").labelStyle(.iconOnly)
-                            .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
-                    }
-                    .accessibilityLabel("\(WorkspaceFilesContentLabels.entry(entry.relativePath, directory: true))，操作")
-                    .accessibilityIdentifier("files-directory-actions-\(entry.relativePath)")
-                }
-            } else {
-                primaryButton
-            }
-        }
-    }
-
-    @ViewBuilder private func entryActions(_ entry: WorkspaceFileEntry, searchResult: Bool) -> some View {
-        if entry.canReference == true, let id = entry.entryId {
-            Button("插入到输入框", systemImage: "text.insert") { insert(id) }
-                .disabled(!flow.canRead || flow.isReferencing)
-        }
-        if searchResult {
-            Button("在目录中显示", systemImage: "folder") { Task { await flow.locate(entry) } }
-                .disabled(!flow.canRead || flow.locationState == .locating)
-        }
-    }
-
     private var gitUnavailableTitle: String {
         switch flow.scope?.gitUnavailableReason {
         case "not_git_repository": "这个目录不是 Git 仓库"
@@ -416,39 +444,48 @@ private struct WorkspaceFilesBrowser: View {
         }
     }
 
-    @ViewBuilder private var changeControls: some View {
-        WorkspaceFilesPickerRow("更改范围", value: flow.range == .staged ? "已暂存" : "未暂存",
-                    selection: Binding(get: { flow.range }, set: { value in Task { await flow.selectRange(value) } })) {
-                    Text("未暂存").tag(WorkspaceFilesChangeRange.unstaged)
-                    Text("已暂存").tag(WorkspaceFilesChangeRange.staged)
-                }
-                .accessibilityIdentifier("files-change-range")
-                if let summary = flow.rangeSummary {
-                    WorkspaceFilesStatistics(summary: summary)
-                }
+    private var changeControls: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            WorkspaceFilesPickerRow("更改范围", value: flow.range == .staged ? "已暂存" : "未暂存",
+                selection: Binding(get: { flow.range }, set: { value in Task { await flow.selectRange(value) } })) {
+                Text("未暂存").tag(WorkspaceFilesChangeRange.unstaged)
+                Text("已暂存").tag(WorkspaceFilesChangeRange.staged)
+            }
+            .accessibilityIdentifier("files-change-range")
+            if let summary = flow.rangeSummary { WorkspaceFilesStatistics(summary: summary) }
+        }
     }
 
     private func changeRow(_ entry: WorkspaceFileEntry) -> some View {
-                    Button { onSelect(.change(entry)) } label: {
-                        VStack(alignment: .leading) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(entry.name).foregroundStyle(.primary)
-                                Spacer()
-                                WorkspaceFilesCounts(additions: entry.additions, deletions: entry.deletions)
-                            }
-                            if !(entry.relativePath as NSString).deletingLastPathComponent.isEmpty {
-                                Text((entry.relativePath as NSString).deletingLastPathComponent)
-                                    .font(.footnote).foregroundStyle(.primary)
-                            }
-                            Text(WorkspaceFilesContentLabels.status(entry.status)).font(.footnote).foregroundStyle(.primary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
-                        .contentShape(Rectangle())
+        Button { onSelect(.change(entry)) } label: {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
+            layout {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.name).foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        let parent = (entry.relativePath as NSString).deletingLastPathComponent
+                        if !parent.isEmpty { Text(parent).font(.footnote).foregroundStyle(.secondary) }
+                        Text(WorkspaceFilesContentLabels.status(entry.status))
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("files-change-\(entry.relativePath)")
-                    .accessibilityLabel("\(WorkspaceFilesContentLabels.status(entry.status))，\(WorkspaceFilesContentLabels.entry(entry.relativePath, directory: false))")
-                    .accessibilityValue(WorkspaceFilesContentLabels.counts(entry.additions, entry.deletions))
+                } icon: {
+                    Image(systemName: "doc.text").foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                WorkspaceFilesCounts(additions: entry.additions, deletions: entry.deletions)
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("files-change-\(entry.relativePath)")
+        .accessibilityLabel("\(WorkspaceFilesContentLabels.status(entry.status))，\(WorkspaceFilesContentLabels.entry(entry.relativePath, directory: false))")
+        .accessibilityValue(WorkspaceFilesContentLabels.counts(entry.additions, entry.deletions))
+        .accessibilityAddTraits(horizontalSizeClass == .regular && flow.selected?.entry.id == entry.id ? .isSelected : [])
     }
 
     @ViewBuilder private var changeContinuation: some View {
@@ -482,12 +519,13 @@ private enum WorkspaceFilesBrowserRole: String { case tree, search, changes }
 /// Stable IDs identify the rendered item. Immutable metadata determines whether
 /// an existing native cell needs reconfiguration; all business state stays in Flow.
 private struct WorkspaceFilesNativeBrowserRow: Identifiable, Equatable {
-    enum Kind: String { case controls, failure, opening, gitUnavailable, tree, search, change,
-        changeControls, searchContinuation, rootContinuation, changeContinuation }
+    enum Kind: String { case scopeControls, viewControls, snapshot, failure, opening, gitUnavailable, tree, search, change,
+        changeControls, directoryContinuation, searchContinuation, rootContinuation, changeContinuation }
     let id: String
     let kind: Kind
     let entry: WorkspaceFileEntry?
     let depth: Int
+    let isExpanded: Bool
 
     var accessibilityIdentifier: String {
         guard let entry else { return id }
@@ -500,10 +538,13 @@ private struct WorkspaceFilesNativeBrowserRow: Identifiable, Equatable {
     }
 
     static func control(_ kind: Kind) -> Self {
-        Self(id: "files-browser-\(kind.rawValue)", kind: kind, entry: nil, depth: 0)
+        Self(id: "files-browser-\(kind.rawValue)", kind: kind, entry: nil, depth: 0, isExpanded: false)
     }
-    static func entry(_ entry: WorkspaceFileEntry, kind: Kind, depth: Int = 0) -> Self {
-        Self(id: entry.id, kind: kind, entry: entry, depth: depth)
+    static func directoryContinuation(_ entry: WorkspaceFileEntry, depth: Int) -> Self {
+        Self(id: "files-directory-continuation-\(entry.id)", kind: .directoryContinuation, entry: entry, depth: depth, isExpanded: false)
+    }
+    static func entry(_ entry: WorkspaceFileEntry, kind: Kind, depth: Int = 0, isExpanded: Bool = false) -> Self {
+        Self(id: entry.id, kind: kind, entry: entry, depth: depth, isExpanded: isExpanded)
     }
 }
 
@@ -528,13 +569,15 @@ private struct WorkspaceFilesPickerRow<Selection: Hashable, Content: View>: View
             ? AnyLayout(VStackLayout(alignment: .leading))
             : AnyLayout(HStackLayout())
         layout {
-            Text(title).fixedSize(horizontal: false, vertical: true)
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
             Menu {
                 Picker(title, selection: $selection) { content }
             } label: {
                 HStack {
                     Text(value).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
-                    Image(systemName: "chevron.up.chevron.down").accessibilityHidden(true)
+                    Image(systemName: "chevron.down").font(.caption).accessibilityHidden(true)
                 }
                 .font(.body)
                 .frame(minHeight: Metrics.minimumTapTarget)
@@ -544,6 +587,8 @@ private struct WorkspaceFilesPickerRow<Selection: Hashable, Content: View>: View
             .accessibilityValue(value)
             .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
         }
+        .frame(minHeight: Metrics.minimumTapTarget)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -628,6 +673,7 @@ private struct WorkspaceFilesSearch: ViewModifier {
     let isEnabled: Bool
     @Binding var query: String
     @Binding var isPresented: Bool
+    @State private var isComposing = false
     let submit: (String) -> Void
 
     @ViewBuilder func body(content: Content) -> some View {
@@ -647,35 +693,25 @@ private struct WorkspaceFilesSearch: ViewModifier {
             : AnyLayout(HStackLayout())
         return layout {
             HStack {
-                // Auxiliary sizes give the input its own full-width row.
-                // The decorative glyph yields space to the editable value.
-                if !dynamicTypeSize.isAccessibilitySize {
-                    Image(systemName: "magnifyingglass").accessibilityHidden(true)
-                }
-                WorkspaceFilesNativeSearchField(text: $query, isPresented: $isPresented, submit: submit)
+                WorkspaceFilesNativeSearchField(text: $query, isPresented: $isPresented, isComposing: $isComposing, submit: submit)
             }
             HStack {
-                if !query.isEmpty {
-                    Button { query = "" } label: {
-                        Label("清除搜索", systemImage: "xmark.circle.fill")
-                            .labelStyle(.iconOnly)
-                            .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
-                    }
-                    .accessibilityIdentifier("files-search-clear")
-                }
                 Button(action: performSearch) {
-                    Text("搜索").frame(minHeight: Metrics.minimumTapTarget)
+                    Text("搜索").frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
+                .disabled(isComposing || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("files-search-submit")
             }
         }
         .font(.body)
-        .padding()
-        .background(.background)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func performSearch() {
+        guard !isComposing else { return }
         let submittedQuery = query
         isPresented = false
         submit(submittedQuery)

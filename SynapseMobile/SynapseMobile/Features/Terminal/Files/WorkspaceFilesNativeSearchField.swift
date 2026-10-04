@@ -2,26 +2,38 @@ import SwiftUI
 import UIKit
 
 /// The file browser uses the native input's measured bounds.
-/// The surrounding search row owns its glyph, clear button and submit button.
+/// The system search field owns its glyph and appearance, with a native 44pt clear action.
 struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
     @Binding var text: String
     @Binding var isPresented: Bool
+    @Binding var isComposing: Bool
     let submit: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
+    func makeUIView(context: Context) -> UISearchTextField {
+        let field = UISearchTextField()
         field.placeholder = "搜索文件"
-        field.borderStyle = .roundedRect
         field.textColor = .label
         field.adjustsFontForContentSizeCategory = true
         field.autocapitalizationType = .none
         field.autocorrectionType = .no
         field.returnKeyType = .search
+        // A real accessory button preserves the standard search appearance
+        // while exposing the same 44pt bounds to touch and VoiceOver.
         field.clearButtonMode = .never
+        let clear = UIButton(type: .system)
+        clear.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
+        clear.tintColor = .secondaryLabel
+        clear.accessibilityLabel = "清除搜索"
+        clear.accessibilityIdentifier = "files-search-clear"
+        clear.frame.size = CGSize(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+        clear.addTarget(context.coordinator, action: #selector(Coordinator.clearSearch), for: .touchUpInside)
+        field.rightView = clear
+        field.rightViewMode = text.isEmpty ? .never : .always
+        context.coordinator.field = field
         field.accessibilityLabel = "搜索文件"
         field.accessibilityIdentifier = "files-search"
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -32,7 +44,7 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
         return field
     }
 
-    func updateUIView(_ field: UITextField, context: Context) {
+    func updateUIView(_ field: UISearchTextField, context: Context) {
         context.coordinator.parent = self
         updateControlEnvironment(field, context: context)
         updateFont(field, dynamicTypeSize: context.environment.dynamicTypeSize)
@@ -42,12 +54,13 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
             field.text = text
             field.invalidateIntrinsicContentSize()
         }
+        field.rightViewMode = text.isEmpty ? .never : .always
         if !isPresented, field.isFirstResponder {
             field.resignFirstResponder()
         }
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextField, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UISearchTextField, context: Context) -> CGSize? {
         // A size pass can precede updateUIView when Dynamic Type changes.
         updateFont(uiView, dynamicTypeSize: context.environment.dynamicTypeSize)
         let proposedWidth = proposal.width ?? uiView.intrinsicContentSize.width
@@ -58,19 +71,23 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
         return CGSize(width: proposedWidth, height: max(Metrics.minimumTapTarget, ceil(contentHeight)))
     }
 
-    static func dismantleUIView(_ uiView: UITextField, coordinator: Coordinator) {
+    static func dismantleUIView(_ uiView: UISearchTextField, coordinator: Coordinator) {
         uiView.delegate = nil
+        (uiView.rightView as? UIButton)?.removeTarget(coordinator, action: #selector(Coordinator.clearSearch), for: .touchUpInside)
+        uiView.rightView = nil
+        coordinator.field = nil
         uiView.removeTarget(coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)
         uiView.resignFirstResponder()
     }
 
-    private func updateControlEnvironment(_ field: UITextField, context: Context) {
+    private func updateControlEnvironment(_ field: UISearchTextField, context: Context) {
         field.isEnabled = context.environment.isEnabled
+        field.rightView?.isUserInteractionEnabled = context.environment.isEnabled
         field.semanticContentAttribute = context.environment.layoutDirection == .rightToLeft
             ? .forceRightToLeft : .forceLeftToRight
     }
 
-    private func updateFont(_ field: UITextField, dynamicTypeSize: DynamicTypeSize) {
+    private func updateFont(_ field: UISearchTextField, dynamicTypeSize: DynamicTypeSize) {
         let traits = field.traitCollection.modifyingTraits {
             $0.preferredContentSizeCategory = UIContentSizeCategory(dynamicTypeSize)
         }
@@ -84,14 +101,33 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
 
     @MainActor final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: WorkspaceFilesNativeSearchField
+        weak var field: UISearchTextField?
 
         init(parent: WorkspaceFilesNativeSearchField) {
             self.parent = parent
         }
 
+        @objc func clearSearch() {
+            guard let field, field.isEnabled else { return }
+            field.text = ""
+            field.rightViewMode = .never
+            parent.text = ""
+            updateCompositionState(field)
+        }
+
         @objc func editingChanged(_ field: UITextField) {
+            updateCompositionState(field)
             let value = field.text ?? ""
             if parent.text != value { parent.text = value }
+        }
+
+        func textFieldDidChangeSelection(_ textField: UITextField) {
+            updateCompositionState(textField)
+        }
+
+        private func updateCompositionState(_ field: UITextField) {
+            let composing = field.markedTextRange != nil
+            if parent.isComposing != composing { parent.isComposing = composing }
         }
 
         func textFieldDidBeginEditing(_ textField: UITextField) {
@@ -99,6 +135,7 @@ struct WorkspaceFilesNativeSearchField: UIViewRepresentable {
         }
 
         func textFieldDidEndEditing(_ textField: UITextField) {
+            if parent.isComposing { parent.isComposing = false }
             if parent.isPresented { parent.isPresented = false }
         }
 

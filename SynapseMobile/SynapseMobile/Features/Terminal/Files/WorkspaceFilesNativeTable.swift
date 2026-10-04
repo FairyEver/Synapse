@@ -28,6 +28,8 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
     let dynamicTypeSize: DynamicTypeSize
     var estimateIntent: Int? = nil
     var resetTokens: [String: String] = [:]
+    var selectedRowID: String? = nil
+    var keepsSelection = false
     let heightClass: (Row) -> WorkspaceFilesNativeHeightClass?
     let cellIdentifier: (Row) -> String
     let nativeItem: (Row) -> WorkspaceFilesNativeEntry?
@@ -93,9 +95,13 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
         private var heightClass: ((Row) -> WorkspaceFilesNativeHeightClass?)?
         private var cellIdentifier: ((Row) -> String)?
         private var nativeItems: [String: WorkspaceFilesNativeEntry] = [:]
+        private var configuredNativeItems: [String: WorkspaceFilesNativeEntry] = [:]
+        private var configuredNativeContext: NativeContext?
         private var onPrimaryAction: ((Row) -> Void)?
         private var menuItems: ((Row) -> [WorkspaceFilesNativeMenuAction])?
         private var onMenuAction: ((Row, String) -> Void)?
+        private var selectedRowID: String?
+        private var keepsSelection = false
         private var nativeFittedGeometry: [String: NativeFittedGeometry] = [:]
         private var hostedGeometry: [String: WorkspaceFilesNativeGeometry] = [:]
         private var fittedGeometry: [String: FittedGeometry] = [:]
@@ -112,6 +118,11 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             let width: CGFloat
             let category: UIContentSizeCategory
             let height: CGFloat
+        }
+        private struct NativeContext: Equatable {
+            let owner: String?
+            let view: String?
+            let isEnabled: Bool
         }
         private struct FontRestore {
             let rowID: String
@@ -186,7 +197,13 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                 if let entry = self.nativeItems[rowID] {
                     let cell = table.dequeueReusableCell(
                         withIdentifier: WorkspaceFilesNativeEntryCell.reuseIdentifier, for: indexPath)
-                    if let nativeCell = cell as? WorkspaceFilesNativeEntryCell { nativeCell.configure(entry) }
+                    if let nativeCell = cell as? WorkspaceFilesNativeEntryCell,
+                       let owner = self.ownerContext, let view = self.viewContext {
+                        let menu = entry.isDirectory ? self.directoryMenu(rowID: rowID, owner: owner, view: view) : nil
+                        nativeCell.configure(entry, menu: menu, isEnabled: source.isEnabled) { [weak self] in
+                            self?.performPrimaryAction(rowID: rowID, owner: owner, view: view) ?? false
+                        }
+                    }
                     return cell
                 }
                 let cell = table.dequeueReusableCell(withIdentifier: "workspace-file", for: indexPath)
@@ -194,6 +211,8 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                 cell.contentConfiguration = UIHostingConfiguration {
                     WorkspaceFilesNativeHostedRow(row: row, source: source)
                 }
+                .margins(.vertical, 0)
+                cell.backgroundConfiguration = cell.defaultBackgroundConfiguration()
                 return cell
             }
         }
@@ -209,6 +228,12 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             let locationChanged = ownerChanged || viewChanged || currentLocation != input.location
             if !ownerChanged, viewChanged { rememberLeadingRow() }
             if ownerChanged { readingAnchors.removeAll() }
+            if ownerChanged {
+                for indexPath in table?.indexPathsForSelectedRows ?? [] {
+                    table?.deselectRow(at: indexPath, animated: false)
+                }
+                selectedRowID = nil
+            }
             for context in changedResetContexts { readingAnchors.removeValue(forKey: context) }
 
             let source: WorkspaceFilesNativeHostingSource<Row, Content>
@@ -241,6 +266,8 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             onPrimaryAction = input.onPrimaryAction
             menuItems = input.menuItems
             onMenuAction = input.onMenuAction
+            keepsSelection = input.keepsSelection
+            selectedRowID = input.keepsSelection ? input.selectedRowID : nil
             onLocationVisible = input.onLocationVisible
             rowIDs = input.rows.map(\.id)
             rowsByID = Dictionary(uniqueKeysWithValues: input.rows.map { ($0.id, $0) })
@@ -295,11 +322,16 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             guard !applyingSnapshot, let dataSource else { return }
             let existingIDs = dataSource.snapshot().itemIdentifiers
             let existingSet = Set(existingIDs)
+            let nativeContext = NativeContext(owner: ownerContext, view: viewContext,
+                isEnabled: hostingSource?.isEnabled == true)
             let changedIDs = rowIDs.filter {
-                existingSet.contains($0) && configuredRowsByID[$0] != rowsByID[$0]
+                existingSet.contains($0) && (configuredRowsByID[$0] != rowsByID[$0]
+                    || configuredNativeItems[$0] != nativeItems[$0]
+                    || nativeItems[$0] != nil && configuredNativeContext != nativeContext)
             }
             guard existingIDs != rowIDs || !changedIDs.isEmpty else {
                 snapshotMatchesRows = true
+                restoreSelectionIfNeeded()
                 performPendingMovement()
                 return
             }
@@ -308,12 +340,26 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             snapshot.appendItems(rowIDs, toSection: 0)
             snapshot.reconfigureItems(changedIDs)
             configuredRowsByID = rowsByID
+            configuredNativeItems = nativeItems
+            configuredNativeContext = nativeContext
             applyingSnapshot = true
             dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
                 guard let self else { return }
                 self.applyingSnapshot = false
                 // A newer update may have arrived while UIKit applied the snapshot.
                 self.applySnapshotIfNeeded()
+            }
+        }
+
+        private func restoreSelectionIfNeeded() {
+            guard !applyingSnapshot, snapshotMatchesRows, let table, let dataSource else { return }
+            let target = selectedRowID.flatMap { rowsByID[$0] != nil ? dataSource.indexPath(for: $0) : nil }
+            let selected = table.indexPathsForSelectedRows ?? []
+            for indexPath in selected where indexPath != target {
+                table.deselectRow(at: indexPath, animated: false)
+            }
+            if let target, !selected.contains(target) {
+                table.selectRow(at: target, animated: false, scrollPosition: .none)
             }
         }
 
@@ -700,21 +746,49 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
 
         func tableView(_ tableView: UITableView, willSelectRowAt indexPath: IndexPath) -> IndexPath? {
             guard hostingSource?.isEnabled == true,
-                  let rowID = dataSource?.itemIdentifier(for: indexPath), nativeItems[rowID] != nil else { return nil }
+                  let rowID = dataSource?.itemIdentifier(for: indexPath),
+                  nativeItems[rowID]?.isEnabled == true else { return nil }
             return indexPath
         }
 
         func tableView(_ tableView: UITableView, canPerformPrimaryActionForRowAt indexPath: IndexPath) -> Bool {
             guard let rowID = dataSource?.itemIdentifier(for: indexPath) else { return false }
-            return hostingSource?.isEnabled == true && nativeItems[rowID] != nil && rowsByID[rowID] != nil
+            return hostingSource?.isEnabled == true && nativeItems[rowID]?.isEnabled == true && rowsByID[rowID] != nil
         }
 
         func tableView(_ tableView: UITableView, performPrimaryActionForRowAt indexPath: IndexPath) {
-            tableView.deselectRow(at: indexPath, animated: false)
-            guard hostingSource?.isEnabled == true,
-                  let rowID = dataSource?.itemIdentifier(for: indexPath),
-                  nativeItems[rowID] != nil, let row = rowsByID[rowID] else { return }
+            if !keepsSelection { tableView.deselectRow(at: indexPath, animated: false) }
+            guard let rowID = dataSource?.itemIdentifier(for: indexPath),
+                  let owner = ownerContext, let view = viewContext else { return }
+            _ = performPrimaryAction(rowID: rowID, owner: owner, view: view)
+        }
+
+        private func performPrimaryAction(rowID: String, owner: String, view: String) -> Bool {
+            guard hostingSource?.isEnabled == true, ownerContext == owner, viewContext == view,
+                  nativeItems[rowID]?.isEnabled == true, let row = rowsByID[rowID] else { return false }
             onPrimaryAction?(row)
+            return true
+        }
+
+        private func directoryMenu(rowID: String, owner: String, view: String) -> UIMenu {
+            UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] completion in
+                completion(self?.currentMenuActions(rowID: rowID, owner: owner, view: view) ?? [])
+            }])
+        }
+
+        private func currentMenuActions(rowID: String, owner: String, view: String) -> [UIMenuElement] {
+            guard hostingSource?.isEnabled == true, ownerContext == owner, viewContext == view,
+                  nativeItems[rowID] != nil, let row = rowsByID[rowID] else { return [] }
+            return (menuItems?(row) ?? []).map { item in
+                UIAction(title: item.title, image: UIImage(systemName: item.symbol),
+                         attributes: item.isEnabled ? [] : [.disabled]) { [weak self] _ in
+                    guard let self, self.hostingSource?.isEnabled == true,
+                          self.ownerContext == owner, self.viewContext == view,
+                          self.nativeItems[rowID] != nil, let currentRow = self.rowsByID[rowID],
+                          self.menuItems?(currentRow).first(where: { $0.id == item.id })?.isEnabled == true else { return }
+                    self.onMenuAction?(currentRow, item.id)
+                }
+            }
         }
 
         func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath,
@@ -725,18 +799,8 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             return UIContextMenuConfiguration(identifier: rowID as NSString, previewProvider: nil) { [weak self] _ in
                 guard let self, self.hostingSource?.isEnabled == true,
                       self.ownerContext == owner, self.viewContext == view,
-                      self.nativeItems[rowID] != nil, let row = self.rowsByID[rowID] else { return nil }
-                let actions = (self.menuItems?(row) ?? []).map { item in
-                    UIAction(title: item.title, image: UIImage(systemName: item.symbol),
-                             attributes: item.isEnabled ? [] : [.disabled]) { [weak self] _ in
-                        guard let self, self.hostingSource?.isEnabled == true,
-                              self.ownerContext == owner, self.viewContext == view,
-                              self.nativeItems[rowID] != nil, let currentRow = self.rowsByID[rowID],
-                              self.menuItems?(currentRow).first(where: { $0.id == item.id })?.isEnabled == true else { return }
-                        self.onMenuAction?(currentRow, item.id)
-                    }
-                }
-                return UIMenu(children: actions)
+                      self.nativeItems[rowID] != nil, self.rowsByID[rowID] != nil else { return nil }
+                return UIMenu(children: self.currentMenuActions(rowID: rowID, owner: owner, view: view))
             }
         }
 
@@ -753,6 +817,10 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             fittedGeometry.removeAll()
             nativeFittedGeometry.removeAll()
             nativeItems.removeAll()
+            configuredNativeItems.removeAll()
+            configuredNativeContext = nil
+            selectedRowID = nil
+            keepsSelection = false
             onPrimaryAction = nil
             menuItems = nil
             onMenuAction = nil

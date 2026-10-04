@@ -37,6 +37,14 @@ final class WorkspaceFilesUITests: XCTestCase {
     func testBrowseSearchPreviewAndNativeLayout() throws {
         let app = openPreparedTerminal()
         openFiles(in: app)
+        if app.frame.height > app.frame.width, app.segmentedControls["files-tabs"].exists {
+            let browser = app.tables["files-browser"].firstMatch
+            let firstEntry = browser.cells.matching(NSPredicate(format: "identifier BEGINSWITH 'files-entry-'" )).firstMatch
+            XCTAssertTrue(firstEntry.waitForExistence(timeout: 15) && firstEntry.isHittable,
+                "The ordinary portrait sheet must show file content before expansion")
+            XCTAssertTrue(browser.frame.contains(firstEntry.frame), "The first file row must be fully visible")
+            capture(app, name: "files-initial-content-density")
+        }
         expandSheet(in: app)
         let notes = browserEntry("files-entry-nested", in: app)
         reveal(notes, in: app)
@@ -51,31 +59,48 @@ final class WorkspaceFilesUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap(); search.typeText("notes")
         let submit = app.buttons["files-search-submit"].firstMatch
-        if submit.exists { submit.tap() } else { search.typeText("\n") }
+        XCTAssertTrue(submit.waitForExistence(timeout: 5) && submit.isHittable)
+        submit.tap()
         var result = browserEntry("files-search-result-nested/notes.txt", in: app, file: true)
         XCTAssertTrue(result.waitForExistence(timeout: 15), "The submitted search must return a result row")
         XCTAssertTrue(result.label.contains("目录，nested"), "The result must describe its parent directory")
         capture(app, name: "files-search-results-parent-path")
         try audit(app)
-        if submit.exists {
-            app.buttons["files-search-clear"].firstMatch.tap()
-            XCTAssertTrue(browserEntry("files-entry-nested", in: app).waitForExistence(timeout: 15))
-            XCTAssertTrue(["", "搜索文件"].contains(search.value as? String ?? ""))
-            search.tap(); search.typeText("notes")
-            submit.tap()
-            XCTAssertTrue(result.waitForExistence(timeout: 15))
-            app.buttons["files-scope"].firstMatch.tap()
-            app.buttons["仓库"].firstMatch.tap()
-            XCTAssertTrue(browserEntry("files-entry-nested", in: app).waitForExistence(timeout: 15))
-            search = searchInput(in: app)
-            XCTAssertTrue(["", "搜索文件"].contains(search.value as? String ?? ""))
-            XCTAssertFalse(app.keyboards.firstMatch.exists, "Scope reset must dismiss the search focus")
-            search.tap(); search.typeText("notes\n")
-            result = browserEntry("files-search-result-nested/notes.txt", in: app, file: true)
-            XCTAssertTrue(result.waitForExistence(timeout: 15))
-            XCTAssertTrue(result.label.contains("目录，nested"))
-            capture(app, name: "files-search-results-after-scope-reset")
-        }
+        let clear = app.buttons["files-search-clear"].firstMatch
+        XCTAssertTrue(clear.waitForExistence(timeout: 5) && clear.isHittable)
+        clear.tap()
+        XCTAssertTrue(browserEntry("files-entry-nested", in: app).waitForExistence(timeout: 15))
+        XCTAssertTrue(["", "搜索文件"].contains(search.value as? String ?? ""))
+
+        selectFileView("已修改", in: app)
+        let changedFile = app.tables["files-browser"].buttons["files-change-review.txt"].firstMatch
+        XCTAssertTrue(changedFile.waitForExistence(timeout: 15), "The changed view must show the real fixture's modified file")
+        XCTAssertFalse(browserEntry("files-entry-nested", in: app).exists)
+        capture(app, name: "files-view-changed")
+        selectFileView("所有文件", in: app)
+        XCTAssertTrue(browserEntry("files-entry-nested", in: app).waitForExistence(timeout: 15))
+        XCTAssertFalse(changedFile.exists, "Returning to all files must restore the directory tree")
+        capture(app, name: "files-view-all")
+
+        search = searchInput(in: app)
+        search.tap(); search.typeText("notes")
+        submit.tap()
+        XCTAssertTrue(result.waitForExistence(timeout: 15))
+        let scope = app.buttons["files-scope"].firstMatch
+        XCTAssertTrue(scope.waitForExistence(timeout: 5))
+        if !scope.isHittable { reveal(scope, in: app, towardStart: true) }
+        XCTAssertTrue(scope.isHittable)
+        scope.tap()
+        tapContextAction("仓库", in: app)
+        XCTAssertTrue(browserEntry("files-entry-nested", in: app).waitForExistence(timeout: 15))
+        search = searchInput(in: app)
+        XCTAssertTrue(["", "搜索文件"].contains(search.value as? String ?? ""))
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "Scope reset must dismiss the search focus")
+        search.tap(); search.typeText("notes\n")
+        result = browserEntry("files-search-result-nested/notes.txt", in: app, file: true)
+        XCTAssertTrue(result.waitForExistence(timeout: 15))
+        XCTAssertTrue(result.label.contains("目录，nested"))
+        capture(app, name: "files-search-results-after-scope-reset")
         result.press(forDuration: 1)
         capture(app, name: "files-search-context-menu")
         tapContextAction("在目录中显示", in: app)
@@ -160,15 +185,15 @@ final class WorkspaceFilesUITests: XCTestCase {
         XCTAssertTrue(content(in: app).descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "WORKTREE")).firstMatch.waitForExistence(timeout: 15))
         capture(app, name: "files-unstaged")
         try audit(app)
-        let range = app.tables["files-browser"].buttons["files-change-range"].firstMatch
+        let range = app.buttons["files-change-range"].firstMatch
         if !range.isHittable {
             let back = app.navigationBars.buttons["工作区文件"].firstMatch
             if back.exists { back.tap() }
-            else { reveal(range, in: app, towardStart: true) }
+            if !range.isHittable { reveal(range, in: app, towardStart: true) }
         }
-        XCTAssertTrue(range.waitForExistence(timeout: 5))
+        XCTAssertTrue(range.waitForExistence(timeout: 5) && range.isHittable)
         range.tap()
-        app.buttons["已暂存"].firstMatch.tap()
+        tapContextAction("已暂存", in: app)
         XCTAssertTrue(review.waitForExistence(timeout: 15)); review.tap()
         XCTAssertTrue(content(in: app).descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "BASE")).firstMatch.waitForExistence(timeout: 15))
         XCTAssertTrue(content(in: app).descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "STAGED")).firstMatch.waitForExistence(timeout: 15))
@@ -341,8 +366,10 @@ final class WorkspaceFilesUITests: XCTestCase {
         let directory = browserEntry("files-entry-nested", in: app)
         expandSheet(in: app)
         let rootReference = app.buttons["files-root-reference"].firstMatch
-        reveal(rootReference, in: app)
         XCTAssertTrue(rootReference.waitForExistence(timeout: 15))
+        if !rootReference.isHittable { reveal(rootReference, in: app, towardStart: true) }
+        XCTAssertTrue(rootReference.isHittable,
+            "The insertion action must remain reachable in the header or accessibility rows")
         capture(app, name: "files-root")
         checkLastFile(in: app)
         checkLongTitle(in: app)
@@ -618,11 +645,11 @@ final class WorkspaceFilesUITests: XCTestCase {
         element.frame
     }
 
-    private func browserEntry(_ identifier: String, in app: XCUIApplication, file: Bool = false) -> XCUIElement {
-        // Native file cells own the primary action. Directory cells retain
-        // their hosted button and separate menu/continuation controls.
+    private func browserEntry(_ identifier: String, in app: XCUIApplication, file _: Bool = false) -> XCUIElement {
+        // Native cells own touch actions. Directories expose their independent
+        // semantic primary button alongside the accessory menu.
         let cell = app.tables["files-browser"].cells[identifier].firstMatch
-        return file ? cell : cell.buttons[identifier].firstMatch
+        return cell.buttons[identifier].firstMatch
     }
 
     private func tapContextAction(_ title: String, in app: XCUIApplication) {
@@ -642,7 +669,26 @@ final class WorkspaceFilesUITests: XCTestCase {
     }
 
     private func searchInput(in app: XCUIApplication) -> XCUIElement {
-        return app.textFields["files-search"].firstMatch
+        // UISearchTextField and UITextField can have different native element
+        // types; the stable identifier selects the actual editable control.
+        app.descendants(matching: .any)["files-search"].firstMatch
+    }
+
+    private func selectFileView(_ title: String, in app: XCUIApplication) {
+        let control = app.descendants(matching: .any)["files-tabs"].firstMatch
+        XCTAssertTrue(control.waitForExistence(timeout: 5))
+        if !control.isHittable { reveal(control, in: app, towardStart: true) }
+        XCTAssertTrue(control.isHittable)
+        let segmented = app.segmentedControls["files-tabs"].firstMatch
+        if segmented.exists {
+            let option = segmented.buttons[title].firstMatch
+            XCTAssertTrue(option.waitForExistence(timeout: 5) && option.isHittable)
+            option.tap()
+        } else {
+            // Accessibility text sizes use the same choices in a native menu.
+            control.tap()
+            tapContextAction(title, in: app)
+        }
     }
 
     private func audit(_ app: XCUIApplication) throws {
