@@ -1,12 +1,12 @@
 # 工作区文件 V1 验收记录
 
-日期：2026-10-03～04。状态：已完成下列限定场景的功能与Apple界面验收；原自动报告与未覆盖范围分别保留。v1.0.57 CI与正式桌面Release已成功，说明已归档；完整发版正在执行TestFlight、最终服务器部署与站内信。
+日期：2026-10-03～04。状态：已完成下列限定场景的功能与Apple界面验收；原自动报告与未覆盖范围分别保留。v1.0.57完整发版完成：CI、正式桌面Release与说明归档、iOS 1.0.57（71）上传、最终服务器部署、42账号站内信入库均成功；Apple后续处理与设备显示不作为上传返回成功的替代证据。
 
 规格：[V1 spec](../specs/2026-10-03-mobile-workspace-files-and-changes-spec.md)。计划：[P00–P09](2026-10-03-mobile-workspace-files-and-changes-plan.md)。本记录区分真实运行证据、单元/静态检查和未覆盖场景，不以跳过或编译成功代替验收。
 
 ## 当前冻结产物的验收状态
 
-后端最终读取产物通过109专项、typecheck、架构约束与真实两跳15项检查；iOS最终业务覆盖960项（分批去重，不是同批）。以下四设备完整功能矩阵后，原生行触选发现的实际低对比/持续空行已由R123修复，并完成四外观/字号组合、同App外观转换及独立原片/像素复核；Pad18最大字号两层Git通过自然AX现场与独立原片确认。最后R123 phone18受影响Browse/Composer两项109.842秒、0失败/0跳过通过。当前未发现剩余确定产品P1/P2，进行本地功能提交与完整发版。原Pad自动ALL失败、r139自动proxy命中失败与物理设备/性能取证边界保持，不声明全App无障碍通过或SDK根因。
+后端最终读取产物通过109专项、typecheck、架构约束与真实两跳15项检查；iOS最终业务覆盖960项（分批去重，不是同批）。以下四设备完整功能矩阵后，原生行触选发现的实际低对比/持续空行已由R123修复，并完成四外观/字号组合、同App外观转换及独立原片/像素复核；Pad18最大字号两层Git通过自然AX现场与独立原片确认。最后R123 phone18受影响Browse/Composer两项109.842秒、0失败/0跳过通过。当前未发现剩余确定产品P1/P2，功能提交与完整发版已完成；最终iOS两处空析构编译规避及更新指纹见发布记录。原Pad自动ALL失败、r139自动proxy命中失败与物理设备/性能取证边界保持，不声明全App无障碍通过或界面SDK根因。
 
 | 平台/场景 | 当前实际结果 | 原始日志 |
 | --- | --- | --- |
@@ -18,7 +18,7 @@
 | iOS 18实际最大字号/深色搜索 | r113：57.485秒通过；实际滚到结果、打开UTF-8、菜单关闭与Reveal可达，全项审计无报告 | `/tmp/synapse-files-ui-iphone18-r113-max-dark-search.log` |
 | iOS 26实际最大字号/深色引用与搜索 | r116：两项通过，0失败/跳过，195.069秒；长中文文件名、末行、菜单/关闭、两种引用与Reveal真实完成，全项审计无报告 | `/tmp/synapse-files-ui-iphone26-r116-max-dark.log` |
 
-桌面v1.0.57已发布，完整发版收尾见下方发布记录。iPad原始自动审计失败仍保留；相应实际字号/色对与菜单已经取得独立复核，不由旧轮通过、静态代码或编译成功覆盖。
+v1.0.57完整发版已完成，具体证据见下方发布记录。iPad原始自动审计失败仍保留；相应实际字号/色对与菜单已经取得独立复核，不由旧轮通过、静态代码或编译成功覆盖。
 
 ## 环境与修改边界
 
@@ -386,14 +386,14 @@ r142 最终R123 phone18受影响Browse/Composer两项109.842秒、0失败/0跳�
 | 21 | 系统组件/语义token/±/两行号/自然AX标签，零过滤ALL；两phone默认/最大dark真实通过，Pad实际字号增长与浅深色分别独立核原片/像素 | 原始Pad ALL报告仍有失败，未宣称全App认证；R123原生行四组合与同App外观切换真实完成，原系统过渡帧另说明；物理VoiceOver/键盘指针/减弱动态手工证据未取得 |
 | 22 | gateway错误与audit不含源码/路径；relay只精准目标/无summary正文缓存；现有NoticeBar复用 | 四设备默认入口、详情/菜单、关闭与草稿均有真实片；数据库/COS/遥测无正文为源码审查 |
 | 23 | registry组装与dispose、Flow/client/后台模型分离、窄bridge、无依赖；v1.0.57正式macOS签名/公证、两平台ASAR/包内runtime/更新协议、typecheck/hard constraints均通过 | 未做正式桌面安装器在用户设备上的安装运行 |
-| 24 | 旧Git范围、runtime/module规则、private例外、README/notes同步；核对MCP/系统Skill/Agent指南，无公开能力变更、Terminal仍49；v1.0.57原生Windows CI和正式新包通过 | TestFlight、最终部署及站内信待当前发版步骤完成 |
+| 24 | 旧Git范围、runtime/module规则、private例外、README/notes同步；核对MCP/系统Skill/Agent指南，无公开能力变更、Terminal仍49；v1.0.57原生Windows CI、正式新包、iOS（71）上传、最终部署及42账号站内信入库成功 | Apple处理、测试员安装与实际设备通知显示未在本次验收证明 |
 
-## 最终验收结论与发布待办
+## 最终验收结论与发布结果
 
-- 桌面最后两项Git gate修订已冻结，109专项与完整typecheck/HARD通过，04:49最终full build与编译真实两跳15/15通过。验收端点使用独立配置home，真实adapter按精确权限读取夹具，不修改用户global。早前独立mac-arm64 App已通过ASAR及包内smoke但不含最后两项Gate字节；新正式签名、公证与Windows产物继续由CI/Release验证。旧1.0.46缺新模块按预期失败，不计新包证据。
-- iPhone18/26四流程、两Pad默认实际功能、205文件分页、字号/Back位置与Pad26真窗口复验已完成。R123原生行四组合及同App外观切换已独立核通过；Pad18最大字号Git自然AX现场r141完成两层往返，r139自动proxy失败保留。受影响phone18回归r142两项0失败/跳过通过，12份Files源码指纹一致，最终冻结；不重跑未变更的后端或完整矩阵。物理VoiceOver、硬件键盘/指针、Reduce Motion与RSS/Instruments是尚未取得的证据边界。
+- 桌面最后两项Git gate修订已冻结，109专项与完整typecheck/HARD通过，04:49最终full build与编译真实两跳15/15通过。验收端点使用独立配置home，真实adapter按精确权限读取夹具，不修改用户global。v1.0.57正式两平台ASAR/包内smoke、macOS签名与公证及原生Windows CI/安装器均已成功；不将早前缺Gate字节的独立包当正式新包。旧1.0.46缺新模块按预期失败，不计新包证据。
+- iPhone18/26四流程、两Pad默认实际功能、205文件分页、字号/Back位置与Pad26真窗口复验已完成。R123原生行四组合及同App外观切换已独立核通过；Pad18最大字号Git自然AX现场r141完成两层往返，r139自动proxy失败保留。受影响phone18回归r142两项0失败/跳过通过；R123交接时12份指纹一致，后续仅NativeTable两处空析构改变，其他11份不变，Release优化编译及正式iOS归档/上传已通过。未重跑未变化的完整UI矩阵。物理VoiceOver、硬件键盘/指针、Reduce Motion与RSS/Instruments是尚未取得的证据边界。
 - 独立安全最终只读复核已无新增确定P1/P2；Apple已给四色对/触选与同App外观切换的最终限定结论，未发现新增确定P1/P2，原低对比及持续空白P2关闭。Pad18范围菜单r141现场功能与独立新原片复核已完成、无新增确定可见P1/P2；r139自动proxy FAIL、自动ALL与手工criteria分别记录。
-- 通过后本地功能提交、生产服务端先行部署、桌面 CI/Release、说明归档、TestFlight、完整服务器部署和全站站内信。
+- 已完成首次Git提交、功能与修订提交、生产服务端先行部署、桌面v1.0.57 CI/Release、说明归档、TestFlight上传、最终服务器部署和全站站内信入库；各次失败和恢复结果在下方保留。
 
 ## 发布准备
 
@@ -437,7 +437,11 @@ build70的正式归档exit65，脚本仅保留stdout尾部，活动日志为空�
 
 最终仅`WorkspaceFilesNativeTable.swift`增加两处空`deinit {}`和原因注释，共7行；未关闭优化、修改actor/config、移除功能或更改字段销毁。独立复核确认ARC及父类析构仍执行，`dismantleUIView→detach`、弱捕获、回调/缓存清理、布局和所有动作原字节不变，依据[Swift官方析构语义](https://docs.swift.org/latest/documentation/the-swift-programming-language/deinitialization/)。最终同设置arm64/iOS18、Release `-O`/WMO完整compile/link/dSYM成功、exit0，日志`/tmp/synapse-files-release-v57-explicit-deinit-both.log`，没有编译错误/崩溃。该无签名产物版本1.0.57、默认build1，仅为编译验证，不冒充正式build70/71。
 
-最终源相对R123为11/12文件原指纹不变，NativeTable新SHA256为`e6ce48c30cf439ca1944c16a16374de2ff76032f98b74d69e2ce8492e8a115c7`；更新冻结记录`/tmp/synapse-files-ios-v57-final-handoff.json`。原12文件R123交接是当时事实，后续发布产物以此修訂指纹为准。独立检查已接受最小源码规避；不重复未变化的完整UI矩阵或桌面CI/Release，按同一v1.0.57恢复正式`pnpm mobile:release`，上传成功后再发送通知。
+最终源相对R123为11/12文件原指纹不变，NativeTable新SHA256为`e6ce48c30cf439ca1944c16a16374de2ff76032f98b74d69e2ce8492e8a115c7`；更新冻结记录`/tmp/synapse-files-ios-v57-final-handoff.json`。原12文件R123交接是当时事实，后续发布产物以此修订指纹为准。独立检查已接受最小源码规避；不重复未变化的完整UI矩阵或桌面CI/Release，按同一v1.0.57恢复正式`pnpm mobile:release`，上传成功后再发送通知。
+
+源码规避及配套验证计划/记录提交`defb67e99`已push，仅iOS源与文档，无桌面/服务端代码变化。2026-10-04 00:07Z原版本脚本重试实际1.0.57（71），正式ARCHIVE SUCCEEDED、EXPORT SUCCEEDED、uploaded提示及进程exit0均已亲核；log`/tmp/synapse-files-release-v1.0.57-ios-release-retry.log`。这是真正上传成功，与前述无签名build1分开记录；不等待Apple后续处理，不声明测试员已安装。APNS网关始终生产false，未改配置。
+
+正式上传与最终服务器部署两命令均成功后，使用归档`docs/releases/v1.0.57.md`按稳定请求ID`release:v1.0.57`发送站内信。2026-10-04 00:11Z脚本exit0，服务端确认mail`cmut2feit001nl52p4nvju417`入库、收件人42人，log`/tmp/synapse-files-release-v1.0.57-mail.log`；该结果证明数据库接受及收件副本数量，不冒充通知设备显示或阅读。没有重复bump、重发桌面包或重复群发，完整发版完成。
 
 ## Apple 依据
 
