@@ -332,10 +332,14 @@ private struct WorkspaceFilesBrowser: View {
                         Image(systemName: "folder").accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(scope.rootDisplayName).font(.subheadline.weight(.semibold))
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                                .truncationMode(.middle)
                                 .fixedSize(horizontal: false, vertical: true)
                             Text(flow.mode == .repository ? "仓库" : "当前目录")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Image(systemName: "chevron.down").font(.caption).accessibilityHidden(true)
                     }
                     .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget, alignment: .leading)

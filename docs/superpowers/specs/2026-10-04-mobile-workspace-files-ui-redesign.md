@@ -2,7 +2,7 @@
 
 日期：2026-10-04
 
-状态：静态审查与设计说明。本文记录五张用户截图、重做前源码和 Apple 当前原文所支持的判断；构建结果由本次任务的验证记录补充。本次未获授权启动 App、模拟器或浏览器调试，没有新的运行截图，不能据本文声称视觉、VoiceOver 或窗口适配已实测通过。
+状态：本文记录原始静态审查、重做方案与后续用户授权的模拟器截图复核。原始重做的构建结果见第 6 节；后续目录标题修正与实际截图见第 7 节。未执行的 VoiceOver、iPad 或窗口验收不得据此声称通过。
 
 范围：现有终端内「工作区文件」面板的内容组织、搜索、范围与视图选择、目录/文件行、已修改概要。面板的系统弹出方式、导航及只读业务协议保持现有边界。协议、安全、预算、取消、分页与版本校验仍以 [工作区文件 V1 spec](2026-10-03-mobile-workspace-files-and-changes-spec.md) 和 [移动端运行时约束](../../agents/mobile-runtime-contracts.md) 为准。
 
@@ -91,7 +91,7 @@
 ```
 
 - 保留现有 `.sheet`、`NavigationSplitView`、medium/large、抓手、展开/收起、关闭和刷新方式。新内容不改变底层终端 attach、租约或尺寸协议。[Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)、[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview)。
-- 根上下文使用系统 Menu。根名为主要 label，scope 为 caption；完整根名可换行，VoiceOver 可以获取根名和当前范围。scope Menu 使用 Picker 保留系统当前选项反馈。[Menus](https://developer.apple.com/design/human-interface-guidelines/menus)、[Pickers](https://developer.apple.com/design/human-interface-guidelines/pickers)。
+- 根上下文使用系统 Menu。根名为主要 label，scope 为 caption。普通字号的根名保持单行，过长时使用系统中间省略；辅助功能字号保留完整换行，明确左对齐。文字列占满图标与菜单指示符之间的可用宽度，避免按钮默认多行居中和不必要的操作区增高；不缩小动态字体。VoiceOver 继续获取完整根名和当前范围。scope Menu 使用 Picker 保留系统当前选项反馈。单行/中间省略是本项目对紧凑目录标题的选择，Apple 并没有规定该面板必须这样排列。[Menus](https://developer.apple.com/design/human-interface-guidelines/menus)、[Pickers](https://developer.apple.com/design/human-interface-guidelines/pickers)、[Typography](https://developer.apple.com/design/human-interface-guidelines/typography)。
 - 根目录引用是相邻的独立 `text.insert` 按钮，44pt 点击区；不再占一个正文行。根名从可选择 `UITextView` 改成 Menu 正文，是本次获授权的 UI 重做，目录身份、范围切换和引用能力均保留，不要求保留原控件的文本选择方式。[Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons)、[Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)。
 - 两个文件视图在普通字号用系统 segmented Picker，让当前内容模式和另一个模式都可见。不是增加新导航层级。[Pickers](https://developer.apple.com/design/human-interface-guidelines/pickers)。
 - 搜索使用 `UISearchTextField` 原生搜索图标；native `rightView` 提供 44pt Clear，旁边保留 plain 系统提交 Button。搜索只在显式提交后读取，编辑仍取消过期意图。HIG 建议在可行时即时搜索，但本项目保持用户按需远程读取协议，不为外观重做增加每个字符的网络请求。[Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields)、[UISearchTextField](https://developer.apple.com/documentation/uikit/uisearchtextfield)。
@@ -132,4 +132,19 @@
 - Swift 语法解析与 `git diff --check` 通过。既有 UI 回归更新为新的控件定位，补充初始普通竖屏可见文件行、文件视图切换，保留清除、范围重置、差异、定位、分页和草稿引用断言；不再因搜索按钮查询失败而跳过清除及范围测试。
 - 独立复核补齐：hosted 差异行的 iPad 选中反馈、中文 IME 未确认时屏幕提交守卫、UIKit 替换 `contentView` 后重新挂载目录符号与真实辅助功能节点、复用及约束清理。目录主动作与独立菜单分别保留，菜单开启/执行继续校验当前上下文。
 
-运行验收：未执行。本次没有启动 App、模拟器或浏览器，没有新增 iPhone/iPad 实物截图、VoiceOver 朗读记录或可缩放窗口结果。后续获授权运行时，按第 3 节及现有 [工作区文件验收记录](../plans/2026-10-03-mobile-workspace-files-and-changes-acceptance.md) 验证，不用构建成功或源码检查替代这些结果。
+原始重做阶段未执行运行验收。后续用户已明确授权运行模拟器和生成截图网页，结果见第 7 节；尚未完成的验收仍按第 3 节及现有 [工作区文件验收记录](../plans/2026-10-03-mobile-workspace-files-and-changes-acceptance.md) 执行。
+
+## 7. 截图复核与目录标题修正
+
+用户查看截图网页后指出顶部标题换行缺陷。长根目录名没有行数限制，多行文字继承 Menu 的居中对齐，造成第二行居中并撑高操作区。
+
+普通字号目录标题使用系统单行中间省略，保留名称首尾；辅助功能字号完整换行。文字列占满可用宽度，目录标题及范围 caption 均明确左对齐，不缩小动态字体。Menu 的无障碍值继续提供完整根名。修改只涉及展示修饰符，不改变范围、引用、搜索或面板呈现。
+
+依据：[Typography](https://developer.apple.com/design/human-interface-guidelines/typography)、[Layout](https://developer.apple.com/design/human-interface-guidelines/layout)、[multilineTextAlignment(_:)](https://developer.apple.com/documentation/swiftui/view/multilinetextalignment(_:))、[truncationMode(_:)](https://developer.apple.com/documentation/swiftui/view/truncationmode(_:))。普通字号的单行中间省略是本项目对目录上下文的布局选择，不是 Apple 对此功能的固定要求。
+
+复核设备为 iPhone 17 Pro / iOS 26.5 Simulator，使用本机独立验收仓库的真实文件和 Git 数据；终端背景来自展示数据。截图不代表用户自己的会话或文件。截图网页：[工作区文件模拟器截图](https://synapse-files-ui-review-oct04.eager-brush-6546.chatgpt.site/)。
+
+- 最终修正源码的 Simulator `build-for-testing` 成功，日志 `/tmp/synapse-files-header-fix-build.log`；未运行自动 UI 测试。
+- 实际检查普通 `large` 字号的 medium/large 面板：长目录名保持单行中间省略，范围 caption 左对齐，插入按钮独立可见。
+- 实际检查最大 `accessibility-extra-extra-extra-large` 字号：完整目录名和范围 caption 均左对齐换行，无横向裁切；原生列表的无障碍滚动动作可滚至文件行。截图后已恢复 `large`。这不是完整 VoiceOver 朗读验收。
+- 本次尚未运行 iPad 或可缩放窗口验收；标题修正尚未上传到新的 TestFlight 构建。
