@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 录音页。
 ///
@@ -9,6 +10,7 @@ import SwiftUI
 struct MeetingRecordingView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @ScaledMetric(relativeTo: .footnote) private var hintLineHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .largeTitle) private var timerFontSize: CGFloat = 46
 
@@ -61,73 +63,75 @@ struct MeetingRecordingView: View {
             .surfaceCard()
     }
 
-    /// 提示行。**高度固定**：字换来换去，但这一行不许把下面的东西顶下去。
+    /// 保留一行的最小高度，错误原因与辅助字号仍可完整换行。
     private var hintLine: some View {
         Text(hintText)
             .font(.footnote)
             .foregroundStyle(hintIsFailure ? Theme.failure : Color.secondary)
-            .lineLimit(1)
-            .frame(height: hintLineHeight)
+            .multilineTextAlignment(.center)
+            .frame(minHeight: hintLineHeight)
     }
 
     private var footer: some View {
         VStack(spacing: 16) {
-            Text("录音会保存，用于转写")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if model.recording.isRecording && model.recording.meetingId != nil {
+                Text("录音会保存，用于转写")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if model.recording.hint == .microphoneDenied,
+               let settings = URL(string: UIApplication.openSettingsURLString) {
+                Button("去设置") { openURL(settings) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("recording-open-settings")
+            }
             HStack(spacing: 12) {
                 // 两个按钮都**立刻回列表**，不等任何网络往返：点「完成」之后要发生的事
                 // （补尾片、提交、清理本机文件）全在后台跑，界面不显示等待。
-                action("取消", isPrimary: false) {
+                Button {
                     Haptics.warning()
                     model.recording.cancel()
                     dismiss()
+                } label: {
+                    Text("取消").frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 .accessibilityIdentifier("recording-cancel")
 
-                action("完成", isPrimary: true) {
+                Button {
                     Haptics.commit()
                     model.recording.finish()
                     dismiss()
+                } label: {
+                    Text("完成").frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!model.recording.isRecording)
                 .accessibilityIdentifier("recording-finish")
             }
         }
     }
 
-    /// 实心那一种是 `Theme.ink` 作填充、`Theme.paper` 作文字——与 App 里其他「确定的
-    /// 那一个」按钮同一套。`.opacity(1)` 不是多余的：`Theme.ink` 就是 `Color.primary`，
-    /// 当填充用的时候按「主要前景」那一档算，不带上它就落不成实色。
-    private func action(_ label: String, isPrimary: Bool, perform: @escaping () -> Void) -> some View {
-        Button(action: perform) {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(isPrimary ? Theme.paper : Theme.ink)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: Metrics.minimumTapTarget)
-                .background(
-                    isPrimary
-                        ? AnyShapeStyle(Theme.ink.opacity(1))
-                        : AnyShapeStyle(Color(uiColor: .secondarySystemBackground)),
-                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
     private var hintText: String {
+        if model.recording.isStarting { return "正在开始录音…" }
         switch model.recording.hint {
         case .none: return ""
         case .silent: return "没有听到声音"
-        case .microphoneDenied: return "未取得麦克风权限，波形为示意"
+        case .microphoneDenied: return "未取得麦克风权限"
         case .interrupted: return "录音已暂停，麦克风被其他应用占用"
         case .uploadFailed(let reason): return reason
+        case .recordingFailed(let reason): return reason
         }
     }
 
     private var hintIsFailure: Bool {
-        if case .uploadFailed = model.recording.hint { return true }
-        return false
+        switch model.recording.hint {
+        case .uploadFailed, .recordingFailed: return true
+        default: return false
+        }
     }
 }
 

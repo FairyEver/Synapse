@@ -29,20 +29,21 @@ struct TerminalGitCommit: View {
             Section {
                 Toggle("提交后立即推送", isOn: $flow.pushAfterCommit)
                     .accessibilityIdentifier("git-commit-push-toggle")
-            } footer: {
-                Text("默认关。推送是对外动作，不该在你没要求时发生。")
             }
         }
         .listStyle(.insetGrouped)
+        .disabled(flow.isBusy)
         .navigationTitle("提交")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("提交") {
+                Button {
                     Haptics.commit()
                     Task { await flow.commit(on: desk) }
+                } label: {
+                    TerminalGitConfirmationLabel(title: "提交", isBusy: flow.isBusy)
                 }
-                .disabled(trimmedMessage.isEmpty)
+                .disabled(trimmedMessage.isEmpty || flow.isBusy)
                 .accessibilityIdentifier("git-commit-submit")
             }
         }

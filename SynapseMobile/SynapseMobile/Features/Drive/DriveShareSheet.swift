@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// 分享结果页上那几行字（Spec §4.5）。
 enum DriveShareSummary {
@@ -43,10 +44,54 @@ enum DriveShareLookup: Equatable {
     /// 没读到。`reason` 是给用户看的一句话。
     case failed(reason: String)
 
+    /// 本机缓存与浏览角标都只是候选编号；仅用只读查询决定它现在是否可用。
+    @MainActor
+    static func read(
+        known: DriveShare?,
+        browserPath: String?,
+        fetch: (String) async -> DriveShareLookup
+    ) async -> DriveShareLookup {
+        guard let id = known?.shareId ?? DriveShareLink.shareId(inBrowserPath: browserPath) else {
+            return .missing
+        }
+        return await fetch(id)
+    }
+
     /// 一次读为什么没成。
     static func of(_ error: Error) -> DriveShareLookup {
         if let apiError = error as? APIError, apiError.status == 404 { return .missing }
         return .failed(reason: DriveText.errorMessage(error))
+    }
+}
+
+/// 管理详情只使用本次只读查询的结果，缓存中的密码不能直接进入剪贴板。
+@MainActor
+@Observable
+final class DriveShareDetailState {
+    private(set) var lookup: DriveShareLookup?
+    private(set) var loading = false
+    private var accountGeneration: Int?
+
+    func currentShare(account: Int, now: Date = .now) -> DriveShare? {
+        guard account == accountGeneration, case .found(let share) = lookup,
+              share.isActive(at: now) else { return nil }
+        return share
+    }
+
+    func load(
+        id: String,
+        account: Int,
+        isCurrentAccount: (Int) -> Bool,
+        fetch: (String) async -> DriveShareLookup
+    ) async {
+        guard !loading else { return }
+        loading = true
+        lookup = nil
+        accountGeneration = account
+        defer { loading = false }
+        let result = await fetch(id)
+        guard !Task.isCancelled, isCurrentAccount(account) else { return }
+        lookup = result
     }
 }
 
@@ -389,6 +434,11 @@ struct DriveShareSheet: View {
     /// 链接与密码**只**进剪贴板：不写日志、不进 `AppLog`，它们离开这一屏就是这一页唯一的
     /// 结果 —— 嗡一声、说一句话，与全 App 其它几处拷贝同走 `Clipboard`。
     private func copy(_ value: String) {
+        guard case .result(let outcome) = phase, let share = outcome.share else { return }
+        guard share.isActive() else {
+            model.notice("分享已失效。", tone: .failure)
+            return
+        }
         // 一个固定的 id：连着拷两行时重启这一句，而不是排两句一模一样的「已复制」。
         Clipboard.copy(value, saying: "已复制", id: "drive.share.copied", on: model)
     }
@@ -425,30 +475,18 @@ struct DriveShareSheet: View {
     /// 去服务端读一次 → 都没有就摆表单。**没有一步靠「发一次请求试试」**：分享的建立只能由
     /// 用户在表单上按下「创建」那一刻发生。
     private func begin() async {
-        // 本机已经知道这一项有分享：不发请求，直接把那条链接摆出来（`DriveSharePlan` 的
-        // 复用快路也是这么判的）。
-        if let known = model.drive.existingShare(forItemId: item.id) {
-            phase = .result(.reused(known))
-            return
-        }
-        // 浏览行上那枚角标说这一项有分享，而本机手里没有这条链接。用户要的是**那一条**，
-        // 所以去读它，而不是建一条新的。
-        //
-        // 这里是读，不是那趟空体 POST：空体在服务端是「没给设置」，没有活跃分享时它会
-        // **建**一条（服务端默认：仅阅读 + 永久 + 无密码），停用过的会另建一条、过期过的会
-        // 被悄悄续成默认有效期（`drive.service.ts` 的 `reusedExisting`）。角标是快照里的事，
-        // 停用或过期都还在，所以「角标说有一条」与「现在真有一条」是两件事——这一条路由正
-        // 好只给还活着的那条，404 就是「现在没有」。
-        guard let shareId = DriveShareLink.shareId(inBrowserPath: item.shareUrl) else {
-            // 角标也没有：这一项没有分享，直接摆表单（这一趟不做任何请求）。
-            phase = .form
-            return
-        }
-        switch await model.driveShareRecord(id: shareId) {
+        let account = model.accountIdentityGeneration
+        let lookup = await DriveShareLookup.read(
+            known: model.drive.existingShare(forItemId: item.id),
+            browserPath: item.shareUrl,
+            fetch: model.driveShareRecord
+        )
+        guard model.isCurrentAccount(account), !Task.isCancelled else { return }
+        switch lookup {
         case .found(let share):
-            // 本机不知道、服务端有一条：这就是「沿用已有那条」，不必新建。
             phase = .result(.reused(share))
         case .missing:
+            model.drive.forgetShare(forItemId: item.id)
             phase = .form
         case .failed(let reason):
             phase = .probeFailed(reason)
@@ -457,16 +495,20 @@ struct DriveShareSheet: View {
 
     private func submit() {
         guard !submitting, canSubmit else { return }
-        Task { await create(settings: requestSettings) }
+        submitting = true
+        let account = model.accountIdentityGeneration
+        let settings = requestSettings
+        Task { await create(settings: settings, account: account) }
     }
 
     /// 请求一次分享。
     ///
     /// 请求在这一张还开着的时候发（按钮那条，`submitting` 锁住表单），落地了才走下一步：
     /// 失败时留在表单上，用户刚选的那几项还在，改一下就能重来（多数失败只是网络抖了一下）。
-    private func create(settings: APIClient.DriveShareSettings) async {
-        submitting = true
+    private func create(settings: APIClient.DriveShareSettings, account: Int) async {
+        guard model.isCurrentAccount(account) else { return }
         let outcome = await model.driveShare(item: item, settings: settings)
+        guard model.isCurrentAccount(account) else { return }
         submitting = false
         switch outcome {
         case .failed(let reason):

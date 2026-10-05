@@ -128,11 +128,11 @@ struct DriveBrowserTests {
         #expect(DriveBrowserRow.openLabel(item()) == "在浏览器中打开")
     }
 
-    /// 文件夹不能导出：服务端那条下载路由认的是单个文件。菜单里这一条置灰而不是藏起来，
-    /// 所以这个判据决定的是「灰不灰」，不是「在不在」。
-    @Test func foldersCannotBeExported() {
-        #expect(!DriveBrowserRow.canExport(item("设计稿", folder: true)))
+    /// owner 下载接口把普通文件夹打成 ZIP，与多选导出走相同通道。
+    @Test func foldersCanBeExportedAsZip() {
+        #expect(DriveBrowserRow.canExport(item("设计稿", folder: true)))
         #expect(DriveBrowserRow.canExport(item()))
+        #expect(!DriveBrowserRow.canExport(item("网盘", id: "root", folder: true)))
     }
 
     // MARK: - 计数行
@@ -173,6 +173,15 @@ struct DriveBrowserTests {
         let items = [item("a", id: "a"), item("b", id: "b")]
         #expect(DriveBrowserSelection.items(["a", "gone"], in: items).map(\.id) == ["a"])
         #expect(DriveBrowserSelection.items([], in: items).isEmpty)
+    }
+
+    @Test func refreshedMembershipRemovesStaleSelectionAndKeepsTheRest() {
+        let remaining = [item("留下.pdf", id: "keep"), item("新文件.pdf", id: "new")]
+        let picked = DriveBrowserSelection.retained(["gone", "keep"], in: remaining)
+        #expect(picked == ["keep"])
+        #expect(DriveBrowserSelection.items(picked, in: remaining).map(\.id) == ["keep"])
+        #expect(DriveBrowserSelection.retained(picked, in: []).isEmpty)
+        #expect(DriveBrowserSelection.retained(picked, in: remaining.reversed()) == picked)
     }
 
     // MARK: - 上传那一组

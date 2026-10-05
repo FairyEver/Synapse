@@ -40,7 +40,7 @@ struct DriveBrowserView: View {
     /// 有一件事在办（下钻、删除）。办的时候行菜单里那些项置灰，免得两件事撞在同一层上。
     @State private var busy = false
     /// 刚收起的这一张动过分享没有。见 `sheetDismissed` 与 `shareChanged`。
-    @State private var shareChanged = false
+    @State private var shareChangedAccount: Int?
 
     /// 这一屏会开出来的那几张。收成一片 sheet：`···` 菜单与行菜单开的是同一批对话框，
     /// 而两片 sheet 挂在同一个视图上只有一片会出来。
@@ -76,7 +76,7 @@ struct DriveBrowserView: View {
         case move([DriveBrowserItem])
         case share(DriveBrowserItem)
         case info(DriveBrowserItem)
-        case pick(UploadSource)
+        case pick(UploadSource, DriveUploadIntakeContext)
 
         var id: String {
             switch self {
@@ -85,7 +85,7 @@ struct DriveBrowserView: View {
             case .move(let items): return "move.\(items.map(\.id).joined(separator: ","))"
             case .share(let item): return "share.\(item.id)"
             case .info(let item): return "info.\(item.id)"
-            case .pick(let source): return "pick.\(source.rawValue)"
+            case .pick(let source, _): return "pick.\(source.rawValue)"
             }
         }
     }
@@ -281,17 +281,17 @@ struct DriveBrowserView: View {
             }
             Menu {
                 Button {
-                    sheet = .pick(.photos)
+                    beginPick(.photos)
                 } label: {
                     Label("照片", systemImage: "photo")
                 }
                 Button {
-                    sheet = .pick(.documents)
+                    beginPick(.documents)
                 } label: {
                     Label("文件", systemImage: "folder")
                 }
                 Button {
-                    sheet = .pick(.camera)
+                    beginPick(.camera)
                 } label: {
                     Label("拍照", systemImage: "camera")
                 }
@@ -476,7 +476,9 @@ struct DriveBrowserView: View {
     private func remove(_ items: [DriveBrowserItem]) async {
         guard !items.isEmpty, !busy else { return }
         busy = true
+        let account = model.accountIdentityGeneration
         let outcome = await model.driveTrashItems(items)
+        guard model.isCurrentAccount(account) else { return }
         busy = false
         picked = outcome.failedItemIds
         if let notice = outcome.noticeText("删除") {
@@ -558,26 +560,26 @@ struct DriveBrowserView: View {
                 picked = outcome.failedItemIds
             }
         case .share(let item):
-            DriveShareSheet(item: item) { shareChanged = true }
+            DriveShareSheet(item: item) { shareChangedAccount = model.accountIdentityGeneration }
         case .info(let item):
-            DriveItemInfoView(item: item, path: model.drive.path) { shareChanged = true }
-        case .pick(let source):
-            picker(source)
+            DriveItemInfoView(item: item, path: model.drive.path) { shareChangedAccount = model.accountIdentityGeneration }
+        case .pick(let source, let context):
+            picker(source, context: context)
         }
     }
 
     /// 系统 picker。选完的东西先落成磁盘上的一份（`DriveFileIntake`），再进上传队列。
     @ViewBuilder
-    private func picker(_ source: UploadSource) -> some View {
+    private func picker(_ source: UploadSource, context: DriveUploadIntakeContext) -> some View {
         switch source {
         case .photos:
             PhotoLibraryPicker(
                 // 一批的上限与接力那条通路一致：它一次最多带 9 个附件，队列的并发上限是 2，
                 // 再多也只是排在后面（`AppConfiguration.relayMaxFileCount`）。
-                selectionLimit: AppConfiguration.relayMaxFileCount,
+                selectionLimit: 0,
                 onPicked: { results in
                     sheet = nil
-                    Task { await upload(results: results) }
+                    Task { await upload(results: results, context: context) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -586,7 +588,7 @@ struct DriveBrowserView: View {
             DocumentPicker(
                 onPicked: { urls in
                     sheet = nil
-                    Task { await upload(documentURLs: urls) }
+                    Task { await upload(documentURLs: urls, context: context) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -595,7 +597,7 @@ struct DriveBrowserView: View {
             CameraPicker(
                 onPicked: { capture in
                     sheet = nil
-                    Task { await upload(capture: capture) }
+                    Task { await upload(capture: capture, context: context) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -610,9 +612,13 @@ struct DriveBrowserView: View {
     /// 只在「动过」时才重取，不是每次都重取：用户只是打开来看了一眼也重取一次的话，
     /// 每看一次分享就白跑一趟 GET。
     private func sheetDismissed() {
-        guard shareChanged else { return }
-        shareChanged = false
-        Task { await model.driveReload() }
+        guard let account = shareChangedAccount else { return }
+        shareChangedAccount = nil
+        guard model.isCurrentAccount(account) else { return }
+        Task {
+            guard model.isCurrentAccount(account) else { return }
+            await model.driveReload()
+        }
     }
 
     /// 系统面板收起了。
@@ -648,27 +654,56 @@ struct DriveBrowserView: View {
     /// 是一片空白，下拉与重试也回不来（它们取的是 store 那一层，越取越不对）。
     /// 所以两者必须在进屏这一刻对齐，而不只是在栈变化时对齐（`layerChanged`）。
     private func enter() async {
+        let account = model.accountIdentityGeneration
+        guard model.isCurrentAccount(account), !Task.isCancelled else { return }
         if model.drive.path.isEmpty {
             await model.driveReload()
         } else {
             // `jump` 自己会取根层那一份，不必再 `reload` 一次。
             await model.driveJump(to: 0)
         }
+        guard model.isCurrentAccount(account), !Task.isCancelled else { return }
         await model.driveLoadUsage()
+        guard model.isCurrentAccount(account), !Task.isCancelled else { return }
         await model.driveLoadTrash(search: nil)
     }
 
-    private func upload(results: [PHPickerResult]) async {
-        await enqueue(await DriveFileIntake.prepare(results: results))
+    private func beginPick(_ source: UploadSource) {
+        sheet = .pick(source, DriveUploadIntakeContext(
+            accountGeneration: model.accountIdentityGeneration,
+            parentId: model.drive.folderId
+        ))
     }
 
-    private func upload(documentURLs: [URL]) async {
-        await enqueue(DriveFileIntake.prepare(documentURLs: documentURLs))
+    private func upload(results: [PHPickerResult], context: DriveUploadIntakeContext) async {
+        guard let files = await context.prepare({
+            await DriveFileIntake.prepare(results: results)
+        }, isCurrentAccount: model.isCurrentAccount) else { return }
+        reportIntakeFailure(selected: results.count, prepared: files.count)
+        enqueue(files, parentId: context.parentId)
     }
 
-    private func upload(capture: CameraCapture) async {
-        guard let file = await DriveFileIntake.prepare(camera: capture) else { return }
-        await enqueue([file])
+    private func upload(documentURLs: [URL], context: DriveUploadIntakeContext) async {
+        guard let files = await context.prepare({
+            DriveFileIntake.prepare(documentURLs: documentURLs)
+        }, isCurrentAccount: model.isCurrentAccount) else { return }
+        reportIntakeFailure(selected: documentURLs.count, prepared: files.count)
+        enqueue(files, parentId: context.parentId)
+    }
+
+    private func upload(capture: CameraCapture, context: DriveUploadIntakeContext) async {
+        guard let files = await context.prepare({
+            if let file = await DriveFileIntake.prepare(camera: capture) { return [file] }
+            return []
+        }, isCurrentAccount: model.isCurrentAccount) else { return }
+        reportIntakeFailure(selected: 1, prepared: files.count)
+        enqueue(files, parentId: context.parentId)
+    }
+
+    private func reportIntakeFailure(selected: Int, prepared: Int) {
+        if let message = DriveFileIntake.failureMessage(selected: selected, prepared: prepared) {
+            model.notice(message, tone: .failure)
+        }
     }
 
     /// 交给上传队列。
@@ -677,7 +712,7 @@ struct DriveBrowserView: View {
     /// 相册权限那条路，而 picker 这条路的设计恰恰是不申请权限），所以只能在文件落到磁盘之后
     /// 量。超限的那一个不进队列 —— 让它发给服务端的话，用户等到传完才知道（说法与接力那一套
     /// 逐字相同：同一条上限不该有两种措辞）。
-    private func enqueue(_ files: [PickedFile]) async {
+    private func enqueue(_ files: [PickedFile], parentId: String?) {
         guard !files.isEmpty else { return }
         var accepted: [PickedFile] = []
         for file in files {
@@ -693,8 +728,8 @@ struct DriveBrowserView: View {
             accepted.append(file)
         }
         guard !accepted.isEmpty else { return }
-        // 传到眼前这一层：根层给 nil（服务端把根当成「没有父级」）。
-        model.driveEnqueueUploads(accepted, parentId: model.drive.folderId)
+        // 传到打开 picker 时的那一层：准备文件期间导航不会改变目标。
+        model.driveEnqueueUploads(accepted, parentId: parentId)
     }
 
     /// 一项传完了：落进这一层的话把这一层重取一次。

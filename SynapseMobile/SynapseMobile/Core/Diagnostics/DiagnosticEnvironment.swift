@@ -59,7 +59,7 @@ nonisolated struct DiagnosticExportManifest: Encodable, Sendable {
     let device: Device
     let os: String
     /// 这份包里**有没有**终端屏幕内容。这是界面、README 与它自己三处必须一致的那一件事。
-    let includesTerminalContent: Bool
+    var includesTerminalContent: Bool
     var lanes: [Lane] = []
     let counters: Counters
     var previousSession: PreviousSession? = nil

@@ -1,7 +1,49 @@
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import SynapseMobile
+
+@MainActor @Suite(.serialized)
+struct TerminalShortcutSelectionTests {
+    @Test func anUnavailableRememberedSegmentFallsBackWithoutLosingTheChoice() {
+        withSavedSegment {
+            UserDefaults.standard.set("phrases", forKey: "terminal.shortcutPanel.segment")
+            #expect(panel(phrases: []).pickerSelection.wrappedValue == .phrases)
+            #expect(panel(phrases: nil).pickerSelection.wrappedValue == .clipboard)
+            #expect(UserDefaults.standard.string(forKey: "terminal.shortcutPanel.segment") == "phrases")
+            #expect(panel(phrases: []).pickerSelection.wrappedValue == .phrases)
+        }
+    }
+
+    @Test func selectingAnAvailableSegmentUpdatesTheRememberedChoice() {
+        withSavedSegment {
+            UserDefaults.standard.set("phrases", forKey: "terminal.shortcutPanel.segment")
+            let unavailable = panel(phrases: nil)
+            unavailable.pickerSelection.wrappedValue = .commands
+            #expect(unavailable.pickerSelection.wrappedValue == .commands)
+            #expect(UserDefaults.standard.string(forKey: "terminal.shortcutPanel.segment") == "commands")
+            #expect(panel(phrases: []).pickerSelection.wrappedValue == .commands)
+        }
+    }
+
+    private func panel(phrases: [MobileQuickPhrase]?) -> TerminalShortcutPanel {
+        TerminalShortcutPanel(buttons: [], phrases: phrases, isRunning: false,
+            onRun: { _ in }, onInsert: { _ in }, clipboardEntries: [],
+            onCopyClipboard: { _ in }, onClearClipboard: {})
+    }
+
+    private func withSavedSegment(_ body: () -> Void) {
+        let defaults = UserDefaults.standard
+        let key = "terminal.shortcutPanel.segment"
+        let saved = defaults.object(forKey: key)
+        defer {
+            if let saved { defaults.set(saved, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+        body()
+    }
+}
 
 /// The phone half of the computer's 快捷输入 sentences: decoding what a computer sent,
 /// and deciding what to show when it sent nothing.

@@ -68,13 +68,14 @@ final class MeetingPlayback {
     ///
     /// 本机有就直接播本机那份；没有就先下、下完再播。`serverSize` 是服务端详情里的
     /// `recording.size`——命中判据三件套里的一件就是它。
-    func load(meetingId: String, serverSize: Int, using client: APIClient) async {
+    func load(meetingId: String, serverSize: Int, durationMs: Int = 0, using client: APIClient) async {
         if loadedMeetingId != meetingId {
             loadGeneration += 1
             downloadTask?.cancel()
             loadedMeetingId = meetingId
             self.serverSize = serverSize
             teardownPlayer()
+            durationSeconds = Double(max(0, durationMs)) / 1000
             peaks = []
             isUnavailable = false
             isLoading = true
@@ -208,12 +209,16 @@ final class MeetingPlayback {
         ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int) ?? serverSize
     }
 
-    func togglePlay() {
+    func togglePlay(whileRecording: Bool) {
         guard let player else { return }
         if isPlaying {
             player.pause()
             isPlaying = false
         } else {
+            // 语音输入留下的 .record 会静音输出；已有会议录音（含系统暂停）仍保留其类别。
+            if !whileRecording {
+                try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            }
             // 播之前先激活会话：不激活的话第一次点播放要等音频系统就位，那一下的静默
             // 会被当成「点了没反应」。
             try? AVAudioSession.sharedInstance().setActive(true)
@@ -312,7 +317,7 @@ final class MeetingPlayback {
 
         // 时长要等资源就绪才有，先把播放头压到 0，免得进度条先闪一下再跳。
         currentSeconds = 0
-        durationSeconds = 0
+        // 媒体尚未就绪时保留详情的总时长；播放回调取得真实时长后再校正。
     }
 
     private func teardownPlayer() {

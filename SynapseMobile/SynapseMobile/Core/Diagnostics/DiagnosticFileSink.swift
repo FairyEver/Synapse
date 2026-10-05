@@ -58,6 +58,11 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         func bytes(in lane: DiagnosticLane) -> Int { laneBytes[lane] ?? 0 }
     }
 
+    struct ExportedArchive: Sendable {
+        let url: URL
+        let includesTerminalContent: Bool
+    }
+
     /// 一路日志在磁盘上的状态。
     private struct LaneState {
         var descriptor: Int32 = -1
@@ -75,11 +80,9 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     private let launchStamp: String
 
     private var lanes: [DiagnosticLane: LaneState] = [:]
-    /// crash 路的 fd，**故意在队列之外也读得到**：崩溃处理器要在崩溃线程上直接写它。
-    ///
-    /// 代价是崩溃线程可能读到刚被换掉的旧 fd —— 那只会返回 EBADF，而那一刻我们本来
-    /// 也只能尽力而为。用独立的一个字段而不是去 `lanes` 里取，是因为那一刻不能碰
-    /// 字典（它由队列上的锁语义保护），而这个 `Int32` 的读写是原子的。
+    /// 保护 crash fd 的整个写入生命周期，防止关闭后被其它文件复用。
+    /// 崩溃线程只 try-lock；串行落盘队列在打开和关闭时持有同一把锁。
+    private let crashDescriptorLock = NSLock()
     private var crashDescriptor: Int32 = -1
 
     private var timer: DispatchSourceTimer?
@@ -87,6 +90,7 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     private var started = false
     /// 上一次导出的产物，下次导出前删掉。只在队列上读写。
     private var lastExportURL: URL?
+    private var previousSessionSnapshot: (event: String, timestamp: String)?
 
     init?(
         directory base: URL? = nil,
@@ -106,6 +110,7 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         // 那后面，升级后的第一次启动会看到根目录里没有 app 路、app 路里又没有东西，
         // 于是把"上一个版本最后一次运行没收尾"整个漏掉。
         Self.adoptLegacyFiles(root: root)
+        previousSessionSnapshot = readPreviousSessionTail()
     }
 
     // MARK: - 生命周期
@@ -114,9 +119,10 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self, !self.started else { return }
             self.started = true
-            // 只把 app 路先开出来：启动时的 `app.launch` 立刻就写，其余各域按需惰性建。
-            // 建目录本身要动磁盘，启动路径上不该为一路还没内容的日志付这笔钱。
+            // app 立即记录启动；crash 必须先缓存 fd，异常处理器不能开文件。
+            // 其余各域仍按需惰性建。
             _ = self.openActiveFile(in: .app)
+            _ = self.openActiveFile(in: .crash)
             self.startTimer()
         }
     }
@@ -160,6 +166,10 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     /// 那个文件，而分域之后 net 路几乎总比 app 路新 —— 读它就永远看不到
     /// `app.sessionClose`，于是每一次正常退出都会被判成疑似崩溃。
     func previousSessionTail() -> (event: String, timestamp: String)? {
+        previousSessionSnapshot
+    }
+
+    private func readPreviousSessionTail() -> (event: String, timestamp: String)? {
         let files = listFiles(in: .app).sorted { $0.modified > $1.modified }
         guard let newest = files.first,
               let data = try? Data(contentsOf: laneDirectory(.app).appendingPathComponent(newest.name)),
@@ -169,23 +179,25 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         guard let last = lines.last(where: { !$0.isEmpty }) else { return nil }
         if last.contains("app.sessionClose") { return nil }
 
-        let parts = last.split(separator: " ", maxSplits: 3).map(String.init)
-        guard parts.count >= 3 else { return nil }
-        return (event: parts[2], timestamp: "\(parts[0]) \(parts[1])")
+        let parts = last.split(separator: " ", maxSplits: 4).map(String.init)
+        guard parts.count >= 4 else { return nil }
+        return (event: parts[3], timestamp: "\(parts[0]) \(parts[1])")
     }
 
     /// 用户按下开关。
     func setEnabled(_ enabled: Bool) {
         queue.async { [weak self] in
             guard let self else { return }
-            self.paused = !enabled
             if enabled {
+                self.paused = false
                 _ = self.openActiveFile(in: .app)
+                _ = self.openActiveFile(in: .crash)
                 self.startTimer()
             } else {
+                self.flushNow()
+                self.paused = true
                 self.timer?.cancel()
                 self.timer = nil
-                self.flushNow()
                 self.closeAllActiveFiles()
             }
         }
@@ -227,12 +239,14 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     ///
     /// 它**只读不改**：不开文件、不轮转、不动任何 `bytes`。这些动作都要动状态，
     /// 而崩溃的那个线程可能正好把写盘的队列卡在半路 —— 改状态只会把损坏的面扩大。
-    /// 拿到一个已经失效的 fd 也无妨，`write` 返回 EBADF，我们不看不重试。
+    /// 生命周期锁拿不到就跳过，不能等正在轮转或关闭的落盘队列。
     ///
     /// 缓冲区是不分域的，所以这一批整体写进 **crash 路**：那一路的额度只归它自己、
     /// 不会被输出打满的 term 路轮转掉。从前它写进的是"恰好是当前活动文件"的那个文件，
     /// 而那个文件随时可能在轮转中被换掉。
     func writeCrashRecordsSynchronously() {
+        guard crashDescriptorLock.try() else { return }
+        defer { crashDescriptorLock.unlock() }
         let descriptor = crashDescriptor
         guard descriptor >= 0 else { return }
         let records = buffer.tryDrainForCrash()
@@ -244,6 +258,8 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
 
     /// 崩溃处理器专用的最后一行。与 `writeCrashRecordsSynchronously` 一样只读不改。
     func appendCrashLine(_ line: String) {
+        guard crashDescriptorLock.try() else { return }
+        defer { crashDescriptorLock.unlock() }
         let descriptor = crashDescriptor
         guard descriptor >= 0 else { return }
         Self.writeRaw(line + "\n", to: descriptor)
@@ -287,6 +303,8 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
 
     /// 打开这一路的活动文件（已经开着就直接返回）。目录可能在两帧之间被删掉过。
     private func openActiveFile(in lane: DiagnosticLane) -> Int32? {
+        if lane == .crash { crashDescriptorLock.lock() }
+        defer { if lane == .crash { crashDescriptorLock.unlock() } }
         guard !paused else { return nil }
         if let state = lanes[lane], state.descriptor >= 0 { return state.descriptor }
 
@@ -305,7 +323,9 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         state.descriptor = descriptor
         state.bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int)
             .flatMap { $0 } ?? 0
-        if state.bytes == 0 {
+        // The prepared crash descriptor stays empty until it has a real record:
+        // clearing logs must not leave a visible header-only log behind.
+        if state.bytes == 0, lane != .crash {
             // 版本号不在这里写：它在每份日志开头的 `env.snapshot` 里已经有了，
             // 而那个值只读得主线程（`AppVersion` 读 bundle），这一层在后台队列上。
             let header = "# 诊断日志 \(lane.rawValue) 路 \(DiagnosticLineRenderer.timestamp(Date()))"
@@ -318,6 +338,8 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     }
 
     private func closeActiveFile(in lane: DiagnosticLane) {
+        if lane == .crash { crashDescriptorLock.lock() }
+        defer { if lane == .crash { crashDescriptorLock.unlock() } }
         guard var state = lanes[lane], state.descriptor >= 0 else { return }
         Darwin.close(state.descriptor)
         state.descriptor = -1
@@ -385,28 +407,36 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     // MARK: - 查询与导出
 
     func snapshot() -> Snapshot {
-        queue.sync {
-            var snapshot = Snapshot()
-            snapshot.status = paused ? .paused : .running
-            snapshot.directory = directory.path
-            for lane in DiagnosticLane.allCases {
-                let files = listFiles(in: lane)
-                let bytes = files.reduce(0) { $0 + $1.sizeBytes }
-                snapshot.laneBytes[lane] = bytes
-                snapshot.fileCount += files.count
-                snapshot.totalBytes += bytes
-                for file in files {
-                    snapshot.oldest = min(snapshot.oldest ?? file.modified, file.modified)
-                    snapshot.newest = max(snapshot.newest ?? file.modified, file.modified)
-                }
-            }
-            let counters = buffer.counters
-            snapshot.dropped = counters.dropped
-            snapshot.overwritten = counters.overwritten
-            snapshot.pendingCount = counters.pendingCount
-            snapshot.totalWritten = counters.totalWritten
-            return snapshot
+        queue.sync { snapshotNow() }
+    }
+
+    func snapshotAsync() async -> Snapshot {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: self.snapshotNow()) }
         }
+    }
+
+    private func snapshotNow() -> Snapshot {
+        var snapshot = Snapshot()
+        snapshot.status = paused ? .paused : .running
+        snapshot.directory = directory.path
+        for lane in DiagnosticLane.allCases {
+            let files = listFiles(in: lane)
+            let bytes = files.reduce(0) { $0 + $1.sizeBytes }
+            snapshot.laneBytes[lane] = bytes
+            snapshot.fileCount += files.count
+            snapshot.totalBytes += bytes
+            for file in files {
+                snapshot.oldest = min(snapshot.oldest ?? file.modified, file.modified)
+                snapshot.newest = max(snapshot.newest ?? file.modified, file.modified)
+            }
+        }
+        let counters = buffer.counters
+        snapshot.dropped = counters.dropped
+        snapshot.overwritten = counters.overwritten
+        snapshot.pendingCount = counters.pendingCount
+        snapshot.totalWritten = counters.totalWritten
+        return snapshot
     }
 
     /// 导出一个可以直接发出去的压缩包。
@@ -421,17 +451,39 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         header: String,
         manifest: DiagnosticExportManifest
     ) async -> URL? {
+        await exportWithMetadata(
+            headerWithContent: header,
+            headerWithoutContent: header,
+            manifest: manifest
+        )?.url
+    }
+
+    func exportWithMetadata(
+        headerWithContent: String,
+        headerWithoutContent: String,
+        manifest: DiagnosticExportManifest
+    ) async -> ExportedArchive? {
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
-                continuation.resume(returning: self?.exportNow(header: header, manifest: manifest))
+                continuation.resume(returning: self?.exportNow(
+                    headerWithContent: headerWithContent,
+                    headerWithoutContent: headerWithoutContent,
+                    manifest: manifest
+                ))
             }
         }
     }
 
-    private func exportNow(header: String, manifest: DiagnosticExportManifest) -> URL? {
+    private func exportNow(
+        headerWithContent: String,
+        headerWithoutContent: String,
+        manifest: DiagnosticExportManifest
+    ) -> ExportedArchive? {
         var remaining = DiagnosticExportLimits.totalRawBytes
         var entries: [DiagnosticZip.Entry] = []
         var manifest = manifest
+        manifest.includesTerminalContent = false
+        flushNow()
 
         for lane in DiagnosticLane.allCases {
             guard remaining > 0 else { break }
@@ -456,6 +508,9 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
                 } else {
                     taken = Data(data.suffix(budget))
                     truncated = true
+                }
+                if Self.containsTerminalContent(in: data, suffixBytes: taken.count) {
+                    manifest.includesTerminalContent = true
                 }
                 budget -= taken.count
                 remaining -= taken.count
@@ -493,6 +548,7 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         // 包里再套一层同名目录：解压出来的人不会把一堆 .log 直接撒进他当前那层目录，
         // 而"这一包是什么"从目录名上就读得到。
         let root = "synapse-diagnostics-\(stamp)"
+        let header = manifest.includesTerminalContent ? headerWithContent : headerWithoutContent
         var all: [DiagnosticZip.Entry] = [
             .init(name: "\(root)/README.txt", data: Data(header.utf8)),
             .init(name: "\(root)/manifest.json", data: Data(DiagnosticExportManifest.encode(manifest).utf8)),
@@ -512,20 +568,43 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         }
         guard (try? archive.write(to: url)) != nil else { return nil }
         lastExportURL = url
-        return url
+        return ExportedArchive(url: url, includesTerminalContent: manifest.includesTerminalContent)
+    }
+
+    /// Parse complete source records before examining the exported suffix: its first
+    /// bytes may be in the middle of a content record, after the event name was cut.
+    private static func containsTerminalContent(in data: Data, suffixBytes: Int) -> Bool {
+        let start = data.endIndex - suffixBytes
+        for line in data.split(separator: 0x0A, omittingEmptySubsequences: false) where line.endIndex > start {
+            let parts = String(decoding: line.prefix(128), as: UTF8.self).split(separator: " ", maxSplits: 4)
+            guard parts.count >= 4 else { continue }
+            if parts[3] == DiagnosticEvent.frameContent.rawValue
+                || parts[3] == DiagnosticEvent.terminalInput.rawValue { return true }
+        }
+        return false
     }
 
     /// 连目录一起删掉，下次写入时惰性重建。
     func deleteAll() {
-        queue.sync {
-            closeAllActiveFiles()
-            timer?.cancel()
-            timer = nil
-            try? FileManager.default.removeItem(at: directory)
-            for lane in DiagnosticLane.allCases {
-                lanes[lane] = LaneState()
+        queue.sync { deleteAllNow() }
+    }
+
+    func deleteAllAsync() async {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                self.deleteAllNow()
+                continuation.resume()
             }
         }
+    }
+
+    private func deleteAllNow() {
+        closeAllActiveFiles()
+        _ = buffer.drain()
+        try? FileManager.default.removeItem(at: directory)
+        for lane in DiagnosticLane.allCases { lanes[lane] = LaneState() }
+        // Keep the running timer: deleting existing logs does not stop new recording.
+        if started, !paused { _ = openActiveFile(in: .crash) }
     }
 
     // MARK: - 路径与文件
@@ -542,10 +621,11 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         ) else { return [] }
         return urls.compactMap { url in
             guard url.pathExtension == "log",
-                  let values = try? url.resourceValues(forKeys: Set(keys)) else { return nil }
+                  let values = try? url.resourceValues(forKeys: Set(keys)),
+                  let size = values.fileSize, size > 0 else { return nil }
             return DiagnosticFileInfo(
                 name: url.lastPathComponent,
-                sizeBytes: values.fileSize ?? 0,
+                sizeBytes: size,
                 modified: values.contentModificationDate ?? .distantPast
             )
         }

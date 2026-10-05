@@ -19,13 +19,21 @@ final class SynapseAppModel {
     private(set) var authState: AuthState = .restoring
     private(set) var email: String?
     private(set) var onlineDesktops: [ReachableDesktop] = []
+    private var desktopPresenceGeneration: Int?
+    private var desktopPresenceRevision = 0
+    /// An empty list is an offline answer only after this connection supplied it.
+    var hasCurrentDesktopPresence: Bool {
+        authState == .signedIn && desktopPresenceGeneration == realtime.connectionGeneration
+    }
     /// The computer being viewed. Never changes without the reader asking — see
     /// `ViewedDesktopPreference`.
     private(set) var selectedDesktopClientInstanceId: String?
     private(set) var summary: MobileSummaryPayload?
     private let terminalWidgetPublisher = TerminalWidgetPublisher()
-    private var widgetHasLiveSummary = false
-    var hasLiveTerminalSummary: Bool { widgetHasLiveSummary && realtime.state.isConnected }
+    private var liveTerminalSummary = LiveTerminalSummaryStamp()
+    var hasLiveTerminalSummary: Bool {
+        liveTerminalSummary.belongs(to: realtime.connectionGeneration) && realtime.state.isConnected
+    }
     private(set) var terminalStores: [String: TerminalStore] = [:]
     /// The buttons the last `mobile.toolbar` carried, and which computer sent them.
     /// See `TerminalToolbarState` for why one slot is enough.
@@ -103,6 +111,7 @@ final class SynapseAppModel {
     private struct PendingWrite {
         let sessionId: String
         let intent: MobileIntentRequest
+        let context: TerminalActionContext
         /// Set on the replay itself, so a write is never replayed twice.
         let replayed: Bool
         /// The expanded editor waits for the same result and lease replay as other writes.
@@ -220,9 +229,9 @@ final class SynapseAppModel {
         }
     }
 
-    func dismissNotice(_ id: String) {
+    func dismissNotice(_ id: String, revision: Int? = nil) {
+        guard notices.remove(id, revision: revision) else { return }
         cancelNoticeTimer(id)
-        notices.remove(id)
         // Taking one away is what makes room for the next: a queued notice spends no time
         // on a clock, so it gets its whole duration once it is actually shown.
         syncNoticeTimers()
@@ -316,7 +325,7 @@ final class SynapseAppModel {
         opensSettings: Bool = false
     ) {
         let key = id ?? "text:\(text)"
-        if let index = terminalMessages.firstIndex(where: { $0.id == key }) {
+        if let index = terminalMessages.firstIndex(where: { $0.sessionId == sessionId && $0.id == key }) {
             terminalMessages[index].text = text
             terminalMessages[index].opensSettings = opensSettings
             return
@@ -335,8 +344,8 @@ final class SynapseAppModel {
         }
     }
 
-    func dismissTerminalMessage(_ id: String) {
-        terminalMessages.removeAll { $0.id == id }
+    func dismissTerminalMessage(_ id: String, sessionId: String? = nil) {
+        terminalMessages.removeAll { $0.id == id && (sessionId == nil || $0.sessionId == sessionId) }
     }
 
     /// A closed terminal takes its refusals with it: they are about a session that is
@@ -375,6 +384,21 @@ final class SynapseAppModel {
     private let uploader = FileUploader()
     private var relayDrainTask: Task<Void, Never>?
     private var accountGeneration = 0
+    private var viewingGeneration = 0
+
+    var terminalActionContext: TerminalActionContext? {
+        guard authState == .signedIn, let desktop = selectedDesktopClientInstanceId else { return nil }
+        return TerminalActionContext(desktopId: desktop, accountGeneration: accountGeneration,
+            viewingGeneration: viewingGeneration)
+    }
+
+    /// Async UI work belongs to the signed-in account that started it. This changes
+    /// at the start of sign-out, before credentials finish their cleanup requests.
+    var accountIdentityGeneration: Int { accountGeneration }
+
+    func isCurrentAccount(_ generation: Int) -> Bool {
+        authState == .signedIn && generation == accountGeneration
+    }
 
     var clientInstanceId: String { tokens.clientInstanceId }
 
@@ -547,6 +571,8 @@ final class SynapseAppModel {
         guard authState == .signedIn else { return }
         invalidateWorkspaceRequests()
         accountGeneration += 1
+        desktopPresenceGeneration = nil
+        desktopPresenceRevision += 1
         authState = .restoring
         stopKeepAlive()
         realtime.disconnect(reason: .unauthenticated)
@@ -562,7 +588,7 @@ final class SynapseAppModel {
         terminalMessages.removeAll()
         summary = nil
         onlineDesktops = []
-        widgetHasLiveSummary = false
+        liveTerminalSummary.clear()
         terminalWidgetPublisher.clear()
         gridClaims = GridClaimLedger()
         selectedDesktopClientInstanceId = nil
@@ -639,7 +665,10 @@ final class SynapseAppModel {
     }
 
     func readNotification(_ id: String) async {
-        await notifications.ensure(id, using: apiClient)
+        let account = accountIdentityGeneration
+        guard isCurrentAccount(account) else { return }
+        guard await notifications.ensure(id, using: apiClient) else { return }
+        guard isCurrentAccount(account) else { return }
         await notifications.read(id, using: apiClient)
     }
 
@@ -659,19 +688,24 @@ final class SynapseAppModel {
         _ = await meetings.loadDetail(meetingId, using: apiClient)
     }
 
-    func renameMeeting(_ meetingId: String, to title: String) async {
+    @discardableResult
+    func renameMeeting(_ meetingId: String, to title: String) async -> Bool {
         await meetings.rename(meetingId, to: title, using: apiClient)
     }
 
     @discardableResult
     func deleteMeeting(_ meetingId: String) async -> Bool {
-        let deleted = await meetings.delete(meetingId, using: apiClient)
+        let deleted = await meetings.delete(meetingId, using: apiClient,
+            onDeleted: { [playback] in playback.forget(meetingId: meetingId) },
+            onFailure: { [weak self] reason in self?.notice(reason, tone: .failure) }
+        )
         // 删除不可恢复，做完了要说一声。
         if deleted { notice("已删除") }
         return deleted
     }
 
-    func retryMeetingTranscription(_ meetingId: String) async {
+    @discardableResult
+    func retryMeetingTranscription(_ meetingId: String) async -> Bool {
         await meetings.retryTranscription(meetingId, using: apiClient)
     }
 
@@ -724,7 +758,7 @@ final class SynapseAppModel {
     /// 详情一起带过去是因为命中判据要服务端那份 `recording.size`：本机这份音频是不是还有
     /// 效，得跟服务端对一次。
     func loadMeetingAudio(_ detail: MeetingDetail) async {
-        await playback.load(meetingId: detail.id, serverSize: detail.recording.size, using: apiClient)
+        await playback.load(meetingId: detail.id, serverSize: detail.recording.size, durationMs: detail.durationMs, using: apiClient)
     }
 
     /// 载入态里那个「重试」：手动催一下，不取代自动恢复。
@@ -1012,7 +1046,7 @@ final class SynapseAppModel {
         } else {
             // A widget tap after backgrounding must wait for the next live summary,
             // while the shared snapshot remains available until it becomes stale.
-            widgetHasLiveSummary = false
+            liveTerminalSummary.clear()
             invalidateWorkspaceRequests()
             realtime.disconnect()
         }
@@ -1065,7 +1099,7 @@ final class SynapseAppModel {
             guard payload.desktopClientInstanceId == self.selectedDesktopClientInstanceId else { return }
             self.summary = payload
             self.referenceSelection.prune(keeping: payload.workspaces ?? [])
-            self.widgetHasLiveSummary = true
+            self.liveTerminalSummary.receive(on: self.realtime.connectionGeneration)
             self.publishTerminalWidgetSnapshot()
             self.pruneTerminalStores(keeping: Set(payload.sessions.map(\.id)))
             self.applyGridClaims(payload.sessions)
@@ -1230,6 +1264,9 @@ final class SynapseAppModel {
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
+            if !self.hasCurrentDesktopPresence {
+                Task { await self.refreshDesktops() }
+            }
             Task { await self.reloadNotifications(filter: self.notifications.filter) }
             self.clearExpiredTerminalMessages()
             // The computer may have been away for days while this phone was closed;
@@ -1239,9 +1276,7 @@ final class SynapseAppModel {
             self.retryWaitingAttachments()
             guard let desktop = self.selectedDesktopClientInstanceId else {
                 // Nothing is selected because nothing was online when this app
-                // started. The connection is the only news we have, so the list
-                // has to be fetched here rather than skipped.
-                Task { await self.refreshDesktops() }
+                // started. The current connection's list is fetched above.
                 return
             }
             // Everything below is addressed to the computer being viewed, and it may
@@ -1336,6 +1371,8 @@ final class SynapseAppModel {
     /// is and the screen says why.
     private func applyPresence(_ clientInstanceIds: [String]) {
         defer { publishTerminalWidgetSnapshot() }
+        desktopPresenceRevision += 1
+        desktopPresenceGeneration = realtime.connectionGeneration
         // Carried across the rebuild rather than re-fetched: presence is the authority
         // on which computers are reachable, and it says nothing else about any of
         // them. Whatever the last list did say — the name, the platform — belongs to
@@ -1379,7 +1416,7 @@ final class SynapseAppModel {
         // The computer being viewed went away. The list it sent describes a machine
         // that is not there, so it goes; the reader does not.
         summary = nil
-        widgetHasLiveSummary = false
+        liveTerminalSummary.clear()
         // A file the computer had begun fetching is not being fetched any more: it
         // died, or lost the network, partway through. It goes back to waiting rather
         // than staying in a state that claims progress that has stopped, and the
@@ -1405,15 +1442,16 @@ final class SynapseAppModel {
     /// over waiting files, and a computer signing in is not news about the computer
     /// being viewed.
     private func refreshDesktopDetails() async {
-        guard !onlineDesktopIds.isEmpty else { return }
+        guard authState == .signedIn, !onlineDesktopIds.isEmpty else { return }
         let account = accountGeneration
+        let connection = realtime.connectionGeneration
         guard let listed = try? await apiClient.onlineDesktops() else {
             // The ids from presence are still right; only the details are missing, and
             // each of them has a fallback of its own — the id for a name, the board
             // this phone has always drawn for a platform.
             return
         }
-        guard account == accountGeneration else { return }
+        guard isCurrentAccount(account), connection == realtime.connectionGeneration else { return }
         let details = listed.reduce(into: [String: ReachableDesktop]()) { details, desktop in
             details[desktop.clientInstanceId] = desktop
         }
@@ -1436,11 +1474,18 @@ final class SynapseAppModel {
     }
 
     func refreshDesktops() async {
+        guard authState == .signedIn else { return }
         let account = accountGeneration
+        let connection = realtime.connectionGeneration
+        let revision = desktopPresenceRevision
         defer { if account == accountGeneration { publishTerminalWidgetSnapshot() } }
         do {
             let listed = try await apiClient.onlineDesktops()
-            guard account == accountGeneration else { return }
+            guard isCurrentAccount(account), connection == realtime.connectionGeneration,
+                  revision == desktopPresenceRevision else { return }
+            desktopPresenceRevision += 1
+            let acceptedRevision = desktopPresenceRevision
+            desktopPresenceGeneration = connection
             onlineDesktops = listed
             for desktop in onlineDesktops {
                 guard let name = desktop.deviceName else { continue }
@@ -1454,8 +1499,11 @@ final class SynapseAppModel {
             // every row leads to a terminal that cannot attach is worse than none.
             if summary == nil, onlineDesktopIds.contains(desktop) {
                 let cached = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
-                guard account == accountGeneration,
-                      selectedDesktopClientInstanceId == desktop else { return }
+                guard isCurrentAccount(account),
+                      connection == realtime.connectionGeneration,
+                      acceptedRevision == desktopPresenceRevision,
+                      selectedDesktopClientInstanceId == desktop,
+                      summary == nil else { return }
                 summary = cached
                 if let name = summary?.desktopName {
                     viewedDesktops.remember(name: name, for: desktop)
@@ -1499,7 +1547,7 @@ final class SynapseAppModel {
         viewedDesktops.view(clientInstanceId)
         // The previous computer's list, terminals and in-flight work belong to it.
         summary = nil
-        widgetHasLiveSummary = false
+        liveTerminalSummary.clear()
         publishTerminalWidgetSnapshot()
         releaseViewing()
         Task { await refreshDesktops() }
@@ -1529,6 +1577,10 @@ final class SynapseAppModel {
     /// computer's summary does not list, and doing it here as well would be a second
     /// implementation of the same rule.
     private func releaseViewing() {
+        viewingGeneration += 1
+        for attachment in relayAttachments where attachment.pathUndo == .pending {
+            update(attachment.id) { $0.pathUndo = .blocked(TerminalAttachmentUndo.interruptedMessage) }
+        }
         referenceSelection = TerminalWorkspaceReferenceSelection()
         openSessions.removeAll()
         pendingWrites.removeAll()
@@ -1578,7 +1630,7 @@ final class SynapseAppModel {
             ))
             return
         }
-        guard widgetHasLiveSummary, let summary, summary.desktopClientInstanceId == desktopId else {
+        guard liveTerminalSummary.hasSummary, let summary, summary.desktopClientInstanceId == desktopId else {
             terminalWidgetPublisher.clear()
             return
         }
@@ -1778,61 +1830,67 @@ final class SynapseAppModel {
     /// Resolves once the desktop has answered, because the write that follows it
     /// is rejected if the lease has not actually changed hands yet — the gateway
     /// executes intents concurrently, so sending both without waiting would race.
-    private func reclaimControl(_ sessionId: String) async {
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else { return }
+    private func reclaimControl(_ sessionId: String, context: TerminalActionContext) async {
+        guard terminalActionContext == context, realtime.state.isConnected else { return }
         let result = await awaitResult(
             of: MobileIntentRequest(intentId: UUID().uuidString, kind: "unlock", sessionId: sessionId),
-            sentTo: desktop,
+            sentTo: context.desktopId,
             timeoutSeconds: 5
         )
         // Cleared only on confirmation, so a reclaim that never landed is retried
         // by the next write rather than silently losing that write too.
-        if result?.isAccepted == true { preemptedSessions.remove(sessionId) }
+        if terminalActionContext == context, result?.isAccepted == true { preemptedSessions.remove(sessionId) }
     }
 
     func sendCommand(_ sessionId: String, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        Task {
-            await write(MobileIntentRequest(
-                intentId: UUID().uuidString,
-                kind: "command",
-                sessionId: sessionId,
-                text: text
-            ), to: sessionId)
-        }
+        guard !trimmed.isEmpty, let context = terminalActionContext else { return }
+        submitWrite(MobileIntentRequest(
+            intentId: UUID().uuidString,
+            kind: "command",
+            sessionId: sessionId,
+            text: text
+        ), to: sessionId, context: context, submitsLine: true)
     }
 
-    /// Wait for acceptance before the expanded editor clears a long draft. A missing
+    /// Wait for acceptance before an editor clears its draft. A missing
     /// reply is uncertain: the command may have run, so it is never retried here.
     func sendCommandConfirming(_ sessionId: String, text: String) async -> CommandSendOutcome {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .notSent("没有可发送的内容。")
         }
-        if preemptedSessions.contains(sessionId) {
-            await reclaimControl(sessionId)
-            guard !preemptedSessions.contains(sessionId) else {
-                return .notSent("电脑正在使用这个会话，命令没有发送。")
-            }
-        }
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        guard let context = terminalActionContext, realtime.state.isConnected else {
             return .notSent("电脑离线，命令没有发送。")
         }
-        let intent = MobileIntentRequest(
+        return await writeConfirming(MobileIntentRequest(
             intentId: UUID().uuidString,
             kind: "command",
             sessionId: sessionId,
             text: text
-        )
+        ), to: sessionId, context: context)
+    }
+
+    private func writeConfirming(_ intent: MobileIntentRequest, to sessionId: String,
+                                 context: TerminalActionContext) async -> CommandSendOutcome {
+        guard await context.remainsCurrent(while: {
+            if preemptedSessions.contains(sessionId) { await reclaimControl(sessionId, context: context) }
+        }, current: { terminalActionContext }) else {
+            return .notSent("账号或电脑已切换，命令没有发送。")
+        }
+        guard !preemptedSessions.contains(sessionId) else {
+            return .notSent("电脑正在使用这个会话，命令没有发送。")
+        }
+        guard realtime.state.isConnected else { return .notSent("电脑离线，命令没有发送。") }
         return await withCheckedContinuation { continuation in
             let confirmation = CommandConfirmation(continuation)
             pendingWrites[intent.intentId] = PendingWrite(
                 sessionId: sessionId,
                 intent: intent,
+                context: context,
                 replayed: false,
                 confirmation: confirmation
             )
-            send(intent, to: desktop)
+            send(intent, to: context.desktopId)
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(10))
                 confirmation.finish(.uncertain("电脑是否收到不确定，请确认后再试。"))
@@ -1893,15 +1951,13 @@ final class SynapseAppModel {
     /// An empty list is refused here rather than sent: the computer's schema requires
     /// at least one action, so it would only ever come back rejected.
     func sendKeys(_ sessionId: String, _ actions: [MobileKeyAction]) {
-        guard !actions.isEmpty else { return }
-        Task {
-            await write(MobileIntentRequest(
-                intentId: UUID().uuidString,
-                kind: "keys",
-                sessionId: sessionId,
-                actions: actions
-            ), to: sessionId)
-        }
+        guard !actions.isEmpty, let context = terminalActionContext else { return }
+        submitWrite(MobileIntentRequest(
+            intentId: UUID().uuidString,
+            kind: "keys",
+            sessionId: sessionId,
+            actions: actions
+        ), to: sessionId, context: context, submitsLine: actions.contains(.key(.enter)))
     }
 
     // MARK: - Terminal toolbar
@@ -1945,7 +2001,8 @@ final class SynapseAppModel {
     /// 面板与它下面几页都不直接拿 `model`：它们拿的是一对闭包，这样「先提交、成功了再
     /// 切换」这类时序可以被单独验，而不必先起一个 App。见 `TerminalGitFlow`。
     var gitDesk: TerminalGitDesk {
-        TerminalGitDesk(
+        let context = terminalActionContext
+        return TerminalGitDesk(
             send: { [weak self] intent, timeout in
                 guard let self else { return nil }
                 return await self.runGitIntent(intent, waiting: timeout)
@@ -1953,7 +2010,10 @@ final class SynapseAppModel {
             notice: { [weak self] text, tone, id in
                 self?.notice(text, tone: tone, id: id)
             }
-        )
+        ).scoped { [weak self] in
+            guard let self, let context else { return false }
+            return self.terminalActionContext == context
+        }
     }
 
     /// 发一个 `git` intent 并等电脑的回答，等不到就是 `nil`。
@@ -2015,30 +2075,43 @@ final class SynapseAppModel {
     /// runs the command the user wrote, character for character, and a phone that
     /// tidied it up would be running a different one.
     func runToolbarButton(_ button: MobileToolbarButton, sessionId: String) {
+        guard let context = terminalActionContext else { return }
         let intent = button.action.intent(sessionId: sessionId, intentId: UUID().uuidString)
-        Task { await write(intent, to: sessionId) }
-        // Only when the button submits a line: that is the moment the chip an inserted
-        // path was holding has nothing left to undo, which is the same moment the input
-        // bar's own send button reaches it.
-        if button.action.submitsLine {
-            commitDeliveredAttachments(for: sessionId)
+        submitWrite(intent, to: sessionId, context: context, submitsLine: button.action.submitsLine)
+    }
+
+    private func submitWrite(_ intent: MobileIntentRequest, to sessionId: String,
+                             context: TerminalActionContext, submitsLine: Bool) {
+        let attachmentIds = submitsLine ? committedAttachmentIds(relayAttachments, sessionId: sessionId) : []
+        Task {
+            if submitsLine {
+                await TerminalAttachmentSubmission.perform(
+                    context: context, attachmentIds: attachmentIds,
+                    currentContext: { self.terminalActionContext },
+                    send: { await self.writeConfirming(intent, to: sessionId, context: context) },
+                    commit: { self.commitDeliveredAttachments(for: sessionId, attachmentIds: $0) },
+                    fail: { self.raiseTerminalMessage($0, sessionId: sessionId) }
+                )
+            } else {
+                await write(intent, to: sessionId, context: context)
+            }
         }
     }
 
     /// The takeover the user never asks for: a terminal the desktop has taken back
     /// is reclaimed on the way to the write, so typing here just works.
-    private func write(_ intent: MobileIntentRequest, to sessionId: String) async {
-        if preemptedSessions.contains(sessionId) {
-            await reclaimControl(sessionId)
-        }
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else { return }
+    private func write(_ intent: MobileIntentRequest, to sessionId: String, context: TerminalActionContext) async {
+        guard await context.remainsCurrent(while: {
+            if preemptedSessions.contains(sessionId) { await reclaimControl(sessionId, context: context) }
+        }, current: { terminalActionContext }), realtime.state.isConnected else { return }
         pendingWrites[intent.intentId] = PendingWrite(
             sessionId: sessionId,
             intent: intent,
+            context: context,
             replayed: false,
             confirmation: nil
         )
-        send(intent, to: desktop)
+        send(intent, to: context.desktopId)
     }
 
     /// Sends a refused write again, after taking the lease back.
@@ -2057,8 +2130,9 @@ final class SynapseAppModel {
     /// Interrupting someone mid-keystroke is worth one silent retry; it is not
     /// worth turning into a loop.
     private func replay(_ write: PendingWrite) async {
-        guard write.confirmation?.isFinished != true else { return }
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        let context = write.context
+        guard terminalActionContext == context, write.confirmation?.isFinished != true else { return }
+        guard realtime.state.isConnected else {
             if let confirmation = write.confirmation {
                 confirmation.finish(.notSent("电脑离线，命令没有发送。"))
             } else {
@@ -2066,8 +2140,9 @@ final class SynapseAppModel {
             }
             return
         }
-        await reclaimControl(write.sessionId)
-        guard write.confirmation?.isFinished != true else { return }
+        guard await context.remainsCurrent(while: {
+            await reclaimControl(write.sessionId, context: context)
+        }, current: { terminalActionContext }), write.confirmation?.isFinished != true else { return }
         guard !preemptedSessions.contains(write.sessionId) else {
             if let confirmation = write.confirmation {
                 confirmation.finish(.notSent("电脑正在使用这个会话，命令没有发送。"))
@@ -2084,10 +2159,11 @@ final class SynapseAppModel {
         pendingWrites[resent.intentId] = PendingWrite(
             sessionId: write.sessionId,
             intent: resent,
+            context: context,
             replayed: true,
             confirmation: write.confirmation
         )
-        send(resent, to: desktop)
+        send(resent, to: context.desktopId)
     }
 
     func stop(_ sessionId: String) {
@@ -2134,19 +2210,18 @@ final class SynapseAppModel {
                 self.notice(message, tone: .failure, id: "terminal.reference")
             }
         }
-        guard let desktop = selectedDesktopClientInstanceId,
-              realtime.state.isConnected, onlineDesktopIds.contains(desktop) else {
+        guard let context = terminalActionContext,
+              realtime.state.isConnected, onlineDesktopIds.contains(context.desktopId) else {
             fail("电脑离线，无法复制会话引用。")
             return
         }
-        let account = accountGeneration
         await TerminalSessionReferenceCopy.perform(
             target: target,
             send: { intent in
-                await self.awaitResult(of: intent, sentTo: desktop, timeoutSeconds: 10)
+                await self.awaitResult(of: intent, sentTo: context.desktopId, timeoutSeconds: 10)
             },
             isCurrent: {
-                guard self.accountGeneration == account, self.selectedDesktopClientInstanceId == desktop else { return false }
+                guard self.terminalActionContext == context else { return false }
                 switch target {
                 case .session(let sessionId):
                     return self.sessions.contains(where: { $0.id == sessionId })
@@ -2200,7 +2275,7 @@ final class SynapseAppModel {
         rows: Int?,
         deviceLabel: String?
     ) async -> AgentConversationStart {
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        guard let context = terminalActionContext, realtime.state.isConnected else {
             return .failed("电脑离线。")
         }
 
@@ -2215,9 +2290,11 @@ final class SynapseAppModel {
                 rows: rows,
                 deviceLabel: deviceLabel
             ),
-            sentTo: desktop,
+            sentTo: context.desktopId,
             timeoutSeconds: 10
         )
+
+        guard terminalActionContext == context else { return .failed("账号或电脑已切换。") }
 
         guard let result else {
             // Nothing came back at all. The cause a reader can act on is a computer
@@ -2316,13 +2393,14 @@ final class SynapseAppModel {
     /// reported as its own case — nothing was refused there, and the reader's choice
     /// has to survive for the reconnect to honour it.
     func releaseGrid(for sessionId: String) async -> GridReleaseOutcome {
+        guard let context = terminalActionContext else { return .notSent }
         gridSizeTasks[sessionId]?.cancel()
         gridSizeTasks[sessionId] = nil
 
         // Nothing was claimed, so there is nothing to give back. This is also what
         // keeps a phone that was never in the mode from sending a release at all.
         guard requestedGrid.removeValue(forKey: sessionId) != nil else { return .notSent }
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        guard realtime.state.isConnected else {
             return .notSent
         }
 
@@ -2334,9 +2412,10 @@ final class SynapseAppModel {
                 kind: "releaseGrid",
                 sessionId: sessionId
             ),
-            sentTo: desktop,
+            sentTo: context.desktopId,
             timeoutSeconds: 5
         )
+        guard terminalActionContext == context else { return .notSent }
         return gridReleaseOutcome(for: result)
     }
 
@@ -2397,11 +2476,13 @@ final class SynapseAppModel {
     /// failure it cannot attribute to anything, and the reader would get the reason
     /// twice or not at all depending on which branch ran first.
     private func performReturningSession(_ intent: MobileIntentRequest) async -> String? {
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        guard let context = terminalActionContext, realtime.state.isConnected else {
             banner = "电脑离线。"
             return nil
         }
-        guard let result = await awaitResult(of: intent, sentTo: desktop, timeoutSeconds: 10) else {
+        let result = await awaitResult(of: intent, sentTo: context.desktopId, timeoutSeconds: 10)
+        guard terminalActionContext == context else { return nil }
+        guard let result else {
             banner = "电脑一直没有回答，请重试。"
             return nil
         }
@@ -2725,8 +2806,13 @@ final class SynapseAppModel {
     /// immediately so the user can see what was accepted and what was refused
     /// without waiting for a transfer to finish.
     func sendFiles(_ files: [PickedFile], to sessionId: String) {
+        guard authState == .signedIn, let targetDesktop = selectedDesktopClientInstanceId else {
+            files.forEach(TerminalFileIntake.discard)
+            return
+        }
         let alreadyWaiting = relayAttachments.filter { $0.sessionId == sessionId && !$0.state.isFailed }.count
         let (accepted, rejections) = screenPickedFiles(files, alreadyWaiting: alreadyWaiting)
+        TerminalFileIntake.discardRejected(files, keeping: accepted)
 
         for rejection in rejections {
             raiseTerminalMessage(
@@ -2743,7 +2829,6 @@ final class SynapseAppModel {
         // Whichever computer this terminal is on, in case the reader switches before
         // the file is handed over. A file belongs to the computer it was picked for,
         // not to whichever one happens to be on screen when its bytes finish going up.
-        guard let targetDesktop = selectedDesktopClientInstanceId else { return }
         let uploads = accepted.map { file in
             (
                 file,
@@ -2923,19 +3008,13 @@ final class SynapseAppModel {
         guard let attachmentId = relayByIntent.removeValue(forKey: result.intentId) else { return }
 
         if result.isAccepted {
-            if let landedPath = result.landedPath {
-                let name = (landedPath as NSString).lastPathComponent
-                if !name.isEmpty {
-                    update(attachmentId) { $0.name = name }
-                }
-            }
             // The desktop has removed the cloud copy; the ledger no longer owes it.
             // Resolved on the item recorded at upload time, not on the result, which
             // does not carry it.
             if let itemId = relayAttachments.first(where: { $0.id == attachmentId })?.driveItemId {
                 relayLedger.resolve(itemId: itemId)
             }
-            update(attachmentId) { $0.state = .delivered(path: result.landedPath) }
+            update(attachmentId) { $0.acceptDelivery(result) }
             // A file that landed but could not be typed is a success with a caveat.
             // Saying nothing would leave the user waiting for text that is not coming.
             // A success with a caveat: the file landed, it just could not be typed.
@@ -3002,8 +3081,8 @@ final class SynapseAppModel {
     /// characters the user has since typed. The files themselves are left alone —
     /// `dismissRelay` does not touch a delivered one — because they are the user's
     /// now, sitting on the computer where the terminal said they are.
-    func commitDeliveredAttachments(for sessionId: String) {
-        for id in committedAttachmentIds(relayAttachments, sessionId: sessionId) {
+    func commitDeliveredAttachments(for sessionId: String, attachmentIds: [String]? = nil) {
+        for id in committedAttachmentIds(relayAttachments, sessionId: sessionId, attachmentIds: attachmentIds) {
             dismissRelay(id)
         }
     }
@@ -3012,38 +3091,56 @@ final class SynapseAppModel {
     ///
     /// That is the only undo a terminal offers, and it is why the desktop reports
     /// the path it inserted: the phone cannot count the characters of a path it
-    /// never knew. The chips go regardless of the answer — the row describes what
-    /// this phone put in the terminal, and the request to remove it has been made.
+    /// never knew. The chip leaves only after every chunk was accepted. A partial
+    /// or uncertain result keeps the file and requires checking the actual input.
     func undoTypedPaths(_ attachmentIds: [String]) {
+        guard let context = terminalActionContext else { return }
         for id in attachmentIds {
             guard let attachment = relayAttachments.first(where: { $0.id == id }),
+                  attachment.desktopClientInstanceId == context.desktopId,
+                  attachment.availableActions.contains(.undoInsert),
                   let path = attachment.insertedPath,
                   !path.isEmpty
             else { continue }
-            let count = path.count
+            update(id) { $0.pathUndo = .pending }
             Task { [weak self] in
-                var remaining = count
-                while remaining > 0 {
-                    let chunk = min(remaining, Self.backspaceChunk)
-                    remaining -= chunk
-                    await self?.write(
-                        MobileIntentRequest(
-                            intentId: UUID().uuidString,
-                            kind: "keys",
-                            sessionId: attachment.sessionId,
-                            actions: Array(repeating: .key(.backspace), count: chunk)
-                        ),
-                        to: attachment.sessionId
-                    )
-                }
+                guard let self else { return }
+                await TerminalAttachmentUndo.perform(
+                    characterCount: path.count, context: context,
+                    currentContext: { self.terminalActionContext },
+                    isPending: {
+                        self.relayAttachments.contains {
+                            $0.id == id && $0.intentId == attachment.intentId && $0.pathUndo == .pending
+                        }
+                    },
+                    send: { chunk in
+                        await self.writeConfirming(
+                            MobileIntentRequest(
+                                intentId: UUID().uuidString,
+                                kind: "keys",
+                                sessionId: attachment.sessionId,
+                                actions: Array(repeating: .key(.backspace), count: chunk)
+                            ),
+                            to: attachment.sessionId,
+                            context: context
+                        )
+                    },
+                    finish: { result in
+                        switch result {
+                        case .sent:
+                            self.dismissRelay(id)
+                        case .notSent(let message):
+                            self.update(id) { $0.pathUndo = nil }
+                            self.raiseTerminalMessage(message, sessionId: attachment.sessionId)
+                        case .blocked(let message):
+                            self.update(id) { $0.pathUndo = .blocked(message) }
+                            self.raiseTerminalMessage(message, sessionId: attachment.sessionId)
+                        }
+                    }
+                )
             }
         }
-        for id in attachmentIds { dismissRelay(id) }
     }
-
-    /// Well under the desktop's 128-action ceiling, so a long path is undone in a
-    /// few intents rather than refused as one oversized one.
-    private static let backspaceChunk = 64
 
     /// Removes relayed files whose computer never came back.
     ///

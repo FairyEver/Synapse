@@ -12,8 +12,7 @@ import Testing
 /// `snapshotFetcher` 接线口（见那边的注释），测试从这里驱动交错。
 @MainActor
 struct DriveStoreTests {
-    /// `reload` 那几个方法的签名要一个 `APIClient`；下面这批用例整套取快照都注入了、
-    /// 一次网络都不会发，所以它只是签名上的占位。
+    /// 快照交错测试注入取数；请求契约回归另用URLProtocol拦截HTTP，不访问生产。
     private let client = APIClient(
         tokens: TokenStore(service: "com.liy.SynapseMobile.tests.drive-store"),
         onCredentialsChanged: {}
@@ -370,7 +369,7 @@ struct DriveStoreTests {
     @Test func anExistingShareIsReusedInsteadOfCreatedAgain() {
         let known = [shareListItem("shr_1")]
 
-        // 用户什么都没改，本机手里就有那一条：不发请求，直接用。
+        // 用户什么都没改：计划选择校验并复用已有链接，避免创建请求。
         switch DriveSharePlan.of(itemId: "itm_1", known: known, settings: APIClient.DriveShareSettings()) {
         case .useExisting(let existing):
             #expect(existing.url == "https://synapse.d2.pub/s/shr_1")
@@ -523,6 +522,24 @@ struct DriveStoreTests {
         #expect(try shareBody(existing.settings(changedFrom: existing)).isEmpty)
     }
 
+    @Test func overlappingSharePagesKeepUniqueRowsAndUseTheServerOffset() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OverlappingSharesURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let client = APIClient(
+            tokens: TokenStore(service: UUID().uuidString),
+            session: session,
+            onCredentialsChanged: {}
+        )
+        let store = DriveStore()
+        await store.loadShares(using: client)
+        #expect(store.sharesErrorMessage == nil)
+        #expect(store.shares.map(\.id) == (0..<200).map { "share-\($0)" })
+        #expect(Set(store.shares.map(\.id)).count == store.shares.count)
+        #expect(!store.sharesLoading)
+    }
+
     // MARK: - 公开素材直链
 
     private func publicAsset(_ assetId: String, url: String = "https://synapse.d2.pub/files/ast_1") -> DrivePublicAsset {
@@ -611,6 +628,43 @@ struct DriveStoreTests {
     }
 
     // MARK: - 层代次
+
+    @Test func aCancelledLatestBrowserReadDoesNotInventAnError() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        store.snapshotFetcher = { _, _ in
+            await gate.hold()
+            throw APIError(status: 0, code: nil, message: "网络不可用")
+        }
+        let read = Task { await store.reload(using: client) }
+        await gate.waitUntilHeld()
+        read.cancel()
+        await gate.release()
+        await read.value
+        #expect(!store.loading)
+        #expect(store.errorMessage == nil)
+    }
+
+    @Test func aCancelledBrowserReadPreservesAnExistingFailure() async {
+        let store = DriveStore()
+        store.snapshotFetcher = { _, _ in
+            throw APIError(status: 403, code: nil, message: "读取被拒绝")
+        }
+        await store.reload(using: client)
+        #expect(store.errorMessage == "读取被拒绝")
+        let gate = DriveFetchGate()
+        store.snapshotFetcher = { _, _ in
+            await gate.hold()
+            throw APIError(status: 0, code: nil, message: "网络不可用")
+        }
+        let read = Task { await store.reload(using: client) }
+        await gate.waitUntilHeld()
+        read.cancel()
+        await gate.release()
+        await read.value
+        #expect(!store.loading)
+        #expect(store.errorMessage == "读取被拒绝")
+    }
 
     /// 续页在飞 → 下钻落地 → 续页返回。
     ///
@@ -713,6 +767,48 @@ struct DriveStoreTests {
         #expect(!store.hasMore)
     }
 
+    @Test func overlappingPagesKeepItemsUniqueAndAdvanceTheServerOffset() async {
+        let store = DriveStore()
+        let files = (0..<100).map { item("f\($0)", "文件\($0).md") }
+        let first = snapshot(
+            id: "root", name: "网盘", children: Array(files[0..<50]),
+            page: DriveChildrenPage(offset: 0, limit: 50, hasMore: true, nextOffset: 50)
+        )
+        // 第一页后其它端新增文件，实时 offset 页会再次包含原第 50 项。
+        let second = snapshot(
+            id: "root", name: "网盘", children: Array(files[49..<99]),
+            page: DriveChildrenPage(offset: 50, limit: 50, hasMore: true, nextOffset: 100)
+        )
+        let third = snapshot(
+            id: "root", name: "网盘", children: [files[99]],
+            page: DriveChildrenPage(offset: 100, limit: 50, hasMore: false, nextOffset: nil)
+        )
+        var requestedOffsets: [Int] = []
+        store.snapshotFetcher = { _, offset in
+            requestedOffsets.append(offset ?? 0)
+            switch offset {
+            case nil: return first
+            case 50: return second
+            case 100: return third
+            default:
+                Issue.record("必须继续使用服务端游标，不能从去重后的条数计算偏移")
+                return third
+            }
+        }
+
+        await store.reload(using: client)
+        await store.loadMore(using: client)
+        #expect(store.current?.children.map(\.id) == Array(files[0..<99]).map(\.id))
+        #expect(store.visibleChildren.count == 99)
+        #expect(store.current?.childrenPage?.nextOffset == 100)
+
+        await store.loadMore(using: client)
+        #expect(store.current?.children.map(\.id) == files.map(\.id))
+        #expect(store.visibleChildren.count == 100)
+        #expect(requestedOffsets == [0, 50, 100])
+        #expect(!store.hasMore)
+    }
+
     /// 末行反复出现时不该空转：`hasMore` 为真而 `nextOffset` 不在，就当作没有下一页。
     ///
     /// 服务端的契约是「`hasMore` 为真必带 `nextOffset`」，但列表末行的 `.onAppear` 每次
@@ -736,6 +832,517 @@ struct DriveStoreTests {
 
     // MARK: - 造数据
 
+    @Test func aFailedBackNavigationRetriesTheVisibleAncestor() async {
+        let store = DriveStore()
+        let root = snapshot(id: "root", name: "网盘", children: [])
+        let ancestor = snapshot(id: "a", name: "上层", children: [])
+        let child = snapshot(id: "b", name: "下层", children: [])
+        var failAncestor = false
+        var requested: [String?] = []
+        store.snapshotFetcher = { id, _ in
+            requested.append(id)
+            if id == "a", failAncestor {
+                throw APIError(status: 0, code: "network", message: "网络不可用")
+            }
+            return id == "b" ? child : id == "a" ? ancestor : root
+        }
+        await store.reload(using: client)
+        await store.open(itemId: "a", using: client)
+        await store.open(itemId: "b", using: client)
+        failAncestor = true
+        await store.jump(to: 1, using: client)
+
+        #expect(store.path.map(\.id) == ["a"])
+        #expect(store.folderId == "a", "失败后新建和上传也必须指向可见的上层")
+        #expect(store.current == nil)
+        #expect(store.errorMessage != nil)
+        failAncestor = false
+        await store.reload(using: client)
+        #expect(requested.last! == "a")
+        #expect(store.current?.current.id == "a")
+        #expect(store.errorMessage == nil)
+    }
+
+    @Test func aLaterBackNavigationSupersedesAnEarlierPendingJump() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        let root = snapshot(id: "root", name: "网盘", children: [])
+        let ancestor = snapshot(id: "a", name: "上层", children: [])
+        let child = snapshot(id: "b", name: "下层", children: [])
+        var holdAncestor = false
+        store.snapshotFetcher = { id, _ in
+            if id == "a", holdAncestor { await gate.hold() }
+            return id == "b" ? child : id == "a" ? ancestor : root
+        }
+        await store.reload(using: client)
+        await store.open(itemId: "a", using: client)
+        await store.open(itemId: "b", using: client)
+        holdAncestor = true
+        let earlier = Task { await store.jump(to: 1, using: client) }
+        await gate.waitUntilHeld()
+        await store.jump(to: 0, using: client)
+        #expect(store.path.isEmpty)
+        #expect(store.current?.isRoot == true)
+        await gate.release()
+        await earlier.value
+        #expect(store.path.isEmpty)
+        #expect(store.current?.isRoot == true)
+        #expect(!store.loading)
+    }
+
+    @Test func aFailedBackLayerStillShowsItsOwnRetry() async {
+        let store = DriveStore()
+        let ancestor = item("a", "上层", folder: true)
+        store.snapshotFetcher = { id, _ in
+            if id == "a" { return self.snapshot(id: "a", name: "上层", children: []) }
+            return self.snapshot(id: "b", name: "下层", children: [])
+        }
+        await store.open(itemId: "a", using: client)
+        await store.open(itemId: "b", using: client)
+        store.snapshotFetcher = { _, _ in throw URLError(.notConnectedToInternet) }
+        await store.jump(to: 1, using: client)
+        #expect(DriveBrowserLayer.folder(ancestor).isCurrent(in: store))
+        #expect(!DriveBrowserLayer.root.isCurrent(in: store))
+        #expect(store.errorMessage != nil)
+    }
+
+    @Test func anOldAccountLayerCannotFinishTheNewAccountsLoading() async {
+        let store = DriveStore()
+        let oldGate = DriveFetchGate()
+        let newGate = DriveFetchGate()
+        var account = "old"
+        store.snapshotFetcher = { _, _ in
+            let name = account
+            if name == "old" { await oldGate.hold() } else { await newGate.hold() }
+            return self.snapshot(id: "root", name: name, children: [])
+        }
+        let oldLoad = Task { await store.reload(using: client) }
+        await oldGate.waitUntilHeld()
+        store.clear()
+        account = "new"
+        let newLoad = Task { await store.reload(using: client) }
+        await newGate.waitUntilHeld()
+        await oldGate.release()
+        await oldLoad.value
+        #expect(store.current == nil)
+        #expect(store.loading)
+        await newGate.release()
+        await newLoad.value
+        #expect(store.current?.current.name == "new")
+        #expect(!store.loading)
+    }
+
+    @Test func aSameQueryTrashResponseCannotReplaceTheNewerResult() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        var calls = 0
+        store.trashFetcher = { _ in
+            calls += 1
+            if calls == 1 { await gate.hold(); return self.trashPage(total: 1, items: [self.trashEntry("old")]) }
+            return self.trashPage(total: 0)
+        }
+        let oldLoad = Task { await store.loadTrash(search: "报告", using: client) }
+        await gate.waitUntilHeld()
+        await store.loadTrash(search: "报告", using: client)
+        #expect(store.trashTotal == 0)
+        #expect(store.trash.isEmpty)
+        await gate.release()
+        await oldLoad.value
+        #expect(store.trashTotal == 0)
+        #expect(store.trash.isEmpty)
+        #expect(!store.trashLoading)
+    }
+
+    @Test func successfulTrashRefreshesTheAuthoritativeTotalWithoutReplacingItsList() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        store.snapshotFetcher = { _, _ in self.snapshot(id: "root", name: "网盘", children: []) }
+        await store.loadTrash(using: client)
+        let previousRows = store.trash
+        #expect(store.trashTotal == 55)
+
+        let outcome = await store.trash([item("review-count-success", "目录", folder: true)], using: client)
+
+        #expect(outcome.succeeded == 1)
+        // 权威 GET 返回57；不能按成功一项在本机推成56。
+        #expect(store.trashTotal == 57)
+        #expect(store.trash == previousRows)
+        #expect(!store.trashLoading)
+        #expect(store.trashErrorMessage == nil)
+    }
+
+    @Test func unsuccessfulTrashKeepsAllSnapshotsAndDoesNotReadTheCount() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        var reads = 0
+        store.trashFetcher = { _ in reads += 1; return self.trashPage(total: 55, items: [self.trashEntry("old")]) }
+        store.snapshotFetcher = { _, _ in self.snapshot(id: "root", name: "网盘", children: [self.item("keep", "保留")]) }
+        await store.loadTrash(using: client)
+        await store.reload(using: client)
+        let previous = store.current
+
+        let outcome = await store.trash([item("review-count-failed", "保留")], using: client)
+
+        #expect(outcome.failed == 1)
+        #expect(reads == 1)
+        #expect(store.current == previous)
+        #expect(store.trash.map(\.id) == ["old"])
+        #expect(store.trashTotal == 55)
+    }
+
+    @Test func filteredTrashDoesNotReplaceTheGlobalCount() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        await store.loadTrash(using: client)
+        await store.loadTrash(search: "报告", using: client)
+        #expect(store.trash.map(\.id) == ["filtered"])
+        #expect(store.trashTotal == 55)
+    }
+
+    @Test func anUnfilteredTrashReadCanUpdateTheCountAfterSearchChanges() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        var fullReads = 0
+        store.trashFetcher = { term in
+            if term != nil { return self.trashPage(total: 1, items: [self.trashEntry("filtered")]) }
+            fullReads += 1
+            if fullReads == 1 { return self.trashPage(total: 55) }
+            await gate.hold()
+            return self.trashPage(total: 58, items: [self.trashEntry("late-full")])
+        }
+        await store.loadTrash(using: client)
+        let oldLoad = Task { await store.loadTrash(using: client) }
+        await gate.waitUntilHeld()
+        await store.loadTrash(search: "报告", using: client)
+        #expect(store.trashTotal == 55)
+        await gate.release()
+        await oldLoad.value
+        #expect(store.trashTotal == 58)
+        #expect(store.trash.map(\.id) == ["filtered"])
+    }
+
+    @Test func anOlderUnfilteredReadCannotOverwriteThePostDeletionCount() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        var fullReads = 0
+        store.snapshotFetcher = { _, _ in self.snapshot(id: "root", name: "网盘", children: []) }
+        store.trashFetcher = { term in
+            if term != nil { return self.trashPage(total: 1, items: [self.trashEntry("filtered")]) }
+            fullReads += 1
+            if fullReads == 1 { return self.trashPage(total: 55) }
+            if fullReads == 2 { await gate.hold(); return self.trashPage(total: 55) }
+            return self.trashPage(total: 57)
+        }
+        await store.loadTrash(using: client)
+        let oldLoad = Task { await store.loadTrash(using: client) }
+        await gate.waitUntilHeld()
+        await store.loadTrash(search: "报告", using: client)
+        let outcome = await store.trash([item("review-count-success", "目录", folder: true)], using: client)
+        #expect(outcome.succeeded == 1)
+        #expect(store.trashTotal == 57)
+        await gate.release()
+        await oldLoad.value
+        #expect(store.trashTotal == 57)
+        #expect(store.trash.map(\.id) == ["filtered"])
+    }
+
+    @Test func aPendingDeletionCountCannotCrossTheAccountBoundary() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        var countStarted = false
+        var completed = false
+        store.snapshotFetcher = { _, _ in self.snapshot(id: "root", name: "网盘", children: []) }
+        store.trashFetcher = { _ in self.trashPage(total: 55) }
+        await store.loadTrash(using: client)
+        store.trashFetcher = { _ in
+            countStarted = true
+            await gate.hold()
+            return self.trashPage(total: 99)
+        }
+        let deleting = Task {
+            let result = await store.trash([self.item("review-count-success", "目录")], using: client)
+            completed = true
+            return result
+        }
+        while !countStarted && !completed { await Task.yield() }
+        #expect(countStarted, "成功删除必须读取权威总数")
+        guard countStarted else { _ = await deleting.value; return }
+        await gate.waitUntilHeld()
+        store.clear()
+        store.trashFetcher = { _ in self.trashPage(total: 4, items: [self.trashEntry("new-account")]) }
+        await store.loadTrash(using: client)
+        await gate.release()
+        _ = await deleting.value
+        #expect(store.trashTotal == 4)
+        #expect(store.trash.map(\.id) == ["new-account"])
+        #expect(store.current == nil)
+        #expect(!store.trashLoading)
+    }
+
+    @Test func aLateDeletionCountCannotOverwriteANewerRestoration() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        var reads = 0
+        var countStarted = false
+        var completed = false
+        store.snapshotFetcher = { _, _ in self.snapshot(id: "root", name: "网盘", children: []) }
+        store.trashFetcher = { _ in
+            reads += 1
+            if reads == 1 { return self.trashPage(total: 55) }
+            if reads == 2 { countStarted = true; await gate.hold(); return self.trashPage(total: 99) }
+            return self.trashPage(total: 54)
+        }
+        await store.loadTrash(using: client)
+        let deleting = Task {
+            let result = await store.trash([self.item("review-count-success", "目录")], using: client)
+            completed = true
+            return result
+        }
+        while !countStarted && !completed { await Task.yield() }
+        #expect(countStarted, "成功删除必须读取权威总数")
+        guard countStarted else { _ = await deleting.value; return }
+        await gate.waitUntilHeld()
+        #expect(await store.restoreTrashEntry(trashEntry("review-count-restored"), using: client).succeeded == 1)
+        #expect(store.trashTotal == 54)
+        await gate.release()
+        _ = await deleting.value
+        #expect(store.trashTotal == 54)
+    }
+
+    @Test func restoringFilteredTrashUpdatesTheGlobalCountAndPreservesTheQuery() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        var restored = false
+        store.trashFetcher = { term in
+            if term == nil { return self.trashPage(total: restored ? 54 : 55) }
+            return self.trashPage(total: restored ? 0 : 1, items: restored ? [] : [self.trashEntry("filtered")])
+        }
+        await store.loadTrash(using: client)
+        await store.loadTrash(search: "报告", using: client)
+        restored = true
+        #expect(await store.restoreTrashEntry(trashEntry("review-count-restored"), using: client).succeeded == 1)
+        #expect(store.trashTotal == 54)
+        #expect(store.trash.isEmpty)
+        #expect(!store.trashLoading)
+    }
+
+    @Test func aFailedAuxiliaryCountReadPreservesTheCountAndTrashFailure() async {
+        let (client, session) = trashCountClient(failTotal: true)
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        store.snapshotFetcher = { _, _ in self.snapshot(id: "root", name: "网盘", children: []) }
+        store.trashFetcher = { term in
+            if term != nil { throw APIError(status: 503, code: nil, message: "搜索未完成") }
+            return self.trashPage(total: 55, items: [self.trashEntry("keep")])
+        }
+        await store.loadTrash(using: client)
+        await store.loadTrash(search: "报告", using: client)
+        let previousFailure = store.trashErrorMessage
+        store.trashFetcher = nil
+        #expect(await store.trash([item("review-count-success", "目录")], using: client).succeeded == 1)
+        #expect(store.trashTotal == 55)
+        #expect(store.trash.map(\.id) == ["keep"])
+        #expect(store.trashErrorMessage == previousFailure)
+        #expect(!store.trashLoading)
+    }
+
+    @Test func successfulAssetTrashAlsoRefreshesTheGlobalCountWithoutResettingSearch() async {
+        let (client, session) = trashCountClient()
+        defer { session.invalidateAndCancel() }
+        let store = DriveStore()
+        let asset = publicAsset("review-count-asset")
+        store.assetsFetcher = { self.assetPage([asset]) }
+        store.assetTrashRequest = { _ in }
+        await store.loadAssets(using: client)
+        await store.loadTrash(using: client)
+        await store.loadTrash(search: "报告", using: client)
+        let previousRows = store.trash
+        #expect(await store.trashAsset(asset, using: client).succeeded == 1)
+        #expect(store.assets.isEmpty)
+        #expect(store.trashTotal == 57)
+        #expect(store.trash == previousRows)
+    }
+
+    private func trashCountClient(failTotal: Bool = false) -> (APIClient, URLSession) {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TrashCountReviewURLProtocol.self]
+        if failTotal { configuration.httpAdditionalHeaders = ["X-Review-Count-Failure": "1"] }
+        let session = URLSession(configuration: configuration)
+        return (APIClient(tokens: TokenStore(service: UUID().uuidString), session: session, onCredentialsChanged: {}), session)
+    }
+
+    @Test func aCancelledLatestTrashReadEndsItsLoadingWithoutAnError() async {
+        let store = DriveStore()
+        store.trashFetcher = { _ in throw CancellationError() }
+        await store.loadTrash(using: client)
+        #expect(!store.trashLoading)
+        #expect(store.trashErrorMessage == nil)
+    }
+
+    @Test func aSameAccountAssetsResponseCannotReplaceTheNewerResult() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        let oldAsset = publicAsset("old")
+        let newAsset = publicAsset("new")
+        var calls = 0
+        store.assetsFetcher = {
+            calls += 1
+            if calls == 1 { await gate.hold(); return self.assetPage([oldAsset]) }
+            return self.assetPage([newAsset])
+        }
+        let oldLoad = Task { await store.loadAssets(using: client) }
+        await gate.waitUntilHeld()
+        await store.loadAssets(using: client)
+        await gate.release()
+        await oldLoad.value
+        #expect(store.assets.map(\.assetId) == ["new"])
+        #expect(!store.assetsLoading)
+    }
+
+    @Test func anAssetsReadStartedBeforeDeletionCannotReviveTheDeletedRow() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        let asset = publicAsset("asset")
+        var hold = false
+        store.assetsFetcher = {
+            if hold { await gate.hold() }
+            return self.assetPage([asset])
+        }
+        store.assetTrashRequest = { _ in }
+        store.trashFetcher = { _ in self.trashPage(total: 0) }
+        await store.loadAssets(using: client)
+        hold = true
+        let oldLoad = Task { await store.loadAssets(using: client) }
+        await gate.waitUntilHeld()
+        let outcome = await store.trashAsset(asset, using: client)
+        #expect(outcome.succeeded == 1)
+        #expect(store.assets.isEmpty)
+        #expect(!store.assetsLoading)
+        await gate.release()
+        await oldLoad.value
+        #expect(store.assets.isEmpty)
+    }
+
+    @Test func aFailedAssetDeletionKeepsItsRowAndPendingRead() async {
+        let store = DriveStore()
+        let gate = DriveFetchGate()
+        let asset = publicAsset("asset")
+        var hold = false
+        store.assetsFetcher = {
+            if hold { await gate.hold() }
+            return self.assetPage([asset])
+        }
+        store.assetTrashRequest = { _ in throw URLError(.notConnectedToInternet) }
+        await store.loadAssets(using: client)
+        hold = true
+        let load = Task { await store.loadAssets(using: client) }
+        await gate.waitUntilHeld()
+        let outcome = await store.trashAsset(asset, using: client)
+        #expect(outcome.failed == 1)
+        #expect(store.assets.map(\.assetId) == ["asset"])
+        #expect(store.assetsLoading)
+        await gate.release()
+        await load.value
+        #expect(!store.assetsLoading)
+    }
+
+    @Test func anOldAssetsAccountCannotEndTheNewAccountsLoading() async {
+        let store = DriveStore()
+        let oldGate = DriveFetchGate()
+        let newGate = DriveFetchGate()
+        var account = "old"
+        store.assetsFetcher = {
+            let name = account
+            if name == "old" { await oldGate.hold() } else { await newGate.hold() }
+            return self.assetPage([self.publicAsset(name)])
+        }
+        let oldLoad = Task { await store.loadAssets(using: client) }
+        await oldGate.waitUntilHeld()
+        store.clear()
+        account = "new"
+        let newLoad = Task { await store.loadAssets(using: client) }
+        await newGate.waitUntilHeld()
+        await oldGate.release()
+        await oldLoad.value
+        #expect(store.assets.isEmpty)
+        #expect(store.assetsLoading)
+        await newGate.release()
+        await newLoad.value
+        #expect(store.assets.map(\.assetId) == ["new"])
+        #expect(!store.assetsLoading)
+    }
+
+    enum LateMutation: String, CaseIterable, Sendable {
+        case createFolder, rename, move, disableShare
+    }
+
+    @Test(arguments: LateMutation.allCases, [false, true])
+    func mutationRefreshCannotCrossAnAccountChange(_ mutation: LateMutation, accountChanged: Bool) async {
+        let key = UUID().uuidString
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LateDriveMutationURLProtocol.self]
+        configuration.httpAdditionalHeaders = ["X-Review-Mutation": key]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let client = APIClient(tokens: TokenStore(service: UUID().uuidString),
+                               session: session, onCredentialsChanged: {})
+        let store = DriveStore()
+        let oldItem = item("old-item", "old.md")
+        let oldShare = DriveShareListItem(id: "old-share", shareId: "old-link", itemId: oldItem.id,
+            itemName: oldItem.name, itemType: .file, sourceDeleted: false,
+            url: "https://example.invalid/share/old-link", urlWithPassword: "https://example.invalid/share/old-link",
+            passwordEnabled: false, password: nil, expiresAt: nil, accessMode: .linkRead,
+            editorEmails: [], createdAt: "2026-10-05T00:00:00Z")
+        let pending = Task {
+            switch mutation {
+            case .createFolder: return await store.createFolder(name: "old-folder", using: client)
+            case .rename: return await store.rename(item: oldItem, to: "renamed.md", using: client)
+            case .move: return await store.move([oldItem], to: nil, using: client)
+            case .disableShare: return await store.disableShare(oldShare, using: client)
+            }
+        }
+        await LateDriveMutationURLProtocol.gate.waitUntilHeld(key)
+        if accountChanged { store.clear() }
+        var reads = 0
+        store.snapshotFetcher = { _, _ in
+            reads += 1
+            return self.snapshot(id: "root", name: "新账号", children: [self.item("new-item", "new.md")])
+        }
+        await store.reload(using: client)
+        #expect(reads == 1)
+        #expect(store.visibleChildren.map(\.id) == ["new-item"])
+        await LateDriveMutationURLProtocol.gate.release(key)
+        let outcome = await pending.value
+        #expect(outcome.succeeded == 1)
+        let expectedBrowserReads = !accountChanged && mutation != .disableShare ? 2 : 1
+        let expectedShareReads = !accountChanged && mutation == .disableShare ? 1 : 0
+        #expect(reads == expectedBrowserReads)
+        #expect(store.visibleChildren.map(\.id) == ["new-item"])
+        #expect(await LateDriveMutationURLProtocol.gate.readCount(key) == expectedShareReads)
+        #expect(store.shares.isEmpty)
+        #expect(!store.sharesLoading)
+    }
+
+    private func assetPage(_ assets: [DrivePublicAsset]) -> DrivePublicAssetPage {
+        DrivePublicAssetPage(items: assets, total: assets.count,
+                            page: DriveChildrenPage(offset: 0, limit: 100, hasMore: false, nextOffset: nil))
+    }
+
+    private func trashPage(total: Int, items: [DriveTrashEntry] = []) -> DriveTrashPage {
+        DriveTrashPage(items: items, total: total,
+                       page: DriveChildrenPage(offset: 0, limit: 100, hasMore: false, nextOffset: nil))
+    }
+
     private func snapshot(
         id: String,
         name: String,
@@ -752,6 +1359,95 @@ struct DriveStoreTests {
             canZip: false
         )
     }
+}
+
+nonisolated private final class TrashCountReviewURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let body: Data
+        let status: Int
+        if request.httpMethod == "GET", url.path.hasSuffix("/drive/trash") {
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let limit = query.first(where: { $0.name == "limit" })?.value
+            let filtered = query.contains { $0.name == "search" }
+            guard limit == "1" || limit == "100" else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+                return
+            }
+            if limit == "1", request.value(forHTTPHeaderField: "X-Review-Count-Failure") == "1" {
+                status = 503
+                body = Data(#"{"message":"总数暂时不可用"}"#.utf8)
+            } else {
+                status = 200
+                let row: [String: Any] = ["id": filtered ? "filtered" : "original", "kind": "normal",
+                    "name": "报告", "type": "folder", "size": "0", "trashedAt": "2026-09-25T02:11:00.000Z"]
+                body = try! JSONSerialization.data(withJSONObject: ["items": [row],
+                    "total": filtered ? 1 : limit == "1" ? 57 : 55,
+                    "page": ["offset": 0, "limit": Int(limit!)!, "hasMore": false]])
+            }
+        } else if (request.httpMethod == "DELETE" || request.httpMethod == "POST"), url.path.contains("review-count-") {
+            status = url.path.contains("review-count-failed") ? 503 : 200
+            body = Data((status == 200 ? "{}" : #"{"message":"删除未完成"}"#).utf8)
+        } else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil) else { return }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+nonisolated private final class OverlappingSharesURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url,
+              url.path.hasSuffix("/drive/shares"),
+              let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              query.first(where: { $0.name == "limit" })?.value == "100",
+              let rawOffset = query.first(where: { $0.name == "offset" })?.value,
+              let offset = Int(rawOffset), [0, 100, 200].contains(offset)
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let range = offset == 0 ? 0..<100 : offset == 100 ? 99..<199 : 199..<200
+        let items: [[String: Any]] = range.map { index in
+            [
+                "id": "share-\(index)", "shareId": "shr_\(index)",
+                "itemId": "item-\(index)", "itemName": "\(index).md", "itemType": "file",
+                "sourceDeleted": false, "url": "https://example.invalid/share/shr_\(index)",
+                "urlWithPassword": "https://example.invalid/share/shr_\(index)",
+                "passwordEnabled": false, "accessMode": "link_read", "editorEmails": [],
+                "createdAt": "2026-09-25T02:11:00.000Z"
+            ]
+        }
+        let page: [String: Any] = [
+            "offset": offset, "limit": 100, "hasMore": offset < 200,
+            "nextOffset": offset < 200 ? (offset + 100) as Any : NSNull()
+        ]
+        do {
+            let data = try JSONSerialization.data(withJSONObject: ["items": items, "page": page])
+            guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+                throw URLError(.badServerResponse)
+            }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }
 
 /// 让一趟「取快照」停在半路的闸门。
@@ -784,4 +1480,60 @@ private actor DriveFetchGate {
         releaseWaiters.forEach { $0.resume() }
         releaseWaiters.removeAll()
     }
+}
+
+// 每个参数用独立 session 与请求标识拦截 HTTP；请求真正挂起后才切换账号，不访问生产。
+nonisolated private final class LateDriveMutationURLProtocol: URLProtocol, @unchecked Sendable {
+    static let gate = LateDriveMutationGate()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let key = request.value(forHTTPHeaderField: "X-Review-Mutation") else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        Task {
+            let data: Data
+            if request.httpMethod == "GET" {
+                await Self.gate.noteRead(key)
+                data = Data(#"{"items":[],"page":{"offset":0,"limit":100,"hasMore":false}}"#.utf8)
+            } else {
+                await Self.gate.hold(key)
+                data = Data("{}".utf8)
+            }
+            guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+private actor LateDriveMutationGate {
+    private var held: Set<String> = []
+    private var heldWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private var releaseWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+    private var reads: [String: Int] = [:]
+
+    func hold(_ key: String) async {
+        held.insert(key)
+        heldWaiters.removeValue(forKey: key)?.forEach { $0.resume() }
+        await withCheckedContinuation { releaseWaiters[key] = $0 }
+    }
+
+    func waitUntilHeld(_ key: String) async {
+        guard !held.contains(key) else { return }
+        await withCheckedContinuation { heldWaiters[key, default: []].append($0) }
+    }
+
+    func release(_ key: String) { releaseWaiters.removeValue(forKey: key)?.resume() }
+    func noteRead(_ key: String) { reads[key, default: 0] += 1 }
+    func readCount(_ key: String) -> Int { reads[key, default: 0] }
 }

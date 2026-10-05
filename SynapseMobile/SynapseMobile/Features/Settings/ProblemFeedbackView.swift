@@ -13,6 +13,7 @@ struct ProblemFeedbackView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var submitting = false
+    @State private var viewGeneration = 0
 
     /// 空白不算内容：只有空格的输入框不该让提交按钮亮起来。
     private var trimmed: String {
@@ -27,6 +28,8 @@ struct ProblemFeedbackView: View {
                     .accessibilityIdentifier("feedback-text")
             }
         }
+        .disabled(submitting)
+        .onDisappear { viewGeneration += 1 }
         .noticeOverlay(model)
         .navigationTitle("问题反馈")
         .navigationBarTitleDisplayMode(.inline)
@@ -49,11 +52,14 @@ struct ProblemFeedbackView: View {
 
     private func submit() {
         guard !trimmed.isEmpty, !submitting else { return }
+        let content = trimmed
+        let account = model.accountIdentityGeneration
+        let request = viewGeneration
         submitting = true
         Task {
-            let content = trimmed
             let outcome = await model.submitProblemFeedback(content)
             submitting = false
+            guard request == viewGeneration, model.isCurrentAccount(account) else { return }
             // 成功走 `success`，其余走 `failure`：`unknown` 也是失败 —— 内容可能已经
             // 送出去了，但这件事对读者来说没成，他不该看到一条绿色的东西。
             model.notice(outcome.message, tone: outcome == .submitted ? .success : .failure)

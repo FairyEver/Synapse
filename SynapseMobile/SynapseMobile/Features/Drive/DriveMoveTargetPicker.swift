@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// 一批动作收尾时该不该说话。
 ///
@@ -34,6 +35,45 @@ enum DriveMoveTargets {
     }
 }
 
+/// 续页失败保留游标；下一次请求从失败的同一页继续。
+@MainActor
+@Observable
+final class DriveMoveTargetPagination {
+    private(set) var nextOffset: Int?
+    private(set) var loading = false
+    private(set) var errorMessage: String?
+    private var generation = 0
+
+    func reset(nextOffset: Int? = nil) {
+        generation += 1
+        self.nextOffset = nextOffset
+        loading = false
+        errorMessage = nil
+    }
+
+    func load(
+        isCurrent: () -> Bool,
+        fetch: (Int) async throws -> DriveBrowserSnapshot
+    ) async -> DriveBrowserSnapshot? {
+        guard !loading, let offset = nextOffset else { return nil }
+        let request = generation
+        loading = true
+        errorMessage = nil
+        defer { if request == generation { loading = false } }
+        do {
+            let snapshot = try await fetch(offset)
+            guard request == generation, !Task.isCancelled, isCurrent() else { return nil }
+            let page = snapshot.childrenPage
+            nextOffset = page?.hasMore == true ? page?.nextOffset : nil
+            return snapshot
+        } catch {
+            guard request == generation, !Task.isCancelled, isCurrent() else { return nil }
+            errorMessage = DriveText.errorMessage(error)
+            return nil
+        }
+    }
+}
+
 /// 移动目标：一棵能一层层走下去的文件夹树。
 ///
 /// 从**当前这一层**出发，可以一层层往上去（要移到兄弟文件夹里就得先上去）—— 这也是原型
@@ -59,10 +99,8 @@ struct DriveMoveTargetPicker: View {
     @State private var chain: [DriveBrowserItem]
     @State private var children: [DriveBrowserItem] = []
     @State private var loading = true
-    @State private var loadingMore = false
+    @State private var pagination = DriveMoveTargetPagination()
     @State private var errorMessage: String?
-    /// 还有下一页时那个偏移量；到尽头就是 nil。
-    @State private var nextOffset: Int?
     @State private var moving = false
 
     init(
@@ -137,10 +175,23 @@ struct DriveMoveTargetPicker: View {
                         Text("这里没有子文件夹")
                             .foregroundStyle(.secondary)
                     }
-                    if nextOffset != nil {
-                        HStack { Spacer(); ProgressView(); Spacer() }
-                            .listRowSeparator(.hidden)
-                            .onAppear { Task { await loadMore() } }
+                    if pagination.nextOffset != nil {
+                        VStack(alignment: .leading) {
+                            if pagination.loading {
+                                HStack { Spacer(); ProgressView(); Spacer() }
+                            } else if let reason = pagination.errorMessage {
+                                Text(reason).foregroundStyle(.secondary)
+                                Button { Task { await loadMore() } } label: {
+                                    Text("重试").frame(minHeight: Metrics.minimumTapTarget)
+                                }
+                            } else {
+                                Button { Task { await loadMore() } } label: {
+                                    Text("加载更多").frame(minHeight: Metrics.minimumTapTarget)
+                                }
+                            }
+                        }
+                        .listRowSeparator(.hidden)
+                        .onAppear { Task { await loadMore() } }
                     }
                 } footer: {
                     // 现在停在哪：上面那张列表只说明下一层能去哪，说明不了这一层是哪里。
@@ -195,6 +246,7 @@ struct DriveMoveTargetPicker: View {
             .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget)
         }
         .buttonStyle(.borderedProminent)
+        .tint(Color(uiColor: .systemBlue))
         .disabled(moving)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -223,7 +275,7 @@ struct DriveMoveTargetPicker: View {
         loading = true
         errorMessage = nil
         children = []
-        nextOffset = nil
+        pagination.reset()
     }
 
     // MARK: - 取数
@@ -232,18 +284,20 @@ struct DriveMoveTargetPicker: View {
     private func loadLevel() async {
         loading = true
         errorMessage = nil
+        pagination.reset()
         let level = levelId
+        let account = model.accountIdentityGeneration
         do {
             let snapshot = try await model.driveSnapshot(itemId: level)
             // 这一趟出发之后用户可能已经换了一层（上去、进了别的文件夹）：这一页属于上一层，
             // 接上去就是一份张冠李戴的名单，和第 51 个子文件夹一样够不着。
-            guard level == levelId else { return }
+            guard !Task.isCancelled, level == levelId, model.isCurrentAccount(account) else { return }
             apply(snapshot, replacing: true)
             loading = false
         } catch {
-            guard level == levelId else { return }
+            guard !Task.isCancelled, level == levelId, model.isCurrentAccount(account) else { return }
             children = []
-            nextOffset = nil
+            pagination.reset()
             errorMessage = DriveText.errorMessage(error)
             loading = false
         }
@@ -254,19 +308,16 @@ struct DriveMoveTargetPicker: View {
     /// 选择器要能看见**所有**子文件夹，而一页只有 50 个：只画第一页的话，第 51 个子文件夹
     /// 在手机上根本够不着，用户会以为它不在那儿。
     private func loadMore() async {
-        guard !loading, !loadingMore, let offset = nextOffset else { return }
-        loadingMore = true
-        defer { loadingMore = false }
+        guard !loading else { return }
         let level = levelId
-        do {
-            let snapshot = try await model.driveSnapshot(itemId: level, childrenOffset: offset)
-            guard level == levelId else { return }
-            apply(snapshot, replacing: false)
-        } catch {
-            // 续页失败不动已经画出来的那些：一次网络抖动不该把这一层的名单擦掉。
-            guard level == levelId else { return }
-            model.notice(DriveText.errorMessage(error), tone: .failure)
+        let account = model.accountIdentityGeneration
+        let snapshot = await pagination.load(isCurrent: {
+            level == levelId && model.isCurrentAccount(account)
+        }) { offset in
+            try await model.driveSnapshot(itemId: level, childrenOffset: offset)
         }
+        guard let snapshot else { return }
+        apply(snapshot, replacing: false)
     }
 
     private func apply(_ snapshot: DriveBrowserSnapshot, replacing: Bool) {
@@ -280,8 +331,10 @@ struct DriveMoveTargetPicker: View {
             let known = Set(children.map(\.id))
             children += next.filter { !known.contains($0.id) }
         }
-        let page = snapshot.childrenPage
-        nextOffset = page?.hasMore == true ? page?.nextOffset : nil
+        if replacing {
+            let page = snapshot.childrenPage
+            pagination.reset(nextOffset: page?.hasMore == true ? page?.nextOffset : nil)
+        }
     }
 
     // MARK: - 移动
@@ -295,8 +348,11 @@ struct DriveMoveTargetPicker: View {
         guard !moving else { return }
         moving = true
         let target = levelId
+        let account = model.accountIdentityGeneration
         Task {
+            guard model.isCurrentAccount(account) else { return }
             let outcome = await model.driveMove(items, to: target)
+            guard model.isCurrentAccount(account) else { return }
             moving = false
             guard let notice = outcome.noticeText("移动") else {
                 onMoved(outcome)

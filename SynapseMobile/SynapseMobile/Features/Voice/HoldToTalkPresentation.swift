@@ -8,6 +8,12 @@ import Foundation
 /// 这一版的排布：按住之后**输入栏上方浮出一块录音面板**；手指往上滑压到面板上，面板
 /// 上盖一层与它同样尺寸、左右一分为二的蒙层（左取消 / 右固定）。
 struct HoldToTalkPresentation: Equatable {
+    enum AccessibleActivation: Equatable {
+        case begin
+        case finish
+        case none
+    }
+
     /// 转写的两级呈现：已定稿的正常色，还在变的当前句次要色，末尾一个光标。
     struct Transcript: Equatable {
         let stable: String
@@ -74,6 +80,16 @@ struct HoldToTalkPresentation: Equatable {
     let controlsEnabled: Bool
     /// 发送键。语音态一律不可点 —— 此刻没有可发的文字。
     let sendEnabled: Bool
+    /// 默认辅助操作不用按住手势：开始后固定，再次激活完成。
+    let accessibleActivation: AccessibleActivation
+
+    var accessibilityLabel: String {
+        switch accessibleActivation {
+        case .begin: "开始语音输入"
+        case .finish: Self.finishLabel
+        case .none: barLabel
+        }
+    }
 
     /// 输入栏那一格的字。这一格从头到尾都在原位，只是称呼跟着走。
     static let idleLabel = "按住 说话"
@@ -135,6 +151,9 @@ struct HoldToTalkPresentation: Equatable {
         let wrappingUp = phase == .finalizing
 
         self.locked = locked
+        accessibleActivation = phase == .finalizing ? .none
+            : locked ? .finish
+            : (voiceMode && phase == .idle ? .begin : .none)
         barIsVoice = voiceMode || phase != .idle
         recording = listening && !locked
         barLabel = Self.labelForBar(recording: listening && !locked, locked: locked, gesture: gesture)

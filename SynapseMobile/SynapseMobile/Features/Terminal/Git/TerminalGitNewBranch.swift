@@ -33,15 +33,18 @@ struct TerminalGitNewBranch: View {
             }
         }
         .listStyle(.insetGrouped)
+        .disabled(flow.isBusy)
         .navigationTitle("新建分支")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("创建") {
+                Button {
                     Haptics.commit()
                     Task { await flow.createBranch(on: desk) }
+                } label: {
+                    TerminalGitConfirmationLabel(title: "创建", isBusy: flow.isBusy)
                 }
-                .disabled(trimmedName.isEmpty)
+                .disabled(trimmedName.isEmpty || flow.isBusy)
                 .accessibilityIdentifier("git-new-branch-create")
             }
         }

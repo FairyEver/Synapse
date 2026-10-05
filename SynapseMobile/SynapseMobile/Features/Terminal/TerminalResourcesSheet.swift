@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct TerminalResourcesSheet: View {
-    @Environment(\.dismiss) private var dismiss
     let store: TerminalStore
+    let usesNavigationStack: Bool
+    let onClose: () -> Void
     let onOpen: (URL) -> Void
     @State private var pending: TerminalResource?
     /// 每条链接问到的答案。没问到的就是没有键 —— 那时什么都不标，不拿「不知道」当失效。
@@ -23,25 +24,49 @@ struct TerminalResourcesSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let pending {
-                    candidateList(pending)
-                } else {
-                    resourceList
+        Group {
+            if usesNavigationStack {
+                NavigationStack {
+                    resourceContent
+                        .navigationTitle(title)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            if pending != nil {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    Button("返回") { pending = nil }
+                                }
+                            } else {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("关闭", action: onClose)
+                                }
+                            }
+                        }
                 }
-            }
-            .navigationTitle(pending == nil ? "会话资源" : "选择链接")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if pending != nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("返回") { pending = nil }
+            } else {
+                // A NavigationStack inside a split view's inspector can replace
+                // the detail's navigation items, even while the inspector is hidden.
+                // Apple's documented alternative keeps the title in the content.
+                resourceContent.safeAreaInset(edge: .top, spacing: 0) {
+                    HStack {
+                        if pending != nil {
+                            Button { pending = nil } label: {
+                                Label("返回", systemImage: "chevron.backward")
+                                    .labelStyle(.iconOnly)
+                                    .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                                    .contentShape(Rectangle())
+                            }
+                        }
+                        Text(title).font(.headline)
+                        Spacer()
+                        Button(action: onClose) {
+                            Label("关闭", systemImage: "xmark")
+                                .labelStyle(.iconOnly)
+                                .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                                .contentShape(Rectangle())
+                        }
                     }
-                } else {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("关闭") { dismiss() }
-                    }
+                    .padding()
+                    .background(.bar)
                 }
             }
         }
@@ -52,6 +77,13 @@ struct TerminalResourcesSheet: View {
             pending = nil
             reachability.removeAll()
         }
+    }
+
+    private var title: String { pending == nil ? "会话资源" : "选择链接" }
+
+    @ViewBuilder private var resourceContent: some View {
+        if let pending { candidateList(pending) }
+        else { resourceList }
     }
 
     private var resourceList: some View {

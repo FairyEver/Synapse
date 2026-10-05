@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 @MainActor
 private enum MailDateFormatters {
@@ -17,7 +18,7 @@ func mailDate(_ value: String) -> String {
     return date.formatted(date: .abbreviated, time: .shortened)
 }
 
-struct MailBulkSelection {
+struct MailBulkSelection: Equatable {
     private(set) var isActive = false
     private(set) var ids: Set<String> = []
 
@@ -83,7 +84,7 @@ struct MailView: View {
                 }
 
                 Section(store.box.title) {
-                    if let error = store.error { Text(error).foregroundStyle(.red) }
+                    if let error = store.error { Text(error).foregroundStyle(Theme.failure) }
                     if store.loading && store.messages.isEmpty { ProgressView() }
                     ForEach(store.messages) { message in
                         Group {
@@ -106,6 +107,15 @@ struct MailView: View {
                             if store.messages.last?.messageId == message.messageId { Task { await store.loadMore(using: model, query: search) } }
                         }
                     }
+                    if store.nextCursor != nil {
+                        Button {
+                            Task { await store.loadMore(using: model, query: search) }
+                        } label: {
+                            if store.loading { ProgressView("加载中") }
+                            else { Text("加载更多") }
+                        }
+                        .disabled(store.loading)
+                    }
                     if !store.loading && store.messages.isEmpty { ContentUnavailableView("没有信件", systemImage: "envelope") }
                 }
             }
@@ -127,12 +137,13 @@ struct MailView: View {
                             }
                             Button("清空\(store.box.title)", systemImage: "trash", role: .destructive) { pendingDelete = .all(store.box.rawValue) }
                         } label: { Image(systemName: "ellipsis.circle") }
+                        .accessibilityLabel("信箱操作")
                         Button("写信", systemImage: "square.and.pencil") { compose = MailComposeStart() }.labelStyle(.iconOnly)
                     }
                 }
             }
         } detail: { id in
-            MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { deleteMessage(id) })
+            MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, loadingContext: store.loadingContext, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { deleteMessage(id) })
                 .task(id: id) {
                     if !(await store.open(id: id, using: model)), selection == id {
                         selection = nil
@@ -161,6 +172,9 @@ struct MailView: View {
         .confirmationDialog(pendingDelete?.title ?? "删除信件？", isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible) {
             Button("删除", role: .destructive) {
                 let scope = pendingDelete
+                let requestedBox = store.box
+                let requestedSelection = selection
+                let requestedBulkSelection = bulkSelection
                 pendingDelete = nil
                 Task {
                     let success: Bool
@@ -169,8 +183,14 @@ struct MailView: View {
                     case .all(let box): success = await store.deleteAll(box: box, using: model)
                     case nil: return
                     }
-                    bulkSelection.finishDeletion(success: success)
-                    if success { selection = nil }
+                    guard store.box == requestedBox else { return }
+                    if bulkSelection == requestedBulkSelection { bulkSelection.finishDeletion(success: success) }
+                    guard success, selection == requestedSelection, store.detail == nil, let requestedSelection else { return }
+                    switch scope {
+                    case .selected(let ids) where ids.contains(requestedSelection): selection = nil
+                    case .all: selection = nil
+                    default: break
+                    }
                 }
             }
         } message: {
@@ -229,20 +249,21 @@ private struct MailDetailView: View {
     let context: [MailSummary]
     let hasMoreContext: Bool
     let contextError: String?
+    let loadingContext: Bool
     let error: String?
     let onReply: (ReplyKind, MailMessage) -> Void
     let onOpenContext: (String) -> Void
     let onLoadMoreContext: () -> Void
     let onRead: (Bool) -> Void
     let onDelete: () -> Void
-    @State private var downloaded: [String: URL] = [:]
-    @State private var downloadError: String?
+    @State private var attachmentStore = MailAttachmentStore()
 
     var body: some View {
         Group {
             if let message, message.messageId == messageId {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        if let error { Text(error).foregroundStyle(Theme.failure) }
                         Text(message.subject).font(.title2).fontWeight(.semibold)
                         if let kind = message.relationKind { Text(kind == "forward" ? "转发" : "回复").font(.caption).foregroundStyle(.secondary) }
                         Text("发件人：\(message.sender.name)").font(.subheadline)
@@ -268,17 +289,32 @@ private struct MailDetailView: View {
                             Text("附件").font(.headline)
                             ForEach(message.attachments) { attachment in
                                 HStack {
-                                    Button(attachment.fileName, systemImage: "paperclip") { Task { await download(attachment) } }
+                                    Button {
+                                        Task { await attachmentStore.open(attachment, messageId: messageId, using: model) }
+                                    } label: {
+                                        Label(attachment.fileName, systemImage: "paperclip")
+                                            .frame(minHeight: Metrics.minimumTapTarget, alignment: .leading)
+                                    }
+                                    .disabled(attachmentStore.loading.contains(attachment.id))
+                                    .accessibilityHint("打开附件")
                                     Spacer()
-                                    if let url = downloaded[attachment.id] { ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("分享 \(attachment.fileName)") }
+                                    if attachmentStore.loading.contains(attachment.id) {
+                                        ProgressView().accessibilityLabel("正在下载 \(attachment.fileName)")
+                                    } else if let url = attachmentStore.downloaded[attachment.id] {
+                                        ShareLink(item: url) {
+                                            Image(systemName: "square.and.arrow.up")
+                                                .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                                        }
+                                        .accessibilityLabel("分享 \(attachment.fileName)")
+                                    }
                                 }
                             }
                         }
-                        if let downloadError { Text(downloadError).foregroundStyle(.red) }
+                        if let error = attachmentStore.error { Text(error).foregroundStyle(Theme.failure) }
                         if context.count > 1 || hasMoreContext || contextError != nil {
                             Divider()
                             Text("关联往来").font(.headline)
-                            if let contextError { Text(contextError).foregroundStyle(.red) }
+                            if let contextError { Text(contextError).foregroundStyle(Theme.failure) }
                             ForEach(context.filter { $0.messageId != messageId }) { item in
                                 Button { onOpenContext(item.messageId) } label: {
                                     HStack {
@@ -288,7 +324,7 @@ private struct MailDetailView: View {
                                     }
                                 }
                             }
-                            if hasMoreContext { Button("加载更早往来", action: onLoadMoreContext) }
+                            if hasMoreContext { Button("加载更早往来", action: onLoadMoreContext).disabled(loadingContext) }
                         }
                     }
                     .padding()
@@ -306,15 +342,16 @@ private struct MailDetailView: View {
                             if message.sender.userId != message.viewerId { Button(message.readAt == nil ? "设为已读" : "设为未读") { onRead(message.readAt == nil) } }
                             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
                         } label: { Image(systemName: "ellipsis.circle") }
+                        .accessibilityLabel("信件操作")
                     }
                 }
             } else if let error { ContentUnavailableView(error, systemImage: "exclamationmark.triangle") }
             else { ProgressView() }
         }
-    }
-
-    private func download(_ attachment: MailAttachment) async {
-        do { downloaded[attachment.id] = try await model.mailDownloadAttachment(messageId: messageId, attachment: attachment) }
-        catch { downloadError = error.localizedDescription }
+        .task(id: messageId) { attachmentStore.reset(for: messageId) }
+        .quickLookPreview(Binding(
+            get: { attachmentStore.previewURL },
+            set: { if $0 == nil { attachmentStore.dismissPreview() } }
+        ))
     }
 }

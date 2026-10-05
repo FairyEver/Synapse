@@ -181,8 +181,11 @@ final class AsrSession {
     private func receive(on socket: URLSessionWebSocketTask) async {
         while !Task.isCancelled {
             do {
-                handle(try await socket.receive())
+                let message = try await socket.receive()
+                guard !Task.isCancelled, !closed else { return }
+                handle(message)
             } catch {
+                guard !closed else { return }
                 // 没走到 final 就断了，对用户来说就是「网络已断开」，不是正常结束。
                 if !closed, !finished { reportFailure(.network) }
                 events.onFinished()
@@ -192,7 +195,8 @@ final class AsrSession {
         }
     }
 
-    private func handle(_ message: URLSessionWebSocketTask.Message) {
+    func handle(_ message: URLSessionWebSocketTask.Message) {
+        guard !closed, !finished else { return }
         let data: Data
         switch message {
         case .string(let text): data = Data(text.utf8)
@@ -222,6 +226,7 @@ final class AsrSession {
         if message.final == 1 {
             finished = true
             events.onFinished()
+            close()
         }
     }
 

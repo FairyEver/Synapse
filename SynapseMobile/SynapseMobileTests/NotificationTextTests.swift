@@ -59,6 +59,29 @@ struct NotificationTextTests {
         #expect(NotificationText.fullTimestamp(items[1].createdAt, calendar: calendar) == "2026年9月22日 23:50")
     }
 
+    @Test func ensuringAnOldNotificationDoesNotSplitDaysOrDuplicateSectionIds() throws {
+        let groups = NotificationText.dayGroups([
+            item("old-deep-link", at: "2026-09-22T09:25:00.000Z"),
+            item("today", at: "2026-09-23T09:25:00.000Z"),
+            item("yesterday", at: "2026-09-22T15:50:00.000Z"),
+        ], now: try now(), calendar: calendar)
+        #expect(groups.map(\.title) == ["今天", "昨天"])
+        #expect(groups[1].items.map(\.id) == ["yesterday", "old-deep-link"])
+        #expect(Set(groups.map(\.id)).count == groups.count)
+    }
+
+    @Test func anUnknownFirstTimestampFormsOneSafeSectionAtTheEnd() throws {
+        let unknown = item("unknown", at: "")
+        let alone = NotificationText.dayGroups([unknown], now: try now(), calendar: calendar)
+        #expect(alone.count == 1)
+        #expect(alone.first?.title == "时间未知")
+        let mixed = NotificationText.dayGroups([
+            unknown, item("today", at: "2026-09-23T09:25:00.000Z"), item("also-unknown", at: "invalid"),
+        ], now: try now(), calendar: calendar)
+        #expect(mixed.map(\.title) == ["今天", "时间未知"])
+        #expect(mixed.last?.items.map(\.id) == ["unknown", "also-unknown"])
+    }
+
     @Test func resolvedTerminalNotificationsDoNotLookActionable() {
         let createdAt = "2026-09-23T09:25:00.000Z"
         #expect(NotificationText.status(item("waiting", at: createdAt, source: "terminal-attention", targetId: "session")) == nil)

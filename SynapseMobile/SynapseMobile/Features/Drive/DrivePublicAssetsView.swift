@@ -50,12 +50,12 @@ struct DrivePublicAssetsView: View {
 
     /// 这一屏会开出来的两张。
     private enum Sheet: Identifiable {
-        case pick(UploadSource)
+        case pick(UploadSource, DriveUploadIntakeContext)
         case rename(DrivePublicAsset)
 
         var id: String {
             switch self {
-            case .pick(let source): return "pick.\(source.rawValue)"
+            case .pick(let source, _): return "pick.\(source.rawValue)"
             case .rename(let asset): return "rename.\(asset.assetId)"
             }
         }
@@ -109,12 +109,12 @@ struct DrivePublicAssetsView: View {
                 } else {
                     Menu {
                         Button {
-                            sheet = .pick(.photos)
+                            beginPick(.photos)
                         } label: {
                             Label("照片", systemImage: "photo")
                         }
                         Button {
-                            sheet = .pick(.documents)
+                            beginPick(.documents)
                         } label: {
                             Label("文件", systemImage: "folder")
                         }
@@ -223,8 +223,8 @@ struct DrivePublicAssetsView: View {
     @ViewBuilder
     private func presented(_ sheet: Sheet) -> some View {
         switch sheet {
-        case .pick(let source):
-            picker(source)
+        case .pick(let source, let context):
+            picker(source, context: context)
         case .rename(let asset):
             // 改名那一张与云盘里那些共用（`DriveRenameSheet`）：改一个名字、一个输入框、
             // 取消加保存，四处都是同一件事，不该有第二种样子。公开素材没有上一层，
@@ -235,7 +235,7 @@ struct DrivePublicAssetsView: View {
 
     /// 系统 picker。选完的东西先落成磁盘上的一份（`DriveFileIntake`），再进上传。
     @ViewBuilder
-    private func picker(_ source: UploadSource) -> some View {
+    private func picker(_ source: UploadSource, context: DriveUploadIntakeContext) -> some View {
         switch source {
         case .photos:
             PhotoLibraryPicker(
@@ -243,7 +243,7 @@ struct DrivePublicAssetsView: View {
                 selectionLimit: 1,
                 onPicked: { results in
                     sheet = nil
-                    Task { await upload(results: results) }
+                    Task { await upload(results: results, context: context) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -252,7 +252,7 @@ struct DrivePublicAssetsView: View {
             DocumentPicker(
                 onPicked: { urls in
                     sheet = nil
-                    Task { await upload(documentURLs: urls) }
+                    Task { await upload(documentURLs: urls, context: context) }
                 },
                 onCancelled: { sheet = nil }
             )
@@ -279,25 +279,46 @@ struct DrivePublicAssetsView: View {
         Clipboard.copy(value, saying: "已复制直链", id: "drive.asset.copied", on: model)
     }
 
+    private func beginPick(_ source: UploadSource) {
+        sheet = .pick(source, DriveUploadIntakeContext(
+            accountGeneration: model.accountIdentityGeneration,
+            parentId: nil
+        ))
+    }
+
     /// 相册选中的一批。
     ///
     /// **在飞标志在落地之前就置位。** `DriveFileIntake.prepare` 要往临时目录里拷一份最大
     /// 100 MB 的东西，可能好几秒，而工具栏那颗 ＋ 只在 `uploading` 时换成转圈 —— 晚置位的话
     /// 这几秒里再点一次 ＋ 会落在 `guard !uploading` 上被静默丢掉（用户选了文件、什么都没
     /// 发生），或者两批交错跑完、后一批把前一批的直链盖掉。
-    private func upload(results: [PHPickerResult]) async {
+    private func upload(results: [PHPickerResult], context: DriveUploadIntakeContext) async {
         guard !uploading else { return }
         uploading = true
         defer { uploading = false }
-        await deliver(await DriveFileIntake.prepare(results: results))
+        guard let files = await context.prepare({
+            await DriveFileIntake.prepare(results: results)
+        }, isCurrentAccount: model.isCurrentAccount) else { return }
+        reportIntakeFailure(selected: results.count, prepared: files.count)
+        await deliver(files, context: context)
     }
 
     /// 文件 App 选中的一批。
-    private func upload(documentURLs: [URL]) async {
+    private func upload(documentURLs: [URL], context: DriveUploadIntakeContext) async {
         guard !uploading else { return }
         uploading = true
         defer { uploading = false }
-        await deliver(DriveFileIntake.prepare(documentURLs: documentURLs))
+        guard let files = await context.prepare({
+            DriveFileIntake.prepare(documentURLs: documentURLs)
+        }, isCurrentAccount: model.isCurrentAccount) else { return }
+        reportIntakeFailure(selected: documentURLs.count, prepared: files.count)
+        await deliver(files, context: context)
+    }
+
+    private func reportIntakeFailure(selected: Int, prepared: Int) {
+        if let message = DriveFileIntake.failureMessage(selected: selected, prepared: prepared) {
+            model.notice(message, tone: .failure)
+        }
     }
 
     /// 已经落到磁盘上的一批：先按大小拦一道，再一条条发。
@@ -306,9 +327,8 @@ struct DrivePublicAssetsView: View {
     /// 相册权限那条路，而 picker 这条路的设计恰恰是不申请权限），所以只能在文件落到磁盘之后
     /// 量。超限的那一个不发给服务端 —— 让它拒的话，用户等到传完才知道。
     ///
-    /// 空的一批（落地就失败了）什么都不说：`DriveFileIntake` 已经把原因写进日志，而这一屏
-    /// 没有可做的事 —— 编一句「没能读取」出来只会让用户再试一次同样会失败的操作。
-    private func deliver(_ files: [PickedFile]) async {
+    /// 读取失败的条目在准备阶段提示，已经读到的文件继续上传。
+    private func deliver(_ files: [PickedFile], context: DriveUploadIntakeContext) async {
         guard !files.isEmpty else { return }
         var accepted: [PickedFile] = []
         for file in files {
@@ -330,12 +350,18 @@ struct DrivePublicAssetsView: View {
         guard !accepted.isEmpty else { return }
 
         var links: [String] = []
-        for file in accepted {
+        for (index, file) in accepted.enumerated() {
+            guard model.isCurrentAccount(context.accountGeneration), !Task.isCancelled else {
+                accepted[index...].forEach(DriveFileIntake.discard)
+                return
+            }
             // 一条失败不影响后面的：失败的那一条说清是哪一条、为什么（见 `send`）。
-            if let link = await send(file) { links.append(link) }
+            if let link = await send(file, context: context) { links.append(link) }
         }
         // 传完重取：新素材要出现在列表里。成了的那几条由 `uploadedLinks` 把直链摆出来。
+        guard model.isCurrentAccount(context.accountGeneration), !Task.isCancelled else { return }
         await model.driveLoadAssets()
+        guard model.isCurrentAccount(context.accountGeneration), !Task.isCancelled else { return }
         uploadedLinks = links
     }
 
@@ -347,11 +373,13 @@ struct DrivePublicAssetsView: View {
     ///
     /// 队列丢下的两项收尾（失败即释放服务端预留、用完删掉本机那份临时拷贝）落在
     /// `SynapseAppModel.driveUploadPublicAsset` 里：视图这里只管「这一条成没成」。
-    private func send(_ file: PickedFile) async -> String? {
+    private func send(_ file: PickedFile, context: DriveUploadIntakeContext) async -> String? {
         do {
             let asset = try await model.driveUploadPublicAsset(file)
+            guard model.isCurrentAccount(context.accountGeneration), !Task.isCancelled else { return nil }
             return model.drive.directLink(for: asset)
         } catch {
+            guard model.isCurrentAccount(context.accountGeneration), !Task.isCancelled else { return nil }
             model.notice("「\(file.name)」\(DriveText.errorMessage(error))", tone: .failure)
             return nil
         }
@@ -362,7 +390,9 @@ struct DrivePublicAssetsView: View {
     private func remove(_ asset: DrivePublicAsset) async {
         guard !busy else { return }
         busy = true
+        let account = model.accountIdentityGeneration
         let outcome = await model.driveTrashAsset(asset)
+        guard model.isCurrentAccount(account) else { return }
         busy = false
         if let notice = outcome.noticeText("删除") {
             model.notice(notice, tone: .failure)

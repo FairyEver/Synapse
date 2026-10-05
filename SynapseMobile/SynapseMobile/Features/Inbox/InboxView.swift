@@ -83,6 +83,10 @@ struct InboxView: View {
                 }
             }
 
+            emptyState
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
             // 「加载更多」自己占一段。留在消息那一段里的话，它清掉底色会在卡片上戳出
             // 一个洞——最后一行下面的圆角是画在这一行身上的，而这一行是透明的。
             if filter != "pending", model.notifications.filter == filter,
@@ -92,9 +96,6 @@ struct InboxView: View {
         }
         .listStyle(.insetGrouped)
         .contentMargins(.top, 0, for: .scrollContent)
-        // 空态铺在列表上，铺的是 `List` 本身，不铺那条筛选带子——带子在这一屏的
-        // 哪一档下都在，它不是内容，是控制。
-        .overlay { emptyState }
         .refreshable {
             if filter == "pending" { await model.refreshDesktops() }
             else { await model.reloadNotifications(filter: filter) }
@@ -243,15 +244,19 @@ struct InboxView: View {
         Button {
             Task { await model.loadMoreNotifications() }
         } label: {
-            Text("加载更多").frame(maxWidth: .infinity)
+            Group {
+                if model.notifications.loading { ProgressView("加载中") }
+                else { Text("加载更多") }
+            }
+            .frame(maxWidth: .infinity)
         }
+        .disabled(model.notifications.loading)
         .font(.subheadline)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
     }
 
-    /// 空态铺在列表上而不是列表里的一行：`ContentUnavailableView` 要的是整块内容区。
-    /// 它铺的是 `List`，不铺那条筛选带子——带子是这一屏的控制，任何一档下都在。
+    /// 空态和加载状态参与列表布局，避开筛选栏与当前电脑标题，并随内容滚动。
     @ViewBuilder
     private var emptyState: some View {
         if filter == "pending" {

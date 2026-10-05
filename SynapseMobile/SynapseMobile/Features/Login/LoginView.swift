@@ -16,7 +16,7 @@ struct LoginView: View {
     private enum Field { case email, password }
 
     private var canSubmit: Bool {
-        !email.isEmpty && !password.isEmpty && !isSubmitting
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty && !isSubmitting
     }
 
     var body: some View {
@@ -45,7 +45,7 @@ struct LoginView: View {
                     Spacer()
                     VStack(spacing: 10) {
                         Image(systemName: "terminal")
-                            .font(.system(size: 40, weight: .light))
+                            .font(.largeTitle)
                             .foregroundStyle(Theme.ink)
                         Text("Synapse Remote")
                             .font(.title2.weight(.bold))
@@ -72,6 +72,7 @@ struct LoginView: View {
                             .padding(12)
                             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     }
+                    .disabled(isSubmitting)
                     .padding(.horizontal, 24)
 
                     // Between the fields and the button, and left-aligned with them. A rejected
@@ -92,28 +93,16 @@ struct LoginView: View {
                     Button(action: submit) {
                         Group {
                             if isSubmitting {
-                                ProgressView()
+                                ProgressView("登录中").tint(Theme.paper)
                             } else {
-                                Text("登录").font(.callout.weight(.semibold))
+                                Text("登录")
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
                     }
-                    // Ink fill, paper label: the pair has to invert together with the
-                    // appearance, or the button turns into a blank rectangle in dark mode.
-                    // The disabled cue dims the fill only — fading the label too would
-                    // leave grey text on a grey rectangle — which is why the dimming is
-                    // bounded by what keeps the label readable (see the constant).
-                    //
-                    // `.circular`: a continuous corner is drawn larger than the radius it
-                    // is given, and on a bar this short (46 pt, the same as the sheet's
-                    // 开始对话) that swallows both ends — the reason is recorded there in
-                    // full. The two filled buttons are one shape.
-                    .background(
-                        Theme.ink.opacity(canSubmit ? 1 : Theme.disabledInkOpacity),
-                        in: RoundedRectangle(cornerRadius: 12, style: .circular)
-                    )
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .tint(Theme.ink)
                     .foregroundStyle(Theme.paper)
                     .disabled(!canSubmit)
                     .padding(.horizontal, 24)
@@ -148,15 +137,17 @@ struct LoginView: View {
     }
 
     private func submit() {
-        guard !email.isEmpty, !password.isEmpty, !isSubmitting else { return }
+        guard canSubmit else { return }
         // After the guard, on the same rule the send key follows: a submit with
         // nothing to submit does nothing. The verdict is a round trip away and comes
         // back below.
         Haptics.commit()
         isSubmitting = true
         errorMessage = nil
+        let submittedEmail = email
+        let submittedPassword = password
         Task {
-            let rejected = await model.signIn(email: email, password: password)
+            let rejected = await model.signIn(email: submittedEmail, password: submittedPassword)
             // A rejected credential is written into the form, which is where the eyes
             // already are only if the user has begun to suspect something. Success
             // needs nothing here: the whole screen is replaced by the app.

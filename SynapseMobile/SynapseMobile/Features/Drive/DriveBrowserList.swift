@@ -38,10 +38,9 @@ enum DriveBrowserLayer: Hashable {
     /// 不是的话（还没取回来、或者回退动画里被压在后面的那一页）画占位，绝不画别人那一层
     /// 的内容 —— 一页的标题说 A、列表显示 B 是这一屏最容易出的一种错。
     ///
-    /// 一层都还没加载出来时（刚进这一屏）根页按「是」算：那一刻在飞的那一趟正是为它
-    /// 取的数，失败时那一行错误也该落在它上面。
+    /// 快照还没回来时按目标路径识别页面，加载和失败重试都留在导航已经到达的那一层。
     func isCurrent(in store: DriveStore) -> Bool {
-        guard let current = store.current else { return isRoot }
+        guard let current = store.current else { return store.folderId == folderId }
         return current.current.id == id
     }
 }
@@ -98,13 +97,9 @@ enum DriveBrowserRow {
         item.isFolder ? "打开" : "在浏览器中打开"
     }
 
-    /// 这一项能不能直接导出成文件。
-    ///
-    /// 文件夹不能：服务端那条下载路由认的是单个文件，文件夹要打包（`canZip`）才是另一条
-    /// 事，而这一屏没有打包入口。菜单里这一条**置灰**而不是藏起来 —— 消失的菜单项会让
-    /// 用户以为这一版没有导出。
+    /// 普通文件直接下载，非根文件夹由同一个 owner 下载接口打包为 ZIP。
     static func canExport(_ item: DriveBrowserItem) -> Bool {
-        !item.isFolder
+        item.id != DrivePath.rootId
     }
 }
 
@@ -200,6 +195,11 @@ enum DriveBrowserSelection {
     /// 按一下那一颗之后选中的应该是哪些。
     static func toggled(picked: Set<String>, in items: [DriveBrowserItem]) -> Set<String> {
         isAll(picked: picked, in: items) ? [] : Set(items.map(\.id))
+    }
+
+    /// 同层刷新移除的项不再计入选择；仍存在的选择保留。
+    static func retained(_ picked: Set<String>, in items: [DriveBrowserItem]) -> Set<String> {
+        picked.intersection(items.map(\.id))
     }
 
     /// 一条选中的项。项不见了（别人删了、这一层重取过）就落成空的。
@@ -325,6 +325,11 @@ struct DriveBrowserList: View {
 
     @Environment(SynapseAppModel.self) private var model
 
+    @ScaledMetric(relativeTo: .footnote)
+    private var compactGridMinimumWidth = DriveGridMetrics.compactMinimumWidth
+    @ScaledMetric(relativeTo: .footnote)
+    private var regularGridMinimumWidth = DriveGridMetrics.regularMinimumWidth
+
     /// 等用户点头的那一项覆盖（只有文本文档会走到这里，见 `requestOverwrite`）。
     @State private var pendingOverwrite: DriveUploadItem?
 
@@ -391,6 +396,11 @@ struct DriveBrowserList: View {
                     }
                 }
             }
+        }
+        .onChange(of: model.drive.current) { _, _ in
+            guard model.drive.current != nil, layer.isCurrent(in: model.drive),
+                  model.drive.errorMessage == nil else { return }
+            picked = DriveBrowserSelection.retained(picked, in: items)
         }
         // 覆盖文本文档那一问。挂在这一屏上（这一屏没有别的 sheet 或 alert），
         // 宿主那一片 sheet 是别的几张对话框。
@@ -487,7 +497,8 @@ struct DriveBrowserList: View {
                             .fontWeight(index == crumbs.count - 1 ? .semibold : .regular)
                             .foregroundStyle(index == crumbs.count - 1 ? Color.primary : Color.secondary)
                             .lineLimit(1)
-                            .frame(minHeight: Metrics.minimumTapTarget)
+                            .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -642,8 +653,8 @@ struct DriveBrowserList: View {
                 GridItem(
                     .adaptive(
                         minimum: isCompact
-                            ? DriveGridMetrics.compactMinimumWidth
-                            : DriveGridMetrics.regularMinimumWidth
+                            ? compactGridMinimumWidth
+                            : regularGridMinimumWidth
                     ),
                     spacing: DriveGridMetrics.spacing
                 )
@@ -833,6 +844,7 @@ struct DriveBrowserList: View {
                 failureRow(error)
             } else if items.isEmpty, layer.isCurrent(in: model.drive), !model.drive.loading {
                 ContentUnavailableView("文件夹为空", systemImage: "folder")
+                    .listRowSeparator(.hidden)
             } else {
                 placeholderRows
             }
@@ -940,6 +952,10 @@ struct DriveBrowserList: View {
             Text(DriveBrowserSelection.countLabel(picked.count))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            if actions.busy {
+                ProgressView()
+                    .accessibilityLabel("正在处理")
+            }
             Spacer(minLength: 8)
             barButton("移动") { actions.move(selected) }
             barButton("导出", disabled: actions.exporting) { actions.export(selected) }
@@ -961,7 +977,7 @@ struct DriveBrowserList: View {
                 .padding(.horizontal, 6)
         }
         .buttonStyle(.bordered)
-        .disabled(picked.isEmpty || disabled)
+        .disabled(actions.busy || picked.isEmpty || disabled)
     }
 
     private var selected: [DriveBrowserItem] {

@@ -97,6 +97,119 @@ struct TerminalGitFlowTests {
 
     // MARK: - 切分支
 
+    @Test(arguments: [
+        TerminalGitPendingSwitch.checkout("feature/next"),
+        .createBranch(name: "feature/next", from: "main"),
+        .merge(branch: "feature/next", direction: .intoCurrent),
+        .checkoutRemote(remote: "origin", branch: "feature/next", localBranch: "next")
+    ])
+    func leavingTheCommitPageCancelsOnlyItsUnsubmittedFollowUp(_ pending: TerminalGitPendingSwitch) async {
+        let (flow, fake) = makeFlow()
+        await flow.choose(.commit, from: pending, on: fake.desk)
+        #expect(flow.path.last == .commit)
+        flow.path.removeLast()
+        flow.path.append(.commit)
+        flow.commitMessage = "ordinary commit"
+        fake.answers = [fake.accept()]
+        await flow.commit(on: fake.desk)
+        #expect(fake.actions == ["commit"])
+    }
+
+    @Test func leavingTheCommitPageDoesNotCancelAnAlreadySubmittedChain() async {
+        let (flow, fake) = makeFlow()
+        var resume: CheckedContinuation<MobileIntentResult?, Never>?
+        var sent: [MobileIntentRequest] = []
+        let desk = TerminalGitDesk(send: { intent, _ in
+            sent.append(intent)
+            if sent.count == 1 { return await withCheckedContinuation { resume = $0 } }
+            return fake.accept()
+        }, notice: { _, _, _ in })
+        await flow.choose(.commit, from: .checkout("feature/next"), on: desk)
+        flow.commitMessage = "save then switch"
+        let committing = Task { await flow.commit(on: desk) }
+        while resume == nil { await Task.yield() }
+        #expect(flow.isBusy)
+        flow.path.removeLast()
+        resume?.resume(returning: fake.accept())
+        await committing.value
+        #expect(sent.map(\.action) == ["commit", "checkout"])
+        #expect(sent.last?.branch == "feature/next")
+    }
+
+    @Test func switchingComputersWhileCommitWaitsPreventsTheFollowUpCheckout() async {
+        let (flow, fake) = makeFlow()
+        var current = true
+        var resume: CheckedContinuation<MobileIntentResult?, Never>?
+        var sent: [MobileIntentRequest] = []
+        var notices = 0
+        let desk = TerminalGitDesk(send: { intent, _ in
+            sent.append(intent)
+            return await withCheckedContinuation { resume = $0 }
+        }, notice: { _, _, _ in notices += 1 }).scoped { current }
+        await flow.choose(.commit, from: .checkout("feature/next"), on: desk)
+        flow.commitMessage = "save changes"
+        let committing = Task { await flow.commit(on: desk) }
+        while resume == nil { await Task.yield() }
+        current = false
+        resume?.resume(returning: fake.accept())
+        await committing.value
+        #expect(sent.map(\.action) == ["commit"])
+        #expect(notices == 0)
+        #expect(flow.commitMessage == "save changes")
+    }
+
+    @Test func anInvalidatedGitDeskCannotSendOrAnnounce() async {
+        let (_, fake) = makeFlow()
+        let desk = fake.desk.scoped { false }
+        let result = await desk.send(.git("checkout", sessionId: "sess-1", branch: "feature/next"), 10)
+        desk.notice("旧结果", .success, "git.old")
+        #expect(result == nil)
+        #expect(fake.sent.isEmpty)
+        #expect(fake.said.isEmpty)
+    }
+
+    @Test func aPendingCheckoutBlocksAnotherBranchOperation() async {
+        let (flow, fake) = makeFlow()
+        var resume: CheckedContinuation<MobileIntentResult?, Never>?
+        var sent: [MobileIntentRequest] = []
+        let desk = TerminalGitDesk(send: { intent, _ in
+            sent.append(intent)
+            if sent.count == 1 { return await withCheckedContinuation { resume = $0 } }
+            return fake.accept()
+        }, notice: { _, _, _ in })
+        let first = Task { await flow.checkout("feature/first", on: desk) }
+        while resume == nil { await Task.yield() }
+
+        await flow.checkout("feature/second", on: desk)
+        #expect(sent.map(\.branch) == ["feature/first"])
+        #expect(flow.isBusy)
+
+        resume?.resume(returning: fake.accept())
+        await first.value
+        #expect(!flow.isBusy)
+    }
+
+    @Test func fetchingRemotesBlocksBranchWritesUntilItFinishes() async {
+        let (flow, fake) = makeFlow()
+        var resume: CheckedContinuation<MobileIntentResult?, Never>?
+        var sent: [MobileIntentRequest] = []
+        let desk = TerminalGitDesk(send: { intent, _ in
+            sent.append(intent)
+            if sent.count == 1 { return await withCheckedContinuation { resume = $0 } }
+            return fake.accept()
+        }, notice: { _, _, _ in })
+        let refresh = Task { await flow.refresh(on: desk) }
+        while resume == nil { await Task.yield() }
+
+        await flow.checkout("feature/next", on: desk)
+        #expect(sent.compactMap(\.action) == ["fetchRemotes"])
+        #expect(flow.isBusy)
+
+        resume?.resume(returning: fake.accept())
+        await refresh.value
+        #expect(!flow.isBusy)
+    }
+
     @Test func checkoutSendsOneCheckoutIntent() async {
         let (flow, fake) = makeFlow()
         fake.answers = [fake.accept()]

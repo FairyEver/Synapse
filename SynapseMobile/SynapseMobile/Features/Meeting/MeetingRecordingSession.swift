@@ -17,7 +17,7 @@ final class MeetingRecordingSession {
     enum Phase: Equatable {
         case idle
         case recording
-        /// 麦克风被别的 App 抢走了，自动暂停中。**没有手动暂停**。
+        /// 系统中断暂停，或本机写入失败已停止采集。**没有手动暂停**。
         case paused
         /// 已经在收尾，界面通常已经回列表了。
         case saving
@@ -28,12 +28,14 @@ final class MeetingRecordingSession {
         case none
         /// 开头一直没听到声音。听到过一次就永不再出现。
         case silent
-        /// 没拿到麦克风权限。**不阻断录音**，只是波形不作数。
+        /// 未取得麦克风权限时不启动采集，保留原因提示与取消入口。
         case microphoneDenied
         /// 麦克风被其他应用占用。
         case interrupted
         /// 分片发不出去，带上下文原因。
         case uploadFailed(String)
+        /// 本机编码写入已停止，保留已写部分供完成/取消。
+        case recordingFailed(String)
     }
 
     private(set) var phase: Phase = .idle
@@ -59,7 +61,15 @@ final class MeetingRecordingSession {
     /// 和意图那两条路径会在同一瞬间各叫一次）。只看 `phase` 的话，两边都会在 await 窗口
     /// 里看到「没在录」，于是各发一次 `POST /meetings/recordings`——服务端多一条孤儿记录，
     /// 本机多一个采集器。
-    private var isStarting = false
+    private(set) var isStarting = false
+    private var startGeneration = 0
+    /// 启动请求可停在权限与服务端响应之间，回归测试据此验证取消后不会迟到开录。
+    @ObservationIgnored
+    var microphoneAuthorizer: (() async -> Bool)?
+    @ObservationIgnored
+    var recordingStarter: ((APIClient) async throws -> APIClient.StartedRecording)?
+    @ObservationIgnored
+    var recordingCanceller: ((String, APIClient) async -> Void)?
 
     var isRecording: Bool { phase == .recording || phase == .paused }
 
@@ -80,9 +90,11 @@ final class MeetingRecordingSession {
         // 互不干扰。拦住的话，用户点完「完成」马上再点加号会什么也没发生。
         guard !isRecording, !isStarting else { return }
         let generation = accountGeneration
+        startGeneration += 1
+        let request = startGeneration
         isStarting = true
         didHitDurationLimit = false
-        defer { isStarting = false }
+        defer { if request == startGeneration { isStarting = false } }
         self.client = client
         levels = []
         elapsedMs = 0
@@ -91,21 +103,31 @@ final class MeetingRecordingSession {
 
         // **先问权限，再建录音。** 反过来做的话，没有权限时会先在服务端建出一条永远不
         // 会有音频的记录，而用户这边连个解释都看不到。
-        if MeetingPermission.microphone != .granted {
-            let granted = await MeetingPermission.requestMicrophone()
-            guard generation == accountGeneration else { return }
-            guard granted else {
-                // **不阻断**：录音页照常留着，只是明说这一条波形不作数。iOS 在没有权限
-                // 时一点音频都不给，画一条平线并把原因写出来，比拿假波形冒充真的诚实。
-                hint = .microphoneDenied
-                return
-            }
+        let granted: Bool
+        if let microphoneAuthorizer {
+            granted = await microphoneAuthorizer()
+        } else if MeetingPermission.microphone == .granted {
+            granted = true
+        } else {
+            granted = await MeetingPermission.requestMicrophone()
+        }
+        guard generation == accountGeneration, request == startGeneration else { return }
+        guard granted else {
+            // 未授权时保留录音页解释原因，但不建档，也不允许把未开始的录音当成已完成。
+            hint = .microphoneDenied
+            return
         }
 
+        var createdRecord: PendingMeetingRecording?
         do {
-            let started = try await client.startMeetingRecording(title: nil, startedAt: Date())
-            guard generation == accountGeneration else {
-                try? await client.cancelMeetingRecording(recordingId: started.recordingId)
+            let started: APIClient.StartedRecording
+            if let recordingStarter {
+                started = try await recordingStarter(client)
+            } else {
+                started = try await client.startMeetingRecording(title: nil, startedAt: Date())
+            }
+            guard generation == accountGeneration, request == startGeneration else {
+                await cancelStartedRecording(started.recordingId, using: client)
                 return
             }
             title = started.title
@@ -116,6 +138,7 @@ final class MeetingRecordingSession {
                 title: started.title,
                 startedAt: Date()
             )
+            createdRecord = record
             pending = record
             persistedParts = 0
             PendingMeetingRecordingStore.save(record)
@@ -142,13 +165,33 @@ final class MeetingRecordingSession {
             phase = .recording
             startTicker()
         } catch let error as APIError {
-            guard generation == accountGeneration else { return }
+            guard generation == accountGeneration, request == startGeneration else { return }
             hint = .uploadFailed(error.message)
-            abandonFailedStart()
+            if let record = createdRecord {
+                await cancelStartedRecording(record.recordingId, using: client)
+                guard generation == accountGeneration, request == startGeneration else { return }
+                abandonFailedStart()
+            }
         } catch {
-            guard generation == accountGeneration else { return }
+            guard generation == accountGeneration, request == startGeneration else { return }
             hint = .uploadFailed("录音没能开始，请稍后再试。")
-            abandonFailedStart()
+            if let record = createdRecord {
+                await cancelStartedRecording(record.recordingId, using: client)
+                guard generation == accountGeneration, request == startGeneration else { return }
+                abandonFailedStart()
+            }
+        }
+    }
+
+    private func cancelStartedRecording(_ recordingId: String, using client: APIClient) async {
+        if let recordingCanceller {
+            await recordingCanceller(recordingId, client)
+        } else {
+            do {
+                try await client.cancelMeetingRecording(recordingId: recordingId)
+            } catch {
+                AppLog.recording.warning("cancelling a recording start failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -174,15 +217,28 @@ final class MeetingRecordingSession {
         recorder.onLevel = { [weak self] amplitude in self?.handleLevel(amplitude) }
         recorder.onInterrupted = { [weak self] in
             guard let self else { return }
+            if case .recordingFailed = self.hint { return }
             self.phase = .paused
             self.hint = .interrupted
         }
         recorder.onResumed = { [weak self] in
             guard let self else { return }
+            if case .recordingFailed = self.hint { return }
             self.phase = .recording
             self.hint = .none
         }
-        try recorder.start(recordingId: recordingId)
+        recorder.onFailure = { [weak self] error in
+            guard let self, self.isRecording else { return }
+            AppLog.recording.error("recording file writing failed: \(error.localizedDescription, privacy: .public)")
+            self.phase = .paused
+            self.hint = .recordingFailed("录音已停止，未能继续保存。")
+        }
+        do {
+            try recorder.start(recordingId: recordingId)
+        } catch {
+            recorder.stop()
+            throw error
+        }
         return recorder
     }
 
@@ -235,14 +291,31 @@ final class MeetingRecordingSession {
         }
         // 编码器是停下来之后才写最后那几个分片和索引的，这一批就是「结束只补尾片」里的
         // 那片尾巴。补上它，服务端拼出来的才是一条完整的音频。
-        if let tail = await recorder?.remainingBytesAfterStop() {
-            uploader?.enqueue(tail)
+        do {
+            if let tail = try await recorder?.remainingBytesAfterStop() {
+                uploader?.enqueue(tail)
+            }
+        } catch {
+            guard generation == accountGeneration else {
+                discardLocalFiles(record.recordingId)
+                return
+            }
+            AppLog.recording.warning("reading the recording tail failed, leaving it pending: \(error.localizedDescription, privacy: .public)")
+            finishSaving(recordingId: record.recordingId)
+            return
         }
         guard generation == accountGeneration else {
             discardLocalFiles(record.recordingId)
             return
         }
-        let fileURL = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId)
+        let fileURL: URL
+        do {
+            fileURL = try MeetingRecordingFiles.audioURL(recordingId: record.recordingId)
+        } catch {
+            AppLog.recording.warning("opening the recording file failed, leaving it pending: \(error.localizedDescription, privacy: .public)")
+            finishSaving(recordingId: record.recordingId)
+            return
+        }
         // 尾片没送出去就**不要提交**。收尾那几个字节里带着索引，服务端拼出来的会是一段读不
         // 出来的音频，而它照样会计费转写；更糟的是接着那句 `keepRecordedAudio` 会把本机这份
         // **完好的**文件归入缓存，`MeetingAudioCache` 再按大小对不上把它删掉——唯一一份好
@@ -289,6 +362,9 @@ final class MeetingRecordingSession {
 
     /// 取消：服务端中止分块上传并丢弃已传分片，本机这一份也删掉。
     func cancel() {
+        // 取消同样覆盖等待权限或建档的阶段；迟到建档结果只会被撤销，不会启动麦克风。
+        startGeneration += 1
+        isStarting = false
         guard phase == .recording || phase == .paused else { return }
         let record = pending
         let uploader = self.uploader
@@ -314,6 +390,8 @@ final class MeetingRecordingSession {
     /// Invalidate older start and finish requests before another account can sign in.
     func clearForAccountExit() {
         accountGeneration += 1
+        startGeneration += 1
+        isStarting = false
         if isRecording { cancel() }
         for record in PendingMeetingRecordingStore.loadAll() {
             discardLocalFiles(record.recordingId)
@@ -415,6 +493,8 @@ final class MeetingRecordingSession {
     ///
     /// 高度固定，内容在这些之间换，所以这里不做「追加」，每次算出唯一的那一条。
     private func updateHint() {
+        // 写入失败已终止采集，不能被静音、上传状态或系统中断提示盖回正常录音。
+        if case .recordingFailed = hint { return }
         // 发不出去是唯一需要用户看见并且可能有动作的一条，排在前面。
         if let message = uploader?.lastError {
             hint = .uploadFailed(message)
@@ -484,8 +564,11 @@ final class MeetingRecordingSession {
     }
 
     private func finalize(_ record: PendingMeetingRecording, using client: APIClient, generation: Int) async {
-        guard let fileURL = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId) else {
-            PendingMeetingRecordingStore.remove(recordingId: record.recordingId)
+        let fileURL: URL
+        do {
+            fileURL = try MeetingRecordingFiles.audioURL(recordingId: record.recordingId)
+        } catch {
+            AppLog.recording.warning("opening a pending recording failed, leaving it pending: \(error.localizedDescription, privacy: .public)")
             return
         }
         // 本机那份音频是完整的，波形可以从它重算——这正是手机端比电脑端强的地方
@@ -509,7 +592,13 @@ final class MeetingRecordingSession {
             },
             abort: { try? await client.cancelMeetingRecording(recordingId: record.recordingId) }
         )
-        await uploadFromFile(fileURL, skipping: record.uploadedParts, into: uploader)
+        do {
+            try await uploadFromFile(fileURL, skipping: record.uploadedParts, into: uploader)
+        } catch {
+            guard generation == accountGeneration else { return }
+            AppLog.recording.warning("reading a pending recording failed, leaving it pending: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         guard generation == accountGeneration else { return }
         // **不能只从断点往后补，第 1 片也要过一遍。** 接着传的那些分片（第 2 片起）里，中间
         // 的字节确实不会再变，但第 1 片不是：录音期间磁盘上写的是分片 m4a，`finishWriting()`
@@ -519,7 +608,13 @@ final class MeetingRecordingSession {
         // 传 `audioFile` 就是让它走收尾那套核对：本进程里没有摘要的分片会被当成「变过」重发
         // （第 1 片正属此类），有摘要且对得上的不重传。收尾路径上那些已经传过的分片因此只多
         // 出一次读盘，不会重传。
-        guard await uploader.finish(audioFile: fileURL) else { return }
+        guard await uploader.finish(audioFile: fileURL) else {
+            if let error = uploader.lastFailure, Self.recoveryOutcome(for: error) == .giveUp {
+                AppLog.recording.warning("the server no longer has this recording; discarding the local residue.")
+                discardLocalFiles(record.recordingId)
+            }
+            return
+        }
         guard generation == accountGeneration else { return }
 
         do {
@@ -561,10 +656,10 @@ final class MeetingRecordingSession {
     ///   同步读占着，用户看到的是几十秒白屏。
     /// - **读得比传得快就停下来等。** 背压看的是上传器手上还没发出去的字节数；没有
     ///   这一条，文件只是换了个地方堆在内存里而已。
-    private func uploadFromFile(_ url: URL, skipping parts: Int, into uploader: MeetingUploader) async {
+    private func uploadFromFile(_ url: URL, skipping parts: Int, into uploader: MeetingUploader) async throws {
         var offset = UInt64(max(0, parts)) * UInt64(MeetingAudio.partBytes)
         while !Task.isCancelled {
-            guard let data = await Self.readPart(url, at: offset), !data.isEmpty else { return }
+            guard let data = try await Self.readPart(url, at: offset), !data.isEmpty else { return }
             uploader.enqueue(data)
             offset += UInt64(data.count)
             // 上传器发不出去（网断了、重试也用完了）就不再等它了：它的泵已经停了，等下去
@@ -574,19 +669,21 @@ final class MeetingRecordingSession {
                   !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(50))
             }
-            if uploader.hasFailed || Task.isCancelled { return }
+            try Task.checkCancellation()
+            if uploader.hasFailed { return }
         }
+        try Task.checkCancellation()
     }
 
     /// 读一片。`nonisolated` + `async` 才会离开主 actor（SE-0338）。
     ///
     /// 每一片重新开一次文件：一次 `open` 换掉一整片（1 MB）的读，代价可以忽略，换来的是
     /// 一个不用跨 actor 保管的文件句柄。
-    nonisolated private static func readPart(_ url: URL, at offset: UInt64) async -> Data? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+    nonisolated private static func readPart(_ url: URL, at offset: UInt64) async throws -> Data? {
+        let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
-        guard (try? handle.seek(toOffset: offset)) != nil else { return nil }
-        return try? handle.read(upToCount: MeetingAudio.partBytes)
+        try handle.seek(toOffset: offset)
+        return try handle.read(upToCount: MeetingAudio.partBytes)
     }
 
     /// 上传器最多可以先攒着多少字节。八片 —— 够填满一条慢链路，又不至于把整个录音

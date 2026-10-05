@@ -100,6 +100,31 @@ struct TerminalAttachment: Identifiable, Equatable {
     /// ledger there is something that may need reclaiming.
     var driveItemId: String?
     var state: State
+    /// Delivery and path insertion are separate results. Keep the landed path even
+    /// when the desktop explicitly says it could not type it.
+    private(set) var pathWasNotInserted = false
+    enum PathUndo: Equatable {
+        case pending
+        /// Some backspaces may already have run; repeating the full path is unsafe.
+        case blocked(String)
+    }
+    var pathUndo: PathUndo?
+
+    mutating func acceptDelivery(_ result: MobileIntentResult) {
+        guard result.isAccepted else { return }
+        if let path = result.landedPath {
+            let landedName = (path as NSString).lastPathComponent
+            if !landedName.isEmpty { name = landedName }
+        }
+        state = .delivered(path: result.landedPath)
+        // The existing fileUpload result has no typed insertion flag. These are
+        // precisely typeRelayedPath's three failure caveats, not arbitrary text.
+        pathWasNotInserted = [
+            "文件已落到电脑，但这个终端已经不在了，路径没有插入。",
+            "文件已落到电脑，但桌面端正在使用这个终端，路径没有插入。",
+            "文件已落到电脑，但路径没有插入。",
+        ].contains(result.message ?? "")
+    }
     /// True while the bytes still have to go up. A transfer that already has a drive
     /// item must never be uploaded again — the second copy would be a second file
     /// on the computer.
@@ -124,6 +149,7 @@ struct TerminalAttachment: Identifiable, Equatable {
     }
 
     var canBeDismissed: Bool {
+        if pathUndo == .pending { return false }
         switch state {
         case .queued, .uploading, .receiving:
             return false
@@ -135,6 +161,7 @@ struct TerminalAttachment: Identifiable, Equatable {
     /// The last path the computer reported for this file, for undo. Only a
     /// delivered file with a typed path can be undone.
     var insertedPath: String? {
+        guard !pathWasNotInserted else { return nil }
         if case .delivered(let path) = state { return path }
         return nil
     }
@@ -148,7 +175,7 @@ struct TerminalAttachment: Identifiable, Equatable {
     /// are testable without a screen.
     var availableActions: [Action] {
         var actions: [Action] = []
-        if insertedPath != nil { actions.append(.undoInsert) }
+        if let path = insertedPath, !path.isEmpty, pathUndo == nil { actions.append(.undoInsert) }
         if canRetry { actions.append(.retry) }
         if canBeDismissed { actions.append(.dismiss) }
         return actions
@@ -158,12 +185,14 @@ struct TerminalAttachment: Identifiable, Equatable {
     /// strip shows most of these by shape — a bar, a spinner — which says nothing
     /// to a reader who cannot see it.
     var stateDescription: String {
+        if pathUndo == .pending { return "正在撤销插入" }
+        if case .blocked(let reason) = pathUndo { return reason }
         switch state {
         case .queued: return "准备上传"
         case .uploading: return "上传中"
         case .waitingForComputer: return "等待电脑接收"
         case .receiving: return "电脑正在接收"
-        case .delivered: return "已插入"
+        case .delivered(let path): return pathWasNotInserted || path == nil ? "已送达" : "已插入"
         // The reason was carried on the case but never read, so a reader was told a
         // file had not arrived and not one word about why — the one thing that
         // decides whether retrying is worth it.
@@ -440,10 +469,76 @@ func screenPickedFiles(_ files: [PickedFile], alreadyWaiting: Int) -> (accepted:
 /// whatever the user types next. Every other state still has something to do: the
 /// bytes are going up, the computer has not answered, or the transfer failed and
 /// the user may retry, so those stay where the user can see and act on them.
-func committedAttachmentIds(_ attachments: [TerminalAttachment], sessionId: String) -> [String] {
-    attachments
-        .filter { $0.sessionId == sessionId && $0.state.isDelivered }
+func committedAttachmentIds(_ attachments: [TerminalAttachment], sessionId: String, attachmentIds: [String]? = nil) -> [String] {
+    let submitted = attachmentIds.map(Set.init)
+    return attachments
+        .filter { $0.sessionId == sessionId && $0.state.isDelivered && submitted?.contains($0.id) != false }
         .map(\.id)
+}
+
+/// A submitting key or voice command starts immediately, but its undo chips
+/// belong to that captured write until the computer confirms acceptance.
+@MainActor
+enum TerminalAttachmentSubmission {
+    static func perform(
+        context: TerminalActionContext,
+        attachmentIds: [String],
+        currentContext: () -> TerminalActionContext?,
+        send: () async -> SynapseAppModel.CommandSendOutcome,
+        commit: ([String]) -> Void,
+        fail: (String) -> Void
+    ) async {
+        var outcome: SynapseAppModel.CommandSendOutcome?
+        guard await context.remainsCurrent(while: { outcome = await send() }, current: currentContext) else { return }
+        switch outcome {
+        case .sent: commit(attachmentIds)
+        case .notSent(let message), .uncertain(let message): fail(message)
+        case nil: break
+        }
+    }
+}
+
+/// Backspaces are positional. Only a known refusal before any accepted chunk is
+/// safe to retry; partial success or a missing reply requires checking the input.
+@MainActor
+enum TerminalAttachmentUndo {
+    enum Completion: Equatable {
+        case sent
+        case notSent(String)
+        case blocked(String)
+    }
+
+    static let interruptedMessage = "撤销结果不确定，请确认终端中的输入。"
+    static let partialMessage = "已撤销部分输入，请确认终端中的剩余输入。"
+
+    static func perform(
+        characterCount: Int,
+        context: TerminalActionContext,
+        currentContext: () -> TerminalActionContext?,
+        isPending: () -> Bool,
+        send: (Int) async -> SynapseAppModel.CommandSendOutcome,
+        finish: (Completion) -> Void
+    ) async {
+        var remaining = characterCount
+        while remaining > 0 {
+            guard currentContext() == context, isPending(), !Task.isCancelled else { return }
+            // Below the existing 128-action ceiling; each chunk waits for its ACK.
+            let chunk = min(remaining, 64)
+            let outcome = await send(chunk)
+            guard currentContext() == context, isPending(), !Task.isCancelled else { return }
+            switch outcome {
+            case .sent:
+                remaining -= chunk
+            case .notSent(let message):
+                finish(remaining == characterCount ? .notSent(message) : .blocked(partialMessage))
+                return
+            case .uncertain:
+                finish(.blocked(interruptedMessage))
+                return
+            }
+        }
+        finish(.sent)
+    }
 }
 
 /// What one progress report from the computer does to a transfer's state.

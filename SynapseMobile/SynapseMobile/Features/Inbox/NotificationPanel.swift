@@ -10,9 +10,17 @@ struct NotificationPanel: View {
     @State private var openedWebLink: WebLink?
     @State private var readingNotification: SynapseNotification?
     @State private var selectedDetent: PresentationDetent = .medium
+    private let initialNotification: SynapseNotification?
 
     /// 「待处理」段里的行打开一个终端会话。
     let onOpenTerminal: (String) -> Void
+
+    init(initialNotification: SynapseNotification? = nil, onOpenTerminal: @escaping (String) -> Void) {
+        self.initialNotification = initialNotification
+        self.onOpenTerminal = onOpenTerminal
+        _readingNotification = State(initialValue: initialNotification)
+        _selectedDetent = State(initialValue: initialNotification == nil ? .medium : .large)
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,6 +51,11 @@ struct NotificationPanel: View {
         }
         .presentationDetents([.medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
+        .onChange(of: initialNotification?.id) { _, _ in
+            guard let initialNotification else { return }
+            readingNotification = initialNotification
+            selectedDetent = .large
+        }
         // sheet 会盖住底层屏幕挂的那条通知覆盖层，所以这一层要自己再挂一次 ——
         // 与剪贴板 sheet 同一个做法。
         .noticeOverlay(model)

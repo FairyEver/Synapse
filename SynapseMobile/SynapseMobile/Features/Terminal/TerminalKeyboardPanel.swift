@@ -397,6 +397,10 @@ extension View {
 /// repeated what the board already says — the terminal above is the only thing on this
 /// screen that is not the keyboard.
 struct TerminalKeyboardPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .caption) private var keyHeight = KeyboardPanelMetrics.keyHeight
+    @ScaledMetric(relativeTo: .caption) private var modifierKeyHeight = KeyboardPanelMetrics.modifierRowHeight
+    @ScaledMetric(relativeTo: .caption) private var minimumKeyWidth: CGFloat = 28
     /// Nil while the terminal is not running, which greys out every key.
     let isEnabled: Bool
     /// How much room the screen can give the panel. The panel takes what it needs, up to
@@ -447,7 +451,13 @@ struct TerminalKeyboardPanel: View {
     /// type on. With those rows gone the screen can afford both halves: the empty room is
     /// still there on the shorter page, and a page change moves nothing above the board.
     private var panelHeight: CGFloat {
-        KeyboardPanelMetrics.height(fitting: maxHeight)
+        let contentHeight = 8 + modifierRowHeight + 8 + boardHeight + 8 + KeyboardPanelMetrics.pageControlHeight + 14
+        return maxHeight > 0 ? min(contentHeight, maxHeight * 0.55) : contentHeight
+    }
+    private var rowPitch: CGFloat { keyHeight + KeyboardPanelMetrics.rowGap }
+    private var boardHeight: CGFloat { rowPitch * CGFloat(KeyboardPanelMetrics.maximumRows) }
+    private var modifierRowHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? modifierKeyHeight * 2 + 8 : modifierKeyHeight
     }
 
     var body: some View {
@@ -504,7 +514,10 @@ struct TerminalKeyboardPanel: View {
     /// The four share whatever room the label leaves, which puts Control under the left
     /// thumb and ⌘ under the right, the way the board they stand in for does.
     private var modifierRow: some View {
-        HStack(spacing: 8) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
             HStack(spacing: 7) {
                 Toggle("组合键", isOn: $combinationMode)
                     .labelsHidden()
@@ -518,7 +531,7 @@ struct TerminalKeyboardPanel: View {
                         if !isOn { clearModifier() }
                     }
                 Text("组合键")
-                    .font(.system(size: 12.5))
+                    .font(.caption)
                     .lineLimit(1)
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -529,13 +542,16 @@ struct TerminalKeyboardPanel: View {
                 }
             }
         }
-        .frame(height: KeyboardPanelMetrics.modifierRowHeight)
+        .frame(height: modifierRowHeight)
     }
 
     private func modifierKey(_ modifier: KeyboardPanelModifier) -> some View {
         let isLatched = effectiveModifier == modifier
         let isLocked = lockedModifier == modifier
         let keycap = modifier.keycap(on: hostPlatform)
+        let legendLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 4))
         return Button {
             guard !modifier.isDead else {
                 Haptics.warning()
@@ -545,23 +561,17 @@ struct TerminalKeyboardPanel: View {
             tapModifier(modifier)
         } label: {
             ZStack(alignment: .topTrailing) {
-                // 符号与名字并排。符号是从终端里认回来的那一个，名字是这颗键叫什么，
-                // 而名字在这一行里是二号 —— 面板是照真键盘摆的，真键盘的键帽也是这么
-                // 印的（`⌥ option`），而符号才是他在终端里读到的那个字形。
-                //
-                // 四颗键分的是屏宽除以四，`⌃ Shift` 在窄机型上差几个点，所以两个都
-                // 自带缩字：**缩字而不是截断**，这一行里没有一个字是可以丢的。
-                HStack(spacing: 4) {
+                // 大字号时把符号与名字纵排，让完整名字得到整颗键的宽度。
+                // 普通字号仍沿用键帽上的并排印法，保留原字号与键高。
+                legendLayout {
                     if let symbol = keycap.symbol {
                         Text(symbol)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.subheadline.weight(.medium))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.75)
                     }
                     Text(keycap.name)
-                        .font(.system(size: keycap.symbol == nil ? 14 : 10.5, weight: .medium))
+                        .font(keycap.symbol == nil ? .subheadline.weight(.medium) : .caption2.weight(.medium))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.75)
                         // 锁上时整颗键反色，名字跟着走 —— 这里只能自己说，因为 pill
                         // 给的标签色被这一句盖掉了。`systemBackground` 就是 pill 在
                         // 反色态下用的那个颜色（`TerminalKeyPill.labelColor`）。
@@ -583,8 +593,8 @@ struct TerminalKeyboardPanel: View {
                 minWidth: 0,
                 prominent: isLatched,
                 horizontalPadding: 6,
-                size: KeyboardPanelMetrics.modifierRowHeight,
-                tapHeight: KeyboardPanelMetrics.modifierRowHeight
+                size: modifierKeyHeight,
+                tapHeight: modifierKeyHeight
             )
         }
         .buttonStyle(.plain)
@@ -625,7 +635,7 @@ struct TerminalKeyboardPanel: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
         }
-        .frame(height: KeyboardPanelMetrics.boardHeight)
+        .frame(height: boardHeight)
     }
 
     private func boardPage(_ pageRows: [[KeyboardPanelKey]], width: CGFloat) -> some View {
@@ -633,11 +643,19 @@ struct TerminalKeyboardPanel: View {
         // 那 6pt（`rowPitch`），不是这里再加一次间距。两个都算的话，纵向的缝就是 12pt
         // 而横向还是 6pt —— 板子读起来就不是一个网格，而是几排按钮（2026-09-19 真机
         // 截图，量的就是 12 对 6）。
-        VStack(spacing: 0) {
-            ForEach(Array(pageRows.enumerated()), id: \.offset) { _, row in
-                rowView(row, width: width)
+        let minimumWidth = pageRows.map { row in
+            row.reduce(CGFloat.zero) { $0 + $1.weight } * minimumKeyWidth
+                + CGFloat(max(0, row.count - 1)) * KeyboardPanelMetrics.rowGap
+        }.max() ?? width
+        return ScrollView(.horizontal) {
+            VStack(spacing: 0) {
+                ForEach(Array(pageRows.enumerated()), id: \.offset) { _, row in
+                    rowView(row, width: max(width, minimumWidth))
+                }
             }
+            .frame(width: max(width, minimumWidth), alignment: .leading)
         }
+        .scrollBounceBehavior(.basedOnSize)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
@@ -692,14 +710,14 @@ struct TerminalKeyboardPanel: View {
             action()
         } label: {
             Text(key.title)
-                .font(.system(size: 12.5))
+                .font(.caption)
                 .frame(maxWidth: .infinity)
                 .terminalKeyPill(
                     minWidth: 0,
                     prominent: prominent,
                     horizontalPadding: 2,
-                    size: KeyboardPanelMetrics.keyHeight,
-                    tapHeight: KeyboardPanelMetrics.rowPitch
+                    size: keyHeight,
+                    tapHeight: rowPitch
                 )
                 .frame(width: width)
         }
@@ -734,8 +752,8 @@ struct TerminalKeyboardPanel: View {
                 .terminalKeyPill(
                     minWidth: 0,
                     horizontalPadding: 2,
-                    size: KeyboardPanelMetrics.keyHeight,
-                    tapHeight: KeyboardPanelMetrics.rowPitch
+                    size: keyHeight,
+                    tapHeight: rowPitch
                 )
                 .frame(width: width)
         }
@@ -755,9 +773,9 @@ struct TerminalKeyboardPanel: View {
         upper: Bool
     ) -> some View {
         if !key.title.isEmpty {
-            Text(key.title).font(.system(size: 12.5))
+            Text(key.title).font(.caption)
         } else if plain == shifted {
-            Text(plain).font(.system(size: 14))
+            Text(plain).font(.subheadline)
         } else {
             // Shifted legend first, the way it is printed on the cap. Whichever one is
             // going to be sent is the one drawn at full strength, so the key never sends
@@ -766,7 +784,7 @@ struct TerminalKeyboardPanel: View {
                 Text(shifted).foregroundStyle(upper ? Color.primary : Color.secondary)
                 Text(plain).foregroundStyle(upper ? Color.secondary : Color.primary)
             }
-            .font(.system(size: 13))
+            .font(.footnote)
         }
     }
 
@@ -780,21 +798,21 @@ struct TerminalKeyboardPanel: View {
                 Button {
                     page = index
                 } label: {
-                    // The dot is drawn at 7pt; the box around it is what a finger aims
-                    // at, so it reaches the 44pt floor with the row's own padding.
+                    // The visible dot stays small; its own button owns the full hit region.
                     Circle()
                         .fill(index == page ? Theme.ink : Color(uiColor: .tertiaryLabel))
                         .frame(width: 7, height: 7)
-                        .frame(width: 22, height: 22)
+                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("第 \(index + 1) 页")
+                .accessibilityAddTraits(index == page ? .isSelected : [])
                 .accessibilityIdentifier("panelkey-page-\(index)")
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 14)
+        .frame(height: KeyboardPanelMetrics.pageControlHeight)
     }
 
     // MARK: - What a press sends
@@ -963,15 +981,17 @@ enum KeyboardPanelMetrics {
     ///
     ///     padding 8 + modifier 42 + 8 + board + dots 8 + 14 + padding 14
     ///
-    /// So **346**, on both pages. It was 306 and 390 while the panel followed the page and
+    /// The baseline is 376 on both pages, including full-size page-control hit regions.
+    /// It was 306 and 390 while the panel followed the page and
     /// a two-tab switch sat above the modifier row; taking that row away is what made one
     /// height affordable, and one height is what the page dots then cost nothing to use.
-    static let panelHeight: CGFloat = 8 + (modifierRowHeight + 8) + boardHeight + (8 + 14) + 14
+    static let pageControlHeight: CGFloat = Metrics.minimumTapTarget
+    static let panelHeight: CGFloat = 8 + (modifierRowHeight + 8) + boardHeight + (8 + pageControlHeight) + 14
 
     /// What the panel actually takes, given how much room the screen has.
     ///
-    /// The height above is a **portrait** height: 346 is a bit under half of a phone held
-    /// upright, and the same 346 is more than a phone held sideways has to give, where the
+    /// The baseline above is a portrait height and can exceed a phone held sideways,
+    /// where the
     /// screen is only about 372 points tall with the safe areas taken out. Left alone
     /// there, the panel plus the navigation bar above it come to about 400 — the terminal
     /// gets nothing.

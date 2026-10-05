@@ -63,6 +63,7 @@ struct TerminalGitBranchList: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("新建分支")
+                    .disabled(flow.isBusy)
                     .accessibilityIdentifier("git-branch-new")
                 }
             }
@@ -84,16 +85,16 @@ struct TerminalGitBranchList: View {
     }
 
     /// 搜不到与「一条都没有」是两件事，说法也不一样：前者是换个词再试，后者是这一页
-    /// 现在没东西可给。标识符挂在说明那一行 —— 它才是用例查的 `staticTexts`，
-    /// 挂在容器上元素类型会变成 other。
+    /// 现在没东西可给。标识符保留在实际空态文字上。
     @ViewBuilder
     private var emptyState: some View {
         if query.isEmpty {
             ContentUnavailableView {
-                Label("还没有本地分支", systemImage: "arrow.triangle.branch")
-            } description: {
-                Text("这个仓库里还没有任何本地分支。")
-                    .accessibilityIdentifier("git-branches-empty")
+                Label {
+                    Text("还没有本地分支").accessibilityIdentifier("git-branches-empty")
+                } icon: {
+                    Image(systemName: "arrow.triangle.branch")
+                }
             }
             .listRowBackground(Color.clear)
         } else {
@@ -125,6 +126,7 @@ struct TerminalGitBranchList: View {
             }
             .contentShape(Rectangle())
         }
+        .disabled(flow.isBusy)
         .accessibilityIdentifier("git-branch-\(branch.name)")
     }
 

@@ -15,6 +15,7 @@ struct SessionListView: View {
     /// 哪一行」，一行一行都要先问过那道闸门（那条会话还开不开得开）；而这里的 id 是电脑刚
     /// 亲口回给我们的，它一定存在，闸门问不出任何有用的东西 —— 问出来的只有「列表还没跟上」。
     let onOpenCreated: (String) -> Void
+    let onBeginNavigation: () -> Void
     @State private var showingNewSession = false
     @State private var renameTarget: MobileSummarySession?
     @State private var deleteTarget: MobileSummarySession?
@@ -68,6 +69,7 @@ struct SessionListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .tint(Color(uiColor: .systemBlue))
         // 位置和外观都交给系统：导航栏下拉露出搜索框（`.automatic`，苹果自己的
         // 「邮件」「备忘录」就是这个行为），输入时标题自动让位，不用自己画。
         .searchable(text: $searchText, prompt: "搜索会话")
@@ -76,6 +78,7 @@ struct SessionListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    onBeginNavigation()
                     showingNewSession = true
                 } label: {
                     Image(systemName: "plus")
@@ -84,6 +87,7 @@ struct SessionListView: View {
                 // groups of a list that is gone, and whatever it built would be
                 // refused by a computer that never heard of it.
                 .disabled(model.selectedDesktopClientInstanceId == nil || model.viewedDesktopIsOffline)
+                .accessibilityLabel("新建")
                 .accessibilityIdentifier("new-session")
             }
         }
@@ -171,7 +175,7 @@ struct SessionListView: View {
     /// implements the physics, the full-swipe, the VoiceOver actions, and the
     /// rule that only one row stays open.
     private func sessionRow(_ session: MobileSummarySession) -> some View {
-        SessionRow(session: session)
+        SessionRow(session: session, isSelected: selection == session.id)
         .contextMenu {
             Button {
                 Task { await model.copySessionReference(session.id) }
@@ -191,6 +195,7 @@ struct SessionListView: View {
         .swipeActions(edge: .trailing) {
             // Declared first, so it is the one a full swipe commits to.
             Button(role: .destructive) {
+                onBeginNavigation()
                 deleteTarget = session
             } label: {
                 Label("删除", systemImage: "trash")
@@ -198,6 +203,7 @@ struct SessionListView: View {
             .tint(Color(uiColor: .systemRed))
 
             Button {
+                onBeginNavigation()
                 renameTarget = session
             } label: {
                 Label("重命名", systemImage: "pencil")
@@ -286,6 +292,7 @@ struct SessionListView: View {
                     Menu {
                         ForEach(model.desktopSwitchTargets) { desktop in
                             Button {
+                                onBeginNavigation()
                                 Haptics.select()
                                 selection = nil
                                 model.selectDesktop(desktop.clientInstanceId)
@@ -371,6 +378,7 @@ struct SessionListView: View {
 
 struct SessionRow: View {
     let session: MobileSummarySession
+    let isSelected: Bool
 
     /// `NavigationLink` rather than a `Button` that appends to the path itself: it
     /// is what draws the disclosure indicator this row owes the reader, and it
@@ -395,18 +403,18 @@ struct SessionRow: View {
                             // `.secondary`, not `.tertiary`: at this size tertiary
                             // measured 2.11:1 on the light background, well under the
                             // 4.5:1 the text needs to be legible at all.
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(isSelected ? .primary : .secondary)
                     }
                     Text(session.cwd)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
                     // Drawn whether or not there is anything to say, so that every
                     // row is the same height.
                     Text(session.rowLastLine)
                         .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .lineLimit(1)
                     if session.attention.isWaiting {
                         Text(session.attention.kind == "approval" ? "等待确认" : "等待输入")
@@ -435,7 +443,7 @@ extension MobileSummarySession {
     /// （那是一条会话，不是一条消息），两处各写一遍的话，改了一处另一处就不会跟着改。
     var elapsedLabel: String {
         guard let started = startedAtDate else { return "" }
-        let seconds = Int(Date().timeIntervalSince(started))
+        let seconds = max(0, Int(Date().timeIntervalSince(started)))
         if seconds < 60 { return "\(seconds) 秒" }
         if seconds < 3600 { return "\(seconds / 60) 分" }
         if seconds < 86_400 { return "\(seconds / 3600) 小时" }

@@ -11,9 +11,11 @@ import UIKit
 /// 这不是缺陷，系统的侧边栏本来就不分组。
 struct SettingsCategoriesView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var selection: SettingsCategory?
     /// 录音那个分类外层显示的是权限状态，与它二级页里那一行同一个读法。
     @State private var microphone: PermissionRow.State = .undetermined
+    @ScaledMetric(relativeTo: .body) private var symbolWidth = 22
 
     var body: some View {
         List(selection: $selection) {
@@ -32,6 +34,7 @@ struct SettingsCategoriesView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .tint(Color(uiColor: .systemBlue))
         .navigationTitle("我的")
         .task { microphone = Self.currentMicrophoneState() }
         // 用户可能在系统设置里改过。回到前台要重新读一次，否则这一行会一直停在
@@ -70,23 +73,49 @@ struct SettingsCategoriesView: View {
 
     private func row(_ category: SettingsCategory, value: String?, dot: Color? = nil) -> some View {
         NavigationLink(value: category) {
-            HStack(spacing: 12) {
-                Image(systemName: category.symbol)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22)
-                Text(category.title)
-                Spacer(minLength: 8)
-                if let dot {
-                    Circle().fill(dot).frame(width: 7, height: 7)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(category.title, systemImage: category.symbol)
+                        .labelStyle(.titleOnly)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let value {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if let dot {
+                                Circle().fill(dot).frame(width: 7, height: 7)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(value)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .foregroundStyle(selection == category ? .primary : .secondary)
+                    }
                 }
-                if let value {
-                    Text(value)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 12) {
+                    Image(systemName: category.symbol)
+                        .font(.body)
+                        .foregroundStyle(selection == category ? .primary : .secondary)
+                        .frame(width: symbolWidth)
+                    Text(category.title)
+                    Spacer(minLength: 8)
+                    if let dot {
+                        Circle().fill(dot).frame(width: 7, height: 7)
+                    }
+                    if let value {
+                        Text(value)
+                            .foregroundStyle(selection == category ? .primary : .secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(category.title)
+        .accessibilityValue(category == .notifications && model.notifications.unreadCount > 0
+                            ? "\(model.notifications.unreadCount) 条未读" : value ?? "")
         .accessibilityIdentifier("settings-category-\(category.rawValue)")
     }
 }

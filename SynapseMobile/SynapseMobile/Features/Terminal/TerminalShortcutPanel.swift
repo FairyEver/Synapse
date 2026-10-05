@@ -107,6 +107,10 @@ struct TerminalShortcutPanel: View {
         segment.wrappedValue == .phrases && phrases == nil ? .clipboard : segment.wrappedValue
     }
 
+    var pickerSelection: Binding<ShortcutPanelSegment> {
+        Binding(get: { shown }, set: { segment.wrappedValue = $0 })
+    }
+
     var body: some View {
         // 导航栏是这个面板自己带的，因为「清空」这类作用于整段列表的动作，iOS 只给了
         // 工具栏这一个位置。它由剪贴板那一段并进来（见 `ClipboardList`），所以栏本身
@@ -175,7 +179,7 @@ struct TerminalShortcutPanel: View {
     /// segments are always meaningful, so there is somewhere to switch from and somewhere
     /// to switch to.
     private var picker: some View {
-        Picker("快捷面板内容", selection: segment) {
+        Picker("快捷面板内容", selection: pickerSelection) {
             ForEach(availableSegments) { option in
                 Text(option.label).tag(option)
             }

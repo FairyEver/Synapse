@@ -159,6 +159,7 @@ nonisolated struct WorkspaceFilesScope: Equatable, Sendable {
 nonisolated struct WorkspaceFilesFailure: Error, Equatable, Sendable {
     let code: String
     let message: String
+    var displayMessage: String { code == "cursor_expired" ? "分页已过期，请重新打开" : message }
     static let unavailable = Self(code: "unsupported_version", message: "请更新电脑端与服务端后重试。")
     static let offline = Self(code: "desktop_offline", message: "电脑离线，请连接后重试。")
     static let cancelled = Self(code: "cancelled", message: "读取已取消。")

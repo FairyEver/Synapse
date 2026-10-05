@@ -4,9 +4,8 @@ import Testing
 
 /// 导出里能单独拿出来判的那几条：什么时候先问一句、落地那一份叫什么、同一批重名怎么排。
 ///
-/// 都是纯判据 —— 不读 `UserDefaults`、不碰网络、不起视图，所以这些断言是密闭的。
-/// `DriveFileExport` 的网络那一半不在这里：它收的是 `APIClient`（actor），没有协议就注入
-/// 不了假的，与本仓 `DriveStore` 的处理一致。
+/// 纯判据之外，还验证取消发生在排队任务入口之前时，不会重新创建临时目录。
+/// 这个取消路径不进入网络下载，也不需要启动视图。
 @MainActor
 struct DriveExportTests {
     private func file(_ name: String, size: String, folder: Bool = false) -> DriveBrowserItem {
@@ -22,6 +21,28 @@ struct DriveExportTests {
             downloadUrl: folder ? nil : "/drive/items/\(name)/download",
             shareUrl: nil
         )
+    }
+
+    @Test func cancellingBeforeTaskEntryDoesNotRecreateTheStagingDirectory() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SynapseDriveExport", isDirectory: true)
+        let before = Set((try? FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil
+        )) ?? [])
+        let export = DriveFileExport()
+        let model = SynapseAppModel()
+        defer { export.cancel() }
+
+        export.download([file("cancelled-\(UUID().uuidString).txt", size: "1")], using: model)
+        export.cancel()
+        try await Task.sleep(for: .milliseconds(20))
+
+        let after = Set((try? FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil
+        )) ?? [])
+        #expect(after.subtracting(before).isEmpty)
+        #expect(export.share.progress == nil)
+        #expect(export.shareRequest == nil)
     }
 
     // MARK: - 先问一句

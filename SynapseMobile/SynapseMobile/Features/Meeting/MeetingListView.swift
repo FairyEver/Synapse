@@ -6,12 +6,10 @@ import SwiftUI
 /// 流水账，看得见就够，和电脑端的左栏一致。
 struct MeetingListView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var selection: String?
     @State private var renameTarget: MeetingSummary?
     @State private var deleteTarget: MeetingSummary?
-    /// 转写轮询。收尾完成时要重新起一轮，所以它是个能取消、能重起的任务，不是一条
-    /// 一次性的循环。
-    @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
         @Bindable var model = model
@@ -22,6 +20,7 @@ struct MeetingListView: View {
                         NavigationLink(value: meeting.id) {
                             row(meeting)
                         }
+                        .badge(dynamicTypeSize.isAccessibilitySize ? nil : MeetingText.statusLabel(meeting.status))
                         // 长按是 iOS 的上下文菜单：整行抬起来、其余模糊、玻璃按钮浮在
                         // 下方。**不是底部动作表**，那需要用户先把手指移开。
                         .contextMenu {
@@ -69,6 +68,7 @@ struct MeetingListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .tint(Color(uiColor: .systemBlue))
         // 空态铺在列表上，而不是列表里的一行：`ContentUnavailableView` 要的是整块内容
         // 区。留在 `List` 上也让下拉刷新在空态下照旧能用。
         //
@@ -121,11 +121,9 @@ struct MeetingListView: View {
             if !presented { Task { await model.reloadMeetings() } }
         }
         .onChange(of: model.recording.phase) { _, phase in
-            // 收尾跑完就是这条录音变成「转写中」的时候，轮询要从这里重新起一轮——进屏时
-            // 若一条都不在转写，它早就退出了。
+            // 收尾结束后刷新列表；是否继续轮询由列表里的转写状态决定。
             if phase == .idle {
                 Task { await model.reloadMeetings() }
-                startPolling()
             }
             if model.recording.didHitDurationLimit {
                 model.notice("录音已到 5 小时上限，已自动保存。")
@@ -133,7 +131,7 @@ struct MeetingListView: View {
         }
         .sheet(item: $renameTarget) { meeting in
             RenameRecordingSheet(title: meeting.title) { newTitle in
-                Task { await model.renameMeeting(meeting.id, to: newTitle) }
+                await model.renameMeeting(meeting.id, to: newTitle)
             }
         }
         .alert("删除这条录音？", isPresented: Binding(
@@ -156,31 +154,21 @@ struct MeetingListView: View {
             // 还没存在，`.onChange` 不会为一个它没见过的初值触发。
             startIfRequested()
             await model.reloadMeetings()
-            startPolling()
         }
-        .onDisappear {
-            // `pollTask` 是在 `.task` 的闭包里就地起的，不是它的子任务 —— SwiftUI
-            // 在视图消失时的自动取消够不着它。不显式收掉，用户切走之后它还会每 5 秒
-            // 发一次请求，而这条任务已经没人拿得住、也没人能再取消它了。
-            pollTask?.cancel()
-            pollTask = nil
+        .task(id: model.meetings.hasTranscribing) {
+            await pollWhileTranscribing()
         }
     }
 
     /// 正在转写的那几场要自己变成结果，用户不用下拉。没有在转的就退出循环，免得在后台
     /// 白跑一路请求。
     ///
-    /// **这件事得能被重新点着。** 写成一条 `while hasTranscribing` 的自走循环的话，进屏
-    /// 那一刻一条都不在转就再也不会自动刷新了——而刚录完的那条恰恰是在那之后才变成
-    /// 「转写中」的。所以它是个可以再叫一次的入口，收尾完成时叫它。
-    private func startPolling() {
-        pollTask?.cancel()
-        pollTask = Task {
-            while !Task.isCancelled, model.meetings.hasTranscribing {
-                try? await Task.sleep(for: .seconds(5))
-                if Task.isCancelled { return }
-                await model.reloadMeetings()
-            }
+    /// 状态变回转写中时由 SwiftUI 重启，离屏或不再转写时由 SwiftUI 取消。
+    private func pollWhileTranscribing() async {
+        while !Task.isCancelled, model.meetings.hasTranscribing {
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+            await model.reloadMeetings()
         }
     }
 
@@ -196,32 +184,44 @@ struct MeetingListView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(meeting.title)
                 .font(.subheadline)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             Text(MeetingText.secondary(meeting))
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .foregroundStyle(selection == meeting.id ? .primary : .secondary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(MeetingText.statusLabel(meeting.status))
+                    .font(.caption)
+                    .foregroundStyle(selection == meeting.id ? .primary : .secondary)
+            }
         }
         .padding(.vertical, 2)
-        .badge(MeetingText.statusLabel(meeting.status))
+        .accessibilityElement(children: .combine)
     }
 
     private func copyTranscript(_ meeting: MeetingSummary) {
         Task {
-            guard let text = await model.meetingTranscript(meeting.id) else { return }
+            guard let text = await model.meetingTranscript(meeting.id) else {
+                let message = model.meetings.detailError(for: meeting.id) ?? "这条录音还没有可复制的文字。"
+                model.notice(message, tone: model.meetings.detailError(for: meeting.id) == nil ? .info : .failure)
+                return
+            }
             Clipboard.copy(text, saying: "已复制全文", on: model)
         }
     }
 }
 
 /// 重命名。跟终端会话那一个同一个形状：只改名字，不碰别的。
-private struct RenameRecordingSheet: View {
+struct RenameRecordingSheet: View {
+    @Environment(SynapseAppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let title: String
-    let onCommit: (String) -> Void
+    let onCommit: (String) async -> Bool
     @State private var text: String
+    @State private var saving = false
+    @State private var errorMessage: String?
 
-    init(title: String, onCommit: @escaping (String) -> Void) {
+    init(title: String, onCommit: @escaping (String) async -> Bool) {
         self.title = title
         self.onCommit = onCommit
         _text = State(initialValue: title)
@@ -231,20 +231,30 @@ private struct RenameRecordingSheet: View {
         NavigationStack {
             Form {
                 TextField("名称", text: $text)
+                    .submitLabel(.done)
+                    .onSubmit(commit)
+                    .disabled(saving)
                     .accessibilityIdentifier("recording-rename-field")
+                if let errorMessage {
+                    Text(errorMessage).foregroundStyle(Theme.failure)
+                }
             }
             .navigationTitle("重命名")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
+                        .disabled(saving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        onCommit(text)
-                        dismiss()
+                    Button(action: commit) {
+                        if saving {
+                            ProgressView().accessibilityLabel("正在保存")
+                        } else {
+                            Text("保存")
+                        }
                     }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(saving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -253,5 +263,22 @@ private struct RenameRecordingSheet: View {
         // 浮在整屏中间。同一件事在两处两种样子是错的，这是这一处错在哪。
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(saving)
+    }
+
+    private func commit() {
+        let name = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !saving, !name.isEmpty else { return }
+        saving = true
+        errorMessage = nil
+        Task {
+            let saved = await onCommit(name)
+            saving = false
+            if saved {
+                dismiss()
+            } else {
+                errorMessage = model.meetings.errorMessage ?? "改名失败，请重试。"
+            }
+        }
     }
 }

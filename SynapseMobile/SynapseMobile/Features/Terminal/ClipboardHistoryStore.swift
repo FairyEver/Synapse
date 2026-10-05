@@ -108,6 +108,11 @@ final class ClipboardHistoryStore {
     func merge(_ payload: MobileClipboardPayload) {
         let id = payload.desktopClientInstanceId
         var bucket = buckets[id] ?? ClipboardHistoryBucket()
+        // A desktop payload is its complete ring. Keep deletion marks while that ring
+        // can resend them, and release marks for rows it has already forgotten.
+        bucket.clearedKeys.formIntersection(Set(payload.entries.map {
+            Self.key(id: $0.id, copiedAt: $0.copiedAt)
+        }))
 
         var byId: [String: MobileClipboardEntry] = [:]
         for entry in bucket.entries { byId[entry.id] = entry }
@@ -131,9 +136,8 @@ final class ClipboardHistoryStore {
     /// Empties one computer's list, leaving the computer's own clipboard alone.
     func clear(for desktopClientInstanceId: String) {
         guard var bucket = buckets[desktopClientInstanceId] else { return }
-        // Replaced rather than accumulated: what matters is the rows that were on
-        // screen when the reader asked, and those are exactly the ones just removed.
-        bucket.clearedKeys = Set(bucket.entries.map { Self.key(id: $0.id, copiedAt: $0.copiedAt) })
+        // Earlier clears still matter while the desktop can resend those same rows.
+        bucket.clearedKeys.formUnion(bucket.entries.map { Self.key(id: $0.id, copiedAt: $0.copiedAt) })
         bucket.entries = []
         buckets[desktopClientInstanceId] = bucket
     }

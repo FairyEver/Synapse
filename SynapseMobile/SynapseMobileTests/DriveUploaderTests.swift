@@ -221,11 +221,11 @@ struct DriveUploaderTests {
         let server = FakeDrive()
         let uploader = uploader(server)
 
-        uploader.enqueue(files: (1...5).map { file("f\($0).md") }, parentId: nil, using: client)
+        uploader.enqueue(files: (1...10).map { file("f\($0).md") }, parentId: nil, using: client)
         await settle(uploader)
 
         #expect(server.maxInFlight == 2)
-        #expect(server.completed.count == 5)
+        #expect(server.completed.count == 10)
     }
 
     @Test func accountExitCancelsUploadsWithoutStartingQueuedFiles() async {
@@ -396,6 +396,50 @@ struct DriveUploaderTests {
     }
 
     // MARK: - 同名覆盖
+
+    @Test func aNewOverwriteTargetDuringResignWaitsForConfirmation() async throws {
+        let server = FakeDrive()
+        server.failingSessions = ["s1-a.md"]
+        let target = DriveUploadOverwriteTarget(
+            itemId: "new-same-name", name: "a.md", currentVersionId: nil, documentText: true
+        )
+        // 第一张票没有同名项；第一次 PUT 过期期间，电脑上传了同名文件。
+        server.onPut = { server.overwriteTarget = target }
+        defer { server.onPut = nil }
+        let uploader = uploader(server)
+        uploader.enqueue(files: [file("a.md")], parentId: "folder-1", using: client)
+        await settle(uploader)
+        let item = try #require(uploader.items.first)
+        #expect(item.state == .awaitingOverwrite(target))
+        #expect(server.puts == 1)
+        #expect(server.completed.isEmpty)
+        #expect(server.released == ["s1-a.md", "s2-a.md"])
+
+        uploader.confirmOverwrite(item.id)
+        await settle(uploader)
+        #expect(server.prepares.last?.expectedItemId == target.itemId)
+        #expect(server.delivered == ["s3-a.md"])
+        #expect(uploader.items.first?.state == .completed(itemId: "item-a.md"))
+    }
+
+    @Test func anAuthorizedOverwriteResignsWithoutAskingAgain() async throws {
+        let server = FakeDrive()
+        let target = DriveUploadOverwriteTarget(
+            itemId: "authorized", name: "a.md", currentVersionId: nil, documentText: true
+        )
+        server.overwriteTarget = target
+        server.failingSessions = ["s2-a.md"]
+        let uploader = uploader(server)
+        uploader.enqueue(files: [file("a.md")], parentId: nil, using: client)
+        await settle(uploader)
+        let item = try #require(uploader.items.first)
+        uploader.confirmOverwrite(item.id)
+        await settle(uploader)
+        #expect(server.prepares.count == 3)
+        #expect(server.prepares[2].expectedItemId == target.itemId)
+        #expect(server.delivered == ["s3-a.md"])
+        #expect(uploader.items.first?.state == .completed(itemId: "item-a.md"))
+    }
 
     /// `overwrite` 缺失 = 未知：不弹确认、不阻断。
     @Test func anAbsentOverwriteFieldUploadsWithoutAsking() async {

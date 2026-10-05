@@ -11,6 +11,15 @@ import UniformTypeIdentifiers
 /// Nor does it care what kind of file it is: the drive stores bytes and the
 /// desktop only splits the name, so a video takes the same path a picture does.
 enum TerminalFileIntake {
+    static func discard(_ file: PickedFile) {
+        try? FileManager.default.removeItem(at: file.url)
+    }
+
+    static func discardRejected(_ files: [PickedFile], keeping accepted: [PickedFile]) {
+        let kept = Set(accepted.map(\.url))
+        for file in files where !kept.contains(file.url) { discard(file) }
+    }
+
     /// A photo-library item, still or moving.
     ///
     /// `loadFileRepresentation` hands over the asset's own file, and the URL it

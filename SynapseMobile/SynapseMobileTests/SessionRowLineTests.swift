@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import SynapseMobile
 
@@ -19,7 +20,12 @@ struct SessionRowLineTests {
         #expect(!session(lastLine: "").rowLastLine.isEmpty)
     }
 
-    private func session(lastLine: String) -> MobileSummarySession {
+    @Test(arguments: [5.0, 120.0, 3600.0]) func aComputerClockAheadOfThePhoneNeverShowsNegativeElapsedSeconds(offset: TimeInterval) {
+        let startedAt = ISO8601DateFormatter.withFractionalSeconds.string(from: Date().addingTimeInterval(offset))
+        #expect(session(lastLine: "", startedAt: startedAt).elapsedLabel == "0 秒")
+    }
+
+    private func session(lastLine: String, startedAt: String = "2026-01-01T00:00:00.000Z") -> MobileSummarySession {
         MobileSummarySession(
             id: "s1",
             groupId: "g1",
@@ -29,7 +35,7 @@ struct SessionRowLineTests {
             cwd: "/tmp",
             cols: 80,
             rows: 24,
-            startedAt: "2026-01-01T00:00:00.000Z",
+            startedAt: startedAt,
             lastLine: lastLine,
             lastOutputSeq: 0,
             gridOwnerId: nil,

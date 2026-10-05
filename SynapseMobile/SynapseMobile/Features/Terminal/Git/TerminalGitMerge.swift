@@ -42,16 +42,19 @@ struct TerminalGitMerge: View {
             }
         }
         .listStyle(.insetGrouped)
+        .disabled(flow.isBusy)
         .navigationTitle("合并分支")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("合并") {
+                Button {
                     Haptics.commit()
                     Task { await flow.merge(on: desk) }
+                } label: {
+                    TerminalGitConfirmationLabel(title: "合并", isBusy: flow.isBusy)
                 }
                 // 没有选分支就没什么可合的。让这一颗灰着，比让它发出去再报一次错好。
-                .disabled(flow.mergeBranch == nil)
+                .disabled(flow.mergeBranch == nil || flow.isBusy)
                 .accessibilityIdentifier("git-merge-run")
             }
         }
@@ -100,7 +103,7 @@ struct TerminalGitMerge: View {
         case .intoCurrent:
             return "一旦发生冲突，会自动取消这次合并并退回到合并前，然后给你一段可复制的冲突信息。手机上不解决冲突。"
         case .outOfCurrent:
-            return "git 没有「留在原分支、把成果合进别的分支」这条原语，所以这一步必然要离开当前分支，结束后会切回来。一旦发生冲突，会取消合并并切回原分支。"
+            return "发生冲突时，会取消合并并切回原分支。"
         }
     }
 }

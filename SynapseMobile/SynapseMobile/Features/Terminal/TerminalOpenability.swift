@@ -1,5 +1,84 @@
 import Foundation
 
+/// Retain the received list for offline display, but only this socket's receipt
+/// can authorize a deferred external destination after a reconnect.
+struct LiveTerminalSummaryStamp {
+    private(set) var connectionGeneration: Int?
+
+    var hasSummary: Bool { connectionGeneration != nil }
+
+    mutating func receive(on generation: Int) {
+        connectionGeneration = generation
+    }
+
+    mutating func clear() {
+        connectionGeneration = nil
+    }
+
+    func belongs(to generation: Int) -> Bool {
+        connectionGeneration == generation
+    }
+}
+
+/// A request waiting for its computer's list. List/home requests omit the computer
+/// from their callback, so freeze the currently viewed one when they are queued.
+struct PendingTerminalOpen: Equatable {
+    let sessionId: String
+    let desktopClientInstanceId: String?
+
+    init(sessionId: String, requestedDesktop: String?, currentDesktop: String?) {
+        self.sessionId = sessionId
+        desktopClientInstanceId = requestedDesktop ?? currentDesktop
+    }
+
+    func belongs(to currentDesktop: String?) -> Bool {
+        desktopClientInstanceId == currentDesktop
+    }
+}
+
+/// External destinations wait for this connection's presence and live list;
+/// an initial empty presence cache is not an offline answer.
+struct PendingExternalTerminalOpen: Equatable {
+    let desktopId: String?
+    let sessionId: String?
+    let origin: TerminalOpenOrigin
+
+    enum Resolution: Equatable {
+        case waiting
+        case list
+        case terminal(sessionId: String, desktopId: String)
+    }
+
+    func resolve(
+        currentDesktopId: String?,
+        hasCurrentPresence: Bool,
+        onlineDesktopIds: [String],
+        hasLiveSummary: Bool,
+        summary: MobileSummaryPayload?
+    ) -> Resolution {
+        guard let sessionId else { return .list }
+        guard hasCurrentPresence else { return .waiting }
+        guard let desktopId = desktopId ?? currentDesktopId,
+              onlineDesktopIds.contains(desktopId) else { return .list }
+        guard hasLiveSummary, summary?.desktopClientInstanceId == desktopId else { return .waiting }
+        return .terminal(sessionId: sessionId, desktopId: desktopId)
+    }
+}
+
+/// A rejected destination leaves the reader's real selection and current page
+/// intact. Its notice describes the requested destination, wherever it is shown.
+struct TerminalOpenNavigation: Equatable {
+    let selection: String?
+    let activatesTerminalTab: Bool
+    let rejectionNotice: String?
+
+    init(requestedSession: String, currentSelection: String?, decision: TerminalOpenability) {
+        selection = decision == .openable ? requestedSession : currentSelection
+        activatesTerminalTab = decision != .ended
+        rejectionNotice = decision == .ended ? "要打开的会话已结束。" : nil
+    }
+}
+
 /// 一个终端还开不开得开。
 ///
 /// 手机上有五条路能进终端页：会话列表里的行、「消息」里的待处理行、「消息」里一条记录上的

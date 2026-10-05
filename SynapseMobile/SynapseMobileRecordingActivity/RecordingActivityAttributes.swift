@@ -17,7 +17,7 @@ struct RecordingActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         /// 已经录了多久。暂停期间不涨，所以它比钟表时间准——系统中断那几分钟不计入。
         var elapsedSeconds: Int
-        /// 有值代表正被系统中断占着麦克风，界面要照原样说明原因。
+        /// 有值代表采集已暂停/停止，界面要照原样说明系统中断或本机写入失败原因。
         var pausedReason: String?
     }
 }

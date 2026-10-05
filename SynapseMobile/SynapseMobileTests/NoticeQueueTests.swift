@@ -10,6 +10,19 @@ import Testing
 /// replaced another inherited the first one's countdown and could leave half a second
 /// after it arrived.
 struct NoticeQueueTests {
+    @Test func anOldDismissalCannotRemoveARepostedMessage() {
+        var queue = NoticeQueue()
+        queue.post("正在准备", tone: .info, id: "operation")
+        let dismissedRevision = queue.notices[0].revision
+        queue.post("准备完成", tone: .success, id: "operation")
+        let oldDismissalRemovedMessage = queue.remove("operation", revision: dismissedRevision)
+        #expect(!oldDismissalRemovedMessage)
+        #expect(queue.notices.first?.text == "准备完成")
+        let currentDismissalRemovedMessage = queue.remove("operation", revision: queue.notices[0].revision)
+        #expect(currentDismissalRemovedMessage)
+        #expect(queue.notices.isEmpty)
+    }
+
     private func queue(
         _ posts: [(text: String, tone: NoticeTone, id: String)]
     ) -> NoticeQueue {

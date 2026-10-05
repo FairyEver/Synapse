@@ -104,6 +104,7 @@ struct TerminalGitPanel: View {
                 TerminalGitActionRow(
                     title: "分支",
                     detail: TerminalGitPresentation.branchLabel(status),
+                    enabled: !flow.isBusy,
                     identifier: "git-panel-branch"
                 ) {
                     flow.path.append(.branches(.checkout))

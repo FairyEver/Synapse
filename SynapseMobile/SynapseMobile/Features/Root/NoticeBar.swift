@@ -4,7 +4,7 @@ import SwiftUI
 /// the older one stacks above it. Notices past the visible window draw nothing at all.
 struct NoticeStack: View {
     let notices: [Notice]
-    let onDismiss: (String) -> Void
+    let onDismiss: (String, Int) -> Void
     let onHold: (String) -> Void
     let onRelease: (String) -> Void
 
@@ -15,7 +15,7 @@ struct NoticeStack: View {
             ForEach(notices) { notice in
                 NoticeBar(
                     notice: notice,
-                    onDismiss: { onDismiss(notice.id) },
+                    onDismiss: { onDismiss(notice.id, notice.revision) },
                     onHold: { onHold(notice.id) },
                     onRelease: { onRelease(notice.id) }
                 )
@@ -96,6 +96,12 @@ struct NoticeBar: View {
         // something a screen reader can perform, and the bar is on a clock.
         .accessibilityAction { onDismiss() }
         .accessibilityAction(.escape) { onDismiss() }
+        .onChange(of: notice.revision) { _, _ in
+            // A re-post edits this same view. Restore it if the preceding message
+            // was already animating out when the replacement arrived.
+            dragOffset = 0
+            isDragging = false
+        }
     }
 
     private var icon: String {
@@ -199,7 +205,7 @@ extension View {
         overlay(alignment: .bottom) {
             NoticeStack(
                 notices: model.notices.armed(forSession: sessionId),
-                onDismiss: { model.dismissNotice($0) },
+                onDismiss: { model.dismissNotice($0, revision: $1) },
                 onHold: { model.holdNotice($0) },
                 onRelease: { model.resumeNotice($0) }
             )

@@ -397,12 +397,10 @@ extension DriveShare {
 
 /// 这一次分享要怎么做。
 ///
-/// 「已有活跃分享时不重复创建」就落在这里：本机手里有那一条（分享列表里那一条带着链接、
-/// 带密码链接与密码）**而且用户什么都没改**时，连请求都不必发——服务端那条只会在不带
-/// 设置去的时候复用它（`drive.service.ts` 的 `reusedExisting`），而带设置去就是把它更新
-/// 掉，那种情况本机说不出结果，只能走一次请求。
+/// 本机已有分享且设置未改时，先只读确认其当前状态；带设置时提交更新。
+/// 计划中的缓存只是候选链接，不替代服务端的活跃状态校验。
 enum DriveSharePlan {
-    /// 用本机已经知道的那一条，不发请求。
+    /// 校验本机已知链接，仍活跃时复用。
     case useExisting(DriveShare)
     /// 发一次请求。带设置是更新，空体是让服务端复用或新建。
     case request(APIClient.DriveShareSettings)
@@ -655,6 +653,11 @@ final class DriveStore {
     private(set) var trashTotal = 0
     private(set) var trashLoading = false
     private(set) var trashErrorMessage: String?
+    private var trashLoadGeneration = 0
+    /// 根入口的全量数独立于搜索列表；旧全量读不能覆盖变更后的新数。
+    private var trashTotalLoadGeneration = 0
+    @ObservationIgnored
+    var trashFetcher: ((_ search: String?) async throws -> DriveTrashPage)?
 
     private(set) var shares: [DriveShareListItem] = []
     private(set) var sharesLoading = false
@@ -664,6 +667,11 @@ final class DriveStore {
     private(set) var assets: [DrivePublicAsset] = []
     private(set) var assetsLoading = false
     private(set) var assetsErrorMessage: String?
+    private var assetsLoadGeneration = 0
+    @ObservationIgnored
+    var assetsFetcher: (() async throws -> DrivePublicAssetPage)?
+    @ObservationIgnored
+    var assetTrashRequest: ((_ assetId: String) async throws -> Void)?
 
     /// 用量。拉不到时是 `nil`，列表最底下那一行这次不显示。
     private(set) var usage: DriveUsage?
@@ -734,8 +742,7 @@ final class DriveStore {
     /// 找的真实文件夹（`drive.service.ts` 的 `requireOwnedFolder`），拿它当父级会被判成
     /// 「这一项不在你的云盘里」。
     var folderId: String? {
-        guard let current, !current.isRoot else { return nil }
-        return current.current.id
+        path.last?.id
     }
 
     /// 这一层还有下一页要取吗。
@@ -814,7 +821,7 @@ final class DriveStore {
         // 出发时是哪一层：`loading` 挡得住两次导航撞在一起，挡不住「续页 + 下钻」。
         let generation = layerGeneration
         loadingMore = true
-        defer { loadingMore = false }
+        defer { if generation == layerGeneration { loadingMore = false } }
         do {
             let next = try await fetch(itemId: folderId, childrenOffset: offset, using: client)
             // 这期间层换了（人点进了别的文件夹、回了上一级、退出了登录）：这一页属于
@@ -822,10 +829,12 @@ final class DriveStore {
             guard generation == layerGeneration else { return }
             // 只接子项那一页。`current` / `breadcrumbs` / `preview` 是这一层的元信息，
             // 续页不会让它们变——它们说的是「这一层是什么」，不是「这一页有哪些行」。
+            // 实时 offset 页之间新增项会重复上一页末项，按 id 去重；游标仍由服务端推进。
+            let known = Set(snapshot.children.map(\.id))
             current = DriveBrowserSnapshot(
                 current: snapshot.current,
                 breadcrumbs: snapshot.breadcrumbs,
-                children: snapshot.children + next.children,
+                children: snapshot.children + next.children.filter { !known.contains($0.id) },
                 childrenPage: next.childrenPage,
                 preview: snapshot.preview,
                 canDownload: snapshot.canDownload,
@@ -843,22 +852,28 @@ final class DriveStore {
     private enum PathIntent {
         /// 下钻：栈上追加这一层。
         case push
-        /// 栈已经由调用方算好了（回上级 / 面包屑跳转 / 刷新），成了才落下去。
+        /// 栈已经由调用方算好了（回上级 / 面包屑跳转 / 刷新），先同步目标层。
         case replace([DriveBrowserItem])
     }
 
     /// 拉一层并把它当成当前层。
     ///
-    /// 路径栈的改动**等请求回来才落**：先改栈再请求的话，一个失败的回上一级会让标题
-    /// 已经换成上一层、列表还是原来那一层——比这一次操作失败更难看。
+    /// 返回和跳转时，系统导航栈已经到了目标层；请求失败也必须留在该层供重试。
+    /// 下钻仍然成功才推栈；每趟请求独占代次，较晚的跳转不会被旧响应覆盖。
     private func load(itemId: String?, intending intent: PathIntent, using client: APIClient) async {
-        // 同一层的两次请求会互相覆盖，而一个双击会把同一个文件夹往栈上推两次。
-        guard !loading else { return }
-        loading = true
-        defer { loading = false }
-
-        // `loading` 挡得住两次导航，挡不住「请求在飞的时候被清空」（退出登录）。
+        if case .push = intent, loading { return }
+        if case .replace(let newPath) = intent {
+            path = newPath
+            if current?.current.id != (itemId ?? DrivePath.rootId) {
+                current = nil
+            }
+        }
+        layerGeneration += 1
         let generation = layerGeneration
+        loading = true
+        loadingMore = false
+        defer { if generation == layerGeneration { loading = false } }
+
         do {
             let snapshot = try await fetch(itemId: itemId, childrenOffset: nil, using: client)
             // 这一趟出发之后层已经被清掉或换掉了：它的数据属于上一个账号 / 上一层，
@@ -877,10 +892,9 @@ final class DriveStore {
             }
             current = snapshot
             errorMessage = nil
-            // 层换完了：还在飞的那些续页从这一刻起都不再属于现在这一层。
-            layerGeneration += 1
         } catch {
             guard generation == layerGeneration else { return }
+            guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             errorMessage = DriveText.errorMessage(error)
         }
     }
@@ -913,6 +927,7 @@ final class DriveStore {
     /// 指令）直接调这个方法，行为不该不一样。
     @discardableResult
     func createFolder(name: String, using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return DriveBatchOutcome(succeeded: 0, failures: []) }
 
@@ -924,7 +939,7 @@ final class DriveStore {
                 return DriveBatchOutcome.Failure(name: name, reason: DriveText.errorMessage(error))
             }
         }
-        await reloadAfterChange(outcome, using: client)
+        await reloadAfterChange(outcome, account: account, using: client)
         return outcome
     }
 
@@ -934,6 +949,7 @@ final class DriveStore {
     /// 不编一句话去说它，也不发一个必定被拒的请求。
     @discardableResult
     func rename(item: DriveBrowserItem, to name: String, using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return DriveBatchOutcome(succeeded: 0, failures: []) }
 
@@ -949,7 +965,7 @@ final class DriveStore {
                 )
             }
         }
-        await reloadAfterChange(outcome, using: client)
+        await reloadAfterChange(outcome, account: account, using: client)
         return outcome
     }
 
@@ -962,6 +978,7 @@ final class DriveStore {
         to parentId: String?,
         using client: APIClient
     ) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting(items) { item in
             guard DrivePath.canMove(itemId: item.id, into: parentId, path: path) else {
                 return DriveBatchOutcome.Failure(
@@ -981,13 +998,14 @@ final class DriveStore {
                 )
             }
         }
-        await reloadAfterChange(outcome, using: client)
+        await reloadAfterChange(outcome, account: account, using: client)
         return outcome
     }
 
     /// 移到回收站。字节还在，恢复走回收站那一页。
     @discardableResult
     func trash(_ items: [DriveBrowserItem], using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting(items) { item in
             do {
                 try await client.driveTrashItem(itemId: item.id)
@@ -1000,7 +1018,10 @@ final class DriveStore {
                 )
             }
         }
-        await reloadAfterChange(outcome, using: client)
+        guard account == accountGeneration else { return outcome }
+        if outcome.succeeded > 0 { await refreshTrashTotal(using: client) }
+        guard account == accountGeneration else { return outcome }
+        await reloadAfterChange(outcome, account: account, using: client)
         return outcome
     }
 
@@ -1009,8 +1030,8 @@ final class DriveStore {
     /// 那几个接口回的是 `DriveItemDto`，它缺 `previewKind` / `browserUrl`，接不上
     /// `DriveBrowserItem`——所以改了名字、删了一行之后，新样子只能靠再取一次拿到。
     /// 一项都没成时列表没变，不必多打一次请求。
-    private func reloadAfterChange(_ outcome: DriveBatchOutcome, using client: APIClient) async {
-        guard outcome.succeeded > 0 else { return }
+    private func reloadAfterChange(_ outcome: DriveBatchOutcome, account: Int, using client: APIClient) async {
+        guard outcome.succeeded > 0, account == accountGeneration else { return }
         await reload(using: client)
     }
 
@@ -1023,27 +1044,63 @@ final class DriveStore {
     func loadTrash(search: String? = nil, using client: APIClient) async {
         let term = DriveSearchTerm.normalized(search)
         let account = accountGeneration
-        // 这一次查询「认」哪一份结果：搜索词是这次这个，账号也还是原来那个。词是会连着
-        // 变的（`.searchable` 每敲一下都可能发一次），而两次请求回来的顺序不保证——不认的话
-        // 屏幕上会出现上一个词的结果。
+        let totalGeneration: Int?
+        if term == nil {
+            trashTotalLoadGeneration += 1
+            totalGeneration = trashTotalLoadGeneration
+        } else {
+            totalGeneration = nil
+        }
+        trashLoadGeneration += 1
+        let generation = trashLoadGeneration
         trashSearch = term
         trashLoading = true
+        defer { if generation == trashLoadGeneration { trashLoading = false } }
         do {
-            let page = try await client.driveTrash(limit: Self.pageLimit, search: term)
-            // 作废的这一趟连 `trashLoading` 都不动：飞着的那一次才是现在该等的那一次。
-            guard isCurrentTrash(term, account: account) else { return }
+            let page: DriveTrashPage
+            if let trashFetcher { page = try await trashFetcher(term) }
+            else { page = try await client.driveTrash(limit: Self.pageLimit, search: term) }
+            // 用户开始搜索后，这趟全量响应仍能更新根入口；列表按自己的slot认领。
+            if let totalGeneration, totalGeneration == trashTotalLoadGeneration,
+               account == accountGeneration, !Task.isCancelled {
+                trashTotal = page.total
+            }
+            guard generation == trashLoadGeneration, isCurrentTrash(term, account: account) else { return }
             trash = page.items
-            trashTotal = page.total
             trashErrorMessage = nil
-            trashLoading = false
         } catch {
-            guard isCurrentTrash(term, account: account) else { return }
-            // 这一趟被取消（用户退出这一屏、或者搜索词又变了）就什么都不说：取消不是这一
-            // 屏读不到东西。`trashLoading` 也不动 —— 该等的那一次是后一趟。
+            guard generation == trashLoadGeneration, isCurrentTrash(term, account: account) else { return }
             guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             trashErrorMessage = DriveText.errorMessage(error)
-            trashLoading = false
         }
+    }
+
+    /// 只读权威总数，不替换当前回收站搜索/条目/错误/加载状态。
+    private func refreshTrashTotal(using client: APIClient) async {
+        let account = accountGeneration
+        trashTotalLoadGeneration += 1
+        let generation = trashTotalLoadGeneration
+        do {
+            let page: DriveTrashPage
+            if let trashFetcher { page = try await trashFetcher(nil) }
+            else { page = try await client.driveTrash(limit: 1) }
+            guard account == accountGeneration, generation == trashTotalLoadGeneration,
+                  !Task.isCancelled else { return }
+            trashTotal = page.total
+        } catch {
+            guard account == accountGeneration, generation == trashTotalLoadGeneration else { return }
+            guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
+            AppLog.drive.warning("drive trash total unavailable: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func reloadTrashAfterChange(
+        _ outcome: DriveBatchOutcome, account: Int, using client: APIClient
+    ) async {
+        guard outcome.succeeded > 0, account == accountGeneration else { return }
+        if trashSearch != nil { await refreshTrashTotal(using: client) }
+        guard account == accountGeneration else { return }
+        await loadTrash(search: trashSearch, using: client)
     }
 
     /// 恢复一条。普通项与公开素材是两条接口，走哪条由条目自己定（`DriveTrashRestore`）。
@@ -1052,6 +1109,7 @@ final class DriveStore {
     /// 下拉或回来时刷新——两个屏不共享一次请求。
     @discardableResult
     func restoreTrashEntry(_ entry: DriveTrashEntry, using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting([entry]) { entry in
             guard let target = DriveTrashRestore.target(for: entry) else {
                 return DriveBatchOutcome.Failure(name: entry.name, reason: DriveTrashRestore.unresolvedReason)
@@ -1069,13 +1127,14 @@ final class DriveStore {
             }
         }
         // 成了才重取：恢复的那一条要从这一页里消失，而「还剩多少」是服务端说了算。
-        if outcome.succeeded > 0 { await loadTrash(search: trashSearch, using: client) }
+        await reloadTrashAfterChange(outcome, account: account, using: client)
         return outcome
     }
 
     /// 从回收站里移掉一条。用户看不见「彻底删除」，这一步之后字节由服务端按自己的节奏回收。
     @discardableResult
     func purgeTrashEntry(_ entry: DriveTrashEntry, using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting([entry]) { entry in
             do {
                 try await client.driveHideTrashItem(id: entry.id)
@@ -1084,7 +1143,7 @@ final class DriveStore {
                 return DriveBatchOutcome.Failure(name: entry.name, reason: DriveText.errorMessage(error))
             }
         }
-        if outcome.succeeded > 0 { await loadTrash(search: trashSearch, using: client) }
+        await reloadTrashAfterChange(outcome, account: account, using: client)
         return outcome
     }
 
@@ -1104,12 +1163,13 @@ final class DriveStore {
         defer { if request == sharesLoadGeneration { sharesLoading = false } }
         do {
             var items: [DriveShareListItem] = []
+            var known: Set<String> = []
             var offset = 0
             while true {
                 try Task.checkCancellation()
                 let page = try await client.driveShares(offset: offset, limit: Self.pageLimit)
                 guard account == accountGeneration, request == sharesLoadGeneration else { return }
-                items.append(contentsOf: page.items)
+                items.append(contentsOf: page.items.filter { known.insert($0.id).inserted })
                 guard page.page.hasMore else { break }
                 guard let nextOffset = page.page.nextOffset, nextOffset > offset else {
                     throw URLError(.badServerResponse)
@@ -1132,41 +1192,36 @@ final class DriveStore {
         DriveSharePlan.existing(forItemId: itemId, in: shares)
     }
 
-    /// 分享一项。
-    ///
-    /// 已有那一条、而且用户什么都没改时**不发请求**，直接把本机手里那条给结果页
-    /// （`DriveSharePlan`）。本机不知道的那一种「已有」（只知道浏览行上的 `shareUrl`、
-    /// 手里没有链接）仍然走一次请求：服务端会把那一条更新（或复用）掉，回来的还是同一个
-    /// 地址。
+    /// 分享一项。未更改设置时先只读确认已有链接仍有效，再复用它。
     func share(
         item: DriveBrowserItem,
         settings: APIClient.DriveShareSettings,
         using client: APIClient
     ) async -> DriveShareOutcome {
-        switch DriveSharePlan.of(itemId: item.id, known: shares, settings: settings) {
-        case .useExisting(let existing):
-            return .reused(existing)
-
-        case .request(let body):
-            // 发请求之前先记下本机知道的那个编号，发完了可能就没了（见下面那句 `forgetShare`）。
-            let previousShareId = knownShareId(for: item)
-            let account = accountGeneration
-            do {
-                let share = try await client.driveCreateShare(itemId: item.id, settings: body)
-                // 本机存的那一条从现在起不再是服务端那一条：带设置的一次请求是**更新**，
-                // 服务端按新设置重算了密码（`passwordEnabled: true` 时），而本机那份还是旧的
-                // （`urlWithPassword`、`password` 都过期）。留着它，复用快路
-                // （`DriveSharePlan.useExisting`）下次就会把已经失效的密码当现行值给结果页——
-                // 用户拷走的是一条打不开的带密码链接。
-                //
-                // 去掉而不是就地重建那一行：`DriveShare` 装不下列表行才有的 `itemName`、
-                // `itemType`、`sourceDeleted`。下次自然会走一次请求，服务端复用那一条
-                // 并发回新鲜值。
-                if account == accountGeneration { forgetShare(forItemId: item.id) }
-                return DriveShareOutcome.resolving(share, previousShareId: previousShareId)
-            } catch {
-                return .failed(reason: DriveText.errorMessage(error))
+        let account = accountGeneration
+        if case .useExisting(let existing) = DriveSharePlan.of(itemId: item.id, known: shares, settings: settings) {
+            let lookup = await DriveShareLookup.read(known: existing, browserPath: item.shareUrl) { id in
+                do { return .found(DriveShare(listItem: try await client.driveShareRecord(id: id))) }
+                catch { return DriveShareLookup.of(error) }
             }
+            guard account == accountGeneration, !Task.isCancelled else {
+                return .failed(reason: "操作已取消。")
+            }
+            switch lookup {
+            case .found(let share): return .reused(share)
+            case .failed(let reason): return .failed(reason: reason)
+            case .missing: forgetShare(forItemId: item.id)
+            }
+        }
+        // 只有用户提交表单后才到这里创建；打开分享界面时的查询不写入。
+        let previousShareId = knownShareId(for: item)
+        do {
+            let share = try await client.driveCreateShare(itemId: item.id, settings: settings)
+            // 更新会改变密码等设置，本地列表行不能继续充当现行值。
+            if account == accountGeneration { forgetShare(forItemId: item.id) }
+            return DriveShareOutcome.resolving(share, previousShareId: previousShareId)
+        } catch {
+            return .failed(reason: DriveText.errorMessage(error))
         }
     }
 
@@ -1183,13 +1238,14 @@ final class DriveStore {
     ///
     /// 只删一项的那一行：别的项的分享没有被这次请求动过，`shares` 那一页也还是有效的
     /// （与 `disableShare` 之后的整页重取不同，这里没有别的行会变）。
-    private func forgetShare(forItemId itemId: String) {
+    func forgetShare(forItemId itemId: String) {
         shares.removeAll { $0.itemId == itemId }
     }
 
     /// 关掉一条分享。链接立刻失效，记录还在。
     @discardableResult
     func disableShare(_ share: DriveShareListItem, using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting([share]) { share in
             do {
                 try await client.driveDisableShare(id: share.id)
@@ -1201,7 +1257,7 @@ final class DriveStore {
                 )
             }
         }
-        if outcome.succeeded > 0 { await loadShares(using: client) }
+        if outcome.succeeded > 0, account == accountGeneration { await loadShares(using: client) }
         return outcome
     }
 
@@ -1210,15 +1266,19 @@ final class DriveStore {
     /// 公开素材。它是平铺的一页，没有文件夹。
     func loadAssets(using client: APIClient) async {
         let account = accountGeneration
+        assetsLoadGeneration += 1
+        let generation = assetsLoadGeneration
         assetsLoading = true
-        defer { assetsLoading = false }
+        defer { if generation == assetsLoadGeneration { assetsLoading = false } }
         do {
-            let page = try await client.drivePublicAssets(limit: Self.pageLimit)
-            guard account == accountGeneration else { return }
+            let page: DrivePublicAssetPage
+            if let assetsFetcher { page = try await assetsFetcher() }
+            else { page = try await client.drivePublicAssets(limit: Self.pageLimit) }
+            guard generation == assetsLoadGeneration, account == accountGeneration else { return }
             assets = page.items
             assetsErrorMessage = nil
         } catch {
-            guard account == accountGeneration else { return }
+            guard generation == assetsLoadGeneration, account == accountGeneration else { return }
             // 与回收站同一条：退出这一屏时被取消的那一趟不写错误行。
             guard !DriveRequestCancellation.covers(error, taskCancelled: Task.isCancelled) else { return }
             assetsErrorMessage = DriveText.errorMessage(error)
@@ -1243,10 +1303,14 @@ final class DriveStore {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return DriveBatchOutcome(succeeded: 0, failures: []) }
 
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting([asset]) { asset in
             do {
                 let updated = try await client.driveRenamePublicAsset(assetId: asset.assetId, name: trimmed)
-                replaceAsset(updated)
+                if account == accountGeneration {
+                    invalidateAssetsRead()
+                    replaceAsset(updated)
+                }
                 return nil
             } catch {
                 return DriveBatchOutcome.Failure(name: asset.name, reason: DriveText.errorMessage(error))
@@ -1258,17 +1322,29 @@ final class DriveStore {
     /// 移入回收站。直链当下就不可用，素材还在回收站里等恢复。
     @discardableResult
     func trashAsset(_ asset: DrivePublicAsset, using client: APIClient) async -> DriveBatchOutcome {
+        let account = accountGeneration
         let outcome = await DriveBatchOutcome.collecting([asset]) { asset in
             do {
-                _ = try await client.driveTrashPublicAsset(assetId: asset.assetId)
+                if let assetTrashRequest { try await assetTrashRequest(asset.assetId) }
+                else { _ = try await client.driveTrashPublicAsset(assetId: asset.assetId) }
                 return nil
             } catch {
                 return DriveBatchOutcome.Failure(name: asset.name, reason: DriveText.errorMessage(error))
             }
         }
         // 进了回收站就不再属于这一页，就地去掉（回收站那一屏下次进去自己会重取）。
-        if outcome.succeeded > 0 { assets.removeAll { $0.assetId == asset.assetId } }
+        if outcome.succeeded > 0, account == accountGeneration {
+            invalidateAssetsRead()
+            assets.removeAll { $0.assetId == asset.assetId }
+            await refreshTrashTotal(using: client)
+        }
         return outcome
+    }
+
+    /// 本地成功变更比先前发出的列表读取更新，旧 GET 不能撤销这次结果。
+    private func invalidateAssetsRead() {
+        assetsLoadGeneration += 1
+        assetsLoading = false
     }
 
     /// 改名之后就地换掉那一条：列表按 `assetId` 认行，`itemId` 会随删除重建而变。
@@ -1315,6 +1391,8 @@ final class DriveStore {
         trashLoading = false
         trashErrorMessage = nil
         trashSearch = nil
+        trashLoadGeneration += 1
+        trashTotalLoadGeneration += 1
         shares = []
         sharesLoading = false
         sharesErrorMessage = nil
@@ -1322,6 +1400,7 @@ final class DriveStore {
         assets = []
         assetsLoading = false
         assetsErrorMessage = nil
+        assetsLoadGeneration += 1
         usage = nil
     }
 }

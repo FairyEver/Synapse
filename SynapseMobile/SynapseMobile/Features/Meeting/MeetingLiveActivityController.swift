@@ -41,9 +41,15 @@ final class MeetingLiveActivityController {
         guard let session else { return true }
         switch session.phase {
         case .recording, .paused:
+            let pausedReason: String?
+            if case .recordingFailed(let reason) = session.hint {
+                pausedReason = reason
+            } else {
+                pausedReason = session.phase == .paused ? "录音已暂停，麦克风被其他应用占用" : nil
+            }
             let state = RecordingActivityAttributes.ContentState(
                 elapsedSeconds: session.elapsedMs / 1000,
-                pausedReason: session.phase == .paused ? "录音已暂停，麦克风被其他应用占用" : nil
+                pausedReason: pausedReason
             )
             if let activity {
                 Task { await activity.update(ActivityContent(state: state, staleDate: nil)) }

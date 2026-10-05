@@ -23,8 +23,8 @@ struct TerminalKeyboardPanelMetricsTests {
 
     /// 一档高度，就是行数最多的那一页所需要的。
     @Test func thePanelIsAsTallAsItsTallestPage() {
-        // 8 + (42 + 8) + 板 + (8 + 14) + 14
-        #expect(KeyboardPanelMetrics.panelHeight == 346)
+        #expect(KeyboardPanelMetrics.panelHeight == 376)
+        #expect(KeyboardPanelMetrics.pageControlHeight >= Metrics.minimumTapTarget)
         #expect(KeyboardPanelMetrics.maximumRows == functionRows)
         #expect(KeyboardPanelMetrics.boardHeight == KeyboardPanelMetrics.rowPitch * CGFloat(functionRows))
     }

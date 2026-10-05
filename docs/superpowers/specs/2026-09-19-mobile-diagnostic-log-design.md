@@ -62,7 +62,7 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 
 ### 并发：采样前置 + 锁 + 独立串行队列落盘
 
-调用点路径 = 采样判定（不取锁）→ `os_unfair_lock` → 追加 + 分配序号 → 解锁。百纳秒级，主线程零阻塞、零 `Task` 分配。
+调用点路径 = 读取开关与 sink 的短锁快照 → 采样判定 → 缓冲锁 → 追加 + 分配序号 → 解锁。状态锁不覆盖内容闭包、渲染或磁盘操作；调用点不分配 `Task`。设置开关与缓存开关状态遵循同一把状态锁，后台 REST 日志与界面设置不能并发裸读写。
 
 不用 `actor`：调用点全是同步上下文（`@MainActor` 同步方法、UIKit 手势回调），`await` 会强迫每处包 `Task {}`，每次日志一次堆分配、还会丢顺序；崩溃时 actor 的 mailbox 也捞不出来。
 
@@ -74,7 +74,7 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 
 `NSSetUncaughtExceptionHandler` **只覆盖 ObjC `NSException`**。抓不到 Swift 运行时陷阱（`fatalError`、强解包、越界）、信号类崩溃、OOM jetsam、看门狗。因此：
 
-1. **处理器**：用缓存的 fd 直接 `write(2)`；取锁用 `trylock`，失败整段跳过；不开文件、不轮转、不编码 JSON。
+1. **处理器**：用缓存的 fd 直接 `write(2)`；缓冲与 fd 生命周期取锁均用 `trylock`，失败整段跳过；不开文件、不轮转、不编码 JSON。fd 生命周期锁覆盖整批写入，正常队列关闭、替换、轮转和清理 crash 文件时使用同一把锁，避免旧 fd 数字被其他文件复用。
 2. **每秒落盘**（真正的兜底）：无论怎么死，文件里都有死之前 ≤1 秒。
 3. **会话标记**：启动写 `app.sessionOpen`，收尾写 `app.sessionClose`；下次启动若上个会话没有 close，写一条 `app.crashSuspected` —— 这是 jetsam 与看门狗唯一的间接证据。
 
@@ -84,11 +84,13 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 
 单文件 1 MiB、保留 10 个、总封顶 10 MiB、单条 2 KiB（栈 8 KiB）。每进程一个文件，便于判断"上个会话有没有收尾"。**活动文件永不进删除候选。**
 
+删除全部日志不改变记录开关，也不解除既有暂停；删除确认只说明已导出的文件不受影响，不承诺关闭采集后仍会记录。
+
 ### 防爆炸（四道闸，全在写盘之前）
 
 1. 采样：`term.scrollTick` 10 Hz（`scrollViewDidScroll` 可达 120 Hz）、`term.rows` 20 Hz；状态迁移类不采样。
 2. 合并：相邻同键折叠带 `repeatCount`/`spanMs`。**易变字段不参与键**，且合并自己写进去的字段也必须在易变集里，否则合并一次之后键就变了，下一轮合不动。
-3. 令牌桶：200 条/秒、64 KiB/秒；超限只发一条 `log.dropped`。`error` 绕过令牌桶。
+3. 令牌桶：200 条/秒、64 KiB/秒；超限只发一条 `log.dropped`，其中字节数为自上次落盘后被丢弃记录的估算字节合计。`error` 绕过令牌桶。
 4. 环形上限 1000 条，覆盖时累加 `overwritten`，在导出头部报告。
 
 ### 脱敏
@@ -97,7 +99,7 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 
 > 与 ADR 0114 的 `<secret>` / `<token>` 固定占位符集**不是同一套**，这是刻意的：ADR 0114 管的是问题反馈（一个更严、有损的通道），而这里要对齐的是**日志**那一侧，否则跨端语料测试永远对不上。`RedactionPlaceholder` 里那套 `<...>` 只用作**语义标注**（"这个字段是个 token"），不参与正则替换。
 
-会话标题 → `<redacted>`；设备名 → 保留（用户已同意）；邮箱 → `<user>`；真实标识符 → 本地别名 `s1`/`d1`/`p1`（不用哈希：id 空间小，哈希等于一份可字典反推的密文，还会给人"已经匿名了"的错觉）。
+会话标题 → 保留并限长；设备名 → 保留（用户已同意）；邮箱 → `<user>`；真实标识符 → 本地别名 `s1`/`d1`/`p1`（不用哈希：id 空间小，哈希等于一份可字典反推的密文，还会给人"已经匿名了"的错觉）。
 
 ## 事件目录（节选：终端那组）
 
@@ -126,6 +128,7 @@ UI：`Features/Settings/DiagnosticLogView.swift`，入口在 `SettingsView` 的�
 全局最新文件会永远看不到 `app.sessionClose`，于是每次正常退出都被记成疑似崩溃。
 分域之前留在根目录的旧日志在 `init` 里同步收编进 `app/`（放在 `start()` 之后的话，
 升级后第一次启动反而读不到上一次会话）。
+上一会话的尾部在初始化收编后、创建当前活动文件前固定；启动判断与导出 manifest 复用这份快照，不能在导出时把本次会话的最新操作当成上一次未收尾。
 
 ## 导出
 

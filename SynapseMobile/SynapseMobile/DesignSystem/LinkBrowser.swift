@@ -34,6 +34,23 @@ enum SynapseWebLink {
 @MainActor
 enum SynapseWebCookies {
     private static let name = "synapse_user_session"
+    private static let store = SynapseWebCookieStore(
+        read: {
+            await withCheckedContinuation { continuation in
+                WKWebsiteDataStore.default().httpCookieStore.getAllCookies { continuation.resume(returning: $0) }
+            }
+        },
+        write: { cookie in
+            await withCheckedContinuation { continuation in
+                WKWebsiteDataStore.default().httpCookieStore.setCookie(cookie) { continuation.resume() }
+            }
+        },
+        remove: { cookie in
+            await withCheckedContinuation { continuation in
+                WKWebsiteDataStore.default().httpCookieStore.delete(cookie) { continuation.resume() }
+            }
+        }
+    )
 
     private static func paths(for origin: URL) -> [String] {
         let prefix = origin.path == "/" ? "" : origin.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -42,16 +59,21 @@ enum SynapseWebCookies {
     }
 
     static func currentToken(origin: URL) async -> String? {
-        let cookies = await all()
+        let cookies = await store.allCookies()
         return cookies.first {
             matchesOrigin($0, origin: origin) && $0.path == paths(for: origin)[0] &&
             ($0.expiresDate.map { $0 > Date() } ?? true)
         }?.value
     }
 
-    static func install(token: String, expiresAt: Date, origin: URL) async throws {
+    static func install(
+        token: String,
+        expiresAt: Date,
+        origin: URL,
+        isCurrent: @escaping @MainActor () -> Bool
+    ) async throws {
         guard origin.host != nil else { throw CocoaError(.fileReadInvalidFileName) }
-        await clear(origin: origin)
+        var cookies: [HTTPCookie] = []
         for path in paths(for: origin) {
             var properties: [HTTPCookiePropertyKey: Any] = [
                 .name: name,
@@ -66,29 +88,79 @@ enum SynapseWebCookies {
             guard let cookie = HTTPCookie(properties: properties), cookie.isHTTPOnly else {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            await withCheckedContinuation { continuation in
-                WKWebsiteDataStore.default().httpCookieStore.setCookie(cookie) { continuation.resume() }
-            }
+            cookies.append(cookie)
         }
+        try await store.install(cookies, matching: { matchesOrigin($0, origin: origin) }, isCurrent: isCurrent)
     }
 
     static func clear(origin: URL) async {
-        for cookie in await all() where matchesOrigin(cookie, origin: origin) {
-            await withCheckedContinuation { continuation in
-                WKWebsiteDataStore.default().httpCookieStore.delete(cookie) { continuation.resume() }
-            }
-        }
-    }
-
-    private static func all() async -> [HTTPCookie] {
-        await withCheckedContinuation { continuation in
-            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { continuation.resume(returning: $0) }
-        }
+        await store.clear(matching: { matchesOrigin($0, origin: origin) })
     }
 
     private static func matchesOrigin(_ cookie: HTTPCookie, origin: URL) -> Bool {
         cookie.name == name && cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")) == origin.host &&
         paths(for: origin).contains(cookie.path)
+    }
+}
+
+/// WebKit's completion handlers can overlap. In particular, logout must finish
+/// deleting cookies only after every earlier write has completed. A queued clear
+/// also invalidates an install immediately, before waiting for its current write.
+@MainActor
+final class SynapseWebCookieStore {
+    private let read: () async -> [HTTPCookie]
+    private let write: (HTTPCookie) async -> Void
+    private let remove: (HTTPCookie) async -> Void
+    private var generation = 0
+    private var pendingMutation: Task<Void, Never>?
+
+    init(
+        read: @escaping () async -> [HTTPCookie],
+        write: @escaping (HTTPCookie) async -> Void,
+        remove: @escaping (HTTPCookie) async -> Void
+    ) {
+        self.read = read
+        self.write = write
+        self.remove = remove
+    }
+
+    func allCookies() async -> [HTTPCookie] { await read() }
+
+    func install(
+        _ cookies: [HTTPCookie],
+        matching: @escaping (HTTPCookie) -> Bool,
+        isCurrent: @escaping @MainActor () -> Bool
+    ) async throws {
+        guard isCurrent() else { throw CancellationError() }
+        generation += 1
+        let request = generation
+        let previous = pendingMutation
+        let operation = Task<Void, Error> {
+            await previous?.value
+            guard request == generation, isCurrent() else { throw CancellationError() }
+            for cookie in await read() where matching(cookie) {
+                guard request == generation, isCurrent() else { throw CancellationError() }
+                await remove(cookie)
+            }
+            for cookie in cookies {
+                guard request == generation, isCurrent() else { throw CancellationError() }
+                await write(cookie)
+            }
+            guard request == generation, isCurrent() else { throw CancellationError() }
+        }
+        pendingMutation = Task { _ = try? await operation.value }
+        try await operation.value
+    }
+
+    func clear(matching: @escaping (HTTPCookie) -> Bool) async {
+        generation += 1
+        let previous = pendingMutation
+        let operation = Task {
+            await previous?.value
+            for cookie in await read() where matching(cookie) { await remove(cookie) }
+        }
+        pendingMutation = operation
+        await operation.value
     }
 }
 
@@ -137,6 +209,8 @@ private struct SynapseSiteBrowser: View {
     /// 之前是 nil，分享退回进来时那一条。
     @State private var liveURL: URL?
     @State private var sharing: Share?
+    @State private var requestID = UUID()
+    @State private var isActive = false
 
     var body: some View {
         NavigationStack {
@@ -179,7 +253,14 @@ private struct SynapseSiteBrowser: View {
                 SystemShareSheet(items: [target.url])
             }
         }
-        .task(id: url) { await prepare() }
+        .task(id: url) {
+            isActive = true
+            await prepare()
+        }
+        .onDisappear {
+            isActive = false
+            requestID = UUID()
+        }
         .sheet(item: $consent, onDismiss: {
             if !consentAccepted { onFinish() }
         }) { request in
@@ -197,44 +278,73 @@ private struct SynapseSiteBrowser: View {
     }
 
     private func prepare() async {
+        let request = UUID()
+        requestID = request
+        let account = model.accountIdentityGeneration
+        guard isCurrent(request, account: account) else { return }
         phase = .checking
         consent = nil
         consentAccepted = false
         if SynapseWebLink.isPublic(url) { phase = .ready; return }
         do {
-            guard let cookie = await SynapseWebCookies.currentToken(origin: AppConfiguration.apiOrigin) else {
+            let cookie = await SynapseWebCookies.currentToken(origin: AppConfiguration.apiOrigin)
+            guard isCurrent(request, account: account) else { return }
+            guard let cookie else {
                 consent = Consent(existingEmail: nil)
                 return
             }
             if let web = try await model.webIdentity(cookie: cookie) {
-                if web.userId == (try await model.currentUserID()) {
+                guard isCurrent(request, account: account) else { return }
+                let userID = try await model.currentUserID()
+                guard isCurrent(request, account: account) else { return }
+                if web.userId == userID {
                     phase = .ready
                 } else {
                     consent = Consent(existingEmail: web.email)
                 }
             } else {
+                guard isCurrent(request, account: account) else { return }
                 consent = Consent(existingEmail: nil)
             }
         } catch {
+            guard isCurrent(request, account: account) else { return }
             phase = .failed("登录状态检查失败，请重试。")
         }
     }
 
     private func authorize() async {
+        let request = UUID()
+        requestID = request
+        let account = model.accountIdentityGeneration
+        guard isCurrent(request, account: account) else { return }
         phase = .checking
         do {
             let credential = try await model.issueRemoteWebCredential()
+            guard isCurrent(request, account: account) else { return }
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let userID = try await model.currentUserID()
+            guard isCurrent(request, account: account) else { return }
             guard let expiry = formatter.date(from: credential.expiresAt),
-                  expiry > Date(), credential.userId == (try await model.currentUserID()) else {
+                  expiry > Date(), credential.userId == userID else {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            try await SynapseWebCookies.install(token: credential.token, expiresAt: expiry, origin: AppConfiguration.apiOrigin)
+            try await SynapseWebCookies.install(
+                token: credential.token,
+                expiresAt: expiry,
+                origin: AppConfiguration.apiOrigin,
+                isCurrent: { isCurrent(request, account: account) }
+            )
+            guard isCurrent(request, account: account) else { return }
             phase = .ready
         } catch {
+            guard isCurrent(request, account: account) else { return }
             phase = .failed("登录失败，请重试。")
         }
+    }
+
+    private func isCurrent(_ request: UUID, account: Int) -> Bool {
+        isActive && requestID == request && model.isCurrentAccount(account)
     }
 }
 

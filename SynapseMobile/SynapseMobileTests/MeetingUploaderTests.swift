@@ -194,4 +194,45 @@ struct MeetingUploaderTests {
         // 文件一个字节都没变：一片都不重发，「完成」的耗时因此与录音长度无关。
         #expect(sender.sent.isEmpty)
     }
+
+    @Test func missingRequiredFinalAudioCannotReportSuccess() async {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("missing-final-audio-\(UUID().uuidString).m4a")
+        let sender = FakeSender()
+        let uploader = MeetingUploader(startAtPart: 1,
+            send: { try await sender.send($0, $1) }, abort: { await sender.abort() }, retries: 0)
+
+        #expect(await uploader.finish(audioFile: url) == false)
+        #expect(uploader.lastError != nil)
+        #expect(sender.sent.isEmpty)
+    }
+
+    @Test func directoryReadFailureCannotReportSuccess() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("final-audio-directory-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let sender = FakeSender()
+        let uploader = MeetingUploader(startAtPart: 1,
+            send: { try await sender.send($0, $1) }, abort: { await sender.abort() }, retries: 0)
+
+        #expect(await uploader.finish(audioFile: url) == false)
+        #expect(uploader.lastError != nil)
+        #expect(sender.sent.isEmpty)
+    }
+
+    @Test func eofBeforeConfirmedPartCannotReportSuccess() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("empty-final-audio-\(UUID().uuidString).m4a")
+        try Data().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let sender = FakeSender()
+        let uploader = MeetingUploader(startAtPart: 1,
+            send: { try await sender.send($0, $1) }, abort: { await sender.abort() }, retries: 0)
+
+        #expect(await uploader.finish(audioFile: url) == false)
+        #expect(uploader.lastError != nil)
+        #expect(sender.sent.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
 }

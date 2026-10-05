@@ -4,6 +4,7 @@ import SwiftUI
 /// NavigationSplitView keeps the list beside the detail when there is room and folds
 /// them into a stack when the window becomes compact.
 struct AdaptiveFeatureNavigation<Selection: Hashable, Sidebar: View, Detail: View>: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Binding var selection: Selection?
     let emptyTitle: String
     let emptySymbol: String
@@ -34,6 +35,11 @@ struct AdaptiveFeatureNavigation<Selection: Hashable, Sidebar: View, Detail: Vie
         }
         .onChange(of: selection) { _, current in
             preferredCompactColumn = current == nil ? .sidebar : .detail
+        }
+        .onChange(of: preferredCompactColumn) { previous, current in
+            if horizontalSizeClass == .compact, previous == .detail, current == .sidebar {
+                selection = nil
+            }
         }
     }
 }

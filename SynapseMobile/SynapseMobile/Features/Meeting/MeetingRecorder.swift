@@ -32,6 +32,7 @@ final class MeetingRecorder {
         /// 依据（见设计文档 6.4）。
         case cannotOpenFile
         case cannotStart
+        case cannotWrite
     }
 
     /// 每 28 毫秒一次，交上来的是 0–1 的线性振幅。
@@ -42,6 +43,8 @@ final class MeetingRecorder {
     var onInterrupted: (() -> Void)?
     /// 抢回来了，已经在录同一条。
     var onResumed: (() -> Void)?
+    /// 本机编码写入中途失败，采集已停止；保留已写部分供原完成/取消路径处理。
+    var onFailure: ((Error) -> Void)?
 
     private(set) var isRecording = false
     private(set) var isPaused = false
@@ -56,11 +59,12 @@ final class MeetingRecorder {
     private var readOffset: UInt64 = 0
     private var lastFileRead = Date.distantPast
     private var observers: [NSObjectProtocol] = []
+    private var stoppedDurationMs = 0
 
     /// 录了多久。取**已经写进文件的采样数**——暂停的那几分钟不计入，这一点与原先一致，
     /// 异常退出之后按字节估出来的时长才对得上。
     var durationMs: Int {
-        guard let sink else { return 0 }
+        guard let sink else { return stoppedDurationMs }
         let frames = sink.writtenFrames
         return Int((Double(frames) / MeetingAudio.sampleRate * 1000).rounded())
     }
@@ -108,6 +112,7 @@ final class MeetingRecorder {
         self.handle = try? FileHandle(forReadingFrom: url)
         self.readOffset = 0
         self.lastFileRead = .distantPast
+        self.stoppedDurationMs = 0
         self.isRecording = true
         self.isPaused = false
 
@@ -120,6 +125,7 @@ final class MeetingRecorder {
     /// `finishWriting` 是异步的，这里不等——等它落地的责任交给 `remainingBytesAfterStop`，
     /// 那边本来就要读文件。主 actor 不该为了一个磁盘动作停住。
     func stop() {
+        stoppedDurationMs = durationMs
         ticker?.cancel()
         ticker = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -150,12 +156,13 @@ final class MeetingRecorder {
     ///
     /// 两件事在这里合流：编码器是收尾之后才把最后那几个分片和索引写出来的，所以要等
     /// `finishWriting` 落地；读完还得另开一个句柄——`stop()` 已经把原来那个关掉了。
-    func remainingBytesAfterStop() async -> Data? {
+    func remainingBytesAfterStop() async throws -> Data? {
         await finalizing?.value
-        guard let fileURL, let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        guard let fileURL else { throw Failure.cannotOpenFile }
+        let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
-        guard (try? handle.seek(toOffset: readOffset)) != nil else { return nil }
-        guard let data = try? handle.readToEnd(), !data.isEmpty else { return nil }
+        try handle.seek(toOffset: readOffset)
+        guard let data = try handle.readToEnd(), !data.isEmpty else { return nil }
         readOffset += UInt64(data.count)
         return data
     }
@@ -215,6 +222,11 @@ final class MeetingRecorder {
 
     private func tick() {
         guard isRecording, !isPaused, let sink else { return }
+        if let error = sink.writingFailure {
+            stop()
+            onFailure?(error)
+            return
+        }
         // 这一拍里采集到的采样算一个 RMS。换算与「异常退出之后从文件重算波形」共用
         // `amplitude(fromRMS:)`，两条路的刻度因此一致。
         onLevel?(MeetingAudio.amplitude(fromRMS: sink.drainRMS()))
@@ -269,7 +281,7 @@ private final class Sink: @unchecked Sendable {
 
     private var energy = 0.0
     private var levelFrames = 0
-    private var failed = false
+    private var failure: Error?
 
     /// 已经写进编码器的采样数。时长由它算，暂停期间不增加。
     private var framesWritten: AVAudioFramePosition = 0
@@ -308,16 +320,31 @@ private final class Sink: @unchecked Sendable {
         return framesWritten
     }
 
+    /// status 可跨线程读取；失败原因只记录一次，电平与主线程读取共享同一把锁。
+    var writingFailure: Error? {
+        if writer.status == .failed {
+            recordFailure(writer.error ?? MeetingRecorder.Failure.cannotWrite)
+        }
+        lock.lock(); defer { lock.unlock() }
+        return failure
+    }
+
+    private func recordFailure(_ error: Error) {
+        lock.lock(); defer { lock.unlock() }
+        if failure == nil { failure = error }
+    }
+
     /// 收一块采样：进编码器，同时把电平累加起来。
     func accept(_ buffer: AVAudioPCMBuffer) {
+        guard writingFailure == nil else { return }
         accumulateLevel(buffer)
-        guard !failed, let converted = convert(buffer) else { return }
+        guard let converted = convert(buffer) else { return }
         guard input.isReadyForMoreMediaData else { return }
         guard let sample = Self.sampleBuffer(converted, at: framesWritten) else { return }
         if input.append(sample) {
             lock.lock(); framesWritten += AVAudioFramePosition(converted.frameLength); lock.unlock()
         } else {
-            lock.lock(); failed = true; lock.unlock()
+            recordFailure(writer.error ?? MeetingRecorder.Failure.cannotWrite)
         }
     }
 
@@ -337,6 +364,8 @@ private final class Sink: @unchecked Sendable {
         let writer = self.writer
         let input = self.input
         return Task {
+            // 已失败的 writer 不能继续写索引；已有 fMP4 分片仍留给完成/恢复路径。
+            guard writer.status != .failed else { return }
             input.markAsFinished()
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 writer.finishWriting { continuation.resume() }

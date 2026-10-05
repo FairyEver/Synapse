@@ -46,7 +46,7 @@ struct TerminalVoiceDock: View {
     /// 固定而不是随字长，是因为按住的那几秒里每认出一个字面板就长高一点，手指底下
     /// 正压着的那层蒙层会跟着上下跳。三行是「够读到刚说的那句」和「不占掉太多终端」
     /// 之间的取舍，按 `.body` 的行高算出来。
-    private static let transcriptHeight: CGFloat = 66
+    @ScaledMetric(relativeTo: .body) private var transcriptHeight: CGFloat = 66
 
     /// 波形一根柱子的宽与高。
     ///
@@ -112,7 +112,7 @@ struct TerminalVoiceDock: View {
                 transcript
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: Self.transcriptHeight)
+            .frame(height: transcriptHeight)
             .scrollIndicators(.hidden)
 
             HStack(spacing: 8) {
@@ -127,7 +127,7 @@ struct TerminalVoiceDock: View {
                             .font(.caption)
                             // 画的是这行字（约 13pt），点的是 44 高。固定之后手指早走
                             // 了，这里是长录唯一的退路，按字高算等于点不中。
-                            .frame(minHeight: Metrics.minimumTapTarget)
+                            .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -139,13 +139,6 @@ struct TerminalVoiceDock: View {
         .padding(16)
         // 实色，跟着明暗走（理由写在文件顶上）。
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-        .overlay {
-            // 面板与终端画面之间那条发丝线。深色下两块底色都不深不浅地挨着，没有这条
-            // 线整块面板就没有形状。
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                .strokeBorder(Color(uiColor: .separator), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
         // 蒙层与面板同尺寸，所以直接盖在它上面。多一层 `overlay` 而不是让面板为它让位：
         // 手指压上来的那一刻，面板自己不能动 —— 判定用的正是它量出来的那块矩形。
         .overlay {

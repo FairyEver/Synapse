@@ -151,6 +151,7 @@ final class RealtimeClient {
     private var heartbeatLoop: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectAttempt = 0
+    private var connectionWasRecovering = false
     private var shouldStayConnected = false
     private var generation = 0
     /// 最近一次收到任何服务端流量的时刻。
@@ -243,6 +244,7 @@ final class RealtimeClient {
     private func openSocket() {
         generation += 1
         let current = generation
+        connectionWasRecovering = state.isWaiting
         state = .connecting
 
         Task { [weak self] in
@@ -376,7 +378,8 @@ final class RealtimeClient {
     /// does not buzz each time. Neither does the first connect of a launch, for the
     /// same reason.
     private func markConnected() {
-        let wasRecovering = state.isWaiting
+        let wasRecovering = connectionWasRecovering
+        connectionWasRecovering = false
         state = .connected
         // 一次连接成功本身没什么可看的，可它把「断了多久、试了几次才回来」钉住了 ——
         // 那正是「终端忽然不动了」要回答的问题。
@@ -385,6 +388,7 @@ final class RealtimeClient {
             .init(.kind, .flag(wasRecovering ? .reconnecting : .connected)),
         ])
         if wasRecovering { Haptics.success() }
+        reconnectAttempt = 0
     }
 
     /// 服务端会发、这个客户端也处理得了的消息。
@@ -421,7 +425,6 @@ final class RealtimeClient {
 
         if header.type == LiveMessageType.welcome {
             workspaceFilesRelayVersion = payload(WorkspaceFilesWelcome.self, from: data)?.mobileCapabilities?.workspaceFilesVersion
-            reconnectAttempt = 0
             markConnected()
             onConnected?()
             return

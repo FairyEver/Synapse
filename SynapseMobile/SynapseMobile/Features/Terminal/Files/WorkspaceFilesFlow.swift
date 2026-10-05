@@ -28,7 +28,11 @@ final class WorkspaceFilesFlow: Identifiable {
     var tab: WorkspaceFilesTab
     private(set) var range: WorkspaceFilesChangeRange = .unstaged
     private(set) var selected: WorkspaceFilesSelection?
+    // A selected change keeps its original baseline even when its list pages
+    // leave the bounded LRU. This is part of that selection's scope context.
+    private var selectedChangeSetVersion: String?
     private(set) var failure: WorkspaceFilesFailure?
+    private(set) var contentFailureAtEnd = false
     private(set) var expanded: Set<String> = []
     private(set) var searchQuery = ""
     private(set) var searchResetGeneration = 0
@@ -104,7 +108,7 @@ final class WorkspaceFilesFlow: Identifiable {
         var request = intent(.refresh, scope: scope)
         request.expectedContextVersion = scope.contextVersion
         guard let result = await fetch(request, key: "refresh"), let refreshed = Self.scope(from: result.data) else { return }
-        clearPages(); expanded.removeAll(); selected = nil; previewSide = nil
+        clearPages(); expanded.removeAll(); selected = nil; previewSide = nil; selectedChangeSetVersion = nil
         resetSearchPresentation()
         self.scope = refreshed; failure = nil; phase = .ready
         await loadSelectedTab()
@@ -125,7 +129,7 @@ final class WorkspaceFilesFlow: Identifiable {
         guard phase != .closed, phase != .closing else { return }
         let closingScope = scope
         phase = .closing; cancelPending(); scope = nil
-        selected = nil; expanded.removeAll(); clearPages()
+        selected = nil; selectedChangeSetVersion = nil; expanded.removeAll(); clearPages()
         if let closingScope, let owner {
             let request = intent(.close, scope: closingScope)
             _ = try? await client.send(request, owner)
@@ -137,13 +141,13 @@ final class WorkspaceFilesFlow: Identifiable {
         guard phase != .closed, phase != .closing else { return }
         let current = client.owner()
         if current == nil || owner == nil || !current!.sameTarget(as: owner!) {
-            cancelPending(); clearPages(); scope = nil; selected = nil; expanded.removeAll()
+            cancelPending(); clearPages(); scope = nil; selected = nil; selectedChangeSetVersion = nil; expanded.removeAll()
             phase = .stale
             failure = WorkspaceFilesFailure(code: "scope_stale", message: "会话已改变，请重新打开。")
         } else if let unavailable = client.availability() {
             cancelPending(); failure = unavailable
-            if unavailable.code == "session_ended" {
-                clearPages(); scope = nil; selected = nil; expanded.removeAll(); phase = .stale
+            if unavailable.code == "session_ended" || unavailable.code == "permission_denied" {
+                clearPages(); scope = nil; selected = nil; selectedChangeSetVersion = nil; expanded.removeAll(); phase = .stale
             } else { phase = unavailable.code == "desktop_offline" ? .offlineSnapshot : .stale }
         } else if current != owner || phase == .offlineSnapshot {
             phase = .stale
@@ -154,7 +158,7 @@ final class WorkspaceFilesFlow: Identifiable {
     func selectTab(_ value: WorkspaceFilesTab) async {
         if value == .changed { clearSearch(); resetSearchPresentation() }
         tab = value
-        await loadSelectedTab()
+        await restoreBrowser()
     }
 
     private func loadSelectedTab() async {
@@ -163,6 +167,17 @@ final class WorkspaceFilesFlow: Identifiable {
             if pages[directoryKey(scope.rootEntryId)] == nil { await loadDirectory(scope.rootEntryId) }
         } else if scope.gitAvailable {
             if pages[changesKey] == nil { await loadChanges() }
+        }
+    }
+
+    /// LRU recovery starts the current browser at page zero. It is invoked by
+    /// returning to the browser or an explicit reread, never by cache eviction.
+    func restoreBrowser() async {
+        guard canRead else { return }
+        if tab == .all, !searchQuery.isEmpty {
+            if pages[searchKey] == nil { await submitSearch(searchQuery) }
+        } else {
+            await loadSelectedTab()
         }
     }
 
@@ -285,7 +300,7 @@ final class WorkspaceFilesFlow: Identifiable {
     }
 
     func selectRange(_ value: WorkspaceFilesChangeRange) async {
-        userSelectedRange = true; range = value; selected = nil; previewSide = nil
+        userSelectedRange = true; range = value; selected = nil; previewSide = nil; selectedChangeSetVersion = nil
         if pages[changesKey] == nil { await loadChanges() }
     }
 
@@ -312,7 +327,10 @@ final class WorkspaceFilesFlow: Identifiable {
         markdownDocument = nil
         displayRows = []
         selected = selection; previewSide = nil
-        guard selection != nil else { return }
+        if case .change? = selection { selectedChangeSetVersion = pages[changesKey]?.first?.changeSetVersion }
+        else { selectedChangeSetVersion = nil }
+        contentFailureAtEnd = false
+        guard selection != nil else { await restoreBrowser(); return }
         await loadContent()
     }
 
@@ -320,11 +338,13 @@ final class WorkspaceFilesFlow: Identifiable {
         cancel(key: contentKey); removePage(forKey: contentKey)
         markdownDocument = nil
         displayRows = []
+        contentFailureAtEnd = false
         previewSide = side; await loadContent()
     }
 
     func loadContent(next: Bool = false) async {
         guard canRead, let scope, let selected else { checkConnectivity(); return }
+        let selectedVersion = selectedChangeSetVersion
         let key = contentKey
         var request: MobileIntentRequest
         switch selected {
@@ -333,7 +353,7 @@ final class WorkspaceFilesFlow: Identifiable {
             request = intent(.preview, scope: scope)
             request.target = WorkspaceFilesPreviewTarget(source: "disk", entryId: id)
         case .change(let entry):
-            guard let id = entry.changeId, let version = pages[changesKey]?.first?.changeSetVersion else { return }
+            guard let id = entry.changeId, let version = selectedVersion else { return }
             if let previewSide {
                 request = intent(.preview, scope: scope)
                 request.target = WorkspaceFilesPreviewTarget(source: "change", changeId: id, changeSetVersion: version, side: previewSide)
@@ -345,14 +365,25 @@ final class WorkspaceFilesFlow: Identifiable {
             guard let last = pages[key]?.last, let cursor = last.nextCursor else { return }
             request.cursor = cursor; request.expectedContentVersion = last.contentVersion
         }
-        guard let result = await fetch(request, key: key) else { return }
+        guard let result = await fetch(request, key: key) else {
+            if next, failure != nil, self.selected == selected,
+               selectedChangeSetVersion == selectedVersion,
+               self.previewSide == request.target?.side, self.scope?.id == scope.id {
+                contentFailureAtEnd = true
+            }
+            return
+        }
+        guard self.selected == selected, selectedChangeSetVersion == selectedVersion,
+              self.previewSide == request.target?.side else { return }
+        contentFailureAtEnd = false
         store(result.data, key: key, next: next, version: { $0.contentVersion })
+        contentFailureAtEnd = next && failure != nil
         let contentTicket = generation
         let pagesToPrepare = contentPages
         let preparedRows = await Task.detached(priority: .userInitiated) {
             WorkspaceFilesContentModel.rows(from: pagesToPrepare)
         }.value
-        guard contentTicket == generation, self.selected == selected,
+        guard contentTicket == generation, self.selected == selected, selectedChangeSetVersion == selectedVersion,
               self.previewSide == request.target?.side,
               contentLastPage?.contentVersion == result.data.contentVersion else { return }
         displayRows = preparedRows
@@ -364,7 +395,10 @@ final class WorkspaceFilesFlow: Identifiable {
                 let ticket = generation
                 let version = result.data.contentVersion
                 let document = await Task.detached(priority: .userInitiated) { MarkdownDocument(source) }.value
-                guard ticket == generation, contentLastPage?.contentVersion == version else { return }
+                guard ticket == generation, self.selected == selected, selectedChangeSetVersion == selectedVersion,
+                      self.previewSide == request.target?.side,
+                      contentLastPage?.format == "markdown",
+                      contentLastPage?.contentVersion == version else { return }
                 markdownDocument = document
             }
         }
@@ -422,10 +456,10 @@ final class WorkspaceFilesFlow: Identifiable {
             guard ticket == generation, pending[key] == request.intentId else { return nil }
             let failure = error as? WorkspaceFilesFailure ?? .invalid
             self.failure = failure
-            if failure.code == "session_ended" {
+            if failure.code == "session_ended" || failure.code == "permission_denied" {
                 phase = .stale; cancelPending()
                 clearPages(); scope = nil; selected = nil; expanded.removeAll()
-            } else if ["scope_stale", "content_stale", "invalid_scope", "unsupported_version"].contains(failure.code) {
+            } else if ["scope_stale", "content_stale", "cursor_expired", "invalid_scope", "unsupported_version"].contains(failure.code) {
                 phase = .stale; cancelPending()
             } else if failure.code == "desktop_offline" {
                 phase = .offlineSnapshot; cancelPending()
@@ -462,7 +496,7 @@ final class WorkspaceFilesFlow: Identifiable {
         recount()
     }
     private func recount() { retainedBytes = pages.values.flatMap { $0 }.reduce(0) { $0 + Self.cost($1) } }
-    private func clearPages() { invalidateLocation(); pages.removeAll(); recency.removeAll(); retainedBytes = 0; markdownDocument = nil; displayRows = [] }
+    private func clearPages() { invalidateLocation(); pages.removeAll(); recency.removeAll(); retainedBytes = 0; markdownDocument = nil; displayRows = []; contentFailureAtEnd = false }
     private static func cost(_ page: WorkspaceFilesData) -> Int {
         let entries = (page.entries ?? []).reduce(0) { $0 + 512 + ($1.relativePath.utf8.count + $1.name.utf8.count) * 4 }
         let hunks = (page.hunks ?? []).reduce(0) { sum, hunk in sum + 512 + hunk.lines.reduce(0) { $0 + 256 + $1.text.utf8.count * 4 } }

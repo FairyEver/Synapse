@@ -45,7 +45,7 @@ struct MeetingRecorderTests {
         let (recorder, recordingId, _) = try await startRecording(seconds: 6)
         let live = try Data(contentsOf: try audioURL(recordingId))
         recorder.stop()
-        _ = await recorder.remainingBytesAfterStop()
+        _ = try await recorder.remainingBytesAfterStop()
         defer { cleanUp(recordingId) }
 
         #expect(live.count > 0)
@@ -61,7 +61,7 @@ struct MeetingRecorderTests {
         let (recorder, recordingId, elapsedMs) = try await startRecording(seconds: 2)
         let reported = recorder.durationMs
         recorder.stop()
-        let tail = await recorder.remainingBytesAfterStop()
+        let tail = try await recorder.remainingBytesAfterStop()
         defer { cleanUp(recordingId) }
 
         // 录了多久就报多久：它跟着墙钟走，而不是恒为 0（现场那次）或者恒为某个缓冲长度
@@ -87,7 +87,7 @@ struct MeetingRecorderTests {
         let began = Date()
         try await Task.sleep(for: .seconds(2))
         recorder.stop()
-        _ = await recorder.remainingBytesAfterStop()
+        _ = try await recorder.remainingBytesAfterStop()
         let elapsedMs = Int(Date().timeIntervalSince(began) * 1000)
         defer { cleanUp(recordingId) }
 

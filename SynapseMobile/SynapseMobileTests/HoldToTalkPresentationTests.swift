@@ -64,6 +64,24 @@ struct HoldToTalkPresentationTests {
         #expect(presentation(.idle, hasDraft: true).sendEnabled == false)
     }
 
+    @Test func accessibilityActivationStartsAndFinishesWithoutHolding() {
+        let idle = presentation(.idle)
+        #expect(idle.accessibleActivation == .begin)
+        #expect(idle.accessibilityLabel == "开始语音输入")
+        #expect(presentation(.idle, locked: true).accessibleActivation == .finish)
+        let locked = presentation(.listening, locked: true)
+        #expect(locked.accessibleActivation == .finish)
+        #expect(locked.accessibilityLabel == "完成")
+        #expect(presentation(.failed(.noSpeech), locked: true).accessibleActivation == .finish)
+    }
+
+    @Test func accessibilityActivationCannotRestartOrInterruptFinalizing() {
+        #expect(presentation(.idle, voiceMode: false).accessibleActivation == .none)
+        #expect(presentation(.listening).accessibleActivation == .none)
+        #expect(presentation(.finalizing).accessibleActivation == .none)
+        #expect(presentation(.finalizing, locked: true).accessibleActivation == .none)
+    }
+
     // MARK: - 按住
 
     @Test func holdingShowsThePanelAndDimsTheRest() {

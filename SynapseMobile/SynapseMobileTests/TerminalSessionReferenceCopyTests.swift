@@ -84,6 +84,25 @@ struct TerminalSessionReferenceCopyTests {
         #expect(failures.isEmpty)
     }
 
+    @Test func returningToTheSameComputerDoesNotReviveTheEarlierCopyRequest() async throws {
+        let result = try answer(text: reference)
+        let original = TerminalActionContext(desktopId: "desktop", accountGeneration: 1, viewingGeneration: 1)
+        var current = original
+        var copied = "原剪贴板"
+        var failures: [String] = []
+        await TerminalSessionReferenceCopy.perform(
+            target: .session("sess-2"),
+            send: { _ in
+                current = TerminalActionContext(desktopId: "desktop", accountGeneration: 1, viewingGeneration: 3)
+                return result
+            },
+            isCurrent: { current == original },
+            copy: { copied = $0 }, fail: { failures.append($0) }
+        )
+        #expect(copied == "原剪贴板")
+        #expect(failures.isEmpty)
+    }
+
     @Test func oldDesktopRepliesStillDecodeWithoutReferenceText() throws {
         let result = try answer()
         #expect(result.isAccepted)

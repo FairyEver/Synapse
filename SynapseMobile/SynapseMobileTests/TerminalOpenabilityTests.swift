@@ -11,6 +11,114 @@ import Testing
 ///   每一次正常的点击都换成一句「这个会话已经结束了」。
 final class TerminalOpenabilityTests {
 
+    @Test func anEndedDestinationPreservesTheRealSessionAndReportsToItsHost() throws {
+        let decision = resolve(sessionId: "old", desktop: "d1", sessions: [("live", "running")])
+        let navigation = TerminalOpenNavigation(requestedSession: "old", currentSelection: "live", decision: decision)
+        #expect(navigation.selection == "live")
+        #expect(!navigation.activatesTerminalTab)
+        let notice = try #require(navigation.rejectionNotice)
+        var queue = NoticeQueue()
+        queue.post(notice, tone: .failure, id: "terminal.ended.old")
+        #expect(queue.armed(forSession: navigation.selection).first?.text == "要打开的会话已结束。")
+        #expect(queue.armed(forSession: nil).count == 1)
+    }
+
+    @Test func aValidDestinationActivatesOnlyItsActualSelection() {
+        let decision = resolve(sessionId: "next", desktop: "d1", sessions: [("live", "running"), ("next", "running")])
+        let navigation = TerminalOpenNavigation(requestedSession: "next", currentSelection: "live", decision: decision)
+        #expect(navigation.selection == "next" && navigation.activatesTerminalTab)
+        #expect(navigation.rejectionNotice == nil)
+        let unknown = TerminalOpenNavigation(requestedSession: "next", currentSelection: nil, decision: .unknown)
+        #expect(unknown.selection == nil && unknown.activatesTerminalTab && unknown.rejectionNotice == nil)
+    }
+
+    @Test func aQueuedListRequestKeepsItsOriginalComputer() {
+        let pending = PendingTerminalOpen(sessionId: "s1", requestedDesktop: nil, currentDesktop: "d1")
+        #expect(pending.desktopClientInstanceId == "d1")
+        #expect(pending.belongs(to: "d1"))
+        #expect(!pending.belongs(to: "d2"))
+        #expect(!pending.belongs(to: nil))
+    }
+
+    @Test func aQueuedDeepLinkWaitsForTheNamedComputer() {
+        let pending = PendingTerminalOpen(sessionId: "s1", requestedDesktop: "d2", currentDesktop: "d1")
+        #expect(pending.desktopClientInstanceId == "d2")
+        #expect(!pending.belongs(to: "d1"))
+        #expect(pending.belongs(to: "d2"))
+    }
+
+    @Test(arguments: [TerminalOpenOrigin.homeWidget, .inboxRecord, .pushNotification])
+    func anExternalDestinationWaitsForAuthoritativePresenceAndItsLiveList(origin: TerminalOpenOrigin) {
+        let pending = PendingExternalTerminalOpen(desktopId: "d1", sessionId: "s1", origin: origin)
+        let cached = summary(desktop: "d1", sessions: [("s1", "running")])
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: false,
+            onlineDesktopIds: [], hasLiveSummary: false, summary: nil) == .waiting)
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: [], hasLiveSummary: false, summary: nil) == .list)
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: ["d1"], hasLiveSummary: false, summary: cached) == .waiting)
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: ["d1"], hasLiveSummary: true,
+            summary: summary(desktop: "d2", sessions: [("s1", "running")])) == .waiting)
+        let ready = pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: ["d1"], hasLiveSummary: true, summary: cached)
+        #expect(ready == .terminal(sessionId: "s1", desktopId: "d1"))
+        #expect(pending.origin == origin)
+        let navigation = TerminalOpenNavigation(requestedSession: "s1", currentSelection: nil,
+            decision: TerminalOpenability.resolve(sessionId: "s1", desktopClientInstanceId: "d1", summary: cached))
+        #expect(navigation.selection == "s1" && navigation.activatesTerminalTab)
+    }
+
+    @Test func aLegacyNotificationWaitsForTheCurrentComputerWithoutSelectingAnEmptyId() {
+        let pending = PendingExternalTerminalOpen(desktopId: nil, sessionId: "s1", origin: .inboxRecord)
+        #expect(pending.resolve(currentDesktopId: nil, hasCurrentPresence: false,
+            onlineDesktopIds: [], hasLiveSummary: false, summary: nil) == .waiting)
+        #expect(pending.resolve(currentDesktopId: nil, hasCurrentPresence: true,
+            onlineDesktopIds: [], hasLiveSummary: false, summary: nil) == .list)
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: ["d1"], hasLiveSummary: true,
+            summary: summary(desktop: "d1", sessions: [("s1", "running")]))
+            == .terminal(sessionId: "s1", desktopId: "d1"))
+    }
+
+    @MainActor
+    @Test(arguments: [TerminalOpenOrigin.homeWidget, .inboxRecord, .pushNotification])
+    func reconnectPresenceCannotAuthorizeThePreviousConnectionsList(origin: TerminalOpenOrigin) {
+        let client = RealtimeClient(clientInstanceId: "mobile-test", deviceName: "test-device",
+            appVersion: "0", tokenProvider: { .unreachable })
+        defer { client.disconnect() }
+        client.connect()
+        let initialGeneration = client.connectionGeneration
+        var receipt = LiveTerminalSummaryStamp()
+        receipt.receive(on: initialGeneration)
+        let pending = PendingExternalTerminalOpen(desktopId: "d1", sessionId: "s1", origin: origin)
+        let cached = summary(desktop: "d1", sessions: [("s1", "running")])
+        #expect(receipt.belongs(to: client.connectionGeneration))
+
+        client.disconnect()
+        client.connect()
+        #expect(client.connectionGeneration != initialGeneration)
+        // The new presence can arrive before its desktop summary. Preserve the
+        // offline cache, but do not enter the terminal using that old receipt.
+        #expect(receipt.hasSummary)
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: ["d1"], hasLiveSummary: receipt.belongs(to: client.connectionGeneration),
+            summary: cached) == .waiting)
+
+        // A fresh list now reveals that the requested session ended while away.
+        receipt.receive(on: client.connectionGeneration)
+        let fresh = summary(desktop: "d1", sessions: [])
+        #expect(pending.resolve(currentDesktopId: "d1", hasCurrentPresence: true,
+            onlineDesktopIds: ["d1"], hasLiveSummary: receipt.belongs(to: client.connectionGeneration),
+            summary: fresh) == .terminal(sessionId: "s1", desktopId: "d1"))
+        let navigation = TerminalOpenNavigation(requestedSession: "s1", currentSelection: "live",
+            decision: TerminalOpenability.resolve(sessionId: "s1", desktopClientInstanceId: "d1", summary: fresh))
+        #expect(navigation.selection == "live" && !navigation.activatesTerminalTab)
+        #expect(navigation.rejectionNotice != nil)
+        receipt.clear()
+        #expect(!receipt.hasSummary && !receipt.belongs(to: client.connectionGeneration))
+    }
+
     @Test func aRunningSessionCanBeOpened() {
         #expect(resolve(sessionId: "s1", desktop: "d1", sessions: [("s1", "running")]) == .openable)
     }

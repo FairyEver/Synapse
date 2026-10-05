@@ -38,15 +38,16 @@ nonisolated struct DiagnosticLogSettings {
 /// 全部不碰磁盘。
 nonisolated enum DiagnosticLog {
     private final class State: @unchecked Sendable {
+        let lock = NSLock()
         var sink: DiagnosticFileSink?
-        var settings = DiagnosticLogSettings()
+        let settings = DiagnosticLogSettings()
         var enabled = true
         /// 要不要记屏幕内容与发给电脑的内容。与 `enabled` 分开：关掉日志是"什么都别记"，
         /// 关掉这个是"记，但别记终端里那些字"。
         var capturesContent = true
         var started = false
         /// 内容采集的**调用点闸门**。见 `captureScreen` 里为什么不能只靠缓冲区那层。
-        var captureGate = CaptureGate()
+        let captureGate = CaptureGate()
     }
 
     /// 同一件事一秒只放行一条。
@@ -71,24 +72,33 @@ nonisolated enum DiagnosticLog {
     }
 
     private static let state = State()
+    private static var currentSink: DiagnosticFileSink? {
+        state.lock.withLock { state.sink }
+    }
 
     /// 只调一次，在 App 启动早期。
     @MainActor
     static func start() {
-        guard !state.started else { return }
-        state.started = true
-        state.enabled = state.settings.isEnabled
-        state.capturesContent = state.settings.capturesContent
+        let shouldStart = state.lock.withLock {
+            guard !state.started else { return false }
+            state.started = true
+            state.enabled = state.settings.isEnabled
+            state.capturesContent = state.settings.capturesContent
+            return true
+        }
+        guard shouldStart else { return }
 
         guard let sink = DiagnosticFileSink() else {
             // 目录都建不出来（磁盘满、沙盒异常）。整个子系统就此关闭，App 其余部分
             // 一个字都不用知道 —— 这里不写任何日志，因为能写日志的地方正是它。
-            state.sink = nil
+            state.lock.withLock { state.sink = nil }
             return
         }
-        state.sink = sink
-        sink.start()
-        sink.setEnabled(state.enabled)
+        state.lock.withLock {
+            state.sink = sink
+            sink.start()
+            sink.setEnabled(state.enabled)
+        }
         DiagnosticCrashHandler.install(sink: sink)
 
         if let previous = sink.previousSessionTail() {
@@ -110,14 +120,15 @@ nonisolated enum DiagnosticLog {
 
     /// 记一条。
     ///
-    /// 这是热路径上的函数：一次布尔读、一次取锁、一次数组追加。**没有**字符串拼接、
+    /// 这是热路径上的函数：一次开关快照、一次缓冲取锁、一次数组追加。**没有**字符串拼接、
     /// 没有文件、没有 `Task`。任何一样加进来，滚动就会开始掉帧。
     static func record(
         _ event: DiagnosticEvent,
         _ fields: [DiagnosticEntry] = [],
         level: DiagnosticLevel? = nil
     ) {
-        guard state.enabled, let sink = state.sink else { return }
+        let sink = state.lock.withLock { state.enabled ? state.sink : nil }
+        guard let sink else { return }
         let flushNow = sink.append(
             event: event,
             level: level ?? event.defaultLevel,
@@ -143,7 +154,7 @@ nonisolated enum DiagnosticLog {
         session: String,
         rows: () -> [String]
     ) {
-        guard state.enabled, state.capturesContent else { return }
+        guard state.lock.withLock({ state.enabled && state.capturesContent }) else { return }
         guard state.captureGate.admits(.frameContent, at: Date()) else { return }
         record(.frameContent, [
             .init(.session, alias(.session, session)),
@@ -161,7 +172,7 @@ nonisolated enum DiagnosticLog {
         session: String?,
         text: () -> String?
     ) {
-        guard state.enabled, state.capturesContent else { return }
+        guard state.lock.withLock({ state.enabled && state.capturesContent }) else { return }
         guard state.captureGate.admits(.terminalInput, at: Date()) else { return }
         guard let value = text(), !value.isEmpty else { return }
         record(.terminalInput, [
@@ -179,31 +190,40 @@ nonisolated enum DiagnosticLog {
     // MARK: - 设置与界面
 
     static var isEnabled: Bool {
-        get { state.settings.isEnabled }
+        get { state.lock.withLock { state.settings.isEnabled } }
         set {
-            state.settings.isEnabled = newValue
-            state.enabled = newValue
-            state.sink?.setEnabled(newValue)
+            state.lock.withLock {
+                state.settings.isEnabled = newValue
+                state.enabled = newValue
+                state.sink?.setEnabled(newValue)
+            }
         }
     }
 
     /// 要不要把终端屏幕内容与发给电脑的内容也记下来。
     ///
     /// 关掉它**不删已有的**，和主开关一样：用户按下的是"以后别记这些"，不是
-    /// "把已经记下来的那些抹掉"。**导出包上会写明本次含不含**，所以关掉之后
-    /// 再导出的包里就没有，两者的区别在包里看得见。
+    /// "把已经记下来的那些抹掉"。导出包按实际选入的历史记录写明是否包含正文，
+    /// 因此关闭采集后，已有正文仍可能随日志导出，并在分享前要求确认。
     static var capturesContent: Bool {
-        get { state.settings.capturesContent }
+        get { state.lock.withLock { state.settings.capturesContent } }
         set {
-            state.settings.capturesContent = newValue
-            state.capturesContent = newValue
+            state.lock.withLock {
+                state.settings.capturesContent = newValue
+                state.capturesContent = newValue
+            }
         }
     }
 
-    static var isAvailable: Bool { state.sink != nil }
+    static var isAvailable: Bool { currentSink != nil }
 
     static func snapshot() -> DiagnosticFileSink.Snapshot {
-        state.sink?.snapshot() ?? DiagnosticFileSink.Snapshot(status: .disabled)
+        currentSink?.snapshot() ?? DiagnosticFileSink.Snapshot(status: .disabled)
+    }
+
+    static func snapshotAsync() async -> DiagnosticFileSink.Snapshot {
+        guard let sink = currentSink else { return .init(status: .disabled) }
+        return await sink.snapshotAsync()
     }
 
     /// 导出一个压缩包。**是 async 的**：打包要压缩，而压缩是 CPU 活。
@@ -211,26 +231,24 @@ nonisolated enum DiagnosticLog {
     /// 从前的实现在主线程上 `queue.sync` 拼文件，几 MiB 拼接会卡住那一下；
     /// 里面再叠一层 deflate 就不是"卡一下"了。现在整件事排在 sink 自己那条队列上。
     @MainActor
-    static func export() async -> URL? {
-        guard let sink = state.sink else { return nil }
-        let snapshot = sink.snapshot()
-        let includesTerminalContent = state.capturesContent
-        return await sink.export(
-            header: DiagnosticEnvironment.exportHeader(
-                counters: snapshot,
-                includesTerminalContent: includesTerminalContent
-            ),
-            manifest: DiagnosticEnvironment.exportManifest(
-                includesTerminalContent: includesTerminalContent,
-                snapshot: snapshot
-            )
+    static func export() async -> DiagnosticFileSink.ExportedArchive? {
+        guard let sink = currentSink else { return nil }
+        let snapshot = await sink.snapshotAsync()
+        return await sink.exportWithMetadata(
+            headerWithContent: DiagnosticEnvironment.exportHeader(counters: snapshot, includesTerminalContent: true),
+            headerWithoutContent: DiagnosticEnvironment.exportHeader(counters: snapshot, includesTerminalContent: false),
+            manifest: DiagnosticEnvironment.exportManifest(includesTerminalContent: false, snapshot: snapshot)
         )
     }
 
     /// 删掉全部日志。**不关开关** —— 用户按下的是"把已有的删掉"，不是"以后别记了"，
     /// 把两件事合成一个动作，他会失去刚表达过的那个意思。
     static func deleteAll() {
-        state.sink?.deleteAll()
+        currentSink?.deleteAll()
+    }
+
+    static func deleteAllAsync() async {
+        await currentSink?.deleteAllAsync()
     }
 
     /// 退出登录时调：别名表是"这个人在这一份日志里"的坐标系，换人就不该接着数。
@@ -245,13 +263,15 @@ nonisolated enum DiagnosticLog {
 
     /// 只给测试用：把内部状态换成可控的。
     static func useSinkForTesting(_ sink: DiagnosticFileSink?) {
-        state.sink = sink
+        state.lock.withLock { state.sink = sink }
     }
 
     /// 只给测试用：清掉"已经启动过"的闩，让用例可以重跑 `start()`。
     static func resetForTesting() {
-        state.started = false
-        state.sink = nil
-        state.enabled = true
+        state.lock.withLock {
+            state.started = false
+            state.sink = nil
+            state.enabled = true
+        }
     }
 }

@@ -12,7 +12,7 @@ struct WorkspaceFilesFlowTests {
         #expect(WorkspaceFilesContentLabels.counts(nil, 2) == "新增未计算行，删除2行")
     }
 
-    private final class Desktop {
+    @MainActor private final class Desktop {
         var owner: WorkspaceFilesOwner? = WorkspaceFilesOwner(accountGeneration: 1, connectionGeneration: 1,
             desktopId: "desktop", mobileId: "mobile", sessionId: "session")
         var unavailable: WorkspaceFilesFailure?
@@ -115,6 +115,232 @@ struct WorkspaceFilesFlowTests {
         try JSONDecoder().decode(WorkspaceFileEntry.self, from: JSONSerialization.data(withJSONObject: wireEntry(id, path: path, directory: directory)))
     }
 
+    private enum LargeBrowser: CaseIterable { case root, expanded, search, changes }
+
+    /// Every page stays within the actual wire budgets; pressure comes from
+    /// retaining an ordinary directory/change list alongside a 661 KB file.
+    private func largeDesktop(_ browser: LargeBrowser) -> Desktop {
+        let desktop = Desktop()
+        desktop.intercept = { request in
+            let index = request.cursor.flatMap(Int.init) ?? 0
+            let data: [String: Any]
+            switch request.operation! {
+            case .directory, .search, .changes:
+                if browser == .expanded, request.operation == .directory, request.directoryEntryId == "root" {
+                    data = ["directoryVersion": "large-root", "entries": [self.wireEntry("nested", path: "nested", directory: true)],
+                        "pageIndex": 0, "nextCursor": NSNull(), "completion": "complete", "collectionComplete": true]
+                    break
+                }
+                if browser == .search, request.operation == .directory { return try desktop.reply(request) }
+                let entries: [[String: Any]] = (index * 100..<(index + 1) * 100).map { number in
+                    let name = String(repeating: "n", count: 170) + String(format: "%06d", number) + ".txt"
+                    let path = browser == .expanded ? "nested/" + name : name
+                    if request.operation == .changes {
+                        return ["changeId": "large-change-\(number)", "name": name, "relativePath": path,
+                            "status": "modified", "changeRange": request.changeRange!.rawValue, "additions": 1100, "deletions": 0,
+                            "statsComplete": true, "contentState": "available", "canPreviewBefore": true, "canPreviewAfter": true]
+                    }
+                    return ["entryId": "large-entry-\(number)", "name": name, "relativePath": path, "kind": "file",
+                        "metadata": ["sizeBytes": 661099, "modifiedAt": NSNull()], "canPreview": true, "canReference": true]
+                }
+                var page: [String: Any] = ["entries": entries, "pageIndex": index,
+                    "nextCursor": index < 7 ? String(index + 1) : NSNull(),
+                    "completion": index < 7 ? "partial" : "complete", "collectionComplete": true]
+                switch request.operation! {
+                case .directory: page["directoryVersion"] = "large-directory"
+                case .search:
+                    page["searchVersion"] = "large-search"; page["scanComplete"] = true; page["scannedEntries"] = 800
+                case .changes:
+                    page["changeSetVersion"] = "large-changes"; page["changeRange"] = request.changeRange!.rawValue; page["statsComplete"] = true
+                    page["ranges"] = ["unstaged": ["fileCount": 800, "additions": 880000, "deletions": 0,
+                        "collectionComplete": true, "statsComplete": true], "staged": ["fileCount": 0, "additions": 0,
+                        "deletions": 0, "collectionComplete": true, "statsComplete": true]]
+                default: break
+                }
+                data = page
+            case .preview, .diff:
+                let numbers = index * 60..<min(1100, (index + 1) * 60)
+                var page: [String: Any] = ["contentVersion": "large-content", "contentState": "available",
+                    "pageIndex": index, "nextCursor": index < 18 ? String(index + 1) : NSNull(),
+                    "completion": index < 18 ? "partial" : "complete", "contentComplete": index == 18]
+                if request.operation == .diff {
+                    page["changeId"] = request.changeId!; page["additions"] = 1100; page["deletions"] = 0; page["statsComplete"] = true
+                    page["hunks"] = [["hunkId": "large-hunk", "oldStart": 1, "oldCount": 0, "newStart": 1,
+                        "newCount": 1100, "lineOffset": index * 60, "continued": index > 0,
+                        "lines": numbers.map { ["kind": "addition", "oldLineNumber": NSNull(), "newLineNumber": $0 + 1,
+                            "text": String(repeating: "x", count: 600), "truncated": false] }]]
+                } else {
+                    page["source"] = request.target!.source; page["format"] = "text"
+                    page["name"] = "preview.txt"; page["relativePath"] = "preview.txt"
+                    page["metadata"] = ["sizeBytes": 661099, "modifiedAt": NSNull()]
+                    if let side = request.target?.side { page["side"] = side }
+                    page["lines"] = numbers.map { ["lineNumber": $0 + 1, "text": String(repeating: "x", count: 600), "truncated": false] }
+                }
+                data = page
+            default: return try desktop.reply(request)
+            }
+            #expect(try JSONSerialization.data(withJSONObject: data).count <= 64 * 1024)
+            return try desktop.result(request, data: data)
+        }
+        return desktop
+    }
+
+    private func readLargeBrowser(_ browser: LargeBrowser, files: WorkspaceFilesFlow) async throws -> WorkspaceFileEntry {
+        await files.open()
+        if browser == .expanded { await files.toggleDirectory(try #require(files.treeRows.first?.entry)) }
+        if browser == .search { await files.submitSearch("n") }
+        for _ in 1...7 {
+            switch browser {
+            case .root: await files.loadDirectory("root", next: true)
+            case .expanded: await files.loadDirectory("nested", next: true)
+            case .search: await files.submitSearch("n", next: true)
+            case .changes: await files.loadChanges(next: true)
+            }
+        }
+        let entry = try #require(browser == .search ? files.searchEntries.first
+            : browser == .changes ? files.changes.first : files.treeRows.last?.entry)
+        await files.select(browser == .changes ? .change(entry) : .disk(entry))
+        for _ in 1...18 { await files.loadContent(next: true) }
+        #expect(files.retainedBytes <= 4 * 1024 * 1024)
+        return entry
+    }
+
+    @Test(arguments: LargeBrowser.allCases)
+    private func returningToAnEvictedBrowserRestartsOnlyItsFirstPage(_ browser: LargeBrowser) async throws {
+        let desktop = largeDesktop(browser)
+        let files = flow(desktop, tab: browser == .changes ? .changed : .all)
+        _ = try await readLargeBrowser(browser, files: files)
+        let start = desktop.sent.count
+        await files.select(nil)
+        #expect(files.selected == nil && files.failure == nil && files.pending.isEmpty)
+        #expect(files.retainedBytes <= 4 * 1024 * 1024)
+        let reads = desktop.sent.dropFirst(start)
+        #expect(reads.count == 1 && reads.first?.cursor == nil)
+        switch browser {
+        case .root: #expect(files.treeRows.count == 100 && reads.first?.directoryEntryId == "root")
+        case .expanded:
+            #expect(files.treeRows.count == 1 && files.expanded.contains("nested"))
+            #expect(files.directoryPage("nested") == nil && reads.first?.directoryEntryId == "root")
+            await files.loadDirectory("nested")
+            #expect(files.treeRows.count == 101 && files.expanded.contains("nested"))
+        case .search: #expect(files.searchEntries.count == 100 && reads.first?.operation == .search && reads.first?.query == "n")
+        case .changes: #expect(files.changes.count == 100 && reads.first?.operation == .changes)
+        }
+    }
+
+    @Test func evictingChangeRowsKeepsSelectedDiffAndSidePreviewVersion() async throws {
+        let desktop = largeDesktop(.changes), files = flow(desktop, tab: .changed)
+        let entry = try await readLargeBrowser(.changes, files: files)
+        #expect(files.changesLastPage == nil)
+        #expect(files.contentLastPage?.contentComplete == true)
+        #expect(files.displayRows.filter { !$0.isHeader }.count == 1100)
+        #expect(desktop.sent.filter { $0.operation == .diff }.count == 19)
+        #expect(desktop.sent.filter { $0.operation == .diff }.allSatisfy { $0.changeSetVersion == "large-changes" })
+        await files.preview("after")
+        let preview = try #require(desktop.sent.last)
+        #expect(preview.operation == .preview && preview.target?.changeId == entry.changeId)
+        #expect(preview.target?.changeSetVersion == "large-changes" && preview.target?.side == "after")
+        #expect(files.displayRows.count == 60 && files.failure == nil)
+    }
+
+    @Test(arguments: ["close", "scope", "owner"])
+    func oldBrowserRestoreCannotPublishAfterContextChange(_ change: String) async throws {
+        let desktop = largeDesktop(.root), files = flow(desktop)
+        _ = try await readLargeBrowser(.root, files: files)
+        let original = try #require(desktop.intercept)
+        var held: CheckedContinuation<WorkspaceFilesResult, Error>?
+        var captured: MobileIntentRequest?
+        desktop.intercept = { request in
+            if captured == nil, request.operation == .directory, request.directoryEntryId == "root" {
+                captured = request
+                return try await withCheckedThrowingContinuation { held = $0 }
+            }
+            return try await original(request)
+        }
+        let restoring = Task { await files.select(nil) }
+        for _ in 0..<1000 where held == nil { await Task.yield() }
+        let request = try #require(captured), continuation = try #require(held)
+        #expect(files.directoryIsLoading("root") && files.treeRows.isEmpty)
+        switch change {
+        case "close": await files.close()
+        case "scope": await files.switchScope(.repository)
+        default: desktop.owner = nil; files.checkConnectivity()
+        }
+        continuation.resume(returning: try desktop.result(request, data: ["directoryVersion": "late-directory",
+            "entries": [wireEntry("late", path: "late.txt")], "pageIndex": 0, "nextCursor": NSNull(),
+            "completion": "complete", "collectionComplete": true]))
+        await restoring.value
+        #expect(!files.treeRows.contains { $0.entry.id == "late" })
+        if change == "scope" { #expect(files.mode == .repository && files.treeRows.count == 100) }
+        else { #expect(files.treeRows.isEmpty && files.retainedBytes == 0) }
+    }
+
+    @Test func changingRangeReplacesTheEvictedSelectionBaselineAndRejectsLateSideContent() async throws {
+        let desktop = largeDesktop(.changes), files = flow(desktop, tab: .changed)
+        _ = try await readLargeBrowser(.changes, files: files)
+        let original = try #require(desktop.intercept)
+        var held: CheckedContinuation<WorkspaceFilesResult, Error>?
+        var captured: MobileIntentRequest?
+        desktop.intercept = { request in
+            if request.operation == .preview {
+                captured = request
+                return try await withCheckedThrowingContinuation { held = $0 }
+            }
+            let result = try await original(request)
+            guard request.operation == .changes else { return result }
+            var data = result.data; data.changeSetVersion = "new-range-baseline"
+            return WorkspaceFilesResult(filesVersion: result.filesVersion, operation: result.operation,
+                sessionId: result.sessionId, scopeId: result.scopeId, contextVersion: result.contextVersion,
+                readAt: result.readAt, data: data)
+        }
+        let reading = Task { await files.preview("before") }
+        for _ in 0..<1000 where held == nil { await Task.yield() }
+        let request = try #require(captured), continuation = try #require(held)
+        #expect(request.target?.changeSetVersion == "large-changes")
+        await files.selectRange(.staged)
+        continuation.resume(returning: try await original(request))
+        await reading.value
+        #expect(files.selected == nil && files.contentPages.isEmpty && files.displayRows.isEmpty)
+        await files.select(.change(try #require(files.changes.first)))
+        #expect(desktop.sent.last?.operation == .diff && desktop.sent.last?.changeSetVersion == "new-range-baseline")
+        #expect(files.displayRows.filter { !$0.isHeader }.count == 60 && files.failure == nil)
+    }
+
+    @Test func lateMarkdownParsingCannotFormatAPlainTextHardlinkPreview() async throws {
+        let desktop = Desktop(); let files = flow(desktop); await files.open()
+        let markdown = try entry("markdown", path: "report.md")
+        let text = try entry("text", path: "report.txt")
+        // Two hardlinks share the disk identity/content version, but their extensions
+        // choose different formats. Parse a real document within one display budget.
+        let source = (1...1200).map { "# **section \($0)** with _formatted_ content" }
+        #expect(source.joined(separator: "\n").utf8.count <= 64 * 1024)
+        let lines = source.enumerated().map { index, line in
+            ["lineNumber": index + 1, "text": line, "truncated": false] as [String: Any]
+        }
+        desktop.intercept = { request in
+            guard request.operation == .preview else { return try desktop.reply(request) }
+            let isMarkdown = request.target?.entryId == "markdown"
+            let path = isMarkdown ? "report.md" : "report.txt"
+            return try desktop.result(request, data: ["contentVersion": "same-inode-version", "source": "disk",
+                "name": path, "relativePath": path, "metadata": ["sizeBytes": 60000, "modifiedAt": NSNull()],
+                "contentState": "available", "lines": lines, "contentComplete": true,
+                "format": isMarkdown ? "markdown" : "text", "pageIndex": 0,
+                "nextCursor": NSNull(), "completion": "complete"])
+        }
+        let oldPreview = Task { await files.select(.disk(markdown)) }
+        while files.displayRows.isEmpty && files.failure == nil { await Task.yield() }
+        try #require(!files.displayRows.isEmpty)
+        let formattingWasPending = files.markdownDocument == nil
+        try #require(formattingWasPending)
+        await files.select(.disk(text))
+        await oldPreview.value
+        #expect(files.selected == .disk(text))
+        #expect(files.contentLastPage?.format == "text")
+        #expect(files.displayRows.map(\.text) == source)
+        let hasFormattedDocument = files.markdownDocument != nil
+        #expect(!hasFormattedDocument)
+    }
+
     @Test func locationLoadsParentContinuationAndPublishesItsActualTreeRowWithoutPreview() async throws {
         let desktop = Desktop(); let files = flow(desktop); await files.open()
         await files.submitSearch("target")
@@ -153,6 +379,60 @@ struct WorkspaceFilesFlowTests {
         #expect(files.expanded.contains("entry") && files.treeRows.count == 2)
         #expect(files.locationState == .located && files.locatedRowID == "entry")
         #expect(desktop.sent.count == count && files.selected == nil)
+    }
+
+    @Test func anExpiredLocationCursorKeepsAReadOnlySnapshotUntilExplicitReopen() async throws {
+        let desktop = Desktop()
+        var reopened = false
+        desktop.intercept = { request in
+            if reopened, request.operation == .open {
+                var responseRequest = request
+                responseRequest.scopeId = "new-scope"
+                return try desktop.result(responseRequest, data: ["scopeId": "new-scope", "rootEntryId": "root",
+                    "scopeMode": "currentDirectory", "rootDisplayName": "fixture", "contextVersion": "context-v2",
+                    "expiresAt": "2026-10-03T00:10:00Z", "gitAvailable": true])
+            }
+            guard request.operation == .directory, request.directoryEntryId == "entry" else { return try desktop.reply(request) }
+            if request.cursor == "expired-next" {
+                throw WorkspaceFilesFailure(code: "cursor_expired", message: "分页已过期，请刷新")
+            }
+            let first = request.cursor == nil
+            return try desktop.result(request, data: ["directoryVersion": reopened ? "fresh-directory" : "old-directory",
+                "entries": [self.wireEntry(first ? "first" : "fresh-target", path: first ? "nested/first.txt" : "nested/target.txt")],
+                "collectionComplete": true, "pageIndex": first ? 0 : 1,
+                "nextCursor": first ? (reopened ? "fresh-next" : "expired-next") : NSNull(),
+                "completion": first ? "partial" : "complete"])
+        }
+        let files = flow(desktop); await files.open()
+        await files.toggleDirectory(files.treeRows[0].entry)
+        let target = try entry("search-target", path: "nested/target.txt")
+        await files.select(.disk(target))
+        let snapshot = files.displayRows.map(\.text)
+        let originalScope = files.scope
+
+        await files.locate(target)
+        #expect(files.failure?.code == "cursor_expired" && files.phase == .stale)
+        #expect(files.scope == originalScope && files.selected == .disk(target))
+        #expect(files.displayRows.map(\.text) == snapshot && !snapshot.isEmpty)
+        #expect(!files.canRead && files.canReopen && files.locatedRowID == nil)
+        let requests = desktop.sent.count
+        await files.loadContent()
+        await files.loadDirectory("entry", next: true)
+        let reference = await files.reference("search-target")
+        #expect(reference == nil && desktop.sent.count == requests)
+
+        reopened = true
+        await files.reopen()
+        #expect(files.phase == .ready && files.scope?.id == "new-scope")
+        #expect(files.selected == nil && files.contentPages.isEmpty && files.displayRows.isEmpty)
+        #expect(files.expanded.isEmpty && files.directoryPage("entry") == nil)
+        #expect(files.treeRows.map(\.id) == ["entry"])
+        let freshRequestStart = desktop.sent.count
+        await files.locate(try entry("fresh-search-target", path: "nested/target.txt"))
+        #expect(files.locationState == .located && files.locatedRowID == "fresh-target")
+        let freshReads = desktop.sent.dropFirst(freshRequestStart).filter { $0.operation == .directory }
+        #expect(freshReads.map(\.cursor) == [nil, "fresh-next"])
+        #expect(freshReads.allSatisfy { $0.scopeId == "new-scope" && $0.expectedContextVersion == "context-v2" })
     }
 
     @Test func successfulLocationClosesThePreviewSoTheSameFileCanOpenAgain() async {
@@ -496,6 +776,85 @@ struct WorkspaceFilesFlowTests {
         #expect(desktop.sent.last?.target?.source == "change")
         #expect(desktop.sent.last?.target?.side == "before")
         #expect(tested.contentLastPage?.side == "before")
+    }
+
+    @Test(arguments: [false, true])
+    func expiredContentContinuationPreservesSnapshotAndOffersRecoveryAtTheEnd(diff: Bool) async throws {
+        let desktop = Desktop()
+        desktop.intercept = { request in
+            if request.cursor == "content-next" {
+                throw WorkspaceFilesFailure(code: "cursor_expired", message: "分页已过期，请刷新")
+            }
+            let original = try desktop.reply(request)
+            guard request.operation == .preview || request.operation == .diff else { return original }
+            var data = original.data
+            data.nextCursor = "content-next"; data.completion = "partial"; data.contentComplete = false
+            return WorkspaceFilesResult(filesVersion: original.filesVersion, operation: original.operation,
+                sessionId: original.sessionId, scopeId: original.scopeId, contextVersion: original.contextVersion,
+                readAt: original.readAt, data: data)
+        }
+        let files = flow(desktop, tab: diff ? .changed : .all); await files.open()
+        let selected: WorkspaceFilesSelection = diff
+            ? .change(try #require(files.changes.first)) : .disk(try entry("file", path: "nested/notes.txt"))
+        await files.select(selected)
+        let snapshot = files.displayRows.map(\.text)
+        #expect(!snapshot.isEmpty && !files.contentFailureAtEnd)
+
+        await files.loadContent(next: true)
+        #expect(files.phase == .stale && files.contentFailureAtEnd)
+        #expect(files.failure?.displayMessage == "分页已过期，请重新打开")
+        #expect(files.failure?.message == "分页已过期，请刷新") // Keep the server receipt intact.
+        #expect(files.displayRows.map(\.text) == snapshot && files.selected == selected)
+        #expect(!files.canRead && files.canReopen)
+        let sent = desktop.sent.count
+        await files.loadContent(next: true)
+        #expect(desktop.sent.count == sent)
+        await files.reopen()
+        #expect(!files.contentFailureAtEnd && files.selected == nil && files.displayRows.isEmpty)
+    }
+
+    @Test func aLateContentContinuationFailureDoesNotMoveTheNewFilesErrorToTheEnd() async throws {
+        let desktop = Desktop()
+        var resume: CheckedContinuation<Void, Never>?
+        desktop.intercept = { request in
+            if request.cursor == "content-next" {
+                await withCheckedContinuation { resume = $0 }
+                throw WorkspaceFilesFailure(code: "cursor_expired", message: "旧分页已过期")
+            }
+            let original = try desktop.reply(request)
+            guard request.operation == .preview else { return original }
+            var data = original.data
+            data.nextCursor = "content-next"; data.completion = "partial"; data.contentComplete = false
+            return WorkspaceFilesResult(filesVersion: original.filesVersion, operation: original.operation,
+                sessionId: original.sessionId, scopeId: original.scopeId, contextVersion: original.contextVersion,
+                readAt: original.readAt, data: data)
+        }
+        let files = flow(desktop); await files.open()
+        await files.select(.disk(try entry("first", path: "nested/first.txt")))
+        let paging = Task { await files.loadContent(next: true) }
+        while resume == nil { await Task.yield() }
+        let next = WorkspaceFilesSelection.disk(try entry("second", path: "nested/second.txt"))
+        await files.select(next)
+        resume?.resume()
+        await paging.value
+        #expect(files.selected == next && files.failure == nil && !files.contentFailureAtEnd)
+    }
+
+    @Test func revokedReadPermissionClearsTheScopeAndAlreadyReadContent() async throws {
+        let desktop = Desktop(); let files = flow(desktop); await files.open()
+        await files.toggleDirectory(files.treeRows[0].entry)
+        let file = try #require(files.treeRows.last?.entry)
+        await files.select(.disk(file))
+        #expect(!files.displayRows.isEmpty && files.retainedBytes > 0)
+
+        desktop.intercept = { _ in throw WorkspaceFilesFailure(code: "permission_denied", message: "电脑未允许读取此范围") }
+        await files.loadContent()
+
+        #expect(files.failure?.code == "permission_denied")
+        #expect(files.phase == .stale && !files.canRead)
+        #expect(files.scope == nil && files.selected == nil)
+        #expect(files.treeRows.isEmpty && files.displayRows.isEmpty && files.contentPages.isEmpty)
+        #expect(files.retainedBytes == 0)
     }
 
     @Test func offlineKeepsSnapshotAndTargetSwitchClearsIt() async {

@@ -4,6 +4,25 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// 文件准备跨越 await 时，仍归属于打开 picker 的账号和文件夹。
+@MainActor
+struct DriveUploadIntakeContext {
+    let accountGeneration: Int
+    let parentId: String?
+
+    func prepare(
+        _ operation: () async -> [PickedFile],
+        isCurrentAccount: (Int) -> Bool
+    ) async -> [PickedFile]? {
+        let files = await operation()
+        guard isCurrentAccount(accountGeneration), !Task.isCancelled else {
+            files.forEach(DriveFileIntake.discard)
+            return nil
+        }
+        return files
+    }
+}
+
 /// 三个 picker 交回来的东西 → 磁盘上一份能上传的文件。
 ///
 /// 与终端接力那套（`TerminalFileIntake`）是两条路，只共用了三个 picker 本身：
@@ -17,6 +36,12 @@ import UniformTypeIdentifiers
 /// 落地这一步没得选：`loadFileRepresentation` 交出来的 URL 只在回调返回之前有效，
 /// 所以相册那条必须当场拷贝一份。
 enum DriveFileIntake {
+    /// 选中与真正读到的数量不同，必须说明；静默跳过会让上传看起来没有响应。
+    static func failureMessage(selected: Int, prepared: Int) -> String? {
+        guard selected > prepared else { return nil }
+        return prepared == 0 ? "未能读取所选文件，请重新选择。" : "部分文件未能读取，请重新选择。"
+    }
+
     // MARK: - 相册
 
     /// 相册选中的一批。一项落地失败只丢它自己，不影响其余的。

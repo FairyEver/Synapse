@@ -43,3 +43,18 @@ struct TerminalGitActionRow: View {
         .accessibilityIdentifier(identifier)
     }
 }
+
+struct TerminalGitConfirmationLabel: View {
+    let title: String
+    let isBusy: Bool
+
+    var body: some View {
+        HStack {
+            if isBusy {
+                ProgressView()
+                    .accessibilityIdentifier("git-operation-busy")
+            }
+            Text(title)
+        }
+    }
+}

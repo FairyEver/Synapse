@@ -75,6 +75,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
         private var viewContext: String?
         private var resetTokens: [String: String] = [:]
         private var readingAnchors: [String: String] = [:]
+        private var readingLayout: ReadingLayout?
         private var currentLocation: WorkspaceFilesNativeLocation?
         private var pendingLocation: LocationRequest?
         private var pendingAnchor: String?
@@ -143,6 +144,10 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             let direction: LayoutDirection
             let legibility: UILegibilityWeight
         }
+        private struct ReadingLayout {
+            let heights: HeightLayout
+            let viewport: CGRect
+        }
         private struct HeightKey: Hashable { let view: String; let rowID: String }
         private struct HeightClassKey: Hashable { let view: String; let kind: WorkspaceFilesNativeHeightClass }
         private struct EstimateIntent: Equatable {
@@ -169,6 +174,8 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             let ticket: Int
             var didScroll = false
             var receiptQueued = false
+            var hasRefreshedEstimates = false
+            var estimateRefreshQueued = false
         }
 
         fileprivate func attach(to table: WorkspaceFilesNativeTableView) {
@@ -180,14 +187,17 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             table.onLayout = { [weak self] in
                 self?.collectVisibleHeights()
                 self?.performPendingMovement()
+                self?.preserveReadingAnchorIfNeeded()
             }
             table.onWindow = { [weak self] in self?.performPendingMovement() }
+            table.onUserScroll = { [weak self] in self?.cancelNativeMovement() }
             table.registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) {
                 [weak self] (_: WorkspaceFilesNativeTableView, _: UITraitCollection) in
                 // Invalidate even when two category changes occur before the
                 // next native layout; returning to the old key cannot revive it.
                 self?.frozenEstimates = nil
                 self?.pendingEstimateIntent = nil
+                self?.readingLayout = nil
             }
             dataSource = UITableViewDiffableDataSource<Int, String>(tableView: table) { [weak self] table, indexPath, rowID in
                 guard let self, let row = self.rowsByID[rowID], let source = self.hostingSource else {
@@ -228,6 +238,9 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             }
             let resetChanged = !ownerChanged && changedResetContexts.contains(input.viewContext)
             let locationChanged = ownerChanged || viewChanged || currentLocation != input.location
+            if ownerChanged || viewChanged || resetChanged || locationChanged && input.location != nil {
+                readingLayout = nil
+            }
             if !ownerChanged, viewChanged { rememberLeadingRow() }
             if ownerChanged { readingAnchors.removeAll() }
             if ownerChanged {
@@ -309,6 +322,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             if let generation = input.estimateIntent {
                 let intent = EstimateIntent(owner: input.ownerContext, view: input.viewContext, generation: generation)
                 if lastEstimateIntent != intent {
+                    readingLayout = nil
                     lastEstimateIntent = intent
                     pendingEstimateIntent = intent
                     frozenEstimates = nil
@@ -316,6 +330,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                 captureEstimatesIfReady()
             } else {
                 pendingEstimateIntent = nil
+                readingLayout = nil
             }
             applySnapshotIfNeeded()
         }
@@ -337,6 +352,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                 performPendingMovement()
                 return
             }
+            readingLayout = nil
             var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
             snapshot.appendSections([0])
             snapshot.appendItems(rowIDs, toSection: 0)
@@ -381,6 +397,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             guard let table, let ownerContext, let source = hostingSource,
                   let layout = currentHeightLayout() else { return }
             guard heightLayout != layout else { return }
+            readingLayout = nil
             // An estimate belongs to one explicit location's original layout.
             // A font/width transition must use UIKit's current automatic estimate,
             // rather than replacing that intent with a succession of new medians.
@@ -549,6 +566,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                 heightMedians[classKey] = values[values.count / 2]
             }
             captureEstimatesIfReady()
+            refreshPendingLocationEstimatesIfReady()
             let restored = hasCurrentLayout && restoreFontAnchorIfReady()
             if fontRestore == nil, pendingLocation == nil, pendingAnchor == nil,
                UIContentSizeCategory(hostingSource?.dynamicTypeSize ?? .large) == table.traitCollection.preferredContentSizeCategory,
@@ -623,7 +641,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             if var request = pendingLocation {
                 guard isCurrent(request), let indexPath = dataSource.indexPath(for: request.location.rowID),
                       dataSource.itemIdentifier(for: indexPath) == request.location.rowID else { return }
-                if !request.didScroll {
+                if !request.didScroll || !isRowVisible(request.location.rowID) {
                     request.didScroll = true
                     pendingLocation = request
                     table.layoutIfNeeded()
@@ -641,6 +659,41 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             }
         }
 
+        /// The first cold snapshot can already have cached automatic estimates
+        /// before the visible files provide this intent's one frozen sample.
+        /// Refresh those estimates once, then finish the same pending reveal.
+        private func refreshPendingLocationEstimatesIfReady() {
+            guard var request = pendingLocation, isCurrent(request),
+                  !request.hasRefreshedEstimates, !request.estimateRefreshQueued,
+                  nativeItems[request.location.rowID] != nil,
+                  let row = rowsByID[request.location.rowID], let kind = heightClass?(row),
+                  let frozen = frozenEstimates, frozen.intent.owner == ownerContext,
+                  frozen.intent.view == viewContext, frozen.layout == currentHeightLayout(),
+                  frozen.values[kind] != nil else { return }
+            request.estimateRefreshQueued = true
+            pendingLocation = request
+            let requestTicket = request.ticket
+            DispatchQueue.main.async { [weak self] in
+                guard let self, var current = self.pendingLocation,
+                      current.ticket == requestTicket, self.isCurrent(current) else { return }
+                current.estimateRefreshQueued = false
+                self.pendingLocation = current
+                guard !self.applyingSnapshot, let table = self.table, let dataSource = self.dataSource,
+                      dataSource.snapshot().itemIdentifiers == self.rowIDs,
+                      let frozen = self.frozenEstimates,
+                      frozen.intent.owner == self.ownerContext, frozen.intent.view == self.viewContext,
+                      frozen.layout == self.currentHeightLayout(), frozen.values[kind] != nil,
+                      self.isLaidOutInVisibleViewport(table),
+                      !table.isDragging, !table.isDecelerating else { return }
+                current.hasRefreshedEstimates = true
+                current.didScroll = false
+                self.pendingLocation = current
+                table.reloadData()
+                table.layoutIfNeeded()
+                self.performPendingMovement()
+            }
+        }
+
         private func isCurrent(_ request: LocationRequest) -> Bool {
             request.ticket == ticket && request.ownerContext == ownerContext &&
                 request.viewContext == viewContext && request.location == currentLocation
@@ -648,7 +701,8 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
 
         private func queueReceiptIfVisible() {
             guard var request = pendingLocation, request.didScroll, !request.receiptQueued,
-                  isCurrent(request), isRowVisible(request.location.rowID) else { return }
+                  !request.estimateRefreshQueued, isCurrent(request),
+                  locationHasCurrentGeometry(request), isRowVisible(request.location.rowID) else { return }
             request.receiptQueued = true
             pendingLocation = request
             let receiptTicket = request.ticket
@@ -659,11 +713,32 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                       current.ticket == receiptTicket, self.isCurrent(current) else { return }
                 current.receiptQueued = false
                 self.pendingLocation = current
-                guard self.isRowVisible(current.location.rowID) else { return }
+                guard self.locationHasCurrentGeometry(current),
+                      self.isRowVisible(current.location.rowID) else { return }
                 self.pendingLocation = nil
                 self.readingAnchors[current.viewContext] = current.location.rowID
+                if self.nativeItems[current.location.rowID] != nil,
+                   let row = self.rowsByID[current.location.rowID], self.heightClass?(row) != nil,
+                   let heights = self.currentHeightLayout(), let table = self.table,
+                   let viewport = self.visibleViewport(in: table) {
+                    self.readingLayout = ReadingLayout(heights: heights, viewport: viewport)
+                }
                 self.onLocationVisible?(current.location)
             }
+        }
+
+        private func locationHasCurrentGeometry(_ request: LocationRequest) -> Bool {
+            guard let table, let dataSource, let row = rowsByID[request.location.rowID],
+                  let indexPath = dataSource.indexPath(for: request.location.rowID),
+                  let cell = table.cellForRow(at: indexPath),
+                  hasCurrentNativeGeometry(cell, rowID: request.location.rowID) else { return false }
+            if nativeItems[request.location.rowID] != nil, heightClass?(row) != nil {
+                // A real layout/trait transition deliberately discards this
+                // intent's frozen estimate. Keep the existing system fallback.
+                if pendingEstimateIntent == nil, frozenEstimates == nil { return true }
+                return request.hasRefreshedEstimates
+            }
+            return true
         }
 
         private func isRowVisible(_ rowID: String) -> Bool {
@@ -722,12 +797,49 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             }
         }
 
-        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        /// A visible receipt finishes navigation, but does not make the other
+        /// rows' estimated heights exact. Preserve only the current reading
+        /// identity if subsequent native self-sizing loses it. No Location or
+        /// navigation receipt survives here, and user movement cancels it.
+        private func preserveReadingAnchorIfNeeded() {
+            guard let layout = readingLayout, let table else { return }
+            guard layout.heights == currentHeightLayout(), layout.viewport == visibleViewport(in: table) else {
+                readingLayout = nil
+                return
+            }
+            guard !applyingSnapshot, snapshotMatchesRows, !handlingMovement,
+                  pendingLocation == nil, pendingAnchor == nil, fontRestore == nil,
+                  let dataSource, let viewContext,
+                  !table.isDragging, !table.isDecelerating,
+                  isLaidOutInVisibleViewport(table), let rowID = readingAnchors[viewContext],
+                  rowsByID[rowID] != nil, let indexPath = dataSource.indexPath(for: rowID),
+                  !isRowVisible(rowID) else { return }
+            handlingMovement = true
+            table.scrollToRow(at: indexPath, at: .top, animated: false)
+            handlingMovement = false
+        }
+
+        private func cancelNativeMovement() {
             ticket += 1
             pendingLocation = nil
             pendingAnchor = nil
             fontRestore = nil
             pendingEstimateIntent = nil
+            readingLayout = nil
+        }
+
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            cancelNativeMovement()
+        }
+
+        func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+            cancelNativeMovement()
+            return true
+        }
+
+        func tableView(_ tableView: UITableView, shouldUpdateFocusIn context: UITableViewFocusUpdateContext) -> Bool {
+            if !context.focusHeading.isEmpty { cancelNativeMovement() }
+            return true
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -768,6 +880,9 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
         private func performPrimaryAction(rowID: String, owner: String, view: String) -> Bool {
             guard hostingSource?.isEnabled == true, ownerContext == owner, viewContext == view,
                   nativeItems[rowID]?.isEnabled == true, let row = rowsByID[rowID] else { return false }
+            // The user's row action supersedes any still-settling reveal
+            // before its async Flow selection updates the representable.
+            cancelNativeMovement()
             onPrimaryAction?(row)
             return true
         }
@@ -788,6 +903,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
                           self.ownerContext == owner, self.viewContext == view,
                           self.nativeItems[rowID] != nil, let currentRow = self.rowsByID[rowID],
                           self.menuItems?(currentRow).first(where: { $0.id == item.id })?.isEnabled == true else { return }
+                    self.cancelNativeMovement()
                     self.onMenuAction?(currentRow, item.id)
                 }
             }
@@ -810,6 +926,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             ticket += 1
             pendingLocation = nil
             pendingAnchor = nil
+            readingLayout = nil
             fontRestore = nil
             lastEstimateIntent = nil
             pendingEstimateIntent = nil
@@ -828,6 +945,7 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
             onMenuAction = nil
             table?.onLayout = nil
             table?.onWindow = nil
+            table?.onUserScroll = nil
             table?.delegate = nil
             table = nil
             dataSource = nil
@@ -839,6 +957,12 @@ struct WorkspaceFilesNativeTable<Row: Identifiable & Equatable, Content: View>: 
 fileprivate final class WorkspaceFilesNativeTableView: UITableView {
     var onLayout: (() -> Void)?
     var onWindow: (() -> Void)?
+    var onUserScroll: (() -> Void)?
+
+    override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+        onUserScroll?()
+        return super.accessibilityScroll(direction)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()

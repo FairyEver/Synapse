@@ -19,7 +19,7 @@ struct TerminalGitConflictSheet: View {
         NavigationStack {
             List {
                 Section("发生了什么") {
-                    Text("把 \(conflict.source) 合并到 \(conflict.target) 时发生冲突。已经自动取消这次合并并退回到合并前，仓库回到了合并前的状态。")
+                    Text("把 \(conflict.source) 合并到 \(conflict.target) 时发生冲突。已经自动取消这次合并并退回到合并前。")
                         .accessibilityIdentifier("git-conflict-summary")
                 }
 

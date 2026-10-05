@@ -79,6 +79,9 @@ struct TerminalRelayStrip: View {
                 if case .failed(let reason) = attachment.state, !reason.isEmpty {
                     Text(reason)
                 }
+                if case .blocked(let reason) = attachment.pathUndo {
+                    Text(reason)
+                }
                 ForEach(attachment.availableActions, id: \.self) { action in
                     Button(action.label, role: action.isDestructive ? .destructive : nil) {
                         perform(action, on: attachment)
@@ -149,19 +152,27 @@ struct TerminalRelayStrip: View {
     /// filename is a badge for a success the user did not need told.
     @ViewBuilder
     private func statusIndicator(for attachment: TerminalAttachment) -> some View {
-        switch attachment.state {
-        case .queued:
+        if attachment.pathUndo == .pending {
             ProgressView().controlSize(.mini)
-        case .uploading(let fraction), .receiving(let fraction):
-            progress(fraction)
-        case .waitingForComputer, .delivered:
-            EmptyView()
-        case .failed:
-            // No retry arrow: retrying is in the menu now, so an arrow here would
-            // promise a tap on the chip that no longer does anything.
+        } else if case .blocked = attachment.pathUndo {
             Image(systemName: "exclamationmark")
                 .font(.caption2)
                 .foregroundStyle(Theme.failure)
+        } else {
+            switch attachment.state {
+            case .queued:
+                ProgressView().controlSize(.mini)
+            case .uploading(let fraction), .receiving(let fraction):
+                progress(fraction)
+            case .waitingForComputer, .delivered:
+                EmptyView()
+            case .failed:
+                // No retry arrow: retrying is in the menu now, so an arrow here would
+                // promise a tap on the chip that no longer does anything.
+                Image(systemName: "exclamationmark")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.failure)
+            }
         }
     }
 

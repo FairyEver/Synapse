@@ -109,6 +109,34 @@ struct ClipboardHistoryTests {
         #expect(store.entries(for: "desk-1").map(\.id) == ["a"])
     }
 
+    @Test func repeatedClearsKeepEarlierDeletedRowsDeletedAcrossRestart() throws {
+        let (store, defaults) = try makeStore()
+        let a = entry("a", "alpha", at: 0)
+        let b = entry("b", "beta", at: 10)
+        let c = entry("c", "gamma", at: 20)
+        store.merge(payload("desk-1", entries: [a, b]))
+        store.clear(for: "desk-1")
+        store.merge(payload("desk-1", revision: 2, entries: [a, b, c]))
+        #expect(store.entries(for: "desk-1").map(\.id) == ["c"])
+        store.clear(for: "desk-1")
+
+        let reopened = ClipboardHistoryStore(defaults: defaults)
+        reopened.merge(payload("desk-1", revision: 3, entries: [a, b, c, entry("d", "delta", at: 30)]))
+        #expect(reopened.entries(for: "desk-1").map(\.id) == ["d"])
+    }
+
+    @Test func deletionMarksAreBoundedByTheLatestDesktopSnapshot() throws {
+        let (store, defaults) = try makeStore()
+        for index in 0..<100 {
+            store.merge(payload("desk-1", revision: index, entries: [entry("e-\(index)", "text", at: index)]))
+            store.clear(for: "desk-1")
+        }
+        let data = try #require(defaults.data(forKey: "SynapseClipboardHistory"))
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: [String: Any]])
+        let keys = try #require(json["desk-1"]?["clearedKeys"] as? [String])
+        #expect(keys.count == 1)
+    }
+
     @Test func clearsOneComputerAndLeavesTheOtherAlone() throws {
         let (store, _) = try makeStore()
         store.merge(payload("desk-1", entries: [entry("a", "alpha", at: 0)]))

@@ -203,23 +203,43 @@ enum TerminalRecentPhotoLibrary {
 @MainActor
 final class TerminalRecentPhotoWatcher: NSObject, PHPhotoLibraryChangeObserver {
     private let onChange: () -> Void
+    private let isAuthorized: @MainActor () -> Bool
+    private let register: @MainActor (TerminalRecentPhotoWatcher) -> Void
+    private let unregister: @MainActor (TerminalRecentPhotoWatcher) -> Void
+    private var isRegistered = false
 
-    init(onChange: @escaping () -> Void) {
+    init(
+        onChange: @escaping () -> Void,
+        isAuthorized: @escaping @MainActor () -> Bool = { TerminalRecentPhotoLibrary.isAuthorized },
+        register: @escaping @MainActor (TerminalRecentPhotoWatcher) -> Void = { PHPhotoLibrary.shared().register($0) },
+        unregister: @escaping @MainActor (TerminalRecentPhotoWatcher) -> Void = { PHPhotoLibrary.shared().unregisterChangeObserver($0) }
+    ) {
         self.onChange = onChange
+        self.isAuthorized = isAuthorized
+        self.register = register
+        self.unregister = unregister
         super.init()
     }
 
     func start() {
-        PHPhotoLibrary.shared().register(self)
+        guard isAuthorized() else { stop(); return }
+        guard !isRegistered else { return }
+        isRegistered = true
+        register(self)
     }
 
     /// 不收回来它会一直活着：注册是强引用，而持有它的那个界面早就走了。
     func stop() {
-        PHPhotoLibrary.shared().unregisterChangeObserver(self)
+        guard isRegistered else { return }
+        isRegistered = false
+        unregister(self)
     }
 
     /// 回调落在哪个线程上没有承诺，所以只借它敲一下门，判定留在主线程上做。
     nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
-        Task { @MainActor in onChange() }
+        Task { @MainActor in
+            guard isRegistered else { return }
+            onChange()
+        }
     }
 }

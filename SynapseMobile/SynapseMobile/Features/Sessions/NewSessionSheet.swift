@@ -7,8 +7,7 @@ import SwiftUI
 /// offer different things because that is what they are: a conversation has defaults
 /// worth not deciding, and a terminal group has none worth inventing.
 ///
-/// The labels name where each one puts what it makes: a conversation goes into a
-/// project, a terminal goes into a terminal group.
+/// The labels name the created item; each segment then asks for its destination.
 private enum NewSessionSegment: String, CaseIterable, Identifiable {
     case conversation
     case terminal
@@ -17,8 +16,8 @@ private enum NewSessionSegment: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .conversation: return "项目"
-        case .terminal: return "终端分组"
+        case .conversation: return "对话"
+        case .terminal: return "终端"
         }
     }
 }
@@ -43,6 +42,7 @@ struct NewSessionSheet: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(AgentConversationPreferences.self) private var preferences
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// A terminal was created in this group. The sheet is already gone by the time it runs.
     let onCreated: (String) -> Void
@@ -88,12 +88,13 @@ struct NewSessionSheet: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                Picker("新建", selection: $segment) {
-                    ForEach(NewSessionSegment.allCases) { segment in
-                        Text(segment.label).tag(segment)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        segmentPicker.pickerStyle(.menu)
+                    } else {
+                        segmentPicker.pickerStyle(.segmented)
                     }
                 }
-                .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
                 .accessibilityIdentifier("new-session-segment")
@@ -108,6 +109,7 @@ struct NewSessionSheet: View {
                         .padding(.bottom, 8)
                 }
             }
+            .disabled(starting)
             .navigationTitle("新建")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: AgentRowRoute.self) { route in
@@ -137,12 +139,13 @@ struct NewSessionSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("取消") { dismiss() }.disabled(starting)
                 }
             }
         }
         .presentationDetents([.fraction(0.75), .large])
         .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(starting)
         .onAppear {
             // Once: the reader's own picks must not be overwritten by a summary that
             // arrives while the panel is open.
@@ -153,6 +156,14 @@ struct NewSessionSheet: View {
                 providerId: preferences.providerId,
                 modelTier: preferences.modelTier
             )
+        }
+    }
+
+    private var segmentPicker: some View {
+        Picker("新建", selection: $segment) {
+            ForEach(NewSessionSegment.allCases) { segment in
+                Text(segment.label).tag(segment)
+            }
         }
     }
 
@@ -200,7 +211,7 @@ struct NewSessionSheet: View {
                 agentRow(
                     title: "项目",
                     value: selection.project?.name,
-                    badge: selection.projectIsRemembered ? "上次" : nil,
+                    badge: preferences.projectId != nil && selection.project?.projectId == preferences.projectId ? "上次" : nil,
                     route: .project
                 )
                 .accessibilityIdentifier("new-session-project")
@@ -225,46 +236,23 @@ struct NewSessionSheet: View {
         }
     }
 
-    /// 「开始对话」画在列表外面，不在列表的一行里。
-    ///
-    /// iOS 26 起，列表里每一行的内容会被按分组卡片的圆角裁掉。这个按钮在列表里既是
-    /// 那个分组唯一的一行、又左右拉满（`.listRowInsets(EdgeInsets())`），上下两端就
-    /// 一起被裁成卡片的圆角：它比这里的 12 点大得多，一条 46 点高的按钮左右两端被切到
-    /// 只剩两三点的直边，读起来像一颗被削平了顶底的胶囊——这就是「上下被截了一些」的
-    /// 来源。同一份代码在 iOS 18 上不做这层裁剪，所以只有 iOS 26 看得见，改半径也没有
-    /// 用：在那种摆法下 `.circular` 和 `.continuous` 渲染出来逐像素相同。
-    ///
-    /// 列表外面没有这层裁剪，12 点就是画出来的 12 点，左右各 16 点让它和上面的卡片同宽。
-    /// 代价是它不再跟着列表滚——`List` 会占满剩余高度，所以它停在面板底部，而不是紧贴
-    /// 卡片下方。
+    /// 主操作留在列表外，使用系统按钮的尺寸和外观。
     private var startButton: some View {
         Button {
             Task { await start() }
         } label: {
             Group {
                 if starting {
-                    ProgressView()
+                    ProgressView("创建中").tint(Theme.paper)
                 } else {
-                    Text("开始对话").font(.callout.weight(.semibold))
+                    Text("开始对话")
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
         }
-        // Ink fill, paper label — the same pair the sign-in button uses, and for the
-        // same reason. `.borderedProminent` with `Color.primary` as the tint does not
-        // pair them: it painted the fill with the ink and then drew the label in white
-        // as well, so in dark appearance this was a blank white pill with nothing
-        // written on it.
-        //
-        // `.circular`, not `.continuous`: `.continuous` draws a larger curve than the
-        // radius it is given, so a 12 pt continuous corner is not a 12 pt corner. The
-        // prototype's `border-radius: 11px` is an ordinary corner, and this is that —
-        // the sign-in button is the same shape.
-        .background(
-            Theme.ink.opacity(canStart ? 1 : Theme.disabledInkOpacity),
-            in: RoundedRectangle(cornerRadius: 12, style: .circular)
-        )
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(Theme.ink)
         .foregroundStyle(Theme.paper)
         .disabled(!canStart)
         .accessibilityIdentifier("start-conversation")
@@ -457,6 +445,10 @@ struct NewSessionSheet: View {
 
     private var projectPicker: some View {
         List {
+            if model.summary?.agentGroups?.isEmpty == true {
+                ContentUnavailableView("电脑上还没有项目", systemImage: "folder", description: Text("请先在电脑端创建项目。"))
+                    .listRowBackground(Color.clear)
+            }
             ForEach(matchingProjects) { group in
                 pickerRow(
                     title: group.name,
@@ -497,6 +489,10 @@ struct NewSessionSheet: View {
 
     private var providerPicker: some View {
         List {
+            if model.summary?.agentProviders?.isEmpty == true {
+                ContentUnavailableView("没有可用供应商", systemImage: "server.rack", description: Text("请在电脑端配置供应商。"))
+                    .listRowBackground(Color.clear)
+            }
             ForEach(matchingProviders) { provider in
                 pickerRow(
                     title: provider.name,
@@ -540,6 +536,10 @@ struct NewSessionSheet: View {
     private var modelPicker: some View {
         List {
             Section(selection.provider?.name ?? "模型") {
+                if selection.provider?.selectableTiers.isEmpty != false {
+                    Text("没有可用模型，请在电脑端配置供应商。")
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(selection.provider?.selectableTiers ?? [], id: \.self) { tier in
                     pickerRow(
                         title: tier.label,

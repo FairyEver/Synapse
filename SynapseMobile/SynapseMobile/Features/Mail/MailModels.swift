@@ -195,6 +195,16 @@ struct MailContent: Encodable, Equatable {
     let attachmentIds: [String]
     let forwardAttachmentIds: [String]
     let relation: MailRelation?
+
+    func hasSameDraft(as other: MailContent) -> Bool {
+        subject == other.subject && body == other.body && relation == other.relation
+            && toIds.sorted() == other.toIds.sorted()
+            && ccIds.sorted() == other.ccIds.sorted()
+            && toOrganizationIds.sorted() == other.toOrganizationIds.sorted()
+            && ccOrganizationIds.sorted() == other.ccOrganizationIds.sorted()
+            && attachmentIds.sorted() == other.attachmentIds.sorted()
+            && forwardAttachmentIds.sorted() == other.forwardAttachmentIds.sorted()
+    }
 }
 
 struct MailPreview: Decodable {
@@ -213,3 +223,38 @@ struct MailPreview: Decodable {
 }
 
 struct MailReceipt: Decodable { let messageId: String; let recipientCount: Int?; let sentAt: String }
+
+struct MailSendConfirmationState {
+    struct Pending {
+        let content: MailContent
+        let previewId: String
+        let clientRequestId: String
+    }
+
+    private(set) var confirmation: MailPreview?
+    private var pending: Pending?
+
+    func pendingSend(for content: MailContent) -> Pending? {
+        guard let pending, pending.content.hasSameDraft(as: content) else { return nil }
+        return pending
+    }
+
+    mutating func prepare(_ preview: MailPreview, content: MailContent) {
+        pending = Pending(content: content, previewId: preview.previewId, clientRequestId: UUID().uuidString)
+        confirmation = preview
+    }
+
+    mutating func invalidateIfChanged(_ content: MailContent) {
+        if let pending, !pending.content.hasSameDraft(as: content) { clear() }
+    }
+
+    mutating func handleFailure(_ error: Error) {
+        guard let status = (error as? APIError)?.status, [400, 403, 409].contains(status) else { return }
+        clear()
+    }
+
+    mutating func clear() {
+        pending = nil
+        confirmation = nil
+    }
+}

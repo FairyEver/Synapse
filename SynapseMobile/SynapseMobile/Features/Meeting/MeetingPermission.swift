@@ -3,8 +3,7 @@ import Foundation
 
 /// 麦克风权限的三态。
 ///
-/// 「被拒绝」是一个要显示出来的状态，不是错误：录音照常开始，波形走示意，提示行里
-/// 明说这一点。拿假波形冒充真的比不录更糟。
+/// 未取得权限时不启动录音，录音页保留原因提示、设置与取消入口，不显示假波形。
 enum MeetingMicrophonePermission: Equatable {
     case undetermined
     case granted

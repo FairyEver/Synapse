@@ -211,6 +211,13 @@ struct DriveShare: Decodable, Identifiable, Hashable {
     let accessMode: DriveAccessMode
     let editorEmails: [String]
     let createdAt: String
+
+    func isActive(at now: Date = .now) -> Bool {
+        guard enabled else { return false }
+        guard let expiresAt else { return true }
+        guard let date = ISO8601DateFormatter.parseWireTimestamp(expiresAt) else { return false }
+        return date > now
+    }
 }
 
 /// 分享列表里的一行：比创建结果多了来源的名字与状态。

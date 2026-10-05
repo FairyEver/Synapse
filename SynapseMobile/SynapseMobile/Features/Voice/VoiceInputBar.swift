@@ -63,6 +63,10 @@ final class VoiceInputController {
     private(set) var elapsed: TimeInterval = 0
     /// 不进录音态时给用户看的一句话。调用方转发给 banner。
     var notice: String?
+    @ObservationIgnored var microphoneAuthorizer: (() async -> Bool)?
+    @ObservationIgnored var captureStarter: ((AudioCapture) async throws -> Void)?
+    @ObservationIgnored var captureStopper: ((AudioCapture) -> Void)?
+    @ObservationIgnored var sessionConnector: ((AsrSession) -> Void)?
 
     /// 这条 bar 是否该顶掉 `inputBar`。
     var isActive: Bool { phase != .idle }
@@ -170,29 +174,31 @@ final class VoiceInputController {
     /// 没识别到东西时返回 nil 并把「没有听到声音」摆出来 —— 空结果和没人声是同一
     /// 件事，静悄悄地回到 idle 只会让人以为话说出去了。
     func confirm() async -> String? {
-        guard isActive else { return nil }
+        guard isActive, phase != .finalizing else { return nil }
         // 这一轮到此为止，所以还在起飞路上的那次启动也到此为止：它已经没有采集可
         // 收尾（`capture` 还是 nil），再往下走只会在收尾之后把麦克风打开，用户会看
         // 到自己刚说完的话被一段新的录音盖掉。
-        invalidateStart()
+        let completionToken = invalidateStart()
         loop?.cancel()
         loop = nil
-
-        if let capture, let session {
-            // 收尾前把缓冲里剩的采样送出去，最后一帧才不会被丢掉。
-            for chunk in capture.pcm.drain(AsrSession.chunkBytes) { session.send(chunk) }
-            session.finish()
-        }
         phase = .finalizing
+        clearWarm()
+        if let capture {
+            // 松手即停止采集；收尾等待只等服务端最后一句，不继续打开麦克风。
+            capture.stop()
+            if let session {
+                // 收尾前把缓冲里剩的采样送出去，最后一帧才不会被丢掉。
+                for chunk in capture.pcm.drain(AsrSession.chunkBytes) { session.send(chunk) }
+                session.finish()
+            }
+        }
         // 网络已经断了就没有什么可等的了。
-        if let session, !session.isClosed { await waitForFinalize() }
+        if let session, !session.isClosed { await waitForFinalize(token: completionToken) }
         // 点「完成」正好赶在接棒那一下，接缝还没定稿：等它定下来再交，否则交出去的是
         // 引擎马上要改写的版本 —— 实测差的就是接缝处最后半个词。
         if let drainTimer { await drainTimer.value }
-        capture?.stop()
-
         // 等待期间用户可能已经取消了，那这次完成就作废。
-        guard phase == .finalizing else { return nil }
+        guard completionToken == generation, phase == .finalizing else { return nil }
         let text = transcript.finalText
         teardown()
         guard !text.isEmpty else {
@@ -218,15 +224,23 @@ final class VoiceInputController {
 
         // 权限先问。被拒就根本不进录音态：一条录不到任何东西的 bar，只会让人以为是
         // 自己没说话。
-        guard await AudioCapture.requestPermission() else {
-            phase = .idle
-            notice = "麦克风权限未开启 · 设置 › Synapse › 麦克风"
-            return
+        let granted: Bool
+        if let microphoneAuthorizer {
+            granted = await microphoneAuthorizer()
+        } else {
+            granted = await AudioCapture.requestPermission()
         }
         guard token == generation else { return }
+        guard granted else {
+            phase = .idle
+            notice = HoldToTalkPresentation.microphoneDeniedNotice
+            return
+        }
 
         let signed: AsrSignature
-        switch await signing?() {
+        let outcome = await signing?()
+        guard token == generation else { return }
+        switch outcome {
         case .signed(let value): signed = value
         case .notConfigured:
             phase = .failed(.notConfigured)
@@ -235,15 +249,18 @@ final class VoiceInputController {
             phase = .failed(.network)
             return
         }
-        guard token == generation else { return }
-
         let capture = AudioCapture()
         capture.onInterrupted = { [weak self] in self?.handleInterruption() }
         do {
             // 起引擎是阻塞的，放在主线程之外做 —— 这一步正好落在「按住 说话」按下
             // 的那一刻，占着主线程会把面板浮上来那一下冻住。
-            try await capture.startOffMainThread()
+            if let captureStarter {
+                try await captureStarter(capture)
+            } else {
+                try await capture.startOffMainThread()
+            }
         } catch {
+            guard token == generation else { return }
             AppLog.voice.warning("microphone capture failed to start.")
             phase = .failed(.network)
             return
@@ -259,7 +276,7 @@ final class VoiceInputController {
         nextToken += 1
         liveToken = nextToken
         let session = AsrSession(url: signed.url, events: events(for: liveToken))
-        session.connect()
+        if let sessionConnector { sessionConnector(session) } else { session.connect() }
         self.session = session
         liveReady = false
         connectedAt = Date()
@@ -472,12 +489,13 @@ final class VoiceInputController {
 
     // MARK: - 收尾与失败
 
-    private func waitForFinalize() async {
+    private func waitForFinalize(token: Int) async {
         await withCheckedContinuation { continuation in
             finalizeWaiter = continuation
             Task { [weak self] in
                 try? await Task.sleep(for: Self.finalizeTimeout)
-                self?.releaseFinalizeWaiter()
+                guard let self, self.generation == token else { return }
+                self.releaseFinalizeWaiter()
             }
         }
     }
@@ -507,6 +525,11 @@ final class VoiceInputController {
         dropWarm()
         loop?.cancel()
         loop = nil
+        if let capture {
+            // 网络失败后不再识别；立即关闭麦克风，避免无人消费的 PCM 持续累积。
+            if let captureStopper { captureStopper(capture) } else { capture.stop() }
+            self.capture = nil
+        }
         phase = .failed(.network)
     }
 

@@ -132,8 +132,11 @@ struct DriveRenameSheet: View {
         let name = DriveRenameInput.trimmed(draft)
         guard !name.isEmpty else { return }
         running = true
+        let account = model.accountIdentityGeneration
         Task {
+            guard model.isCurrentAccount(account) else { return }
             let outcome = await perform(name)
+            guard model.isCurrentAccount(account) else { return }
             running = false
             if let notice = outcome.noticeText(purpose.actionLabel) {
                 model.notice(notice, tone: .failure)

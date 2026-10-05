@@ -97,6 +97,22 @@ struct DiagnosticBufferTests {
         #expect(buffer.counters.dropped == 40)
     }
 
+    @Test func droppedBytesDescribeSuppressedRecordsAndResetAfterDrain() throws {
+        let clock = Clock()
+        let buffer = buffer(clock: clock) { $0.maxRecordsPerSecond = 1 }
+        let longFields: [DiagnosticEntry] = [.init(.reason, .message(RedactedMessage(alreadyRedacted: String(repeating: "x", count: 200))))]
+        let expected = DiagnosticRecord(seq: 0, time: clock.now, level: .info, event: .action, fields: longFields).estimatedBytes
+        buffer.append(event: .action, level: .info, fields: [])
+        buffer.append(event: .action, level: .info, fields: longFields)
+        let first = try #require(buffer.drain().first { $0.event == .logDropped })
+        #expect(first.fields.contains(.init(.droppedBytes, .int(expected))))
+
+        buffer.append(event: .action, level: .info, fields: [])
+        let second = try #require(buffer.drain().first { $0.event == .logDropped })
+        #expect(second.fields.contains(.init(.droppedBytes, .int(80))))
+        #expect(buffer.counters.droppedBytes == expected + 80)
+    }
+
     /// 错误绕过令牌桶：错误风暴本身就是需要被看见的那件事，把它丢掉等于把证据丢掉。
     @Test func errorsBypassTheTokenBucket() {
         let clock = Clock()

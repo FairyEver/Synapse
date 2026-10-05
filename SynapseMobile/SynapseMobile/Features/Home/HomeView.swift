@@ -12,6 +12,7 @@ import SwiftUI
 /// 主页直接推到某一屏上，而那些请求不是从这一页里发出来的。
 struct HomeView: View {
     @Environment(SynapseAppModel.self) private var model
+    @ScaledMetric(relativeTo: .body) private var iconColumnWidth: CGFloat = 22
 
     let onOpenNotifications: () -> Void
     let onOpenRecordings: () -> Void
@@ -45,21 +46,21 @@ struct HomeView: View {
                 )
                 row(
                     title: "云盘",
-                    subtitle: "服务端上的文件",
+                    subtitle: nil,
                     symbol: "internaldrive",
                     value: nil,
                     action: onOpenDrive
                 )
                 row(
                     title: "站内信",
-                    subtitle: "收件箱与已发送",
+                    subtitle: nil,
                     symbol: "envelope",
                     value: nil,
                     action: onOpenMail
                 )
                 row(
                     title: "新建会话",
-                    subtitle: "在当前电脑上开一个终端",
+                    subtitle: nil,
                     symbol: "plus",
                     value: nil,
                     action: onNewSession
@@ -149,56 +150,23 @@ struct HomeView: View {
         .padding(.horizontal, 8)
     }
 
-    /// 常驻的那一枚铃铛。
-    ///
-    /// 角标用系统红，不跟 `Theme.attention`：底栏主页那一格的未读数由系统 `.badge`
-    /// 画，也是这个红，两处读的是同一个数字，颜色不一致就会像两套计数。红在这里只
-    /// 表示「有未读」，不表示出错；琥珀仍然只留给「有人在等你回话」。
-    ///
-    /// 角标挑在铃铛框的右上角外，于是它落在**这一项自己的内容框之外** —— 而 iOS 26
-    /// 起工具栏项自带背景，并把项的内容裁进背景里那块约 36pt 见方的地方（44pt 的圆往
-    /// 里收 4pt）。原先那 9/-8 的位移正好把角标推出框外，顶边和右边各被切掉一截。
-    /// 位移收到 `badgeOffset` 里那块框内，角标就完整了；iOS 18 没有这层背景也没有这层
-    /// 裁剪，原来的位移在那里本来就是完整的。
-    ///
-    /// 约束是那块框，不是铃铛：以后动这个按钮的背景、尺寸或图标，都要重新确认角标还在
-    /// 框内 —— 越界不会报错，只会被安静地切掉一角。
-    ///
-    /// 角标还要按自己的内容定宽（`fixedSize`）：`.overlay` 只把铃铛那点宽度提给它，字一多
-    /// 在里面放不下就会折成两行，红底变成一块竖着的疙瘩。位数由 `NotificationText.badgeCount`
-    /// 封在三位以内（100 条起写「99+」），定宽之后顺着这个上限向左长，右边始终挂在铃铛的
-    /// 右上角上，怎么都还是一行。
+    /// Keep the toolbar button native; the system supplies its badge in menus too.
     private var bell: some View {
-        Button(action: onOpenNotifications) {
-            Image(systemName: "bell")
-                .overlay(alignment: .topTrailing) {
-                    if model.notifications.unreadCount > 0 {
-                        Text(NotificationText.badgeCount(model.notifications.unreadCount))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 4)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(Color(uiColor: .systemRed), in: Capsule())
-                            .fixedSize()
-                            .offset(x: badgeOffset.x, y: badgeOffset.y)
-                    }
-                }
-        }
-        .accessibilityIdentifier("home-notifications")
-        .accessibilityLabel(
-            model.notifications.unreadCount > 0
-                ? "通知，\(model.notifications.unreadCount) 条未读"
-                : "通知"
-        )
+        Button("通知", systemImage: "bell", action: onOpenNotifications)
+            .accessibilityIdentifier("home-notifications")
+            .accessibilityLabel(notificationAccessibilityLabel)
+            .badge(notificationBadge)
     }
 
-    /// 角标相对铃铛右上角的位移，判据见 `bell` 的说明。
-    ///
-    /// 两版差的不是口味：iOS 26 那 36pt 的内容框只容得下 4pt，再多一点就会被裁；
-    /// iOS 18 上把角标推到框外才是它原本的样子。
-    private var badgeOffset: (x: CGFloat, y: CGFloat) {
-        if #available(iOS 26.0, *) { (4, -4) } else { (9, -8) }
+    private var notificationBadge: String? {
+        let count = model.notifications.unreadCount
+        return count > 0 ? NotificationText.badgeCount(count) : nil
+    }
+
+    private var notificationAccessibilityLabel: String {
+        model.notifications.unreadCount > 0
+            ? "通知，\(model.notifications.unreadCount) 条未读"
+            : "通知"
     }
 
     /// 「N 个会话在等你」。
@@ -222,9 +190,6 @@ struct HomeView: View {
                     Text("\(model.waitingSessions.count) 个会话在等你")
                         .font(.headline)
                         .foregroundStyle(Theme.attention)
-                    Text("终端有输出，需要你回复")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.attention)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
@@ -240,9 +205,9 @@ struct HomeView: View {
     }
 
     /// 录音条数。为 0 时不显示值 —— 一个写着「0 条」的入口是在报告空，不是在报告有什么。
-    private var recordingSubtitle: String {
+    private var recordingSubtitle: String? {
         if model.recording.phase == .paused { return "录音已暂停" }
-        return model.recording.isRecording ? "正在录音" : "会议录音、转写与回听"
+        return model.recording.isRecording ? "正在录音" : nil
     }
 
     private var recordingCount: String? {
@@ -258,7 +223,7 @@ struct HomeView: View {
 
     private func row(
         title: String,
-        subtitle: String,
+        subtitle: String?,
         symbol: String,
         value: String?,
         action: @escaping () -> Void
@@ -268,12 +233,14 @@ struct HomeView: View {
                 Image(systemName: symbol)
                     .font(.body)
                     .foregroundStyle(.secondary)
-                    .frame(width: 22)
+                    .frame(width: iconColumnWidth)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 8)
                 if let value {

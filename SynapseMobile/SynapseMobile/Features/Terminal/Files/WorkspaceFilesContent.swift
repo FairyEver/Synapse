@@ -63,6 +63,15 @@ struct WorkspaceFilesContent: View {
     }
 
     private var content: some View {
+        ScrollViewReader { proxy in
+            scrollingContent
+                .onChange(of: flow.contentFailureAtEnd) { _, atEnd in
+                    if atEnd { proxy.scrollTo("files-content-failure", anchor: .bottom) }
+                }
+        }
+    }
+
+    private var scrollingContent: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 WorkspaceFilesSelectableValue(value: flow.contentLastPage?.relativePath ?? selection.entry.relativePath)
@@ -89,14 +98,7 @@ struct WorkspaceFilesContent: View {
                 }
                 if let old = selection.entry.oldGitlink { selectableField("更改前引用", value: old) }
                 if let new = selection.entry.newGitlink { selectableField("更改后引用", value: new) }
-                if let failure = flow.failure {
-                    Text(failure.message).foregroundStyle(Theme.failure).padding(.vertical)
-                    if flow.canRead {
-                        Button { Task { await flow.loadContent() } } label: {
-                            Text("重试").frame(minHeight: Metrics.minimumTapTarget)
-                        }
-                    }
-                }
+                if !flow.contentFailureAtEnd { failureContent }
                 if let last = flow.contentLastPage {
                     if last.contentState != "available" {
                         Text(WorkspaceFilesContentLabels.contentState(last.contentState))
@@ -106,7 +108,9 @@ struct WorkspaceFilesContent: View {
                     } else {
                         codeRows
                     }
-                    if last.nextCursor != nil {
+                    if flow.contentFailureAtEnd {
+                        failureContent
+                    } else if last.nextCursor != nil {
                         Button("加载更多") { Task { await flow.loadContent(next: true) } }
                             .frame(minHeight: Metrics.minimumTapTarget)
                             .disabled(!flow.canRead || flow.isReading)
@@ -123,6 +127,27 @@ struct WorkspaceFilesContent: View {
                 if flow.isReading { ProgressView("等待电脑").padding(.vertical) }
             }
             .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder private var failureContent: some View {
+        if let failure = flow.failure {
+            VStack(alignment: .leading) {
+                Text(failure.displayMessage).foregroundStyle(Theme.failure).padding(.vertical)
+                    .accessibilityIdentifier("files-detail-error")
+                if flow.canRead {
+                    Button { Task { await flow.loadContent(next: flow.contentFailureAtEnd) } } label: {
+                        Text("重试").frame(minHeight: Metrics.minimumTapTarget)
+                    }
+                } else if flow.phase == .stale || flow.phase == .offlineSnapshot || flow.phase == .closed {
+                    Button { Task { await flow.reopen() } } label: {
+                        Text("重新打开").frame(minHeight: Metrics.minimumTapTarget)
+                    }
+                    .disabled(!flow.canReopen)
+                    .accessibilityIdentifier("files-detail-reopen")
+                }
+            }
+            .id("files-content-failure")
         }
     }
 

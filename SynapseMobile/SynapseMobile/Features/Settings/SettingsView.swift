@@ -21,7 +21,7 @@ struct SettingsView: View {
 
         List {
             if category == .account {
-                Section("账号") {
+                Section {
                     // 只读的值用次要色，与系统「设置」里那些信息行一致：它是给你认的，
                     // 不是给你点的，更不该比它自己的标签还显眼。
                     LabeledContent("邮箱") {
@@ -47,7 +47,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: {
-                    Text("终端")
+                    Text("显示密度")
                 }
             }
 
@@ -128,8 +128,6 @@ struct SettingsView: View {
                     } label: {
                         Text("诊断日志")
                     }
-                } header: {
-                    Text("诊断")
                 } footer: {
                     Text("记录崩溃、网络与终端交互的元数据；终端屏幕内容可以单独关掉。")
                 }

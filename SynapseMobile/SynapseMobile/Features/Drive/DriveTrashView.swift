@@ -214,7 +214,9 @@ struct DriveTrashView: View {
     private func restore(_ entry: DriveTrashEntry) async {
         guard !busy else { return }
         busy = true
+        let account = model.accountIdentityGeneration
         let outcome = await model.driveRestoreTrashEntry(entry)
+        guard model.isCurrentAccount(account) else { return }
         busy = false
         if let notice = outcome.noticeText("恢复") {
             model.notice(notice, tone: .failure)
@@ -225,7 +227,9 @@ struct DriveTrashView: View {
     private func purge(_ entry: DriveTrashEntry) async {
         guard !busy else { return }
         busy = true
+        let account = model.accountIdentityGeneration
         let outcome = await model.drivePurgeTrashEntry(entry)
+        guard model.isCurrentAccount(account) else { return }
         busy = false
         if let notice = outcome.noticeText("移除") {
             model.notice(notice, tone: .failure)

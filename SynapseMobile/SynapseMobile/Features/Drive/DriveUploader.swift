@@ -382,9 +382,16 @@ final class DriveUploader {
                     return nil
                 }
                 sessions[id] = ticket.sessionId
-                // 重签之后**不**再看这张票的 `overwrite`：这一次上传要不要覆盖，第一次
-                // prepare 时已经问过了。再问一次会让人把同一件事确认两遍，而按下确认之后
-                // 立刻又回到待确认——来回打转。
+                guard !Task.isCancelled else { return nil }
+                // 首次没有同名项，不代表重签时仍没有；新出现的目标需要用户另行确认。
+                // 已带 expectedItemId 的覆盖授权仍沿用，不重复询问同一个目标。
+                if expectedItemId == nil, let target = ticket.overwrite {
+                    sessions[id] = nil
+                    await release(ticket.sessionId)
+                    guard !Task.isCancelled else { return nil }
+                    setState(id, .awaitingOverwrite(target))
+                    return nil
+                }
             }
         }
     }

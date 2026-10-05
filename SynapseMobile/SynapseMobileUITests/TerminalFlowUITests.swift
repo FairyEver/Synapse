@@ -55,6 +55,65 @@ final class TerminalFlowUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Selection is local UI state; no delete, move, export, or upload is submitted.
+    func testReviewOwnedDriveFolderSelectionTogglesOnlyThatRow() throws {
+        guard let name = ProcessInfo.processInfo.environment["SYNAPSE_DRIVE_REVIEW_OWN_FOLDER"],
+              name.hasPrefix("iOSReview-"), name.count > "iOSReview-".count else {
+            throw XCTSkip("An explicitly owned review folder is required")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        app.tabBars.buttons.element(boundBy: TabIndex.home).tap()
+        let drive = app.buttons["home-feature-云盘"].firstMatch
+        XCTAssertTrue(drive.waitForExistence(timeout: 15) && drive.isHittable)
+        drive.tap()
+
+        let folder = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ", "))
+        XCTAssertTrue(folder.firstMatch.waitForExistence(timeout: 15))
+        XCTAssertEqual(folder.count, 1, "Only the explicitly owned folder may be toggled")
+        let more = app.navigationBars.buttons["更多"].firstMatch
+        XCTAssertTrue(more.exists && more.isHittable)
+        more.tap()
+        let select = app.buttons["选择"].firstMatch
+        XCTAssertTrue(select.waitForExistence(timeout: 5) && select.isHittable)
+        select.tap()
+
+        func verifyCount(_ count: Int, _ stage: String) {
+            XCTAssertTrue(app.staticTexts["已选 \(count) 项"].firstMatch.waitForExistence(timeout: 5))
+            capture(app, name: stage)
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.name = stage + "-ax"; tree.lifetime = .keepAlways; add(tree)
+        }
+        verifyCount(0, "drive-selection-empty")
+        XCTAssertTrue(folder.firstMatch.isHittable)
+        folder.firstMatch.tap()
+        verifyCount(1, "drive-selection-one-owned-row")
+        folder.firstMatch.tap()
+        verifyCount(0, "drive-selection-owned-row-cleared")
+
+        app.navigationBars.buttons["全选"].firstMatch.tap()
+        let counters = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "已选 "))
+        XCTAssertEqual(counters.count, 1)
+        let components = counters.firstMatch.label.split(separator: " ")
+        guard components.count == 3, let total = Int(components[1]), total > 1 else {
+            XCTFail("The actual root list must provide multiple items for this selection check"); return
+        }
+        verifyCount(total, "drive-selection-all-local")
+        folder.firstMatch.tap()
+        verifyCount(total - 1, "drive-selection-only-owned-row-removed")
+        folder.firstMatch.tap()
+        verifyCount(total, "drive-selection-only-owned-row-restored")
+        app.navigationBars.buttons["取消全选"].firstMatch.tap()
+        verifyCount(0, "drive-selection-local-state-cleared")
+        more.tap()
+        let done = app.buttons["完成"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5) && done.isHittable)
+        done.tap()
+        XCTAssertTrue(app.staticTexts["已选 0 项"].firstMatch.waitForNonExistence(timeout: 5))
+    }
+
     /// 底栏结构与「不新增槽位」这条硬规则。
     ///
     /// 一条**会失败的**用例，而不是一条描述现状的用例：底栏从四格变三格是设计上要买的东西，
@@ -331,6 +390,678 @@ final class TerminalFlowUITests: XCTestCase {
         app.descendants(matching: .any)["settings-category-about"].tap()
         XCTAssertTrue(app.staticTexts["版本"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["问题反馈"].exists)
+    }
+
+    /// Actual denied-permission path; opens Settings without changing permissions.
+    func testReviewDeniedRecordingSettingsAndCancellation() throws {
+        guard ProcessInfo.processInfo.environment["SYNAPSE_TERMINAL_REVIEW_MICROPHONE_DENIED"] == "1" else {
+            throw XCTSkip("The review requires a simulator with microphone permission already denied")
+        }
+        let app = try launchReadOnlyReview()
+        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
+        let recording = app.buttons["home-feature-录音"].firstMatch
+        revealReviewElement(recording, in: app)
+        recording.tap()
+        let newRecording = app.buttons["new-recording"].firstMatch
+        XCTAssertTrue(newRecording.waitForExistence(timeout: 15) && newRecording.isHittable)
+        newRecording.tap()
+        let denied = app.staticTexts["未取得麦克风权限"].firstMatch
+        XCTAssertTrue(denied.waitForExistence(timeout: 10) && denied.isHittable)
+        XCTAssertFalse(app.staticTexts["录音会保存，用于转写"].firstMatch.exists)
+        let finish = app.buttons["recording-finish"].firstMatch
+        let cancel = app.buttons["recording-cancel"].firstMatch
+        let settings = app.buttons["recording-open-settings"].firstMatch
+        XCTAssertTrue(finish.exists && !finish.isEnabled)
+        XCTAssertTrue(cancel.exists && cancel.isHittable)
+        XCTAssertTrue(settings.exists && settings.isHittable)
+        capture(app, name: "review-recording-denied-truthful-state")
+        settings.tap()
+        let preferences = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        let opened = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            preferences.state == .runningForeground && app.state != .runningForeground
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [opened], timeout: 10), .completed,
+            "The real denied-permission action must open system Settings")
+        let tree = XCTAttachment(string: preferences.debugDescription)
+        tree.name = "review-recording-native-app-settings-accessibility"
+        tree.lifetime = .keepAlways; add(tree)
+        capture(preferences, name: "review-recording-native-app-settings-read-only")
+        if !preferences.navigationBars["Synapse"].firstMatch.exists {
+            XCTAssertTrue(preferences.navigationBars["设置"].firstMatch.exists
+                || preferences.navigationBars["Settings"].firstMatch.exists,
+                "The supported settings URL must reach the real system Settings")
+            recordReviewBoundary("This Simulator runtime opened Settings home and did not expose app-specific permission settings; the physical-device destination remains unverified.")
+        }
+        app.activate()
+        XCTAssertTrue(denied.waitForExistence(timeout: 10) && !finish.isEnabled)
+        XCTAssertFalse(app.staticTexts["录音会保存，用于转写"].firstMatch.exists)
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(newRecording.exists && newRecording.isHittable)
+        capture(app, name: "review-recording-denied-cancel-returned-to-list")
+    }
+
+    /// Root configures maximum Dynamic Type; permission values and density stay unchanged.
+    func testReviewMaximumTypeSettingsDetailsAndSafeCancellation() throws {
+        let app = try launchReadOnlyReview()
+        let settings = app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.settings)
+
+        func open(_ category: String, title: String) {
+            settings.tap()
+            let row = app.descendants(matching: .any)["settings-category-\(category)"].firstMatch
+            revealReviewElement(row, in: app)
+            row.tap()
+            XCTAssertTrue(app.navigationBars[title].firstMatch.waitForExistence(timeout: 10))
+        }
+
+        open("account", title: "账号")
+        XCTAssertTrue(app.staticTexts["邮箱"].firstMatch.waitForExistence(timeout: 10))
+        let fullEmail = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label == %@ OR value == %@ OR (label CONTAINS %@ AND label CONTAINS %@)",
+            email, email, "邮箱", email
+        )).firstMatch
+        revealReviewElement(fullEmail, in: app)
+        capture(app, name: "review-settings-account-full-field")
+        let signOut = app.buttons["退出登录"].firstMatch
+        revealReviewElement(signOut, in: app)
+        signOut.tap()
+        let signOutAlert = app.alerts["退出登录？"].firstMatch
+        XCTAssertTrue(signOutAlert.waitForExistence(timeout: 5))
+        XCTAssertTrue(signOutAlert.buttons["退出"].exists)
+        capture(app, name: "review-settings-sign-out-cancel")
+        signOutAlert.buttons["取消"].tap()
+        XCTAssertTrue(signOutAlert.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(fullEmail.exists, "Cancel must retain the signed-in account")
+
+        open("desktops", title: "电脑")
+        XCTAssertTrue(app.staticTexts["已连接的电脑"].firstMatch.waitForExistence(timeout: 10))
+        let desktop = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "settings-desktop-")).firstMatch
+        revealReviewElement(desktop, in: app)
+        XCTAssertFalse(desktop.label.isEmpty, "The actual desktop row must identify its computer")
+        capture(app, name: "review-settings-desktops-read-only")
+
+        open("terminal", title: "终端")
+        XCTAssertTrue(app.staticTexts["显示密度"].firstMatch.waitForExistence(timeout: 10))
+        let density = app.segmentedControls.firstMatch
+        revealReviewElement(density, in: app)
+        XCTAssertEqual(Set(density.buttons.allElementsBoundByIndex.map(\.label)), Set(["紧凑", "正常", "稀疏"]))
+        capture(app, name: "review-settings-density-unchanged")
+
+        open("recording", title: "录音")
+        assertReviewPermission(app.buttons["permission-麦克风"].firstMatch, in: app)
+        capture(app, name: "review-settings-microphone-status-only")
+
+        open("notifications", title: "通知")
+        assertReviewPermission(app.buttons["permission-系统通知"].firstMatch, in: app)
+        let badge = app.switches["settings-badge-toggle"].firstMatch
+        revealReviewElement(badge, in: app)
+        XCTAssertNotNil(badge.value, "The native badge switch must expose its current state")
+        capture(app, name: "review-settings-system-notification-status-only")
+        let center = app.buttons["settings-notification-center"].firstMatch
+        revealReviewElement(center, in: app, towardTop: true)
+        center.tap()
+        let filter = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "筛选：")).firstMatch
+        XCTAssertTrue(filter.waitForExistence(timeout: 10) && filter.isHittable,
+            "This opt-in walk requires the actual accessibility-size filter menu")
+        for title in ["全部通知", "未读通知", "待处理"] {
+            filter.tap()
+            let option = app.buttons[title].firstMatch
+            XCTAssertTrue(option.waitForExistence(timeout: 5) && option.isHittable)
+            option.tap()
+            XCTAssertTrue(waitForHittable(filter, timeout: 5))
+            XCTAssertEqual(filter.label, "筛选：\(title)")
+            capture(app, name: "review-notification-filter-\(title)")
+        }
+        let closeCenter = app.navigationBars.buttons["关闭"].firstMatch
+        XCTAssertTrue(closeCenter.exists && closeCenter.isHittable)
+        closeCenter.tap()
+        XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(center.exists && center.isHittable)
+
+        open("diagnostics", title: "诊断")
+        let logging = app.switches["记录诊断日志"].firstMatch
+        revealReviewElement(logging, in: app)
+        XCTAssertNotNil(logging.value)
+        let logs = app.buttons["诊断日志"].firstMatch
+        revealReviewElement(logs, in: app)
+        logs.tap()
+        XCTAssertTrue(app.navigationBars["诊断日志"].firstMatch.waitForExistence(timeout: 10))
+        for field in ["状态", "占用", "文件数"] {
+            let row = app.cells.containing(.staticText, identifier: field).firstMatch
+            revealReviewElement(row, in: app)
+            XCTAssertTrue(row.staticTexts[field].firstMatch.exists)
+            XCTAssertTrue(row.staticTexts.allElementsBoundByIndex.contains {
+                !$0.label.isEmpty && $0.label != field
+            }, "The native summary row must expose its actual value as well as its heading")
+            capture(app, name: "review-diagnostics-real-summary-\(field)")
+        }
+        capture(app, name: "review-diagnostics-real-summary")
+        let content = app.switches["记录终端屏幕内容"].firstMatch
+        revealReviewElement(content, in: app)
+        XCTAssertNotNil(content.value)
+        capture(app, name: "review-diagnostics-content-state-unchanged")
+        let export = app.buttons["导出并分享"].firstMatch
+        revealReviewElement(export, in: app)
+        XCTAssertTrue(export.isEnabled, "Existing app logs are required for the real export-cancel path")
+        export.tap()
+        let contentAlert = app.alerts["这份压缩包里包含终端屏幕内容"].firstMatch
+        let exportPresented = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            contentAlert.exists || self.reviewVisibleDismissButtons(in: app).count == 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [exportPresented], timeout: 25), .completed)
+        if contentAlert.exists {
+            XCTAssertTrue(contentAlert.buttons["继续分享"].exists)
+            capture(app, name: "review-diagnostics-content-confirmation-cancel")
+            contentAlert.buttons["取消"].tap()
+            XCTAssertTrue(contentAlert.waitForNonExistence(timeout: 5))
+        } else {
+            capture(app, name: "review-diagnostics-native-share-cancel")
+            let dismiss = reviewVisibleDismissButtons(in: app)
+            guard dismiss.count == 1 else {
+                XCTFail("Only the actual native share dismissal may be tapped"); return
+            }
+            dismiss[0].tap()
+        }
+        XCTAssertTrue(waitForHittable(export, timeout: 10) && export.isEnabled,
+            "Cancelling must return to the unchanged diagnostic log page")
+        let deleteLogs = app.buttons["删除全部日志"].firstMatch
+        revealReviewElement(deleteLogs, in: app)
+        XCTAssertTrue(deleteLogs.isEnabled)
+        deleteLogs.tap()
+        let deleteAlert = app.alerts["删除全部日志？"].firstMatch
+        XCTAssertTrue(deleteAlert.waitForExistence(timeout: 5))
+        XCTAssertTrue(deleteAlert.buttons["删除"].exists)
+        capture(app, name: "review-diagnostics-delete-confirmation-cancel")
+        deleteAlert.buttons["取消"].tap()
+        XCTAssertTrue(deleteAlert.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(deleteLogs.exists && deleteLogs.isEnabled)
+        reviewBack(from: "诊断日志", to: "诊断", in: app)
+        XCTAssertTrue(logging.waitForExistence(timeout: 5))
+
+        open("about", title: "关于")
+        let version = app.cells.containing(.staticText, identifier: "版本").firstMatch
+        revealReviewElement(version, in: app)
+        XCTAssertTrue(version.staticTexts["版本"].firstMatch.exists)
+        XCTAssertTrue(version.staticTexts.allElementsBoundByIndex.contains {
+            !$0.label.isEmpty && $0.label != "版本"
+        }, "The native About row must expose its actual full version value")
+        capture(app, name: "review-settings-about-real-version")
+        let feedback = app.buttons["问题反馈"].firstMatch
+        revealReviewElement(feedback, in: app)
+        feedback.tap()
+        XCTAssertTrue(app.navigationBars["问题反馈"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["feedback-text"].firstMatch.exists)
+        let submit = app.buttons["feedback-submit"].firstMatch
+        XCTAssertTrue(submit.exists && !submit.isEnabled, "Empty feedback must never be submitted")
+        capture(app, name: "review-settings-empty-feedback-disabled")
+        reviewBack(from: "问题反馈", to: "关于", in: app)
+        XCTAssertTrue(feedback.waitForExistence(timeout: 5))
+        settings.tap()
+        revealReviewElement(app.descendants(matching: .any)["settings-category-account"].firstMatch,
+            in: app, towardTop: true)
+        capture(app, name: "review-settings-returned-to-categories")
+    }
+
+    /// Searches real recipients but selects none, imports no file, and sends no preview.
+    func testReviewMaximumTypeMailPickersAndDraftCancellation() throws {
+        let app = try launchReadOnlyReview()
+        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
+        let mail = app.buttons["home-feature-站内信"].firstMatch
+        revealReviewElement(mail, in: app)
+        mail.tap()
+        XCTAssertTrue(app.navigationBars["站内信"].firstMatch.waitForExistence(timeout: 15))
+        let compose = app.buttons["写信"].firstMatch
+        XCTAssertTrue(compose.exists && compose.isHittable)
+        compose.tap()
+        XCTAssertTrue(app.navigationBars["写信"].firstMatch.waitForExistence(timeout: 10))
+        let preview = app.buttons["预览发送"].firstMatch
+        XCTAssertTrue(preview.exists && !preview.isEnabled)
+        capture(app, name: "review-mail-empty-compose-disabled")
+
+        for title in ["选择收件人", "选择抄送"] {
+            let picker = app.buttons[title].firstMatch
+            revealReviewElement(picker, in: app)
+            picker.tap()
+            XCTAssertTrue(app.navigationBars[title].firstMatch.waitForExistence(timeout: 10))
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 10) && search.isHittable)
+            search.tap()
+            search.typeText("iOSReview-NoRecipient-" + UUID().uuidString)
+            let empty = app.staticTexts["没有匹配的成员或组织"].firstMatch
+            XCTAssertTrue(empty.waitForExistence(timeout: 20),
+                "The actual recipient query must finish with its real empty-result state")
+            capture(app, name: "review-mail-\(title)-query-empty")
+            guard dismissReviewSearch(in: app, returningTo: title) else { return }
+            let done = app.navigationBars[title].buttons["完成"].firstMatch
+            XCTAssertTrue(done.exists && done.isHittable)
+            done.tap()
+            XCTAssertTrue(app.navigationBars[title].firstMatch.waitForNonExistence(timeout: 5))
+            XCTAssertTrue(app.navigationBars["写信"].firstMatch.exists)
+            XCTAssertTrue(preview.exists && !preview.isEnabled,
+                "Closing an unselected recipient picker must not make this draft sendable")
+        }
+
+        let importFile = app.buttons["选取文件"].firstMatch
+        revealReviewElement(importFile, in: app)
+        XCTAssertTrue(importFile.isEnabled)
+        importFile.tap()
+        let pickerHosts = [app, XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")]
+        let dismissMarker = NSPredicate(format: "label IN %@", ["取消", "Cancel", "关闭", "Close", "close"])
+        func documentPicker(in host: XCUIApplication) -> XCUIElement {
+            host.otherElements["Browse View (Picker)"].firstMatch
+        }
+        func pickerDismissButtons(in host: XCUIApplication) -> [XCUIElement] {
+            documentPicker(in: host).navigationBars["FullDocumentManagerViewControllerNavigationBar"]
+                .buttons.matching(dismissMarker).allElementsBoundByIndex.filter { $0.isHittable }
+        }
+        func actualDocumentPickerHost() -> XCUIApplication? {
+            pickerHosts.first { host in
+                guard host.state != .notRunning else { return false }
+                let picker = documentPicker(in: host)
+                return picker.exists && picker.searchFields.firstMatch.exists
+                    && pickerDismissButtons(in: host).count == 1
+            }
+        }
+        let pickerPresented = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            actualDocumentPickerHost() != nil
+        }, object: nil)
+        let presented = XCTWaiter.wait(for: [pickerPresented], timeout: 15)
+        if presented != .completed {
+            captureReviewFailure(app, name: "review-mail-document-picker-not-resolved")
+            for host in pickerHosts.dropFirst() where host.state != .notRunning {
+                let tree = XCTAttachment(string: host.debugDescription)
+                tree.name = "review-mail-document-picker-system-host-native-accessibility"
+                tree.lifetime = .keepAlways; add(tree)
+            }
+        }
+        XCTAssertEqual(presented, .completed,
+            "The real system document picker must appear above the compose form")
+        guard let pickerHost = actualDocumentPickerHost() else {
+            XCTFail("The foreground document browser must remain available for native cancellation"); return
+        }
+        capture(app, name: "review-mail-native-document-picker-cancel")
+        let pickerTree = XCTAttachment(string: pickerHost.debugDescription)
+        pickerTree.name = "review-mail-document-picker-native-accessibility"
+        pickerTree.lifetime = .keepAlways; add(pickerTree)
+        let pickerCancel = pickerDismissButtons(in: pickerHost)
+        guard pickerCancel.count == 1 else {
+            XCTFail("Only the actual native picker dismissal may be tapped"); return
+        }
+        pickerCancel[0].tap()
+        XCTAssertTrue(waitForHittable(importFile, timeout: 10))
+        XCTAssertTrue(app.navigationBars["写信"].firstMatch.exists)
+
+        let subject = app.textFields["主题"].firstMatch
+        revealReviewElement(subject, in: app, towardTop: true)
+        let localDraft = "iOS Review UI draft — do not send"
+        subject.tap()
+        subject.typeText(localDraft)
+        XCTAssertTrue(preview.exists && !preview.isEnabled)
+        let cancel = app.navigationBars["写信"].buttons["取消"].firstMatch
+        XCTAssertTrue(cancel.exists && cancel.isHittable)
+        cancel.tap()
+        XCTAssertTrue(app.staticTexts["放弃这封信？"].firstMatch.waitForExistence(timeout: 5))
+        let continueWriting = app.buttons["继续写信"].firstMatch
+        capture(app, name: "review-mail-local-draft-discard-confirmation")
+        let confirmationTree = XCTAttachment(string: app.debugDescription)
+        confirmationTree.name = "review-mail-native-discard-confirmation-accessibility"
+        confirmationTree.lifetime = .keepAlways; add(confirmationTree)
+        if continueWriting.exists {
+            XCTAssertTrue(continueWriting.isHittable)
+            continueWriting.tap()
+        } else {
+            // Native popover confirmations dismiss outside instead of rendering
+            // their cancel action. The source Cancel is a safe visible target.
+            let popover = app.popovers.firstMatch
+            let outside = CGPoint(x: cancel.frame.minX + cancel.frame.width * 0.1, y: cancel.frame.midY)
+            XCTAssertTrue(popover.exists && app.frame.contains(outside) && !popover.frame.contains(outside),
+                "Only an observed point outside the native confirmation popover may dismiss it")
+            cancel.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(app.staticTexts["放弃这封信？"].firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(waitForHittable(subject, timeout: 5))
+        XCTAssertEqual(subject.value as? String, localDraft)
+        capture(app, name: "review-mail-local-draft-retained")
+        cancel.tap()
+        let discard = app.buttons["放弃"].firstMatch
+        XCTAssertTrue(discard.waitForExistence(timeout: 5) && discard.isHittable)
+        discard.tap()
+        XCTAssertTrue(app.navigationBars["写信"].firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(compose.exists && compose.isHittable)
+        capture(app, name: "review-mail-local-draft-cancelled-no-send")
+    }
+
+    /// Existing messages only. Opening may perform the app's normal read acknowledgement.
+    func testReviewExistingMailContentAndReadOnlyActions() throws {
+        let app = try launchReadOnlyReview()
+        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
+        let entry = app.buttons["home-feature-站内信"].firstMatch
+        revealReviewElement(entry, in: app)
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["站内信"].firstMatch.waitForExistence(timeout: 15))
+        for box in ["已发送", "收件箱"] {
+            let button = app.buttons[box].firstMatch
+            revealReviewElement(button, in: app, towardTop: true)
+            button.tap()
+            XCTAssertTrue(app.staticTexts[box].firstMatch.waitForExistence(timeout: 10))
+            capture(app, name: "review-mail-box-\(box)")
+        }
+        let search = app.searchFields.firstMatch
+        if !(search.exists && search.isHittable) {
+            guard let list = reviewForegroundList(in: app) else {
+                captureReviewFailure(app, name: "review-mail-search-no-foreground-list")
+                XCTFail("The current mailbox must expose its native scrolling List"); return
+            }
+            for _ in 0..<3 where !(search.exists && search.isHittable) { list.swipeDown() }
+        }
+        guard waitForHittable(search, timeout: 10) else {
+            captureReviewFailure(app, name: "review-mail-search-not-revealed")
+            XCTFail("Native pull-down must reveal the mailbox search field"); return
+        }
+        let query = "iOSReview-NoMail-" + UUID().uuidString
+        search.tap()
+        search.typeText(query)
+        XCTAssertTrue(app.staticTexts["没有信件"].firstMatch.waitForExistence(timeout: 20))
+        capture(app, name: "review-mail-real-search-empty")
+        search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: query.count))
+        let cleared = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let value = search.value as? String ?? ""
+            return value.isEmpty || value == search.placeholderValue
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 5), .completed,
+            "Native deletion must clear the entire search query")
+        guard dismissReviewSearch(in: app, returningTo: "站内信") else { return }
+        let mailbox = app.buttons["信箱操作"].firstMatch
+        XCTAssertTrue(mailbox.exists && mailbox.isHittable)
+        for title in ["只看未读", "显示全部"] {
+            mailbox.tap()
+            let option = app.buttons[title].firstMatch
+            XCTAssertTrue(option.waitForExistence(timeout: 5) && option.isHittable)
+            option.tap()
+            capture(app, name: "review-mail-filter-\(title)")
+        }
+        let rows = app.cells.buttons.matching(NSPredicate(format: "NOT (label IN %@)", ["收件箱", "已发送", "加载更多"]))
+        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            rows.firstMatch.exists || app.staticTexts["没有信件"].firstMatch.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 20), .completed)
+        if !rows.firstMatch.exists {
+            XCTAssertTrue(app.staticTexts["没有信件"].firstMatch.exists)
+            recordReviewBoundary("Current inbox is genuinely empty; detail, attachment, relation and reply paths are not supplied by this account state.")
+            capture(app, name: "review-mail-current-inbox-empty")
+            return
+        }
+        let message = rows.firstMatch
+        revealReviewElement(message, in: app)
+        message.tap()
+        XCTAssertTrue(app.navigationBars["信件"].firstMatch.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "发件人：")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "收件人：")).firstMatch.exists)
+        let document = app.scrollViews.firstMatch
+        XCTAssertTrue(document.exists && document.staticTexts.count >= 4)
+        capture(app, name: "review-mail-existing-body")
+        document.swipeUp()
+        capture(app, name: "review-mail-existing-body-scrolled")
+        let earlier = app.buttons["加载更早往来"].firstMatch
+        if earlier.exists {
+            revealReviewDocumentElement(earlier, in: document)
+            XCTAssertTrue(earlier.isEnabled)
+            earlier.tap()
+            capture(app, name: "review-mail-real-earlier-context-requested")
+        } else {
+            recordReviewBoundary("The opened existing message has no earlier-context paging action; no relation data was manufactured.")
+        }
+        let attachmentHeading = app.staticTexts["附件"].firstMatch
+        if attachmentHeading.exists {
+            revealReviewDocumentElement(attachmentHeading, in: document)
+            let contextHeading = app.staticTexts["关联往来"].firstMatch
+            let attachment = document.buttons.allElementsBoundByIndex.first { button in
+                !button.label.hasPrefix("分享 ") && button.frame.minY >= attachmentHeading.frame.maxY
+                    && (!contextHeading.exists || button.frame.maxY <= contextHeading.frame.minY)
+            }
+            guard let attachment else { XCTFail("The genuine attachment section must expose its file button"); return }
+            revealReviewDocumentElement(attachment, in: document)
+            let filename = attachment.label
+            attachment.tap()
+            let previewClosed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                self.reviewVisiblePreviewDismissButtons(in: app).count == 1
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [previewClosed], timeout: 30), .completed)
+            capture(app, name: "review-mail-existing-attachment-native-preview")
+            let dismiss = reviewVisiblePreviewDismissButtons(in: app)
+            guard dismiss.count == 1 else { XCTFail("Only the real preview or download confirmation dismissal may be tapped"); return }
+            dismiss[0].tap()
+            let share = app.buttons["分享 " + filename].firstMatch
+            if share.waitForExistence(timeout: 5) {
+                revealReviewDocumentElement(share, in: document)
+                share.tap()
+                let nativeShare = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    self.reviewVisibleDismissButtons(in: app).count == 1
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [nativeShare], timeout: 10), .completed)
+                capture(app, name: "review-mail-downloaded-attachment-share-cancel")
+                let cancel = reviewVisibleDismissButtons(in: app)
+                guard cancel.count == 1 else { XCTFail("Only the real native share dismissal may be tapped"); return }
+                cancel[0].tap()
+            } else {
+                recordReviewBoundary("The actual attachment flow was cancelled before a downloadable share item became available.")
+            }
+        } else {
+            recordReviewBoundary("The opened existing message supplies no attachment; no file was uploaded or synthetic message created.")
+        }
+        let operations = app.buttons["信件操作"].firstMatch
+        for action in ["回复", "转发"] {
+            XCTAssertTrue(operations.exists && operations.isHittable)
+            operations.tap()
+            XCTAssertTrue(app.buttons["删除"].firstMatch.waitForExistence(timeout: 5))
+            capture(app, name: "review-mail-existing-action-menu-\(action)")
+            let button = app.buttons[action].firstMatch
+            if !button.exists {
+                // A native menu occludes its source button. Tap the visible current
+                // tab outside the menu, then require the same detail to remain.
+                let home = app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home)
+                XCTAssertTrue(home.exists && app.frame.contains(home.frame),
+                    "The current native tab must provide a visible area outside the menu")
+                home.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                XCTAssertTrue(app.buttons["删除"].firstMatch.waitForNonExistence(timeout: 5))
+                XCTAssertTrue(app.navigationBars["信件"].firstMatch.exists && operations.isHittable,
+                    "Dismissal must retain the current message without a mutation")
+                recordReviewBoundary("The opened message does not offer " + action + "; its platform-message restrictions are retained.")
+                continue
+            }
+            XCTAssertTrue(button.isHittable)
+            button.tap()
+            XCTAssertTrue(app.navigationBars[action].firstMatch.waitForExistence(timeout: 10))
+            capture(app, name: "review-mail-existing-\(action)-cancel")
+            let cancel = app.navigationBars[action].buttons["取消"].firstMatch
+            XCTAssertTrue(cancel.exists && cancel.isHittable)
+            cancel.tap()
+            if app.staticTexts["放弃这封信？"].firstMatch.waitForExistence(timeout: 1) {
+                app.buttons["放弃"].firstMatch.tap()
+            }
+            XCTAssertTrue(app.navigationBars[action].firstMatch.waitForNonExistence(timeout: 5))
+            XCTAssertTrue(operations.exists && operations.isHittable)
+        }
+        reviewBack(from: "信件", to: "站内信", in: app)
+        capture(app, name: "review-mail-read-only-returned-to-inbox")
+    }
+
+    func testReviewExistingNotificationBodyAndInternalTarget() throws {
+        let app = try launchReadOnlyReview()
+        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
+        let bell = app.buttons["home-notifications"].firstMatch
+        if !bell.isHittable {
+            let more = app.navigationBars.buttons["更多"].firstMatch
+            XCTAssertTrue(more.exists && more.isHittable)
+            more.tap()
+            let notifications = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "通知")).firstMatch
+            XCTAssertTrue(notifications.waitForExistence(timeout: 5) && notifications.isHittable)
+            notifications.tap()
+        } else { bell.tap() }
+        let filter = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "筛选：")).firstMatch
+        XCTAssertTrue(filter.waitForExistence(timeout: 10) && filter.isHittable)
+        filter.tap()
+        app.buttons["全部通知"].firstMatch.tap()
+        XCTAssertTrue(waitForHittable(filter, timeout: 5))
+        XCTAssertEqual(filter.label, "筛选：全部通知")
+        let fullText = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "查看", "正文")).firstMatch
+        let bodyRow = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "查看通知")).firstMatch
+        let targetRows = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@ OR label ENDSWITH %@ OR label ENDSWITH %@", "查看站内信", "查看转写", "打开终端"))
+        let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            fullText.exists || bodyRow.exists || targetRows.firstMatch.exists
+                || app.staticTexts["暂无通知"].firstMatch.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 20), .completed)
+        capture(app, name: "review-notifications-current-all-records")
+        if fullText.exists || bodyRow.exists {
+            let read = fullText.exists ? fullText : bodyRow
+            let hasExplicitBody = fullText.exists
+            revealReviewElement(read, in: app)
+            read.tap()
+            XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
+            let document = app.scrollViews.firstMatch
+            XCTAssertTrue(document.waitForExistence(timeout: 10))
+            XCTAssertGreaterThanOrEqual(document.staticTexts.count, hasExplicitBody ? 3 : 2)
+            capture(app, name: "review-notification-existing-full-document")
+            document.swipeUp()
+            capture(app, name: "review-notification-existing-full-document-scrolled")
+            let backs = app.navigationBars.buttons.matching(NSPredicate(format: "label IN %@", ["通知", "返回", "Back"]))
+                .allElementsBoundByIndex.filter { $0.isHittable }
+            guard backs.count == 1 else { XCTFail("The actual notification document must expose native Back"); return }
+            backs[0].tap()
+            revealReviewElement(filter, in: app, towardTop: true)
+            XCTAssertEqual(filter.label, "筛选：全部通知")
+        } else {
+            recordReviewBoundary("The currently loaded notification page supplies no readable body action; no notification was created.")
+        }
+        let target = targetRows.firstMatch
+        if target.exists {
+            revealReviewElement(target, in: app)
+            target.tap()
+            XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
+            let opened = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                app.buttons["信件操作"].exists
+                    || (app.segmentedControls.buttons["语音"].exists && app.segmentedControls.buttons["文字"].exists)
+                    || app.descendants(matching: .any)["terminal.text"].exists
+                    || app.staticTexts["要打开的会话已结束。"].exists
+                    || app.staticTexts["这台电脑不在线"].exists
+                    || app.staticTexts["读取录音失败"].exists
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [opened], timeout: 20), .completed,
+                "The actual internal target must open or show its real unavailable state")
+            capture(app, name: "review-notification-internal-target-real-result")
+            app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
+            XCTAssertTrue(app.buttons["home-feature-站内信"].firstMatch.waitForExistence(timeout: 10))
+            capture(app, name: "review-notification-target-safe-return-home")
+        } else {
+            recordReviewBoundary("No internal Mail/recording/terminal target is supplied by this loaded notification page; external-link rows are not followed.")
+            let close = app.navigationBars.buttons["关闭"].firstMatch
+            XCTAssertTrue(close.exists && close.isHittable)
+            close.tap()
+            XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
+        }
+    }
+
+    private func revealReviewDocumentElement(_ element: XCUIElement, in document: XCUIElement) {
+        for _ in 0..<12 where !(element.exists && element.isHittable) { document.swipeUp() }
+        XCTAssertTrue(waitForHittable(element, timeout: 10), "The actual document action must be reachable by scrolling")
+    }
+
+    private func reviewVisiblePreviewDismissButtons(in app: XCUIApplication) -> [XCUIElement] {
+        app.buttons.matching(NSPredicate(format: "label IN %@", ["完成", "Done", "取消", "Cancel", "关闭", "Close"]))
+            .allElementsBoundByIndex.filter { $0.isHittable }
+    }
+
+    private func recordReviewBoundary(_ text: String) {
+        let attachment = XCTAttachment(string: text)
+        attachment.name = "review-current-data-boundary"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func launchReadOnlyReview() throws -> XCUIApplication {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["SYNAPSE_IPAD_REVIEW"] != "1"
+            || ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"]?.isEmpty != false,
+            "Explicitly configured production UI review is required")
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
+        app.launch()
+        signIn(app)
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 20))
+        return app
+    }
+
+    private func revealReviewElement(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
+        if waitForHittable(element, timeout: 1) { return }
+        guard let list = reviewForegroundList(in: app) else {
+            captureReviewFailure(app, name: "review-detail-no-foreground-list")
+            XCTFail("The foreground native List/Form must provide scrolling"); return
+        }
+        for _ in 0..<8 where !(element.exists && element.isHittable) {
+            if towardTop { list.swipeDown() } else { list.swipeUp() }
+        }
+        let reached = waitForHittable(element, timeout: 10)
+        if !reached { captureReviewFailure(app, name: "review-detail-control-not-reached") }
+        XCTAssertTrue(reached, "The requested detail control must be reachable by native scrolling")
+    }
+
+    private func reviewForegroundList(in app: XCUIApplication) -> XCUIElement? {
+        let lists = app.tables.allElementsBoundByIndex + app.collectionViews.allElementsBoundByIndex
+        return lists.first { list in
+            list.exists && !list.frame.isEmpty && list.frame.intersects(app.frame)
+                && list.descendants(matching: .any).allElementsBoundByIndex.contains { $0.isHittable }
+        }
+    }
+
+    private func dismissReviewSearch(in app: XCUIApplication, returningTo title: String) -> Bool {
+        let buttons = app.buttons.matching(NSPredicate(format: "label IN %@", ["取消", "Cancel", "Close", "close"]))
+            .allElementsBoundByIndex.filter { $0.isHittable }
+        guard buttons.count == 1 else {
+            captureReviewFailure(app, name: "review-search-native-cancel-not-unique")
+            XCTFail("The active native search must expose one actual Cancel action"); return false
+        }
+        buttons[0].tap()
+        let restored = app.navigationBars[title].firstMatch.waitForExistence(timeout: 5)
+        if !restored { captureReviewFailure(app, name: "review-search-navigation-not-restored") }
+        XCTAssertTrue(restored, "Cancelling native search must restore the actual page navigation")
+        return restored
+    }
+
+    private func captureReviewFailure(_ app: XCUIApplication, name: String) {
+        capture(app, name: name)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = name + "-native-AX"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+    }
+
+    private func assertReviewPermission(_ row: XCUIElement, in app: XCUIApplication) {
+        revealReviewElement(row, in: app)
+        let state = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let exposed = row.label + " " + (row.value as? String ?? "")
+            return ["已允许", "已拒绝", "未请求"].contains { exposed.contains($0) }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [state], timeout: 10), .completed,
+            "The actual permission state must be readable without invoking the permission action")
+    }
+
+    private func reviewVisibleDismissButtons(in app: XCUIApplication) -> [XCUIElement] {
+        app.buttons.matching(NSPredicate(format: "label IN %@", ["取消", "Cancel", "关闭", "Close"]))
+            .allElementsBoundByIndex.filter { $0.isHittable }
+    }
+
+    private func reviewBack(from title: String, to parent: String, in app: XCUIApplication) {
+        let buttons = app.navigationBars[title].buttons
+            .matching(NSPredicate(format: "label IN %@", [parent, "返回", "Back"]))
+            .allElementsBoundByIndex.filter { $0.isHittable }
+        guard buttons.count == 1 else {
+            XCTFail("The real navigation bar must expose one native Back action"); return
+        }
+        buttons[0].tap()
+        XCTAssertTrue(app.navigationBars[title].firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars[parent].firstMatch.waitForExistence(timeout: 5))
     }
 
     /// A phone opened before any computer was online must notice one signing in.

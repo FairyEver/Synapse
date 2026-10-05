@@ -55,3 +55,38 @@ struct TerminalRecentPhotoFreshnessTests {
         #expect(!recentPhotoIsFresh(createdAt: age(90), now: now, within: 60))
     }
 }
+
+@MainActor
+struct TerminalRecentPhotoWatcherTests {
+    @Test func enteringAndLeavingWithoutPhotoAccessNeverTouchesTheLibrary() {
+        var touched = 0
+        let watcher = TerminalRecentPhotoWatcher(onChange: {}, isAuthorized: { false },
+            register: { _ in touched += 1 }, unregister: { _ in touched += 1 })
+        watcher.start()
+        watcher.start()
+        watcher.stop()
+        #expect(touched == 0)
+    }
+
+    @Test func authorizationChangesRegisterOnceAndStopBeforeASecondSubscription() {
+        var authorized = false
+        var registrations = 0
+        var removals = 0
+        let watcher = TerminalRecentPhotoWatcher(onChange: {}, isAuthorized: { authorized },
+            register: { _ in registrations += 1 }, unregister: { _ in removals += 1 })
+        watcher.start()
+        authorized = true
+        watcher.start()
+        watcher.start()
+        #expect(registrations == 1 && removals == 0)
+        authorized = false
+        watcher.start()
+        watcher.stop()
+        #expect(registrations == 1 && removals == 1)
+        authorized = true
+        watcher.start()
+        watcher.stop()
+        watcher.stop()
+        #expect(registrations == 2 && removals == 2)
+    }
+}

@@ -44,14 +44,17 @@ struct TerminalGitLocalName: View {
             }
         }
         .listStyle(.insetGrouped)
+        .disabled(flow.isBusy)
         .navigationTitle("迁出远端分支")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("迁出") {
+                Button {
                     Haptics.commit()
                     // 名字那一格留在 flow 上：失败时这一页不关，字也要留着。
                     Task { await flow.submitLocalName(on: desk) }
+                } label: {
+                    TerminalGitConfirmationLabel(title: "迁出", isBusy: flow.isBusy)
                 }
                 // 只拦住「空」这一条，合法性交给电脑的 `check-ref-format`
                 // —— 与新建分支同一口径，不在手机上复刻一套规则。

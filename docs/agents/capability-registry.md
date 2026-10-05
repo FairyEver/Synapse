@@ -27,7 +27,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
-下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 3 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>` 和 `synapse://mail/<message-id>`。Terminal 路由的 `desktop` / `session` 可省略，用于主屏幕组件进入终端列表或会话；它只解析当前仍在线且在实时摘要中存在的会话。Mail 路由进入站内信并按当前用户权限读取该信件。三条路由均由 iOS App 本地处理。
+下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 3 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>` 和 `synapse://mail/<message-id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。Mail 路由进入站内信并按当前用户权限读取该信件。三条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|

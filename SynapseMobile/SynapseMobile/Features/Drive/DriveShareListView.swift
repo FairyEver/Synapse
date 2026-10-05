@@ -13,6 +13,10 @@ enum DriveShareRow {
     /// 「来源已删除」是有才说 —— 没有的东西不该占一段。「来源已删除」必须说：链接打开是
     /// 空的，而这一行是用户点开它之前唯一能看到的东西。
     static func subtitle(for share: DriveShareListItem) -> String {
+        subtitle(for: DriveShare(listItem: share), sourceDeleted: share.sourceDeleted)
+    }
+
+    static func subtitle(for share: DriveShare, sourceDeleted: Bool) -> String {
         var parts = [
             DriveText.shareModeLabel(share.accessMode),
             // 有效期那一段与分享结果页逐字相同（`DriveShareSummary.expiry`）：同一件事
@@ -20,7 +24,7 @@ enum DriveShareRow {
             DriveShareSummary.expiry(share.expiresAt),
         ]
         if share.passwordEnabled { parts.append("有密码") }
-        if share.sourceDeleted { parts.append("来源已删除") }
+        if sourceDeleted { parts.append("来源已删除") }
         return parts.joined(separator: " · ")
     }
 
@@ -59,6 +63,7 @@ struct DriveShareListView: View {
     @State private var searchText = ""
     /// 点开的那一行。
     @State private var openShare: DriveShareListItem?
+    @State private var openShareAccount: Int?
 
     private var visibleShares: [DriveShareListItem] {
         guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -118,7 +123,7 @@ struct DriveShareListView: View {
         // （`DriveStore.forgetShare(forItemId:)`），不重取的话那一行会从列表里消失，直到
         // 用户下次再进这一屏。停用分享那一趟 store 自己已经重取过，所以这里偶尔是白跑一次
         // —— 一次 GET 换「回来时列表一定是全的」，这个价换得起。
-        .sheet(item: $openShare, onDismiss: { Task { await model.driveLoadShares() } }) { share in
+        .sheet(item: $openShare, onDismiss: shareDismissed) { share in
             DriveShareDetailView(share: share)
         }
         .noticeOverlay(model)
@@ -128,8 +133,19 @@ struct DriveShareListView: View {
     ///
     /// 右边那枚 chevron 是这一屏唯一的手势提示：点进去是那一条分享的结果页（拷贝链接 /
     /// 停止分享），不是这个列表里能做完的事。
+    private func shareDismissed() {
+        guard let account = openShareAccount else { return }
+        openShareAccount = nil
+        guard model.isCurrentAccount(account) else { return }
+        Task {
+            guard model.isCurrentAccount(account) else { return }
+            await model.driveLoadShares()
+        }
+    }
+
     private func row(_ share: DriveShareListItem) -> some View {
         Button {
+            openShareAccount = model.accountIdentityGeneration
             openShare = share
         } label: {
             HStack(spacing: DriveListRow.spacing) {
@@ -175,16 +191,61 @@ private struct DriveShareDetailView: View {
     @Environment(\.dismiss) private var dismiss
     /// 停止分享那一趟在飞。
     @State private var stopping = false
+    @State private var state = DriveShareDetailState()
+
+    private var currentShare: DriveShare? {
+        state.currentShare(account: model.accountIdentityGeneration)
+    }
+
+    private var failureReason: String {
+        if case .failed(let reason) = state.lookup { return reason }
+        return "分享已失效。"
+    }
 
     var body: some View {
         NavigationStack {
-            List {
+            content
+                .navigationTitle("分享")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("关闭") { dismiss() }
+                    }
+                }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .task { await refresh() }
+        // 这一张自己会发提示（拷贝、失败），而提示条画在宿主屏幕上、在这一张之下 ——
+        // 不在这里挂一份就永远看不见（`DriveShareSheet` 同一条）。
+        .noticeOverlay(model)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if state.loading || state.lookup == nil {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let currentShare {
+            result(currentShare)
+        } else {
+            ContentUnavailableView {
+                Label(failureReason, systemImage: "exclamationmark.triangle")
+            } actions: {
+                Button { Task { await refresh() } } label: {
+                    Text("重试").frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                }
+            }
+        }
+    }
+
+    private func result(_ current: DriveShare) -> some View {
+        List {
                 Section {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(share.itemName)
                             .font(.headline)
                         // 与列表行同一句话（`DriveShareRow`）：用户在上一屏看的就是它。
-                        Text(DriveShareRow.subtitle(for: share))
+                        Text(DriveShareRow.subtitle(for: current, sourceDeleted: share.sourceDeleted))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -198,12 +259,12 @@ private struct DriveShareDetailView: View {
                     }
                 }
                 Section {
-                    linkRow("链接", share.url)
+                    linkRow("链接", current.url)
                     // 密码关着时这两行不说：没有的东西不该占一行（Spec §4.5 的结果页只在
                     // 密码开着时才给带密码链接与密码）。
-                    if share.passwordEnabled {
-                        linkRow("带密码链接", share.urlWithPassword)
-                        if let password = share.password, !password.isEmpty {
+                    if current.passwordEnabled {
+                        linkRow("带密码链接", current.urlWithPassword)
+                        if let password = current.password, !password.isEmpty {
                             linkRow("密码", password)
                         }
                     }
@@ -226,20 +287,14 @@ private struct DriveShareDetailView: View {
                     }
                     .disabled(stopping)
                 }
-            }
-            .navigationTitle("分享")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
-                }
-            }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        // 这一张自己会发提示（拷贝、失败），而提示条画在宿主屏幕上、在这一张之下 ——
-        // 不在这里挂一份就永远看不见（`DriveShareSheet` 同一条）。
-        .noticeOverlay(model)
+    }
+
+    private func refresh() async {
+        let account = model.accountIdentityGeneration
+        await state.load(id: share.shareId, account: account,
+                         isCurrentAccount: model.isCurrentAccount,
+                         fetch: model.driveShareRecord)
     }
 
     /// 一行可拷的东西：名字 + 值 + 一颗「拷贝」。
@@ -264,12 +319,18 @@ private struct DriveShareDetailView: View {
                     .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
             }
             .buttonStyle(.borderless)
+            .disabled(stopping)
         }
     }
 
     /// 拷一行里的东西。与 `DriveShareSheet` 里那颗同一条：同一个 id，连着拷两行时重启
     /// 那一句，而不是排两句一模一样的「已复制」。
     private func copy(_ value: String) {
+        guard !stopping else { return }
+        guard currentShare != nil else {
+            model.notice("分享已失效。", tone: .failure)
+            return
+        }
         Clipboard.copy(value, saying: "已复制", id: "drive.share.copied", on: model)
     }
 
@@ -280,9 +341,15 @@ private struct DriveShareDetailView: View {
     /// 和回收站里那个移除同一类动作。
     private func stop() {
         guard !stopping else { return }
+        guard currentShare != nil else {
+            model.notice("分享已失效。", tone: .failure)
+            return
+        }
         stopping = true
+        let account = model.accountIdentityGeneration
         Task {
             let outcome = await model.driveDisableShare(share)
+            guard model.isCurrentAccount(account) else { return }
             stopping = false
             if let notice = outcome.noticeText("停止分享") {
                 model.notice(notice, tone: .failure)

@@ -12,6 +12,19 @@ struct TerminalGitDesk {
     let send: @MainActor (MobileIntentRequest, TimeInterval) async -> MobileIntentResult?
     /// 说一句给用户看的话。参数与 `SynapseAppModel.notice` 一致。
     let notice: @MainActor (String, NoticeTone, String) -> Void
+
+    /// 多步动作共用发起时的电脑。切换之后既不续发，也不把旧结果说到新页面上。
+    func scoped(isCurrent: @escaping @MainActor () -> Bool) -> Self {
+        Self(send: { intent, timeout in
+            guard isCurrent(), !Task.isCancelled else { return nil }
+            let result = await send(intent, timeout)
+            guard isCurrent(), !Task.isCancelled else { return nil }
+            return result
+        }, notice: { text, tone, id in
+            guard isCurrent() else { return }
+            notice(text, tone, id)
+        })
+    }
 }
 
 /// 手机点的那一下，在电脑上要做的事。
@@ -137,7 +150,13 @@ final class TerminalGitFlow: Identifiable {
     /// 一个终端一个面板：这一次弹出来的讲的就是这个会话的事，所以会话 id 就是它的身份。
     var id: String { sessionId }
 
-    var path: [Route] = []
+    var path: [Route] = [] {
+        didSet {
+            if oldValue.last == .commit, path.last != .commit {
+                pendingSwitch = nil
+            }
+        }
+    }
     /// 手上有一个动作正在电脑上跑。它只管把动作行按住，不管画面遮罩。
     var isBusy = false
 
@@ -243,6 +262,8 @@ final class TerminalGitFlow: Identifiable {
     /// 以便用户在终端里切换目录后，面板能显示实际所在的仓库。
     func refresh(on desk: TerminalGitDesk) async {
         guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
         let result = await desk.send(
             .git("fetchRemotes", sessionId: sessionId),
             AppConfiguration.gitRemoteTimeout
@@ -321,6 +342,9 @@ final class TerminalGitFlow: Identifiable {
     ///
     /// 获取失败就**不重取**：列表留在原地，用户可以继续拿旧的挑 —— 比把它变成一个空列表有用。
     func refreshRemoteBranches(on desk: TerminalGitDesk) async {
+        guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
         let fetched = await desk.send(
             .git("fetchRemotes", sessionId: sessionId),
             AppConfiguration.gitRemoteTimeout
@@ -347,6 +371,7 @@ final class TerminalGitFlow: Identifiable {
     /// 带 `-f` 的那条「丢弃改动并切换」在这种情况下会把用户的改动丢掉却什么也没换到 ——
     /// 手机上点错一下就是不可逆的。所以这里先行拦下，连一个 intent 都不发。
     func pick(_ branch: MobileGitBranch, purpose: TerminalGitBranchPurpose, on desk: TerminalGitDesk) async {
+        guard !isBusy else { return }
         switch purpose {
         case .checkout:
             guard !branch.current else {
@@ -494,6 +519,7 @@ final class TerminalGitFlow: Identifiable {
     /// 一次往返回来再报一个用户没法处理的错。数字是电脑给的（`mobile.gitStatus`），不是
     /// 手机自己算的。
     func sync(changeCount: Int, on desk: TerminalGitDesk) async {
+        guard !isBusy else { return }
         guard changeCount == 0 else {
             failure = TerminalGitFailure(
                 title: "同步不了",
@@ -654,6 +680,7 @@ final class TerminalGitFlow: Identifiable {
         on desk: TerminalGitDesk,
         _ makeIntent: () -> MobileIntentRequest
     ) async -> TerminalGitAnswer {
+        guard !isBusy else { return .unanswered }
         isBusy = true
         defer { isBusy = false }
         let answer = await send(makeIntent(), ifDirty: pending, remote: remote, on: desk)

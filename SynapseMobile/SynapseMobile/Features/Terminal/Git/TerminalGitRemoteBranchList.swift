@@ -67,7 +67,7 @@ struct TerminalGitRemoteBranchList: View {
             ContentUnavailableView {
                 Label("还没有远端分支", systemImage: "arrow.triangle.branch")
             } description: {
-                Text("这个仓库还没有任何远端分支。下拉一次试试。")
+                Text("下拉一次试试。")
                     .accessibilityIdentifier("git-remote-branches-empty")
             }
             .listRowBackground(Color.clear)
@@ -93,6 +93,7 @@ struct TerminalGitRemoteBranchList: View {
                 .truncationMode(.middle)
                 .contentShape(Rectangle())
         }
+        .disabled(flow.isBusy)
         .accessibilityIdentifier("git-remote-branch-\(branch.qualifiedName)")
     }
 }

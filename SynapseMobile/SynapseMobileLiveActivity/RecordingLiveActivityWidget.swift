@@ -116,6 +116,7 @@ struct RecordingLiveActivityWidget: Widget {
                 // 同时有两个实时活动时收成一个圆点：这里放不下任何字。
                 RecordingDot(diameter: 12)
             }
+            .widgetURL(URL(string: RecordingDeepLink.openRecording))
         }
     }
 }
@@ -187,9 +188,8 @@ private struct RecordingTimer: View {
 /// 两枚挨在一起谁也大不起来，而且锁屏上按它们要先认证解锁，取消这一个动作本来也不该在
 /// 没解锁的锁屏上做。取消录音仍然做得了，在 App 内——卡片点一下就是录音页。
 ///
-/// 按钮不必解锁就能按，前提是它得在 **App 的进程**里执行——见 `RecordingIntents.swift` 里
-/// `LiveActivityIntent` 那一段。那是这枚按钮唯一的开关，画得再好，执行落在扩展进程里也是
-/// 白按。
+/// 停止动作遵循系统认证解锁规则，并通过 `LiveActivityIntent` 在 App 进程内执行，
+/// 才能操作共享录音会话；进程归属不代表免认证——见 `RecordingIntents.swift`。
 private struct RecordingStopButton: View {
     let diameter: CGFloat
 

@@ -7,7 +7,10 @@ import os
 /// `ThisDeviceOnly` on purpose: the refresh token is a long-lived credential for
 /// a machine that can run arbitrary code, and restoring it onto a different
 /// device from an iCloud backup would silently extend that reach.
-struct TokenStore {
+nonisolated struct TokenStore {
+    private static let credentialLock = NSRecursiveLock()
+    // Protected by credentialLock; rotation does not start a new account lifetime.
+    nonisolated(unsafe) private static var credentialVersions: [String: Int] = [:]
     private let service: String
 
     init(service: String = "com.liy.SynapseMobile") {
@@ -23,7 +26,18 @@ struct TokenStore {
 
     var refreshToken: String? {
         get { read(.refreshToken) }
-        nonmutating set { write(.refreshToken, newValue) }
+        nonmutating set {
+            Self.credentialLock.lock()
+            defer { Self.credentialLock.unlock() }
+            Self.credentialVersions[service, default: 0] &+= 1
+            write(.refreshToken, newValue)
+        }
+    }
+
+    var credentialVersion: Int {
+        Self.credentialLock.lock()
+        defer { Self.credentialLock.unlock() }
+        return Self.credentialVersions[service, default: 0]
     }
 
     var accountEmail: String? {
@@ -42,13 +56,36 @@ struct TokenStore {
     }
 
     func clearCredentials() {
+        Self.credentialLock.lock()
+        defer { Self.credentialLock.unlock() }
+        Self.credentialVersions[service, default: 0] &+= 1
         write(.refreshToken, nil)
         write(.accountEmail, nil)
+    }
+
+    /// 通知动作和主界面可有不同客户端；迟到刷新只替换它实际使用的凭据。
+    func replaceRefreshToken(_ replacement: String, matching expected: String, credentialVersion version: Int? = nil) -> Bool {
+        Self.credentialLock.lock()
+        defer { Self.credentialLock.unlock() }
+        if let version, version != Self.credentialVersions[service, default: 0] { return false }
+        guard read(.refreshToken) == expected else { return false }
+        return write(.refreshToken, replacement) == errSecSuccess
+    }
+
+    func clearCredentials(matching expected: String, credentialVersion version: Int? = nil) -> Bool {
+        Self.credentialLock.lock()
+        defer { Self.credentialLock.unlock() }
+        if let version, version != Self.credentialVersions[service, default: 0] { return false }
+        guard read(.refreshToken) == expected else { return false }
+        clearCredentials()
+        return true
     }
 
     // MARK: - Keychain plumbing
 
     private func read(_ key: Key) -> String? {
+        Self.credentialLock.lock()
+        defer { Self.credentialLock.unlock() }
         var query = baseQuery(key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -70,6 +107,8 @@ struct TokenStore {
     /// ever in memory, and the next launch had nothing to restore.
     @discardableResult
     private func write(_ key: Key, _ value: String?) -> OSStatus {
+        Self.credentialLock.lock()
+        defer { Self.credentialLock.unlock() }
         let query = baseQuery(key)
         guard let value else {
             let status = SecItemDelete(query as CFDictionary)

@@ -74,7 +74,7 @@ struct TerminalGitDirtySheet: ViewModifier {
                 titleVisibility: .visible,
                 presenting: flow.decision
             ) { pending in
-                ForEach(TerminalGitDirtyChoice.allowed(for: pending)) { choice in
+                ForEach(TerminalGitDirtyChoice.allowed(for: pending).filter { $0 != .cancel }) { choice in
                     Button(choice.title(for: pending), role: choice == .discard ? .destructive : nil) {
                         // 把这一条动作**带进闭包**，而不是让 flow 再去读一遍自己的状态：
                         // 按下的同一刻这张表就开始收，收表会把 `flow.decision` 清掉。

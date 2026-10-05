@@ -10,8 +10,11 @@ struct TerminalExpandedInputSheet: View {
     let sessionId: String
 
     @FocusState private var editorFocused: Bool
-    @State private var sending = false
+    @State private var submission = TerminalDraftSubmission()
+    @State private var draftInsertion = TerminalDraftInsertion()
     @State private var sendError: String?
+
+    private var sending: Bool { submission.sending }
 
     var body: some View {
         NavigationStack {
@@ -56,23 +59,39 @@ struct TerminalExpandedInputSheet: View {
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(sending)
         .onAppear { editorFocused = true }
-        .onChange(of: draft) { sendError = nil }
+        .onChange(of: draft) {
+            sendError = nil
+            draftInsertion.update(text: draft, selection: nil)
+        }
     }
 
     private func sendDraft() async {
         guard !sending, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        sending = true
-        let text = draft
-        let outcome = await model.sendCommandConfirming(sessionId, text: text)
-        sending = false
-        switch outcome {
-        case .sent:
+        draftInsertion.update(text: draft, selection: nil)
+        let ticket = draftInsertion.ticket()
+        let context = model.terminalActionContext
+        let attachmentIds = committedAttachmentIds(model.relayAttachments, sessionId: sessionId)
+        let completion = await submission.submit(
+            ticket: ticket, context: context, attachmentIds: attachmentIds,
+            currentContext: { model.terminalActionContext },
+            currentTicket: {
+                draftInsertion.update(text: draft, selection: nil)
+                return draftInsertion.ticket()
+            },
+            send: { await model.sendCommandConfirming(sessionId, text: $0) }
+        )
+        switch completion {
+        case .sent(let clearDraft, let attachmentIds):
             Haptics.commit()
-            model.commitDeliveredAttachments(for: sessionId)
-            draft = ""
-            dismiss()
-        case .notSent(let message), .uncertain(let message):
+            model.commitDeliveredAttachments(for: sessionId, attachmentIds: attachmentIds)
+            if clearDraft {
+                draft = ""
+                dismiss()
+            }
+        case .failed(let message):
             sendError = message
+        case nil:
+            break
         }
     }
 }

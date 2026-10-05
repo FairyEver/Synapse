@@ -174,6 +174,7 @@ final class DriveFileExport {
         using model: SynapseAppModel,
         generation: Int
     ) async {
+        guard !Task.isCancelled, generation == share.generation else { return }
         let slot = share
         // 这一趟自己的那一份：上一趟已经在上面的 `cancel` 里放掉了，这里收的是更早留下的
         // 目录（比如取消之后没再动过的那一个）。

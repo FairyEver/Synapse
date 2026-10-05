@@ -20,10 +20,20 @@ enum NotificationText {
     ) -> [DayGroup] {
         var groups: [DayGroup] = []
         let today = calendar.startOfDay(for: now)
-        for item in items {
-            let day = ISO8601DateFormatter.parseWireTimestamp(item.createdAt)
+        // A deep link can ensure an older item at the front of the store. Keep each
+        // day together so SwiftUI receives one section ID per day, including unknown.
+        let ordered = items.enumerated().map { index, item in
+            (index: index, item: item, date: ISO8601DateFormatter.parseWireTimestamp(item.createdAt))
+        }.sorted {
+            let left = $0.date ?? .distantPast
+            let right = $1.date ?? .distantPast
+            return left == right ? $0.index < $1.index : left > right
+        }
+        for entry in ordered {
+            let item = entry.item
+            let day = entry.date
                 .map { min(calendar.startOfDay(for: $0), today) }
-            if groups.last?.id == day {
+            if let last = groups.last, last.id == day {
                 groups[groups.count - 1].items.append(item)
             } else {
                 groups.append(DayGroup(

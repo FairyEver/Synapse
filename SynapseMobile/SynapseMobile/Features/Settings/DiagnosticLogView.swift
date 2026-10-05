@@ -5,12 +5,14 @@ import SwiftUI
 /// 这一页存在，是因为这套机制的价值全在"用户能把文件发出来"这一步上。日志本身
 /// 写得再全，没有这个按钮也只是一堆谁也拿不到的文件。
 struct DiagnosticLogView: View {
-    @State private var snapshot = DiagnosticLog.snapshot()
+    @State private var snapshot = DiagnosticFileSink.Snapshot()
     @State private var exportURL: URL?
+    @State private var pendingExportURL: URL?
     @State private var showingDeleteConfirm = false
     @State private var showingContentExportConfirm = false
     @State private var capturesContent = DiagnosticLog.capturesContent
     @State private var exporting = false
+    @State private var deleting = false
     @State private var exportFailed = false
 
     var body: some View {
@@ -56,8 +58,6 @@ struct DiagnosticLogView: View {
                         .foregroundStyle(.secondary)
                     }
                 }
-            } footer: {
-                Text("记录崩溃、网络与终端交互的元数据，以及每一路各占多少。")
             }
 
             Section {
@@ -69,20 +69,12 @@ struct DiagnosticLogView: View {
                         DiagnosticLog.capturesContent = value
                     }
             } footer: {
-                Text("打开后会记下屏幕上的内容与你发给电脑的命令（每秒至多一条，先经脱敏）。"
-                    + "导出时的压缩包里会一并包含，并写明本次是否包含。")
+                Text("关闭后停止记录正文，已有内容仍可能随日志导出。含正文时会在分享前确认。")
             }
 
             Section {
                 Button {
-                    // 包含内容时先问一句。这份包是从微信发出去的，而"用户交出去的东西
-                    // 必须是他当场就知道的"是这件事唯一站得住的理由 —— 开关开着久了，
-                    // 按导出的人未必还记得自己当初打开过它。
-                    if capturesContent {
-                        showingContentExportConfirm = true
-                    } else {
-                        export()
-                    }
+                    export()
                 } label: {
                     if exporting {
                         ProgressView("正在导出")
@@ -90,10 +82,9 @@ struct DiagnosticLogView: View {
                         Label("导出并分享", systemImage: "square.and.arrow.up")
                     }
                 }
-                .disabled(snapshot.fileCount == 0 || exporting)
+                .disabled(snapshot.fileCount == 0 || exporting || deleting || pendingExportURL != nil)
             } footer: {
                 VStack(alignment: .leading) {
-                    Text(capturesContent ? "本次导出包含终端屏幕内容。" : "本次导出不含终端屏幕内容。")
                     if exportFailed {
                         Text("导出失败，请重试")
                             .foregroundStyle(Theme.failure)
@@ -105,36 +96,50 @@ struct DiagnosticLogView: View {
                 Button("删除全部日志", role: .destructive) {
                     showingDeleteConfirm = true
                 }
-                .disabled(snapshot.fileCount == 0)
+                .disabled(snapshot.fileCount == 0 || exporting || deleting || pendingExportURL != nil)
             }
         }
         .navigationTitle("诊断日志")
         .navigationBarTitleDisplayMode(.inline)
-        .task { refresh() }
+        .task {
+            while !Task.isCancelled {
+                await refresh()
+                do { try await Task.sleep(for: .seconds(2)) }
+                catch { return }
+            }
+        }
+        .refreshable { await refresh() }
         .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) {
             if let exportURL {
                 SystemShareSheet(items: [exportURL])
             }
         }
         .alert("这份压缩包里包含终端屏幕内容", isPresented: $showingContentExportConfirm) {
-            Button("取消", role: .cancel) {}
-            Button("继续导出") { export() }
+            Button("取消", role: .cancel) { pendingExportURL = nil }
+            Button("继续分享") {
+                exportURL = pendingExportURL
+                pendingExportURL = nil
+            }
         } message: {
             Text("里面会有最近记下的终端屏幕内容与你发给电脑的命令。确认要分享时请注意发给谁。")
         }
         .alert("删除全部日志？", isPresented: $showingDeleteConfirm) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) {
-                DiagnosticLog.deleteAll()
-                refresh()
+                deleting = true
+                Task {
+                    await DiagnosticLog.deleteAllAsync()
+                    await refresh()
+                    deleting = false
+                }
             }
         } message: {
-            Text("已经导出的文件不受影响。删除后仍会继续记录新的。")
+            Text("已经导出的文件不受影响。")
         }
     }
 
-    private func refresh() {
-        snapshot = DiagnosticLog.snapshot()
+    private func refresh() async {
+        snapshot = await DiagnosticLog.snapshotAsync()
     }
 
     private func export() {
@@ -145,10 +150,15 @@ struct DiagnosticLogView: View {
         exportFailed = false
         exporting = true
         Task {
-            let url = await DiagnosticLog.export()
+            let archive = await DiagnosticLog.export()
             exporting = false
-            if let url {
-                exportURL = url
+            if let archive {
+                if archive.includesTerminalContent {
+                    pendingExportURL = archive.url
+                    showingContentExportConfirm = true
+                } else {
+                    exportURL = archive.url
+                }
             } else {
                 exportFailed = true
             }

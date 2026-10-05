@@ -4,6 +4,7 @@ import UserNotifications
 struct RootView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     /// 功能页切换尊重系统的减弱动态效果设置。
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab = Tab.home
@@ -19,17 +20,20 @@ struct RootView: View {
     /// 通知面板。它挂在根上，因为有两个入口打开的是同一个面板：主页右上角的铃铛，
     /// 和「我的 → 通知」。
     @State private var isNotificationPanelPresented = false
+    @State private var notificationToRead: SynapseNotification?
+    @State private var notificationWebLink: WebLink?
     /// 会话创建那张 sheet。同样挂在根上：主页那一行与终端列表右上角的 ＋ 打开的是同一个。
     @State private var isNewSessionPresented = false
     /// 「我的 → 通知」里那一个开关。关掉只是不往 App 图标上写数字，别的都不受影响。
     @AppStorage(NotificationBadgePreference.key) private var badgeEnabled = true
-    @State private var pendingWidgetTarget: TerminalWidgetLink.Target?
+    @State private var pendingWidgetTarget: PendingExternalTerminalOpen?
     /// 一个还没能判定的打开终端请求。
     ///
     /// 只在一种情况下存在：请求带来了一个会话 id，而**当下没有一份属于那台电脑的列表**可问
     /// （刚冷启动、刚切过电脑）。那不是「这个终端没有了」，是什么都还不知道，所以要留住它，
     /// 等下一份列表到了再判 —— 丢掉它就等于把用户点的那一下当作没发生。
     @State private var pendingTerminalOpen: PendingTerminalOpen?
+    @State private var notificationOpenRequest = UUID()
 
     /// 底栏的三格，并且**从此不再增加**。
     ///
@@ -57,12 +61,16 @@ struct RootView: View {
             handleRoute(NotificationRouter.shared.consume())
             resolveExternalTerminalRequests()
         }
+        .fullScreenCover(item: $notificationWebLink) { target in
+            LinkBrowser(url: target.url) { notificationWebLink = nil }
+        }
         .onChange(of: NotificationRouter.shared.pending) { _, _ in
             handleRoute(NotificationRouter.shared.consume())
         }
         // 锁屏和灵动岛上那张卡被点开。走 URL 而不是 App Intent：卡片是「带我去看」
         // 的那一个，那两个按钮才是「替我做」。这是 Apple 给实时活动定的分工。
         .onOpenURL { url in
+            beginNavigationRequest()
             if url.scheme == "synapse", url.host == "mail", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
                 mailSelection = id
                 homePath = [.mail]
@@ -70,7 +78,9 @@ struct RootView: View {
             } else if RecordingDeepLink.isOpenRecording(url) {
                 handleRoute(.liveRecording)
             } else if let target = TerminalWidgetLink.target(from: url) {
-                pendingWidgetTarget = target
+                pendingWidgetTarget = PendingExternalTerminalOpen(
+                    desktopId: target.desktopId, sessionId: target.sessionId, origin: .homeWidget
+                )
                 openPendingWidgetTarget()
             }
         }
@@ -82,17 +92,41 @@ struct RootView: View {
                 mailSelection = nil
                 settingsSelection = nil
                 isNotificationPanelPresented = false
+                notificationToRead = nil
+                notificationWebLink = nil
                 isNewSessionPresented = false
                 // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
                 // 哪台电脑都无从谈起。
                 pendingTerminalOpen = nil
+                notificationOpenRequest = UUID()
                 selectedTab = .home
             }
             resolveExternalTerminalRequests()
         }
+        .onChange(of: model.accountIdentityGeneration) { _, _ in
+            // A widget waiting for a live list and a notification waiting for REST
+            // are still the outgoing account's requests, even while logout drains.
+            pendingWidgetTarget = nil
+            pendingTerminalOpen = nil
+            terminalSelection = nil
+            notificationToRead = nil
+            notificationWebLink = nil
+            notificationOpenRequest = UUID()
+        }
+        .onChange(of: model.selectedDesktopClientInstanceId) { _, _ in
+            if let pending = pendingTerminalOpen,
+               !pending.belongs(to: model.selectedDesktopClientInstanceId) {
+                pendingTerminalOpen = nil
+            }
+            if let desktopId = pendingWidgetTarget?.desktopId,
+               desktopId != model.selectedDesktopClientInstanceId {
+                pendingWidgetTarget = nil
+            }
+        }
         .onChange(of: model.summary?.revision) { _, _ in resolveExternalTerminalRequests() }
         .onChange(of: model.hasLiveTerminalSummary) { _, _ in resolveExternalTerminalRequests() }
         .onChange(of: model.onlineDesktopIds) { _, _ in resolveExternalTerminalRequests() }
+        .onChange(of: model.hasCurrentDesktopPresence) { _, _ in resolveExternalTerminalRequests() }
         .onChange(of: scenePhase) { _, phase in
             // 会话标记是崩溃的第三种证据：进程被系统杀掉时不会留下任何遗言，
             // 而"文件末尾没有 sessionClose"就是它来过又走了的唯一痕迹。
@@ -119,8 +153,16 @@ struct RootView: View {
     private var terminalEntry: Binding<String?> {
         Binding(
             get: { terminalSelection },
-            set: { requestTerminal($0, from: .sessionList) }
+            set: {
+                beginNavigationRequest()
+                requestTerminal($0, from: .sessionList)
+            }
         )
+    }
+
+    private func beginNavigationRequest() {
+        notificationOpenRequest = UUID()
+        pendingWidgetTarget = nil
     }
 
     /// Re-selecting a tab returns to that feature's list at every window width.
@@ -137,6 +179,7 @@ struct RootView: View {
         Binding(
             get: { selectedTab },
             set: { tab in
+                beginNavigationRequest()
                 if tab == selectedTab {
                     popToRoot(tab)
                 } else {
@@ -147,16 +190,19 @@ struct RootView: View {
     }
 
     private func popToRoot(_ tab: Tab) {
+        beginNavigationRequest()
         switch tab {
         case .home:
             // 回到主页的顶上：栈清空，那一路记着的录音选择也一并作废。
             homePath = []
             meetingSelection = nil
+            mailSelection = nil
         case .terminals:
             terminalSelection = nil
             // 「回到这一屏的列表」把等着的那个打开请求也一并作废：人已经往下走了，
             // 再把他拽进一个终端页不是他要的。
             pendingTerminalOpen = nil
+            pendingWidgetTarget = nil
         case .settings: settingsSelection = nil
         }
     }
@@ -186,15 +232,31 @@ struct RootView: View {
             case .clipboard, .none:
                 NavigationStack(path: $homePath) {
                     HomeView(
-                        onOpenNotifications: { isNotificationPanelPresented = true },
+                        onOpenNotifications: {
+                            beginNavigationRequest()
+                            isNotificationPanelPresented = true
+                        },
                         onOpenRecordings: openRecordingsFromHome,
                         onOpenDrive: { openDrive() },
-                        onOpenMail: { homePath = [.mail] },
-                        onOpenClipboard: { homePath.append(.clipboard) },
-                        onNewSession: { isNewSessionPresented = true },
+                        onOpenMail: {
+                            beginNavigationRequest()
+                            homePath = [.mail]
+                        },
+                        onOpenClipboard: {
+                            beginNavigationRequest()
+                            homePath.append(.clipboard)
+                        },
+                        onNewSession: {
+                            beginNavigationRequest()
+                            isNewSessionPresented = true
+                        },
                         onOpenWaitingSession: openWaitingSession,
-                        onSwitchComputer: switchComputer
+                        onSwitchComputer: {
+                            beginNavigationRequest()
+                            switchComputer($0)
+                        }
                     )
+                    .noticeOverlay(model)
                     .navigationDestination(for: HomeRoute.self) { route in
                         switch route {
                         case .clipboard:
@@ -260,10 +322,13 @@ struct RootView: View {
                     }
                 }
         } detail: { meetingId in
-            MeetingDetailView(meetingId: meetingId) {
-                if meetingSelection == meetingId { meetingSelection = nil }
+            NavigationStack {
+                MeetingDetailView(meetingId: meetingId) {
+                    if meetingSelection == meetingId { meetingSelection = nil }
+                }
             }
         }
+        .noticeOverlay(model)
     }
 
     /// 云盘页：和录音页同构，整页归这一格所有（见 `homeTab`）。
@@ -300,7 +365,8 @@ struct RootView: View {
             ) {
                 // 两个入口分开给：`selection` 是「用户挑了哪一个」，每一步都要过闸门；
                 // `onOpenCreated` 是「电脑刚把这条终端交给我们」，它不必过。
-                SessionListView(selection: terminalEntry, onOpenCreated: openFreshTerminal)
+                SessionListView(selection: terminalEntry, onOpenCreated: openFreshTerminal,
+                    onBeginNavigation: beginNavigationRequest)
             } detail: { sessionId in
                 TerminalScreen(sessionId: sessionId) { terminalSelection = nil }
             }
@@ -309,15 +375,17 @@ struct RootView: View {
 
             AdaptiveSettingsView(selection: $settingsSelection) {
                 terminalSelection = nil
+                pendingTerminalOpen = nil
             } onOpenNotificationCenter: {
+                beginNavigationRequest()
                 isNotificationPanelPresented = true
             }
             .tabItem { Label("我的", systemImage: "person") }
             .tag(Tab.settings)
         }
         .tabViewStyle(.sidebarAdaptable)
-        .sheet(isPresented: $isNotificationPanelPresented) {
-            NotificationPanel(onOpenTerminal: openWaitingSession)
+        .sheet(isPresented: $isNotificationPanelPresented, onDismiss: { notificationToRead = nil }) {
+            NotificationPanel(initialNotification: notificationToRead, onOpenTerminal: openWaitingSession)
         }
         .newSessionSheet(isPresented: $isNewSessionPresented, onOpenCreated: openNewlyCreatedFromHome)
     }
@@ -335,8 +403,8 @@ struct RootView: View {
     ///
     /// 走 `requestTerminal` 同一道闸门：那条会话可能在卡片画出来与手指落下去之间结束掉。
     private func openWaitingSession(_ sessionId: String) {
-        selectedTab = .terminals
-        requestTerminal(sessionId, from: .homePending)
+        beginNavigationRequest()
+        if requestTerminal(sessionId, from: .homePending) { selectedTab = .terminals }
     }
 
     /// 主页顶栏换了一台电脑。
@@ -345,10 +413,13 @@ struct RootView: View {
     /// 成立。留着它，人切到终端那一格就会落进一个属于上一台电脑的终端页。清空永远成立，不
     /// 需要过闸门 —— 与 `popToRoot(.terminals)` 是同一条理由、同一个动作，那里也是这么做的。
     ///
-    /// 那个还在等判定的打开请求不必在这里清：`resolvePendingTerminalOpen` 自己会认名字，
-    /// 换了电脑它就不算数了。
+    /// 等着列表的请求也属于旧电脑；与选择一起清除。
     private func switchComputer(_ clientInstanceId: String) {
-        terminalSelection = nil
+        if clientInstanceId != model.selectedDesktopClientInstanceId {
+            terminalSelection = nil
+            pendingTerminalOpen = nil
+            if pendingWidgetTarget?.desktopId != clientInstanceId { pendingWidgetTarget = nil }
+        }
         model.selectDesktop(clientInstanceId)
     }
 
@@ -371,23 +442,18 @@ struct RootView: View {
     /// Sends a notification tap straight to the terminal that needs attention.
     private func handleRoute(_ destination: NotificationRouter.Destination?) {
         guard let destination else { return }
+        beginNavigationRequest()
         switch destination {
         case .terminal(let sessionId, let desktopClientInstanceId, let entry):
             // Naming a computer is the reader saying which one they mean, so this is
             // honoured even when that computer is not reachable — landing them on
             // another one instead is the behaviour the switch exists to remove.
-            model.selectDesktop(desktopClientInstanceId)
-            selectedTab = .terminals
-            // Only when that computer can actually open it. Selecting the terminal anyway
-            // would show a screen with nothing in it and nothing to say; the list, whose
-            // device row is now the way to switch, says what happened and what to do.
-            //
-            // 「能打开」现在是两个条件，不是一个：那台电脑在线，**而且**它的列表里还有这个
-            // 会话。一条通知记着的是「它完成那一轮时」的会话 id，那条会话后来结束了、被删了
-            // 都不会让这条记录失效，所以这个 id 的存在必须当场再问一次。
-            if !model.viewedDesktopIsOffline {
-                requestTerminal(sessionId, on: desktopClientInstanceId, from: entry)
-            }
+            pendingWidgetTarget = PendingExternalTerminalOpen(
+                desktopId: desktopClientInstanceId.isEmpty ? model.selectedDesktopClientInstanceId : desktopClientInstanceId,
+                sessionId: sessionId,
+                origin: entry
+            )
+            openPendingWidgetTarget()
         case .meeting(let meetingId):
             // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
             openRecording(meetingId)
@@ -422,6 +488,7 @@ struct RootView: View {
     /// 深链里所有「看录音」的落点都从这一个函数过：录音不在底栏上了，它是主页那一格的
     /// 一页，而那一页由根视图拿着的那一条 `homePath` 指认（见 `homeTab`）。
     private func openRecording(_ meetingId: String?) {
+        beginNavigationRequest()
         selectedTab = .home
         meetingSelection = meetingId
         homePath = [.recordings]
@@ -437,6 +504,7 @@ struct RootView: View {
     /// 与 `openRecording` 同一件事：云盘同样是「这一格的一页」，落点由同一条 `homePath`
     /// 指认，只是它没有要选中的条目——进去就停在根层（`DriveBrowserView.enter`）。
     private func openDrive() {
+        beginNavigationRequest()
         selectedTab = .home
         homePath = [.drive]
     }
@@ -448,20 +516,35 @@ struct RootView: View {
     /// 列表到达之后才解析，是因为 `deviceId` / `targetId` 都在通知自己身上，
     /// 而解析要用的 `model.notifications.items` 也在这一刻才更新。
     private func openNotification(_ id: String) {
+        let account = model.accountIdentityGeneration
+        let request = UUID()
+        notificationOpenRequest = request
         Task {
+            guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             await model.reloadNotifications()
+            guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
+            // readNotification first ensures this exact id: the latest page can no
+            // longer contain a notification that is still valid in an older page.
+            await model.readNotification(id)
+            guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             guard let item = model.notifications.items.first(where: { $0.id == id }) else {
                 // 拉回来却没有这一条（已过期、已在别处删掉）。打开面板，让人自己看
                 // 手上到底还有什么 —— 比什么都不做要好。
                 isNotificationPanelPresented = true
+                model.notice("无法打开这条通知", tone: .failure)
                 return
             }
-            await model.readNotification(item.id)
             switch NotificationDestination.resolve(item) {
             case .route(let destination):
                 handleRoute(destination)
-            case .externalURL, .none:
-                // 没有应用内的去处。打开面板让人读它自己。
+            case .externalURL(let url):
+                if SynapseWebLink.isTrusted(url) {
+                    notificationWebLink = WebLink(url: url)
+                } else {
+                    openURL(url)
+                }
+            case .none:
+                notificationToRead = item
                 isNotificationPanelPresented = true
             }
         }
@@ -476,17 +559,20 @@ struct RootView: View {
     /// 是唯一说得通的一条：另外三条路带来的 id 都来自某个更早的时刻，而那一刻可能早就过去了。
     /// 旧的写法是直接进终端页 —— 于是手机把人送进一块空画布，画布上只有电脑回的那句
     /// 「该终端已结束。」，而返回的路要人自己找。
-    private func requestTerminal(
+    @discardableResult private func requestTerminal(
         _ sessionId: String?,
         on desktopClientInstanceId: String? = nil,
         from origin: TerminalOpenOrigin
-    ) {
+    ) -> Bool {
         guard let sessionId else {
             terminalSelection = nil
             pendingTerminalOpen = nil
-            return
+            return false
         }
         let decision = model.terminalOpenability(sessionId, on: desktopClientInstanceId)
+        let navigation = TerminalOpenNavigation(requestedSession: sessionId,
+            currentSelection: terminalSelection, decision: decision)
+        terminalSelection = navigation.selection
         // 没能进去的两种在这里各留一条记录，连同**是谁在问**一起（见 `TerminalOpenOrigin`）。
         // 它排在这个 switch 之前而不是某个分支里，是因为下面那个 `.unknown` 会把请求排进
         // 队列、过几秒才轮到 —— 那一刻「谁在问」已经不在栈上了，只能由这里带过去。
@@ -494,35 +580,22 @@ struct RootView: View {
         switch decision {
         case .openable:
             pendingTerminalOpen = nil
-            terminalSelection = sessionId
         case .ended:
             pendingTerminalOpen = nil
-            // 不当着人的面开一块空白：就地说明为什么没进去。
-            //
-            // 与电脑那条拒绝同一个语气（电脑回的是「该终端已结束。」，落在手机上就是一条
-            // 拒绝），因为这就是同一件事被两个地方说出来 —— 只是这一次那个人还没有被送进
-            // 一块空画布里去听它。
-            //
-            // 这句话是**关于 `sessionId` 这个会话的**，所以带上它：五条路里只有会话列表
-            // 那一行是当场取的 id，通知、消息里的记录、桌面小组件和等下一份列表的挂起请求
-            // 带来的都是某一刻记下的 id —— 那次拒绝发生时，人很可能已经站在**另一个**会话里
-            // 了。不带归属的话，这句「这个会话已经结束了。」就会画在那个好好的会话的画布上，
-            // 读起来正是「我正在用的这个结束了」。见 `Notice.sessionId`。
-            //
-            // id 里带上会话：同一个 id 在队列里只有一条，两个会话各自被拒绝时不该互相顶掉。
-            model.notice(
-                "这个会话已经结束了。",
-                tone: .failure,
-                id: "terminal.ended.\(sessionId)",
-                sessionId: sessionId
-            )
+            // It names the attempted destination rather than claiming that the
+            // still-selected terminal ended, so the current host can show it.
+            if let message = navigation.rejectionNotice {
+                model.notice(message, tone: .failure, id: "terminal.ended.\(sessionId)")
+            }
         case .unknown:
             // 列表还没到。留到下一份列表，别把人这一下丢掉。
             pendingTerminalOpen = PendingTerminalOpen(
                 sessionId: sessionId,
-                desktopClientInstanceId: desktopClientInstanceId
+                requestedDesktop: desktopClientInstanceId,
+                currentDesktop: model.selectedDesktopClientInstanceId
             )
         }
+        return navigation.activatesTerminalTab
     }
 
     /// 打开一个**手机自己刚让电脑建出来**的终端。
@@ -534,6 +607,7 @@ struct RootView: View {
     /// 它」是**列表还没跟上**。拿判据去问，用户按下「开始对话」得到的第一句话会是
     /// 「这个会话已经结束了」。
     private func openFreshTerminal(_ sessionId: String) {
+        beginNavigationRequest()
         pendingTerminalOpen = nil
         terminalSelection = sessionId
     }
@@ -554,8 +628,7 @@ struct RootView: View {
         // 换过电脑就不算数了。手机端按会话 id 记住的东西都只对签发它的那台电脑成立，
         // 而这一类最容易出事的正是「等下一次」的东西：等到了、电脑却已经不是那台了，
         // 就会打到一个没听说过这个终端的电脑上。
-        if let named = pending.desktopClientInstanceId,
-           named != model.selectedDesktopClientInstanceId {
+        if !pending.belongs(to: model.selectedDesktopClientInstanceId) {
             pendingTerminalOpen = nil
             return
         }
@@ -575,39 +648,25 @@ struct RootView: View {
 
     private func openPendingWidgetTarget() {
         guard model.authState == .signedIn, let target = pendingWidgetTarget else { return }
-        selectedTab = .terminals
-        terminalSelection = nil
-        guard let desktopId = target.desktopId else {
-            pendingWidgetTarget = nil
+        if let desktopId = target.desktopId, model.selectedDesktopClientInstanceId != desktopId {
+            switchComputer(desktopId)
+        }
+        switch target.resolve(
+            currentDesktopId: model.selectedDesktopClientInstanceId,
+            hasCurrentPresence: model.hasCurrentDesktopPresence,
+            onlineDesktopIds: model.onlineDesktopIds,
+            hasLiveSummary: model.hasLiveTerminalSummary,
+            summary: model.summary
+        ) {
+        case .waiting:
             return
-        }
-        if model.selectedDesktopClientInstanceId != desktopId {
-            model.selectDesktop(desktopId)
-        }
-        guard let sessionId = target.sessionId else {
+        case .list:
+            selectedTab = .terminals
+            terminalSelection = nil
             pendingWidgetTarget = nil
-            return
-        }
-        guard !model.viewedDesktopIsOffline else {
+        case .terminal(let sessionId, let desktopId):
+            if requestTerminal(sessionId, on: desktopId, from: target.origin) { selectedTab = .terminals }
             pendingWidgetTarget = nil
-            return
         }
-        guard model.hasLiveTerminalSummary,
-              let summary = model.summary,
-              summary.desktopClientInstanceId == desktopId else { return }
-        // 判据和通知那条路是同一条，只是这里多一个前置条件：列表必须是**刚从那台电脑的
-        // 连接上收到的**。小组件的快照可以躺很久，而拿一份陈旧的列表去判，每一条都会读成
-        // 「它还在」—— 那正是这道闸门要挡的东西。
-        requestTerminal(sessionId, on: desktopId, from: .homeWidget)
-        pendingWidgetTarget = nil
     }
-}
-
-/// 一个带来了会话 id、却还没有一份列表可问的打开请求。
-///
-/// `desktopClientInstanceId` 是请求自己记着的那台电脑，不是「现在看着的那台」：一条通知
-/// 说的是「这条会话在**那台**电脑上」，等列表也要等那台的那一份。
-private struct PendingTerminalOpen: Equatable {
-    let sessionId: String
-    let desktopClientInstanceId: String?
 }

@@ -3,6 +3,237 @@ import Testing
 
 @testable import SynapseMobile
 
+@MainActor
+struct TerminalAttachmentSubmissionTests {
+    private func context(account: Int = 1, desktop: String = "desktop", viewing: Int = 1) -> TerminalActionContext {
+        TerminalActionContext(desktopId: desktop, accountGeneration: account, viewingGeneration: viewing)
+    }
+
+    private func attachment(_ id: String) -> TerminalAttachment {
+        TerminalAttachment(id: id, name: id + ".txt", sessionId: "session",
+            desktopClientInstanceId: "desktop", intentId: id, driveItemId: nil, state: .delivered(path: id + ".txt"))
+    }
+
+    @Test func acknowledgementCommitsOnlyFilesCapturedBeforeTheWrite() async {
+        let owner = context()
+        var files = [attachment("original")]
+        let captured = committedAttachmentIds(files, sessionId: "session")
+        var reply: CheckedContinuation<SynapseAppModel.CommandSendOutcome, Never>?
+        let task = Task {
+            await TerminalAttachmentSubmission.perform(context: owner, attachmentIds: captured,
+                currentContext: { owner }, send: {
+                    await withCheckedContinuation { reply = $0 }
+                }, commit: { ids in
+                    let committed = committedAttachmentIds(files, sessionId: "session", attachmentIds: ids)
+                    files.removeAll { committed.contains($0.id) }
+                }, fail: { _ in Issue.record("Accepted write failed") })
+        }
+        while reply == nil { await Task.yield() }
+        #expect(files.map(\.id) == ["original"])
+        files.append(attachment("later"))
+        reply?.resume(returning: .sent)
+        await task.value
+        #expect(files.map(\.id) == ["later"])
+        #expect(files.first?.availableActions.contains(.undoInsert) == true)
+    }
+
+    @Test(arguments: [false, true])
+    func refusedOrUncertainWriteKeepsUndoAndReportsItsFailure(uncertain: Bool) async {
+        let owner = context()
+        let files = [attachment("keep")]
+        var commits = 0
+        var failures: [String] = []
+        await TerminalAttachmentSubmission.perform(context: owner,
+            attachmentIds: committedAttachmentIds(files, sessionId: "session"), currentContext: { owner },
+            send: { uncertain ? .uncertain("未确认") : .notSent("租约未取得") },
+            commit: { _ in commits += 1 }, fail: { failures.append($0) })
+        #expect(commits == 0)
+        #expect(files.first?.availableActions.contains(.undoInsert) == true)
+        #expect(failures == [uncertain ? "未确认" : "租约未取得"])
+    }
+
+    @Test(arguments: [0, 1, 2, 3])
+    func oldWriteCannotCommitOrPublishIntoAnotherContext(change: Int) async {
+        let owner = context()
+        var current: TerminalActionContext? = owner
+        var reply: CheckedContinuation<SynapseAppModel.CommandSendOutcome, Never>?
+        var commits = 0
+        var failures = 0
+        let task = Task {
+            await TerminalAttachmentSubmission.perform(context: owner, attachmentIds: ["old"],
+                currentContext: { current }, send: {
+                    await withCheckedContinuation { reply = $0 }
+                }, commit: { _ in commits += 1 }, fail: { _ in failures += 1 })
+        }
+        while reply == nil { await Task.yield() }
+        switch change {
+        case 0: current = nil
+        case 1: current = context(account: 2)
+        case 2: current = context(desktop: "other", viewing: 2)
+        default: current = context(viewing: 3)
+        }
+        reply?.resume(returning: change == 0 ? .notSent("旧拒绝") : .sent)
+        await task.value
+        #expect(commits == 0)
+        #expect(failures == 0)
+    }
+
+    @Test func changedContextBeforeStartingDoesNotSend() async {
+        let owner = context()
+        var sends = 0
+        await TerminalAttachmentSubmission.perform(context: owner, attachmentIds: ["old"],
+            currentContext: { nil }, send: { sends += 1; return .sent },
+            commit: { _ in Issue.record("Old write committed") }, fail: { _ in Issue.record("Old failure published") })
+        #expect(sends == 0)
+    }
+}
+
+@MainActor
+struct TerminalAttachmentUndoTests {
+    private let owner = TerminalActionContext(desktopId: "desktop", accountGeneration: 1, viewingGeneration: 1)
+
+    private func attachment(_ id: String = "original") -> TerminalAttachment {
+        TerminalAttachment(id: id, name: id + ".txt", sessionId: "session",
+            desktopClientInstanceId: "desktop", intentId: id, driveItemId: nil,
+            state: .delivered(path: String(repeating: "a", count: 130)))
+    }
+
+    @Test func chunksWaitForAcceptanceAndRemoveOnlyTheOriginalFile() async {
+        var files = [attachment()]
+        files[0].pathUndo = .pending
+        var reply: CheckedContinuation<SynapseAppModel.CommandSendOutcome, Never>?
+        var chunks: [Int] = []
+        let task = Task {
+            await TerminalAttachmentUndo.perform(characterCount: 130, context: owner,
+                currentContext: { owner }, isPending: { files.contains { $0.id == "original" && $0.pathUndo == .pending } },
+                send: { count in
+                    chunks.append(count)
+                    if chunks.count == 1 { return await withCheckedContinuation { reply = $0 } }
+                    return .sent
+                }, finish: { result in
+                    #expect(result == .sent)
+                    files.removeAll { $0.id == "original" }
+                })
+        }
+        while reply == nil { await Task.yield() }
+        #expect(chunks == [64])
+        #expect(files.count == 1)
+        #expect(files[0].availableActions.isEmpty)
+        #expect(!files[0].canBeDismissed)
+        files.append(attachment("later"))
+        reply?.resume(returning: .sent)
+        await task.value
+        #expect(chunks == [64, 64, 2])
+        #expect(files.map(\.id) == ["later"])
+        #expect(files[0].availableActions.contains(.undoInsert))
+    }
+
+    @Test(arguments: ["电脑离线，命令没有发送。", "电脑正在使用这个会话，命令没有发送。"])
+    func aKnownRefusalBeforeAnyBackspaceKeepsTheUndo(message: String) async {
+        var file = attachment()
+        file.pathUndo = .pending
+        var attempts = 0
+        var reported: String?
+        await TerminalAttachmentUndo.perform(characterCount: 130, context: owner,
+            currentContext: { owner }, isPending: { file.pathUndo == .pending },
+            send: { _ in attempts += 1; return .notSent(message) }, finish: { result in
+                guard case .notSent(let reason) = result else { Issue.record("A refused undo was completed"); return }
+                file.pathUndo = nil
+                reported = reason
+            })
+        #expect(attempts == 1)
+        #expect(reported == message)
+        #expect(file.state.isDelivered)
+        #expect(file.availableActions == [.undoInsert, .dismiss])
+    }
+
+    @Test(arguments: [false, true])
+    func partialAcceptanceOrUncertaintyCannotRepeatTheFullUndo(uncertain: Bool) async {
+        var file = attachment()
+        file.pathUndo = .pending
+        var chunks: [Int] = []
+        await TerminalAttachmentUndo.perform(characterCount: 130, context: owner,
+            currentContext: { owner }, isPending: { file.pathUndo == .pending },
+            send: { count in
+                chunks.append(count)
+                if uncertain { return .uncertain("回执丢失") }
+                return chunks.count == 1 ? .sent : .notSent("租约拒绝")
+            }, finish: { result in
+                guard case .blocked(let reason) = result else { Issue.record("Unsafe full-path retry was allowed"); return }
+                file.pathUndo = .blocked(reason)
+            })
+        #expect(chunks == (uncertain ? [64] : [64, 64]))
+        #expect(file.state.isDelivered)
+        #expect(file.insertedPath?.count == 130)
+        #expect(file.availableActions == [.dismiss])
+        #expect(file.stateDescription == (uncertain ? TerminalAttachmentUndo.interruptedMessage : TerminalAttachmentUndo.partialMessage))
+    }
+
+    @Test(arguments: [0, 1, 2])
+    func changedOwnershipOrRemovedAttachmentStopsFurtherBackspaces(change: Int) async {
+        var context: TerminalActionContext? = owner
+        var pending = true
+        var reply: CheckedContinuation<SynapseAppModel.CommandSendOutcome, Never>?
+        var sends = 0
+        var finishes = 0
+        let task = Task {
+            await TerminalAttachmentUndo.perform(characterCount: 130, context: owner,
+                currentContext: { context }, isPending: { pending }, send: { _ in
+                    sends += 1
+                    return await withCheckedContinuation { reply = $0 }
+                }, finish: { _ in finishes += 1 })
+        }
+        while reply == nil { await Task.yield() }
+        switch change {
+        case 0: context = TerminalActionContext(desktopId: "desktop", accountGeneration: 2, viewingGeneration: 1)
+        case 1: context = TerminalActionContext(desktopId: "other", accountGeneration: 1, viewingGeneration: 2)
+        default: pending = false
+        }
+        reply?.resume(returning: .sent)
+        await task.value
+        #expect(sends == 1)
+        #expect(finishes == 0)
+    }
+}
+
+struct TerminalAttachmentDeliveryTests {
+    @Test(arguments: [
+        "文件已落到电脑，但这个终端已经不在了，路径没有插入。",
+        "文件已落到电脑，但桌面端正在使用这个终端，路径没有插入。",
+        "文件已落到电脑，但路径没有插入。",
+    ])
+    func acceptedFileWithoutInsertionDoesNotOfferBackspaces(caveat: String) throws {
+        var file = attachment()
+        file.acceptDelivery(try result(message: caveat))
+        #expect(file.state == .delivered(path: "/tmp/landed.txt"))
+        #expect(file.name == "landed.txt")
+        #expect(file.state.isDelivered)
+        #expect(file.insertedPath == nil)
+        #expect(file.availableActions == [.dismiss])
+        #expect(file.stateDescription == "已送达")
+    }
+
+    @Test(arguments: [Optional<String>.none, "其它说明；并非路径没有插入的结果。"])
+    func insertedAndLegacyResultsKeepTheirActualUndo(message: String?) throws {
+        var file = attachment()
+        file.acceptDelivery(try result(message: message))
+        #expect(file.insertedPath == "/tmp/landed.txt")
+        #expect(file.availableActions == [.undoInsert, .dismiss])
+        #expect(file.stateDescription == "已插入")
+    }
+
+    private func attachment() -> TerminalAttachment {
+        TerminalAttachment(id: "original", name: "picked.txt", sessionId: "session",
+            desktopClientInstanceId: "desktop", intentId: "intent", driveItemId: "cloud", state: .receiving(nil))
+    }
+
+    private func result(message: String?) throws -> MobileIntentResult {
+        var payload: [String: Any] = ["intentId": "intent", "outcome": "accepted", "sessionId": "session", "landedPath": "/tmp/landed.txt"]
+        if let message { payload["message"] = message }
+        return try JSONDecoder().decode(MobileIntentResult.self, from: JSONSerialization.data(withJSONObject: payload))
+    }
+}
+
 /// Turning a name the user picked into one the computer can write and the terminal
 /// can be given.
 ///
@@ -251,7 +482,7 @@ struct TerminalAttachmentStateTests {
         #expect(attachment(.uploading(nil)).stateDescription == "上传中")
         #expect(attachment(.waitingForComputer).stateDescription == "等待电脑接收")
         #expect(attachment(.receiving(nil)).stateDescription == "电脑正在接收")
-        #expect(attachment(.delivered(path: nil)).stateDescription == "已插入")
+        #expect(attachment(.delivered(path: nil)).stateDescription == "已送达")
     }
 
     @Test func onlyAQueuedTransferIsUploaded() {

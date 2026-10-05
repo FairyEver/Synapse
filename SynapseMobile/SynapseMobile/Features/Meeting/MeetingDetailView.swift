@@ -12,29 +12,45 @@ struct MeetingDetailView: View {
     let onDeleted: () -> Void
 
     @State private var isRenaming = false
-    @State private var draftTitle = ""
     @State private var showingDeleteConfirm = false
     /// 手上这帧进度是什么时候拿到的。秒表在两次刷新之间从它往下走。
     @State private var progressReceivedAt = Date()
 
     var body: some View {
-        Group {
-            if let detail = model.meetings.detail(for: meetingId) {
+        let detail = model.meetings.detail(for: meetingId)
+        let error = model.meetings.detailError(for: meetingId)
+        return Group {
+            if let detail {
                 content(detail)
+            } else if let error {
+                ContentUnavailableView {
+                    Label("读取录音失败", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("重试") { Task { await refreshDetail() } }
+                }
             } else {
                 // 同一个页面上的音频区载入时写的是「正在下载」，这里却是一个不说在等
                 // 什么的圈——同一次等待，两处两种说法。
                 ProgressView("正在读取录音…")
             }
         }
-        .navigationTitle(model.meetings.detail(for: meetingId)?.title ?? "录音")
+        .navigationTitle("录音")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarMenu }
-        .task {
+        .task(id: meetingId) {
             await refreshDetail()
+        }
+        .task(id: [meetingId, model.meetings.detail(for: meetingId)?.status ?? ""]) {
             await pollWhileTranscribing()
         }
         .onDisappear { model.playback.stop() }
+        .sheet(isPresented: $isRenaming) {
+            RenameRecordingSheet(title: model.meetings.detail(for: meetingId)?.title ?? "") { title in
+                await model.renameMeeting(meetingId, to: title)
+            }
+        }
         .alert("删除这条录音？", isPresented: $showingDeleteConfirm) {
             Button("删除", role: .destructive) {
                 Haptics.warning()
@@ -78,7 +94,6 @@ struct MeetingDetailView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Button {
-                    draftTitle = model.meetings.detail(for: meetingId)?.title ?? ""
                     isRenaming = true
                 } label: {
                     Label("重命名", systemImage: "pencil")
@@ -111,7 +126,7 @@ struct MeetingDetailView: View {
             .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
 
-            switch model.meetings.viewMode {
+            switch model.meetings.effectiveViewMode(status: detail.status) {
             case .audio:
                 MeetingAudioPane(detail: detail)
             case .text:
@@ -125,10 +140,7 @@ struct MeetingDetailView: View {
     private func viewModeBinding(_ detail: MeetingDetail) -> Binding<MeetingStore.ViewMode> {
         Binding(
             get: {
-                if detail.status == "failed", !model.meetings.hasChosenView {
-                    return .text
-                }
-                return model.meetings.viewMode
+                model.meetings.effectiveViewMode(status: detail.status)
             },
             set: { model.meetings.select(viewMode: $0) }
         )
@@ -136,24 +148,11 @@ struct MeetingDetailView: View {
 
     private func header(_ detail: MeetingDetail) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            if isRenaming {
-                TextField("名称", text: $draftTitle)
-                    .font(.title3)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.done)
-                    .onSubmit { commitRename() }
-                    .focused($renamingFocus)
-                    .accessibilityIdentifier("recording-title-field")
-            } else {
-                // 只是一行标题，不再是一个按钮。它原来点一下就进重命名，可它身上没有
-                // 任何提示说明能点——没有铅笔、没有下划线、没有箭头——而工具栏的 ⋯
-                // 菜单里本来就有同一个入口。同一件事两个入口，其中一个还看不出来，
-                // 那一个就该去掉；剩下的那个才是用户找得到的那个。
-                Text(detail.title)
-                    .font(.title3)
-                    .foregroundStyle(Theme.ink)
-                    .multilineTextAlignment(.leading)
-            }
+            // 重命名从工具栏打开系统表单，标题本身保持只读。
+            Text(detail.title)
+                .font(.title3)
+                .foregroundStyle(Theme.ink)
+                .multilineTextAlignment(.leading)
             Text(MeetingText.secondaryLine(detail))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -161,18 +160,6 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
-        .onChange(of: isRenaming) { _, renaming in
-            if renaming { renamingFocus = true }
-        }
-    }
-
-    @FocusState private var renamingFocus: Bool
-
-    private func commitRename() {
-        let newTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        isRenaming = false
-        guard !newTitle.isEmpty, newTitle != model.meetings.detail(for: meetingId)?.title else { return }
-        Task { await model.renameMeeting(meetingId, to: newTitle) }
     }
 }
 
@@ -205,7 +192,7 @@ private struct MeetingAudioPane: View {
         .padding(.bottom, 24)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
-        .task { await model.loadMeetingAudio(detail) }
+        .task(id: detail.id) { await model.loadMeetingAudio(detail) }
         // 计时挂在一个会变的 key 上：换一条录音、或者按下「重试」，都从这个数重新起算。
         // `.task` 在这一屏消失时取消它，不需要另外收尾。
         .task(id: model.playback.loadAttempt) { await armRetryAfterTenSeconds() }
@@ -277,6 +264,17 @@ private struct MeetingAudioPane: View {
                         model.playback.seek(toFraction: Double(value.location.x / waveformWidth))
                     }
             )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("播放进度")
+            .accessibilityValue("\(MeetingText.clock(Int(model.playback.currentSeconds * 1000)))，共 \(MeetingText.clock(Int(model.playback.durationSeconds * 1000)))")
+            .accessibilityAdjustableAction { direction in
+                guard !model.playback.isLoading else { return }
+                switch direction {
+                case .increment: model.playback.skip(by: MeetingPlayback.skipSeconds)
+                case .decrement: model.playback.skip(by: -MeetingPlayback.skipSeconds)
+                @unknown default: break
+                }
+            }
             .accessibilityIdentifier("playback-waveform")
     }
 
@@ -302,7 +300,7 @@ private struct MeetingAudioPane: View {
 
                 Button {
                     Haptics.commit()
-                    model.playback.togglePlay()
+                    model.playback.togglePlay(whileRecording: model.recording.isRecording)
                 } label: {
                     Image(systemName: model.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 48))
@@ -383,6 +381,7 @@ private struct MeetingTextPane: View {
     let detail: MeetingDetail
     /// 这帧进度是什么时候拿到的。秒表在两次刷新之间从它往下走（见 `transcriptionProgress`）。
     let progressReceivedAt: Date
+    @State private var retryRequest: UUID?
 
     private var paragraphs: [String] { MeetingText.paragraphs(detail.segments) }
 
@@ -415,6 +414,7 @@ private struct MeetingTextPane: View {
             }
             copyCapsule
         }
+        .onChange(of: detail.id) { _, _ in retryRequest = nil }
     }
 
     @ViewBuilder
@@ -447,13 +447,29 @@ private struct MeetingTextPane: View {
                 Button("重试") {
                     Haptics.commit()
                     // 重试**不需要重新上传音频**：音频已经在服务端了。
-                    Task { await model.retryMeetingTranscription(detail.id) }
+                    retryTranscription()
                 }
+                .disabled(retryRequest != nil)
                 .font(.subheadline)
                 .accessibilityIdentifier("transcription-retry")
             }
         default:
             EmptyView()
+        }
+    }
+
+    private func retryTranscription() {
+        guard retryRequest == nil else { return }
+        let request = UUID()
+        let account = model.accountIdentityGeneration
+        retryRequest = request
+        Task {
+            let accepted = await model.retryMeetingTranscription(detail.id)
+            guard retryRequest == request, model.isCurrentAccount(account) else { return }
+            retryRequest = nil
+            if !accepted {
+                model.notice(model.meetings.errorMessage ?? "重试失败，请稍后再试。", tone: .failure)
+            }
         }
     }
 
@@ -492,7 +508,7 @@ private struct MeetingTextPane: View {
             Label("还没有文字", systemImage: "captions.bubble")
         } description: {
             // 转写还没跑完的时候不说「没有识别到语音」——那是一个结论，现在还不知道。
-            if detail.status != "transcribing" {
+            if detail.status == "done" {
                 Text("这段录音里没有识别到语音。")
             }
         }

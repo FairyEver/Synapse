@@ -5,8 +5,7 @@ import os
 
 /// 「通知」这个分类。系统通知权限、应用内的通知中心，以及 App 图标角标。
 ///
-/// 关掉系统通知不影响任何功能：应用内的通知中心、待处理提示和图标角标都照常工作。
-/// 这是这一页唯一需要说的一句 —— 否则关掉开关的人会以为自己从此收不到东西了。
+/// 系统通知权限不影响应用内消息；图标角标仍受系统权限约束。
 struct NotificationSettingsView: View {
     @Environment(SynapseAppModel.self) private var model
     let onOpenNotifications: () -> Void
@@ -31,7 +30,7 @@ struct NotificationSettingsView: View {
                     system = await Self.currentSystemState()
                 }
             } footer: {
-                Text("关掉系统通知不影响任何功能：应用内的通知中心、待处理提示和图标角标都照常工作。")
+                Text("关闭系统通知后，仍可在通知中心查看消息和待处理事项。")
             }
 
             Section {
@@ -53,6 +52,8 @@ struct NotificationSettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("通知中心")
+                .accessibilityValue(model.notifications.unreadCount > 0 ? "\(model.notifications.unreadCount) 条未读" : "没有未读通知")
                 .accessibilityIdentifier("settings-notification-center")
 
                 Toggle("图标角标", isOn: $badgeEnabled)

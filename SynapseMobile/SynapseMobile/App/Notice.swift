@@ -123,8 +123,12 @@ struct NoticeQueue: Equatable {
         return dropped
     }
 
-    mutating func remove(_ id: String) {
-        notices.removeAll { $0.id == id }
+    @discardableResult
+    mutating func remove(_ id: String, revision: Int? = nil) -> Bool {
+        guard let index = notices.firstIndex(where: { $0.id == id }),
+              revision == nil || notices[index].revision == revision else { return false }
+        notices.remove(at: index)
+        return true
     }
 
     mutating func removeAll() {

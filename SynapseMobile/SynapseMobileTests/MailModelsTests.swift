@@ -3,6 +3,18 @@ import Testing
 @testable import SynapseMobile
 
 struct MailModelsTests {
+    @Test func unchangedReplyRecipientsDoNotCountAsAnEditedDraft() {
+        let start = MailComposeStart(toIds: ["first", "second"], ccIds: ["observer"], subject: "回复：原信")
+        let restored = MailContent(formatVersion: 3, toIds: ["second", "first"], ccIds: ["observer"], toOrganizationIds: [], ccOrganizationIds: [], subject: "回复：原信", body: "", attachmentIds: [], forwardAttachmentIds: [], relation: nil)
+        #expect(restored.hasSameDraft(as: start.initialContent))
+    }
+
+    @Test func editedBodyAndRecipientsRequireDiscardConfirmation() {
+        let start = MailComposeStart()
+        let edited = MailContent(formatVersion: 3, toIds: ["reader"], ccIds: [], toOrganizationIds: [], ccOrganizationIds: [], subject: "事项", body: "未发送正文", attachmentIds: [], forwardAttachmentIds: [], relation: nil)
+        #expect(!edited.hasSameDraft(as: start.initialContent))
+    }
+
     @Test func preservesCrossPageSelectionAfterFailureAndKeepsClearScopeIndependentOfSearch() {
         var selection = MailBulkSelection()
         selection.begin()

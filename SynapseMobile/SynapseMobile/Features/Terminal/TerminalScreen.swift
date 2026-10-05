@@ -20,6 +20,7 @@ struct TerminalScreen: View {
     @State private var draft = ""
     @State private var draftSelection: TextSelection?
     @State private var draftInsertion = TerminalDraftInsertion()
+    @State private var draftSubmission = TerminalDraftSubmission()
     @State private var filesFlow: WorkspaceFilesFlow?
     @State private var pendingFilesMode: WorkspaceFilesScopeMode?
     @State private var filesReturnGit: TerminalGitFlow?
@@ -66,6 +67,7 @@ struct TerminalScreen: View {
     @State private var showingPhotoPicker = false
     @State private var showingDocumentPicker = false
     @State private var showingCamera = false
+    @State private var pickerContext: TerminalActionContext?
     /// Refreshed at the moments an image can have arrived rather than read where it
     /// is used: the pasteboard changes while the app is not looking, there is no
     /// notification for that, and the menu that asks is built before it opens.
@@ -82,6 +84,7 @@ struct TerminalScreen: View {
     /// Files picked but not yet sent, while the user is being asked whether a
     /// terminal that is waiting for input should really receive them.
     @State private var pendingFiles: [PickedFile] = []
+    @State private var pendingFilesContext: TerminalActionContext?
     @State private var showingBusyConfirm = false
     @State private var voice = VoiceInputController()
     /// 输入栏现在是哪一种模式。语音不是栏上的一个按钮，而是这条栏的一个状态
@@ -612,6 +615,7 @@ struct TerminalScreen: View {
         .toolbar(usesSystemNavigationBar ? .visible : .hidden, for: .tabBar)
         .toolbar {
             if usesSystemNavigationBar {
+                ToolbarItem(placement: .principal) { titleBlock }
                 ToolbarItem(placement: .topBarTrailing) { moreMenu }
             }
         }
@@ -675,6 +679,7 @@ struct TerminalScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 refreshPasteboardImage()
+                recentPhotoWatcher?.start()
                 Task { await refreshRecentPhoto() }
                 // 后台待过的那几秒不算"没人操作"：回来的时候人正看着这一屏。
                 armChromeIdle()
@@ -683,6 +688,7 @@ struct TerminalScreen: View {
             }
         }
         .onDisappear {
+            discardPendingFiles()
             // Leaving the screen ends the recording with it: a microphone left open
             // behind a pushed-back list is the kind of thing that only gets noticed
             // from the status bar.
@@ -716,6 +722,9 @@ struct TerminalScreen: View {
             switch phase {
             case .failed(.network), .failed(.notConfigured), .interrupted:
                 Task { await settleVoice() }
+            case .idle:
+                // 授权被撤回时启动会直接回 idle；辅助操作已经固定的栏也要归还。
+                if !holdLatched { voiceGrid.unlock() }
             default:
                 break
             }
@@ -753,21 +762,22 @@ struct TerminalScreen: View {
             Text("该会话将被停止，未保存的进程状态会丢失。")
         }
         .alert("这个会话正在等待操作", isPresented: $showingBusyConfirm) {
-            Button("取消", role: .cancel) { pendingFiles = [] }
+            Button("取消", role: .cancel) { discardPendingFiles() }
             Button("仍然插入") {
                 // Proceeding past a caution, so it is felt rather than merely done.
                 Haptics.warning()
-                hand(pendingFiles, confirmed: true)
+                hand(pendingFiles, context: pendingFilesContext, confirmed: true)
             }
         } message: {
             Text("它正在等你回答一个问题或输入密码，插入路径可能被当成回答。")
         }
         .sheet(isPresented: $showingPhotoPicker) {
+            let context = pickerContext
             PhotoLibraryPicker(
                 selectionLimit: AppConfiguration.relayMaxFileCount,
                 onPicked: { results in
                     showingPhotoPicker = false
-                    Task { await intake(results: results) }
+                    Task { await intake(results: results, context: context) }
                 },
                 onCancelled: { showingPhotoPicker = false }
             )
@@ -825,7 +835,8 @@ struct TerminalScreen: View {
             TerminalExpandedInputSheet(draft: $draft, selection: draftSelectionBinding, sessionId: sessionId)
         }
         .inspector(isPresented: $resourcesPresented) {
-            TerminalResourcesSheet(store: store) { url in
+            TerminalResourcesSheet(store: store, usesNavigationStack: !usesSystemNavigationBar,
+                onClose: { resourcesPresented = false }) { url in
                 pendingResourceURL = url
                 resourcesPresented = false
             }
@@ -845,20 +856,22 @@ struct TerminalScreen: View {
             onDismiss: returnFromFiles, onDraftChanged: trackDraftChange,
             onReference: insertWorkspaceReference))
         .sheet(isPresented: $showingDocumentPicker) {
+            let context = pickerContext
             DocumentPicker(
                 onPicked: { urls in
                     showingDocumentPicker = false
-                    Task { await intake(urls: urls) }
+                    Task { await intake(urls: urls, context: context) }
                 },
                 onCancelled: { showingDocumentPicker = false }
             )
             .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showingCamera) {
+            let context = pickerContext
             CameraPicker(
                 onPicked: { capture in
                     showingCamera = false
-                    Task { await intake(cameraCapture: capture) }
+                    Task { await intake(cameraCapture: capture, context: context) }
                 },
                 onCancelled: { showingCamera = false }
             )
@@ -931,7 +944,7 @@ struct TerminalScreen: View {
             .noticeOverlay(model, forSession: sessionId)
             TerminalMessageList(
                 messages: terminalMessages,
-                onDismiss: { model.dismissTerminalMessage($0) }
+                onDismiss: { model.dismissTerminalMessage($0, sessionId: sessionId) }
             )
             TerminalRelayStrip(
                 attachments: relayAttachments,
@@ -1486,7 +1499,6 @@ struct TerminalScreen: View {
                 // The panel stays up — pressing several keys, or holding an arrow, is
                 // the ordinary way to use it, and a panel that closed after each one
                 // would have to be reopened for each one.
-                if actions.contains(.key(.enter)) { model.commitDeliveredAttachments(for: sessionId) }
             }
         }
     }
@@ -1519,6 +1531,7 @@ struct TerminalScreen: View {
 
             sendKey(voicePresentation)
         }
+        .disabled(draftSubmission.sending)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Color(uiColor: .systemBackground))
@@ -1594,6 +1607,20 @@ struct TerminalScreen: View {
             // 固定之后手指早走了，这一格上不再有手势 —— 它变成一枚「完成」，点一下就收尾。
             .onTapGesture { if presentation.locked { finishLockedVoice() } }
             .accessibilityIdentifier("voice-hold")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(presentation.accessibilityLabel)
+            .accessibilityAction {
+                switch voicePresentation.accessibleActivation {
+                case .begin:
+                    beginHold()
+                    holdLatched = false
+                    voiceGrid.lock(holding: DesktopGrid(columns: store.columns, rows: store.visibleRows))
+                case .finish:
+                    finishLockedVoice()
+                case .none:
+                    break
+                }
+            }
     }
 
     /// 按住说话那一格上的手势。
@@ -1705,6 +1732,7 @@ struct TerminalScreen: View {
             // 打字是这里最要紧的一种"人还在"。输入框有焦点时栏本来就收不了，这一句管
             // 的是另一头：手停了、键盘收起来之后，那三秒要从**最后一个字**算起。
             .onChange(of: draft) {
+                trackDraftChange(draft)
                 emptyVoiceMessage = nil
                 noteChromeActivity()
             }
@@ -1808,6 +1836,7 @@ struct TerminalScreen: View {
             .accessibilityIdentifier("terminal-attach-workspace-files")
             Button {
                 noteChromeActivity()
+                pickerContext = model.terminalActionContext
                 showingPhotoPicker = true
             } label: {
                 Label("照片和视频", systemImage: "photo.on.rectangle")
@@ -1817,6 +1846,7 @@ struct TerminalScreen: View {
             if CameraPicker.isAvailable {
                 Button {
                     noteChromeActivity()
+                    pickerContext = model.terminalActionContext
                     showingCamera = true
                 } label: {
                     Label("拍照", systemImage: "camera")
@@ -1824,6 +1854,7 @@ struct TerminalScreen: View {
             }
             Button {
                 noteChromeActivity()
+                pickerContext = model.terminalActionContext
                 showingDocumentPicker = true
             } label: {
                 Label("文件", systemImage: "folder")
@@ -1857,13 +1888,19 @@ struct TerminalScreen: View {
     /// (设计文档 §4.3). Nothing is added or moved, so switching back leaves send exactly
     /// where it was.
     private func sendKey(_ presentation: HoldToTalkPresentation) -> some View {
-        let enabled = presentation.sendEnabled
+        let enabled = presentation.sendEnabled && !draftSubmission.sending
         return Button(action: sendDraft) {
-            Image(systemName: "arrow.up.circle.fill")
-                .font(.system(size: 30))
-                .foregroundStyle(enabled ? Theme.ink : Color.secondary)
-                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                .contentShape(Rectangle())
+            Group {
+                if draftSubmission.sending {
+                    ProgressView()
+                } else {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(enabled ? Theme.ink : Color.secondary)
+                }
+            }
+            .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+            .contentShape(Rectangle())
         }
         .disabled(!enabled)
         .opacity(presentation.barIsVoice ? 0.4 : 1)
@@ -1874,13 +1911,32 @@ struct TerminalScreen: View {
     private func sendDraft() {
         // 写在门槛之前：这一下是**发出去**还是"没东西可发"，都是人按的那一下。
         noteChromeActivity()
-        let text = draft
-        guard !text.isEmpty else { return }
-        // After the guard: a send with nothing to send does nothing, and a tap
-        // felt there would say something happened.
-        Haptics.commit()
-        draft = ""
-        send(text)
+        guard !draftSubmission.sending else { return }
+        trackDraftChange(draft)
+        let ticket = draftInsertion.ticket()
+        let context = model.terminalActionContext
+        let attachmentIds = committedAttachmentIds(model.relayAttachments, sessionId: sessionId)
+        Task {
+            let completion = await draftSubmission.submit(
+                ticket: ticket, context: context, attachmentIds: attachmentIds,
+                currentContext: { model.terminalActionContext },
+                currentTicket: {
+                    trackDraftChange(draft)
+                    return draftInsertion.ticket()
+                },
+                send: { await model.sendCommandConfirming(sessionId, text: $0) }
+            )
+            switch completion {
+            case .sent(let clearDraft, let attachmentIds):
+                Haptics.commit()
+                model.commitDeliveredAttachments(for: sessionId, attachmentIds: attachmentIds)
+                if clearDraft { draft = "" }
+            case .failed(let message):
+                model.raiseTerminalMessage(message, sessionId: sessionId)
+            case nil:
+                break
+            }
+        }
     }
 
     /// 发一条给终端。发送键与语音的「松手即发送」共用它 —— 同一条消息不该因为走了
@@ -1889,7 +1945,6 @@ struct TerminalScreen: View {
         model.sendCommand(sessionId, text: text)
         // The path an inserted file typed goes out with this line, so the chip that
         // carried it has nothing left to undo.
-        model.commitDeliveredAttachments(for: sessionId)
     }
 
     // MARK: - 最新那张图
@@ -1920,6 +1975,7 @@ struct TerminalScreen: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(draftSubmission.sending)
         .accessibilityIdentifier("recent-photo")
         .accessibilityLabel("发送最近的照片")
     }
@@ -1959,6 +2015,7 @@ struct TerminalScreen: View {
 
     /// 点一下气泡：把那一张发出去，和从相册里选它是同一条路。
     private func sendRecentPhoto(_ photo: RecentPhoto) {
+        let context = model.terminalActionContext
         // 点下去就算这一张用掉了，无论它最后有没有发出去：读文件失败、或者终端在等
         // 回答时用户否掉了那个确认框，都会让同一张图再飘回来 —— 而让人对着一张自己
         // 刚点过的图再点一次，比少一次提议更糟（第二次点是会真的发出去的）。
@@ -1969,10 +2026,11 @@ struct TerminalScreen: View {
 
         Task {
             guard let file = await TerminalFileIntake.prepare(libraryAssetId: photo.id) else {
+                guard context != nil, model.terminalActionContext == context else { return }
                 model.raiseTerminalMessage("没有读取到可发送的图片。", sessionId: sessionId)
                 return
             }
-            hand([file])
+            hand([file], context: context)
         }
     }
 
@@ -1986,16 +2044,19 @@ struct TerminalScreen: View {
     /// 一给，同一张图立刻从输入栏上方又浮出来。
     private func offerRecentPhotoAccess() async {
         guard TerminalRecentPhotoLibrary.isUndetermined else {
+            recentPhotoWatcher?.start()
             await refreshRecentPhoto()
             return
         }
         await TerminalRecentPhotoLibrary.requestAccess()
+        recentPhotoWatcher?.start()
         await refreshRecentPhoto()
     }
 
     // MARK: - Sending files to the computer
 
-    private func intake(results: [PHPickerResult]) async {
+    private func intake(results: [PHPickerResult], context: TerminalActionContext?) async {
+        guard context != nil, model.terminalActionContext == context else { return }
         var files: [PickedFile] = []
         for result in results {
             // 相册自己对这一张的称呼（有的话）。从「文件」里挑的、或者别的 App 导
@@ -2010,23 +2071,25 @@ struct TerminalScreen: View {
         // 挑完这一张，就是「用过一次照片和视频」了。文件先走，授权后问：中转条先
         // 出现在屏幕上，接下来那个弹窗在问什么才有上下文。
         let picked = !files.isEmpty
-        hand(files)
+        hand(files, context: context)
         // 终端在等回答时 `hand` 会先弹一个确认框，再叠一个系统授权框，用户会以为
         // 自己点错了什么。那一次就算了 —— 下次用相册时还会走到这里。
-        if picked, !showingBusyConfirm { await offerRecentPhotoAccess() }
+        if picked, !showingBusyConfirm, model.terminalActionContext == context { await offerRecentPhotoAccess() }
     }
 
-    private func intake(urls: [URL]) async {
+    private func intake(urls: [URL], context: TerminalActionContext?) async {
+        guard context != nil, model.terminalActionContext == context else { return }
         var files: [PickedFile] = []
         for url in urls {
             if let file = await TerminalFileIntake.prepare(documentURL: url) {
                 files.append(file)
             }
         }
-        hand(files)
+        hand(files, context: context)
     }
 
-    private func intake(cameraCapture: CameraCapture) async {
+    private func intake(cameraCapture: CameraCapture, context: TerminalActionContext?) async {
+        guard context != nil, model.terminalActionContext == context else { return }
         let file: PickedFile?
         switch cameraCapture {
         case .photo(let image):
@@ -2035,10 +2098,11 @@ struct TerminalScreen: View {
             file = await TerminalFileIntake.prepare(cameraVideo: url)
         }
         guard let file else {
+            guard context != nil, model.terminalActionContext == context else { return }
             model.raiseTerminalMessage("没有读取到可发送的文件。", sessionId: sessionId)
             return
         }
-        hand([file])
+        hand([file], context: context)
     }
 
     /// Whether the pasteboard holds an image, answered at the few moments the answer
@@ -2050,6 +2114,7 @@ struct TerminalScreen: View {
     }
 
     private func sendPastedImage() {
+        let context = model.terminalActionContext
         // The offer was made from a reading taken earlier, and the pasteboard is
         // the one thing on screen that another app can change underneath it.
         guard let image = UIPasteboard.general.image else {
@@ -2059,10 +2124,11 @@ struct TerminalScreen: View {
         }
         Task {
             guard let file = await TerminalFileIntake.prepare(pastedImage: image) else {
+                guard context != nil, model.terminalActionContext == context else { return }
                 model.raiseTerminalMessage("没有读取到可发送的图片。", sessionId: sessionId)
                 return
             }
-            hand([file])
+            hand([file], context: context)
         }
     }
 
@@ -2074,18 +2140,31 @@ struct TerminalScreen: View {
     /// the state of every plain shell, is not evidence of anything and asking on it
     /// would put a dialog in front of the common case until the user learned to tap
     /// through it.
-    private func hand(_ files: [PickedFile], confirmed: Bool = false) {
+    private func hand(_ files: [PickedFile], context: TerminalActionContext?, confirmed: Bool = false) {
+        guard let context, model.terminalActionContext == context, !Task.isCancelled else {
+            files.forEach(TerminalFileIntake.discard)
+            return
+        }
         guard !files.isEmpty else {
             model.raiseTerminalMessage("没有读取到可发送的文件。", sessionId: sessionId)
             return
         }
         if !confirmed, session?.attention.isWaiting == true {
+            discardPendingFiles()
             pendingFiles = files
+            pendingFilesContext = context
             showingBusyConfirm = true
             return
         }
         pendingFiles = []
+        pendingFilesContext = nil
         model.sendFiles(files, to: sessionId)
+    }
+
+    private func discardPendingFiles() {
+        pendingFiles.forEach(TerminalFileIntake.discard)
+        pendingFiles = []
+        pendingFilesContext = nil
     }
 
     private var statusLabel: String {

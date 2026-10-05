@@ -47,6 +47,7 @@ nonisolated final class DiagnosticBuffer: @unchecked Sendable {
     private var recordsInWindow = 0
     private var bytesInWindow = 0
     private var suppressedInWindow = 0
+    private var suppressedBytesSinceDrain = 0
 
     private var overwrittenTotal = 0
     private var droppedTotal = 0
@@ -88,6 +89,7 @@ nonisolated final class DiagnosticBuffer: @unchecked Sendable {
         // 错误绕过令牌桶：错误风暴本身就是需要被看见的那件事，把它丢掉等于把证据丢掉。
         if level < .error, isRateLimited(by: record) {
             suppressedInWindow += 1
+            suppressedBytesSinceDrain += record.estimatedBytes
             droppedTotal += 1
             droppedBytesTotal += record.estimatedBytes
             return false
@@ -126,12 +128,13 @@ nonisolated final class DiagnosticBuffer: @unchecked Sendable {
                     event: .logDropped,
                     fields: [
                         DiagnosticEntry(.droppedCount, .int(suppressedInWindow)),
-                        DiagnosticEntry(.droppedBytes, .int(bytesInWindow)),
+                        DiagnosticEntry(.droppedBytes, .int(suppressedBytesSinceDrain)),
                     ]
                 )
             )
             nextSeq += 1
             suppressedInWindow = 0
+            suppressedBytesSinceDrain = 0
         }
         return out
     }

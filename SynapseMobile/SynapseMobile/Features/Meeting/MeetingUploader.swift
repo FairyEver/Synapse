@@ -30,7 +30,11 @@ final class MeetingUploader {
     private var pump: Task<Void, Never>?
     private var isCancelled = false
     /// 发不出去的那一片就停在这里，不再往下吞字节。
-    private(set) var lastError: String?
+    private(set) var lastFailure: Error?
+    var lastError: String? {
+        guard let lastFailure else { return nil }
+        return (lastFailure as? APIError)?.message ?? "录音未能保存，稍后会再试。"
+    }
 
     /// 已经服务端收下的分片数。异常退出后从这里接着传。
     private(set) var uploadedParts = 0
@@ -145,11 +149,11 @@ final class MeetingUploader {
                 try await send(partNumber, part)
                 uploadedParts = partNumber
                 digests[partNumber] = SHA256.hash(data: part)
-                lastError = nil
+                lastFailure = nil
                 return true
             } catch {
                 if attempt == retries {
-                    lastError = (error as? APIError)?.message ?? "录音未能保存，稍后会再试。"
+                    lastFailure = error
                     return false
                 }
                 // 退一步再试。网络抖动是这条链路上最常见的中断，不是异常。
@@ -175,20 +179,22 @@ final class MeetingUploader {
     /// 后面对齐靠的是「分片是按字节流的整数倍切的」：文件从 0 开始顺序读，读出来的第
     /// N 段就正好是第 N 片发出去的那段字节。
     private func reconcile(with audioFile: URL) async {
-        guard uploadedParts > 0, let handle = try? FileHandle(forReadingFrom: audioFile) else { return }
-        defer { try? handle.close() }
-        for partNumber in 1...uploadedParts {
-            guard !isCancelled else { return }
-            guard let data = try? handle.read(upToCount: MeetingAudio.partBytes), !data.isEmpty else { break }
-            guard digests[partNumber] != SHA256.hash(data: data) else { continue }
-            do {
+        guard uploadedParts > 0 else { return }
+        do {
+            let handle = try FileHandle(forReadingFrom: audioFile)
+            defer { try? handle.close() }
+            for partNumber in 1...uploadedParts {
+                guard !isCancelled else { return }
+                guard let data = try handle.read(upToCount: MeetingAudio.partBytes), !data.isEmpty else {
+                    throw URLError(.cannotDecodeRawData)
+                }
+                guard digests[partNumber] != SHA256.hash(data: data) else { continue }
                 try await send(partNumber, data)
                 digests[partNumber] = SHA256.hash(data: data)
-                lastError = nil
-            } catch {
-                lastError = (error as? APIError)?.message ?? "录音未能保存，稍后会再试。"
-                return
+                lastFailure = nil
             }
+        } catch {
+            lastFailure = error
         }
     }
 }

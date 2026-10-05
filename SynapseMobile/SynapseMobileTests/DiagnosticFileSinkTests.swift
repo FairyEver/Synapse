@@ -63,6 +63,56 @@ struct DiagnosticFileSinkTests {
         #expect(written.contains("displayMode=desktopDriven"))
     }
 
+    @Test(arguments: ["start", "delete", "reenable"])
+    func crashCaptureHasAPreparedDescriptor(_ preparation: String) throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.flushForTesting()
+        if preparation == "delete" { sink.deleteAll() }
+        if preparation == "reenable" {
+            sink.setEnabled(false)
+            sink.setEnabled(true)
+            sink.flushForTesting()
+        }
+        sink.append(event: .action, level: .info, fields: [])
+        sink.writeCrashRecordsSynchronously()
+        sink.appendCrashLine("test crash.exception")
+        let crash = text(of: directory, lane: .crash)
+        #expect(crash.contains("ui.action"))
+        #expect(crash.contains("test crash.exception"))
+        #expect(!text(of: directory, lane: .app).contains("ui.action"))
+        sink.stop()
+    }
+
+    @Test func disablingDuringACrashBatchKeepsTheWholeBatchInItsOwnFile() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let buffer = DiagnosticBuffer()
+        let sink = try #require(DiagnosticFileSink(directory: directory, buffer: buffer))
+        sink.start()
+        _ = await sink.snapshotAsync()
+        let reason = RedactedMessage(redacting: String(repeating: "x", count: 250))
+        for index in 0..<1_000 {
+            sink.append(event: .networkError, level: .error, fields: [
+                .init(.request, .alias(DiagnosticAlias(kind: .request, number: index + 1))),
+                .init(.reason, .message(reason)),
+            ])
+        }
+
+        let crashWrite = Task.detached { sink.writeCrashRecordsSynchronously() }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while buffer.counters.pendingCount > 0, ContinuousClock.now < deadline { await Task.yield() }
+        #expect(buffer.counters.pendingCount == 0)
+        sink.setEnabled(false)
+        #expect(await sink.snapshotAsync().status == .paused)
+
+        await crashWrite.value
+        let crash = text(of: directory, lane: .crash)
+        #expect(crash.split(separator: "\n").filter { $0.contains(" net.error ") }.count == 1_000)
+    }
+
     /// **最要紧的一条**：带 canary 的内容一个字都不许落到文件里。
     ///
     /// 前面那个套件验的是脱敏函数本身；这一条验的是"它有没有被真的用上"——
@@ -130,7 +180,9 @@ struct DiagnosticFileSinkTests {
         #expect(!text(of: directory).isEmpty)
 
         sink.deleteAll()
-        #expect(files(in: directory).isEmpty)
+        #expect(!text(of: directory).contains("app.launch"))
+        #expect(files(in: directory, lane: .app).isEmpty)
+        #expect(sink.snapshot().fileCount == 0)
 
         sink.setEnabled(true)
         sink.append(event: .launch, level: .info, fields: [.init(.coldStart, .bool(false))])
@@ -139,39 +191,44 @@ struct DiagnosticFileSinkTests {
     }
 
     /// 关掉开关只停记录，**不删已有日志**。
-    @Test func turningItOffKeepsWhatIsAlreadyThere() throws {
+    @Test func turningItOffKeepsWhatIsAlreadyThere() async throws {
         let directory = makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let sink = try #require(DiagnosticFileSink(directory: directory))
         sink.start()
         sink.append(event: .launch, level: .info, fields: [])
-        sink.flushForTesting()
-        let before = text(of: directory)
-
         sink.setEnabled(false)
+        _ = sink.snapshot() // Wait for disabling without manually flushing the record.
+        let before = text(of: directory)
+        #expect(before.contains("app.launch"))
+
         sink.append(event: .action, level: .info, fields: [])
         sink.flushForTesting()
 
         #expect(text(of: directory) == before)
+        let url = try #require(await sink.export(header: "# 测试头部\n", manifest: manifest()))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let read = try ZipReader(try Data(contentsOf: url))
+        let logs = read.items.filter { $0.name.hasSuffix(".log") }
+            .map { String(decoding: $0.data, as: UTF8.self) }.joined()
+        #expect(logs.contains("app.launch"))
+        #expect(!logs.contains("ui.action"))
     }
 
     /// 上一次没收尾，才叫疑似崩溃；收过尾的不算。
     @Test func anUnclosedSessionIsReportedAsACrash() throws {
         let directory = makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let old = directory.appendingPathComponent("synapse-old-process.log")
+        try "2026-09-19 12:00:00.000 I app.sessionOpen\n".write(to: old, atomically: true, encoding: .utf8)
+        let unclosed = try #require(DiagnosticFileSink(directory: directory))
+        #expect(unclosed.previousSessionTail()?.event == "app.sessionOpen", "疑似崩溃必须返回事件名而非级别字母")
 
-        let first = try #require(DiagnosticFileSink(directory: directory))
-        first.start()
-        first.append(event: .sessionOpen, level: .info, fields: [])
-        first.flushForTesting()
-        #expect(first.previousSessionTail() != nil, "没写 sessionClose 却没被认成疑似崩溃")
-
-        let second = try #require(DiagnosticFileSink(directory: directory))
-        second.start()
-        second.append(event: .sessionClose, level: .info, fields: [])
-        second.flushForTesting()
-        #expect(second.previousSessionTail() == nil, "正常收尾的会话被误判成了崩溃")
+        try "2026-09-19 12:00:00.000 I app.sessionClose\n".write(to: directory.appendingPathComponent("app/\(old.lastPathComponent)"), atomically: true, encoding: .utf8)
+        let closed = try #require(DiagnosticFileSink(directory: directory))
+        #expect(closed.previousSessionTail() == nil, "正常收尾的会话被误判成了崩溃")
     }
 
     private func manifest(includesTerminalContent: Bool = false) -> DiagnosticExportManifest {
@@ -231,6 +288,108 @@ struct DiagnosticFileSinkTests {
         // 内容真的在包里，不是只有一个空壳。
         let appFile = try #require(read.items.first { $0.name.hasPrefix("\(root)/app/") })
         #expect(String(decoding: appFile.data, as: UTF8.self).contains("app.launch"))
+    }
+
+    @Test(arguments: ["none", "open", "closed"])
+    func previousSessionRemainsOwnedByThePreviousProcess(_ previous: String) throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        if previous != "none" {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let old = directory.appendingPathComponent("synapse-old-process.log")
+            let event = previous == "closed" ? "app.sessionClose" : "app.sessionOpen"
+            try "2026-09-19 12:00:00.000 I \(event)\n".write(to: old, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1)], ofItemAtPath: old.path)
+        }
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.append(event: .launch, level: .info, fields: [])
+        sink.append(event: .action, level: .info, fields: [])
+        sink.flushForTesting()
+        if previous == "open" {
+            let session = try #require(sink.previousSessionTail())
+            #expect(session.event == "app.sessionOpen")
+            #expect(session.timestamp == "2026-09-19 12:00:00.000")
+        } else {
+            #expect(sink.previousSessionTail() == nil)
+        }
+    }
+
+    @Test func exportReportsHistoricalContentEvenWhenTheCurrentSettingIsOff() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.append(event: .frameContent, level: .info, fields: [
+            .init(.screenText, .captured(CapturedText(redacting: ["historical screen"])))
+        ])
+        // Export must flush pending records and derive its own content flag.
+        let result = try #require(await sink.exportWithMetadata(
+            headerWithContent: "contains content", headerWithoutContent: "metadata only", manifest: manifest()
+        ))
+        defer { try? FileManager.default.removeItem(at: result.url) }
+        let read = try ZipReader(try Data(contentsOf: result.url))
+        #expect(result.includesTerminalContent)
+        #expect(read.items.contains { $0.name.hasSuffix("README.txt") && String(decoding: $0.data, as: UTF8.self) == "contains content" })
+        #expect(read.items.contains { $0.name.hasSuffix(".log") && String(decoding: $0.data, as: UTF8.self).contains("historical screen") })
+        let item = try #require(read.items.first { $0.name.hasSuffix("manifest.json") })
+        let json = try #require(try JSONSerialization.jsonObject(with: item.data) as? [String: Any])
+        #expect(json["includesTerminalContent"] as? Bool == true)
+    }
+
+    @Test func metadataOnlyExportDoesNotClaimContentBecauseTheSettingIsOn() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.append(event: .launch, level: .info, fields: [])
+        let result = try #require(await sink.exportWithMetadata(
+            headerWithContent: "contains content", headerWithoutContent: "metadata only", manifest: manifest(includesTerminalContent: true)
+        ))
+        defer { try? FileManager.default.removeItem(at: result.url) }
+        let read = try ZipReader(try Data(contentsOf: result.url))
+        #expect(!result.includesTerminalContent)
+        #expect(read.items.contains { $0.name.hasSuffix("README.txt") && String(decoding: $0.data, as: UTF8.self) == "metadata only" })
+    }
+
+    @Test func contentDetectionIncludesPartiallyExportedRecordsButNotDiscardedOnes() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        let lane = directory.appendingPathComponent("crash", isDirectory: true)
+        try FileManager.default.createDirectory(at: lane, withIntermediateDirectories: true)
+        let file = lane.appendingPathComponent("mixed.log")
+        let budget = DiagnosticFileSink.DiagnosticExportLimits.bytesPerLane
+        let record = "2026-10-04 08:00:00.000 I term.input #1 inputText=\"" + String(repeating: "x", count: 300) + "\"\n"
+        // The archive starts inside the content record, after its event name.
+        try Data((record + String(repeating: "y", count: budget - 100)).utf8).write(to: file)
+        let partial = try #require(await sink.exportWithMetadata(
+            headerWithContent: "contains", headerWithoutContent: "none", manifest: manifest()
+        ))
+        #expect(partial.includesTerminalContent)
+        // The content record now lies entirely outside the selected suffix.
+        try Data((record + String(repeating: "y", count: budget) + "\n").utf8).write(to: file)
+        let discarded = try #require(await sink.exportWithMetadata(
+            headerWithContent: "contains", headerWithoutContent: "none", manifest: manifest()
+        ))
+        #expect(!discarded.includesTerminalContent)
+        try? FileManager.default.removeItem(at: partial.url)
+        try? FileManager.default.removeItem(at: discarded.url)
+    }
+
+    @Test func deletingLogsKeepsAutomaticRecordingAndDropsPendingOldRecords() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        sink.append(event: .launch, level: .info, fields: [])
+        sink.deleteAll()
+        sink.append(event: .action, level: .info, fields: [])
+        try await Task.sleep(for: .milliseconds(1_600))
+        let content = text(of: directory)
+        #expect(content.contains("ui.action"))
+        #expect(!content.contains("app.launch"))
+        sink.stop()
     }
 
     /// **最要紧的那条不变量的另一半**：canary 也不许出现在压缩包里。
@@ -319,9 +478,9 @@ struct DiagnosticFileSinkTests {
         #expect(!term.contains("net.frame"), "net 的记录跑进了 term 路")
         #expect(app.contains("app.launch"))
 
-        // 一条记录都没写过的域不该凭空多出一个空文件 —— 那会让读日志的人以为
-        // "这个域什么都没发生"，而事实是它根本没被接上。两者在屏幕上长得一样。
-        #expect(files(in: directory, lane: .crash).isEmpty)
+        // crash 要预备 fd，异常线程上不能开文件。其余未用域仍然懒建。
+        #expect(!files(in: directory, lane: .crash).isEmpty)
+        #expect(text(of: directory, lane: .crash).isEmpty)
         #expect(files(in: directory, lane: .env).isEmpty)
     }
 
@@ -384,12 +543,11 @@ struct DiagnosticFileSinkTests {
     @Test func aBusierLaneDoesNotShadowTheSessionClose() throws {
         let directory = makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "2026-09-19 12:00:00.000 I app.sessionClose\n".write(to: directory.appendingPathComponent("synapse-old-process.log"), atomically: true, encoding: .utf8)
         let sink = try #require(DiagnosticFileSink(directory: directory))
         sink.start()
         sink.append(event: .sessionOpen, level: .info, fields: [])
-        sink.flushForTesting()
-        sink.append(event: .sessionClose, level: .info, fields: [])
         sink.flushForTesting()
 
         // 之后网络路写了更多，文件也比 app 路新。

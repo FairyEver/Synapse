@@ -44,10 +44,14 @@ actor APIClient {
     private let onCredentialsChanged: @Sendable () -> Void
 
     private var accessToken: String?
+    private var accessTokenCredential: String?
+    private var accessTokenCredentialVersion: Int?
     /// When the current access token stops being accepted; `nil` when its lifetime
     /// cannot be read from the token itself.
     private var accessTokenExpiresAt: Date?
-    private var refreshInFlight: Task<Result<String, RefreshFailure>, Never>?
+    private var refreshInFlight: Task<Result<String, RefreshAttemptFailure>, Never>?
+    private var refreshRequestID: UUID?
+    private var credentialGeneration = 0
 
     /// A bound on the whole request, not just the gap between packets.
     ///
@@ -80,12 +84,12 @@ actor APIClient {
         return URLSession(configuration: configuration)
     }()
 
-    init(tokens: TokenStore, onCredentialsChanged: @escaping @Sendable () -> Void) {
+    init(tokens: TokenStore, session: URLSession? = nil, onCredentialsChanged: @escaping @Sendable () -> Void) {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = AppConfiguration.requestTimeout
         configuration.timeoutIntervalForResource = Self.requestResourceTimeout
         configuration.waitsForConnectivity = true
-        self.session = URLSession(configuration: configuration)
+        self.session = session ?? URLSession(configuration: configuration)
         self.tokens = tokens
         self.onCredentialsChanged = onCredentialsChanged
     }
@@ -117,6 +121,7 @@ actor APIClient {
     }
 
     func liveTokenOutcome() async -> LiveTokenOutcome {
+        synchronizeStoredCredential()
         if accessToken == nil || accessTokenIsStale {
             switch await refreshAccessTokenOutcome() {
             case .success(let token): return .token(token)
@@ -170,6 +175,7 @@ actor APIClient {
     // MARK: - Auth
 
     func login(email: String, password: String) async throws {
+        let generation = beginCredentialChange()
         let body: [String: String] = ["email": email, "password": password]
         let response: TokenPair = try await send(
             path: "/auth/login",
@@ -177,10 +183,16 @@ actor APIClient {
             body: body,
             authenticated: false
         )
+        guard generation == credentialGeneration else {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新登录。")
+        }
+        _ = beginCredentialChange()
         accessToken = response.accessToken
+        accessTokenCredential = response.refreshToken
         accessTokenExpiresAt = Self.expiry(of: response.accessToken)
         tokens.refreshToken = response.refreshToken
         tokens.accountEmail = email
+        accessTokenCredentialVersion = tokens.credentialVersion
         // Writing to the keychain can fail, and it used to fail silently: the token
         // lived only in memory, the login looked like it worked, and the next launch
         // had nothing to restore. Reading it back is what keeps that from being
@@ -196,7 +208,14 @@ actor APIClient {
     }
 
     func logout() async {
-        if let refreshToken = tokens.refreshToken {
+        let refreshToken = tokens.refreshToken
+        _ = beginCredentialChange()
+        accessToken = nil
+        accessTokenCredential = nil
+        accessTokenCredentialVersion = nil
+        accessTokenExpiresAt = nil
+        tokens.clearCredentials()
+        if let refreshToken {
             _ = try? await send(
                 path: "/auth/logout",
                 method: "POST",
@@ -204,9 +223,6 @@ actor APIClient {
                 authenticated: false
             ) as EmptyResponse
         }
-        accessToken = nil
-        accessTokenExpiresAt = nil
-        tokens.clearCredentials()
         onCredentialsChanged()
     }
 
@@ -1284,13 +1300,33 @@ actor APIClient {
     }
 
     func mailDownloadAttachment(messageId: String, attachment: MailAttachment) async throws -> URL {
-        if accessToken == nil || accessTokenIsStale { _ = await refreshAccessToken() }
+        synchronizeStoredCredential()
+        let generation = credentialGeneration
+        let account = tokens.credentialVersion
+        if accessToken == nil || accessTokenIsStale {
+            let outcome = await refreshAccessTokenOutcome()
+            guard generation == credentialGeneration, account == tokens.credentialVersion else {
+                throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+            }
+            if case .failure(.unreachable) = outcome {
+                throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
+            }
+        }
+        guard account == tokens.credentialVersion,
+              accessToken == nil || accessTokenCredentialVersion == account else {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+        }
         guard let token = accessToken else { throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。") }
+        try Task.checkCancellation()
         let path = "/mail/messages/\(escaped(messageId))/attachments/\(escaped(attachment.attachmentId))"
         guard let url = URL(string: AppConfiguration.apiBaseURL.absoluteString + path) else { throw APIError(status: 0, code: "bad_url", message: "附件地址无效。") }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (temporary, response) = try await downloadSession.download(for: request)
+        guard generation == credentialGeneration, account == tokens.credentialVersion else {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+        }
+        try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw APIError(status: 0, code: "download", message: "附件下载失败。") }
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "-" + attachment.fileName)
         try FileManager.default.moveItem(at: temporary, to: destination)
@@ -1311,17 +1347,55 @@ actor APIClient {
         case unreachable
     }
 
+    private enum RefreshAttemptFailure: Error {
+        case rejected, unreachable, rotated
+    }
+
     /// Refreshes, or explains which kind of failure it was.
     ///
     /// One refresh runs at a time whichever caller asked: a socket reconnect and a
     /// 401 from a normal request must not race two refreshes against each other.
     private func refreshAccessTokenOutcome() async -> Result<String, RefreshFailure> {
-        if let inFlight = refreshInFlight { return await inFlight.value }
+        let account = tokens.credentialVersion
+        var result = await checkedRefreshAccessTokenAttempt(account: account)
+        if case .failure(.rotated) = result, account == tokens.credentialVersion {
+            result = await checkedRefreshAccessTokenAttempt(account: account)
+        }
+        guard account == tokens.credentialVersion else { return .failure(.rejected) }
+        switch result {
+        case .success(let token): return .success(token)
+        case .failure(.rejected): return .failure(.rejected)
+        case .failure(.unreachable), .failure(.rotated): return .failure(.unreachable)
+        }
+    }
 
-        let task = Task<Result<String, RefreshFailure>, Never> { [weak self] in
+    private func checkedRefreshAccessTokenAttempt(account: Int) async -> Result<String, RefreshAttemptFailure> {
+        let result = await refreshAccessTokenAttempt()
+        guard account == tokens.credentialVersion else { return .failure(.rejected) }
+        if case .success(let token) = result,
+           token != accessToken || accessTokenCredential != tokens.refreshToken {
+            return .failure(.rotated)
+        }
+        return result
+    }
+
+    private func refreshAccessTokenAttempt() async -> Result<String, RefreshAttemptFailure> {
+        if let inFlight = refreshInFlight {
+            let requestID = refreshRequestID
+            let result = await inFlight.value
+            if let requestID, refreshRequestID == requestID {
+                refreshInFlight = nil
+                refreshRequestID = nil
+            }
+            return result
+        }
+
+        let generation = credentialGeneration
+        let account = tokens.credentialVersion
+        let requestID = UUID()
+        guard let refreshToken = tokens.refreshToken else { return .failure(.rejected) }
+        let task = Task<Result<String, RefreshAttemptFailure>, Never> { [weak self] in
             guard let self else { return .failure(.rejected) }
-            defer { Task { await self.clearRefreshInFlight() } }
-            guard let refreshToken = await self.tokens.refreshToken else { return .failure(.rejected) }
             do {
                 let response: TokenPair = try await self.send(
                     path: "/auth/refresh",
@@ -1330,7 +1404,9 @@ actor APIClient {
                     authenticated: false,
                     allowRefresh: false
                 )
-                await self.storeRefreshed(response)
+                guard await self.storeRefreshed(response, generation: generation, account: account, matching: refreshToken) else {
+                    return await self.refreshCollision(generation: generation, account: account, matching: refreshToken)
+                }
                 return .success(response.accessToken)
             } catch {
                 let apiError = error as? APIError
@@ -1344,12 +1420,22 @@ actor APIClient {
                     )
                     return .failure(.unreachable)
                 }
-                await self.discardCredentials()
-                return .failure(.rejected)
+                await self.discardCredentials(generation: generation, account: account, matching: refreshToken)
+                return await self.refreshCollision(generation: generation, account: account, matching: refreshToken)
             }
         }
+        refreshRequestID = requestID
         refreshInFlight = task
-        return await task.value
+        let result = await task.value
+        if refreshRequestID == requestID {
+            refreshInFlight = nil
+            refreshRequestID = nil
+        }
+        if case .success = result,
+           generation != credentialGeneration || account != tokens.credentialVersion || accessTokenCredential != tokens.refreshToken {
+            return refreshCollision(generation: generation, account: account, matching: refreshToken)
+        }
+        return result
     }
 
     private func refreshAccessToken() async -> String? {
@@ -1359,20 +1445,50 @@ actor APIClient {
         }
     }
 
-    private func storeRefreshed(_ pair: TokenPair) {
+    private func storeRefreshed(_ pair: TokenPair, generation: Int, account: Int, matching refreshToken: String) -> Bool {
+        guard generation == credentialGeneration, account == tokens.credentialVersion,
+              tokens.replaceRefreshToken(pair.refreshToken, matching: refreshToken, credentialVersion: account) else { return false }
         accessToken = pair.accessToken
+        accessTokenCredential = pair.refreshToken
+        accessTokenCredentialVersion = account
         accessTokenExpiresAt = Self.expiry(of: pair.accessToken)
-        tokens.refreshToken = pair.refreshToken
+        return true
     }
 
-    private func clearRefreshInFlight() {
-        refreshInFlight = nil
+    private func refreshCollision(generation: Int, account: Int, matching expected: String) -> Result<String, RefreshAttemptFailure> {
+        guard generation == credentialGeneration, account == tokens.credentialVersion,
+              let current = tokens.refreshToken, current != expected else { return .failure(.rejected) }
+        return .failure(.rotated)
     }
 
-    private func discardCredentials() {
+    private func synchronizeStoredCredential() {
+        guard accessToken != nil,
+              accessTokenCredentialVersion != tokens.credentialVersion || accessTokenCredential != tokens.refreshToken else { return }
+        // A peer's refresh expires this cached bearer, not the account or a
+        // refresh already awaiting the same account's response.
+        if accessTokenCredentialVersion != tokens.credentialVersion { _ = beginCredentialChange() }
         accessToken = nil
+        accessTokenCredential = nil
+        accessTokenCredentialVersion = nil
         accessTokenExpiresAt = nil
-        tokens.clearCredentials()
+        if tokens.refreshToken == nil { onCredentialsChanged() }
+    }
+
+    private func beginCredentialChange() -> Int {
+        credentialGeneration &+= 1
+        refreshInFlight = nil
+        refreshRequestID = nil
+        return credentialGeneration
+    }
+
+    private func discardCredentials(generation: Int, account: Int, matching refreshToken: String) {
+        guard generation == credentialGeneration,
+              tokens.clearCredentials(matching: refreshToken, credentialVersion: account) else { return }
+        _ = beginCredentialChange()
+        accessToken = nil
+        accessTokenCredential = nil
+        accessTokenCredentialVersion = nil
+        accessTokenExpiresAt = nil
         onCredentialsChanged()
     }
 
@@ -1498,6 +1614,9 @@ actor APIClient {
         timeoutSeconds: TimeInterval? = nil,
         workspaceFilesBudget: Bool = false
     ) async throws -> Response {
+        synchronizeStoredCredential()
+        let generation = credentialGeneration
+        let account = tokens.credentialVersion
         // 一次 REST 请求 ↔ 响应。**一个 `defer` 覆盖全部出口**（包括抛出去的那些），
         // 401 之后的重试会递归进这里，于是"重试过"这个事实白得一条记录。
         //
@@ -1528,7 +1647,11 @@ actor APIClient {
         if authenticated, accessToken == nil {
             _ = await refreshAccessToken()
         }
-
+        if authenticated, generation != credentialGeneration ||
+            account != tokens.credentialVersion ||
+            (accessToken != nil && accessTokenCredentialVersion != account) {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+        }
         guard let url = URL(string: AppConfiguration.apiBaseURL.absoluteString + path) else {
             throw APIError(status: 0, code: "bad_url", message: "服务器地址无效。")
         }
@@ -1573,10 +1696,17 @@ actor APIClient {
             throw APIError(status: 0, code: "network", message: "服务器返回的数据无法读取。")
         }
         recordedStatus = http.statusCode
+        if authenticated, generation != credentialGeneration || account != tokens.credentialVersion {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+        }
 
         if http.statusCode == 401 || http.statusCode == 403, authenticated, allowRefresh {
             // One refresh and one retry, matching the desktop client.
-            if await refreshAccessToken() != nil {
+            let refreshedToken = await refreshAccessToken()
+            guard generation == credentialGeneration, account == tokens.credentialVersion else {
+                throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+            }
+            if refreshedToken != nil {
                 return try await perform(
                     path: path,
                     method: method,
