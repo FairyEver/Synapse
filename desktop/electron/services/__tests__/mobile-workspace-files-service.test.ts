@@ -520,7 +520,10 @@ describe("mobile workspace Git uses real bounded readonly repositories", { timeo
     for (const name of names) await writeFile(path.join(f.root, name), `base ${name}\n`)
     await f.command("add", "."); await f.command("commit", "-qm", "baselines")
     const objectsRoot = path.join(f.root, ".git", "objects")
-    const objects = Array.from({ length: 4000 }, (_, index) => {
+    // Windows runners enumerate loose objects substantially slower. Keep the
+    // fixture in the same thousands-of-objects class while staying below the
+    // service's 15-second intent deadline on that platform.
+    const objects = Array.from({ length: process.platform === "win32" ? 1500 : 4000 }, (_, index) => {
       const body = Buffer.from(`unrelated object ${index}\n`), bytes = Buffer.concat([Buffer.from(`blob ${body.length}\0`), body])
       return { oid: createHash("sha1").update(bytes).digest("hex"), bytes: deflateSync(bytes) }
     })

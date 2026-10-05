@@ -116,10 +116,11 @@ describe("DockPanel", () => {
     moveButton.focus()
     await act(async () => {
       moveButton.click()
-      await new Promise((resolve) => setTimeout(resolve, 0))
     })
 
-    expect(document.activeElement).toBe(moveButton)
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(moveButton)
+    })
   })
 
   it("does not render remove for launcher and disables controls while saving", async () => {
