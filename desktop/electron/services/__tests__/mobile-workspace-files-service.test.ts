@@ -28,7 +28,7 @@ const services: MobileWorkspaceFilesService[] = []
 const owner = { accountUserId: "account-1", desktopClientInstanceId: "desktop-1", mobileClientInstanceId: "phone-1" }
 let sequence = 0
 const base = () => ({ v: 1 as const, intentId: `file-request-${++sequence}`, kind: "workspaceFiles" as const, filesVersion: 1 as const, sessionId: "session-1" })
-afterEach(async () => { services.splice(0).forEach(service => service.dispose()); resetGitCommandSecurityForTests(); vi.restoreAllMocks(); vi.mocked(open).mockImplementation(originalOpen); vi.mocked(open).mockClear(); vi.useRealTimers(); await Promise.all(temporary.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
+afterEach(async () => { services.splice(0).forEach(service => service.dispose()); resetGitCommandSecurityForTests(); vi.restoreAllMocks(); vi.mocked(open).mockImplementation(originalOpen); vi.mocked(open).mockClear(); vi.useRealTimers(); await Promise.all(temporary.splice(0).map(root => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))) })
 async function fixture(git = false) {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "synapse-mobile-files-")))
   const home = await realpath(await mkdtemp(path.join(os.tmpdir(), "synapse-mobile-files-home-"))), xdg = path.join(home, ".config")
@@ -66,7 +66,9 @@ function dataFor<O extends NonNullable<MobileIntentResult["workspaceFiles"]>["op
   return result.workspaceFiles?.data as FilesData<O>
 }
 
-describe("mobile workspace files safety and real reads", () => {
+// Repository setup and multiple independent native intents share this test
+// budget; each product command and intent retains its own unchanged deadline.
+describe("mobile workspace files safety and real reads", { timeout: 20_000 }, () => {
   it.skipIf(process.platform === "win32").each(["pointer", "config", "commondir", "commonConfig"] as const)("cancels a discovery %s file-to-FIFO race without a writer or retained read slot", async kind => {
     const f = await fixture(kind !== "pointer"), gitDir = path.join(f.root, ".git"), commonDir = path.join(f.root, "common")
     if (kind === "pointer") await writeFile(gitDir, "gitdir: missing\n")
