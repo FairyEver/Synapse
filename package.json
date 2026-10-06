@@ -15,6 +15,7 @@
     "quit:desktop": "node scripts/dev/quit-processes.mjs dev:desktop",
     "quit:server": "node scripts/dev/quit-server.mjs",
     "quit:processes": "node scripts/dev/quit-processes.mjs",
+    "speedtest": "node scripts/diagnostics/speed-test.mjs",
     "kb:sync-template": "node scripts/knowledge-base/sync-template.mjs",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
     "desktop:release:mac": "pnpm --filter @synapse/desktop run release:mac",
