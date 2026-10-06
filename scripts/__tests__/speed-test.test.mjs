@@ -59,6 +59,13 @@ test("parseArgs accepts explicit endpoints from environment", () => {
   assert.equal(options.uploadUrl, "https://upload.example.test/speed")
 })
 
+test("parseArgs defaults to the deployment SSH target", () => {
+  const options = parseArgs([], {})
+
+  assert.equal(options.mode, "ssh")
+  assert.equal(options.sshTarget, "root@120.53.17.64")
+})
+
 test("bytesToMbps and aggregateSpeeds use decimal megabits", () => {
   assert.equal(bytesToMbps(1_000_000, 1_000), 8)
   assert.deepEqual(aggregateSpeeds([
