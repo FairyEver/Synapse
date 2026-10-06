@@ -84,6 +84,7 @@ struct NotificationDestinationTests {
     @Test func rowActionNamesDescribeTheDestination() {
         #expect(NotificationDestination.actionLabel(for: notification(source: "terminal-attention", targetId: "s1", deviceId: "d1", url: nil)) == "打开终端")
         #expect(NotificationDestination.actionLabel(for: notification(source: "meeting-transcription", targetId: "m1", deviceId: nil, url: nil)) == "查看转写")
+        #expect(NotificationDestination.actionLabel(for: notification(source: "mail", targetId: "mail-1", deviceId: nil, url: nil)) == "查看站内信")
         #expect(NotificationDestination.actionLabel(for: notification(source: "external", targetId: nil, deviceId: nil, url: nil)) == "查看通知")
     }
 

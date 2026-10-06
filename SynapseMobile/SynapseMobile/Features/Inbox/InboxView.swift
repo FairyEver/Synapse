@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// 通知面板。
+/// 通知页。
 ///
-/// 它是一个**覆盖层，不是底栏的一个位置**：从主页右上角的铃铛打开，点一条就按它自己的
-/// 目标去（会话、录音、外链），面板同时关掉。正文摘要进到行里，全文由通知面板单独呈现。
+/// 点一条通知就按它自己的目标去（会话、录音、外链），正文摘要进到行里，全文由通知页的
+/// 导航栈呈现。
 ///
 /// 筛选栏是列表里**自己一段**：这一行清了底色，于是它不成卡片，只在页面底色上占一条
 /// 带子，和下面那张卡片之间只隔着这条带子自己的下边距。分段控件切换的是这一屏的**子视图**
@@ -21,9 +21,7 @@ struct InboxView: View {
     let onOpenTerminal: (String) -> Void
     /// 一条通知被点了。去向由调用方决定 —— 列表自己不做路由。
     let onOpen: (SynapseNotification) -> Void
-    let onViewContent: (SynapseNotification) -> Void
-    @Binding var selectedDetent: PresentationDetent
-    @State private var filter = "pending"
+    @Binding var filter: String
     @State private var confirmingClear = false
 
     var body: some View {
@@ -100,7 +98,7 @@ struct InboxView: View {
             if filter == "pending" { await model.refreshDesktops() }
             else { await model.reloadNotifications(filter: filter) }
         }
-        // 标题由宿主给：面板那一层画的是「通知」，而这一屏不知道自己是被谁画出来的。
+        // 标题由独立通知页宿主提供，这一屏只负责列表内容。
         .toolbar {
             if filter != "pending" {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -121,11 +119,8 @@ struct InboxView: View {
             Button("全部清空", role: .destructive) { Task { await model.deleteAllNotifications() } }
         }
         .onChange(of: filter) { _, selected in
-            if selected == "pending" {
-                selectedDetent = .medium
-            } else {
-                Task { await model.reloadNotifications(filter: selected) }
-            }
+            guard selected != "pending" else { return }
+            Task { await model.reloadNotifications(filter: selected) }
         }
         .noticeOverlay(model)
     }
@@ -197,24 +192,15 @@ struct InboxView: View {
     }
 
     private func notificationRow(_ item: SynapseNotification) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Button {
-                onOpen(item)
-            } label: {
-                NotificationRow(item: item, desktopName: notificationDesktopName(item))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(NotificationDestination.actionLabel(for: item))
-            if NotificationDestination.resolve(item) != .none, !item.body.isEmpty {
-                Button { onViewContent(item) } label: {
-                    Image(systemName: "text.alignleft")
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("查看\(item.title)正文")
-            }
+        Button {
+            onOpen(item)
+        } label: {
+            NotificationRow(item: item, desktopName: notificationDesktopName(item))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityHint(NotificationDestination.actionLabel(for: item))
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 Haptics.warning()

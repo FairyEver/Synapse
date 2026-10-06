@@ -2,16 +2,16 @@ import Foundation
 
 /// 一条通知点下去该去哪。
 ///
-/// 这段判断由通知面板里的行和 `.message(id)` 深链共用；无目标的通知可打开全文。
+/// 这段判断由通知页里的行和 `.message(id)` 深链共用；无目标的通知可打开全文。
 ///
-/// 三个去向里只有第一个是应用里的位置。网址由通知面板按来源决定浏览器；没有去处的那一类
-/// 打开全文，由通知面板决定呈现方式。
+/// 三个去向里只有第一个是应用里的位置。网址由通知页按来源决定浏览器；没有去处的那一类
+/// 打开全文，由通知页决定呈现方式。
 enum NotificationDestination {
 
     enum Outcome: Equatable {
         /// 走 `NotificationRouter` 的路由。
         case route(NotificationRouter.Destination)
-        /// 一条 HTTPS 链接，交给通知面板的浏览入口。
+        /// 一条 HTTPS 链接，交给通知页的浏览入口。
         case externalURL(URL)
         /// 没有可去的地方。
         case none

@@ -19,7 +19,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 ## `desktop/app-capabilities` 产品表面
 
-账号消息中心是桌面全局壳层面板与 iOS 主页右上角铃铛打开的通知面板；其列表、详情、统计和管理操作注册为账号 MCP 能力，不另注册 System App、Dock、Workflow、Automation 或 Deep Link。System Notifier 的既有能力是用户已登录且在线时把正式触发内容同步到消息中心，测试通知仍仅本机显示。
+账号消息中心是桌面全局壳层面板与 iOS 独立通知页面；iOS 由底栏「通知」进入，不注册为独立 System App、Dock、Workflow、Automation 或 Deep Link。其列表、详情、统计和管理操作注册为账号 MCP 能力。System Notifier 的既有能力是用户已登录且在线时把正式触发内容同步到消息中心，测试通知仍仅本机显示。
 
 桌面通知来源下拉筛选复用既有 `app_account_notification_list` 的可选 `source`，与 `filter` 状态条件取交集并在分页前过滤；账号消息中心仍为 7 个 MCP 工具，各注册数量不变，不新增 capability 或路由。全部已读、清空全部与忽略全部待处理仍按当前账号范围执行，不受列表来源筛选影响。
 

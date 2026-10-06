@@ -3,7 +3,7 @@ import SwiftUI
 /// 主页：所有入口，以及「有没有人需要你」。
 ///
 /// 它是本次导航改版的落点 —— 底栏不再为每一个功能开一格，新能力一律进这里的「功能」清单，
-/// 所以这一页会长，而底栏永远是三格。
+/// 所以这一页会长。
 ///
 /// 顶上那张待处理卡只在真有会话卡住时出现。它和终端列表行上的琥珀徽章读的是同一份
 /// `waitingSessions`，不引入第二套状态；没有内容就不占位置。
@@ -14,8 +14,8 @@ struct HomeView: View {
     @Environment(SynapseAppModel.self) private var model
     @ScaledMetric(relativeTo: .body) private var iconColumnWidth: CGFloat = 22
 
-    let onOpenNotifications: () -> Void
     let onOpenRecordings: () -> Void
+    let onOpenPendingNotifications: () -> Void
     let onOpenDrive: () -> Void
     let onOpenMail: () -> Void
     let onOpenClipboard: () -> Void
@@ -84,23 +84,14 @@ struct HomeView: View {
         }
     }
 
-    /// 顶栏那两枚：先切换器，后铃铛。
-    ///
-    /// 声明顺序定下两者的先后。分开声明定下的是它们**各是各的**：iOS 26 会把同一个
-    /// placement 上的项并进同一块共享背景 —— 两枚互不相干的控件挤进一个胶囊里，看起来
-    /// 就是一枚。`ToolbarSpacer(.fixed)` 是系统给的分家方式：它把两侧分成各自一组，各拿
-    /// 各的背景，于是又变回两枚按钮。iOS 18 上没有这层共享背景，两枚本来就分开画，那一支
-    /// 保持原样（`ToolbarItemGroup` 是那里定住先后最直接的写法）。
+    /// 顶栏的电脑切换器。
     @ToolbarContentBuilder
     private var homeToolbar: some ToolbarContent {
         if #available(iOS 26.0, *) {
             ToolbarItem(placement: .topBarTrailing) { desktopSwitcher }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            ToolbarItem(placement: .topBarTrailing) { bell }
         } else {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 desktopSwitcher
-                bell
             }
         }
     }
@@ -150,28 +141,9 @@ struct HomeView: View {
         .padding(.horizontal, 8)
     }
 
-    /// Keep the toolbar button native; the system supplies its badge in menus too.
-    private var bell: some View {
-        Button("通知", systemImage: "bell", action: onOpenNotifications)
-            .accessibilityIdentifier("home-notifications")
-            .accessibilityLabel(notificationAccessibilityLabel)
-            .badge(notificationBadge)
-    }
-
-    private var notificationBadge: String? {
-        let count = model.notifications.unreadCount
-        return count > 0 ? NotificationText.badgeCount(count) : nil
-    }
-
-    private var notificationAccessibilityLabel: String {
-        model.notifications.unreadCount > 0
-            ? "通知，\(model.notifications.unreadCount) 条未读"
-            : "通知"
-    }
-
     /// 「N 个会话在等你」。
     ///
-    /// 一条时直接进那个会话；多条时打开通知面板的「待处理」段 —— 卡片上写着 N，
+    /// 一条时直接进那个会话；多条时打开通知页的「待处理」段 —— 卡片上写着 N，
     /// 却只把人送进其中一个，另外几个就藏起来了。
     private var attentionCard: some View {
         Button {
@@ -179,7 +151,7 @@ struct HomeView: View {
             if waiting.count == 1, let only = waiting.first {
                 onOpenWaitingSession(only.id)
             } else {
-                onOpenNotifications()
+                onOpenPendingNotifications()
             }
         } label: {
             HStack(spacing: 12) {

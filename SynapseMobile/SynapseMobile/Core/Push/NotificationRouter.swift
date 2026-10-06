@@ -73,7 +73,7 @@ enum TerminalOpenOrigin: String, Equatable, Sendable {
     case sessionList
     /// 点了一条推送通知。
     case pushNotification
-    /// 通知面板里点了一条记录。
+    /// 通知页里点了一条记录。
     case inboxRecord
     /// 桌面小组件的一行。它带的是快照那一刻的会话号，本来就可能已经旧了。
     case homeWidget
@@ -82,7 +82,7 @@ enum TerminalOpenOrigin: String, Equatable, Sendable {
     /// 主页那张「有会话在等你」的卡片。
     ///
     /// 和 `inboxRecord` 分开记，是因为两者的数据来源根本不同：这一条读的是**实时的会话
-    /// 列表**（和会话列表那一行同源、同一次刷新），而通知面板里那条来自一条某一刻写下的
+    /// 列表**（和会话列表那一行同源、同一次刷新），而通知页里那条来自一条某一刻写下的
     /// 记录。判据拒绝时，前者几乎一定是这个人手快，后者才是设计里预料到的旧记录。
     case homePending
 

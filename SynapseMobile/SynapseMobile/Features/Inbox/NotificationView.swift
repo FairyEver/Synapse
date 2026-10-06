@@ -1,25 +1,56 @@
 import SwiftUI
 
-/// 通知面板。主页右上角那枚铃铛打开的就是它。
+/// 通知页。它是底栏的一个顶层分区。
 ///
-/// 有目标的行直接去目标；无目标的行和独立的「全文」操作打开 Markdown 正文。
-struct NotificationPanel: View {
+/// 每条通知整行只提供一个打开动作：有目标的行直接去目标，无目标的行打开 Markdown 正文。
+struct NotificationView: View {
     @Environment(SynapseAppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var openedWebLink: WebLink?
     @State private var readingNotification: SynapseNotification?
-    @State private var selectedDetent: PresentationDetent = .medium
-    private let initialNotification: SynapseNotification?
+    @State private var readingFromDeepLink = false
+    @Binding private var notificationToRead: SynapseNotification?
+    @Binding private var filter: String
+    private let onOpenExternal: ((URL) -> Void)?
 
     /// 「待处理」段里的行打开一个终端会话。
     let onOpenTerminal: (String) -> Void
 
     init(initialNotification: SynapseNotification? = nil, onOpenTerminal: @escaping (String) -> Void) {
-        self.initialNotification = initialNotification
         self.onOpenTerminal = onOpenTerminal
+        self.onOpenExternal = nil
+        _notificationToRead = .constant(initialNotification)
+        _filter = .constant("pending")
         _readingNotification = State(initialValue: initialNotification)
-        _selectedDetent = State(initialValue: initialNotification == nil ? .medium : .large)
+        _readingFromDeepLink = State(initialValue: initialNotification != nil)
+    }
+
+    init(
+        notificationToRead: Binding<SynapseNotification?>,
+        onOpenTerminal: @escaping (String) -> Void,
+        onOpenExternal: @escaping (URL) -> Void,
+        filter: Binding<String>
+    ) {
+        self.onOpenTerminal = onOpenTerminal
+        self.onOpenExternal = onOpenExternal
+        _notificationToRead = notificationToRead
+        _filter = filter
+        _readingNotification = State(initialValue: notificationToRead.wrappedValue)
+        _readingFromDeepLink = State(initialValue: notificationToRead.wrappedValue != nil)
+    }
+
+    init(
+        readingNotification: Binding<SynapseNotification?>,
+        onOpenTerminal: @escaping (String) -> Void,
+        onOpenExternal: @escaping (URL) -> Void,
+        filter: Binding<String>
+    ) {
+        self.init(
+            notificationToRead: readingNotification,
+            onOpenTerminal: onOpenTerminal,
+            onOpenExternal: onOpenExternal,
+            filter: filter
+        )
     }
 
     var body: some View {
@@ -27,75 +58,65 @@ struct NotificationPanel: View {
             InboxView(
                 onOpenTerminal: openTerminal,
                 onOpen: open,
-                onViewContent: viewContent,
-                selectedDetent: $selectedDetent
+                filter: $filter
             )
             .navigationTitle("通知")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: Binding(
                 get: { readingNotification != nil },
-                set: { if !$0 { readingNotification = nil } }
+                set: {
+                    if !$0 {
+                        readingNotification = nil
+                        readingFromDeepLink = false
+                        notificationToRead = nil
+                    }
+                }
             )) {
                 if let item = readingNotification {
                     NotificationFullTextView(item: item)
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("关闭")
-                }
+        }
+        .onChange(of: notificationToRead?.id) { _, _ in
+            if let notificationToRead {
+                readingNotification = notificationToRead
+                readingFromDeepLink = true
+            } else if readingFromDeepLink {
+                readingNotification = nil
+                readingFromDeepLink = false
             }
         }
-        .presentationDetents([.medium, .large], selection: $selectedDetent)
-        .presentationDragIndicator(.visible)
-        .onChange(of: initialNotification?.id) { _, _ in
-            guard let initialNotification else { return }
-            readingNotification = initialNotification
-            selectedDetent = .large
-        }
-        // sheet 会盖住底层屏幕挂的那条通知覆盖层，所以这一层要自己再挂一次 ——
-        // 与剪贴板 sheet 同一个做法。
         .noticeOverlay(model)
         .fullScreenCover(item: $openedWebLink) { target in
             LinkBrowser(url: target.url) {
                 openedWebLink = nil
-                dismiss()
             }
         }
     }
 
     /// 点一条通知：先标已读，再按它自己的去向往外走。
     ///
-    /// 走之前就收起来。留着一个盖住目标的 sheet，等于让人再点一次「关闭」才看得见
-    /// 他刚刚要求去的地方。
     private func open(_ item: SynapseNotification) {
         Task { await model.readNotification(item.id) }
+        notificationToRead = nil
         switch NotificationDestination.resolve(item) {
         case .route(let destination):
-            dismiss()
             NotificationRouter.shared.route(to: destination)
         case .externalURL(let url):
-            if SynapseWebLink.isTrusted(url) {
+            if let onOpenExternal {
+                onOpenExternal(url)
+            } else if SynapseWebLink.isTrusted(url) {
                 openedWebLink = WebLink(url: url)
             } else {
-                dismiss()
                 openURL(url)
             }
         case .none:
+            readingFromDeepLink = false
             readingNotification = item
         }
     }
 
-    private func viewContent(_ item: SynapseNotification) {
-        Task { await model.readNotification(item.id) }
-        readingNotification = item
-    }
-
     private func openTerminal(_ sessionId: String) {
-        dismiss()
         onOpenTerminal(sessionId)
     }
 }

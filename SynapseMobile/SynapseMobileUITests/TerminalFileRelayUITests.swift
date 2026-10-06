@@ -300,7 +300,7 @@ final class TerminalFileRelayUITests: XCTestCase {
         add(attachment)
     }
 
-    /// 底栏三格之后冷启动落在主页，而这一份用例要的是终端列表。
+    /// 底栏冷启动落在主页，而这一份用例要的是终端列表。
     ///
     /// 挂在 `signIn` 的 `defer` 里，是因为那个函数有不止一条返回路径（会话已经恢复时
     /// 直接返回），而每一条之后人都需要在终端那一格上。

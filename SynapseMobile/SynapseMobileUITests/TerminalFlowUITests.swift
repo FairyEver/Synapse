@@ -39,7 +39,7 @@ final class TerminalFlowUITests: XCTestCase {
         "-SynapseChromeIdleSeconds", "3600",
     ]
 
-    /// 底栏的下标。三格之后主页占了 0，终端从 0 挪到 1。
+    /// 底栏的下标：主页、终端、通知、我的。
     ///
     /// 用下标而不是按标签找，是因为**角标会改写它所在那一格的 accessibility label**
     /// ——「主页」带着未读数时 `buttons["主页"]` 会时灵时不灵。这一条理由下面那段注释里
@@ -47,7 +47,8 @@ final class TerminalFlowUITests: XCTestCase {
     private enum TabIndex {
         static let home = 0
         static let terminals = 1
-        static let settings = 2
+        static let notifications = 2
+        static let settings = 3
     }
 
     override func setUpWithError() throws {
@@ -114,11 +115,9 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已选 0 项"].firstMatch.waitForNonExistence(timeout: 5))
     }
 
-    /// 底栏结构与「不新增槽位」这条硬规则。
+    /// 底栏结构与四个顶层分区。
     ///
-    /// 一条**会失败的**用例，而不是一条描述现状的用例：底栏从四格变三格是设计上要买的东西，
-    /// 下一个人加第四个 tab 时，这里要红。
-    func testBottomBarHasExactlyThreeTabsAndHomeIsTheDefault() throws {
+    func testBottomBarHasExactlyFourTabsAndHomeIsTheDefault() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + barLaunchArguments
         app.launch()
@@ -129,7 +128,7 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(tabs.waitForExistence(timeout: 20), "the bottom bar never appeared")
 
         // 数量先于位置：位置错了还能一眼看出，少一格或多一格不会。
-        XCTAssertEqual(tabs.buttons.count, 3, "the bottom bar must stay at three tabs")
+        XCTAssertEqual(tabs.buttons.count, 4, "the bottom bar must have four tabs")
 
         // 第一格是主页。按前缀比而不是相等：主页那一格带着未读角标时，系统会把角标写进
         // 它的 accessibility label。
@@ -137,6 +136,9 @@ final class TerminalFlowUITests: XCTestCase {
             tabs.buttons.element(boundBy: TabIndex.home).label.hasPrefix("主页"),
             "the first tab is not the home page"
         )
+        XCTAssertTrue(tabs.buttons.element(boundBy: TabIndex.terminals).label.hasPrefix("终端"))
+        XCTAssertTrue(tabs.buttons.element(boundBy: TabIndex.notifications).label.hasPrefix("通知"))
+        XCTAssertTrue(tabs.buttons.element(boundBy: TabIndex.settings).label.hasPrefix("我的"))
 
         tabs.buttons.element(boundBy: TabIndex.home).tap()
 
@@ -145,8 +147,7 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home-feature-新建会话"].exists, "the new-session entry is missing")
         XCTAssertTrue(app.buttons["home-feature-剪贴板历史"].exists, "the clipboard entry is missing")
 
-        // 铃铛是通知的唯一常驻入口。
-        XCTAssertTrue(app.buttons["home-notifications"].exists, "the home page has no bell")
+        XCTAssertFalse(app.buttons["home-notifications"].exists, "the home page still exposes the removed bell")
     }
 
     /// 录音页那两枚键（返回主页、加号）必须在同一行。
@@ -208,27 +209,21 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["api-logs"].exists, "third session missing")
         XCTAssertTrue(app.staticTexts["等待确认"].exists, "attention badge missing from the list")
 
-        // A locked-out Agent surfaces on the home page's attention card, and the
-        // notifications panel is one tap further in. Tabs are addressed by index
-        // because a badge rewrites the accessibility label of the tab it sits on —
-        // which is now the home tab, since it carries the unread count.
-        //
-        // The order is 主页 / 终端 / 我的 — `RootView`'s `TabView`, in that order.
+        // A locked-out Agent surfaces on the home page's attention card. The
+        // notification tab is a top-level page, so it can be selected directly.
         let tabs = app.tabBars.firstMatch
         tabs.buttons.element(boundBy: TabIndex.home).tap()
         XCTAssertTrue(
             app.buttons["home-attention"].waitForExistence(timeout: 8),
             "the home page did not report a waiting session"
         )
-        app.buttons["home-notifications"].tap()
+        tabs.buttons.element(boundBy: TabIndex.notifications).tap()
         capture(app, name: "02-notifications")
         XCTAssertTrue(
             app.staticTexts["claude-code"].waitForExistence(timeout: 8),
-            "the notifications panel did not show the waiting session"
+            "the notifications page did not show the waiting session"
         )
-        XCTAssertTrue(app.staticTexts["请求执行一个命令"].exists, "the panel lost the waiting reason")
-        // 面板是覆盖层，关掉它才回到刚才那一屏。
-        app.buttons["关闭"].tap()
+        XCTAssertTrue(app.staticTexts["请求执行一个命令"].exists, "the notifications page lost the waiting reason")
 
         tabs.buttons.element(boundBy: TabIndex.terminals).tap()
         app.staticTexts["claude-code"].tap()
@@ -348,7 +343,7 @@ final class TerminalFlowUITests: XCTestCase {
 
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 25), "no tab bar")
-        // 我的 — 三格之后它是最后一格。
+        // 我的 — 四格之后它是最后一格。
         tabs.buttons.element(boundBy: TabIndex.settings).tap()
 
         // 七个分类都在外层。
@@ -384,7 +379,8 @@ final class TerminalFlowUITests: XCTestCase {
 
         settingsTab.tap()
         app.descendants(matching: .any)["settings-category-notifications"].tap()
-        XCTAssertTrue(app.buttons["settings-notification-center"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.switches["settings-badge-toggle"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["settings-notification-center"].exists)
 
         settingsTab.tap()
         app.descendants(matching: .any)["settings-category-about"].tap()
@@ -497,27 +493,8 @@ final class TerminalFlowUITests: XCTestCase {
         revealReviewElement(badge, in: app)
         XCTAssertNotNil(badge.value, "The native badge switch must expose its current state")
         capture(app, name: "review-settings-system-notification-status-only")
-        let center = app.buttons["settings-notification-center"].firstMatch
-        revealReviewElement(center, in: app, towardTop: true)
-        center.tap()
-        let filter = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "筛选：")).firstMatch
-        XCTAssertTrue(filter.waitForExistence(timeout: 10) && filter.isHittable,
-            "This opt-in walk requires the actual accessibility-size filter menu")
-        for title in ["全部通知", "未读通知", "待处理"] {
-            filter.tap()
-            let option = app.buttons[title].firstMatch
-            XCTAssertTrue(option.waitForExistence(timeout: 5) && option.isHittable)
-            option.tap()
-            XCTAssertTrue(waitForHittable(filter, timeout: 5))
-            XCTAssertEqual(filter.label, "筛选：\(title)")
-            capture(app, name: "review-notification-filter-\(title)")
-        }
-        let closeCenter = app.navigationBars.buttons["关闭"].firstMatch
-        XCTAssertTrue(closeCenter.exists && closeCenter.isHittable)
-        closeCenter.tap()
-        XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(center.exists && center.isHittable)
+        XCTAssertFalse(app.buttons["settings-notification-center"].exists,
+            "设置页仍然暴露通知中心跳转")
 
         open("diagnostics", title: "诊断")
         let logging = app.switches["记录诊断日志"].firstMatch
@@ -889,16 +866,7 @@ final class TerminalFlowUITests: XCTestCase {
 
     func testReviewExistingNotificationBodyAndInternalTarget() throws {
         let app = try launchReadOnlyReview()
-        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
-        let bell = app.buttons["home-notifications"].firstMatch
-        if !bell.isHittable {
-            let more = app.navigationBars.buttons["更多"].firstMatch
-            XCTAssertTrue(more.exists && more.isHittable)
-            more.tap()
-            let notifications = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "通知")).firstMatch
-            XCTAssertTrue(notifications.waitForExistence(timeout: 5) && notifications.isHittable)
-            notifications.tap()
-        } else { bell.tap() }
+        app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.notifications).tap()
         let filter = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", "筛选：")).firstMatch
         XCTAssertTrue(filter.waitForExistence(timeout: 10) && filter.isHittable)
@@ -906,61 +874,49 @@ final class TerminalFlowUITests: XCTestCase {
         app.buttons["全部通知"].firstMatch.tap()
         XCTAssertTrue(waitForHittable(filter, timeout: 5))
         XCTAssertEqual(filter.label, "筛选：全部通知")
-        let fullText = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "查看", "正文")).firstMatch
-        let bodyRow = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "查看通知")).firstMatch
-        let targetRows = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@ OR label ENDSWITH %@ OR label ENDSWITH %@", "查看站内信", "查看转写", "打开终端"))
+
+        let bodyRows = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "查看通知"))
+        let mailRows = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "查看站内信"))
+        let otherTargetRows = app.cells.buttons.matching(NSPredicate(format: "label ENDSWITH %@ OR label ENDSWITH %@", "查看转写", "打开终端"))
         let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            fullText.exists || bodyRow.exists || targetRows.firstMatch.exists
+            bodyRows.firstMatch.exists || mailRows.firstMatch.exists || otherTargetRows.firstMatch.exists
                 || app.staticTexts["暂无通知"].firstMatch.exists
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 20), .completed)
         capture(app, name: "review-notifications-current-all-records")
-        if fullText.exists || bodyRow.exists {
-            let read = fullText.exists ? fullText : bodyRow
-            let hasExplicitBody = fullText.exists
-            revealReviewElement(read, in: app)
-            read.tap()
+
+        // 每条通知只有整行主操作；旧的正文图标不应再出现。
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "正文")).firstMatch.exists)
+        if bodyRows.firstMatch.exists {
+            let row = bodyRows.firstMatch
+            revealReviewElement(row, in: app)
+            row.tap()
             XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
-            let document = app.scrollViews.firstMatch
-            XCTAssertTrue(document.waitForExistence(timeout: 10))
-            XCTAssertGreaterThanOrEqual(document.staticTexts.count, hasExplicitBody ? 3 : 2)
-            capture(app, name: "review-notification-existing-full-document")
-            document.swipeUp()
-            capture(app, name: "review-notification-existing-full-document-scrolled")
-            let backs = app.navigationBars.buttons.matching(NSPredicate(format: "label IN %@", ["通知", "返回", "Back"]))
-                .allElementsBoundByIndex.filter { $0.isHittable }
-            guard backs.count == 1 else { XCTFail("The actual notification document must expose native Back"); return }
-            backs[0].tap()
-            revealReviewElement(filter, in: app, towardTop: true)
-            XCTAssertEqual(filter.label, "筛选：全部通知")
+            XCTAssertTrue(app.navigationBars["通知"].firstMatch.exists)
+            XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 10))
+            let back = app.navigationBars.buttons.matching(NSPredicate(format: "label IN %@", ["通知", "返回", "Back"]))
+                .allElementsBoundByIndex.filter { $0.isHittable }.first
+            XCTAssertNotNil(back)
+            back?.tap()
+            XCTAssertTrue(filter.waitForExistence(timeout: 5))
         } else {
-            recordReviewBoundary("The currently loaded notification page supplies no readable body action; no notification was created.")
+            recordReviewBoundary("The current notification page supplies no plain notification row; no notification was created.")
         }
-        let target = targetRows.firstMatch
-        if target.exists {
-            revealReviewElement(target, in: app)
-            target.tap()
-            XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
+
+        if mailRows.firstMatch.exists {
+            let mail = mailRows.firstMatch
+            revealReviewElement(mail, in: app)
+            mail.tap()
             let opened = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
                 app.buttons["信件操作"].exists
-                    || (app.segmentedControls.buttons["语音"].exists && app.segmentedControls.buttons["文字"].exists)
-                    || app.descendants(matching: .any)["terminal.text"].exists
                     || app.staticTexts["要打开的会话已结束。"].exists
                     || app.staticTexts["这台电脑不在线"].exists
-                    || app.staticTexts["读取录音失败"].exists
             }, object: nil)
             XCTAssertEqual(XCTWaiter.wait(for: [opened], timeout: 20), .completed,
-                "The actual internal target must open or show its real unavailable state")
-            capture(app, name: "review-notification-internal-target-real-result")
-            app.tabBars.firstMatch.buttons.element(boundBy: TabIndex.home).tap()
-            XCTAssertTrue(app.buttons["home-feature-站内信"].firstMatch.waitForExistence(timeout: 10))
-            capture(app, name: "review-notification-target-safe-return-home")
+                "站内信通知整行应打开真实站内信页面")
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "查看站内信正文")).firstMatch.exists)
         } else {
-            recordReviewBoundary("No internal Mail/recording/terminal target is supplied by this loaded notification page; external-link rows are not followed.")
-            let close = app.navigationBars.buttons["关闭"].firstMatch
-            XCTAssertTrue(close.exists && close.isHittable)
-            close.tap()
-            XCTAssertTrue(filter.waitForNonExistence(timeout: 5))
+            recordReviewBoundary("The current notification page supplies no internal Mail target; no notification was created.")
         }
     }
 
@@ -3166,7 +3122,7 @@ final class TerminalFlowUITests: XCTestCase {
         add(attachment)
     }
 
-    /// 底栏三格之后冷启动落在主页，而这个文件里的用例绝大多数要的是终端列表。
+    /// 底栏冷启动落在主页，而这个文件里的用例绝大多数要的是终端列表。
     ///
     /// 挂在 `signIn` 的 `defer` 里，是因为那个函数有不止一条返回路径（会话已经恢复时
     /// 直接返回），而每一条之后人都需要在终端那一格上。要留在主页或去别处的用例，自己

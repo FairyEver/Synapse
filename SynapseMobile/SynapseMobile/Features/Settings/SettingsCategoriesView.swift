@@ -65,7 +65,7 @@ struct SettingsCategoriesView: View {
     }
 
     /// 未读数照角标那条规则封顶（`NotificationText.badgeCount`）：这一行说的是「有没有、
-    /// 多到什么程度」，不差那几个位数，而和铃铛、底栏写成两套数字更像两笔账。
+    /// 多到什么程度」，不差那几个位数，而和底栏写成两套数字更像两笔账。
     private var unreadValue: String? {
         let count = model.notifications.unreadCount
         return count > 0 ? "\(NotificationText.badgeCount(count)) 条未读" : nil

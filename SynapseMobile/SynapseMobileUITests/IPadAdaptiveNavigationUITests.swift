@@ -89,27 +89,19 @@ final class IPadAdaptiveNavigationUITests: XCTestCase {
         capture(app, name: "recording-window-restored")
     }
 
-    /// Run with the system's largest accessibility text size so Home uses its native overflow.
-    func testHomeOverflowNotificationHasAnIntelligibleNativeLabel() {
+    /// The notification tab remains a native top-level destination at the largest text size.
+    func testNotificationTabHasAnIntelligibleNativeLabel() {
         let app = openHome()
-        let more = app.navigationBars.buttons.matching(
-            NSPredicate(format: "label IN %@", ["更多", "More"])
-        ).firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 19) && more.isHittable,
-            "Home must expose its real system toolbar overflow at the configured accessibility size")
-        more.tap()
-        let tree = XCTAttachment(string: app.debugDescription)
-        tree.name = "home-overflow-native-accessibility"; tree.lifetime = .keepAlways; add(tree)
-        capture(app, name: "home-overflow-native")
-        let identified = app.buttons["home-notifications"].firstMatch
-        let notification = identified.exists ? identified
-            : app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "通知")).firstMatch
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 19))
+        let notification = tabs.buttons.element(boundBy: 2)
         XCTAssertTrue(notification.waitForExistence(timeout: 5) && notification.isHittable,
-            "The native overflow must contain a readable notification action")
+            "The notification tab must remain reachable at the configured accessibility size")
         XCTAssertTrue(notification.label.contains("通知"),
-            "A notification action cannot expose only its unread count as its native accessibility label")
+            "The notification tab must expose its native label")
         notification.tap()
         XCTAssertTrue(app.navigationBars["通知"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars.buttons["关闭"].exists)
     }
 
     /// The fixture's clipboard is already empty; this test never clears or copies its data.

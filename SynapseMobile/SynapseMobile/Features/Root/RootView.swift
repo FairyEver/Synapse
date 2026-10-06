@@ -17,10 +17,9 @@ struct RootView: View {
     @State private var meetingSelection: String?
     @State private var mailSelection: String?
     @State private var settingsSelection: SettingsCategory?
-    /// 通知面板。它挂在根上，因为有两个入口打开的是同一个面板：主页右上角的铃铛，
-    /// 和「我的 → 通知」。
-    @State private var isNotificationPanelPresented = false
+    /// 通知页的全文选择。深链和通知列表共用这一份导航状态。
     @State private var notificationToRead: SynapseNotification?
+    @State private var notificationFilter = "pending"
     @State private var notificationWebLink: WebLink?
     /// 会话创建那张 sheet。同样挂在根上：主页那一行与终端列表右上角的 ＋ 打开的是同一个。
     @State private var isNewSessionPresented = false
@@ -35,12 +34,9 @@ struct RootView: View {
     @State private var pendingTerminalOpen: PendingTerminalOpen?
     @State private var notificationOpenRequest = UUID()
 
-    /// 底栏的三格，并且**从此不再增加**。
-    ///
-    /// 位置是稀缺资源，功能不是：新能力一律进「主页 → 功能」，见
-    /// `docs/agents/mobile-adaptive-layout.md`。
+    /// 底栏的四个顶层分区，顺序固定为主页、终端、通知、我的。
     private enum Tab: Hashable {
-        case home, terminals, settings
+        case home, terminals, notifications, settings
     }
 
     var body: some View {
@@ -91,8 +87,8 @@ struct RootView: View {
                 meetingSelection = nil
                 mailSelection = nil
                 settingsSelection = nil
-                isNotificationPanelPresented = false
                 notificationToRead = nil
+                notificationFilter = "pending"
                 notificationWebLink = nil
                 isNewSessionPresented = false
                 // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
@@ -110,6 +106,7 @@ struct RootView: View {
             pendingTerminalOpen = nil
             terminalSelection = nil
             notificationToRead = nil
+            notificationFilter = "pending"
             notificationWebLink = nil
             notificationOpenRequest = UUID()
         }
@@ -203,6 +200,8 @@ struct RootView: View {
             // 再把他拽进一个终端页不是他要的。
             pendingTerminalOpen = nil
             pendingWidgetTarget = nil
+        case .notifications:
+            notificationToRead = nil
         case .settings: settingsSelection = nil
         }
     }
@@ -232,11 +231,13 @@ struct RootView: View {
             case .clipboard, .none:
                 NavigationStack(path: $homePath) {
                     HomeView(
-                        onOpenNotifications: {
-                            beginNavigationRequest()
-                            isNotificationPanelPresented = true
-                        },
                         onOpenRecordings: openRecordingsFromHome,
+                        onOpenPendingNotifications: {
+                            beginNavigationRequest()
+                            notificationFilter = "pending"
+                            notificationToRead = nil
+                            selectedTab = .notifications
+                        },
                         onOpenDrive: { openDrive() },
                         onOpenMail: {
                             beginNavigationRequest()
@@ -348,14 +349,6 @@ struct RootView: View {
         TabView(selection: tabSelection) {
             homeTab
                 .tabItem { Label("主页", systemImage: "house") }
-            // 系统角标，颜色不改。SwiftUI 的 `TabView` 没有自定义 tab 角标颜色的 API，
-            // 桥接 `UITabBarItem` 只在 iPhone 底栏生效、iPadOS 侧边栏做不到同色。
-            // 「有人需要你」的琥珀色由主页里那枚铃铛自绘承担。
-            //
-            // 写的是字符串而不是数字，为了让这里也走角标那条封顶规则（100 条起「99+」）。
-            // 代价是没了「0 就不画」这条：数字版按 0 隐藏，字符串版只认 nil，所以没有未读
-            // 时得传 nil，传 "0" 会在底栏上明晃晃挂一个 0。
-            .badge(unreadBadge)
             .tag(Tab.home)
 
             AdaptiveFeatureNavigation(
@@ -373,27 +366,28 @@ struct RootView: View {
             .tabItem { Label("终端", systemImage: "terminal") }
             .tag(Tab.terminals)
 
+            NotificationView(
+                readingNotification: $notificationToRead,
+                onOpenTerminal: openWaitingSession,
+                onOpenExternal: openNotificationExternalURL,
+                filter: $notificationFilter
+            )
+            .tabItem { Label("通知", systemImage: "bell") }
+            .badge(unreadBadge)
+            .tag(Tab.notifications)
+
             AdaptiveSettingsView(selection: $settingsSelection) {
                 terminalSelection = nil
                 pendingTerminalOpen = nil
-            } onOpenNotificationCenter: {
-                beginNavigationRequest()
-                isNotificationPanelPresented = true
             }
             .tabItem { Label("我的", systemImage: "person") }
             .tag(Tab.settings)
         }
         .tabViewStyle(.sidebarAdaptable)
-        .sheet(isPresented: $isNotificationPanelPresented, onDismiss: { notificationToRead = nil }) {
-            NotificationPanel(initialNotification: notificationToRead, onOpenTerminal: openWaitingSession)
-        }
         .newSessionSheet(isPresented: $isNewSessionPresented, onOpenCreated: openNewlyCreatedFromHome)
     }
 
-    /// 底栏主页那一格的角标。
-    ///
-    /// 写法与主页铃铛上那枚同一份（`NotificationText.badgeCount`）：99 条以内照实写，100 条
-    /// 起「99+」。没有未读时传 nil —— 字符串版角标不认 0。
+    /// 通知底栏的角标：99 条以内照实写，100 条起「99+」。
     private var unreadBadge: String? {
         let count = model.notifications.unreadCount
         return count > 0 ? NotificationText.badgeCount(count) : nil
@@ -519,6 +513,7 @@ struct RootView: View {
         let account = model.accountIdentityGeneration
         let request = UUID()
         notificationOpenRequest = request
+        selectedTab = .notifications
         Task {
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             await model.reloadNotifications()
@@ -528,9 +523,8 @@ struct RootView: View {
             await model.readNotification(id)
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             guard let item = model.notifications.items.first(where: { $0.id == id }) else {
-                // 拉回来却没有这一条（已过期、已在别处删掉）。打开面板，让人自己看
-                // 手上到底还有什么 —— 比什么都不做要好。
-                isNotificationPanelPresented = true
+                // 拉回来却没有这一条（已过期、已在别处删掉）。留在通知页，让人看到
+                // 当前仍然有效的通知。
                 model.notice("无法打开这条通知", tone: .failure)
                 return
             }
@@ -538,15 +532,18 @@ struct RootView: View {
             case .route(let destination):
                 handleRoute(destination)
             case .externalURL(let url):
-                if SynapseWebLink.isTrusted(url) {
-                    notificationWebLink = WebLink(url: url)
-                } else {
-                    openURL(url)
-                }
+                openNotificationExternalURL(url)
             case .none:
                 notificationToRead = item
-                isNotificationPanelPresented = true
             }
+        }
+    }
+
+    private func openNotificationExternalURL(_ url: URL) {
+        if SynapseWebLink.isTrusted(url) {
+            notificationWebLink = WebLink(url: url)
+        } else {
+            openURL(url)
         }
     }
 

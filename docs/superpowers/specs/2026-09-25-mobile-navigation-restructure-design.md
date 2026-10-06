@@ -2,11 +2,19 @@
 
 > 现行 iOS 界面规范：本文件中的视觉、组件形制和页面组织只供历史追溯；后续设计与修改须通过 `.agents/skills/apple-design/SKILL.md` 阅读 Apple 官方原文。业务协议、安全和运行时事实不因此失效。
 
+> **2026-10-06 superseding revision（当前实现依据）：**本修订覆盖本文此前关于 iOS 底栏三格、主页通知铃铛和通知 `.sheet` 面板的产品约定。当前 iOS 顶层底栏从左到右为「主页 / 终端 / 通知 / 我的」；通知由独立页面承载，主页不再提供通知铃铛入口。通知列表每一行只有一个点击动作，站内信与其他通知统一整行点击进入各自目标，不再提供单独的正文图标。桌面消息中心、服务端通知数据、MCP 能力、权限边界和协议不变。下文 2026-09-25 的三格与面板内容保留作历史决策记录，涉及当前实现时以本修订、`docs/agents/mobile-runtime-contracts.md` 和 `SynapseMobile/README.md` 为准。
+
 > 2026-09-25。把底栏从四个槽位收敛为三个，并把「消息」从一个位置降级成主页上的覆盖层。
 >
 > 设计来源是一次独立的设计会话，产出在 `~/Desktop/UI 重构/`（18 屏纯 CSS 原型 + 现状调查 + 设计方案）。原型已收进本仓：`docs/prototypes/2026-09-25-mobile-navigation-restructure.html`。本文是该设计的实现规格，与原型不一致处一律以本文为准。
 
 ## 1. 一句话结论
+
+### 当前方案（2026-10-06）
+
+底栏从左到右为 **主页 / 终端 / 通知 / 我的** 四个位置。通知由独立页面承载，主页不再提供通知铃铛或通知覆盖面板。通知页面保留「待处理 / 全部通知 / 未读通知」筛选和管理操作；通知项整行只有一个点击动作，按通知自身目标进入会话、录音、站内信或链接，没有目标时在通知页面打开正文。站内信通知不显示独立正文图标。
+
+### 历史方案（2026-09-25，已被上方修订覆盖）
 
 底栏从 **终端 / 录音 / 消息 / 我的** 收敛为 **主页 / 终端 / 我的** 三个位置，**并且从此不再增加**。新增能力一律进入「主页 → 功能」；通知从底栏移到主页右上角的铃铛，用它自己的覆盖面板承载。
 
@@ -21,7 +29,18 @@
 2. **「消息」占着最贵的位置做中转站的活。** 通知的意义是「带你去某个地方」，它本身不是目的地。用户进这一屏不是为了读消息，是为了点进去处理会话或看转写。现状印证了这一点：入口独立，但里面的「待处理」段读的是**实时会话列表**（`Features/Inbox/InboxView.swift:47`），点进去是为了离开它。
 3. **「我的」是平铺的杂物间。** 账号、显示密度、已连接的电脑、诊断四段直接铺在一屏，每加一个设置就长一行。
 
-## 3. 三个位置的固定含义
+## 3. 顶层位置
+
+### 当前四格（2026-10-06）
+
+| 位置 | 含义 | 放什么 |
+|---|---|---|
+| **主页** | 中枢：所有入口，以及「有没有人需要你」 | 功能清单、待处理卡 |
+| **终端** | 工作现场：控制电脑上的会话 | 电脑切换、会话列表、终端画布 |
+| **通知** | 账号消息中心 | 待处理、全部通知、未读通知和管理操作 |
+| **我的** | 配置：账号与本机行为 | 分类列表，点进去才是具体设置 |
+
+### 历史三格（2026-09-25，已被上方修订覆盖）
 
 | 位置 | 含义 | 放什么 |
 |---|---|---|
@@ -33,11 +52,13 @@
 
 冷启动落主页；从后台恢复保持上次的 tab（`TabView` 的默认行为，不需要额外逻辑）。
 
-### 3.1 硬规则：底栏不新增槽位
+### 3.1 历史硬规则：底栏不新增槽位（已被 2026-10-06 修订覆盖）
 
 **位置是稀缺资源，功能不是。** 新增能力一律进入「主页 → 功能」清单，底栏永远是三格，不因任何理由增加第四个。
 
 这条要写进 `docs/agents/mobile-adaptive-layout.md`，否则下次又会为一个新功能开一格。功能超过十二项左右时，「功能」页需要加搜索框和「常用」置顶——那个阈值现在不必决定，但它是这条规则的下一站，不是推翻它。
+
+当前方案明确保留四个顶层位置；后续新增能力仍应优先进入主页功能清单，只有经过产品决策才可继续增加底栏位置。
 
 ## 4. 关键决策
 
@@ -48,8 +69,8 @@
 | # | 决定 | 理由 |
 |---|---|---|
 | A | **「新建会话」和「剪贴板历史」在主页栈里不重写成页面**：新建会话仍弹现有 `NewSessionSheet`，剪贴板历史作为主页栈的一页推入 | 原型把它们画成推入的一屏是**纯 CSS 的妥协**——原型不含一行 JS，做不了 sheet。`NewSessionSheet` 内部是一套 `NavigationStack` 加项目 / 供应商 / 模型三层下钻（`Features/Sessions/NewSessionSheet.swift:89,113-120`），拆掉重搭一层导航买不到任何东西。设计稿自己要求「两处打开同一个界面」，弹同一个 sheet 正是这句话。 |
-| B | **通知行的「该去哪」解析要抽成共用函数** | 设计稿说「`NotificationRouter` 的 target 解析逻辑可以直接复用」，但 `NotificationRouter` 只有一条 `pending` 队列（`Core/Push/NotificationRouter.swift:31`）；真正的解析住在 `NotificationDetailView` 里（`Features/Inbox/InboxView.swift:295-310`）。而详情页按本设计要取消。所以必须先抽出「这条通知该去哪」，否则面板行和深链要各写一遍。见 §7.5。 |
-| C | **待处理卡有多条待处理会话时，点开通知面板的「待处理」段** | 设计稿的箭头是「待处理卡 → 终端 · 那个会话」。只有一条时照办；有多条时直接进其中一条会把另外几条藏起来，而卡片文案会写「N 个会话在等你」，说了 N 只给一个是不诚实的。两条路读的是同一份 `model.waitingSessions`（`App/SynapseAppModel.swift:1126`），面板「待处理」段就是它的完整列表。 |
+| B | **通知行的「该去哪」解析要抽成共用函数** | 设计稿说「`NotificationRouter` 的 target 解析逻辑可以直接复用」，但 `NotificationRouter` 只有一条 `pending` 队列（`Core/Push/NotificationRouter.swift:31`）；真正的解析住在 `NotificationDetailView` 里（`Features/Inbox/InboxView.swift:295-310`）。而详情页按本设计要取消。所以必须先抽出「这条通知该去哪」，否则通知页行和深链要各写一遍。见 §7.5。 |
+| C | **待处理卡有多条待处理会话时，点开通知页的「待处理」段** | 设计稿的箭头是「待处理卡 → 终端 · 那个会话」。只有一条时照办；有多条时直接进其中一条会把另外几条藏起来，而卡片文案会写「N 个会话在等你」，说了 N 只给一个是不诚实的。两条路读的是同一份 `model.waitingSessions`（`App/SynapseAppModel.swift:1126`），通知页「待处理」段就是它的完整列表。 |
 | D | **`.liveRecording` 深链落主页时同时把「录音列表」推进主页栈** | 原来「先落到录音 tab」的理由是：录音页是 sheet，若背后是一片无关界面，用户退出 sheet 后不知道自己回到了哪（`Features/Root/RootView.swift:260-263`）。落到主页**根**会把这个理由重新引入。落主页 + 推入录音列表，退出 sheet 后人就在录音列表里。 |
 
 ### 4.2 用户 2026-09-25 拍板的四项
@@ -57,7 +78,7 @@
 | 决定 | 内容 |
 |---|---|
 | 交付范围 | 「我的」七分类**全部落地**，但**不做开源许可**；**版本号同时留在两处** —— 「关于」页新增一行，同时**终端顶栏第二行（`TerminalScreen.swift:1131-1137`）一个字不动** |
-| 通知面板形态 | `.sheet` 覆盖面板（不是推入一屏） |
+| 通知面板形态（历史） | `.sheet` 覆盖面板（已由 2026-10-06 独立通知页面替代） |
 | 底栏未读角标 | **沿用系统 `.badge`（系统红）**，不做琥珀小圆点。见下 |
 | 剪贴板历史 | 从终端挪进主页「功能」 |
 
@@ -74,15 +95,41 @@
 
 ### 4.3 其余沿用设计稿的决策
 
-- **2026-09-29 补充：通知支持全文阅读。** 行内保留两行摘要；无目标的通知点行进入 Markdown 全文，有目标的通知仍点行直达目标，并提供独立「全文」操作。此处取代原先“通知详情页取消”的决定。
-- **有目标的通知点行仍直达目标**，同时标记已读并关闭面板；无目标通知点行进入全文。
-- **常驻性由三处承担**：主页右上角常驻铃铛、底栏主页 tab 上的未读数、已有的系统推送与 App 图标角标。注意终端会话页会隐藏底栏（`TerminalScreen.swift:600`），所以终端里看不见底栏角标——这与现状一致，会话行上的琥珀「等待输入」徽章承担那里的提示。
+- **2026-09-29 补充（历史面板方案）：通知支持全文阅读。** 行内保留两行摘要；无目标的通知点行进入 Markdown 全文，有目标的通知仍点行直达目标，并提供独立「全文」操作。此处已由 2026-10-06 的整行单动作规则替代。
+- **2026-10-06 当前方案：通知页中的每行只有一个点击动作。** 先标记已读，再按目标进入会话、录音、站内信或链接；没有目标时在通知页打开 Markdown 全文。站内信与其他通知相同，不显示独立「全文」图标。
+- **常驻性（历史面板方案）由三处承担**：主页右上角常驻铃铛、底栏主页 tab 上的未读数、已有的系统推送与 App 图标角标。该入口与角标归属已由 2026-10-06 修订替代。
+- **2026-10-06 当前常驻性：**通知底栏项承载未读角标；主页不再显示通知铃铛。已有的系统推送与 App 图标角标保持不变。终端会话页会隐藏底栏（`TerminalScreen.swift:600`），会话行上的琥珀「等待输入」徽章继续承担终端内的提示。
 - **「我的」外层只放分类，值放二级页。** 例外只有两行：账号（显示邮箱）、电脑（显示当前电脑名 + 在线圆点）。这两个值是「你现在处在什么状态」，不是「一个可以调的设置」。
   - **注意：设计稿原型的「昵称」在代码里不存在。** `SynapseAppModel` 只有 `email`（`App/SynapseAppModel.swift:20`），没有昵称字段。账号行右侧显示邮箱。
 - **功能是目录，终端页上保留同一件事的快捷方式。** 「新建会话」既列在功能里，也保留终端列表右上角原有的 ＋；剪贴板历史则**只**保留功能里那一处（挪走就是挪走）。电脑切换同属此列：主处是终端页的设备行，主页顶栏那一枚是它的快捷方式 —— 两处共用同一个 `selectDesktop`。
 - **主页的待处理卡只在真有会话卡住时出现**，没有内容就不占位置。它与终端会话行上的琥珀徽章是同一份数据（`waitingSessions`），不引入第二套状态。
 
-## 5. 新结构全图
+## 5. 结构全图
+
+### 当前结构（2026-10-06）
+
+```
+主页
+ ├─ 待处理卡（仅当 model.waitingSessions 非空）
+ └─ 功能
+     ├─ 录音 ──────────────────────→ 推入 录音列表 → 录音详情
+     ├─ 云盘 / 站内信 / 新建会话 / 剪贴板历史
+     └─ 其他主页功能
+
+终端
+ └─ 当前电脑 → 会话列表 → 终端画布（进入后隐藏底栏）
+
+通知
+ └─ 待处理 / 全部通知 / 未读通知 → 整行点击进入通知目标或打开正文
+
+我的（分类列表 → 二级页 → 三级页）
+ ├─ 账号 │ 电脑
+ ├─ 终端 │ 录音 │ 通知
+ └─ 诊断 → 诊断日志
+     │ 关于
+```
+
+### 历史结构（2026-09-25，已被上方修订覆盖）
 
 ```
 主页
@@ -120,13 +167,26 @@
 | 新建会话 | 在当前电脑上开一个终端 | — | 弹出 `NewSessionSheet` | 与终端页 ＋ 同一判据：`selectedDesktopClientInstanceId == nil \|\| viewedDesktopIsOffline` 时置灰（`Features/Sessions/SessionListView.swift:79-89`） |
 | 剪贴板历史 | 这台电脑上复制过的内容 | — | 推入剪贴板历史 | 恒可用 |
 
-**右上角是两枚，不是一枚。** 电脑切换（圆点 + 电脑名 + 上下箭头）落在铃铛左边：它回答的是终端页设备行问的同一个问题 ——「我在哪一台电脑上」—— 而这一页那两行文案（「在当前电脑上开一个终端」「这台电脑上复制过的内容」）本来就在引用它，此前却从没说出过是哪一台。词汇、判据和 `selectDesktop` 与终端页共用一份（`Features/Sessions/DesktopIdentityLabel.swift`）：只有真别处可去时它才是控件，只有一台电脑时它只是一行字，正在看的那台掉线时名字仍在（ADR 0221）。电脑名过长时按 `.lineLimit(1)` 截断，不动铃铛。
+**主页顶栏当前只保留电脑切换。** 电脑切换（圆点 + 电脑名 + 上下箭头）回答终端页设备行问的同一个问题——「我在哪一台电脑上」——并与终端页共用 `selectDesktop` 和 `DesktopIdentityLabel`。通知入口位于底栏「通知」，主页不再显示铃铛。
+
+**历史面板方案：右上角是两枚，不是一枚。** 电脑切换落在铃铛左边；该铃铛入口已由 2026-10-06 修订移除。电脑名过长时按 `.lineLimit(1)` 截断。
 
 **不做「即将支持」分组。** 原型里那组（云盘 / 自动化 / 内容库 / 数据库）是为了展示结构在功能变多后长什么样，不是假装已经能用。真实实现时这一组不存在，直到对应能力上线。
 
 功能清单**暂不分组**（记录 / 工具 / 数据…）——现在只有三项可放，过早分组是空的。
 
-### 6.2 通知面板
+### 6.2 当前通知页面（2026-10-06）
+
+通知页面由底栏「通知」进入，与主页、终端和我的处于同一顶层层级。页面使用系统导航与列表组件，不使用 `.sheet` 或主页铃铛入口：
+
+- 顶部分段为 **待处理 / 全部通知 / 未读通知**，默认落「待处理」。前者是当前电脑的实时会话，后两者是账号通知记录；大字号下用菜单选择。
+- 右上角操作菜单包含「将所有通知标为已读」（未读为 0 时置灰）和「清空全部通知」（仅全部通知，仍需确认）。
+- 通知按日期分组，每行显示具体时刻、标题、最多两行 Markdown 摘要、未读点和目标操作提示；站内信与其他来源一样，整行只有一个可操作区域，不显示独立正文图标。
+- 行点击先执行 `readNotification(id)`，再按 §7.5 解析目标并进入会话、录音、站内信或链接；无目标时在通知页面进入 Markdown 全文。外部 HTTPS 链接仍按原浏览入口处理。
+- 待处理行不显示没有标明含义的会话运行时长；左滑删除、加载更多和分页照旧。
+- 页面继续挂 `.noticeOverlay(model)`，并保留动态字体、深浅外观、iPadOS 窗口和辅助功能验收。
+
+### 历史通知面板（2026-09-25，已被上方修订覆盖）
 
 `.sheet` 承载。2026-09-30 的通知面板修正保持以下行为；界面依据为 Apple 的 [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets)、[Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars)、[Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables) 与 [Segmented controls](https://developer.apple.com/design/human-interface-guidelines/segmented-controls)：
 
@@ -185,7 +245,7 @@ enum HomeRoute: Hashable { case recordings, clipboard }
 | 电脑 | `desktopcomputer` | 当前电脑名 + 在线圆点 | 已连接的电脑列表（单选当前、在线 / 离线），点一行切电脑 |
 | 终端 | `terminal` | — | 显示密度（紧凑 / 正常 / 稀疏，分段选择器） |
 | 录音 | `waveform` | 麦克风权限状态 | 麦克风权限行；未请求时点击触发 `MeetingPermission.requestMicrophone()`，已拒绝时点击跳系统设置；一段说明「录音与转写都在服务端处理，不依赖任何一台电脑」 |
-| 通知 | `bell` | 「N 条未读」（无未读时不显示值） | 系统通知权限行（同上模式）；「通知中心」行 → 打开 §6.2 的面板；「图标角标」开关 |
+| 通知 | `bell` | 「N 条未读」（无未读时不显示值） | 系统通知权限；「图标角标」开关。通知列表由底栏「通知」页面承载 |
 | 诊断 | `waveform.path.ecg` | — | 记录诊断日志开关 → 诊断日志页（记录终端屏幕内容、时间范围、占用、导出、删除全部） |
 | 关于 | `info.circle` | 版本号 | 版本与构建号（`AppVersion.label`）；问题反馈 → 三级页 |
 
@@ -238,7 +298,21 @@ enum HomeRoute: Hashable { case recordings, clipboard }
 
 ## 7. 技术落地
 
-### 7.1 Tab 枚举与底栏
+### 7.1 当前 Tab 枚举与底栏（2026-10-06）
+
+`Features/Root/RootView.swift` 当前实现应表达四个顶层位置：
+
+```swift
+private enum Tab: Hashable { case home, terminals, notifications, settings }
+```
+
+- `selectedTab` 初值为 `.home`；四个 `.tag` 顺序为 `.home` / `.terminals` / `.notifications` / `.settings`。
+- 底栏顺序固定为主页 / 终端 / 通知 / 我的；通知页面与其他三页处于同一顶层，不由 `.sheet` 承载。
+- 未读 `.badge` 归通知 tab；App 图标角标仍由 `NotificationBadgePreference` 管理，99 上限不变。
+- 主页不再提供通知铃铛；主页待处理卡可按既有规则直达终端，多个待处理项进入通知 tab 的待处理段。
+- `.tabViewStyle(.sidebarAdaptable)` 不变。
+
+### 7.1a 历史 Tab 枚举与底栏（2026-09-25，已被上方修订覆盖）
 
 `Features/Root/RootView.swift`：
 
@@ -268,7 +342,7 @@ private enum Tab: Hashable { case home, terminals, settings }
 |---|---|---|
 | `.terminal(sessionId, desktopId)` | `selectedTab = .terminals` + `requestTerminal` | **不变**（只是不再有 `.inbox` 兜底） |
 | `.meeting(meetingId)` | `selectedTab = .meetings`；`meetingSelection = id` | `selectedTab = .home`；`homePath = [.recordings]`；`meetingSelection = id` |
-| `.message(id)` | `selectedTab = .inbox`；`reloadNotifications()` 后 `inboxSelection = id` | `reloadNotifications()` → 按 §7.5 解析该条的 target → 有 target 走该 target 的落点；无 target 打开通知面板。两种都先 `readNotification(id)` |
+| `.message(id)` | `selectedTab = .inbox`；`reloadNotifications()` 后 `inboxSelection = id` | `selectedTab = .notifications`；`reloadNotifications()` 后按通知目标进入会话、录音、站内信或链接；无目标在通知页面打开正文。两种都先 `readNotification(id)` |
 | `.newRecording` | `selectedTab = .meetings`；`meetingSelection = nil`；浮出录音页 | `selectedTab = .home`；`homePath = [.recordings]`；`meetingSelection = nil`；浮出录音页 |
 | `.liveRecording` | `selectedTab = .meetings`；`meetingSelection = nil`；在录时浮出录音页 | `selectedTab = .home`；`homePath = [.recordings]`；在录时浮出录音页（见 §4.1 D） |
 | Widget `synapse://terminal?…` | `selectedTab = .terminals` + 判据 | **不变** |
@@ -276,11 +350,11 @@ private enum Tab: Hashable { case home, terminals, settings }
 
 `.message(id)` 的分支要注意异步：`reloadNotifications()` 之后才知道那条通知有没有 target，而用户可能已经自己走开了。照现有写法保留「先落位置、再异步填内容」的次序（`RootView.swift:248-253` 就是这么做的）。
 
-`docs/agents/mobile-adaptive-layout.md:9`「通知、Widget 与其他深链要设置功能、电脑和条目三层目标」继续有效，只是「功能」的含义从底栏 tab 变成主页栈里的位置。
+`docs/agents/mobile-adaptive-layout.md:9`「通知、Widget 与其他深链要设置功能、电脑和条目三层目标」继续有效；通知深链的功能落点现在是通知 tab 或它解析出的目标页面。
 
 ### 7.4 登录退出
 
-`RootView.swift:81-93` 的清理加两项：`homePath = []`，以及关闭通知面板与录音页。`selectedTab` 回到 `.home`（原为 `.terminals`）。
+`RootView.swift:81-93` 的清理包括 `homePath = []`、通知页面的选中项/正文路径和录音页。`selectedTab` 回到 `.home`（原为 `.terminals`）；不再清理或关闭通知面板，因为当前 iOS 没有通知面板。
 
 ### 7.5 通知 target 解析的抽取
 
@@ -290,12 +364,17 @@ private enum Tab: Hashable { case home, terminals, settings }
 |---|---|
 | `source` 是 `terminal-attention` / `terminal-complete`，且有 `targetId` | `.terminal(sessionId: targetId, desktopClientInstanceId: deviceId ?? "")` |
 | `source` 是 `meeting-transcription`，且有 `targetId` | `.meeting(meetingId: targetId)` |
-| 有 `url` 且 scheme 是 `https` | 外部链接，**不是** `Destination`——面板行直接 `openURL`，不走路由 |
-| 其余 | `nil`（普通通知） |
+| `source` 是 `mail`，且有 `targetId` | `.mail(messageId: targetId)` |
+| 有 `url` 且 scheme 是 `https` | 外部链接，**不是** `Destination`——通知页行直接 `openURL`，不走路由 |
+| 其余 | `nil`（普通通知，在通知页打开正文） |
 
-三个消费者共用它：通知面板的行、`.message(id)` 深链、以及将来任何新入口。
+三个消费者共用它：通知页的行、`.message(id)` 深链、以及将来任何新入口。
 
-### 7.6 通知面板对 `InboxView` 的改造
+### 7.6 当前通知页对 `InboxView` 的装配（2026-10-06）
+
+`InboxView` 作为通知 tab 的页面内容，不再接收 `PresentationDetent` 绑定，也不由 `NotificationPanel` sheet 包裹。页面宿主提供通知目标回调和正文导航；切换筛选只刷新对应列表。`notificationRow` 使用单一整行点击区域，删除站内信专用的右侧正文按钮与 `onViewContent` 分支。通知目标为 `.mail` 时，整行进入真实站内信；没有目标时才进入通知正文。
+
+### 7.6a 历史通知面板对 `InboxView` 的改造（已被上方修订覆盖）
 
 `InboxView` 从「分栏里的列表」改为「sheet 里的面板」，改动集中在三处：
 
@@ -303,26 +382,25 @@ private enum Tab: Hashable { case home, terminals, settings }
 2. **删掉旧 `NotificationDetailView`** 及 `RootView` 的旧装配（`RootView.swift:208-210`）；2026-09-29 新增的全文页只负责阅读，不恢复原先的中转路由。
 3. **`.navigationTitle("消息")` 去掉**（`InboxView.swift:81`）——面板和全文页统一使用「通知」。
 
-`onOpenTerminal` 回调的语义变了：原来是「切到终端 tab 并打开会话」，现在是「关闭面板、切到终端、打开会话」——多一点是 dismiss。它仍要经过 `requestTerminal` 那道闸门（待处理行取自列表，可能在画行与落指之间结束掉，`RootView.swift:203-207` 的原有理由成立）。
+`onOpenTerminal` 回调仍是「切到终端 tab 并打开会话」，不再包含关闭通知面板的 dismiss 步骤；它仍要经过 `requestTerminal` 那道闸门（待处理行取自列表，可能在画行与落指之间结束掉，`RootView.swift:203-207` 的原有理由成立）。
 
 ### 7.7 iPadOS
 
-- `TabView(.sidebarAdaptable)` 不变，三个 tab 在侧边栏就是三项。
+- `TabView(.sidebarAdaptable)` 不变，当前四个 tab 在侧边栏按「主页 / 终端 / 通知 / 我的」排列；通知页面与其他顶层页面共享窗口、动态字体和辅助功能约束。
 - 「我的」宽窗用分类列表 + 右侧内容，即 `AdaptiveFeatureNavigation` 的既有形态；本改版把它从「只有宽窗用」推广到两种情况都用（§6.5）。
 - 主页栈里推入的 `AdaptiveFeatureNavigation` 提供录音的并排分栏（§6.3），不要再叠分栏。
 - 除「我的」以外，不因为改成三个 tab 而调整任何栏宽或折叠顺序。
 
 ### 7.8 角标
 
-底栏用系统 `.badge`，颜色不改（§4.2）。App 图标角标受 §6.5.2 的开关控制。自绘的角标只出现在主页铃铛上，与底栏同色（系统红 + 白字）。
-
-它挑在铃铛框的右上角外面，所以那一层**不能被裁剪**：`HomeView` 的 `bell` 及其外层的工具栏按钮都不要加 `clipShape`。
+底栏通知项用系统 `.badge`，颜色不改（§4.2）。App 图标角标受 §6.5.2 的开关控制。主页不再绘制通知铃铛角标。
 
 ## 8. 明确不做
 
 - 不改终端的画布、键盘、语音输入与网格上报逻辑。
 - 不改录音的会话生命周期，也不增加纪要、发言人等已取消的产品层级。
 - 不改主机名、权限模型与任何服务端协议。
+- iOS 通知改为第四个顶层 tab，不恢复主页铃铛或 `.sheet` 通知面板；桌面消息中心继续使用既有面板。
 - **不改终端顶栏第二行的版本号显示**（用户明确要求保留）。
 - 不做「即将支持」那一组，也不做「功能」清单的分组。
 - 不做开源许可页。
@@ -334,11 +412,11 @@ private enum Tab: Hashable { case home, terminals, settings }
 
 | 文件 | 改什么 |
 |---|---|
-| `docs/agents/mobile-adaptive-layout.md:7` | 「顶层『终端 / 录音 / 消息 / 我的』」→ 三格；并补 §3.1 的硬规则 |
+| `docs/agents/mobile-runtime-contracts.md` | 当前四格顺序、独立通知页、整行通知点击和通知目标状态边界 |
 | `docs/agents/mobile-adaptive-layout.md:28` | 「『我的』在 iPhone 保持现有分组列表」→ iPhone 也是分类列表下钻 |
-| `docs/agents/capability-registry.md:22` | 「iOS『消息』Tab」→ 主页的铃铛与通知面板 |
-| `docs/superpowers/specs/2026-09-23-account-notification-center-design.md:5,13` | 「iOS『消息』Tab」→ 通知面板；「普通点按先按消息 ID 打开详情」→ 直接去往 target |
-| `SynapseMobile/README.md:5` | 顶层导航那句话；并补一小节写清三个位置与「不再增加」 |
+| `docs/agents/capability-registry.md:22` | iOS 入口改为独立通知页面，保留无 System App / Dock / Workflow / Automation / Deep Link 注册 |
+| `docs/superpowers/specs/2026-09-23-account-notification-center-design.md` | 2026-10-06 iOS 展示修订：四格、独立通知页、站内信整行点击；桌面与协议不变 |
+| `SynapseMobile/README.md` | 顶层导航改为四格并说明通知页与整行点击 |
 | `AGENTS.md:70` | 「录音、消息和终端的现有业务状态」→ 通知取代消息 |
 | `RELEASE_NOTES_PENDING.md` | 底栏结构变化属用户可感知变化，必须记录 |
 | `docs/prototypes/2026-09-25-mobile-navigation-restructure.html` | 新增，从 `~/Desktop/UI 重构/原型.html` 收入 |
@@ -349,25 +427,25 @@ private enum Tab: Hashable { case home, terminals, settings }
 
 ### 10.1 必须修的既有测试
 
-`SynapseMobileUITests` 里没有断言 tab 数量，但**有一批按索引点 tab 的写法**，三格之后索引全错，而且错得无声无息（`boundBy: 0` 从「终端」变成「主页」）：
+`SynapseMobileUITests` 里按索引点 tab 的写法统一使用当前四格顺序：
 
-| 位置 | 现在点的 | 三格后实际点的 |
+| 索引 | 当前分区 |
 |---|---|---|
-| `SynapseMobileUITests/TerminalFlowUITests.swift:71` | 索引 2 = 消息 | 我的 |
-| `SynapseMobileUITests/TerminalFlowUITests.swift:79` | 索引 0 = 终端 | 主页 |
-| `SynapseMobileUITests/TerminalFlowUITests.swift:198` | 索引 3 = 我的 | 越界 |
-| `SynapseMobileUITests/TerminalGitUITests.swift:357` | 索引 0 = 终端 | 主页 |
+| `0` | 主页 | — |
+| `1` | 终端 | — |
+| `2` | 通知 | — |
+| `3` | 我的 | — |
 
-**修正索引，但不要改成按标签查找。** `TerminalFlowUITests.swift:63-69` 那条注释写明了这里为什么用索引：「a badge rewrites the accessibility label of the tab it sits on」——底栏主页那一格从此就带着未读数角标，用 `buttons["主页"]` 去找会随未读数变化而时灵时不灵。索引留着，数字改正，并抽成有名字的常量（`home = 0` / `terminals = 1` / `settings = 2`），免得下一次移动 tab 又要逐个改数字。那段过时的顺序注释同时改正。
+**修正索引，但不要改成按标签查找。** `TerminalFlowUITests.swift` 的注释写明了这里为什么用索引：「a badge rewrites the accessibility label of the tab it sits on」——通知角标会改变通知 tab 的 accessibility label，用标签查找会随未读数变化而时灵时不灵。索引留着，并抽成有名字的常量（`home = 0` / `terminals = 1` / `notifications = 2` / `settings = 3`），免得下一次移动 tab 又要逐个改数字。
 
 ### 10.2 要补的行为验证
 
 1. **深链五条各走一遍**：`.terminal` / `.meeting` / `.message`（有 target 与无 target 两种）/ `.newRecording` / `.liveRecording`。`.message` 是改动最大的一条。
-2. **待处理卡两种条数**：1 条直接进会话；多条落面板「待处理」段。
-3. **通知面板**：行点击后确实 dismiss 且落到了目标；「全部已读」后底栏角标与铃铛角标同时消失；左滑删除。
+2. **待处理卡两种条数**：1 条直接进会话；多条落通知 tab 的「待处理」段。
+3. **通知页面**：底栏进入独立页面；整行点击后落到目标或正文；「全部已读」后通知 tab 角标消失；站内信没有独立正文按钮；左滑删除。
 4. **主页栈三层**：主页 → 录音列表 → 录音详情 → 逐级返回，`meetingSelection` 在返回时清空。
 5. **重按主页 tab** 回到主页根，并清掉 `homePath` 与 `meetingSelection`。
-6. **登录退出**：清空后落主页，且主页栈、通知面板、录音页都不残留。
+6. **登录退出**：清空后落主页，且主页栈、通知页面选中项/正文路径、录音页都不残留。
 7. **我的七分类**：iPhone 与 iPadOS 都能进每个二级页；权限行三种状态各试一次；图标角标开关关闭后重启 App 角标仍为 0。
 8. **新建会话置灰**：无电脑、以及选了离线电脑时，主页那一行与终端 ＋ 同时置灰。
 9. **剪贴板历史**：无电脑时能进入并看到空态；切电脑后列表跟着换。
@@ -383,7 +461,7 @@ private enum Tab: Hashable { case home, terminals, settings }
 
 另外两处同样只在真渲染下才暴露，一并实测：
 
-- 通知面板 sheet 在 `.medium` detent 下的分段控件与列表滚动行为。
+- 通知页面在 iPhone / iPadOS 窗口中的分段控件、列表滚动、动态字体和整行点击行为。
 - 「我的」在 iPhone 从平铺改为下钻后，`AdaptiveFeatureNavigation` 的返回手势与导航栏标题是否正常。
 
 ### 10.4 环境
@@ -397,7 +475,7 @@ private enum Tab: Hashable { case home, terminals, settings }
 |---|---|---|
 | iPadOS 三层嵌套分栏 | §10.3 | 实测，不成立就回退 |
 | 用户肌肉记忆 | 底栏第一格从「终端」变成「主页」，且终端页不再默认落点 | 冷启动落主页是设计选择；`RELEASE_NOTES_PENDING.md` 要说清楚 |
-| 通知常驻性变弱 | 底栏角标虽在，但终端页隐藏底栏 | 主页铃铛 + 系统推送 + 图标角标三处兜住；会话行琥珀徽章在终端内继续工作 |
+| 通知常驻性变弱 | 底栏角标虽在，但终端页隐藏底栏 | 通知 tab、系统推送与图标角标共同提示；会话行琥珀徽章在终端内继续工作 |
 | 首次登录的落点 | 现在登录后落终端，改版后落主页 | 登录成功后的行为照 `selectedTab` 初值，即主页 |
 | 「我的」七分类里两项只有一行设置 | 终端（显示密度）、录音（麦克风权限） | 设计稿已论证这是给将来留位置；若用户不认，把「显示密度」提回外层即可 |
 

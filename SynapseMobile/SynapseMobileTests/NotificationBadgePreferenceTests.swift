@@ -4,7 +4,7 @@ import Testing
 
 /// App 图标角标要不要跟随未读数。
 ///
-/// 这个开关只影响**系统角标**：底栏那一格的角标、主页铃铛上自绘的琥珀角标都照常工作。
+/// 这个开关只影响**系统角标**：通知底栏那一格的角标照常工作。
 /// 关掉它是一件「我不想让手机在锁屏上提醒我」的事，不是「我不想看见未读」。
 ///
 /// 这一套**串行跑**：读写的是同一份 `UserDefaults.standard`，两条同时改同一个键时，
@@ -28,7 +28,7 @@ struct NotificationBadgePreferenceTests {
     }
 
     /// 封顶：图标角标只收数字、写不出「+」，所以 100 条以上都写成 99 —— 它得和界面上
-    /// 那两枚写着「99+」的角标（主页铃铛、底栏主页那一格）对得上。
+    /// 通知页底栏那枚写着「99+」的角标对得上。
     @Test func aLargeCountStopsAtTheLimit() {
         #expect(NotificationBadgePreference.badgeCount(unreadCount: 99, enabled: true) == 99)
         #expect(NotificationBadgePreference.badgeCount(unreadCount: 100, enabled: true) == 99)
