@@ -471,6 +471,32 @@ describe("AuditLogInterceptor", () => {
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("李 阳")
   })
 
+  it("lets the service audit successful handle edits and records failed requests", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const interceptor = new AuditLogInterceptor(auditLog as never)
+    const context = createContext({
+      method: "PATCH",
+      path: "/api/admin/users/user-1/handle",
+      params: { id: "user-1" },
+      body: { handle: "new-name" },
+      admin: { id: "admin-1", email: "current-admin@example.com" },
+    })
+
+    await lastValueFrom(interceptor.intercept(context, { handle: () => of({ ok: true }) }))
+    expect(auditLog.record).not.toHaveBeenCalled()
+
+    await expect(lastValueFrom(interceptor.intercept(
+      context,
+      { handle: () => throwError(() => new Error("用户名已被使用。")) },
+    ))).rejects.toThrow("用户名已被使用。")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.user.handle_update.failed",
+      targetType: "user",
+      targetId: "user-1",
+      detail: expect.objectContaining({ body: { handle: "new-name" } }),
+    }))
+  })
+
   it("records failed authenticated admin operations without duplicating service success audits", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }

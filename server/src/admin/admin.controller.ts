@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Head, Header, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
-import { normalizeUserNickname } from "@synapse/shared"
+import { normalizeUserHandle, normalizeUserNickname, userHandleMaxLength } from "@synapse/shared"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuditLogService, auditLogExportLimit } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
@@ -29,6 +29,19 @@ const userNicknameSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: error instanceof Error ? error.message : "昵称无效。",
+      })
+    }
+  }),
+}).strict()
+
+const userHandleSchema = z.object({
+  handle: z.string().trim().min(1).max(userHandleMaxLength).superRefine((value, ctx) => {
+    try {
+      normalizeUserHandle(value)
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "用户名无效。",
       })
     }
   }),
@@ -221,6 +234,13 @@ export class AdminController {
     const result = userNicknameSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "昵称无效。")
     return this.admin.updateUserNickname(id, result.data, request?.admin?.email, request?.ip)
+  }
+
+  @Patch("/users/:id/handle")
+  async updateUserHandle(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
+    const result = userHandleSchema.safeParse(body)
+    if (!result.success) throw badRequestFromZodError(result.error, "用户名无效。")
+    return this.admin.updateUserHandle(id, result.data, request?.admin?.email, request?.ip)
   }
 
   @Post("/users/:id/password-reset-link")

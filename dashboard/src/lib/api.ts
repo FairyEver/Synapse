@@ -1646,6 +1646,14 @@ export const adminApi = {
         body: JSON.stringify({ nickname }),
       }
     ),
+  updateUserHandle: (id: string, handle: string) =>
+    request<AdminUserRow>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/handle`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ handle }),
+      }
+    ),
   createUserPasswordResetLink: (id: string) =>
     request<PasswordResetLinkResult>(
       `${adminApiBasePath}/users/${encodeURIComponent(id)}/password-reset-link`,

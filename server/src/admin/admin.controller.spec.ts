@@ -531,4 +531,21 @@ describe("AdminController", () => {
     )
   })
 
+  it("validates and forwards administrator username edits", async () => {
+    const updateUserHandle = vi.fn().mockResolvedValue({ id: "user-1", handle: "new-name" })
+    const controller = createController({ updateUserHandle })
+    const request = { admin: { email: "admin@example.com" }, ip: "203.0.113.12" } as never
+
+    await expect(controller.updateUserHandle("user-1", { handle: "bad.name" }, request))
+      .rejects.toThrow("用户名不能包含点。")
+    await expect(controller.updateUserHandle("user-1", { handle: "console" }, request))
+      .rejects.toThrow("用户名不能使用保留路由名称。")
+    expect(updateUserHandle).not.toHaveBeenCalled()
+
+    await controller.updateUserHandle("user-1", { handle: " New-Name " }, request)
+    expect(updateUserHandle).toHaveBeenCalledWith(
+      "user-1", { handle: "New-Name" }, "admin@example.com", "203.0.113.12",
+    )
+  })
+
 })

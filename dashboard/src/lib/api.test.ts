@@ -168,6 +168,26 @@ describe('adminApi.users', () => {
     )
   })
 
+  it('updates usernames through the admin endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'user/id', handle: 'new-name' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.updateUserHandle('user/id', 'new-name')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/users/user%2Fid/handle',
+      expect.objectContaining({
+        body: JSON.stringify({ handle: 'new-name' }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
+    )
+  })
+
   it('searches users for administrator filters', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {

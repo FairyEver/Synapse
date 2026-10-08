@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
-import { buildPasswordResetUrl, normalizeUserNickname } from "@synapse/shared"
+import { buildPasswordResetUrl, normalizeUserHandle, normalizeUserNickname } from "@synapse/shared"
 import { PinoLogger } from "nestjs-pino"
 import { passwordResetTokenTtlMs } from "../auth/password-reset"
 import { createOpaqueToken, hashToken } from "../auth/token"
@@ -267,6 +267,74 @@ export class AdminService {
     return toAdminUserRow(user)
   }
 
+  async updateUserHandle(
+    id: string,
+    input: { readonly handle: string },
+    actorEmail = "system",
+    ipAddress = "system",
+  ) {
+    let handle: string
+    try {
+      handle = normalizeUserHandle(input.handle)
+    } catch (error) {
+      if (error instanceof Error) throw new BadRequestException(error.message)
+      throw error
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.user.findUnique({
+        where: { id },
+        select: { id: true, handle: true },
+      })
+      if (!current) throw new NotFoundException("用户不存在。")
+
+      if (handle !== current.handle) {
+        const redirect = await tx.userHandleRedirect.findUnique({
+          where: { oldHandle: handle },
+          select: { userId: true },
+        })
+        if (redirect && redirect.userId !== id) {
+          throw new BadRequestException("用户名已被保留。")
+        }
+
+        const existingUser = await tx.user.findUnique({
+          where: { handle },
+          select: { id: true },
+        })
+        if (existingUser && existingUser.id !== id) {
+          throw new BadRequestException("用户名已被使用。")
+        }
+
+        await tx.userHandleRedirect.upsert({
+          where: { oldHandle: current.handle },
+          create: { userId: id, oldHandle: current.handle },
+          update: { userId: id },
+        })
+      }
+
+      try {
+        return await tx.user.update({
+          where: { id },
+          data: { handle },
+          select: adminUserSelect,
+        })
+      } catch (error) {
+        if (isUniqueConstraintError(error)) throw new BadRequestException("用户名已被使用。")
+        if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
+        throw error
+      }
+    })
+    await this.recordServiceManagedAuditSafely({
+      adminEmail: actorEmail,
+      action: "admin.user.handle_update",
+      targetType: "user",
+      targetId: id,
+      detail: { fields: ["handle"] },
+      ipAddress,
+    })
+    return toAdminUserRow(user)
+  }
+
   async createUserPasswordResetLink(id: string, publicAppUrl: string) {
     const now = new Date()
     const expiresAt = new Date(now.getTime() + passwordResetTokenTtlMs)
@@ -373,6 +441,10 @@ function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; 
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
 
 function normalizeAdminNote(value: string | null): string | null {

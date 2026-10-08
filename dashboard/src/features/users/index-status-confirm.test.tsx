@@ -19,6 +19,7 @@ vi.mock('@/lib/api', () => ({
     createUserPasswordResetLink: vi.fn(),
     updateUserAdminNote: vi.fn(),
     updateUserNickname: vi.fn(),
+    updateUserHandle: vi.fn(),
     updateUserStatus: vi.fn(),
   },
 }))
@@ -269,6 +270,40 @@ describe('UsersPage status confirmation', () => {
     await click(dialogButtonByText('保存'))
     expect(mockedAdminApi.updateUserNickname).toHaveBeenCalledWith('user-1', '李 阳')
     await waitFor(() => expect(cellByHeader('ada@example.com', '昵称').textContent).toBe('李 阳'))
+  })
+
+  it('edits usernames with shared validation', async () => {
+    const user = {
+      id: 'user-1',
+      email: 'ada@example.com',
+      handle: 'ada',
+      nickname: 'Ada',
+      adminNote: null,
+      status: 'active' as const,
+      createdAt: '2026-06-14T00:00:00.000Z',
+      updatedAt: '2026-06-14T00:00:00.000Z',
+      teams: [],
+    }
+    mockedAdminApi.listUsers.mockResolvedValue({ data: [user], total: 1 })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+    mockedAdminApi.updateUserHandle.mockResolvedValue({ ...user, handle: 'new-name' })
+
+    renderPage()
+    await waitFor(() => userActionsButton('ada@example.com'))
+    await openMenu(userActionsButton('ada@example.com'))
+    await click(menuItemByText('编辑用户名'))
+
+    const input = document.querySelector('#user-handle')
+    if (!(input instanceof HTMLInputElement)) throw new Error('handle input not found')
+    await inputValue(input, 'bad.name')
+    expect(document.body.textContent).toContain('用户名不能包含点。')
+    expect(dialogButtonByText('保存').disabled).toBe(true)
+
+    await inputValue(input, ' New-Name ')
+    expect(dialogButtonByText('保存').disabled).toBe(false)
+    await click(dialogButtonByText('保存'))
+    expect(mockedAdminApi.updateUserHandle).toHaveBeenCalledWith('user-1', 'new-name')
   })
 
   it('generates and copies password reset links for active users', async () => {

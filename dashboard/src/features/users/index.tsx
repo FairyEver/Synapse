@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { normalizeUserNickname } from '@synapse/shared'
+import { normalizeUserHandle, normalizeUserNickname, userHandleMaxLength } from '@synapse/shared'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Download, MoreHorizontal, RefreshCw } from 'lucide-react'
@@ -57,6 +57,15 @@ function getNicknameError(value: string): string | null {
   }
 }
 
+function getHandleError(value: string): string | null {
+  try {
+    normalizeUserHandle(value)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : '用户名无效。'
+  }
+}
+
 export default function UsersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
@@ -71,11 +80,14 @@ export default function UsersPage() {
   const [noteTarget, setNoteTarget] = useState<AdminUserRow | null>(null)
   const [nicknameTarget, setNicknameTarget] = useState<AdminUserRow | null>(null)
   const [nicknameDraft, setNicknameDraft] = useState('')
+  const [handleTarget, setHandleTarget] = useState<AdminUserRow | null>(null)
+  const [handleDraft, setHandleDraft] = useState('')
   const [passwordResetTarget, setPasswordResetTarget] = useState<AdminUserRow | null>(null)
   const [adminNoteDraft, setAdminNoteDraft] = useState('')
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
   const nicknameError = nicknameTarget ? getNicknameError(nicknameDraft) : null
+  const handleError = handleTarget ? getHandleError(handleDraft) : null
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-users', page, pageSize, sortQuery],
@@ -169,6 +181,18 @@ export default function UsersPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const updateHandle = useMutation({
+    mutationFn: ({ id, handle }: { id: string; handle: string }) =>
+      adminApi.updateUserHandle(id, handle),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setHandleTarget(null)
+      setHandleDraft('')
+      toast.success('用户名已保存')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   const createPasswordResetLink = useMutation({
     mutationFn: (id: string) => adminApi.createUserPasswordResetLink(id),
     onError: (err: Error) => toast.error(err.message),
@@ -189,11 +213,24 @@ export default function UsersPage() {
     setNicknameDraft(user.nickname)
   }, [])
 
+  const openHandleDialog = useCallback((user: AdminUserRow) => {
+    setHandleTarget(user)
+    setHandleDraft(user.handle)
+  }, [])
+
   function saveNickname() {
     if (!nicknameTarget || nicknameError) return
     const nickname = nicknameDraft.trim()
     if (nickname !== nicknameTarget.nickname) {
       updateNickname.mutate({ id: nicknameTarget.id, nickname })
+    }
+  }
+
+  function saveHandle() {
+    if (!handleTarget || handleError) return
+    const handle = handleDraft.trim().toLowerCase()
+    if (handle !== handleTarget.handle) {
+      updateHandle.mutate({ id: handleTarget.id, handle })
     }
   }
 
@@ -235,6 +272,9 @@ export default function UsersPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align='end'>
+            <DropdownMenuItem onSelect={() => openHandleDialog(row.original)}>
+              编辑用户名
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => openNicknameDialog(row.original)}>
               编辑昵称
             </DropdownMenuItem>
@@ -269,7 +309,7 @@ export default function UsersPage() {
     },
     enableSorting: false,
     enableHiding: false,
-  }), [handleToggle, openAdminNoteDialog, openNicknameDialog, openPasswordResetDialog, toggleStatus.isPending, statusTarget?.user.id])
+  }), [handleToggle, openAdminNoteDialog, openHandleDialog, openNicknameDialog, openPasswordResetDialog, toggleStatus.isPending, statusTarget?.user.id])
 
   const columns: ColumnDef<AdminUserRow>[] = [
     {
@@ -287,7 +327,11 @@ export default function UsersPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='用户名' />
       ),
-      cell: ({ row }) => <LongText>{row.original.handle || '-'}</LongText>,
+      cell: ({ row }) => (
+        <div onDoubleClick={() => openHandleDialog(row.original)}>
+          <LongText>{row.original.handle || '-'}</LongText>
+        </div>
+      ),
       meta: { className: 'max-w-0 w-1/5' },
     },
     {
@@ -422,6 +466,7 @@ export default function UsersPage() {
     ? adminNoteDraft.trim() === (noteTarget.adminNote ?? '').trim()
     : true
   const isNicknameUnchanged = nicknameDraft.trim() === nicknameTarget?.nickname
+  const isHandleUnchanged = handleDraft.trim().toLowerCase() === handleTarget?.handle
 
   return (
     <>
@@ -481,6 +526,45 @@ export default function UsersPage() {
             }
           }}
         />
+        <Dialog
+          open={Boolean(handleTarget)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setHandleTarget(null)
+              setHandleDraft('')
+            }
+          }}
+        >
+          <DialogContent className='sm:max-w-md'>
+            <DialogHeader>
+              <DialogTitle>编辑用户名</DialogTitle>
+              <DialogDescription className='sr-only'>编辑用户名。</DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-2'>
+              <Label htmlFor='user-handle'>用户名</Label>
+              <Input
+                id='user-handle'
+                value={handleDraft}
+                maxLength={userHandleMaxLength}
+                onChange={(event) => setHandleDraft(event.target.value)}
+              />
+              {handleError ? (
+                <p className='text-sm text-destructive'>{handleError}</p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setHandleTarget(null)}>
+                取消
+              </Button>
+              <Button
+                disabled={updateHandle.isPending || Boolean(handleError) || isHandleUnchanged}
+                onClick={saveHandle}
+              >
+                保存
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Dialog
           open={Boolean(nicknameTarget)}
           onOpenChange={(open) => {

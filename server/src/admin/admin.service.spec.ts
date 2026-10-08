@@ -50,6 +50,10 @@ function createPrismaMock(counts: {
       findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({ teamMemberships: [] }),
     },
+    userHandleRedirect: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
     userPasswordResetToken: {
       create: vi.fn().mockResolvedValue({ id: "reset-1" }),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -340,6 +344,61 @@ describe("AdminService", () => {
     prisma.user.update.mockRejectedValue(createNotFoundError())
     await expect(service.updateUserNickname("missing-user", { nickname: "Ada" }))
       .rejects.toThrow("用户不存在。")
+  })
+
+  it("updates a user's handle with shared validation, preserves redirects, and audits the change", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: "user-1", handle: "old-name" })
+      .mockResolvedValueOnce(null)
+    prisma.user.update.mockResolvedValue({
+      id: "user-1",
+      handle: "new-name",
+      teamMemberships: [],
+    })
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.updateUserHandle(
+      "user-1", { handle: " New-Name " }, "admin@example.com", "203.0.113.12",
+    )).resolves.toMatchObject({ handle: "new-name" })
+    expect(prisma.userHandleRedirect.upsert).toHaveBeenCalledWith({
+      where: { oldHandle: "old-name" },
+      create: { userId: "user-1", oldHandle: "old-name" },
+      update: { userId: "user-1" },
+    })
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "user-1" },
+      data: { handle: "new-name" },
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.user.handle_update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { fields: ["handle"] },
+      ipAddress: "203.0.113.12",
+    })
+  })
+
+  it("rejects invalid, reserved, and occupied handles", async () => {
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await expect(service.updateUserHandle("user-1", { handle: "bad.name" }))
+      .rejects.toThrow("用户名不能包含点。")
+    expect(prisma.user.update).not.toHaveBeenCalled()
+
+    prisma.userHandleRedirect.findUnique.mockResolvedValue({ userId: "other-user" })
+    await expect(service.updateUserHandle("user-1", { handle: "console" }))
+      .rejects.toThrow("用户名不能使用保留路由名称。")
+
+    prisma.userHandleRedirect.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: "user-1", handle: "old-name" })
+      .mockResolvedValueOnce({ id: "other-user" })
+    await expect(service.updateUserHandle("user-1", { handle: "other-name" }))
+      .rejects.toThrow("用户名已被使用。")
   })
 
   it("clears admin-only user notes when the value is blank", async () => {
