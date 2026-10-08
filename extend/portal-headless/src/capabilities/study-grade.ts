@@ -33,8 +33,8 @@ import type { PortalRequest } from './meeting-room.js'
  *
  * 班级删除和班级详情里的「移出学员」都按 prepare → submit → cancel 暴露。
  * prepare/cancel 只在本地校验或返回取消标记；submit 才发送真实请求。
- * 页面行尾的「启用/停用」仍未实现：它是先 `PUT /study/grade/studygrade/updateStatus`，
- * 再 `PUT /study/grade/studygrade` 的两步写。
+ * 页面行尾的「启用/停用」按 Portal 两步写暴露：先 `PUT /study/grade/studygrade/updateStatus`，
+ * 再 `PUT /study/grade/studygrade`；第一步本身可能已写状态或创建群聊，不能当只读检查。
  *
  * ## 弹窗与隐藏子页（本文件第二批）
  *
@@ -140,10 +140,12 @@ export const STUDY_GRADE_PERMISSION = '/dashboard/grade/grade'
 
 /** 列表接口。同时也是**班级候选**的来源 */
 export const STUDY_GRADE_LIST_PATH = '/study/grade/studygrade/page'
-/** 启用/停用的第一步（**本能力没有实现**，列在这里是为了让它可被检索到） */
+/** 启用/停用的第一步（真实写操作） */
 export const STUDY_GRADE_UPDATE_STATUS_PATH = '/study/grade/studygrade/updateStatus'
 /** 班级删除入口（批量，body 是裸 ID 数组） */
 export const STUDY_GRADE_DELETE_PATH = '/study/grade/studygrade'
+/** 班级详情学员关联列表（独立回查入口） */
+export const STUDY_GRADE_STUDENT_LIST_PATH = '/study/grade/student'
 /** 班级详情「移出学员」入口（批量，body 是班级学员关联 ID 的裸数组） */
 export const STUDY_GRADE_STUDENT_DELETE_PATH = '/study/grade/student'
 export const STUDY_GRADE_STUDENT_PAGE_PATH = STUDY_GRADE_PAGE_PATH
@@ -177,8 +179,8 @@ export const STUDY_GRADE_STUDENT_SAVE_PATH = '/study/grade/student/addGradeStude
 /**
  * 这批能力的页面归属。
  *
- * 全部钉在**列表页**上：三个弹窗与学员子页都没有自己的菜单权限，只能由列表行进入，
- * 与即时通讯课程那批隐藏路由同一种处理（`study-course.ts` 用 `STUDY_COURSE_IM_PAGE_PATH`）。
+ * 班级列表的三个弹窗与学员子页都没有自己的菜单权限，只能由列表行进入；组织结构下的
+ * 隐藏班级子页另有自己的页面上下文，不能复用这里的权限。
  */
 const HIDDEN_SURFACE = {
   pagePath: STUDY_GRADE_PAGE_PATH,
@@ -271,6 +273,29 @@ export type StudyGradeQuery = {
   pageNo?: number
   pageSize?: number
 }
+
+export type StudyGradeStudentQuery = {
+  gradeId: StudyGradeId
+  name?: string
+  mobile?: string | number
+  staffCode?: string | number
+  isRelatedLayer?: number | string
+  createTimeStart?: string
+  createTimeEnd?: string
+}
+
+export type StudyGradeManagementCenterQuery = {
+  managementCenterId: StudyGradeId
+  name?: string
+  type?: number | string
+  createTimeStart?: string
+  createTimeEnd?: string
+  pageNo?: number
+  pageSize?: number
+}
+
+const STUDENT_LIST_ORDER = ['gradeId', 'name', 'mobile', 'staffCode', 'isRelatedLayer', 'createTimeStart', 'createTimeEnd'] as const
+const MANAGEMENT_CENTER_LIST_ORDER = ['order', 'orderField', 'managementCenterId', 'name', 'type', 'createTimeStart', 'createTimeEnd', 'pageNo', 'pageSize'] as const
 
 /**
  * 这一页的参数顺序 —— **顺序即 qs 序列化后的顺序**，是契约不是默认值表（D20）。
@@ -530,6 +555,22 @@ function idOf (value: unknown, label: string): StudyGradeId {
   throw new Error(`${label}必须为正整数 ID`)
 }
 
+function statusDraftOf (value: unknown): { id: StudyGradeId; status: 0 | 1 } {
+  const draft = objectOf(value, '状态草稿')
+  if (draft.status !== 0 && draft.status !== 1) throw new Error('状态草稿.status只能是0或1')
+  return {
+    id: idOf(draft.id, '状态草稿.id'),
+    status: draft.status,
+  }
+}
+
+function assertReadbackTimeRange (query: { createTimeStart?: string; createTimeEnd?: string }): void {
+  const start = query.createTimeStart ?? ''
+  const end = query.createTimeEnd ?? ''
+  if ((start === '') !== (end === '')) throw new Error('创建时间起止必须成对给出')
+  if (start !== '' && (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(end) || end < start)) throw new Error('创建时间必须为YYYY-MM-DD HH:mm:ss，结束时间不早于开始时间')
+}
+
 /** 非空去重 ID 数组。去重是**本地的**：重复项对服务端是同一个集合，去掉不改变语义。 */
 function idListOf (value: unknown, label: string): StudyGradeId[] {
   const ids = parseIds(value, label)
@@ -703,6 +744,79 @@ export const studyGradeCapabilities: CapabilityDefinition[] = [
           '无头不能照抄（设计 D6 / H35）。用户说不出完整名字时，先问他名字里的一两个字。',
       },
       { name: 'limit', kind: 'number', required: false, description: '最多返回几条，默认 20' },
+    ],
+  },
+  {
+    id: 'study-grade-status-prepare',
+    title: '准备启停班级',
+    pagePath: STUDY_GRADE_PAGE_PATH,
+    permission: STUDY_GRADE_PERMISSION,
+    moduleType: STUDY_GRADE_MODULE_TYPE,
+    httpInstance: 'platform',
+    write: false,
+    params: [
+      { name: 'id', kind: 'text', required: true, description: '班级列表行 ID' },
+      { name: 'currentStatus', kind: 'number', required: true, description: '当前状态，只接受 0 或 1' },
+    ],
+  },
+  {
+    id: 'study-grade-status-check',
+    title: '执行班级启停第一步',
+    pagePath: STUDY_GRADE_PAGE_PATH,
+    permission: STUDY_GRADE_PERMISSION,
+    moduleType: STUDY_GRADE_MODULE_TYPE,
+    httpInstance: 'platform',
+    write: true,
+    params: [{ name: 'draft', kind: 'text', required: true, description: 'study-grade-status-prepare 返回的状态草稿' }],
+  },
+  {
+    id: 'study-grade-status-submit',
+    title: '提交班级启停第二步',
+    pagePath: STUDY_GRADE_PAGE_PATH,
+    permission: STUDY_GRADE_PERMISSION,
+    moduleType: STUDY_GRADE_MODULE_TYPE,
+    httpInstance: 'platform',
+    write: true,
+    params: [{ name: 'draft', kind: 'text', required: true, description: '同一次 check 返回的状态草稿' }],
+  },
+  {
+    id: 'study-grade-status-cancel',
+    title: '取消班级启停',
+    pagePath: STUDY_GRADE_PAGE_PATH,
+    permission: STUDY_GRADE_PERMISSION,
+    moduleType: STUDY_GRADE_MODULE_TYPE,
+    httpInstance: 'platform',
+    write: false,
+    params: [],
+  },
+  {
+    id: 'study-grade-student-list',
+    title: '查询班级学员关联',
+    pagePath: STUDY_GRADE_STUDENT_PAGE_PATH,
+    permission: STUDY_GRADE_STUDENT_PERMISSION,
+    moduleType: STUDY_GRADE_MODULE_TYPE,
+    httpInstance: 'platform',
+    write: false,
+    params: [
+      { name: 'gradeId', kind: 'text', required: true, description: '班级 ID' },
+      ...['name', 'mobile', 'staffCode', 'isRelatedLayer'].map(name => ({ name, kind: 'text' as const, required: false, description: '班级学员子页同名筛选条件；未给时发空串' })),
+      ...['createTimeStart', 'createTimeEnd'].map(name => ({ name, kind: 'date' as const, required: false, description: '创建时间范围；结束时间为所选结束日加一天的零点，需成对给出' })),
+    ],
+  },
+  {
+    id: 'study-grade-management-center-list',
+    title: '查询组织结构下班级',
+    pagePath: STUDY_GRADE_MANAGEMENT_CENTER_PAGE_PATH,
+    permission: STUDY_GRADE_MANAGEMENT_CENTER_PERMISSION,
+    moduleType: STUDY_GRADE_MODULE_TYPE,
+    httpInstance: 'platform',
+    write: false,
+    params: [
+      { name: 'managementCenterId', kind: 'text', required: true, description: '学习组织结构 ID' },
+      { name: 'name', kind: 'text', required: false, description: '班级名称模糊筛选' },
+      { name: 'type', kind: 'text', required: false, description: '班级类型原码' },
+      ...['createTimeStart', 'createTimeEnd'].map(name => ({ name, kind: 'date' as const, required: false, description: '创建时间范围；结束时间为所选结束日加一天的零点，需成对给出' })),
+      ...candidatePageParams(DEFAULT_PAGE_SIZE),
     ],
   },
   {
@@ -947,6 +1061,12 @@ export const studyGradeCapabilities: CapabilityDefinition[] = [
 export const STUDY_GRADE_METHODS = {
   'study-grade-list': 'list',
   'study-grade-search': 'searchByKeyword',
+  'study-grade-status-prepare': 'prepareStatus',
+  'study-grade-status-check': 'checkStatus',
+  'study-grade-status-submit': 'submitStatus',
+  'study-grade-status-cancel': 'cancelStatus',
+  'study-grade-student-list': 'listStudents',
+  'study-grade-management-center-list': 'listManagementCenterGrades',
   'study-grade-prepare-remove': 'prepareRemove',
   'study-grade-remove': 'remove',
   'study-grade-cancel-remove': 'cancelRemove',
@@ -979,7 +1099,7 @@ export const STUDY_GRADE_METHODS = {
  * 能力实现。`request` 由 SDK 门面注入，已经带好页面上下文
  * （module-type 走 `/dashboard/grade/grade/list` 的推导结果 = 12 学习管理）。
  */
-export function createStudyGradeCapability (request: PortalRequest) {
+export function createStudyGradeCapability (request: PortalRequest, requestManagementCenter: PortalRequest = request) {
   return {
     /** 分页查询班级列表。只读 */
     list (query: StudyGradeQuery = {}): Promise<PageResult<StudyGradeRow>> {
@@ -1025,6 +1145,52 @@ export function createStudyGradeCapability (request: PortalRequest) {
       return { list: matched, total: page.total, matched: matched.length }
     },
 
+    prepareStatus (input: { id: StudyGradeId; currentStatus: number }): { draft: { id: StudyGradeId; status: 0 | 1 } } {
+      const id = idOf(input?.id, '班级 ID')
+      if (input?.currentStatus !== 0 && input?.currentStatus !== 1) throw new Error('班级当前状态只能是0或1')
+      return { draft: { id, status: input.currentStatus === 0 ? 1 : 0 } }
+    },
+
+    async checkStatus (input: { draft: { id: StudyGradeId; status: 0 | 1 } }): Promise<{ draft: { id: StudyGradeId; status: 0 | 1 }; message: string | null }> {
+      const draft = statusDraftOf(input?.draft)
+      const result = await request<unknown>({ url: STUDY_GRADE_UPDATE_STATUS_PATH, method: 'put', data: draft })
+      if (result === undefined || result === null || result === '') return { draft, message: null }
+      if (typeof result !== 'string') throw new Error('班级启停第一步响应不是确认提示文本')
+      return { draft, message: result }
+    },
+
+    async submitStatus (input: { draft: { id: StudyGradeId; status: 0 | 1 } }): Promise<void> {
+      const draft = statusDraftOf(input?.draft)
+      await request({ url: STUDY_GRADE_DELETE_PATH, method: 'put', data: draft })
+    },
+
+    cancelStatus (): { cancelled: true } { return { cancelled: true } },
+
+    async listStudents (query: StudyGradeStudentQuery): Promise<Record<string, unknown>[]> {
+      const gradeId = idOf(query?.gradeId, '班级 ID')
+      assertReadbackTimeRange(query)
+      const params: Record<string, unknown> = { order: '', orderField: '' }
+      for (const name of STUDENT_LIST_ORDER) params[name] = name === 'gradeId' ? gradeId : (query as Record<string, unknown>)[name] ?? ''
+      const result = await request<unknown>({ url: STUDY_GRADE_STUDENT_LIST_PATH, method: 'get', params })
+      if (!Array.isArray(result)) throw new Error('班级学员关联响应必须是数组，不能将形状错误当作移出成功')
+      return result.map((row, index) => objectOf(row, `班级学员关联[${index}]`))
+    },
+
+    async listManagementCenterGrades (query: StudyGradeManagementCenterQuery): Promise<PageResult<StudyGradeRow>> {
+      const managementCenterId = idOf(query?.managementCenterId, '组织结构 ID')
+      assertReadbackTimeRange(query)
+      const source = query as Record<string, unknown>
+      const params: Record<string, unknown> = { order: '', orderField: '' }
+      for (const name of MANAGEMENT_CENTER_LIST_ORDER.slice(2)) params[name] = name === 'managementCenterId' ? managementCenterId : source[name] ?? (name === 'pageNo' ? 1 : name === 'pageSize' ? DEFAULT_PAGE_SIZE : '')
+      params.pageNo = pageNoOf(query.pageNo, '组织结构班级 pageNo')
+      params.pageSize = pageSizeOf(query.pageSize, '组织结构班级 pageSize', DEFAULT_PAGE_SIZE, MAX_PERSON_PAGE_SIZE)
+      const result = objectOf(await requestManagementCenter<unknown>({ url: STUDY_GRADE_LIST_PATH, method: 'get', params }), '组织结构班级响应')
+      if (!Array.isArray(result.list) || typeof result.total !== 'number' || !Number.isFinite(result.total) || result.total < 0) {
+        throw new Error('组织结构班级响应必须包含 list 数组和非负 total')
+      }
+      return { list: result.list.map((row, index) => objectOf(row, `组织结构班级[${index}]`) as StudyGradeRow), total: result.total }
+    },
+
     prepareRemove (input: { ids: StudyGradeId[] }): { ids: StudyGradeId[] } {
       return prepareIds(input, '班级 ID')
     },
@@ -1057,7 +1223,7 @@ export function createStudyGradeCapability (request: PortalRequest) {
 
     async removeManagementCenterGrades (input: { ids: StudyGradeId[] }): Promise<void> {
       const prepared = prepareIds(input, '组织结构中的班级 ID')
-      await request({ url: STUDY_GRADE_DELETE_PATH, method: 'delete', data: prepared.ids })
+      await requestManagementCenter({ url: STUDY_GRADE_DELETE_PATH, method: 'delete', data: prepared.ids })
     },
 
     cancelRemoveManagementCenterGrades (): { cancelled: true } {

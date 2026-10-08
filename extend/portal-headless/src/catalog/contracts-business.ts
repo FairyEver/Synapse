@@ -353,7 +353,7 @@ function lookup (key: string, param: string, capabilityId: string, args: Record<
   c.inputs[param] = { ...c.inputs[param]!, ...(meaning ? { meaning } : {}), source: `${capabilityId} 返回的 ${valueField}；显示 ${labelField} 后让用户确定具体条目。`, lookup: { capabilityId, args, valueField, labelField } }
 }
 
-const assignmentFields = [id('作业记录主键'), s('title', '作业名称'), s('demand', '作业要求'), f('type', 'number', '作业类型', { '1': '文件', '2': '图片+文字', '3': '图片', '4': '文字', '5': '视频', '6': '视频+文字' }), enabled, deleted,
+const assignmentFields = [id('作业记录主键'), s('title', '作业名称'), s('demand', '作业要求'), f('type', 'number', '作业类型', { '1': '文件', '2': '图片+文字', '3': '图片', '4': '文字', '5': '视频', '6': '视频+文字' }), f('scoreType', 'number | string', '教师评分方式；0 为打分，1 为送花，编辑时必须保留作业详情返回值'), enabled, deleted,
   time('endTime', '提交截止时间'), s('creatorName', '创建人姓名'), time('createTime', '创建时间'),
   n('isUploadAnswer', '是否上传答案，0 否/1 是'), n('isTeacherCheck', '是否讲师评分，0 否/1 是'), n('isSelfScoring', '是否自评，0 否/1 是'),
   time('selfScoringEndTime', '自评截止时间'), time('answerPublishTime', '答案发布时间'), s('textAnswer', '文字参考答案'), s('fileAnswer', '参考答案文件地址'), s('fileAnswerName', '参考答案文件名'), s('imageAnswer', '图片参考答案'), f('isUploadCore', 'number | string', '课程核心上传开关；保留 get 原值，空串会被后端转为 0 或 null')]

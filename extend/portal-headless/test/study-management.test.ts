@@ -545,12 +545,17 @@ describe('讲师三页 —— 与浏览器基准逐字段一致（D20）', () =>
 /**
  * 学习管理域这三份能力文件里**允许是写操作**的能力 ID。
  *
- * 逐条对应：外部讲师学员创建（saveTeacher）、讲师类型保存（.lay）、评价设置题目保存。
+ * 逐条对应：外部讲师学员创建、讲师主体/状态/删除、讲师类型保存/状态/删除、评价设置题目保存。
  * 任何一条新写能力出现时都必须显式加到这里 —— 这是有意的手工闸门。
  */
 const WRITE_CAPABILITY_IDS = new Set([
   'study-teacher-save-teacher',
+  'study-teacher-save',
+  'study-teacher-status',
+  'study-teacher-remove',
   'study-teacher-level-save',
+  'study-teacher-level-status',
+  'study-teacher-level-remove',
   'study-appraise-setting-save',
 ])
 

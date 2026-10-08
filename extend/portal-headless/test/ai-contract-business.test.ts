@@ -133,9 +133,9 @@ describe('业务模块 SDK 实际 AI 描述', () => {
 
   it('原始create与注册防重创建明确分离，遗漏门面方法可下钻', () => {
 	 // 业务页面动作与隐藏学习/绩效方法均进入统一门面契约；同一路径只保留一份最终契约。
-	 // 计数是**「不许静默丢条目」的守门**：2026-09-26 补缺口轮次把弹窗 / 隐藏子路由 /
-	 // 下钻页的动作接进来后由 1072 变为 1125。数字变了要连带看清少的是哪些，别直接改大。
-	 expect(Object.keys(BUSINESS_METHOD_CONTRACTS)).toHaveLength(1125)
+	 // 计数是**「不许静默丢条目」的守门**：本轮补齐班级启停、讲师主体/状态/类型写入口后为 1146。
+	 // 数字变了要连带看清少的是哪些，别静默吞掉方法。
+	 expect(Object.keys(BUSINESS_METHOD_CONTRACTS)).toHaveLength(1146)
     expect(BUSINESS_METHOD_CONTRACTS['assignment.create']?.idempotency).toContain('不防重')
     expect(description('assignment-create').ai.idempotency).toContain('requestId')
     const method = catalog.describeMethod('perfManageConfig.listFormulaScenes')

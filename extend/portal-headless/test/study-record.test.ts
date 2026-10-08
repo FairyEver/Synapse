@@ -15,6 +15,7 @@ import {
   STUDY_RECORD_HIDDEN_METHOD_CONTRACTS,
 } from '../src/catalog/contracts-study-record.js'
 import type { PortalRequest } from '../src/capabilities/meeting-room.js'
+import { assignmentCapabilities } from '../src/capabilities/assignment.js'
 
 /**
  * 学习管理页上**两级弹窗**发出的四个能力。
@@ -233,7 +234,7 @@ describe('本批 4 条弹窗契约通过项目自己的检查器（complete 档�
     const ids = studyRecordHiddenCapabilities.map((definition) => definition.id)
     const options = {
       profile: 'complete',
-      definitions: studyRecordHiddenCapabilities,
+      definitions: [...studyRecordHiddenCapabilities, ...assignmentCapabilities],
       contracts: STUDY_RECORD_HIDDEN_AI_CONTRACTS,
     }
     const issues = ids.flatMap((id) => validateAiContract(id, STUDY_RECORD_HIDDEN_AI_CONTRACTS[id], options))

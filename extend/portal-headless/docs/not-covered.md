@@ -132,9 +132,9 @@
 - **2026-09-26**：本表建立。真正的排除是 **1 条敏感类 + 7 类全量候选 + 5 条取舍**，
   其余一度被我按「明确不做」统计的条目经复核属于**待办**（见上）。
 - 同日的缺口盘点：真缺口 **65 条**（原报 70 条，复核可达性后删 5 条——晨/月课堂的学习记录子页
-  **用户到不了**、奖励导入页**从不发**那条组织树）；另有 **6 条**本来被我误归为「不做」的
-  讲师写入口属于**待办**：`updateTeacherLevelStatus.lay`、`deleteTeacherLevel.lay`、
-  `addProfessorStudy.lay`、`updateProfessorStudy.lay`、`updateProfessor.lay`、
-  `DELETE /study/base/studyteacher`。
-- `.lay` 写入口的落地进度：`insertTeacherLevel.lay` / `updateTeacherLevel.lay` **2026-09-26 已补**
-  （能力 `study-teacher-level-save`）；其余仍待办，**不在本表**。
+  **用户到不了**、奖励导入页**从不发**那条组织树）。讲师六条写入口已接入讲师能力族，移出本表。
+- `.lay` 写入口的落地进度：`insertTeacherLevel.lay` / `updateTeacherLevel.lay` **2026-09-26 已补**；
+  `updateTeacherLevelStatus.lay`、`deleteTeacherLevel.lay`、`addProfessorStudy.lay`、
+  `updateProfessorStudy.lay`、`updateProfessor.lay` 已补入当前实现；`DELETE /study/base/studyteacher`
+  也已接入讲师删除能力。
+- **2026-10-08 人力范围修复**：班级启停两步写入、班级学员/组织结构班级独立回查、讲师主体保存/启停/删除、讲师类型启停/删除均已接入；对应 prepare / submit / cancel 契约已登记。取消只丢弃本地草稿，不能撤销已发出的写请求；真实 Portal 环境闭环仍需补测。

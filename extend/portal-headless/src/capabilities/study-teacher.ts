@@ -48,20 +48,17 @@ import type { PortalRequest } from './meeting-room.js'
  *
  * ## 写操作
  *
- * 三条写能力，各在不同的页面上：
+ * 讲师相关写能力分布在讲师主体、讲师类型和评价设置三个页面：
  *
  * | 能力 | 端点 | 页面 |
  * | --- | --- | --- |
+ * | `study-teacher-save` | `POST /manage/{add,update}ProfessorStudy.lay`（必要时先 platform 创建学员） | 讲师管理表单 |
+ * | `study-teacher-status` / `study-teacher-remove` | `GET /manage/updateProfessor.lay` / `DELETE /study/base/studyteacher` | 讲师列表 |
+ * | `study-teacher-level-save/status/remove` | `POST /manage/study/{insert,update}TeacherLevel.lay`、`POST updateTeacherLevelStatus.lay`、`GET deleteTeacherLevel.lay` | 讲师类型表单/列表 |
  * | `study-teacher-save-teacher` | `POST /study/base/studystudent/saveTeacher`（platform） | 讲师管理表单（没有 staffCode 时先建学员记录） |
- * | `study-teacher-level-save` | `POST /manage/study/{insert,update}TeacherLevel.lay`（smart-layer-admin） | 讲师类型表单 |
  * | `study-appraise-setting-save` | `POST /study/base/studyappraiseteacher`（platform，**数组 body**） | 评价设置 |
  *
- * **仍未覆盖**（**是待办缺口，不是「不做」**——`docs/not-covered.md` 那几张表里**没有**它们，
- * 不要拿去当排除项用；那里的「未做 ≠ 不做」一节就是为这件事写的）：
- * 讲师主体的 `.lay` 保存 / 编辑（`addProfessorStudy.lay`、`updateProfessorStudy.lay`、
- * `updateProfessor.lay`）、讲师删除（`DELETE /study/base/studyteacher`）、
- * 以及讲师类型列表行上的启停（`updateTeacherLevelStatus.lay`）与删除（`deleteTeacherLevel.lay`）——
- * 这几条都不是本轮派单的入口。按 conventions 第 33 条，它们仍然是**缺口**，不要当成已做。
+ * 讲师主体 `.lay` 保存/编辑、讲师主体启停与删除、讲师类型启停与删除均已接入；真实环境回查仍需按契约执行。
  */
 
 export const STUDY_TEACHER_PAGE_PATH = '/dashboard/base/teacher/list'
@@ -76,6 +73,12 @@ export const STUDY_TEACHER_LEVEL_LIST_PATH = '/manage/study/teacherlevelmanageme
 export const STUDY_APPRAISE_SETTING_LIST_PATH = '/study/base/studyappraiseteacher/list'
 /** 讲师创建页无 staffCode 时创建外部讲师学员记录 */
 export const STUDY_TEACHER_SAVE_TEACHER_PATH = '/study/base/studystudent/saveTeacher'
+export const STUDY_TEACHER_CREATE_PATH = '/manage/addProfessorStudy.lay'
+export const STUDY_TEACHER_UPDATE_PATH = '/manage/updateProfessorStudy.lay'
+export const STUDY_TEACHER_STATUS_PATH = '/manage/updateProfessor.lay'
+export const STUDY_TEACHER_DELETE_PATH = '/study/base/studyteacher'
+export const STUDY_TEACHER_LEVEL_STATUS_PATH = '/manage/updateTeacherLevelStatus.lay'
+export const STUDY_TEACHER_LEVEL_DELETE_PATH = '/manage/deleteTeacherLevel.lay'
 export const STUDY_TEACHER_MODULE_TYPE = 12
 
 // ---------------------------------------------------------------------------
@@ -184,6 +187,27 @@ export type StudyTeacherQuery = {
   limit?: number
 }
 
+export type StudyTeacherForm = {
+  mode: 'create' | 'edit'
+  id?: string | number
+  staffCode?: string | number | null
+  name: string
+  jobTitle: string
+  briefIntro: string
+  detailedIntro: string
+  img: string
+  level: string | number
+  teacherType: string | number
+  videoIds?: Array<string | number> | null
+  [key: string]: unknown
+}
+
+export type StudyTeacherDraft = {
+  mode: 'create' | 'edit'
+  professor: Record<string, unknown>
+  videoIds: unknown[] | null
+}
+
 /** 讲师类型的查询条件：页面**只有一个分页参数** */
 export type StudyTeacherLevelQuery = {
   page?: number
@@ -236,6 +260,8 @@ export type StudyTeacherLevelForm = {
   level: number | string
   /** 排序（1~999 的整数）。必填 */
   sort: number | string
+  /** 编辑态 bridge 可能回传 status 等业务字段；prepare 按 Portal omit 规则保留它们。 */
+  [key: string]: unknown
 }
 
 /** 讲师类型的 save 草稿：载荷按端点分岔，所以把 mode 与目标端点一起记下来 */
@@ -379,6 +405,36 @@ export const studyTeacherCapabilities: CapabilityDefinition[] = [
     params: [],
   },
   {
+    id: 'study-teacher-prepare-save', title: '准备保存讲师主体', pagePath: STUDY_TEACHER_PAGE_PATH, permission: '/dashboard/base/teacher', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: false, params: [{ name: 'form', kind: 'text', required: true, description: '讲师表单对象' }],
+  },
+  {
+    id: 'study-teacher-save', title: '保存讲师主体', pagePath: STUDY_TEACHER_PAGE_PATH, permission: '/dashboard/base/teacher', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: true, params: [{ name: 'draft', kind: 'text', required: true, description: 'prepareSave 返回的讲师草稿' }],
+  },
+  {
+    id: 'study-teacher-prepare-status', title: '准备讲师启停', pagePath: STUDY_TEACHER_PAGE_PATH, permission: '/dashboard/base/teacher', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: false, params: [{ name: 'id', kind: 'text', required: true, description: '讲师 ID' }, { name: 'currentStatus', kind: 'number', required: true, description: '当前状态 0 或 1' }],
+  },
+  {
+    id: 'study-teacher-status', title: '变更讲师状态', pagePath: STUDY_TEACHER_PAGE_PATH, permission: '/dashboard/base/teacher', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: true, params: [{ name: 'draft', kind: 'text', required: true, description: '状态草稿' }],
+  },
+  {
+    id: 'study-teacher-prepare-remove', title: '准备删除讲师', pagePath: STUDY_TEACHER_PAGE_PATH, permission: '/dashboard/base/teacher', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: 'platform', write: false, params: [{ name: 'ids', kind: 'array', required: true, description: '讲师 ID 数组' }],
+  },
+  {
+    id: 'study-teacher-remove', title: '删除讲师', pagePath: STUDY_TEACHER_PAGE_PATH, permission: '/dashboard/base/teacher', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: 'platform', write: true, params: [{ name: 'ids', kind: 'array', required: true, description: '讲师 ID 数组' }],
+  },
+  {
+    id: 'study-teacher-level-prepare-status', title: '准备讲师类型启停', pagePath: STUDY_TEACHER_LEVEL_PAGE_PATH, permission: '/dashboard/base/teacher-level', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: false, params: [{ name: 'id', kind: 'text', required: true, description: '讲师类型 ID' }, { name: 'currentStatus', kind: 'number', required: true, description: '当前状态 0 或 1' }],
+  },
+  {
+    id: 'study-teacher-level-status', title: '变更讲师类型状态', pagePath: STUDY_TEACHER_LEVEL_PAGE_PATH, permission: '/dashboard/base/teacher-level', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: true, params: [{ name: 'draft', kind: 'text', required: true, description: '状态草稿' }],
+  },
+  {
+    id: 'study-teacher-level-prepare-remove', title: '准备删除讲师类型', pagePath: STUDY_TEACHER_LEVEL_PAGE_PATH, permission: '/dashboard/base/teacher-level', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: false, params: [{ name: 'id', kind: 'text', required: true, description: '讲师类型 ID' }],
+  },
+  {
+    id: 'study-teacher-level-remove', title: '删除讲师类型', pagePath: STUDY_TEACHER_LEVEL_PAGE_PATH, permission: '/dashboard/base/teacher-level', moduleType: STUDY_TEACHER_MODULE_TYPE, httpInstance: STUDY_TEACHER_HTTP_INSTANCE, write: true, params: [{ name: 'id', kind: 'text', required: true, description: '讲师类型 ID' }],
+  },
+  {
     id: 'study-teacher-candidate-student-list',
     title: '查询「不是讲师的学员」候选列表',
     pagePath: STUDY_TEACHER_PAGE_PATH,
@@ -440,6 +496,16 @@ export const studyTeacherCapabilities: CapabilityDefinition[] = [
 ]
 
 /** 页面能力 ID 与 SDK 方法名的固定映射；供目录和统一调用入口复用。 */
+for (const [id, title, pagePath, permission, httpInstance] of [
+  ['study-teacher-cancel-save', '取消讲师保存草稿', STUDY_TEACHER_PAGE_PATH, '/dashboard/base/teacher', STUDY_TEACHER_HTTP_INSTANCE],
+  ['study-teacher-cancel-status', '取消讲师启停草稿', STUDY_TEACHER_PAGE_PATH, '/dashboard/base/teacher', STUDY_TEACHER_HTTP_INSTANCE],
+  ['study-teacher-cancel-remove', '取消讲师删除草稿', STUDY_TEACHER_PAGE_PATH, '/dashboard/base/teacher', 'platform'],
+  ['study-teacher-level-cancel-status', '取消讲师类型启停草稿', STUDY_TEACHER_LEVEL_PAGE_PATH, '/dashboard/base/teacher-level', STUDY_TEACHER_HTTP_INSTANCE],
+  ['study-teacher-level-cancel-remove', '取消讲师类型删除草稿', STUDY_TEACHER_LEVEL_PAGE_PATH, '/dashboard/base/teacher-level', STUDY_TEACHER_HTTP_INSTANCE],
+] as const) {
+  studyTeacherCapabilities.push({ id, title, pagePath, permission, httpInstance, moduleType: STUDY_TEACHER_MODULE_TYPE, write: false, params: [] })
+}
+
 export const STUDY_TEACHER_METHODS = {
   'study-teacher-list': 'list',
   'study-teacher-level-list': 'listLevels',
@@ -447,10 +513,25 @@ export const STUDY_TEACHER_METHODS = {
   'study-teacher-prepare-save-teacher': 'prepareSaveTeacher',
   'study-teacher-save-teacher': 'submitSaveTeacher',
   'study-teacher-cancel-save-teacher': 'cancelSaveTeacher',
+  'study-teacher-prepare-save': 'prepareSave',
+  'study-teacher-save': 'save',
+  'study-teacher-cancel-save': 'cancelSave',
+  'study-teacher-prepare-status': 'prepareStatus',
+  'study-teacher-status': 'setStatus',
+  'study-teacher-cancel-status': 'cancelStatus',
+  'study-teacher-prepare-remove': 'prepareRemove',
+  'study-teacher-remove': 'remove',
+  'study-teacher-cancel-remove': 'cancelRemove',
   'study-teacher-candidate-student-list': 'listCandidateStudents',
   'study-teacher-type-dict': 'listTeacherTypes',
   'study-teacher-level-prepare-save': 'prepareSaveLevel',
   'study-teacher-level-save': 'saveLevel',
+  'study-teacher-level-prepare-status': 'prepareLevelStatus',
+  'study-teacher-level-status': 'setLevelStatus',
+  'study-teacher-level-cancel-status': 'cancelLevelStatus',
+  'study-teacher-level-prepare-remove': 'prepareRemoveLevel',
+  'study-teacher-level-remove': 'removeLevel',
+  'study-teacher-level-cancel-remove': 'cancelRemoveLevel',
   'study-appraise-setting-prepare-save': 'prepareSaveAppraiseSetting',
   'study-appraise-setting-save': 'submitAppraiseSetting',
 } as const
@@ -518,20 +599,22 @@ function buildLevelDraft (value: unknown): StudyTeacherLevelDraft {
     if (form.id !== undefined && form.id !== null && String(form.id).trim() !== '') {
       throw new Error('新建讲师类型不能带 id（页面新建态的 bridge 里没有记录）')
     }
+    const { mode: _mode, createTime: _createTime, updateTime: _updateTime, id: _id, ...body } = form as StudyTeacherLevelForm & Record<string, unknown>
     return {
       mode: 'create',
       url: STUDY_TEACHER_LEVEL_CREATE_PATH,
-      // 键序与页面 form 的初值顺序一致：name, level, sort
-      body: { name, level, sort },
+      // 页面实际发送 omit(form, ['createTime', 'updateTime'])，保留 bridge 中的业务字段。
+      body: { ...body, name, level, sort },
     }
   }
   const id = String(form.id ?? '').trim()
   if (id === '') throw new Error('修改讲师类型必须给 id（来自讲师类型列表行）')
+  const { mode: _mode, createTime: _createTime, updateTime: _updateTime, ...body } = form as StudyTeacherLevelForm & Record<string, unknown>
   return {
     mode: 'edit',
     url: STUDY_TEACHER_LEVEL_UPDATE_PATH,
-    // 编辑态的键序与浏览器发出的 body 一致：id 在最前（它是行数据里的第一个键）
-    body: { id, name, level, sort },
+    // 页面实际发送 omit(form, ['createTime', 'updateTime'])，编辑行上的 status 等字段也要保留。
+    body: { ...body, id, name, level, sort },
   }
 }
 
@@ -593,6 +676,54 @@ function dictResultsOf (body: unknown): unknown[] {
     '教师类型字典的响应里没有 results 数组：页面靠 `const { results } = …` 取数，' +
       '形状变了要当场炸，不能静默返回空的类型列表',
   )
+}
+
+function binaryStatusDraftOf (value: unknown, label: string): { id: string | number; status: 0 | 1 } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label}必须是对象`)
+  const draft = value as { id?: unknown; status?: unknown }
+  const id = typeof draft.id === 'number' && Number.isSafeInteger(draft.id) && draft.id > 0
+    ? draft.id
+    : typeof draft.id === 'string' && /^[1-9]\d*$/.test(draft.id) ? draft.id : null
+  if (id === null) throw new Error(`${label}.id必须为正整数 ID`)
+  if (draft.status !== 0 && draft.status !== 1) throw new Error(`${label}.status只能是0或1`)
+  return { id, status: draft.status }
+}
+
+function idsOf (value: unknown, label: string): Array<string | number> {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label}必须是非空数组`)
+  return value.map((id, index) => {
+    if (typeof id === 'number' && Number.isSafeInteger(id) && id > 0) return id
+    if (typeof id === 'string' && /^[1-9]\d*$/.test(id)) return id
+    throw new Error(`${label}[${index}]必须为正整数 ID`)
+  })
+}
+
+function teacherFormDraftOf (value: unknown): StudyTeacherDraft {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('讲师表单必须是对象')
+  const form = value as StudyTeacherForm
+  if (form.mode !== 'create' && form.mode !== 'edit') throw new Error('讲师表单.mode只能是create或edit')
+  if (typeof form.name !== 'string' || form.name.trim() === '') throw new Error('讲师姓名不能为空')
+  for (const [key, max] of [['jobTitle', 3], ['briefIntro', 50]] as const) {
+    const text = form[key]
+    if (typeof text !== 'string' || text.trim() === '' || text.length > max) throw new Error(`讲师表单.${key}必填且不超过${max}个字符`)
+  }
+  for (const key of ['detailedIntro', 'img', 'level', 'teacherType'] as const) {
+    if (form[key] === undefined || form[key] === null || form[key] === '') throw new Error(`讲师表单.${key}必填`)
+  }
+  if (typeof form.detailedIntro !== 'string' || form.detailedIntro.replace(/<[^<>]+>/g, '').length > 500) throw new Error('讲师图文介绍必须为字符串且去标签后不超过500个字符')
+  if (typeof form.img !== 'string') throw new Error('讲师形象照必须为地址字符串')
+  if (form.mode === 'create' && form.id !== undefined && form.id !== null && form.id !== '') throw new Error('新建讲师不能带 id')
+  if (form.mode === 'edit') idsOf([form.id], '讲师 ID')
+  if (form.staffCode !== undefined && form.staffCode !== null && form.staffCode !== '') idsOf([form.staffCode], '讲师工号')
+  if (form.videoIds !== undefined && form.videoIds !== null && !Array.isArray(form.videoIds)) throw new Error('讲师表单.videoIds必须为数组或null')
+  if (Array.isArray(form.videoIds) && form.videoIds.length > 0) idsOf(form.videoIds, '讲师视频 ID')
+  const professor: Record<string, unknown> = { ...form }
+  delete professor.mode
+  delete professor.videoIds
+  delete professor.createTime
+  delete professor.lastUpdateTime
+  const videoIds = Array.isArray(form.videoIds) ? [...form.videoIds] : null
+  return { mode: form.mode, professor, videoIds }
 }
 
 export function createStudyTeacherCapability (
@@ -737,12 +868,9 @@ export function createStudyTeacherCapability (
       }
       // 重新走一遍 prepare 的校验，避免调用方手搓一个绕过规则的草稿
       const body = buildLevelDraft({
+        ...(draft.body as Record<string, unknown>),
         mode: draft.mode,
-        id: draft.body?.id as string | number | undefined,
-        name: draft.body?.name as string,
-        level: draft.body?.level as number,
-        sort: draft.body?.sort as number,
-      }).body
+      } as StudyTeacherLevelForm).body
       const result = await requestLevel<unknown>({
         url: draft.url,
         method: 'post',
@@ -862,6 +990,77 @@ export function createStudyTeacherCapability (
         data: prepared.draft,
       })
     },
+
+    prepareSave (input: { form: StudyTeacherForm }): { draft: StudyTeacherDraft } {
+      return { draft: teacherFormDraftOf(input?.form) }
+    },
+
+    async save (input: { draft: StudyTeacherDraft }): Promise<void> {
+      if (!input?.draft || !input.draft.professor || typeof input.draft.professor !== 'object' || Array.isArray(input.draft.professor)) throw new Error('讲师保存草稿必须包含 professor 对象')
+      const draft = teacherFormDraftOf({ ...input?.draft.professor, mode: input?.draft.mode, videoIds: input?.draft.videoIds })
+      let professor = draft.professor
+      if (draft.mode === 'create' && (professor.staffCode === undefined || professor.staffCode === null || professor.staffCode === '')) {
+        const staffCode = await requestSaveTeacher<number | string>({
+          url: STUDY_TEACHER_SAVE_TEACHER_PATH,
+          method: 'post',
+          data: { name: String(professor.name) },
+        })
+        idsOf([staffCode], '外部讲师创建返回的工号')
+        professor = { ...professor, staffCode }
+      }
+      const result = await requestTeacher<unknown>({
+        url: draft.mode === 'create' ? STUDY_TEACHER_CREATE_PATH : STUDY_TEACHER_UPDATE_PATH,
+        method: 'post',
+        data: { professor, videoIds: draft.videoIds },
+      })
+      assertSmartLayerSuccess(result, draft.mode === 'create' ? '保存讲师' : '修改讲师')
+    },
+
+    prepareStatus (input: { id: string | number; currentStatus: number }): { draft: { id: string | number; status: 0 | 1 } } {
+      const draft = binaryStatusDraftOf({ id: input?.id, status: input?.currentStatus }, '讲师状态')
+      return { draft: { id: draft.id, status: draft.status === 0 ? 1 : 0 } }
+    },
+
+    async setStatus (input: { draft: { id: string | number; status: 0 | 1 } }): Promise<void> {
+      const draft = binaryStatusDraftOf(input?.draft, '讲师状态草稿')
+      const result = await requestTeacher<unknown>({ url: STUDY_TEACHER_STATUS_PATH, method: 'get', params: draft })
+      assertSmartLayerSuccess(result, '变更讲师状态')
+    },
+
+    prepareRemove (input: { ids: Array<string | number> }): { ids: Array<string | number> } {
+      return { ids: idsOf(input?.ids, '讲师 ID') }
+    },
+
+    async remove (input: { ids: Array<string | number> }): Promise<void> {
+      await requestSaveTeacher({ url: STUDY_TEACHER_DELETE_PATH, method: 'delete', data: idsOf(input?.ids, '讲师 ID') })
+    },
+
+    prepareLevelStatus (input: { id: string | number; currentStatus: number }): { draft: { id: string | number; status: 0 | 1 } } {
+      const draft = binaryStatusDraftOf({ id: input?.id, status: input?.currentStatus }, '讲师类型状态')
+      return { draft: { id: draft.id, status: draft.status === 0 ? 1 : 0 } }
+    },
+
+    async setLevelStatus (input: { draft: { id: string | number; status: 0 | 1 } }): Promise<void> {
+      const draft = binaryStatusDraftOf(input?.draft, '讲师类型状态草稿')
+      const result = await requestLevel<unknown>({ url: STUDY_TEACHER_LEVEL_STATUS_PATH, method: 'post', data: draft })
+      assertSmartLayerSuccess(result, '变更讲师类型状态')
+    },
+
+    prepareRemoveLevel (input: { id: string | number }): { id: string | number } {
+      return { id: idsOf([input?.id], '讲师类型 ID')[0]! }
+    },
+
+    async removeLevel (input: { id: string | number }): Promise<void> {
+      const id = idsOf([input?.id], '讲师类型 ID')[0]
+      const result = await requestLevel<unknown>({ url: STUDY_TEACHER_LEVEL_DELETE_PATH, method: 'get', params: { id } })
+      assertSmartLayerSuccess(result, '删除讲师类型')
+    },
+
+    cancelSave (): { cancelled: true } { return { cancelled: true } },
+    cancelStatus (): { cancelled: true } { return { cancelled: true } },
+    cancelRemove (): { cancelled: true } { return { cancelled: true } },
+    cancelLevelStatus (): { cancelled: true } { return { cancelled: true } },
+    cancelRemoveLevel (): { cancelled: true } { return { cancelled: true } },
 
     cancelSaveTeacher (): { cancelled: true } {
       return { cancelled: true }

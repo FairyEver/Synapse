@@ -1,15 +1,15 @@
 import type { AiContract, AiField, AiParameter } from './ai-contract.js'
-import { STUDY_GRADE_METHODS, studyGradeCapabilities } from '../capabilities/study-grade.js'
+import { STUDY_GRADE_LIST_PATH, STUDY_GRADE_METHODS, STUDY_GRADE_STUDENT_LIST_PATH, studyGradeCapabilities } from '../capabilities/study-grade.js'
 
 /**
  * 班级管理（`/dashboard/grade/grade/list`）**隐藏表面**的 AI 契约。
  *
- * ⚠️ 本文件**只覆盖 17 个能力**：三个弹窗（关联组织 / 关联业务 / 添加学员）、班级表单的
+ * ⚠️ 本文件覆盖班级页面上的隐藏弹窗、状态切换和独立回查能力：三个弹窗（关联组织 / 关联业务 / 添加学员）、班级表单的
  * 人员候选，以及它们的 prepare / cancel 搭档。同一页面的另外 9 个能力
  * （`study-grade-list`、`study-grade-search`、两组 remove 与它们的 prepare/cancel）
  * 的契约在 `contracts-study-grade-teacher.ts` 里，两者**互不重叠**。
  *
- * 之所以分成两个文件：这一批是后补的隐藏表面，交付时其它 agent 正在并行改本包，
+ * 之所以分成两个文件：这一批是班级隐藏表面与状态回查，
  * 按文件所有权切分才不互相覆盖；接线（并入 `AI_CONTRACTS` / `METHOD_CONTRACTS`）
  * 由主线统一做。
  *
@@ -144,7 +144,7 @@ const base = (value: ContractBody): AiContract => ({
   whenToUse:
     '操作 Portal「学习管理 → 班级管理」列表行进入的隐藏弹窗（关联组织、关联业务、管理学员）与班级表单里的人员候选选择器。',
   boundaries: [
-    '这 17 个能力都绑在班级列表页 /dashboard/grade/grade/list 上（权限 /dashboard/grade/grade，module-type=12 学习管理，platform HTTP 实例）：三个弹窗与学员子页没有独立菜单权限，只能由列表行进入，不要改页面上下文或换租户。',
+    '每个能力都绑定到自己的 Portal 页面上下文：班级列表页及其弹窗使用 /dashboard/grade/grade，组织结构下的班级回查/删除使用 /dashboard/base/management-center；均发送 module-type=12 并使用 platform HTTP 实例。不要把组织结构页面的权限或筛选上下文误换成班级列表页。',
     '班级 ID（hr_study_grade.id）、组织 ID（hr_organization.id）、岗位 ID（hr_post.id）、用户工号（hr_sys_user.username）、班级学员关联 ID 是**五类不同主键**，只能按各自字段传递，不能用名称、树节点 id 或另一类 ID 替换。',
     '「关联组织」只在班级类型 type=0 的行上显示，「关联业务（岗位）」只在 type≠0 的行上显示（list.vue:79-80），两者互斥；它们收的是**同一个 DTO 类**但字段不同，不能互相代填。',
     '两个「关联」写入都是**集合替换**而非增量追加：不在目标列表里的旧组织/岗位会被软删，名下班级学员关联同时被软删，并按被移除学员推送移出消息。目标列表不含旧项就等于一次批量移除。',
@@ -606,7 +606,7 @@ add('study-grade-student-create', base({
     '本地写有事务，但外部群调整与推送不在事务里：本地回滚了不代表群成员没被加过。',
   ],
   steps: [
-    { role: 'required', when: '请求成功或超时', capabilityId: 'study-grade-student-candidate', mapping: { gradeId: 'args.draft.gradeId', keyword: 'user.verifyKeyword' }, instruction: '回查班级学员范围确认目标工号已入班。⚠️ 该候选接口并不过滤已在班级的人，只能用来确认人存在，不能用来确认"未入班"；要确认入班请用班级学员列表（/study/grade/student?gradeId=）。' },
+    { role: 'required', when: '请求成功或超时', capabilityId: 'study-grade-student-list', mapping: { gradeId: 'args.draft.gradeId' }, instruction: '按同一班级的学员关联数组核对目标staffCode已出现；人员候选不能证明入班结果。' },
     { role: 'cancel', when: '提交前用户取消', capabilityId: 'study-grade-student-create-cancel', instruction: '仅在未提交时有效；提交后要撤销必须走"移出学员"，且外部群成员也需要另行处理。' },
   ],
   completion: '班级学员列表回查确认目标工号已入班、且外部群成员调整已确认或明确记录未确认后，才能报告完成。',
@@ -624,11 +624,58 @@ add('study-grade-student-create-cancel', base({
   idempotency: null,
 }))
 
+const statusInputs = { draft: parameter('同一次状态准备/check返回的{id,status}；status是绝对目标状态0或1。', 'study-grade-status-prepare.result.draft / study-grade-status-check.result.draft', { type: '{ id: string | number, status: 0 | 1 }' }) }
+const statusReadback: AiContract['steps'] = [{ role: 'recovery', when: '请求成功、超时或响应不确定', capabilityId: 'study-grade-list', instruction: '保留原筛选并逐页按同一ID核对status；第一步有群聊副作用，不能因状态已改变就声称全部外部副作用已验证，也不要盲目重发第一步。' }]
+const statusIdempotency = '没有requestId。两次PUT使用同一绝对目标状态；第一步可能创建云信群、课程并拉成员。超时先回查，不重新取反或自动重发。取消不回滚第一步。'
+add('study-grade-status-prepare', base({
+  purpose: '根据当前班级行状态生成启停目标草稿，不发请求。', effect: 'prepare',
+  inputs: { id: idParameter('班级ID。', 'study-grade-list.result.list[].id'), currentStatus: parameter('当前状态：0停用、1启用；只接受0或1。', '同一班级最新列表行.status', { type: '0 | 1' }) },
+  output: draftOutput('班级启停', [field('draft.id', 'string | number', '班级ID'), field('draft.status', '0 | 1', '取反后的绝对目标状态：0停用、1启用')]),
+  consume: ['向用户确认班级与目标状态；prepare不读取或锁定服务端状态。'],
+  steps: [{ role: 'required', when: '用户确认启停', capabilityId: 'study-grade-status-check', mapping: { draft: 'result.draft' }, instruction: '执行第一步真实写操作。' }, { role: 'cancel', when: '用户取消', capabilityId: 'study-grade-status-cancel', instruction: '只丢弃本地草稿。' }],
+  completion: '得到本地状态草稿，服务端尚未变更。', idempotency: null,
+}))
+add('study-grade-status-check', base({
+  purpose: '执行Portal班级启停第一步真实PUT /study/grade/studygrade/updateStatus；不是只读预检。', effect: 'write', inputs: statusInputs,
+  output: { shape: '{ draft: { id, status }, message: string | null }', fields: [field('draft.id', 'string | number', '同一班级ID'), field('draft.status', '0 | 1', '保持不变的绝对目标状态'), field('message', 'string | null', '服务端返回的追加确认提示；null表示没有提示', { nullable: true, nullMeaning: '无追加确认提示' })], empty: '成功空回执归一为message=null；形状错误或业务失败抛错。' },
+  consume: ['第一步本身可能已写status、创建云信群聊/即时通讯课程并拉入成员。SDK不自动发第二步。', 'message非空时向用户展示并取得追加确认；message=null且用户此前已确认时继续第二步。'],
+  steps: [{ role: 'required', when: '没有追加提示，或用户接受服务端提示', capabilityId: 'study-grade-status-submit', mapping: { draft: 'result.draft' }, instruction: '发送同一份草稿；不要根据新状态重新取反。' }, ...statusReadback, { role: 'cancel', when: '用户拒绝追加提示', capabilityId: 'study-grade-status-cancel', instruction: '停止第二步并回查；取消不会回滚第一步。' }],
+  completion: '第一步请求完成，保留目标草稿与提示；不能报告整个启停流程已完成。', idempotency: statusIdempotency,
+}))
+add('study-grade-status-submit', base({
+  purpose: '执行Portal班级启停第二步PUT /study/grade/studygrade，body为{id,status}。', effect: 'write', inputs: statusInputs, output: undefinedOutput,
+  consume: ['必须使用同一次check返回的草稿；有提示时先确认。完成后按同一班级ID回查status。'], steps: statusReadback,
+  completion: '第二步完成且独立列表回查确认status等于目标状态；群聊副作用未观测时如实说明。', idempotency: statusIdempotency,
+}))
+add('study-grade-status-cancel', base({ purpose: '丢弃本地班级启停草稿并停止后续请求；不撤销已发送的第一步。', effect: 'local', inputs: {}, output: cancelOutput, consume: ['如果check已执行，需要回查status；cancel不是服务端撤销。'], steps: [], completion: '返回cancelled=true，无新增网络副作用。', idempotency: null }))
+const timeReadbackInputs = {
+  createTimeStart: optional('创建时间起YYYY-MM-DD HH:mm:ss。', '用户选定日期区间开始日零点', '空串', { type: 'string', constraints: ['与createTimeEnd成对'] }),
+  createTimeEnd: optional('创建时间止，开区间：结束日加一天零点。', '用户选定日期区间结束日加一天', '空串', { type: 'string', constraints: ['与createTimeStart成对；不早于起点'] }),
+}
+add('study-grade-student-list', base({
+  purpose: `按班级详情隐藏子页读取学员关联GET ${STUDY_GRADE_STUDENT_LIST_PATH}，用于入班/移出独立回查。`, effect: 'read',
+  inputs: { gradeId: idParameter('班级ID，不是学员ID。', 'study-grade-list.result.list[].id / 班级详情路由id'), name: optional('学员姓名模糊筛选。', '用户输入', '空串', { type: 'string' }), mobile: optional('手机号筛选。', '用户输入', '空串', { type: 'string | number' }), staffCode: optional('工号筛选，不是关联记录ID。', '当前候选工号或用户输入', '空串', { type: 'string | number' }), isRelatedLayer: optional('是否关联智慧蛋鸡原码。', '页面同名字典或用户筛选', '空串', { type: 'string | number' }), ...timeReadbackInputs },
+  output: arrayOutput([field('id', 'string | number', '班级学员关联记录ID；移出使用这个ID，不能用学员主表ID'), field('staffCode', 'string | number', '学员工号；入班后按此核对'), field('name', 'string', '学员姓名'), field('mobile', 'string | number', '联系方式原值'), field('organizationName', 'string', '组织结构名称'), field('inClassType', 'string | number', '入班方式原码，按页面字典显示'), field('isRelatedLayer', 'string | number', '是否关联智慧蛋鸡原码'), field('createTime', 'string', '关联创建时间原值')], '班级学员关联'),
+  consume: ['非分页数组，order/orderField及空筛选值仍照发；有过滤时只能证明该过滤范围。', '移出后按关联记录id确认消失；入班后按staffCode确认出现，同名不能当成同一人。'], steps: [], completion: '得到同一班级当前筛选范围的关联记录；错误形状抛错，不当成空列表。', idempotency: null,
+}))
+add('study-grade-management-center-list', base({
+  purpose: `按学习组织结构隐藏班级子页读取GET ${STUDY_GRADE_LIST_PATH}；使用组织结构页权限上下文。`, effect: 'read',
+  inputs: { managementCenterId: idParameter('学习组织结构ID，不是行政组织ID。', 'base-management-center-list.result.list[].id'), name: optional('班级名称模糊筛选。', '用户输入', '空串', { type: 'string' }), type: optional('班级类型原码。', '页面字典或用户筛选', '空串', { type: 'string | number' }), ...timeReadbackInputs, ...pageInputs(20) },
+  output: pageOutput([field('id', 'string | number', '班级ID'), field('name', 'string', '班级名称'), field('serialNumber', 'string', '班级编号'), field('type', 'string | number', '班级类型原码'), field('teachingAssistantName', 'string', '助教姓名'), field('status', 'number', '0停用、1启用', { values: { '0': '停用', '1': '启用' } }), field('creatorName', 'string', '创建人'), field('createTime', 'string', '创建时间原值'), field('updaterName', 'string', '修改人'), field('updateTime', 'string', '修改时间原值')], '组织结构班级'),
+  consume: ['保留managementCenterId和原筛选，按total继续分页；某一页未出现目标ID不能证明删除完成。'], steps: [], completion: '返回当前组织结构下的班级分页，独立回查覆盖原查询范围后再判断删除。', idempotency: null,
+}))
+
 /**
  * 本文件覆盖的能力 → SDK 方法名。**是 `STUDY_GRADE_METHODS` 的一个子集**：
- * 另外那 9 个在 `contracts-study-grade-teacher.ts` 里。
+ * 班级删除与讲师/类型等写入口在 `contracts-study-grade-teacher.ts` 里。
  */
 export const STUDY_GRADE_HIDDEN_METHODS = {
+  'study-grade-status-prepare': 'prepareStatus',
+  'study-grade-status-check': 'checkStatus',
+  'study-grade-status-submit': 'submitStatus',
+  'study-grade-status-cancel': 'cancelStatus',
+  'study-grade-student-list': 'listStudents',
+  'study-grade-management-center-list': 'listManagementCenterGrades',
   'study-grade-staff-search': 'searchStaffCandidates',
   'study-grade-staff-resolve': 'resolveStaffByUsername',
   'study-grade-organization-list': 'listOrganizations',

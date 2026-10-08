@@ -1,5 +1,6 @@
 import type { AiContract, AiField, AiParameter } from './ai-contract.js'
 import { STUDY_RECORD_HIDDEN_METHODS, studyRecordHiddenCapabilities } from '../capabilities/study-record.js'
+import { assignmentCapabilities } from '../capabilities/assignment.js'
 
 /**
  * 学习管理页上**由弹窗发出**的四个能力的 AI 契约。
@@ -13,7 +14,10 @@ import { STUDY_RECORD_HIDDEN_METHODS, studyRecordHiddenCapabilities } from '../c
  * `components/assignment.vue`（"作业详情"/"评分"）。两个弹窗各自带 `http.get`/`http.post`。
  */
 
-const definitions = new Map(studyRecordHiddenCapabilities.map(definition => [definition.id, definition]))
+const definitions = new Map([
+  ...studyRecordHiddenCapabilities.map(definition => [definition.id, definition] as const),
+  ...assignmentCapabilities.map(definition => [definition.id, definition] as const),
+])
 
 const field = (path: string, type: string, meaning: string, extra: Partial<AiField> = {}): AiField => ({
   path,
@@ -178,11 +182,12 @@ const contracts: Record<string, AiContract> = {
     consume: [
       '展示答案：textAnswer 直接显示；imageAnswer 先按逗号切分再逐张展示；fileAnswer 配 fileAnswerName 做下载/预览入口；videoAnswer 同 imageAnswer。',
       '评分前先用 assignment-check-permission 与 assignmentId 判断"这个人该不该由我来评"，再决定要不要打开评分。',
-      '`teacherScore` / `teacherFlower` 只用来回填输入框的初值；页面把 `scoreType`（作业自身的配置，来自另一个接口）决定"打分"还是"送花"——SDK 没有覆盖那个接口，见 gaps。',
+      '`teacherScore` / `teacherFlower` 只用来回填输入框的初值；先用 assignment-get 读取同一作业的 `scoreType`，再决定是"打分"还是"送花"。',
       'isRead 是"写入前的值"，不要用它证明本次调用写了什么。',
     ],
     steps: [
       { role: 'required', when: '用户要评分（不是只看）', capabilityId: 'assignment-check-permission', mapping: { assignmentId: 'result.assignmentId', lessonId: 'context.lessonId' }, instruction: '先确认返回 1（允许评分）再准备提交；返回 0 时页面会把提交按钮禁用，SDK 也不该继续提交。' },
+      { role: 'required', when: '用户要填写评分字段', capabilityId: 'assignment-get', mapping: { id: 'result.assignmentId' }, instruction: '读取作业详情的 scoreType：0 传 teacherScore，1 传 teacherFlower；不要两个字段同时传。' },
       { role: 'optional', when: '用户确认要提交评分', capabilityId: 'study-record-assignment-update', mapping: { id: 'result.id', assignmentId: 'result.assignmentId' }, instruction: '两个 ID 都取本次返回的值；评分字段二选一，由作业配置决定给 teacherScore 还是 teacherFlower。' },
     ],
     completion: '返回该学员该环节的答案与评分现状（可能是一个空对象，表示还没提交）；除条件性的"已读"标记外不改变业务数据。',
@@ -195,7 +200,6 @@ const contracts: Record<string, AiContract> = {
     evidence: commonEvidence,
     gaps: [
       ...gaps,
-      '作业自身的评分模式（`GET /study/assignment/studyassignment/{id}` 的 scoreType）与考试/课程的答案展示路径没有对应的 SDK 能力；评分字段该给哪个由调用方按页面配置自行决定。',
     ],
   },
 
@@ -294,7 +298,7 @@ const contracts: Record<string, AiContract> = {
     evidence: commonEvidence,
     gaps: [
       ...gaps,
-      '本能力不判断"该给分还是该送花"（那来自作业配置 scoreType，SDK 未覆盖该接口）；调用方需要自己查作业详情后决定传哪个字段。',
+      '本能力不自动读取作业配置；调用方必须先用 assignment-get 读取 scoreType，再决定传 teacherScore 或 teacherFlower。',
     ],
   },
 }

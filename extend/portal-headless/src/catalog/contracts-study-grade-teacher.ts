@@ -15,12 +15,16 @@ import {
   STUDY_APPRAISE_SETTING_PAGE_PATH,
   STUDY_APPRAISE_SETTING_SAVE_PATH,
   STUDY_TEACHER_CANDIDATE_STUDENT_PATH,
+  STUDY_TEACHER_DELETE_PATH,
   STUDY_TEACHER_LEVEL_CREATE_PATH,
+  STUDY_TEACHER_LEVEL_DELETE_PATH,
   STUDY_TEACHER_LEVEL_PAGE_PATH,
+  STUDY_TEACHER_LEVEL_STATUS_PATH,
   STUDY_TEACHER_LEVEL_UPDATE_PATH,
   STUDY_TEACHER_MODULE_TYPE,
   STUDY_TEACHER_PAGE_PATH,
   STUDY_TEACHER_SAVE_TEACHER_PATH,
+  STUDY_TEACHER_STATUS_PATH,
   STUDY_TEACHER_TYPE_DICT_PATH,
   STUDY_TEACHER_TYPE_DICT_TYPE,
   studyTeacherCapabilities,
@@ -171,6 +175,37 @@ const teacherDraftInput: Record<string, AiParameter> = {
   }),
 }
 
+const teacherFormInput: Record<string, AiParameter> = {
+  form: input('Portal 讲师表单对象；保存时按 create/edit 分支提交。', 'Portal 讲师表单页 [mode]/[id].vue 的 formState', {
+    type: 'object',
+    constraints: [
+      '必须保留 name、jobTitle、briefIntro、detailedIntro、img、level、teacherType 这些页面必填字段。',
+      'edit 必须带当前讲师 id；create 不带 id。staffCode 有值时沿用已有学员，缺失时 Portal 会先创建外部讲师学员。',
+      'videoIds 只能是数组或 null；页面保存时单独放在 body.videoIds。',
+    ],
+  }),
+  'form.id': input('讲师主体 ID；编辑必填。', 'study-teacher-list.result.list[].id', { type: 'string | number', required: false, requiredWhen: 'mode=edit 时必填' }),
+  'form.staffCode': input('讲师对应学员工号；新建外部讲师时可留空触发 saveTeacher。', '讲师表单的 staffCode', { type: 'string | number', required: false, nullable: true, nullMeaning: '新建外部讲师，Portal 会先创建学员记录' }),
+}
+
+const teacherStatusInput: Record<string, AiParameter> = {
+  id: input('讲师主体 ID。', 'study-teacher-list.result.list[].id', { type: 'string | number' }),
+  currentStatus: input('当前状态，只能是 0 或 1。', 'study-teacher-list.result.list[].status', { type: '0 | 1' }),
+}
+
+const teacherStatusDraftInput: Record<string, AiParameter> = {
+  draft: input('prepareStatus 返回的状态草稿。', 'study-teacher-prepare-status.result.draft', { type: '{ id: string | number, status: 0 | 1 }' }),
+}
+
+const levelStatusInput: Record<string, AiParameter> = {
+  id: input('讲师类型 ID。', 'study-teacher-level-list.result.list[].id', { type: 'string | number' }),
+  currentStatus: input('当前状态，只能是 0 或 1。', 'study-teacher-level-list.result.list[].status', { type: '0 | 1' }),
+}
+
+const levelStatusDraftInput: Record<string, AiParameter> = {
+  draft: input('prepareLevelStatus 返回的状态草稿。', 'study-teacher-level-prepare-status.result.draft', { type: '{ id: string | number, status: 0 | 1 }' }),
+}
+
 type Context = {
   pagePath: string
   permission: string
@@ -249,6 +284,24 @@ const teacherContext: Context = {
   gaps: teacherGaps,
 }
 
+const teacherManagementContext: Context = {
+  pagePath: STUDY_TEACHER_PAGE_PATH,
+  permission: '/dashboard/base/teacher',
+  moduleType: STUDY_TEACHER_MODULE_TYPE,
+  boundaries: [
+    `覆盖 Portal 讲师管理页 ${STUDY_TEACHER_PAGE_PATH} 的讲师主体保存、启停和删除；权限是 /dashboard/base/teacher，按各能力定义使用 smart-layer-admin 或 platform 实例并发送 module-type=${STUDY_TEACHER_MODULE_TYPE}。`,
+    '讲师主体保存会先按 Portal 分支创建缺失的外部讲师学员记录，再调用讲师主体接口；任一步失败都可能留下部分副作用，不能把一次请求当作原子事务。',
+    '启停与删除的 ID 必须来自当前讲师列表；状态接口是 GET 写操作，删除接口是 platform DELETE 裸 ID 数组，不要按 HTTP 动词猜测其读写属性。',
+  ],
+  prerequisites: [
+    '使用当前用户、当前租户的会话 token 创建 SDK，并确认讲师管理页权限。',
+    '保存编辑草稿必须来自当前表单；启停/删除 ID 必须来自最近一次讲师列表，写后按同一 ID 回查。',
+  ],
+  evidence: teacherEvidence,
+  gaps: teacherGaps,
+}
+
+
 const writeIdempotency = '端点没有requestId，SDK不伪造服务端幂等键；请求完成或超时后必须先独立回查，确认未落库前不得盲目重试。'
 
 /**
@@ -298,7 +351,7 @@ const levelContext: Context = {
     `覆盖 Portal 讲师类型页 ${STUDY_TEACHER_LEVEL_PAGE_PATH} 表单页的保存动作（隐藏路由 [mode]/[id].vue）；权限是 /dashboard/base/teacher-level，走 smart-layer-admin 实例并发送 module-type=${STUDY_TEACHER_MODULE_TYPE}。`,
     `create 打 ${STUDY_TEACHER_LEVEL_CREATE_PATH}，edit 打 ${STUDY_TEACHER_LEVEL_UPDATE_PATH}；两条都是 POST + JSON body，页面按 isCreateMode 二选一。`,
     '保存成功后**没有**业务返回值可读；SDK 通过 smart-layer 的 code 判定成败，并要求用 study-teacher-level-list 回查确认。',
-    'SDK 只提交表单上真有控件的四个字段（name/level/sort，编辑态加 id）；页面在编辑态会把 bridge 里的整行（去掉 createTime/updateTime）一起回传，可能还带 status —— 该差异记在 gaps。',
+    'SDK 复刻页面的 omit(form, [createTime, updateTime])：会保留 bridge 行上的业务字段（编辑态可能包含 status 等），同时重新校验 name/level/sort；不会把审计时间字段发回。',
   ],
   prerequisites: [
     '使用当前用户、当前租户的会话 token 创建 SDK，并拥有讲师类型页权限。',
@@ -318,11 +371,29 @@ const levelContext: Context = {
     },
   ],
   gaps: [
-    'smart-layer 后端（`.lay` 那一侧）**不在本仓库的两个固定检出内**：它有没有要求行上的其它字段（如 status）无法核实，所以 SDK 只发页面表单真有的字段。',
+    'smart-layer 后端（`.lay` 那一侧）**不在本仓库的两个固定检出内**：额外业务字段是否必需无法在源码侧确认；SDK 会保留页面 bridge 中的字段，但不虚构缺失字段。',
     '这两个端点**没有浏览器基准**，参数形状来自固定检出源码（conventions 第 31 条：无基准的契约只能算推断）。',
     '尚未在真实测试环境执行过新建/修改（写操作闭环未做）。',
   ],
 }
+
+const levelActionContext: Context = {
+  pagePath: STUDY_TEACHER_LEVEL_PAGE_PATH,
+  permission: '/dashboard/base/teacher-level',
+  moduleType: STUDY_TEACHER_MODULE_TYPE,
+  boundaries: [
+    `覆盖 Portal 讲师类型页 ${STUDY_TEACHER_LEVEL_PAGE_PATH} 的启停与删除动作；权限是 /dashboard/base/teacher-level，使用 smart-layer-admin 实例并发送 module-type=${STUDY_TEACHER_MODULE_TYPE}。`,
+    '启停接口是 POST JSON，删除接口虽然是 GET 但会真实删除类型；两者都属于写操作，不能当成只读查询。',
+    'ID 必须来自当前讲师类型列表；删除没有页面撤销接口，提交前取消只能丢弃本地草稿。',
+  ],
+  prerequisites: [
+    '使用当前用户、当前租户的会话 token 创建 SDK，并为 smart-layer-admin 配置 baseURL。',
+    '从 study-teacher-level-list 保留目标行的 id 与当前 status，写后重新读取列表确认结果。',
+  ],
+  evidence: levelContext.evidence,
+  gaps: levelContext.gaps,
+}
+
 
 /**
  * 教师类型字典：两个页面上都发（讲师管理列表页与讲师管理表单页），
@@ -598,6 +669,187 @@ const contracts: Record<string, AiContract> = {
     teacherContext,
   ),
 
+  'study-teacher-prepare-save': base(
+    'study-teacher-prepare-save',
+    '按 Portal 讲师主体表单规则校验并生成保存草稿；只做本地准备，不发送请求。',
+    'prepare',
+    teacherFormInput,
+    { shape: '{ draft: { mode, professor, videoIds } }', fields: [field('$', 'object', '本地讲师保存草稿。'), field('draft', 'object', '供 study-teacher-save 使用的草稿。'), field('draft.professor', 'object', '去掉 mode、videoIds、createTime、lastUpdateTime 后的讲师字段。'), field('draft.videoIds', 'object[] | null', '视频 ID 数组；没有时为 null。', { nullable: true, nullMeaning: '页面没有视频' })], empty: '表单字段、ID 或 videoIds 非法时抛错，不发请求。' },
+    ['把草稿中的完整讲师字段展示给用户确认；staffCode 为空时明确提示保存会先创建外部讲师学员记录。', '用户取消时调用本地 cancel 能力，不触发任何写请求。'],
+    [
+      { role: 'required', when: '用户确认保存', capabilityId: 'study-teacher-save', mapping: { draft: 'result.draft' }, instruction: '原样提交同一份讲师草稿。' },
+      { role: 'cancel', when: '用户取消保存', capabilityId: 'study-teacher-cancel-save', mapping: {}, instruction: '只丢弃本地草稿。' },
+    ],
+    '得到通过 Portal 表单校验、尚未产生服务端副作用的讲师保存草稿。',
+    teacherManagementContext,
+  ),
+  'study-teacher-save': base(
+    'study-teacher-save',
+    '保存讲师主体；按 Portal create/edit 分支提交 professor 与 videoIds，必要时先创建外部讲师学员。',
+    'write',
+    { draft: input('study-teacher-prepare-save 返回的完整草稿。', 'study-teacher-prepare-save.result.draft', { type: 'object' }) },
+    voidOutput,
+    [
+      '创建且 staffCode 缺失时，SDK 先 POST saveTeacher，再把返回 staffCode 放进 professor 后 POST addProfessorStudy；已有 staffCode 或编辑态不会创建学员。',
+      '请求成功、超时或响应不确定后，按同一 name/staffCode 回查 study-teacher-list；若先建学员后主体保存失败，必须报告部分副作用。',
+    ],
+    [
+      { role: 'recovery', when: '请求成功、超时或响应不确定', capabilityId: 'study-teacher-list', mapping: {}, instruction: '回查讲师列表确认主体字段；外部讲师分支还要核对返回的 staffCode。' },
+      { role: 'cancel', when: '用户尚未确认而放弃草稿', capabilityId: 'study-teacher-cancel-save', mapping: {}, instruction: '提交前取消只丢弃草稿；任何已发请求都没有撤销能力。' },
+    ],
+    '讲师列表回查确认主体字段与草稿一致后，才能报告保存完成；只拿到 HTTP 成功不算。',
+    teacherManagementContext,
+    { idempotency: '端点没有 requestId；编辑是绝对值保存，创建外部讲师可能先产生 staffCode。超时必须先回查，不能盲目重试。' },
+  ),
+  'study-teacher-cancel-save': base(
+    'study-teacher-cancel-save',
+    '取消尚未提交的讲师主体保存草稿。',
+    'local',
+    {},
+    cancelOutput,
+    ['丢弃本地讲师草稿；不能回滚已创建的学员或已提交的讲师主体。'],
+    [],
+    '返回 cancelled=true 且不发请求。',
+    teacherManagementContext,
+  ),
+  'study-teacher-prepare-status': base(
+    'study-teacher-prepare-status',
+    '按当前讲师列表行准备启停状态草稿，不发送请求。',
+    'prepare',
+    teacherStatusInput,
+    { shape: '{ draft: { id, status } }', fields: [field('$', 'object', '本地状态草稿。'), field('draft.id', 'string | number', '讲师主体 ID。'), field('draft.status', '0 | 1', '目标状态。')], empty: 'ID 非法或 currentStatus 不是 0/1 时抛错。' },
+    ['展示当前状态和目标状态；用户取消时调用 cancel。'],
+    [{ role: 'required', when: '用户确认启停', capabilityId: 'study-teacher-status', mapping: { draft: 'result.draft' }, instruction: '原样提交状态草稿。' }, { role: 'cancel', when: '用户取消', capabilityId: 'study-teacher-cancel-status', mapping: {}, instruction: '只丢弃草稿。' }],
+    '得到尚未产生服务端副作用的状态草稿。',
+    teacherManagementContext,
+  ),
+  'study-teacher-status': base(
+    'study-teacher-status',
+    `变更讲师状态：GET ${STUDY_TEACHER_STATUS_PATH} 携带 id 与目标 status；虽然是 GET，但 Portal 将其作为写操作。`,
+    'write',
+    teacherStatusDraftInput,
+    voidOutput,
+    ['请求完成或超时后按同一 ID 回查 study-teacher-list，确认 status 已变成目标值。'],
+    [{ role: 'required', when: '请求完成、超时或响应不确定', capabilityId: 'study-teacher-list', mapping: {}, instruction: '回查同一讲师 ID 的 status。' }, { role: 'cancel', when: '用户尚未确认而放弃', capabilityId: 'study-teacher-cancel-status', mapping: {}, instruction: '提交前取消不发 GET。' }],
+    '讲师列表回查确认目标状态后，才能报告启停完成。',
+    teacherManagementContext,
+    { idempotency: writeIdempotency },
+  ),
+  'study-teacher-cancel-status': base(
+    'study-teacher-cancel-status',
+    '取消尚未提交的讲师启停草稿。',
+    'local',
+    {},
+    cancelOutput,
+    ['丢弃本地状态草稿；不能撤销已发出的 GET 写请求。'],
+    [],
+    '返回 cancelled=true 且不发请求。',
+    teacherManagementContext,
+  ),
+  'study-teacher-prepare-remove': base(
+    'study-teacher-prepare-remove',
+    '按当前讲师列表准备删除讲师 ID 数组，不发送 DELETE。',
+    'prepare',
+    { ids: input('待删除讲师 ID 数组。', 'study-teacher-list.result.list[].id', { type: '(string | number)[]', constraints: ['非空数组', '每个 ID 为正整数'] }) },
+    idsOutput('讲师删除的本地 ID 草稿。'),
+    ['向用户展示讲师姓名、ID及删除影响后确认；取消时调用 cancel。'],
+    [{ role: 'required', when: '用户确认删除', capabilityId: 'study-teacher-remove', mapping: { ids: 'result.ids' }, instruction: '原样提交同一 ID 数组。' }, { role: 'cancel', when: '用户取消', capabilityId: 'study-teacher-cancel-remove', mapping: {}, instruction: '只丢弃 ID。' }],
+    '得到经过本地 ID 校验、尚未产生删除副作用的草稿。',
+    teacherManagementContext,
+  ),
+  'study-teacher-remove': base(
+    'study-teacher-remove',
+    `删除讲师主体：DELETE ${STUDY_TEACHER_DELETE_PATH}，body为裸讲师ID数组。`,
+    'write',
+    { ids: input('prepare 返回的讲师 ID 数组。', 'study-teacher-prepare-remove.result.ids', { type: '(string | number)[]' }) },
+    voidOutput,
+    ['请求完成、超时或响应不确定后按同一 ID 回查 study-teacher-list；不要用 HTTP 成功代替删除确认。'],
+    [{ role: 'required', when: '用户确认且已有 prepare 结果', capabilityId: 'study-teacher-remove', mapping: { ids: 'args.ids' }, instruction: '发送 platform DELETE 裸数组。' }, { role: 'recovery', when: '请求成功、超时或响应不确定', capabilityId: 'study-teacher-list', mapping: {}, instruction: '按 ID 回查讲师列表。' }, { role: 'cancel', when: '提交前取消', capabilityId: 'study-teacher-cancel-remove', mapping: {}, instruction: '只丢弃草稿。' }],
+    '讲师列表回查确认目标 ID 不再可见后，才能报告删除完成。',
+    teacherManagementContext,
+    { idempotency: writeIdempotency },
+  ),
+  'study-teacher-cancel-remove': base(
+    'study-teacher-cancel-remove',
+    '取消尚未提交的讲师删除草稿。',
+    'local',
+    {},
+    cancelOutput,
+    ['丢弃本地 ID；不能撤销已发送的 DELETE。'],
+    [],
+    '返回 cancelled=true 且不发请求。',
+    teacherManagementContext,
+  ),
+
+  'study-teacher-level-prepare-status': base(
+    'study-teacher-level-prepare-status',
+    '按当前讲师类型列表准备启停状态草稿，不发送请求。',
+    'prepare',
+    levelStatusInput,
+    { shape: '{ draft: { id, status } }', fields: [field('$', 'object', '本地状态草稿。'), field('draft.id', 'string | number', '讲师类型 ID。'), field('draft.status', '0 | 1', '目标状态。')], empty: 'ID 非法或 currentStatus 不是 0/1 时抛错。' },
+    ['展示当前状态和目标状态；用户取消时调用 cancel。'],
+    [{ role: 'required', when: '用户确认启停', capabilityId: 'study-teacher-level-status', mapping: { draft: 'result.draft' }, instruction: '原样提交状态草稿。' }, { role: 'cancel', when: '用户取消', capabilityId: 'study-teacher-level-cancel-status', mapping: {}, instruction: '只丢弃草稿。' }],
+    '得到尚未产生服务端副作用的讲师类型状态草稿。',
+    levelActionContext,
+  ),
+  'study-teacher-level-status': base(
+    'study-teacher-level-status',
+    `变更讲师类型状态：POST ${STUDY_TEACHER_LEVEL_STATUS_PATH}，JSON body为 id 与目标 status。`,
+    'write',
+    levelStatusDraftInput,
+    voidOutput,
+    ['请求完成、超时或响应不确定后按同一 ID 回查 study-teacher-level-list，确认 status 已变更。'],
+    [{ role: 'required', when: '请求完成、超时或响应不确定', capabilityId: 'study-teacher-level-list', mapping: {}, instruction: '回查同一讲师类型 ID。' }, { role: 'cancel', when: '提交前取消', capabilityId: 'study-teacher-level-cancel-status', mapping: {}, instruction: '只丢弃草稿。' }],
+    '讲师类型列表回查确认目标状态后，才能报告启停完成。',
+    levelActionContext,
+    { idempotency: writeIdempotency },
+  ),
+  'study-teacher-level-cancel-status': base(
+    'study-teacher-level-cancel-status',
+    '取消尚未提交的讲师类型启停草稿。',
+    'local',
+    {},
+    cancelOutput,
+    ['丢弃本地状态草稿；不能撤销已发出的 POST。'],
+    [],
+    '返回 cancelled=true 且不发请求。',
+    levelActionContext,
+  ),
+  'study-teacher-level-prepare-remove': base(
+    'study-teacher-level-prepare-remove',
+    '按当前讲师类型列表准备删除目标 ID，不发送 GET。',
+    'prepare',
+    { id: input('待删除讲师类型 ID。', 'study-teacher-level-list.result.list[].id', { type: 'string | number' }) },
+    { shape: '{ id: string | number }', fields: [field('$', 'object', '本地删除草稿。'), field('id', 'string | number', '讲师类型 ID。')], empty: 'ID 非法时抛错。' },
+    ['向用户展示类型名称和 ID 后确认；取消时调用 cancel。'],
+    [{ role: 'required', when: '用户确认删除', capabilityId: 'study-teacher-level-remove', mapping: { id: 'result.id' }, instruction: '原样提交 ID。' }, { role: 'cancel', when: '用户取消', capabilityId: 'study-teacher-level-cancel-remove', mapping: {}, instruction: '只丢弃 ID。' }],
+    '得到经过本地 ID 校验、尚未产生删除副作用的草稿。',
+    levelActionContext,
+  ),
+  'study-teacher-level-remove': base(
+    'study-teacher-level-remove',
+    `删除讲师类型：GET ${STUDY_TEACHER_LEVEL_DELETE_PATH}?id=...；虽然是 GET，但会真实删除记录。`,
+    'write',
+    { id: input('prepare 返回的讲师类型 ID。', 'study-teacher-level-prepare-remove.result.id', { type: 'string | number' }) },
+    voidOutput,
+    ['请求完成、超时或响应不确定后按同一 ID 回查 study-teacher-level-list；不要用 HTTP 成功代替删除确认。'],
+    [{ role: 'required', when: '用户确认且已有 prepare 结果', capabilityId: 'study-teacher-level-remove', mapping: { id: 'args.id' }, instruction: '发送 smart-layer-admin GET query.id。' }, { role: 'recovery', when: '请求成功、超时或响应不确定', capabilityId: 'study-teacher-level-list', mapping: {}, instruction: '按 ID 回查讲师类型列表。' }, { role: 'cancel', when: '提交前取消', capabilityId: 'study-teacher-level-cancel-remove', mapping: {}, instruction: '只丢弃草稿。' }],
+    '讲师类型列表回查确认目标 ID 不再可见后，才能报告删除完成。',
+    levelActionContext,
+    { idempotency: writeIdempotency },
+  ),
+  'study-teacher-level-cancel-remove': base(
+    'study-teacher-level-cancel-remove',
+    '取消尚未提交的讲师类型删除草稿。',
+    'local',
+    {},
+    cancelOutput,
+    ['丢弃本地 ID；不能撤销已发送的 GET 删除请求。'],
+    [],
+    '返回 cancelled=true 且不发请求。',
+    levelActionContext,
+  ),
+
   // -------------------------------------------------------------------------
   // 本轮补齐：人员候选、教师类型字典、讲师类型写入口、评价设置保存
   // -------------------------------------------------------------------------
@@ -833,10 +1085,25 @@ const METHOD_PATHS = {
   'study-teacher-prepare-save-teacher': 'studyTeacher.prepareSaveTeacher',
   'study-teacher-save-teacher': 'studyTeacher.submitSaveTeacher',
   'study-teacher-cancel-save-teacher': 'studyTeacher.cancelSaveTeacher',
+  'study-teacher-prepare-save': 'studyTeacher.prepareSave',
+  'study-teacher-save': 'studyTeacher.save',
+  'study-teacher-cancel-save': 'studyTeacher.cancelSave',
+  'study-teacher-prepare-status': 'studyTeacher.prepareStatus',
+  'study-teacher-status': 'studyTeacher.setStatus',
+  'study-teacher-cancel-status': 'studyTeacher.cancelStatus',
+  'study-teacher-prepare-remove': 'studyTeacher.prepareRemove',
+  'study-teacher-remove': 'studyTeacher.remove',
+  'study-teacher-cancel-remove': 'studyTeacher.cancelRemove',
   'study-teacher-candidate-student-list': 'studyTeacher.listCandidateStudents',
   'study-teacher-type-dict': 'studyTeacher.listTeacherTypes',
   'study-teacher-level-prepare-save': 'studyTeacher.prepareSaveLevel',
   'study-teacher-level-save': 'studyTeacher.saveLevel',
+  'study-teacher-level-prepare-status': 'studyTeacher.prepareLevelStatus',
+  'study-teacher-level-status': 'studyTeacher.setLevelStatus',
+  'study-teacher-level-cancel-status': 'studyTeacher.cancelLevelStatus',
+  'study-teacher-level-prepare-remove': 'studyTeacher.prepareRemoveLevel',
+  'study-teacher-level-remove': 'studyTeacher.removeLevel',
+  'study-teacher-level-cancel-remove': 'studyTeacher.cancelRemoveLevel',
   'study-appraise-setting-prepare-save': 'studyTeacher.prepareSaveAppraiseSetting',
   'study-appraise-setting-save': 'studyTeacher.submitAppraiseSetting',
 } as const

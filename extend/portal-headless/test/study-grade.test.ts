@@ -88,6 +88,8 @@ describe('学习域班级写动作', () => {
     ])
     // 绑在这个路径上的写：班级删除、移出学员，加本批新增的关联组织、关联业务、添加学员
     expect(writes.filter(item => item.pagePath === STUDY_GRADE_PAGE_PATH).map(item => item.id)).toEqual([
+      'study-grade-status-check',
+      'study-grade-status-submit',
       'study-grade-remove',
       'study-grade-student-remove',
       'study-grade-add-organization-rel',
@@ -112,6 +114,49 @@ describe('学习域班级写动作', () => {
     expect(api.cancelRemoveStudents()).toEqual({ cancelled: true })
     expect(api.cancelRemoveManagementCenterGrades()).toEqual({ cancelled: true })
     expect(calls).toHaveLength(0)
+  })
+})
+
+describe('班级启停与删除回查能力', () => {
+  it('按 Portal 两步 PUT 发送同一份绝对状态草稿', async () => {
+    const calls: RequestConfig[] = []
+    const responses: unknown[] = [undefined, undefined]
+    const request: PortalRequest = async <T>(config: RequestConfig) => { calls.push(config); return responses.shift() as T }
+    const api = createStudyGradeCapability(request)
+    const prepared = api.prepareStatus({ id: '101', currentStatus: 0 })
+    expect(prepared).toEqual({ draft: { id: '101', status: 1 } })
+    await expect(api.checkStatus(prepared)).resolves.toEqual({ draft: { id: '101', status: 1 }, message: null })
+    await api.submitStatus(prepared)
+    expect(calls).toEqual([
+      { url: '/study/grade/studygrade/updateStatus', method: 'put', data: { id: '101', status: 1 } },
+      { url: '/study/grade/studygrade', method: 'put', data: { id: '101', status: 1 } },
+    ])
+  })
+
+  it('第一步返回提示时保留提示，不把第二步偷偷发出', async () => {
+    const calls: RequestConfig[] = []
+    const request: PortalRequest = async <T>(config: RequestConfig) => { calls.push(config); return '请确认' as T }
+    const api = createStudyGradeCapability(request)
+    const prepared = api.prepareStatus({ id: 7, currentStatus: 1 })
+    await expect(api.checkStatus(prepared)).resolves.toEqual({ draft: { id: 7, status: 0 }, message: '请确认' })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('提供班级学员与组织结构班级的独立回查请求', async () => {
+    const calls: RequestConfig[] = []
+    const responses: unknown[] = [[], { list: [], total: 0 }]
+    const request: PortalRequest = async <T>(config: RequestConfig) => { calls.push(config); return responses.shift() as T }
+    const api = createStudyGradeCapability(request)
+    await api.listStudents({ gradeId: 9 })
+    await api.listManagementCenterGrades({ managementCenterId: 10 })
+    expect(calls[0]).toEqual({
+      url: '/study/grade/student', method: 'get',
+      params: { order: '', orderField: '', gradeId: 9, name: '', mobile: '', staffCode: '', isRelatedLayer: '', createTimeStart: '', createTimeEnd: '' },
+    })
+    expect(calls[1]).toEqual({
+      url: '/study/grade/studygrade/page', method: 'get',
+      params: { order: '', orderField: '', managementCenterId: 10, name: '', type: '', createTimeStart: '', createTimeEnd: '', pageNo: 1, pageSize: 20 },
+    })
   })
 })
 

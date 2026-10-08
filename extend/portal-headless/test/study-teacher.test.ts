@@ -268,6 +268,21 @@ describe('评价设置：题目保存', () => {
 
 describe('讲师域新增能力的 AI 说明契约', () => {
   const newIds = [
+    'study-teacher-prepare-save',
+    'study-teacher-save',
+    'study-teacher-cancel-save',
+    'study-teacher-prepare-status',
+    'study-teacher-status',
+    'study-teacher-cancel-status',
+    'study-teacher-prepare-remove',
+    'study-teacher-remove',
+    'study-teacher-cancel-remove',
+    'study-teacher-level-prepare-status',
+    'study-teacher-level-status',
+    'study-teacher-level-cancel-status',
+    'study-teacher-level-prepare-remove',
+    'study-teacher-level-remove',
+    'study-teacher-level-cancel-remove',
     'study-teacher-candidate-student-list',
     'study-teacher-type-dict',
     'study-teacher-level-prepare-save',
@@ -283,6 +298,11 @@ describe('讲师域新增能力的 AI 说明契约', () => {
     // sdkPath 映射（门面方法契约）也要覆盖到
     const methodContracts = mod.STUDY_GRADE_TEACHER_METHOD_CONTRACTS
     for (const path of [
+      'studyTeacher.prepareSave', 'studyTeacher.save', 'studyTeacher.cancelSave',
+      'studyTeacher.prepareStatus', 'studyTeacher.setStatus', 'studyTeacher.cancelStatus',
+      'studyTeacher.prepareRemove', 'studyTeacher.remove', 'studyTeacher.cancelRemove',
+      'studyTeacher.prepareLevelStatus', 'studyTeacher.setLevelStatus', 'studyTeacher.cancelLevelStatus',
+      'studyTeacher.prepareRemoveLevel', 'studyTeacher.removeLevel', 'studyTeacher.cancelRemoveLevel',
       'studyTeacher.listCandidateStudents', 'studyTeacher.listTeacherTypes',
       'studyTeacher.prepareSaveLevel', 'studyTeacher.saveLevel',
       'studyTeacher.prepareSaveAppraiseSetting', 'studyTeacher.submitAppraiseSetting',
@@ -317,5 +337,82 @@ describe('讲师域新增能力的 AI 说明契约', () => {
     expect(appraise.steps[0]?.capabilityId).toBe('study-appraise-setting-list')
     // 无基准的结论必须标成推断
     expect(contracts['study-teacher-level-prepare-save']?.gaps?.join(' ')).toContain('没有浏览器基准')
+  })
+})
+
+describe('讲师主体、状态与删除写入口', () => {
+  it('新建缺 staffCode 的讲师先创建外部学员，再保存讲师主体；编辑沿用已有 staffCode', async () => {
+    const calls: Array<{ owner: string; config: RequestConfig }> = []
+    const responses: unknown[] = [1234, { code: 200 }, { code: 200 }]
+    const makeRequest = (owner: string): PortalRequest => async <T>(config: RequestConfig) => {
+      calls.push({ owner, config })
+      const next = responses.shift()
+      if (next instanceof Error) throw next
+      return next as T
+    }
+    const api = createStudyTeacherCapability(
+      makeRequest('teacher'), makeRequest('level'), makeRequest('appraise'), makeRequest('platform'),
+    )
+    const form = {
+      mode: 'create' as const,
+      name: '外部讲师', jobTitle: '讲师', briefIntro: '简介', detailedIntro: '<p>详细介绍</p>',
+      img: 'https://example.test/avatar.png', level: 1, teacherType: 2,
+      videoIds: ['88'],
+    }
+    const prepared = api.prepareSave({ form })
+    await api.save(prepared)
+    expect(calls.map(item => [item.owner, item.config])).toEqual([
+      ['platform', { url: '/study/base/studystudent/saveTeacher', method: 'post', data: { name: '外部讲师' } }],
+      ['teacher', { url: '/manage/addProfessorStudy.lay', method: 'post', data: { professor: { ...prepared.draft.professor, staffCode: 1234 }, videoIds: ['88'] } }],
+    ])
+
+    calls.length = 0
+    await api.save(api.prepareSave({ form: { ...form, mode: 'edit', id: 9, staffCode: '1234' } }))
+    expect(calls.map(item => item.owner)).toEqual(['teacher'])
+    expect(calls[0]?.config).toMatchObject({ url: '/manage/updateProfessorStudy.lay', method: 'post' })
+    expect(calls[0]?.config.data).toMatchObject({ professor: { id: 9, staffCode: '1234' }, videoIds: ['88'] })
+  })
+
+  it('讲师表单必填字段和状态/删除 ID 在本地拒绝，取消动作不发请求', async () => {
+    const { api, calls } = queueFixture([{ code: 200 }])
+    const base = { mode: 'create' as const, name: '讲师', jobTitle: '讲师', briefIntro: '简介', detailedIntro: '详情', img: 'avatar', level: 1, teacherType: 2 }
+    expect(() => api.prepareSave({ form: { ...base, detailedIntro: 'x'.repeat(501) } })).toThrow(/500/)
+    expect(() => api.prepareStatus({ id: 1, currentStatus: 2 })).toThrow(/0或1/)
+    expect(() => api.prepareRemove({ ids: [] })).toThrow(/非空数组/)
+    expect(() => api.prepareLevelStatus({ id: 1, currentStatus: 2 })).toThrow(/0或1/)
+    expect(() => api.prepareRemoveLevel({ id: 0 })).toThrow(/正整数/)
+    expect(api.cancelSave()).toEqual({ cancelled: true })
+    expect(api.cancelStatus()).toEqual({ cancelled: true })
+    expect(api.cancelRemove()).toEqual({ cancelled: true })
+    expect(api.cancelLevelStatus()).toEqual({ cancelled: true })
+    expect(api.cancelRemoveLevel()).toEqual({ cancelled: true })
+    expect(calls).toHaveLength(0)
+  })
+
+  it('讲师状态、讲师删除、类型状态和类型删除保持 Portal 的 HTTP 形状与实例', async () => {
+    const calls: Array<{ owner: string; config: RequestConfig }> = []
+    const makeRequest = (owner: string): PortalRequest => async <T>(config: RequestConfig) => {
+      calls.push({ owner, config })
+      return { code: 200 } as T
+    }
+    const api = createStudyTeacherCapability(makeRequest('teacher'), makeRequest('level'), makeRequest('appraise'), makeRequest('platform'))
+    await api.setStatus(api.prepareStatus({ id: '7', currentStatus: 0 }))
+    await api.remove(api.prepareRemove({ ids: ['7', 8] }))
+    await api.setLevelStatus(api.prepareLevelStatus({ id: 9, currentStatus: 1 }))
+    await api.removeLevel(api.prepareRemoveLevel({ id: '9' }))
+    expect(calls.map(item => [item.owner, item.config])).toEqual([
+      ['teacher', { url: '/manage/updateProfessor.lay', method: 'get', params: { id: '7', status: 1 } }],
+      ['platform', { url: '/study/base/studyteacher', method: 'delete', data: ['7', 8] }],
+      ['level', { url: '/manage/updateTeacherLevelStatus.lay', method: 'post', data: { id: 9, status: 0 } }],
+      ['level', { url: '/manage/deleteTeacherLevel.lay', method: 'get', params: { id: '9' } }],
+    ])
+  })
+
+  it('讲师类型编辑保留页面 bridge 中的 status 等业务字段，移除审计时间', () => {
+    const { api } = queueFixture()
+    const draft = api.prepareSaveLevel({ form: {
+      mode: 'edit', id: '7', name: '初级讲师', level: 1, sort: 10, status: 1, createTime: 'old', updateTime: 'old',
+    } }).draft
+    expect(draft.body).toEqual({ id: '7', name: '初级讲师', level: 1, sort: 10, status: 1 })
   })
 })

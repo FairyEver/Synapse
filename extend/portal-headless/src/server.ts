@@ -506,6 +506,7 @@ import {
   createStudyGradeCapability,
   studyGradeCapabilities,
   STUDY_GRADE_PAGE_PATH,
+  STUDY_GRADE_MANAGEMENT_CENTER_PAGE_PATH,
 } from './capabilities/study-grade.js'
 import {
   createStudyLessonCapability,
@@ -2334,8 +2335,9 @@ export function createPortalServer (options: PortalServerOptions): PortalServer 
     )
 
     // 班级管理
-    const studyGrade = createStudyGradeCapability((requestConfig) =>
-      call(STUDY_GRADE_PAGE_PATH, requestConfig as PortalRequestConfig),
+    const studyGrade = createStudyGradeCapability(
+      (c) => call(STUDY_GRADE_PAGE_PATH, c as PortalRequestConfig),
+      (c) => call(STUDY_GRADE_MANAGEMENT_CENTER_PAGE_PATH, c as PortalRequestConfig),
     )
 
     // 课堂三页：**每页一个 request**，module-type 才按各自的页面解析
@@ -2367,6 +2369,7 @@ export function createPortalServer (options: PortalServerOptions): PortalServer 
       (c) => call(STUDY_TEACHER_PAGE_PATH, { ...(c as object), httpInstance: STUDY_TEACHER_HTTP_INSTANCE, isOriginal: true } as PortalRequestConfig),
       (c) => call(STUDY_TEACHER_LEVEL_PAGE_PATH, { ...(c as object), httpInstance: STUDY_TEACHER_HTTP_INSTANCE, isOriginal: true } as PortalRequestConfig),
       (c) => call(STUDY_APPRAISE_SETTING_PAGE_PATH, c as PortalRequestConfig),
+      (c) => call(STUDY_TEACHER_PAGE_PATH, c as PortalRequestConfig),
     )
 
     // 绩效·协议类五页（状态变更 / 个人月度 / 所辖月度 / 个人年度 / 所辖年度）
