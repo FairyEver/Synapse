@@ -94,6 +94,7 @@ export default function UsersPage() {
   const debouncedHandleSearch = useDebouncedValue(handleSearch)
   const debouncedNicknameSearch = useDebouncedValue(nicknameSearch)
   const nicknameError = nicknameTarget ? getNicknameError(nicknameDraft) : null
+  const handleError = handleTarget ? getHandleError(handleDraft) : null
   const userListQuery = {
     page,
     pageSize,
@@ -102,7 +103,6 @@ export default function UsersPage() {
     nickname: debouncedNicknameSearch.trim() || undefined,
     ...sortQuery,
   }
-  const handleError = handleTarget ? getHandleError(handleDraft) : null
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-users', userListQuery],

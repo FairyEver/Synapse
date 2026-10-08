@@ -70,7 +70,6 @@ describe('UsersPage status confirmation', () => {
     expect(mockedAdminApi.exportUsers).toHaveBeenCalledOnce()
   })
 
-
   it('passes all fuzzy user filters to the users query', async () => {
     vi.useFakeTimers()
     try {

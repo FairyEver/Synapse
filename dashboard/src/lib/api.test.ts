@@ -212,12 +212,12 @@ describe('adminApi.users', () => {
   })
 
   it('searches users for administrator filters', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
         headers: { 'Content-Type': 'application/json' },
         status: 200,
       })
-    )
+    ))
 
     await adminApi.listUsers({ search: 'alice', pageSize: 20 })
 
@@ -226,7 +226,6 @@ describe('adminApi.users', () => {
       expect.objectContaining({ credentials: 'include' })
     )
   })
-
 
   it('sends fuzzy email, handle, and nickname filters for administrator users', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
