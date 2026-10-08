@@ -247,7 +247,7 @@ struct InboxView: View {
     private var emptyState: some View {
         if filter == "pending" {
             if model.waitingSessions.isEmpty {
-                ContentUnavailableView("暂无待处理事项", systemImage: "checkmark.circle")
+                ContentUnavailableView("暂无待处理会话", systemImage: "checkmark.circle")
             }
         } else if model.notifications.error == nil && visibleItems.isEmpty {
             if model.notifications.loading || model.notifications.filter != filter {
