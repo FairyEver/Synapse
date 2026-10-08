@@ -86,9 +86,10 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
           {flow.scenario === "remote_to_local" && <FieldDescription>目标已存在时，请返回选择「本地和云端都存在」。</FieldDescription>}
         </Field>}
         {flow.step === "remote" && <>
-          <DriveSyncRemotePicker controller={controller} kind={flow.kind || "folder"} chooseParent={flow.scenario === "local_to_remote"} onSelect={flow.setRemote} onParent={flow.setParent} />
-          {flow.scenario === "local_to_remote" && <Field><FieldLabel htmlFor="sync-name">云端新建名称</FieldLabel><Input id="sync-name" value={flow.name} onChange={(event) => flow.setName(event.target.value)} /></Field>}
-          <FieldDescription>已选云端位置：{flow.remotePath || "尚未选择"}</FieldDescription>
+          <DriveSyncRemotePicker controller={controller} kind={flow.kind || "folder"} chooseParent={flow.scenario === "local_to_remote"}
+            initialParent={flow.parent} onSelect={flow.setRemote} onNavigate={flow.setParent} />
+          {flow.scenario === "local_to_remote" && <Field><FieldLabel htmlFor="sync-name">文件名</FieldLabel><Input id="sync-name" value={flow.name} onChange={(event) => flow.setName(event.target.value)} /></Field>}
+          <FieldDescription>保存到：<span className="font-medium text-foreground">{flow.remotePath || "尚未选择"}</span></FieldDescription>
         </>}
         {flow.step === "authority" && <GuidedChoices disabled={!flow.canChoose} title="本次以哪边为准？" value={flow.authority} onSelect={(value) => flow.chooseAuthority(value as "local" | "remote")} options={[
           { value: "local", icon: <FolderInput aria-hidden="true" />, title: "以本地为准，更新云端", description: "覆盖云端不同内容；云端独有内容移入回收站。" },
