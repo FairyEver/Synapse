@@ -22,7 +22,7 @@ It preserves the existing `/api/admin/**` authorization boundary and all ordinar
 - `/admin` resolves to `/admin/system` for an active administrator session and `/admin/access` otherwise.
 - `/admin/access` is the only management-secret entry page.
 - The root path continues to redirect to `/console/`.
-- Public shares, standalone Drive readers, signup, password reset completion, desktop authorization and `/desktop/update` remain outside the admin application. Password reset link generation belongs to administrator user management.
+- Public shares, standalone Drive readers, signup, password reset completion, desktop authorization and `/desktop/update` remain outside the admin application. Password reset link generation belongs to ordinary-user profile settings for self-service and administrator user management for users who cannot sign in.
 - The same browser may hold an ordinary-user session and an administrator session at the same time. The sessions, permissions and logout behavior remain independent.
 
 ## Frontend Applications
@@ -31,7 +31,7 @@ It preserves the existing `/api/admin/**` authorization boundary and all ordinar
 
 The console application owns:
 
-- ordinary-user sign-in, signup and password reset completion;
+- ordinary-user sign-in, signup, authenticated self-service password reset link generation and password reset completion;
 - My Skills and Explore Skills;
 - personal Drive;
 - user Webhooks and the current user's Webhook history;
@@ -51,21 +51,23 @@ The admin application has no profile settings. Its identity label is always `平
 
 The applications may share the existing shadcn primitives, theme providers and identity-neutral request helpers. They do not share navigation, auth stores, route guards or business route composition. Role-based runtime switching is removed.
 
-## Administrator Password Reset Links
+## Password Reset Links
 
-Ordinary users cannot request password reset links. An active administrator session may generate a link for an active user from `/admin/users`. The plaintext link is returned once for manual delivery and is never stored in audit records or server logs.
+Authenticated ordinary users may generate a password reset link for themselves from `/console/settings`; both ordinary-user Web sessions and Bearer access tokens are accepted. The target user ID comes only from the authenticated context. Users who cannot sign in must contact an administrator, whose active session may generate a link for an active user from `/admin/users`. The plaintext link is returned once for manual delivery and is never stored in audit records or server logs.
 
-Links expire after 30 minutes and are single-use. Generating a link marks the user's previous unused reset links as used. Completing a reset updates the password, consumes every remaining reset link, and revokes the user's existing sessions and refresh tokens. Disabled users must be enabled before an administrator can generate a link.
+Links expire after 30 minutes and are single-use. Generating a link marks the user's previous unused reset links as used. Completing a reset updates the password, consumes every remaining reset link, and revokes the user's existing sessions and refresh tokens. Disabled users must be enabled before either flow can generate a link.
 
 The API boundary is:
 
 ```text
 POST /api/admin/users/:id/password-reset-link
+POST /api/console/me/password-reset-link
+POST /api/dashboard/me/password-reset-link
 POST /api/auth/password-reset/validate
 POST /api/auth/password-reset/confirm
 ```
 
-The first endpoint requires an administrator session. Validation and confirmation remain public because they consume an opaque bearer token. Audit records identify the administrator and target user but never contain the token or complete reset URL.
+The administrator endpoint requires an administrator session. The current-user endpoints require ordinary-user authentication and share the existing token lifecycle with administrator-generated links. Validation and confirmation remain public because they consume an opaque bearer token. Audit records identify the actor and target user but never contain the token or complete reset URL.
 
 ## Administrator Access Secret
 

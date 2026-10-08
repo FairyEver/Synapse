@@ -5,6 +5,7 @@ import { userNicknameMaxLength } from '@synapse/shared'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { ProfileSettings } from './profile-settings'
@@ -15,6 +16,7 @@ vi.mock('@/lib/api', () => ({
   dashboardApi: {
     getMe: vi.fn(),
     updateMe: vi.fn(),
+    createMyPasswordResetLink: vi.fn(),
   },
 }))
 
@@ -184,6 +186,47 @@ describe('ProfileSettings', () => {
     expect(saveButton().disabled).toBe(true)
     expect(document.body.textContent).toContain('该用户名不可用。')
   })
+
+  it('generates, copies, and clears a password reset link', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+    mockedDashboardApi.createMyPasswordResetLink.mockResolvedValue({
+      ok: true,
+      resetUrl: 'https://app.example.com/console/reset-password?token=reset-token',
+      expiresAt: '2026-09-02T01:30:00.000Z',
+    })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-handle'))
+    await click(buttonByText('生成重置链接'))
+
+    await waitFor(() => {
+      expect(mockedDashboardApi.createMyPasswordResetLink).toHaveBeenCalledOnce()
+      expect(inputById('password-reset-link').value).toContain('token=reset-token')
+    })
+    await click(buttonByText('复制链接'))
+    expect(writeText).toHaveBeenCalledWith(
+      'https://app.example.com/console/reset-password?token=reset-token'
+    )
+    await click(buttonByText('关闭'))
+    expect(document.getElementById('password-reset-link')).toBeNull()
+  })
+
+  it('shows a generation error without leaving a reset link visible', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+    mockedDashboardApi.createMyPasswordResetLink.mockRejectedValue(new Error('请求失败'))
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-handle'))
+    await click(buttonByText('生成重置链接'))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('请求失败'))
+    expect(document.getElementById('password-reset-link')).toBeNull()
+  })
 })
 
 function renderProfileSettings() {
@@ -271,5 +314,12 @@ function saveButton(): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll('button'))
     .find((item) => item.textContent === '保存')
   if (!(button instanceof HTMLButtonElement)) throw new Error('save button not found')
+  return button
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll('button'))
+    .find((item) => item.textContent?.trim() === text)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
   return button
 }

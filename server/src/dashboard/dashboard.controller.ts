@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Patch, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Header, Patch, Post, Req, UseGuards } from "@nestjs/common"
 import { normalizeUserNickname } from "@synapse/shared"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
+import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 
 const updateMeSchema = z.object({
@@ -39,5 +40,18 @@ export class DashboardController {
       throw badRequestFromZodError(result.error, "Profile update request is invalid.")
     }
     return this.auth.updateMyProfile(request.user!.id, result.data, request.ip)
+  }
+
+  @Post("/me/password-reset-link")
+  @Header("Cache-Control", "no-store")
+  createMyPasswordResetLink(@Req() request: AuthenticatedUserRequest) {
+    return this.auth.createMyPasswordResetLink(
+      request.user!.id,
+      resolvePublicAppUrl({
+        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+        request,
+      }),
+      request.ip,
+    )
   }
 }

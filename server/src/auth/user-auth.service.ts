@@ -21,6 +21,7 @@ import {
 } from "@synapse/shared"
 import { AuditLogService, auditActors } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
+import { createPasswordResetLink } from "./password-reset"
 import { createOpaqueToken, hashToken } from "./token"
 import { PrismaService } from "../prisma/prisma.service"
 
@@ -767,6 +768,19 @@ export class UserAuthService {
     })
 
     return toUserMeResponse(user)
+  }
+
+  async createMyPasswordResetLink(userId: string, publicAppUrl: string, ipAddress = "system") {
+    const me = await this.getMe(userId)
+    if (me.user.status !== "active") throw new BadRequestException("请先启用用户。")
+    const result = await createPasswordResetLink(this.prisma, userId, publicAppUrl)
+    await this.recordUserAuthSuccessAuditSafely({
+      adminEmail: me.user.email,
+      action: "user.password_reset_link_create",
+      targetId: userId,
+      ipAddress,
+    })
+    return result
   }
 
   async updateMyProfile(

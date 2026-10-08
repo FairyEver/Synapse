@@ -948,6 +948,11 @@ export const dashboardApi = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  createMyPasswordResetLink: () =>
+    request<PasswordResetLinkResult>(`${consoleApiBasePath}/me/password-reset-link`, {
+      cache: 'no-store',
+      method: 'POST',
+    }),
   listApiKeys: () =>
     request<DashboardApiKey[]>(`${consoleApiBasePath}/api-keys`),
   listApiKeyCapabilities: () =>

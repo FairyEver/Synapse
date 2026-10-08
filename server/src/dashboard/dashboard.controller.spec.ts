@@ -37,6 +37,33 @@ describe("DashboardController", () => {
     expect(auth.getMe).toHaveBeenCalledWith("user-1")
   })
 
+  it("creates a password reset link for the authenticated user", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
+    const auth = {
+      createMyPasswordResetLink: vi.fn().mockResolvedValue({
+        ok: true,
+        resetUrl: "https://app.example.com/console/reset-password?token=reset-token",
+        expiresAt: new Date("2026-09-02T01:30:00.000Z"),
+      }),
+    }
+    const controller = new DashboardController(auth as never)
+
+    await expect(controller.createMyPasswordResetLink({
+      ip: "203.0.113.80",
+      user: { id: "user-1" },
+    } as never)).resolves.toEqual({
+      ok: true,
+      resetUrl: "https://app.example.com/console/reset-password?token=reset-token",
+      expiresAt: new Date("2026-09-02T01:30:00.000Z"),
+    })
+    expect(auth.createMyPasswordResetLink).toHaveBeenCalledWith(
+      "user-1",
+      "https://app.example.com",
+      "203.0.113.80",
+    )
+    vi.unstubAllEnvs()
+  })
+
   it("updates the normal user dashboard handle", async () => {
     const auth = {
       updateMyProfile: vi.fn().mockResolvedValue({

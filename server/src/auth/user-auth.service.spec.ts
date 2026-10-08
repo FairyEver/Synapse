@@ -36,6 +36,7 @@ function createPrismaMock() {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     userPasswordResetToken: {
+      create: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     $executeRaw: vi.fn(),
@@ -1401,6 +1402,61 @@ describe("UserAuthService", () => {
         nickname: true,
       },
     })
+  })
+
+  it("creates a password reset link for the current active user and audits the action", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-02T01:00:00.000Z"))
+    const prisma = createPrismaMock()
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      handle: "liyang",
+      nickname: "liyang",
+    })
+    prisma.__tx.user.findUnique.mockResolvedValue({ id: "user-1", status: "active" })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.createMyPasswordResetLink(
+      "user-1",
+      "https://app.example.com",
+      "203.0.113.81",
+    )).resolves.toMatchObject({
+      ok: true,
+      resetUrl: expect.stringMatching(/^https:\/\/app\.example\.com\/console\/reset-password\?token=/),
+      expiresAt: new Date("2026-09-02T01:30:00.000Z"),
+    })
+    expect(prisma.__tx.userPasswordResetToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", usedAt: null },
+      data: { usedAt: new Date("2026-09-02T01:00:00.000Z") },
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.password_reset_link_create",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.81",
+    })
+    vi.useRealTimers()
+  })
+
+  it("rejects a password reset link for a disabled current user", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "disabled",
+      handle: "liyang",
+      nickname: "liyang",
+    })
+    const service = createService(prisma)
+
+    await expect(service.createMyPasswordResetLink("user-1", "https://app.example.com"))
+      .rejects
+      .toThrow("请先启用用户。")
+    expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 
   it("sets normalized handles and reserves the previous handle when renamed", async () => {

@@ -72,6 +72,29 @@ describe('dashboardApi.apiKeys', () => {
   })
 })
 
+describe('dashboardApi.passwordReset', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('creates a password reset link for the current user', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        ok: true,
+        resetUrl: 'https://app.example.com/console/reset-password?token=reset-token',
+        expiresAt: '2026-09-02T01:30:00.000Z',
+      }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
+    )
+
+    await dashboardApi.createMyPasswordResetLink()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/console/me/password-reset-link',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include', method: 'POST' }),
+    )
+  })
+})
+
 describe('driveAnnotationApi', () => {
   afterEach(() => {
     vi.restoreAllMocks()
