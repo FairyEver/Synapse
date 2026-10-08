@@ -117,7 +117,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -3251,6 +3251,15 @@ function DriveShareSuccessDialog({
             <Label htmlFor="drive-share-success-url">访问链接</Label>
             <InputGroup className="max-w-full overflow-hidden">
               <InputGroupInput id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  size="icon-xs"
+                  aria-label="复制纯链接"
+                  onClick={() => { void copyDriveText(accessUrl, "链接已复制") }}
+                >
+                  <Copy />
+                </InputGroupButton>
+              </InputGroupAddon>
             </InputGroup>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button type="button" size="default" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyDriveUrl(share.name, share.type, accessUrl) }}>

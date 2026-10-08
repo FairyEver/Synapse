@@ -3011,6 +3011,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("文件已分享")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test")
+    expect(getButtonByLabel("复制纯链接").dataset.size).toBe("icon-xs")
     expect(document.body.textContent).toMatch(/\d+ (?:分钟|小时|天|个月|年)前/)
     expect(getButton("复制链接").querySelector("svg")).toBeNull()
     expect(getButton("打开文件").querySelector("svg")).toBeNull()
@@ -3022,6 +3023,10 @@ describe("DriveModule", () => {
 
     await clickButtonText("复制链接")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("文件分享：report\nhttps://synapse.test/share/shr_test")
+    expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
+
+    await clickButtonByLabel("复制纯链接")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/share/shr_test")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
