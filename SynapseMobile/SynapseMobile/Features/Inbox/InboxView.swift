@@ -118,9 +118,10 @@ struct InboxView: View {
         .confirmationDialog("清空所有通知？", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("全部清空", role: .destructive) { Task { await model.deleteAllNotifications() } }
         }
-        .onChange(of: filter) { _, selected in
+        .task(id: filter) {
+            let selected = filter
             guard selected != "pending" else { return }
-            Task { await model.reloadNotifications(filter: selected) }
+            await model.reloadNotifications(filter: selected)
         }
         .noticeOverlay(model)
     }

@@ -61,9 +61,16 @@ final class NotificationStore {
     }
 
     private func load(using client: any NotificationStoreAPI, filter: String, append: Bool = false, feedback: Int) async {
+        guard !Task.isCancelled else { return }
         loadGeneration += 1
         let requestGeneration = loadGeneration
         let account = accountGeneration
+        // Background refreshes must use the requested filter even before its page arrives.
+        if self.filter != filter {
+            self.filter = filter
+            items = []
+            nextCursor = nil
+        }
         loading = true
         defer { if requestGeneration == loadGeneration, account == accountGeneration { loading = false } }
         do {
@@ -73,12 +80,11 @@ final class NotificationStore {
                 guard !Task.isCancelled else { return }
                 let revision = mutationRevision
                 page = try await client.listNotifications(filter: filter, cursor: cursor)
-                guard requestGeneration == loadGeneration, account == accountGeneration else { return }
+                guard requestGeneration == loadGeneration, account == accountGeneration, !Task.isCancelled else { return }
                 // A successful read/delete changes the server before this snapshot
                 // returns. Retry its same cursor instead of restoring stale rows.
                 if revision == mutationRevision { break }
             }
-            self.filter = filter
             if append {
                 var known = Set(items.map(\.id))
                 items += page.items.filter { known.insert($0.id).inserted }
@@ -91,6 +97,7 @@ final class NotificationStore {
             unreadCount = count
             if feedback == feedbackGeneration { error = nil }
         } catch {
+            guard !Task.isCancelled else { return }
             if requestGeneration == loadGeneration, account == accountGeneration, feedback == feedbackGeneration { self.error = "通知加载失败" }
         }
     }
