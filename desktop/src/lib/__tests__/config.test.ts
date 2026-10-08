@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_QUICK_INPUTS } from "../../constants/defaults"
-import { DEFAULT_DOCK_APP_IDS } from "../../modules/apps/dock"
+import { DEFAULT_DOCK_APP_IDS, DEFAULT_DOCK_MIGRATION_IDS } from "../../modules/apps/dock"
 import { SYNAPSE_APP_VERSION } from "../app-version"
 import {
   applySynapseConfigPatch,
@@ -10,6 +10,22 @@ import {
 } from "../config"
 
 describe("Synapse config Agent defaults", () => {
+  it("marks Dock migrations as applied for new installations", () => {
+    expect(createDefaultConfig().global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
+  })
+
+  it("leaves legacy Dock configs eligible for pending migrations", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [], dockAppIds: ["agent", "launcher"] },
+    })
+
+    expect(config.global.dockMigrationIds).toEqual([])
+    expect(sanitizeSynapseConfig({ activeRepoUuid: null, repositories: [] }).global.dockMigrationIds)
+      .toEqual([])
+  })
+
   it("defaults new Agent conversations to default permission mode", () => {
     expect(createDefaultConfig().agent.defaultPermissionMode).toBe("default")
     expect(createDefaultConfig().agent.recentSlashSkills).toEqual([])

@@ -7,7 +7,7 @@
 | 注册表面 | 决定内容 | 权威入口 |
 |---|---|---|
 | System App | 应用身份、独立窗口、启动器入口、条件可见性 | `desktop/src/modules/apps/types.ts`、`definitions.ts`、`registry.ts`、`visibility.ts`、`components/system-app-content.tsx` |
-| Dock | 默认固定、用户可固定、条件显示 | 各 App 的 `app-definition.ts` 中 `dock` 元数据、`desktop/src/modules/apps/dock.ts` |
+| Dock | 默认固定、用户可固定、条件显示、一次性升级迁移 | 各 App 的 `app-definition.ts` 中 `dock` 元数据、`desktop/src/modules/apps/dock.ts` |
 | Workflow Node | 节点类型、Renderer manifest、Main executor | `desktop/workflow-nodes/register.renderer.ts`、`register.main.ts` |
 | Automation Action | 动作类型、Renderer 配置、Main executor | `desktop/src/action-runtime/builtin-actions.ts`、`desktop/electron/action-runtime/builtin-actions.ts` |
 | MCP Capability / Tool | capability catalog、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
@@ -42,7 +42,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail | 是 | 否 | — | — | 16 | `open` |
+| Mail | 是 | 否（旧配置升级时一次性加入） | — | — | 16 | `open` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -125,6 +125,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
 
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
+
+Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。首条迁移把 `launcher`（「应用」）移到末尾，把 `mail` 放到其左侧；其它应用的相对顺序保持不变，已有 Mail 只移动且不重复。新安装预先记录当前迁移，不改变默认 Dock；用户之后移除 Mail、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。
 

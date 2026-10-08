@@ -16,7 +16,7 @@ import {
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
 import { SYNAPSE_AGENT_PERMISSION_MODES } from "../types/agent"
 import { MODEL_TIERS } from "../types/provider-model"
-import { normalizeDockAppIds } from "../modules/apps/dock"
+import { normalizeDockAppIds, normalizeDockMigrationIds } from "../modules/apps/dock"
 import { normalizeAgentProjectOrder } from "../modules/agent/project-order"
 import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
@@ -235,6 +235,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "dockAppIds") && !Array.isArray(value.dockAppIds)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "dockMigrationIds") && !Array.isArray(value.dockMigrationIds)) {
     return true
   }
 
@@ -613,7 +617,7 @@ function normalizeKnowledgeBaseStorage(value: unknown): SynapseKnowledgeBaseStor
 
 function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   if (!isRecord(value)) {
-    return structuredClone(DEFAULT_GLOBAL_CONFIG)
+    return { ...structuredClone(DEFAULT_GLOBAL_CONFIG), dockMigrationIds: [] }
   }
 
   const seeded = applyDefaultQuickInputSeed(
@@ -635,6 +639,9 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     variables: normalizeVariableList(value.variables),
     knowledgeBaseStorage: normalizeKnowledgeBaseStorage(value.knowledgeBaseStorage),
     dockAppIds: normalizeDockAppIds(Array.isArray(value.dockAppIds) ? value.dockAppIds : undefined),
+    dockMigrationIds: normalizeDockMigrationIds(
+      Array.isArray(value.dockMigrationIds) ? value.dockMigrationIds : undefined,
+    ),
     agentProjectOrder: normalizeAgentProjectOrder(
       projects,
       Array.isArray(value.agentProjectOrder) ? value.agentProjectOrder : undefined,

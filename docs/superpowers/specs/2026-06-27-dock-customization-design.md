@@ -190,6 +190,16 @@ config.global.dockAppIds
 
 Do not add a DataRepository namespace. Dock layout is a global preference already represented in the config model and config backup flow.
 
+### One-time upgrade migrations
+
+Product introductions may need to expose an existing app without repeatedly overriding the user's Dock choices. Keep these changes as ordered, stable-id migrations in the Dock model and record completed ids in:
+
+```text
+config.global.dockMigrationIds
+```
+
+Each migration runs once for an existing config, persists its layout and completed ids atomically, and never runs again after the user removes an introduced app. New installations mark the current migrations as already applied so the ordinary default Dock remains unchanged. Supported operations include moving an app to the end and inserting an app immediately before another app. The first migration moves `launcher` (shown as “应用”) to the end and inserts `mail` immediately before it.
+
 ### Normalization
 
 Separate default seeding from config cleanup.

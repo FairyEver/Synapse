@@ -47,6 +47,7 @@ extend/portal-headless/ # Portal 服务端无头 SDK，server 的运行时依赖
 - `.env`、`.env.example`、`*.env.*` 必须按职责分组，并为每组、每项添加中文注释，说明用途、影响范围或单位。
 - 示例配置不得包含密码、token、secret、私钥或真实连接串。
 - 新增配置时同步更新校验、示例、部署/初始化脚本和相关 README。
+- Dock 的一次性升级调整只在 `desktop/src/modules/apps/dock.ts` 的 `DOCK_MIGRATIONS` 清单末尾追加稳定且唯一的 ID，不修改或删除已发布条目，不绑定每次变化的应用版本。主进程加载或恢复配置时执行未完成条目，布局与 `global.dockMigrationIds` 同时原子落盘，成功后才更新缓存；用户移除、排序和恢复默认不清除完成记录。新安装预先标记当前清单；恢复历史备份时按备份携带的记录判断待执行迁移。
 
 ## 对象存储与数据归属
 

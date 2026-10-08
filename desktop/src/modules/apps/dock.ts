@@ -11,6 +11,38 @@ export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] =
 
 export const REQUIRED_DOCK_APP_ID = "launcher" as const satisfies SynapseSystemAppId
 
+export type DockMigrationOperation =
+  | {
+      readonly kind: "move-to-end"
+      readonly appId: SynapseSystemAppId
+    }
+  | {
+      readonly kind: "insert-before"
+      readonly appId: SynapseSystemAppId
+      readonly targetAppId: SynapseSystemAppId
+    }
+
+export type DockMigration = {
+  readonly id: string
+  readonly operations: readonly DockMigrationOperation[]
+}
+
+/**
+ * 旧配置按清单顺序执行未完成迁移，新安装仅记录当前清单，保留默认 Dock。
+ * 已发布条目及 ID 不得修改或移除；后续需求在末尾追加新 ID。
+ */
+export const DOCK_MIGRATIONS: readonly DockMigration[] = [
+  {
+    id: "dock.mail-introduction.v1",
+    operations: [
+      { kind: "move-to-end", appId: "launcher" },
+      { kind: "insert-before", appId: "mail", targetAppId: "launcher" },
+    ],
+  },
+]
+
+export const DEFAULT_DOCK_MIGRATION_IDS: readonly string[] = DOCK_MIGRATIONS.map((migration) => migration.id)
+
 export type DockMoveDirection = "up" | "down"
 
 export function seedDefaultDockAppIds(): SynapseSystemAppId[] {
@@ -44,6 +76,28 @@ export function normalizeDockAppIds(values: readonly unknown[] | undefined): Syn
   return next
 }
 
+export function normalizeDockMigrationIds(values: readonly unknown[] | undefined): string[] {
+  if (values === undefined) {
+    return []
+  }
+
+  const next: string[] = []
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const id = value.trim()
+    if (!id || next.includes(id)) {
+      continue
+    }
+
+    next.push(id)
+  }
+
+  return next
+}
+
 export function insertDockAppId(
   values: readonly unknown[] | undefined,
   appId: SynapseSystemAppId,
@@ -57,6 +111,70 @@ export function insertDockAppId(
     appId,
     ...current.slice(insertIndex),
   ]
+}
+
+export function moveDockAppIdToEnd(
+  values: readonly unknown[] | undefined,
+  appId: SynapseSystemAppId,
+): SynapseSystemAppId[] {
+  const current = normalizeDockAppIds(values)
+  return current.includes(appId)
+    ? [...current.filter((value) => value !== appId), appId]
+    : current
+}
+
+export function insertDockAppIdBefore(
+  values: readonly unknown[] | undefined,
+  appId: SynapseSystemAppId,
+  targetAppId: SynapseSystemAppId,
+): SynapseSystemAppId[] {
+  const normalized = normalizeDockAppIds(values)
+  if (appId === targetAppId) {
+    return normalized
+  }
+  const current = normalized.filter((value) => value !== appId)
+  const targetIndex = current.indexOf(targetAppId)
+  if (targetIndex < 0) {
+    return [...current, appId]
+  }
+
+  return [
+    ...current.slice(0, targetIndex),
+    appId,
+    ...current.slice(targetIndex),
+  ]
+}
+
+function applyDockMigrationOperation(
+  values: readonly SynapseSystemAppId[],
+  operation: DockMigrationOperation,
+): SynapseSystemAppId[] {
+  if (operation.kind === "move-to-end") {
+    return moveDockAppIdToEnd(values, operation.appId)
+  }
+
+  return insertDockAppIdBefore(values, operation.appId, operation.targetAppId)
+}
+
+export function applyDockMigrations(
+  values: readonly unknown[] | undefined,
+  appliedMigrationIds: readonly unknown[] | undefined,
+): { readonly dockAppIds: SynapseSystemAppId[]; readonly appliedMigrationIds: string[] } {
+  let dockAppIds = normalizeDockAppIds(values)
+  const applied = normalizeDockMigrationIds(appliedMigrationIds)
+
+  for (const migration of DOCK_MIGRATIONS) {
+    if (applied.includes(migration.id)) {
+      continue
+    }
+
+    for (const operation of migration.operations) {
+      dockAppIds = applyDockMigrationOperation(dockAppIds, operation)
+    }
+    applied.push(migration.id)
+  }
+
+  return { dockAppIds, appliedMigrationIds: applied }
 }
 
 export function removeDockAppId(

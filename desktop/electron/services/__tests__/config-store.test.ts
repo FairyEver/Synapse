@@ -15,6 +15,7 @@ vi.mock("electron", () => ({
 }))
 
 import { configStore } from "../config-store"
+import { DEFAULT_DOCK_MIGRATION_IDS } from "../../../src/modules/apps/dock"
 
 describe("ConfigStore", () => {
   beforeEach(() => {
@@ -60,6 +61,42 @@ describe("ConfigStore", () => {
 
       expect(config.agent.defaultPermissionMode).toBe("default")
       expect(persisted.singleton?.agent?.defaultPermissionMode).toBe("default")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("applies pending Dock migrations once and keeps user removals", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-store-dock-migration-"))
+    electronMock.userDataPath = dir
+
+    try {
+      const dataDir = path.join(dir, "data-v1")
+      const configPath = path.join(dataDir, "core.config.json")
+      await mkdir(dataDir, { recursive: true })
+      await writeFile(configPath, JSON.stringify({
+        schemaVersion: 1,
+        singleton: {
+          activeRepoUuid: null,
+          repositories: [],
+          global: {
+            themeMode: "light",
+            projects: [],
+            dockAppIds: ["agent", "launcher"],
+          },
+        },
+        items: {},
+      }))
+
+      const migrated = await configStore.load()
+      expect(migrated.global.dockAppIds).toEqual(["agent", "mail", "launcher"])
+      expect(migrated.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
+
+      await configStore.update({ global: { dockAppIds: ["agent", "launcher"] } })
+
+      const afterRemoval = await configStore.load()
+      expect(afterRemoval.global.dockAppIds).toEqual(["agent", "launcher"])
+      expect(afterRemoval.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

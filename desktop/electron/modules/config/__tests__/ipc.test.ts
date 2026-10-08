@@ -576,6 +576,7 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
       variables: [],
       knowledgeBaseStorage: { mode: "default" },
       dockAppIds: [...DEFAULT_DOCK_APP_IDS],
+      dockMigrationIds: [],
       agentProjectOrder: [],
     },
     agent: {

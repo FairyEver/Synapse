@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest"
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { listSystemApps } from "../registry"
 import {
+  applyDockMigrations,
   DEFAULT_DOCK_APP_IDS,
+  DEFAULT_DOCK_MIGRATION_IDS,
+  insertDockAppIdBefore,
   insertDockAppId,
   listAddableDockApps,
   listDockApps,
   moveDockAppId,
+  moveDockAppIdToEnd,
   normalizeDockAppIds,
+  normalizeDockMigrationIds,
   removeDockAppId,
   reorderDockAppIds,
   resolveDefaultDockAppId,
@@ -50,6 +55,42 @@ describe("app Dock model", () => {
     expect(insertDockAppId(["agent", "launcher"], "database")).toEqual(["agent", "database", "launcher"])
     expect(insertDockAppId(["launcher", "agent"], "database")).toEqual(["database", "launcher", "agent"])
     expect(insertDockAppId(["agent", "launcher"], "agent")).toEqual(["agent", "launcher"])
+  })
+
+  it("supports moving an app to the end and inserting another app before it", () => {
+    expect(moveDockAppIdToEnd(["launcher", "agent"], "launcher")).toEqual(["agent", "launcher"])
+    expect(insertDockAppIdBefore(["agent", "launcher"], "mail", "launcher"))
+      .toEqual(["agent", "mail", "launcher"])
+    expect(insertDockAppIdBefore(["agent", "mail", "launcher"], "mail", "launcher"))
+      .toEqual(["agent", "mail", "launcher"])
+  })
+
+  it("applies each Dock migration once and preserves the applied ids", () => {
+    const migrated = applyDockMigrations(["launcher", "agent"], [])
+
+    expect(migrated.dockAppIds).toEqual(["agent", "mail", "launcher"])
+    expect(migrated.appliedMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
+    expect(applyDockMigrations(migrated.dockAppIds, migrated.appliedMigrationIds)).toEqual(migrated)
+  })
+
+  it("keeps other apps in user order and moves an existing Mail without duplication", () => {
+    expect(applyDockMigrations(["mail", "database", "launcher", "workflow", "agent"], []).dockAppIds)
+      .toEqual(["database", "workflow", "agent", "mail", "launcher"])
+    expect(applyDockMigrations([], []).dockAppIds).toEqual(["mail", "launcher"])
+  })
+
+  it("does not move launcher or reintroduce Mail after the migration was recorded", () => {
+    const userDock = ["launcher", "database", "agent"]
+    const applied = [...DEFAULT_DOCK_MIGRATION_IDS, "future-migration"]
+    expect(applyDockMigrations(userDock, applied)).toEqual({
+      dockAppIds: userDock,
+      appliedMigrationIds: applied,
+    })
+  })
+
+  it("normalizes migration records without discarding unknown ids", () => {
+    expect(normalizeDockMigrationIds([" future-migration ", "", 42, "future-migration"]))
+      .toEqual(["future-migration"])
   })
 
   it("does not remove launcher", () => {

@@ -7,6 +7,7 @@ import {
   createDefaultConfig,
   sanitizeSynapseConfig,
 } from "../../src/lib/config"
+import { applyDockMigrations } from "../../src/modules/apps/dock"
 import { sanitizeConfigPatchForLog } from "../../src/lib/config-log-redaction"
 import type { SynapseConfig, SynapseConfigPatch } from "../../src/types/config"
 import { createMainLogger } from "./log-store"
@@ -22,6 +23,18 @@ const CORE_CONFIG_NAMESPACE = "core.config"
 
 // Legacy config file path (for migration)
 const LEGACY_CONFIG_FILE_NAME = "config.json"
+
+function applyPendingDockMigrations(config: SynapseConfig): SynapseConfig {
+  const result = applyDockMigrations(config.global.dockAppIds, config.global.dockMigrationIds)
+  return {
+    ...config,
+    global: {
+      ...config.global,
+      dockAppIds: result.dockAppIds,
+      dockMigrationIds: result.appliedMigrationIds,
+    },
+  }
+}
 
 // Create DataRepository and config namespace
 function createConfigNamespace(): JsonNamespace<SynapseConfig> {
@@ -170,7 +183,7 @@ class ConfigStore {
       return structuredClone(defaultConfig)
     }
 
-    const normalizedConfig = sanitizeSynapseConfig(config)
+    const normalizedConfig = applyPendingDockMigrations(sanitizeSynapseConfig(config))
     if (JSON.stringify(normalizedConfig) !== JSON.stringify(config)) {
       await namespace.setSingleton(normalizedConfig)
       logger.info("Config normalized after load.", {
@@ -209,7 +222,7 @@ class ConfigStore {
       throw new Error("备份文件里的配置格式不对。")
     }
 
-    const nextConfig = sanitizeSynapseConfig(rawConfig)
+    const nextConfig = applyPendingDockMigrations(sanitizeSynapseConfig(rawConfig))
 
     const namespace = this.getNamespace()
     await namespace.setSingleton(nextConfig)
@@ -275,7 +288,7 @@ class ConfigStore {
     }
 
     const config = configEntry.data.singleton
-    const normalizedConfig = sanitizeSynapseConfig(config)
+    const normalizedConfig = applyPendingDockMigrations(sanitizeSynapseConfig(config))
 
     const namespace = this.getNamespace()
     await namespace.setSingleton(normalizedConfig)

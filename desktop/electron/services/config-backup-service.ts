@@ -4,7 +4,11 @@ import path from "node:path"
 import { CONFIG_BACKUP_IMPORT_MAX_BYTES } from "../../config"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_KNOWLEDGE_BASE_STORAGE } from "../../src/constants/defaults"
-import { DEFAULT_DOCK_APP_IDS, normalizeDockAppIds } from "../../src/modules/apps/dock"
+import {
+  DEFAULT_DOCK_APP_IDS,
+  normalizeDockAppIds,
+  normalizeDockMigrationIds,
+} from "../../src/modules/apps/dock"
 import { normalizeAgentProjectOrder } from "../../src/modules/agent/project-order"
 import type {
   SynapseDataRepositoryBackupPayload,
@@ -125,6 +129,26 @@ function validateDockAppIds(rawValue: unknown, errors: string[]): SynapseConfig[
   }
 
   return normalizeDockAppIds(rawValue)
+}
+
+function validateDockMigrationIds(
+  rawValue: unknown,
+  errors: string[],
+): SynapseConfig["global"]["dockMigrationIds"] | null {
+  if (rawValue === undefined) {
+    return []
+  }
+
+  if (!Array.isArray(rawValue)) {
+    errors.push("config.global.dockMigrationIds 必须是数组。")
+    return null
+  }
+
+  if (rawValue.some((item) => typeof item !== "string")) {
+    errors.push("config.global.dockMigrationIds 必须只包含字符串。")
+  }
+
+  return normalizeDockMigrationIds(rawValue)
 }
 
 function validateAgentProjectOrder(
@@ -791,6 +815,7 @@ function validateConfig(
     errors,
   )
   const dockAppIds = validateDockAppIds(global.dockAppIds, errors)
+  const dockMigrationIds = validateDockMigrationIds(global.dockMigrationIds, errors)
 
   if (
     typeof themeMode !== "string"
@@ -862,6 +887,7 @@ function validateConfig(
     || !normalizedAgent
     || !knowledgeBaseStorage
     || !dockAppIds
+    || !dockMigrationIds
     || !agentProjectOrder
   ) {
     return null
@@ -881,6 +907,7 @@ function validateConfig(
       variables,
       knowledgeBaseStorage,
       dockAppIds,
+      dockMigrationIds,
       agentProjectOrder,
     },
     agent: normalizedAgent,

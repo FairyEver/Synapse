@@ -83,6 +83,7 @@ export type SynapseGlobalConfig = {
   variables: SynapseVariable[]
   knowledgeBaseStorage: SynapseKnowledgeBaseStorageConfig
   dockAppIds: SynapseSystemAppId[]
+  dockMigrationIds: string[]
   agentProjectOrder: string[]
 }
 
