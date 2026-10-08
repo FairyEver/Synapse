@@ -14,6 +14,7 @@ vi.mock('@/lib/api', () => ({
   adminApi: {
     listLiveClients: vi.fn(),
     listUsers: vi.fn(),
+    exportUsers: vi.fn(),
     subscribeLiveClients: vi.fn(),
     createUserPasswordResetLink: vi.fn(),
     updateUserAdminNote: vi.fn(),
@@ -56,6 +57,18 @@ afterEach(() => {
 })
 
 describe('UsersPage status confirmation', () => {
+  it('exports all users from the toolbar', async () => {
+    mockedAdminApi.listUsers.mockResolvedValue({ data: [], total: 0 })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+    mockedAdminApi.exportUsers.mockResolvedValue(undefined)
+
+    renderPage()
+    await click(buttonByText('导出'))
+
+    expect(mockedAdminApi.exportUsers).toHaveBeenCalledOnce()
+  })
+
   it('keeps an open user menu when live client status changes', async () => {
     mockedAdminApi.listUsers.mockResolvedValue({
       data: [{

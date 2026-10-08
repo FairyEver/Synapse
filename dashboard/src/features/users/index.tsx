@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { normalizeUserNickname } from '@synapse/shared'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MoreHorizontal, RefreshCw } from 'lucide-react'
+import { Download, MoreHorizontal, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -123,6 +123,15 @@ export default function UsersPage() {
   const retryTable = () => {
     void refetch()
     void refetchLiveClients()
+  }
+
+  async function handleExport() {
+    try {
+      await adminApi.exportUsers()
+      toast.success('导出成功')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '导出失败')
+    }
   }
 
   const toggleStatus = useMutation({
@@ -392,15 +401,23 @@ export default function UsersPage() {
     },
     actionsColumn,
   ]
-  const liveClientToolbar = liveClientStatusError ? (
-    <div className='flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm'>
-      <span className='text-muted-foreground'>客户端状态未知</span>
-      <Button variant='outline' size='sm' onClick={retryTable}>
-        <RefreshCw className='size-4' />
-        重试
+  const liveClientToolbar = (
+    <div className='flex flex-wrap items-center justify-between gap-2'>
+      {liveClientStatusError ? (
+        <div className='flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-sm'>
+          <span className='text-muted-foreground'>客户端状态未知</span>
+          <Button variant='outline' size='sm' onClick={retryTable}>
+            <RefreshCw className='size-4' />
+            重试
+          </Button>
+        </div>
+      ) : <div className='min-w-0 flex-1' />}
+      <Button variant='outline' size='sm' onClick={handleExport}>
+        <Download data-icon='inline-start' />
+        导出
       </Button>
     </div>
-  ) : null
+  )
   const isAdminNoteUnchanged = noteTarget
     ? adminNoteDraft.trim() === (noteTarget.adminNote ?? '').trim()
     : true

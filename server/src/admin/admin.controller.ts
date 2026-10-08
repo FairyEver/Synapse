@@ -142,6 +142,35 @@ export class AdminController {
     return result
   }
 
+  @Get("/users/export")
+  @Header("Cache-Control", "no-store")
+  async exportUsers(@Req() request: AdminRequest, @Res() response: Response) {
+    const data = await this.admin.listUsersForExport()
+    const csv = toCsv(data.map((user) => ({
+      "邮箱": user.email,
+      "用户名": user.handle,
+      "昵称": user.nickname,
+    })), ["邮箱", "用户名", "昵称"])
+    response.setHeader("Content-Type", "text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=users.csv")
+    response.send(csv)
+    await this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: "admin.users.export",
+      targetType: "user",
+      targetId: "export",
+      detail: { count: data.length },
+      ipAddress: request.ip ?? "",
+    })
+  }
+
+  @Head("/users/export")
+  checkExportUsers(@Res() response: Response) {
+    response.setHeader("Content-Type", "text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=users.csv")
+    response.end()
+  }
+
   @Get("/devices")
   async listDevices(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
     const pagination = parsePagination(query, { allowedSortFields: deviceSortFields })

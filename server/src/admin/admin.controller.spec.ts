@@ -203,6 +203,48 @@ describe("AdminController", () => {
     }))
   })
 
+  it("exports all users as a csv and records the export", async () => {
+    const listUsersForExport = vi.fn().mockResolvedValue([
+      { email: "ada@example.com", handle: "ada", nickname: "Ada" },
+      { email: "li@example.com", handle: "li", nickname: "李" },
+    ])
+    const record = vi.fn().mockResolvedValue(undefined)
+    const response = { setHeader: vi.fn(), send: vi.fn() }
+    const controller = createController({ listUsersForExport }, { record })
+
+    await controller.exportUsers(
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.12" } as never,
+      response as never,
+    )
+
+    expect(listUsersForExport).toHaveBeenCalledOnce()
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", "text/csv; charset=utf-8")
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Disposition", "attachment; filename=users.csv")
+    expect(response.send).toHaveBeenCalledWith(expect.stringContaining("邮箱,用户名,昵称"))
+    expect(response.send).toHaveBeenCalledWith(expect.stringContaining("ada@example.com,ada,Ada"))
+    expect(record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.users.export",
+      targetType: "user",
+      targetId: "export",
+      detail: { count: 2 },
+      ipAddress: "203.0.113.12",
+    })
+  })
+
+  it("answers user export HEAD checks without querying users", () => {
+    const listUsersForExport = vi.fn()
+    const controller = createController({ listUsersForExport })
+    const response = { end: vi.fn(), setHeader: vi.fn() }
+
+    controller.checkExportUsers(response as never)
+
+    expect(listUsersForExport).not.toHaveBeenCalled()
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", "text/csv; charset=utf-8")
+    expect(response.setHeader).toHaveBeenCalledWith("Content-Disposition", "attachment; filename=users.csv")
+    expect(response.end).toHaveBeenCalledOnce()
+  })
+
   it("lists devices for administrators and records audit metadata", async () => {
     const listAdminDevices = vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 })
     const record = vi.fn().mockResolvedValue(undefined)

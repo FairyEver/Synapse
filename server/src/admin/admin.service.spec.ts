@@ -156,6 +156,18 @@ describe("AdminService", () => {
     expect(prisma.user.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("modulePermissions")
   })
 
+  it("loads only export fields for all users in a stable order", async () => {
+    const prisma = createPrismaMock({ transactionResult: [[]] })
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await service.listUsersForExport()
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { email: true, handle: true, nickname: true },
+    })
+  })
+
   it("includes each user's teams as a flat list ordered by join time", async () => {
     const prisma = createPrismaMock({
       transactionResult: [[{

@@ -31,6 +31,12 @@ const adminUserSelect = {
   },
 } as const satisfies Prisma.UserSelect
 
+const adminUserExportSelect = {
+  email: true,
+  handle: true,
+  nickname: true,
+} as const satisfies Prisma.UserSelect
+
 /** Prisma 回来的是 { team: {...} }[]，接口外面只该看到拍平后的 { id, name }[]。 */
 function toAdminUserRow<
   T extends { readonly teamMemberships: readonly { readonly team: { readonly id: string; readonly name: string } }[] },
@@ -162,6 +168,13 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ])
     return { data: data.map(toAdminUserRow), total, page: page.page, pageSize: page.pageSize }
+  }
+
+  async listUsersForExport() {
+    return this.prisma.user.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: adminUserExportSelect,
+    })
   }
 
   async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system", ipAddress = "system") {

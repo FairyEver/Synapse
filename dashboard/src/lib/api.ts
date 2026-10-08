@@ -1546,6 +1546,8 @@ export const adminApi = {
     request<PaginatedResponse<AdminUserRow>>(
       `${adminApiBasePath}/users${adminUserListQuerySuffix(options)}`
     ),
+  exportUsers: () =>
+    downloadFile(`${adminApiBasePath}/users/export`, 'users.csv'),
   listTeams: (options: AdminTeamListQuery = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(
       `${adminTeamBasePath}${adminTeamQuerySuffix(options)}`
