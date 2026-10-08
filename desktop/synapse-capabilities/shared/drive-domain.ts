@@ -34,7 +34,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.annotation.comment.create" as CapabilityId, title: "Reply to Drive link annotation", description: "Add a comment or nested reply to an annotation thread in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.update" as CapabilityId, title: "Update Drive link annotation comment", description: "Edit the current user's annotation comment in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one permitted annotation comment with its descendant replies; deleting the first comment removes the thread.", mutates: true },
-  { id: "app.drive.link.annotation.thread.status.update" as CapabilityId, title: "Update Drive link annotation status", description: "Resolve or reopen a shared Markdown annotation thread as the file owner.", mutates: true },
+  { id: "app.drive.link.annotation.thread.status.update" as CapabilityId, title: "Update Drive link annotation status", description: "Resolve or reopen a shared Markdown annotation thread as its creator.", mutates: true },
   { id: "app.drive.link.annotation.thread.delete" as CapabilityId, title: "Delete Drive link annotation thread", description: "Delete one annotation thread when the current user has permission.", mutates: true },
   { id: "app.drive.message.list" as CapabilityId, title: "List Drive document messages", description: "List unanchored messages and replies on an owned or shared Markdown document.", mutates: false },
   { id: "app.drive.message.create" as CapabilityId, title: "Create Drive document message", description: "Post an unanchored message below an owned or shared Markdown document.", mutates: true },
@@ -515,7 +515,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_status_update",
-      description: "Set a shared Markdown annotation discussion to resolved (标记评论为已解决) or open (重新打开评论). Only the file owner may change status; comment authors and document editors receive no additional permission. List first and use the identified thread id and permissions.canChangeStatus. All comments, anchors, and replies remain visible; replies never reopen the discussion automatically. Repeating the same target status has no additional effect.",
+      description: "Set a shared Markdown annotation discussion to resolved (标记评论为已解决) or open (重新打开评论). Only the discussion creator may change status; file owners, reply authors, and document editors receive no additional permission unless they created the discussion. List first and use the identified thread id and permissions.canChangeStatus. All comments, anchors, and replies remain visible; replies never reopen the discussion automatically. Repeating the same target status has no additional effect.",
       inputSchema: {
         type: "object",
         properties: {

@@ -192,7 +192,7 @@ describe("Drive capability domain", () => {
     expect(capabilities.get("app.drive.link.annotation.thread.status.update")).toMatchObject({ mutates: true })
     expect(tools.get("app_drive_link_annotation_thread_status_update")?.inputSchema.required).toEqual(["url", "threadId", "status"])
     expect(tools.get("app_drive_link_annotation_thread_status_update")?.inputSchema.properties.status).toMatchObject({ type: "string", enum: ["open", "resolved"] })
-    expect(tools.get("app_drive_link_annotation_thread_status_update")?.description).toContain("Only the file owner")
+    expect(tools.get("app_drive_link_annotation_thread_status_update")?.description).toContain("Only the discussion creator")
     expect(tools.has("app_drive_link_annotation_anchor_update")).toBe(false)
     expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("Author emails are redacted")
     expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("anchor field is the current authority")

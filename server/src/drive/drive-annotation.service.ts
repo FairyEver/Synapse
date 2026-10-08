@@ -548,8 +548,8 @@ export class DriveAnnotationService {
     auditContext: DriveAuditContext,
     shareId?: string,
   ): Promise<DriveAnnotationThreadDto> {
-    if (actorUserId !== item.userId) throw new ForbiddenException("仅文件所有者可更改评论状态。")
     const thread = await this.requireThread(item.id, threadId)
+    if (actorUserId !== thread.createdByUserId) throw new ForbiddenException("仅评论创建人可更改评论状态。")
     const changed = await this.prisma.driveAnnotationThread.updateMany({
       where: { id: threadId, itemId: item.id, deletedAt: null, status: { not: status } },
       // Status changes do not reorder unlocated discussions by latest comment activity.
@@ -1103,7 +1103,7 @@ function toThreadDto(
     updatedAt: record.updatedAt.toISOString(),
     permissions: {
       canDelete: canDeleteThread(record, comments, actorUserId, fileOwnerUserId, canWrite),
-      canChangeStatus: canWrite && actorUserId !== null && actorUserId === fileOwnerUserId,
+      canChangeStatus: canWrite && actorUserId !== null && actorUserId === record.createdByUserId,
     },
   }
 }

@@ -325,7 +325,7 @@ Additional input: `commentId`. The author or file owner can delete the selected 
 
 ### `app_drive_link_annotation_thread_status_update`
 
-Additional input: `threadId` and `status: "open" | "resolved"`. List first and confirm the requested discussion and `permissions.canChangeStatus`. Only the file owner can resolve or reopen a discussion, including unlocated threads; comment authors and users with document edit access cannot. Returns the updated thread with `status` and projected permissions. Repeating the same status is idempotent. Resolving preserves comments, replies and anchors; later replies or source changes never reopen it automatically. This does not update document content or document messages.
+Additional input: `threadId` and `status: "open" | "resolved"`. List first and confirm the requested discussion and `permissions.canChangeStatus`. Only the discussion creator can resolve or reopen a discussion, including unlocated threads; file owners, reply authors and users with document edit access cannot unless they created that discussion. Returns the updated thread with `status` and projected permissions. Repeating the same status is idempotent. Resolving preserves comments, replies and anchors; later replies or source changes never reopen it automatically. This does not update document content or document messages.
 
 ### `app_drive_link_annotation_thread_delete`
 
