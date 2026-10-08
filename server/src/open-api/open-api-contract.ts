@@ -13,13 +13,7 @@ export const OPEN_API_NOTIFICATION_SEND_PATH = OPEN_API_NOTIFICATION_ROUTE
 export const OPEN_API_NOTIFICATION_KEY_SEND_PATH = `${OPEN_API_NOTIFICATION_ROUTE}/{key}`
 export const OPEN_API_NOTIFICATION_PATH_SEND_PATH = `${OPEN_API_NOTIFICATION_KEY_SEND_PATH}/{title}/{body}`
 export const OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH = "/drive/public-links/downloads"
-/**
- * The public route and schema names retain `comment` for compatibility. This
- * operation creates a DriveMessage, the unanchored 留言 shown below a document.
- */
-export const OPEN_API_ARTICLE_MESSAGE_PATH = "/drive/public-links/comments"
-/** @deprecated Use OPEN_API_ARTICLE_MESSAGE_PATH in server code. */
-export const OPEN_API_ARTICLE_COMMENT_PATH = OPEN_API_ARTICLE_MESSAGE_PATH
+export const OPEN_API_ARTICLE_MESSAGE_PATH = "/drive/public-links/messages"
 export const OPEN_API_LEGACY_SHARE_LINK_DOWNLOAD_PATH = "/drive/share-links/downloads"
 export const OPEN_API_DOWNLOAD_PATH = "/downloads/{grantId}"
 export const OPEN_API_CREATE_DOWNLOAD_PATHS = [
@@ -88,10 +82,6 @@ export const createArticleMessageRequestSchema = z.object({
 })
 
 export type CreateArticleMessageRequest = z.infer<typeof createArticleMessageRequestSchema>
-/** @deprecated Use createArticleMessageRequestSchema and CreateArticleMessageRequest in server code. */
-export const createArticleCommentRequestSchema = createArticleMessageRequestSchema
-/** @deprecated Use CreateArticleMessageRequest in server code. */
-export type CreateArticleCommentRequest = CreateArticleMessageRequest
 
 const notificationMessageJsonSchema = toContractJsonSchema(openApiNotificationMessageSchema, "input")
 const notificationKeyedMessageJsonSchema = toContractJsonSchema(openApiNotificationKeyedMessageSchema, "input")
@@ -100,7 +90,6 @@ const createArticleMessageRequestJsonSchema = {
   ...toContractJsonSchema(createArticleMessageRequestSchema, "input"),
   anyOf: [{ required: ["url"] }, { required: ["shareId"] }],
 }
-const createArticleCommentRequestJsonSchema = createArticleMessageRequestJsonSchema
 
 /**
  * 生成契约里的 JSON Schema。`io: "input"` 让带 `.default()` 的字段保持可选，
@@ -244,14 +233,14 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
       post: {
         tags: ["Article messages"],
         summary: "给分享文章留言",
-        operationId: "createPublicLinkArticleComment",
+        operationId: "createPublicLinkArticleMessage",
         security: [{ ApiKeyBearer: [] }],
         "x-required-scope": PUBLIC_LINK_MESSAGE_CREATE_SCOPE,
         description: "url 与 shareId 至少提供一个；都提供时必须指向同一分享和同一文章。shareId 单独使用时只指向分享根文件。",
         parameters: [idempotencyKeyParameter],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArticleCommentRequest" } } },
+          content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArticleMessageRequest" } } },
         },
         responses: {
           "201": {
@@ -260,7 +249,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
               "X-Request-Id": { $ref: "#/components/headers/RequestId" },
               "Cache-Control": { $ref: "#/components/headers/NoStore" },
             },
-            content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArticleCommentResponse" } } },
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArticleMessageResponse" } } },
           },
           "400": errorResponse("请求体或去重键无效，或 url 与 shareId 都未提供。"),
           "401": errorResponse("API 密钥无效（INVALID_API_KEY）。"),
@@ -420,8 +409,8 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
       NoStore: noStoreHeader,
     },
     schemas: {
-      CreateArticleCommentRequest: createArticleCommentRequestJsonSchema,
-      CreateArticleCommentResponse: {
+      CreateArticleMessageRequest: createArticleMessageRequestJsonSchema,
+      CreateArticleMessageResponse: {
         type: "object", required: ["requestId", "data"], additionalProperties: false,
         properties: {
           requestId: { type: "string" },
@@ -509,7 +498,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
                   "TARGET_MISMATCH",
                   "TARGET_NOT_ARTICLE",
                   "IDEMPOTENCY_CONFLICT",
-                  "COMMENT_FORBIDDEN",
+                  "MESSAGE_FORBIDDEN",
                   "INVALID_IDEMPOTENCY_KEY",
                   "RATE_LIMITED",
                   "METHOD_NOT_ALLOWED",

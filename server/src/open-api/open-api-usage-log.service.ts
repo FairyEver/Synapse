@@ -5,7 +5,7 @@ import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../c
 import { PrismaService } from "../prisma/prisma.service"
 import { OpenApiHttpError } from "./open-api.types"
 
-export type OpenApiUsageOperation = "grant_create" | "download" | "message_create" | "comment_create"
+export type OpenApiUsageOperation = "grant_create" | "download" | "message_create"
 export type OpenApiUsageStatus = "started" | "succeeded" | "failed" | "aborted"
 
 type StartedUsageLog = {

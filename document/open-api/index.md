@@ -26,7 +26,7 @@ OpenAPI 3.1 契约由服务端提供：
 
 发送消息步骤：[使用 API 发送消息](/open-api/guide/send-message)。此接口需要单独的 `notification.send` 权限。
 
-给分享的 Markdown 文章添加文末留言：[给分享文章留言](/open-api/api/article-comment-create)。此接口需要独立的 `drive.public_link.comment.create` 权限（`comment` 是已发布的兼容标识）。
+给分享的 Markdown 文章添加文末留言：[给分享文章留言](/open-api/api/article-message-create)。此接口需要独立的 `drive.public_link.message.create` 权限。
 
 ## 创建 API 密钥
 
@@ -62,7 +62,7 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
-| `createPublicLinkArticleComment` | `POST` | `/drive/public-links/comments` | `Authorization: Bearer` 与 `drive.public_link.comment.create` | [给分享文章留言](/open-api/api/article-comment-create) |
+| `createPublicLinkArticleMessage` | `POST` | `/drive/public-links/messages` | `Authorization: Bearer` 与 `drive.public_link.message.create` | [给分享文章留言](/open-api/api/article-message-create) |
 | `sendNotification` | `POST` | `/notifications` | 请求体 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#整体式) |
 | `sendNotificationWithKeyInPath` | `POST` | `/notifications/{key}` | 路径段 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#表单式) |
 | `sendNotificationFromPath` | `GET` | `/notifications/{key}/{title}/{body}` | 路径段 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#路径式) |

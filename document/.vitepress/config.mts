@@ -105,7 +105,7 @@ export default defineConfig({
             },
             {
               text: '给分享文章留言',
-              link: '/open-api/api/article-comment-create'
+              link: '/open-api/api/article-message-create'
             },
             {
               text: '发送通知',

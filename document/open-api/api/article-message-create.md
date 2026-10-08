@@ -2,10 +2,10 @@
 
 给当前 Synapse `/share/...` 链接指向的 Markdown 文件添加一条文末留言。留言以 API 密钥所属账号的身份发布，显示在文章正文之后，不附着到正文选区。
 
-创建 API 密钥时选择「给分享文章留言」（`drive.public_link.comment.create`）。此权限不包含文件下载或留言编辑、删除。路径、权限和 operation ID 中的 `comment` 是已发布的兼容标识，实际创建的是文末留言。
+创建 API 密钥时选择「给分享文章留言」（`drive.public_link.message.create`）。此权限不包含文件下载或留言编辑、删除。
 
 ```http
-POST /api/open/v1/drive/public-links/comments
+POST /api/open/v1/drive/public-links/messages
 Authorization: Bearer syn_sk_...
 Content-Type: application/json
 ```
@@ -19,7 +19,7 @@ Content-Type: application/json
 
 | 请求头 | 必填 | 说明 |
 |---|---|---|
-| `Authorization` | 是 | `Bearer syn_sk_...`，使用具有 `drive.public_link.comment.create` 权限的 API 密钥 |
+| `Authorization` | 是 | `Bearer syn_sk_...`，使用具有 `drive.public_link.message.create` 权限的 API 密钥 |
 | `Content-Type` | 是 | `application/json` |
 | `Idempotency-Key` | 否 | 防止同一次请求重试时重复创建留言；正常发留言无需提供 |
 
@@ -54,7 +54,7 @@ Content-Type: application/json
 |---:|---|---|
 | 400 | `TARGET_REQUIRED`、`INVALID_REQUEST`、`INVALID_IDEMPOTENCY_KEY` | 目标缺失、字段无效或去重键无效 |
 | 401 | `INVALID_API_KEY` | API 密钥无效 |
-| 403 | `INSUFFICIENT_SCOPE`、`LINK_PASSWORD_REQUIRED_OR_INVALID`、`COMMENT_FORBIDDEN` | 密钥权限不足、分享密码错误或无法留言 |
+| 403 | `INSUFFICIENT_SCOPE`、`LINK_PASSWORD_REQUIRED_OR_INVALID`、`MESSAGE_FORBIDDEN` | 密钥权限不足、分享密码错误或无法留言 |
 | 404 | `LINK_NOT_FOUND` | 分享不存在、已失效或目标文件不可用 |
 | 409 | `TARGET_MISMATCH`、`IDEMPOTENCY_CONFLICT` | 双字段目标不一致或去重键冲突 |
 | 422 | `TARGET_NOT_ARTICLE`、`UNSUPPORTED_LINK` | 分享根目标或链接不是可留言的 Markdown 文件 |

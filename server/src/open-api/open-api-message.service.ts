@@ -12,11 +12,6 @@ import { OpenApiUsageLogService } from "./open-api-usage-log.service"
 
 type ShareTarget = Extract<DriveMessageAccess, { kind: "share" }> & { readonly itemId: string }
 
-/**
- * The public route, scope, and operationId retain `comment` because they were
- * already published. The implementation writes DriveMessage records, which are
- * the unanchored 留言 shown below the document.
- */
 @Injectable()
 export class OpenApiMessageService {
   constructor(
@@ -107,7 +102,7 @@ function hash(values: readonly string[]): string {
 function mapMessageError(error: unknown): OpenApiHttpError {
   if (error instanceof OpenApiHttpError) return error
   if (error instanceof ConflictException) return new OpenApiHttpError(409, "IDEMPOTENCY_CONFLICT", "去重键对应不同请求。")
-  if (error instanceof ForbiddenException) return new OpenApiHttpError(403, "COMMENT_FORBIDDEN", "没有该文章的留言权限。")
+  if (error instanceof ForbiddenException) return new OpenApiHttpError(403, "MESSAGE_FORBIDDEN", "没有该文章的留言权限。")
   if (error instanceof NotFoundException) return new OpenApiHttpError(404, "LINK_NOT_FOUND", "分享链接不存在或已失效。")
   if (error instanceof BadRequestException) {
     if (error.message.includes("需要密码")) {

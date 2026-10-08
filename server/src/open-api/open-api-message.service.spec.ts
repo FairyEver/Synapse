@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { OpenApiMessageService } from "./open-api-message.service"
 
 const principal = {
-  userId: "user-1", apiKeyId: "key-1", scopes: ["drive.public_link.comment.create"],
+  userId: "user-1", apiKeyId: "key-1", scopes: ["drive.public_link.message.create"],
 }
 const article = { id: "item-1", name: "article.md", type: "file", mimeType: "text/markdown" }
 const base = {
@@ -40,7 +40,7 @@ describe("OpenApiMessageService", () => {
       "user-1", "评论", "203.0.113.1", undefined,
     )
     expect(usageLogs.start).toHaveBeenCalledWith(expect.objectContaining({
-      operation: "message_create", scope: "drive.public_link.comment.create", apiKeyId: "key-1",
+      operation: "message_create", scope: "drive.public_link.message.create", apiKeyId: "key-1",
     }))
   })
 

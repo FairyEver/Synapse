@@ -80,15 +80,15 @@ describe("Open API machine-readable contract", () => {
   })
 
   it("publishes the message endpoint and its strict dual-target request schema", () => {
-    expect(OPEN_API_ARTICLE_MESSAGE_PATH).toBe("/drive/public-links/comments")
+    expect(OPEN_API_ARTICLE_MESSAGE_PATH).toBe("/drive/public-links/messages")
     expect(contractDocument.paths[OPEN_API_ARTICLE_MESSAGE_PATH].post).toMatchObject({
-      operationId: "createPublicLinkArticleComment",
+      operationId: "createPublicLinkArticleMessage",
       summary: "给分享文章留言",
       tags: ["Article messages"],
       security: [{ ApiKeyBearer: [] }],
-      "x-required-scope": "drive.public_link.comment.create",
+      "x-required-scope": "drive.public_link.message.create",
     })
-    const body = contractDocument.components.schemas.CreateArticleCommentRequest
+    const body = contractDocument.components.schemas.CreateArticleMessageRequest
     expect(body).toMatchObject({
       additionalProperties: false,
       anyOf: [{ required: ["url"] }, { required: ["shareId"] }],

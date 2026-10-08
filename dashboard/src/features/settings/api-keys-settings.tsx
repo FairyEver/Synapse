@@ -696,7 +696,6 @@ const usageOperationLabels = {
   grant_create: '创建下载地址',
   download: '下载',
   message_create: '添加文章留言',
-  comment_create: '添加文章留言',
 } as const
 
 const usageStatusLabels = {

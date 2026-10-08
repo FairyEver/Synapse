@@ -351,7 +351,7 @@ export type DashboardApiKeyCapability = {
 export type DashboardApiKeyUsageLog = {
   id: string
   requestId: string
-  operation: 'grant_create' | 'download' | 'message_create' | 'comment_create'
+  operation: 'grant_create' | 'download' | 'message_create'
   status: 'started' | 'succeeded' | 'failed' | 'aborted'
   httpStatus: number | null
   errorCode: string | null

@@ -5,7 +5,7 @@ import { OpenApiMessageController } from "./open-api-message.controller"
 
 describe("OpenApiMessageController", () => {
   const principal = {
-    userId: "user-1", apiKeyId: "key-1", scopes: ["drive.public_link.comment.create"],
+    userId: "user-1", apiKeyId: "key-1", scopes: ["drive.public_link.message.create"],
   }
   const request = { openApiRequestId: "req-1", ip: "203.0.113.1", openApiPrincipal: principal }
   const response = { setHeader: vi.fn() }
@@ -13,7 +13,7 @@ describe("OpenApiMessageController", () => {
   it("mounts the v1 route with API-key auth and no global throttle", () => {
     expect(Reflect.getMetadata(PATH_METADATA, OpenApiMessageController)).toBe("/api/open/v1")
     expect(Reflect.getMetadata(PATH_METADATA, OpenApiMessageController.prototype.create))
-      .toBe("/drive/public-links/comments")
+      .toBe("/drive/public-links/messages")
     expect(Reflect.getMetadata("THROTTLER:SKIPdefault", OpenApiMessageController.prototype.create)).toBe(true)
   })
 
