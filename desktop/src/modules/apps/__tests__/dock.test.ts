@@ -73,6 +73,11 @@ describe("app Dock model", () => {
     expect(applyDockMigrations(migrated.dockAppIds, migrated.appliedMigrationIds)).toEqual(migrated)
   })
 
+  it("requires unique migration ids so each release step is addressable", () => {
+    const ids = DEFAULT_DOCK_MIGRATION_IDS
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
   it("keeps other apps in user order and moves an existing Mail without duplication", () => {
     expect(applyDockMigrations(["mail", "database", "launcher", "workflow", "agent"], []).dockAppIds)
       .toEqual(["database", "workflow", "agent", "mail", "launcher"])

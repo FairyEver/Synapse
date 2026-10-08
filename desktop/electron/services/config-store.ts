@@ -95,7 +95,7 @@ async function migrateConfigIfNeeded(
     logger.info("[migration] Legacy config backed up to config.json.v0.bak")
 
     // Validate and sanitize
-    const normalizedConfig = sanitizeSynapseConfig(legacyConfig)
+    const normalizedConfig = applyPendingDockMigrations(sanitizeSynapseConfig(legacyConfig))
 
     // Write to DataRepository
     await namespace.setSingleton(normalizedConfig)
@@ -165,7 +165,10 @@ class ConfigStore {
 
     if (this.cachedConfig) {
       logger.debug("Returning cached config.")
-      const normalizedConfig = sanitizeSynapseConfig(this.cachedConfig)
+      const normalizedConfig = applyPendingDockMigrations(sanitizeSynapseConfig(this.cachedConfig))
+      if (JSON.stringify(normalizedConfig) !== JSON.stringify(this.cachedConfig)) {
+        await this.getNamespace().setSingleton(normalizedConfig)
+      }
       this.cachedConfig = normalizedConfig
       return structuredClone(normalizedConfig)
     }
@@ -201,7 +204,7 @@ class ConfigStore {
 
     logger.info("Updating config.", sanitizeConfigPatchForLog(patch))
     const currentConfig = await this.readCachedOrNamespace()
-    const nextConfig = applySynapseConfigPatch(currentConfig, patch)
+    const nextConfig = applyPendingDockMigrations(applySynapseConfigPatch(currentConfig, patch))
 
     const namespace = this.getNamespace()
     await namespace.setSingleton(nextConfig)
@@ -315,7 +318,7 @@ class ConfigStore {
     if (!this.cachedConfig) {
       throw new Error("ConfigStore.loadSync() called before config was loaded — check service dependency ordering")
     }
-    const normalizedConfig = sanitizeSynapseConfig(this.cachedConfig)
+    const normalizedConfig = applyPendingDockMigrations(sanitizeSynapseConfig(this.cachedConfig))
     this.cachedConfig = normalizedConfig
     return normalizedConfig
   }

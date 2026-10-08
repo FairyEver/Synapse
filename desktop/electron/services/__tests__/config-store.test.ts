@@ -16,6 +16,7 @@ vi.mock("electron", () => ({
 
 import { configStore } from "../config-store"
 import { DEFAULT_DOCK_MIGRATION_IDS } from "../../../src/modules/apps/dock"
+import type { SynapseConfigPatch } from "../../../src/types/config"
 
 describe("ConfigStore", () => {
   beforeEach(() => {
@@ -97,6 +98,13 @@ describe("ConfigStore", () => {
       const afterRemoval = await configStore.load()
       expect(afterRemoval.global.dockAppIds).toEqual(["agent", "launcher"])
       expect(afterRemoval.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
+
+      const unsafePatch = { global: { dockMigrationIds: [] } } as unknown as SynapseConfigPatch
+      await configStore.update(unsafePatch)
+
+      const afterUnsafePatch = await configStore.load()
+      expect(afterUnsafePatch.global.dockAppIds).toEqual(["agent", "launcher"])
+      expect(afterUnsafePatch.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

@@ -87,6 +87,11 @@ export type SynapseGlobalConfig = {
   agentProjectOrder: string[]
 }
 
+export type SynapseGlobalConfigPatch = Omit<Partial<SynapseGlobalConfig>, "dockMigrationIds"> & {
+  projects?: SynapseProjectConfig[]
+  quickInputs?: SynapseQuickInput[]
+}
+
 export type SynapseAgentGlobalConfig = {
   defaultPermissionMode: SynapseAgentPermissionMode
   defaultProviderModel: { providerId: string; modelTier: ModelTier } | null
@@ -104,9 +109,6 @@ export type SynapseConfig = {
 export type SynapseConfigPatch = {
   activeRepoUuid?: SynapseConfig["activeRepoUuid"]
   repositories?: SynapseRepositoryConfig[]
-  global?: Partial<SynapseGlobalConfig> & {
-    projects?: SynapseProjectConfig[]
-    quickInputs?: SynapseQuickInput[]
-  }
+  global?: SynapseGlobalConfigPatch
   agent?: Partial<SynapseAgentGlobalConfig>
 }

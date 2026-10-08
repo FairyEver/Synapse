@@ -8,6 +8,7 @@ import {
   hasRecoverableSynapseConfigFormatError,
   sanitizeSynapseConfig,
 } from "../config"
+import type { SynapseConfigPatch } from "../../types/config"
 
 describe("Synapse config Agent defaults", () => {
   it("marks Dock migrations as applied for new installations", () => {
@@ -24,6 +25,15 @@ describe("Synapse config Agent defaults", () => {
     expect(config.global.dockMigrationIds).toEqual([])
     expect(sanitizeSynapseConfig({ activeRepoUuid: null, repositories: [] }).global.dockMigrationIds)
       .toEqual([])
+  })
+
+  it("keeps Dock migration bookkeeping out of runtime config patches", () => {
+    const current = createDefaultConfig()
+    const unsafePatch = { global: { dockMigrationIds: [] } } as unknown as SynapseConfigPatch
+
+    const next = applySynapseConfigPatch(current, unsafePatch)
+
+    expect(next.global.dockMigrationIds).toEqual(current.global.dockMigrationIds)
   })
 
   it("defaults new Agent conversations to default permission mode", () => {

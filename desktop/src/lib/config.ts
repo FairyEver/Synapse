@@ -771,8 +771,11 @@ export function applySynapseConfigPatch(
     ? {
         ...config.global,
         ...patch.global,
+        // Migration bookkeeping is owned by ConfigStore. Runtime callers may
+        // still provide an untyped patch, so do not let them clear it.
+        dockMigrationIds: config.global.dockMigrationIds,
         projects: patch.global.projects ?? config.global.projects,
-    }
+      }
     : config.global
   const nextAgent = patch.agent
     ? {
