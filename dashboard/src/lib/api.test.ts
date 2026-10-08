@@ -242,6 +242,30 @@ describe('adminApi.users', () => {
   })
 })
 
+describe('adminApi.mail', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('uses the administrator read-only mail endpoints with filters and cursor context', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    ))
+
+    await adminApi.listMailMessages({ page: 2, pageSize: 10, sortBy: 'sentAt', sortOrder: 'desc', search: '主题', kind: 'user', teamId: 'team/id', from: '2026-10-01', to: '2026-10-02' })
+    await adminApi.getMailMessage('mail/id')
+    await adminApi.listMailContext('mail/id', 'cursor/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/admin/mail/messages?page=2&pageSize=10&sortBy=sentAt&sortOrder=desc&search=%E4%B8%BB%E9%A2%98&kind=user&teamId=team%2Fid&from=2026-10-01&to=2026-10-02', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/admin/mail/messages/mail%2Fid', expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/admin/mail/messages/mail%2Fid/context?cursor=cursor%2Fid', expect.objectContaining({ credentials: 'include' }))
+  })
+})
+
 describe('userAuthApi.passwordReset', () => {
   afterEach(() => {
     vi.restoreAllMocks()

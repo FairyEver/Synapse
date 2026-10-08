@@ -79,6 +79,59 @@ export type AdminSession = {
   expiresAt: string
 }
 
+export type AdminMailAddress =
+  | { kind: 'user'; userId: string; name: string }
+  | { kind: 'organization'; organizationId: string; name: string }
+  | { kind: 'audience'; name: string }
+
+export type AdminMailSender =
+  | { userId: string; email: string; handle: string; nickname: string }
+  | { userId: 'platform'; email: null; handle: null; nickname: 'Synapse' }
+
+export type AdminMailMessageSummary = {
+  messageId: string
+  kind: string
+  sender: AdminMailSender
+  toAddresses: AdminMailAddress[]
+  ccAddresses: AdminMailAddress[]
+  subject: string
+  snippet: string
+  sentAt: string
+  conversationId: string
+  relationKind: 'reply' | 'forward' | null
+  replyToId: string | null
+  forwardOfId: string | null
+  team: { id: string; name: string } | null
+  recipientCount: number
+  attachmentCount: number
+  senderDeletedAt: string | null
+}
+
+export type AdminMailMessageDetail = AdminMailMessageSummary & {
+  body: string
+  quote: unknown
+  attachments: Array<{
+    attachmentId: string
+    fileName: string
+    mimeType: string | null
+    size: number
+  }>
+  delivery: {
+    recipientCount: number
+    readCount: number
+    deletedCount: number
+    pendingCount: number
+  }
+}
+
+export type AdminMailListOptions = PaginationOptions & {
+  search?: string
+  kind?: 'user' | 'platform_broadcast'
+  teamId?: string
+  from?: string
+  to?: string
+}
+
 export type SystemOverview = {
   serverTime: string
   counts: {
@@ -670,6 +723,20 @@ function adminUserListQuerySuffix(options: AdminUserListOptions) {
     email: options.email,
     handle: options.handle,
     nickname: options.nickname,
+  })
+}
+
+function adminMailQuerySuffix(options: AdminMailListOptions = {}) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
+    sortBy: options.sortBy,
+    sortOrder: options.sortOrder,
+    search: options.search,
+    kind: options.kind,
+    teamId: options.teamId,
+    from: options.from,
+    to: options.to,
   })
 }
 
@@ -1533,6 +1600,18 @@ export const adminApi = {
     request<{ ok: true }>(`${adminApiBasePath}/session`, { method: 'DELETE' }),
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
+  listMailMessages: (options: AdminMailListOptions = {}) =>
+    request<PaginatedResponse<AdminMailMessageSummary>>(
+      `${adminApiBasePath}/mail/messages${adminMailQuerySuffix(options)}`
+    ),
+  getMailMessage: (id: string) =>
+    request<AdminMailMessageDetail>(
+      `${adminApiBasePath}/mail/messages/${encodeURIComponent(id)}`
+    ),
+  listMailContext: (id: string, cursor?: string) =>
+    request<{ items: AdminMailMessageDetail[]; nextCursor: string | null }>(
+      `${adminApiBasePath}/mail/messages/${encodeURIComponent(id)}/context${querySuffix({ cursor })}`
+    ),
   getTelemetryStats: (options: TelemetryStatsOptions = {}) =>
     request<TelemetryStats>(
       `${adminApiBasePath}/telemetry/stats${querySuffix(options)}`,

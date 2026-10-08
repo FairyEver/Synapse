@@ -15,6 +15,7 @@ const BackupPage = lazyRouteComponent(() => import('@/features/backup'))
 const DevicesPage = lazyRouteComponent(() => import('@/features/devices'))
 const DriveAdminPage = lazyRouteComponent(() => import('@/features/drive'))
 const LogsPage = lazyRouteComponent(() => import('@/features/logs'))
+const MailPage = lazyRouteComponent(() => import('@/features/mail'))
 const ProblemFeedbackPage = lazyRouteComponent(() => import('@/features/problem-feedback'))
 const SkillRepositoryAdminPage = lazyRouteComponent(() => import('@/features/skill-repository'), 'SkillRepositoryAdminPage')
 const SystemPage = lazyRouteComponent(() => import('@/features/system'))
@@ -90,6 +91,19 @@ const webhookSearchSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).optional(), webhookId: z.string().optional(), status: z.string().optional(),
   from: z.string().optional(), to: z.string().optional(), user: z.string().optional(), userId: z.string().optional(),
 })
+const mailSearchSchema = z.object({
+  page: z.coerce.number().optional(), pageSize: z.coerce.number().optional(),
+  sortBy: z.enum(['sentAt', 'subject', 'kind']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(), search: z.string().optional(),
+  kind: z.enum(['user', 'platform_broadcast']).optional(), teamId: z.string().optional(),
+  from: z.string().optional(), to: z.string().optional(),
+})
+const mailRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: 'mail',
+  validateSearch: mailSearchSchema,
+  component: () => <MailPage search={mailRoute.useSearch()} />,
+})
 const webhookDeliveriesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: 'webhook-deliveries',
@@ -110,6 +124,7 @@ export const adminRouteTree = rootRoute.addChildren([
     adminPage('system', SystemPage), adminPage('users', UsersPage), adminPage('devices', DevicesPage),
     adminPage('teams', TeamsPage), teamDetailRoute,
     adminPage('telemetry', TelemetryPage),
+    mailRoute,
     skillRepositoriesRoute, webhookDeliveriesRoute, adminPage('audit-logs', AuditLogsPage),
     adminPage('problem-feedback', ProblemFeedbackPage),
     adminPage('backup', BackupPage), adminPage('drive', DriveAdminPage), adminPage('logs', LogsPage),

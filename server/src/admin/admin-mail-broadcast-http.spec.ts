@@ -11,6 +11,7 @@ import { registerHttpBodyParsers } from "../common/http-body-parser"
 import { LiveDeviceService } from "../live/live-device.service"
 import { WebhookService } from "../webhooks/webhook.service"
 import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
+import { AdminMailService } from "./admin-mail.service"
 import { AdminController } from "./admin.controller"
 import { AdminService } from "./admin.service"
 
@@ -25,12 +26,18 @@ async function fixture() {
     audience: vi.fn(async () => ({ activeUsers: 2 })),
     send: vi.fn(async () => ({ messageId: "mail-1", recipientCount: 2 })),
   }
+  const mail = {
+    listMessages: vi.fn(async () => ({ data: [], total: 0, page: 1, pageSize: 20 })),
+    getMessage: vi.fn(async () => ({ messageId: "mail-1", conversationId: "conversation-1" })),
+    listContext: vi.fn(async () => ({ items: [], nextCursor: null })),
+  }
   const moduleRef = await Test.createTestingModule({
     controllers: [AdminController],
     providers: [
       AdminAuthGuard,
       { provide: AdminAuthService, useValue: auth },
       { provide: AdminMailBroadcastService, useValue: broadcast },
+      { provide: AdminMailService, useValue: mail },
       { provide: AdminService, useValue: {} },
       { provide: AuditLogService, useValue: { record: vi.fn(async () => undefined) } },
       { provide: LiveDeviceService, useValue: {} },
@@ -41,7 +48,7 @@ async function fixture() {
   registerHttpBodyParsers(app)
   app.use(cookieParser())
   await app.init()
-  return { app, broadcast }
+  return { app, broadcast, mail }
 }
 
 describe("administrator broadcast HTTP", () => {
@@ -72,6 +79,28 @@ describe("administrator broadcast HTTP", () => {
         .set("Origin", "https://synapse.example")
         .send({ requestId: "release:v1.0.0", subject: "更新", body: "正文" }).expect(201)
       expect(broadcast.send).toHaveBeenCalledWith({ requestId: "release:v1.0.0", subject: "更新", body: "正文" }, "admin-session", expect.any(String))
+    } finally { await app.close() }
+  })
+
+  it("keeps the read endpoints behind the administrator session", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.example")
+    const { app, mail } = await fixture()
+    try {
+      await request(app.getHttpServer()).get("/api/admin/mail/messages")
+        .set("Cookie", "synapse_admin_session=admin-token")
+        .expect(200, { data: [], total: 0, page: 1, pageSize: 20 })
+      await request(app.getHttpServer()).get("/api/admin/mail/messages")
+        .set("Cookie", "synapse_user_session=user-token")
+        .expect(401)
+      await request(app.getHttpServer()).get("/api/admin/mail/messages")
+        .set("Cookie", "synapse_admin_session=admin-token")
+        .set("Origin", "https://other.example")
+        .expect(403)
+      await request(app.getHttpServer()).get("/api/admin/mail/messages/mail-1/context")
+        .set("Cookie", "synapse_admin_session=admin-token")
+        .expect(200, { items: [], nextCursor: null })
+      expect(mail.listMessages).toHaveBeenCalledOnce()
+      expect(mail.listContext).toHaveBeenCalledWith("mail-1", undefined)
     } finally { await app.close() }
   })
 })

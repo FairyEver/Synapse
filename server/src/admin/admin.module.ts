@@ -7,6 +7,7 @@ import { WebhookModule } from "../webhooks/webhook.module"
 import { AdminController } from "./admin.controller"
 import { AdminService } from "./admin.service"
 import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
+import { AdminMailService } from "./admin-mail.service"
 import { LogFileController } from "./log-file.controller"
 import { LogFileService } from "./log-file.service"
 
@@ -16,6 +17,7 @@ import { LogFileService } from "./log-file.service"
   providers: [
     AdminService,
     AdminMailBroadcastService,
+    AdminMailService,
     AuditLogService,
     LogFileService,
   ],

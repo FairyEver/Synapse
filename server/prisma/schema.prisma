@@ -1373,6 +1373,7 @@ model MailMessage {
   @@unique([senderId, clientRequestId])
   @@index([senderId, senderDeletedAt, sentAt, id])
   @@index([teamIdSnapshot, sentAt])
+  @@index([sentAt, id])
   @@index([conversationId, sentAt, id])
 }
 

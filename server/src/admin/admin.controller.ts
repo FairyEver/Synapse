@@ -3,7 +3,7 @@ import type { Response } from "express"
 import { z } from "zod"
 import { normalizeUserHandle, normalizeUserNickname, userHandleMaxLength } from "@synapse/shared"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
-import { AuditLogService, auditLogExportLimit } from "../common/audit-log.service"
+import { AuditLogService, auditActors, auditLogExportLimit } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
@@ -13,6 +13,7 @@ import { WebhookService } from "../webhooks/webhook.service"
 import { AdminService } from "./admin.service"
 import type { AdminUserListFilters } from "./admin.service"
 import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
+import { AdminMailService, adminMailKinds, type AdminMailKind } from "./admin-mail.service"
 
 const userStatusSchema = z.object({
   status: z.enum(["active", "disabled"]),
@@ -58,6 +59,7 @@ const userSortFields = ["createdAt", "updatedAt", "email", "handle", "status"] a
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
 const skillRepositorySortFields = ["createdAt", "updatedAt", "title", "name"] as const
+const mailSortFields = ["sentAt", "subject", "kind"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(AdminAuthGuard)
@@ -71,6 +73,7 @@ export class AdminController {
     private readonly devices: LiveDeviceService,
     private readonly webhooks: WebhookService,
     private readonly mailBroadcast: AdminMailBroadcastService,
+    private readonly mail: AdminMailService,
   ) {}
 
   @Get("/mail/broadcasts/audience")
@@ -85,6 +88,46 @@ export class AdminController {
     const parsed = mailBroadcastSchema.safeParse(body)
     if (!parsed.success) throw badRequestFromZodError(parsed.error, "平台公告无效。")
     return this.mailBroadcast.send(parsed.data, request.admin!.sessionId, request.ip ?? "")
+  }
+
+  @Get("/mail/messages")
+  @Header("Cache-Control", "no-store")
+  async listMailMessages(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination({ ...query, sortBy: query.sortBy ?? "sentAt" }, { allowedSortFields: mailSortFields })
+    const filters = parseMailFilters(query)
+    const result = await this.mail.listMessages(pagination, filters)
+    await this.recordAdminMailRead(request, {
+      action: "admin.mail.messages.list",
+      targetType: "mail_message",
+      targetId: "list",
+      detail: { ...pagination, filters },
+    })
+    return result
+  }
+
+  @Get("/mail/messages/:id")
+  @Header("Cache-Control", "no-store")
+  async getMailMessage(@Param("id") id: string, @Req() request?: AdminRequest) {
+    const result = await this.mail.getMessage(id)
+    await this.recordAdminMailRead(request, {
+      action: "admin.mail.message.view",
+      targetType: "mail_message",
+      targetId: id,
+    })
+    return result
+  }
+
+  @Get("/mail/messages/:id/context")
+  @Header("Cache-Control", "no-store")
+  async listMailContext(@Param("id") id: string, @Query("cursor") cursor?: string, @Req() request?: AdminRequest) {
+    const result = await this.mail.listContext(id, cursor)
+    await this.recordAdminMailRead(request, {
+      action: "admin.mail.conversation.view",
+      targetType: "mail_conversation",
+      targetId: result.items[0]?.conversationId ?? id,
+      detail: { messageId: id, cursor: cursor ?? null },
+    })
+    return result
   }
 
   @Get("/audit-logs")
@@ -306,6 +349,17 @@ export class AdminController {
     response.end()
   }
 
+  private async recordAdminMailRead(
+    request: AdminRequest | undefined,
+    input: { readonly action: string; readonly targetType: string; readonly targetId: string; readonly detail?: unknown },
+  ): Promise<void> {
+    await this.recordAuditSafely({
+      ...input,
+      actor: request?.admin ? auditActors.platformAdmin(request.admin.sessionId) : auditActors.system(),
+      ipAddress: request?.ip ?? "system",
+    })
+  }
+
   private async recordAdminRead(
     request: AdminRequest | undefined,
     input: {
@@ -343,6 +397,22 @@ function getUserSearchValue(value: unknown): string | undefined {
   const search = typeof value === "string" ? value.trim() : ""
   if (search.length > 120) throw new BadRequestException("用户搜索条件过长。")
   return search || undefined
+}
+
+function parseMailFilters(query: Record<string, unknown>) {
+  const kind = typeof query.kind === "string" && query.kind ? query.kind : undefined
+  if (kind !== undefined && !(adminMailKinds as readonly string[]).includes(kind)) {
+    throw new BadRequestException("消息类型无效。")
+  }
+  const search = typeof query.search === "string" ? query.search.trim() : undefined
+  if (search && search.length > 120) throw new BadRequestException("搜索词过长。")
+  return {
+    search: search || undefined,
+    kind: kind as AdminMailKind | undefined,
+    teamId: typeof query.teamId === "string" && query.teamId ? query.teamId : undefined,
+    from: typeof query.from === "string" && query.from ? query.from : undefined,
+    to: typeof query.to === "string" && query.to ? query.to : undefined,
+  }
 }
 
 function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {

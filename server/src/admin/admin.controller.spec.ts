@@ -7,6 +7,7 @@ import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.s
 import type { LiveDeviceService } from "../live/live-device.service"
 import type { WebhookService } from "../webhooks/webhook.service"
 import type { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
+import type { AdminMailService } from "./admin-mail.service"
 
 function createController(
   service: Partial<AdminService>,
@@ -14,6 +15,7 @@ function createController(
   devices: Partial<LiveDeviceService> = {},
   webhooks: Partial<WebhookService> = {},
   mailBroadcast: Partial<AdminMailBroadcastService> = {},
+  mail: Partial<AdminMailService> = {},
 ) {
   const ControllerCtor = AdminController as new (
     service: AdminService,
@@ -21,6 +23,7 @@ function createController(
     devices: LiveDeviceService,
     webhooks: WebhookService,
     mailBroadcast: AdminMailBroadcastService,
+    mail: AdminMailService,
   ) => AdminController
   return new ControllerCtor(
     service as AdminService,
@@ -28,6 +31,7 @@ function createController(
     devices as LiveDeviceService,
     webhooks as WebhookService,
     mailBroadcast as AdminMailBroadcastService,
+    mail as AdminMailService,
   )
 }
 
@@ -61,6 +65,34 @@ describe("AdminController", () => {
     await expect(controller.sendMailBroadcast({ requestId: "release:v1.0.0", subject: "  更新  ", body: "  正文  " }, adminRequest)).resolves.toMatchObject({ messageId: "mail-1" })
     expect(send).toHaveBeenCalledWith({ requestId: "release:v1.0.0", subject: "更新", body: "正文" }, "admin-session", "203.0.113.10")
     expect(() => controller.sendMailBroadcast({ requestId: "short", subject: "更新", body: "正文" }, adminRequest)).toThrow("平台公告无效")
+  })
+
+  it("lists and opens administrator mail while auditing each read", async () => {
+    const listMessages = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const getMessage = vi.fn().mockResolvedValue({ messageId: "mail-1", conversationId: "conversation-1" })
+    const listContext = vi.fn().mockResolvedValue({ items: [{ messageId: "mail-1", conversationId: "conversation-1" }], nextCursor: null })
+    const record = vi.fn().mockResolvedValue(undefined)
+    const controller = createController({}, { record }, {}, {}, {}, { listMessages, getMessage, listContext })
+    const request = { admin: { sessionId: "session-1", email: "platform_admin:session-1" }, ip: "203.0.113.10" } as never
+
+    await expect(controller.listMailMessages({ page: "1", pageSize: "20", search: "主题" }, request)).resolves.toMatchObject({ total: 0 })
+    await expect(controller.getMailMessage("mail-1", request)).resolves.toMatchObject({ messageId: "mail-1" })
+    await expect(controller.listMailContext("mail-1", undefined, request)).resolves.toMatchObject({ nextCursor: null })
+
+    expect(listMessages).toHaveBeenCalledWith(
+      { page: 1, pageSize: 20, sortBy: "sentAt", sortOrder: "desc" },
+      { search: "主题", kind: undefined, teamId: undefined, from: undefined, to: undefined },
+    )
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.mail.messages.list", targetType: "mail_message" }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.mail.message.view", targetId: "mail-1" }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.mail.conversation.view", targetId: "conversation-1" }))
+  })
+
+  it("does not block mail reads when audit persistence fails", async () => {
+    const controller = createController({}, { record: vi.fn().mockRejectedValue(new Error("audit down")) }, {}, {}, {}, {
+      listMessages: vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 }),
+    })
+    await expect(controller.listMailMessages({}, { admin: { sessionId: "session-1" }, ip: "203.0.113.10" } as never)).resolves.toMatchObject({ total: 0 })
   })
 
   it("creates password reset links with the configured public app URL", async () => {
