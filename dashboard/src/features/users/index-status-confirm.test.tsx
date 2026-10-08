@@ -70,6 +70,41 @@ describe('UsersPage status confirmation', () => {
     expect(mockedAdminApi.exportUsers).toHaveBeenCalledOnce()
   })
 
+
+  it('passes all fuzzy user filters to the users query', async () => {
+    vi.useFakeTimers()
+    try {
+      mockedAdminApi.listUsers.mockResolvedValue({ data: [], total: 0 })
+      mockedAdminApi.listLiveClients.mockResolvedValue([])
+      mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+
+      renderPage()
+      const emailInput = document.querySelector('input[aria-label="按邮箱搜索"]')
+      const handleInput = document.querySelector('input[aria-label="按用户名搜索"]')
+      const nicknameInput = document.querySelector('input[aria-label="按昵称搜索"]')
+      if (!(emailInput instanceof HTMLInputElement)) throw new Error('email search input not found')
+      if (!(handleInput instanceof HTMLInputElement)) throw new Error('handle search input not found')
+      if (!(nicknameInput instanceof HTMLInputElement)) throw new Error('nickname search input not found')
+
+      await inputValue(emailInput, 'ada@')
+      await inputValue(handleInput, 'ali')
+      await inputValue(nicknameInput, '小明')
+      await act(async () => {
+        vi.advanceTimersByTime(300)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(mockedAdminApi.listUsers).toHaveBeenCalledWith(expect.objectContaining({
+        email: 'ada@',
+        handle: 'ali',
+        nickname: '小明',
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps an open user menu when live client status changes', async () => {
     mockedAdminApi.listUsers.mockResolvedValue({
       data: [{

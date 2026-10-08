@@ -10,6 +10,12 @@ import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { PrismaService } from "../prisma/prisma.service"
 
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
+export type AdminUserListFilters = {
+  readonly search?: string
+  readonly email?: string
+  readonly handle?: string
+  readonly nickname?: string
+}
 type SkillRepositoryAdminListFilters = {
   readonly status?: "active" | "removed"
   readonly query?: string
@@ -148,17 +154,12 @@ export class AdminService {
     }
   }
 
-  async listUsers(pagination?: PaginationQuery, search?: string): Promise<PaginatedResponse<unknown>> {
+  async listUsers(
+    pagination?: PaginationQuery,
+    searchOrFilters?: string | AdminUserListFilters,
+  ): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
-    const where = search
-      ? {
-          OR: [
-            { id: { contains: search, mode: "insensitive" as const } },
-            { email: { contains: search, mode: "insensitive" as const } },
-            { handle: { contains: search, mode: "insensitive" as const } },
-          ],
-        }
-      : undefined
+    const where = buildAdminUserWhere(searchOrFilters)
     const [data, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         ...toPrismaArgs(page),
@@ -433,6 +434,52 @@ export class AdminService {
       }, "Failed to record admin service audit log")
     }
   }
+}
+
+function buildAdminUserWhere(
+  searchOrFilters?: string | AdminUserListFilters,
+): Prisma.UserWhereInput | undefined {
+  if (typeof searchOrFilters === "string") {
+    const search = searchOrFilters.trim()
+    return search
+      ? {
+          OR: [
+            { id: { contains: search, mode: "insensitive" as const } },
+            { email: { contains: search, mode: "insensitive" as const } },
+            { handle: { contains: search, mode: "insensitive" as const } },
+          ],
+        }
+      : undefined
+  }
+
+  const filters = searchOrFilters
+  const conditions: Prisma.UserWhereInput[] = []
+  const search = filters?.search?.trim()
+  if (search) {
+    conditions.push({
+      OR: [
+        { id: { contains: search, mode: "insensitive" as const } },
+        { email: { contains: search, mode: "insensitive" as const } },
+        { handle: { contains: search, mode: "insensitive" as const } },
+      ],
+    })
+  }
+  for (const [field, value] of [
+    ["email", filters?.email],
+    ["handle", filters?.handle],
+    ["nickname", filters?.nickname],
+  ] as const) {
+    const normalizedValue = value?.trim()
+    if (normalizedValue) {
+      conditions.push({
+        [field]: { contains: normalizedValue, mode: "insensitive" as const },
+      })
+    }
+  }
+
+  if (conditions.length === 0) return undefined
+  if (conditions.length === 1) return conditions[0]
+  return { AND: conditions }
 }
 
 function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {

@@ -229,6 +229,27 @@ describe("AdminService", () => {
     }))
   })
 
+  it("filters users by fuzzy email, handle, and nickname conditions", async () => {
+    const prisma = createPrismaMock({ transactionResult: [[], 0] })
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await service.listUsers(undefined, {
+      email: "example.com",
+      handle: "ali",
+      nickname: "小明",
+    })
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        AND: [
+          { email: { contains: "example.com", mode: "insensitive" } },
+          { handle: { contains: "ali", mode: "insensitive" } },
+          { nickname: { contains: "小明", mode: "insensitive" } },
+        ],
+      },
+    }))
+  })
+
   it("disables a user without returning the password hash", async () => {
     const prisma = createPrismaMock()
     const service = new AdminService(prisma as unknown as PrismaService)

@@ -36,6 +36,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import {
   getLiveClientSummary,
   mergeLiveClientSnapshot,
@@ -69,6 +70,9 @@ function getHandleError(value: string): string | null {
 export default function UsersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
+  const [emailSearch, setEmailSearch] = useState('')
+  const [handleSearch, setHandleSearch] = useState('')
+  const [nicknameSearch, setNicknameSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
@@ -86,12 +90,23 @@ export default function UsersPage() {
   const [adminNoteDraft, setAdminNoteDraft] = useState('')
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
+  const debouncedEmailSearch = useDebouncedValue(emailSearch)
+  const debouncedHandleSearch = useDebouncedValue(handleSearch)
+  const debouncedNicknameSearch = useDebouncedValue(nicknameSearch)
   const nicknameError = nicknameTarget ? getNicknameError(nicknameDraft) : null
+  const userListQuery = {
+    page,
+    pageSize,
+    email: debouncedEmailSearch.trim() || undefined,
+    handle: debouncedHandleSearch.trim() || undefined,
+    nickname: debouncedNicknameSearch.trim() || undefined,
+    ...sortQuery,
+  }
   const handleError = handleTarget ? getHandleError(handleDraft) : null
 
   const { data, error, isError, isLoading, refetch } = useQuery({
-    queryKey: ['admin-users', page, pageSize, sortQuery],
-    queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
+    queryKey: ['admin-users', userListQuery],
+    queryFn: () => adminApi.listUsers(userListQuery),
   })
 
   const {
@@ -447,15 +462,47 @@ export default function UsersPage() {
   ]
   const liveClientToolbar = (
     <div className='flex flex-wrap items-center justify-between gap-2'>
-      {liveClientStatusError ? (
-        <div className='flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-sm'>
-          <span className='text-muted-foreground'>客户端状态未知</span>
-          <Button variant='outline' size='sm' onClick={retryTable}>
-            <RefreshCw className='size-4' />
-            重试
-          </Button>
-        </div>
-      ) : <div className='min-w-0 flex-1' />}
+      <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
+        {liveClientStatusError ? (
+          <div className='flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-sm'>
+            <span className='text-muted-foreground'>客户端状态未知</span>
+            <Button variant='outline' size='sm' onClick={retryTable}>
+              <RefreshCw className='size-4' />
+              重试
+            </Button>
+          </div>
+        ) : null}
+        <Input
+          aria-label='按邮箱搜索'
+          className='w-full sm:w-40'
+          placeholder='搜索邮箱'
+          value={emailSearch}
+          onChange={(event) => {
+            setEmailSearch(event.target.value)
+            setPage(1)
+          }}
+        />
+        <Input
+          aria-label='按用户名搜索'
+          className='w-full sm:w-40'
+          placeholder='搜索用户名'
+          value={handleSearch}
+          onChange={(event) => {
+            setHandleSearch(event.target.value)
+            setPage(1)
+          }}
+        />
+        <Input
+          aria-label='按昵称搜索'
+          className='w-full sm:w-40'
+          placeholder='搜索昵称'
+          value={nicknameSearch}
+          onChange={(event) => {
+            setNicknameSearch(event.target.value)
+            setPage(1)
+          }}
+        />
+      </div>
       <Button variant='outline' size='sm' onClick={handleExport}>
         <Download data-icon='inline-start' />
         导出

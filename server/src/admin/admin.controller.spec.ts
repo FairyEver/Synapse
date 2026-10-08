@@ -203,6 +203,18 @@ describe("AdminController", () => {
     }))
   })
 
+  it("passes trimmed fuzzy user filters to the service", async () => {
+    const listUsers = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const controller = createController({ listUsers })
+
+    await controller.listUsers({ email: " ada@example.com ", handle: " ali ", nickname: " 小明 " })
+
+    expect(listUsers).toHaveBeenCalledWith(
+      { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+      { email: "ada@example.com", handle: "ali", nickname: "小明" },
+    )
+  })
+
   it("exports all users as a csv and records the export", async () => {
     const listUsersForExport = vi.fn().mockResolvedValue([
       { email: "ada@example.com", handle: "ada", nickname: "Ada" },

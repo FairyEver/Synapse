@@ -11,6 +11,7 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import { LiveDeviceService } from "../live/live-device.service"
 import { WebhookService } from "../webhooks/webhook.service"
 import { AdminService } from "./admin.service"
+import type { AdminUserListFilters } from "./admin.service"
 import { AdminMailBroadcastService } from "./admin-mail-broadcast.service"
 
 const userStatusSchema = z.object({
@@ -141,16 +142,21 @@ export class AdminController {
   @Get("/users")
   async listUsers(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
     const pagination = parsePagination(query, { allowedSortFields: userSortFields })
-    const search = typeof query.search === "string" ? query.search.trim() : undefined
-    if (search && search.length > 120) throw new BadRequestException("用户搜索条件过长。")
-    const result = search
-      ? await this.admin.listUsers(pagination, search)
+    const filters: AdminUserListFilters = {
+      search: getUserSearchValue(query.search),
+      email: getUserSearchValue(query.email),
+      handle: getUserSearchValue(query.handle),
+      nickname: getUserSearchValue(query.nickname),
+    }
+    const searched = Object.values(filters).some(Boolean)
+    const result = searched
+      ? await this.admin.listUsers(pagination, filters)
       : await this.admin.listUsers(pagination)
     await this.recordAdminRead(request, {
       action: "admin.users.list",
       targetType: "user",
       targetId: "list",
-      detail: { page: pagination.page, pageSize: pagination.pageSize, searched: Boolean(search) },
+      detail: { page: pagination.page, pageSize: pagination.pageSize, searched },
     })
     return result
   }
@@ -331,6 +337,12 @@ export class AdminController {
       }, "Failed to record admin audit log")
     }
   }
+}
+
+function getUserSearchValue(value: unknown): string | undefined {
+  const search = typeof value === "string" ? value.trim() : ""
+  if (search.length > 120) throw new BadRequestException("用户搜索条件过长。")
+  return search || undefined
 }
 
 function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {

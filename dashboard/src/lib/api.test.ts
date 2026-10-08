@@ -204,6 +204,23 @@ describe('adminApi.users', () => {
     )
   })
 
+
+  it('sends fuzzy email, handle, and nickname filters for administrator users', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.listUsers({ email: 'ada@', handle: 'ali', nickname: '小明' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/users?email=ada%40&handle=ali&nickname=%E5%B0%8F%E6%98%8E',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+
   it('creates password reset links through the admin endpoint', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({

@@ -655,6 +655,9 @@ type PaginationOptions = {
 
 type AdminUserListOptions = PaginationOptions & {
   search?: string
+  email?: string
+  handle?: string
+  nickname?: string
 }
 
 function adminUserListQuerySuffix(options: AdminUserListOptions) {
@@ -664,6 +667,9 @@ function adminUserListQuerySuffix(options: AdminUserListOptions) {
     sortBy: options.sortBy,
     sortOrder: options.sortOrder,
     search: options.search,
+    email: options.email,
+    handle: options.handle,
+    nickname: options.nickname,
   })
 }
 
