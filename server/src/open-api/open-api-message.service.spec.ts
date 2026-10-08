@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { OpenApiCommentService } from "./open-api-comment.service"
+import { OpenApiMessageService } from "./open-api-message.service"
 
 const principal = {
   userId: "user-1", apiKeyId: "key-1", scopes: ["drive.public_link.comment.create"],
@@ -11,7 +11,7 @@ const base = {
   body: { body: "评论" },
 }
 
-describe("OpenApiCommentService", () => {
+describe("OpenApiMessageService", () => {
   const drive = {
     resolvePublicShareAccess: vi.fn(),
     resolveShareAnnotationAccess: vi.fn(),
@@ -19,7 +19,7 @@ describe("OpenApiCommentService", () => {
   const linkIntake = { resolveSharedMessageTarget: vi.fn() }
   const messages = { create: vi.fn() }
   const usageLogs = { start: vi.fn(), finish: vi.fn() }
-  const service = new OpenApiCommentService(drive as never, linkIntake as never, messages as never, usageLogs as never)
+  const service = new OpenApiMessageService(drive as never, linkIntake as never, messages as never, usageLogs as never)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -31,7 +31,7 @@ describe("OpenApiCommentService", () => {
     usageLogs.finish.mockResolvedValue(undefined)
   })
 
-  it("uses a direct share ID as the root article and records the API-key owner as author", async () => {
+  it("uses a direct share ID as the root article message and records the API-key owner as author", async () => {
     await expect(service.create({ ...base, body: { shareId: "shr_same", body: "评论" } })).resolves.toEqual({
       id: "message-1", createdAt: "2026-09-30T00:00:00.000Z",
     })
@@ -40,7 +40,7 @@ describe("OpenApiCommentService", () => {
       "user-1", "评论", "203.0.113.1", undefined,
     )
     expect(usageLogs.start).toHaveBeenCalledWith(expect.objectContaining({
-      operation: "comment_create", scope: "drive.public_link.comment.create", apiKeyId: "key-1",
+      operation: "message_create", scope: "drive.public_link.comment.create", apiKeyId: "key-1",
     }))
   })
 
@@ -86,7 +86,7 @@ describe("OpenApiCommentService", () => {
     expect(messages.create).not.toHaveBeenCalled()
   })
 
-  it("enforces the dedicated scope before starting usage or writing comments", async () => {
+  it("enforces the dedicated scope before starting usage or writing messages", async () => {
     await expect(service.create({ ...base, principal: { ...principal, scopes: ["drive.public_link.download"] }, body: { shareId: "shr_same", body: "评论" } }))
       .rejects.toMatchObject({ statusCode: 403, code: "INSUFFICIENT_SCOPE" })
     expect(usageLogs.start).not.toHaveBeenCalled()

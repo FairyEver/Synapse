@@ -135,7 +135,7 @@
 - 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/当前 scope/用户失效会阻止新的下载。
 - `/api/open/openapi.json` 是开放 API 的权威 OpenAPI 3.1 机器契约发现入口。运行时路由和 strict 请求校验必须复用契约模块导出的路径与 Zod schema；新增、弃用或修改开放接口时必须同批更新契约和契约回归测试，不维护第二份静态 JSON。
 - 开放 API 的应用地址使用 `APP_PUBLIC_URL`，文档地址使用 `DOCUMENT_PUBLIC_URL`；生产未配置文档地址时从应用根地址派生 `/document`，DEV 必须显式指向独立的本地文档服务。API capability 和 OpenAPI `externalDocs` 由服务端输出绝对文档地址，契约 `servers` 继续保持版本化相对路径。
-- 开放 API 用量记录只写 `OpenApiUsageLog` 的固定列，禁止 URL、密码、token、评论正文、文件名、路径、storage key、manifest 和文件内容。下载与评论接口显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制。
+- 开放 API 用量记录只写 `OpenApiUsageLog` 的固定列，禁止 URL、密码、token、留言内容、文件名、路径、storage key、manifest 和文件内容。下载与留言接口显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制。
 
 ## 客户端埋点
 

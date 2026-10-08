@@ -155,7 +155,7 @@ function MessageItem({ message, canPost, editor, pendingDelete, busy, onEdit, on
               {comment.permissions.canEdit ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'comment', id: comment.id, value: comment.body })}>编辑</Button> : null}
               {comment.permissions.canDelete ? <DeleteButton pending={pendingDelete === `comment:${comment.id}`} busy={busy} onClick={() => { void onDelete('comment', comment.id) }} /> : null}
             </div> : null}
-            {reply && editor.parentCommentId === comment.id ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复评论', () => onEdit(null)) : null}
+            {reply && editor.parentCommentId === comment.id ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
           </div>
         })}
       </div>

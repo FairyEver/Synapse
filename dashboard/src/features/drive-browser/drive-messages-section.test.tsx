@@ -54,6 +54,11 @@ describe('DriveMessagesSection', () => {
     expect(document.querySelector('[data-drive-message-comment-id="two"]')?.textContent).toContain('回复 reader')
     expect(document.querySelector('[data-drive-message-id="message"]')?.textContent).toContain('原留言')
     expect([...document.querySelectorAll('[data-drive-message-id="message"] button')].some((item) => item.textContent === '编辑')).toBe(true) // own reply
+    const nestedReplyButton = document.querySelector('[data-drive-message-comment-id="one"] button') as HTMLButtonElement
+    await act(async () => nestedReplyButton.click())
+    expect(document.querySelector('textarea[aria-label="回复留言"]')).toBeTruthy()
+    expect(document.querySelector('textarea[aria-label="回复评论"]')).toBeNull()
+    await act(async () => button('取消').click())
     await act(async () => button('删除').click())
     expect(button('确认删除（含下级回复）')).toBeTruthy()
     await act(async () => button('确认删除（含下级回复）').click())

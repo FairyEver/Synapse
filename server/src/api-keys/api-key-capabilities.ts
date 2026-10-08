@@ -1,7 +1,13 @@
 import { buildPublicDocumentUrl } from "../common/public-document-url"
 
 export const PUBLIC_LINK_DOWNLOAD_SCOPE = "drive.public_link.download"
-export const PUBLIC_LINK_COMMENT_CREATE_SCOPE = "drive.public_link.comment.create"
+/**
+ * The published scope keeps `comment` for compatibility, but this capability
+ * creates an unanchored message below a shared Markdown document.
+ */
+export const PUBLIC_LINK_MESSAGE_CREATE_SCOPE = "drive.public_link.comment.create"
+/** @deprecated Use PUBLIC_LINK_MESSAGE_CREATE_SCOPE in server code. */
+export const PUBLIC_LINK_COMMENT_CREATE_SCOPE = PUBLIC_LINK_MESSAGE_CREATE_SCOPE
 export const NOTIFICATION_SEND_SCOPE = "notification.send"
 export const LEGACY_SHARE_LINK_DOWNLOAD_SCOPE = "drive.share_link.download"
 
@@ -13,9 +19,9 @@ export const API_KEY_CAPABILITIES = [
     documentationPath: "/open-api/api/share-link-download",
   },
   {
-    scope: PUBLIC_LINK_COMMENT_CREATE_SCOPE,
-    name: "评论分享文章",
-    description: "允许通过开放接口给分享的 Markdown 文章添加文末评论。",
+    scope: PUBLIC_LINK_MESSAGE_CREATE_SCOPE,
+    name: "给分享文章留言",
+    description: "允许通过开放接口给分享的 Markdown 文章添加文末留言。",
     documentationPath: "/open-api/api/article-comment-create",
   },
   {

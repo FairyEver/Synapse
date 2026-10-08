@@ -5,7 +5,7 @@ import request from "supertest"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   OPEN_API_CREATE_DOWNLOAD_PATHS,
-  OPEN_API_ARTICLE_COMMENT_PATH,
+  OPEN_API_ARTICLE_MESSAGE_PATH,
   OPEN_API_NOTIFICATIONS_BASE_PATH,
   OPEN_API_NOTIFICATION_KEY_SEND_PATH,
   OPEN_API_NOTIFICATION_PATH_SEND_PATH,
@@ -13,7 +13,7 @@ import {
   OPEN_API_PUBLIC_LINK_DOWNLOAD_PATH,
   createOpenApiContractDocument,
   createDownloadRequestSchema,
-  createArticleCommentRequestSchema,
+  createArticleMessageRequestSchema,
 } from "./open-api-contract"
 import { apiKeySecretPatternSource } from "../api-keys/api-key-token"
 import { OpenApiContractController } from "./open-api-contract.controller"
@@ -79,10 +79,12 @@ describe("Open API machine-readable contract", () => {
     ])
   })
 
-  it("publishes the comment endpoint and its strict dual-target request schema", () => {
-    expect(OPEN_API_ARTICLE_COMMENT_PATH).toBe("/drive/public-links/comments")
-    expect(contractDocument.paths[OPEN_API_ARTICLE_COMMENT_PATH].post).toMatchObject({
+  it("publishes the message endpoint and its strict dual-target request schema", () => {
+    expect(OPEN_API_ARTICLE_MESSAGE_PATH).toBe("/drive/public-links/comments")
+    expect(contractDocument.paths[OPEN_API_ARTICLE_MESSAGE_PATH].post).toMatchObject({
       operationId: "createPublicLinkArticleComment",
+      summary: "给分享文章留言",
+      tags: ["Article messages"],
       security: [{ ApiKeyBearer: [] }],
       "x-required-scope": "drive.public_link.comment.create",
     })
@@ -97,11 +99,11 @@ describe("Open API machine-readable contract", () => {
       },
     })
     const sample = { url: "https://synapse.example/share/shr_example", shareId: "shr_example", body: "评论" }
-    expect(createArticleCommentRequestSchema.safeParse(sample).success).toBe(true)
-    expect(createArticleCommentRequestSchema.safeParse({ shareId: "shr_example", body: "评论" }).success).toBe(true)
-    expect(createArticleCommentRequestSchema.safeParse({ url: sample.url, body: "评论" }).success).toBe(true)
-    expect(createArticleCommentRequestSchema.safeParse({ body: "评论" }).success).toBe(false)
-    expect(createArticleCommentRequestSchema.safeParse({ ...sample, extra: true }).success).toBe(false)
+    expect(createArticleMessageRequestSchema.safeParse(sample).success).toBe(true)
+    expect(createArticleMessageRequestSchema.safeParse({ shareId: "shr_example", body: "评论" }).success).toBe(true)
+    expect(createArticleMessageRequestSchema.safeParse({ url: sample.url, body: "评论" }).success).toBe(true)
+    expect(createArticleMessageRequestSchema.safeParse({ body: "评论" }).success).toBe(false)
+    expect(createArticleMessageRequestSchema.safeParse({ ...sample, extra: true }).success).toBe(false)
   })
 
   it("describes the three notification send shapes without an Authorization header", () => {

@@ -4,8 +4,8 @@ import { UserAuthModule } from "../auth/user-auth.module"
 import { DriveModule } from "../drive/drive.module"
 import { PrismaModule } from "../prisma/prisma.module"
 import { OpenApiDownloadController } from "./open-api-download.controller"
-import { OpenApiCommentController } from "./open-api-comment.controller"
-import { OpenApiCommentService } from "./open-api-comment.service"
+import { OpenApiMessageController } from "./open-api-message.controller"
+import { OpenApiMessageService } from "./open-api-message.service"
 import { OpenApiDownloadGrantService } from "./open-api-download-grant.service"
 import { OpenApiContractController } from "./open-api-contract.controller"
 import { OpenApiExceptionFilter } from "./open-api-exception.filter"
@@ -17,12 +17,12 @@ import { OpenApiController } from "./open-api.controller"
 
 @Module({
   imports: [ApiKeyModule, UserAuthModule, DriveModule, PrismaModule],
-  controllers: [OpenApiContractController, OpenApiController, OpenApiCommentController, OpenApiDownloadController, OpenApiUsageController],
+  controllers: [OpenApiContractController, OpenApiController, OpenApiMessageController, OpenApiDownloadController, OpenApiUsageController],
   providers: [
     OpenApiKeyGuard,
     OpenApiExceptionFilter,
     OpenApiShareLinkDownloadService,
-    OpenApiCommentService,
+    OpenApiMessageService,
     OpenApiDownloadGrantService,
     OpenApiUsageLogService,
   ],

@@ -404,7 +404,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "分析这个云盘分享链接": call `app_drive_link_resolve`, then `app_drive_link_list` or `app_drive_link_read_text`.
 - "读取这个需求链接": call `app_drive_link_read_text`.
 - "在这个文档下加一些留言": call `app_drive_message_list` to check posting permission, then `app_drive_message_create` with the document target.
-- "读取并回复这个分享文档的评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_comment_create` with the selected thread or comment id.
+- "读取并回复这个分享文档的正文评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_comment_create` with the selected thread or comment id.
 - "在这段原文上评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_thread_create` with the exact visible text as the target and a stable idempotency key.
 - "评论这张 Markdown 图片": call `app_drive_link_read_text`, choose the matching entry from `markdownImages`, then call `app_drive_link_annotation_thread_create` with `{ kind: "image", imageId }` and a stable idempotency key.
 - "把这条正文评论标记为已解决": list the threads, verify the target and `permissions.canChangeStatus`, then call `app_drive_link_annotation_thread_status_update` with `status: "resolved"`. For "重新打开评论", set `status: "open"`.

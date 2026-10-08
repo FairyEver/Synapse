@@ -51,8 +51,8 @@ describe("ApiKeyController", () => {
       documentationUrl: "http://localhost:19773/document/open-api/api/share-link-download",
     }, {
       scope: "drive.public_link.comment.create",
-      name: "评论分享文章",
-      description: "允许通过开放接口给分享的 Markdown 文章添加文末评论。",
+      name: "给分享文章留言",
+      description: "允许通过开放接口给分享的 Markdown 文章添加文末留言。",
       documentationUrl: "http://localhost:19773/document/open-api/api/article-comment-create",
     }, {
       scope: "notification.send",
