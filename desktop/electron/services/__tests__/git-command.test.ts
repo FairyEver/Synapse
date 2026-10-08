@@ -39,7 +39,7 @@ describe("git-command helpers", () => {
     const snapshot = "[core]\nautocrlf = true\n"
     const request = { cwd: "/repo", args: ["config", "--file", "-", "--no-includes", "--null", "--get-regexp", MOBILE_READ_ONLY_CONFIG_QUERY], fallbackMessage: "parse failed", readOnlyIsolation: { authorizationToken: "scope-token" }, readOnlyConfigSnapshot: snapshot }
     await runGitCommand(request)
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ stdin: snapshot, env: expect.objectContaining({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null", GIT_ATTR_NOSYSTEM: "1" }), metadata: expect.objectContaining({ source: "mobile-workspace-files", args: "[redacted]" }) }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ stdin: snapshot, env: expect.objectContaining({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ATTR_NOSYSTEM: "1" }), metadata: expect.objectContaining({ source: "mobile-workspace-files", args: "[redacted]" }) }))
     for (const args of [["config", "--file", "arbitrary", "--get", "core.autocrlf"], ["config", "--file", "-", "--includes", "--get", "core.autocrlf"], ["config", "--file", "-", "--no-includes", "--get", "credential.helper"], ["hash-object", "-w", "--stdin"]]) {
       expect(() => runGitCommand({ ...request, args })).toThrow("Invalid read-only configuration request")
     }

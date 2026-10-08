@@ -77,10 +77,13 @@ type GitCommandSecurity = {
 
 let gitCommandSecurity: GitCommandSecurity | null = null
 
-const READ_ONLY_NULL_PATH = process.platform === "win32" ? "NUL" : "/dev/null"
+// Git for Windows 2.56 (UCRT64 runtime) stopped treating "NUL" as an empty configuration
+// file; every read-only Git call failed with "fatal: unable to access 'NUL'". Its runtime
+// resolves /dev/null on Windows too, so the same null path works on every platform.
+const READ_ONLY_NULL_PATH = "/dev/null"
 const READ_ONLY_GIT_FLAGS = ["--no-optional-locks", "--no-lazy-fetch", "--literal-pathspecs", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${READ_ONLY_NULL_PATH}`, "-c", `core.excludesFile=${READ_ONLY_NULL_PATH}`, "-c", `core.attributesFile=${READ_ONLY_NULL_PATH}`, "-c", `diff.orderFile=${READ_ONLY_NULL_PATH}`, "-c", "core.pager=cat", "-c", "diff.external=", "-c", "protocol.allow=never"]
 const READ_ONLY_GIT_ENV = {
-  GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null", GIT_ATTR_NOSYSTEM: "1",
+  GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ATTR_NOSYSTEM: "1",
   GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GIT_PAGER: "cat",
   GIT_CONFIG_COUNT: "0", GIT_EXTERNAL_DIFF: "", GIT_DIFF_OPTS: "",
 }
