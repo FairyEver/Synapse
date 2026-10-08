@@ -59,8 +59,8 @@ export class MailController {
 
   @Post("messages/delete-batch")
   deleteMessages(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
-    const { messageIds } = parse(z.object({ messageIds: z.array(z.string().min(1)).min(1).max(100).refine((items) => new Set(items).size === items.length, "信件不能重复。") }).strict(), body)
-    return this.mail.deleteMessages(userId(request), messageIds)
+    const { messageIds, box } = parse(z.object({ messageIds: z.array(z.string().min(1)).min(1).max(100).refine((items) => new Set(items).size === items.length, "信件不能重复。"), box: z.enum(["inbox", "sent"]).optional() }).strict(), body)
+    return box ? this.mail.deleteMessages(userId(request), messageIds, box) : this.mail.deleteMessages(userId(request), messageIds)
   }
 
   @Delete("messages")
@@ -86,8 +86,9 @@ export class MailController {
   }
 
   @Delete("messages/:id")
-  deleteMessage(@Req() request: AuthenticatedUserRequest, @Param("id") id: string) {
-    return this.mail.deleteMessage(userId(request), id)
+  deleteMessage(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query("box") box?: string) {
+    if (box !== undefined && box !== "inbox" && box !== "sent") throw new BadRequestException("无效的信箱。")
+    return box ? this.mail.deleteMessage(userId(request), id, box as "inbox" | "sent") : this.mail.deleteMessage(userId(request), id)
   }
 
   @Get("messages/:id/attachments/:attachmentId")

@@ -1252,9 +1252,9 @@ actor APIClient {
         try await send(path: "/mail/messages/read-all", method: "PATCH", body: EmptyBody())
     }
 
-    func mailDeleteBatch(ids: [String]) async throws -> MailBulkDeleteResult {
-        struct Body: Encodable { let messageIds: [String] }
-        return try await send(path: "/mail/messages/delete-batch", method: "POST", body: Body(messageIds: ids))
+    func mailDeleteBatch(ids: [String], box: String?) async throws -> MailBulkDeleteResult {
+        struct Body: Encodable { let messageIds: [String]; let box: String? }
+        return try await send(path: "/mail/messages/delete-batch", method: "POST", body: Body(messageIds: ids, box: box))
     }
 
     func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult {
@@ -1275,8 +1275,9 @@ actor APIClient {
         let _: MailReadResult = try await send(path: "/mail/messages/\(escaped(id))/read", method: "PATCH", body: Body(read: read))
     }
 
-    func mailDelete(id: String) async throws {
-        let _: MailDeleteResult = try await send(path: "/mail/messages/\(escaped(id))", method: "DELETE")
+    func mailDelete(id: String, box: String?) async throws {
+        let query = box.map { mailQuery([URLQueryItem(name: "box", value: $0)]) } ?? ""
+        let _: MailDeleteResult = try await send(path: "/mail/messages/\(escaped(id))" + query, method: "DELETE")
     }
 
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment {

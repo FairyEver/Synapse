@@ -143,7 +143,7 @@ struct MailView: View {
                 }
             }
         } detail: { id in
-            MailDetailView(messageId: id, message: store.detail, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, loadingContext: store.loadingContext, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { deleteMessage(id) })
+            MailDetailView(messageId: id, message: store.detail, isInbox: store.box == .inbox, context: store.context, hasMoreContext: store.nextContextCursor != nil, contextError: store.contextError, loadingContext: store.loadingContext, error: store.error, onReply: reply, onOpenContext: { selection = $0 }, onLoadMoreContext: { Task { await store.loadMoreContext(id: id, using: model) } }, onRead: { read in Task { await store.setRead(id: id, read: read, using: model) } }, onDelete: { deleteMessage(id) })
                 .task(id: id) {
                     if !(await store.open(id: id, using: model)), selection == id {
                         selection = nil
@@ -235,7 +235,8 @@ struct MailView: View {
             ids = []
         }
         var seen = Set<String>()
-        let toIds = ids.filter { $0 != message.viewerId && seen.insert($0).inserted }
+        let keepViewer = message.sender.userId == message.viewerId && ids.contains(message.viewerId)
+        let toIds = ids.filter { (keepViewer || $0 != message.viewerId) && seen.insert($0).inserted }
         let ccIds: [String] = []
         compose = MailComposeStart(toIds: toIds, ccIds: ccIds, subject: kind == .forward ? "转发：\(message.subject)" : "回复：\(message.subject)", relation: MailRelation(kind: kind == .forward ? "forward" : "reply", messageId: message.messageId), source: message)
     }
@@ -246,6 +247,7 @@ private struct MailDetailView: View {
     @Environment(SynapseAppModel.self) private var model
     let messageId: String
     let message: MailMessage?
+    let isInbox: Bool
     let context: [MailSummary]
     let hasMoreContext: Bool
     let contextError: String?
@@ -339,7 +341,7 @@ private struct MailDetailView: View {
                                 Button("回复", systemImage: "arrowshape.turn.up.left") { onReply(.reply, message) }
                                 Button("转发", systemImage: "arrowshape.turn.up.right") { onReply(.forward, message) }
                             }
-                            if message.sender.userId != message.viewerId { Button(message.readAt == nil ? "设为已读" : "设为未读") { onRead(message.readAt == nil) } }
+                            if isInbox { Button(message.readAt == nil ? "设为已读" : "设为未读") { onRead(message.readAt == nil) } }
                             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
                         } label: { Image(systemName: "ellipsis.circle") }
                         .accessibilityLabel("信件操作")

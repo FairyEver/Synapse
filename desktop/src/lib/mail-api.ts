@@ -13,12 +13,12 @@ export async function mailRequest<K extends MailOperation["kind"]>(operation: Ex
     case "messageList": result = await bridge.mail.message.list({ box: request.box, query: request.query, cursor: request.cursor, unreadOnly: request.unreadOnly }); break
     case "messageCount": result = await bridge.mail.message.count(); break
     case "messageReadAll": result = await bridge.mail.message.readAll(); break
-    case "messageDeleteBatch": result = await bridge.mail.message.deleteBatch({ messageIds: request.messageIds }); break
+    case "messageDeleteBatch": result = await bridge.mail.message.deleteBatch({ messageIds: request.messageIds, box: request.box }); break
     case "messageDeleteAll": result = await bridge.mail.message.deleteAll({ box: request.box }); break
     case "messageGet": result = await bridge.mail.message.get({ messageId: request.messageId }); break
     case "messageContext": result = await bridge.mail.context.list({ messageId: request.messageId, cursor: request.cursor }); break
     case "messageSetRead": result = await bridge.mail.message.update({ messageId: request.messageId, read: request.read }); break
-    case "messageDelete": result = await bridge.mail.message.delete({ messageId: request.messageId }); break
+    case "messageDelete": result = await bridge.mail.message.delete({ messageId: request.messageId, box: request.box }); break
     case "attachmentLocal": result = await bridge.mail.attachment.localCreate({ filePath: request.filePath }); break
     case "attachmentDownload": result = await bridge.mail.attachment.downloadFile({ messageId: request.messageId, attachmentId: request.attachmentId, outputPath: request.outputPath }); break
     case "sendPreview": result = await bridge.mail.send.preview({ content: request.content }); break

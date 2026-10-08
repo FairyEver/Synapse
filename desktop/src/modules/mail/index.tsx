@@ -88,7 +88,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
         const ids = [...selectedIds]
         let skipped = 0
         for (let offset = 0; offset < ids.length; offset += 100) {
-          const result = await mailRequest({ kind: "messageDeleteBatch", messageIds: ids.slice(offset, offset + 100) })
+          const result = await mailRequest({ kind: "messageDeleteBatch", messageIds: ids.slice(offset, offset + 100), box })
           skipped += result.skippedIds.length
         }
         if (skipped) toast.error(`${skipped} 封信件未处理`)
@@ -118,7 +118,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
 
   async function remove(message: MailSummary) {
     try {
-      await mailRequest({ kind: "messageDelete", messageId: message.messageId })
+      await mailRequest({ kind: "messageDelete", messageId: message.messageId, box })
       if (mail.selectedId === message.messageId) mail.setSelectedId(null)
       mail.refresh()
     } catch (error) { toast.error(error instanceof Error ? error.message : "删除失败。") }
@@ -140,7 +140,8 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
         return
       }
       const to = source.sender.userId === myId ? source.toRecipients : [source.sender]
-      const toIds = [...new Set(to.map((person) => person.userId))].filter((id) => id !== myId)
+      const keepViewer = source.sender.userId === myId && to.some((person) => person.userId === myId)
+      const toIds = [...new Set(to.map((person) => person.userId))].filter((id) => keepViewer || id !== myId)
       setCompose({ toIds, ccIds: [], subject: `回复：${source.subject}`, relation: { kind, messageId: source.messageId }, source })
     } catch (error) { toast.error(error instanceof Error ? error.message : "读取信件失败。") }
   }

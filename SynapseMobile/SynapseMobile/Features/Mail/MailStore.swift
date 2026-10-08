@@ -14,9 +14,9 @@ protocol MailStoreAPI: MailAccountContext {
     func mailMessage(id: String) async throws -> MailMessage
     func mailContext(id: String, cursor: String?) async throws -> MailMessagePage
     func mailSetRead(id: String, read: Bool) async throws
-    func mailDelete(id: String) async throws
+    func mailDelete(id: String, box: String?) async throws
     func mailReadAll() async throws -> MailBulkReadResult
-    func mailDeleteBatch(ids: [String]) async throws -> MailBulkDeleteResult
+    func mailDeleteBatch(ids: [String], box: String?) async throws -> MailBulkDeleteResult
     func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult
 }
 
@@ -146,7 +146,7 @@ final class MailStore {
         do {
             let received = try await model.mailMessage(id: id)
             guard generation == openGeneration else { return true }
-            let incoming = received.sender.userId != received.viewerId
+            let incoming = box == .inbox
             let latestOperation = latestReadOperation[id] ?? 0
             let readChanged = max(latestOperation, incoming ? latestReadAllOperation : 0)
                 > max(readOperation, incoming ? readAllOperation : 0)
@@ -234,7 +234,7 @@ final class MailStore {
               operation >= (latestReadOperation[id] ?? 0) else { return }
         latestReadOperation[id] = operation
         let previousUnread: Bool?
-        if let message = detail, message.messageId == id, message.sender.userId != message.viewerId {
+        if let message = detail, message.messageId == id, box == .inbox {
             previousUnread = message.readAt == nil
         } else if box == .inbox, let message = messages.first(where: { $0.messageId == id }) {
             previousUnread = message.readAt == nil
@@ -264,7 +264,7 @@ final class MailStore {
         let generation = openGeneration
         let feedback = beginFeedback()
         do {
-            try await model.mailDelete(id: id)
+            try await model.mailDelete(id: id, box: box.rawValue)
             clearDeletedDetail(ids: [id], generation: generation)
             _ = await load(using: model, query: loadedQuery, feedback: feedback)
             return true
@@ -286,7 +286,7 @@ final class MailStore {
             guard model.isCurrentAccount(account), !Task.isCancelled else { return }
             latestReadAllOperation = max(latestReadAllOperation, operation)
             if generation == openGeneration, revision == readRevision,
-               let message = detail, message.sender.userId != message.viewerId {
+               let message = detail, box == .inbox {
                 applyReadState(id: message.messageId, readAt: ISO8601DateFormatter().string(from: Date()), operation: operation)
             } else {
                 readRevision += 1
@@ -305,7 +305,7 @@ final class MailStore {
             var deletedIds = Set(ids)
             for start in stride(from: 0, to: ids.count, by: 100) {
                 guard model.isCurrentAccount(account), !Task.isCancelled else { return false }
-                let result = try await model.mailDeleteBatch(ids: Array(ids[start..<min(start + 100, ids.count)]))
+                let result = try await model.mailDeleteBatch(ids: Array(ids[start..<min(start + 100, ids.count)]), box: box.rawValue)
                 guard model.isCurrentAccount(account), !Task.isCancelled else { return false }
                 skipped += result.skippedIds?.count ?? 0
                 deletedIds.subtract(result.skippedIds ?? [])

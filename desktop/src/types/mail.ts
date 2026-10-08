@@ -29,12 +29,12 @@ export type MailOperation =
   | { kind: "messageList"; box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean }
   | { kind: "messageCount" }
   | { kind: "messageReadAll" }
-  | { kind: "messageDeleteBatch"; messageIds: string[] }
+  | { kind: "messageDeleteBatch"; messageIds: string[]; box?: "inbox" | "sent" }
   | { kind: "messageDeleteAll"; box: "inbox" | "sent" }
   | { kind: "messageGet"; messageId: string }
   | { kind: "messageContext"; messageId: string; cursor?: string }
   | { kind: "messageSetRead"; messageId: string; read: boolean }
-  | { kind: "messageDelete"; messageId: string }
+  | { kind: "messageDelete"; messageId: string; box?: "inbox" | "sent" }
   | { kind: "attachmentLocal"; filePath: string }
   | { kind: "attachmentDownload"; messageId: string; attachmentId: string; outputPath?: string }
   | { kind: "sendPreview"; content: MailContent }

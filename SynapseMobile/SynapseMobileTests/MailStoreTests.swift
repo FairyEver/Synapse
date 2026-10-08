@@ -4,6 +4,26 @@ import Testing
 
 @MainActor
 struct MailStoreTests {
+    @Test func selfSentMailUsesInboxReadStateAndKeepsSentReadState() async {
+        let api = MailReviewAPI()
+        let store = MailStore()
+        var readRequests: [(String, Bool)] = []
+        api.messageOperation = { id in mailSelfMessage(id, readAt: nil) }
+        api.setReadOperation = { id, read in readRequests.append((id, read)) }
+        store.messages = [mailSummary("self", readAt: nil)]
+        store.counts = MailCounts(inboxTotal: 1, sentTotal: 1, unread: 1)
+
+        store.box = .inbox
+        #expect(await store.open(id: "self", using: api))
+        #expect(readRequests.map { $0.1 } == [true])
+        #expect(store.detail?.readAt != nil)
+
+        readRequests.removeAll()
+        store.box = .sent
+        #expect(await store.open(id: "self", using: api))
+        #expect(readRequests.isEmpty)
+    }
+
     @Test(arguments: ["unread", "read", "readRetry", "all", "allAfterOther", "other", "failed"])
     func aLateDetailSnapshotKeepsTheReadStateAcknowledgedWhileReopening(followUp: String) async {
         let api = MailReviewAPI()
@@ -656,6 +676,11 @@ private func mailReviewMessage(_ id: String, readAt: String? = "2026-10-04T08:00
     MailMessage(messageId: id, kind: "user", viewerId: "reader", sender: mailPerson("sender"), recipients: [], toRecipients: [], ccRecipients: [], toAddresses: nil, ccAddresses: nil, relationKind: nil, subject: id, body: body, sentAt: "2026-10-04T08:00:00Z", readAt: readAt, replyToId: nil, conversationId: id, relation: nil, quote: nil, attachments: [])
 }
 
+private func mailSelfMessage(_ id: String, readAt: String?) -> MailMessage {
+    let person = mailPerson("reader")
+    return MailMessage(messageId: id, kind: "user", viewerId: "reader", sender: person, recipients: [person], toRecipients: [person], ccRecipients: [], toAddresses: nil, ccAddresses: nil, relationKind: nil, subject: id, body: "正文", sentAt: "2026-10-04T08:00:00Z", readAt: readAt, replyToId: nil, conversationId: id, relation: nil, quote: nil, attachments: [])
+}
+
 @MainActor
 private final class MailReviewAPI: MailStoreAPI, MailOrganizationMemberAPI {
     var accountIdentityGeneration = 0
@@ -692,9 +717,9 @@ private final class MailReviewAPI: MailStoreAPI, MailOrganizationMemberAPI {
     }
     func mailMessage(id: String) async throws -> MailMessage { try await messageOperation?(id) ?? mailReviewMessage(id) }
     func mailSetRead(id: String, read: Bool) async throws { try await setReadOperation?(id, read) }
-    func mailDelete(id: String) async throws { try await singleDeleteOperation?(id) }
+    func mailDelete(id: String, box: String?) async throws { try await singleDeleteOperation?(id) }
     func mailReadAll() async throws -> MailBulkReadResult { try await readAllOperation?() ?? MailBulkReadResult(updated: 0) }
-    func mailDeleteBatch(ids: [String]) async throws -> MailBulkDeleteResult {
+    func mailDeleteBatch(ids: [String], box: String?) async throws -> MailBulkDeleteResult {
         try await deleteOperation?(ids, nil) ?? MailBulkDeleteResult(deleted: ids.count, skippedIds: [])
     }
     func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult {

@@ -25,6 +25,6 @@
 
 用 `app_mail_message_count` 取得收件箱、已发送箱和未读数的精确统计。`app_mail_message_list` 按发送时间倒序分页，收件箱可设 `unreadOnly: true`；持续使用 `nextCursor` 才能查全。列表包含发件人与摘要，需要判断正文时用 `app_mail_message_get` 读取完整信件；`app_mail_context_list` 查看当前账号可见的关联往来。AI 根据用户要求和这些内容自行选择需处理的信件，不能由 MCP 代它定义“没用”。
 
-单封设已读或未读用 `app_mail_message_update`；收件箱全部设已读用 `app_mail_message_read_all`。单封删除用 `app_mail_message_delete`，最多 100 个确定 ID 用 `app_mail_message_delete_batch`；检查返回的 `skippedIds`，不能把未处理项报告成已删除。`app_mail_message_delete_all` 按 `box` 清空完整收件箱或已发送箱，与当前搜索词和已加载页无关。删除只隐藏当前用户的副本。下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。
+单封设已读或未读用 `app_mail_message_update`；收件箱全部设已读用 `app_mail_message_read_all`。单封删除用 `app_mail_message_delete`，最多 100 个确定 ID 用 `app_mail_message_delete_batch`；从收件箱或已发送操作时传对应 `box`，自发信只隐藏这一侧副本；检查返回的 `skippedIds`，不能把未处理项报告成已删除。`app_mail_message_delete_all` 按 `box` 清空完整收件箱或已发送箱，与当前搜索词和已加载页无关。下载附件走 `app_mail_attachment_download_file`，目的地为绝对本地路径。
 
-回复只选原发件人；转发重新选择 To/Cc，默认把原附件 ID 放入 `forwardAttachmentIds`，用户可要求移除。两种操作都通过新预览执行完整确认流程。不提供回复全部。
+普通来信回复原发件人；自己发出的信回复时保留原 To 收件人（其中可以包含当前用户）。转发重新选择 To/Cc，默认把原附件 ID 放入 `forwardAttachmentIds`，用户可要求移除。两种操作都通过新预览执行完整确认流程。不提供回复全部。

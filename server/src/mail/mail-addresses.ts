@@ -16,7 +16,6 @@ export async function resolveMailAddresses(
 ) {
   const directIds = [...new Set([...toIds, ...ccIds])]
   const selectedOrganizationIds = [...new Set([...toOrganizationIds, ...ccOrganizationIds])]
-  if (directIds.includes(senderId)) throw new BadRequestException("不能给自己发送站内信。")
   if (!toIds.length && !toOrganizationIds.length) throw new BadRequestException("请选择收件人。")
 
   const organizations = selectedOrganizationIds.length ? await db.organization.findMany({ where: { id: { in: selectedOrganizationIds } }, select: { id: true, teamId: true, name: true, parentId: true } }) : []
@@ -24,8 +23,9 @@ export async function resolveMailAddresses(
   const organizationTeams = [...new Set(organizations.map((item) => item.teamId))]
   if (organizationTeams.length > 1 || (fixedTeamId && organizationTeams.length && organizationTeams[0] !== fixedTeamId)) throw new ForbiddenException("一封信只能选择同一团队的组织。")
 
-  const participants = await db.user.findMany({ where: { id: { in: [senderId, ...directIds] }, status: "active" }, select: { id: true, nickname: true, handle: true, teamMemberships: { select: { teamId: true } } } })
-  if (participants.length !== directIds.length + 1) throw new ForbiddenException("收件人已失效。")
+  const participantIds = new Set([senderId, ...directIds])
+  const participants = await db.user.findMany({ where: { id: { in: [...participantIds] }, status: "active" }, select: { id: true, nickname: true, handle: true, teamMemberships: { select: { teamId: true } } } })
+  if (participants.length !== participantIds.size) throw new ForbiddenException("收件人已失效。")
   const sender = participants.find((user) => user.id === senderId)
   if (!sender) throw new ForbiddenException("发件人已失效。")
   const common = participants.reduce<string[]>((shared, user) => shared.filter((id) => user.teamMemberships.some((item) => item.teamId === id)), sender.teamMemberships.map((item) => item.teamId))
@@ -40,8 +40,6 @@ export async function resolveMailAddresses(
   const memberRows = selectedOrganizationIds.length ? await db.organizationMembership.findMany({ where: { organizationId: { in: [...new Set([...toSubtree, ...ccSubtree])] }, user: { status: "active" } }, select: { organizationId: true, userId: true } }) : []
   const to = new Set([...toIds, ...memberRows.filter((row) => toSubtree.has(row.organizationId)).map((row) => row.userId)])
   const cc = new Set([...ccIds, ...memberRows.filter((row) => ccSubtree.has(row.organizationId)).map((row) => row.userId)])
-  to.delete(senderId)
-  cc.delete(senderId)
   for (const id of to) cc.delete(id)
   if (!to.size) throw new BadRequestException("收件组织没有可投递的成员。")
 

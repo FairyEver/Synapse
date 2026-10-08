@@ -70,7 +70,7 @@ export class MailService {
     const memberships = await this.prisma.teamMembership.findMany({ where: { userId }, select: { teamId: true } })
     const teamIds = memberships.map((row) => row.teamId)
     if (!teamIds.length) return { items: [], nextCursor: null }
-    const where = { id: { not: userId }, status: "active" as const, teamMemberships: { some: { teamId: { in: teamIds } } } }
+    const where = { status: "active" as const, teamMemberships: { some: { teamId: { in: teamIds } } } }
     const select = { id: true, nickname: true, handle: true, teamMemberships: { where: { teamId: { in: teamIds } }, select: { teamId: true } } } as const
     if (!term) {
       if (cursor && !await this.prisma.user.findFirst({ where: { AND: [where, { id: cursor }] }, select: { id: true } })) throw new BadRequestException("无效的收件人分页位置。")
@@ -310,7 +310,7 @@ export class MailService {
       include: { sender: { select: { id: true, nickname: true, handle: true } }, recipients: { where: { OR: [{ userId }, { message: { addressSnapshot: { equals: Prisma.DbNull } } }] }, include: { user: { select: { id: true, nickname: true, handle: true } } } }, attachments: { select: { id: true } } },
       orderBy: [{ sentAt: "desc" }, { id: "desc" }], take: 51,
     })
-    return { items: rows.slice(0, 50).map((row) => this.summary(row, userId)), nextCursor: rows.length > 50 ? rows[49]!.id : null }
+    return { items: rows.slice(0, 50).map((row) => this.summary(row, userId, box)), nextCursor: rows.length > 50 ? rows[49]!.id : null }
   }
 
   async countMessages(userId: string) {
@@ -327,15 +327,15 @@ export class MailService {
     return { updated: result.count }
   }
 
-  async deleteMessages(userId: string, messageIds: string[]) {
+  async deleteMessages(userId: string, messageIds: string[], box?: "inbox" | "sent") {
     return this.prisma.$transaction(async (tx) => {
       const [received, sent] = await Promise.all([
-        tx.mailRecipient.findMany({ where: { userId, messageId: { in: messageIds }, deletedAt: null }, select: { messageId: true } }),
-        tx.mailMessage.findMany({ where: { id: { in: messageIds }, senderId: userId, senderDeletedAt: null }, select: { id: true } }),
+        box === "sent" ? [] : tx.mailRecipient.findMany({ where: { userId, messageId: { in: messageIds }, deletedAt: null }, select: { messageId: true } }),
+        box === "inbox" ? [] : tx.mailMessage.findMany({ where: { id: { in: messageIds }, senderId: userId, senderDeletedAt: null }, select: { id: true } }),
       ])
       const visible = new Set([...received.map((item) => item.messageId), ...sent.map((item) => item.id)])
-      await tx.mailRecipient.updateMany({ where: { userId, messageId: { in: messageIds }, deletedAt: null }, data: { deletedAt: new Date() } })
-      await tx.mailMessage.updateMany({ where: { id: { in: messageIds }, senderId: userId, senderDeletedAt: null }, data: { senderDeletedAt: new Date() } })
+      if (box !== "sent") await tx.mailRecipient.updateMany({ where: { userId, messageId: { in: messageIds }, deletedAt: null }, data: { deletedAt: new Date() } })
+      if (box !== "inbox") await tx.mailMessage.updateMany({ where: { id: { in: messageIds }, senderId: userId, senderDeletedAt: null }, data: { senderDeletedAt: new Date() } })
       return { deleted: visible.size, skippedIds: messageIds.filter((id) => !visible.has(id)) }
     })
   }
@@ -371,13 +371,15 @@ export class MailService {
     return { items: rows.slice(0, 50).map((row) => this.summary(row, userId)).reverse(), nextCursor: rows.length > 50 ? rows[49]!.id : null }
   }
 
-  private summary(row: { id: string; senderId: string | null; sender: { id: string; nickname: string | null; handle: string | null } | null; kind: string; recipients: { userId: string; role: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; addressSnapshot?: Prisma.JsonValue | null; subject: string; body: string; sentAt: Date; attachments: { id: string }[]; replyToId: string | null; forwardOfId: string | null }, userId: string) {
+  private summary(row: { id: string; senderId: string | null; sender: { id: string; nickname: string | null; handle: string | null } | null; kind: string; recipients: { userId: string; role: string; readAt: Date | null; user: { id: string; nickname: string | null; handle: string | null } }[]; addressSnapshot?: Prisma.JsonValue | null; subject: string; body: string; sentAt: Date; attachments: { id: string }[]; replyToId: string | null; forwardOfId: string | null }, userId: string, box?: "inbox" | "sent") {
     const stored = row.addressSnapshot as MailAddressSnapshot | null | undefined
     const toRecipients = stored ? stored.to.filter((item) => item.kind === "user").map((item) => ({ userId: item.userId, nickname: item.name, handle: null })) : row.recipients.filter((item) => item.role === "to").map((item) => exposedUser(item.user))
     const ccRecipients = stored ? stored.cc.filter((item) => item.kind === "user").map((item) => ({ userId: item.userId, nickname: item.name, handle: null })) : row.recipients.filter((item) => item.role === "cc").map((item) => exposedUser(item.user))
     const toAddresses = stored?.to ?? toRecipients.map((person) => ({ kind: "user" as const, userId: person.userId, name: person.nickname || person.handle || person.userId }))
     const ccAddresses = stored?.cc ?? ccRecipients.map((person) => ({ kind: "user" as const, userId: person.userId, name: person.nickname || person.handle || person.userId }))
-    return { messageId: row.id, kind: row.kind, sender: row.sender ? exposedUser(row.sender) : { userId: "platform", nickname: "Synapse", handle: null }, recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt: row.senderId === userId ? row.sentAt : row.recipients.find((item) => item.userId === userId)?.readAt ?? null, attachmentCount: row.attachments.length }
+    const recipient = row.recipients.find((item) => item.userId === userId)
+    const readAt = box === "sent" ? row.sentAt : recipient ? recipient.readAt : row.senderId === userId ? row.sentAt : null
+    return { messageId: row.id, kind: row.kind, sender: row.sender ? exposedUser(row.sender) : { userId: "platform", nickname: "Synapse", handle: null }, recipients: [...toRecipients, ...ccRecipients], toRecipients, ccRecipients, toAddresses, ccAddresses, relationKind: row.forwardOfId ? "forward" as const : row.replyToId ? "reply" as const : null, subject: row.subject, snippet: row.body.slice(0, 160), sentAt: row.sentAt, readAt, attachmentCount: row.attachments.length }
   }
 
   async setRead(userId: string, id: string, read: boolean) {
@@ -386,10 +388,10 @@ export class MailService {
     return { read }
   }
 
-  async deleteMessage(userId: string, id: string) {
-    const [recipient, sender] = await this.prisma.$transaction([
-      this.prisma.mailRecipient.updateMany({ where: { messageId: id, userId, deletedAt: null }, data: { deletedAt: new Date() } }),
-      this.prisma.mailMessage.updateMany({ where: { id, senderId: userId, senderDeletedAt: null }, data: { senderDeletedAt: new Date() } }),
+  async deleteMessage(userId: string, id: string, box?: "inbox" | "sent") {
+    const [recipient, sender] = await this.prisma.$transaction(async (tx) => [
+      box === "sent" ? { count: 0 } : await tx.mailRecipient.updateMany({ where: { messageId: id, userId, deletedAt: null }, data: { deletedAt: new Date() } }),
+      box === "inbox" ? { count: 0 } : await tx.mailMessage.updateMany({ where: { id, senderId: userId, senderDeletedAt: null }, data: { senderDeletedAt: new Date() } }),
     ])
     if (!recipient.count && !sender.count) throw new NotFoundException("信件不存在。")
     return { deleted: true }

@@ -26,7 +26,7 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
     }
     case "app.mail.message.count": z.object({}).strict().parse(params); return { kind: "messageCount" }
     case "app.mail.message.read_all": z.object({}).strict().parse(params); return { kind: "messageReadAll" }
-    case "app.mail.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length) }).strict().parse(params) }
+    case "app.mail.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length), box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
     case "app.mail.message.delete_all": return { kind: "messageDeleteAll", ...z.object({ box: z.enum(["inbox", "sent"]) }).strict().parse(params) }
     case "app.mail.message.get": {
       const input = getInput.parse(params)
@@ -34,7 +34,7 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
     }
     case "app.mail.context.list": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
-    case "app.mail.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id }).strict().parse(params) }
+    case "app.mail.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id, box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
     case "app.mail.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }
     case "app.mail.attachment.download_file": return { kind: "attachmentDownload", ...z.object({ messageId: id, attachmentId: id, outputPath: z.string().min(1) }).strict().parse(params) }
     case "app.mail.send.preview": return { kind: "sendPreview", content: content.parse(params) }

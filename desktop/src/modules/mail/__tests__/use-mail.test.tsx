@@ -101,6 +101,24 @@ describe("useMail", () => {
     expect(mocks.request).not.toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "other", read: true })
   })
 
+  it("marks self-sent mail read only when opened from the inbox", async () => {
+    mocks.request.mockImplementation((operation: { kind: string; box?: string }) => {
+      if (operation.kind === "messageGet") return Promise.resolve({ ...message("self"), viewerId: "reader", sender: { userId: "reader" }, body: "记录", readAt: null })
+      if (operation.kind === "messageSetRead") return Promise.resolve({ read: true })
+      return Promise.resolve({ items: [message("self")], nextCursor: null })
+    })
+    render("inbox")
+    await act(async () => { current.setSelectedId("self") })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "self", read: true })
+
+    mocks.request.mockClear()
+    render("sent")
+    await act(async () => { current.setSelectedId("self") })
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(mocks.request).not.toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "self", read: true })
+  })
+
   it("keeps the selected message unread until another message is opened and it is reopened", async () => {
     let openedReadAt: string | null = "2026-09-28T00:00:00.000Z"
     mocks.request.mockImplementation(async (operation: { kind: string; messageId?: string; read?: boolean }) => {

@@ -26,6 +26,7 @@ async function fixture() {
     readAllMessages: vi.fn(async () => ({ updated: 0 })),
     deleteMessages: vi.fn(async () => ({ deleted: 0, skippedIds: [] })),
     deleteAllMessages: vi.fn(async () => ({ deleted: 0 })),
+    deleteMessage: vi.fn(async () => ({ deleted: true })),
     send: vi.fn(async () => ({ messageId: "message-1", recipientIds: ["teammate"] })),
     prepareLocalAttachment: vi.fn(async () => ({ attachmentId: "attachment-1" })),
   }
@@ -51,9 +52,13 @@ describe("internal mail HTTP routes", () => {
       expect(mail.readAllMessages).toHaveBeenCalledWith("sender")
       await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["a", "b"] }).expect(201)
       expect(mail.deleteMessages).toHaveBeenCalledWith("sender", ["a", "b"])
+      await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["self"], box: "inbox" }).expect(201)
+      expect(mail.deleteMessages).toHaveBeenCalledWith("sender", ["self"], "inbox")
       await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["a", "a"] }).expect(400)
       await request(app.getHttpServer()).delete("/api/mail/messages?box=sent").expect(200)
       expect(mail.deleteAllMessages).toHaveBeenCalledWith("sender", "sent")
+      await request(app.getHttpServer()).delete("/api/mail/messages/self?box=sent").expect(200)
+      expect(mail.deleteMessage).toHaveBeenCalledWith("sender", "self", "sent")
     } finally { await app.close() }
   })
   it("routes recipient search, fixed preview and send using the authenticated user", async () => {

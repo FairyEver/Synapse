@@ -104,6 +104,18 @@ describe("MailService", () => {
     expect(await service.deleteMessages("reader", ["received", "sent", "other"])).toEqual({ deleted: 0, skippedIds: ["received", "sent", "other"] })
   })
 
+  it("deletes only the selected mailbox copy for self mail", async () => {
+    const { service, prisma } = harness()
+    prisma.mailRecipient.findMany.mockResolvedValueOnce([{ messageId: "self-mail" }])
+    await expect(service.deleteMessages("sender", ["self-mail"], "inbox")).resolves.toEqual({ deleted: 1, skippedIds: [] })
+    expect(prisma.mailRecipient.updateMany).toHaveBeenCalledWith({ where: { userId: "sender", messageId: { in: ["self-mail"] }, deletedAt: null }, data: { deletedAt: expect.any(Date) } })
+    expect(prisma.mailMessage.updateMany).not.toHaveBeenCalled()
+
+    prisma.mailMessage.findMany.mockResolvedValueOnce([{ id: "self-mail" }] as never)
+    await expect(service.deleteMessages("sender", ["self-mail"], "sent")).resolves.toEqual({ deleted: 1, skippedIds: [] })
+    expect(prisma.mailMessage.updateMany).toHaveBeenCalledWith({ where: { id: { in: ["self-mail"] }, senderId: "sender", senderDeletedAt: null }, data: { senderDeletedAt: expect.any(Date) } })
+  })
+
   it("clears inbox and sent mail separately for the current user", async () => {
     const { service, prisma } = harness()
     prisma.mailRecipient.updateMany.mockResolvedValueOnce({ count: 4 })
@@ -145,7 +157,8 @@ describe("MailService", () => {
     const first = await service.searchRecipients("sender", "")
     expect(first.items).toHaveLength(50)
     expect(first.nextCursor).toBe("person-49")
-    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: { not: "sender" }, status: "active", teamMemberships: { some: { teamId: { in: ["team-1"] } } } }), take: 51 }))
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ status: "active", teamMemberships: { some: { teamId: { in: ["team-1"] } } } }), take: 51 }))
+    expect(prisma.user.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: { not: "sender" } }) }))
     const second = await service.searchRecipients("sender", "", first.nextCursor!)
     expect(second.items.map((item) => item.userId)).toEqual(["person-50"])
     expect(second.nextCursor).toBeNull()
@@ -163,6 +176,27 @@ describe("MailService", () => {
     const { service } = harness()
     const preview = await service.createPreview("sender", { toIds: ["teammate"], ccIds: [], subject: "报告", body: "完整正文", attachmentIds: [], forwardAttachmentIds: [] })
     expect(preview).toMatchObject({ previewId: "preview-1", recipients: [{ userId: "teammate" }], subject: "报告", body: "完整正文", attachments: [] })
+  })
+
+  it("returns the current user and allows self-only and mixed recipients", async () => {
+    const { service } = harness()
+    const self = await service.searchRecipients("sender", "liyang")
+    expect(self.items).toEqual([expect.objectContaining({ userId: "sender" })])
+    const preview = await service.createPreview("sender", { toIds: ["sender", "teammate"], ccIds: ["sender"], subject: "记录", body: "给自己和同事", attachmentIds: [], forwardAttachmentIds: [] })
+    expect(preview.toRecipients.map((person) => person.userId)).toEqual(["sender", "teammate"])
+    expect(preview.ccRecipients).toEqual([])
+    expect(preview.recipientCount).toBe(2)
+  })
+
+  it("keeps the sender when an organization includes the sender", async () => {
+    const { service, prisma, sender, teammate } = harness()
+    const organization = [{ id: "org-1", teamId: "team-1", name: "研发", parentId: null }]
+    prisma.organization.findMany.mockImplementation(async (query?: { where?: { id?: { in: string[] } } }) => query?.where?.id ? organization.filter((item) => query.where!.id!.in.includes(item.id)) : organization)
+    prisma.organizationMembership.findMany.mockResolvedValue([{ organizationId: "org-1", userId: sender.id }, { organizationId: "org-1", userId: teammate.id }])
+    prisma.user.findMany.mockResolvedValueOnce([sender] as never)
+    const preview = await service.createPreview("sender", { formatVersion: 3, toIds: [], ccIds: [], toOrganizationIds: ["org-1"], ccOrganizationIds: [], subject: "组织记录", body: "正文", attachmentIds: [], forwardAttachmentIds: [] })
+    expect(preview.recipientCount).toBe(2)
+    expect(preview.toAddresses).toEqual([{ kind: "organization", organizationId: "org-1", name: "研发" }])
   })
 
   it("stores To and Cc separately and gives To priority for overlap", async () => {
@@ -253,6 +287,27 @@ describe("MailService", () => {
     await service.send("sender", "preview-1", "request-1")
     expect(prisma.mailRecipient.createMany).toHaveBeenCalledWith({ data: [{ messageId: "message-1", userId: "teammate", role: "to" }, { messageId: "message-1", userId: "observer", role: "cc" }] })
     expect(prisma.mailNotificationOutbox.createMany).toHaveBeenCalledWith({ data: [{ messageId: "message-1", recipientId: "teammate" }, { messageId: "message-1", recipientId: "observer" }] })
+  })
+
+  it("creates a recipient, notification outbox entry, and notification when sending to self", async () => {
+    const { service, prisma, notifications, sender } = harness()
+    prisma.mailSendPreview.findFirst.mockResolvedValueOnce({ id: "preview-1", userId: "sender", formatVersion: 2, teamIdSnapshot: "team-1", teamNameSnapshot: "团队一", recipientIds: ["sender"], ccIds: [], attachmentIds: [], subject: "记录", body: "给自己", conversationId: "conversation-1", quoteSnapshot: null, replyToId: null, forwardOfId: null } as never)
+    prisma.user.findMany.mockResolvedValueOnce([sender] as never)
+    prisma.mailNotificationOutbox.findMany.mockResolvedValueOnce([{ id: "outbox-self", messageId: "message-1", recipientId: "sender", message: { sender: { nickname: "李杨", handle: "liyang" } } }] as never)
+    await service.send("sender", "preview-1", "request-self")
+    expect(prisma.mailRecipient.createMany).toHaveBeenCalledWith({ data: [{ messageId: "message-1", userId: "sender", role: "to" }] })
+    expect(prisma.mailNotificationOutbox.createMany).toHaveBeenCalledWith({ data: [{ messageId: "message-1", recipientId: "sender" }] })
+    expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "sender", sourceKey: "mail:message-1" }))
+  })
+
+  it("uses the inbox recipient read state for self mail and sent state for sent mail", async () => {
+    const { service, prisma, sender } = harness()
+    const row = { id: "self-mail", kind: "user", senderId: "sender", sender, recipients: [{ userId: "sender", role: "to", readAt: null, user: sender }], addressSnapshot: null, subject: "记录", body: "正文", sentAt: new Date("2026-10-08T00:00:00Z"), attachments: [], replyToId: null, forwardOfId: null }
+    prisma.mailMessage.findMany.mockResolvedValue([row] as never)
+    const inbox = await service.listMessages("sender", "inbox")
+    const sent = await service.listMessages("sender", "sent")
+    expect(inbox.items[0]?.readAt).toBeNull()
+    expect(sent.items[0]?.readAt).toEqual(row.sentAt)
   })
 
   it("sends only once for the same preview and request key", async () => {

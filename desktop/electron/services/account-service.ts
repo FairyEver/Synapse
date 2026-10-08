@@ -508,12 +508,12 @@ export class AccountService {
       }
       case "messageCount": return await json("GET", "/messages/count")
       case "messageReadAll": return await json("PATCH", "/messages/read-all")
-      case "messageDeleteBatch": return await json("POST", "/messages/delete-batch", { messageIds: operation.messageIds })
+      case "messageDeleteBatch": return await json("POST", "/messages/delete-batch", { messageIds: operation.messageIds, box: operation.box })
       case "messageDeleteAll": return await json("DELETE", `/messages?box=${operation.box}`)
       case "messageGet": return normalizeMailMessage(await json("GET", `/messages/${id(operation.messageId)}`))
       case "messageContext": return normalizeMailPage(await json("GET", `/messages/${id(operation.messageId)}/context${operation.cursor ? `?cursor=${id(operation.cursor)}` : ""}`))
       case "messageSetRead": return await json("PATCH", `/messages/${id(operation.messageId)}/read`, { read: operation.read })
-      case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}`)
+      case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}${operation.box ? `?box=${operation.box}` : ""}`)
       case "attachmentLocal": {
         const info = await stat(operation.filePath)
         if (!info.isFile() || info.size > 20 * 1024 * 1024 || !info.size) throw new Error("附件必须是 20 MB 以内的文件。")

@@ -129,7 +129,7 @@ describe("mail bulk controls", () => {
     click("second")
     click("删除选中")
     await act(async () => { click("删除"); await Promise.resolve() })
-    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageDeleteBatch", messageIds: ["first", "second"] })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageDeleteBatch", messageIds: ["first", "second"], box: "inbox" })
   })
 
   it("clears the complete mailbox after a search and preserves selection on failure", async () => {

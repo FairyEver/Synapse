@@ -774,12 +774,12 @@ final class SynapseAppModel {
     func mailMessages(box: String, query: String = "", cursor: String? = nil, unreadOnly: Bool = false) async throws -> MailMessagePage { try await apiClient.mailMessages(box: box, query: query, cursor: cursor, unreadOnly: unreadOnly) }
     func mailCounts() async throws -> MailCounts { try await apiClient.mailCounts() }
     func mailReadAll() async throws -> MailBulkReadResult { try await apiClient.mailReadAll() }
-    func mailDeleteBatch(ids: [String]) async throws -> MailBulkDeleteResult { try await apiClient.mailDeleteBatch(ids: ids) }
+    func mailDeleteBatch(ids: [String], box: String?) async throws -> MailBulkDeleteResult { try await apiClient.mailDeleteBatch(ids: ids, box: box) }
     func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult { try await apiClient.mailDeleteAll(box: box) }
     func mailMessage(id: String) async throws -> MailMessage { try await apiClient.mailMessage(id: id) }
     func mailContext(id: String, cursor: String? = nil) async throws -> MailMessagePage { try await apiClient.mailContext(id: id, cursor: cursor) }
     func mailSetRead(id: String, read: Bool) async throws { try await apiClient.mailSetRead(id: id, read: read) }
-    func mailDelete(id: String) async throws { try await apiClient.mailDelete(id: id) }
+    func mailDelete(id: String, box: String?) async throws { try await apiClient.mailDelete(id: id, box: box) }
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment { try await apiClient.mailPrepareLocalAttachment(url: url) }
     func mailPreview(_ content: MailContent) async throws -> MailPreview { try await apiClient.mailPreview(content) }
     func mailSend(previewId: String, clientRequestId: String) async throws -> MailReceipt { try await apiClient.mailSend(previewId: previewId, clientRequestId: clientRequestId) }

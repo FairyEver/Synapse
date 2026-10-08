@@ -51,7 +51,7 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
       .then(async (result) => {
         if (!active) return
         setDetail(result)
-        const shouldMarkRead = !handledSelectedRead.current && result.sender.userId !== result.viewerId && !result.readAt
+        const shouldMarkRead = box === "inbox" && !handledSelectedRead.current && !result.readAt
         handledSelectedRead.current = true
         if (shouldMarkRead) {
           try {

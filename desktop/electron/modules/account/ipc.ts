@@ -99,7 +99,8 @@ const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
 const mailDeletedSchema = z.object({ deleted: z.literal(true) })
 const mailRecipientListInputSchema = z.object({ query: z.string().max(100), cursor: mailIdSchema.optional() }).strict()
 const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional(), unreadOnly: z.boolean().optional() }).strict()
-const mailMessageBatchInputSchema = z.object({ messageIds: z.array(mailIdSchema).min(1).max(100).refine((items) => new Set(items).size === items.length) }).strict()
+const mailMessageBatchInputSchema = z.object({ messageIds: z.array(mailIdSchema).min(1).max(100).refine((items) => new Set(items).size === items.length), box: z.enum(["inbox", "sent"]).optional() }).strict()
+const mailMessageDeleteInputSchema = mailIdInputSchema.extend({ box: z.enum(["inbox", "sent"]).optional() })
 const mailBoxInputSchema = z.object({ box: z.enum(["inbox", "sent"]) }).strict()
 const mailMessageContextInputSchema = mailIdInputSchema.extend({ cursor: mailIdSchema.optional() })
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
@@ -1183,8 +1184,8 @@ export const accountIpcModule: IpcModule = {
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageSetRead", ...mailMessageUpdateInputSchema.parse(input) }),
     },
     mailMessageDelete: {
-      kind: "invoke", operationId: "app.mail.message.delete", request: mailIdInputSchema, response: mailDeletedSchema,
-      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDelete", ...mailIdInputSchema.parse(input) }),
+      kind: "invoke", operationId: "app.mail.message.delete", request: mailMessageDeleteInputSchema, response: mailDeletedSchema,
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDelete", ...mailMessageDeleteInputSchema.parse(input) }),
     },
     mailAttachmentCreate: {
       kind: "invoke", operationId: "app.mail.attachment.create",

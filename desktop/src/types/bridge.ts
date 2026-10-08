@@ -1409,11 +1409,11 @@ export type SynapseBridge = {
       list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean }) => Promise<import("./mail").MailOperationResult["messageList"]>
       count: () => Promise<import("./mail").MailOperationResult["messageCount"]>
       readAll: () => Promise<import("./mail").MailOperationResult["messageReadAll"]>
-      deleteBatch: (input: { messageIds: string[] }) => Promise<import("./mail").MailOperationResult["messageDeleteBatch"]>
+      deleteBatch: (input: { messageIds: string[]; box?: "inbox" | "sent" }) => Promise<import("./mail").MailOperationResult["messageDeleteBatch"]>
       deleteAll: (input: { box: "inbox" | "sent" }) => Promise<import("./mail").MailOperationResult["messageDeleteAll"]>
       get: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageGet"]>
       update: (input: { messageId: string; read: boolean }) => Promise<import("./mail").MailOperationResult["messageSetRead"]>
-      delete: (input: { messageId: string }) => Promise<import("./mail").MailOperationResult["messageDelete"]>
+      delete: (input: { messageId: string; box?: "inbox" | "sent" }) => Promise<import("./mail").MailOperationResult["messageDelete"]>
       send: (input: { previewId: string; clientRequestId: string }) => Promise<import("./mail").MailOperationResult["send"]>
     }
     context: { list: (input: { messageId: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["messageContext"]> }
