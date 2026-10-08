@@ -1,13 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { adminApi, type DashboardDeviceRow } from '@/lib/api'
-import {
-  deviceStatusLabels,
-  deviceStatusVariants,
-  sortDevicesByTableSorting,
-  upsertDeviceLiveEvent,
-} from '@/lib/device-utils'
+import { deviceStatusLabels, deviceStatusVariants } from '@/lib/device-utils'
 import {
   DataTableColumnHeader,
   DEFAULT_DASHBOARD_PAGE_SIZE,
@@ -20,14 +15,12 @@ import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 
 export default function DevicesPage() {
-  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'lastSeenAt', desc: true },
   ])
   const [devices, setDevices] = useState<DashboardDeviceRow[]>([])
-  const devicesRef = useRef<DashboardDeviceRow[]>([])
   const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, error, isError, isLoading, refetch } = useQuery({
@@ -38,31 +31,8 @@ export default function DevicesPage() {
   useEffect(() => {
     if (data?.data) {
       setDevices(data.data)
-      devicesRef.current = data.data
     }
   }, [data])
-
-  useEffect(() => {
-    return adminApi.subscribeLiveClients(
-      (event) => {
-        if (!event.client.userId) return
-        const nextDevices = upsertDeviceLiveEvent(devicesRef.current, event, {
-          scope: 'admin',
-          insertMissing: false,
-        })
-        if (nextDevices === devicesRef.current) {
-          void queryClient.invalidateQueries({ queryKey: ['admin-devices'] })
-          return
-        }
-        const sortedDevices = sortDevicesByTableSorting(nextDevices, sorting)
-        devicesRef.current = sortedDevices
-        setDevices(sortedDevices)
-      },
-      () => {
-        void queryClient.invalidateQueries({ queryKey: ['admin-devices'] })
-      }
-    )
-  }, [queryClient, sorting])
 
   const columns = useMemo<ColumnDef<DashboardDeviceRow>[]>(
     () => [
