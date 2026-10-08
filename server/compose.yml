@@ -24,6 +24,7 @@ services:
       dockerfile: server/Dockerfile
       args:
         APP_PUBLIC_URL: ${APP_PUBLIC_URL:?APP_PUBLIC_URL is required}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       ADMIN_ACCESS_SECRET: ${ADMIN_ACCESS_SECRET:?ADMIN_ACCESS_SECRET is required}
@@ -104,6 +105,8 @@ services:
     build:
       context: ..
       dockerfile: pdf-renderer/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     environment:
       PDF_RENDERER_INTERNAL_SECRET: ${PDF_RENDERER_INTERNAL_SECRET:?PDF_RENDERER_INTERNAL_SECRET is required}
       PORT: "3010"

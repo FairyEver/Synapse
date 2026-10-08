@@ -1,8 +1,14 @@
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
+ARG NPM_REGISTRY
+RUN COREPACK_NPM_REGISTRY="$NPM_REGISTRY" corepack enable \
+  && COREPACK_NPM_REGISTRY="$NPM_REGISTRY" corepack prepare pnpm@10.22.0 --activate
 WORKDIR /app
 
 FROM base AS deps
+ARG NPM_REGISTRY
+ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY patches/ patches/
 COPY shared/package.json shared/package.json

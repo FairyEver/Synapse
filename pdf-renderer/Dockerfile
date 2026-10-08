@@ -1,4 +1,8 @@
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
 FROM node:22-bookworm-slim AS build
+ARG NPM_REGISTRY
+ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY NPM_CONFIG_REGISTRY=$NPM_REGISTRY
 WORKDIR /workspace
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
