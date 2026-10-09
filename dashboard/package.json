@@ -11,7 +11,7 @@
     "check:drive-telemetry": "node scripts/check-drive-telemetry-coverage.mjs",
     "preview": "vite preview --port 3000",
     "test:browser": "vitest run --config vitest.browser.config.ts",
-    "tsc": "pnpm --filter @synapse/shared run build && tsc --noEmit"
+    "tsc": "pnpm --filter @synapse/shared run build && tsc -b"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
