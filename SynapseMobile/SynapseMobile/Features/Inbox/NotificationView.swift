@@ -11,14 +11,25 @@ struct NotificationView: View {
     @State private var readingFromDeepLink = false
     @Binding private var notificationToRead: SynapseNotification?
     @Binding private var filter: String
+    private let refreshRequest: UUID
     private let onOpenExternal: ((URL) -> Void)?
+
+    private struct LoadRequest: Equatable {
+        let filter: String
+        let refreshRequest: UUID
+    }
 
     /// 「待处理」段里的行打开一个终端会话。
     let onOpenTerminal: (String) -> Void
 
-    init(initialNotification: SynapseNotification? = nil, onOpenTerminal: @escaping (String) -> Void) {
+    init(
+        initialNotification: SynapseNotification? = nil,
+        onOpenTerminal: @escaping (String) -> Void,
+        refreshRequest: UUID = UUID()
+    ) {
         self.onOpenTerminal = onOpenTerminal
         self.onOpenExternal = nil
+        self.refreshRequest = refreshRequest
         _notificationToRead = .constant(initialNotification)
         _filter = .constant("pending")
         _readingNotification = State(initialValue: initialNotification)
@@ -29,10 +40,12 @@ struct NotificationView: View {
         notificationToRead: Binding<SynapseNotification?>,
         onOpenTerminal: @escaping (String) -> Void,
         onOpenExternal: @escaping (URL) -> Void,
-        filter: Binding<String>
+        filter: Binding<String>,
+        refreshRequest: UUID = UUID()
     ) {
         self.onOpenTerminal = onOpenTerminal
         self.onOpenExternal = onOpenExternal
+        self.refreshRequest = refreshRequest
         _notificationToRead = notificationToRead
         _filter = filter
         _readingNotification = State(initialValue: notificationToRead.wrappedValue)
@@ -43,13 +56,15 @@ struct NotificationView: View {
         readingNotification: Binding<SynapseNotification?>,
         onOpenTerminal: @escaping (String) -> Void,
         onOpenExternal: @escaping (URL) -> Void,
-        filter: Binding<String>
+        filter: Binding<String>,
+        refreshRequest: UUID = UUID()
     ) {
         self.init(
             notificationToRead: readingNotification,
             onOpenTerminal: onOpenTerminal,
             onOpenExternal: onOpenExternal,
-            filter: filter
+            filter: filter,
+            refreshRequest: refreshRequest
         )
     }
 
@@ -85,6 +100,10 @@ struct NotificationView: View {
                 readingNotification = nil
                 readingFromDeepLink = false
             }
+        }
+        .task(id: LoadRequest(filter: filter, refreshRequest: refreshRequest)) {
+            guard filter != "pending" else { return }
+            await model.reloadNotifications(filter: filter)
         }
         .noticeOverlay(model)
         .fullScreenCover(item: $openedWebLink) { target in

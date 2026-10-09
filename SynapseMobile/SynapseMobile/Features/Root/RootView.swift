@@ -20,7 +20,7 @@ struct RootView: View {
     /// 通知页的全文选择。深链和通知列表共用这一份导航状态。
     @State private var notificationToRead: SynapseNotification?
     @State private var notificationFilter = "all"
-    @State private var hasEnteredNotifications = false
+    @State private var notificationRefreshRequest = UUID()
     @State private var notificationWebLink: WebLink?
     /// 会话创建那张 sheet。同样挂在根上：主页那一行与终端列表右上角的 ＋ 打开的是同一个。
     @State private var isNewSessionPresented = false
@@ -90,7 +90,7 @@ struct RootView: View {
                 settingsSelection = nil
                 notificationToRead = nil
                 notificationFilter = "all"
-                hasEnteredNotifications = false
+                notificationRefreshRequest = UUID()
                 notificationWebLink = nil
                 isNewSessionPresented = false
                 // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
@@ -109,7 +109,7 @@ struct RootView: View {
             terminalSelection = nil
             notificationToRead = nil
             notificationFilter = "all"
-            hasEnteredNotifications = false
+            notificationRefreshRequest = UUID()
             notificationWebLink = nil
             notificationOpenRequest = UUID()
         }
@@ -180,7 +180,7 @@ struct RootView: View {
             get: { selectedTab },
             set: { tab in
                 beginNavigationRequest()
-                if tab == .notifications, tab != selectedTab {
+                if tab == .notifications {
                     prepareNotificationEntry()
                 }
                 if tab == selectedTab {
@@ -241,7 +241,7 @@ struct RootView: View {
                         onOpenPendingNotifications: {
                             beginNavigationRequest()
                             notificationFilter = "pending"
-                            hasEnteredNotifications = true
+                            notificationRefreshRequest = UUID()
                             notificationToRead = nil
                             selectedTab = .notifications
                         },
@@ -377,7 +377,8 @@ struct RootView: View {
                 readingNotification: $notificationToRead,
                 onOpenTerminal: openWaitingSession,
                 onOpenExternal: openNotificationExternalURL,
-                filter: $notificationFilter
+                filter: $notificationFilter,
+                refreshRequest: notificationRefreshRequest
             )
             .tabItem { Label("通知", systemImage: "bell") }
             .badge(unreadBadge)
@@ -400,13 +401,10 @@ struct RootView: View {
         return count > 0 ? NotificationText.badgeCount(count) : nil
     }
 
-    /// 从底栏首次进入通知时，让角标和落点表达同一件事。
-    ///
-    /// 用户已经手动选过筛选，或从主页待处理卡进入时，不覆盖其明确选择。
+    /// 每次从底栏进入通知时重新决定落点，不保留上次的子筛选。
     private func prepareNotificationEntry() {
-        guard !hasEnteredNotifications else { return }
-        hasEnteredNotifications = true
         notificationFilter = NotificationEntry.defaultFilter(unreadCount: model.notifications.unreadCount)
+        notificationRefreshRequest = UUID()
     }
 
     /// 从主页那张待处理卡进一个会话。
@@ -529,7 +527,8 @@ struct RootView: View {
         let account = model.accountIdentityGeneration
         let request = UUID()
         notificationOpenRequest = request
-        hasEnteredNotifications = true
+        notificationFilter = "all"
+        notificationRefreshRequest = UUID()
         selectedTab = .notifications
         Task {
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
