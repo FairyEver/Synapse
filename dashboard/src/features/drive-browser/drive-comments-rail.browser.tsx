@@ -80,6 +80,7 @@ function orphanedThread(quote: string): DriveCommentsRailItem {
       },
       anchorStatus: 'orphaned',
       status: 'open',
+      anchor: null,
       author: { id: 'user-1', email: 'user@example.com', handle: 'user' },
       comments: [{
         id: 'comment-1',
