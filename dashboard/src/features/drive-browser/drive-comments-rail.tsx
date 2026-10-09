@@ -647,7 +647,7 @@ function ThreadView({
   return (
     <section
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border bg-card p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
+        'relative cursor-default overflow-hidden rounded-lg border bg-card p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring contain-inline-size',
         emphasized ? 'border-ring' : 'border-border'
       )}
       onClick={(event) => {
@@ -670,7 +670,7 @@ function ThreadView({
                 onClick={() => onFocusThread(thread.id)}
               >
                 <Quote aria-hidden className='text-muted-foreground' />
-                <span className='min-w-0 max-w-full flex-1 truncate text-left'>{quote}</span>
+                <span className='min-w-0 w-0 max-w-full flex-1 truncate text-left'>{quote}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent className='max-w-sm break-all'>{quote}</TooltipContent>
