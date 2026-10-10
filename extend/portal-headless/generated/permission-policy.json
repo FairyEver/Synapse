@@ -1,0 +1,9 @@
+{
+  "schema": "ph-permission-policy/v1",
+  "status": "incomplete",
+  "sourceRevision": "unreviewed",
+  "revision": "unreviewed:000000000000",
+  "contentHash": "",
+  "counts": { "accepted": 0, "blocked": 0, "needsReview": 0 },
+  "entries": []
+}

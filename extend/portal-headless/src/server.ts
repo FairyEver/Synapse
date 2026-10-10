@@ -410,6 +410,8 @@ import {
   type CapabilityRegistry,
 } from './capabilities/invoke.js'
 import { createPageCall } from './call.js'
+import { createPermissionGate } from './permissions/gate.js'
+import type { PermissionPolicy } from './permissions/policy.js'
 import { applyInvalidation } from './invalidation/index.js'
 import type { PortalHeadlessConfig } from './config.js'
 import type { PortalRequestConfig } from './http/client.js'
@@ -1106,6 +1108,8 @@ export type PortalServerOptions = Omit<PortalHeadlessConfig, 'credential' | 'por
    * 除非在写测试或自建请求层，否则不要传——传了就等于自己承担
    * 凭据绑定、baseURL、请求头这三件事。
    */
+  /** 生产服务必须传入已编译策略；省略时保留 SDK 单测/本地门面的兼容行为。 */
+  permissionPolicy?: PermissionPolicy
   sessionOptions?: Omit<SessionStoreOptions, 'createRequest' | 'registry'> & {
     createRequest?: PortalRequestFactory
   }
@@ -2843,7 +2847,7 @@ export function createPortalServer (options: PortalServerOptions): PortalServer 
           aiPrompt,
           aiPromptTool,
           chat,
-        }),
+        }, { permissionGate: options.permissionPolicy === undefined ? undefined : createPermissionGate({ policy: options.permissionPolicy, request: session.request, context: async () => ({ tenantId: session.key.tenantId, systemIds: session.get('tenant-system') }), onDenied: event => sessionOptions?.logger?.warn('portal.permission.denied', event) }) }),
       ),
       meetingRoom,
       meetingApplication,

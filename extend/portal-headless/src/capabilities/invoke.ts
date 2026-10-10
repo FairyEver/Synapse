@@ -581,6 +581,7 @@ import type {
 import { CHAT_METHODS, type ChatCapability } from './chat.js'
 import { BATCH_SDK_CAPABILITIES, batchMethodName, type BatchCapabilityHost } from './generated/index.js'
 import type { CapabilityDefinition } from './types.js'
+import type { PermissionGate } from '../permissions/gate.js'
 
 /** 门面上承载能力的方法组（单用户与多用户门面对这份形状是一致的） */
 export type CapabilityHost = {
@@ -6012,7 +6013,7 @@ export type CapabilityInvoker = {
 }
 
 /** 按 `host`（门面上的能力方法组）建出通用调用入口 */
-export function createCapabilityInvoker (host: CapabilityHost): CapabilityInvoker {
+export function createCapabilityInvoker (host: CapabilityHost, options: { permissionGate?: PermissionGate } = {}): CapabilityInvoker {
   installAiModelCompatibility(host)
   installPortalPageCompatibility(host)
   const invoke = async <T = unknown> (
@@ -6023,6 +6024,8 @@ export function createCapabilityInvoker (host: CapabilityHost): CapabilityInvoke
     if (id.length === 0) {
       throw new CapabilityInvokeError('invoke 需要 capabilityId（能力 ID，来自 describe / recommend）')
     }
+
+    await options.permissionGate?.assert(id)
 
     const binding = CAPABILITY_BINDINGS.find((candidate) => candidate.capabilityId === id)
     if (binding === undefined) {

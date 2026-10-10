@@ -6322,3 +6322,7 @@ export type {
 } from './idempotency/index.js'
 
 export { withAiModelCompatibility, AiModelApplyPartialWriteError, type AiModelFillApplyInput, type AiModelFillReceipt, type CompatibleAiModel } from './capabilities/ai-model-compat.js'
+
+export { createPermissionGate, PermissionDeniedError } from './permissions/gate.js'
+export { compilePermissionPolicy, evaluatePermissionExpression, loadGeneratedPermissionPolicy } from './permissions/policy.js'
+export type { PermissionExpression, PermissionCandidate, PermissionReview, PermissionPolicy, PermissionPolicyEntry, ContextRule, EvidenceRef } from './permissions/policy.js'

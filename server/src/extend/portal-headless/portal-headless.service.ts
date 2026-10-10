@@ -55,7 +55,7 @@ export class PortalHeadlessService implements OnModuleDestroy {
       const sdk = await this.loading
       const config = { baseUrl: baseUrls[identity.environment], timeoutMs: 10_000 }
       const requestFactory = sdk.createPortalRequestFactory(config)
-      server = sdk.createPortalServer({ ...config, sessionOptions: {
+      server = sdk.createPortalServer({ ...config, permissionPolicy: sdk.loadGeneratedPermissionPolicy(), sessionOptions: {
         maxSessions: 1, idleTtlMs: 30_000, absoluteTtlMs: 30_000,
         // SDK diagnostics may include upstream error messages; never forward their raw metadata.
         logger: {
@@ -141,6 +141,16 @@ export function normalizePortalError(error: unknown, timedOut = false): HttpExce
   let current = error
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
     const item = current as { name?: string; code?: number | string; response?: { status?: number }; cause?: unknown }
+    if (item.name === "PermissionDeniedError") {
+      const denied = item as { capabilityId?: string; policyRevision?: string | null; failedRule?: string }
+      return new HttpException({
+        code: "PH_PERMISSION_DENIED",
+        message: "PH 权限策略拒绝当前能力。",
+        capabilityId: denied.capabilityId,
+        policyRevision: denied.policyRevision,
+        failedRule: denied.failedRule,
+      }, 403)
+    }
     if (item.code === 403 || item.response?.status === 403 || item.code === 1002015001) {
       return failure(403, "PORTAL_FORBIDDEN", "Portal 拒绝当前账号或企业访问。")
     }
