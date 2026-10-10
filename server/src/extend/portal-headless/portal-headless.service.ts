@@ -55,11 +55,18 @@ export class PortalHeadlessService implements OnModuleDestroy {
       const sdk = await this.loading
       const config = { baseUrl: baseUrls[identity.environment], timeoutMs: 10_000 }
       const requestFactory = sdk.createPortalRequestFactory(config)
-      server = sdk.createPortalServer({ ...config, permissionPolicy: sdk.loadGeneratedPermissionPolicy(), sessionOptions: {
+      server = sdk.createPortalServer({ ...config, permissionPolicy: sdk.loadGeneratedPermissionPolicy(), permissionSourcePin: sdk.loadPermissionSourcePin(), sessionOptions: {
         maxSessions: 1, idleTtlMs: 30_000, absoluteTtlMs: 30_000,
         // SDK diagnostics may include upstream error messages; never forward their raw metadata.
         logger: {
-          warn: () => this.logger.warn({ event: "portal.session.degraded" }),
+          warn: (event, metadata) => {
+            if (event === "portal.permission.denied") {
+              const denied = metadata as { capabilityId?: unknown; policyRevision?: unknown; failedRule?: unknown } | undefined
+              this.logger.warn({ event, capabilityId: typeof denied?.capabilityId === "string" ? denied.capabilityId : null,
+                policyRevision: typeof denied?.policyRevision === "string" ? denied.policyRevision : null,
+                failedRule: typeof denied?.failedRule === "string" ? denied.failedRule : "permission denied" })
+            } else this.logger.warn({ event: "portal.session.degraded" })
+          },
           error: () => this.logger.error({ event: "portal.session.failed" }),
         },
         createRequest(context) {

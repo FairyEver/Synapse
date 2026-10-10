@@ -28,8 +28,8 @@
     "smoke:meeting-room": "node smoke/read-meeting-rooms.mjs",
     "smoke:prepare": "node smoke/prepare-meeting-application.mjs",
     "smoke:submit": "node smoke/submit-meeting-application.mjs",
-    "permissions:scan": "node tools/permissions/scan.mjs",
-    "permissions:compile": "node tools/permissions/compile.mjs"
+    "permissions:scan": "pnpm build && node tools/permissions/scan.mjs",
+    "permissions:compile": "pnpm build && node tools/permissions/compile.mjs"
   },
   "dependencies": {
     "axios": "^1.20.0",

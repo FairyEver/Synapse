@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 import { JwtService } from "@nestjs/jwt"
 import { Logger } from "@nestjs/common"
@@ -7,15 +10,34 @@ import { PortalHeadlessController } from "./portal-headless.controller"
 
 vi.mock("../../config/env", () => ({ loadEnv: () => ({ userAccessJwtSecret: "synthetic-sy-test-secret-not-real" }) }))
 let sdk: PortalSdk
+let reviewedPolicy: NonNullable<ReturnType<PortalSdk["loadGeneratedPermissionPolicy"]>>
+function syntheticPolicy() {
+  const root = mkdtempSync(join(tmpdir(), "ph-server-policy-"))
+  const source = "permissionCheck('page')\nhttp.post('/synthetic/target', body)\n"
+  writeFileSync(join(root, "page.vue"), source)
+  const sourceRevision = sdk.permissionSourceRevision(root)
+  const accepted = new Set(["meeting-room-usage", "hr-post-type-list", "hr-post-type-create", "perf-year-agreement-list", "base-dict-get"])
+  const candidates = sdk.permissionCapabilityRegistry().map(cap => ({ candidateId: cap.id, capabilityIds: [cap.id], pagePath: cap.pagePath,
+    routeFile: "page.vue", actionFiles: ["page.vue"], importTrail: [], keywordHits: [], unresolved: [], sourceRevision,
+    endpointRefs: [{ method: "post", path: "/synthetic/target", sourceFile: "page.vue", line: 2 }] }))
+  const reviews = candidates.map(candidate => ({ candidateId: candidate.candidateId, capabilityId: candidate.candidateId, sdkPath: sdk.sdkPathOf(candidate.candidateId)!,
+    pageChain: { kind: "code" as const, code: "/dashboard/year-agreement/main" }, actionChain: { kind: "code" as const, code: "action" }, contextRules: [],
+    evidence: [{ file: "page.vue", line: 1, snippet: "permissionCheck('page')" }, { file: "page.vue", line: 2, snippet: "http.post('/synthetic/target', body)" }],
+    sdkEvidence: [{ file: "src/capabilities/hr-post-type.ts", line: 47, snippet: "await request({ url: `${ROOT}/save`, method: 'post', data: draft(input) })" }],
+    endpointRefs: candidate.endpointRefs, sourceRevision, status: accepted.has(candidate.candidateId) ? "accepted" as const : "blocked" as const, reason: "Synthetic reviewed test policy" }))
+  return sdk.compilePermissionPolicy({ candidates, reviews, sourceRoot: root, sourceRevision })
+}
 // 这个包有 17 MB 编译产物，冷加载要数百毫秒；全量并行跑时 CPU 被占满会更慢，
 // 默认的 10 秒 hook 超时会偶发性地判它失败。放宽到 30 秒，避免误报。
-beforeAll(async () => { sdk = await import("@synapse/portal-headless") }, 30_000)
+beforeAll(async () => { sdk = await import("@synapse/portal-headless"); reviewedPolicy = syntheticPolicy() }, 30_000)
 const identity = { owner: "owner-one", environment: "test" as const, credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
-function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]> } = {}) {
+function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]>; missingPolicy?: boolean; stalePolicy?: boolean } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []
   const runtimes: ReturnType<PortalSdk["createPortalServer"]>[] = []
   const factoryBaseUrls: string[] = []
   const loader = async () => ({ ...sdk,
+    loadGeneratedPermissionPolicy: () => options.missingPolicy ? null : options.stalePolicy ? { ...reviewedPolicy, sourceRevision: "old" } : reviewedPolicy,
+    loadPermissionSourcePin: () => ({ sourceRevision: reviewedPolicy.sourceRevision, sdkSourceRevision: reviewedPolicy.sdkSourceRevision }),
     createPortalServer: (config: Parameters<PortalSdk["createPortalServer"]>[0]) => {
       const runtime = sdk.createPortalServer(config); runtimes.push(runtime); return runtime
     },
@@ -32,7 +54,7 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
       if (url.endsWith("/sys/menu/permissionsNotBySystem")) {
         if (options.permissionFailure) throw new Error("permission secret-canary")
         if (options.permissionsByTenant) return options.permissionsByTenant[context.credential.tenantId] ?? []
-        return options.permissions === undefined ? ["/dashboard/year-agreement/main"] : options.permissions
+        return options.permissions === undefined ? ["/dashboard/year-agreement/main", "action"] : options.permissions
       }
       if (url.endsWith("/meeting-room-usage")) return { meetingRooms: [{ meetingRoomId: "room", meetingRoomName: "会议室", timeSlots: [] }] }
       if (url.endsWith("/org/hrposttype/page")) return { list: [{ id: "post-type", name: "测试类别" }], total: 1 }
@@ -105,8 +127,9 @@ describe("Portal Headless backend extension", () => {
     await expect(service.run(identity, { op: "describe", input: { kind: "capability", capabilityId: "hr-post-type-list" } }))
       .resolves.toMatchObject({ data: { ok: true, write: false } })
     await expect(service.run(identity, { op: "read", input: { capabilityId: "hr-post-type-list", arguments: {} } }))
-      .resolves.toMatchObject({ data: { result: { total: 1 } } })
-    expect(calls.some((call) => String(call.request.url).endsWith("/permissionsNotBySystem"))).toBe(false)
+      .rejects.toMatchObject({ response: { code: "PH_PERMISSION_DENIED" } })
+    expect(calls.some((call) => String(call.request.url).endsWith("/permissionsNotBySystem"))).toBe(true)
+    expect(calls.some((call) => String(call.request.url).endsWith("/org/hrposttype/page"))).toBe(false)
   })
   it("preserves Portal business denial even when the page permission is granted", async () => {
     const { service } = fixture({ yearlyError: { response: { status: 403 } } })
@@ -120,6 +143,29 @@ describe("Portal Headless backend extension", () => {
       service.run({ owner: "owner-two", environment: "test", credential: { ...identity.credential, tenantId: "tenant-two", token: "other-canary" } }, { op: "context" }),
     ])
     expect(calls.every((call) => call.token === "portal-canary" ? call.tenantId === "tenant-one" : call.token === "other-canary" && call.tenantId === "tenant-two")).toBe(true)
+  })
+  it.each(["read", "invoke"] as const)("denies %s with no page/action permission and sends zero target requests", async op => {
+    for (const permissions of [[], ["/dashboard/year-agreement/main"]]) {
+      const { service, calls } = fixture({ permissions })
+      await expect(service.run(identity, { op, input: { capabilityId: "hr-post-type-create", arguments: { name: "测试类别", sort: 1, permissions: ["action"], tenantId: "override" } } }))
+        .rejects.toMatchObject({ status: 403, response: { code: "PH_PERMISSION_DENIED", capabilityId: "hr-post-type-create" } })
+      expect(calls.some(call => String(call.request.url).endsWith("/org/hrposttype/save"))).toBe(false)
+    }
+  })
+  it.each(["missingPolicy", "stalePolicy"] as const)("denies %s before any permission or target request", async kind => {
+    const { service, calls } = fixture({ [kind]: true })
+    await expect(service.run(identity, { op: "invoke", input: { capabilityId: "hr-post-type-create", arguments: { name: "测试类别", sort: 1 } } }))
+      .rejects.toMatchObject({ status: 403, response: { code: "PH_PERMISSION_DENIED" } })
+    expect(calls.some(call => /permissionsNotBySystem|hrposttype/.test(String(call.request.url)))).toBe(false)
+  })
+  it("preserves denial audit fields without token or arguments", async () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    try {
+      const { service } = fixture({ permissions: [] })
+      await expect(service.run(identity, { op: "invoke", input: { capabilityId: "hr-post-type-create", arguments: { name: "argument-canary", sort: 1 } } })).rejects.toThrow()
+      expect(warn).toHaveBeenCalledWith({ event: "portal.permission.denied", capabilityId: "hr-post-type-create", policyRevision: reviewedPolicy.revision, failedRule: "page permission chain" })
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/portal-canary|argument-canary/)
+    } finally { warn.mockRestore() }
   })
   it("strips SDK error details", async () => {
     const failed = fixture({ error: Object.assign(new Error("token=leak-canary"), { code: 401 }) })

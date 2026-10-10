@@ -18,7 +18,7 @@ Read [api-reference.md](api-reference.md) before issuing HTTP requests.
 
 ## Current scope
 
-Test and production use separate Portal connections and fixed API addresses. The extension publishes the pinned SDK's complete catalog, including read and write capabilities, without a Synapse allowlist or Portal page-permission catalog filter. Portal still applies its own business authorization when a capability runs; a listed capability can therefore fail with `PORTAL_FORBIDDEN` for the connected account or tenant. Production has not yet passed real authorization and business-call acceptance.
+Test and production use separate Portal connections and fixed API addresses. The extension publishes the pinned SDK's complete catalog, including read and write capabilities, without a Synapse allowlist or Portal page-permission catalog filter. PH first enforces the reviewed page/action permission chain and trusted business context on the server. Missing, unaccepted, stale or unsatisfied policies return `PH_PERMISSION_DENIED` before any target request. Portal also applies its own business authorization after the PH gate passes. Production has not yet passed real authorization and business-call acceptance.
 
 - Discover and describe the exact capability before every call. Use `/invoke` for direct write calls; the bundled client currently sends all capability calls through the compatible `/read` route, which can also mutate data.
 - Never execute a write capability merely to answer what is available. Require an explicit user request for the business mutation, follow required prepare/lookup steps, preserve `requestId` across retries, and report uncertain results without blind resubmission.
@@ -39,7 +39,7 @@ Respond in the user's language. Lead with the requested business result; for occ
 
 ## Credentials and errors
 
-The SY extension token expires after five minutes. On `SY_EXTENSION_AUTH_REQUIRED`, follow the client’s one-refresh protocol in the API reference; reacquire through MCP once and retry with `authRetry: 1`, then stop on failure. On `PORTAL_CREDENTIAL_INVALID`, reconnect Portal. A 403 (`PORTAL_FORBIDDEN`) is distinct from an expired login. Timeouts and upstream failures do not justify deleting credentials or changing identities.
+The SY extension token expires after five minutes. On `SY_EXTENSION_AUTH_REQUIRED`, follow the client’s one-refresh protocol in the API reference; reacquire through MCP once and retry with `authRetry: 1`, then stop on failure. On `PORTAL_CREDENTIAL_INVALID`, reconnect Portal. A 403 (`PH_PERMISSION_DENIED` or `PORTAL_FORBIDDEN`) is distinct from an expired login. On `PH_PERMISSION_DENIED`, stop without retrying or changing entry points. Maintainers must repair review evidence/policy versions or the user must obtain the required Portal permissions/context. Never supply permissions or tenant/shop context to bypass the decision. Timeouts and upstream failures do not justify deleting credentials or changing identities.
 
 Disconnecting Synapse stops future credential retrieval; it does not revoke Portal tokens already given to your AI. A previously issued SY extension token can remain usable until expiry, subject to the SY account remaining active and Portal credentials remaining valid. The desktop only needs to be online for credential retrieval.
 

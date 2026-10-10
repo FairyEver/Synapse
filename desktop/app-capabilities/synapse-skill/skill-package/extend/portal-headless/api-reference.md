@@ -95,6 +95,7 @@ Errors include `code`, `message`, safe `fields` for validation failures, and HTT
 - `INVALID_REQUEST`: reread schema; do not retry unchanged parameters.
 - `SY_EXTENSION_AUTH_REQUIRED`: follow the one-refresh protocol above; never reset `authRetry` during the retry.
 - `PORTAL_CREDENTIAL_INVALID`: Portal connection must be renewed.
+- `PH_PERMISSION_DENIED`: HTTP 403 from the PH server gate, with `capabilityId`, nullable `policyRevision`, and `failedRule`. No target business request was sent. Stop without retrying or switching entry points; `/read` and `/invoke` share the same gate. Missing/stale/unaccepted policies require maintainer review and recompilation. Missing account permissions or trusted context require the corresponding Portal permission/business change; arguments cannot override the decision.
 - `PORTAL_FORBIDDEN`: Portal denied access to this user/tenant; do not report it as token expiry.
 - `CAPABILITY_UNAVAILABLE` / `REFERENCE_UNAVAILABLE`: this extension cannot provide the requested capability/reference.
 - `EXTENSION_BUSY` / `PORTAL_TIMEOUT` / `PORTAL_REQUEST_FAILED`: stop and report the failure; retain valid credentials.

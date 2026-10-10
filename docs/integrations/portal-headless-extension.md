@@ -38,11 +38,11 @@ SDK 源码就在本仓库内，是 `extend/portal-headless` 下的 workspace 子
 
 测试 API 固定为 `https://biz-api-test.wodecorp.cn`，正式 API 固定为 `https://biz-api.wodecorp.cn`；后端从已验证的短期授权中读取环境，不允许业务请求覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。正式环境真实授权与业务调用尚未验收。
 
-两个环境的扩展都发布固定版本 SDK 的完整能力目录，不设置 Synapse capability allowlist，也不按 Portal 页面权限收窄目录。`describe` 只接受目录中的精确 capability/method 引用并返回 SDK 契约与顶层参数 schema；`/invoke` 和兼容 `/read` 只调用 SDK 已登记的 `capabilities.invoke` 绑定，不接受客户端指定 URL、header 或任意方法路径。读写能力均可执行，Portal 后端业务鉴权仍是最终权限边界。
+两个环境的扩展都发布固定版本 SDK 的完整能力发现目录，不按 Portal 页面权限收窄目录。`describe` 只接受目录中的精确 capability/method 引用并返回 SDK 契约与顶层参数 schema；`/invoke` 和兼容 `/read` 只调用 SDK 已登记的 `capabilities.invoke` 绑定，不接受客户端指定 URL、header 或任意方法路径。读写能力均须通过 PH 服务端权限闸门，已审阅页面链、动作链和可信上下文全部满足才发送目标请求；Portal 后端继续执行自身鉴权。
 
-全量目录是能力发现面，不表示当前账号具备每项业务权限；执行仍使用当前用户与企业绑定的 Portal 凭据，由目标业务接口返回真实授权结果。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。每次 HTTP 请求仍使用独立会话，不跨用户或企业缓存。
+全量目录是能力发现面，不表示当前账号具备每项业务权限；执行使用当前用户与企业绑定的 Portal 凭据，先读取当前权限与业务上下文执行 PH 策略，再调用目标业务接口。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。每次 HTTP 请求仍使用独立会话，不跨用户或企业缓存。
 
-`context.capabilityAccess` 返回 `mode=all` 及固定 SDK 的总数、读能力数和写能力数；具体清单通过分页目录读取。`catalogRevision` 在 SDK 提交号后加 `:full-test-v1` 或 `:full-prod-v1`，分别标识环境与全量目录规则。
+`context.capabilityAccess` 返回 `mode=all` 及固定 SDK 的总数、读能力数和写能力数；这些计数只表示可发现能力，不代表策略或账号授权通过。具体清单通过分页目录读取。`catalogRevision` 在 SDK 提交号后加 `:full-test-v1` 或 `:full-prod-v1`，分别标识环境与全量目录规则。
 
 年度协议列表无 year 参数，按真实 year 字段与分页筛选。当前固定 SDK 没有个人年度详情，不可用列表或年度时间配置冒充任务/指标正文。目录不存在某项能力表示固定 SDK 未发布它；目录中存在但执行返回 `PORTAL_FORBIDDEN` 表示当前 Portal 身份或企业被业务接口拒绝。
 
@@ -55,3 +55,13 @@ SDK 源码就在本仓库内，是 `extend/portal-headless` 下的 workspace 子
 SY 401 仅输出一次 MCP 刷新指令（退出码 10）；调用方刷新后带 `authRetry:1` 重试，失败立即结束。Portal 401 要求重连，400 等错误不重试。错误无原始上游文本或凭证，参数校验通过全局异常过滤器返回 schema 已知字段的 path/code/固定 message，不回显输入值或未知字段名。脚本不创建凭证文件、不调用 shell、不把凭证放进进程参数。
 
 专项脚本验证：`node --test desktop/tests/portal-headless-client.test.mjs`，已接入 CI。真实网络路径使用本机临时 HTTP 测试服务与虚构凭证；不以合成测试声称已覆盖用户真实 Portal 数据。
+
+## 权限审阅与拒绝恢复
+
+权限生产策略采用 `ph-permission-policy/v2`。扫描器盘点源码事实，AI 逐条审阅，SDK 与 CLI 共用结构编译器。完整覆盖允许 `accepted` 与 `blocked` 并存；仅 accepted 产生可执行策略。任何 needs-review、悬空引用、证据或源码不一致均不能编译。操作说明见 `extend/portal-headless/tools/permissions/README.md`。
+
+SDK build 独立固定 Portal 与 SDK 源码 revision；执行前检查 schema、覆盖、registry 与内容 hash。策略缺失、损坏、过期、无 accepted 条目、权限/上下文不可取得或不满足，均返回结构化 `403 PH_PERMISSION_DENIED`，包括 capabilityId、policyRevision、failedRule。目标业务接口零请求，禁止重试或通过参数覆盖权限。审计仅保留这些固定字段，不记录 token 或业务参数。
+
+权限码每次重新读取；租户来自验证后的会话，系统条件重新读取企业开通系统。店铺、业务状态与配置需先接入经审阅的可信服务端 resolver；没有来源时编译阻断。不能把调用方提交的上下文当成授权事实。
+
+收到 PH_PERMISSION_DENIED 后停止调用，由维护者核对 Portal Web 调用链、补齐证据与审阅、重新编译和构建部署。普通用户只能修正真实账号权限或业务条件，不能更换入口绕过。PORTAL_FORBIDDEN 仍表示目标业务接口自身拒绝。当前仓库没有真实 accepted 策略；普通/管理员双账号与高风险写操作验收仍待完成，合成测试不能代替该验收。

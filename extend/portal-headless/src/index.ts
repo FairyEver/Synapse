@@ -6324,5 +6324,8 @@ export type {
 export { withAiModelCompatibility, AiModelApplyPartialWriteError, type AiModelFillApplyInput, type AiModelFillReceipt, type CompatibleAiModel } from './capabilities/ai-model-compat.js'
 
 export { createPermissionGate, PermissionDeniedError } from './permissions/gate.js'
-export { compilePermissionPolicy, evaluatePermissionExpression, loadGeneratedPermissionPolicy } from './permissions/policy.js'
+export { compilePermissionPolicy, evaluatePermissionExpression, loadGeneratedPermissionPolicy, loadPermissionSourcePin, validatePermissionPolicy } from './permissions/policy.js'
 export type { PermissionExpression, PermissionCandidate, PermissionReview, PermissionPolicy, PermissionPolicyEntry, ContextRule, EvidenceRef } from './permissions/policy.js'
+
+export { permissionSourceRevision } from './permissions/source.js'
+export { permissionCapabilityRegistry } from './permissions/registry.js'

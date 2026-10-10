@@ -1,76 +1,68 @@
 import type { PortalRequest } from '../session/types.js'
-import { evaluatePermissionExpression, type ContextRule, type PermissionPolicy, type PermissionPolicyEntry } from './policy.js'
+import { evaluatePermissionExpression, loadPermissionSourcePin, validatePermissionPolicy, type ContextRule, type PermissionPolicy } from './policy.js'
 
 export class PermissionDeniedError extends Error {
   readonly code = 403
-  readonly capabilityId: string
-  readonly policyRevision: string | null
-  readonly failedRule: string
-  constructor (capabilityId: string, failedRule: string, policyRevision: string | null) {
+  constructor(readonly capabilityId: string, readonly failedRule: string, readonly policyRevision: string | null) {
     super(`PH capability ${capabilityId} 被权限闸门拒绝：${failedRule}`)
-    this.name = 'PermissionDeniedError'; this.capabilityId = capabilityId; this.failedRule = failedRule; this.policyRevision = policyRevision
+    this.name = 'PermissionDeniedError'
   }
 }
-
 export type PermissionGateOptions = {
-  policy: PermissionPolicy
+  policy: PermissionPolicy | null
   request: PortalRequest
+  /** Trusted server configuration, never invocation arguments. */
+  sourcePin?: { sourceRevision: string; sdkSourceRevision: string }
   permissionCodes?: () => Promise<ReadonlySet<string>>
-  context?: () => Promise<Record<string, unknown>>
-  evaluators?: Record<string, (rule: ContextRule, context: Record<string, unknown>) => boolean | Promise<boolean>>
+  context?: (rules: readonly ContextRule[]) => Promise<Record<string, unknown>>
   onDenied?: (event: { capabilityId: string; policyRevision: string | null; failedRule: string }) => void
 }
-
-function extractCodes (payload: unknown): Set<string> {
-  const output = new Set<string>()
-  const visit = (value: unknown): void => {
-    if (typeof value === 'string') { output.add(value); return }
-    if (Array.isArray(value)) { value.forEach(visit); return }
-    if (value && typeof value === 'object') {
-      const record = value as Record<string, unknown>
-      for (const key of ['permission', 'permissions', 'permissionCode', 'code']) if (key in record) visit(record[key])
-      for (const key of ['list', 'data', 'rows', 'menus']) if (key in record) visit(record[key])
-    }
-  }
-  visit(payload); return output
+function extractCodes(payload: unknown): Set<string> {
+  if (!Array.isArray(payload) || payload.some(code => typeof code !== 'string')) throw new Error('invalid permission response')
+  return new Set(payload as string[])
 }
-
-export function createPermissionGate (options: PermissionGateOptions) {
+function evaluateContext(rule: ContextRule, values: Record<string, unknown>): boolean {
+  const args = rule.args!
+  const has = (key: string): boolean => Object.hasOwn(values, key) && values[key] !== undefined && values[key] !== null
+  const matches = (key: string): boolean => has(key) && String(values[key]) === String(args.id)
+  switch (rule.evaluator) {
+    case 'tenant': return matches('tenantId')
+    case 'shop': return matches('shopId')
+    case 'system': return has('systemIds') && Array.isArray(values.systemIds) && values.systemIds.some(id => (typeof id === 'string' || typeof id === 'number') && String(id) === String(args.id))
+    case 'state': return has('state') && values.state === args.value
+    case 'config': return has('config') && !!values.config && typeof values.config === 'object' && Object.hasOwn(values.config, String(args.key)) && (values.config as Record<string, unknown>)[String(args.key)] === args.value
+    default: return false
+  }
+}
+export function createPermissionGate(options: PermissionGateOptions) {
+  const sourcePin = { ...(options.sourcePin ?? loadPermissionSourcePin()) }
+  // Detach from mutable configuration so callers cannot change a policy after validation.
+  let policy: PermissionPolicy | null = null
+  try { policy = JSON.parse(JSON.stringify(options.policy)) as PermissionPolicy | null } catch { policy = null }
   const permissionCodes = options.permissionCodes ?? (async () => extractCodes(await options.request({ url: '/admin-api/sys/menu/permissionsNotBySystem', method: 'get' })))
-  const context = options.context ?? (async () => ({}))
-  const builtIns: Record<string, (rule: ContextRule, context: Record<string, unknown>) => boolean> = {
-    tenant: (rule, values) => rule.args?.id === undefined || String(values.tenantId) === String(rule.args.id),
-    system: (rule, values) => rule.args?.id === undefined || (Array.isArray(values.systemIds) ? values.systemIds.some(id => String(id) === String(rule.args?.id)) : String(values.systemId) === String(rule.args.id)),
-    shop: (rule, values) => rule.args?.id === undefined || String(values.shopId) === String(rule.args.id),
-    state: (rule, values) => rule.args?.value === undefined || values.state === rule.args.value,
-    config: (rule, values) => rule.args?.key === undefined || values[ String(rule.args.key) ] === rule.args?.value,
-  }
-  const evaluators = { ...builtIns, ...options.evaluators }
-  const evaluateContext = async (entry: PermissionPolicyEntry, values: Record<string, unknown>): Promise<string | null> => {
-    for (const rule of entry.contextRules) {
-      const evaluator = evaluators[rule.evaluator]
-      if (evaluator === undefined) return `unregistered evaluator ${rule.evaluator}`
-      if (!await evaluator(rule, values)) return `context rule ${rule.evaluator}`
-    }
-    return null
-  }
   return {
-    policy: options.policy,
-    async assert (capabilityId: string): Promise<void> {
-      if (options.policy.status !== 'complete') {
-        const error = new PermissionDeniedError(capabilityId, 'permission policy is incomplete', options.policy.revision)
-        options.onDenied?.({ capabilityId, policyRevision: options.policy.revision, failedRule: error.failedRule }); throw error
+    async assert(capabilityId: string): Promise<void> {
+      const revision = policy && typeof policy.revision === 'string' ? policy.revision : null
+      const deny = (failedRule: string): never => {
+        const error = new PermissionDeniedError(capabilityId, failedRule, revision)
+        options.onDenied?.({ capabilityId, policyRevision: revision, failedRule })
+        throw error
       }
-      const entry = options.policy.entries.find(candidate => candidate.capabilityId === capabilityId)
-      if (entry === undefined) {
-        const error = new PermissionDeniedError(capabilityId, 'accepted policy entry not found', options.policy.revision)
-        options.onDenied?.({ capabilityId, policyRevision: options.policy.revision, failedRule: error.failedRule }); throw error
+      try { validatePermissionPolicy(policy, sourcePin) } catch { deny('policy missing, invalid, incomplete or stale') }
+      const entry = policy!.entries.find(candidate => candidate.capabilityId === capabilityId)
+      if (!entry) deny('accepted policy entry not found')
+      let permissions: ReadonlySet<string>
+      try { permissions = await permissionCodes() } catch { deny('current permissions unavailable') }
+      if (!evaluatePermissionExpression(entry!.pageChain, permissions!)) deny('page permission chain')
+      if (!evaluatePermissionExpression(entry!.actionChain, permissions!)) deny('action permission chain')
+      if (entry!.contextRules.length) {
+        let values: Record<string, unknown>
+        try {
+          values = await (options.context?.(entry!.contextRules) ?? Promise.resolve({}))
+          if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('invalid trusted business context')
+        } catch { deny('trusted business context unavailable') }
+        for (const rule of entry!.contextRules) if (!evaluateContext(rule, values!)) deny(`context rule ${rule.evaluator}`)
       }
-      const permissions = await permissionCodes()
-      if (!evaluatePermissionExpression(entry.pageChain, permissions)) { const error = new PermissionDeniedError(capabilityId, 'page permission chain', options.policy.revision); options.onDenied?.({ capabilityId, policyRevision: options.policy.revision, failedRule: error.failedRule }); throw error }
-      if (!evaluatePermissionExpression(entry.actionChain, permissions)) { const error = new PermissionDeniedError(capabilityId, 'action permission chain', options.policy.revision); options.onDenied?.({ capabilityId, policyRevision: options.policy.revision, failedRule: error.failedRule }); throw error }
-      const failedContext = await evaluateContext(entry, await context())
-      if (failedContext !== null) { const error = new PermissionDeniedError(capabilityId, failedContext, options.policy.revision); options.onDenied?.({ capabilityId, policyRevision: options.policy.revision, failedRule: error.failedRule }); throw error }
     },
   }
 }

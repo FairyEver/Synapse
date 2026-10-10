@@ -1,21 +1,55 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPermissionGate, PermissionDeniedError } from '../../src/permissions/gate.js'
-import type { PermissionPolicy } from '../../src/permissions/policy.js'
+import { compilePermissionPolicy } from '../../src/permissions/policy.js'
+import { fixture, policyFixture } from './fixture.js'
+import type { PortalRequest } from '../../src/session/types.js'
 
-const base: PermissionPolicy = { schema: 'ph-permission-policy/v1', status: 'complete', sourceRevision: 'r', revision: 'r:1', contentHash: '1', counts: { accepted: 1, blocked: 0, needsReview: 0 }, entries: [{ candidateId: 'c', capabilityId: 'cap', sdkPath: 'x', pageChain: { kind: 'code', code: 'page' }, actionChain: { kind: 'all', rules: [{ kind: 'code', code: 'action' }] }, contextRules: [{ evaluator: 'shop', args: { id: 7 } }], evidence: [{ file: 'x', line: 1, snippet: 'x' }], sourceRevision: 'r' }] }
-
+function reviewed(contextRules: Parameters<typeof compilePermissionPolicy>[0]['reviews'][number]['contextRules']) {
+  const input = fixture()
+  input.reviews.find(row => row.status === 'accepted')!.contextRules = contextRules
+  return compilePermissionPolicy({ ...input, sourceRoot: input.root, availableContextEvaluators: ['tenant', 'system', 'shop', 'state', 'config'] })
+}
+const pin = (policy: ReturnType<typeof policyFixture>) => ({ sourceRevision: policy.sourceRevision, sdkSourceRevision: policy.sdkSourceRevision })
 describe('permission gate', () => {
-  it('rejects before target request when page/action/context is not satisfied', async () => {
-    let targetRequests = 0
-    const gate = createPermissionGate({ policy: base, request: async <T>() => { targetRequests++; return [] as unknown as T }, permissionCodes: async () => new Set(['page']), evaluators: { shop: () => true } })
-    await expect(gate.assert('cap')).rejects.toBeInstanceOf(PermissionDeniedError)
-    expect(targetRequests).toBe(0)
+  it('checks live permissions on each call and denies before target request', async () => {
+    const policy = policyFixture(); let codes = ['page', 'action']
+    const request = vi.fn(async <T>() => codes as T)
+    const audit = vi.fn()
+    const gate = createPermissionGate({ policy, sourcePin: pin(policy), request: request as PortalRequest, onDenied: audit })
+    await gate.assert('hr-post-type-create')
+    codes = ['page']
+    await expect(gate.assert('hr-post-type-create')).rejects.toBeInstanceOf(PermissionDeniedError)
+    codes = []
+    await expect(gate.assert('hr-post-type-create')).rejects.toThrow('page permission')
+    expect(request).toHaveBeenCalledTimes(3)
+    expect(request.mock.calls.every(call => (call as unknown as [{ url: string }])[0].url.endsWith('permissionsNotBySystem'))).toBe(true)
+    expect(audit).toHaveBeenCalledWith({ capabilityId: 'hr-post-type-create', policyRevision: policy.revision, failedRule: 'action permission chain' })
   })
-  it('accepts only a complete reviewed policy', async () => {
-    let permissionRequests = 0
-    const gate = createPermissionGate({ policy: base, request: async <T>() => { permissionRequests++; return { data: ['page', 'action'] } as unknown as T }, evaluators: { shop: () => true } })
-    await gate.assert('cap')
-    expect(permissionRequests).toBe(1)
-    await expect(createPermissionGate({ policy: { ...base, status: 'incomplete' }, request: async <T>() => [] as unknown as T }).assert('cap')).rejects.toThrow(/incomplete/)
+  it.each([
+    { evaluator: 'tenant', args: { id: 'tenant' } }, { evaluator: 'system', args: { id: 11 } },
+    { evaluator: 'shop', args: { id: 7 } }, { evaluator: 'state', args: { value: 'ready' } },
+    { evaluator: 'config', args: { key: 'enabled', value: true } },
+  ])('rejects missing and mismatched trusted $evaluator context', async rule => {
+    const policy = reviewed([rule]); const request = vi.fn()
+    const options = { policy, sourcePin: pin(policy), request, permissionCodes: async () => new Set(['page', 'action']) }
+    await expect(createPermissionGate(options).assert('hr-post-type-create')).rejects.toThrow('context rule')
+    await expect(createPermissionGate({ ...options, context: async () => ({ tenantId: 'other', systemIds: [9], shopId: 8, state: 'other', config: { enabled: false } }) }).assert('hr-post-type-create')).rejects.toThrow('context rule')
+    await createPermissionGate({ ...options, context: async () => ({ tenantId: 'tenant', systemIds: [11], shopId: 7, state: 'ready', config: { enabled: true } }) }).assert('hr-post-type-create')
+    expect(request).not.toHaveBeenCalled()
+  })
+  it('denies null policies, invalid permission payloads and resolver errors', async () => {
+    await expect(createPermissionGate({ policy: null, request: vi.fn() }).assert('hr-post-type-create')).rejects.toThrow('policy')
+    const policy = policyFixture()
+    await expect(createPermissionGate({ policy, sourcePin: pin(policy), request: async <T>() => ({ data: ['page', 'action'] }) as T }).assert('hr-post-type-create')).rejects.toThrow('current permissions unavailable')
+    const contextual = reviewed([{ evaluator: 'shop', args: { id: 7 } }])
+    await expect(createPermissionGate({ policy: contextual, sourcePin: pin(contextual), request: vi.fn(), permissionCodes: async () => new Set(['page', 'action']), context: async () => { throw new Error('secret') } }).assert('hr-post-type-create')).rejects.toThrow('trusted business context unavailable')
+  })
+})
+
+describe('trusted context availability', () => {
+  it('cannot publish a shop condition until a server resolver is registered', () => {
+    const input = fixture()
+    input.reviews.find(row => row.status === 'accepted')!.contextRules = [{ evaluator: 'shop', args: { id: 7 } }]
+    expect(() => compilePermissionPolicy({ ...input, sourceRoot: input.root })).toThrow('no registered server resolver')
   })
 })

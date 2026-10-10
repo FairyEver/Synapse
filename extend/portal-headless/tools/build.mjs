@@ -46,9 +46,11 @@ function distContentHash () {
 const tsc = path.join(ROOT, 'node_modules/typescript/bin/tsc')
 execFileSync(process.execPath, [tsc, '-p', path.join(ROOT, 'tsconfig.build.json')], { stdio: 'inherit' })
 
-const manifest = {
-  schema: 'portal-headless-build/v1',
-  sourceContentHash: sourceContentHash(),
-  distContentHash: distContentHash(),
-}
+const { permissionSourceRevision } = await import('../dist/permissions/source.js')
+let sourceRevision = ''
+const permissionSourceFile = path.join(ROOT, 'generated/permission-source.json')
+if (fs.existsSync(permissionSourceFile)) sourceRevision = JSON.parse(fs.readFileSync(permissionSourceFile, 'utf8')).sourceRevision ?? ''
+fs.writeFileSync(path.join(DIST_ROOT, 'permissions/source-pin.json'), JSON.stringify({ sourceRevision, sdkSourceRevision: permissionSourceRevision(SOURCE_ROOT) }) + '\n')
+// Include the independent permission pin in the verified build contents.
+const manifest = { schema: 'portal-headless-build/v1', sourceContentHash: sourceContentHash(), distContentHash: distContentHash() }
 fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`)

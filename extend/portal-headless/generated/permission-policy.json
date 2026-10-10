@@ -1,9 +1,16 @@
 {
-  "schema": "ph-permission-policy/v1",
+  "schema": "ph-permission-policy/v2",
   "status": "incomplete",
   "sourceRevision": "unreviewed",
-  "revision": "unreviewed:000000000000",
+  "sdkSourceRevision": "unreviewed",
+  "registryHash": "",
+  "revision": "unreviewed",
   "contentHash": "",
-  "counts": { "accepted": 0, "blocked": 0, "needsReview": 0 },
-  "entries": []
+  "counts": {
+    "accepted": 0,
+    "blocked": 0,
+    "needsReview": 0
+  },
+  "entries": [],
+  "blocked": []
 }

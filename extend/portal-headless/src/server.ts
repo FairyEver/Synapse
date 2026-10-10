@@ -402,6 +402,7 @@ import {
   createBaseUploadCapability,
   type BaseUploadCapability,
 } from './capabilities/base-upload.js'
+import { loadPermissionContext } from './permissions/context.js'
 import { ALL_CAPABILITY_DEFINITIONS } from './capabilities/index.js'
 import type { CapabilityDefinition } from './capabilities/types.js'
 import {
@@ -1109,7 +1110,10 @@ export type PortalServerOptions = Omit<PortalHeadlessConfig, 'credential' | 'por
    * 凭据绑定、baseURL、请求头这三件事。
    */
   /** 生产服务必须传入已编译策略；省略时保留 SDK 单测/本地门面的兼容行为。 */
-  permissionPolicy?: PermissionPolicy
+  permissionPolicy?: PermissionPolicy | null
+  permissionSourcePin?: { sourceRevision: string; sdkSourceRevision: string }
+  /** Trusted resolvers for reviewed context; never populated from invocation arguments. */
+  permissionContext?: (session: PortalSession, rules: readonly import('./permissions/policy.js').ContextRule[]) => Promise<Record<string, unknown>>
   sessionOptions?: Omit<SessionStoreOptions, 'createRequest' | 'registry'> & {
     createRequest?: PortalRequestFactory
   }
@@ -2847,7 +2851,11 @@ export function createPortalServer (options: PortalServerOptions): PortalServer 
           aiPrompt,
           aiPromptTool,
           chat,
-        }, { permissionGate: options.permissionPolicy === undefined ? undefined : createPermissionGate({ policy: options.permissionPolicy, request: session.request, context: async () => ({ tenantId: session.key.tenantId, systemIds: session.get('tenant-system') }), onDenied: event => sessionOptions?.logger?.warn('portal.permission.denied', event) }) }),
+        }, { permissionGate: options.permissionPolicy === undefined ? undefined : createPermissionGate({
+          policy: options.permissionPolicy, sourcePin: options.permissionSourcePin, request: session.request,
+          context: async rules => ({ ...(await options.permissionContext?.(session, rules)), ...(await loadPermissionContext(session, rules)) }),
+          onDenied: event => sessionOptions?.logger?.warn('portal.permission.denied', event),
+        }) }),
       ),
       meetingRoom,
       meetingApplication,
