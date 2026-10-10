@@ -1,3 +1,4 @@
+import { isTerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import {
   DEFAULT_AGENT_GLOBAL_CONFIG,
   DEFAULT_CONFIG,
@@ -628,6 +629,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
 
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
+    ...(isTerminalThemeId(value.terminalTheme) ? { terminalTheme: value.terminalTheme } : {}),
     projects,
     quickInputs: seeded.quickInputs,
     defaultQuickInputsSeededVersion: seeded.seededVersion,

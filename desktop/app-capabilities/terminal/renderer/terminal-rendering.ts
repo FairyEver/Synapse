@@ -1,4 +1,5 @@
 import type { ITerminalOptions, ITheme } from "@xterm/xterm"
+import { TERMINAL_THEMES, type TerminalThemeId } from "../shared/terminal-themes"
 import {
   getTerminalAppearanceOptions,
   type TerminalAppearanceSize,
@@ -41,6 +42,7 @@ const TERMINAL_VISUAL_OPTIONS = {
 
 type TerminalRenderingInput = {
   readonly appearanceSize: TerminalAppearanceSize
+  readonly appearanceTheme?: TerminalThemeId
   readonly container: HTMLElement
   readonly disableStdin: boolean
 }
@@ -53,7 +55,7 @@ export function createTerminalRenderingOptions(input: TerminalRenderingInput): I
     ...getTerminalAppearanceOptions(input.appearanceSize),
     convertEol: true,
     disableStdin: input.disableStdin,
-    theme: createTerminalTheme(input.container),
+    theme: resolveTerminalTheme(input.container, input.appearanceTheme ?? "default"),
   }
 }
 
@@ -72,6 +74,24 @@ export function constrainTerminalCompositionToViewport(container: HTMLElement): 
   composition.style.maxWidth = maxWidth
   container.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")?.style.setProperty("max-width", maxWidth)
   composition.scrollLeft = composition.scrollWidth
+}
+
+export function applyTerminalTheme(
+  terminal: { options: ITerminalOptions; rows: number; refresh: (start: number, end: number) => void },
+  container: HTMLElement,
+  themeId: TerminalThemeId,
+): void {
+  const theme = resolveTerminalTheme(container, themeId)
+  terminal.options.theme = theme
+  // The padding and phone-sized canvas share the terminal's resolved background.
+  container.closest<HTMLElement>("[data-terminal-xterm-frame]")
+    ?.style.setProperty("--terminal-background", theme.background ?? "Canvas")
+  terminal.refresh(0, terminal.rows - 1)
+}
+
+function resolveTerminalTheme(container: HTMLElement, themeId: TerminalThemeId): ITheme {
+  const palette = TERMINAL_THEMES[themeId].palette
+  return palette ? { ...palette } : createTerminalTheme(container)
 }
 
 function createTerminalTheme(container: HTMLElement): ITheme {

@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { installTerminalUnicodeWidth, TERMINAL_UNICODE_VERSION } from "../../shared/terminal-unicode-width"
 import {
+  applyTerminalTheme,
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
 } from "../terminal-rendering"
@@ -42,6 +43,32 @@ describe("terminal rendering", () => {
     expect(options.allowProposedApi).toBe(true)
     expect(context.fillStyle).toBe("oklch(0.985 0 0)")
     expect(context.fillRect).toHaveBeenCalled()
+  })
+
+  it("switches palette and canvas colors while preserving text and truecolor cells", async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
+    const frame = document.createElement("div")
+    frame.setAttribute("data-terminal-xterm-frame", "")
+    const container = frame.appendChild(document.createElement("div"))
+    const terminal = new Terminal({ cols: 20, rows: 4 })
+    try {
+      await new Promise<void>((resolve) => terminal.write("\x1b[31mR\x1b[38;2;12;34;56mT\x1b[0m", resolve))
+      const row = terminal.buffer.active.getLine(0)!
+      applyTerminalTheme(terminal, container, "catppuccin-latte")
+      expect(terminal.options.theme?.background).toBe("#eff1f5")
+      expect(frame.style.getPropertyValue("--terminal-background")).toBe("#eff1f5")
+      expect(row.translateToString(true)).toBe("RT")
+      expect(row.getCell(0)?.getFgColor()).toBe(1)
+      expect(row.getCell(1)?.getFgColor()).toBe(0x0c2238)
+      expect([terminal.cols, terminal.rows]).toEqual([20, 4])
+      const previousTheme = terminal.options.theme
+      applyTerminalTheme(terminal, container, "default")
+      expect(terminal.options.theme).not.toBe(previousTheme)
+      expect(terminal.options.theme?.background).not.toBe("#eff1f5")
+      expect(row.translateToString(true)).toBe("RT")
+    } finally {
+      terminal.dispose()
+    }
   })
 
   it("activates the emoji aware width table for renderer terminals", async () => {

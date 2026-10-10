@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { isTerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import { LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -146,6 +147,14 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
       unsubscribe?.()
     }
   }, [refreshConfig])
+
+  useEffect(() => {
+    const unsubscribe = getSynapseBridge()?.config?.onTerminalThemeChanged?.(({ theme }) => {
+      if (!isTerminalThemeId(theme)) return
+      setConfig((current) => ({ ...current, global: { ...current.global, terminalTheme: theme } }))
+    })
+    return () => { unsubscribe?.() }
+  }, [])
 
   useEffect(() => {
     const mediaQueryList =

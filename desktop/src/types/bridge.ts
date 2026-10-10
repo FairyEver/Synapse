@@ -1557,6 +1557,7 @@ export type SynapseBridge = {
     releaseInstallSource: (preparedSourceId: string) => Promise<void>
   }
   config: {
+    onTerminalThemeChanged: (listener: (event: { theme: NonNullable<SynapseConfig["global"]["terminalTheme"]> }) => void) => () => void
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>
     get: () => Promise<SynapseConfig>
     importBackup: () => Promise<SynapseConfigBackupImportResult | null>

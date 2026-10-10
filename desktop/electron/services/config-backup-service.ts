@@ -1,3 +1,4 @@
+import { isTerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import { app, dialog } from "electron"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -799,6 +800,10 @@ function validateConfig(
     return null
   }
 
+  const terminalTheme = global.terminalTheme
+  if (terminalTheme !== undefined && !isTerminalThemeId(terminalTheme)) {
+    errors.push("config.global.terminalTheme 必须是支持的终端主题。")
+  }
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
   const projects = readRequiredField(global, "projects", "config.global", errors)
   const quickInputs = validateQuickInputs(global.quickInputs, errors)
@@ -898,6 +903,7 @@ function validateConfig(
     repositories: normalizedRepositories,
     global: {
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
+      ...(isTerminalThemeId(terminalTheme) ? { terminalTheme } : {}),
       projects: normalizedProjects,
       quickInputs,
       defaultQuickInputsSeededVersion,

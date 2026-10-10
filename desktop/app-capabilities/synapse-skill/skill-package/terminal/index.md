@@ -6,6 +6,10 @@ Use Terminal tools to operate Synapse-managed interactive PTY sessions. Terminal
 
 Read `api-reference.md` before constructing requests. Read `examples.md` when translating a user goal into a multi-step Terminal workflow.
 
+## Desktop appearance
+
+The desktop Terminal settings include a global theme selector with a local preview. Built-in themes are Default, Nord, Gruvbox Dark, Catppuccin Mocha, and Catppuccin Latte. Saving applies the theme to all desktop Terminal windows; discarding restores the saved theme. This is a UI-only setting, with no Terminal MCP theme tool. Do not send theme changes as shell commands or terminal input. Mobile palettes and application-emitted truecolor are unaffected.
+
 ## Two worlds: this process, and the session you drive
 
 You are a process with an environment of your own — a shell, a working directory, a `PATH`, aliases and functions, a foreground program. The session you drive has each of those too, and they are not yours. **A fact about your world is never evidence about theirs**: your shell not having a command says nothing about whether theirs does, a relative path names one file in your shell and a different one in theirs, and a program missing from your `PATH` says nothing about the `PATH` it would run under. An alias or function lives in the target shell's startup files, so it is not findable from your side at all — the target answers as soon as the command reaches it, in the output you are already reading.

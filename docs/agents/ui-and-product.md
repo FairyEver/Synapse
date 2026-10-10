@@ -25,6 +25,12 @@
 - 禁止卡片套卡片、连续 Divider，以及同时用 shadow + border + background 制造重复层级。
 - 所有元素落在网格线上；表单 label/input 基线对齐，表格数字右对齐，icon/text 垂直居中。
 
+## 终端主题数据例外
+
+- 用户已明确允许社区调色板作为终端专用主题数据。默认、Nord、Gruvbox Dark、Catppuccin Mocha 与 Latte 的目录集中在 `desktop/app-capabilities/terminal/shared/terminal-themes.ts`；颜色字面值只限该数据目录，不散落到 JSX 或普通 UI。
+- 终端画布消费解析后的 xterm theme 与运行时 `--terminal-background` token；设置、工具栏、按钮和其它界面继续遵守 shadcn 主题 token 规则。
+- 调色板来源与许可保存在终端能力包的 `THIRD_PARTY_NOTICES.md`。主题只改变桌面绘制，不改变 PTY、网格、手机端固定配色或程序显式输出的真彩色。
+
 ## 按钮尺寸
 
 - 桌面端 `Button` 默认使用标准尺寸（`default`，32px 高）；普通操作、主要操作、空/错误状态的操作、表单动作、对话框底部动作以及空间充足的标题栏动作都用标准尺寸。省略 `size` 即为标准尺寸。

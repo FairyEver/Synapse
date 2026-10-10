@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type ReactNode } from "react"
+import { act, useState, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
@@ -16,6 +16,9 @@ import type {
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalWorkspace,
 } from "../../../../src/types/terminal"
+import { createDefaultConfig } from "../../../../src/lib/config"
+import type { SynapseConfig, SynapseConfigPatch } from "../../../../src/types/config"
+import type { ITheme } from "@xterm/xterm"
 import type { SynapseQuickInputItem } from "../../../../src/types/quick-input"
 import {
   WORKSPACE_FILE_TREE_DRAG_TYPE,
@@ -23,6 +26,34 @@ import {
 } from "../../../../src/lib/workspace-file-tree-drag"
 import { equalizeTerminalPaneGroup } from "../../shared/schema"
 import type { TerminalGitStatus } from "../../shared/schema"
+
+const configState = vi.hoisted(() => ({
+  persisted: null as SynapseConfig | null,
+  failSave: false,
+  synchronizeTheme: null as null | ((theme: NonNullable<SynapseConfig["global"]["terminalTheme"]>) => void),
+}))
+
+vi.mock("../../../../src/app-shell/config", () => ({
+  useAppConfig: () => {
+    const [config, setConfig] = useState(configState.persisted!)
+    configState.synchronizeTheme = (theme) => {
+      configState.persisted = { ...configState.persisted!, global: { ...configState.persisted!.global, terminalTheme: theme } }
+      setConfig(configState.persisted)
+    }
+    return {
+      config,
+      updateConfig: async (patch: SynapseConfigPatch) => {
+        if (configState.failSave) throw new Error("Cannot save config")
+        configState.persisted = {
+          ...configState.persisted!,
+          global: { ...configState.persisted!.global, ...patch.global },
+        }
+        setConfig(configState.persisted)
+        return configState.persisted
+      },
+    }
+  },
+}))
 
 const bridgeState = vi.hoisted(() => ({
   globalLaunch: {
@@ -569,7 +600,7 @@ const xtermState = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>
     cols: number
     rows: number
-    options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number }
+    options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number; theme?: ITheme }
     /** 前台应用通过 DECSET 2004 打开的 bracketed paste；默认关。 */
     modes: { bracketedPasteMode: boolean }
     emitInput: (data: string) => void
@@ -763,6 +794,7 @@ vi.mock("@xterm/xterm", () => ({
       }),
       clear: vi.fn(),
       reset: vi.fn(),
+      select: vi.fn(),
       getSelection: vi.fn(() => ""),
       hasSelection: vi.fn(() => false),
       paste: vi.fn(),
@@ -918,6 +950,9 @@ const resizeObservers: Array<{ disconnect: ReturnType<typeof vi.fn>; trigger: ()
 let roots: Root[] = []
 
 beforeEach(() => {
+  configState.persisted = createDefaultConfig()
+  configState.failSave = false
+  configState.synchronizeTheme = null
   setDocumentVisibility("visible")
   window.synapse = { platform: "darwin" } as typeof window.synapse
   claudeCodeState.providers = []
@@ -1782,11 +1817,103 @@ describe("TerminalModule", () => {
     await clickButton("保存")
 
     expect(window.localStorage.getItem("synapse:app:terminal:appearance_size:v1")).toBe("small")
-    expect(xtermState.instances).toHaveLength(1)
+    expect(xtermState.instances).toHaveLength(2)
+    expect(xtermState.instances[1]?.dispose).toHaveBeenCalled()
+    expect(xtermState.instances[0]?.dispose).not.toHaveBeenCalled()
     expect(xtermState.instances[0]?.options.fontSize).toBe(12)
     expect(xtermState.instances[0]?.options.lineHeight).toBe(1.05)
     expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
+  })
+
+  it("previews and saves a theme on all panes without recreating sessions", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
+    await renderEmbeddedModule()
+    await act(async () => {
+      xtermState.instances[0]!.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await flushPromises()
+    })
+    const terminals = [...xtermState.instances]
+    expect(terminals).toHaveLength(2)
+    const initialResizeCalls = terminalBridge.resizeSession.mock.calls.length
+
+    await clickButton("设置")
+    await selectTab("外观")
+    await chooseTheme("Nord")
+    for (const terminal of terminals) {
+      expect(terminal.options.theme?.background).toBe("#2e3440")
+      expect(terminal.dispose).not.toHaveBeenCalled()
+    }
+    expect(configState.persisted?.global.terminalTheme).toBeUndefined()
+    expect(document.querySelector('[data-terminal-theme-preview]')).not.toBeNull()
+    expect(terminalBridge.resizeSession.mock.calls.length).toBe(initialResizeCalls)
+    await clickButton("保存")
+    expect(configState.persisted?.global.terminalTheme).toBe("nord")
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
+    await clickButton("设置")
+    await selectTab("外观")
+    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe("Nord")
+  })
+
+  it("restores the saved theme when a preview is discarded", async () => {
+    configState.persisted!.global.terminalTheme = "nord"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
+    await renderEmbeddedModule()
+    const terminal = xtermState.instances[0]!
+    await clickButton("设置")
+    await selectTab("外观")
+    await chooseTheme("Catppuccin Latte")
+    expect(terminal.options.theme?.background).toBe("#eff1f5")
+    expect(document.querySelector('[data-terminal-xterm-frame]')?.getAttribute("style"))
+      .toContain("--terminal-background: #eff1f5")
+    await clickButton("取消")
+    await clickButton("放弃更改")
+    expect(terminal.options.theme?.background).toBe("#2e3440")
+    expect(configState.persisted?.global.terminalTheme).toBe("nord")
+    expect(terminal.dispose).not.toHaveBeenCalled()
+  })
+
+  it("keeps another window's saved theme when saving an untouched theme draft", async () => {
+    await renderEmbeddedModule()
+    await clickButton("设置")
+    await selectTab("外观")
+    await act(async () => { configState.synchronizeTheme!("nord") })
+    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe("Nord")
+    await selectTab("常规")
+    await changeInput("工作目录", "/repo/new")
+    await clickButton("保存")
+    expect(configState.persisted?.global.terminalTheme).toBe("nord")
+  })
+
+  it("keeps an edited preview and restores the latest saved theme when discarded", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
+    await renderEmbeddedModule()
+    const terminal = xtermState.instances[0]!
+    await clickButton("设置")
+    await selectTab("外观")
+    await chooseTheme("Catppuccin Latte")
+    await act(async () => { configState.synchronizeTheme!("nord") })
+    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe("Catppuccin Latte")
+    expect(terminal.options.theme?.background).toBe("#eff1f5")
+    await clickButton("取消")
+    await clickButton("放弃更改")
+    expect(terminal.options.theme?.background).toBe("#2e3440")
+    expect(configState.persisted?.global.terminalTheme).toBe("nord")
+  })
+
+  it("keeps a failed theme save open and does not persist the preview", async () => {
+    await renderEmbeddedModule()
+    await clickButton("设置")
+    await selectTab("外观")
+    await chooseTheme("Gruvbox Dark")
+    configState.failSave = true
+    await clickButton("保存")
+    expect(configState.persisted?.global.terminalTheme).toBeUndefined()
+    expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+    expect(toastState.error).toHaveBeenCalledWith("保存终端设置失败")
   })
 
   it("enables Agent notifications from the notification category", async () => {
@@ -5492,4 +5619,21 @@ function createDeferred<T>(): {
 
 async function flushPromises(): Promise<void> {
   for (let index = 0; index < 12; index += 1) await Promise.resolve()
+}
+
+async function chooseTheme(name: string): Promise<void> {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() })
+  const trigger = document.querySelector<HTMLButtonElement>('[aria-label="主题"]')
+  expect(trigger).not.toBeNull()
+  await act(async () => {
+    trigger!.click()
+    await flushPromises()
+  })
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
+    .find((element) => element.textContent === name)
+  expect(option).toBeDefined()
+  await act(async () => {
+    option!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    await flushPromises()
+  })
 }

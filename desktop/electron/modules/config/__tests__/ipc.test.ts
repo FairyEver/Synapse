@@ -79,6 +79,20 @@ describe("configIpcModule", () => {
     mocks.fs.unlink.mockResolvedValue(undefined)
   })
 
+  it("announces a persisted terminal theme to other windows", async () => {
+    const config = configFixture({ defaultPermissionMode: "default", defaultProviderModel: null })
+    config.global.terminalTheme = "nord"
+    vi.mocked(configStore.update).mockResolvedValue(config)
+    const eventBus = { emit: vi.fn() }
+    const harness = createHarness({ eventBus })
+    await harness.invoke("synapse:app:config:operation:update", { global: { terminalTheme: "nord" } })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "system",
+      type: "config.terminal-theme.changed",
+      payload: { theme: "nord" },
+    }))
+  })
+
   it("preserves Agent config on get responses", async () => {
     vi.mocked(configStore.load).mockResolvedValue(configFixture({ defaultPermissionMode: "plan", defaultProviderModel: null }))
     const harness = createHarness()

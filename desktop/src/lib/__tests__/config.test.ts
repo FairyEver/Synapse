@@ -795,3 +795,24 @@ describe("Synapse user variables config", () => {
     expect(removed.global.agentProjectOrder).toEqual(["project-a"])
   })
 })
+
+
+describe("terminal theme preferences", () => {
+  it("preserves a saved terminal theme through config patches and reloads", () => {
+    const config = applySynapseConfigPatch(createDefaultConfig(), {
+      global: { terminalTheme: "catppuccin-latte" },
+    } as SynapseConfigPatch)
+    const updated = applySynapseConfigPatch(config, { global: { themeMode: "dark" } })
+    expect(sanitizeSynapseConfig(JSON.parse(JSON.stringify(updated))).global.terminalTheme)
+      .toBe("catppuccin-latte")
+  })
+
+  it("ignores unsupported terminal themes while preserving other settings", () => {
+    const config = sanitizeSynapseConfig({
+      ...createDefaultConfig(),
+      global: { ...createDefaultConfig().global, terminalTheme: "unknown-theme" },
+    })
+    expect(config.global.terminalTheme).toBeUndefined()
+    expect(config.global.themeMode).toBe("light")
+  })
+})

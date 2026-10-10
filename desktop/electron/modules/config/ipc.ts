@@ -130,6 +130,14 @@ export const configIpcModule: IpcModule = {
 
           recordVariableAudits(ctx, variableAudits, "allowed")
           emitVariablesUpdated(ctx, variableAudits)
+          if (patch.global?.terminalTheme !== undefined) {
+            ctx.resolve<EventBus>("core.event-bus").emit({
+              domain: "system",
+              type: "config.terminal-theme.changed",
+              payload: { theme: config.global.terminalTheme ?? "default" },
+              timestamp: new Date().toISOString(),
+            })
+          }
 
           logger.info(
             `Config updated. activeRepoUuid: ${config.activeRepoUuid}, repositoryCount: ${config.repositories.length}`

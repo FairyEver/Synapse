@@ -952,6 +952,9 @@ const synapseBridge: SynapseBridge = {
     releaseInstallSource: (preparedSourceId) => invoke(IPC_CHANNELS["synapse-skill"].releaseInstallSource)({ preparedSourceId }),
   },
   config: {
+    onTerminalThemeChanged: createDomainEventPayloadSubscription(
+      subscribe, "system", "config.terminal-theme.changed",
+    ),
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),
     get: invoke(IPC_CHANNELS.config.get),
     importBackup: invoke(IPC_CHANNELS.config.importBackup),

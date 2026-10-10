@@ -1,3 +1,4 @@
+import type { TerminalThemeId } from "../shared/terminal-themes"
 import {
   useCallback,
   useEffect,
@@ -87,6 +88,7 @@ import {
   type TerminalAppearanceSize,
 } from "./terminal-appearance"
 import {
+  applyTerminalTheme,
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
 } from "./terminal-rendering"
@@ -143,6 +145,7 @@ type SplitLayoutControls = {
 export function TerminalWorkspaceView({
   activePaneId,
   appearanceSize,
+  appearanceTheme = "default",
   onActivePaneChange,
   onClosePane,
   onCopySessionReference,
@@ -162,6 +165,7 @@ export function TerminalWorkspaceView({
 }: {
   readonly activePaneId: string
   readonly appearanceSize: TerminalAppearanceSize
+  readonly appearanceTheme?: TerminalThemeId
   readonly onActivePaneChange: (paneId: string) => void
   readonly onClosePane: (paneId: string) => void
   /** Copies the reference of the session this pane owns (one pane = one session). */
@@ -504,6 +508,7 @@ export function TerminalWorkspaceView({
           <TerminalPane
             active={pane.paneId === activePaneId}
             appearanceSize={appearanceSize}
+            appearanceTheme={appearanceTheme}
             dimmed={dimInactivePanes && pane.paneId !== activePaneId}
             dragSourcePaneId={paneDrag?.sourcePaneId ?? null}
             dragged={pane.paneId === paneDrag?.sourcePaneId}
@@ -805,6 +810,7 @@ function TerminalPaneTitle({
 function TerminalPane({
   active,
   appearanceSize,
+  appearanceTheme = "default",
   closePending,
   closing,
   dimmed,
@@ -842,6 +848,7 @@ function TerminalPane({
 }: {
   readonly active: boolean
   readonly appearanceSize: TerminalAppearanceSize
+  readonly appearanceTheme?: TerminalThemeId
   readonly closePending: boolean
   readonly closing: boolean
   readonly dimmed: boolean
@@ -921,6 +928,8 @@ function TerminalPane({
   /** Hands the grid back to this machine. Reached from the pane header button. */
   const releaseGridOwnershipRef = useRef<((announceFailure?: boolean) => void) | null>(null)
   const setProjectionVisibilityRef = useRef<((nextVisible: boolean) => void) | null>(null)
+  const appearanceThemeRef = useRef(appearanceTheme)
+  appearanceThemeRef.current = appearanceTheme
   const appearanceSizeRef = useRef(appearanceSize)
   const sessionRef = useRef(session)
   /**
@@ -1031,6 +1040,7 @@ function TerminalPane({
     const xterm = new Terminal({
       ...createTerminalRenderingOptions({
         appearanceSize: appearanceSizeRef.current,
+        appearanceTheme: appearanceThemeRef.current,
         container,
         // Read through the ref: a pane mounted while a phone already holds the grid
         // never sees this effect run again with a terminal to update.
@@ -1452,6 +1462,12 @@ function TerminalPane({
     xterm.options.lineHeight = appearanceOptions.lineHeight
     syncTerminalGeometryRef.current?.(true)
   }, [appearanceSize])
+
+  useEffect(() => {
+    const terminal = xtermRef.current
+    const container = containerRef.current
+    if (terminal && container) applyTerminalTheme(terminal, container, appearanceTheme)
+  }, [appearanceTheme])
 
   /**
    * Takes the grid back when it stops being a phone's.
@@ -1876,7 +1892,7 @@ function TerminalPane({
           ref={frameRef}
           data-terminal-xterm-frame
           className={cn(
-            "h-full min-h-0 min-w-0 overflow-hidden p-1",
+            "h-full min-h-0 min-w-0 overflow-hidden bg-(--terminal-background) p-1",
             // A phone-sized grid does not fill the pane, so it is placed rather
             // than stretched. Centring is the only arrangement that keeps the
             // dashed canvas outline reading as "this is the whole terminal".

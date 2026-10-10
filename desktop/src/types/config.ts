@@ -1,3 +1,4 @@
+import type { TerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import type { SynapseContentType } from "./content"
 import type { SynapseAgentPermissionMode } from "./agent"
 import type { ModelTier } from "./provider-model"
@@ -74,6 +75,7 @@ export type SynapseKnowledgeBaseStorageConfig =
 
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
+  terminalTheme?: TerminalThemeId
   projects: SynapseProjectConfig[]
   quickInputs: SynapseQuickInput[]
   defaultQuickInputsSeededVersion: string | null

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, LoaderCircle, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
+import { useAppConfig } from "../../../src/app-shell/config"
+import { isTerminalThemeId, type TerminalThemeId } from "../shared/terminal-themes"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
 import { useVoiceInput } from "../../../src/modules/voice/use-voice-input"
@@ -163,6 +165,16 @@ export function TerminalModule({
   const [agentNotificationsEnabledDraft, setAgentNotificationsEnabledDraft] = useState(false)
   const [agentNotificationsNotifyDraft, setAgentNotificationsNotifyDraft] = useState(true)
   const [globalLaunchDraft, setGlobalLaunchDraft] = useState<SynapseTerminalLaunchLayer>({})
+  const { config, updateConfig } = useAppConfig()
+  const terminalTheme = isTerminalThemeId(config.global.terminalTheme) ? config.global.terminalTheme : "default"
+  const [terminalThemeDraft, setTerminalThemeDraft] = useState<TerminalThemeId>(terminalTheme)
+  const previousSavedThemeRef = useRef(terminalTheme)
+  useEffect(() => {
+    const previousSavedTheme = previousSavedThemeRef.current
+    previousSavedThemeRef.current = terminalTheme
+    setTerminalThemeDraft((draft) => draft === previousSavedTheme ? terminalTheme : draft)
+  }, [terminalTheme])
+  const previewTheme = globalSettingsOpen ? terminalThemeDraft : terminalTheme
   const [terminalAppearanceSize, setTerminalAppearanceSize] = useState(readTerminalAppearanceSize)
   const [terminalAppearanceSizeDraft, setTerminalAppearanceSizeDraft] = useState(terminalAppearanceSize)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
@@ -309,6 +321,7 @@ export function TerminalModule({
   const globalLaunchDirty = globalSettingsOpen
     && (
       JSON.stringify(globalLaunchDraft) !== JSON.stringify(globalLaunchSettings?.settings ?? {})
+      || terminalThemeDraft !== terminalTheme
       || terminalAppearanceSizeDraft !== terminalAppearanceSize
       || agentNotificationsEnabledDraft !== agentNotificationSettings?.enabled
       || agentNotificationsNotifyDraft !== agentNotificationSettings?.notify
@@ -584,13 +597,14 @@ export function TerminalModule({
       setAgentNotificationSettings(notificationSettings)
       setAgentNotificationsEnabledDraft(notificationSettings.enabled)
       setAgentNotificationsNotifyDraft(notificationSettings.notify)
+      setTerminalThemeDraft(terminalTheme)
       setTerminalAppearanceSizeDraft(terminalAppearanceSize)
       setGlobalSettingsOpen(true)
     } catch (error) {
       logger.error("Failed to load global terminal launch settings.", error)
       toast.error("加载终端设置失败")
     }
-  }, [terminalAppearanceSize, terminalBridge])
+  }, [terminalAppearanceSize, terminalTheme, terminalBridge])
 
   const chooseLaunchCwd = useCallback(async (
     setChoosing: (value: boolean) => void,
@@ -621,21 +635,27 @@ export function TerminalModule({
       const notificationSettingsChanged = notificationEnabledChanged || notificationNotifyChanged
       const [updatedLaunch, updatedNotifications] = await runTrackedOperation(
         { component: "terminal", eventKey: "terminal.settings.update" },
-        () => Promise.all([
-          launchSettingsChanged
-            ? terminalBridge.globalLaunch.update({
-                expectedRevision: globalLaunchSettings.revision,
-                settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
-              })
-            : Promise.resolve(globalLaunchSettings),
-          notificationSettingsChanged
-            ? terminalBridge.agentNotifications.update({
-                ...(notificationEnabledChanged ? { enabled: agentNotificationsEnabledDraft } : {}),
-                ...(notificationNotifyChanged ? { notify: agentNotificationsNotifyDraft } : {}),
-                expectedRevision: agentNotificationSettings.revision,
-              })
-            : Promise.resolve(agentNotificationSettings),
-        ]),
+        async () => {
+          const updatedSettings = await Promise.all([
+            launchSettingsChanged
+              ? terminalBridge.globalLaunch.update({
+                  expectedRevision: globalLaunchSettings.revision,
+                  settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
+                })
+              : Promise.resolve(globalLaunchSettings),
+            notificationSettingsChanged
+              ? terminalBridge.agentNotifications.update({
+                  ...(notificationEnabledChanged ? { enabled: agentNotificationsEnabledDraft } : {}),
+                  ...(notificationNotifyChanged ? { notify: agentNotificationsNotifyDraft } : {}),
+                  expectedRevision: agentNotificationSettings.revision,
+                })
+              : Promise.resolve(agentNotificationSettings),
+          ])
+          if (terminalThemeDraft !== terminalTheme) {
+            await updateConfig({ global: { terminalTheme: terminalThemeDraft } })
+          }
+          return updatedSettings
+        },
       )
       writeTerminalAppearanceSize(terminalAppearanceSizeDraft)
       setTerminalAppearanceSize(terminalAppearanceSizeDraft)
@@ -671,6 +691,9 @@ export function TerminalModule({
     globalLaunchDraft,
     globalLaunchSettings,
     terminalAppearanceSizeDraft,
+    terminalThemeDraft,
+    terminalTheme,
+    updateConfig,
     terminalBridge,
   ])
 
@@ -1747,6 +1770,7 @@ export function TerminalModule({
                         }}
                         activePaneId={workspaceActivePaneId}
                         appearanceSize={terminalAppearanceSize}
+                        appearanceTheme={previewTheme}
                         onActivePaneChange={(paneId) => {
                           setActivePaneIds((current) => ({ ...current, [workspace.id]: paneId }))
                         }}
@@ -1971,6 +1995,8 @@ export function TerminalModule({
                   onCopyEnvironmentValue={(key, draftValue) => terminalBridge.launch.copyEnvironmentValue({ scope: "global", key, draftValue })}
                   onChange={setGlobalLaunchDraft}
                   appearanceSize={terminalAppearanceSizeDraft}
+                  appearanceTheme={terminalThemeDraft}
+                  onAppearanceThemeChange={setTerminalThemeDraft}
                   onAppearanceSizeChange={setTerminalAppearanceSizeDraft}
                   agentNotificationsEnabled={agentNotificationsEnabledDraft}
                   onAgentNotificationsEnabledChange={setAgentNotificationsEnabledDraft}

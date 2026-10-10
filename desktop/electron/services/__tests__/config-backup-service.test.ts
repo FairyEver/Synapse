@@ -68,6 +68,18 @@ describe("ConfigBackupService quick inputs", () => {
     setConfigBackupDataRepository(null)
   })
 
+  it("preserves the desktop terminal theme when importing a backup", async () => {
+    const filePath = await writeBackupFile({ terminalTheme: "catppuccin-mocha" })
+    try {
+      await configBackupService.readImport(filePath)
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        global: expect.objectContaining({ terminalTheme: "catppuccin-mocha" }),
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("preserves valid multi-line quick inputs when importing a backup", async () => {
     const filePath = await writeBackupFile({
       quickInputs: [{ id: "quick-1", content: "第一行\n第二行", directSend: true }],

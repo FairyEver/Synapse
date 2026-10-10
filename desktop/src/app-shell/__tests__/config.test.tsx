@@ -9,6 +9,7 @@ import { createDefaultConfig } from "@/lib/config"
 const mocks = vi.hoisted(() => ({
   configGet: vi.fn(),
   configUpdate: vi.fn(),
+  terminalThemeListener: null as null | ((event: { theme: string }) => void),
   repositoryUpdatedListener: null as null | ((event: unknown) => void),
   logger: {
     error: vi.fn(),
@@ -23,6 +24,12 @@ vi.mock("@/app-shell/logging", () => ({
 
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
+    config: {
+      onTerminalThemeChanged: (listener: (event: { theme: string }) => void) => {
+        mocks.terminalThemeListener = listener
+        return () => { mocks.terminalThemeListener = null }
+      },
+    },
     settings: {
       repository: {
         onUpdated: (listener: (event: unknown) => void) => {
@@ -62,6 +69,7 @@ beforeEach(() => {
   mocks.configGet.mockReset()
   mocks.configUpdate.mockReset()
   mocks.repositoryUpdatedListener = null
+  mocks.terminalThemeListener = null
   for (const fn of Object.values(mocks.logger)) fn.mockClear()
 })
 
@@ -76,6 +84,26 @@ afterEach(() => {
 })
 
 describe("AppConfigProvider", () => {
+  it("updates the global terminal theme after another window saves it", async () => {
+    mocks.configGet.mockResolvedValue(createDefaultConfig())
+    const container = document.body.appendChild(document.createElement("div"))
+    const root = createRoot(container)
+    roots.push(root)
+    function ThemeProbe() {
+      return <div data-testid="theme-probe">{useAppConfig().config.global.terminalTheme ?? "default"}</div>
+    }
+    await act(async () => {
+      root.render(<AppConfigProvider><ThemeProbe /></AppConfigProvider>)
+      await Promise.resolve()
+    })
+    expect(container.textContent).toBe("default")
+    await act(async () => {
+      mocks.terminalThemeListener?.({ theme: "nord" })
+      await Promise.resolve()
+    })
+    expect(container.textContent).toBe("nord")
+  })
+
   it("blocks children and retries when the initial config load fails", async () => {
     const loadedConfig = {
       ...createDefaultConfig(),
