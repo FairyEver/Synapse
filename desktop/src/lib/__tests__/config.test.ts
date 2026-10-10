@@ -798,13 +798,19 @@ describe("Synapse user variables config", () => {
 
 
 describe("terminal theme preferences", () => {
-  it("preserves a saved terminal theme through config patches and reloads", () => {
+  it.each([
+    "catppuccin-latte",
+    "rose-pine-dawn",
+    "ayu-light",
+    "solarized-light",
+    "tokyo-night-day",
+  ])("preserves saved theme %s through config patches and reloads", (terminalTheme) => {
     const config = applySynapseConfigPatch(createDefaultConfig(), {
-      global: { terminalTheme: "catppuccin-latte" },
+      global: { terminalTheme },
     } as SynapseConfigPatch)
     const updated = applySynapseConfigPatch(config, { global: { themeMode: "dark" } })
     expect(sanitizeSynapseConfig(JSON.parse(JSON.stringify(updated))).global.terminalTheme)
-      .toBe("catppuccin-latte")
+      .toBe(terminalTheme)
   })
 
   it("ignores unsupported terminal themes while preserving other settings", () => {

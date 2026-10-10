@@ -27,7 +27,7 @@
 
 ## 终端主题数据例外
 
-- 用户已明确允许社区调色板作为终端专用主题数据。默认、Nord、Gruvbox Dark、Catppuccin Mocha 与 Latte 的目录集中在 `desktop/app-capabilities/terminal/shared/terminal-themes.ts`；颜色字面值只限该数据目录，不散落到 JSX 或普通 UI。
+- 用户已明确允许社区调色板作为终端专用主题数据。默认、Nord、Gruvbox Dark、Catppuccin Mocha 与 Latte，以及 Rosé Pine Dawn、Ayu Light、Solarized Light、Tokyo Night Day 的目录集中在 `desktop/app-capabilities/terminal/shared/terminal-themes.ts`；颜色字面值只限该数据目录，不散落到 JSX 或普通 UI。
 - 终端画布消费解析后的 xterm theme 与运行时 `--terminal-background` token；设置、工具栏、按钮和其它界面继续遵守 shadcn 主题 token 规则。
 - 调色板来源与许可保存在终端能力包的 `THIRD_PARTY_NOTICES.md`。主题只改变桌面绘制，不改变 PTY、网格、手机端固定配色或程序显式输出的真彩色。
 

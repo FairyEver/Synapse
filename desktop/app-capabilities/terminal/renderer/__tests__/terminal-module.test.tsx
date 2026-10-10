@@ -1826,7 +1826,13 @@ describe("TerminalModule", () => {
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
   })
 
-  it("previews and saves a theme on all panes without recreating sessions", async () => {
+  it.each([
+    ["Nord", "nord", "#2e3440"],
+    ["Rosé Pine Dawn", "rose-pine-dawn", "#faf4ed"],
+    ["Ayu Light", "ayu-light", "#fcfcfc"],
+    ["Solarized Light", "solarized-light", "#fdf6e3"],
+    ["Tokyo Night Day", "tokyo-night-day", "#e1e2e7"],
+  ])("previews and saves %s on all panes without recreating sessions", async (name, themeId, background) => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
     await renderEmbeddedModule()
@@ -1840,20 +1846,20 @@ describe("TerminalModule", () => {
 
     await clickButton("设置")
     await selectTab("外观")
-    await chooseTheme("Nord")
+    await chooseTheme(name)
     for (const terminal of terminals) {
-      expect(terminal.options.theme?.background).toBe("#2e3440")
+      expect(terminal.options.theme?.background).toBe(background)
       expect(terminal.dispose).not.toHaveBeenCalled()
     }
     expect(configState.persisted?.global.terminalTheme).toBeUndefined()
     expect(document.querySelector('[data-terminal-theme-preview]')).not.toBeNull()
     expect(terminalBridge.resizeSession.mock.calls.length).toBe(initialResizeCalls)
     await clickButton("保存")
-    expect(configState.persisted?.global.terminalTheme).toBe("nord")
+    expect(configState.persisted?.global.terminalTheme).toBe(themeId)
     expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
     await clickButton("设置")
     await selectTab("外观")
-    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe("Nord")
+    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe(name)
   })
 
   it("restores the saved theme when a preview is discarded", async () => {

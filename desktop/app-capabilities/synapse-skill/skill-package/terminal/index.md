@@ -8,7 +8,7 @@ Read `api-reference.md` before constructing requests. Read `examples.md` when tr
 
 ## Desktop appearance
 
-The desktop Terminal settings include a global theme selector with a local preview. Built-in themes are Default, Nord, Gruvbox Dark, Catppuccin Mocha, and Catppuccin Latte. Saving applies the theme to all desktop Terminal windows; discarding restores the saved theme. This is a UI-only setting, with no Terminal MCP theme tool. Do not send theme changes as shell commands or terminal input. Mobile palettes and application-emitted truecolor are unaffected.
+The desktop Terminal settings include a global theme selector with a local preview. Built-in themes are Default, Nord, Gruvbox Dark, Catppuccin Mocha, Catppuccin Latte, Rosé Pine Dawn, Ayu Light, Solarized Light, and Tokyo Night Day. Saving applies the theme to all desktop Terminal windows; discarding restores the saved theme. This is a UI-only setting, with no Terminal MCP theme tool. Do not send theme changes as shell commands or terminal input. Mobile palettes and application-emitted truecolor are unaffected.
 
 ## Two worlds: this process, and the session you drive
 
