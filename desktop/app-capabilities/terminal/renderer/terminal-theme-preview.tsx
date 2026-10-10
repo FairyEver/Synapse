@@ -9,12 +9,12 @@ import { applyTerminalTheme, createTerminalRenderingOptions } from "./terminal-r
 
 const PREVIEW_OUTPUT = [
   "$ git status",
-  "On branch main",
-  "\x1b[32mChanges ready to commit\x1b[0m",
-  "\x1b[31mred  \x1b[32mgreen  \x1b[33myellow  \x1b[34mblue  \x1b[35mmagenta  \x1b[36mcyan\x1b[0m",
-  "\x1b[91mred  \x1b[92mgreen  \x1b[93myellow  \x1b[94mblue  \x1b[95mmagenta  \x1b[96mcyan\x1b[0m",
+  "\x1b[32mReady to commit\x1b[0m",
+  "\x1b[31mred \x1b[32mgreen \x1b[33myellow\x1b[0m",
+  "\x1b[34mblue \x1b[35mmagenta \x1b[36mcyan\x1b[0m",
+  "\x1b[91mred \x1b[92mgreen \x1b[93myellow\x1b[0m",
+  "\x1b[94mblue \x1b[95mmagenta \x1b[96mcyan\x1b[0m",
   "Selected text",
-  "$ ",
 ].join("\r\n")
 
 /** A local xterm sample; never creates a PTY or sends input to a session. */
@@ -51,7 +51,7 @@ export function TerminalThemePreview({ theme, size }: {
     fit.fit()
     let disposed = false
     terminal.write(PREVIEW_OUTPUT, () => {
-      if (!disposed) terminal.select(0, 5, 13)
+      if (!disposed) terminal.select(0, 6, 13)
     })
 
     let frame: number | undefined
@@ -103,7 +103,7 @@ export function TerminalThemePreview({ theme, size }: {
       aria-label="终端主题预览"
       className="dark h-44 overflow-hidden rounded-md bg-(--terminal-background) p-2"
     >
-      <div ref={containerRef} className="h-full w-full overflow-hidden" />
+      <div ref={containerRef} inert className="h-full w-full overflow-hidden" />
     </div>
   )
 }

@@ -4,9 +4,8 @@ import { Button } from "../../../src/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../src/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../src/components/ui/select"
-import { TERMINAL_THEMES, isTerminalThemeId, type TerminalThemeId } from "../shared/terminal-themes"
-import { TerminalThemePreview } from "./terminal-theme-preview"
+import type { TerminalThemeId } from "../shared/terminal-themes"
+import { TerminalThemePicker } from "./terminal-theme-picker"
 import { Switch } from "../../../src/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import type { SynapseTerminalLaunchLayer } from "../../../src/types/terminal"
@@ -111,28 +110,7 @@ export function TerminalLaunchSettingsForm({
         />
       </TabsContent>
       {appearanceSize && onAppearanceSizeChange ? (
-        <TabsContent value="appearance" className="grid gap-4 pt-3">
-          {appearanceTheme && onAppearanceThemeChange ? (
-            <Field orientation="horizontal">
-              <FieldLabel htmlFor="terminal-theme">主题</FieldLabel>
-              <Select
-                value={appearanceTheme}
-                data-track="terminal-appearance-theme"
-                onValueChange={(theme) => {
-                  if (isTerminalThemeId(theme)) onAppearanceThemeChange(theme)
-                }}
-              >
-                <SelectTrigger id="terminal-theme" aria-label="主题">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TERMINAL_THEMES).map(([id, theme]) => (
-                    <SelectItem key={id} value={id}>{theme.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          ) : null}
+        <TabsContent value="appearance" className="@container grid gap-4 pt-3">
           <Field orientation="horizontal">
             <FieldLabel>字号</FieldLabel>
             <ToggleGroup
@@ -150,7 +128,9 @@ export function TerminalLaunchSettingsForm({
               <ToggleGroupItem value="large">大</ToggleGroupItem>
             </ToggleGroup>
           </Field>
-          {appearanceTheme ? <TerminalThemePreview theme={appearanceTheme} size={appearanceSize} /> : null}
+          {appearanceTheme && onAppearanceThemeChange ? (
+            <TerminalThemePicker value={appearanceTheme} size={appearanceSize} onValueChange={onAppearanceThemeChange} />
+          ) : null}
         </TabsContent>
       ) : null}
       {agentNotificationsEnabled !== undefined && onAgentNotificationsEnabledChange ? (

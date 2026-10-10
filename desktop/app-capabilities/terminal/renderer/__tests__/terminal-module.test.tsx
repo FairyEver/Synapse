@@ -1817,13 +1817,40 @@ describe("TerminalModule", () => {
     await clickButton("保存")
 
     expect(window.localStorage.getItem("synapse:app:terminal:appearance_size:v1")).toBe("small")
-    expect(xtermState.instances).toHaveLength(2)
-    expect(xtermState.instances[1]?.dispose).toHaveBeenCalled()
+    expect(xtermState.instances).toHaveLength(10)
+    for (const preview of xtermState.instances.slice(1)) {
+      expect(preview.options.fontSize).toBe(12)
+      expect(preview.dispose).toHaveBeenCalled()
+    }
     expect(xtermState.instances[0]?.dispose).not.toHaveBeenCalled()
     expect(xtermState.instances[0]?.options.fontSize).toBe(12)
     expect(xtermState.instances[0]?.options.lineHeight).toBe(1.05)
     expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
+  })
+
+  it("shows every theme preview before selection and selects a theme by clicking its preview", async () => {
+    await renderEmbeddedModule()
+    await clickButton("设置")
+    await selectTab("外观")
+
+    const picker = document.querySelector('[role="radiogroup"][aria-label="主题"]')
+    expect(picker).not.toBeNull()
+    expect(picker?.querySelectorAll('[data-terminal-theme-preview]')).toHaveLength(9)
+    expect(picker?.querySelector('[role="radio"][aria-checked="true"]')?.getAttribute("aria-label"))
+      .toBe("默认")
+    expect(terminalBridge.createSession).not.toHaveBeenCalled()
+
+    const preview = document.querySelector('[role="radio"][aria-label="Ayu Light"]')
+      ?.closest("label")?.querySelector<HTMLElement>('[data-terminal-theme-preview]')
+    expect(preview).not.toBeNull()
+    await act(async () => { preview!.click() })
+
+    expect(picker?.querySelector('[role="radio"][aria-checked="true"]')?.getAttribute("aria-label"))
+      .toBe("Ayu Light")
+    expect(configState.persisted?.global.terminalTheme).toBeUndefined()
+    await clickButton("保存")
+    expect(configState.persisted?.global.terminalTheme).toBe("ayu-light")
   })
 
   it.each([
@@ -1859,7 +1886,7 @@ describe("TerminalModule", () => {
     expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
     await clickButton("设置")
     await selectTab("外观")
-    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe(name)
+    expect(document.querySelector('[aria-label="主题"] [role="radio"][aria-checked="true"]')?.getAttribute("aria-label")).toBe(name)
   })
 
   it("restores the saved theme when a preview is discarded", async () => {
@@ -1886,7 +1913,7 @@ describe("TerminalModule", () => {
     await clickButton("设置")
     await selectTab("外观")
     await act(async () => { configState.synchronizeTheme!("nord") })
-    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe("Nord")
+    expect(document.querySelector('[aria-label="主题"] [role="radio"][aria-checked="true"]')?.getAttribute("aria-label")).toBe("Nord")
     await selectTab("常规")
     await changeInput("工作目录", "/repo/new")
     await clickButton("保存")
@@ -1902,7 +1929,7 @@ describe("TerminalModule", () => {
     await selectTab("外观")
     await chooseTheme("Catppuccin Latte")
     await act(async () => { configState.synchronizeTheme!("nord") })
-    expect(document.querySelector('[aria-label="主题"]')?.textContent).toBe("Catppuccin Latte")
+    expect(document.querySelector('[aria-label="主题"] [role="radio"][aria-checked="true"]')?.getAttribute("aria-label")).toBe("Catppuccin Latte")
     expect(terminal.options.theme?.background).toBe("#eff1f5")
     await clickButton("取消")
     await clickButton("放弃更改")
@@ -5628,18 +5655,11 @@ async function flushPromises(): Promise<void> {
 }
 
 async function chooseTheme(name: string): Promise<void> {
-  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() })
-  const trigger = document.querySelector<HTMLButtonElement>('[aria-label="主题"]')
-  expect(trigger).not.toBeNull()
-  await act(async () => {
-    trigger!.click()
-    await flushPromises()
-  })
-  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
-    .find((element) => element.textContent === name)
+  const option = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+    .find((element) => element.getAttribute("aria-label") === name)
   expect(option).toBeDefined()
   await act(async () => {
-    option!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    option!.click()
     await flushPromises()
   })
 }
