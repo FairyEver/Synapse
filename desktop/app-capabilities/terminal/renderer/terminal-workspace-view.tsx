@@ -92,6 +92,7 @@ import {
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
 } from "./terminal-rendering"
+import { getTerminalChromeStyle, TERMINAL_CHROME_BUTTON_CLASS_NAME } from "./terminal-chrome"
 import {
   notifyTerminalAtlasRestructured,
   registerTerminalAtlasRepair,
@@ -780,7 +781,7 @@ function TerminalPaneTitle({
 }) {
   return (
     <span
-      className="min-w-0 truncate text-xs font-medium text-foreground/75"
+      className="min-w-0 truncate text-xs font-medium text-foreground"
       data-track="terminal-pane-title"
       onClick={disabled ? undefined : () => {
         track({
@@ -929,6 +930,7 @@ function TerminalPane({
   const releaseGridOwnershipRef = useRef<((announceFailure?: boolean) => void) | null>(null)
   const setProjectionVisibilityRef = useRef<((nextVisible: boolean) => void) | null>(null)
   const appearanceThemeRef = useRef(appearanceTheme)
+  const terminalChromeStyle = useMemo(() => getTerminalChromeStyle(appearanceTheme), [appearanceTheme])
   appearanceThemeRef.current = appearanceTheme
   const appearanceSizeRef = useRef(appearanceSize)
   const sessionRef = useRef(session)
@@ -1666,8 +1668,9 @@ function TerminalPane({
             draggable={!remoteSized}
             onDragEnd={onPaneDragEnd}
             onDragStart={handlePaneDragStart}
+            style={terminalChromeStyle}
             className={cn(
-              "@container flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
+              "@container flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-background pl-2 pr-0.5 text-foreground",
               remoteSized ? "cursor-default" : "cursor-grab",
               dragged && "cursor-grabbing",
             )}
@@ -1683,7 +1686,7 @@ function TerminalPane({
                 title={fileTreeOpen ? "关闭文件树" : "打开文件树"}
                 aria-pressed={fileTreeOpen}
                 data-track="terminal-pane-file-tree-toggle"
-                className="shrink-0 text-muted-foreground"
+                className={cn("shrink-0", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                 onClick={(event) => {
                   event.stopPropagation()
                   onActive()
@@ -1714,7 +1717,7 @@ function TerminalPane({
                     variant="ghost"
                     aria-label={`更多分屏操作：${session.title}`}
                     title="更多分屏操作"
-                    className="hidden text-muted-foreground @max-xs:inline-flex"
+                    className={cn("hidden @max-xs:inline-flex", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                     onPointerDown={(event) => event.stopPropagation()}
                   >
                     <MoreHorizontal className="size-3.5" />
@@ -1749,7 +1752,7 @@ function TerminalPane({
                 aria-label={`${equalizeActionLabel}：${session.title}`}
                 title={equalizeActionLabel}
                 data-track="terminal-pane-equalize"
-                className="text-muted-foreground @max-xs:hidden"
+                className={cn("@max-xs:hidden", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                 disabled={equalizeDisabled || remoteSized}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -1770,7 +1773,7 @@ function TerminalPane({
                 title={maximized ? "还原分屏" : "最大化分屏"}
                 aria-pressed={maximized}
                 data-track="terminal-pane-maximize"
-                className="text-muted-foreground @max-xs:hidden"
+                className={cn("@max-xs:hidden", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                 disabled={maximizeDisabled || remoteSized}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -1794,7 +1797,7 @@ function TerminalPane({
                 aria-label={`复制引用：${session.title}`}
                 title="复制引用"
                 data-track="terminal-pane-copy-reference"
-                className="text-muted-foreground @max-xs:hidden"
+                className={cn("@max-xs:hidden", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                 onClick={(event) => {
                   event.stopPropagation()
                   onActive()
@@ -1811,7 +1814,7 @@ function TerminalPane({
                 aria-label={`复制全文：${session.title}`}
                 title="复制全文"
                 data-track="terminal-pane-copy-transcript"
-                className="text-muted-foreground @max-xs:hidden"
+                className={cn("@max-xs:hidden", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                 onClick={(event) => {
                   event.stopPropagation()
                   onActive()
@@ -1827,7 +1830,7 @@ function TerminalPane({
                 variant="ghost"
                 aria-label={`${closeActionLabel}：${session.title}`}
                 title={closeActionLabel}
-                className="text-muted-foreground hover:text-destructive @max-xs:hidden"
+                className={cn(TERMINAL_CHROME_BUTTON_CLASS_NAME, "hover:text-destructive @max-xs:hidden")}
                 disabled={closePending || (closing && platform !== "darwin") || remoteSized}
                 onClick={(event) => {
                   event.stopPropagation()

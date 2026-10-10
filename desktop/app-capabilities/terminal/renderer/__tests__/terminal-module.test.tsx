@@ -1854,12 +1854,15 @@ describe("TerminalModule", () => {
   })
 
   it.each([
-    ["Nord", "nord", "#2e3440"],
-    ["Rosé Pine Dawn", "rose-pine-dawn", "#faf4ed"],
-    ["Ayu Light", "ayu-light", "#fcfcfc"],
-    ["Solarized Light", "solarized-light", "#fdf6e3"],
-    ["Tokyo Night Day", "tokyo-night-day", "#e1e2e7"],
-  ])("previews and saves %s on all panes without recreating sessions", async (name, themeId, background) => {
+    ["Nord", "nord", "#2e3440", "#d8dee9"],
+    ["Gruvbox Dark", "gruvbox-dark", "#282828", "#ebdbb2"],
+    ["Catppuccin Mocha", "catppuccin-mocha", "#1e1e2e", "#cdd6f4"],
+    ["Catppuccin Latte", "catppuccin-latte", "#eff1f5", "#4c4f69"],
+    ["Rosé Pine Dawn", "rose-pine-dawn", "#faf4ed", "#575279"],
+    ["Ayu Light", "ayu-light", "#fcfcfc", "#5c6166"],
+    ["Solarized Light", "solarized-light", "#fdf6e3", "#657b83"],
+    ["Tokyo Night Day", "tokyo-night-day", "#e1e2e7", "#3760bf"],
+  ])("previews and saves %s on all panes without recreating sessions", async (name, themeId, background, foreground) => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
     await renderEmbeddedModule()
@@ -1877,6 +1880,12 @@ describe("TerminalModule", () => {
     for (const terminal of terminals) {
       expect(terminal.options.theme?.background).toBe(background)
       expect(terminal.dispose).not.toHaveBeenCalled()
+    }
+    const bars = document.querySelectorAll<HTMLElement>("[data-terminal-pane-header], [data-terminal-toolbar]")
+    expect(bars).toHaveLength(3)
+    for (const bar of bars) {
+      expect(bar.style.getPropertyValue("--background")).toBe(background)
+      expect(bar.style.getPropertyValue("--foreground")).toBe(foreground)
     }
     expect(configState.persisted?.global.terminalTheme).toBeUndefined()
     expect(document.querySelector('[data-terminal-theme-preview]')).not.toBeNull()
@@ -1906,6 +1915,10 @@ describe("TerminalModule", () => {
     expect(terminal.options.theme?.background).toBe("#2e3440")
     expect(configState.persisted?.global.terminalTheme).toBe("nord")
     expect(terminal.dispose).not.toHaveBeenCalled()
+    for (const bar of document.querySelectorAll<HTMLElement>("[data-terminal-pane-header], [data-terminal-toolbar]")) {
+      expect(bar.style.getPropertyValue("--background")).toBe("#2e3440")
+      expect(bar.style.getPropertyValue("--foreground")).toBe("#d8dee9")
+    }
   })
 
   it("keeps another window's saved theme when saving an untouched theme draft", async () => {
@@ -2055,7 +2068,8 @@ describe("TerminalModule", () => {
     const terminalRegion = document.querySelector("[aria-label^='终端会话']")
     expect(toolbar).toBeTruthy()
     expect(toolbar?.classList.contains("min-h-10")).toBe(true)
-    expect(toolbar?.classList.contains("bg-card")).toBe(true)
+    expect(toolbar?.classList.contains("bg-background")).toBe(true)
+    expect(document.querySelector("[data-terminal-pane-header]")?.classList.contains("bg-background")).toBe(true)
     expect(toolbar?.classList.contains("border-t")).toBe(true)
     expect(toolbar?.classList.contains("border-b")).toBe(false)
     // 横向滚动收在内层：快捷输入那一格钉在外面，滚不走。
@@ -2079,14 +2093,14 @@ describe("TerminalModule", () => {
       ["Ctrl+C", "Clear", "/exit", "/clear"].includes(button.textContent ?? ""))
     expect(builtInButtons).toHaveLength(4)
     for (const button of builtInButtons) {
-      expect(button.className).toContain("text-foreground/75")
+      expect(button.classList.contains("text-foreground")).toBe(true)
       expect(button.className).toContain("transition-[scale,background-color,color]")
       expect(button.className).toContain("active:scale-[0.96]")
-      expect(button.className).toContain("hover:text-foreground")
+      expect(button.className).toContain("hover:text-accent-foreground")
     }
     const manageButton = toolbar.querySelector("button[aria-label='管理快捷命令']")
-    expect(manageButton?.className).toContain("text-foreground/75")
-    expect(manageButton?.className).toContain("hover:text-foreground")
+    expect(manageButton?.classList.contains("text-foreground")).toBe(true)
+    expect(manageButton?.className).toContain("hover:text-accent-foreground")
     expect(toolbar.querySelector("[aria-hidden='true']")?.className).toContain("bg-border")
   })
 

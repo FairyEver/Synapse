@@ -4,6 +4,8 @@ import { ChevronUp, Eye, X } from "lucide-react"
 import { Button } from "../../../src/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../src/components/ui/popover"
 import type { SynapseQuickInputItem } from "../../../src/types/quick-input"
+import { cn } from "../../../src/lib/utils"
+import { TERMINAL_CHROME_BUTTON_CLASS_NAME } from "./terminal-chrome"
 
 /** 行标签与折叠正文的长度上限。句子本身没有长度约束，这里只是防止长句撑破行。 */
 const QUICK_INPUT_LABEL_MAX_LENGTH = 24
@@ -69,7 +71,7 @@ export function TerminalQuickInputMenu({ items, disabled, onPick }: TerminalQuic
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 rounded-md px-2 text-foreground/75 hover:bg-accent hover:text-foreground"
+          className={cn("h-7 rounded-md px-2", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
           aria-label="快捷输入"
           disabled={disabled}
         >

@@ -3,6 +3,8 @@ import { toast } from "sonner"
 
 import { Button } from "../../../src/components/ui/button"
 import { Spinner } from "../../../src/components/ui/spinner"
+import { cn } from "../../../src/lib/utils"
+import { TERMINAL_CHROME_BUTTON_CLASS_NAME } from "./terminal-chrome"
 import { useTerminalGitStatus } from "./use-terminal-git-status"
 
 export function TerminalGitIndicator({
@@ -41,7 +43,7 @@ export function TerminalGitIndicator({
         aria-label={syncLabel}
         title={syncLabel}
         data-track="terminal-pane-git-sync"
-        className="shrink-0"
+        className={cn("shrink-0", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
         onClick={(event) => {
           event.stopPropagation()
           void sync().then((result) => {

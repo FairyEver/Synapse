@@ -118,6 +118,7 @@ import {
 } from "./terminal-toolbar-actions"
 import { TerminalToolbarManagerDialog } from "./terminal-toolbar-manager-dialog"
 import { TerminalQuickInputMenu } from "./terminal-quick-input-menu"
+import { getTerminalChromeStyle, TERMINAL_CHROME_BUTTON_CLASS_NAME } from "./terminal-chrome"
 import {
   applyGroupOrder,
   moveGroupId,
@@ -175,6 +176,7 @@ export function TerminalModule({
     setTerminalThemeDraft((draft) => draft === previousSavedTheme ? terminalTheme : draft)
   }, [terminalTheme])
   const previewTheme = globalSettingsOpen ? terminalThemeDraft : terminalTheme
+  const terminalChromeStyle = useMemo(() => getTerminalChromeStyle(previewTheme), [previewTheme])
   const [terminalAppearanceSize, setTerminalAppearanceSize] = useState(readTerminalAppearanceSize)
   const [terminalAppearanceSizeDraft, setTerminalAppearanceSizeDraft] = useState(terminalAppearanceSize)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
@@ -1799,7 +1801,8 @@ export function TerminalModule({
                 <div
                   data-terminal-toolbar
                   data-voice-toolbar
-                  className="flex min-h-10 shrink-0 items-center gap-2 border-t bg-card px-2.5 py-1.5"
+                  style={terminalChromeStyle}
+                  className="flex min-h-10 shrink-0 items-center gap-2 border-t bg-background px-2.5 py-1.5 text-foreground"
                 >
                   <p
                     ref={voiceTranscriptRef}
@@ -1809,7 +1812,6 @@ export function TerminalModule({
                     {voice.state.transcript.combined ? (
                       <>
                         {voice.state.transcript.stable}
-                        {/* 未定稿的部分还会变，用次要色和定稿文字区分开。 */}
                         <span className="text-muted-foreground">{voice.state.transcript.unstable}</span>
                         {voicePresentation.caretVisible ? (
                           <span aria-hidden="true" className="ml-px inline-block h-3.5 w-0.5 bg-foreground align-middle" />
@@ -1824,7 +1826,7 @@ export function TerminalModule({
                     type="button"
                     size="xs"
                     variant="ghost"
-                    className="shrink-0 text-foreground/75 hover:text-foreground"
+                    className={cn("shrink-0", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                     aria-label="取消语音输入"
                     onClick={voice.cancel}
                   >
@@ -1849,7 +1851,8 @@ export function TerminalModule({
                 /* 语音转写填进命令行了但还没执行 —— 提示挂在转写条
                    自己身上，不去动 pane 头，改动半径最小。 */
                 <div
-                  className="flex shrink-0 items-center gap-2 border-t border-border bg-card px-2.5 py-1.5"
+                  style={terminalChromeStyle}
+                  className="flex shrink-0 items-center gap-2 border-t border-border bg-background px-2.5 py-1.5 text-foreground"
                   data-terminal-pending-input
                 >
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
@@ -1860,7 +1863,7 @@ export function TerminalModule({
                     type="button"
                     size="icon-xs"
                     variant="ghost"
-                    className="shrink-0 text-foreground/75 hover:text-foreground"
+                    className={cn("shrink-0", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                     aria-label="忽略待执行提示"
                     onClick={() => setPendingInputText(null)}
                   >
@@ -1871,7 +1874,7 @@ export function TerminalModule({
               {toolbarActions.length && !voicePresentation.active ? (
                 // 包一层相对定位，好让锁的蒙层只盖命令条 —— 蒙层放进去会跟着内容一起滚。
                 <div className="relative shrink-0">
-                  <div data-terminal-toolbar className="flex min-h-10 items-center border-t bg-card">
+                  <div data-terminal-toolbar style={terminalChromeStyle} className="flex min-h-10 items-center border-t bg-background text-foreground">
                     {/* 快捷输入钉在滚动区之外：指令一多，滚动区最左边的东西会被滚出屏幕。 */}
                     <div className="flex shrink-0 items-center px-2.5 py-1.5">
                       <TerminalQuickInputMenu
@@ -1891,7 +1894,7 @@ export function TerminalModule({
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
+                            className={cn("h-7 rounded-md px-2 transition-[scale,background-color,color] duration-150 ease-out active:scale-[0.96]", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                             aria-label={action.ariaLabel}
                             disabled={!isTerminalToolbarActionEnabled(action, terminalSessionStatus) || sessionLockedByMobile}
                             onClick={() => { void runToolbarAction(action) }}
@@ -1908,7 +1911,7 @@ export function TerminalModule({
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
+                            className={cn("h-7 rounded-md px-2 transition-[scale,background-color,color] duration-150 ease-out active:scale-[0.96]", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
                             aria-label={`${action.pressEnter ? "运行" : "输入"}快捷命令：${action.label}`}
                             disabled={terminalSessionStatus !== "running" || sessionLockedByMobile}
                             onClick={() => { void runCustomToolbarAction(action) }}
@@ -1920,7 +1923,7 @@ export function TerminalModule({
                           type="button"
                           size="icon-xs"
                           variant="ghost"
-                          className="text-foreground/75 hover:text-foreground"
+                          className={TERMINAL_CHROME_BUTTON_CLASS_NAME}
                           aria-label="管理快捷命令"
                           disabled={sessionLockedByMobile}
                           onClick={() => setToolbarManagerOpen(true)}
@@ -1933,7 +1936,7 @@ export function TerminalModule({
                           type="button"
                           size="icon-xs"
                           variant="ghost"
-                          className="text-foreground/75 hover:text-foreground"
+                          className={TERMINAL_CHROME_BUTTON_CLASS_NAME}
                           aria-label="语音输入"
                           disabled={terminalSessionStatus !== "running" || voice.state.phase === "recording" || sessionLockedByMobile}
                           onClick={() => { void voice.start() }}
