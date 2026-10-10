@@ -846,22 +846,17 @@ function AgentConversationWorkspace({
         projectId={target.projectId}
         conversationId={target.conversationId}
         footer={continuation.readOnly ? (
-          <div className="flex flex-col items-center gap-3">
-            <p role="status" className="text-sm text-muted-foreground">
-              {continuationIncomplete ? "转交尚未完成，请重试。" : "已转到 Claude Code"}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={claudeCodeContinuationDisabled}
-              onClick={() => void continuation.resume()}
-            >
-              {continuation.continuing
-                ? <LoaderCircle data-icon="inline-start" className="animate-spin" />
-                : <Terminal data-icon="inline-start" />}
-              {continuationIncomplete ? "重试转交" : "打开 Claude Code"}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={claudeCodeContinuationDisabled}
+            onClick={() => void continuation.resume()}
+          >
+            {continuation.continuing
+              ? <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              : <Terminal data-icon="inline-start" />}
+            {continuationIncomplete ? "重试转交" : "打开 Claude Code"}
+          </Button>
         ) : undefined}
       />
 
