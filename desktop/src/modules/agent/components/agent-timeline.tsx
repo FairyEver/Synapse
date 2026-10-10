@@ -173,7 +173,7 @@ function AgentTimeline({
           </div>
         )}
         {footer ? (
-          <div className="mx-auto flex min-w-0 max-w-4xl justify-center px-4 py-6">
+          <div className="mx-auto flex min-w-0 max-w-4xl justify-center px-4 pt-6 pb-14">
             {footer}
           </div>
         ) : null}
