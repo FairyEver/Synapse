@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { AsyncLocalStorage } from "node:async_hooks"
 import { HttpException, Inject, Injectable, Logger, OnModuleDestroy } from "@nestjs/common"
 import type { Catalog } from "@synapse/portal-headless" with { "resolution-mode": "import" }
 import type { z } from "zod"
@@ -31,16 +31,34 @@ function permitted(catalog: Catalog, id: string): ExecutableCapabilityDescriptio
   if (!description.invoke) throw failure(404, "CAPABILITY_UNAVAILABLE", "当前 SDK 能力没有可执行绑定。")
   return description as ExecutableCapabilityDescription
 }
+async function waitForOperation<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  let onAbort!: () => void
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。"))
+    if (signal.aborted) onAbort()
+    else signal.addEventListener("abort", onAbort, { once: true })
+  })
+  try { return await Promise.race([operation, cancelled]) }
+  finally { signal.removeEventListener("abort", onAbort) }
+}
 
-/** 每个 HTTP 请求独立 SDK 会话，用完清理，避免跨凭证缓存与本机断开语义混淆。 */
+/** 环境各自持有 SDK 会话仓库；用户缓存与单次 HTTP 调用的取消信号独立。 */
 @Injectable()
 export class PortalHeadlessService implements OnModuleDestroy {
   private readonly logger = new Logger(PortalHeadlessService.name)
   private loading?: Promise<PortalSdk>
+  private readonly servers = new Map<PortalEnvironment, ReturnType<PortalSdk["createPortalServer"]>>()
+  private readonly requestScope = new AsyncLocalStorage<AbortSignal>()
+  private readonly shutdown = new AbortController()
   private readonly active = new Map<AbortController, string>()
   constructor(@Inject(PORTAL_SDK_LOADER) private readonly load: () => Promise<PortalSdk>) {}
 
-  onModuleDestroy() { for (const controller of this.active.keys()) controller.abort() }
+  onModuleDestroy() {
+    this.shutdown.abort()
+    for (const controller of this.active.keys()) controller.abort()
+    for (const server of this.servers.values()) server.sessions.clear()
+    this.servers.clear()
+  }
 
   async run(identity: { owner: string; environment: PortalEnvironment; credential: PortalCredentials }, operation: Operation) {
     if (this.active.size >= 16 || [...this.active.values()].filter((owner) => owner === identity.owner).length >= 4) {
@@ -50,67 +68,88 @@ export class PortalHeadlessService implements OnModuleDestroy {
     this.active.set(controller, identity.owner)
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
     let server: ReturnType<PortalSdk["createPortalServer"]> | undefined
+    let scoped: Awaited<ReturnType<NonNullable<typeof server>["forSession"]>> | undefined
     try {
       this.loading ??= this.load().catch(() => { this.loading = undefined; throw failure(503, "SDK_UNAVAILABLE", "Portal SDK 暂不可用。") })
       const sdk = await this.loading
-      const config = { baseUrl: baseUrls[identity.environment], timeoutMs: 10_000 }
-      const requestFactory = sdk.createPortalRequestFactory(config)
-      server = sdk.createPortalServer({ ...config, permissionPolicy: sdk.loadGeneratedPermissionPolicy(), permissionSourcePin: sdk.loadPermissionSourcePin(), sessionOptions: {
-        maxSessions: 1, idleTtlMs: 30_000, absoluteTtlMs: 30_000,
-        // SDK diagnostics may include upstream error messages; never forward their raw metadata.
-        logger: {
-          warn: (event, metadata) => {
-            if (event === "portal.permission.denied") {
-              const denied = metadata as { capabilityId?: unknown; policyRevision?: unknown; failedRule?: unknown } | undefined
-              this.logger.warn({ event, capabilityId: typeof denied?.capabilityId === "string" ? denied.capabilityId : null,
-                policyRevision: typeof denied?.policyRevision === "string" ? denied.policyRevision : null,
-                failedRule: typeof denied?.failedRule === "string" ? denied.failedRule : "permission denied" })
-            } else this.logger.warn({ event: "portal.session.degraded" })
-          },
-          error: () => this.logger.error({ event: "portal.session.failed" }),
-        },
-        createRequest(context) {
-          const request = requestFactory(context)
-          return (input) => request({ ...input, signal, timeout: 10_000, maxRedirects: 0, maxContentLength: 2 * 1024 * 1024, maxBodyLength: 256 * 1024 })
-        },
-      } })
-      if (server.catalog.index.pages.length === 0) throw failure(503, "SDK_RESOURCES_MISSING", "SDK 目录资源缺失。")
-      const scoped = await server.forSession({
-        userId: `${identity.owner}:${randomUUID()}`, credential: identity.credential, language: identity.credential.language,
-        capabilities: ["user-basic", "tenant-context"],
-      })
-      let data: unknown
-      if (operation.op === "context") {
-        const user = await scoped.baseShell.getUserInfo()
-        const capabilities = server.catalog.index.capabilities
-        data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
-          environment: identity.environment, now: new Date().toISOString(), timeZone: "Asia/Shanghai",
-          capabilityAccess: { mode: "all", total: capabilities.length,
-            read: capabilities.filter((entry) => !entry.write).length, write: capabilities.filter((entry) => entry.write).length } }
-      } else {
-        const catalog = server.catalog
-        if (operation.op === "catalog") data = this.catalog(catalog, operation.input)
-        else if (operation.op === "describe") {
-          const description = permitted(catalog, operation.input.capabilityId)
-          if (operation.input.kind === "capability") data = { ...description, extensionInputSchema: this.parameterSchema(description) }
-          else if (operation.input.kind === "method" && operation.input.id && operation.input.id === description.invoke?.sdkPath) data = catalog.describeMethod(operation.input.id)
-          else throw failure(404, "REFERENCE_UNAVAILABLE", "当前能力没有此结构或方法引用。")
+      return await waitForOperation(this.requestScope.run(signal, async () => {
+        server = this.serverFor(sdk, identity.environment)
+        if (server.catalog.index.pages.length === 0) throw failure(503, "SDK_RESOURCES_MISSING", "SDK 目录资源缺失。")
+        scoped = await server.forSession({
+          userId: identity.owner, credential: identity.credential, language: identity.credential.language,
+          capabilities: ["user-basic", "tenant-context"],
+        })
+        let data: unknown
+        if (operation.op === "context") {
+          const user = await scoped.baseShell.getUserInfo()
+          const capabilities = server.catalog.index.capabilities
+          data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
+            environment: identity.environment, now: new Date().toISOString(), timeZone: "Asia/Shanghai",
+            capabilityAccess: { mode: "all", total: capabilities.length,
+              read: capabilities.filter((entry) => !entry.write).length, write: capabilities.filter((entry) => entry.write).length } }
         } else {
-          const description = permitted(catalog, operation.input.capabilityId)
-          const result = await scoped.capabilities.invoke(description.invoke.capabilityId, operation.input.arguments)
-          data = { result, ai: description.ai, capabilityId: description.capabilityId }
+          const catalog = server.catalog
+          if (operation.op === "catalog") data = this.catalog(catalog, operation.input)
+          else if (operation.op === "describe") {
+            const description = permitted(catalog, operation.input.capabilityId)
+            if (operation.input.kind === "capability") data = { ...description, extensionInputSchema: this.parameterSchema(description) }
+            else if (operation.input.kind === "method" && operation.input.id && operation.input.id === description.invoke?.sdkPath) data = catalog.describeMethod(operation.input.id)
+            else throw failure(404, "REFERENCE_UNAVAILABLE", "当前能力没有此结构或方法引用。")
+          } else {
+            const description = permitted(catalog, operation.input.capabilityId)
+            const result = await scoped.capabilities.invoke(description.invoke.capabilityId, operation.input.arguments)
+            data = { result, ai: description.ai, capabilityId: description.capabilityId }
+          }
         }
-      }
-      if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
-      return { protocolVersion, catalogRevision: `${catalogRevision}:full-${identity.environment}-v1`, data }
+        if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
+        return { protocolVersion, catalogRevision: `${catalogRevision}:full-${identity.environment}-v1`, data }
+      }), signal)
     } catch (error) {
-      if (error instanceof HttpException) throw error
-      throw normalizePortalError(error, signal.aborted)
+      const normalized = error instanceof HttpException ? error : normalizePortalError(error, signal.aborted)
+      // An older in-flight failure must not invalidate a newly rotated credential's session.
+      if (normalized.getStatus() === 401 && server && scoped && server.sessions.peek(scoped.session.key) === scoped.session) {
+        server.sessions.invalidate(scoped.session.key, "credential-rotated")
+      }
+      throw normalized
     } finally {
       controller.abort()
-      server?.sessions.clear()
       this.active.delete(controller)
     }
+  }
+
+  private serverFor(sdk: PortalSdk, environment: PortalEnvironment) {
+    const cached = this.servers.get(environment)
+    if (cached) return cached
+    const config = { baseUrl: baseUrls[environment], timeoutMs: 10_000 }
+    const requestFactory = sdk.createPortalRequestFactory(config)
+    const server = sdk.createPortalServer({ ...config, permissionPolicy: sdk.loadGeneratedPermissionPolicy(), permissionSourcePin: sdk.loadPermissionSourcePin(), sessionOptions: {
+      // SDK diagnostics may include upstream error messages; never forward their raw metadata.
+      logger: {
+        warn: (event, metadata) => {
+          if (event === "portal.permission.denied") {
+            const denied = metadata as { capabilityId?: unknown; policyRevision?: unknown; failedRule?: unknown } | undefined
+            this.logger.warn({ event, capabilityId: typeof denied?.capabilityId === "string" ? denied.capabilityId : null,
+              policyRevision: typeof denied?.policyRevision === "string" ? denied.policyRevision : null,
+              failedRule: typeof denied?.failedRule === "string" ? denied.failedRule : "permission denied" })
+          } else this.logger.warn({ event: "portal.session.degraded" })
+        },
+        error: () => this.logger.error({ event: "portal.session.failed" }),
+      },
+      createRequest: (context) => {
+        const request = requestFactory(context)
+        return (input) => {
+          // Resolve at send time: a cached session must never retain a previous request's signal.
+          const operationSignal = this.requestScope.getStore()
+          if (!operationSignal) throw new Error("Portal request outside operation scope")
+          // Single-flight base data belongs to the session, not its first waiting caller.
+          const signal = input.capabilityId?.startsWith("base-data:") ? this.shutdown.signal : operationSignal
+          if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
+          return request({ ...input, signal, timeout: 10_000, maxRedirects: 0, maxContentLength: 2 * 1024 * 1024, maxBodyLength: 256 * 1024 })
+        }
+      },
+    } })
+    this.servers.set(environment, server)
+    return server
   }
 
   private parameterSchema(description: CapabilityDescription) {

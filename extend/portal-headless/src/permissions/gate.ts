@@ -1,4 +1,6 @@
 import type { PortalRequest } from '../session/types.js'
+import type { PortalSession } from '../session/session.js'
+import { BASE_DATA_KEYS } from '../capabilities/base-dept-dict-permission.js'
 import { evaluatePermissionExpression, loadPermissionSourcePin, validatePermissionPolicy, type ContextRule, type PermissionPolicy } from './policy.js'
 
 export class PermissionDeniedError extends Error {
@@ -20,6 +22,14 @@ export type PermissionGateOptions = {
 function extractCodes(payload: unknown): Set<string> {
   if (!Array.isArray(payload) || payload.some(code => typeof code !== 'string')) throw new Error('invalid permission response')
   return new Set(payload as string[])
+}
+/** Permission facts share the SDK user-session cache; authorization decisions do not. */
+export async function loadSessionPermissionCodes(session: PortalSession): Promise<ReadonlySet<string>> {
+  await session.ensure([BASE_DATA_KEYS.permission])
+  try { return extractCodes(session.get(BASE_DATA_KEYS.permission)) } catch (error) {
+    session.invalidate(BASE_DATA_KEYS.permission)
+    throw error
+  }
 }
 function evaluateContext(rule: ContextRule, values: Record<string, unknown>): boolean {
   const args = rule.args!

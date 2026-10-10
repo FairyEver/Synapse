@@ -31,6 +31,6 @@ CLI 和 SDK 共用一个编译器，不接受调用方 `--capabilities` 清单�
 
 ## 服务端行为
 
-Synapse 适配层必须加载策略和独立 pin；加载失败也启用拒绝闸门。`/invoke`、兼容 `/read` 都走同一个 gate。每次调用重新读取 Portal 权限码，系统条件重新读取企业开通系统，租户来自已验证会话。其他上下文仅来自可信 resolver；缺失、失败或不满足均拒绝。拒绝返回 `PH_PERMISSION_DENIED` 403，不发送目标业务请求，不重试；审计仅记录 capability、policyRevision、failedRule。
+Synapse 适配层必须加载策略和独立 pin；加载失败也启用拒绝闸门。`/invoke`、兼容 `/read` 都走同一个 gate。每次调用重新校验策略与计算权限链；权限码和企业开通系统按需读取 SDK 用户会话缓存（`permission-list`、`tenant-system`），租户来自已验证会话。缓存沿用 SDK 的身份隔离、并发加载去重、TTL/LRU 与显式失效，不缓存授权结论。权限变化在会话失效或过期后重新读取；可信宿主可显式 invalidate，AI 参数不能刷新或覆盖权限事实。其他上下文仅来自可信 resolver；缺失、失败或不满足均拒绝。拒绝返回 `PH_PERMISSION_DENIED` 403，不发送目标业务请求，不重试；审计仅记录 capability、policyRevision、failedRule。
 
 直接嵌入的本地 SDK 门面保持既有兼容行为；不得把未装配 gate 的本地门面作为远程执行入口。当前仓库策略仍为 `incomplete`，没有伪造真实审阅或默认放行。合成回归测试不代表普通/管理员双账号真实验收；启用能力前仍需完成逐条审阅及真实 Portal 请求验收。

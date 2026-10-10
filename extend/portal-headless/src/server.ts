@@ -411,7 +411,7 @@ import {
   type CapabilityRegistry,
 } from './capabilities/invoke.js'
 import { createPageCall } from './call.js'
-import { createPermissionGate } from './permissions/gate.js'
+import { createPermissionGate, loadSessionPermissionCodes } from './permissions/gate.js'
 import type { PermissionPolicy } from './permissions/policy.js'
 import { applyInvalidation } from './invalidation/index.js'
 import type { PortalHeadlessConfig } from './config.js'
@@ -2853,6 +2853,7 @@ export function createPortalServer (options: PortalServerOptions): PortalServer 
           chat,
         }, { permissionGate: options.permissionPolicy === undefined ? undefined : createPermissionGate({
           policy: options.permissionPolicy, sourcePin: options.permissionSourcePin, request: session.request,
+          permissionCodes: () => loadSessionPermissionCodes(session),
           context: async rules => ({ ...(await options.permissionContext?.(session, rules)), ...(await loadPermissionContext(session, rules)) }),
           onDenied: event => sessionOptions?.logger?.warn('portal.permission.denied', event),
         }) }),

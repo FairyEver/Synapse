@@ -31,7 +31,7 @@ function syntheticPolicy() {
 // 默认的 10 秒 hook 超时会偶发性地判它失败。放宽到 30 秒，避免误报。
 beforeAll(async () => { sdk = await import("@synapse/portal-headless"); reviewedPolicy = syntheticPolicy() }, 30_000)
 const identity = { owner: "owner-one", environment: "test" as const, credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
-function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]>; missingPolicy?: boolean; stalePolicy?: boolean } = {}) {
+function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]>; missingPolicy?: boolean; stalePolicy?: boolean; writeResponse?: (token: string, signal: AbortSignal) => Promise<unknown>; permissionResponse?: (signal: AbortSignal) => Promise<unknown> } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []
   const runtimes: ReturnType<PortalSdk["createPortalServer"]>[] = []
   const factoryBaseUrls: string[] = []
@@ -42,6 +42,7 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
       const runtime = sdk.createPortalServer(config); runtimes.push(runtime); return runtime
     },
     createPortalRequestFactory: (config: { baseUrl: string }) => { factoryBaseUrls.push(config.baseUrl); return (context: { credential: { token: string; tenantId: string } }) => async (request: Record<string, unknown>) => {
+      if ((request.signal as AbortSignal)?.aborted) throw { code: 'ERR_CANCELED' }
       calls.push({ ...context.credential, request })
       if (options.error) throw options.error
       const url = String(request.url)
@@ -52,13 +53,14 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
         return [{ id: "menu", name: "双赢协议", permissions: "/dashboard/agreement", url: null, children: [] }]
       }
       if (url.endsWith("/sys/menu/permissionsNotBySystem")) {
+        if (options.permissionResponse) return options.permissionResponse(request.signal as AbortSignal)
         if (options.permissionFailure) throw new Error("permission secret-canary")
         if (options.permissionsByTenant) return options.permissionsByTenant[context.credential.tenantId] ?? []
         return options.permissions === undefined ? ["/dashboard/year-agreement/main", "action"] : options.permissions
       }
       if (url.endsWith("/meeting-room-usage")) return { meetingRooms: [{ meetingRoomId: "room", meetingRoomName: "会议室", timeSlots: [] }] }
       if (url.endsWith("/org/hrposttype/page")) return { list: [{ id: "post-type", name: "测试类别" }], total: 1 }
-      if (url.endsWith("/org/hrposttype/save")) return null
+      if (url.endsWith("/org/hrposttype/save")) return options.writeResponse ? options.writeResponse(context.credential.token, request.signal as AbortSignal) : null
       if (url.endsWith("/kpiyearprotocol/page")) {
         if (options.yearlyError) throw options.yearlyError
         return { list: [{ id: "agreement", year: 2026, status: "1" }], total: 1 }
@@ -71,6 +73,167 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
 }
 
 describe("Portal Headless backend extension", () => {
+  const writeOperation = { op: 'invoke' as const, input: { capabilityId: 'hr-post-type-create', arguments: { name: '测试类别', sort: 1 } } }
+  it('shares SDK permission data across read/invoke calls without reusing an aborted request signal', async () => {
+    const { service, calls, runtimes } = fixture()
+    await service.run(identity, writeOperation)
+    await service.run(identity, { ...writeOperation, op: 'read' })
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(1)
+    expect(calls.filter(call => String(call.request.url).endsWith('/sys/user/info'))).toHaveLength(1)
+    const targets = calls.filter(call => String(call.request.url).endsWith('/org/hrposttype/save'))
+    expect(targets).toHaveLength(2)
+    expect(targets[0]!.request.signal).not.toBe(targets[1]!.request.signal)
+    expect(runtimes).toHaveLength(1)
+  })
+  it('coalesces concurrent permission loads for the same SDK user session', async () => {
+    const { service, calls } = fixture()
+    await Promise.all([service.run(identity, writeOperation), service.run(identity, writeOperation)])
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(1)
+    expect(calls.filter(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toHaveLength(2)
+  })
+  it('finishing one concurrent call does not abort another call using the same cached session', async () => {
+    let releaseSecond!: () => void
+    let reportBoth!: () => void
+    let reportFirst!: () => void
+    const firstStarted = new Promise<void>(resolve => { reportFirst = resolve })
+    const bothStarted = new Promise<void>(resolve => { reportBoth = resolve })
+    const secondPending = new Promise<void>(resolve => { releaseSecond = resolve })
+    const signals: AbortSignal[] = []
+    const { service } = fixture({ writeResponse: async (_token, signal) => {
+      signals.push(signal)
+      if (signals.length === 1) { reportFirst(); await bothStarted }
+      else { reportBoth(); await secondPending }
+      return null
+    } })
+    const first = service.run(identity, writeOperation)
+    await firstStarted
+    const second = service.run(identity, writeOperation)
+    try {
+      await bothStarted
+      await first
+      expect(signals[0]!.aborted).toBe(true)
+      expect(signals[1]!.aborted).toBe(false)
+      expect(signals[0]).not.toBe(signals[1])
+    } finally { releaseSecond() }
+    await second
+  })
+  it('an old credential failure cannot evict a newly rotated user session', async () => {
+    let reportStarted!: () => void
+    let rejectOld!: (reason: unknown) => void
+    const started = new Promise<void>(resolve => { reportStarted = resolve })
+    const oldPending = new Promise<unknown>((_resolve, reject) => { rejectOld = reject })
+    const { service, calls } = fixture({ writeResponse: async token => {
+      if (token === identity.credential.token) { reportStarted(); return oldPending }
+      return null
+    } })
+    const old = service.run(identity, writeOperation)
+    const rejected = expect(old).rejects.toMatchObject({ status: 401 })
+    await started
+    const rotated = { ...identity, credential: { ...identity.credential, token: 'rotated-canary' } }
+    await service.run(rotated, writeOperation)
+    rejectOld({ code: 401 })
+    await rejected
+    await service.run(rotated, writeOperation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(2)
+    expect(calls.filter(call => String(call.request.url).endsWith('/sys/user/info'))).toHaveLength(2)
+  })
+  it('one caller timeout does not cancel a shared permission load needed by another caller', async () => {
+    const deadlines = [new AbortController(), new AbortController()]
+    let deadlineIndex = 0
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => deadlines[deadlineIndex++]!.signal)
+    let loaded!: (value: unknown) => void
+    let reportStarted!: () => void
+    const started = new Promise<void>(resolve => { reportStarted = resolve })
+    const pending = new Promise<unknown>(resolve => { loaded = resolve })
+    let sharedSignal!: AbortSignal
+    const { service, calls } = fixture({ permissionResponse: async signal => {
+      sharedSignal = signal
+      reportStarted()
+      return pending
+    } })
+    try {
+      const first = service.run(identity, writeOperation)
+      const failed = expect(first).rejects.toMatchObject({ status: 504 })
+      await started
+      const second = service.run(identity, writeOperation)
+      deadlines[0]!.abort()
+      await failed
+      loaded(['/dashboard/year-agreement/main', 'action'])
+      await second
+      expect(sharedSignal.aborted).toBe(false)
+      expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(1)
+      expect(calls.filter(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toHaveLength(1)
+      service.onModuleDestroy()
+      expect(sharedSignal.aborted).toBe(true)
+    } finally { loaded([]); timeout.mockRestore() }
+  })
+  it('refreshes invalidated permission data and denies without caching the prior allow decision', async () => {
+    const options = { permissions: ['/dashboard/year-agreement/main', 'action'] }
+    const { service, calls, runtimes } = fixture(options)
+    await service.run(identity, writeOperation)
+    options.permissions = ['/dashboard/year-agreement/main']
+    const runtime = runtimes[0]!
+    runtime.sessions.invalidateCapability({ userId: identity.owner, tenantId: identity.credential.tenantId, language: identity.credential.language }, 'permission-list')
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403, response: { failedRule: 'action permission chain' } })
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(2)
+    expect(calls.filter(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toHaveLength(1)
+  })
+  it('does not share cached permissions across owners, tenants, languages, environments or rotated credentials', async () => {
+    const { service, calls, runtimes } = fixture()
+    const identities = [identity, { ...identity, owner: 'owner-two' },
+      { ...identity, credential: { ...identity.credential, tenantId: 'tenant-two' } },
+      { ...identity, credential: { ...identity.credential, language: 'en-US' as const } },
+      { ...identity, environment: 'prod' as const },
+      { ...identity, credential: { ...identity.credential, token: 'rotated-canary' } }]
+    for (const item of identities) await service.run(item, writeOperation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(6)
+    expect(runtimes).toHaveLength(2)
+    await service.run(identities[5]!, writeOperation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(6)
+    service.onModuleDestroy()
+    expect(runtimes.every(runtime => runtime.sessions.list().length === 0)).toBe(true)
+  })
+  it('reloads permissions after the SDK session expires', async () => {
+    const { service, calls } = fixture()
+    let at = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => at)
+    try {
+      await service.run(identity, writeOperation)
+      at += 31 * 60_000
+      await service.run(identity, writeOperation)
+    } finally { clock.mockRestore() }
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(2)
+  })
+  it('does not cache a failed permission fetch or send a target request on that failure', async () => {
+    const options = { permissionFailure: true }
+    const { service, calls } = fixture(options)
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403 })
+    expect(calls.some(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toBe(false)
+    options.permissionFailure = false
+    await service.run(identity, writeOperation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(2)
+  })
+  it('clears the failing session after a business credential rejection', async () => {
+    const options: { yearlyError?: unknown } = {}
+    const { service, calls } = fixture(options)
+    const operation = { op: 'read' as const, input: { capabilityId: 'perf-year-agreement-list', arguments: {} } }
+    await service.run(identity, operation)
+    options.yearlyError = { code: 401 }
+    await expect(service.run(identity, operation)).rejects.toMatchObject({ status: 401 })
+    options.yearlyError = undefined
+    await service.run(identity, operation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(2)
+    expect(calls.filter(call => String(call.request.url).endsWith('/sys/user/info'))).toHaveLength(2)
+  })
+  it('discards malformed permission data so a repaired source can load on the next call', async () => {
+    const options: { permissions: unknown } = { permissions: ['/dashboard/year-agreement/main', 'action', 42] }
+    const { service, calls } = fixture(options)
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403 })
+    expect(calls.some(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toBe(false)
+    options.permissions = ['/dashboard/year-agreement/main', 'action']
+    await service.run(identity, writeOperation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(2)
+  })
   it("loads the packaged SDK, validates identity and returns only safe context", async () => {
     const { service, calls, runtimes } = fixture()
     const result = await service.run(identity, { op: "context" })
@@ -80,6 +243,7 @@ describe("Portal Headless backend extension", () => {
     expect(calls.some((call) => String(call.request.url).endsWith("getUserTenantsByPage"))).toBe(true)
     expect(calls.every((call) => call.request.maxRedirects === 0 && call.request.timeout === 10_000 && call.request.signal instanceof AbortSignal)).toBe(true)
     expect(runtimes).toHaveLength(1)
+    service.onModuleDestroy()
     expect(calls.every((call) => (call.request.signal as AbortSignal).aborted)).toBe(true)
   })
   it("selects only the production API for production credentials", async () => {

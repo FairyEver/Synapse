@@ -36,11 +36,11 @@ SDK 源码就在本仓库内，是 `extend/portal-headless` 下的 workspace 子
 
 ## 运行范围与限制
 
-测试 API 固定为 `https://biz-api-test.wodecorp.cn`，正式 API 固定为 `https://biz-api.wodecorp.cn`；后端从已验证的短期授权中读取环境，不允许业务请求覆盖环境、URL、header 集合或 SDK 方法路径。每个请求使用隔离 SDK 会话并在 finally 清理，身份与企业验证显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。正式环境真实授权与业务调用尚未验收。
+测试 API 固定为 `https://biz-api-test.wodecorp.cn`，正式 API 固定为 `https://biz-api.wodecorp.cn`；后端从已验证的短期授权中读取环境，不允许业务请求覆盖环境、URL、header 集合或 SDK 方法路径。两个环境分别复用 SDK 会话仓库；会话按已验证的 SY owner、Portal 凭据、企业和语言隔离，身份与企业基础数据显式要求 `user-basic`、`tenant-context`。SDK 请求工厂设置 10 秒单请求、30 秒总时限、禁止重定向、2 MiB 响应上限。正式环境真实授权与业务调用尚未验收。
 
 两个环境的扩展都发布固定版本 SDK 的完整能力发现目录，不按 Portal 页面权限收窄目录。`describe` 只接受目录中的精确 capability/method 引用并返回 SDK 契约与顶层参数 schema；`/invoke` 和兼容 `/read` 只调用 SDK 已登记的 `capabilities.invoke` 绑定，不接受客户端指定 URL、header 或任意方法路径。读写能力均须通过 PH 服务端权限闸门，已审阅页面链、动作链和可信上下文全部满足才发送目标请求；Portal 后端继续执行自身鉴权。
 
-全量目录是能力发现面，不表示当前账号具备每项业务权限；执行使用当前用户与企业绑定的 Portal 凭据，先读取当前权限与业务上下文执行 PH 策略，再调用目标业务接口。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。每次 HTTP 请求仍使用独立会话，不跨用户或企业缓存。
+全量目录是能力发现面，不表示当前账号具备每项业务权限；执行使用当前用户与企业绑定的 Portal 凭据，从用户会话读取权限与可信业务上下文执行 PH 策略，再调用目标业务接口。能力探查不得触发写操作；写入必须来自用户明确请求，并遵守 SDK 描述中的 prepare、候选值、`requestId`、幂等、完成条件和失败处理。同一用户会话复用 SDK 内部缓存，不跨身份、企业、语言或环境共享；权限判断结果不缓存。
 
 `context.capabilityAccess` 返回 `mode=all` 及固定 SDK 的总数、读能力数和写能力数；这些计数只表示可发现能力，不代表策略或账号授权通过。具体清单通过分页目录读取。`catalogRevision` 在 SDK 提交号后加 `:full-test-v1` 或 `:full-prod-v1`，分别标识环境与全量目录规则。
 
@@ -62,6 +62,14 @@ SY 401 仅输出一次 MCP 刷新指令（退出码 10）；调用方刷新后�
 
 SDK build 独立固定 Portal 与 SDK 源码 revision；执行前检查 schema、覆盖、registry 与内容 hash。策略缺失、损坏、过期、无 accepted 条目、权限/上下文不可取得或不满足，均返回结构化 `403 PH_PERMISSION_DENIED`，包括 capabilityId、policyRevision、failedRule。目标业务接口零请求，禁止重试或通过参数覆盖权限。审计仅保留这些固定字段，不记录 token 或业务参数。
 
-权限码每次重新读取；租户来自验证后的会话，系统条件重新读取企业开通系统。店铺、业务状态与配置需先接入经审阅的可信服务端 resolver；没有来源时编译阻断。不能把调用方提交的上下文当成授权事实。
+权限码通过 SDK 会话的 `permission-list` 按需加载；企业开通系统通过 `tenant-system` 按需加载。已加载数据在会话有效期内复用，并发首次加载由 SDK single-flight 合并。租户来自验证后的会话。每次调用仍校验策略版本并重新计算页面链、动作链与业务条件，不缓存 allow/deny 结论。店铺、业务状态与配置需先接入经审阅的可信服务端 resolver；没有来源时编译阻断。不能把调用方提交的上下文当成授权事实。
 
 收到 PH_PERMISSION_DENIED 后停止调用，由维护者核对 Portal Web 调用链、补齐证据与审阅、重新编译和构建部署。普通用户只能修正真实账号权限或业务条件，不能更换入口绕过。PORTAL_FORBIDDEN 仍表示目标业务接口自身拒绝。当前仓库没有真实 accepted 策略；普通/管理员双账号与高风险写操作验收仍待完成，合成测试不能代替该验收。
+
+## 权限缓存与 Portal Web 对齐
+
+本次源码核对基于 Portal `test/portal/main` 的 `a3e0adc7fc`，不代表已验证线上部署。Portal Web 的 `app/portal/utils/system.js` 中，`fetchPermissions(force=false)` 在权限 store 已 ready 且未 force 时直接返回；`permissionCheck` 用 store 中的权限码判断。`fetchTenantSystem` 复用同一企业已加载的系统数据。退出重置 stores；重新登录更新 refreshMark 并触发 dashboard 重载；销售店铺切换更换 token 后调用 `fetchSaleAllState(true)`，强制刷新权限。PH 复用 SDK 已有会话缓存实现这一模式，不复制 Web 开发环境的权限绕过开关。
+
+适配层不再生成随机 userId 或在每次 HTTP 请求结束时清空 SDK 仓库。每个环境沿用 SDK 默认的 64 会话 LRU 上限、30 分钟绝对有效期和 30 分钟空闲有效期；两种过期条件先到者生效。凭据轮换重建同一身份的会话；不同企业、语言和 owner 使用独立会话。可信宿主可通过 `sessions.invalidateCapability(key, 'permission-list')` 或 `sessions.invalidate(key)` 显式刷新。缓存仅在服务端进程内存中保存，服务关闭时清空，不落盘，不返回给 AI。
+
+账号权限变化后，在显式失效、重新连接导致凭据变化或会话过期后读取新权限；不承诺下一次调用立即看到管理员修改。有效的空权限列表也会缓存并持续拒绝；请求失败或权限载荷不合法时失败关闭，不发送目标请求，不保留可放行的降级结果。业务接口返回凭据失效时清除对应会话，旧请求失败不能清除已轮换凭据的新会话。每次 HTTP 调用保留独立取消信号与 30 秒等待期限，业务请求不会继承上一请求的已取消信号。共享基础数据加载使用原有 10 秒请求超时和服务关闭信号，不受首个等待者超时影响；超时调用停止等待，共享数据返回后也不能发送该调用的目标请求。
