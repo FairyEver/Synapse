@@ -2,7 +2,7 @@ import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import type { CapabilityId } from "./naming"
 
 const definitions = [
-  ["app_mail_recipient_list", "app.mail.recipient.list", "Browse or search active users sharing a team with the current user. An exact unique result can be provisional; ask the user to choose when names are ambiguous."],
+  ["app_mail_recipient_list", "app.mail.recipient.list", "Browse or search active users sharing a team with the current user. Use an exact unique match; ask the user to choose when names are ambiguous."],
   ["app_mail_organization_list", "app.mail.organization.list", "Search organizations in the current user's teams; selecting a parent includes all descendant members. Pagination: none; returns all matching organizations."],
   ["app_mail_organization_members_list", "app.mail.organization_members.list", "List active direct and descendant members of one organization visible to the current user. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_message_list", "app.mail.message.list", "List the current user's received or sent internal mail. Pagination: cursor-based. Continue with nextCursor."],
@@ -16,8 +16,8 @@ const definitions = [
   ["app_mail_message_delete", "app.mail.message.delete", "Hide one mail from the current user's mailbox only."],
   ["app_mail_attachment_create", "app.mail.attachment.create", "Upload a local file as an internal mail attachment without adding it to Synapse Drive."],
   ["app_mail_attachment_download_file", "app.mail.attachment.download_file", "Download an attachment from a mail the current user may read to an absolute local path."],
-  ["app_mail_send_preview", "app.mail.send.preview", "Fix recipient addresses, complete subject and body, attachments, and team for final confirmation. Organization membership is expanded again at send time."],
-  ["app_mail_message_send", "app.mail.message.send", "Send a previously previewed internal mail only after the user explicitly confirms its addresses, subject, complete body, and attachments in conversation. Organization members may change before send. Does not open a compose UI."],
+  ["app_mail_send_preview", "app.mail.send.preview", "Fix recipient addresses, complete subject and body, attachments, and team before sending. Check the returned content; ask for confirmation only when ambiguity, uncertainty, or content requiring user review remains, or the user requested review. Organization membership is expanded again at send time."],
+  ["app_mail_message_send", "app.mail.message.send", "Send a previously previewed internal mail authorized by the user. Send directly when recipients, content, and attachments are clear and no ambiguity, uncertainty, or content requiring user review remains. Otherwise resolve those points with the user before sending; honor any request to review first. Organization members may change before send. Does not open a compose UI."],
 ] as const satisfies readonly (readonly [string, CapabilityId, string])[]
 
 export const MAIL_DOMAIN: CapabilityDomainDefinition = {
@@ -58,7 +58,7 @@ const schemas: Record<string, { properties: Record<string, unknown>; required?: 
   app_mail_attachment_create: { properties: { filePath: text("Absolute path to a local file to upload directly as a mail attachment.") }, required: ["filePath"] },
   app_mail_attachment_download_file: { properties: { messageId: text("Mail id."), attachmentId: text("Attachment id in the mail."), outputPath: text("Absolute destination path.") }, required: ["messageId", "attachmentId", "outputPath"] },
   app_mail_send_preview: { properties: content, required: ["formatVersion", "toIds", "ccIds", "toOrganizationIds", "ccOrganizationIds", "subject", "body", "attachmentIds", "forwardAttachmentIds"] },
-  app_mail_message_send: { properties: { previewId: text("Unexpired previewId from app_mail_send_preview; do not modify the preview after user confirmation."), clientRequestId: text("Stable UUID for retries of this exact send."), confirmed: { type: "boolean", description: "True only after the user explicitly confirms the complete preview in this conversation." } }, required: ["previewId", "clientRequestId", "confirmed"] },
+  app_mail_message_send: { properties: { previewId: text("Unexpired previewId from app_mail_send_preview. Recreate the preview after content changes or expiry and re-evaluate whether user review is needed."), clientRequestId: text("Stable UUID for retries of this exact send."), confirmed: { type: "boolean", description: "Set true when the user has authorized sending and the caller has checked the preview: no unresolved ambiguity, uncertainty, or content requiring user review remains, and any user-requested review is complete. A separate confirmation reply is not required for a clear authorized send. This is a caller declaration, not proof of a user reply." } }, required: ["previewId", "clientRequestId", "confirmed"] },
 }
 
 export function buildMailTools(): McpToolDefinition[] {

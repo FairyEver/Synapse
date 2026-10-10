@@ -53,7 +53,7 @@ describe("mail capability dispatcher", () => {
     expect(executeMailOperation).not.toHaveBeenCalled()
   })
 
-  it("requires the explicit confirmation flag before invoking background send", async () => {
+  it("requires the caller's authorization and preview-check declaration before invoking background send", async () => {
     const executeMailOperation = vi.fn(async () => ({ messageId: "message-1" }))
     const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })
     await expect(dispatcher.dispatch("app.mail.message.send", { previewId: "preview-1", clientRequestId: "request-1" }, { source: "api" })).rejects.toThrow()
