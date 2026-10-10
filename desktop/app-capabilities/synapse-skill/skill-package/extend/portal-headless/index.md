@@ -16,6 +16,10 @@ Read [api-reference.md](api-reference.md) before issuing HTTP requests.
 4. Use the client to call `context`, then `catalog` (`recommend` or `search`), then `describe`. Use returned `extensionInputSchema` and SDK `ai.inputs/output/consume/steps/completion/failures` to form the capability arguments. Do not guess identifiers, method signatures or schemas. `sdkPath` is descriptive, not an arbitrary execution path.
 5. Answer using the actual results and their scope. Continue pagination when completeness is necessary. A query about reservations must never turn into creating a reservation.
 
+## Refresh your own PH session
+
+When the user explicitly asks to refresh PH or reload their permissions, use the bundled client with `request: { "endpoint": "session/refresh", "body": {} }` and their current credential result. The server clears only the caller’s current environment/tenant/language session and revalidates the Portal user and tenant. Later operations reload permissions, enabled systems and dictionaries on demand. Stop after the refresh result unless the user also requested a business operation. This is a session cache reset, not token renewal or a policy repair; never use it as an automatic 403 retry or accept a target user ID. Follow the API reference for the exact success and failure contract.
+
 ## Current scope
 
 Test and production use separate Portal connections and fixed API addresses. The extension publishes the pinned SDK's complete catalog, including read and write capabilities, without a Synapse allowlist or Portal page-permission catalog filter. PH first enforces the reviewed page/action permission chain and trusted business context on the server. Missing, unaccepted, stale or unsatisfied policies return `PH_PERMISSION_DENIED` before any target request. Portal also applies its own business authorization after the PH gate passes. Production has not yet passed real authorization and business-call acceptance.

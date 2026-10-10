@@ -82,7 +82,7 @@ Synapse 连接器中的 **Portal Headless Test** 永久用于测试环境。打�
 }
 ```
 
-独立扩展的凭证 dispatcher 复用该内部入口，经过权限和审计，再向后端换取短期 SY 扩展授权；返回前复核账号与 connectionGeneration。AI 携带两类凭证直连 SY 后端，后端按请求创建 SDK 会话，显式验证 `user-basic`、`tenant-context` 并在 finally 清理。SDK 仅安装在服务端，连接器不注册 Agent contribution。详见 [扩展直连契约](portal-headless-extension.md)。
+独立扩展的凭证 dispatcher 复用该内部入口，经过权限和审计，再向后端换取短期 SY 扩展授权；返回前复核账号与 connectionGeneration。AI 携带两类凭证直连 SY 后端，后端按 owner/环境/企业/语言/凭据复用 SDK 用户会话；初始化和用户明确调用 `/session/refresh` 后重新验证 `user-basic`、`tenant-context`，权限与系统数据按需缓存。SDK 仅安装在服务端，连接器不注册 Agent contribution。详见 [扩展直连契约](portal-headless-extension.md)。
 
 使用凭据时仍需处理远端失效，不能将最近一次验证当作永久有效。断开删除本机凭据并阻止后续交付，不承诺吊销 Portal token 或即时撤销已交付的五分钟 SY 授权。
 

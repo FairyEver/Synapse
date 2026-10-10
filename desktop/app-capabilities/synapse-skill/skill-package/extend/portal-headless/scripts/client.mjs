@@ -28,7 +28,8 @@ function safeFields(value) {
 function validate(input) {
   if (!object(input) || !object(input.credentials) || !object(input.request)) fail('INVALID_INPUT')
   const { credentials: c, request: r } = input
-  if (!['context', 'catalog', 'describe', 'read'].includes(r.endpoint) || !object(r.body)) fail('INVALID_INPUT')
+  if (!['context', 'session/refresh', 'catalog', 'describe', 'read'].includes(r.endpoint) || !object(r.body)) fail('INVALID_INPUT')
+  if (r.endpoint === 'session/refresh' && Object.keys(r.body).length) fail('INVALID_INPUT')
   if (input.authRetry !== undefined && input.authRetry !== 0 && input.authRetry !== 1) fail('INVALID_INPUT')
   if (r.paginate !== undefined && typeof r.paginate !== 'boolean') fail('INVALID_INPUT')
   if (input.maxPages !== undefined && (!integer(input.maxPages) || input.maxPages < 1 || input.maxPages > 100)) fail('INVALID_INPUT')

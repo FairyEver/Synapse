@@ -29,7 +29,7 @@ Input (placeholders, replace `credentials` with the exact MCP credential result)
 }
 ```
 
-`credentials` is an object, not a JSON string. `endpoint` accepts only `context`, `catalog`, `describe`, `read`; the body is exactly the HTTP contract below. The client's `read` endpoint name is retained for compatibility and can execute both read and write capabilities in the test extension. Call once per operation. Success exits 0 and prints the normal success envelope. Failure exits nonzero and prints `{ "error": { "code", "message", ... } }`; stop parsing business data on any failure. Raw upstream errors and credentials are never printed.
+`credentials` is an object, not a JSON string. `endpoint` accepts only `context`, `session/refresh`, `catalog`, `describe`, `read`; the body is exactly the HTTP contract below. The client's `read` endpoint name is retained for compatibility and can execute both read and write capabilities in the test extension. Call once per operation. Success exits 0 and prints the normal success envelope. Failure exits nonzero and prints `{ "error": { "code", "message", ... } }`; stop parsing business data on any failure. Raw upstream errors and credentials are never printed.
 
 - `paginate: true` supports catalog `domains/pages/search` and `read` of `perf-year-agreement-list`. Start at offset 0 / pageNo 1. It returns an aggregate **only after completion**; do not build another pagination loop. `pages` requires `domain`, obtained from `domains` items' `domain` field. SDK page fields are `id/menuPath/title/capabilityIds`, not `pagePath`.
 - The client checks numeric advancing cursors, typed JSON null, total/completion consistency and repeated records. A malformed response, changing catalog/total or exceeded page budget stops with an error; it never labels a partial result complete. Default 20 pages, configurable 1–100. Search remains bounded by the backend search result set.
@@ -70,6 +70,7 @@ SY authentication and Portal authentication are separate. Do not put the Portal 
 | Suffix | JSON body |
 | --- | --- |
 | `/context` | `{}` |
+| `/session/refresh` | `{}`; explicitly requested refresh of the caller’s current PH session |
 | `/catalog` | `{"op":"domains","offset":0,"limit":20}` |
 | `/catalog` | `{"op":"pages","domain":"<returned-domain>","offset":0,"limit":20}` |
 | `/catalog` | `{"op":"page","pageId":"<returned-page-id>"}` |
@@ -84,6 +85,8 @@ Only exact registered capability and method references are accepted. Unsupported
 
 Success envelope: `{ protocolVersion, catalogRevision, data }`. Domain/page/search lists use `data.items`, `total`, `nextOffset`, `complete`; the bundled client preserves the query and advances `offset` to the numeric `nextOffset` until JSON null. `limit` is 1–50. Recommendation and page detail preserve SDK structure.
 
+To refresh your own PH session like reloading the Portal page, use the bundled client with `"request":{"endpoint":"session/refresh","body":{}}` and the unchanged current credentials. Call only when the user explicitly asks to refresh/reload their PH session or permissions. The backend derives owner/environment from the signed authorization and tenant/language from the Portal headers; no target user, environment, permissions or cache keys are accepted in the body. Success returns `data: { refreshed: true, environment, tenantId }` after clearing that whole session and revalidating Portal user/tenant membership. Permission codes, enabled systems and dictionaries are fetched on demand by later operations; this response does not mean a capability is authorized. Other owners, environments, tenants and languages keep their caches. Refresh does not change the Portal token, policy or SDK version, perform a business write, or retry an earlier business call. Do not refresh automatically after a 403 or poll this endpoint. Normal authentication, request limits, timeout and failure handling apply.
+
 `context.data.capabilityAccess` reports `mode: "all"` and the pinned SDK's total/read/write counts. The catalog is not filtered by Portal page permissions; Portal business authorization still applies when invoking a capability.
 
 `describe` includes the complete SDK contract plus `extensionInputSchema`, which lists accepted top-level arguments and required fields. SDK capability validation remains authoritative for nested values and business constraints. `/read` and `/invoke` return `data.result`, `data.ai`, `data.capabilityId`; SDK business pagination (such as `{list,total}`) is inside `result`, separate from directory pagination.
@@ -96,7 +99,7 @@ Errors include `code`, `message`, safe `fields` for validation failures, and HTT
 - `SY_EXTENSION_AUTH_REQUIRED`: follow the one-refresh protocol above; never reset `authRetry` during the retry.
 - `PORTAL_CREDENTIAL_INVALID`: Portal connection must be renewed.
 - `PH_PERMISSION_DENIED`: HTTP 403 from the PH server gate, with `capabilityId`, nullable `policyRevision`, and `failedRule`. No target business request was sent. Stop without retrying or switching entry points; `/read` and `/invoke` share the same gate. Missing/stale/unaccepted policies require maintainer review and recompilation. Missing account permissions or trusted context require the corresponding Portal permission/business change; arguments cannot override the decision.
-- PH permission codes and enabled systems use the SDK’s internal user-session cache, isolated by owner, environment, tenant, language and credential. Every call still evaluates the server policy. Permission changes are loaded after trusted cache invalidation, credential rotation or session expiry (SDK default: 30 minutes); an immediate refresh is not guaranteed. Invocation arguments cannot replace permissions or force a refresh.
+- PH permission codes and enabled systems use the SDK’s internal user-session cache, isolated by owner, environment, tenant, language and credential. Every call still evaluates the server policy. Permission changes are loaded after trusted cache invalidation, credential rotation or session expiry (SDK default: 30 minutes); users may explicitly refresh their current session through `/session/refresh`. Invocation arguments cannot replace permissions or force a refresh; session refresh is a separate authenticated operation.
 - `PORTAL_FORBIDDEN`: Portal denied access to this user/tenant; do not report it as token expiry.
 - `CAPABILITY_UNAVAILABLE` / `REFERENCE_UNAVAILABLE`: this extension cannot provide the requested capability/reference.
 - `EXTENSION_BUSY` / `PORTAL_TIMEOUT` / `PORTAL_REQUEST_FAILED`: stop and report the failure; retain valid credentials.

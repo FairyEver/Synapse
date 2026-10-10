@@ -26,6 +26,33 @@ async function fixture(fn) {
 async function withServer(fn, run) { const f = await fixture(fn); try { await run(f) } finally { await f.close() } }
 const rejectCode = (code) => (e) => { assert.equal(e.code, code); assert.doesNotMatch(JSON.stringify(e), /sy-canary|portal-canary/); return true }
 
+test('refresh sends one authenticated empty-body request to the current user session endpoint', async () => {
+  await withServer((body, _n, req) => {
+    assert.equal(req.url, '/api/extend/portal-headless/session/refresh')
+    assert.deepEqual(body, {})
+    return { body: envelope({ refreshed: true, tenantId: 'tenant', environment: 'test' }) }
+  }, async ({ input, calls }) => {
+    input.request = { endpoint: 'session/refresh', body: {} }
+    const result = await execute(input)
+    assert.equal(result.data.refreshed, true)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].headers.authorization, 'Bearer sy-canary')
+    assert.equal(calls[0].headers['x-portal-tenant-id'], 'tenant')
+    assert.doesNotMatch(JSON.stringify(result), /sy-canary|portal-canary/)
+  })
+})
+test('refresh rejects identity overrides and pagination before any network request', async () => {
+  let calls = 0
+  for (const request of [
+    { endpoint: 'session/refresh', body: { owner: 'another-user' } },
+    { endpoint: 'session/refresh', body: { environment: 'prod' } },
+    { endpoint: 'session/refresh', body: {}, paginate: true },
+  ]) {
+    await assert.rejects(execute({ credentials: credentials('https://example.invalid/api/extend/portal-headless'), request }, { fetchImpl: () => { calls++ } }), rejectCode('INVALID_INPUT'))
+  }
+  assert.equal(calls, 0)
+})
+
 test('completes typed null pagination, preserves domain and authenticates each request', async () => {
   await withServer((b) => ({ body: envelope({ items: [{ id: b.offset }], total: 2, nextOffset: b.offset === 0 ? 1 : null, complete: b.offset === 1 }) }), async ({ input, calls }) => {
     const result = await execute(input)

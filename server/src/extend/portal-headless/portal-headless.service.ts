@@ -7,6 +7,7 @@ import { catalogInput, describeInput, readInput, type PortalCredentials, type Po
 export const PORTAL_SDK_LOADER = "PORTAL_HEADLESS_SDK_LOADER"
 export type PortalSdk = typeof import("@synapse/portal-headless", { with: { "resolution-mode": "import" } })
 type Operation = { op: "context" }
+  | { op: "refresh" }
   | { op: "catalog"; input: z.infer<typeof catalogInput> }
   | { op: "describe"; input: z.infer<typeof describeInput> }
   | { op: "read"; input: z.infer<typeof readInput> }
@@ -73,14 +74,23 @@ export class PortalHeadlessService implements OnModuleDestroy {
       this.loading ??= this.load().catch(() => { this.loading = undefined; throw failure(503, "SDK_UNAVAILABLE", "Portal SDK 暂不可用。") })
       const sdk = await this.loading
       return await waitForOperation(this.requestScope.run(signal, async () => {
+        if (signal.aborted) throw failure(504, "PORTAL_TIMEOUT", "Portal 操作超时，请稍后重试。")
         server = this.serverFor(sdk, identity.environment)
         if (server.catalog.index.pages.length === 0) throw failure(503, "SDK_RESOURCES_MISSING", "SDK 目录资源缺失。")
+        if (operation.op === "refresh") {
+          server.sessions.invalidate({ userId: identity.owner, tenantId: identity.credential.tenantId, language: identity.credential.language })
+        }
         scoped = await server.forSession({
           userId: identity.owner, credential: identity.credential, language: identity.credential.language,
           capabilities: ["user-basic", "tenant-context"],
         })
         let data: unknown
-        if (operation.op === "context") {
+        if (operation.op === "refresh") {
+          await scoped.baseShell.getUserInfo()
+          data = { refreshed: true, environment: identity.environment, tenantId: identity.credential.tenantId }
+          this.logger.log({ event: "portal.session.refreshed", owner: identity.owner, environment: identity.environment,
+            tenantId: identity.credential.tenantId, language: identity.credential.language })
+        } else if (operation.op === "context") {
           const user = await scoped.baseShell.getUserInfo()
           const capabilities = server.catalog.index.capabilities
           data = { portalUser: { id: user.id, name: user.realName ?? user.username }, tenantId: identity.credential.tenantId,
@@ -106,9 +116,9 @@ export class PortalHeadlessService implements OnModuleDestroy {
       }), signal)
     } catch (error) {
       const normalized = error instanceof HttpException ? error : normalizePortalError(error, signal.aborted)
-      // An older in-flight failure must not invalidate a newly rotated credential's session.
-      if (normalized.getStatus() === 401 && server && scoped && server.sessions.peek(scoped.session.key) === scoped.session) {
-        server.sessions.invalidate(scoped.session.key, "credential-rotated")
+      // An older in-flight failure must not invalidate a newer refreshed or rotated session.
+      if ((normalized.getStatus() === 401 || operation.op === "refresh") && server && scoped && server.sessions.peek(scoped.session.key) === scoped.session) {
+        server.sessions.invalidate(scoped.session.key, normalized.getStatus() === 401 ? "credential-rotated" : "manual")
       }
       throw normalized
     } finally {

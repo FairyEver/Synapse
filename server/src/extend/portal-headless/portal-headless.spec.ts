@@ -31,7 +31,7 @@ function syntheticPolicy() {
 // 默认的 10 秒 hook 超时会偶发性地判它失败。放宽到 30 秒，避免误报。
 beforeAll(async () => { sdk = await import("@synapse/portal-headless"); reviewedPolicy = syntheticPolicy() }, 30_000)
 const identity = { owner: "owner-one", environment: "test" as const, credential: { token: "portal-canary", tenantId: "tenant-one", language: "zh-CN" as const } }
-function fixture(options: { error?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]>; missingPolicy?: boolean; stalePolicy?: boolean; writeResponse?: (token: string, signal: AbortSignal) => Promise<unknown>; permissionResponse?: (signal: AbortSignal) => Promise<unknown> } = {}) {
+function fixture(options: { error?: unknown; userInfo?: unknown; permissionFailure?: boolean; permissions?: unknown; yearlyError?: unknown; permissionsByTenant?: Record<string, string[]>; missingPolicy?: boolean; stalePolicy?: boolean; writeResponse?: (token: string, signal: AbortSignal) => Promise<unknown>; permissionResponse?: (signal: AbortSignal) => Promise<unknown> } = {}) {
   const calls: Array<{ token: string; tenantId: string; request: Record<string, unknown> }> = []
   const runtimes: ReturnType<PortalSdk["createPortalServer"]>[] = []
   const factoryBaseUrls: string[] = []
@@ -46,7 +46,7 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
       calls.push({ ...context.credential, request })
       if (options.error) throw options.error
       const url = String(request.url)
-      if (url.endsWith("/sys/user/info")) return { id: "portal-user", realName: "测试用户", password2: "private-canary", salt: "salt-canary" }
+      if (url.endsWith("/sys/user/info")) return options.userInfo ?? { id: "portal-user", realName: "测试用户", password2: "private-canary", salt: "salt-canary" }
       if (url.endsWith("getUserTenantsByPage")) return { list: [{ id: context.credential.tenantId }], total: 1 }
       if (url.endsWith("/sys/menu/nav")) {
         // Real Portal nav exposes the old group, while the web UI uses exact page permissions.
@@ -74,6 +74,90 @@ function fixture(options: { error?: unknown; permissionFailure?: boolean; permis
 
 describe("Portal Headless backend extension", () => {
   const writeOperation = { op: 'invoke' as const, input: { capabilityId: 'hr-post-type-create', arguments: { name: '测试类别', sort: 1 } } }
+  it('refreshes the whole user session and reloads changed permissions and dictionaries on demand', async () => {
+    const options = { permissions: ['/dashboard/year-agreement/main', 'action'] }
+    const { service, calls } = fixture(options)
+    const dict = { op: 'read' as const, input: { capabilityId: 'base-dict-get', arguments: { dictType: 'protocol_status' } } }
+    await service.run(identity, writeOperation)
+    await service.run(identity, dict)
+    options.permissions = ['/dashboard/year-agreement/main']
+    const result = await service.run(identity, { op: 'refresh' })
+    expect(result).toMatchObject({ data: { refreshed: true, environment: 'test', tenantId: 'tenant-one' } })
+    expect(JSON.stringify(result)).not.toMatch(/portal-canary|private-canary|salt-canary/)
+    expect(calls.filter(call => String(call.request.url).endsWith('/sys/user/info'))).toHaveLength(2)
+    expect(calls.filter(call => String(call.request.url).endsWith('getUserTenantsByPage'))).toHaveLength(2)
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403, response: { failedRule: 'action permission chain' } })
+    expect(calls.filter(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toHaveLength(1)
+    options.permissions = ['/dashboard/year-agreement/main', 'action']
+    await service.run(identity, { op: 'refresh' })
+    await service.run(identity, dict)
+    expect(calls.filter(call => String(call.request.url).endsWith('/dict-data/grouped-list'))).toHaveLength(2)
+  })
+  it('refresh leaves other owners, tenants, languages and environments cached', async () => {
+    const { service, calls } = fixture()
+    const others = [{ ...identity, owner: 'other-owner' },
+      { ...identity, credential: { ...identity.credential, tenantId: 'other-tenant' } },
+      { ...identity, credential: { ...identity.credential, language: 'en-US' as const } },
+      { ...identity, environment: 'prod' as const }]
+    await service.run(identity, writeOperation)
+    for (const other of others) await service.run(other, writeOperation)
+    await service.run(identity, { op: 'refresh' })
+    await service.run(identity, writeOperation)
+    for (const other of others) await service.run(other, writeOperation)
+    expect(calls.filter(call => String(call.request.url).endsWith('/permissionsNotBySystem'))).toHaveLength(6)
+    expect(calls.filter(call => String(call.request.url).endsWith('/sys/user/info'))).toHaveLength(6)
+  })
+  it('refresh cannot accept late permission data from the disposed session or send its target request', async () => {
+    let resolveOld!: (value: unknown) => void
+    let reportStarted!: () => void
+    const started = new Promise<void>(resolve => { reportStarted = resolve })
+    const pending = new Promise<unknown>(resolve => { resolveOld = resolve })
+    let loads = 0
+    const { service, calls } = fixture({ permissionResponse: async () => {
+      if (++loads === 1) { reportStarted(); return pending }
+      return ['/dashboard/year-agreement/main']
+    } })
+    const old = expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403 })
+    await started
+    await service.run(identity, { op: 'refresh' })
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403 })
+    resolveOld(['/dashboard/year-agreement/main', 'action'])
+    await old
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403 })
+    expect(loads).toBe(2)
+    expect(calls.some(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toBe(false)
+  })
+  it('refresh revalidates Portal credentials instead of trusting cached identity', async () => {
+    const options: { error?: unknown } = {}
+    const { service, calls } = fixture(options)
+    await service.run(identity, { op: 'context' })
+    options.error = { code: 401 }
+    await expect(service.run(identity, { op: 'refresh' })).rejects.toMatchObject({ status: 401, response: { code: 'PORTAL_CREDENTIAL_INVALID' } })
+    expect(calls.filter(call => String(call.request.url).endsWith('/sys/user/info'))).toHaveLength(2)
+    expect(calls.some(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toBe(false)
+  })
+  it('refresh rejects a malformed Portal identity rather than reporting successful verification', async () => {
+    const options: { userInfo: unknown } = { userInfo: { realName: 'malformed-canary' } }
+    const { service } = fixture(options)
+    await expect(service.run(identity, { op: 'refresh' })).rejects.toMatchObject({ status: 502, response: { code: 'PORTAL_REQUEST_FAILED' } })
+    options.userInfo = { id: 'portal-user', realName: '测试用户' }
+    await expect(service.run(identity, { op: 'context' })).resolves.toMatchObject({ data: { portalUser: { id: 'portal-user' } } })
+  })
+  it('refresh audit records only the scoped identity without credentials or upstream user fields', async () => {
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+    try {
+      const { service } = fixture()
+      await service.run(identity, { op: 'refresh' })
+      expect(log).toHaveBeenCalledWith({ event: 'portal.session.refreshed', owner: identity.owner, environment: 'test', tenantId: 'tenant-one', language: 'zh-CN' })
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/portal-canary|private-canary|salt-canary/)
+    } finally { log.mockRestore() }
+  })
+  it.each(['missingPolicy', 'stalePolicy'] as const)('refresh with %s cannot bypass the business permission gate', async kind => {
+    const { service, calls } = fixture({ [kind]: true })
+    await expect(service.run(identity, { op: 'refresh' })).resolves.toMatchObject({ data: { refreshed: true } })
+    await expect(service.run(identity, writeOperation)).rejects.toMatchObject({ status: 403, response: { code: 'PH_PERMISSION_DENIED' } })
+    expect(calls.some(call => String(call.request.url).endsWith('/org/hrposttype/save'))).toBe(false)
+  })
   it('shares SDK permission data across read/invoke calls without reusing an aborted request signal', async () => {
     const { service, calls, runtimes } = fixture()
     await service.run(identity, writeOperation)
@@ -388,6 +472,7 @@ describe("SY extension authorization", () => {
       "x-portal-token": identity.credential.token, "x-portal-tenant-id": identity.credential.tenantId }
     const operations = [
       (h: typeof headers) => controller.context(h, {}),
+      (h: typeof headers) => controller.refresh(h, {}),
       (h: typeof headers) => controller.catalog(h, { op: "domains" }),
       (h: typeof headers) => controller.describe(h, { kind: "capability", capabilityId: "meeting-room-usage" }),
       (h: typeof headers) => controller.read(h, { capabilityId: "meeting-room-usage" }),
@@ -399,6 +484,11 @@ describe("SY extension authorization", () => {
       await expect(operation({ ...headers, "x-portal-tenant-id": "" })).rejects.toMatchObject({ status: 400 })
     }
     expect(calls).toHaveLength(0)
+    for (const body of [{ owner: 'another-user' }, { environment: 'prod' }, { tenantId: 'another-tenant' }, { permissions: ['action'] }]) {
+      await expect(controller.refresh(headers, body)).rejects.toMatchObject({ status: 400 })
+    }
+    expect(calls).toHaveLength(0)
+    await expect(controller.refresh(headers, {})).resolves.toMatchObject({ data: { refreshed: true, tenantId: identity.credential.tenantId, environment: 'test' } })
     await expect(controller.context(headers, {})).resolves.toMatchObject({ data: { portalUser: { id: "portal-user" } } })
     const invalid = fixture({ error: Object.assign(new Error("invalid-portal-canary"), { code: 401 }) })
     await expect(new PortalHeadlessController(access, invalid.service).context(headers, {}))

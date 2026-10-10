@@ -34,6 +34,14 @@ export class PortalHeadlessController {
     return this.portal.run(identity, { op: "context" })
   }
 
+  @Post("session/refresh")
+  @HttpCode(200)
+  async refresh(@Headers() headers: Record<string, string | string[] | undefined>, @Body() body: unknown) {
+    const identity = await this.identity(headers)
+    parseInput(z.object({}).strict(), body ?? {})
+    return this.portal.run(identity, { op: "refresh" })
+  }
+
   @Post("catalog")
   @HttpCode(200)
   async catalog(@Headers() headers: Record<string, string | string[] | undefined>, @Body() body: unknown) {
