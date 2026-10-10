@@ -1,3 +1,5 @@
+import type { SynapseAgentClaudeCodeContinuation } from "../../../src/types/agent"
+import { SYNAPSE_AGENT_PERMISSION_MODES } from "../../../src/types/agent"
 import path from "node:path"
 import { realpath, stat } from "node:fs/promises"
 
@@ -582,6 +584,42 @@ export class SessionManager {
     }
   }
 
+  async claudeCodeContinuationSelection(conversation: ConversationEntryV1): Promise<SynapseAgentClaudeCodeContinuation> {
+    if (!conversation.sdkSessionId) throw new Error("当前对话没有可恢复的原生会话。")
+    const state = this.deps.states.get(conversation.id)
+    const providerId = state?.providerId ?? conversation.providerId
+    if (!providerId) throw new Error("当前对话没有可用的供应商配置。")
+    const cwd = state?.workspacePath ?? conversation.workspacePath ?? this.deps.workDir
+    if (!cwd) throw new Error(AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE)
+    const env = await this.deps.providerService.buildEnv(providerId, {
+      actor: { kind: "user", id: "renderer" }, projectId: this.deps.projectId,
+    })
+    const tier = conversation.agentConfig?.modelTier
+    const model = state?.effectiveModel ?? conversation.agentConfig?.model
+      ?? (tier ? resolveTierModelFromEnv(env, tier) : env.ANTHROPIC_MODEL)
+    const mode = state?.modeOverride ?? conversation.agentConfig?.mode ?? "default"
+    if (!SYNAPSE_AGENT_PERMISSION_MODES.some((value) => value === mode)) throw new Error("当前对话的权限模式不可用。")
+    return {
+      phase: "stopping", sdkSessionId: conversation.sdkSessionId, providerId, cwd,
+      model, permissionMode: mode as SynapseAgentClaudeCodeContinuation["permissionMode"],
+      createdAt: (this.deps.now?.() ?? new Date()).toISOString(),
+    }
+  }
+
+  /** Strict stop: an uncertain SDK shutdown must never start a concurrent CLI. */
+  async closeForClaudeCodeContinuation(conversationId: string): Promise<void> {
+    const state = this.deps.states.get(conversationId)
+    if (!state) return
+    state.closing = true
+    state.claudeCodeContinuationStopPending = true
+    try {
+      await state.liveSession?.close()
+      this.deps.states.delete(conversationId)
+    } finally {
+      state.closing = false
+    }
+  }
+
   async closeCurrentTurn(conversationId: string): Promise<void> {
     const state = this.deps.states.get(conversationId)
     if (!state) return
@@ -701,6 +739,7 @@ export class SessionManager {
   async closeIdleSessions(): Promise<void> {
     const now = Date.now()
     for (const [conversationId, state] of this.deps.states) {
+      if (state.claudeCodeContinuationStopPending) continue
       if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
       if (!state.liveSession) continue
       if (now - state.lastActivity < IDLE_TIMEOUT_MS) continue
@@ -726,6 +765,7 @@ export class SessionManager {
     const cutoff = nowMs - idleTimeoutMs
     const reaped: string[] = []
     for (const [conversationId, state] of this.deps.states) {
+      if (state.claudeCodeContinuationStopPending) continue
       if (!state.workspaceKey || !state.workspacePath) continue
       if (state.busy || state.activeTurns > 0 || state.queue.length > 0) continue
       if (state.lastActivity >= cutoff) continue

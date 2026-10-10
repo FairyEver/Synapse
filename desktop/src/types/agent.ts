@@ -563,10 +563,24 @@ export interface SynapseAgentDisplayProfile {
 
 export type SynapseAgentTimelineEntry = SynapseAgentTimelineItem
 
+/** Persistent one-way ownership transfer; contains no credentials. */
+export interface SynapseAgentClaudeCodeContinuation {
+  readonly phase: "stopping" | "launching" | "transferred"
+  readonly sdkSessionId: string
+  readonly cwd: string
+  readonly providerId: string
+  readonly model?: string
+  readonly permissionMode: SynapseAgentPermissionMode
+  readonly terminalSessionId?: string
+  readonly createdAt: string
+}
+
 export interface SynapseAgentSessionSummary {
   readonly projectId: string
   readonly id: string
   readonly conversationRef?: string
+  readonly hasNativeSession?: boolean
+  readonly claudeCodeContinuation?: Pick<SynapseAgentClaudeCodeContinuation, "phase" | "terminalSessionId">
   readonly sessionKey: string
   readonly mode?: SynapseAgentPermissionMode
   readonly name?: string

@@ -1045,7 +1045,7 @@ describe("AgentModule pending prompt sessions", () => {
     })
 
     await act(async () => {
-      document.querySelector<HTMLButtonElement>("button")?.click()
+      document.querySelector<HTMLButtonElement>('button[aria-label="复制对话"]')?.click()
       await Promise.resolve()
     })
 

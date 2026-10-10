@@ -23,6 +23,16 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 - Agent 附件链路在 Windows runner 上原生执行：`attachment-staging-service`、附件 fsync 契约、附件 IPC 和 composer 四组测试。附件落盘对刚写入的文件做 fsync，而 Windows 只允许通过可写句柄 fsync（只读句柄返回 `ERROR_ACCESS_DENIED`）；这条平台差异在 macOS 上不可见，任何附件写入改动都要看 Windows runner 结果。
 - macOS 的模拟 Windows 路径测试不等于 Windows 原生执行通过；必须保留 CI/实机结果。当前审计状态见 `docs/reference/2026-09-14-macos-windows-compatibility-audit.md`。
 
+## UI 对话单向接续到 Claude Code
+
+- 用户从本地 Agent 对话顶部显式触发「在 Claude Code 中继续」时，使用原 `sdkSessionId` 接续内置 CLI；这是用户选择的入口切换，不是容量恢复、自动轮换或请求重放。
+- 原 UI 对话永久只读，CLI 新消息与用量不回流。持久化 `claudeCodeContinuation` 独立于旧 `contextHandoff`；记录不含凭据，状态为停止 SDK、启动 CLI、已转交。重新打开或应用重启不解除只读；终端已结束时恢复同一 SDK 会话。
+- 交接与写入共享会话级准入。运行中、排队、权限等待或其它写入尚未结束时拒绝交接；所有发送、排队、steer、重置和文件撤销入口必须拒绝已转交或正在转交的会话。
+- SDK query 必须经过停止屏障并确认结束，停止失败保留句柄和持久化锁。终端关联在 PTY 启动前保存；`failed` 不能视为启动成功。只有确认未启动新进程才允许撤销首次交接；已有转交记录和状态不确定时保留只读，重试检查关联终端，不重复启动。
+- 保留实际工作目录、供应商、模型与权限模式，不套用全局默认选择。CLI 启动采用原生配置，不迁移 UI 专属 Persona、连接器、SDK 进程内 router 或宿主 PreToolUse 文件写入边界；CLI 继续服从自己的 permission mode 与本机配置，不得声称宿主检查仍然生效。
+- 保存 SDK 会话 ID 时一并记录实际供应商、目录、模型和权限选择；不保存密钥或进程环境。接续时优先使用运行中的选择，其次使用已保存选择，不能因供应商默认模型变化而替换原模型。停止未确认的句柄不得被后台空闲回收丢弃。
+- `resumeClaudeCodeTerminal` 是 UI 专用 IPC，仅接收 project/conversation 标识，不接受 Renderer 的凭据、路径或 SDK 会话 ID，不新增 MCP 工具。MCP inspect 对持久化交接记录返回 `controllable=false`，控制接口返回 `control_not_supported`；历史仍可读取。
+
 ## Claude SDK 配置
 
 - 修改 SDK 参数前核对官方文档和当前安装包类型。`Options.env` 是子进程环境；`Options.settings` 是更高优先级 inline/flag settings，两者不能混用。

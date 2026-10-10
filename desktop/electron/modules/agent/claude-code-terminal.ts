@@ -1,5 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
+import type { SynapseAgentClaudeCodeContinuation } from "../../../src/types/agent"
+import { validateWorkspaceDirectory } from "../../services/agent-runtime/session-manager"
 import path from "node:path"
 
 import { TERMINAL_AGENT_NOTIFICATION_SERVICE_ID } from "../../../app-capabilities/terminal/main/agent-notification-service"
@@ -74,6 +76,8 @@ function resolveClaudeCodeHookSettings(
 
 export interface CreateClaudeCodeTerminalSessionInput {
   readonly projectId: string
+  readonly continuation?: SynapseAgentClaudeCodeContinuation
+  readonly onCreated?: (sessionId: string) => Promise<void>
   /**
    * Explicit Provider and tier, or neither.
    *
@@ -127,15 +131,19 @@ export async function createClaudeCodeTerminalSession(
     throw new ClaudeCodeTerminalError("runtime_missing", PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE)
   }
   const config = await configStore.load()
-  const selection = explicitProviderId !== undefined && explicitModelTier !== undefined
+  const selection = input.continuation
+    ? { providerId: input.continuation.providerId, modelTier: "default" as const }
+    : explicitProviderId !== undefined && explicitModelTier !== undefined
     ? { providerId: explicitProviderId, modelTier: explicitModelTier }
     : await resolveDefaultProviderModel(providerService)
-  const permissionMode = resolveClaudeCodeTerminalPermissionMode(config.agent?.defaultPermissionMode)
+  const permissionMode = input.continuation?.permissionMode ?? resolveClaudeCodeTerminalPermissionMode(config.agent?.defaultPermissionMode)
   const providerEnv = await providerService.buildEnv(selection.providerId, {
     actor: { kind: "user", id: "renderer" },
     projectId: input.projectId,
   })
-  const tierModel = resolveTierModelFromEnv(providerEnv, selection.modelTier)
+  const tierModel = input.continuation
+    ? input.continuation.model
+    : resolveTierModelFromEnv(providerEnv, selection.modelTier)
   const environment = {
     ...providerEnv,
     ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
@@ -164,15 +172,16 @@ export async function createClaudeCodeTerminalSession(
     const title = project.name
       ? `${CLAUDE_CODE_TERMINAL_TITLE} · ${project.name}`.slice(0, 120)
       : CLAUDE_CODE_TERMINAL_TITLE
-    return await resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
+    const session = await resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
       title,
       // The project is where this conversation belongs as much as where it runs, so the
       // terminal puts it in that project's group rather than wherever the list happens
       // to start.
       project: { projectId: project.uuid, name: project.name, path: project.localPath },
-      cwd: project.localPath,
+      cwd: input.continuation?.cwd ?? project.localPath,
       shell: executablePath,
       args: [
+        ...(input.continuation ? ["--resume", input.continuation.sdkSessionId] : []),
         "--settings", settingsPath,
         ...(tierModel ? ["--model", tierModel] : []),
         "--permission-mode", permissionMode,
@@ -181,12 +190,47 @@ export async function createClaudeCodeTerminalSession(
       ...(input.cols === undefined ? {} : { cols: input.cols }),
       ...(input.rows === undefined ? {} : { rows: input.rows }),
       ...(input.createdByClientId === undefined ? {} : { createdByClientId: input.createdByClientId }),
+      ...(input.onCreated ? { onCreated: input.onCreated } : {}),
       onEnded: () => { void rm(directory, { recursive: true, force: true }).catch(() => undefined) },
     })
+    if (session.status === "failed" || (input.continuation && session.status !== "running")) {
+      throw new ClaudeCodeTerminalError("launch_failed", "无法在终端中启动 Claude Code，请重试。")
+    }
+    return session
   } catch (error) {
     await rm(directory, { recursive: true, force: true }).catch(() => undefined)
     throw error
   }
+}
+
+/** User-triggered continuation: CLI owns subsequent turns, using its native configuration. */
+export async function resumeClaudeCodeTerminalConversation(
+  resolve: <T>(serviceId: string) => T,
+  input: { readonly projectId: string; readonly conversationId: string },
+): Promise<string> {
+  const { agent, providerService } = await resolveProjectAgent(resolve, input.projectId)
+  const terminal = resolve<TerminalService>("core.terminal")
+  return agent.resumeClaudeCodeConversation(input.conversationId, {
+    validate: async (selection) => {
+      if (!resolveBundledClaudeExecutable()) throw new ClaudeCodeTerminalError("runtime_missing", PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE)
+      await validateWorkspaceDirectory(selection.cwd)
+      await providerService.buildEnv(selection.providerId, { actor: { kind: "user", id: "renderer" }, projectId: input.projectId })
+      const sdk = await import("@anthropic-ai/claude-agent-sdk")
+      const info = await sdk.getSessionInfo(selection.sdkSessionId, { dir: selection.cwd })
+      if (!info) throw new Error("原生会话历史不存在，无法在 Claude Code 中继续。")
+    },
+    terminalStatus: async (sessionId) => {
+      const session = terminal.listSessions().find((item) => item.id === sessionId)
+      if (!session) return "missing"
+      if (session.status === "running") return "running"
+      return session.status === "ended" || session.status === "failed" || session.status === "lost"
+        ? "ended" : "unknown"
+    },
+    launch: async (selection, onCreated) => {
+      const session = await createClaudeCodeTerminalSession(resolve, { projectId: input.projectId, continuation: selection, onCreated })
+      return session.id
+    },
+  })
 }
 
 /**

@@ -351,7 +351,7 @@ export class AgentConversationControlService {
         conversationId: conversation.id,
         conversationRef: agentConversationReference(conversation.projectId, conversation.id),
         source,
-        controllable: isControllable(source),
+        controllable: isControllable(source) && !conversation.claudeCodeContinuation,
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
       },
@@ -580,6 +580,9 @@ export class AgentConversationControlService {
 
   private async requireControllableConversation(input: ConversationTarget): Promise<ConversationEntryV1> {
     const conversation = await this.requireConversation(input)
+    if (conversation.claudeCodeContinuation) {
+      throw new AgentConversationCapabilityError("control_not_supported", { reason: "claude_code_continuation" })
+    }
     if (!isControllable(agentConversationSourceForPlatform(conversation.platform))) {
       throw new AgentConversationCapabilityError("control_not_supported")
     }

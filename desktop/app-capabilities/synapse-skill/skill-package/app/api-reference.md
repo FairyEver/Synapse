@@ -89,7 +89,7 @@ Stable failures are `invalid_input`, `invalid_link`, `invalid_locator`, `not_fou
 
 - Input: one target form above plus `{ content, idempotencyKey }`; content is non-empty and at most 64 KiB, and the key is a UUID.
 - Returns `{ accepted, turnId, disposition, queuePosition, revision }` immediately after admission, without waiting for completion.
-- Only `controllable: true` local user conversations accept control.
+- Only `controllable: true` local user conversations accept control. Conversations transferred to Claude Code return `control_not_supported`; continue in their associated terminal. Their original timeline remains readable and does not include new CLI messages.
 
 ## `app_agent_turn_steer`
 

@@ -7,6 +7,8 @@
  * services start using it.
  */
 
+import type { SynapseAgentClaudeCodeContinuation } from "../../../../src/types/agent"
+import { SYNAPSE_AGENT_PERMISSION_MODES } from "../../../../src/types/agent"
 import type { Migration, NamespaceSchema } from "../types"
 import type { JsonFileEnvelope } from "../backends/json"
 import { migration } from "../migrations"
@@ -222,6 +224,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   sessionKey: string
   providerId?: string
   sdkSessionId?: string
+  claudeCodeContinuation?: SynapseAgentClaudeCodeContinuation
   /** @deprecated Read-only compatibility; stripped on the next normal save. */
   taskListId?: string
   /** @deprecated Read-only compatibility; stripped on the next normal save. */
@@ -280,6 +283,16 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   updatedAt: string
 }
 
+function isClaudeCodeContinuation(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!isAnyRecord(value)) return false
+  return ["stopping", "launching", "transferred"].includes(String(value.phase))
+    && ["sdkSessionId", "cwd", "providerId", "createdAt"].every((key) => typeof value[key] === "string" && value[key].length > 0)
+    && isOptionalString(value.model)
+    && isOptionalString(value.terminalSessionId)
+    && SYNAPSE_AGENT_PERMISSION_MODES.some((mode) => mode === value.permissionMode)
+}
+
 export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
   name: "conversations",
   backend: "sqlite",
@@ -293,6 +306,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).sessionKey === "string"
     && isOptionalString((v as ConversationEntryV1).providerId)
     && isOptionalString((v as ConversationEntryV1).sdkSessionId)
+    && isClaudeCodeContinuation((v as ConversationEntryV1).claudeCodeContinuation)
     && isConversationContextHandoff((v as ConversationEntryV1).contextHandoff)
     && ((v as ConversationEntryV1).taskProgressScope === undefined
       || (isAnyRecord((v as ConversationEntryV1).taskProgressScope)

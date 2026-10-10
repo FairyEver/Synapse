@@ -46,6 +46,26 @@ function conversation(platform = "local-renderer"): ConversationEntryV1 {
   }
 }
 
+describe("Claude Code transferred conversations", () => {
+  it("reports transferred user conversations as readable but not controllable", async () => {
+    const entry = conversation()
+    entry.claudeCodeContinuation = {
+      phase: "transferred", sdkSessionId: "sdk-1", cwd: "/repo", providerId: "deepseek",
+      permissionMode: "default", terminalSessionId: "terminal-1", createdAt: entry.createdAt,
+    }
+    const { service } = createHarness(entry)
+    try {
+      const result = await service.inspect({ projectId: "project-1", conversationId: entry.id, limit: 50 })
+      expect(result.conversation.controllable).toBe(false)
+      expect((result.timeline as { entries: unknown[] }).entries.length).toBeGreaterThan(0)
+      await expect(service.send({ projectId: "project-1", conversationId: entry.id, content: "new", idempotencyKey }, "client"))
+        .rejects.toMatchObject({ code: "control_not_supported" })
+    } finally {
+      service.dispose()
+    }
+  })
+})
+
 function createHarness(entry = conversation(), overrides: Partial<AgentRuntimeService> = {}) {
   const entries = new Map([[entry.id, entry]])
   const listeners = new Set<(change: { id?: string; value?: ConversationEntryV1; previous?: ConversationEntryV1 }) => void>()

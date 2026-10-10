@@ -33,6 +33,8 @@ export interface RuntimeSessionState {
   mainThreadAgentName?: string
   agentDefinitionsHash?: string
   closing?: boolean
+  /** Retain the SDK handle for explicit continuation retries; idle reclaim must not discard it. */
+  claudeCodeContinuationStopPending?: boolean
   activeLifecycle?: TurnLifecycle
   steerAdmissionsOpen?: boolean
   permissionAdmissionPending?: boolean
@@ -156,8 +158,11 @@ export class SessionLifecycleManager {
     sessionKey: string,
     platform = "local",
     workspaceKey?: string,
+    conversationIdValue?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
+    const conversation = conversationIdValue
+      ? await this.deps.repository.get(conversationIdValue)
+      : await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
     if (!conversation) return null
     return this.deps.repository.clearCurrentAgentSessionId(conversation.id, await this.deps.getActiveAgentType())
   }
@@ -166,8 +171,11 @@ export class SessionLifecycleManager {
     sessionKey: string,
     platform = "local",
     workspaceKey?: string,
+    conversationIdValue?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
+    const conversation = conversationIdValue
+      ? await this.deps.repository.get(conversationIdValue)
+      : await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
     const agentType = conversation ? await this.deps.getActiveAgentType() : undefined
     if (conversation) {
       optionalResetCoordinator(this.deps.sessionManager).beginReset?.(conversation.id)

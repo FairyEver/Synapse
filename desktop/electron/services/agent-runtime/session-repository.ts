@@ -462,15 +462,31 @@ export class AgentSessionRepository {
     return this.persistNonTitleUpdate(updated, conversation)
   }
 
+  async saveClaudeCodeContinuation(
+    conversationIdValue: string,
+    continuation: ConversationEntryV1["claudeCodeContinuation"],
+  ): Promise<ConversationEntryV1> {
+    return this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      return this.persistConversation({ ...conversation, claudeCodeContinuation: continuation, updatedAt: this.isoNow() })
+    })
+  }
+
   async saveSdkSession(input: {
     readonly conversationId: string
     readonly sdkSessionId: string
+    readonly launchSelection?: { readonly providerId?: string; readonly cwd?: string; readonly model?: string; readonly mode?: string }
   }): Promise<ConversationEntryV1> {
     const conversation = await this.requireConversation(input.conversationId)
     const updated: ConversationEntryV1 = {
       ...conversation,
       sdkSessionId: input.sdkSessionId,
       agentSessionId: input.sdkSessionId,
+      ...(input.launchSelection ? {
+        providerId: input.launchSelection.providerId ?? conversation.providerId,
+        workspacePath: input.launchSelection.cwd ?? conversation.workspacePath,
+        agentConfig: { ...conversation.agentConfig, model: input.launchSelection.model, mode: input.launchSelection.mode ?? conversation.agentConfig?.mode },
+      } : {}),
       updatedAt: this.isoNow(),
     }
     return this.persistNonTitleUpdate(updated, conversation)

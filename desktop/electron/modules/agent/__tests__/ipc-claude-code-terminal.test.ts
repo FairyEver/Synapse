@@ -12,6 +12,8 @@ const runtimeBinaryMock = vi.hoisted(() => ({
   missingMessage: "内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。",
   resolveBundledClaudeExecutable: vi.fn(),
 }))
+const sdkMock = vi.hoisted(() => ({ getSessionInfo: vi.fn() }))
+vi.mock("@anthropic-ai/claude-agent-sdk", () => sdkMock)
 
 vi.mock("../../../services/config-store", () => ({ configStore: configStoreMock }))
 vi.mock("../../../services/log-store", () => ({ createMainLogger: vi.fn(() => logStoreMock.logger) }))
@@ -29,6 +31,7 @@ import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { removeStaleClaudeCodeLaunchDirectories } from "../claude-code-terminal-launch-dirs"
 import { resolveClaudeCodeTerminalPermissionMode } from "../claude-code-terminal"
 import { claudeCodeTerminalMethods } from "../ipc-claude-code-terminal"
+import type { ClaudeCodeContinuationLauncher } from "../../../services/agent-runtime/claude-code-continuation"
 
 const method = claudeCodeTerminalMethods.createClaudeCodeTerminal!
 
@@ -36,13 +39,14 @@ function createContext(input: {
   readonly buildEnv: ReturnType<typeof vi.fn>
   readonly createSessionWithEphemeralEnvironment: ReturnType<typeof vi.fn>
   readonly getProvider?: ReturnType<typeof vi.fn>
+  readonly resume?: (id: string, launcher: ClaudeCodeContinuationLauncher) => Promise<string>
 }): IpcHandlerContext {
   const getProvider = input.getProvider ?? vi.fn().mockResolvedValue({ category: "third_party" })
   const container: ProjectContainer = {
     projectId: "project-1",
     get: <T>(id: string): T => {
       if (id === PROVIDER_SERVICE_ID) return { buildEnv: input.buildEnv, getProvider } as T
-      if (id === AGENT_RUNTIME_SERVICE_ID) return {} as T
+      if (id === AGENT_RUNTIME_SERVICE_ID) return { resumeClaudeCodeConversation: input.resume } as T
       throw new Error(`Unknown service: ${id}`)
     },
     inspect: () => [],
@@ -71,6 +75,41 @@ describe("Claude Code terminal IPC", () => {
       global: { projects: [] },
     })
     runtimeBinaryMock.resolveBundledClaudeExecutable.mockReturnValue("/app/claude")
+  })
+
+  it("accepts only the project and conversation identifiers for UI continuation", () => {
+    const request = claudeCodeTerminalMethods.resumeClaudeCodeTerminal!.request!
+    expect(request.safeParse({ projectId: "project-1", conversationId: "conversation-1" }).success).toBe(true)
+    for (const field of ["sdkSessionId", "cwd", "providerId", "credentials"]) {
+      expect(request.safeParse({ projectId: "project-1", conversationId: "conversation-1", [field]: "untrusted" }).success).toBe(false)
+    }
+  })
+
+  it("validates native history in the original directory and never creates an empty replacement", async () => {
+    const createSessionWithEphemeralEnvironment = vi.fn()
+    const buildEnv = vi.fn().mockResolvedValue({ ANTHROPIC_AUTH_TOKEN: "secret" })
+    const selection = {
+      phase: "stopping" as const, sdkSessionId: "native-original", cwd: os.tmpdir(),
+      providerId: "deepseek", model: "deepseek-flash[1M]", permissionMode: "acceptEdits" as const,
+      createdAt: new Date().toISOString(),
+    }
+    const resume = vi.fn(async (id: string, launcher: ClaudeCodeContinuationLauncher) => {
+      expect(id).toBe("conversation-1")
+      await launcher.validate(selection)
+      return "validated"
+    })
+    const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment, resume })
+    const request = { projectId: "project-1", conversationId: "conversation-1" }
+    sdkMock.getSessionInfo.mockResolvedValue(undefined)
+    await expect(claudeCodeTerminalMethods.resumeClaudeCodeTerminal!.handler(ctx, request)).rejects.toThrow("历史不存在")
+    sdkMock.getSessionInfo.mockResolvedValue({ sessionId: "native-original" })
+    await expect(claudeCodeTerminalMethods.resumeClaudeCodeTerminal!.handler(ctx, request)).resolves.toEqual({ sessionId: "validated" })
+    expect(sdkMock.getSessionInfo).toHaveBeenCalledWith("native-original", { dir: os.tmpdir() })
+    expect(buildEnv).toHaveBeenCalledWith("deepseek", { actor: { kind: "user", id: "renderer" }, projectId: "project-1" })
+    expect(createSessionWithEphemeralEnvironment).not.toHaveBeenCalled()
+    buildEnv.mockRejectedValue(new Error("供应商凭据不可用"))
+    await expect(claudeCodeTerminalMethods.resumeClaudeCodeTerminal!.handler(ctx, request)).rejects.toThrow("供应商凭据不可用")
+    expect(createSessionWithEphemeralEnvironment).not.toHaveBeenCalled()
   })
 
   it("launches the bundled Claude Code with the selected provider and tier", async () => {

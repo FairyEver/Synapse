@@ -43,7 +43,7 @@ export const AGENT_CONVERSATION_CAPABILITY_CATALOG = [
   capability({
     id: "app.agent.message.send",
     title: "Send Agent message",
-    description: "Asynchronously submit one user message to an existing local user-owned Agent conversation.",
+    description: "Asynchronously submit one user message to an existing local user-owned Agent conversation. Conversations transferred to Claude Code are read-only and reject new messages.",
     mutates: true,
     risk: "high",
   }),

@@ -63,8 +63,30 @@ function useAgentProjectTerminalActions() {
     }
   }, [])
 
-  const startClaudeCodeTerminal = useCallback(async (target: AgentClaudeCodeTerminalTarget): Promise<boolean> => {
+  const openClaudeCodeTerminalSession = useCallback(async (projectId: string, sessionId: string) => {
     const bridge = requireSynapseBridge()
+    const openRequest = { requestId: createRequestId(), sessionId: sessionId }
+    try {
+      if (isMainAppWindow()) {
+        requestOpenTerminalSession(openRequest)
+        return
+      }
+      await bridge.apps.openSystemApp("terminal", {
+        terminalOpenRequest: openRequest,
+      })
+    } catch (rawError) {
+      logger.warn("Claude Code terminal window open failed.", {
+        boundary: "renderer.agent.claude-code-terminal.window",
+        projectId: projectId,
+        sessionId: sessionId,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+      toast.error("Claude Code 已启动，但无法打开终端应用。")
+    }
+  }, [])
+
+  const startClaudeCodeTerminal = useCallback(async (target: AgentClaudeCodeTerminalTarget): Promise<boolean> => {
     const launched = await launchClaudeCodeTerminal({
       projectId: target.id,
       selection: target.selection,
@@ -74,30 +96,31 @@ function useAgentProjectTerminalActions() {
       return false
     }
 
-    const openRequest = { requestId: createRequestId(), sessionId: launched.sessionId }
-    if (isMainAppWindow()) {
-      requestOpenTerminalSession(openRequest)
-      return true
-    }
+    await openClaudeCodeTerminalSession(target.id, launched.sessionId)
+    return true
+  }, [openClaudeCodeTerminalSession])
 
+  const resumeClaudeCodeTerminal = useCallback(async (target: { projectId: string; conversationId: string }): Promise<boolean> => {
+    let sessionId: string
     try {
-      await bridge.apps.openSystemApp("terminal", {
-        terminalOpenRequest: openRequest,
-      })
+      const result = await requireSynapseBridge().agent.resumeClaudeCodeTerminal(target)
+      sessionId = result.sessionId
     } catch (rawError) {
-      logger.warn("Claude Code terminal window open failed.", {
-        boundary: "renderer.agent.claude-code-terminal.window",
-        projectId: target.id,
-        sessionId: launched.sessionId,
+      logger.warn("Claude Code continuation failed.", {
+        boundary: "renderer.agent.claude-code-terminal.resume", ...target,
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessageLength(rawError),
       })
-      toast.error("Claude Code 已启动，但无法打开终端应用。")
+      const detail = rawError instanceof Error
+        ? rawError.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, "") : ""
+      toast.error(detail || "无法在 Claude Code 中继续，请重试。")
+      return false
     }
+    await openClaudeCodeTerminalSession(target.projectId, sessionId)
     return true
-  }, [])
+  }, [openClaudeCodeTerminalSession])
 
-  return { openProjectInTerminal, startClaudeCodeTerminal }
+  return { openProjectInTerminal, startClaudeCodeTerminal, resumeClaudeCodeTerminal }
 }
 
 function errorMessageLength(error: unknown): number {

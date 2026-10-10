@@ -78,7 +78,7 @@ function harness(input: {
 } = {}) {
   const buildEnv = input.buildEnv ?? vi.fn().mockResolvedValue(providerEnv)
   const listAllProviders = vi.fn().mockResolvedValue(input.providers ?? [])
-  const createSession = input.createSession ?? vi.fn().mockResolvedValue({ id: "session-1" })
+  const createSession = input.createSession ?? vi.fn().mockResolvedValue({ id: "session-1", status: "running" })
   ipcSharedMock.resolveProjectAgent.mockResolvedValue({
     providerService: { buildEnv, listAllProviders },
     project: { uuid: "project-1", name: "Synapse", localPath: "/repo" },
@@ -115,6 +115,30 @@ function launchDirectories(): readonly string[] {
 }
 
 describe("Claude Code terminal launch", () => {
+  it("resumes the requested native session with its workspace, exact model and permission mode", async () => {
+    const { resolve, createSession } = harness()
+    await createClaudeCodeTerminalSession(resolve, {
+      projectId: "project-1",
+      continuation: {
+        phase: "launching", sdkSessionId: "sdk-original", providerId: "deepseek",
+        cwd: "/original-workspace", model: "deepseek-flash", permissionMode: "acceptEdits",
+        createdAt: "2026-10-10T00:00:00Z",
+      },
+    })
+    const launched = createSession.mock.calls[0]?.[0]
+    expect(launched.cwd).toBe("/original-workspace")
+    expect(launched.args).toContain("--resume")
+    expect(launched.args).toContain("sdk-original")
+    expect(launched.args).toContain("deepseek-flash")
+    expect(launched.args).toContain("acceptEdits")
+  })
+
+  it("rejects a failed PTY result instead of reporting a launched conversation", async () => {
+    const { resolve } = harness({ createSession: vi.fn().mockResolvedValue({ id: "failed", status: "failed" }) })
+    await expect(createClaudeCodeTerminalSession(resolve, { projectId: "project-1", providerId: "preferred", modelTier: "sonnet" }))
+      .rejects.toThrow("Claude Code")
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     runtimeBinaryMock.resolveBundledClaudeExecutable.mockReturnValue("/app/claude")

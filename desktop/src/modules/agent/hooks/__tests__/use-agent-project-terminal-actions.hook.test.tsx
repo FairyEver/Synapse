@@ -64,6 +64,30 @@ function detachSidebarWindow(): void {
 }
 
 describe("useAgentProjectTerminalActions", () => {
+  it.each([false, true])("opens the resumed conversation in the correct window (detached=%s)", async (detached) => {
+    if (detached) detachSidebarWindow()
+    const resumeClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "resumed-terminal" }))
+    const openSystemApp = vi.fn(async () => undefined)
+    bridgeMock.requireSynapseBridge.mockReturnValue({ agent: { resumeClaudeCodeTerminal }, apps: { openSystemApp } })
+    const requests = collectTerminalOpenRequests()
+    const hook = await renderHook()
+    await expect(hook.current.resumeClaudeCodeTerminal({ projectId: "project-1", conversationId: "conversation-1" })).resolves.toBe(true)
+    expect(resumeClaudeCodeTerminal).toHaveBeenCalledWith({ projectId: "project-1", conversationId: "conversation-1" })
+    if (detached) expect(openSystemApp).toHaveBeenCalledWith("terminal", { terminalOpenRequest: { requestId: expect.any(String), sessionId: "resumed-terminal" } })
+    else expect(requests).toEqual([{ requestId: expect.any(String), sessionId: "resumed-terminal" }])
+  })
+
+  it("keeps a resumed terminal after navigation fails so the UI can become read-only", async () => {
+    detachSidebarWindow()
+    bridgeMock.requireSynapseBridge.mockReturnValue({
+      agent: { resumeClaudeCodeTerminal: async () => ({ sessionId: "resumed-terminal" }) },
+      apps: { openSystemApp: async () => { throw new Error("window unavailable") } },
+    })
+    const hook = await renderHook()
+    await expect(hook.current.resumeClaudeCodeTerminal({ projectId: "project-1", conversationId: "conversation-1" })).resolves.toBe(true)
+    expect(toastMock.error).toHaveBeenCalledWith("Claude Code 已启动，但无法打开终端应用。")
+  })
+
   it("creates a Claude Code terminal with the selected provider and opens it inside the app", async () => {
     const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-1" }))
     const openSystemApp = vi.fn(async () => undefined)

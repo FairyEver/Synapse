@@ -483,7 +483,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
   }
 
   close(): Promise<void> {
-    this.closePromise ??= this.closeAtBoundary()
+    this.closePromise ??= this.closeAtBoundary().catch((error) => {
+      // Coalesce in-flight stops, but a later explicit retry must check the native
+      // iterator again instead of inheriting an old timeout or rejection.
+      this.closePromise = undefined
+      throw error
+    })
     return this.closePromise
   }
 

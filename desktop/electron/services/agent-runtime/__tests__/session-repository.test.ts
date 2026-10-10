@@ -11,6 +11,18 @@ import type {
 import { AgentSessionRepository, conversationId } from "../session-repository"
 
 describe("AgentSessionRepository", () => {
+  it("records the native launch choice with the SDK session without persisting credentials", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({ projectId: "project-1", conversations })
+    const session = await repository.createSession({ sessionKey: "native", modelTier: "sonnet" })
+    const saved = await repository.saveSdkSession({
+      conversationId: session.id, sdkSessionId: "sdk-native",
+      launchSelection: { providerId: "deepseek", cwd: "/original", model: "deepseek-flash[1M]", mode: "acceptEdits" },
+    })
+    expect(saved).toMatchObject({ providerId: "deepseek", workspacePath: "/original", agentConfig: { modelTier: "sonnet", model: "deepseek-flash[1M]", mode: "acceptEdits" } })
+    expect(saved.agentConfig?.env).toBeUndefined()
+  })
+
   it("ignores legacy recovery state and removes it with task progress on the next save", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const taskProgress = new MemoryNamespace<AgentTaskProgressEntryV1>("agent.task-progress")

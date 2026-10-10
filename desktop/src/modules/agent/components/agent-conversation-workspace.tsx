@@ -1,5 +1,6 @@
+import { useAgentClaudeCodeContinuation } from "../hooks/use-agent-claude-code-continuation"
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, LoaderCircle, ShieldAlert } from "lucide-react"
+import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, LoaderCircle, ShieldAlert, Terminal } from "lucide-react"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "@/app-shell/logging"
@@ -193,6 +194,7 @@ function AgentConversationWorkspace({
   const [createMode, setCreateMode] = useState<SynapseAgentPermissionMode | undefined>()
   const [createInitialName, setCreateInitialName] = useState("")
   const { startClaudeCodeTerminal } = useAgentProjectTerminalActions()
+  const continuation = useAgentClaudeCodeContinuation(session, chat.refresh)
   const pendingMessageIdRef = useRef(0)
   const recentSlashSkillsRef = useRef(config.agent.recentSlashSkills)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
@@ -346,6 +348,7 @@ function AgentConversationWorkspace({
       preserveDraft?: boolean
     } = {},
   ): Promise<boolean> => {
+    if (continuation.readOnly || continuation.continuing) return false
     const attachments = options.attachments ?? []
     if (!content.trim() && attachments.length === 0) return false
     if (!options.preserveDraft) setDraft("")
@@ -569,6 +572,11 @@ function AgentConversationWorkspace({
   const selectedPermissionMode = session.mode ?? "default"
   const pendingPermissionCount = currentPendingPermissions.filter(isToolPermission).length
   const pendingQuestionCount = currentPendingPermissions.filter(isUserQuestionPending).length
+  const claudeCodeContinuationDisabled = continuation.continuing || !session.hasNativeSession || chat.sending
+    || chat.sendingConversationIds.has(target.conversationId)
+    || currentPendingPermissions.length > 0
+    || selectedPendingMessages.some((message) => message.status !== "failed")
+    || chat.cancelPhase === "cancel_pending"
 
   const openReference = (reference: string) => {
     const bridge = getSynapseBridge()
@@ -729,6 +737,22 @@ function AgentConversationWorkspace({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label="在 Claude Code 中继续"
+                  disabled={claudeCodeContinuationDisabled}
+                  onClick={() => void continuation.resume()}
+                >
+                  {continuation.continuing ? <LoaderCircle className="animate-spin" /> : <Terminal />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>在 Claude Code 中继续</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   disabled={chat.timeline.length === 0}
                   onClick={() => void handleCopyTranscript()}
                   aria-label="复制对话"
@@ -811,7 +835,7 @@ function AgentConversationWorkspace({
         referenceActions={referenceActions}
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
-        onContinue={() => void submitContent("继续", { preserveDraft: true })}
+        onContinue={continuation.readOnly ? undefined : () => void submitContent("继续", { preserveDraft: true })}
         viewportRef={stick.viewportRef}
         loadingOlder={chat.loadingOlder}
         hasMore={chat.timelineHasMore}
@@ -821,14 +845,19 @@ function AgentConversationWorkspace({
         conversationId={target.conversationId}
       />
 
-      <AgentComposer
+      {continuation.readOnly ? (
+        <p className="text-sm text-muted-foreground">
+          {session.claudeCodeContinuation?.phase === "stopping" || session.claudeCodeContinuation?.phase === "launching"
+            ? "转交尚未完成，请重试。" : "已转到 Claude Code"}
+        </p>
+      ) : <AgentComposer
         key={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         projectId={target.projectId}
         focusInputKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         dropTargetRef={workspaceRef}
         draft={draft}
-        disabled={!target.projectId || personaUnavailable}
-        canSend={Boolean(draft.trim() && target.projectId && !personaUnavailable)}
+        disabled={!target.projectId || personaUnavailable || continuation.continuing}
+        canSend={Boolean(draft.trim() && target.projectId && !personaUnavailable && !continuation.continuing)}
         sending={chat.sending}
         creatingConversation={creatingConversation}
         cancelPhase={chat.cancelPhase}
@@ -870,7 +899,7 @@ function AgentConversationWorkspace({
         onSteerPendingMessage={handleSteerPendingMessage}
         onRemovePendingMessage={handleRemovePendingMessage}
         onRetryPendingMessage={handleRetryPendingMessage}
-      />
+      />}
       <AgentGitCommitDialog
         pending={projectGit.pendingCommit}
         error={projectGit.commitError}

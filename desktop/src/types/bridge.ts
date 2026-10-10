@@ -1820,6 +1820,7 @@ export type SynapseBridge = {
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
+    resumeClaudeCodeTerminal: (input: { projectId: string; conversationId: string }) => Promise<{ sessionId: string }>,
     createClaudeCodeTerminal: (input: {
       projectId: string
       providerId: string

@@ -2038,6 +2038,18 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("rechecks native termination after a failed stop instead of retaining the rejected close promise", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+    query.interrupt.mockRejectedValueOnce(new Error("stop not acknowledged"))
+    await expect(session.close()).rejects.toThrow("停止未确认")
+    expect(query.close).not.toHaveBeenCalled()
+    // A later explicit retry must still close and wait for the real native iterator.
+    await expect(session.close()).resolves.toBeUndefined()
+    expect(query.close).toHaveBeenCalledOnce()
+    expect(session.finished).toBe(true)
+  })
+
   it("settles pending permission requests when cancelling the current turn", async () => {
     const { factory, getOptions, query } = createQueryFactory()
     const session = createSession(factory)

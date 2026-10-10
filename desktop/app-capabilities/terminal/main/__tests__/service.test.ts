@@ -11,6 +11,53 @@ const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", acto
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("retains an associated live CLI when terminal persistence fails after spawn", async () => {
+    const store = memoryStore()
+    const pty = fakePty()
+    const service = createTerminalService({ store, spawnPty: () => pty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
+    await service.start()
+    let associatedId: string | undefined
+    const result = service.createSessionWithEphemeralEnvironment({
+      shell: "/bin/zsh", cwd: os.tmpdir(), environment: {},
+      onCreated: async (id) => {
+        associatedId = id
+        store.saveState = async () => { throw new Error("terminal storage unavailable") }
+      },
+    })
+    await expect(result).resolves.toMatchObject({ status: "running" })
+    expect(service.listSessions()).toMatchObject([{ id: associatedId, status: "running" }])
+    store.saveState = async (state) => { store.state = state }
+    await service.stop()
+  })
+
+  it("persists a caller association before spawning an embedded CLI", async () => {
+    let associatedId: string | undefined
+    const spawnPty = vi.fn(() => {
+      expect(associatedId).toBeTypeOf("string")
+      return fakePty()
+    })
+    const service = createTerminalService({ store: memoryStore(), spawnPty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
+    await service.start()
+    const session = await service.createSessionWithEphemeralEnvironment({
+      shell: "/bin/zsh", cwd: os.tmpdir(), environment: {},
+      onCreated: async (id) => { associatedId = id },
+    })
+    expect(session.status).toBe("running")
+    expect(session.id).toBe(associatedId)
+  })
+
+  it("does not spawn a CLI when persisting its caller association fails", async () => {
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({ store: memoryStore(), spawnPty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
+    await service.start()
+    const session = await service.createSessionWithEphemeralEnvironment({
+      shell: "/bin/zsh", cwd: os.tmpdir(), environment: {},
+      onCreated: async () => { throw new Error("association save failed") },
+    })
+    expect(session.status).toBe("failed")
+    expect(spawnPty).not.toHaveBeenCalled()
+  })
+
   it("persists custom toolbar actions independently from built-in actions", async () => {
     const store = memoryStore()
     const service = createTerminalService({

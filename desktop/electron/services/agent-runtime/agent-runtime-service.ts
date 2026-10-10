@@ -1,3 +1,4 @@
+import { ClaudeCodeContinuationManager, type ClaudeCodeContinuationLauncher } from "./claude-code-continuation"
 import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
@@ -248,6 +249,8 @@ export class AgentRuntimeService {
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
 
+  private readonly claudeCodeContinuation: ClaudeCodeContinuationManager
+
   constructor(deps: AgentRuntimeServiceDeps) {
     this.deps = deps
     this.fileCheckpoints = deps.fileCheckpointEntries && deps.workDir && deps.permissionGuard && deps.auditSink
@@ -292,6 +295,18 @@ export class AgentRuntimeService {
       onConversationTitle: (conversationId, title) =>
         this.applyGeneratedConversationTitle(conversationId, title),
       onConversationUpdated: (conversation) => this.emitConversationUpdated(conversation),
+    })
+    this.claudeCodeContinuation = new ClaudeCodeContinuationManager({
+      repository: this.repository,
+      isIdle: (id) => {
+        const state = this.states.get(id)
+        return this.getConversationRuntimeSnapshot(id).lifecycle === "idle"
+          && !state?.busy && !state?.activeTurns && !state?.closing
+          && ![...this.pendingPermissions.values()].some((pending) => pending.conversationId === id)
+      },
+      selection: (conversation) => this.sessionManager.claudeCodeContinuationSelection(conversation),
+      stop: (id) => this.sessionManager.closeForClaudeCodeContinuation(id),
+      changed: (conversation) => this.emitConversationUpdated(conversation),
     })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,
@@ -351,6 +366,7 @@ export class AgentRuntimeService {
         auditSink: deps.auditSink,
         prepareMessage: deps.prepareMessage,
         afterTurn: deps.afterTurn,
+        withConversationWrite: (id, operation) => this.claudeCodeContinuation.runWritable(id, operation),
       },
       repository: this.repository,
       sessionManager: this.sessionManager,
@@ -371,7 +387,8 @@ export class AgentRuntimeService {
     conversationId: string,
     options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
-    return this.conversationRouter.sendToConversation(message, conversationId, options)
+    return this.claudeCodeContinuation.runWritable(conversationId, () =>
+      this.conversationRouter.sendToConversation(message, conversationId, options))
   }
 
   async submitToConversation(
@@ -379,7 +396,8 @@ export class AgentRuntimeService {
     conversationId: string,
     options: ConversationTurnOptions = {},
   ): Promise<AgentTurnAdmissionResult> {
-    return this.conversationRouter.submitToConversation(message, conversationId, options)
+    return this.claudeCodeContinuation.runWritable(conversationId, () =>
+      this.conversationRouter.submitToConversation(message, conversationId, options))
   }
 
   getConversationRuntimeSnapshot(conversationId: string): AgentConversationRuntimeSnapshot {
@@ -417,7 +435,11 @@ export class AgentRuntimeService {
     readonly content: string
     readonly submittedAt: string
   }): Promise<AgentSteerResult> {
-    return this.conversationRouter.steer(input)
+    return this.claudeCodeContinuation.runWritable(input.conversationId, () => this.conversationRouter.steer(input))
+  }
+
+  resumeClaudeCodeConversation(conversationId: string, launcher: ClaudeCodeContinuationLauncher): Promise<string> {
+    return this.claudeCodeContinuation.resume(conversationId, launcher)
   }
 
   async getFileCheckpointDetail(
@@ -440,49 +462,53 @@ export class AgentRuntimeService {
     readonly checkpointId: string
     readonly actor: ActorIdentity
   }): Promise<AgentFileCheckpointPrepareResult> {
-    const state = this.states.get(input.conversationId)
-    try {
-      return await this.requireFileCheckpoints().prepareRewind({
-        ...input,
-        busy: Boolean(state?.busy || state?.activeTurns || state?.queue.length),
-        rewind: (sdkUserMessageId, dryRun, sdkSessionId) => this.rewindCheckpointFiles(
-          input.conversationId,
-          sdkUserMessageId,
-          dryRun,
-          sdkSessionId,
-        ),
-      })
-    } catch (error) {
-      await this.appendCheckpointStatusErrorEvent(input.conversationId, error)
-      throw error
-    }
+    return this.claudeCodeContinuation.runWritable(input.conversationId, async () => {
+      const state = this.states.get(input.conversationId)
+      try {
+        return await this.requireFileCheckpoints().prepareRewind({
+          ...input,
+          busy: Boolean(state?.busy || state?.activeTurns || state?.queue.length),
+          rewind: (sdkUserMessageId, dryRun, sdkSessionId) => this.rewindCheckpointFiles(
+            input.conversationId,
+            sdkUserMessageId,
+            dryRun,
+            sdkSessionId,
+          ),
+        })
+      } catch (error) {
+        await this.appendCheckpointStatusErrorEvent(input.conversationId, error)
+        throw error
+      }
+    })
   }
 
   async confirmFileCheckpointRewind(input: {
     readonly conversationId: string
     readonly operationId: string
   }): Promise<AgentFileCheckpointRewindResult> {
-    const state = this.states.get(input.conversationId)
-    let result: AgentFileCheckpointRewindResult
-    try {
-      result = await this.requireFileCheckpoints().confirmRewind({
-        conversationId: input.conversationId,
-        operationId: input.operationId,
-        busy: Boolean(state?.busy || state?.activeTurns || state?.queue.length),
-        rewind: (sdkUserMessageId, dryRun, sdkSessionId) => this.rewindCheckpointFiles(
-          input.conversationId,
-          sdkUserMessageId,
-          dryRun,
-          sdkSessionId,
-        ),
-      })
-    } catch (error) {
-      await this.appendCheckpointStatusErrorEvent(input.conversationId, error)
-      throw error
-    }
-    const conversation = await this.repository.get(input.conversationId)
-    if (conversation) await this.conversationRouter.appendExternalEvent(conversation, result.event)
-    return result
+    return this.claudeCodeContinuation.runWritable(input.conversationId, async () => {
+      const state = this.states.get(input.conversationId)
+      let result: AgentFileCheckpointRewindResult
+      try {
+        result = await this.requireFileCheckpoints().confirmRewind({
+          conversationId: input.conversationId,
+          operationId: input.operationId,
+          busy: Boolean(state?.busy || state?.activeTurns || state?.queue.length),
+          rewind: (sdkUserMessageId, dryRun, sdkSessionId) => this.rewindCheckpointFiles(
+            input.conversationId,
+            sdkUserMessageId,
+            dryRun,
+            sdkSessionId,
+          ),
+        })
+      } catch (error) {
+        await this.appendCheckpointStatusErrorEvent(input.conversationId, error)
+        throw error
+      }
+      const conversation = await this.repository.get(input.conversationId)
+      if (conversation) await this.conversationRouter.appendExternalEvent(conversation, result.event)
+      return result
+    })
   }
 
   private async appendCheckpointStatusErrorEvent(conversationIdValue: string, error: unknown): Promise<void> {
@@ -1346,32 +1372,36 @@ export class AgentRuntimeService {
     readonly mode: string
     readonly actor: ActorIdentity
   }): Promise<ConversationEntryV1> {
-    const conversation = await this.repository.get(input.conversationId)
-    if (!conversation) {
-      throw new Error(conversationNotFoundMessage(input.conversationId))
-    }
-
-    // Persist first — if it fails, the live session is never switched.
-    const updated = await this.repository.savePermissionMode(input.conversationId, input.mode)
-
-    const liveSession = this.states.get(input.conversationId)?.liveSession
-    if (liveSession?.alive()) {
-      if (!liveSession.setPermissionMode) {
-        throw new Error("当前会话不支持切换权限模式")
+    return this.claudeCodeContinuation.runWritable(input.conversationId, async () => {
+      const conversation = await this.repository.get(input.conversationId)
+      if (!conversation) {
+        throw new Error(conversationNotFoundMessage(input.conversationId))
       }
-      await liveSession.setPermissionMode(input.mode)
-    }
 
-    this.emitConversationUpdated(updated)
-    this.deps.logger?.info("Agent permission mode changed.", {
-      boundary: "agent-runtime.permission-mode",
-      projectId: this.deps.projectId,
-      conversationId: input.conversationId,
-      actorKind: input.actor.kind,
-      actorId: input.actor.id,
-      mode: input.mode,
+      // Persist first — if it fails, the live session is never switched.
+      const updated = await this.repository.savePermissionMode(input.conversationId, input.mode)
+
+      const state = this.states.get(input.conversationId)
+      const liveSession = state?.liveSession
+      if (liveSession?.alive()) {
+        if (!liveSession.setPermissionMode) {
+          throw new Error("当前会话不支持切换权限模式")
+        }
+        await liveSession.setPermissionMode(input.mode)
+      }
+      if (state) state.modeOverride = input.mode
+
+      this.emitConversationUpdated(updated)
+      this.deps.logger?.info("Agent permission mode changed.", {
+        boundary: "agent-runtime.permission-mode",
+        projectId: this.deps.projectId,
+        conversationId: input.conversationId,
+        actorKind: input.actor.kind,
+        actorId: input.actor.id,
+        mode: input.mode,
+      })
+      return updated
     })
-    return updated
   }
 
   private async applyGeneratedConversationTitle(
@@ -1396,7 +1426,10 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    return this.sessionLifecycle.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey)
+    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
+    if (!conversation) return null
+    return this.claudeCodeContinuation.runWritable(conversation.id, () =>
+      this.sessionLifecycle.clearCurrentAgentSessionId(sessionKey, platform, workspaceKey, conversation.id))
   }
 
   async resetSession(
@@ -1404,11 +1437,15 @@ export class AgentRuntimeService {
     platform = "local",
     workspaceKey?: string,
   ): Promise<ConversationEntryV1 | null> {
-    const reset = await this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey)
-    if (reset) {
-      this.conversationRouter.forgetSavedSdkSession(reset.id)
-    }
-    return reset
+    const conversation = await this.repository.getActive(sessionKey, platform, workspaceKey)
+    if (!conversation) return null
+    return this.claudeCodeContinuation.runWritable(conversation.id, async () => {
+      const reset = await this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey, conversation.id)
+      if (reset) {
+        this.conversationRouter.forgetSavedSdkSession(reset.id)
+      }
+      return reset
+    })
   }
 
   async createSession(

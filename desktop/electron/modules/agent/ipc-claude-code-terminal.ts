@@ -4,6 +4,7 @@ import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import {
   createClaudeCodeTerminalSession,
+  resumeClaudeCodeTerminalConversation,
   ClaudeCodeTerminalError,
 } from "./claude-code-terminal"
 
@@ -27,7 +28,18 @@ const claudeCodeTerminalResponseSchema = z.object({
  * resolution into the main process for a caller that already did it, and would leave
  * the two paths able to disagree.
  */
+const resumeClaudeCodeTerminalRequestSchema = projectRequestSchema.extend({ conversationId: z.string().min(1) }).strict()
+
 export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
+  resumeClaudeCodeTerminal: {
+    kind: "invoke",
+    operationId: "app.agent.operation.resume_claude_code_terminal",
+    request: resumeClaudeCodeTerminalRequestSchema,
+    response: claudeCodeTerminalResponseSchema,
+    handler: async (ctx, request: z.infer<typeof resumeClaudeCodeTerminalRequestSchema>) => ({
+      sessionId: await resumeClaudeCodeTerminalConversation(ctx.resolve, request),
+    }),
+  },
   createClaudeCodeTerminal: {
     kind: "invoke",
     operationId: "app.agent.operation.create_claude_code_terminal",

@@ -269,6 +269,7 @@ export const IPC_CHANNELS = {
     "switchSession": "synapse:app:agent:operation:switch_session",
     "deleteSession": "synapse:app:agent:operation:delete_session",
     "renameSession": "synapse:app:agent:operation:rename_session",
+    "resumeClaudeCodeTerminal": "synapse:app:agent:operation:resume_claude_code_terminal",
     "createClaudeCodeTerminal": "synapse:app:agent:operation:create_claude_code_terminal",
     "setAgentEventSubscription": "synapse:app:agent:operation:set_event_subscription",
     "ackAgentEventBatch": "synapse:app:agent:operation:ack_event_batch",

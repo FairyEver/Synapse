@@ -125,6 +125,7 @@ beforeEach(() => {
     writable: true,
     value: {
       agent: {
+        resumeClaudeCodeTerminal: vi.fn(async () => ({ sessionId: "cc-terminal" })),
         listAllProviders: vi.fn(async () => [{
           id: "provider-1",
           name: "百炼",
@@ -154,6 +155,30 @@ afterEach(() => {
 })
 
 describe("AgentConversationWorkspace", () => {
+  it("makes the conversation read-only after continuing in Claude Code", async () => {
+    const container = renderWorkspace({ mode: "embedded", session: { ...session, agentSessionId: "sdk-original", hasNativeSession: true, historyCount: 2 } })
+    await act(async () => {
+      const button = container.querySelector<HTMLButtonElement>('button[aria-label="在 Claude Code 中继续"]')
+      expect(button).not.toBeNull()
+      button?.click()
+    })
+    expect(container.textContent).toContain("已转到 Claude Code")
+    expect(container.querySelector('[data-testid="agent-composer"]')).toBeNull()
+    expect(mocks.timelineProps.at(-1)?.onContinue).toBeUndefined()
+  })
+
+  it("keeps a persisted transferred conversation read-only", () => {
+    const container = renderWorkspace({ mode: "window", session: { ...session, agentSessionId: "sdk-original", hasNativeSession: true, claudeCodeContinuation: { phase: "transferred", terminalSessionId: "cc-terminal" } } })
+    expect(container.textContent).toContain("已转到 Claude Code")
+    expect(container.querySelector('[data-testid="agent-composer"]')).toBeNull()
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="在 Claude Code 中继续"]')?.disabled).toBe(false)
+  })
+
+  it.each([false, true])("disables continuation without a native session or while sending (%s)", (sending) => {
+    const container = renderWorkspace({ mode: "embedded", session: { ...session, agentSessionId: sending ? "sdk-original" : undefined, hasNativeSession: sending }, chat: createController({ sending }) })
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="在 Claude Code 中继续"]')?.disabled).toBe(true)
+  })
+
   it("sends an explicit continue message for a recoverable interruption", async () => {
     const sendMessage = vi.fn(async () => true)
     renderWorkspace({ mode: "embedded", chat: createController({ sendMessage }) })

@@ -1185,6 +1185,7 @@ export function createTerminalService(deps: {
       readonly overriddenFields?: readonly ("cwd" | "shell" | "environment" | "cols" | "rows")[]
       /** Caller-owned launch environment that must never be written into the session record. */
       readonly persistEnvironment?: boolean
+      readonly onCreated?: (sessionId: string) => Promise<void>
     },
     createdByClientId?: string,
     commandLaunch?: TerminalLaunchLayer,
@@ -1280,6 +1281,7 @@ export function createTerminalService(deps: {
     bumpDomain("session.created", session.id, session.metadataRevision)
     unpublishedSessions.set(session.id, terminalDomainRevision)
     try {
+      await launchOverrides?.onCreated?.(session.id)
       const defaultShellArgs = launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
       /*
        * 身份在这里注入而不是在 `resolveTerminalEnvironment` 里：新标签页的 workspace 到
@@ -2329,6 +2331,8 @@ export function createTerminalService(deps: {
      * this method had before the mobile gateway became a caller.
      */
     readonly createdByClientId?: string
+    /** Persist caller-owned associations before spawning the process. */
+    readonly onCreated?: (sessionId: string) => Promise<void>
     /** Runs once when the session process ends; used to release caller-owned launch assets. */
     readonly onEnded?: () => void
   }): Promise<TerminalSession> {
@@ -2348,6 +2352,7 @@ export function createTerminalService(deps: {
         ...(input.rows === undefined ? [] : ["rows" as const]),
       ],
       persistEnvironment: false,
+      onCreated: input.onCreated,
     }, input.createdByClientId)
     if (input.onEnded) endCallbacks.set(session.id, input.onEnded)
     return session

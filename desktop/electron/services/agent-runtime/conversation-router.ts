@@ -95,6 +95,7 @@ import type { AgentFileCheckpointService } from "./agent-file-checkpoint-service
 
 export interface ConversationRouterDeps {
   readonly projectId: string
+  readonly withConversationWrite?: <T>(conversationId: string, operation: () => Promise<T>) => Promise<T>
   readonly defaultAgentType: string
   readonly workDir?: string
   readonly eventBus?: ScopedEventBus
@@ -595,6 +596,17 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     options: ConversationTurnOptions = {},
   ): Promise<AgentTurnSubmissionHandle> {
+    if (conversation.claudeCodeContinuation) throw new Error("该对话已转交 Claude Code，请在 Claude Code 中继续。")
+    return this.deps.withConversationWrite
+      ? this.deps.withConversationWrite(conversation.id, () => this.admitWritableTurn(message, conversation, options))
+      : this.admitWritableTurn(message, conversation, options)
+  }
+
+  private async admitWritableTurn(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    options: ConversationTurnOptions = {},
+  ): Promise<AgentTurnSubmissionHandle> {
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
@@ -1060,7 +1072,7 @@ export class ConversationRouter {
       appendBoundedTurnEvent(events, event)
       this.emitEvent(message, conversation.id, event)
       await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, event)
-      await this.saveEventSdkSession(conversation.id, event, liveSession)
+      await this.saveEventSdkSession(conversation.id, event, liveSession, state)
       await this.saveEventHistory(conversation.id, event)
     }
     while (!error && liveSession.alive()) {
@@ -1155,7 +1167,7 @@ export class ConversationRouter {
         appendBoundedTurnEvent(events, finalized.event)
         this.emitEvent(message, conversation.id, finalized.event)
         await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, finalized.event)
-        await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
+        await this.saveEventSdkSession(conversation.id, finalized.event, liveSession, state)
         assistantHistoryPersisted = await this.saveEventHistory(conversation.id, finalized.event, {
           assistantHistoryPersisted,
         }) || assistantHistoryPersisted
@@ -1212,7 +1224,7 @@ export class ConversationRouter {
           appendBoundedTurnEvent(events, projected)
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
-          await this.saveEventSdkSession(conversation.id, projected, liveSession)
+          await this.saveEventSdkSession(conversation.id, projected, liveSession, state)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
             assistantHistoryPersisted,
           }) || assistantHistoryPersisted
@@ -1222,7 +1234,7 @@ export class ConversationRouter {
         appendBoundedTurnEvent(events, enrichedError)
         this.emitEvent(message, conversation.id, enrichedError)
         await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
-        await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
+        await this.saveEventSdkSession(conversation.id, enrichedError, liveSession, state)
         await this.saveEventHistory(conversation.id, enrichedError)
         error = enrichedError.message
         break
@@ -1235,7 +1247,7 @@ export class ConversationRouter {
       appendBoundedTurnEvent(events, preparedEvent)
       this.emitEvent(message, conversation.id, preparedEvent)
       await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, preparedEvent)
-      await this.saveEventSdkSession(conversation.id, preparedEvent, liveSession)
+      await this.saveEventSdkSession(conversation.id, preparedEvent, liveSession, state)
       const preparedEventHistoryPersisted = await this.saveEventHistory(conversation.id, preparedEvent)
       assistantHistoryPersisted = preparedEventHistoryPersisted || assistantHistoryPersisted
       if (preparedEvent.type === "assistant" && preparedEventHistoryPersisted) {
@@ -1275,7 +1287,7 @@ export class ConversationRouter {
             appendBoundedTurnEvent(events, projected)
             this.emitEvent(message, conversation.id, projected)
             await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
-            await this.saveEventSdkSession(conversation.id, projected, liveSession)
+            await this.saveEventSdkSession(conversation.id, projected, liveSession, state)
             assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
               assistantHistoryPersisted,
             }) || assistantHistoryPersisted
@@ -1521,7 +1533,7 @@ export class ConversationRouter {
           appendBoundedTurnEvent(events, errorEvent)
           this.emitEvent(message, conversation.id, errorEvent)
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, errorEvent)
-          await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
+          await this.saveEventSdkSession(conversation.id, errorEvent, liveSession, state)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
           return {
@@ -1559,7 +1571,7 @@ export class ConversationRouter {
           appendBoundedTurnEvent(events, finalized.event)
           this.emitEvent(message, conversation.id, finalized.event)
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, finalized.event)
-          await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
+          await this.saveEventSdkSession(conversation.id, finalized.event, liveSession, state)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, finalized.event, {
             assistantHistoryPersisted,
           }) || assistantHistoryPersisted
@@ -1615,7 +1627,7 @@ export class ConversationRouter {
             partialText = appendRelayText(partialText, projected)
             this.emitEvent(message, conversation.id, projected)
             await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
-            await this.saveEventSdkSession(conversation.id, projected, liveSession)
+            await this.saveEventSdkSession(conversation.id, projected, liveSession, state)
               assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
                 assistantHistoryPersisted,
               }) || assistantHistoryPersisted
@@ -1626,7 +1638,7 @@ export class ConversationRouter {
           partialText = appendRelayText(partialText, enrichedError)
           this.emitEvent(message, conversation.id, enrichedError)
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
-          await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
+          await this.saveEventSdkSession(conversation.id, enrichedError, liveSession, state)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, enrichedError) || assistantHistoryPersisted
           error = enrichedError.message
           break
@@ -1635,7 +1647,7 @@ export class ConversationRouter {
         partialText = appendRelayText(partialText, event)
         this.emitEvent(message, conversation.id, event)
         await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, event)
-        await this.saveEventSdkSession(conversation.id, event, liveSession)
+        await this.saveEventSdkSession(conversation.id, event, liveSession, state)
         assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
         if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
@@ -1681,7 +1693,7 @@ export class ConversationRouter {
           appendBoundedTurnEvent(events, projected)
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
-          await this.saveEventSdkSession(conversation.id, projected, liveSession)
+          await this.saveEventSdkSession(conversation.id, projected, liveSession, state)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
             assistantHistoryPersisted,
           }) || assistantHistoryPersisted
@@ -1708,7 +1720,7 @@ export class ConversationRouter {
         appendBoundedTurnEvent(events, errorEvent)
         this.emitEvent(message, conversation.id, errorEvent)
         await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, errorEvent)
-        await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
+        await this.saveEventSdkSession(conversation.id, errorEvent, liveSession, state)
         assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         await this.sessionManager.closeCurrentTurn(conversation.id)
         return {
@@ -1897,6 +1909,10 @@ export class ConversationRouter {
       message.workspaceKey,
     )
     if (existing) {
+      if (existing.claudeCodeContinuation) throw new Error("该对话已转交 Claude Code，请在 Claude Code 中继续。")
+      if (this.deps.withConversationWrite) {
+        return this.deps.withConversationWrite(existing.id, () => this.repository.getOrCreateActive(message))
+      }
       return this.repository.getOrCreateActive(message)
     }
     const providerId = await this.resolveNewConversationProviderId(message)
@@ -2020,11 +2036,18 @@ export class ConversationRouter {
     conversationId: string,
     event: AgentEvent,
     liveSession: AgentLiveSession,
+    state: RuntimeSessionState,
   ): Promise<void> {
     const sdkSessionId = event.sdkSessionId ?? liveSession.currentSessionId()
     if (!sdkSessionId) return
-    if (this.savedSdkSessions.get(conversationId) === sdkSessionId) return
-    await this.repository.saveSdkSession({ conversationId, sdkSessionId })
+    if (this.savedSdkSessions.get(conversationId) === sdkSessionId && event.type !== "sessionInit") return
+    const model = state.effectiveModel ?? (event.type === "sessionInit" ? event.model : undefined)
+    await this.repository.saveSdkSession({ conversationId, sdkSessionId,
+      launchSelection: {
+        providerId: state.providerId, cwd: state.workspacePath ?? this.deps.workDir,
+        model, mode: state.modeOverride,
+      },
+    })
     this.savedSdkSessions.set(conversationId, sdkSessionId)
   }
 
