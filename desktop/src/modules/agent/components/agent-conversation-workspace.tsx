@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppConfig } from "@/app-shell/config"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useQuickInputItems } from "@/hooks/use-quick-input-items"
@@ -846,10 +847,13 @@ function AgentConversationWorkspace({
       />
 
       {continuation.readOnly ? (
-        <p className="text-sm text-muted-foreground">
-          {session.claudeCodeContinuation?.phase === "stopping" || session.claudeCodeContinuation?.phase === "launching"
-            ? "转交尚未完成，请重试。" : "已转到 Claude Code"}
-        </p>
+        <div role="status" className="flex shrink-0 justify-center py-4">
+          <Badge variant="secondary">
+            <Terminal data-icon="inline-start" aria-hidden="true" />
+            {session.claudeCodeContinuation?.phase === "stopping" || session.claudeCodeContinuation?.phase === "launching"
+              ? "转交尚未完成，请重试。" : "已转到 Claude Code"}
+          </Badge>
+        </div>
       ) : <AgentComposer
         key={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         projectId={target.projectId}
