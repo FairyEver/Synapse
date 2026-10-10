@@ -1886,6 +1886,7 @@ describe("TerminalModule", () => {
     for (const bar of bars) {
       expect(bar.style.getPropertyValue("--background")).toBe(background)
       expect(bar.style.getPropertyValue("--foreground")).toBe(foreground)
+      expect(bar.style.backgroundColor).toBe("color-mix(in srgb, var(--background) 90%, var(--color-black) 10%)")
     }
     expect(configState.persisted?.global.terminalTheme).toBeUndefined()
     expect(document.querySelector('[data-terminal-theme-preview]')).not.toBeNull()
@@ -1918,6 +1919,7 @@ describe("TerminalModule", () => {
     for (const bar of document.querySelectorAll<HTMLElement>("[data-terminal-pane-header], [data-terminal-toolbar]")) {
       expect(bar.style.getPropertyValue("--background")).toBe("#2e3440")
       expect(bar.style.getPropertyValue("--foreground")).toBe("#d8dee9")
+      expect(bar.style.backgroundColor).toBe("color-mix(in srgb, var(--background) 90%, var(--color-black) 10%)")
     }
   })
 
@@ -2070,6 +2072,9 @@ describe("TerminalModule", () => {
     expect(toolbar?.classList.contains("min-h-10")).toBe(true)
     expect(toolbar?.classList.contains("bg-background")).toBe(true)
     expect(document.querySelector("[data-terminal-pane-header]")?.classList.contains("bg-background")).toBe(true)
+    for (const bar of document.querySelectorAll<HTMLElement>("[data-terminal-pane-header], [data-terminal-toolbar]")) {
+      expect(bar.style.backgroundColor).toBe("color-mix(in srgb, var(--background) 90%, var(--color-black) 10%)")
+    }
     expect(toolbar?.classList.contains("border-t")).toBe(true)
     expect(toolbar?.classList.contains("border-b")).toBe(false)
     // 横向滚动收在内层：快捷输入那一格钉在外面，滚不走。

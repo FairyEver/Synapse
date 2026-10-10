@@ -8,9 +8,12 @@ export const TERMINAL_CHROME_BUTTON_CLASS_NAME =
 /** Runtime palette tokens scoped to the terminal's header and command bars. */
 export function getTerminalChromeStyle(theme: TerminalThemeId): CSSProperties & Record<`--${string}`, string> {
   const palette = TERMINAL_THEMES[theme].palette
-  if (!palette) return { "--muted-foreground": "var(--foreground)" }
+  // Equivalent to a 10% black overlay, without dimming text or intercepting clicks.
+  const backgroundColor = "color-mix(in srgb, var(--background) 90%, var(--color-black) 10%)"
+  if (!palette) return { backgroundColor, "--muted-foreground": "var(--foreground)" }
 
   return {
+    backgroundColor,
     "--background": palette.background,
     "--foreground": palette.foreground,
     "--muted-foreground": palette.foreground,
