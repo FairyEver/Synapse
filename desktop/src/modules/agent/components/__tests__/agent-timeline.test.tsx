@@ -113,6 +113,25 @@ function renderInteractiveTimeline(overrides: Partial<ComponentProps<typeof Agen
 }
 
 describe("AgentTimeline", () => {
+  it.each([false, true])("places the footer after history inside the scroll viewport (has messages: %s)", (hasMessages) => {
+    const items: SynapseAgentTimelineItem[] = hasMessages ? [{
+      id: "last-message", kind: "message", role: "user", content: "最后一条消息",
+      timestamp: "2026-10-10T00:00:00.000Z",
+    }] : []
+    const onOpen = vi.fn()
+    const { container } = renderInteractiveTimeline({
+      items,
+      footer: <button type="button" onClick={onOpen}>打开 Claude Code</button>,
+    })
+    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')!
+    const button = Array.from(container.querySelectorAll("button")).find((element) => element.textContent === "打开 Claude Code")!
+    expect(viewport.contains(button)).toBe(true)
+    expect(viewport.textContent?.trim().endsWith("打开 Claude Code")).toBe(true)
+    expect(viewport.textContent).toContain(hasMessages ? "最后一条消息" : "暂无消息")
+    act(() => button.click())
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
   it("keeps loading and recovery controls visible when no displayable rows are loaded", () => {
     expect(textFromMarkup(renderTimeline({ loadingOlder: true }))).toContain("加载中")
     expect(textFromMarkup(renderTimeline({ loadingOlder: true }))).not.toContain("暂无消息")

@@ -60,7 +60,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 固定例外：
 
-- Agent 顶部的「在 Claude Code 中继续」通过 UI 专用 `app.agent.operation.resume_claude_code_terminal` IPC 接续原生会话。转交后原对话永久只读，MCP inspect 返回 `controllable=false`，消息及其它控制请求拒绝；CLI 新消息不回流。终端内部新增 PTY 启动前保存关联的回调，不新增公开 capability。Agent 保持 11 个 MCP 工具，Terminal 保持 49 个；System App、Dock、Workflow、Automation 和 Deep Link 数量均不变。
+- Agent 顶部的「在 Claude Code 中继续」及转交后历史末尾的「打开 Claude Code」复用 UI 专用 `app.agent.operation.resume_claude_code_terminal` IPC 接续原生会话。转交后原对话永久只读，MCP inspect 返回 `controllable=false`，消息及其它控制请求拒绝；CLI 新消息不回流。终端内部新增 PTY 启动前保存关联的回调，不新增公开 capability。Agent 保持 11 个 MCP 工具，Terminal 保持 49 个；System App、Dock、Workflow、Automation 和 Deep Link 数量均不变。
 
 - System Notifier 的注册表面不变（1 个 MCP 工具、1 个 Workflow 节点），它是「通知用户」这一个能力：一次触发只把消息写进账号消息中心（桌面端入口是 `POST /api/notifications/desktop`），服务端再投递给该账号所有在线桌面（包括发起的那台）并随 APNs 推到用户手机。走桌面登录态，不需要用户新建 API 密钥，也不经过开放 API。System Notifier 同时负责这台电脑的原生呈现：实时连接收到账号消息后交给它，按 `localEnabled` / `silent` 两颗开关决定弹不弹、静不静音；`sendEnabled` 是发送总闸，关掉则完全不发。未登录或离线时发不出去，那就什么都不发生，本机也不另弹一条，但会留下 `notification_sync` 固定诊断。测试通知仅本机显示且永不发送，成功响应仍不承诺送达或显示。
 

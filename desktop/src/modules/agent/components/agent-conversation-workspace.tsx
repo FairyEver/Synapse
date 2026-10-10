@@ -6,7 +6,6 @@ import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppConfig } from "@/app-shell/config"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useQuickInputItems } from "@/hooks/use-quick-input-items"
@@ -578,6 +577,8 @@ function AgentConversationWorkspace({
     || currentPendingPermissions.length > 0
     || selectedPendingMessages.some((message) => message.status !== "failed")
     || chat.cancelPhase === "cancel_pending"
+  const continuationIncomplete = session.claudeCodeContinuation?.phase === "stopping"
+    || session.claudeCodeContinuation?.phase === "launching"
 
   const openReference = (reference: string) => {
     const bridge = getSynapseBridge()
@@ -844,17 +845,27 @@ function AgentConversationWorkspace({
         onRetryHistory={() => void chat.loadOlderTimeline()}
         projectId={target.projectId}
         conversationId={target.conversationId}
+        footer={continuation.readOnly ? (
+          <div className="flex flex-col items-center gap-3">
+            <p role="status" className="text-sm text-muted-foreground">
+              {continuationIncomplete ? "转交尚未完成，请重试。" : "已转到 Claude Code"}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={claudeCodeContinuationDisabled}
+              onClick={() => void continuation.resume()}
+            >
+              {continuation.continuing
+                ? <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                : <Terminal data-icon="inline-start" />}
+              {continuationIncomplete ? "重试转交" : "打开 Claude Code"}
+            </Button>
+          </div>
+        ) : undefined}
       />
 
-      {continuation.readOnly ? (
-        <div role="status" className="flex shrink-0 justify-center py-4">
-          <Badge variant="secondary">
-            <Terminal data-icon="inline-start" aria-hidden="true" />
-            {session.claudeCodeContinuation?.phase === "stopping" || session.claudeCodeContinuation?.phase === "launching"
-              ? "转交尚未完成，请重试。" : "已转到 Claude Code"}
-          </Badge>
-        </div>
-      ) : <AgentComposer
+      {continuation.readOnly ? null : <AgentComposer
         key={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         projectId={target.projectId}
         focusInputKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -84,9 +84,10 @@ vi.mock("../components/agent-timeline", () => ({
   AgentTimeline: (props: {
     readonly referenceActions?: unknown
     readonly onContinue?: () => void
+    readonly footer?: ReactNode
   }) => {
     mocks.timelineProps.push(props)
-    return <div data-testid="agent-timeline" />
+    return <div data-testid="agent-timeline">{props.footer}</div>
   },
 }))
 
@@ -172,6 +173,41 @@ describe("AgentConversationWorkspace", () => {
     expect(container.textContent).toContain("已转到 Claude Code")
     expect(container.querySelector('[data-testid="agent-composer"]')).toBeNull()
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="在 Claude Code 中继续"]')?.disabled).toBe(false)
+  })
+
+  it.each(["embedded", "window"] as const)("reopens Claude Code from the history footer in %s mode", async (mode) => {
+    const container = renderWorkspace({ mode, session: { ...session, hasNativeSession: true, claudeCodeContinuation: { phase: "transferred", terminalSessionId: "cc-terminal" } } })
+    const footerButton = container.querySelector<HTMLButtonElement>('[data-testid="agent-timeline"] button')
+    expect(footerButton?.textContent).toContain("打开 Claude Code")
+    await act(async () => footerButton?.click())
+    expect(window.synapse?.agent.resumeClaudeCodeTerminal).toHaveBeenCalledWith({
+      projectId: session.projectId, conversationId: session.id,
+    })
+    expect(container.querySelector('[data-testid="agent-composer"]')).toBeNull()
+  })
+
+  it("disables the history footer action while reopening Claude Code", async () => {
+    let resolveResume!: (value: { sessionId: string }) => void
+    const resume = vi.mocked(window.synapse!.agent.resumeClaudeCodeTerminal)
+    resume.mockReturnValueOnce(new Promise((resolve) => { resolveResume = resolve }))
+    const container = renderWorkspace({ mode: "embedded", session: { ...session, hasNativeSession: true, claudeCodeContinuation: { phase: "transferred", terminalSessionId: "cc-terminal" } } })
+    const button = container.querySelector<HTMLButtonElement>('[data-testid="agent-timeline"] button')!
+    await act(async () => button.click())
+    expect(button.disabled).toBe(true)
+    act(() => button.click())
+    expect(resume).toHaveBeenCalledTimes(1)
+    await act(async () => resolveResume({ sessionId: "cc-terminal" }))
+    expect(button.disabled).toBe(false)
+  })
+
+  it.each(["stopping", "launching"] as const)("offers a retry from the history footer for %s continuation", async (phase) => {
+    const container = renderWorkspace({ mode: "embedded", session: { ...session, hasNativeSession: true, claudeCodeContinuation: { phase } } })
+    const button = container.querySelector<HTMLButtonElement>('[data-testid="agent-timeline"] button')
+    expect(button?.textContent).toContain("重试转交")
+    expect(container.textContent).toContain("转交尚未完成，请重试。")
+    await act(async () => button?.click())
+    expect(window.synapse?.agent.resumeClaudeCodeTerminal).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('[data-testid="agent-composer"]')).toBeNull()
   })
 
   it.each([false, true])("disables continuation without a native session or while sending (%s)", (sending) => {

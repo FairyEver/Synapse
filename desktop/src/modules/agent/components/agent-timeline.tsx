@@ -1,6 +1,7 @@
-import { useState, type Ref } from "react"
+import { useState, type ReactNode, type Ref } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
@@ -35,6 +36,7 @@ function AgentTimeline({
   onRetryHistory,
   projectId,
   conversationId,
+  footer,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
@@ -58,6 +60,7 @@ function AgentTimeline({
   readonly onRetryHistory: () => void
   readonly projectId?: string
   readonly conversationId?: string
+  readonly footer?: ReactNode
 }) {
   const now = Date.now()
   const visibleItems = visibleTimelineItems(items, now)
@@ -79,7 +82,7 @@ function AgentTimeline({
         viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
       >
         {displayNodes.length === 0 ? (
-          <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center px-4 pb-34 pt-4 text-center">
+          <div data-allow-select="true" className={cn("mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center px-4 pt-4 text-center", footer ? "pb-4" : "pb-34")}>
             {loadingOlder ? (
               <p className="text-sm text-muted-foreground">加载中</p>
             ) : historyError || hasMore ? (
@@ -93,7 +96,7 @@ function AgentTimeline({
             )}
           </div>
         ) : (
-          <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pb-34 pt-4">
+          <div data-allow-select="true" className={cn("mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pt-4", footer ? "pb-4" : "pb-34")}>
             {loadingOlder ? (
               <p className="py-2 text-center text-sm text-muted-foreground">加载中</p>
             ) : historyError || hasMore ? (
@@ -169,6 +172,11 @@ function AgentTimeline({
             })}
           </div>
         )}
+        {footer ? (
+          <div className="mx-auto flex min-w-0 max-w-4xl justify-center px-4 py-6">
+            {footer}
+          </div>
+        ) : null}
       </ScrollArea>
     </div>
   )
