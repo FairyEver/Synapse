@@ -555,6 +555,7 @@ import type {
   SynapseSystemAppContentOpenRequest,
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppMailOpenRequest,
+  TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -1039,6 +1040,7 @@ export type SynapseBridge = {
     onTerminalOpenRequest: (
       listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
+    onTodoOpenRequest: (listener: (request: TodoOpenRequest) => void) => () => void
     onMailOpenRequest: (
       listener: (request: SynapseSystemAppMailOpenRequest) => void,
     ) => () => void

@@ -394,6 +394,7 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       EVENT_CHANNELS.apps.terminalOpenRequest,
     ),
+    onTodoOpenRequest: createRawPayloadSubscription(subscribe, IPC_CHANNELS.apps.todoOpenRequest),
     onMailOpenRequest: createRawPayloadSubscription(
       subscribe,
       EVENT_CHANNELS.apps.mailOpenRequest,

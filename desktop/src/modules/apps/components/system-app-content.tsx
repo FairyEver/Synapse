@@ -10,6 +10,7 @@ import { AgentModule } from "@/modules/agent"
 import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
 import { DriveModule } from "@/modules/drive"
+import { TodosModule } from "@/modules/todos"
 import { MailModule } from "@/modules/mail"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { GitModule } from "@/modules/git"
@@ -34,6 +35,7 @@ import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
 import type {
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppMailOpenRequest,
+  TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -57,6 +59,8 @@ type SystemAppContentProps = {
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
   readonly onTerminalOpenRequestConsumed?: (requestId: string) => void
   readonly meetingOpenRequest?: string | null
+  readonly todoOpenRequest?: TodoOpenRequest | null
+  readonly onTodoOpenRequestConsumed?: (requestId: string) => void
   readonly mailOpenRequest?: SynapseSystemAppMailOpenRequest | null
   readonly onMailOpenRequestConsumed?: (requestId: string) => void
   readonly onMeetingOpenRequestConsumed?: () => void
@@ -76,6 +80,8 @@ function SystemAppContent({
   terminalOpenRequest = null,
   onTerminalOpenRequestConsumed,
   meetingOpenRequest = null,
+  todoOpenRequest = null,
+  onTodoOpenRequestConsumed,
   mailOpenRequest = null,
   onMailOpenRequestConsumed,
   onMeetingOpenRequestConsumed,
@@ -96,6 +102,7 @@ function SystemAppContent({
   if (appId === "agent-personas") return <AgentPersonasModule />
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
+  if (appId === "todos") return <TodosModule openRequest={todoOpenRequest} onOpenRequestConsumed={onTodoOpenRequestConsumed} />
   if (appId === "mail") return <MailModule openRequest={mailOpenRequest} onOpenRequestConsumed={onMailOpenRequestConsumed} />
   if (appId === "automation") return <AutomationModule />
   if (appId === "launcher") {

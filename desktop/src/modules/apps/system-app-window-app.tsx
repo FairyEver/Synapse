@@ -9,6 +9,7 @@ import { SystemAppContent } from "./components/system-app-content"
 import type {
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppMailOpenRequest,
+  TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -20,6 +21,7 @@ type AppsBridge = {
   readonly onContentOpenRequest: (listener: (request: ContentOpenRequest) => void) => () => void
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
   readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
+  readonly onTodoOpenRequest?: (listener: (request: TodoOpenRequest) => void) => () => void
   readonly onMailOpenRequest: (listener: (request: SynapseSystemAppMailOpenRequest) => void) => () => void
 }
 
@@ -70,6 +72,15 @@ function parseInitialTerminalOpenRequest(): SynapseSystemAppTerminalOpenRequest 
   }
 }
 
+function parseInitialTodoOpenRequest(): TodoOpenRequest | null {
+  const raw = new URLSearchParams(window.location.search).get("todoOpenRequest")
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<TodoOpenRequest>
+    return typeof parsed.requestId === "string" && parsed.requestId.length > 0 && typeof parsed.id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(parsed.id) ? { requestId: parsed.requestId, id: parsed.id } : null
+  } catch { return null }
+}
+
 function parseInitialMailOpenRequest(): SynapseSystemAppMailOpenRequest | null {
   const raw = new URLSearchParams(window.location.search).get("mailOpenRequest")
   if (!raw) return null
@@ -100,6 +111,7 @@ export function SystemAppWindowApp() {
     useState<SynapseSystemAppGitOpenRequest | null>(() => parseInitialGitOpenRequest())
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
+  const [pendingTodoOpenRequest, setPendingTodoOpenRequest] = useState<TodoOpenRequest | null>(() => parseInitialTodoOpenRequest())
   const [pendingMailOpenRequest, setPendingMailOpenRequest] =
     useState<SynapseSystemAppMailOpenRequest | null>(() => parseInitialMailOpenRequest())
 
@@ -143,6 +155,15 @@ export function SystemAppWindowApp() {
     })
   }, [])
 
+  useEffect(() => getAppsBridge()?.onTodoOpenRequest?.((request) => setPendingTodoOpenRequest(request)), [])
+
+  const handleTodoConsumed = useCallback((requestId: string) => {
+    setPendingTodoOpenRequest((current) => current?.requestId === requestId ? null : current)
+    const url = new URL(window.location.href)
+    url.searchParams.delete("todoOpenRequest")
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+  }, [])
+
   const forwardContentOpenRequest = useCallback((request: ContentOpenRequest) => {
     void getAppsBridge()?.openSystemApp("resource-repository", {
       contentOpenRequest: request,
@@ -168,6 +189,8 @@ export function SystemAppWindowApp() {
       onTerminalOpenRequestConsumed={(requestId) => {
         setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
       }}
+      todoOpenRequest={pendingTodoOpenRequest}
+      onTodoOpenRequestConsumed={handleTodoConsumed}
       mailOpenRequest={pendingMailOpenRequest}
       onMailOpenRequestConsumed={(requestId) => {
         setPendingMailOpenRequest((current) => current?.requestId === requestId ? null : current)

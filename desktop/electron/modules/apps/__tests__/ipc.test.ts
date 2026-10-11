@@ -26,6 +26,17 @@ describe("appsIpcModule", () => {
     expect(appsIpcModule.methods.openSystemApp.operationId).toBe("app.apps.system_app.open")
   })
 
+  it("strictly accepts Todo targets only on the Todo app", async () => {
+    const options = { todoOpenRequest: { requestId: "open-1", id: "todo-1" } }
+    const schema = appsIpcModule.methods.openSystemApp.request
+    expect(schema.safeParse({ appId: "todos", options }).success).toBe(true)
+    expect(schema.safeParse({ appId: "mail", options }).success).toBe(false)
+    expect(schema.safeParse({ appId: "todos", options: { ...options, userId: "other" } }).success).toBe(false)
+    expect(schema.safeParse({ appId: "todos", options: { todoOpenRequest: { requestId: "open-1", id: "a/b" } } }).success).toBe(false)
+    await appsIpcModule.methods.openSystemApp.handler(createContext({}), { appId: "todos", options })
+    expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("todos", options)
+  })
+
   it("validates app ids and opens a valid app", async () => {
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "database" }).success).toBe(true)
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "mcp" }).success).toBe(false)

@@ -31,6 +31,7 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
 }
 
 function sourceName(item: SynapseNotification): string {
+  if (item.source === "todo-reminder") return "待办事项"
   if (item.source === "mail") return "站内信"
   if (item.source.startsWith("terminal-")) return "终端"
   if (item.source === "meeting-transcription") return "录音"
@@ -59,6 +60,7 @@ function recipientNames(addresses: MailAddress[] | undefined, people: MailPerson
 }
 
 function primaryAction(item: SynapseNotification): string | null {
+  if (item.source === "todo-reminder" && item.targetId) return "查看待办"
   if (item.source === "mail" && item.targetId) return "在站内信中打开"
   if (isPending(item) && item.targetId) return "前往处理"
   if (item.targetId && item.source.startsWith("terminal-")) return "打开会话"

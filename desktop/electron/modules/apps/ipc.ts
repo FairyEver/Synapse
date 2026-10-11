@@ -43,6 +43,8 @@ const terminalOpenRequestSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
+const todoOpenRequestSchema = z.object({ requestId: z.string().min(1).max(200), id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) }).strict()
+
 const mailOpenRequestSchema = z.object({ requestId: z.string().min(1), messageId: z.string().min(1) }).strict()
 
 const openSystemAppRequestSchema = z.object({
@@ -52,8 +54,9 @@ const openSystemAppRequestSchema = z.object({
     gitOpenRequest: gitOpenRequestSchema.optional(),
     terminalOpenRequest: terminalOpenRequestSchema.optional(),
     mailOpenRequest: mailOpenRequestSchema.optional(),
-  }).optional(),
-}).superRefine((request, context) => {
+    todoOpenRequest: todoOpenRequestSchema.nullable().optional(),
+  }).strict().optional(),
+}).strict().superRefine((request, context) => {
   if (request.options?.gitOpenRequest && request.appId !== "git") {
     context.addIssue({
       code: "custom",
@@ -67,6 +70,9 @@ const openSystemAppRequestSchema = z.object({
       message: "Terminal open requests require the Terminal app.",
       path: ["options", "terminalOpenRequest"],
     })
+  }
+  if (request.options?.todoOpenRequest && request.appId !== "todos") {
+    context.addIssue({ code: "custom", message: "Todo open requests require the Todos app.", path: ["options", "todoOpenRequest"] })
   }
   if (request.options?.mailOpenRequest && request.appId !== "mail") {
     context.addIssue({ code: "custom", message: "Mail open requests require the Mail app.", path: ["options", "mailOpenRequest"] })
@@ -111,5 +117,7 @@ export const appsIpcModule: IpcModule = {
       },
     },
   },
-  events: {},
+  events: {
+    todoOpenRequest: { operationId: "app.apps.operation.todo_open_request", kind: "event", payload: todoOpenRequestSchema },
+  },
 }

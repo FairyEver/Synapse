@@ -130,7 +130,7 @@ export function AppLauncherGrid({
                     <img
                       src={app.icon}
                       alt=""
-                      className="size-20 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                      className={`size-20 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${app.id === "todos" ? "dark:invert" : ""}`}
                       draggable={false}
                     />
                     <span className="mt-2.5 flex min-w-0 flex-1 items-start">

@@ -16,6 +16,19 @@ vi.mock("../log-store", () => ({
 }))
 
 describe("createSystemAppWindowService", () => {
+  it("opens and retargets a Todo window without sending its target to other windows", async () => {
+    const window = createWindowMock(), manager = createWindowManagerMock()
+    const createWindow = vi.fn(() => window as never)
+    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html", windowManager: manager })
+    await service.open("todos", { todoOpenRequest: { requestId: "first", id: "todo-1" } })
+    await service.open("todos", { todoOpenRequest: { requestId: "second", id: "todo-2" } })
+    expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(new URL(window.loadURL.mock.calls[0]?.[0] as unknown as string).searchParams.get("todoOpenRequest")).toBe(JSON.stringify({ requestId: "first", id: "todo-1" }))
+    expect(manager.broadcast).toHaveBeenCalledWith("synapse:app:apps:operation:todo_open_request", { requestId: "second", id: "todo-2" }, expect.any(Function))
+    const filter = manager.broadcast.mock.calls[0]?.[2]
+    expect(filter?.({ id: window.webContents.id })).toBe(true)
+    expect(filter?.({ id: window.webContents.id + 1 })).toBe(false)
+  })
   it("opens and focuses one window per app id", async () => {
     const window = createWindowMock()
     const createWindow = vi.fn(() => window as never)
@@ -225,7 +238,7 @@ function createWindowMock() {
     isMinimized: vi.fn(() => false),
     restore: vi.fn(),
     focus: vi.fn(),
-    loadURL: vi.fn(async () => undefined),
+    loadURL: vi.fn(async (_url: string) => undefined),
     close: vi.fn(),
     destroy: vi.fn(),
     webContents: {

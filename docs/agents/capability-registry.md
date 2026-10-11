@@ -43,7 +43,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail | 是 | 否（旧配置升级时一次性加入） | — | — | 16 | `open` |
-| Todos | 否（能力层已注册） | 否 | — | — | 6 | — |
+| Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -124,6 +124,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
 | Mail | 是 | 否 | `mail` |
+| Todos | 是 | 否 | `todos` |
 | Meeting | 是 | 否 | — |
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
@@ -186,4 +187,4 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 - 即使改动不在 `desktop/app-capabilities/`，只要影响普通 System App 或 MCP domain，就必须更新本文件。
 - 只修改能力内部实现且注册表面不变时可以不改数字，但必须主动核对本清单仍与运行时装配一致。
 
-云端待办能力层注册六个 todos action，复用账号认证与 network.connect 权限，IPC 和 MCP 共用 dispatcher。onChanged/onReset 仅 UI 订阅，不计索引；身份重登清空内存，普通 token 刷新不清空。内容不进入请求/审计日志。应用界面和深链在后续阶段登记。
+云端待办能力层注册六个 todos action，复用账号认证与 network.connect 权限，IPC 和 MCP 共用 dispatcher。onChanged/onReset 仅 UI 订阅，不计索引；身份重登清空内存，普通 token 刷新不清空。内容不进入请求/审计日志。待办为第 21 个 System App，默认 Dock 顺序不变，可手动固定；主窗口/启动器嵌入与独立窗口使用同一内容。新增一条严格 synapse://todos/<id> 桌面路由和 UI-only apps.onTodoOpenRequest 事件，不新增 MCP；消息中心查看待办先已读再只读定位，原生横幅无新 click 能力。

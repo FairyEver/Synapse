@@ -20,6 +20,7 @@ import { createMainLogger } from "./log-store"
 const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:content_open_request"
 const SYSTEM_APP_GIT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:git_open_request"
 const SYSTEM_APP_TERMINAL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:terminal_open_request"
+const SYSTEM_APP_TODO_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:todo_open_request"
 const SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:mail_open_request"
 export const SYSTEM_APP_WINDOW_SERVICE_ID = "core.system-app-window"
 
@@ -137,6 +138,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
             })
           }
         }
+        if (options.todoOpenRequest) {
+          sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_TODO_OPEN_REQUEST_CHANNEL, options.todoOpenRequest)
+        }
         if (options.mailOpenRequest) {
           sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL, options.mailOpenRequest)
         }
@@ -154,6 +158,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       }
       if (options.terminalOpenRequest) {
         params.set("terminalOpenRequest", JSON.stringify(options.terminalOpenRequest))
+      }
+      if (options.todoOpenRequest) {
+        params.set("todoOpenRequest", JSON.stringify(options.todoOpenRequest))
       }
       if (options.mailOpenRequest) {
         params.set("mailOpenRequest", JSON.stringify(options.mailOpenRequest))

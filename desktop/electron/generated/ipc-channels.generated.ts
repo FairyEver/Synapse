@@ -341,6 +341,7 @@ export const IPC_CHANNELS = {
   },
   "apps": {
     "openSystemApp": "synapse:app:apps:system_app:open",
+    "todoOpenRequest": "synapse:app:apps:operation:todo_open_request",
   },
   "mcp": {
     "serverGet": "synapse:app:mcp:server:get",
