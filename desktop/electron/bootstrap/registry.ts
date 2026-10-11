@@ -57,6 +57,7 @@ import {
   coreQuickInputDescriptor,
   coreConnectorsDescriptor,
   coreSecretsDescriptor,
+  coreTodosDescriptor,
   coreRelayDescriptor,
   coreSideChannelDescriptor,
   coreVoiceDescriptor,
@@ -153,6 +154,7 @@ export function buildServiceRegistry(
   registry.register(coreQuickInputDescriptor)
   registry.register(coreConnectorsDescriptor)
   registry.register(coreSecretsDescriptor)
+  registry.register(coreTodosDescriptor)
   registry.register(coreAgentPersonasDescriptor)
   registry.register(coreVoiceDescriptor)
   registry.register(coreMeetingDescriptor)

@@ -18,6 +18,13 @@ vi.mock("electron", () => ({
 }))
 
 describe("createElectronTransportInstall", () => {
+  it("omits Todo content even when invalid requests fail before dispatch", async () => {
+    const logger = { error: vi.fn() }
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    createElectronTransportInstall({ logger })("synapse:app:todos:item:create", async () => { throw new Error("invalid") })
+    await electronMock.handlers.get("synapse:app:todos:item:create")?.({ senderFrame: { url: "http://localhost:5173/" } }, { title: "private-title", note: "private-note", query: "private-query", expectedVersion: 1 })
+    expect(JSON.stringify(logger.error.mock.calls)).not.toMatch(/private-title|private-note|private-query/u)
+  })
   beforeEach(() => {
     electronMock.handlers.clear()
     electronMock.ipcMain.handle.mockClear()

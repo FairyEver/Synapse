@@ -1236,6 +1236,16 @@ describe("preload bridge", () => {
     )
   })
 
+  it("omits Todo content from renderer IPC failure logs", async () => {
+    const bridge = await loadPreloadBridge()
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => channel.includes(":todos:")
+      ? Promise.reject(new Error("invalid request")) : Promise.resolve(undefined))
+    await expect(bridge.todos.item.create({ title: "private-title", note: "private-note", clientRequestId: "35304438-bd26-4b4e-a7b0-4ad6cb8a861a" })).rejects.toThrow("invalid request")
+    const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) => channel === "synapse:app:log:entry:write")
+    expect(logCall).toBeDefined()
+    expect(JSON.stringify(logCall?.[1])).not.toMatch(/private-title|private-note/u)
+  })
+
   it("writes a renderer IPC failure log when bridge invoke rejects", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("main failed")

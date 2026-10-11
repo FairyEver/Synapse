@@ -34,6 +34,9 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createMailCapabilityDispatcher } from "../capabilities/mail-dispatcher"
+import { TodoCloudService } from "../../app-capabilities/todos/main/service"
+import { createTodoCapabilityDispatcher } from "../../app-capabilities/todos/main/dispatcher"
+import { TODOS_SERVICE_ID } from "../../app-capabilities/todos/shared/capability"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
 import { createAccountCapabilityDispatcher } from "../../app-capabilities/account/main/dispatcher"
 import { createDesktopControlDispatcher } from "../../app-capabilities/desktop-control/main/dispatcher"
@@ -744,6 +747,14 @@ export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
   async start(instance) {
     await instance.initialize()
   },
+}
+
+export const coreTodosDescriptor: ServiceDescriptor<TodoCloudService> = {
+  id: TODOS_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.event-bus"],
+  create(ctx) { return new TodoCloudService({ account: accountService, eventBus: ctx.registry.get<EventBus>("core.event-bus") }) },
+  stop(instance) { instance.dispose() },
 }
 
 export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {
@@ -1531,6 +1542,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   id: "core.database",
   criticality: "degraded",
   dependsOn: [
+    TODOS_SERVICE_ID,
     "core.config",
     "core.connectors",
     "core.event-bus",
@@ -1703,6 +1715,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       auditSink,
     })
     const mailDispatcher = createMailCapabilityDispatcher({ accountService, permissionGuard, auditSink })
+    const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
       service: createDocumentTemplateService(),
       permissionGuard,
@@ -1797,6 +1810,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
       mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
+      todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       skillRepositoryDispatch: (action, params, context) => skillRepositoryDispatcher.dispatch(action, params, context),

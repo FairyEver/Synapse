@@ -43,6 +43,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail | 是 | 否（旧配置升级时一次性加入） | — | — | 16 | `open` |
+| Todos | 否（能力层已注册） | 否 | — | — | 6 | — |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -151,12 +152,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `content` | 16 | 16 |
 | `drive` | 73 | 73 |
 | `mail` | 16 | 16 |
+| `todos` | 6 | 6 |
 | `extend` | 1 | 1 |
-| 合计 | 283 | 279 |
+| 合计 | 289 | 285 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 279 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 285 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -183,3 +185,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 - 修改启动器可见性、Workflow 条件入口、`systemApp`、`discovery`、`openable`、`pinnableToDock`、`defaultDock` 或任何改变产品表面的过滤逻辑时，也必须同步。
 - 即使改动不在 `desktop/app-capabilities/`，只要影响普通 System App 或 MCP domain，就必须更新本文件。
 - 只修改能力内部实现且注册表面不变时可以不改数字，但必须主动核对本清单仍与运行时装配一致。
+
+云端待办能力层注册六个 todos action，复用账号认证与 network.connect 权限，IPC 和 MCP 共用 dispatcher。onChanged/onReset 仅 UI 订阅，不计索引；身份重登清空内存，普通 token 刷新不清空。内容不进入请求/审计日志。应用界面和深链在后续阶段登记。

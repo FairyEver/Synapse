@@ -400,6 +400,14 @@ export const IPC_CHANNELS = {
     "queueSkillEnvBindings": "synapse:app:secrets:operation:queue_skill_env_bindings",
     "changed": "synapse:app:secrets:item:changed",
   },
+  "todos": {
+    "list": "synapse:app:todos:item:list",
+    "get": "synapse:app:todos:item:get",
+    "create": "synapse:app:todos:item:create",
+    "update": "synapse:app:todos:item:update",
+    "setCompleted": "synapse:app:todos:item:set_completed",
+    "delete": "synapse:app:todos:item:delete",
+  },
   "agentPersonas": {
     "list": "synapse:app:agent_personas:operation:list",
     "create": "synapse:app:agent_personas:operation:create",

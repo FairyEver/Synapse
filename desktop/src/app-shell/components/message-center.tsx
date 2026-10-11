@@ -26,6 +26,7 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
   "terminal-complete": "Agent 回复完成",
   mail: "站内信",
   "meeting-transcription": "录音转写",
+  "todo-reminder": "待办提醒",
   external: "外部通知",
 }
 

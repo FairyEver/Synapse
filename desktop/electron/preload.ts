@@ -5,6 +5,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from "electron"
+import { unwrapTodoResult, type TodoIpcResult } from "../app-capabilities/todos/shared/ipc-result"
 import type {
   DriveLocalUploadProgressEvent,
   DriveLocalUploadRequest,
@@ -253,7 +254,9 @@ function writeRendererIpcFailureLog(channel: string, args: unknown, error: unkno
       operationId: operationIdForChannel(channel),
       durationMs,
       error: describeIpcError(error),
-      request: sanitizeIpcPayload("request", args),
+      request: channel.startsWith("synapse:app:todos:item:")
+        ? { inputType: typeof args }
+        : sanitizeIpcPayload("request", args),
     },
   }).catch(() => undefined)
 }
@@ -766,6 +769,18 @@ const synapseBridge: SynapseBridge = {
       readAll: invoke(IPC_CHANNELS.account.markAllNotificationsRead),
       delete: invoke(IPC_CHANNELS.account.deleteNotification),
       deleteAll: invoke(IPC_CHANNELS.account.deleteAllNotifications),
+    },
+  },
+  todos: {
+    item: {
+      list: async (input = {}) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.list)(input) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoPageDto>),
+      get: async (locator) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.get)(locator) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoItemDto>),
+      create: async (input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.create)(input) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoItemDto>),
+      update: async (id, input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.update)({ id, ...input }) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoItemDto>),
+      setCompleted: async (id, input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.setCompleted)({ id, ...input }) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoItemDto>),
+      delete: async (id, input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.delete)({ id, ...input }) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoDeleteResult>),
+      onChanged: createDomainEventPayloadSubscription<import("@synapse/shared/todo-contracts").TodoChangedPayload>(subscribe, "account", "todos.changed"),
+      onReset: (listener) => createDomainEventPayloadSubscription(subscribe, "account", "todos.reset")(() => listener()),
     },
   },
   mail: {

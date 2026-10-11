@@ -141,7 +141,7 @@
 - Produces: `window.synapse.todos.item` 具有同签名的六个方法及 UI-only `onChanged(listener: (event: TodoChangedPayload) => void): () => void`、`onReset(listener: () => void): () => void`；身份变化前发 reset，确保同号重登也清草稿。`desktop/src/lib/todos-api.ts` 的 `todosApi` 是 renderer 唯一调用入口。
 - Produces: 规范 action `app.todos.item.list / get / create / update / set_completed / delete`；索引名 `app_todos_item_list / get / create / update / set_completed / delete`。IPC / MCP 调用同一权限与服务层。
 
-- [ ] **Step 1：建立接线回归用例。**
+- [x] **Step 1：建立接线回归用例。**
 
 | 测试名 | 必须断言的测试代码 / 值 |
 | --- | --- |
@@ -151,12 +151,12 @@
 | `missing_endpoint_is_not_missing_item` | list 的 404 为服务器不支持提示；get 的 404 为事项不可访问；HTTP / 网络 / 409 code 保留，不返回伪空列表 |
 | `permission_and_audit_metadata` | 拒绝网络权限时 `expect(httpCalls).toBe(0)`；审计不含 title / note / 完整请求；ID 与 reference 双传 / 非法路由为参数错误 |
 
-- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test app-capabilities/todos/main synapse-capabilities/shared/__tests__/todos-domain.test.ts`，预期缺实现 / 接线失败。
-- [ ] **Step 3：实现集中 cloud service。** 使用既有认证请求处理 base URL、超时、refresh；service 在身份即将变化时递增 generation，异步前后检查，即使 userId 相同也不能回填。同次超时重试保留原 UUID / 原 payload，不跨 24 小时自动重放，错误归一保留 status / code，不持久化草稿或请求队列。
-- [ ] **Step 4：接入能力包与 bridge。** dispatcher strict 校验后经网络权限与审计调用 service；在 descriptors 组装，在 IpcRegistry 注册，用 EventBus 传递账号所属变更与身份 reset。preload 只暴露类型化六方法与订阅，禁止裸 ipcRenderer / webContents.send。修改注册源后运行 `pnpm --filter @synapse/desktop run generate:ipc`，不手改生成文件。
-- [ ] **Step 5：编写 Skill / Agent 指南。** 列出准确 schema、offset / nextOffset、UTC 分钟精度、version / UUID；AI 修改前检索并精读唯一对象，同名和缺时间才澄清，明确授权 CRUD 直接执行；如实报告失败，不把保存提醒说成已弹通知。不增加第三个公开 MCP 工具或 Workflow / Automation 能力。
-- [ ] **Step 6：运行绿灯与边界检查。** Step 2、`pnpm --filter @synapse/desktop run test synapse-capabilities/shared/__tests__/registry.test.ts`、desktop typecheck、`check:ipc-codegen`、`check:hard-constraints` 全部通过；共享子入口在 Electron CommonJS 与 renderer ESM 均可加载。
-- [ ] **Step 7：同步六项能力、指南与发布说明并提交。** 摘要：`feat: 通过 Synapse Skill 和桌面桥接维护云端待办`；此时不提前登记尚未完成的应用 UI / 路由数量。
+- [x] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test app-capabilities/todos/main synapse-capabilities/shared/__tests__/todos-domain.test.ts`，预期缺实现 / 接线失败。
+- [x] **Step 3：实现集中 cloud service。** 使用既有认证请求处理 base URL、超时、refresh；service 在身份即将变化时递增 generation，异步前后检查，即使 userId 相同也不能回填。同次超时重试保留原 UUID / 原 payload，不跨 24 小时自动重放，错误归一保留 status / code，不持久化草稿或请求队列。
+- [x] **Step 4：接入能力包与 bridge。** dispatcher strict 校验后经网络权限与审计调用 service；在 descriptors 组装，在 IpcRegistry 注册，用 EventBus 传递账号所属变更与身份 reset。preload 只暴露类型化六方法与订阅，禁止裸 ipcRenderer / webContents.send。修改注册源后运行 `pnpm --filter @synapse/desktop run generate:ipc`，不手改生成文件。
+- [x] **Step 5：编写 Skill / Agent 指南。** 列出准确 schema、offset / nextOffset、UTC 分钟精度、version / UUID；AI 修改前检索并精读唯一对象，同名和缺时间才澄清，明确授权 CRUD 直接执行；如实报告失败，不把保存提醒说成已弹通知。不增加第三个公开 MCP 工具或 Workflow / Automation 能力。
+- [x] **Step 6：运行绿灯与边界检查。** Step 2、`pnpm --filter @synapse/desktop run test synapse-capabilities/shared/__tests__/registry.test.ts`、desktop typecheck、`check:ipc-codegen`、`check:hard-constraints` 全部通过；共享子入口在 Electron CommonJS 与 renderer ESM 均可加载。
+- [x] **Step 7：同步六项能力、指南与发布说明并提交。** 摘要：`feat: 通过 Synapse Skill 和桌面桥接维护云端待办`；此时不提前登记尚未完成的应用 UI / 路由数量。
 
 ## Task 4：桌面白色卡片列表、编辑与通知目标
 
