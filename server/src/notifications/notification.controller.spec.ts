@@ -163,7 +163,7 @@ describe("NotificationController", () => {
     const endpoint = new NotificationController(service as never)
     const request = { user: { id: "user-1" } }
 
-    for (const source of ["external", "terminal-attention", "meeting-transcription"]) {
+    for (const source of ["external", "terminal-attention", "meeting-transcription", "todo-reminder"]) {
       await expect(endpoint.createFromDesktop(request as never, { source, title: "标题", body: "正文" }))
         .rejects.toMatchObject({ status: 400 })
     }

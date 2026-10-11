@@ -14,6 +14,7 @@ import {
 import { isMobilePresencePayload } from "./mobile-live.js"
 import { isMeetingTranscriptionCompletedPayload } from "./meeting.js"
 import { isWebhookDeliveryReceivedPayload } from "./webhook.js"
+import type { TodoChangedPayload } from "./todos.js"
 
 export const LIVE_MESSAGE_TYPES = {
   hello: "live.hello",
@@ -36,6 +37,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileGitStatus: "mobile.gitStatus",
   meetingTranscriptionCompleted: "meeting.transcription.completed",
   notificationChanged: "notification.changed",
+  todosChanged: "todos.changed",
 } as const
 
 /**
@@ -120,6 +122,7 @@ export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileGitStatus, import("./mobile-live.js").MobileGitStatusPayload>
 
 export type LiveDesktopServerMessage =
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.todosChanged, TodoChangedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.pong, LiveDesktopPongPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryReceived, import("./webhook.js").WebhookDeliveryReceivedPayload>
@@ -142,6 +145,7 @@ export type LiveMobileClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntent, import("./mobile-live.js").MobileIntentPayload>
 
 export type LiveMobileServerMessage =
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.todosChanged, TodoChangedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.pong, LiveDesktopPongPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileSummary, import("./mobile-live.js").MobileSummaryPayload>
@@ -166,6 +170,7 @@ export function isLiveMobileClientMessage(value: unknown): value is LiveMobileCl
 
 export function isLiveMobileServerMessage(value: unknown): value is LiveMobileServerMessage {
   if (!isLiveEnvelope(value)) return false
+  if (value.type === LIVE_MESSAGE_TYPES.todosChanged) return isTodoChangedPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.welcome) return isWelcomePayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.pong) return isPongPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileSummary) return isMobileSummaryPayload(value.payload)
@@ -230,6 +235,7 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
 
 export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktopServerMessage {
   if (!isLiveEnvelope(value)) return false
+  if (value.type === LIVE_MESSAGE_TYPES.todosChanged) return isTodoChangedPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.welcome) return isWelcomePayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.pong) return isPongPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived) {
@@ -242,6 +248,12 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
   }
   if (value.type === LIVE_MESSAGE_TYPES.notificationChanged) return isNotificationChangedPayload(value.payload)
   return false
+}
+
+function isTodoChangedPayload(value: unknown): value is TodoChangedPayload {
+  return isRecord(value) && Object.keys(value).length === 2
+    && typeof value.id === "string" && /^[A-Za-z0-9_-]{1,200}$/u.test(value.id)
+    && Number.isSafeInteger(value.version) && Number(value.version) > 0
 }
 
 function isNotificationChangedPayload(value: unknown): value is NotificationChangedPayload {

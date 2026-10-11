@@ -107,7 +107,7 @@
 - Produces: `NotificationService.deliverCommitted(userId: string, notificationId: string): Promise<void>`，读取已提交账号通知并复用实时 / APNs 投递；不会再创建记录。现有 `PushOutcome.failed > 0` 或 `skipped === true` 必须转换为可重试失败，不能把 resolved Promise 当成推送成功；没有注册推送设备不算失败。
 - Produces: `TodoReminderWorker.scanDue(now: Date): Promise<void>`；`TodoReminderOutbox.deliverPending(now: Date): Promise<void>`；`TodoEvents.publish(userId: string, payload: TodoChangedPayload): void`，提交后按账号广播 `todos.changed`。
 
-- [ ] **Step 1：建立调度、竞争与失败用例。** 测试中 `now` 固定，fake timer 不等待真实 30 秒；竞争测试在 PostgreSQL 显式交错两个事务。
+- [x] **Step 1：建立调度、竞争与失败用例。** 测试中 `now` 固定，fake timer 不等待真实 30 秒；竞争测试在 PostgreSQL 显式交错两个事务。
 
 | 测试名 | 必须断言的测试代码 / 值 |
 | --- | --- |
@@ -119,11 +119,11 @@
 | `resolved_failed_push_is_retried` | 网关返回 `{ sent: 0, failed: 1, skipped: false }` 或未配置而 skipped 时，`expect(outbox.status).not.toBe('delivered')`；无推送设备的 0 / 0 不无限重试 |
 | `server_owned_source` | 用户 / 桌面发送 API 伪造 `todo-reminder` 被拒绝；`expect(DESKTOP_NOTIFICATION_SOURCES).not.toContain('todo-reminder')`；配置仍为生产 APNs |
 
-- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/server run test src/todos/todo-reminder`；`pnpm --filter @synapse/shared run test src/todo-events.test.ts`，预期新增接口 / 行为失败。
-- [ ] **Step 3：实现同锁触发事务。** 每 30 秒扫描至多 100 项，锁定后重验本人 / 未完成 / 未删除 / 当前代际与时间。通知使用账号内 sourceKey 唯一键，通知 upsert、sent 状态、version 与 outbox 同事务；不在已失败的 PostgreSQL 事务里捕获唯一冲突后继续写。标题「待办提醒」，正文仅标题，source `todo-reminder`、targetId、active 级别。
-- [ ] **Step 4：实现持久投递与清理。** `TodoReminderDelivery` 保存通知 ID、账号、代际、原提醒时间、尝试次数、下次尝试时间、租约与结果；领取租约 60 秒，失败 1 分钟起指数退避、上限 15 分钟，截止于原 remindAt + 24h。投递在事务外且 await 结果，崩溃后继续；已读 / 删除跳过外部横幅，事件失败后进入重试。按设计清理 24 小时收据、90 天墓碑及已结束 outbox，不碰其他业务数据。
-- [ ] **Step 5：接通提交后广播并运行绿灯。** TodoModule 复用已导出的 NotificationModule、LiveModule、MobileLiveModule，避免注入循环；不为现有 gateway 增加平行通知接口。只扩展共享 `NOTIFICATION_SOURCES`；`todos.changed` 是 server-to-client 消息，客户端不能向服务器伪造。事件只按账号扇出，电脑离线不妨碍 REST / 提醒。e2e 脚本追加精确 reminder 测试文件。先运行 `pnpm --filter @synapse/server run prisma:generate`，再运行 Step 2、`pnpm --filter @synapse/server run test src/notifications`、`pnpm --filter @synapse/server run test:todos:e2e` 和 server typecheck，全部通过。
-- [ ] **Step 6：同步提醒 / 通知来源规则与发布说明并提交。** 摘要：`feat: 支持云端待办提醒及取消去重投递`。不改变 System Notifier 对外发送或其他通知来源的成功语义。
+- [x] **Step 2：运行红灯。** `pnpm --filter @synapse/server run test src/todos/todo-reminder`；`pnpm --filter @synapse/shared run test src/todo-events.test.ts`，预期新增接口 / 行为失败。
+- [x] **Step 3：实现同锁触发事务。** 每 30 秒扫描至多 100 项，锁定后重验本人 / 未完成 / 未删除 / 当前代际与时间。通知使用账号内 sourceKey 唯一键，通知 upsert、sent 状态、version 与 outbox 同事务；不在已失败的 PostgreSQL 事务里捕获唯一冲突后继续写。标题「待办提醒」，正文仅标题，source `todo-reminder`、targetId、active 级别。
+- [x] **Step 4：实现持久投递与清理。** `TodoReminderDelivery` 保存通知 ID、账号、代际、原提醒时间、尝试次数、下次尝试时间、租约与结果；领取租约 60 秒，失败 1 分钟起指数退避、上限 15 分钟，截止于原 remindAt + 24h。投递在事务外且 await 结果，崩溃后继续；已读 / 删除跳过外部横幅，事件失败后进入重试。按设计清理 24 小时收据、90 天墓碑及已结束 outbox，不碰其他业务数据。
+- [x] **Step 5：接通提交后广播并运行绿灯。** TodoModule 复用已导出的 NotificationModule、LiveModule、MobileLiveModule，避免注入循环；不为现有 gateway 增加平行通知接口。只扩展共享 `NOTIFICATION_SOURCES`；`todos.changed` 是 server-to-client 消息，客户端不能向服务器伪造。事件只按账号扇出，电脑离线不妨碍 REST / 提醒。e2e 脚本追加精确 reminder 测试文件。先运行 `pnpm --filter @synapse/server run prisma:generate`，再运行 Step 2、`pnpm --filter @synapse/server run test src/notifications`、`pnpm --filter @synapse/server run test:todos:e2e` 和 server typecheck，全部通过。
+- [x] **Step 6：同步提醒 / 通知来源规则与发布说明并提交。** 摘要：`feat: 支持云端待办提醒及取消去重投递`。不改变 System Notifier 对外发送或其他通知来源的成功语义。
 
 ## Task 3：桌面认证适配、窄 IPC、MCP 与系统 Skill
 
