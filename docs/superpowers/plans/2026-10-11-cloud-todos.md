@@ -10,7 +10,7 @@
 
 **Spec:** [已确认设计](../specs/2026-10-11-cloud-todos-design.md)，[已认可原型](../../prototypes/2026-10-11-cloud-todos/README.md)。
 
-状态：用户于 2026-10-11 确认书面设计；本计划待用户审阅与选择执行方式。以下新增路径、类型和命令是实施约定，尚未实现或运行。
+状态：用户于 2026-10-11 确认书面设计和本实施计划，选择当前会话顺序开发、最后独立审查。实施进行中；步骤勾选与验收记录只依据实际结果。
 
 ## Global Constraints
 
@@ -73,7 +73,7 @@
 - Produces: `countTodoCodePoints(value: string): number`、`parseTodoReference(value: string): string | null`，以及后续任务共用的 DTO / 输入类型，导出子入口 `@synapse/shared/todo-contracts`。
 - Produces: `TodosService.list(userId: string, input: TodoListInput): Promise<TodoPageDto>`、`get(userId: string, id: string): Promise<TodoItemDto>`、`create(userId: string, input: TodoCreateInput): Promise<TodoItemDto>`、`update(userId: string, id: string, input: TodoUpdateInput): Promise<TodoItemDto>`、`setCompleted(userId: string, id: string, input: TodoCompletionInput): Promise<TodoItemDto>`、`delete(userId: string, id: string, input: TodoDeleteInput): Promise<TodoDeleteResult>`。
 
-- [ ] **Step 1：建立字段、HTTP 和真实 PostgreSQL 回归用例。** 固定时钟，创建两个测试账号；真实事务测试不以 mock 的“锁已调用”代替竞争结果。
+- [x] **Step 1：建立字段、HTTP 和真实 PostgreSQL 回归用例。** 固定时钟，创建两个测试账号；真实事务测试不以 mock 的“锁已调用”代替竞争结果。
 
 | 测试名 | 必须断言的测试代码 / 值 |
 | --- | --- |
@@ -86,11 +86,11 @@
 | `reminder_generation_and_completion` | 标题 / 备注编辑代际不变；自定提醒下仅改截止代际不变；相对提醒时间变化代际递增；完成取消 pending，恢复不补发 sent / 过去提醒 |
 | `stable_page_order` | 未完成按 dueAt 升序、null 后置，再 createdAt / id 升序；全部将完成项按 completedAt / id 倒序放后；最后 `expect(nextOffset).toBeNull()` |
 
-- [ ] **Step 2：运行红灯测试。** `pnpm --filter @synapse/shared run test -- src/todos.test.ts`；`pnpm --filter @synapse/server run test -- src/todos`。预期因契约 / 服务尚未实现失败，不把缺数据库或无测试文件视为红灯证据。
-- [ ] **Step 3：实现单点类型与校验。** shared 只用现有 TypeScript；子入口从同一 source 生成 ESM 与 CJS / 类型声明，沿用 notification 子入口模式。服务端 Zod strict schema 调用码点校验，合法带偏移时间规范为 UTC；补丁合成完整候选条目后一次校验。`parseTodoReference` 只接受 `synapse://todos/<id>`，ID 为 `[A-Za-z0-9_-]{1,200}`，拒绝 query、fragment、额外路径与编码分隔符。
-- [ ] **Step 4：实现模型、事务与六条 API。** 新增 `TodoItem / TodoMutationReceipt`，创建原始请求 ID 与摘要、索引、账号内唯一键； mutation 摘要包括操作、目标、规范内容和 expectedVersion。事务先判幂等，再锁定本人条目并比较版本，变更与响应收据共同提交；delete 推进版本并软删除。完成 / 触发使用同一行锁协议。路由严格按设计 §5.1，使用 UserAuthGuard，DELETE 结果为 `TodoDeleteResult`；错误固定 code，无正文日志。
-- [ ] **Step 5：实现安全 e2e 入口并运行绿灯。** 新增 `test:todos:e2e`，先校验测试专用 `TODOS_E2E_DATABASE_URL`：PostgreSQL、仅 loopback、库名以 `_e2e` 结尾；通过后才给迁移 / Vitest 子进程设置 DATABASE_URL，绝不输出连接串。只运行 `test/todos-commit.e2e.spec.ts`，不误跑另一领域 e2e。先 `pnpm --filter @synapse/server run prisma:generate` 更新新增模型的客户端，再运行 Step 2、`pnpm --filter @synapse/server run test:todos:e2e`、`pnpm --filter @synapse/server run typecheck`，预期全部通过；没有独立测试库则明确记录未运行，不替换成生产库。
-- [ ] **Step 6：同步账号云端归属规则与发布说明并提交。** 提交摘要：`feat: 增加账号云端待办接口与版本幂等事务`。只暂存本 Task 实际变更文件。
+- [x] **Step 2：运行红灯测试。** `pnpm --filter @synapse/shared run test src/todos.test.ts`；`pnpm --filter @synapse/server run test src/todos`。预期因契约 / 服务尚未实现失败，不把缺数据库或无测试文件视为红灯证据。
+- [x] **Step 3：实现单点类型与校验。** shared 只用现有 TypeScript；子入口从同一 source 生成 ESM 与 CJS / 类型声明，沿用 notification 子入口模式。服务端 Zod strict schema 调用码点校验，合法带偏移时间规范为 UTC；补丁合成完整候选条目后一次校验。`parseTodoReference` 只接受 `synapse://todos/<id>`，ID 为 `[A-Za-z0-9_-]{1,200}`，拒绝 query、fragment、额外路径与编码分隔符。
+- [x] **Step 4：实现模型、事务与六条 API。** 新增 `TodoItem / TodoMutationReceipt`，创建原始请求 ID 与摘要、索引、账号内唯一键； mutation 摘要包括操作、目标、规范内容和 expectedVersion。事务先判幂等，再锁定本人条目并比较版本，变更与响应收据共同提交；delete 推进版本并软删除。完成 / 触发使用同一行锁协议。路由严格按设计 §5.1，使用 UserAuthGuard，DELETE 结果为 `TodoDeleteResult`；错误固定 code，无正文日志。
+- [x] **Step 5：实现安全 e2e 入口并运行绿灯。** 新增 `test:todos:e2e`，先校验测试专用 `TODOS_E2E_DATABASE_URL`：PostgreSQL、仅 loopback、库名以 `_e2e` 结尾；通过后才给迁移 / Vitest 子进程设置 DATABASE_URL，绝不输出连接串。只运行 `test/todos-commit.e2e.spec.ts`，不误跑另一领域 e2e。先 `pnpm --filter @synapse/server run prisma:generate` 更新新增模型的客户端，再运行 Step 2、`pnpm --filter @synapse/server run test:todos:e2e`、`pnpm --filter @synapse/server run typecheck`，预期全部通过；没有独立测试库则明确记录未运行，不替换成生产库。
+- [x] **Step 6：同步账号云端归属规则与发布说明并提交。** 提交摘要：`feat: 增加账号云端待办接口与版本幂等事务`。只暂存本 Task 实际变更文件。
 
 ## Task 2：云端提醒、事务 outbox 与账号变更事件
 
@@ -119,10 +119,10 @@
 | `resolved_failed_push_is_retried` | 网关返回 `{ sent: 0, failed: 1, skipped: false }` 或未配置而 skipped 时，`expect(outbox.status).not.toBe('delivered')`；无推送设备的 0 / 0 不无限重试 |
 | `server_owned_source` | 用户 / 桌面发送 API 伪造 `todo-reminder` 被拒绝；`expect(DESKTOP_NOTIFICATION_SOURCES).not.toContain('todo-reminder')`；配置仍为生产 APNs |
 
-- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/server run test -- src/todos/todo-reminder`；`pnpm --filter @synapse/shared run test -- src/todo-events.test.ts`，预期新增接口 / 行为失败。
+- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/server run test src/todos/todo-reminder`；`pnpm --filter @synapse/shared run test src/todo-events.test.ts`，预期新增接口 / 行为失败。
 - [ ] **Step 3：实现同锁触发事务。** 每 30 秒扫描至多 100 项，锁定后重验本人 / 未完成 / 未删除 / 当前代际与时间。通知使用账号内 sourceKey 唯一键，通知 upsert、sent 状态、version 与 outbox 同事务；不在已失败的 PostgreSQL 事务里捕获唯一冲突后继续写。标题「待办提醒」，正文仅标题，source `todo-reminder`、targetId、active 级别。
 - [ ] **Step 4：实现持久投递与清理。** `TodoReminderDelivery` 保存通知 ID、账号、代际、原提醒时间、尝试次数、下次尝试时间、租约与结果；领取租约 60 秒，失败 1 分钟起指数退避、上限 15 分钟，截止于原 remindAt + 24h。投递在事务外且 await 结果，崩溃后继续；已读 / 删除跳过外部横幅，事件失败后进入重试。按设计清理 24 小时收据、90 天墓碑及已结束 outbox，不碰其他业务数据。
-- [ ] **Step 5：接通提交后广播并运行绿灯。** TodoModule 复用已导出的 NotificationModule、LiveModule、MobileLiveModule，避免注入循环；不为现有 gateway 增加平行通知接口。只扩展共享 `NOTIFICATION_SOURCES`；`todos.changed` 是 server-to-client 消息，客户端不能向服务器伪造。事件只按账号扇出，电脑离线不妨碍 REST / 提醒。e2e 脚本追加精确 reminder 测试文件。先运行 `pnpm --filter @synapse/server run prisma:generate`，再运行 Step 2、`pnpm --filter @synapse/server run test -- src/notifications`、`pnpm --filter @synapse/server run test:todos:e2e` 和 server typecheck，全部通过。
+- [ ] **Step 5：接通提交后广播并运行绿灯。** TodoModule 复用已导出的 NotificationModule、LiveModule、MobileLiveModule，避免注入循环；不为现有 gateway 增加平行通知接口。只扩展共享 `NOTIFICATION_SOURCES`；`todos.changed` 是 server-to-client 消息，客户端不能向服务器伪造。事件只按账号扇出，电脑离线不妨碍 REST / 提醒。e2e 脚本追加精确 reminder 测试文件。先运行 `pnpm --filter @synapse/server run prisma:generate`，再运行 Step 2、`pnpm --filter @synapse/server run test src/notifications`、`pnpm --filter @synapse/server run test:todos:e2e` 和 server typecheck，全部通过。
 - [ ] **Step 6：同步提醒 / 通知来源规则与发布说明并提交。** 摘要：`feat: 支持云端待办提醒及取消去重投递`。不改变 System Notifier 对外发送或其他通知来源的成功语义。
 
 ## Task 3：桌面认证适配、窄 IPC、MCP 与系统 Skill
@@ -151,11 +151,11 @@
 | `missing_endpoint_is_not_missing_item` | list 的 404 为服务器不支持提示；get 的 404 为事项不可访问；HTTP / 网络 / 409 code 保留，不返回伪空列表 |
 | `permission_and_audit_metadata` | 拒绝网络权限时 `expect(httpCalls).toBe(0)`；审计不含 title / note / 完整请求；ID 与 reference 双传 / 非法路由为参数错误 |
 
-- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test -- app-capabilities/todos/main synapse-capabilities/shared/__tests__/todos-domain.test.ts`，预期缺实现 / 接线失败。
+- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test app-capabilities/todos/main synapse-capabilities/shared/__tests__/todos-domain.test.ts`，预期缺实现 / 接线失败。
 - [ ] **Step 3：实现集中 cloud service。** 使用既有认证请求处理 base URL、超时、refresh；service 在身份即将变化时递增 generation，异步前后检查，即使 userId 相同也不能回填。同次超时重试保留原 UUID / 原 payload，不跨 24 小时自动重放，错误归一保留 status / code，不持久化草稿或请求队列。
 - [ ] **Step 4：接入能力包与 bridge。** dispatcher strict 校验后经网络权限与审计调用 service；在 descriptors 组装，在 IpcRegistry 注册，用 EventBus 传递账号所属变更与身份 reset。preload 只暴露类型化六方法与订阅，禁止裸 ipcRenderer / webContents.send。修改注册源后运行 `pnpm --filter @synapse/desktop run generate:ipc`，不手改生成文件。
 - [ ] **Step 5：编写 Skill / Agent 指南。** 列出准确 schema、offset / nextOffset、UTC 分钟精度、version / UUID；AI 修改前检索并精读唯一对象，同名和缺时间才澄清，明确授权 CRUD 直接执行；如实报告失败，不把保存提醒说成已弹通知。不增加第三个公开 MCP 工具或 Workflow / Automation 能力。
-- [ ] **Step 6：运行绿灯与边界检查。** Step 2、`pnpm --filter @synapse/desktop run test -- synapse-capabilities/shared/__tests__/registry.test.ts`、desktop typecheck、`check:ipc-codegen`、`check:hard-constraints` 全部通过；共享子入口在 Electron CommonJS 与 renderer ESM 均可加载。
+- [ ] **Step 6：运行绿灯与边界检查。** Step 2、`pnpm --filter @synapse/desktop run test synapse-capabilities/shared/__tests__/registry.test.ts`、desktop typecheck、`check:ipc-codegen`、`check:hard-constraints` 全部通过；共享子入口在 Electron CommonJS 与 renderer ESM 均可加载。
 - [ ] **Step 7：同步六项能力、指南与发布说明并提交。** 摘要：`feat: 通过 Synapse Skill 和桌面桥接维护云端待办`；此时不提前登记尚未完成的应用 UI / 路由数量。
 
 ## Task 4：桌面白色卡片列表、编辑与通知目标
@@ -186,7 +186,7 @@
 | `target_beyond_first_page_and_stale_navigation` | 深链直接 get 目标，已完成切全部；未登录等待；目标不在首 50 条仍可打开；用户新导航或换账号后 `expect(oldTargetOpened).toBe(false)` |
 | `notification_is_read_only_target` | 消息中心先按现有规则已读，再打开 todos；`expect(todoMutationCalls).toHaveLength(0)`；不存在 / 删除 / 非本人统一必要错误 |
 
-- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test -- src/modules/todos electron/bootstrap/__tests__/todos-protocol-handlers.test.ts`，预期缺页面 / 路由行为失败。
+- [ ] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test src/modules/todos electron/bootstrap/__tests__/todos-protocol-handlers.test.ts`，预期缺页面 / 路由行为失败。
 - [ ] **Step 3：实现数据与编辑 hooks。** 分开账号 generation、读取序号、筛选序号；订阅 onReset 立即清列表、草稿、撤销反馈与目标，不只比较 userId。进入页面、回到前台与 live 重连都补读。分页按 ID / version 合并，旧页面不能覆盖新数据。保存后重读当前数据；所有失败保留草稿；无网络阻止提交且不排队。完成撤销用成功回执版本，不自动跨冲突重放；删除确认具体标题，没有删除撤销。
 - [ ] **Step 4：按已认可原型实现 UI。** 复用现有 SystemAppWindowShell / EmbeddedSystemAppShell，居中 tabs，标准尺寸新建。一张 Card 承载列表，行不再加卡片；必要空 / 错 / 加载状态、菜单和独立完成控件。Dialog 使用既有表单、日期与时间组合；日期辅助逻辑置于 todo-time。图标使用已有图标几何与主题语义，透明资源，不设计独立配色。
 - [ ] **Step 5：注册应用与目标。** id / namespace `todos`、用户可固定 Dock、默认不固定；主窗口与独立窗口均接同一内容，不重复顶栏。应用 open options 的 strict schema 仅允许 todos 携带 todoOpenRequest；现有窗口通过 EventBus 送新目标，新窗口按现有受控 query 初始化，preload / bridge 添加 UI-only `apps.onTodoOpenRequest`。深链严格解析一个 ID，所有账号 / 导航竞争复验；消息中心新增来源「待办提醒」与动作「查看待办」。桌面原生横幅继续由现有 System Notifier 单向呈现，不添加 click 回调或扩展其公开能力。
@@ -277,10 +277,10 @@
 ```bash
 pnpm --filter @synapse/shared run test
 pnpm --filter @synapse/server run prisma:generate
-pnpm --filter @synapse/server run test -- src/todos src/notifications
+pnpm --filter @synapse/server run test src/todos src/notifications
 pnpm --filter @synapse/server run test:todos:e2e
 pnpm --filter @synapse/server run typecheck
-pnpm --filter @synapse/desktop run test -- app-capabilities/todos synapse-capabilities/shared/__tests__/todos-domain.test.ts synapse-capabilities/shared/__tests__/registry.test.ts src/modules/todos src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-header-architecture.test.ts src/modules/apps/__tests__/system-app-window-app.test.tsx src/app-shell/hooks/__tests__/use-message-center.test.tsx src/app-shell/components/__tests__/message-center.test.tsx electron/bootstrap/__tests__/todos-protocol-handlers.test.ts electron/modules/apps/__tests__/ipc.test.ts electron/services/__tests__/system-app-window-service.test.ts
+pnpm --filter @synapse/desktop run test app-capabilities/todos synapse-capabilities/shared/__tests__/todos-domain.test.ts synapse-capabilities/shared/__tests__/registry.test.ts src/modules/todos src/modules/apps/__tests__/registry.test.ts src/modules/apps/__tests__/system-app-header-architecture.test.ts src/modules/apps/__tests__/system-app-window-app.test.tsx src/app-shell/hooks/__tests__/use-message-center.test.tsx src/app-shell/components/__tests__/message-center.test.tsx electron/bootstrap/__tests__/todos-protocol-handlers.test.ts electron/modules/apps/__tests__/ipc.test.ts electron/services/__tests__/system-app-window-service.test.ts
 pnpm --filter @synapse/desktop run typecheck
 pnpm --filter @synapse/desktop run check:ipc-codegen
 pnpm --filter @synapse/desktop run check:hard-constraints
@@ -301,6 +301,6 @@ xcodebuild test-without-building -project SynapseMobile/SynapseMobile.xcodeproj 
 
 ## 自审与交接
 
-实施前审阅此计划及设计；选择逐任务子代理执行，或当前会话顺序执行并在最后独立审查。本计划建议当前会话顺序执行：七个阶段共享账号、事务、通知与接口，接口依赖连续，顺序实现便于保持两端一致。此建议不是用户已选定执行方式。
+实施前审阅此计划及设计；选择逐任务子代理执行，或当前会话顺序执行并在最后独立审查。本计划建议当前会话顺序执行：七个阶段共享账号、事务、通知与接口，接口依赖连续，顺序实现便于保持两端一致。用户已选择当前会话顺序执行并在最后独立审查。
 
 计划自审已完成：设计界面对应 Task 4 / 6，数据与一致性对应 Task 1 / 3 / 5，提醒对应 Task 2，AI 对应 Task 3，整体验收与文档对应 Task 7；Review Focus 五项均有具名断言。现有 Modify 路径和本地文档链接已核对，后续 Task 才修改的新增文件明确归属于前置任务。任务完成时勾选步骤并记录真实检查结果。

@@ -1,3 +1,5 @@
+import { TodosModule } from "./todos/todos.module"
+import { todoLogRequest } from "./todos/todo-log"
 import { Module } from "@nestjs/common"
 import { PortalHeadlessModule } from "./extend/portal-headless/portal-headless.module"
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
@@ -46,7 +48,9 @@ type RequestLogObject = {
  */
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
-  return pathname === "/api/problem-feedback"
+  return pathname === "/api/todos"
+    || pathname.startsWith("/api/todos/")
+    || pathname === "/api/problem-feedback"
     || pathname === "/api/mail"
     || pathname.startsWith("/api/mail/")
     || pathname === OPEN_API_NOTIFICATIONS_BASE_PATH
@@ -71,7 +75,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
         redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret", 'req.headers["x-portal-token"]'],
         serializers: {
           req(request: RequestLogObject) {
-            return sanitizeWebhookLogRequest(request)
+            return todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
           },
         },
         transport: {
@@ -101,6 +105,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
     LiveModule,
     MobileLiveModule,
     NotificationModule,
+    TodosModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

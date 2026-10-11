@@ -2,6 +2,8 @@
 
 ## 新增功能
 
+- 新增账号云端待办服务，支持截止时间与提醒配置、完成和恢复；跨端同时修改时提示重新载入，请求重试不会重复新增。
+
 - 桌面终端支持全局主题切换与实时预览，内置 Nord、Gruvbox Dark、Catppuccin Mocha 和 Latte，并保留默认主题；保存后所有终端窗口跟随配色，取消可恢复原主题。
 - 桌面终端新增 Rosé Pine Dawn、Ayu Light、Solarized Light 和 Tokyo Night Day 四款浅色主题，支持预览、保存与多窗口同步。
 
