@@ -2,6 +2,7 @@ import { useEffect, useRef, type FormEvent } from "react"
 import { createRoot } from "react-dom/client"
 import { ArrowLeft, AudioLines, Bell, CheckCircle2, ChevronRight, Circle, ClipboardList, Ellipsis, House, ListTodo, Mail, Plus, Terminal, User, HardDrive, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -80,9 +81,10 @@ function TodoRow({ todo, app }: { todo: Todo; app: Prototype }) {
   </Item>
 }
 function TodoList({ app }: { app: Prototype }) {
-  if (app.scenario === "signed-out" || app.scenario === "offline") return <StatusView app={app} />
   const todos = displayedTodos(app.todos, app.filter)
-  return <div className="mx-auto w-full max-w-4xl p-3 sm:p-6">
+  const unavailable = app.scenario === "signed-out" || app.scenario === "offline"
+  if (unavailable && app.platform !== "desktop") return <StatusView app={app} />
+  const content = unavailable ? <StatusView app={app} /> : <>
     {app.scenario === "notifications-off" && <p className="mb-4 text-sm" role="status">系统通知未开启，提醒仍会出现在通知列表。</p>}
     {todos.length ? <ItemGroup aria-label="待办事项列表">{todos.map(todo => <TodoRow key={todo.id} todo={todo} app={app} />)}</ItemGroup> : <div className="flex min-h-72 flex-col items-center justify-center gap-4">
       <CheckCircle2 className="size-6 text-muted-foreground" aria-hidden="true" />
@@ -90,6 +92,9 @@ function TodoList({ app }: { app: Prototype }) {
       <Button onClick={() => app.openEditor()}><Plus />新建事项</Button>
     </div>}
     {app.notice && <div className="mt-4 flex items-center justify-center gap-2 text-sm" role="status" aria-live="polite">{app.notice}{app.undoItem && <Button variant="ghost" onClick={app.undo}><RotateCcw />撤销</Button>}</div>}
+  </>
+  return <div className="mx-auto w-full max-w-4xl p-3 sm:p-6">
+    {app.platform === "desktop" ? <Card><CardContent>{content}</CardContent></Card> : content}
   </div>
 }
 function Desktop({ app }: { app: Prototype }) {
@@ -98,7 +103,7 @@ function Desktop({ app }: { app: Prototype }) {
     <Button variant="ghost" onClick={() => app.setHome(false)}><ListTodo />待办事项</Button>
   </div>
   const unavailable = app.scenario === "signed-out" || app.scenario === "offline"
-  return <div className="min-h-128 bg-background">
+  return <div className="min-h-128 bg-surface">
     <EmbeddedSystemAppShell appName="待办事项" onBack={() => app.setHome(true)}>
       <SystemAppWindowShell tabs={filterTabs} value={app.filter} onValueChange={app.setFilter} actions={<SystemAppTopBarActionButton disabled={unavailable} onClick={() => app.openEditor()}><Plus />新建</SystemAppTopBarActionButton>}>
         <TodoList app={app} />
