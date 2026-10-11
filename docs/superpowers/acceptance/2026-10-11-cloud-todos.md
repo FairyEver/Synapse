@@ -17,6 +17,12 @@
 
 原服务器全量基线有两项既有管理员认证测试失败（`request.get is not a function`）；待办专项不包含这两项，没有修改它们。
 
+Task 7 集成验证：shared 全量 **255/255**，服务端待办与通知 **71/71**，桌面待办及认证 / 通知 / 注册回归 **344/344**，真实 PostgreSQL **20/20**；server / desktop typecheck、IPC codegen、hard constraints 均通过。固定 JSON 夹具由 shared、真实服务端 DTO 映射、桌面严格 schema 共同校验；shared 还检查 Swift 内嵌夹具字段和值完全相同。iOS 的实际 API 解码断言已加入测试包，再次 `build-for-testing` 通过，未执行原生测试。
+
+本轮从新编译的桌面代码生成 arm64 本地检查包，`check:packaged-asar` 通过：27633 个 packed、1599 个 unpacked 文件。检查包含待办六个运行入口、shared ESM / CJS 文件、包内 CJS / schema 实际解析及两份待办 Skill 指南；既有 JSON Repair、文档提取、HTML Worker 与 Terminal PTY 冒烟也通过。这些检查只使用 Node 模式，不启动 Synapse 界面。
+
+本地依赖由既有锁文件离线安装；复用同版本 Electron / node-pty 二进制并恢复缺失的忽略安装文件。复用的 Electron 框架结构导致本地 ad-hoc 应用签名失败，因此只在忽略的检查配置中跳过应用签名 / 公证，保留已签名的原生组件。正式打包配置未变；此包不作为发布包，不证明分发签名、公证或其他架构发布。
+
 ## 原生界面与跨端矩阵
 
 | 场景 | 验收标准 | 本轮结果 |

@@ -258,15 +258,16 @@
 - Modify: `docs/agents/capability-registry.md`、`docs/agents/module-boundaries.md`、`docs/agents/mobile-runtime-contracts.md`、`docs/superpowers/specs/2026-09-23-account-notification-center-design.md`。
 - Modify: `docs/agent-guides/todos.md`、`server/README.md`、`SynapseMobile/README.md`、`RELEASE_NOTES_PENDING.md`、本计划、Task 6 验收矩阵。
 - Test: Task 1–6 的 contract / 事务 / worker / bridge / UI / Swift 测试；新契约与既有通知 / 认证回归。
+- Create: `shared/fixtures/todo-page.json`、`server/src/todos/todo-contract.spec.ts`、`desktop/app-capabilities/todos/main/__tests__/contract.test.ts`；Modify: shared / Swift 契约测试与 `desktop/scripts/checks/verify-packaged-asar.mjs`，核对新待办运行入口和 Skill 资源。
 
 **Interfaces:**
 - Consumes: 六个账号 API、六个 MCP 索引、桌面与 iOS 同一账号 DTO / event / deep link，Task 6 的验收证据。
 - Produces: 与真实实现一致的规则、注册数量、用户发布说明与验证记录；确认 `+1 System App / +6 MCP 索引 / +1 桌面路由`，iOS 路由另 `+1`，用户可固定 Dock但默认不固定，Workflow / Automation 增量 0。
 
-- [ ] **Step 1：增加跨层契约断言。** 复用固定 JSON 夹具验证 shared / server / desktop DTO；Swift 测试用同字段和值。`expect(capabilityActions).toHaveLength(6)`；UI bridge 与 MCP 映射均覆盖同六 action；通知 query 不能伪造来源，变更事件无正文，System Notifier 公共 schema 不增加新字段。
-- [ ] **Step 2：执行最小充分静态与自动化检查。** 使用下方公共命令，不调用 dev / 发版命令。所有测试应通过，记下真实 PostgreSQL 测试是否运行；通过最小充分检查后不重复扩大测试，除非新失败或改动需要。
-- [ ] **Step 3：完成有运行授权的实际链路。** 桌面手动新建 → AI 查询 / 修改 → iOS 同账号读取；完成后取消提醒、全部恢复；另一个账号不可见；电脑关闭时云端仍产出提醒。生产推送在 TestFlight / App Store 设备检验，不改 APNs 网关；区分账号通知与系统横幅证据。没有运行授权 / 设备的项列为待验收，不称已完整验收。
-- [ ] **Step 4：核对 UI / 包产物与注册。** 验收桌面启动台内嵌、Dock、独立窗口的白卡片和单顶栏；iOS 按 Task 6 矩阵。新能力包 / Skill 资源涉及正式包时，运行 `check:packaged-asar` 并核对新生成产物，不用旧包的检查冒充；仅在允许打包的范围生成本地包，不运行 release / push。重数能力清单的真实总数并解释例外，不能简单替换猜测的基数。
+- [x] **Step 1：增加跨层契约断言。** 复用固定 JSON 夹具验证 shared / server / desktop DTO；Swift 测试用同字段和值。`expect(capabilityActions).toHaveLength(6)`；UI bridge 与 MCP 映射均覆盖同六 action；通知 query 不能伪造来源，变更事件无正文，System Notifier 公共 schema 不增加新字段。
+- [x] **Step 2：执行最小充分静态与自动化检查。** 使用下方公共命令，不调用 dev / 发版命令。shared 255/255、服务端待办与通知 71/71、桌面相关回归 344/344、真实 PostgreSQL 20/20；类型、IPC、架构检查通过，iOS 测试包编译通过但断言未执行。既有服务器两项管理员认证基线失败单独保留记录。
+- [x] **Step 3：核对运行授权并记录实际链路边界。** 桌面手动新建 → AI 查询 / 修改 → iOS 同账号读取、实际账号切换和电脑关闭后的生产推送均无本轮运行授权 / 设备证据，列入验收矩阵待验收。API / bridge / 行锁与 outbox 分层测试已运行，不冒充三端实测；APNs 网关保持生产。
+- [x] **Step 4：核对 UI / 包产物与注册。** 新编译 arm64 本地包的 `check:packaged-asar` 通过，含 Todo CJS / schema 解析及 Skill 资源；本地依赖框架签名失败后仅在忽略检查配置跳过应用签名 / 公证，不作为发布包。重数 289 capability / 285 MCP 索引 / 21 System App，Todo +6 / +1，公开工具仍 2，Workflow / Automation 和默认 Dock 无增量。三宿主白卡片、单顶栏与 iOS 原生外观仍按矩阵待实际验收，不运行 release / push。
 - [ ] **Step 5：完成独立审查。** 使用用户选择执行方式所要求的审查流程；逐任务方式每任务审查再集成审查，当前会话方式完成后一次独立全量审查。处理发现的任务范围内缺陷并重跑受影响检查，不顺手重构。
 - [ ] **Step 6：更新最终文档、检查 diff / 暂存区并提交。** 规则与 Skill 均描述真实能力；发布说明面向用户，不写代码流水账；保留他人改动。摘要：`docs: 同步云端待办能力规则与验收结果`。交付列出本地提交、已通过验证与尚待设备 / 部署验证的项目；没有授权不部署、不发版、不 push。
 

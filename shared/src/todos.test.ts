@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import type { TodoPageDto } from "./todos.js"
 import { countTodoCodePoints, isValidTodoText, parseTodoInstant, parseTodoReference } from "./todos.js"
 
 describe("todo wire primitives", () => {
@@ -24,5 +26,26 @@ describe("todo wire primitives", () => {
   })
   it.each(["synapse://todos/a?completed=true", "synapse://todos/a#b", "synapse://todos/a/b", "synapse://todos/a%2Fb", "synapse://todos/%61", "synapse://other/a", "synapse://todos/"])("rejects ambiguous reference: %s", (value) => {
     expect(parseTodoReference(value)).toBeNull()
+  })
+})
+
+describe("cross-client Todo JSON", () => {
+  const raw = readFileSync(new URL("../fixtures/todo-page.json", import.meta.url), "utf8")
+  const page: TodoPageDto = JSON.parse(raw)
+  it("uses valid references and minute-aligned user dates without trimming notes", () => {
+    for (const item of page.items) {
+      expect(parseTodoReference(`synapse://todos/${item.id}`)).toBe(item.id)
+      for (const value of [item.dueAt, item.remindAt].filter((date) => date !== null)) expect(parseTodoInstant(value)).not.toBeNull()
+      expect(isValidTodoText(item.title)).toBe(true)
+    }
+    expect(page.items[0]?.note).toBe("  第一行\n第二行  ")
+    expect(page.items[1]?.completedAt).toBe("2026-10-11T12:05:01.123Z")
+    expect(page.nextOffset).toBeNull()
+  })
+  it("keeps the native decoding fixture identical to the shared wire fixture", () => {
+    const swift = readFileSync(new URL("../../SynapseMobile/SynapseMobileTests/TodoAPIContractTests.swift", import.meta.url), "utf8")
+    const embedded = swift.match(/\/\/ BEGIN SHARED TODO JSON\s+let json = #"""\s*([\s\S]*?)\s*"""#\s+\/\/ END SHARED TODO JSON/u)
+    expect(embedded).not.toBeNull()
+    expect(JSON.parse(embedded![1]!)).toEqual(page)
   })
 })

@@ -188,3 +188,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 - 只修改能力内部实现且注册表面不变时可以不改数字，但必须主动核对本清单仍与运行时装配一致。
 
 云端待办能力层注册六个 todos action，复用账号认证与 network.connect 权限，IPC 和 MCP 共用 dispatcher。onChanged/onReset 仅 UI 订阅，不计索引；身份重登清空内存，普通 token 刷新不清空。内容不进入请求/审计日志。待办为第 21 个 System App，默认 Dock 顺序不变，可手动固定；主窗口/启动器嵌入与独立窗口使用同一内容。新增一条严格 synapse://todos/<id> 桌面路由和 UI-only apps.onTodoOpenRequest 事件，不新增 MCP；消息中心查看待办先已读再只读定位，原生横幅无新 click 能力。
+
+2026-10-11 集成核对：从实际 `CAPABILITY_DOMAINS` 累加 289 项、`MCP_TOOL_ACTIONS` 与 `buildAllMcpTools()` 各 285 项；`todos` 均为 6。System App 注册测试列出 21 个应用。相对实施前增量为 1 个 System App、6 个 capability / MCP 索引、1 条桌面 Todo 路由及 1 条 iOS Todo 路由；Workflow / Automation 增量均为 0，默认 Dock 无增量，公开 MCP 工具仍为 2。iOS 入口为主页现有导航栈，不注册桌面 System App 或额外底栏。

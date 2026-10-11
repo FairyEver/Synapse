@@ -3,6 +3,27 @@ import Testing
 @testable import SynapseMobile
 
 struct TodoAPIContractTests {
+    @Test func sharedWireFixtureDecodesWithoutChangingFields() async throws {
+        // BEGIN SHARED TODO JSON
+        let json = #"""
+        {"items":[{"id":"todo_contract-1","title":"提交报告 🧩","note":"  第一行\n第二行  ","dueAt":"2026-10-12T01:00:00.000Z","reminder":"before_due","offsetMinutes":10,"remindAt":"2026-10-12T00:50:00.000Z","reminderGeneration":3,"reminderStatus":"pending","completedAt":null,"version":7,"createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T12:00:00.000Z"},{"id":"todo_contract-2","title":"完成 é","note":null,"dueAt":null,"reminder":"custom","offsetMinutes":null,"remindAt":"2026-10-12T02:00:00.000Z","reminderGeneration":4,"reminderStatus":"cancelled","completedAt":"2026-10-11T12:05:01.123Z","version":8,"createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T12:05:01.123Z"}],"nextOffset":null}
+        """#
+        // END SHARED TODO JSON
+        let fixture = TodoTestFixture()
+        defer { fixture.clear() }
+        fixture.transport.enqueue(.json(200, json))
+        let page = try await fixture.api.listTodos(TodoListInput(filter: .all))
+        #expect(page.items == [
+            TodoItemDto(id: "todo_contract-1", title: "提交报告 🧩", note: "  第一行\n第二行  ", dueAt: "2026-10-12T01:00:00.000Z", reminder: .beforeDue, offsetMinutes: 10,
+                remindAt: "2026-10-12T00:50:00.000Z", reminderGeneration: 3, reminderStatus: .pending, completedAt: nil, version: 7,
+                createdAt: "2026-10-11T00:00:00.000Z", updatedAt: "2026-10-11T12:00:00.000Z"),
+            TodoItemDto(id: "todo_contract-2", title: "完成 é", note: nil, dueAt: nil, reminder: .custom, offsetMinutes: nil,
+                remindAt: "2026-10-12T02:00:00.000Z", reminderGeneration: 4, reminderStatus: .cancelled, completedAt: "2026-10-11T12:05:01.123Z", version: 8,
+                createdAt: "2026-10-11T00:00:00.000Z", updatedAt: "2026-10-11T12:05:01.123Z")
+        ])
+        #expect(page.nextOffset == nil)
+    }
+
     @Test func wireNullPatchAndRetryUUID() async throws {
         let fixture = TodoTestFixture()
         defer { fixture.clear() }
