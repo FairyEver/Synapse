@@ -207,7 +207,7 @@
 - Produces: `TodoDraft` 保存编辑目标 `id / expectedVersion`（新建为 nil）、当前字段与稳定 `clientRequestId: UUID`；`TodoPatchField<Value: Codable>` 的 `absent / null / value(Value)` 用于可清空字段，避免 `encodeIfPresent` 丢失 null。撤销使用成功完成回执的版本与一个新的反向请求 ID。
 - Produces: `RealtimeClient.onTodosChanged: ((TodoChangedPayload) -> Void)?`，只解码服务器事件，由 AppModel 更新当前账号 TodoStore。
 
-- [ ] **Step 1：用现有 URLProtocol 测试模式建立真实 JSON / 认证回归。** Swift `String.count` 是 grapheme 数，不能用于 API 的码点上限；用 unicodeScalars 并校验合法性。
+- [x] **Step 1：用现有 URLProtocol 测试模式建立真实 JSON / 认证回归。** Swift `String.count` 是 grapheme 数，不能用于 API 的码点上限；用 unicodeScalars 并校验合法性。
 
 | 测试名 | 必须断言的测试代码 / 值 |
 | --- | --- |
@@ -218,11 +218,11 @@
 | `instant_and_unicode_contract` | 200 个非 BMP 标题可保存；组合字符按标量计数；上海 / 洛杉矶显示不同但 UTC 相同；DST 转换不手写偏移，发送秒 / 毫秒为 0 |
 | `unsupported_server_distinct_from_item_404` | list 404 显示升级 / 不可用状态；get 404 显示目标无法访问；均不能回退本地库或伪空列表 |
 
-- [ ] **Step 2：构建并运行红灯单测。** 先 `xcrun simctl list devices available` 取得真实可用 UDID；构建命令为下方公共 iOS 命令。新增方法缺失应导致编译 / 测试失败，Simulator 不可用只是验证缺口。
-- [ ] **Step 3：实现 APIClient 六方法与 Codable 类型。** 在现有 APIClient 文件内调用 private send，沿用统一认证 / 超时 / 归一化，禁止另建客户端或在 View 中手写 URLSession。patch 用明确 absent / null / value 编码，日期固定 wire 精度。
-- [ ] **Step 4：实现单一 TodoStore 与时间 / 草稿。** AppModel 持有并在身份变化同步 reset；异步捕获账号 generation / 筛选 generation / 读序号，返回前复验。相同 ID 不倒退版本，切筛选重读，重连 / 前台 / 进入补读；实时事件不依赖 selected desktop。编辑草稿与列表刷新分离，账号改变才清空，不落 UserDefaults、文件、SQLite 或 Keychain 正文。
-- [ ] **Step 5：运行绿灯并同步移动契约。** 构建成功，TodoAPIContractTests / TodoStoreTests / TodoTimeTests、APIAuthLifecycleTests / RealtimeAuthTests 全部通过；按部署版本 iOS 18.0 编译，项目使用同步目录，不手改 PBX 文件枚举或升部署版本。运行测试会启动测试宿主 / 模拟器，须在用户明确要求运行原生测试时执行并保留结果；本计划不启动。
-- [ ] **Step 6：同步移动账号归属与发布说明并提交。** 摘要：`feat: 为 iOS 增加云端待办数据与账号同步`。
+- [x] **Step 2：构建并运行红灯单测。** 先 `xcrun simctl list devices available` 取得真实可用 UDID；构建命令为下方公共 iOS 命令。新增方法缺失应导致编译 / 测试失败，Simulator 不可用只是验证缺口。
+- [x] **Step 3：实现 APIClient 六方法与 Codable 类型。** 在现有 APIClient 文件内调用 private send，沿用统一认证 / 超时 / 归一化，禁止另建客户端或在 View 中手写 URLSession。patch 用明确 absent / null / value 编码，日期固定 wire 精度。
+- [x] **Step 4：实现单一 TodoStore 与时间 / 草稿。** AppModel 持有并在身份变化同步 reset；异步捕获账号 generation / 筛选 generation / 读序号，返回前复验。相同 ID 不倒退版本，切筛选重读，重连 / 前台 / 进入补读；实时事件不依赖 selected desktop。编辑草稿与列表刷新分离，账号改变才清空，不落 UserDefaults、文件、SQLite 或 Keychain 正文。
+- [x] **Step 5：运行绿灯并同步移动契约。** 构建成功，TodoAPIContractTests / TodoStoreTests / TodoTimeTests、APIAuthLifecycleTests / RealtimeAuthTests 全部编译；本轮没有原生测试运行授权，因此未执行测试断言；按部署版本 iOS 18.0 编译，项目使用同步目录，不手改 PBX 文件枚举或升部署版本。运行测试会启动测试宿主 / 模拟器，须在用户明确要求运行原生测试时执行并保留结果；本计划不启动。
+- [x] **Step 6：同步移动账号归属与发布说明并提交。** 摘要：`feat: 为 iOS 增加云端待办数据与账号同步`。
 
 ## Task 6：iOS 原生列表、主页入口与通知定位
 

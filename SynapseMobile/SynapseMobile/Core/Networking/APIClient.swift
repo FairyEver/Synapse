@@ -992,6 +992,37 @@ actor APIClient {
         let _: EmptyResponse = try await send(path: DriveRoute.item(itemId: itemId), method: "DELETE")
     }
 
+    // MARK: 云端待办
+
+    func listTodos(_ input: TodoListInput) async throws -> TodoPageDto {
+        var query = URLComponents()
+        query.queryItems = [URLQueryItem(name: "filter", value: input.filter.rawValue),
+            URLQueryItem(name: "offset", value: String(input.offset)), URLQueryItem(name: "limit", value: String(input.limit))]
+        if let term = input.query { query.queryItems?.append(URLQueryItem(name: "query", value: term)) }
+        return try await send(path: "/todos?" + (query.percentEncodedQuery ?? ""), method: "GET")
+    }
+    func getTodo(id: String) async throws -> TodoItemDto {
+        try await send(path: todoPath(id), method: "GET")
+    }
+    func createTodo(_ input: TodoCreateInput) async throws -> TodoItemDto {
+        try await send(path: "/todos", method: "POST", body: input)
+    }
+    func updateTodo(id: String, input: TodoUpdateInput) async throws -> TodoItemDto {
+        try await send(path: todoPath(id), method: "PATCH", body: input)
+    }
+    func setTodoCompleted(id: String, input: TodoCompletionInput) async throws -> TodoItemDto {
+        try await send(path: todoPath(id) + "/completion", method: "PATCH", body: input)
+    }
+    func deleteTodo(id: String, input: TodoDeleteInput) async throws -> TodoDeleteResult {
+        try await send(path: todoPath(id), method: "DELETE", body: input)
+    }
+    private func todoPath(_ id: String) throws -> String {
+        guard !id.isEmpty, id.utf8.count <= 200, id.utf8.allSatisfy({
+            (65...90).contains($0) || (97...122).contains($0) || (48...57).contains($0) || $0 == 95 || $0 == 45
+        }) else { throw APIError(status: 400, code: "TODO_INVALID_ID", message: "事项编号无效") }
+        return "/todos/" + id
+    }
+
     // MARK: 回收站
 
     func driveTrash(offset: Int? = nil, limit: Int? = nil, search: String? = nil) async throws -> DriveTrashPage {
