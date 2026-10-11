@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
-import { SessionTrailing } from "./session-trailing"
+import { SessionStatus, SessionTrailing } from "./session-trailing"
 import { AgentSidebarSessionRow } from "./agent-sidebar-session-row"
 import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import {
@@ -41,6 +41,7 @@ import {
 import { sessionLabel } from "../utils"
 import { conversationUnreadKey } from "../live-sync"
 import type { AgentProjectMoveDirection } from "../project-order"
+import { getProjectSessionDisclosure } from "../project-session-disclosure"
 
 type ProjectGroupShellProps = ModuleSidebarGroupProps & {
   readonly sortableDisabled: boolean
@@ -123,6 +124,7 @@ function ProjectGroup({
 }: ProjectGroupProps) {
   const isSelected = selectedProjectId === project.id
   const [open, setOpen] = useState(isSelected || sessions.length > 0)
+  const [showAllSessions, setShowAllSessions] = useState(false)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
   const [deleteRequest, setDeleteRequest] = useState<AgentSessionDeleteRequest | null>(null)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
@@ -131,6 +133,15 @@ function ProjectGroup({
   const deleteReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteSuccessFocusRef = useRef<HTMLElement | null>(null)
   const sessionRowRefs = useRef(new Map<string, HTMLDivElement>())
+  const { orderedSessions, recentSessions, hiddenSessions } = getProjectSessionDisclosure(
+    sessions,
+    isSelected ? selectedConversationId : undefined,
+  )
+  const displayedSessions = showAllSessions ? orderedSessions : recentSessions
+  const hiddenRunning = hiddenSessions.some((session) => sendingConversationIds.has(session.id))
+  const hiddenUnread = hiddenSessions.some((session) => (
+    (unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0) > 0
+  ))
 
   const prevIsSelectedRef = useRef(isSelected)
   const prevSessionCountRef = useRef(sessions.length)
@@ -139,6 +150,11 @@ function ProjectGroup({
   }
   prevIsSelectedRef.current = isSelected
   prevSessionCountRef.current = sessions.length
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen)
+    if (!nextOpen) setShowAllSessions(false)
+  }
 
   function handleRenameOpen(session: SynapseAgentSessionSummary, returnFocus?: HTMLElement) {
     renameReturnFocusRef.current = returnFocus
@@ -186,7 +202,7 @@ function ProjectGroup({
         sortableId={sortableId}
         sortableDisabled={sortableDisabled}
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         data-track="agent-project-group"
         headerClassName="pl-2 pr-0.5"
         title={project.name}
@@ -281,7 +297,7 @@ function ProjectGroup({
           </span>
         }
       >
-        {sessions.map((session) => {
+        {displayedSessions.map((session) => {
           const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
           const running = sendingConversationIds.has(session.id)
           const active = session.projectId === selectedProjectId
@@ -341,6 +357,21 @@ function ProjectGroup({
             </ContextMenu>
           )
         })}
+        {hiddenSessions.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full justify-start px-2 text-muted-foreground"
+            data-track="agent-project-toggle-history"
+            aria-expanded={showAllSessions}
+            onClick={() => setShowAllSessions((current) => !current)}
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {showAllSessions ? "收起" : `展开其他（${hiddenSessions.length}）`}
+            </span>
+            {!showAllSessions ? <SessionStatus unread={hiddenUnread ? 1 : 0} running={hiddenRunning} /> : null}
+          </Button>
+        ) : null}
       </ProjectGroupShell>
 
       <AgentSessionRenameDialog

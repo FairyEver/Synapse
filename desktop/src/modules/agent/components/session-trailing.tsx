@@ -6,6 +6,39 @@ import { Button } from "@/components/ui/button"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { cn } from "@/lib/utils"
 
+function SessionStatus({
+  updatedAt,
+  unread,
+  running,
+}: {
+  readonly updatedAt?: string
+  readonly unread: number
+  readonly running: boolean
+}) {
+  if (running) {
+    return (
+      <span className="inline-grid size-6 place-items-center text-muted-foreground" aria-label="正在输出">
+        <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+      </span>
+    )
+  }
+  if (unread > 0) {
+    return (
+      <span className="inline-grid size-6 place-items-center" aria-label="未读">
+        <span className="size-2 rounded-full bg-blue-500" aria-hidden="true" />
+      </span>
+    )
+  }
+  return updatedAt ? (
+    <RelativeTime
+      value={updatedAt}
+      fallback=""
+      showTooltip={false}
+      className="block min-w-0 max-w-full truncate text-xs text-muted-foreground"
+    />
+  ) : null
+}
+
 function SessionTrailing({
   updatedAt,
   unread,
@@ -38,29 +71,6 @@ function SessionTrailing({
     }
   }, [armed])
 
-  const status = running ? (
-    <span className="inline-grid size-6 place-items-center text-muted-foreground" aria-label="正在输出">
-      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-    </span>
-  ) : unread > 0 ? (
-    <span
-      className="inline-grid size-6 place-items-center"
-      aria-label="未读"
-    >
-      <span
-        className="size-2 rounded-full bg-blue-500"
-        aria-hidden="true"
-      />
-    </span>
-  ) : updatedAt ? (
-    <RelativeTime
-      value={updatedAt}
-      fallback=""
-      showTooltip={false}
-      className="block min-w-0 max-w-full truncate text-xs text-muted-foreground"
-    />
-  ) : null
-
   return (
     <span className="relative flex h-6 w-full min-w-0 items-center justify-end">
       <span
@@ -69,7 +79,7 @@ function SessionTrailing({
           canDelete && "transition-opacity duration-150 ease-out group-hover/item:opacity-0 group-focus-within/item:opacity-0",
         )}
       >
-        {status}
+        <SessionStatus updatedAt={updatedAt} unread={unread} running={running} />
       </span>
       {canDelete ? (
         <span
@@ -110,4 +120,4 @@ function SessionTrailing({
   )
 }
 
-export { SessionTrailing }
+export { SessionStatus, SessionTrailing }

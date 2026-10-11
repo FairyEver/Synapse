@@ -127,3 +127,13 @@ Existing tests for malformed timestamps and long title truncation should continu
 - Completed read conversations still show relative time.
 - Archived sessions follow the same status rules.
 - No backend model, IPC schema, storage, or runtime changes are required.
+
+## Project History Disclosure
+
+- Each project, including the local workspace, initially shows its five most recently updated conversations after the existing source filter.
+- A selected conversation outside those five stays visible as one additional row. It is excluded from the hidden conversation count.
+- The last row reads `展开其他（N）`, where N counts only hidden conversations. Clicking it shows all project conversations at once, and the last row becomes `收起`.
+- Closing and reopening a project resets it to the recent list. Expanding or collapsing history does not change the selected conversation or composer draft.
+- When history is collapsed, the history control uses the existing status indicators for hidden conversations: running first, then unread. It never shows numeric unread badges.
+- Project-wide clear and delete-others actions continue to target every conversation in the current source category, including hidden history.
+- This is local renderer presentation state. It does not change archived conversations, storage, IPC schemas, MCP tool scope, or conversation ownership.
