@@ -681,6 +681,12 @@ final class SynapseAppModel {
         guard authState == .signedIn else { throw APIError(status: 401, code: "unauthenticated", message: "请登录后使用待办事项") }
         return try await todos.save(draft, using: apiClient)
     }
+    @discardableResult
+    func submitTodoEditor() async -> Bool {
+        guard let draft = todos.draft, authState == .signedIn else { return false }
+        do { _ = try await saveTodo(draft); return true }
+        catch { return false } // TodoStore preserves the draft and publishes its inline error.
+    }
     func completeTodo(_ item: TodoItemDto, completed: Bool) async {
         guard authState == .signedIn else { return }
         let account = accountGeneration

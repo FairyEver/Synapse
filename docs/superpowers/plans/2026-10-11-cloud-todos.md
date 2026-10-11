@@ -237,7 +237,7 @@
 - Produces: HomeRoute `.todos`；notification destination `.todo(id: String)`；`TodoNavigation` 只维护内存 target / navigation generation，`open(id: String, accountGeneration: Int)`、`cancel()` 与异步结果归属判定。
 - Produces: `TodosView` 的 List / 两状态 Picker / 新建，`TodoEditorSheet` 的标题、备注、截止时间与提醒 Form；所有写入使用 Task 5 store，View 只发意图。
 
-- [ ] **Step 1：建立导航与草稿回归。**
+- [x] **Step 1：建立导航与草稿回归。**
 
 | 测试名 | 必须断言的测试代码 / 值 |
 | --- | --- |
@@ -246,11 +246,11 @@
 | `new_navigation_cancels_pending_target` | 等待登录 / 网络时用户回主页或换账号，释放旧请求后 `XCTAssertNil(oldTarget)`；不会跳到终端 / 换电脑 |
 | `draft_survives_view_changes` | 旋转 / 缩放 / 列表刷新不替换 draft；取消不写；提醒默认 none、自定可无截止、相对无截止显示必要校验 |
 
-- [ ] **Step 2：构建并运行红灯。** 公共 iOS 构建命令；已获原生测试授权时运行 TodoNavigationTests / TodoDraftTests / NotificationDeepLinkTests / NotificationDestinationTests，预期缺待办目的地行为失败。
-- [ ] **Step 3：实现系统界面。** HomeView 加「待办事项」行，复用一个主页栈。List 行完成控件与编辑正文分离，菜单可完成 / 恢复 / 删除；sheet 左取消右添加 / 保存，系统 Form / DatePicker / 提醒 Picker。表单失败保留，删除确认标题；List / sheet 自适应 iPhone 与 iPadOS，底栏不改，使用系统语义颜色和可访问操作名。
-- [ ] **Step 4：接入通知和路由。** 从现有通知 ID 重取通知，再解析 source / target，不信任推送文字；沿用已读语义，登录就绪后单条读取。普通主页进入 pending，已完成目标切 all；待目标请求与用户导航按 generation 复验，已删除 / 非本人不泄漏内容。
-- [ ] **Step 5：按 Apple 依据填写原生验收矩阵。** 沿用设计 §10 的 Lists / Sheets / Layout / Accessibility 等官方依据；记录 iPhone、iPadOS 全窗 / 窄窗、动态字体、VoiceOver、深浅色、键盘 / 指针与最低 iOS 18。构建 / 单测不能标记原生界面或真实推送“已验收”；没有设备或运行授权的项目明确待验收，不补假截图。
-- [ ] **Step 6：运行绿灯与提交。** 公共构建成功，获授权的 Step 2 测试通过；更新主页 / 目标移动规则和发布说明。摘要：`feat: 增加 iOS 待办入口与原生编辑提醒界面`。
+- [x] **Step 2：构建并运行红灯。** 公共 iOS 构建命令；已获原生测试授权时运行 TodoNavigationTests / TodoDraftTests / NotificationDeepLinkTests / NotificationDestinationTests，预期缺待办目的地行为失败。
+- [x] **Step 3：实现系统界面。** HomeView 加「待办事项」行，复用一个主页栈。List 行完成控件与编辑正文分离，菜单可完成 / 恢复 / 删除；sheet 左取消右添加 / 保存，系统 Form / DatePicker / 提醒 Picker。表单失败保留，删除确认标题；List / sheet 自适应 iPhone 与 iPadOS，底栏不改，使用系统语义颜色和可访问操作名。
+- [x] **Step 4：接入通知和路由。** 从现有通知 ID 重取通知，再解析 source / target，不信任推送文字；沿用已读语义，登录就绪后单条读取。普通主页进入 pending，已完成目标切 all；待目标请求与用户导航按 generation 复验，已删除 / 非本人不泄漏内容。
+- [x] **Step 5：按 Apple 依据填写原生验收矩阵。** 沿用设计 §10 的 Lists / Sheets / Layout / Accessibility 等官方依据；记录 iPhone、iPadOS 全窗 / 窄窗、动态字体、VoiceOver、深浅色、键盘 / 指针与最低 iOS 18。构建 / 单测不能标记原生界面或真实推送“已验收”；没有设备或运行授权的项目明确待验收，不补假截图。
+- [x] **Step 6：运行绿灯与提交。** 公共构建成功；本轮按授权只构建测试包，原生断言和设备界面未运行，见验收矩阵；更新主页 / 目标移动规则和发布说明。摘要：`feat: 增加 iOS 待办入口与原生编辑提醒界面`。
 
 ## Task 7：跨端验收、能力清单与交付检查
 

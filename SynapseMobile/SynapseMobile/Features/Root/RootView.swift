@@ -34,6 +34,7 @@ struct RootView: View {
     /// 等下一份列表到了再判 —— 丢掉它就等于把用户点的那一下当作没发生。
     @State private var pendingTerminalOpen: PendingTerminalOpen?
     @State private var notificationOpenRequest = UUID()
+    @State private var todoNavigation = TodoNavigation()
 
     /// 底栏的四个顶层分区，顺序固定为主页、终端、通知、我的。
     private enum Tab: Hashable {
@@ -55,20 +56,23 @@ struct RootView: View {
             await model.bootstrap()
             // A tap that launched the app parked its destination before any view
             // existed, so the change observer would never have fired.
-            handleRoute(NotificationRouter.shared.consume())
+            if model.authState == .signedIn { handleRoute(NotificationRouter.shared.consume()) }
             resolveExternalTerminalRequests()
         }
         .fullScreenCover(item: $notificationWebLink) { target in
             LinkBrowser(url: target.url) { notificationWebLink = nil }
         }
         .onChange(of: NotificationRouter.shared.pending) { _, _ in
-            handleRoute(NotificationRouter.shared.consume())
+            if model.authState == .signedIn { handleRoute(NotificationRouter.shared.consume()) }
         }
+        .sheet(isPresented: todoEditorPresented) { TodoEditorSheet().presentationDetents([.large]) }
         // 锁屏和灵动岛上那张卡被点开。走 URL 而不是 App Intent：卡片是「带我去看」
         // 的那一个，那两个按钮才是「替我做」。这是 Apple 给实时活动定的分工。
         .onOpenURL { url in
             beginNavigationRequest()
-            if url.scheme == "synapse", url.host == "mail", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
+            if let id = TodoReference.id(in: url.absoluteString) {
+                openTodoTarget(id)
+            } else if url.scheme == "synapse", url.host == "mail", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
                 mailSelection = id
                 homePath = [.mail]
                 selectedTab = .home
@@ -99,9 +103,19 @@ struct RootView: View {
                 notificationOpenRequest = UUID()
                 selectedTab = .home
             }
+            if state == .signedIn {
+                let account = model.accountIdentityGeneration
+                Task {
+                    await Task.yield()
+                    guard model.isCurrentAccount(account) else { return }
+                    handleRoute(NotificationRouter.shared.consume())
+                    if todoNavigation.pendingID != nil { homePath = [.todos]; selectedTab = .home; resolveTodoTarget() }
+                }
+            }
             resolveExternalTerminalRequests()
         }
-        .onChange(of: model.accountIdentityGeneration) { _, _ in
+        .onChange(of: model.accountIdentityGeneration) { _, generation in
+            todoNavigation.accountDidChange(generation, signedIn: model.authState == .signedIn)
             // A widget waiting for a live list and a notification waiting for REST
             // are still the outgoing account's requests, even while logout drains.
             pendingWidgetTarget = nil
@@ -113,6 +127,10 @@ struct RootView: View {
             notificationWebLink = nil
             notificationOpenRequest = UUID()
         }
+        .onChange(of: homePath) { old, current in
+            if old.contains(.todos) && !current.contains(.todos) && !todoNavigation.isWaitingForLogin { todoNavigation.cancel() }
+        }
+        .onChange(of: model.todos.isSaving) { _, saving in if !saving { resolveTodoTarget() } }
         .onChange(of: model.selectedDesktopClientInstanceId) { _, _ in
             if let pending = pendingTerminalOpen,
                !pending.belongs(to: model.selectedDesktopClientInstanceId) {
@@ -163,6 +181,30 @@ struct RootView: View {
     private func beginNavigationRequest() {
         notificationOpenRequest = UUID()
         pendingWidgetTarget = nil
+        todoNavigation.cancel()
+        NotificationRouter.shared.discard()
+    }
+
+    private var todoEditorPresented: Binding<Bool> {
+        Binding(get: { model.authState == .signedIn && model.todos.draft != nil },
+            set: { if !$0 { model.todos.closeEditor() } })
+    }
+    private func openTodoTarget(_ id: String) {
+        model.todos.selectFilter(.pending)
+        todoNavigation.open(id: id, accountGeneration: model.accountIdentityGeneration,
+            waitingForLogin: model.authState != .signedIn)
+        isNewSessionPresented = false
+        selectedTab = .home
+        homePath = [.todos]
+        resolveTodoTarget()
+    }
+    private func resolveTodoTarget() {
+        let account = model.accountIdentityGeneration
+        guard model.isCurrentAccount(account), todoNavigation.pendingID != nil, !model.todos.isSaving else { return }
+        Task {
+            guard model.isCurrentAccount(account) else { return }
+            await todoNavigation.resolve(accountGeneration: account, signedIn: true, store: model.todos) { try await model.getTodo(id: $0) }
+        }
     }
 
     /// Re-selecting a tab returns to that feature's list at every window width.
@@ -234,7 +276,7 @@ struct RootView: View {
                 drivePage
             case .mail:
                 mailPage
-            case .clipboard, .none:
+            case .clipboard, .todos, .none:
                 NavigationStack(path: $homePath) {
                     HomeView(
                         onOpenRecordings: openRecordingsFromHome,
@@ -249,6 +291,11 @@ struct RootView: View {
                         onOpenMail: {
                             beginNavigationRequest()
                             homePath = [.mail]
+                        },
+                        onOpenTodos: {
+                            beginNavigationRequest()
+                            model.todos.selectFilter(.pending)
+                            homePath.append(.todos)
                         },
                         onOpenClipboard: {
                             beginNavigationRequest()
@@ -269,6 +316,8 @@ struct RootView: View {
                         switch route {
                         case .clipboard:
                             ClipboardHistoryView()
+                        case .todos:
+                            TodosView(navigation: todoNavigation, onRetryTarget: resolveTodoTarget)
                         case .recordings, .drive, .mail:
                             // 走不到这一支：功能页换的是这一格的内容，不是往栈里推（见上）。
                             // 留着它只为让这个 switch 对 `HomeRoute` 保持穷尽。
@@ -304,7 +353,7 @@ struct RootView: View {
         case .recordings: return .recordings
         case .drive: return .drive
         case .mail: return .mail
-        case .clipboard, .none: return nil
+        case .clipboard, .todos, .none: return nil
         }
     }
 
@@ -469,6 +518,8 @@ struct RootView: View {
             mailSelection = messageId
             selectedTab = .home
             homePath = [.mail]
+        case .todo(let id):
+            openTodoTarget(id)
         case .message(let id):
             openNotification(id)
         case .newRecording:

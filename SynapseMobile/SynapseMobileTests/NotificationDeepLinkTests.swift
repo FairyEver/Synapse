@@ -45,6 +45,18 @@ struct NotificationDeepLinkTests {
         #expect(store.error != nil)
     }
 
+    @Test func todoNotificationIsReadBeforeItsVerifiedTargetIsOpened() async throws {
+        let fixture = fixture()
+        defer { fixture.tokens.clearCredentials(); fixture.session.invalidateAndCancel() }
+        try await fixture.client.login(email: "test@example.invalid", password: "test")
+        let store = NotificationStore()
+        await store.ensure("todo-notice", using: fixture.client)
+        await store.read("todo-notice", using: fixture.client)
+        let item = try #require(store.items.first { $0.id == "todo-notice" })
+        #expect(item.readAt != nil)
+        #expect(NotificationDestination.resolve(item) == .route(.todo(id: "todo_1")))
+    }
+
     private func fixture() -> (client: APIClient, tokens: TokenStore, session: URLSession) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [NotificationDeepLinkURLProtocol.self]
@@ -74,6 +86,9 @@ private final class NotificationDeepLinkURLProtocol: URLProtocol {
         case "older":
             status = 200
             body = #"{"id":"older","source":"terminal-complete","title":"旧通知","body":"旧正文","level":"active","targetId":"older-session","deviceId":"original-desktop","readAt":"2026-10-04T01:00:00Z","createdAt":"2026-10-01T00:00:00Z"}"#
+        case "todo-notice":
+            status = 200
+            body = #"{"id":"todo-notice","source":"todo-reminder","title":"待办提醒","body":"报告","level":"active","targetId":"todo_1","url":"synapse://todos/todo_1","createdAt":"2026-10-11T00:00:00Z"}"#
         case "read":
             status = 200
             body = "{}"

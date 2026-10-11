@@ -27,6 +27,11 @@ nonisolated struct TodoDraft {
 
     var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     var normalizedNote: String? { note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note }
+    var hasChanges: Bool {
+        guard let original else { return !trimmedTitle.isEmpty || normalizedNote != nil || dueAt != nil || reminder != .none }
+        return trimmedTitle != original.title || normalizedNote != original.note
+            || dueAt.map(TodoTime.minute) != TodoTime.parse(original.dueAt) || changesReminder
+    }
     var effectiveRemindAt: Date? {
         switch reminder {
         case .none: nil
