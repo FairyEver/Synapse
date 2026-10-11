@@ -24,7 +24,7 @@ export function TodosModule({ openRequest, onOpenRequestConsumed }: { openReques
   const deleteLock = useRef(false), currentGeneration = useRef(todos.generation), deletingGeneration = useRef(todos.generation)
   currentGeneration.current = todos.generation
   const selectAll = useCallback(() => todos.setFilter("all"), [todos.setFilter])
-  const target = useTodoTarget({ request: openRequest, ready: todos.authenticated, generation: todos.generation, open: editor.open, selectAll, consumed: onOpenRequestConsumed })
+  const target = useTodoTarget({ request: openRequest, ready: todos.authenticated, generation: todos.generation, blocked: !!editor.draft || editor.saving, open: editor.open, selectAll, consumed: onOpenRequestConsumed })
   useEffect(() => { deleteLock.current = false; setDeleting(null); setDeleteBusy(false) }, [todos.generation])
   const create = () => { target.cancel(); editor.open() }
   const open = (item: TodoItemDto) => { target.cancel(); editor.open(item) }

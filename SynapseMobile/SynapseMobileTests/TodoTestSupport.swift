@@ -12,6 +12,7 @@ final class TodoTestTransport: @unchecked Sendable {
         let method: String
         let url: URL
         let body: Data?
+        let cachePolicy: URLRequest.CachePolicy
     }
     private let lock = NSLock()
     private var replies: [Reply] = []
@@ -39,7 +40,7 @@ final class TodoTestTransport: @unchecked Sendable {
         let body = connection.bodyData()
         lock.lock()
         let index = captured.count
-        captured.append(Request(method: connection.request.httpMethod ?? "GET", url: url, body: body))
+        captured.append(Request(method: connection.request.httpMethod ?? "GET", url: url, body: body, cachePolicy: connection.request.cachePolicy))
         let reply = replies.isEmpty ? Reply.failure(.unsupportedURL) : replies.removeFirst()
         if case .held = reply { held[index] = connection }
         lock.unlock()

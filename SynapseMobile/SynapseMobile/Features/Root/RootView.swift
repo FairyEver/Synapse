@@ -131,6 +131,7 @@ struct RootView: View {
             if old.contains(.todos) && !current.contains(.todos) && !todoNavigation.isWaitingForLogin { todoNavigation.cancel() }
         }
         .onChange(of: model.todos.isSaving) { _, saving in if !saving { resolveTodoTarget() } }
+        .onChange(of: model.todos.draft?.presentationID) { _, draft in if draft == nil { resolveTodoTarget() } }
         .onChange(of: model.selectedDesktopClientInstanceId) { _, _ in
             if let pending = pendingTerminalOpen,
                !pending.belongs(to: model.selectedDesktopClientInstanceId) {
@@ -200,7 +201,7 @@ struct RootView: View {
     }
     private func resolveTodoTarget() {
         let account = model.accountIdentityGeneration
-        guard model.isCurrentAccount(account), todoNavigation.pendingID != nil, !model.todos.isSaving else { return }
+        guard model.isCurrentAccount(account), todoNavigation.pendingID != nil, !model.todos.isSaving, model.todos.draft == nil else { return }
         Task {
             guard model.isCurrentAccount(account) else { return }
             await todoNavigation.resolve(accountGeneration: account, signedIn: true, store: model.todos) { try await model.getTodo(id: $0) }

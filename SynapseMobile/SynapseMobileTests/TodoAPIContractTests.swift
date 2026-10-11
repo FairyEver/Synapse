@@ -3,6 +3,11 @@ import Testing
 @testable import SynapseMobile
 
 struct TodoAPIContractTests {
+    @Test func todoTransportHasNoPersistentCacheOrOfflineQueue() {
+        let config = TodoNetworkPolicy.configuration(requestTimeout: 20, resourceTimeout: 30)
+        #expect(config.urlCache == nil && config.httpCookieStorage == nil && config.urlCredentialStorage == nil)
+        #expect(!config.waitsForConnectivity && config.requestCachePolicy == .reloadIgnoringLocalCacheData)
+    }
     @Test func sharedWireFixtureDecodesWithoutChangingFields() async throws {
         // BEGIN SHARED TODO JSON
         let json = #"""
@@ -59,6 +64,7 @@ struct TodoAPIContractTests {
         #expect(deleted.deleted && deleted.version == 4)
         let requests = fixture.transport.requests
         try #require(requests.count == 6)
+        #expect(requests.allSatisfy { $0.cachePolicy == .reloadIgnoringLocalCacheData })
         #expect(requests.map(\.method) == ["GET", "GET", "POST", "PATCH", "PATCH", "DELETE"])
         #expect(requests.map { $0.url.path } == ["/api/todos", "/api/todos/todo_1", "/api/todos", "/api/todos/todo_1", "/api/todos/todo_1/completion", "/api/todos/todo_1"])
         let query = URLComponents(url: requests[0].url, resolvingAgainstBaseURL: false)?.queryItems

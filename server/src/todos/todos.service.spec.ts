@@ -6,6 +6,11 @@ const now = new Date("2026-10-11T00:00:00Z")
 const fields = normalizeTodoFields({ title: "事项", dueAt: "2026-10-12T01:00:00Z", reminder: "at_due" }, null, now)
 const current = { ...fields, reminderGeneration: 1, reminderStatus: "pending" as const }
 describe("todo reminder lifecycle during mutations", () => {
+  it("keeps an unchanged pending reminder eligible after its due time", () => {
+    const afterDue = new Date("2026-10-12T01:00:05Z")
+    const edited = normalizeTodoFields({ title: "刚修改的标题", note: "备注" }, current, afterDue)
+    expect(nextTodoReminderState(edited, current, null, afterDue)).toEqual({ reminderGeneration: 1, reminderStatus: "pending" })
+  })
   it("does not advance a reminder generation for title or note updates", () => {
     const edited = normalizeTodoFields({ title: "新标题", note: "备注" }, current, now)
     expect(nextTodoReminderState(edited, current, null, now)).toEqual({ reminderGeneration: 1, reminderStatus: "pending" })

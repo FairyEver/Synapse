@@ -4,6 +4,28 @@ import Testing
 
 @MainActor
 struct TodoNavigationTests {
+    @Test func incomingTargetWaitsForTheCurrentDraftToClose() async throws {
+        let navigation = TodoNavigation(), store = TodoStore(), item = try TodoTestFixture.item(id: "older")
+        store.openEditor(); store.draft?.title = "不能丢失的草稿"
+        let request = store.draft?.clientRequestId
+        navigation.open(id: "older", accountGeneration: 0)
+        var reads = 0
+        await navigation.resolve(accountGeneration: 0, signedIn: true, store: store) { _ in reads += 1; return item }
+        #expect(reads == 0 && navigation.pendingID == "older")
+        #expect(store.draft?.title == "不能丢失的草稿" && store.draft?.clientRequestId == request)
+        store.closeEditor()
+        await navigation.resolve(accountGeneration: 0, signedIn: true, store: store) { _ in reads += 1; return item }
+        #expect(reads == 1 && navigation.pendingID == nil && store.draft?.id == item.id)
+    }
+
+    @Test func lateTargetDoesNotReplaceADraftOpenedDuringTheRead() async throws {
+        let navigation = TodoNavigation(), store = TodoStore(), item = try TodoTestFixture.item(id: "older")
+        navigation.open(id: "older", accountGeneration: 0)
+        await navigation.resolve(accountGeneration: 0, signedIn: true, store: store) { _ in
+            store.openEditor(); store.draft?.title = "在加载时新写的草稿"; return item
+        }
+        #expect(navigation.pendingID == item.id && store.draft?.title == "在加载时新写的草稿")
+    }
     @Test func referenceIsSingleReadOnlyID() async throws {
         for invalid in ["synapse://todos/abc?completed=true", "synapse://todos/abc#x", "synapse://todos/a/b", "synapse://todos/a%2Fb", "synapse://todos/", "synapse://todos/abc/", "synapse://todos/%61bc"] {
             #expect(TodoReference.id(in: invalid) == nil)

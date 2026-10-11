@@ -4,6 +4,39 @@ import Testing
 
 @MainActor
 struct TodoStoreTests {
+    @Test func lostReceiptCanRetryTheSameIntentAfterItsReminderTime() async throws {
+        let fixture = TodoTestFixture(); defer { fixture.clear() }
+        let store = TodoStore(), before = Date(timeIntervalSince1970: 4_000_000_020)
+        store.openEditor(); store.draft?.title = "报告"; store.draft?.reminder = .custom
+        store.draft?.customRemindAt = before.addingTimeInterval(60)
+        let original = try #require(store.draft)
+        fixture.transport.enqueue(.failure(.networkConnectionLost))
+        do { _ = try await store.save(original, using: fixture.api, now: before); Issue.record("lost response must fail") }
+        catch { #expect(!store.isSaving && store.draft?.clientRequestId == original.clientRequestId) }
+        let after = before.addingTimeInterval(61), retry = try #require(store.draft)
+        #expect(retry.validationMessage(now: after) == nil)
+        #expect(retry.validationMessage(now: before.addingTimeInterval(86_400)) != nil)
+        var changed = retry; changed.note = "新的意图"
+        #expect(changed.validationMessage(now: after) != nil)
+        fixture.transport.enqueue(.json(201, TodoTestFixture.itemJSON()), .json(200, TodoTestFixture.pageJSON([])))
+        _ = try await store.save(retry, using: fixture.api, now: after)
+        #expect(fixture.transport.requests[0].body == fixture.transport.requests[1].body)
+        #expect(store.draft == nil)
+    }
+
+    @Test func offlineSaveFailsAndRequiresAnExplicitRetry() async throws {
+        let fixture = TodoTestFixture(); defer { fixture.clear() }
+        let store = TodoStore(); store.openEditor(); store.draft?.title = "报告"
+        let original = try #require(store.draft)
+        fixture.transport.enqueue(.failure(.notConnectedToInternet))
+        do { _ = try await store.save(original, using: fixture.api); Issue.record("offline save must fail") }
+        catch { #expect(!store.isSaving && store.draft?.clientRequestId == original.clientRequestId) }
+        fixture.transport.enqueue(.json(201, TodoTestFixture.itemJSON()), .json(200, TodoTestFixture.pageJSON([])))
+        await Task.yield()
+        #expect(fixture.transport.requests.count == 1)
+        _ = try await store.save(try #require(store.draft), using: fixture.api)
+        #expect(fixture.transport.requests[0].body == fixture.transport.requests[1].body)
+    }
     @Test func sameAccountReloginRejectsLateResult() async throws {
         let fixture = TodoTestFixture(); defer { fixture.clear() }
         let store = TodoStore()

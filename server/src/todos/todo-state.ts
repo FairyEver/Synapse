@@ -6,5 +6,6 @@ export function nextTodoReminderState(fields: NormalizedTodoFields, current: (No
   const reminderGeneration = current ? current.reminderGeneration + Number(changed) : 1
   if (!fields.remindAt) return { reminderGeneration, reminderStatus: "none" }
   if (!changed && (current?.reminderStatus === "sent" || current?.reminderStatus === "expired")) return { reminderGeneration, reminderStatus: current.reminderStatus }
+  if (!changed && !completedAt && current?.reminderStatus === "pending") return { reminderGeneration, reminderStatus: "pending" }
   return { reminderGeneration, reminderStatus: completedAt ? "cancelled" : fields.remindAt > now ? "pending" : "expired" }
 }

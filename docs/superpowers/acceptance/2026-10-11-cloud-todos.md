@@ -13,15 +13,34 @@
 | 桌面完成 / 全部恢复、失败草稿、撤销冲突与目标 | 组件、hooks、System App / 窗口和通知测试 | 已运行，通过；不代表三宿主外观验收 |
 | iOS 请求与状态 | URLProtocol 的六方法、401 同 UUID、null / absent、身份与筛选交错、撤销及时间测试 | 测试包已构建；未执行原生断言 |
 | iOS 路由与编辑 | TodoNavigation / TodoDraft、既有通知 destination / deep-link 回归 | 测试包已构建；未执行原生断言 |
+| 待办 Swift 状态及传输策略 | macOS 命令行编译生产 Foundation / Observation 源码，API 替身模拟失败与恢复 | 已运行，通过；不能代替真实 iOS URLSession / UI |
 | 最低系统与架构 | `xcodebuild build-for-testing`，generic iOS Simulator，iOS 18.0 | arm64 / x86_64 构建通过；不启动模拟器 |
 
 原服务器全量基线有两项既有管理员认证测试失败（`request.get is not a function`）；待办专项不包含这两项，没有修改它们。
 
-Task 7 集成验证：shared 全量 **255/255**，服务端待办与通知 **71/71**，桌面待办及认证 / 通知 / 注册回归 **344/344**，真实 PostgreSQL **20/20**；server / desktop typecheck、IPC codegen、hard constraints 均通过。固定 JSON 夹具由 shared、真实服务端 DTO 映射、桌面严格 schema 共同校验；shared 还检查 Swift 内嵌夹具字段和值完全相同。iOS 的实际 API 解码断言已加入测试包，再次 `build-for-testing` 通过，未执行原生测试。
+Task 7 集成验证：shared 全量 **255/255**，服务端待办与通知 **73/73**，桌面待办及认证 / 通知 / 注册回归 **350/350**，真实 PostgreSQL **21/21**；server / desktop typecheck、IPC codegen、hard constraints 均通过。固定 JSON 夹具由 shared、真实服务端 DTO 映射、桌面严格 schema 共同校验；shared 还检查 Swift 内嵌夹具字段和值完全相同。iOS 的实际 API 解码断言已加入测试包，再次 `build-for-testing` 通过，未执行原生测试。
 
 本轮从新编译的桌面代码生成 arm64 本地检查包，`check:packaged-asar` 通过：27633 个 packed、1599 个 unpacked 文件。检查包含待办六个运行入口、shared ESM / CJS 文件、包内 CJS / schema 实际解析及两份待办 Skill 指南；既有 JSON Repair、文档提取、HTML Worker 与 Terminal PTY 冒烟也通过。这些检查只使用 Node 模式，不启动 Synapse 界面。
 
 本地依赖由既有锁文件离线安装；复用同版本 Electron / node-pty 二进制并恢复缺失的忽略安装文件。复用的 Electron 框架结构导致本地 ad-hoc 应用签名失败，因此只在忽略的检查配置中跳过应用签名 / 公证，保留已签名的原生组件。正式打包配置未变；此包不作为发布包，不证明分发签名、公证或其他架构发布。
+
+## 独立审查及修复
+
+一次独立审查覆盖七阶段完整 diff（153 个文件，36b3ffe1d..3b0c513e4），报告 0 Critical、7 Important、0 Minor。根代理按用户影响确认七项均需修复，完成一次修复并逐项 RED→GREEN；没有第二次审查，以下是修复与回归结果。
+
+| 发现 | 修复与证据 |
+| --- | --- |
+| 账号待办可能被响应缓存写入本机 | HTTP 成功 / 校验 / 归属 / 鉴权响应均 private, no-store；iOS ephemeral 传输禁缓存。真实 HTTP 及生产策略 CLI 回归通过；原生 URLSession 断言已编译 |
+| 到期后、扫描前编辑文字导致提醒失效 | 同代待触发状态继续参与扫描；纯状态及真实 PostgreSQL 修改后扫描回归通过 |
+| 丢失回执后提醒时刻已过，iOS 阻止原请求重试 | 记录首次尝试的原 payload / UUID，24 小时内可显式重试；新意图仍校验。生产 Swift 草稿 / Store CLI 回归通过，原生测试已编译 |
+| 桌面重新读取迟到覆盖新草稿 | 按编辑修订归属拒绝迟到结果；关闭重开 / 继续修改回归通过 |
+| 新定位目标覆盖两端未保存内容 | 保存或放弃草稿后才消耗目标，期间迟到的目标也保留；桌面 hook / 真实组件与 Swift Navigation CLI 回归通过 |
+| 桌面夏令时回拨重复小时改变原 UTC | 未修改的日期字段使用服务器原值；完整 editor.save 仅改文字回归通过 |
+| iOS 离线提交等待连接恢复后自动发送 | 待办及其刷新禁连接等待；不能跟随背景认证等待队列。生产传输策略 / Store CLI 回归通过，原生离线测试已编译 |
+
+通知 HTTP 额度测试首次集成运行发生一次 socket hang up；单独 9/9、随后完整待办与通知 73/73 通过，没有修改或屏蔽该测试。原生编译包装器曾因 1 MiB 输出上限中断，扩大检查脚本的输出缓冲后完整 build-for-testing 通过；不算作原生断言已执行。
+
+未遗留 Critical / Important，Deferred Minor：无。设备、分发、物理 APNs 恰好一次及非目标边界保持原批准范围。
 
 ## 原生界面与跨端矩阵
 

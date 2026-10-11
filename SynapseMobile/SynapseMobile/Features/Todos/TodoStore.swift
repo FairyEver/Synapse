@@ -87,14 +87,17 @@ final class TodoStore {
         } catch { if current(account) { editorError = TodoText.errorMessage(error) } }
     }
 
-    func save(_ draft: TodoDraft, using api: APIClient) async throws -> TodoItemDto {
+    func save(_ draft: TodoDraft, using api: APIClient, now: Date = Date()) async throws -> TodoItemDto {
         let key = draft.id ?? "new", account = accountGeneration
         guard !isSaving, !writingIDs.contains(key) else { throw busyError() }
-        if let message = draft.validationMessage() {
+        if let message = draft.validationMessage(now: now) {
             editorError = message
             throw APIError(status: 400, code: "TODO_INVALID_DRAFT", message: message)
         }
         isSaving = true; writingIDs.insert(key); editorError = nil
+        if self.draft?.presentationID == draft.presentationID && self.draft?.clientRequestId == draft.clientRequestId {
+            self.draft?.recordSubmission(now: now)
+        }
         defer { if current(account) { isSaving = false; writingIDs.remove(key) } }
         do {
             let item: TodoItemDto

@@ -50,6 +50,22 @@ describe("todo reminder real transaction races", () => {
     }
   })
   const create = (remindAt = instant) => service.create(owner, { title: "提醒标题", note: "私密备注", reminder: "custom", remindAt, clientRequestId: randomUUID() })
+  it("editing a due reminder before the worker scans still delivers the updated title once", async () => {
+    const item = await create()
+    const afterDue = new Date("2099-06-02T08:00:05Z")
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(afterDue)
+    try {
+      const edited = await service.update(owner, item.id, { title: "刚修改的标题", note: "仍为私密备注", expectedVersion: 1, clientRequestId: randomUUID() })
+      expect(edited.reminderStatus).toBe("pending")
+      await worker.scanDue(afterDue)
+      await worker.scanDue(afterDue)
+      const records = await prisma.userNotification.findMany({ where: { userId: owner } })
+      expect(records).toHaveLength(1)
+      expect(records[0]).toMatchObject({ body: "刚修改的标题", sourceKey: "todo:" + item.id + ":1" })
+      expect((await service.get(owner, item.id)).reminderStatus).toBe("sent")
+    } finally { vi.useRealTimers() }
+  })
   it("mutation replay and unchanged completion publish no new event", async () => {
     const input = { title: "去重", clientRequestId: randomUUID() }
     const item = await service.create(owner, input)

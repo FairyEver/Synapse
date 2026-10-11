@@ -45,7 +45,7 @@ final class TodoNavigation {
     }
     func resolve(accountGeneration: Int, signedIn: Bool, store: TodoStore,
                  load: (String) async throws -> TodoItemDto) async {
-        guard signedIn, !isResolving, !store.isSaving, var target else { return }
+        guard signedIn, !isResolving, !store.isSaving, store.draft == nil, var target else { return }
         if target.waitingForLogin { target.account = accountGeneration; target.waitingForLogin = false; self.target = target }
         guard target.account == accountGeneration else { cancel(); return }
         isResolving = true; errorMessage = nil
@@ -53,13 +53,14 @@ final class TodoNavigation {
         do {
             let item = try await load(target.id)
             guard self.target?.request == target.request, self.target?.account == accountGeneration, !Task.isCancelled else { return }
-            guard !store.isSaving else { return }
+            guard !store.isSaving, store.draft == nil else { return }
             guard item.id == target.id else { throw APIError(status: 0, code: "decode", message: "事项无法读取") }
             if item.isCompleted { store.selectFilter(.all) }
             store.openEditor(item)
             self.target = nil; isResolving = false
         } catch {
             guard self.target?.request == target.request, self.target?.account == accountGeneration, !Task.isCancelled else { return }
+            guard store.draft == nil else { return }
             errorMessage = TodoText.errorMessage(error)
         }
     }

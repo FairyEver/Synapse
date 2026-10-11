@@ -34,6 +34,8 @@ Completion cancels pending reminders. Restoration does not resend sent/past remi
 
 Every write has a UUID clientRequestId. Retry a lost response with the exact same action, ID, payload, version and UUID. Memory only, no persistent queue or automatic replay across 24h. A new intent is a new operation/UUID.
 
+Within the 24h receipt window, an exact retry keeps its original reminder instant even if that instant has just passed. Do not change the payload or mint a new UUID to bypass future-time validation. New or revised reminder configurations must still be in the future.
+
 409 TODO_VERSION_CONFLICT: reread and reconcile intended changes with new data, never blindly overwrite. Reminder triggers also advance version. A reconciled new operation uses the new version and a new UUID. 409 TODO_REQUEST_CONFLICT: UUID used for different parameters; report failure, do not reuse it for a changed operation.
 
 Report network/auth/validation/permission failures truthfully. List 404 means server lacks Todo support, not empty list. Get 404 means deleted/unavailable to current account. Do not disclose another account's existence or try another identity.

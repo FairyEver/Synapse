@@ -5,6 +5,8 @@ nonisolated struct TodoDraft {
     let expectedVersion: Int?
     let presentationID = UUID()
     private let original: TodoItemDto?
+    private var submittedPayload: Data?
+    private var firstSubmissionAt: Date?
     var clientRequestId = UUID()
     var title: String { didSet { if title != oldValue { clientRequestId = UUID() } } }
     var note: String { didSet { if note != oldValue { clientRequestId = UUID() } } }
@@ -55,8 +57,25 @@ nonisolated struct TodoDraft {
         if (reminder == .atDue || reminder == .beforeDue) && dueAt == nil { return "请选择截止时间" }
         if reminder == .beforeDue && ![10, 60, 1440].contains(offsetMinutes) { return "请选择提前时间" }
         if reminder == .custom && customRemindAt == nil { return "请选择提醒时间" }
-        if changesReminder, let remindAt = effectiveRemindAt, remindAt <= now { return "提醒时间必须晚于现在" }
+        if changesReminder, let remindAt = effectiveRemindAt, remindAt <= now, !isReceiptRetry(now: now) { return "提醒时间必须晚于现在" }
         return nil
+    }
+
+    mutating func recordSubmission(now: Date) {
+        let payload = mutationPayload
+        if payload != submittedPayload || firstSubmissionAt == nil {
+            submittedPayload = payload; firstSubmissionAt = now
+        }
+    }
+    private func isReceiptRetry(now: Date) -> Bool {
+        guard let submittedPayload, let firstSubmissionAt else { return false }
+        return now >= firstSubmissionAt && now.timeIntervalSince(firstSubmissionAt) < 86_400
+            && mutationPayload == submittedPayload
+    }
+    private var mutationPayload: Data? {
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        if let input = updateInput() { return try? encoder.encode(input) }
+        return try? encoder.encode(createInput())
     }
 
     func createInput() -> TodoCreateInput {
