@@ -3,6 +3,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseNotification } from "@/types/notification-center"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "@/generated/deployment-config.generated"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -10,9 +11,11 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(), count: vi.fn(), read: vi.fn(), delete: vi.fn(), deleteAll: vi.fn(), readAll: vi.fn(),
   mailRequest: vi.fn(), info: vi.fn(), warn: vi.fn(),
   openSystemApp: vi.fn(),
+  openExternal: vi.fn(),
+  accountState: { status: "authenticated", profile: { user: { id: "reader" } } },
 }))
 
-vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
+vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: mocks.accountState }) }))
 vi.mock("@/app-shell/notifications", () => ({ useAppNotifications: () => ({ info: mocks.info }) }))
 vi.mock("@/app-shell/logging", () => ({ createRendererLogger: () => ({ warn: mocks.warn }) }))
 vi.mock("@/app-shell/terminal-navigation", () => ({ requestOpenTerminalSession: vi.fn() }))
@@ -21,6 +24,7 @@ vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => null,
   requireBridgeDomain: (domain: string) => {
     if (domain === "apps") return { openSystemApp: mocks.openSystemApp }
+    if (domain === "shell") return { openExternal: mocks.openExternal }
     if (domain !== "account") throw new Error(`Unexpected domain: ${domain}`)
     return { notifications: { list: mocks.list, count: mocks.count, read: mocks.read, delete: mocks.delete, deleteAll: mocks.deleteAll, readAll: mocks.readAll } }
   },
@@ -46,6 +50,8 @@ function deferred<T>() {
 }
 
 beforeEach(async () => {
+  mocks.accountState = { status: "authenticated", profile: { user: { id: "reader" } } }
+  mocks.openExternal.mockReset().mockResolvedValue(undefined)
   mocks.list.mockReset().mockResolvedValue({ items: [notice], nextCursor: null })
   mocks.count.mockReset().mockResolvedValue({ unread: 1 })
   mocks.read.mockReset().mockResolvedValue({ ok: true })
@@ -73,6 +79,39 @@ afterEach(async () => {
 })
 
 describe("useMessageCenter", () => {
+  it("opens discussion notices using trusted origin and ID instead of a cached URL", async () => {
+    const discussion = { ...notice, source: "drive-discussion", url: "https://outside.example/forged" } as SynapseNotification
+    await act(async () => { await current.navigate(discussion) })
+    expect(mocks.read).toHaveBeenCalledWith({ id: "n1" })
+    expect(mocks.openExternal).toHaveBeenCalledWith(new URL("/notifications/n1/open", SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl).toString())
+    expect(mocks.openExternal.mock.calls[0]?.[0]).not.toContain("outside.example")
+  })
+  it("account change while marking a discussion read cancels opening", async () => {
+    const reading = deferred<unknown>()
+    mocks.read.mockReturnValueOnce(reading.promise)
+    let opening!: Promise<void>
+    await act(async () => { opening = current.navigate({ ...notice, source: "drive-discussion", url: "https://outside.example" } as SynapseNotification) })
+    await act(async () => { mocks.accountState = { status: "authenticated", profile: { user: { id: "other" } } }; root?.render(<Harness />) })
+    await act(async () => { reading.resolve({ ok: true }); await opening })
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+  })
+  it("closing the center cancels a pending discussion navigation", async () => {
+    const reading = deferred<unknown>(); mocks.read.mockReturnValueOnce(reading.promise)
+    let opening!: Promise<void>
+    await act(async () => { opening = current.navigate({ ...notice, source: "drive-discussion" } as SynapseNotification) })
+    await act(async () => current.changeOpen(false))
+    await act(async () => { reading.resolve({ ok: true }); await opening })
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+  })
+  it("logging out and back into the same account invalidates the old opening request", async () => {
+    const reading = deferred<unknown>(); mocks.read.mockReturnValueOnce(reading.promise)
+    let opening!: Promise<void>
+    await act(async () => { opening = current.navigate({ ...notice, source: "drive-discussion" } as SynapseNotification) })
+    await act(async () => { mocks.accountState = { status: "unauthenticated" } as never; root?.render(<Harness />) })
+    await act(async () => { mocks.accountState = { status: "authenticated", profile: { user: { id: "reader" } } }; root?.render(<Harness />) })
+    await act(async () => { reading.resolve({ ok: true }); await opening })
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+  })
   it("marks a Todo notice read and opens its read-only target", async () => {
     const reminder: SynapseNotification = { ...notice, source: "todo-reminder", targetId: "todo-1" }
     mocks.openSystemApp.mockClear().mockResolvedValue(undefined)

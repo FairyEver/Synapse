@@ -44,6 +44,22 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear(); mockCenter.changeSource.mockClear() })
 
 describe("MessageCenter", () => {
+  it.each([
+    ["annotation", "created", "查看评论"], ["message", "created", "查看留言"],
+    ["message", "replied", "查看回复"], [undefined, undefined, "查看文档"],
+  ])("shows the discussion action for %s/%s", async (kind, action, label) => {
+    const previous = mockCenter.selected
+    mockCenter.selected = { ...previous, source: "drive-discussion", url: null, driveDiscussion: kind ? { kind, action } : undefined } as never
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host)
+    try {
+      await act(async () => root.render(<MessageCenter />))
+      expect(document.body.textContent).toContain("云盘")
+      const button = [...document.querySelectorAll("button")].find((button) => button.textContent === label)
+      expect(button).toBeDefined()
+      await act(async () => button?.click())
+      expect(mockCenter.navigate).toHaveBeenCalledWith(mockCenter.selected)
+    } finally { await act(async () => root.unmount()); mockCenter.selected = previous }
+  })
   it("defaults to all sources and offers each existing notification category", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -55,7 +71,7 @@ describe("MessageCenter", () => {
     await act(async () => { trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })) })
     const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')]
     expect(options.map((option) => option.textContent)).toEqual([
-      "全部", "系统通知", "Agent 待回复", "Agent 回复完成", "站内信", "录音转写", "待办提醒", "外部通知",
+      "全部", "系统通知", "Agent 待回复", "Agent 回复完成", "站内信", "录音转写", "待办提醒", "外部通知", "文档互动",
     ])
     await act(async () => { options.find((option) => option.textContent === "Agent 待回复")?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })) })
     expect(mockCenter.changeSource).toHaveBeenCalledWith("terminal-attention")

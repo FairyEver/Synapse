@@ -1,4 +1,4 @@
-import type { DriveDiscussionNotificationMetadata } from "@synapse/shared"
+import type { DriveDiscussionNotificationMetadata } from "@synapse/shared" with { "resolution-mode": "import" }
 
 export type SynapseNotification = {
   readonly driveDiscussion?: DriveDiscussionNotificationMetadata

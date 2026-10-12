@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { NotificationSource } from "@synapse/shared"
+import { getDriveDiscussionActionLabel, type NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
 import { useMessageCenter, type MessageFilter, type MessageSourceFilter } from "@/app-shell/hooks/use-message-center"
@@ -32,6 +32,7 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
 }
 
 function sourceName(item: SynapseNotification): string {
+  if (item.source === "drive-discussion") return "云盘"
   if (item.source === "todo-reminder") return "待办事项"
   if (item.source === "mail") return "站内信"
   if (item.source.startsWith("terminal-")) return "终端"
@@ -61,6 +62,7 @@ function recipientNames(addresses: MailAddress[] | undefined, people: MailPerson
 }
 
 function primaryAction(item: SynapseNotification): string | null {
+  if (item.source === "drive-discussion") return getDriveDiscussionActionLabel(item.driveDiscussion)
   if (item.source === "todo-reminder" && item.targetId) return "查看待办"
   if (item.source === "mail" && item.targetId) return "在站内信中打开"
   if (isPending(item) && item.targetId) return "前往处理"

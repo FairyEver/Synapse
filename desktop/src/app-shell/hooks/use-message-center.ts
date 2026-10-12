@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import type { NotificationSource } from "@synapse/shared"
+import { buildDriveDiscussionNotificationOpenUrl, type NotificationSource } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -18,6 +18,18 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const { state } = useAccount()
   const notifications = useAppNotifications()
   const userId = state.status === "authenticated" ? state.profile.user.id : null
+  const identity = `${state.status}:${userId ?? ""}`
+  const identityRef = useRef(identity)
+  identityRef.current = identity
+  const navigationId = useRef(0)
+  useLayoutEffect(() => { navigationId.current += 1 }, [identity])
+  useEffect(() => {
+    const off = getSynapseBridge()?.account.state.onChanged((event) => {
+      const next = `${event.state.status}:${event.state.status === "authenticated" ? event.state.profile.user.id : ""}`
+      if (next !== identityRef.current) { identityRef.current = next; navigationId.current += 1 }
+    })
+    return () => { navigationId.current += 1; off?.() }
+  }, [])
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState<MessageFilter>("all")
   const [source, setSource] = useState<MessageSourceFilter>("all")
@@ -119,6 +131,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }, [refresh, userId])
 
   const changeOpen = (next: boolean) => {
+    navigationId.current += 1
     setOpen(next)
     if (next) void refresh()
     else setSelected(null)
@@ -126,6 +139,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
 
   const changeFilter = (next: MessageFilter) => {
     if (next === filter) return
+    navigationId.current += 1
     refreshId.current += 1
     setFilter(next)
     setItems([])
@@ -135,6 +149,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
 
   const changeSource = (next: MessageSourceFilter) => {
     if (next === source) return
+    navigationId.current += 1
     refreshId.current += 1
     setSource(next)
     setItems([])
@@ -143,6 +158,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }
 
   const openItem = async (item: SynapseNotification) => {
+    navigationId.current += 1
     setSelected(item)
     try {
       if (!item.readAt) await requireBridgeDomain("account").notifications.read({ id: item.id })
@@ -155,8 +171,16 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }
 
   const navigate = async (item: SynapseNotification) => {
+    const requestId = ++navigationId.current
+    const expectedIdentity = identity
     try {
-      if (item.source.startsWith("terminal-") && item.targetId) {
+      if (item.source === "drive-discussion") {
+        if (!userId) return
+        const url = buildDriveDiscussionNotificationOpenUrl(SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl, item.id)
+        await requireBridgeDomain("account").notifications.read({ id: item.id })
+        if (requestId !== navigationId.current || identityRef.current !== expectedIdentity) return
+        await requireBridgeDomain("shell").openExternal(url)
+      } else if (item.source.startsWith("terminal-") && item.targetId) {
         requestOpenTerminalSession({ requestId: crypto.randomUUID(), sessionId: item.targetId })
         setOpen(false)
       } else if (item.source === "meeting-transcription" && item.targetId) {
@@ -175,6 +199,12 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
         if (url.protocol === "https:") await requireBridgeDomain("shell").openExternal(url.toString())
       }
     } catch (cause) {
+      if (item.source === "drive-discussion") {
+        if (requestId !== navigationId.current || identityRef.current !== expectedIdentity) return
+        logger.warn("Drive discussion notification could not be opened.", { notificationId: item.id, reason: "OPEN_FAILED" })
+        setError("无法打开消息目标")
+        return
+      }
       logger.warn("Message target could not be opened.", { cause })
       setError("无法打开消息目标")
     }
@@ -295,6 +325,6 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     selected, mail, mailLoading, mailError, loading, error,
     changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
-    closeDetail: () => setSelected(null),
+    closeDetail: () => { navigationId.current += 1; setSelected(null) },
   }
 }
