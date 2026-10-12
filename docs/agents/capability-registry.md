@@ -61,6 +61,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 固定例外：
 
+- Todos 的中文 MCP 检索覆盖「待办」「事项」「完成」及六类常用操作；仅补齐既有检索词表，仍为 6 个 capability / MCP 索引，公开工具保持 `search` 与 `invoke`，参数、系统 Skill 指南和其它注册表面不变。
+
 - Todos 的启动台与 Dock 共用内置 PNG 图标，深浅外观均保持原图配色，不再对图标反色。此资源替换不改变 System App、Dock、Workflow、Automation、MCP 或 Deep Link 注册数量；Todos 仍提供 6 个 MCP 能力，参数与系统 Skill 指南不变。
 
 - Agent 顶部的「在 Claude Code 中继续」及转交后历史末尾的「打开 Claude Code」复用 UI 专用 `app.agent.operation.resume_claude_code_terminal` IPC 接续原生会话。转交后原对话永久只读，MCP inspect 返回 `controllable=false`，消息及其它控制请求拒绝；CLI 新消息不回流。终端内部新增 PTY 启动前保存关联的回调，不新增公开 capability。Agent 保持 11 个 MCP 工具，Terminal 保持 49 个；System App、Dock、Workflow、Automation 和 Deep Link 数量均不变。

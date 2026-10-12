@@ -280,6 +280,8 @@ describe("SynapseSkillService", () => {
       "terminal/api-reference.md",
       "terminal/examples.md",
       "terminal/index.md",
+      "todos/api-reference.md",
+      "todos/index.md",
       "workflow/api-reference.md",
       "workflow/index.md",
     ])

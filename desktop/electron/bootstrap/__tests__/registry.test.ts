@@ -88,6 +88,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       [
         "core.action-runtime",
         "agent.conversation-window-service",
+        "app.todos.cloud",
         "core.agent-conversation-control",
         "core.agent-conversation-navigation",
         "core.agent-reference-actions",
@@ -385,6 +386,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.execution-isolation",
     ])
     expect(byId.get("core.database")?.dependsOn).toEqual([
+      "app.todos.cloud",
       "core.config",
       "core.connectors",
       "core.event-bus",

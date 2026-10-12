@@ -57,10 +57,12 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["供应商", "provider"],
   ["设置", "settings"],
   ["扩展", "extend"],
+  ["待办", "todos"],
 
   // ---------------- 名词：drive ----------------
   ["文件", "item"],
   ["条目", "item"],
+  ["事项", "item"],
   ["文件夹", "folder"],
   ["目录树", "tree"],
   ["版本", "version"],
@@ -272,6 +274,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["停下", "stop"],
   ["停用", "disable"],
   ["启用", "enable"],
+  ["完成", "completed"],
   ["暂停", "pause"],
   ["恢复", "resume"],
   ["重新扫描", "rescan"],

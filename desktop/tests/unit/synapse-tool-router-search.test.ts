@@ -97,6 +97,12 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "清空已发送站内信", expect: "app_mail_message_delete_all" },
   { intent: "查看站内信可选组织", expect: "app_mail_organization_list" },
   { intent: "查看站内信组织成员", expect: "app_mail_organization_members_list" },
+  { intent: "我的待办事项有哪些", expect: "app_todos_item_list" },
+  { intent: "查询这个待办事项", expect: "app_todos_item_get" },
+  { intent: "新增一个待办事项", expect: "app_todos_item_create" },
+  { intent: "修改待办事项标题", expect: "app_todos_item_update" },
+  { intent: "把这条待办事项标记完成", expect: "app_todos_item_set_completed" },
+  { intent: "删除这条待办事项", expect: "app_todos_item_delete" },
 ]
 
 /**

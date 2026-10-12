@@ -100,6 +100,21 @@ const SYNTHETIC_DOCUMENT_EXTRACTION_FILES: Readonly<Record<string, string>> = {
   "node_modules/xmlbuilder/package.json": "{}\n",
 }
 
+const SYNTHETIC_TODO_FILES = {
+  service: "module.exports = {}\n",
+  ipc: "module.exports = {}\n",
+  dispatcher: "module.exports = {}\n",
+  schema: "exports.todoPageSchema = { parse: value => { if (!Array.isArray(value.items) || value.nextOffset !== null) throw new Error('Invalid Todo page'); return value } }\n",
+  capability: "exports.TODOS_CAPABILITY_IDS = ['list', 'get', 'create', 'update', 'set_completed', 'delete'].map(action => 'app.todos.item.' + action)\n",
+  manifest: "exports.todosManifest = { id: 'todos' }\n",
+  sharedPackage: JSON.stringify({
+    name: "@synapse/shared",
+    exports: { "./todo-contracts": { require: "./dist/todo-contracts.cjs" } },
+  }),
+  todos: "export {}\n",
+  contracts: "exports.countTodoCodePoints = value => Array.from(value).length; exports.parseTodoReference = value => new URL(value).pathname.slice(1)\n",
+}
+
 type DocumentExtractionContentOverrides = Readonly<Record<string, string>>
 
 function documentExtractionFiles(
@@ -218,6 +233,7 @@ interface CreateAsarBufferOptions {
   readonly includePreloadBundle?: boolean
   readonly includeScriptRuntime?: boolean
   readonly includeSharedPackage?: boolean
+  readonly includeTodos?: boolean
   readonly includeWorkspaceFiles?: boolean
   readonly includeWorkspaceFilesGitConfig?: boolean
   readonly includeMobileFileConstants?: boolean
@@ -411,6 +427,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includePreloadBundle = true,
     includeScriptRuntime = true,
     includeSharedPackage = true,
+    includeTodos = true,
     includeWorkspaceFiles = true,
     includeWorkspaceFilesGitConfig = true,
     includeMobileFileConstants = true,
@@ -483,6 +500,17 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   if (includeScriptRuntime) {
     offset += nodeCliRunner.length
   }
+  const todoBuffers = Object.fromEntries(
+    Object.entries(SYNTHETIC_TODO_FILES)
+      .map(([name, content]) => [name, Buffer.from(content, "utf8")]),
+  ) as Record<keyof typeof SYNTHETIC_TODO_FILES, Buffer>
+  const todoNodes = Object.fromEntries(
+    Object.entries(todoBuffers).map(([name, content]) => {
+      const node = createPackedFileNode(offset, content)
+      if (includeTodos) offset += content.length
+      return [name, node]
+    }),
+  ) as Record<keyof typeof SYNTHETIC_TODO_FILES, ReturnType<typeof createPackedFileNode>>
   const jsonRepairPackageJson = JSON.parse(
     SYNTHETIC_JSON_REPAIR_FILES["node_modules/repair-json-stream/package.json"],
   )
@@ -579,10 +607,26 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
             },
           },
-          ...(includeTextExtraction || includeHtmlGeneration || includeScriptRuntime
+          ...(includeTextExtraction || includeHtmlGeneration || includeScriptRuntime || includeTodos
             ? {
                 "app-capabilities": {
                   files: {
+                    ...(includeTodos ? {
+                      todos: {
+                        files: {
+                          main: { files: {
+                            "service.js": todoNodes.service,
+                            "ipc.js": todoNodes.ipc,
+                            "dispatcher.js": todoNodes.dispatcher,
+                          } },
+                          shared: { files: {
+                            "schema.js": todoNodes.schema,
+                            "capability.js": todoNodes.capability,
+                            "manifest.js": todoNodes.manifest,
+                          } },
+                        },
+                      },
+                    } : {}),
                     ...(includeTextExtraction
                       ? {
                           "text-extractor": {
@@ -633,8 +677,13 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
             files: {
               shared: {
                 files: {
+                  ...(includeTodos ? { "package.json": todoNodes.sharedPackage } : {}),
                   dist: {
                     files: {
+                      ...(includeTodos ? {
+                        "todos.js": todoNodes.todos,
+                        "todo-contracts.cjs": todoNodes.contracts,
+                      } : {}),
                       ...(includeSharedPackage
                         ? {
                             "index.js": sharedIndexNode,
@@ -777,6 +826,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     ...(includeScriptRuntime
       ? [scriptRuntimeSmoke, scriptRuntimeSmokeBootstrap, chromiumWorkerRunner, nodeCliRunner]
       : []),
+    ...(includeTodos ? Object.values(todoBuffers) : []),
     ...(includeJsonRepair ? Object.values(jsonRepairBuffers) : []),
   ])
 }
@@ -826,6 +876,8 @@ describe("packaged asar verification", () => {
   async function writeRequiredExtraResourceFixtures(resourcesPath: string) {
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "SKILL.md"], "# Synapse Skill\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "index.md"], "# Todos\n")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "api-reference.md"], "# Todo API\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
   }
 
@@ -926,7 +978,8 @@ describe("packaged asar verification", () => {
     { options: { includeWorkspaceFiles: false }, missing: "mobile-workspace-files-service.js" },
     { options: { includeWorkspaceFilesGitConfig: false }, missing: "mobile-workspace-files-git-config.js" },
     { options: { includeMobileFileConstants: false }, missing: "mobile-live-constants.cjs" },
-  ])("rejects a package missing the mobile workspace runtime: $missing", async ({ options, missing }) => {
+    { options: { includeTodos: false }, missing: "Todo capability is missing from packed app.asar" },
+  ])("rejects a package missing a required runtime: $missing", async ({ options, missing }) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
       const resourcesPath = path.join(root, "resources")

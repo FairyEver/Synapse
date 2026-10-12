@@ -170,6 +170,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreDatabaseDescriptor.id).toBe("core.database")
     expect(coreDatabaseDescriptor.criticality).toBe("degraded")
     expect(coreDatabaseDescriptor.dependsOn).toEqual([
+      "app.todos.cloud",
       "core.config",
       "core.connectors",
       "core.event-bus",
