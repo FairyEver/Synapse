@@ -67,7 +67,7 @@ enum NotificationDestination {
             guard meta.action == "created" else { return "查看文档" }
             return meta.kind == "annotation" ? "查看评论" : "查看留言"
         }
-        return switch resolve(item) {
+        switch resolve(item) {
         case .route(.terminal): return "打开终端"
         case .route(.meeting): return "查看转写"
         case .route(.mail): return "查看站内信"
