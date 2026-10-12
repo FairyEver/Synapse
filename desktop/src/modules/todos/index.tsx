@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { TodoOpenRequest } from "../apps/types"
 import { useTodos } from "./use-todos"
 import { useTodoEditor } from "./use-todo-editor"
@@ -32,7 +33,7 @@ export function TodosModule({ openRequest, onOpenRequestConsumed }: { openReques
   const remove = async () => { if (!deleting || deleteLock.current) return; const identity = todos.generation; deleteLock.current = true; setDeleteBusy(true); try { await todos.remove(deleting); if (currentGeneration.current === identity) setDeleting(null) } catch (cause) { if (currentGeneration.current === identity) toast.error(todoErrorMessage(cause)) } finally { if (currentGeneration.current === identity) { deleteLock.current = false; setDeleteBusy(false) } } }
   const copy = async (item: TodoItemDto) => { try { await navigator.clipboard.writeText(`synapse://todos/${item.id}`); toast("ID 已复制") } catch { toast.error("复制失败") } }
   const undo = async () => { try { await todos.undoCompletion() } catch (cause) { toast.error(todoErrorMessage(cause)) } }
-  return <SystemAppWindowShell tabs={tabs} value={todos.filter} onValueChange={(filter) => { target.cancel(); todos.setFilter(filter) }} actions={<Button type="button" data-track="todos.new" onClick={create} disabled={!todos.authenticated || !todos.online}><Plus />新建待办</Button>}>
+  return <SystemAppWindowShell tabs={tabs} value={todos.filter} onValueChange={(filter) => { target.cancel(); todos.setFilter(filter) }} actions={<SystemAppTopBarActionButton type="button" data-track="todos.new" onClick={create} disabled={!todos.authenticated || !todos.online}><Plus data-icon="inline-start" />新建待办</SystemAppTopBarActionButton>}>
     <ScrollArea className="h-full"><div className="mx-auto max-w-4xl space-y-4 p-6">
       {!todos.authenticated ? <div className="flex items-center gap-3 text-sm"><span>登录后查看待办事项</span><Button type="button" onClick={() => void startLogin()}>登录</Button></div> : <>
         {(todos.error || target.error || !todos.online) && <div role="alert" className="flex items-center justify-between gap-3 text-sm text-destructive"><span>{target.error ?? todos.error ?? "连接失败，请重试"}</span><Button type="button" variant="outline" onClick={() => void (target.error ? target.retry() : todos.refresh())} disabled={todos.loading}>重试</Button></div>}

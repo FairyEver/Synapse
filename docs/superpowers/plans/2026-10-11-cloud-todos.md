@@ -188,7 +188,7 @@
 
 - [x] **Step 2：运行红灯。** `pnpm --filter @synapse/desktop run test src/modules/todos electron/bootstrap/__tests__/todos-protocol-handlers.test.ts`，预期缺页面 / 路由行为失败。
 - [x] **Step 3：实现数据与编辑 hooks。** 分开账号 generation、读取序号、筛选序号；订阅 onReset 立即清列表、草稿、撤销反馈与目标，不只比较 userId。进入页面、回到前台与 live 重连都补读。分页按 ID / version 合并，旧页面不能覆盖新数据。保存后重读当前数据；所有失败保留草稿；无网络阻止提交且不排队。完成撤销用成功回执版本，不自动跨冲突重放；删除确认具体标题，没有删除撤销。
-- [x] **Step 4：按已认可原型实现 UI。** 复用现有 SystemAppWindowShell / EmbeddedSystemAppShell，居中 tabs，标准尺寸新建。一张 Card 承载列表，行不再加卡片；必要空 / 错 / 加载状态、菜单和独立完成控件。Dialog 使用既有表单、日期与时间组合；日期辅助逻辑置于 todo-time。图标使用已有图标几何与主题语义，透明资源，不设计独立配色。
+- [x] **Step 4：按已认可原型实现 UI。** 复用现有 SystemAppWindowShell / EmbeddedSystemAppShell，居中 tabs，新建操作使用统一的 SystemAppTopBarActionButton 紧凑 ghost 按钮。一张 Card 承载列表，行不再加卡片；必要空 / 错 / 加载状态、菜单和独立完成控件。Dialog 使用既有表单、日期与时间组合；日期辅助逻辑置于 todo-time。图标使用已有图标几何与主题语义，透明资源，不设计独立配色。
 - [x] **Step 5：注册应用与目标。** id / namespace `todos`、用户可固定 Dock、默认不固定；主窗口与独立窗口均接同一内容，不重复顶栏。应用 open options 的 strict schema 仅允许 todos 携带 todoOpenRequest；现有窗口通过 EventBus 送新目标，新窗口按现有受控 query 初始化，preload / bridge 添加 UI-only `apps.onTodoOpenRequest`。深链严格解析一个 ID，所有账号 / 导航竞争复验；消息中心新增来源「待办提醒」与动作「查看待办」。桌面原生横幅继续由现有 System Notifier 单向呈现，不添加 click 回调或扩展其公开能力。
 - [x] **Step 6：运行绿灯。** 先运行 desktop `generate:ipc` 更新新增目标事件；Step 2、apps registry / system-app-header-architecture / system-app-window-app、apps IPC / system-app-window-service、message-center 与 use-message-center 专项测试、desktop typecheck、`check:ipc-codegen`、`check:hard-constraints` 通过。组件测试以可见操作断言，白卡片外观与三宿主检查列入 Task 7，不能仅靠 className 断言声称视觉已验收。
 - [x] **Step 7：同步 System App / 路由 / Dock 清单和发布说明并提交。** 摘要：`feat: 增加桌面云端待办应用与通知定位`。
