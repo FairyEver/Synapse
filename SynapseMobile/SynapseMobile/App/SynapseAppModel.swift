@@ -423,6 +423,7 @@ final class SynapseAppModel {
     /// 既有的「电脑的远程视图」定位不同，所以它不挂在 terminalStores 那一套里。
     let meetings = MeetingStore()
     let notifications = NotificationStore()
+    let todos = TodoStore()
 
     /// 云盘。
     ///
@@ -536,6 +537,8 @@ final class SynapseAppModel {
     func signIn(email address: String, password: String) async -> String? {
         do {
             try await apiClient.login(email: address, password: password)
+            accountGeneration += 1
+            todos.reset(accountGeneration: accountGeneration)
             email = address
             authState = .signedIn
             await startLiveSession()
@@ -571,6 +574,7 @@ final class SynapseAppModel {
         guard authState == .signedIn else { return }
         invalidateWorkspaceRequests()
         accountGeneration += 1
+        todos.reset(accountGeneration: accountGeneration)
         desktopPresenceGeneration = nil
         desktopPresenceRevision += 1
         authState = .restoring
@@ -654,6 +658,56 @@ final class SynapseAppModel {
     /// 录音列表。转写进行中时会自己刷新到出结果为止，由调用它的视图按需重复调用。
     func reloadMeetings() async {
         await meetings.load(using: apiClient)
+    }
+
+    // MARK: - Cloud todos
+
+    func reloadTodos() async {
+        guard authState == .signedIn else { return }
+        await todos.reload(using: apiClient)
+    }
+    func loadMoreTodos() async {
+        guard authState == .signedIn else { return }
+        await todos.loadMore(using: apiClient)
+    }
+    func getTodo(id: String) async throws -> TodoItemDto {
+        let account = accountGeneration
+        guard isCurrentAccount(account) else { throw APIError(status: 401, code: "unauthenticated", message: "请登录后使用待办事项") }
+        let item = try await apiClient.getTodo(id: id)
+        guard isCurrentAccount(account), !Task.isCancelled else { throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重试") }
+        return item
+    }
+    func saveTodo(_ draft: TodoDraft) async throws -> TodoItemDto {
+        guard authState == .signedIn else { throw APIError(status: 401, code: "unauthenticated", message: "请登录后使用待办事项") }
+        return try await todos.save(draft, using: apiClient)
+    }
+    @discardableResult
+    func submitTodoEditor() async -> Bool {
+        guard let draft = todos.draft, authState == .signedIn else { return false }
+        do { _ = try await saveTodo(draft); return true }
+        catch { return false } // TodoStore preserves the draft and publishes its inline error.
+    }
+    func completeTodo(_ item: TodoItemDto, completed: Bool) async {
+        guard authState == .signedIn else { return }
+        let account = accountGeneration
+        do { _ = try await todos.setCompleted(item, completed: completed, using: apiClient) }
+        catch { if isCurrentAccount(account) { notice(TodoText.errorMessage(error), tone: .failure) } }
+    }
+    func undoTodoCompletion() async {
+        guard authState == .signedIn else { return }
+        let account = accountGeneration
+        do { try await todos.undoCompletion(using: apiClient) }
+        catch { if isCurrentAccount(account) { notice(TodoText.errorMessage(error), tone: .failure) } }
+    }
+    func removeTodo(_ item: TodoItemDto) async -> Bool {
+        guard authState == .signedIn else { return false }
+        let account = accountGeneration
+        do { try await todos.remove(item, using: apiClient); return isCurrentAccount(account) }
+        catch { if isCurrentAccount(account) { notice(TodoText.errorMessage(error), tone: .failure) }; return false }
+    }
+    func reloadTodoEditor() async {
+        guard authState == .signedIn else { return }
+        await todos.reloadEditor(using: apiClient)
     }
 
     func reloadNotifications(filter: String = "all") async {
@@ -1040,6 +1094,8 @@ final class SynapseAppModel {
     func handleScenePhase(_ isActive: Bool) {
         guard authState == .signedIn else { return }
         if isActive {
+            let account = accountGeneration
+            Task { if self.isCurrentAccount(account) { await self.reloadTodos() } }
             // The sync and the re-attach both happen in onConnected, once the
             // socket can actually carry them.
             realtime.connect()
@@ -1262,8 +1318,15 @@ final class SynapseAppModel {
             guard let self else { return }
             Task { await self.reloadNotifications(filter: self.notifications.filter) }
         }
+        realtime.onTodosChanged = { [weak self] _ in
+            guard let self else { return }
+            let account = self.accountGeneration
+            Task { if self.isCurrentAccount(account) { await self.reloadTodos() } }
+        }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
+            let account = self.accountGeneration
+            Task { if self.isCurrentAccount(account) { await self.reloadTodos() } }
             if !self.hasCurrentDesktopPresence {
                 Task { await self.refreshDesktops() }
             }

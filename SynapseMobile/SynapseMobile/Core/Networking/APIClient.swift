@@ -40,6 +40,7 @@ struct APIError: Error, LocalizedError {
 /// never see a token.
 actor APIClient {
     private let session: URLSession
+    private let todoSession: URLSession
     private let tokens: TokenStore
     private let onCredentialsChanged: @Sendable () -> Void
 
@@ -51,6 +52,7 @@ actor APIClient {
     private var accessTokenExpiresAt: Date?
     private var refreshInFlight: Task<Result<String, RefreshAttemptFailure>, Never>?
     private var refreshRequestID: UUID?
+    private var refreshUsesNonPersistentTransport = false
     private var credentialGeneration = 0
 
     /// A bound on the whole request, not just the gap between packets.
@@ -90,6 +92,9 @@ actor APIClient {
         configuration.timeoutIntervalForResource = Self.requestResourceTimeout
         configuration.waitsForConnectivity = true
         self.session = session ?? URLSession(configuration: configuration)
+        self.todoSession = URLSession(configuration: TodoNetworkPolicy.configuration(
+            requestTimeout: AppConfiguration.requestTimeout, resourceTimeout: Self.requestResourceTimeout,
+            inheriting: session?.configuration))
         self.tokens = tokens
         self.onCredentialsChanged = onCredentialsChanged
     }
@@ -992,6 +997,35 @@ actor APIClient {
         let _: EmptyResponse = try await send(path: DriveRoute.item(itemId: itemId), method: "DELETE")
     }
 
+    // MARK: 云端待办
+
+    func listTodos(_ input: TodoListInput) async throws -> TodoPageDto {
+        var query = URLComponents()
+        query.queryItems = [URLQueryItem(name: "filter", value: input.filter.rawValue),
+            URLQueryItem(name: "offset", value: String(input.offset)), URLQueryItem(name: "limit", value: String(input.limit))]
+        if let term = input.query { query.queryItems?.append(URLQueryItem(name: "query", value: term)) }
+        return try await send(path: "/todos?" + (query.percentEncodedQuery ?? ""), method: "GET", nonPersistent: true)
+    }
+    func getTodo(id: String) async throws -> TodoItemDto {
+        try await send(path: todoPath(id), method: "GET", nonPersistent: true)
+    }
+    func createTodo(_ input: TodoCreateInput) async throws -> TodoItemDto {
+        try await send(path: "/todos", method: "POST", body: input, nonPersistent: true)
+    }
+    func updateTodo(id: String, input: TodoUpdateInput) async throws -> TodoItemDto {
+        try await send(path: todoPath(id), method: "PATCH", body: input, nonPersistent: true)
+    }
+    func setTodoCompleted(id: String, input: TodoCompletionInput) async throws -> TodoItemDto {
+        try await send(path: todoPath(id) + "/completion", method: "PATCH", body: input, nonPersistent: true)
+    }
+    func deleteTodo(id: String, input: TodoDeleteInput) async throws -> TodoDeleteResult {
+        try await send(path: todoPath(id), method: "DELETE", body: input, nonPersistent: true)
+    }
+    private func todoPath(_ id: String) throws -> String {
+        guard TodoReference.isValidID(id) else { throw APIError(status: 400, code: "TODO_INVALID_ID", message: "事项编号无效") }
+        return "/todos/" + id
+    }
+
     // MARK: 回收站
 
     func driveTrash(offset: Int? = nil, limit: Int? = nil, search: String? = nil) async throws -> DriveTrashPage {
@@ -1356,11 +1390,11 @@ actor APIClient {
     ///
     /// One refresh runs at a time whichever caller asked: a socket reconnect and a
     /// 401 from a normal request must not race two refreshes against each other.
-    private func refreshAccessTokenOutcome() async -> Result<String, RefreshFailure> {
+    private func refreshAccessTokenOutcome(nonPersistent: Bool = false) async -> Result<String, RefreshFailure> {
         let account = tokens.credentialVersion
-        var result = await checkedRefreshAccessTokenAttempt(account: account)
+        var result = await checkedRefreshAccessTokenAttempt(account: account, nonPersistent: nonPersistent)
         if case .failure(.rotated) = result, account == tokens.credentialVersion {
-            result = await checkedRefreshAccessTokenAttempt(account: account)
+            result = await checkedRefreshAccessTokenAttempt(account: account, nonPersistent: nonPersistent)
         }
         guard account == tokens.credentialVersion else { return .failure(.rejected) }
         switch result {
@@ -1370,8 +1404,8 @@ actor APIClient {
         }
     }
 
-    private func checkedRefreshAccessTokenAttempt(account: Int) async -> Result<String, RefreshAttemptFailure> {
-        let result = await refreshAccessTokenAttempt()
+    private func checkedRefreshAccessTokenAttempt(account: Int, nonPersistent: Bool) async -> Result<String, RefreshAttemptFailure> {
+        let result = await refreshAccessTokenAttempt(nonPersistent: nonPersistent)
         guard account == tokens.credentialVersion else { return .failure(.rejected) }
         if case .success(let token) = result,
            token != accessToken || accessTokenCredential != tokens.refreshToken {
@@ -1380,8 +1414,10 @@ actor APIClient {
         return result
     }
 
-    private func refreshAccessTokenAttempt() async -> Result<String, RefreshAttemptFailure> {
+    private func refreshAccessTokenAttempt(nonPersistent: Bool) async -> Result<String, RefreshAttemptFailure> {
         if let inFlight = refreshInFlight {
+            // A manual Todo mutation must not wait behind a background connectivity queue.
+            if nonPersistent && !refreshUsesNonPersistentTransport { return .failure(.unreachable) }
             let requestID = refreshRequestID
             let result = await inFlight.value
             if let requestID, refreshRequestID == requestID {
@@ -1403,7 +1439,8 @@ actor APIClient {
                     method: "POST",
                     body: ["refreshToken": refreshToken],
                     authenticated: false,
-                    allowRefresh: false
+                    allowRefresh: false,
+                    nonPersistent: nonPersistent
                 )
                 guard await self.storeRefreshed(response, generation: generation, account: account, matching: refreshToken) else {
                     return await self.refreshCollision(generation: generation, account: account, matching: refreshToken)
@@ -1426,6 +1463,7 @@ actor APIClient {
             }
         }
         refreshRequestID = requestID
+        refreshUsesNonPersistentTransport = nonPersistent
         refreshInFlight = task
         let result = await task.value
         if refreshRequestID == requestID {
@@ -1442,6 +1480,15 @@ actor APIClient {
     private func refreshAccessToken() async -> String? {
         switch await refreshAccessTokenOutcome() {
         case .success(let accessToken): return accessToken
+        case .failure: return nil
+        }
+    }
+
+    private func requestAccessToken(nonPersistent: Bool) async throws -> String? {
+        switch await refreshAccessTokenOutcome(nonPersistent: nonPersistent) {
+        case .success(let token): return token
+        case .failure(.unreachable) where nonPersistent:
+            throw APIError(status: 0, code: "network", message: "网络不可用，请稍后重试。")
         case .failure: return nil
         }
     }
@@ -1578,14 +1625,16 @@ actor APIClient {
         path: String,
         method: String,
         authenticated: Bool = true,
-        allowRefresh: Bool = true
+        allowRefresh: Bool = true,
+        nonPersistent: Bool = false
     ) async throws -> Response {
         try await perform(
             path: path,
             method: method,
             encodedBody: nil,
             authenticated: authenticated,
-            allowRefresh: allowRefresh
+            allowRefresh: allowRefresh,
+            nonPersistent: nonPersistent
         )
     }
 
@@ -1594,14 +1643,18 @@ actor APIClient {
         method: String,
         body: Body,
         authenticated: Bool = true,
-        allowRefresh: Bool = true
+        allowRefresh: Bool = true,
+        nonPersistent: Bool = false
     ) async throws -> Response {
-        try await perform(
+        let encoder = JSONEncoder()
+        if nonPersistent { encoder.outputFormatting = .sortedKeys }
+        return try await perform(
             path: path,
             method: method,
-            encodedBody: try JSONEncoder().encode(body),
+            encodedBody: try encoder.encode(body),
             authenticated: authenticated,
-            allowRefresh: allowRefresh
+            allowRefresh: allowRefresh,
+            nonPersistent: nonPersistent
         )
     }
 
@@ -1613,7 +1666,8 @@ actor APIClient {
         authenticated: Bool,
         allowRefresh: Bool,
         timeoutSeconds: TimeInterval? = nil,
-        workspaceFilesBudget: Bool = false
+        workspaceFilesBudget: Bool = false,
+        nonPersistent: Bool = false
     ) async throws -> Response {
         synchronizeStoredCredential()
         let generation = credentialGeneration
@@ -1646,7 +1700,7 @@ actor APIClient {
         }
 
         if authenticated, accessToken == nil {
-            _ = await refreshAccessToken()
+            _ = try await requestAccessToken(nonPersistent: nonPersistent)
         }
         if authenticated, generation != credentialGeneration ||
             account != tokens.credentialVersion ||
@@ -1657,6 +1711,7 @@ actor APIClient {
             throw APIError(status: 0, code: "bad_url", message: "服务器地址无效。")
         }
         var request = URLRequest(url: url)
+        if nonPersistent { request.cachePolicy = .reloadIgnoringLocalCacheData }
         if let timeoutSeconds { request.timeoutInterval = timeoutSeconds }
         request.httpMethod = method
         if authenticated, let token = accessToken {
@@ -1681,7 +1736,7 @@ actor APIClient {
                 }
                 data = bounded; response = receivedResponse
             } else {
-                (data, response) = try await session.data(for: request)
+                (data, response) = try await (nonPersistent ? todoSession : session).data(for: request)
             }
         } catch let failure as WorkspaceFilesFailure {
             throw failure
@@ -1703,7 +1758,7 @@ actor APIClient {
 
         if http.statusCode == 401 || http.statusCode == 403, authenticated, allowRefresh {
             // One refresh and one retry, matching the desktop client.
-            let refreshedToken = await refreshAccessToken()
+            let refreshedToken = try await requestAccessToken(nonPersistent: nonPersistent)
             guard generation == credentialGeneration, account == tokens.credentialVersion else {
                 throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
             }
@@ -1716,7 +1771,8 @@ actor APIClient {
                     authenticated: authenticated,
                     allowRefresh: false,
                     timeoutSeconds: timeoutSeconds,
-                    workspaceFilesBudget: workspaceFilesBudget
+                    workspaceFilesBudget: workspaceFilesBudget,
+                    nonPersistent: nonPersistent
                 )
             }
         }

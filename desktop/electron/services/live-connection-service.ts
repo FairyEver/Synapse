@@ -420,6 +420,12 @@ export class LiveConnectionService {
       return
     }
 
+    if (parsed.type === LIVE_MESSAGE_TYPES.todosChanged) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      this.eventBus?.emit({ domain: "account", type: "todos.changed", payload: parsed.payload, timestamp: this.now().toISOString() })
+      return
+    }
+
     if (parsed.type === LIVE_MESSAGE_TYPES.notificationChanged) {
       this.startServerTimeout(this.heartbeatTimeoutMs)
       const notificationId = parsed.payload.notificationId

@@ -4,6 +4,7 @@ export const SYSTEM_APP_IDS = [
   "workflow",
   "drive",
   "mail",
+  "todos",
   "automation",
   "launcher",
   "settings",
@@ -29,6 +30,7 @@ export type SynapseSystemAppNamespace =
   | "workflow"
   | "drive"
   | "mail"
+  | "todos"
   | "automation"
   | "launcher"
   | "settings"
@@ -102,7 +104,10 @@ export type SynapseSystemAppMailOpenRequest = {
   readonly messageId: string
 }
 
+export type TodoOpenRequest = { readonly requestId: string; readonly id: string }
+
 export type SynapseSystemAppOpenOptions = {
+  readonly todoOpenRequest?: TodoOpenRequest | null
   readonly contentOpenRequest?: SynapseSystemAppContentOpenRequest | null
   readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null

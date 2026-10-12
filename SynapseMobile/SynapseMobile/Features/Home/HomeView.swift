@@ -18,6 +18,7 @@ struct HomeView: View {
     let onOpenPendingNotifications: () -> Void
     let onOpenDrive: () -> Void
     let onOpenMail: () -> Void
+    let onOpenTodos: () -> Void
     let onOpenClipboard: () -> Void
     let onNewSession: () -> Void
     /// 打开一个正卡着等人的会话。参数是会话 id。
@@ -66,6 +67,7 @@ struct HomeView: View {
                     action: onNewSession
                 )
                 .disabled(newSessionUnavailable)
+                row(title: "待办事项", subtitle: nil, symbol: "checklist", value: nil, action: onOpenTodos)
                 row(
                     title: "剪贴板历史",
                     subtitle: "这台电脑上复制过的内容",

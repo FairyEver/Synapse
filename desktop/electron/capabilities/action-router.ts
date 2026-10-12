@@ -22,6 +22,7 @@ export type SynapseActionRouterDeps = {
   readonly databaseDispatch: DomainDispatch
   readonly driveDispatch: DomainDispatch
   readonly mailDispatch: DomainDispatch
+  readonly todosDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
   readonly skillRepositoryDispatch?: DomainDispatch
@@ -42,6 +43,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "database") return deps.databaseDispatch(action, params, context)
       if (domainId === "drive") return deps.driveDispatch(action, params, context)
       if (domainId === "mail") return deps.mailDispatch(action, params, context)
+      if (domainId === "todos") {
+        if (!deps.todosDispatch) throw new Error("Todo dispatcher is not configured")
+        return deps.todosDispatch(action, params, context)
+      }
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(action, params, context)
       if (domainId === "skill_repository") {

@@ -50,6 +50,9 @@ model User {
   webhooks                       UserWebhook[]
   apiKeys                        UserApiKey[]
   notifications                  UserNotification[]
+  todoItems                      TodoItem[]
+  todoMutationReceipts            TodoMutationReceipt[]
+  todoReminderDeliveries          TodoReminderDelivery[]
   openApiDownloadGrants          OpenApiDownloadGrant[]
   openApiUsageLogs               OpenApiUsageLog[]
   devices                        UserDevice[]
@@ -102,6 +105,7 @@ model UserNotification {
   resolvedAt  DateTime?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
+  todoDelivery TodoReminderDelivery?
 
   @@unique([userId, sourceKey])
   @@index([userId, deletedAt, createdAt, id])
@@ -1451,4 +1455,91 @@ model MailStorageDeletion {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+
+enum TodoReminderKind {
+  none
+  at_due
+  before_due
+  custom
+}
+
+enum TodoReminderStatus {
+  none
+  pending
+  sent
+  cancelled
+  expired
+}
+
+model TodoItem {
+  id                 String @id @default(cuid())
+  userId             String
+  deliveries         TodoReminderDelivery[]
+  user               User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String
+  note               String?
+  dueAt              DateTime?
+  reminder           TodoReminderKind @default(none)
+  offsetMinutes      Int?
+  remindAt           DateTime?
+  reminderGeneration Int @default(1)
+  reminderStatus     TodoReminderStatus @default(none)
+  completedAt        DateTime?
+  version            Int @default(1)
+  createRequestId    String
+  createRequestHash  String
+  deletedAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, createRequestId])
+  @@index([userId, deletedAt, completedAt, dueAt, createdAt, id])
+  @@index([reminderStatus, remindAt])
+  @@index([deletedAt])
+}
+
+enum TodoDeliveryStatus {
+  pending
+  delivered
+  skipped
+  expired
+}
+
+model TodoReminderDelivery {
+  id             String @id @default(cuid())
+  userId         String
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  todoId         String
+  todo           TodoItem @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  generation     Int
+  notificationId String @unique
+  notification   UserNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  remindAt       DateTime
+  status         TodoDeliveryStatus @default(pending)
+  attempts       Int @default(0)
+  nextAttemptAt  DateTime
+  leaseUntil     DateTime?
+  leaseToken     String?
+  failureReason  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([todoId, generation])
+  @@index([status, nextAttemptAt, leaseUntil])
+  @@index([createdAt])
+}
+
+model TodoMutationReceipt {
+  id              String @id @default(cuid())
+  userId          String
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientRequestId String
+  requestHash     String
+  response        Json
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, clientRequestId])
+  @@index([expiresAt])
 }

@@ -555,6 +555,7 @@ import type {
   SynapseSystemAppContentOpenRequest,
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppMailOpenRequest,
+  TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
@@ -1039,6 +1040,7 @@ export type SynapseBridge = {
     onTerminalOpenRequest: (
       listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
+    onTodoOpenRequest: (listener: (request: TodoOpenRequest) => void) => () => void
     onMailOpenRequest: (
       listener: (request: SynapseSystemAppMailOpenRequest) => void,
     ) => () => void
@@ -1397,6 +1399,18 @@ export type SynapseBridge = {
       readAll: () => Promise<{ ok: true }>
       delete: (input: { id: string }) => Promise<{ ok: true }>
       deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>
+    }
+  }
+  todos: {
+    item: {
+      list: (input?: import("@synapse/shared/todo-contracts").TodoListInput) => Promise<import("@synapse/shared/todo-contracts").TodoPageDto>
+      get: (locator: import("@synapse/shared/todo-contracts").TodoLocator) => Promise<import("@synapse/shared/todo-contracts").TodoItemDto>
+      create: (input: import("@synapse/shared/todo-contracts").TodoCreateInput) => Promise<import("@synapse/shared/todo-contracts").TodoItemDto>
+      update: (id: string, input: import("@synapse/shared/todo-contracts").TodoUpdateInput) => Promise<import("@synapse/shared/todo-contracts").TodoItemDto>
+      setCompleted: (id: string, input: import("@synapse/shared/todo-contracts").TodoCompletionInput) => Promise<import("@synapse/shared/todo-contracts").TodoItemDto>
+      delete: (id: string, input: import("@synapse/shared/todo-contracts").TodoDeleteInput) => Promise<import("@synapse/shared/todo-contracts").TodoDeleteResult>
+      onChanged: (listener: (event: import("@synapse/shared/todo-contracts").TodoChangedPayload) => void) => () => void
+      onReset: (listener: () => void) => () => void
     }
   }
   mail: {

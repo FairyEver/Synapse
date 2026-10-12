@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   openSystemApp: vi.fn(),
   gitOpenRequestListener: null as null | ((request: { requestId: string; repositoryId: string }) => void),
   terminalOpenRequestListener: null as null | ((request: { requestId: string; sessionId: string }) => void),
+  todoOpenRequestListener: null as null | ((request: { requestId: string; id: string }) => void),
 }))
 
 vi.mock("@/modules/agent", () => ({
@@ -34,6 +35,8 @@ vi.mock("@/modules/database", () => ({
 vi.mock("@/modules/drive", () => ({
   DriveModule: () => <div>云盘窗口</div>,
 }))
+
+vi.mock("@/modules/todos", () => ({ TodosModule: ({ openRequest, onOpenRequestConsumed }: { openRequest?: { requestId: string; id: string } | null; onOpenRequestConsumed?: (id: string) => void }) => <div>待办窗口 {openRequest?.id}<button onClick={() => openRequest && onOpenRequestConsumed?.(openRequest.requestId)}>消费待办目标</button></div> }))
 
 vi.mock("@/modules/editor-scan", () => ({
   EditorScanModule: () => <div>IDE 窗口</div>,
@@ -88,6 +91,7 @@ vi.mock("@/lib/electron-bridge", () => ({
     apps: {
       onContentOpenRequest: () => () => undefined,
       onMailOpenRequest: () => () => undefined,
+      onTodoOpenRequest: (listener: (request: { requestId: string; id: string }) => void) => { mocks.todoOpenRequestListener = listener; return () => { mocks.todoOpenRequestListener = null } },
       onGitOpenRequest: (listener: (request: { requestId: string; repositoryId: string }) => void) => {
         mocks.gitOpenRequestListener = listener
         return () => {
@@ -122,6 +126,18 @@ describe("SystemAppWindowApp", () => {
         root.unmount()
       })
     }
+  })
+
+  it("delivers initial and later Todo targets and removes consumed URL state", async () => {
+    const first = encodeURIComponent(JSON.stringify({ requestId: "first", id: "todo-1" }))
+    window.history.replaceState({}, "", `/?window=system-app&appId=todos&todoOpenRequest=${first}`)
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("待办窗口 todo-1")
+    await act(async () => { mocks.todoOpenRequestListener?.({ requestId: "second", id: "todo-2" }) })
+    expect(document.body.textContent).toContain("待办窗口 todo-2")
+    act(() => [...document.querySelectorAll("button")].find((button) => button.textContent === "消费待办目标")?.click())
+    expect(new URLSearchParams(window.location.search).has("todoOpenRequest")).toBe(false)
+    expect(document.body.textContent).not.toContain("todo-2")
   })
 
   it("renders known system apps from the URL", async () => {

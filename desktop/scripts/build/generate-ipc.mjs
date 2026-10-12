@@ -73,6 +73,7 @@ const MODULE_SOURCES = [
   { id: "quick-input", outputId: "quickInput", importPath: "app-capabilities/quick-input/main/ipc.ts" },
   { id: "connectors", importPath: "app-capabilities/connectors/main/ipc.ts" },
   { id: "secrets", importPath: "app-capabilities/secrets/main/ipc.ts" },
+  { id: "todos", importPath: "app-capabilities/todos/main/ipc.ts" },
   { id: "agentPersonas", importPath: "app-capabilities/agent-personas/main/ipc.ts" },
   { id: "driveSync", importPath: "electron/modules/drive-sync/ipc.ts" },
   { id: "voice", importPath: "app-capabilities/voice/main/ipc.ts" },

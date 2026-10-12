@@ -35,6 +35,10 @@ enum NotificationDestination {
         if item.source == "mail", let target = item.targetId {
             return .route(.mail(messageId: target))
         }
+        if item.source == "todo-reminder" {
+            guard let target = item.targetId, TodoReference.isValidID(target) else { return .none }
+            return .route(.todo(id: target))
+        }
         // 只有 HTTPS 打开。这一条沿用的是详情页里那个判断，不是新加的限制。
         if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
             return .externalURL(url)
@@ -47,6 +51,7 @@ enum NotificationDestination {
         case .route(.terminal): return "打开终端"
         case .route(.meeting): return "查看转写"
         case .route(.mail): return "查看站内信"
+        case .route(.todo): return "查看待办"
         case .route: return "查看通知"
         case .externalURL: return "打开链接"
         case .none: return "查看通知"

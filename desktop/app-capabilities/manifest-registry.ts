@@ -13,6 +13,7 @@ import { jsonRepairCapabilityManifest } from "./json-repair/shared/manifest"
 import { agentConversationCapabilityManifest } from "./agent/shared/manifest"
 import { terminalCapabilityManifest } from "./terminal/shared/manifest"
 import { mailCapabilityManifest } from "./mail/shared/manifest"
+import { todosCapabilityManifest } from "./todos/shared/manifest"
 
 export {
   filterDiscoverableTypes,
@@ -27,6 +28,7 @@ const appDeepLinkManifests = [
   agentConversationCapabilityManifest,
   terminalCapabilityManifest,
   mailCapabilityManifest,
+  todosCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,
   htmlGeneratorCapabilityManifest,

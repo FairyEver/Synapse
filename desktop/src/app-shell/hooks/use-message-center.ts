@@ -162,6 +162,9 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
       } else if (item.source === "meeting-transcription" && item.targetId) {
         onOpenMeeting?.(item.targetId)
         setOpen(false)
+      } else if (item.source === "todo-reminder" && item.targetId) {
+        await requireBridgeDomain("apps").openSystemApp("todos", { todoOpenRequest: { requestId: crypto.randomUUID(), id: item.targetId } })
+        setOpen(false)
       } else if (item.source === "mail" && item.targetId) {
         await requireBridgeDomain("apps").openSystemApp("mail", {
           mailOpenRequest: { requestId: crypto.randomUUID(), messageId: item.targetId },

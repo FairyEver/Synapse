@@ -333,6 +333,14 @@ const requiredExtraResourceFiles = [
     label: "Synapse Skill package",
   },
   {
+    relativePath: "synapse-skill/todos/index.md",
+    label: "Todo Skill guide",
+  },
+  {
+    relativePath: "synapse-skill/todos/api-reference.md",
+    label: "Todo Skill API contract",
+  },
+  {
     relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",
     label: "Knowledge Base runtime template",
   },
@@ -609,6 +617,28 @@ function verifyDocumentParserLicense(unpackedPath, license, failures) {
   if (requiredText.some((expectedText) => !licenseText.includes(expectedText))) {
     failures.push(`document parser license content mismatch: ${packageName} (${identity})`)
   }
+}
+
+function verifyTodoRuntime(asarPath, failures) {
+  const smokeScript = [
+    "const path = require('node:path')",
+    "const { createRequire } = require('node:module')",
+    "const root = process.argv[1]",
+    "const packagedRequire = createRequire(path.join(root, 'package.json'))",
+    "const contract = packagedRequire('@synapse/shared/todo-contracts')",
+    "const capabilities = packagedRequire('./dist-electron/app-capabilities/todos/shared/capability.js')",
+    "const schema = packagedRequire('./dist-electron/app-capabilities/todos/shared/schema.js')",
+    "if (capabilities.TODOS_CAPABILITY_IDS.length !== 6 || contract.countTodoCodePoints('😀'.repeat(200)) !== 200 || contract.parseTodoReference('synapse://todos/todo_1') !== 'todo_1') throw new Error('Todo runtime contract mismatch')",
+    "schema.todoPageSchema.parse({ items: [], nextOffset: null })",
+    "process.stdout.write('synapse-todo-runtime-ok')",
+  ].join("\n")
+  let executablePath
+  try { executablePath = require("electron") }
+  catch { failures.push("packaged Todo resolution smoke could not resolve Electron"); return }
+  const smoke = spawnSync(executablePath, ["-e", smokeScript, asarPath], {
+    encoding: "utf8", env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 10_000,
+  })
+  if (smoke.status !== 0 || smoke.stdout !== "synapse-todo-runtime-ok") failures.push("packaged Todo CommonJS/schema resolution smoke failed")
 }
 
 function verifyJsonRepairRuntime(asarPath, header, failures) {
@@ -1126,6 +1156,12 @@ async function verifyResources(resourcesPath, label) {
       `mobile workspace files ${name} is missing from packed app.asar`,
     )
   }
+  for (const entry of ["main/service", "main/ipc", "main/dispatcher", "shared/schema", "shared/capability", "shared/manifest"]) {
+    verifyPackedNode(header, `dist-electron/app-capabilities/todos/${entry}.js`, failures, "Todo capability is missing from packed app.asar")
+  }
+  for (const entry of ["todos.js", "todo-contracts.cjs"]) {
+    verifyPackedNode(header, `node_modules/@synapse/shared/dist/${entry}`, failures, "Todo shared contract is missing from packed app.asar")
+  }
   for (const exported of ["exports.MOBILE_WORKSPACE_FILES_VERSION", "exports.MOBILE_WORKSPACE_FILES_LIMITS", "maxDiffModelBytes", "maxDiffModelLines"]) {
     verifyPackedTextIncludes(
       buffer, dataOffset, header,
@@ -1175,6 +1211,7 @@ async function verifyResources(resourcesPath, label) {
     "packaged Claude runtime diagnostics are missing from app.asar",
   )
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
+  verifyTodoRuntime(asarPath, failures)
   verifyJsonRepairRuntime(asarPath, header, failures)
   verifyTextExtractionWorker(header, unpackedPath, failures)
   verifyHtmlGenerationWorker(header, unpackedPath, failures)

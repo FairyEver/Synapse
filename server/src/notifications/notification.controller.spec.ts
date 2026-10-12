@@ -83,6 +83,16 @@ describe("OpenNotificationController", () => {
     await expect(endpoint.createWithKeyInBody(request as never, { title: "" })).rejects.toMatchObject({ statusCode: 403 })
   })
 
+  it("does not let URL query fields forge Todo ownership metadata", async () => {
+    const { controller: endpoint, request, service } = controller()
+    for (const query of [{ source: "todo-reminder" }, { sourceKey: "todo:id:1" }, { target: { id: "todo" } }]) {
+      await endpoint.createFromPath(request as never, { key: exampleKey, title: "事项", body: "正文" }, query)
+      const created = service.create.mock.calls.at(-1)?.[0]
+      expect(created).toMatchObject({ source: "external", sourceKey: undefined })
+      expect(created).not.toHaveProperty("target")
+    }
+  })
+
   it("rejects non-HTTPS URLs, unknown fields, and invalid retry keys", async () => {
     const { controller: endpoint, request } = controller()
     const message = { title: "测试", body: "正文" }
@@ -163,7 +173,7 @@ describe("NotificationController", () => {
     const endpoint = new NotificationController(service as never)
     const request = { user: { id: "user-1" } }
 
-    for (const source of ["external", "terminal-attention", "meeting-transcription"]) {
+    for (const source of ["external", "terminal-attention", "meeting-transcription", "todo-reminder"]) {
       await expect(endpoint.createFromDesktop(request as never, { source, title: "标题", body: "正文" }))
         .rejects.toMatchObject({ status: 400 })
     }

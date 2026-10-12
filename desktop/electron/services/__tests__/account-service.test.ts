@@ -47,6 +47,8 @@ import type { SynapseAccountProfile } from "../../../src/types/account"
 import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
+import { TodoCloudService } from "../../../app-capabilities/todos/main/service"
+import { todoFixture } from "../../../app-capabilities/todos/main/__tests__/fixtures"
 
 type PersistedAccountForTest = Record<string, unknown> & {
   refreshToken?: string
@@ -147,6 +149,26 @@ async function createTestAccountService(input: {
 }
 
 describe("AccountService", () => {
+  it("refreshes a Todo 401 with the original UUID and preserves its identity generation", async () => {
+    const sentRequestIds: string[] = []
+    const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url).endsWith("/auth/refresh")) return jsonResponse({ accessToken: "access", refreshToken: "refresh" })
+      if (String(url).endsWith("/auth/me")) return jsonResponse({ user: storedProfile.user })
+      if (String(url).endsWith("/todos")) {
+        sentRequestIds.push(JSON.parse(String(init?.body)).clientRequestId)
+        return sentRequestIds.length === 1 ? jsonResponse({}, 401) : jsonResponse(todoFixture)
+      }
+      throw new Error("Unexpected test endpoint")
+    })
+    const { namespace, service: account } = await createTestAccountService({ fetch: fetchImpl as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh", lastProfile: storedProfile })
+    await account.refreshFromStorage()
+    const todos = new TodoCloudService({ account })
+    const requestId = "32a7370b-3b19-4bd3-b3a5-99016bb2fc37"
+    await expect(todos.create({ title: "事项", clientRequestId: requestId })).resolves.toEqual(todoFixture)
+    expect(sentRequestIds).toEqual([requestId, requestId])
+    todos.dispose()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     accountLogger.child.mockReturnValue(accountLogger)

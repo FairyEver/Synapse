@@ -42,6 +42,7 @@ import {
   buildDriveTools,
 } from "./drive-domain"
 import { MAIL_DOMAIN, MAIL_MCP_TOOL_ACTIONS, buildMailTools } from "./mail-domain"
+import { TODOS_DOMAIN, TODOS_MCP_TOOL_ACTIONS, buildTodoTools } from "./todos-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import { assertCanonicalCapabilityId } from "./naming"
 
@@ -57,6 +58,7 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   CONTENT_DOMAIN,
   DRIVE_DOMAIN,
   MAIL_DOMAIN,
+  TODOS_DOMAIN,
 ]
 
 for (const domain of CAPABILITY_DOMAINS) {
@@ -77,6 +79,7 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...CONTENT_MCP_TOOL_ACTIONS,
   ...DRIVE_MCP_TOOL_ACTIONS,
   ...MAIL_MCP_TOOL_ACTIONS,
+  ...TODOS_MCP_TOOL_ACTIONS,
 }
 
 export function buildAllMcpTools(): McpToolDefinition[] {
@@ -92,6 +95,7 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildContentTools(),
     ...buildDriveTools(),
     ...buildMailTools(),
+    ...buildTodoTools(),
   ]
 }
 

@@ -22,6 +22,7 @@ final class NotificationRouter {
         case terminal(sessionId: String, desktopClientInstanceId: String, entry: TerminalOpenOrigin)
         case meeting(meetingId: String)
         case mail(messageId: String)
+        case todo(id: String)
         case message(id: String)
         /// 开始一段新录音。目前只有主屏长按图标那条快捷操作会用它。
         case newRecording

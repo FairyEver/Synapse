@@ -29,6 +29,22 @@ function harness() {
 }
 
 describe("NotificationService", () => {
+  it("treats resolved failed or skipped pushes as retryable, but no devices as success", async () => {
+    const { service, push } = harness()
+    for (const outcome of [{ sent: 0, failed: 1, skipped: false }, { sent: 0, failed: 0, skipped: true }]) {
+      push.sendNotification.mockImplementationOnce(async () => outcome as never)
+      await expect(service.deliverCommitted("user-1", "message-1")).rejects.toThrow()
+    }
+    push.sendNotification.mockImplementationOnce(async () => ({ sent: 0, failed: 0, skipped: false }) as never)
+    await expect(service.deliverCommitted("user-1", "message-1")).resolves.toBeUndefined()
+  })
+  it("does not push a notification that has already been read", async () => {
+    const { service, prisma, push, desktops } = harness()
+    prisma.userNotification.findFirst.mockResolvedValueOnce({ ...record, readAt: new Date() })
+    await service.deliverCommitted("user-1", "message-1")
+    expect(push.sendNotification).not.toHaveBeenCalled()
+    expect(desktops.broadcastToUser).not.toHaveBeenCalled()
+  })
   it("applies the source before cursor pagination and retains the unread intersection", async () => {
     const { service, prisma } = harness()
     const mail = { ...record, source: "mail" }

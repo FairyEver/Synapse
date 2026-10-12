@@ -27,7 +27,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
-下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 3 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>` 和 `synapse://mail/<message-id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。Mail 路由进入站内信并按当前用户权限读取该信件。三条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
+下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 4 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>`、`synapse://mail/<message-id>` 和 `synapse://todos/<id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。Mail 路由进入站内信并按当前用户权限读取该信件。Todo 路由严格接受单一 ID，在账号就绪后只读定位，已完成目标进入全部，query / fragment / 编码分隔符无效；新导航和身份变化取消旧目标。四条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
@@ -43,6 +43,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail | 是 | 否（旧配置升级时一次性加入） | — | — | 16 | `open` |
+| Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -123,6 +124,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
 | Mail | 是 | 否 | `mail` |
+| Todos | 是 | 否 | `todos` |
 | Meeting | 是 | 否 | — |
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
@@ -151,12 +153,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `content` | 16 | 16 |
 | `drive` | 73 | 73 |
 | `mail` | 16 | 16 |
+| `todos` | 6 | 6 |
 | `extend` | 1 | 1 |
-| 合计 | 283 | 279 |
+| 合计 | 289 | 285 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 279 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 285 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -183,3 +186,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 - 修改启动器可见性、Workflow 条件入口、`systemApp`、`discovery`、`openable`、`pinnableToDock`、`defaultDock` 或任何改变产品表面的过滤逻辑时，也必须同步。
 - 即使改动不在 `desktop/app-capabilities/`，只要影响普通 System App 或 MCP domain，就必须更新本文件。
 - 只修改能力内部实现且注册表面不变时可以不改数字，但必须主动核对本清单仍与运行时装配一致。
+
+云端待办能力层注册六个 todos action，复用账号认证与 network.connect 权限，IPC 和 MCP 共用 dispatcher。onChanged/onReset 仅 UI 订阅，不计索引；身份重登清空内存，普通 token 刷新不清空。内容不进入请求/审计日志。待办为第 21 个 System App，默认 Dock 顺序不变，可手动固定；主窗口/启动器嵌入与独立窗口使用同一内容。新增一条严格 synapse://todos/<id> 桌面路由和 UI-only apps.onTodoOpenRequest 事件，不新增 MCP；消息中心查看待办先已读再只读定位，原生横幅无新 click 能力。
+
+2026-10-11 集成核对：从实际 `CAPABILITY_DOMAINS` 累加 289 项、`MCP_TOOL_ACTIONS` 与 `buildAllMcpTools()` 各 285 项；`todos` 均为 6。System App 注册测试列出 21 个应用。相对实施前增量为 1 个 System App、6 个 capability / MCP 索引、1 条桌面 Todo 路由及 1 条 iOS Todo 路由；Workflow / Automation 增量均为 0，默认 Dock 无增量，公开 MCP 工具仍为 2。iOS 入口为主页现有导航栈，不注册桌面 System App 或额外底栏。

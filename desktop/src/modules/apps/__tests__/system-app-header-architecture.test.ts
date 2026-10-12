@@ -10,6 +10,7 @@ const appEntrypoints = {
   workflow: { path: "../../workflow/index.tsx", header: "module-page" },
   drive: { path: "../../drive/index.tsx", header: "module-page" },
   mail: { path: "../../mail/index.tsx", header: "window-shell" },
+  todos: { path: "../../todos/index.tsx", header: "window-shell" },
   automation: { path: "../../automation/index.tsx", header: "module-page" },
   launcher: { path: "../components/system-app-content.tsx", header: "none" },
   settings: { path: "../../settings/index.tsx", header: "none" },

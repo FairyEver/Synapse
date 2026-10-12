@@ -116,6 +116,7 @@ final class RealtimeClient {
     /// without the phone asking on a schedule.
     var onPresence: (([String]) -> Void)?
     var onNotificationChanged: (() -> Void)?
+    var onTodosChanged: ((TodoChangedPayload) -> Void)?
     /// A computer's terminal buttons. A full snapshot, so it replaces what is held.
     var onToolbar: ((MobileToolbarPayload) -> Void)?
     var onGroupCommands: ((MobileGroupCommandsPayload) -> Void)?
@@ -409,6 +410,7 @@ final class RealtimeClient {
         LiveMessageType.mobileClipboard,
         LiveMessageType.mobileGitStatus,
         LiveMessageType.notificationChanged,
+        LiveMessageType.todosChanged,
     ]
 
     /// 复用同一个解码器：每条下行消息都要解一次，而帧在终端持续输出时每秒到好几次。
@@ -502,6 +504,8 @@ final class RealtimeClient {
             }
         case LiveMessageType.notificationChanged:
             onNotificationChanged?()
+        case LiveMessageType.todosChanged:
+            if let payload = payload(TodoChangedPayload.self, from: data) { onTodosChanged?(payload) }
         default:
             // `live.pong`：没有要派发的载荷，它作证的那件事上面已经做了。
             break

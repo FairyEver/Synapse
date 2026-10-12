@@ -48,6 +48,7 @@ import { systemNotifierIpcModule } from "../../app-capabilities/system-notifier/
 import { jsonRepairIpcModule } from "../../app-capabilities/json-repair/main/ipc"
 import { synapseSkillIpcModule } from "../../app-capabilities/synapse-skill/main/ipc"
 import { secretsIpcModule } from "../../app-capabilities/secrets/main/ipc"
+import { todosIpcModule } from "../../app-capabilities/todos/main/ipc"
 import { skillUninstallerIpcModule } from "../../app-capabilities/skill-uninstaller/main/ipc"
 import { meetingIpcModule } from "../modules/meeting/ipc"
 
@@ -95,6 +96,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(quickInputIpcModule, ctx)
   registry.register(connectorsIpcModule, ctx)
   registry.register(secretsIpcModule, ctx)
+  registry.register(todosIpcModule, ctx)
   registry.register(skillUninstallerIpcModule, ctx)
   registry.register(agentPersonasIpcModule, ctx)
   registry.register(voiceIpcModule, ctx)
@@ -146,6 +148,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   quickInputIpcModule,
   connectorsIpcModule,
   secretsIpcModule,
+  todosIpcModule,
   skillUninstallerIpcModule,
   agentPersonasIpcModule,
   voiceIpcModule,

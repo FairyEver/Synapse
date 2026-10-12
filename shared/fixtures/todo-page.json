@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "id": "todo_contract-1",
+      "title": "提交报告 🧩",
+      "note": "  第一行\n第二行  ",
+      "dueAt": "2026-10-12T01:00:00.000Z",
+      "reminder": "before_due",
+      "offsetMinutes": 10,
+      "remindAt": "2026-10-12T00:50:00.000Z",
+      "reminderGeneration": 3,
+      "reminderStatus": "pending",
+      "completedAt": null,
+      "version": 7,
+      "createdAt": "2026-10-11T00:00:00.000Z",
+      "updatedAt": "2026-10-11T12:00:00.000Z"
+    },
+    {
+      "id": "todo_contract-2",
+      "title": "完成 é",
+      "note": null,
+      "dueAt": null,
+      "reminder": "custom",
+      "offsetMinutes": null,
+      "remindAt": "2026-10-12T02:00:00.000Z",
+      "reminderGeneration": 4,
+      "reminderStatus": "cancelled",
+      "completedAt": "2026-10-11T12:05:01.123Z",
+      "version": 8,
+      "createdAt": "2026-10-11T00:00:00.000Z",
+      "updatedAt": "2026-10-11T12:05:01.123Z"
+    }
+  ],
+  "nextOffset": null
+}

@@ -9,6 +9,7 @@ import type { SynapseNotification } from "@/types/notification-center"
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), count: vi.fn(), read: vi.fn(), delete: vi.fn(), deleteAll: vi.fn(), readAll: vi.fn(),
   mailRequest: vi.fn(), info: vi.fn(), warn: vi.fn(),
+  openSystemApp: vi.fn(),
 }))
 
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
@@ -19,6 +20,7 @@ vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.mailRequest }))
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => null,
   requireBridgeDomain: (domain: string) => {
+    if (domain === "apps") return { openSystemApp: mocks.openSystemApp }
     if (domain !== "account") throw new Error(`Unexpected domain: ${domain}`)
     return { notifications: { list: mocks.list, count: mocks.count, read: mocks.read, delete: mocks.delete, deleteAll: mocks.deleteAll, readAll: mocks.readAll } }
   },
@@ -71,6 +73,14 @@ afterEach(async () => {
 })
 
 describe("useMessageCenter", () => {
+  it("marks a Todo notice read and opens its read-only target", async () => {
+    const reminder: SynapseNotification = { ...notice, source: "todo-reminder", targetId: "todo-1" }
+    mocks.openSystemApp.mockClear().mockResolvedValue(undefined)
+    await act(async () => { await current.openItem(reminder); await current.navigate(reminder) })
+    expect(mocks.read).toHaveBeenCalledWith({ id: "n1" })
+    expect(mocks.openSystemApp).toHaveBeenCalledWith("todos", { todoOpenRequest: { id: "todo-1", requestId: expect.any(String) } })
+    expect(mocks.mailRequest).not.toHaveBeenCalled()
+  })
   it("defaults to all categories without sending a source restriction", () => {
     expect(current.source).toBe("all")
     expect(mocks.list).toHaveBeenCalledWith({ filter: "all" })

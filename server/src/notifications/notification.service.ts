@@ -43,6 +43,30 @@ export class NotificationService implements OnModuleInit {
     this.relay.setNotificationSink(this)
   }
 
+  /** Storage only. Caller owns the transaction and post-commit delivery. */
+  createInTransaction(tx: Prisma.TransactionClient, input: CreateNotificationInput & { sourceKey: string }): Promise<UserNotification> {
+    return tx.userNotification.upsert({
+      where: { userId_sourceKey: { userId: input.userId, sourceKey: input.sourceKey } },
+      update: {},
+      create: { userId: input.userId, source: input.source, sourceKey: input.sourceKey, title: input.title.slice(0, 64),
+        body: input.body.slice(0, 512), group: input.group, url: input.url, level: input.level ?? "active",
+        targetId: input.targetId, deviceId: input.deviceId },
+    })
+  }
+
+  /** Retry delivery of an existing record; never create another notification. */
+  async deliverCommitted(userId: string, notificationId: string): Promise<void> {
+    const record = await this.get(userId, notificationId)
+    if (!record || record.readAt || record.deletedAt) return
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.notificationChanged, { notificationId }, { id: randomUUID(), sentAt: new Date().toISOString() })
+    const result = this.desktops.broadcastToUser(userId, message)
+    this.mobiles.sendToMobileClients({ userId, message })
+    if (result?.failedClientCount > 0) throw new Error("NOTIFICATION_LIVE_DELIVERY_FAILED")
+    if (record.level === "passive") return
+    const outcome = await this.push.sendNotification(userId, { id: record.id, title: record.title, body: record.body, level: record.level as NotificationLevel, group: record.group })
+    if (outcome.failed > 0 || outcome.skipped) throw new Error("NOTIFICATION_PUSH_DELIVERY_FAILED")
+  }
+
   async create(input: CreateNotificationInput): Promise<UserNotification> {
     if (input.source === "terminal-attention" && input.deviceId && input.targetId) {
       const pending = await this.prisma.userNotification.findFirst({

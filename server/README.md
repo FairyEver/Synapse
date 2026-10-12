@@ -18,6 +18,18 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 
 ## 本地开发
 
+### 云端待办
+
+账号 API 为 `GET /api/todos`、`GET /api/todos/:id`、`POST /api/todos`、`PATCH /api/todos/:id`、`PATCH /api/todos/:id/completion`、`DELETE /api/todos/:id`。使用既有用户登录态，不接收调用方指定账号；PostgreSQL 为唯一权威存储。写入要求稳定 UUID，修改 / 完成 / 删除还要求当前版本；冲突不自动覆盖。
+
+部署前应用 `20261011000100_cloud_todos` 和 `20261011000200_todo_reminder_outbox` 两个迁移；按服务端 → 桌面 → iOS 顺序上线。没有新增环境变量或桌面调度依赖；旧服务器缺少列表接口时客户端明确提示升级。定时触发与 outbox 每 30 秒运行，批量上限 100，共享事项行锁；通知与代际同事务提交，网络在提交后投递，租约 60 秒，失败从 60 秒指数退避到最多 15 分钟，原提醒时间后 24 小时停止投递。生产 APNs 网关配置保持不变。
+
+请求 / 审计日志及 Nginx 的 Todo API 日志边界不记录标题、备注、搜索词或完整请求。过期请求回执按 24 小时清理；创建键随事项保留，删除墓碑保留 90 天，已完成事项保留至主动删除。
+
+测试在仓库根运行 `pnpm --filter @synapse/server run test src/todos src/notifications`；真实事务测试使用 `pnpm --filter @synapse/server run test:todos:e2e`。后者必须通过私有进程环境传入 `TODOS_E2E_DATABASE_URL`，只允许回环 PostgreSQL 且库名以 `_e2e` 结尾，会向该专用库应用迁移并准备夹具；不得指向开发业务库或生产。测试证据与实际跨端 / 推送缺口见[验收记录](../docs/superpowers/acceptance/2026-10-11-cloud-todos.md)。
+
+### 启动
+
 ```bash
 # 在项目根目录
 pnpm dev:server

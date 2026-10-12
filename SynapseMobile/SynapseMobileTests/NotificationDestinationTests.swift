@@ -88,6 +88,14 @@ struct NotificationDestinationTests {
         #expect(NotificationDestination.actionLabel(for: notification(source: "external", targetId: nil, deviceId: nil, url: nil)) == "查看通知")
     }
 
+    @Test func todoUsesTrustedSourceAndTargetWithoutAComputer() {
+        let item = notification(source: "todo-reminder", targetId: "todo_1", deviceId: nil, url: "synapse://todos/other?completed=true")
+        #expect(NotificationDestination.resolve(item) == .route(.todo(id: "todo_1")))
+        #expect(NotificationDestination.actionLabel(for: item) == "查看待办")
+        #expect(NotificationDestination.resolve(notification(source: "external", targetId: "todo_1", deviceId: nil, url: "synapse://todos/todo_1")) == .none)
+        #expect(NotificationDestination.resolve(notification(source: "todo-reminder", targetId: "a/b", deviceId: nil, url: nil)) == .none)
+    }
+
     // MARK: - Fixtures
 
     private func notification(
