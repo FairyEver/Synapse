@@ -11,7 +11,7 @@ import type { DriveAnnotationTextPositionSelector } from "@synapse/shared"
 import { parseDriveMarkdownRelativeImageSrc } from "./drive-markdown-relative-images"
 
 export const DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION = 1
-export const DRIVE_MARKDOWN_PARSER_VERSION = "remark-15-gfm-4-space-image-1-html-table-break-2"
+export const DRIVE_MARKDOWN_PARSER_VERSION = "remark15-gfm4-img1-html2-lf1"
 
 type MarkdownPosition = {
   readonly start: { readonly offset?: number }
@@ -88,6 +88,7 @@ export function buildDriveMarkdownProjection(
   const definitions = collectImageDefinitions(tree)
   const utf16ToCodePoint = createUtf16ToCodePointMap(markdown)
   const headingStack: string[] = []
+  const hasCrlf = markdown.includes("\r\n")
   let renderedCursor = 0
 
   const visit = (node: MarkdownProjectionNode, parentBlockIndex: number | null): void => {
@@ -101,6 +102,8 @@ export function buildDriveMarkdownProjection(
         headingStack[depth - 1] = normalizedVisibleText(node)
       }
       const text = visibleText(node)
+      const carriageReturnOffsets = hasCrlf ? Array.from(visibleText(node, false)).flatMap((character, index, points) =>
+        character === "\r" && points[index + 1] === "\n" ? [index] : []) : []
       const sourceStart = utf16ToCodePoint(node.position.start.offset ?? 0)
       const sourceEnd = utf16ToCodePoint(node.position.end.offset ?? 0)
       currentParentBlockIndex = blocks.length
@@ -114,6 +117,7 @@ export function buildDriveMarkdownProjection(
         renderedStart: renderedCursor,
         renderedEnd: renderedCursor + codePointLength(text),
         textFingerprint: sha256(`${type}\0${normalizeText(text)}`),
+        ...(carriageReturnOffsets.length > 0 ? { authoredCarriageReturnOffsets: carriageReturnOffsets } : {}),
       })
     }
 
@@ -133,6 +137,14 @@ export function buildDriveMarkdownProjection(
     const block = blocks[blockIndex]
     const sourceStart = utf16ToCodePoint(node.position.start.offset ?? 0)
     const sourceEnd = utf16ToCodePoint(node.position.end.offset ?? 0)
+    const authoredText = type === "text"
+      ? markdown.slice(node.position.start.offset ?? 0, node.position.end.offset ?? 0)
+      : ""
+    if (authoredText.includes("\r\n") && authoredText.replace(/\r\n?/gu, "\n") === text) {
+      segments.push(...splitCrlfTextSegments(authoredText, blockIndex, sourceStart, renderedCursor))
+      renderedCursor += renderedLength
+      return
+    }
     const segmentIndex = segments.length
     segments.push({
       blockIndex,
@@ -172,6 +184,7 @@ export function buildDriveMarkdownProjection(
     renderedStart: block.renderedStart,
     renderedEnd: block.renderedEnd,
     textFingerprint: block.textFingerprint,
+    ...(block.authoredCarriageReturnOffsets ? { authoredCarriageReturnOffsets: block.authoredCarriageReturnOffsets } : {}),
   }))
   const finalizedSegments = segments.map((segment, index) => {
     const blockId = finalizedBlocks[segment.blockIndex]?.blockId ?? finalizedBlocks[0]?.blockId ?? "mdb_root"
@@ -507,11 +520,41 @@ function hasOffsets(node: MarkdownProjectionNode): node is MarkdownProjectionNod
   return typeof node.position?.start.offset === "number" && typeof node.position?.end.offset === "number"
 }
 
-function visibleText(node: MarkdownProjectionNode): string {
-  if (markdownImageTypes.has(node.type ?? "") && typeof node.alt === "string") return node.alt
+function splitCrlfTextSegments(text: string, blockIndex: number, sourceStart: number, renderedStart: number): MutableProjectionSegment[] {
+  const points = Array.from(text)
+  const segments: MutableProjectionSegment[] = []
+  let start = 0
+  let renderedCursor = renderedStart
+  const append = (end: number, mapping: MutableProjectionSegment["mapping"]) => {
+    if (end === start) return
+    const length = mapping === "generated" ? 1 : end - start
+    segments.push({
+      blockIndex,
+      sourceStart: sourceStart + start,
+      sourceEnd: sourceStart + end,
+      renderedStart: renderedCursor,
+      renderedEnd: renderedCursor + length,
+      mapping,
+    })
+    start = end
+    renderedCursor += length
+  }
+  for (let index = 0; index < points.length - 1; index += 1) {
+    if (points[index] !== "\r" || points[index + 1] !== "\n") continue
+    append(index, "identity")
+    append(index + 2, "generated")
+    index += 1
+  }
+  append(points.length, "identity")
+  return segments
+}
+
+function visibleText(node: MarkdownProjectionNode, normalizeLineEndings = true): string {
   if (node.type === "break") return "\n"
-  if (typeof node.value === "string") return node.value
-  return (node.children ?? []).map(visibleText).join("")
+  const value = markdownImageTypes.has(node.type ?? "") && typeof node.alt === "string" ? node.alt : node.value
+  // HTML parsing normalizes CRLF and CR without changing the authored source coordinates.
+  if (typeof value === "string") return normalizeLineEndings ? value.replace(/\r\n?/gu, "\n") : value
+  return (node.children ?? []).map((child) => visibleText(child, normalizeLineEndings)).join("")
 }
 
 function collectImageDefinitions(tree: MarkdownProjectionNode): ReadonlyMap<string, { readonly source: string; readonly title: string | null }> {

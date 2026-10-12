@@ -107,6 +107,140 @@ describe('Drive Markdown projection', () => {
     expect(rendered.renderedText).toBe('前 图标 后\n下一行')
   })
 
+  it.each(['\n', '\r\n', '\r'])('keeps comment offsets after fenced code with %j line endings', async (newline) => {
+    const source = ['```mermaid', 'flowchart TD', 'A --> B', '```', '', '正文：组织'].join(newline)
+    const rendered = await renderDriveMarkdownFragment(source)
+    const sourceStart = source.indexOf('组织')
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: sourceStart, end: sourceStart + 2 },
+        renderedPosition: { start: 24, end: 26 },
+        quote: { exact: '组织', prefix: '正文：', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+      crdtSourceRange: { start: sourceStart, end: sourceStart + 2 },
+    })
+
+    expect(rendered.renderedText).toBe('flowchart TD\nA --> B正文：组织')
+    expect(rendered.projection.blocks.find((block) => block.type === 'paragraph')).toMatchObject({
+      renderedStart: 20,
+      renderedEnd: 25,
+    })
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      sourceRange: { start: sourceStart, end: sourceStart + 2 },
+      renderedRange: { start: 23, end: 25 },
+    })
+  })
+
+  it('normalizes soft line endings without rewriting source offsets', async () => {
+    const source = '前文\r\n后文\r\n\r\n组织'
+    const rendered = await renderDriveMarkdownFragment(source)
+
+    expect(rendered.renderedText).toBe('前文\n后文组织')
+    expect(rendered.projection.segments.at(-1)).toMatchObject({
+      sourceStart: 10,
+      sourceEnd: 12,
+      renderedStart: 5,
+      renderedEnd: 7,
+      mapping: 'identity',
+    })
+    expect(rendered.projection.segments.slice(0, 3)).toMatchObject([
+      { sourceStart: 0, sourceEnd: 2, renderedStart: 0, renderedEnd: 2, mapping: 'identity' },
+      { sourceStart: 2, sourceEnd: 4, renderedStart: 2, renderedEnd: 3, mapping: 'generated' },
+      { sourceStart: 4, sourceEnd: 6, renderedStart: 3, renderedEnd: 5, mapping: 'identity' },
+    ])
+  })
+
+  it.each([
+    { origin: 'authored', start: 4, end: 6 },
+    { origin: 'browser', start: 3, end: 5 },
+  ])('preserves old $origin semantic comments inside CRLF code blocks', async ({ start, end }) => {
+    const source = ['```text', '前文', '后文文', '```'].join('\r\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const block = rendered.projection.blocks[0]
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: 0, end: source.length },
+        renderedPosition: { start, end },
+        semantic: { blockId: block.blockId, start, end },
+        quote: { exact: '后文', prefix: '', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      renderedRange: { start: 3, end: 5 },
+    })
+  })
+
+  it('refuses ambiguous old semantic coordinates when both newline interpretations match', async () => {
+    const source = ['```text', 'ab', 'aaa', '```'].join('\r\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: 0, end: source.length },
+        renderedPosition: { start: 4, end: 6 },
+        semantic: { blockId: rendered.projection.blocks[0].blockId, start: 4, end: 6 },
+        quote: { exact: 'aa', prefix: '', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(resolution).toMatchObject({ positionStatus: 'ambiguous', renderedRange: null })
+  })
+
+  it('compares old multiline quotes in browser line endings without changing stored evidence', async () => {
+    const source = ['```text', '前文', '后文', '```'].join('\r\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const quote = { exact: '前文\r\n后文', prefix: '', suffix: '' }
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: 0, end: source.length },
+        semantic: { blockId: rendered.projection.blocks[0].blockId, start: 0, end: 6 },
+        quote,
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(resolution).toMatchObject({ positionStatus: 'attached', quoteStatus: 'exact', renderedRange: { start: 0, end: 5 } })
+    expect(quote.exact).toBe('前文\r\n后文')
+  })
+
+  it('keeps normalized semantic comments attached after the quoted code is modified', async () => {
+    const source = ['```text', '前文', '新版文', '```'].join('\r\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        renderedTextNormalized: true,
+        position: { start: 0, end: source.length },
+        semantic: { blockId: rendered.projection.blocks[0].blockId, start: 3, end: 5 },
+        quote: { exact: '旧版', prefix: '', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(resolution).toMatchObject({ positionStatus: 'attached', quoteStatus: 'modified', renderedRange: { start: 3, end: 5 } })
+  })
+
   it('keeps text anchors aligned after escaped raw HTML', async () => {
     const source = '前文<u>g</u>后文唯一评论文本。'
     const quote = '后文唯一评论文本。'

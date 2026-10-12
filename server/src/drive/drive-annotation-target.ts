@@ -63,6 +63,7 @@ const imageTargetSchema = z.object({
 
 const textSelectorsSchema = z.object({
   schemaVersion: z.literal(2),
+  renderedTextNormalized: z.literal(true).optional(),
   crdt: z.object({
     epoch: z.string().min(1).max(64),
     start: z.string().min(1).max(64 * 1024),

@@ -64,6 +64,24 @@ describe("drive annotation target helpers", () => {
     expect(parsed).toMatchObject({ targetKind: "image", target: { imageId: "mdimg_1" }, body: "图片评论" })
   })
 
+  it("accepts normalized text selectors while preserving compatibility with unmarked selectors", () => {
+    for (const marker of [{}, { renderedTextNormalized: true }]) {
+      const parsed = parseDriveAnnotationCreateBody({
+        targetKind: "textRange",
+        target: {
+          schemaVersion: 1, kind: "textRange", surface: "markdownRenderedText",
+          range: { start: 0, end: 2 }, quote: { exact: "组织", prefix: "", suffix: "" },
+        },
+        selectors: {
+          schemaVersion: 2, ...marker, position: { start: 0, end: 2 },
+          quote: { exact: "组织", prefix: "", suffix: "" },
+        },
+        body: "Comment",
+      })
+      expect(parsed.selectors).toMatchObject({ ...marker, position: { start: 0, end: 2 } })
+    }
+  })
+
   it("rejects empty comments and collapsed ranges in first-version UI input", () => {
     expect(() => parseDriveAnnotationCreateBody({
       targetKind: "textRange",

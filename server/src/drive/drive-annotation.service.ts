@@ -719,6 +719,7 @@ export class DriveAnnotationService {
       .sort((left, right) => (left.renderedEnd - left.renderedStart) - (right.renderedEnd - right.renderedStart))[0]
     const selectors: DriveAnnotationTextSelectorsV2 = {
       schemaVersion: 2,
+      renderedTextNormalized: true,
       position: resolution.sourceRange,
       renderedPosition: renderedRange,
       quote,

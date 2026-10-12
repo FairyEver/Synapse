@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
-import type { DriveAnnotationThreadDto, DriveMarkdownProjectionDto } from '@synapse/shared'
+import { resolveDriveAnnotationAnchor, type DriveAnnotationThreadDto, type DriveMarkdownProjectionDto } from '@synapse/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { renderDriveMarkdownFragment } from '../../../../../server/src/drive/drive-markdown-renderer'
 import { renderMarkdownAnnotationHtml } from './markdown-annotation-render'
+import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
+import { createMarkdownRenderedDomRange, createMarkdownRenderedTextModel } from './markdown-rendered-text'
 
 describe('renderMarkdownAnnotationHtml', () => {
   afterEach(() => vi.restoreAllMocks())
@@ -193,6 +196,60 @@ describe('renderMarkdownAnnotationHtml', () => {
     })
   })
 
+  it.each([
+    { newline: '\n', trailingBlank: false },
+    { newline: '\r\n', trailingBlank: false },
+    { newline: '\r', trailingBlank: false },
+    { newline: '\n', trailingBlank: true },
+    { newline: '\r\n', trailingBlank: true },
+    { newline: '\r', trailingBlank: true },
+  ])('highlights the exact comment after fenced code with $newline and trailingBlank=$trailingBlank', async ({ newline, trailingBlank }) => {
+    const source = ['```mermaid', 'flowchart TD', 'A --> B', ...(trailingBlank ? [''] : []), '```', '', '正文：组织'].join(newline)
+    const rendered = await renderDriveMarkdownFragment(source)
+    const sourceStart = source.indexOf('组织')
+    const selectors = {
+      schemaVersion: 2 as const,
+      position: { start: sourceStart, end: sourceStart + 2 },
+      renderedPosition: { start: 24, end: 26 },
+      quote: { exact: '组织', prefix: '正文：', suffix: '' },
+    }
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors,
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+      crdtSourceRange: selectors.position,
+    })
+    const annotation: DriveAnnotationThreadDto = {
+      ...anchoredThread(),
+      anchor: {
+        ...anchoredThread().anchor!,
+        selectors,
+        positionStatus: resolution.positionStatus,
+        quoteStatus: resolution.quoteStatus,
+        confidence: resolution.confidence,
+        resolvedSourceRange: resolution.sourceRange,
+        resolvedRenderedRange: resolution.renderedRange,
+      },
+    }
+    const root = document.createElement('main')
+    root.innerHTML = rendered.html
+    const model = createMarkdownRenderedTextModel(root, rendered.projection)
+
+    for (const live of [false, true]) {
+      const result = renderMarkdownAnnotationHtml(rendered.html, [annotation], 'version-1', live ? {
+        sourceText: source,
+        projection: rendered.projection,
+        resolveCrdtRange: () => selectors.position,
+      } : null, rendered.projection)
+      const resolved = result.resolved[0]
+      expect(resolved).toMatchObject({ anchorStatus: 'attached', quoteStatus: 'exact' })
+      expect(resolved.range).not.toBeNull()
+      const range = resolved.range!
+      expect(createMarkdownRenderedDomRange(root, model.segments, range.start, range.end)?.toString()).toBe('组织')
+    }
+  })
+
   it('scans Unicode text once for many cached anchors and preserves their DOM offsets', () => {
     const text = '😀 Note '.repeat(100)
     const iterator = String.prototype[Symbol.iterator]
@@ -220,6 +277,43 @@ describe('renderMarkdownAnnotationHtml', () => {
     expect(result.resolved).toHaveLength(100)
     result.resolved.forEach((range, index) => {
       expect(range).toMatchObject({ anchorStatus: 'attached', range: { start: index * 8 + 3, end: index * 8 + 7 } })
+    })
+  })
+
+  it('keeps a CRLF paragraph selection precise after text is inserted before it', async () => {
+    const source = '前文\r\n后文'
+    const rendered = await renderDriveMarkdownFragment(source)
+    const root = document.createElement('main')
+    root.innerHTML = rendered.html
+    document.body.append(root)
+    const model = createMarkdownRenderedTextModel(root, rendered.projection)
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    selection.addRange(createMarkdownRenderedDomRange(root, model.segments, 3, 5)!)
+    const anchor = createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: rendered.projection })
+    selection.removeAllRanges()
+    root.remove()
+
+    expect(anchor?.selectors.position).toEqual({ start: 4, end: 6 })
+    expect(anchor?.target.quote.exact).toBe('后文')
+    if (!anchor || anchor.selectors.kind === 'image') throw new Error('Missing text anchor')
+    const updatedSource = `新增的${source}`
+    const updated = await renderDriveMarkdownFragment(updatedSource, {
+      previousProjection: { source, projection: rendered.projection },
+    })
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: anchor.selectors,
+      projection: updated.projection,
+      sourceText: updatedSource,
+      renderedText: updated.renderedText,
+      crdtSourceRange: { start: 7, end: 9 },
+    })
+
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      sourceRange: { start: 7, end: 9 },
+      renderedRange: { start: 6, end: 8 },
     })
   })
 

@@ -85,6 +85,7 @@ export function createMarkdownAnnotationAnchorFromSelection(input: {
       target,
       selectors: {
         schemaVersion: 2,
+        renderedTextNormalized: true,
         position: renderedPosition,
         renderedPosition,
         quote: {
@@ -128,6 +129,7 @@ export function createMarkdownAnnotationAnchorFromSelection(input: {
     target,
     selectors: {
       schemaVersion: 2,
+      renderedTextNormalized: true,
       ...(crdt ? { crdt } : {}),
       ...(block ? {
         semantic: {

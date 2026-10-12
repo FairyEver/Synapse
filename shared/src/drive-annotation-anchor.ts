@@ -23,14 +23,26 @@ export function resolveDriveAnnotationAnchor(input: {
   readonly crdtSourceRange?: DriveAnnotationTextPositionSelector | null
   readonly diffSourceRange?: DriveAnnotationTextPositionSelector | null
 }): DriveAnnotationAnchorResolution {
-  if (!input.projection) return unavailableResolution()
+  const projection = input.projection
+  if (!projection) return unavailableResolution()
+  input = {
+    ...input,
+    selectors: {
+      ...input.selectors,
+      quote: {
+        exact: input.selectors.quote.exact.replace(/\r\n?/gu, "\n"),
+        prefix: input.selectors.quote.prefix.replace(/\r\n?/gu, "\n"),
+        suffix: input.selectors.quote.suffix.replace(/\r\n?/gu, "\n"),
+      },
+    },
+  }
   const exact = input.selectors.quote.exact
 
   const crdtRangeCollapsed = Boolean(input.crdtSourceRange
     && input.crdtSourceRange.start === input.crdtSourceRange.end)
 
   const crdtCandidate = input.crdtSourceRange && !crdtRangeCollapsed
-    ? sourceToRenderedCandidate(input.projection, input.crdtSourceRange)
+    ? sourceToRenderedCandidate(projection, input.crdtSourceRange)
     : null
   let relationshipIndicatesDeletion = crdtRangeCollapsed
   if (crdtCandidate) {
@@ -42,7 +54,21 @@ export function resolveDriveAnnotationAnchor(input: {
     relationshipIndicatesDeletion = true
   }
 
-  const semanticCandidate = semanticCandidateRange(input.selectors, input.projection)
+  const semanticCandidates = semanticCandidateRanges(input.selectors, projection)
+  if (semanticCandidates.requiresExactMatch) {
+    const matches = semanticCandidates.candidates.filter((candidate) => sliceByCodePoints(
+      input.renderedText, candidate.renderedRange.start, candidate.renderedRange.end,
+    ) === exact)
+    if (matches.length === 1) return classifyCandidate(input, matches[0], 0.97, false)!
+    if (matches.length > 1) return {
+      positionStatus: "ambiguous",
+      quoteStatus: "exact",
+      sourceRange: null,
+      renderedRange: null,
+      confidence: 0,
+    }
+  }
+  const semanticCandidate = semanticCandidates.requiresExactMatch ? null : semanticCandidates.candidates[0]
   if (semanticCandidate) {
     const semanticResolution = classifyCandidate(input, semanticCandidate, 0.97, false)
     if (semanticResolution?.quoteStatus === "exact") return semanticResolution
@@ -52,7 +78,7 @@ export function resolveDriveAnnotationAnchor(input: {
   }
 
   const diffCandidate = input.diffSourceRange
-    ? sourceToRenderedCandidate(input.projection, input.diffSourceRange)
+    ? sourceToRenderedCandidate(projection, input.diffSourceRange)
     : null
   if (diffCandidate) {
     const diffResolution = classifyCandidate(input, diffCandidate, 0.92, true, 0.72)
@@ -65,7 +91,7 @@ export function resolveDriveAnnotationAnchor(input: {
 
   const exactMatches = findAllCodePointMatches(input.renderedText, exact)
   if (exactMatches.length === 1) {
-    return withSourceRange(input.projection, exactMatches[0], "attached", "exact", 0.9)
+    return withSourceRange(projection, exactMatches[0], "attached", "exact", 0.9)
   }
   if (exactMatches.length > 1) {
     const ranked = exactMatches
@@ -74,7 +100,7 @@ export function resolveDriveAnnotationAnchor(input: {
     const best = ranked[0]
     const second = ranked[1]
     if (best && best.score >= 4 && (!second || best.score - second.score >= 2)) {
-      return withSourceRange(input.projection, best.range, "attached", "exact", Math.min(0.89, 0.72 + best.score / 40))
+      return withSourceRange(projection, best.range, "attached", "exact", Math.min(0.89, 0.72 + best.score / 40))
     }
     return {
       positionStatus: "ambiguous",
@@ -92,7 +118,7 @@ export function resolveDriveAnnotationAnchor(input: {
   const contextualSecond = contextualMatches[1]
   if (contextualBest && contextualBest.score >= 10
     && (!contextualSecond || contextualBest.score - contextualSecond.score >= 2)) {
-    const sourceRange = renderedToSourceRange(input.projection, contextualBest.range)
+    const sourceRange = renderedToSourceRange(projection, contextualBest.range)
     if (sourceRange) {
       const resolution = classifyCandidate(input, { sourceRange, renderedRange: contextualBest.range }, 0.82, false)
       if (resolution) return resolution
@@ -403,21 +429,32 @@ function preservesQuoteContext(
   return prefixMatches && suffixMatches
 }
 
-function semanticCandidateRange(
+function semanticCandidateRanges(
   selectors: DriveAnnotationTextSelectorsV2,
   projection: DriveMarkdownProjectionDto,
-): { readonly sourceRange: DriveAnnotationTextPositionSelector; readonly renderedRange: DriveAnnotationTextPositionSelector } | null {
+): {
+  readonly candidates: Array<{ readonly sourceRange: DriveAnnotationTextPositionSelector; readonly renderedRange: DriveAnnotationTextPositionSelector }>
+  readonly requiresExactMatch: boolean
+} {
   const semantic = selectors.semantic
-  if (!semantic) return null
+  if (!semantic) return { candidates: [], requiresExactMatch: false }
   const block = projection.blocks.find((candidate) => candidate.blockId === semantic.blockId)
-  if (!block) return null
-  const renderedRange = {
-    start: block.renderedStart + semantic.start,
-    end: block.renderedStart + semantic.end,
+  if (!block) return { candidates: [], requiresExactMatch: false }
+  const localRanges: DriveAnnotationTextPositionSelector[] = [semantic]
+  const carriageReturns = selectors.renderedTextNormalized ? [] : block.authoredCarriageReturnOffsets ?? []
+  const normalized = {
+    start: semantic.start - carriageReturns.filter((offset) => offset < semantic.start).length,
+    end: semantic.end - carriageReturns.filter((offset) => offset < semantic.end).length,
   }
-  if (renderedRange.start < block.renderedStart || renderedRange.end > block.renderedEnd || renderedRange.end < renderedRange.start) return null
-  const sourceRange = renderedToSourceRange(projection, renderedRange)
-  return sourceRange ? { sourceRange, renderedRange } : null
+  const requiresExactMatch = normalized.start !== semantic.start || normalized.end !== semantic.end
+  if (requiresExactMatch) localRanges.push(normalized)
+  const candidates = localRanges.flatMap((range) => {
+    const renderedRange = { start: block.renderedStart + range.start, end: block.renderedStart + range.end }
+    if (renderedRange.start < block.renderedStart || renderedRange.end > block.renderedEnd || renderedRange.end < renderedRange.start) return []
+    const sourceRange = renderedToSourceRange(projection, renderedRange)
+    return sourceRange ? [{ sourceRange, renderedRange }] : []
+  })
+  return { candidates, requiresExactMatch }
 }
 
 function sourceToRenderedCandidate(

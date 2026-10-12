@@ -1169,6 +1169,7 @@ export interface DriveAnnotationTextQuoteSelector {
 
 export interface DriveAnnotationTextSelectorsV2 {
   readonly schemaVersion: 2
+  readonly renderedTextNormalized?: true
   readonly kind?: "textRange"
   readonly crdt?: DriveAnnotationCrdtRangeSelector
   readonly semantic?: DriveAnnotationSemanticRangeSelector
@@ -1327,6 +1328,7 @@ export interface DriveMarkdownProjectionBlockDto {
   readonly renderedStart: number
   readonly renderedEnd: number
   readonly textFingerprint: string
+  readonly authoredCarriageReturnOffsets?: readonly number[]
 }
 
 export interface DriveMarkdownProjectionSegmentDto {

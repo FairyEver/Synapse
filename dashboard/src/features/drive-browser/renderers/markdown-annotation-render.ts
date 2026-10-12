@@ -44,7 +44,7 @@ export function renderMarkdownAnnotationHtml(
   if (threads.length === 0) return { html, resolved: [] }
   const template = document.createElement('template')
   template.innerHTML = html
-  const renderedText = getMarkdownRenderedText(template.content)
+  const renderedText = getMarkdownRenderedText(template.content, liveDocument?.projection ?? currentProjection)
   let utf16Offsets: readonly number[] | null = null
   let imageIds: Set<string | undefined> | null = null
   const toUtf16Range = (range: { readonly start: number; readonly end: number }) => {
@@ -134,7 +134,7 @@ export function renderMarkdownAnnotationHtml(
       const cachedRange = thread.anchor.resolvedRenderedRange
       const cachedUtf16Range = cachedRange ? toUtf16Range(cachedRange) : null
       const exactRangeMatches = thread.anchor.quoteStatus !== 'exact'
-        || Boolean(cachedUtf16Range && renderedText.slice(cachedUtf16Range.start, cachedUtf16Range.end) === thread.anchor.selectors.quote.exact)
+        || Boolean(cachedUtf16Range && renderedText.slice(cachedUtf16Range.start, cachedUtf16Range.end) === thread.anchor.selectors.quote.exact.replace(/\r\n?/gu, '\n'))
       const positionStatus = exactRangeMatches ? thread.anchor.positionStatus : 'orphaned' as const
       return {
         threadId: thread.id,
