@@ -1,4 +1,7 @@
+import type { DriveDiscussionNotificationMetadata } from "@synapse/shared"
+
 export type SynapseNotification = {
+  readonly driveDiscussion?: DriveDiscussionNotificationMetadata
   readonly id: string
   readonly source: string
   readonly title: string

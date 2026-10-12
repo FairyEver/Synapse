@@ -7,6 +7,7 @@ export const NOTIFICATION_SOURCES = [
   "meeting-transcription",
   "mail",
   "todo-reminder",
+  "drive-discussion",
 ] as const
 
 export type NotificationSource = (typeof NOTIFICATION_SOURCES)[number]

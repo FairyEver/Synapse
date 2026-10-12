@@ -28,6 +28,7 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
   "meeting-transcription": "录音转写",
   "todo-reminder": "待办提醒",
   external: "外部通知",
+  "drive-discussion": "文档互动",
 }
 
 function sourceName(item: SynapseNotification): string {

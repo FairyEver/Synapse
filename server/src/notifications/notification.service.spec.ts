@@ -29,6 +29,17 @@ function harness() {
 }
 
 describe("NotificationService", () => {
+  it("projects discussion metadata without exposing its internal share context", async () => {
+    const { service, prisma } = harness()
+    prisma.userNotification.findFirst.mockResolvedValueOnce({
+      ...record, source: "drive-discussion",
+      driveDiscussionTarget: { kind: "annotation", action: "replied", sourceShareId: "private-share" },
+    } as UserNotification)
+    const result = await service.get("user-1", "message-1")
+    expect(result).toMatchObject({ driveDiscussion: { kind: "annotation", action: "replied" } })
+    expect(result).not.toHaveProperty("driveDiscussionTarget")
+    expect(result).not.toHaveProperty("sourceShareId")
+  })
   it("stops delivery when its lease is cancelled during the record read", async () => {
     const { service, prisma, desktops, mobiles, push } = harness()
     const controller = new AbortController()
@@ -73,6 +84,7 @@ describe("NotificationService", () => {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 51,
+      include: { driveDiscussionTarget: { select: { kind: true, action: true } } },
     })
   })
 

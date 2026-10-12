@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma, type UserNotification } from "@prisma/client"
-import { LIVE_MESSAGE_TYPES, createLiveEnvelope, type NotificationSource } from "@synapse/shared"
+import { LIVE_MESSAGE_TYPES, createLiveEnvelope, type NotificationSource, type DriveDiscussionNotificationMetadata } from "@synapse/shared"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobileLiveGateway } from "../mobile-live/mobile-live.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
@@ -146,12 +146,14 @@ export class NotificationService implements OnModuleInit {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 51,
+      include: { driveDiscussionTarget: { select: { kind: true, action: true } } },
     })
-    return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]?.id ?? null : null }
+    return { items: rows.slice(0, 50).map(toNotificationProjection), nextCursor: rows.length > 50 ? rows[49]?.id ?? null : null }
   }
 
   async get(userId: string, id: string) {
-    return this.prisma.userNotification.findFirst({ where: { id, userId, deletedAt: null } })
+    const record = await this.prisma.userNotification.findFirst({ where: { id, userId, deletedAt: null }, include: { driveDiscussionTarget: { select: { kind: true, action: true } } } })
+    return record ? toNotificationProjection(record) : null
   }
 
   async unreadCount(userId: string): Promise<number> {
@@ -241,4 +243,10 @@ export class NotificationService implements OnModuleInit {
   async pruneExpired(): Promise<void> {
     await this.prisma.userNotification.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - retentionMs) } } })
   }
+}
+
+function toNotificationProjection(record: UserNotification & { driveDiscussionTarget?: { kind: string; action: string } | null }) {
+  const { driveDiscussionTarget: target, ...notification } = record
+  if (record.source !== "drive-discussion" || !target || !["annotation", "message"].includes(target.kind) || !["created", "replied"].includes(target.action)) return notification
+  return { ...notification, driveDiscussion: { kind: target.kind, action: target.action } as DriveDiscussionNotificationMetadata }
 }
