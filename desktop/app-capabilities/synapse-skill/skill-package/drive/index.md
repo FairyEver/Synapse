@@ -18,6 +18,8 @@ These names alone do not authorize publishing a share or site, creating a public
 
 ## Scope
 
+New Markdown annotation threads, document messages, and their replies automatically notify related accounts on the server. Do not send a second System Notifier message for the same creation. Editing, deleting, resolving, and reopening do not notify; historical creations are not backfilled. Notifications contain a plain-text excerpt and an exact discussion link subject to the current document and original share access. Legacy participation without a recorded share can still receive new-reply notifications, but its link can be unavailable; do not create or choose another share to work around this.
+
 Use these tools only for Synapse Drive:
 
 - `app_drive_item_list`

@@ -304,7 +304,10 @@ private struct NotificationRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                MarkdownContent(item.body, mode: .preview(lines: 2))
+                Group {
+                    if item.source == "drive-discussion" { Text(item.body).lineLimit(2) }
+                    else { MarkdownContent(item.body, mode: .preview(lines: 2)) }
+                }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if dynamicTypeSize.isAccessibilitySize {

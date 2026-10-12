@@ -117,7 +117,9 @@ function MessageDetail({ center }: { center: Center }) {
       </dl>}
       <div className="mt-7 border-t pt-6">
         {isMail && center.mailError && <div role="alert" className="mb-4 flex items-center gap-2 text-sm text-destructive">{center.mailError}<Button type="button" variant="outline" size="default" onClick={center.retryMail}>重试</Button></div>}
-        <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />
+        {item.source === "drive-discussion"
+          ? <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
+          : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
       {action && <div className="mt-7 flex flex-wrap gap-2"><Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button></div>}

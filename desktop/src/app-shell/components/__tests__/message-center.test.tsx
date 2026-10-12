@@ -44,6 +44,16 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear(); mockCenter.changeSource.mockClear() })
 
 describe("MessageCenter", () => {
+  it("renders a discussion excerpt as literal text rather than new Markdown links", async () => {
+    const previous = mockCenter.selected
+    mockCenter.selected = { ...previous, source: "drive-discussion", targetId: null, body: "[下载](https://outside.example)" } as never
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host)
+    try {
+      await act(async () => root.render(<MessageCenter />))
+      expect(document.body.textContent).toContain("[下载](https://outside.example)")
+      expect(document.querySelector('a[href="https://outside.example"]')).toBeNull()
+    } finally { await act(async () => root.unmount()); mockCenter.selected = previous }
+  })
   it.each([
     ["annotation", "created", "查看评论"], ["message", "created", "查看留言"],
     ["message", "replied", "查看回复"], [undefined, undefined, "查看文档"],

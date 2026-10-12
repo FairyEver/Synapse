@@ -3,6 +3,12 @@ import { DRIVE_DOMAIN, DRIVE_MCP_TOOL_ACTIONS, buildDriveTools } from "./drive-d
 import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "./registry"
 
 describe("Drive capability domain", () => {
+  it("creation tools describe automatic recipient notifications without adding tools", () => {
+    const tools = buildDriveTools()
+    for (const name of ["app_drive_link_annotation_thread_create", "app_drive_link_annotation_comment_create", "app_drive_message_create", "app_drive_message_comment_create"]) {
+      expect(tools.find((tool) => tool.name === name)?.description).toContain("automatically notifies")
+    }
+  })
   it("registers Drive MCP tools and actions", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
 

@@ -820,3 +820,6 @@ Future target examples:
 - Status changes preserve comment-activity ordering, record an audit and publish the existing `annotation.changed` event after persistence. Repeating the same desired status does not write, audit or publish again. Concurrent writes never restore a deleted discussion.
 - PATCH the owner/share annotation `/:threadId/status` with `{ status }` and return the updated DTO. MCP uses `app.drive.link.annotation.thread.status.update` via the authenticated link-intake `annotations/threads/status` endpoint and the same service/permissions.
 - This addition does not include document-message status, filters, batch actions, tasks, assignments or notifications.
+## 2026-10-12：新评论与回复通知
+
+新线程首评只产生一次创建通知；新回复按所有者、讨论发起人、直接被回复者去重，排除作者和失效账号。状态变更、编辑、删除不通知，历史创建不补发；首评/回复保存原分享来源。通知与内容在同一事务提交，删除与回复创建共用文档行锁。定位使用完整线程/评论 ID，已解决或未定位讨论可展开，打开不改变状态或重挂原文锚点。完整边界见 [文档互动通知设计](2026-10-12-drive-discussion-notifications-design.md)。

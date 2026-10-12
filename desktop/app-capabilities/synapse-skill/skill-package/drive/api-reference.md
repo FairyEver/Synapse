@@ -709,3 +709,7 @@ Input:
 `authority: "local" | "remote"` is valid only with `direction: "bind_existing"`. Never infer authority from a generic sync request. The chosen side replaces differing included files and removes target-only included entries through recoverable trash. Subsequent sync remains bidirectional. Excluded entries are not touched; type collisions and trashing folders containing exclusions are blocked.
 
 Pass preview's `confirmationToken` unchanged to create after the user approves that plan. Account, scope, authority, identity, or content changes require a fresh preview. Optional `replaceBindingId` replaces an owned same-kind binding only after alignment succeeds. Interrupted authority execution remains paused and requires review again; an existing paused/error record is not a successful sync.
+
+## Automatic discussion notifications
+
+The existing annotation-thread creation, annotation reply, message creation, and message reply tools automatically notify the owner and relevant participants after committing. There is no separate notification parameter or tool. Recipients are deduplicated, the actor is excluded, and existing access checks remain authoritative. Editing/deleting/resolving/reopening does not notify. Do not send a duplicate notification or expose another participant's share context.

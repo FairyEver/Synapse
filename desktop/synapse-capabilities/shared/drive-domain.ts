@@ -30,17 +30,17 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.list" as CapabilityId, title: "List Drive link", description: "List children or resources for a resolved Synapse Drive link.", mutates: false },
   { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link, including image ids for complete Markdown responses.", mutates: false },
   { id: "app.drive.link.annotation.thread.list" as CapabilityId, title: "List Drive link annotation threads", description: "List all visible annotation threads and projected permissions for a shared Markdown document.", mutates: false },
-  { id: "app.drive.link.annotation.thread.create" as CapabilityId, title: "Create Drive link annotation thread", description: "Create an anchored annotation thread on uniquely identified visible text or a projected whole image in a shared Markdown document.", mutates: true },
-  { id: "app.drive.link.annotation.comment.create" as CapabilityId, title: "Reply to Drive link annotation", description: "Add a comment or nested reply to an annotation thread in a shared Markdown document.", mutates: true },
+  { id: "app.drive.link.annotation.thread.create" as CapabilityId, title: "Create Drive link annotation thread", description: "Create an anchored annotation thread on uniquely identified visible text or a projected whole image in a shared Markdown document. The server automatically notifies related accounts; do not send a duplicate notification.", mutates: true },
+  { id: "app.drive.link.annotation.comment.create" as CapabilityId, title: "Reply to Drive link annotation", description: "Add a comment or nested reply to an annotation thread in a shared Markdown document. The server automatically notifies related accounts; do not send a duplicate notification.", mutates: true },
   { id: "app.drive.link.annotation.comment.update" as CapabilityId, title: "Update Drive link annotation comment", description: "Edit the current user's annotation comment in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one permitted annotation comment with its descendant replies; deleting the first comment removes the thread.", mutates: true },
   { id: "app.drive.link.annotation.thread.status.update" as CapabilityId, title: "Update Drive link annotation status", description: "Resolve or reopen a shared Markdown annotation thread as its creator.", mutates: true },
   { id: "app.drive.link.annotation.thread.delete" as CapabilityId, title: "Delete Drive link annotation thread", description: "Delete one annotation thread when the current user has permission.", mutates: true },
   { id: "app.drive.message.list" as CapabilityId, title: "List Drive document messages", description: "List unanchored messages and replies on an owned or shared Markdown document.", mutates: false },
-  { id: "app.drive.message.create" as CapabilityId, title: "Create Drive document message", description: "Post an unanchored message below an owned or shared Markdown document.", mutates: true },
+  { id: "app.drive.message.create" as CapabilityId, title: "Create Drive document message", description: "Post an unanchored message below an owned or shared Markdown document. The server automatically notifies related accounts; do not send a duplicate notification.", mutates: true },
   { id: "app.drive.message.update" as CapabilityId, title: "Update Drive document message", description: "Edit one message authored by the current user.", mutates: true },
   { id: "app.drive.message.delete" as CapabilityId, title: "Delete Drive document message", description: "Delete a permitted message and every descendant reply.", mutates: true },
-  { id: "app.drive.message.comment.create" as CapabilityId, title: "Reply to Drive document message", description: "Reply to a message or to any depth of reply.", mutates: true },
+  { id: "app.drive.message.comment.create" as CapabilityId, title: "Reply to Drive document message", description: "Reply to a message or to any depth of reply. The server automatically notifies related accounts; do not send a duplicate notification.", mutates: true },
   { id: "app.drive.message.comment.update" as CapabilityId, title: "Update Drive document message reply", description: "Edit one reply authored by the current user.", mutates: true },
   { id: "app.drive.message.comment.delete" as CapabilityId, title: "Delete Drive document message reply", description: "Delete a permitted reply and its descendants.", mutates: true },
   { id: "app.drive.link.materialize" as CapabilityId, title: "Materialize Drive link", description: "Download a Synapse Drive link into a local cache directory for local Agent tools.", mutates: true },
@@ -465,7 +465,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_create",
-      description: "Create an annotation thread on visible text or one whole projected image in a shared Markdown document identified by a .md name or Markdown MIME type. Chinese intent: 在这段正文上加评论, 在这段原文上评论, 给这段正文添加评论, 对这段原文发表评论. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing.",
+      description: "Create an annotation thread on visible text or one whole projected image in a shared Markdown document identified by a .md name or Markdown MIME type. Chinese intent: 在这段正文上加评论, 在这段原文上评论, 给这段正文添加评论, 对这段原文发表评论. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing. The server automatically notifies related accounts; do not send a duplicate notification.",
       inputSchema: {
         type: "object",
         properties: {
@@ -479,7 +479,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_comment_create",
-      description: "Add a comment to a shared Markdown annotation thread. Supply parentCommentId to reply to a specific visible comment.",
+      description: "Add a comment to a shared Markdown annotation thread. Supply parentCommentId to reply to a specific visible comment. The server automatically notifies related accounts; do not send a duplicate notification.",
       inputSchema: {
         type: "object",
         properties: {
@@ -542,7 +542,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_message_create",
-      description: "Post a plain-text message below an owned or shared Markdown document. Chinese intent: 在文档下留言, 给文档留个言. Unlike an annotation, this message has no text or image anchor.",
+      description: "Post a plain-text message below an owned or shared Markdown document. Chinese intent: 在文档下留言, 给文档留个言. Unlike an annotation, this message has no text or image anchor. The server automatically notifies related accounts; do not send a duplicate notification.",
       inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, body: driveMessageBodyProperty }, required: ["target", "body"] },
     },
     {
@@ -557,7 +557,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_message_comment_create",
-      description: "Reply to a message; parentCommentId optionally targets an existing reply. Arbitrary reply depth is supported.",
+      description: "Reply to a message; parentCommentId optionally targets an existing reply. Arbitrary reply depth is supported. The server automatically notifies related accounts; do not send a duplicate notification.",
       inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, messageId: stringField("Message id."), parentCommentId: { anyOf: [{ type: "string" }, { type: "null" }], description: "Optional parent reply id." }, body: driveMessageBodyProperty }, required: ["target", "messageId", "body"] },
     },
     {

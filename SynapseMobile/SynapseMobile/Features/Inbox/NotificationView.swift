@@ -154,7 +154,8 @@ private struct NotificationFullTextView: View {
                 Text(NotificationText.detailMeta(item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                MarkdownContent(item.body)
+                if item.source == "drive-discussion" { Text(item.body) }
+                else { MarkdownContent(item.body) }
             }
             .padding()
             .frame(maxWidth: 720, alignment: .leading)

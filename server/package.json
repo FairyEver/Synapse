@@ -17,7 +17,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:dev": "prisma migrate dev",
-    "test:todos:e2e": "node test/todos-e2e-database-guard.mjs && pnpm --filter @synapse/portal-headless run build && pnpm --filter @synapse/shared run build && DATABASE_URL=\"$TODOS_E2E_DATABASE_URL\" prisma migrate deploy && DATABASE_URL=\"$TODOS_E2E_DATABASE_URL\" vitest run --config vitest.e2e.config.ts test/todos-commit.e2e.spec.ts test/todo-reminder-races.e2e.spec.ts"
+    "test:todos:e2e": "node test/todos-e2e-database-guard.mjs && pnpm --filter @synapse/portal-headless run build && pnpm --filter @synapse/shared run build && DATABASE_URL=\"$TODOS_E2E_DATABASE_URL\" prisma migrate deploy && DATABASE_URL=\"$TODOS_E2E_DATABASE_URL\" vitest run --config vitest.e2e.config.ts test/todos-commit.e2e.spec.ts test/todo-reminder-races.e2e.spec.ts",
+    "test:drive-discussion:e2e": "node test/run-drive-discussion-e2e.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
