@@ -8,6 +8,8 @@ import {
   type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
   buildOwnerDriveDownloadUrl,
+  buildOwnerDriveBrowserUrl,
+  buildShareDriveBrowserUrl,
   buildShareDriveDownloadUrl,
   inferDrivePublicAssetMimeType,
   decodeUtf8Prefix,
@@ -2397,6 +2399,30 @@ export class DriveService implements OnApplicationBootstrap {
       ),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
+    }
+  }
+
+  async getDiscussionBrowserUrl(input: { userId: string; itemId: string; sourceShareId: string | null }): Promise<string | null> {
+    try {
+      await this.requireOwnedItem(input.userId, input.itemId)
+      return buildOwnerDriveBrowserUrl(input.itemId)
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) throw error
+    }
+    if (!input.sourceShareId) return null
+    const share = await this.prisma.driveShare.findFirst({
+      where: { id: input.sourceShareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }], item: { is: { publicAsset: null } } },
+      include: { item: { include: { ...driveItemWithShares, publicAsset: true } }, ...driveShareWithEditors },
+    })
+    if (!share || share.item.deletedAt || share.item.publicAsset
+      || share.item.storageStatus !== DRIVE_STORAGE_STATUS.active
+      || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) return null
+    try {
+      const { root, current } = await this.resolveShareBrowserCurrent(toDrivePublicShareValue(share), input.itemId)
+      return buildShareDriveBrowserUrl(share.shareId, current.id === root.id ? null : current.id)
+    } catch (error) {
+      if (error instanceof NotFoundException) return null
+      throw error
     }
   }
 

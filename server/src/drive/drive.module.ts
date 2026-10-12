@@ -1,6 +1,8 @@
 import { NotificationModule } from "../notifications/notification.module"
 import { DriveDiscussionNotificationService } from "./drive-discussion-notification.service"
 import { DriveDiscussionNotificationOutbox } from "./drive-discussion-notification-outbox"
+import { DriveDiscussionNotificationTargetService } from "./drive-discussion-notification-target.service"
+import { DriveDiscussionNotificationTargetController } from "./drive-discussion-notification-target.controller"
 import { Module } from "@nestjs/common"
 import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { UserAuthModule } from "../auth/user-auth.module"
@@ -26,10 +28,11 @@ import { PlatformMediaStorage } from "./platform-media-storage"
 
 @Module({
   imports: [UserAuthModule, AdminAuthModule, PrismaModule, NotificationModule],
-  controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController, PlatformMediaLocalStorageController],
+  controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController, PlatformMediaLocalStorageController, DriveDiscussionNotificationTargetController],
   providers: [
     DriveDiscussionNotificationService,
     DriveDiscussionNotificationOutbox,
+    DriveDiscussionNotificationTargetService,
     DriveLifecycleService,
     DriveChangeLogService,
     DriveAnnotationService,
