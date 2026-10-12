@@ -31,7 +31,8 @@ extend/portal-headless/ # Portal 服务端无头 SDK，server 的运行时依赖
 
 ## 启动与验证
 
-- `pnpm dev`：desktop + server + document。
+- `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document；按 `q` 退出并停止本次启动的进程。
+- `pnpm dev:prod`：同一面板启动，桌面端使用生产站点 URL。
 - `pnpm dev:desktop`：仅桌面端。
 - `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器。
 - `pnpm dev:document`：文档站。

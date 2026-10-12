@@ -1,0 +1,7 @@
+procs:
+  Desktop:
+    cmd: [pnpm, run, dev:desktop]
+  Server:
+    cmd: [pnpm, run, dev:server]
+  Document:
+    cmd: [pnpm, run, dev:document]

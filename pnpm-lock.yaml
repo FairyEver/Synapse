@@ -14,7 +14,11 @@ patchedDependencies:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@dekit/cli':
+        specifier: 0.10.1
+        version: 0.10.1
 
   auto:
     devDependencies:
@@ -1550,6 +1554,36 @@ packages:
 
   '@date-fns/tz@1.4.1':
     resolution: {integrity: sha512-P5LUNhtbj6YfI3iJjw5EL9eUAG6OitD0W3fWQcpQjDRc/QIsL0tRNuO1PcDvPccWL1fSTXXdE1ds+l95DV/OFA==}
+
+  '@dekit/cli@0.10.1':
+    resolution: {integrity: sha512-gX0LCUxQqAKjRc3Z8n3SshMeFjdW+6rQTiBge9AxMqDOtzCYTs6t/CREFs8BFX7GtrP1RMnMeiO4uPMiwxx4yw==}
+    engines: {node: '>=16'}
+    hasBin: true
+
+  '@dekit/dekit-darwin-arm64@0.10.1':
+    resolution: {integrity: sha512-LTAz4g1DiOv8Y7bSiEtSOHQc2QYkfQ7MPjW42ugSrwlSNJcTkOWfLXR5rJW0f2lc8t5l2/kERa86/WXPqK9nBQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@dekit/dekit-darwin-x64@0.10.1':
+    resolution: {integrity: sha512-uTLlA8NlQH/ZcWE+a/7CWo7R7i0sEnD4pE9lC6P6YSwbbF6rx1sOXasCTly8nR9iMJcsPALhCfPO1Ct33L3AlQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@dekit/dekit-linux-arm64@0.10.1':
+    resolution: {integrity: sha512-XcAIj2ORhZzUEf5OUAqq08YzRpqhL0B8byc7eAu2+Quw9HlaS3Cc73W9ni6mpcBCyvPvSl92W8ZxsrMkQgeaww==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@dekit/dekit-linux-x64@0.10.1':
+    resolution: {integrity: sha512-xxytzaZm1ehLX10hlwj9pFhXiPUhMO6aiiW2J1u8V0qvVVtuJSacO2b9ujebgS6tp1S4atwVqCvZEfih4TMwHA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@dekit/dekit-win32-x64@0.10.1':
+    resolution: {integrity: sha512-Ob9r7RbMsJL9zHKsq8/xYWhkQ9uhbiiX/xqEvHBdHMvzJ3lIS+sd6AUQ0VwLl4us/His9SSqJaYbQ3z09xs2wQ==}
+    cpu: [x64]
+    os: [win32]
 
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
@@ -11494,6 +11528,29 @@ snapshots:
   '@dagrejs/graphlib@2.2.4': {}
 
   '@date-fns/tz@1.4.1': {}
+
+  '@dekit/cli@0.10.1':
+    optionalDependencies:
+      '@dekit/dekit-darwin-arm64': 0.10.1
+      '@dekit/dekit-darwin-x64': 0.10.1
+      '@dekit/dekit-linux-arm64': 0.10.1
+      '@dekit/dekit-linux-x64': 0.10.1
+      '@dekit/dekit-win32-x64': 0.10.1
+
+  '@dekit/dekit-darwin-arm64@0.10.1':
+    optional: true
+
+  '@dekit/dekit-darwin-x64@0.10.1':
+    optional: true
+
+  '@dekit/dekit-linux-arm64@0.10.1':
+    optional: true
+
+  '@dekit/dekit-linux-x64@0.10.1':
+    optional: true
+
+  '@dekit/dekit-win32-x64@0.10.1':
+    optional: true
 
   '@develar/schema-utils@2.6.5':
     dependencies:

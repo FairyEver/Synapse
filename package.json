@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "pnpm run dev:server & pnpm run dev:desktop & pnpm run dev:document & wait",
-    "dev:prod": "pnpm run dev:server & pnpm run dev:desktop:prod & pnpm run dev:document & wait",
+    "dev": "pnpm exec dekit mprocs --config mprocs.yaml",
+    "dev:prod": "pnpm exec dekit mprocs --config mprocs.prod.yaml",
     "dev:document": "pnpm --filter @synapse/document run dev",
     "dev:desktop": "pnpm --filter @synapse/shared run build && pnpm --filter @synapse/desktop run dev",
     "dev:desktop:prod": "export SYNAPSE_DESKTOP_PUBLIC_APP_URL=https://synapse.d2.pub && pnpm --filter @synapse/shared run build && pnpm --filter @synapse/desktop run dev",
@@ -24,5 +24,8 @@
     "mobile:install": "SynapseMobile/scripts/install-ios.sh",
     "auto": "pnpm --filter @synapse/auto run start",
     "dev:shadcn-admin": "pnpm --filter @synapse/shadcn-admin run dev"
+  },
+  "devDependencies": {
+    "@dekit/cli": "0.10.1"
   }
 }
