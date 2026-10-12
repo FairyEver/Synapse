@@ -116,8 +116,12 @@ struct NotificationView: View {
     /// 点一条通知：先标已读，再按它自己的去向往外走。
     ///
     private func open(_ item: SynapseNotification) {
-        Task { await model.readNotification(item.id) }
         notificationToRead = nil
+        if item.source == "todo-reminder" {
+            NotificationRouter.shared.route(to: .message(id: item.id))
+            return
+        }
+        Task { await model.readNotification(item.id) }
         switch NotificationDestination.resolve(item) {
         case .route(let destination):
             NotificationRouter.shared.route(to: destination)

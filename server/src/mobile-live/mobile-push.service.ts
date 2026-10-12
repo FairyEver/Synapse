@@ -7,6 +7,8 @@ import { MobileDeviceService } from "./mobile-device.service"
 
 /** Apple rejects tokens issued more than an hour ago; refresh well inside that. */
 const TOKEN_TTL_MS = 45 * 60_000
+/** A stalled APNs connection must not block durable notification retries. */
+const DELIVERY_TIMEOUT_MS = 10_000
 
 const PRODUCTION_HOST = "https://api.push.apple.com"
 const SANDBOX_HOST = "https://api.sandbox.push.apple.com"
@@ -138,7 +140,7 @@ export class MobilePushService {
     body: string
     level: "active" | "passive" | "timeSensitive"
     group: string | null
-  }): Promise<PushOutcome> {
+  }, signal?: AbortSignal): Promise<PushOutcome> {
     return this.sendToAllDevices(userId, {
       title: push.title,
       body: push.body,
@@ -146,10 +148,10 @@ export class MobilePushService {
       threadId: push.group ?? push.id,
       data: { notificationId: push.id, notificationLevel: push.level },
       level: push.level,
-    })
+    }, signal)
   }
 
-  private async sendToAllDevices(userId: string, content: PushContent): Promise<PushOutcome> {
+  private async sendToAllDevices(userId: string, content: PushContent, signal?: AbortSignal): Promise<PushOutcome> {
     if (!this.isConfigured()) {
       this.logger.warn({ reason: "not_configured" }, "Mobile push skipped")
       return { sent: 0, failed: 0, skipped: true }
@@ -169,8 +171,9 @@ export class MobilePushService {
 
     let sent = 0
     let failed = 0
-    for (const target of targets) {
-      const status = await this.deliver(token, target.token, content)
+    for (const [index, target] of targets.entries()) {
+      if (signal?.aborted) { failed += targets.length - index; break }
+      const status = await this.deliver(token, target.token, content, signal)
       if (status === "sent") {
         sent += 1
         await this.devices.recordPushAttempt(target.clientInstanceId, userId).catch(() => undefined)
@@ -188,7 +191,9 @@ export class MobilePushService {
     authorization: string,
     deviceToken: string,
     content: PushContent,
+    signal?: AbortSignal,
   ): Promise<"sent" | "unregistered" | "failed"> {
+    if (signal?.aborted) return "failed"
     const host = this.env.apnsUseSandbox ? SANDBOX_HOST : PRODUCTION_HOST
     const body = JSON.stringify({
       aps: {
@@ -209,15 +214,24 @@ export class MobilePushService {
       const finish = (result: "sent" | "unregistered" | "failed"): void => {
         if (settled) return
         settled = true
+        clearTimeout(timeout)
+        signal?.removeEventListener("abort", abort)
         client.close()
         resolve(result)
       }
+      const abort = () => {
+        finish("failed")
+        client.destroy()
+      }
+      const timeout = setTimeout(abort, DELIVERY_TIMEOUT_MS)
       client.on("error", (error) => {
         this.logger.warn({
           errorName: error instanceof Error ? error.name : typeof error,
         }, "Mobile push transport failed")
         finish("failed")
       })
+      signal?.addEventListener("abort", abort, { once: true })
+      if (signal?.aborted) { abort(); return }
       const request = client.request({
         ":method": "POST",
         ":path": `/3/device/${deviceToken}`,

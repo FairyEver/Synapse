@@ -4,6 +4,23 @@ import Testing
 
 @MainActor
 struct TodoStoreTests {
+    @Test func oldMutationReceiptsCannotReviveItemsAfterAnAuthoritativeEmptyPage() async throws {
+        let fixture = TodoTestFixture(); defer { fixture.clear() }
+        let store = TodoStore(), original = try TodoTestFixture.item()
+        store.openEditor(original); store.draft?.title = "已保存的标题"
+        fixture.transport.enqueue(.failure(.networkConnectionLost))
+        do { _ = try await store.save(try #require(store.draft), using: fixture.api) } catch {}
+        fixture.transport.enqueue(.json(200, TodoTestFixture.pageJSON([])))
+        await store.reload(using: fixture.api)
+        fixture.transport.enqueue(.json(200, TodoTestFixture.itemJSON(version: 2)), .failure(.notConnectedToInternet))
+        _ = try await store.save(try #require(store.draft), using: fixture.api)
+        #expect(store.items.isEmpty && store.errorMessage != nil)
+        #expect(fixture.transport.requests[0].body == fixture.transport.requests[2].body)
+        fixture.transport.enqueue(.json(200, TodoTestFixture.itemJSON(version: 3)), .failure(.notConnectedToInternet))
+        _ = try await store.setCompleted(original, completed: false, using: fixture.api)
+        #expect(store.items.isEmpty)
+    }
+
     @Test func lostReceiptCanRetryTheSameIntentAfterItsReminderTime() async throws {
         let fixture = TodoTestFixture(); defer { fixture.clear() }
         let store = TodoStore(), before = Date(timeIntervalSince1970: 4_000_000_020)

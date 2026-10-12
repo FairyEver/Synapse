@@ -3,7 +3,7 @@ import type { MouseEvent } from "react"
 import type { TodoItemDto } from "@synapse/shared/todo-contracts"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatTodoInstant } from "./todo-time"
 
 export function TodoRow({ item, disabled, onOpen, onComplete, onDelete, onCopy }: { item: TodoItemDto; disabled: boolean; onOpen: () => void; onComplete: () => void; onDelete: () => void; onCopy: () => void }) {
@@ -25,9 +25,12 @@ export function TodoRow({ item, disabled, onOpen, onComplete, onDelete, onCopy }
       </span>}
     </button>
     <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" data-track="todos.menu" aria-label={`${item.title}的操作`} disabled={disabled}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
-      <DropdownMenuItem data-track="todos.edit" onSelect={onOpen}>编辑</DropdownMenuItem>
-      <DropdownMenuItem data-track="todos.copy" onSelect={onCopy}>复制 ID</DropdownMenuItem>
-      <DropdownMenuItem data-track="todos.delete" variant="destructive" onSelect={onDelete}>删除</DropdownMenuItem>
+      <DropdownMenuGroup>
+        <DropdownMenuItem data-track="todos.edit" onSelect={onOpen}>编辑</DropdownMenuItem>
+        <DropdownMenuItem data-track="todos.complete" onSelect={onComplete}>{item.completedAt ? "恢复" : "完成"}</DropdownMenuItem>
+        <DropdownMenuItem data-track="todos.copy" onSelect={onCopy}>复制 ID</DropdownMenuItem>
+        <DropdownMenuItem data-track="todos.delete" variant="destructive" onSelect={onDelete}>删除</DropdownMenuItem>
+      </DropdownMenuGroup>
     </DropdownMenuContent></DropdownMenu>
   </li>
 }

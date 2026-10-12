@@ -29,6 +29,18 @@ function harness() {
 }
 
 describe("NotificationService", () => {
+  it("stops delivery when its lease is cancelled during the record read", async () => {
+    const { service, prisma, desktops, mobiles, push } = harness()
+    const controller = new AbortController()
+    let resolve!: (value: UserNotification) => void
+    prisma.userNotification.findFirst.mockReturnValueOnce(new Promise((done) => { resolve = done }))
+    const delivery = service.deliverCommitted("user-1", "message-1", controller.signal)
+    controller.abort(); resolve(record)
+    await expect(delivery).rejects.toMatchObject({ name: "AbortError" })
+    expect(desktops.broadcastToUser).not.toHaveBeenCalled()
+    expect(mobiles.sendToMobileClients).not.toHaveBeenCalled()
+    expect(push.sendNotification).not.toHaveBeenCalled()
+  })
   it("treats resolved failed or skipped pushes as retryable, but no devices as success", async () => {
     const { service, push } = harness()
     for (const outcome of [{ sent: 0, failed: 1, skipped: false }, { sent: 0, failed: 0, skipped: true }]) {

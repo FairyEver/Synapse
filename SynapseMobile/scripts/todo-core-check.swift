@@ -7,10 +7,21 @@ struct APIError: Error { let status: Int; let code: String?; let message: String
 @MainActor final class APIClient {
     var requests: [Data] = []
     var online = false
+    var listFails = false
+    var listedItems: [TodoItemDto]?
+    var notificationReadFails = false
+    var onNotificationRead: (() -> Void)?
+    var notificationSteps: [String] = []
+    var notificationItem = SynapseNotification(id: "reminder", source: "todo-reminder", title: "待办提醒", body: "事项",
+        group: nil, url: nil, level: "active", targetId: "old-target", deviceId: nil,
+        readAt: nil, resolvedAt: nil, createdAt: "2026-10-11T00:00:00Z")
     var item = TodoItemDto(id: "other", title: "另一事项", note: nil, dueAt: nil, reminder: .none,
         offsetMinutes: nil, remindAt: nil, reminderGeneration: 0, reminderStatus: .none, completedAt: nil,
         version: 1, createdAt: "2026-10-11T00:00:00Z", updatedAt: "2026-10-11T00:00:00Z")
-    func listTodos(_ input: TodoListInput) async throws -> TodoPageDto { TodoPageDto(items: [item], nextOffset: nil) }
+    func listTodos(_ input: TodoListInput) async throws -> TodoPageDto {
+        if listFails { throw APIError(status: 0, code: "network", message: "offline") }
+        return TodoPageDto(items: listedItems ?? [item], nextOffset: nil)
+    }
     func getTodo(id: String) async throws -> TodoItemDto { item }
     func createTodo(_ input: TodoCreateInput) async throws -> TodoItemDto {
         let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
@@ -18,9 +29,25 @@ struct APIError: Error { let status: Int; let code: String?; let message: String
         if !online { throw APIError(status: 0, code: "network", message: "offline") }
         return item
     }
-    func updateTodo(id: String, input: TodoUpdateInput) async throws -> TodoItemDto { item }
+    func updateTodo(id: String, input: TodoUpdateInput) async throws -> TodoItemDto {
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        requests.append(try encoder.encode(input))
+        if !online { throw APIError(status: 0, code: "network", message: "lost receipt") }
+        return item
+    }
     func setTodoCompleted(id: String, input: TodoCompletionInput) async throws -> TodoItemDto { item }
     func deleteTodo(id: String, input: TodoDeleteInput) async throws -> TodoDeleteResult { TodoDeleteResult(id: id, version: 2, deleted: true) }
+    func listNotifications(filter: String, cursor: String?) async throws -> NotificationPage { NotificationPage(items: [notificationItem], nextCursor: nil) }
+    func notification(_ id: String) async throws -> SynapseNotification { notificationSteps.append("get"); return notificationItem }
+    func notificationUnreadCount() async throws -> Int { 0 }
+    func markNotificationRead(_ id: String) async throws {
+        notificationSteps.append("read")
+        if notificationReadFails { throw APIError(status: 404, code: "not_found", message: "deleted") }
+        onNotificationRead?()
+    }
+    func markAllNotificationsRead() async throws {}
+    func deleteNotification(_ id: String) async throws {}
+    func deleteAllNotifications() async throws {}
 }
 
 @main struct TodoCoreCheck {
@@ -66,7 +93,34 @@ struct APIError: Error { let status: Int; let code: String?; let message: String
             store.openEditor(); store.draft?.title = "在加载时新写的草稿"; return api.item
         }
         check(navigation.pendingID == api.item.id && store.draft?.title == "在加载时新写的草稿", "late target does not replace a newly opened draft")
+
+        let replayAPI = APIClient(), replayStore = TodoStore()
+        replayStore.openEditor(replayAPI.item); replayStore.draft?.title = "已经保存的标题"
+        do { _ = try await replayStore.save(replayStore.draft!, using: replayAPI) } catch {}
+        replayAPI.listedItems = []
+        await replayStore.reload(using: replayAPI)
+        replayAPI.online = true; replayAPI.listFails = true
+        _ = try await replayStore.save(replayStore.draft!, using: replayAPI)
+        check(replayAPI.requests.count == 2 && replayAPI.requests[0] == replayAPI.requests[1], "mutation replay preserves the original payload and UUID")
+        check(replayStore.items.isEmpty && replayStore.errorMessage != nil, "an old edit receipt cannot revive an item removed by a newer server read")
+        _ = try await replayStore.setCompleted(replayAPI.item, completed: false, using: replayAPI)
+        check(replayStore.items.isEmpty, "an old completion receipt cannot revive a removed item")
+
+        let notificationAPI = APIClient(), notificationStore = NotificationStore()
+        await notificationStore.load(using: notificationAPI)
+        notificationAPI.notificationItem = SynapseNotification(id: "reminder", source: "todo-reminder", title: "待办提醒", body: "事项",
+            group: nil, url: nil, level: "active", targetId: "current-target", deviceId: nil,
+            readAt: "2026-10-12T00:00:00Z", resolvedAt: nil, createdAt: "2026-10-11T00:00:00Z")
+        let opened = await notificationStore.read("reminder", using: notificationAPI)
+        check(opened?.targetId == "current-target" && notificationAPI.notificationSteps == ["read", "get"], "notification navigation uses the current server target after marking read")
+        notificationAPI.notificationReadFails = true
+        let failed = await notificationStore.read("reminder", using: notificationAPI)
+        check(failed == nil && !notificationStore.items.isEmpty, "cached rows cannot authorize navigation after a failed read")
+        notificationAPI.notificationReadFails = false
+        notificationAPI.onNotificationRead = { notificationStore.clear() }
+        let stale = await notificationStore.read("reminder", using: notificationAPI)
+        check(stale == nil && notificationStore.items.isEmpty, "account reset cancels a notification target")
         if !failures.isEmpty { for message in failures { print("FAIL: " + message) }; exit(1) }
-        print("Todo core checks passed: ephemeral/no-queue policy, failed retry intent, draft target ownership.")
+        print("Todo core checks passed: ephemeral/no-queue policy, stable retry, receipt isolation, draft and notification target ownership.")
     }
 }

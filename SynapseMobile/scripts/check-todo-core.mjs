@@ -9,7 +9,8 @@ const temp = mkdtempSync(resolve(tmpdir(), 'synapse-todo-core-'))
 try {
   const sources = ['Features/Todos/TodoModels.swift', 'Features/Todos/TodoDraft.swift',
     'Features/Todos/TodoTime.swift', 'Features/Todos/TodoStore.swift', 'Features/Todos/TodoNavigation.swift',
-    'Core/Protocol/WireTimestamp.swift', 'Core/Networking/TodoNetworkPolicy.swift'].map(path => resolve(mobile, 'SynapseMobile', path))
+    'Core/Protocol/WireTimestamp.swift', 'Core/Networking/TodoNetworkPolicy.swift',
+    'Features/Inbox/NotificationStore.swift'].map(path => resolve(mobile, 'SynapseMobile', path))
   const binary = resolve(temp, 'todo-core-check')
   const build = spawnSync('swiftc', ['-parse-as-library', ...sources, resolve(mobile, 'scripts/todo-core-check.swift'), '-o', binary], { stdio: 'inherit' })
   if (build.status !== 0) process.exitCode = build.status ?? 1

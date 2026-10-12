@@ -74,7 +74,7 @@ export function useTodos() {
   }, [online])
   const setCompleted = useCallback(async (item: TodoItemDto, completed: boolean) => {
     const result = await mutate(item, `completed:${completed}`, (clientRequestId) => todosApi.setCompleted(item.id, { completed, expectedVersion: item.version, clientRequestId }))
-    setItems((existing) => mergeTodoItems(existing, [result], filterRef.current)); setUndo(completed ? result : null)
+    setUndo(completed ? result : null)
     await latestRefresh.current(); return result
   }, [mutate])
   const remove = useCallback(async (item: TodoItemDto) => {

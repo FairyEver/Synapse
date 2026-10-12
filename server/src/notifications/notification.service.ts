@@ -55,15 +55,17 @@ export class NotificationService implements OnModuleInit {
   }
 
   /** Retry delivery of an existing record; never create another notification. */
-  async deliverCommitted(userId: string, notificationId: string): Promise<void> {
+  async deliverCommitted(userId: string, notificationId: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
     const record = await this.get(userId, notificationId)
+    signal?.throwIfAborted()
     if (!record || record.readAt || record.deletedAt) return
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.notificationChanged, { notificationId }, { id: randomUUID(), sentAt: new Date().toISOString() })
     const result = this.desktops.broadcastToUser(userId, message)
     this.mobiles.sendToMobileClients({ userId, message })
     if (result?.failedClientCount > 0) throw new Error("NOTIFICATION_LIVE_DELIVERY_FAILED")
     if (record.level === "passive") return
-    const outcome = await this.push.sendNotification(userId, { id: record.id, title: record.title, body: record.body, level: record.level as NotificationLevel, group: record.group })
+    const outcome = await this.push.sendNotification(userId, { id: record.id, title: record.title, body: record.body, level: record.level as NotificationLevel, group: record.group }, signal)
     if (outcome.failed > 0 || outcome.skipped) throw new Error("NOTIFICATION_PUSH_DELIVERY_FAILED")
   }
 

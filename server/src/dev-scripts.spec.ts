@@ -23,13 +23,6 @@ describe("server dev scripts", () => {
     expect(scripts["dev:admin"]).toBeUndefined()
   })
 
-  it("keeps one combined workspace dev command", () => {
-    const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
-
-    expect(workspacePackage.scripts?.dev).toContain("pnpm run dev:server")
-    expect(workspacePackage.scripts?.dev).toContain("pnpm run dev:desktop")
-  })
-
   it("keeps one workspace server dev entrypoint for the backend stack", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 

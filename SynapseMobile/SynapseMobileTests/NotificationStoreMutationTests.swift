@@ -4,6 +4,33 @@ import Testing
 
 @MainActor
 struct NotificationStoreMutationTests {
+    @Test func openingRequiresTheFreshServerNotificationAndSuccessfulRead() async {
+        let api = NotificationMutationReviewAPI(), store = NotificationStore()
+        await store.load(using: api)
+        let fresh = SynapseNotification(id: "mail", source: "todo-reminder", title: "待办提醒", body: "事项",
+            group: nil, url: nil, level: "active", targetId: "current-todo", deviceId: nil,
+            readAt: "2026-10-12T00:00:00Z", resolvedAt: nil, createdAt: "2026-10-12T00:00:00Z")
+        api.detail = { _, _ in fresh }
+        let opened = await store.read("mail", using: api)
+        #expect(opened?.targetId == "current-todo")
+        api.mutation = { _ in throw APIError(status: 404, code: "not_found", message: "通知已删除") }
+        let failed = await store.read("mail", using: api)
+        #expect(failed == nil)
+        #expect(store.items.first?.targetId == "current-todo", "Retained rows cannot prove that a new open succeeded")
+    }
+
+    @Test func clearedAccountCannotReturnALateNotificationTarget() async {
+        let api = NotificationMutationReviewAPI(), store = NotificationStore()
+        let gate = NotificationMutationReviewGate()
+        api.mutation = { _ in await gate.hold() }
+        let reading = Task { await store.read("mail", using: api) }
+        await gate.waitUntilHeld()
+        store.clear()
+        await gate.release()
+        #expect(await reading.value == nil)
+        #expect(api.detailCalls.isEmpty)
+    }
+
     @Test(arguments: [false, true], NotificationFeedbackSequence.allCases)
     func aPendingNewReadOwnsFeedbackBeforeItsResult(deleting: Bool, sequence: NotificationFeedbackSequence) async {
         let api = NotificationMutationReviewAPI()

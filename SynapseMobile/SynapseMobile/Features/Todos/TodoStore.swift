@@ -104,7 +104,6 @@ final class TodoStore {
             if let id = draft.id, let input = draft.updateInput() { item = try await api.updateTodo(id: id, input: input) }
             else { item = try await api.createTodo(draft.createInput()) }
             try requireCurrent(account)
-            items = Self.merged(items, incoming: [item], filter: filter)
             self.draft = nil; editorConflict = false
             await reload(using: api)
             try requireCurrent(account)
@@ -129,7 +128,6 @@ final class TodoStore {
                 input: TodoCompletionInput(completed: completed, expectedVersion: item.version, clientRequestId: requestID))
             try requireCurrent(account)
             retryIDs.removeValue(forKey: key)
-            items = Self.merged(items, incoming: [receipt], filter: filter)
             undoItem = completed ? receipt : nil
             await reload(using: api)
             try requireCurrent(account)

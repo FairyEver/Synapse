@@ -15,6 +15,24 @@ function selectText(start: Node, end: Node = start) {
 }
 
 describe("Todo visible actions", () => {
+  it.each([false, true])("offers the completion action in the menu for completed=%s", async (completed) => {
+    const initial = { ...item, completedAt: completed ? item.createdAt : null }
+    mocks.list.mockResolvedValue({ items: [initial], nextOffset: null })
+    mount(<TodosModule />); await flush()
+    if (completed) {
+      act(() => document.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })))
+      await flush()
+    }
+    act(() => document.querySelector<HTMLButtonElement>('[aria-label="报销的操作"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })))
+    await flush()
+    const action = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((entry) => entry.textContent === (completed ? "恢复" : "完成"))
+    expect(action).toBeDefined()
+    mocks.setCompleted.mockResolvedValueOnce({ ...initial, completedAt: completed ? null : item.createdAt, version: 2 })
+    mocks.list.mockResolvedValue({ items: completed ? [{ ...initial, completedAt: null, version: 2 }] : [], nextOffset: null })
+    act(() => action!.click()); await flush()
+    expect(mocks.setCompleted).toHaveBeenCalledWith("a", expect.objectContaining({ completed: !completed, expectedVersion: 1 }))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
   it("preserves selected title and note text without opening the editor, then allows a normal click", async () => {
     mocks.list.mockResolvedValue({ items: [{ ...item, note: "保留收据" }], nextOffset: null })
     mount(<TodosModule />); await flush()

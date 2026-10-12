@@ -571,10 +571,8 @@ struct RootView: View {
 
     /// 一条通知被点开，但只有它的 id。
     ///
-    /// 先拉一次列表再判：一条通知记着的是「它完成那一轮时」的会话 id，那条会话后来
-    /// 结束了、被删了都不会让这条记录失效，所以这个 id 今天还指不指得动要当场问一次。
-    /// 列表到达之后才解析，是因为 `deviceId` / `targetId` 都在通知自己身上，
-    /// 而解析要用的 `model.notifications.items` 也在这一刻才更新。
+    /// 刷新通知页后，按 ID 标记已读并重取本人可访问的记录。
+    /// 只有本次返回的服务器记录可以决定目标，保留的缓存不能证明读取成功。
     private func openNotification(_ id: String) {
         let account = model.accountIdentityGeneration
         let request = UUID()
@@ -588,11 +586,10 @@ struct RootView: View {
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             // readNotification first ensures this exact id: the latest page can no
             // longer contain a notification that is still valid in an older page.
-            await model.readNotification(id)
+            let item = await model.readNotification(id)
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
-            guard let item = model.notifications.items.first(where: { $0.id == id }) else {
-                // 拉回来却没有这一条（已过期、已在别处删掉）。留在通知页，让人看到
-                // 当前仍然有效的通知。
+            guard let item else {
+                // 已失效或读取失败时保留通知页，停止导航到缓存目标。
                 model.notice("无法打开这条通知", tone: .failure)
                 return
             }

@@ -718,12 +718,15 @@ final class SynapseAppModel {
         await notifications.loadMore(using: apiClient)
     }
 
-    func readNotification(_ id: String) async {
+    @discardableResult
+    func readNotification(_ id: String) async -> SynapseNotification? {
         let account = accountIdentityGeneration
-        guard isCurrentAccount(account) else { return }
-        guard await notifications.ensure(id, using: apiClient) else { return }
-        guard isCurrentAccount(account) else { return }
-        await notifications.read(id, using: apiClient)
+        guard isCurrentAccount(account) else { return nil }
+        guard await notifications.ensure(id, using: apiClient) else { return nil }
+        guard isCurrentAccount(account) else { return nil }
+        let item = await notifications.read(id, using: apiClient)
+        guard isCurrentAccount(account) else { return nil }
+        return item
     }
 
     func readAllNotifications() async {

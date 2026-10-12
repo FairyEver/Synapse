@@ -102,21 +102,25 @@ final class NotificationStore {
         }
     }
 
-    func read(_ id: String, using client: any NotificationStoreAPI) async {
+    @discardableResult
+    func read(_ id: String, using client: any NotificationStoreAPI) async -> SynapseNotification? {
+        guard !Task.isCancelled else { return nil }
         let feedback = beginFeedback()
         let account = accountGeneration
         do {
             try await client.markNotificationRead(id)
-            guard account == accountGeneration else { return }
+            guard account == accountGeneration, !Task.isCancelled else { return nil }
             mutationRevision += 1
             let item = try await client.notification(id)
-            guard account == accountGeneration else { return }
+            guard account == accountGeneration, !Task.isCancelled else { return nil }
             items = Self.itemsAfterReading(item, in: items, filter: filter)
-            guard let count = try await currentUnreadCount(using: client, account: account) else { return }
-            guard account == accountGeneration else { return }
+            guard let count = try await currentUnreadCount(using: client, account: account) else { return nil }
+            guard account == accountGeneration, !Task.isCancelled else { return nil }
             unreadCount = count
             if feedback == feedbackGeneration { error = nil }
+            return item
         } catch { if account == accountGeneration, feedback == feedbackGeneration { self.error = "标记已读失败" } }
+        return nil
     }
 
     @discardableResult

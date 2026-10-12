@@ -59,6 +59,7 @@ beforeEach(() => {
 
 afterEach(() => {
   connectMock.mockReset()
+  vi.useRealTimers()
 })
 
 describe("MobilePushService", () => {
@@ -136,5 +137,39 @@ describe("MobilePushService", () => {
 
     expect(devices.dropPushToken).not.toHaveBeenCalled()
     expect(outcome).toEqual({ sent: 0, failed: 1, skipped: false })
+  })
+
+  it("times out a stalled APNs request and continues to the next device", async () => {
+    vi.useFakeTimers()
+    const stalled = stubApns({ status: 200 })
+    ;(stalled.request.end as ReturnType<typeof vi.fn>).mockImplementation(() => undefined)
+    stalled.client.destroy = vi.fn()
+    const healthy = stubApns({ status: 200 })
+    connectMock.mockReset().mockReturnValueOnce(stalled.client).mockReturnValueOnce(healthy.client)
+    const { service, devices } = makeService([{ token: "stalled-token" }, { token: "healthy-token" }])
+    let outcome: unknown
+    const delivery = service.sendNotification("user-1", push).then((result) => { outcome = result })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(outcome).toEqual({ sent: 1, failed: 1, skipped: false })
+    expect(stalled.client.destroy).toHaveBeenCalledOnce()
+    expect(devices.dropPushToken).not.toHaveBeenCalled()
+    await delivery
+  })
+  it("aborts a leased delivery without sending to the remaining devices", async () => {
+    vi.useFakeTimers()
+    const stalled = stubApns({ status: 200 })
+    ;(stalled.request.end as ReturnType<typeof vi.fn>).mockImplementation(() => undefined)
+    stalled.client.destroy = vi.fn()
+    const { service, devices } = makeService([{ token: "first-token" }, { token: "second-token" }])
+    const controller = new AbortController()
+    let outcome: unknown
+    const delivery = service.sendNotification("user-1", push, controller.signal).then((result) => { outcome = result })
+    await vi.advanceTimersByTimeAsync(0)
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(outcome).toEqual({ sent: 0, failed: 2, skipped: false })
+    expect(connectMock).toHaveBeenCalledOnce()
+    expect(devices.dropPushToken).not.toHaveBeenCalled()
+    await delivery
   })
 })

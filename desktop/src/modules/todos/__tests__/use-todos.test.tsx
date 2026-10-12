@@ -35,6 +35,23 @@ describe("cloud Todo list", () => {
     mocks.list.mockResolvedValue({ items: [item], nextOffset: null }); act(() => mocks.changed()); await flush()
     expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", offset: 0, limit: 50 })
   })
+  it("does not resurrect a removed row from an old completion receipt when refresh fails", async () => {
+    const completed = { ...item, version: 2, completedAt: item.createdAt }
+    mount(<Harness />); await flush()
+    mocks.list.mockResolvedValue({ items: [completed], nextOffset: null })
+    act(() => current.setFilter("all")); await flush()
+    const receipt = deferred<typeof item>()
+    mocks.setCompleted.mockReturnValueOnce(receipt.promise)
+    let writing!: Promise<typeof item>
+    act(() => { writing = current.setCompleted(completed, false) })
+    mocks.list.mockResolvedValue({ items: [], nextOffset: null })
+    await act(async () => { await current.refresh() })
+    expect(current.items).toEqual([])
+    mocks.list.mockRejectedValueOnce(new Error("网络中断"))
+    await act(async () => { receipt.resolve({ ...item, version: 3 }); await writing })
+    expect(current.items).toEqual([])
+    expect(current.error).toBe("网络中断")
+  })
   it("rejects late pending pages and same-account identity reset results", async () => {
     const old = deferred<{ items: typeof item[]; nextOffset: null }>(); mocks.list.mockReturnValueOnce(old.promise)
     mount(<Harness />); act(() => current.setFilter("all")); await flush()
