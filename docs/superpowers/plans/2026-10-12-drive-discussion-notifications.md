@@ -10,7 +10,7 @@
 
 **Spec:** [已确认设计](../specs/2026-10-12-drive-discussion-notifications-design.md)。
 
-状态：用户已选择当前会话顺序实施、最后独立审查。实现与源码验证完成；独立审查待进行。真实 PostgreSQL 验收因未配置独立测试库未运行，原生运行与系统推送验收未运行。
+状态：用户已选择当前会话顺序实施、最后独立审查。实现与源码验证完成；独立审查完成，三项 Important 发现已修复。真实 PostgreSQL 验收因未配置独立测试库未运行，原生运行与系统推送验收未运行。
 
 ## Global Constraints
 
@@ -186,7 +186,7 @@ DriveDiscussionNotificationService.enqueue(tx: Prisma.TransactionClient, event: 
 - [ ] **Step 3：实现安全脚本并运行 e2e。** `pnpm --filter @synapse/server run test:drive-discussion:e2e`，预期两个 suite 全部通过。没有独立测试库时报告验证缺口，绝不复用业务 DATABASE_URL、生产库或自动创建/清理现有数据库。
 - [x] **Step 4：同步指南与发布说明。** Drive 创建类 MCP description 明确服务端自动通知，工具名、数量、schema 和权限保持不变；通知列表 source schema 复用共享来源。Skill 指南提醒 Agent 不另发重复通知，说明摘要/链接和旧来源缺失的限制。能力表数量不变，补网页定位与通知来源例外；发布说明只写用户得到的评论/留言通知和直达行为，不写代码路径或把待运行验收冒充完成。
 - [x] **Step 5：运行最终充分验证。** 按下方公共命令运行涉及领域；已通过的同一检查不重复跑，除非本步又修改其覆盖范围。核对 diff、迁移无旧数据清理、共享输出、生产 route fallback、MCP 数量、通知源边界和所有未运行的原生验收。
-- [ ] **Step 6：审阅和提交。** 根据用户选择的执行方式完成独立审查或阶段审查，修复可验证问题；只提交本任务代码、测试、指南和发布说明，不提交他人改动、不 push。提交摘要：`test: 验证云盘互动通知事务边界并同步使用指南`。最终报告实现范围、实际通过项及原生验收缺口。
+- [x] **Step 6：审阅和提交。** 根据用户选择的执行方式完成独立审查或阶段审查，修复可验证问题；只提交本任务代码、测试、指南和发布说明，不提交他人改动、不 push。提交摘要：`test: 验证云盘互动通知事务边界并同步使用指南`。最终报告实现范围、实际通过项及原生验收缺口。
 
 ## 公共验证命令
 
@@ -237,6 +237,12 @@ xcodebuild test-without-building -project SynapseMobile/SynapseMobile.xcodeproj 
 - 本地既有部署允许 loopback HTTP，生产要求 HTTPS。受保护通知接口纳入统一网页登录过期处理。
 - 复跑修改前版本确认 10 个已有阅读器测试夹具失败；更新留言 hook 替身与现有菜单/引用文案断言后通过。
 - 新增当前数据刷新状态，避免缓存缺少新回复时误报已删除。原生 RootView 的请求 UUID、账号归属与新记录读取直接复用；列表分组使用“云盘”。
-- 通过：shared 14 个测试；server 148 个相关单测与类型检查；网页 260 个相关单测、类型检查、构建和遥测检查；桌面 149 个消息/账号测试、14 个 MCP 测试、类型检查和硬约束；iOS App 与测试目标 build-for-testing。
+- 通过：shared 14 个测试；server 321 个相关单测与类型检查；网页 348 个相关单测、类型检查、构建和遥测检查；桌面 149 个消息/账号测试、14 个 MCP 测试、类型检查和硬约束；iOS App 与测试目标 build-for-testing。
 - PostgreSQL 验收代码另行通过 TypeScript 检查。入口拒绝缺失的 `DRIVE_DISCUSSION_E2E_DATABASE_URL`，没有执行迁移或访问业务数据库。iOS 测试仅编译，未启动 Simulator、App 或真实横幅验收。
 - Apple 原文依据：[Notifications](https://developer.apple.com/design/human-interface-guidelines/notifications) 支持克制的摘要与明确动作；[iOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-ios) 与 [iPadOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-ipados) 指导沿用系统控件及可适配的既有列表/浏览呈现。本次没有新增视觉形制，最低版本核对为 iOS 18。
+
+### 独立审查与修复
+
+一次独立审查覆盖整个实施分支，发现三项 Important，无 Critical 或 Minor。写入服务已在事务中复验分享权限并锁定分享和祖先目录；已回滚的锁冲突最多重试三次。新增 10 个权限/锁回归先失败后通过，并增加创建拒绝时不保存或发布事件的测试。两个 PostgreSQL suite 的事件键修正为 `drive:message:` / `drive:message-comment:`，夹具使用真实分享权限服务，并增加撤权先提交的竞争验收；无独立测试库，真实运行仍未执行。
+
+旧定位取消已接入讨论选择、编辑、阅读方式切换、目录与主动滚动。两条慢刷新后保持新选择/输入焦点的测试先失败后通过。扩大的阅读器壳层检查另发现 6 个修改前已存在的留言 hook 夹具遗漏；基线复跑一致，补齐测试替身后全部通过。修复后 server 321、dashboard 348 个相关测试通过，server/dashboard 类型检查、网页构建、遥测和硬约束通过；desktop 163 个相关测试与类型检查、iOS 测试目标编译此前通过且本轮未改变这些生产文件。

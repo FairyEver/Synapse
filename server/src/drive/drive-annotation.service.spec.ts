@@ -1123,6 +1123,7 @@ function createDriveServiceMock() {
   return {
     getShareBrowserSnapshot: vi.fn(),
     resolveShareAnnotationAccess: vi.fn(),
+    validateDiscussionWriteAccess: vi.fn(async () => undefined),
     resolveAnnotationDocument: vi.fn(),
     resolveAnnotationDiffRanges: vi.fn(async (
       _itemId: string,

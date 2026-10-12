@@ -109,7 +109,7 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
             editor={editor}
             pendingDelete={pendingDelete}
             busy={busy}
-            onEdit={(next) => { setEditor(next); setError(null) }}
+            onEdit={(next) => { pending?.cancel(); setEditor(next); setError(null) }}
             onDelete={remove}
             renderEditor={renderEditor}
           />

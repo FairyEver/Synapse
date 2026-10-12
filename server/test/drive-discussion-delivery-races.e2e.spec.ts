@@ -10,7 +10,7 @@ describe("drive discussion PostgreSQL delivery races", () => {
   afterAll(async () => { if (f) await f.cleanup() })
   async function delivery() {
     const root = await f.messages.create(f.access, f.reader, "投递验收")
-    return f.prisma.driveDiscussionNotificationDelivery.findFirstOrThrow({ where: { notification: { sourceKey: "message:" + root.id } } })
+    return f.prisma.driveDiscussionNotificationDelivery.findFirstOrThrow({ where: { notification: { sourceKey: "drive:message:" + root.id } } })
   }
   it("two workers claim one delivery, without adding notification rows", async () => {
     const row = await delivery()

@@ -558,7 +558,8 @@ function ThreadView({
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
-  const target = usePendingDriveDiscussion()?.location
+  const pending = usePendingDriveDiscussion()
+  const target = pending?.location
   const fromNotification = target?.kind === 'annotation' && target.threadId === thread.id
   const [composer, setComposer] = useState<ThreadComposerState>(() => active && !fromNotification
     ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
@@ -591,6 +592,7 @@ function ThreadView({
 
   const changeStatus = async () => {
     if (statusSubmittingRef.current || composerSubmitting || !thread.permissions.canChangeStatus) return
+    pending?.cancel()
     restoreStatusFocusRef.current = document.activeElement === statusButtonRef.current
       || Boolean(statusMenuRef.current?.contains(document.activeElement))
     statusSubmittingRef.current = true
@@ -617,6 +619,7 @@ function ThreadView({
 
   const openReplyComposer = (commentId: string | null) => {
     if (composerSubmitting) return
+    pending?.cancel()
     setComposer((current) => ({
       kind: 'reply',
       parentCommentId: commentId,
@@ -629,6 +632,7 @@ function ThreadView({
 
   const openEditComposer = (comment: DriveAnnotationCommentDto) => {
     if (composerSubmitting) return
+    pending?.cancel()
     setComposer({
       kind: 'edit',
       commentId: comment.id,

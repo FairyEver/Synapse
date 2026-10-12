@@ -206,6 +206,7 @@ export function useDriveDocumentEditorComments({
     editorScrollFrameRef.current = window.requestAnimationFrame(flushEditorScroll)
   }, [flushEditorScroll])
   const scrollToThread = useCallback((threadId: string) => {
+    pendingDiscussion?.cancel()
     const scroller = editorContainerRef.current
     const anchorTop = geometry.anchorTopByThreadId[threadId]
     if (!scroller || typeof anchorTop !== 'number') return
@@ -214,11 +215,12 @@ export function useDriveDocumentEditorComments({
     if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'instant' })
     else scroller.scrollTop = top
     setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, top)
-  }, [geometry.anchorTopByThreadId])
+  }, [geometry.anchorTopByThreadId, pendingDiscussion?.cancel])
   const focusThreadFromRail = useCallback((threadId: string) => {
+    pendingDiscussion?.cancel()
     setActiveThreadId(threadId)
     scrollToThread(threadId)
-  }, [scrollToThread])
+  }, [scrollToThread, pendingDiscussion?.cancel])
   const handleCommentsWheel = useCallback((event: WheelEvent) => {
     if (event.deltaY === 0) return
     const scroller = editorContainerRef.current
@@ -242,6 +244,7 @@ export function useDriveDocumentEditorComments({
 
   return {
     activeThreadId,
+    cancelPendingLocation: pendingDiscussion?.cancel,
     annotationError: annotations.error,
     annotationsEnabled,
     commentBottomCompensation,
@@ -316,11 +319,16 @@ export function DriveDocumentEditorCommentsFrame({
       onAnchoredWheel={mode === 'anchored' ? comments.handleCommentsWheel : undefined}
     />
   )
+  const selectOutlineItem = (id: string) => {
+    comments.cancelPendingLocation?.()
+    outline?.selectItem(id)
+  }
   const editorSurface = (
     <div
       ref={setEditorContainerRef}
       {...{ [dataAttributes.scroll]: 'true' }}
       className='h-full min-h-0 overflow-auto overscroll-contain'
+      onWheelCapture={() => comments.cancelPendingLocation?.()}
       onScroll={() => {
         comments.handleEditorScroll()
         outline?.handleEditorScroll()
@@ -400,7 +408,7 @@ export function DriveDocumentEditorCommentsFrame({
                     <DriveDocumentOutlineTree
                       items={outline.items}
                       activeItemId={outline.activeItemId}
-                      onSelect={outline.selectItem}
+                      onSelect={selectOutlineItem}
                     />
                   </nav>
                 </aside>
@@ -451,7 +459,7 @@ export function DriveDocumentEditorCommentsFrame({
                 items={outline.items}
                 compact
                 activeItemId={outline.activeItemId}
-                onSelect={outline.selectItem}
+                onSelect={selectOutlineItem}
               />
             </nav>
           </SheetContent>

@@ -88,6 +88,9 @@ export class DriveMessageService {
     let message: MessageRecord
     try {
       message = await this.discussion.mutate(item.id, async (tx) => {
+      await this.drive.validateDiscussionWriteAccess(tx, access.kind === "owned"
+        ? { kind: "owned", itemId: item.id, actorUserId }
+        : { kind: "share", itemId: item.id, actorUserId, shareId: access.shareId, sourceShareId: item.sourceShareId ?? null, password: access.password, cookie: access.cookie })
         const message = await tx.driveMessage.create({
           data: {
             itemId: item.id, body: content, createdByUserId: actorUserId, sourceShareId: item.sourceShareId ?? null,
@@ -146,6 +149,9 @@ export class DriveMessageService {
   async createComment(access: DriveMessageAccess, actorUserId: string, messageId: string, parentCommentId: string | null, body: string, ipAddress?: string): Promise<DriveMessageCommentDto> {
     const item = await this.resolveItem(access, actorUserId)
     const comment = await this.discussion.mutate(item.id, async (tx) => {
+      await this.drive.validateDiscussionWriteAccess(tx, access.kind === "owned"
+        ? { kind: "owned", itemId: item.id, actorUserId }
+        : { kind: "share", itemId: item.id, actorUserId, shareId: access.shareId, sourceShareId: item.sourceShareId ?? null, password: access.password, cookie: access.cookie })
       const message = await tx.driveMessage.findFirst({ where: { id: messageId, itemId: item.id, deletedAt: null }, include: messageInclude })
       if (!message) throw new NotFoundException("留言不存在。")
       const parent = parentCommentId ? await tx.driveMessageComment.findFirst({ where: { id: parentCommentId, messageId, deletedAt: null } }) : null

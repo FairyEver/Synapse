@@ -563,6 +563,7 @@ function DriveMarkdownBody({
   useRegisterDriveRendererToolbarItems('markdown', toolbarItems)
 
   const scrollToThread = (threadId: string) => {
+    pendingDiscussion?.cancel()
     setActiveThreadId(threadId)
     const root = bodyRef.current
     const imageId = resolvedByThreadId.get(threadId)?.imageId
@@ -582,11 +583,13 @@ function DriveMarkdownBody({
   }
 
   const focusThreadFromDocument = (threadId: string) => {
+    pendingDiscussion?.cancel()
     setCommentPanelOpen(true)
     setActiveThreadId(threadId)
   }
 
   const focusThreadFromRail = (threadId: string) => {
+    pendingDiscussion?.cancel()
     if (resolvedByThreadId.get(threadId)?.anchorStatus === 'orphaned') {
       setActiveThreadId(threadId)
       return
@@ -612,9 +615,10 @@ function DriveMarkdownBody({
       if (!commentDraftOpen) clearPendingSelectionAction()
       return
     }
+    pendingDiscussion?.cancel()
     selectionRangeRef.current = selection.getRangeAt(0).cloneRange()
     setPendingTarget(target)
-  }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDraftOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
+  }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDraftOpen, liveCollaboration.session, liveCollaboration.state?.epoch, pendingDiscussion?.cancel, projection])
 
   useEffect(() => {
     if (!canCreateAnnotation) return
@@ -661,9 +665,10 @@ function DriveMarkdownBody({
   }, [])
 
   const markDocumentScrollAsUserControlled = useCallback(() => {
+    pendingDiscussion?.cancel()
     documentScrollSourceRef.current = 'user'
     scheduleUserDocumentScrollIdle()
-  }, [scheduleUserDocumentScrollIdle])
+  }, [scheduleUserDocumentScrollIdle, pendingDiscussion?.cancel])
 
   const flushDocumentScrollEffects = useCallback(() => {
     documentScrollFrameRef.current = null
@@ -713,6 +718,7 @@ function DriveMarkdownBody({
   }, [activeOutlineId])
 
   const scrollToOutlineItem = useCallback((itemId: string) => {
+    pendingDiscussion?.cancel()
     const scroller = documentScrollRef.current
     const body = bodyRef.current
     const heading = body ? findMarkdownHeadingById(body, itemId) : null
@@ -736,7 +742,7 @@ function DriveMarkdownBody({
       scroller.scrollTop = targetTop
     }
     scheduleDocumentScrollEffects()
-  }, [scheduleDocumentScrollEffects])
+  }, [scheduleDocumentScrollEffects, pendingDiscussion?.cancel])
 
   const setCommentAnchorLayerRef = useCallback((element: HTMLDivElement | null) => {
     commentAnchorLayerRef.current = element
@@ -745,6 +751,7 @@ function DriveMarkdownBody({
 
   const handleCommentsWheel = useCallback((event: WheelEvent) => {
     if (event.deltaY === 0) return
+    pendingDiscussion?.cancel()
     const scroller = documentScrollRef.current
     if (!scroller) return
     event.preventDefault()

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, type ComponentProps } from 'react'
+import { act, type ComponentProps, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriveAnnotationThreadDto, DriveMarkdownOutlineItemDto, DriveMarkdownProjectionDto } from '@synapse/shared'
@@ -10,6 +10,7 @@ import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
+import { DriveDiscussionLocationContext, useDriveDiscussionLocation } from '../use-drive-discussion-location'
 
 const mermaidRendererMock = vi.hoisted(() => ({
   render: vi.fn(async () => undefined),
@@ -1766,13 +1767,38 @@ describe('DriveMarkdownRenderer', () => {
 
 })
 
+it('preserves an explicitly selected discussion when a slow notification refresh finishes', async () => {
+  const oldUrl = window.location.pathname + window.location.search + window.location.hash
+  history.replaceState(null, '', '/drive/items/item-1#discussion=annotation&threadId=thread-1&commentId=comment-1')
+  try {
+    annotationsMock.loading = true
+    annotationsMock.threads = [thread({ id: 'thread-2', body: 'Selected discussion' })]
+    const view = renderMarkdown({ discussion: true })
+    await act(async () => undefined)
+    await click(elementWithText('Selected discussion'))
+    annotationsMock.loading = false
+    annotationsMock.threads = [thread(), thread({ id: 'thread-2', body: 'Selected discussion' })]
+    view.rerender({})
+    await act(async () => { await new Promise((done) => setTimeout(done, 40)) })
+    expect(document.querySelector('[data-markdown-comment-thread-id="thread-2"] [aria-current=true]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comment-thread-id="thread-1"] [aria-current=true]')).toBeNull()
+  } finally { history.replaceState(null, '', oldUrl) }
+})
+
+function DiscussionProvider({ children }: { children: ReactNode }) {
+  const pending = useDriveDiscussionLocation('item-1')
+  return <DriveDiscussionLocationContext value={pending}>{children}</DriveDiscussionLocationContext>
+}
+
 function renderMarkdown({
+  discussion = false,
   currentItem = current(),
   previewData = preview(),
   edit = editable(),
   annotationContext = { context: 'owner' as const, itemId: 'item-1' },
   editContext,
 }: {
+  readonly discussion?: boolean
   readonly currentItem?: ReturnType<typeof current>
   readonly previewData?: ReturnType<typeof preview>
   readonly edit?: ComponentProps<typeof DriveMarkdownRenderer>['edit']
@@ -1793,7 +1819,7 @@ function renderMarkdown({
   root = createRoot(host)
   const initialInput = { currentItem, previewData, edit, annotationContext, editContext }
   const render = (input: typeof initialInput) => {
-    root?.render(
+    const element = (
       <DriveRendererToolbarProvider>
         <ToolbarHost />
         <FilePreviewLayout>
@@ -1807,6 +1833,7 @@ function renderMarkdown({
         </FilePreviewLayout>
       </DriveRendererToolbarProvider>
     )
+    root?.render(discussion ? <DiscussionProvider>{element}</DiscussionProvider> : element)
   }
   act(() => {
     render(initialInput)

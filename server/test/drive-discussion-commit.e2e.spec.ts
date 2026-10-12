@@ -20,7 +20,7 @@ describe("drive discussion PostgreSQL commit boundaries", () => {
     const replay = await f.messages.create(f.access, f.reader, "新留言", undefined, { keyHash: "test-" + f.item.id, requestHash: "same" })
     expect(replay.id).toBe(first.id)
     const reply = await f.messages.createComment(f.access, f.third, first.id, null, "新回复")
-    expect(await f.prisma.userNotification.count({ where: { sourceKey: "message-comment:" + reply.id } })).toBe(2)
+    expect(await f.prisma.userNotification.count({ where: { sourceKey: "drive:message-comment:" + reply.id } })).toBe(2)
     await f.notifications.createInTransaction(f.prisma as never, { userId: f.owner, source: "external", sourceKey: "test:external", title: "已有通知", body: "摘要" })
     const page = await f.notifications.list(f.owner, { source: "drive-discussion" })
     expect(page.items).toHaveLength(2)
@@ -51,8 +51,31 @@ describe("drive discussion PostgreSQL commit boundaries", () => {
       expect(comments).toHaveLength(order === "delete-first" ? 0 : 1)
       if (order === "reply-first") {
         expect(comments[0]?.deletedAt).not.toBeNull()
-        expect(await f.prisma.userNotification.count({ where: { sourceKey: "message-comment:" + comments[0]!.id } })).toBe(2)
+        expect(await f.prisma.userNotification.count({ where: { sourceKey: "drive:message-comment:" + comments[0]!.id } })).toBe(2)
       }
     } finally { release.release(); spy.mockRestore() }
+  })
+  it("revocation committed while creation waits rolls back the new content and notification", async () => {
+    const held = discussionLatch(), release = discussionLatch(), entered = discussionLatch()
+    const before = await f.prisma.driveMessage.count({ where: { itemId: f.item.id } })
+    const lock = f.discussion.withItemLock.bind(f.discussion)
+    const spy = vi.spyOn(f.discussion, "withItemLock").mockImplementation(async (...args) => { entered.release(); return lock(...args) })
+    const holding = f.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "DriveItem" WHERE "id" = ${f.item.id} FOR UPDATE`
+      held.release(); await release.promise
+    })
+    try {
+      await held.promise
+      const creating = f.messages.create(f.access, f.reader, "撤权竞态")
+      const result = Promise.allSettled([creating])
+      await entered.promise
+      await f.prisma.driveShare.update({ where: { id: f.share.id }, data: { enabled: false } })
+      release.release(); await holding
+      expect((await result)[0]).toMatchObject({ status: "rejected", reason: { status: 404 } })
+      expect(await f.prisma.driveMessage.count({ where: { itemId: f.item.id } })).toBe(before)
+    } finally {
+      release.release(); await holding; spy.mockRestore()
+      await f.prisma.driveShare.update({ where: { id: f.share.id }, data: { enabled: true } })
+    }
   })
 })

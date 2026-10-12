@@ -203,6 +203,11 @@ export type DriveShareAnnotationAccess = {
   readonly sourceShareId: string
 }
 
+export type DriveDiscussionWriteAccess = { itemId: string; actorUserId: string } & (
+  | { kind: "owned" }
+  | { kind: "share"; shareId: string; sourceShareId: string | null; password?: string; cookie?: string | null }
+)
+
 export type DriveAnnotationDocumentValue = {
   readonly versionId: string
   readonly epoch: string | null
@@ -2400,6 +2405,47 @@ export class DriveService implements OnApplicationBootstrap {
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
+  }
+
+  async validateDiscussionWriteAccess(tx: Prisma.TransactionClient, input: DriveDiscussionWriteAccess): Promise<void> {
+    const actor = await tx.user.findFirst({ where: { id: input.actorUserId, status: "active" }, select: { id: true } })
+    if (!actor) throw new ForbiddenException("没有评论权限。")
+    const findItem = (id: string) => tx.driveItem.findFirst({
+      where: { id, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
+    })
+    const item = await findItem(input.itemId)
+    if (!item || !isCommentableMarkdownItem(item)) throw new NotFoundException("文档不存在。")
+    if (input.kind === "owned") {
+      if (item.userId !== input.actorUserId) throw new NotFoundException("文档不存在。")
+      return
+    }
+    // Share settings changes take an update lock on this row; keep the checked
+    // settings and credential fingerprint stable until the content commits.
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "DriveShare" WHERE "shareId" = ${input.shareId} FOR SHARE`)
+    const share = await tx.driveShare.findFirst({ where: { shareId: input.shareId } })
+    const now = new Date()
+    if (!share || !share.enabled || share.id !== input.sourceShareId || share.userId !== item.userId
+      || (share.expiresAt && share.expiresAt <= now)) throw new NotFoundException("文件未找到")
+    let current = item
+    const visited = new Set<string>()
+    while (current.id !== share.itemId) {
+      if (!current.parentId || visited.has(current.id)) throw new NotFoundException("文件未找到")
+      visited.add(current.id)
+      // Lock the current ancestor before reading its parent. Folder moves and
+      // trash must finish before this check, or wait for this transaction.
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "DriveItem" WHERE "id" = ${current.parentId} FOR SHARE`)
+      const parent = await findItem(current.parentId)
+      if (!parent || parent.userId !== item.userId) throw new NotFoundException("文件未找到")
+      current = parent
+    }
+    if (share.passwordEnabled) {
+      const cookieOk = verifyDriveAccessCookie(input.cookie ?? undefined, {
+        kind: "share", publicId: share.shareId, now, passwordHash: share.passwordHash,
+        resourceExpiresAt: share.expiresAt, secret: this.accessSecret,
+      })
+      if (!cookieOk && !await verifyDrivePasswordInput(input.password, share.passwordHash)) throw new NotFoundException("文件未找到")
+    }
+    if (share.expiresAt && share.expiresAt <= new Date()) throw new NotFoundException("文件未找到")
   }
 
   async getDiscussionBrowserUrl(input: { userId: string; itemId: string; sourceShareId: string | null }): Promise<string | null> {

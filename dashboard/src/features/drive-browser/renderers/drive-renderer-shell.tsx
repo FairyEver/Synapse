@@ -111,6 +111,7 @@ export function DriveRendererShell({
   }
   const setRenderer = (id: DriveRendererId) => {
     if (id === selected?.id || editContext?.reloading || editContext?.savingText || rendererRefreshCountRef.current > 0) return
+    discussion.cancel()
     setRendererChangeError(null)
     trackDriveEvent({
       eventKey: 'web.drive.renderer.select',
@@ -254,7 +255,7 @@ function DriveRendererShellChrome({
         </Alert>
       ) : null}
       {discussion?.error ? <Alert><AlertDescription>{discussion.error}</AlertDescription></Alert> : null}
-      <div className='min-h-0 flex-1 overflow-hidden'>
+      <div className='min-h-0 flex-1 overflow-hidden' onInputCapture={discussion?.cancel}>
         <DriveRendererMountGate
           snapshot={snapshot}
           selected={selected}

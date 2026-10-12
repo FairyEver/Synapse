@@ -60,3 +60,14 @@ it('waits for current data instead of declaring a target absent from stale cache
   await render(<DriveMessagesSection messages={{ messages, loading: false, refreshing: false, error: null, canPost: false } as never} />)
   expect(document.activeElement?.getAttribute('data-drive-message-comment-id')).toBe('three')
 })
+it('keeps an editing intent when an older notification target arrives after refresh', async () => {
+  history.replaceState(null, '', '/drive/items/file#discussion=message&messageId=m99&commentId=three')
+  const data = { messages: messages.slice(0, 1), loading: false, refreshing: true, error: null, canPost: true }
+  await render(<DriveMessagesSection messages={data as never} />)
+  await act(async () => { [...document.querySelectorAll('button')].find((button) => button.textContent === '回复')!.click() })
+  const editor = document.querySelector('textarea') as HTMLTextAreaElement
+  editor.focus()
+  await render(<DriveMessagesSection messages={{ ...data, messages, refreshing: false } as never} />)
+  expect(document.activeElement).toBe(editor)
+  expect(document.activeElement?.getAttribute('data-drive-message-comment-id')).toBeNull()
+})

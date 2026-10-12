@@ -15,13 +15,21 @@ export class DriveDiscussionNotificationService {
   setDeliverySink(sink: (ids: readonly string[], now: Date) => Promise<void>): void { this.sink = sink }
 
   async withItemLock<T>(itemId: string, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    return this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT "id" FROM "DriveItem" WHERE "id" = ${itemId}
-        AND "deletedAt" IS NULL AND "storageStatus" = ${DRIVE_STORAGE_STATUS.active}
-        AND "lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active} FOR UPDATE`)
-      if (!rows.length) throw new NotFoundException("文档不存在。")
-      return work(tx)
-    })
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT "id" FROM "DriveItem" WHERE "id" = ${itemId}
+            AND "deletedAt" IS NULL AND "storageStatus" = ${DRIVE_STORAGE_STATUS.active}
+            AND "lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active} FOR UPDATE`)
+          if (!rows.length) throw new NotFoundException("文档不存在。")
+          return work(tx)
+        })
+      } catch (error) {
+        const abortedLock = error instanceof Prisma.PrismaClientKnownRequestError
+          && (error.code === "P2034" || (error.code === "P2010" && error.meta?.code === "40P01"))
+        if (!abortedLock || attempt >= 2) throw error
+      }
+    }
   }
   async mutate<T>(itemId: string, work: (tx: Prisma.TransactionClient) => Promise<{ result: T; event: DriveDiscussionEvent }>): Promise<T> {
     const { result, refs } = await this.withItemLock(itemId, async (tx) => {

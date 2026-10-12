@@ -25,7 +25,7 @@ describe('DriveMessageService', () => {
     driveMessageComment: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(async (operations: unknown): Promise<unknown> => Array.isArray(operations) ? Promise.all(operations) : (operations as (tx: unknown) => Promise<unknown>)(prisma)),
   }
-  const drive = { resolveShareAnnotationAccess: vi.fn() }
+  const drive = { resolveShareAnnotationAccess: vi.fn(), validateDiscussionWriteAccess: vi.fn(async () => undefined) }
   const bus = { publish: vi.fn() }
   const discussion = {
     mutate: async (_id: string, work: (tx: unknown) => Promise<{ result: unknown }>) => (await prisma.$transaction(work) as { result: unknown }).result,
@@ -47,6 +47,13 @@ describe('DriveMessageService', () => {
     prisma.driveMessageComment.update.mockResolvedValue(reply('first'))
     prisma.driveMessageComment.updateMany.mockResolvedValue({ count: 3 })
     drive.resolveShareAnnotationAccess.mockResolvedValue({ item, canComment: true })
+  })
+  it('rejects permission withdrawn while waiting before saving content or publishing an event', async () => {
+    drive.resolveShareAnnotationAccess.mockResolvedValue({ item, canComment: true, sourceShareId: 'original' })
+    drive.validateDiscussionWriteAccess.mockRejectedValueOnce(new NotFoundException('分享已停用'))
+    await expect(service.create({ kind: 'share', shareId: 'public', itemId: item.id }, reader.id, '新留言')).rejects.toMatchObject({ status: 404 })
+    expect(prisma.driveMessage.create).not.toHaveBeenCalled()
+    expect(bus.publish).not.toHaveBeenCalled()
   })
 
   it('does not publish a creation when its notification transaction fails', async () => {

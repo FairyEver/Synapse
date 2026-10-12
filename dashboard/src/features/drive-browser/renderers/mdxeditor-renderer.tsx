@@ -244,10 +244,11 @@ export function DriveMDXeditorRenderer({
     return relativeImagePreviewUrls.get(imageSource) ?? ''
   }, [relativeImagePreviewUrls])
   const handleEditorViewModeChange = useCallback((mode: ViewMode) => {
+    comments.cancelPendingLocation?.()
     setEditorViewMode(mode)
     comments.scheduleGeometry()
     outline.notifyEditorUpdate()
-  }, [comments.scheduleGeometry, outline.notifyEditorUpdate])
+  }, [comments.cancelPendingLocation, comments.scheduleGeometry, outline.notifyEditorUpdate])
   const handleEditorUpdate = useCallback(() => {
     comments.notifyEditorUpdate()
     outline.notifyEditorUpdate()
@@ -526,6 +527,7 @@ export function DriveMDXeditorRenderer({
           className='min-h-96 flex-1 font-mono text-sm'
           onChange={(event) => {
             if (!canEdit) return
+            comments.cancelPendingLocation?.()
             updateValue(event.currentTarget.value)
           }}
         />
@@ -546,6 +548,7 @@ export function DriveMDXeditorRenderer({
             return
           }
           clearExternalMarkdownSync()
+          comments.cancelPendingLocation?.()
           updateValue(nextValue)
           outline.notifyEditorUpdate()
         }}

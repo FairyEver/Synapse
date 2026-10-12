@@ -135,6 +135,7 @@ export class DriveAnnotationService {
       : null
     if (existing) return toThreadDto(existing, userId, item.userId)
     const thread = await this.discussion.mutate(item.id, async (tx) => {
+      await this.drive.validateDiscussionWriteAccess(tx, { kind: "owned", itemId: item.id, actorUserId: userId })
       const thread = await tx.driveAnnotationThread.create({
         data: {
           itemId,
@@ -173,6 +174,7 @@ export class DriveAnnotationService {
   async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
     const { thread, comment } = await this.discussion.mutate(item.id, async (tx) => {
+      await this.drive.validateDiscussionWriteAccess(tx, { kind: "owned", itemId: item.id, actorUserId: userId })
       const thread = await tx.driveAnnotationThread.findFirst({ where: { id: threadId, itemId: item.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
       if (!thread) throw new NotFoundException("评论不存在。")
       const parent = input.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.parentCommentId, threadId: thread.id, deletedAt: null } }) : null
@@ -336,6 +338,7 @@ export class DriveAnnotationService {
       : null
     if (existing) return toThreadDto(existing, input.actorUserId, item.userId, true, true)
     const thread = await this.discussion.mutate(item.id, async (tx) => {
+      await this.drive.validateDiscussionWriteAccess(tx, { kind: "share", itemId: item.id, actorUserId: input.actorUserId, shareId: input.shareId, sourceShareId: item.sourceShareId ?? null, password: input.password, cookie: input.cookie })
       const thread = await tx.driveAnnotationThread.create({
         data: {
           itemId: item.id,
@@ -407,6 +410,7 @@ export class DriveAnnotationService {
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
     const { thread, comment } = await this.discussion.mutate(item.id, async (tx) => {
+      await this.drive.validateDiscussionWriteAccess(tx, { kind: "share", itemId: item.id, actorUserId: input.actorUserId, shareId: input.shareId, sourceShareId: item.sourceShareId ?? null, password: input.password, cookie: input.cookie })
       const thread = await tx.driveAnnotationThread.findFirst({ where: { id: input.threadId, itemId: item.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
       if (!thread) throw new NotFoundException("评论不存在。")
       const parent = input.body.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.body.parentCommentId, threadId: thread.id, deletedAt: null } }) : null

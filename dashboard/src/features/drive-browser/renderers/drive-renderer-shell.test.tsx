@@ -106,6 +106,10 @@ const annotationsMock = vi.hoisted(() => ({
   deletingComment: false,
 }))
 
+vi.mock('../use-drive-messages', () => ({
+  useDriveMessages: () => ({ messages: [], loading: false, error: null, canPost: false }),
+}))
+
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }))
