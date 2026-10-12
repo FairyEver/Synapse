@@ -103,7 +103,7 @@ function DockButton({
       aria-current={active ? "page" : undefined}
       onClick={() => onValueChange(app.id)}
     >
-      <img src={app.icon} alt="" className={`size-10 object-contain ${app.id === "todos" ? "dark:invert" : ""}`} draggable={false} />
+      <img src={app.icon} alt="" className="size-10 object-contain" draggable={false} />
       {active ? (
         <span
           data-slot="app-shell-dock-active-indicator"
