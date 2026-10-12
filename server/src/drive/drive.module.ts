@@ -1,3 +1,5 @@
+import { NotificationModule } from "../notifications/notification.module"
+import { DriveDiscussionNotificationService } from "./drive-discussion-notification.service"
 import { Module } from "@nestjs/common"
 import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { UserAuthModule } from "../auth/user-auth.module"
@@ -22,9 +24,10 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
 import { PlatformMediaStorage } from "./platform-media-storage"
 
 @Module({
-  imports: [UserAuthModule, AdminAuthModule, PrismaModule],
+  imports: [UserAuthModule, AdminAuthModule, PrismaModule, NotificationModule],
   controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController, PlatformMediaLocalStorageController],
   providers: [
+    DriveDiscussionNotificationService,
     DriveLifecycleService,
     DriveChangeLogService,
     DriveAnnotationService,

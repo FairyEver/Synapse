@@ -23,11 +23,15 @@ describe('DriveMessageService', () => {
     driveItem: { findFirst: vi.fn() },
     driveMessage: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     driveMessageComment: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    $transaction: vi.fn(async (operations: Promise<unknown>[]) => Promise.all(operations)),
+    $transaction: vi.fn(async (operations: unknown): Promise<unknown> => Array.isArray(operations) ? Promise.all(operations) : (operations as (tx: unknown) => Promise<unknown>)(prisma)),
   }
   const drive = { resolveShareAnnotationAccess: vi.fn() }
   const bus = { publish: vi.fn() }
-  const service = new DriveMessageService(prisma as never, drive as never, undefined, bus as never)
+  const discussion = {
+    mutate: async (_id: string, work: (tx: unknown) => Promise<{ result: unknown }>) => (await prisma.$transaction(work) as { result: unknown }).result,
+    withItemLock: async (_id: string, work: (tx: unknown) => Promise<unknown>) => prisma.$transaction(work),
+  }
+  const service = new DriveMessageService(prisma as never, drive as never, discussion as never, undefined, bus as never)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -43,6 +47,12 @@ describe('DriveMessageService', () => {
     prisma.driveMessageComment.update.mockResolvedValue(reply('first'))
     prisma.driveMessageComment.updateMany.mockResolvedValue({ count: 3 })
     drive.resolveShareAnnotationAccess.mockResolvedValue({ item, canComment: true })
+  })
+
+  it('does not publish a creation when its notification transaction fails', async () => {
+    prisma.$transaction.mockRejectedValueOnce(new Error('notification store unavailable'))
+    await expect(service.create({ kind: 'owned', itemId: 'doc' }, 'owner', 'hello')).rejects.toThrow('notification store unavailable')
+    expect(bus.publish).not.toHaveBeenCalled()
   })
 
   it('lists owned messages with author and owner permissions', async () => {

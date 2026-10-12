@@ -198,6 +198,7 @@ export type DriveShareAnnotationAccess = {
     readonly storageKey: string | null
   }
   readonly canComment: boolean
+  readonly sourceShareId: string
 }
 
 export type DriveAnnotationDocumentValue = {
@@ -2414,6 +2415,7 @@ export class DriveService implements OnApplicationBootstrap {
     })
     const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
     return {
+      sourceShareId: share.id,
       item: {
         id: current.id,
         userId: current.userId,

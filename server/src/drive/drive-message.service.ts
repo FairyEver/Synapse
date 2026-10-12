@@ -1,3 +1,5 @@
+import { DriveDiscussionNotificationService } from "./drive-discussion-notification.service"
+import { makeDriveDiscussionEvent } from "./drive-discussion-notification.types"
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { DRIVE_MESSAGE_BODY_MAX_LENGTH, isDriveCommentableMarkdownItem, type DriveMessageCommentDto, type DriveMessageDto, type DriveMessageListDto } from "@synapse/shared"
@@ -12,7 +14,7 @@ export type DriveMessageAccess =
   | { readonly kind: "owned"; readonly itemId: string }
   | { readonly kind: "share"; readonly shareId: string; readonly itemId?: string | null; readonly password?: string; readonly cookie?: string | null }
 
-type MessageItem = { readonly id: string; readonly userId: string; readonly name: string; readonly type: string; readonly mimeType: string | null }
+type MessageItem = { readonly sourceShareId?: string | null; readonly id: string; readonly userId: string; readonly name: string; readonly type: string; readonly mimeType: string | null }
 type MessageActor = { readonly id: string; readonly email: string; readonly handle: string | null }
 type MessageCommentRecord = {
   readonly id: string; readonly messageId: string; readonly parentCommentId: string | null; readonly body: string
@@ -49,6 +51,7 @@ export class DriveMessageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
+    private readonly discussion: DriveDiscussionNotificationService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly collaborationBus?: LocalDriveCollaborationBus,
   ) {}
@@ -84,15 +87,18 @@ export class DriveMessageService {
     }
     let message: MessageRecord
     try {
-      message = await this.prisma.driveMessage.create({
-        data: {
-          itemId: item.id, body: content, createdByUserId: actorUserId,
-          ...(idempotency ? {
-            openApiIdempotencyHash: idempotency.keyHash,
-            openApiRequestHash: idempotency.requestHash,
-          } : {}),
-        },
-        include: messageInclude,
+      message = await this.discussion.mutate(item.id, async (tx) => {
+        const message = await tx.driveMessage.create({
+          data: {
+            itemId: item.id, body: content, createdByUserId: actorUserId, sourceShareId: item.sourceShareId ?? null,
+            ...(idempotency ? {
+              openApiIdempotencyHash: idempotency.keyHash,
+              openApiRequestHash: idempotency.requestHash,
+            } : {}),
+          },
+          include: messageInclude,
+        })
+        return { result: message, event: makeDriveDiscussionEvent("message", "created", item, message, null, content) }
       })
     } catch (error) {
       if (idempotency && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -125,27 +131,30 @@ export class DriveMessageService {
 
   async delete(access: DriveMessageAccess, actorUserId: string, messageId: string, ipAddress?: string): Promise<{ readonly ok: true }> {
     const item = await this.resolveItem(access, actorUserId)
-    const message = await this.requireMessage(item.id, messageId)
-    assertCanDelete(message.createdByUserId, actorUserId, item.userId)
-    const deletedAt = new Date()
-    await this.prisma.$transaction([
-      this.prisma.driveMessageComment.updateMany({ where: { messageId, deletedAt: null }, data: { deletedAt } }),
-      this.prisma.driveMessage.update({ where: { id: messageId }, data: { deletedAt } }),
-    ])
+    await this.discussion.withItemLock(item.id, async (tx) => {
+      const message = await tx.driveMessage.findFirst({ where: { id: messageId, itemId: item.id, deletedAt: null }, include: messageInclude })
+      if (!message) throw new NotFoundException("留言不存在。")
+      assertCanDelete(message.createdByUserId, actorUserId, item.userId)
+      const deletedAt = new Date()
+      await tx.driveMessageComment.updateMany({ where: { messageId, deletedAt: null }, data: { deletedAt } })
+      await tx.driveMessage.update({ where: { id: messageId }, data: { deletedAt } })
+    })
     await this.afterMutation(item.id, actorUserId, "drive.message.delete", "drive.message", messageId, ipAddress)
     return { ok: true }
   }
 
   async createComment(access: DriveMessageAccess, actorUserId: string, messageId: string, parentCommentId: string | null, body: string, ipAddress?: string): Promise<DriveMessageCommentDto> {
     const item = await this.resolveItem(access, actorUserId)
-    await this.requireMessage(item.id, messageId)
-    if (parentCommentId) {
-      const parent = await this.prisma.driveMessageComment.findFirst({ where: { id: parentCommentId, messageId, deletedAt: null } })
-      if (!parent) throw new BadRequestException("回复目标不存在。")
-    }
-    const comment = await this.prisma.driveMessageComment.create({
-      data: { messageId, parentCommentId, body: parseDriveMessageBody(body), createdByUserId: actorUserId },
-      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+    const comment = await this.discussion.mutate(item.id, async (tx) => {
+      const message = await tx.driveMessage.findFirst({ where: { id: messageId, itemId: item.id, deletedAt: null }, include: messageInclude })
+      if (!message) throw new NotFoundException("留言不存在。")
+      const parent = parentCommentId ? await tx.driveMessageComment.findFirst({ where: { id: parentCommentId, messageId, deletedAt: null } }) : null
+      if (parentCommentId && !parent) throw new BadRequestException("回复目标不存在。")
+      const comment = await tx.driveMessageComment.create({
+        data: { messageId, parentCommentId, body: parseDriveMessageBody(body), createdByUserId: actorUserId, sourceShareId: item.sourceShareId ?? null },
+        include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+      })
+      return { result: comment, event: makeDriveDiscussionEvent("message", "replied", item, message, comment, comment.body, parent) }
     })
     await this.afterMutation(item.id, actorUserId, "drive.message.comment.create", "drive.messageComment", comment.id, ipAddress)
     return toCommentDto(comment, actorUserId, item.userId, access.kind === "share")
@@ -165,27 +174,28 @@ export class DriveMessageService {
 
   async deleteComment(access: DriveMessageAccess, actorUserId: string, commentId: string, ipAddress?: string): Promise<{ readonly ok: true }> {
     const item = await this.resolveItem(access, actorUserId)
-    const comment = await this.requireComment(item.id, commentId)
-    assertCanDelete(comment.createdByUserId, actorUserId, item.userId)
-    const comments = await this.prisma.driveMessageComment.findMany({
-      where: { messageId: comment.messageId, deletedAt: null }, select: { id: true, parentCommentId: true },
+    await this.discussion.withItemLock(item.id, async (tx) => {
+      const comment = await tx.driveMessageComment.findFirst({ where: { id: commentId, deletedAt: null, message: { itemId: item.id, deletedAt: null } }, include: { createdByUser: { select: { id: true, email: true, handle: true } } } })
+      if (!comment) throw new NotFoundException("回复不存在。")
+      assertCanDelete(comment.createdByUserId, actorUserId, item.userId)
+      const comments = await tx.driveMessageComment.findMany({
+        where: { messageId: comment.messageId, deletedAt: null }, select: { id: true, parentCommentId: true },
+      })
+      const children = new Map<string, string[]>()
+      for (const row of comments) {
+        if (!row.parentCommentId) continue
+        children.set(row.parentCommentId, [...(children.get(row.parentCommentId) ?? []), row.id])
+      }
+      const ids = new Set<string>()
+      const pending = [commentId]
+      while (pending.length) {
+        const id = pending.pop()!
+        if (ids.has(id)) continue
+        ids.add(id)
+        pending.push(...(children.get(id) ?? []))
+      }
+      await tx.driveMessageComment.updateMany({ where: { id: { in: [...ids] }, deletedAt: null }, data: { deletedAt: new Date() } })
     })
-    const children = new Map<string, string[]>()
-    for (const row of comments) {
-      if (!row.parentCommentId) continue
-      children.set(row.parentCommentId, [...(children.get(row.parentCommentId) ?? []), row.id])
-    }
-    const ids = new Set<string>()
-    const pending = [commentId]
-    while (pending.length) {
-      const id = pending.pop()!
-      if (ids.has(id)) continue
-      ids.add(id)
-      pending.push(...(children.get(id) ?? []))
-    }
-    await this.prisma.$transaction([
-      this.prisma.driveMessageComment.updateMany({ where: { id: { in: [...ids] }, deletedAt: null }, data: { deletedAt: new Date() } }),
-    ])
     await this.afterMutation(item.id, actorUserId, "drive.message.comment.delete", "drive.messageComment", commentId, ipAddress)
     return { ok: true }
   }
@@ -202,7 +212,7 @@ export class DriveMessageService {
       const result = await this.drive.resolveShareAnnotationAccess({
         shareId: access.shareId, itemId: access.itemId, cookie: access.cookie ?? undefined, password: access.password, actorUserId,
       })
-      item = result.item
+      item = { ...result.item, sourceShareId: result.sourceShareId }
     }
     if (!item) throw new NotFoundException("文档不存在。")
     if (!isDriveCommentableMarkdownItem(item)) throw new BadRequestException("留言仅支持 Markdown 文档。")

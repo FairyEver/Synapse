@@ -7,7 +7,11 @@ describe("DriveAnnotationService", () => {
   const drive = createDriveServiceMock()
   const auditLog = { record: vi.fn() }
   const collaborationBus = { publish: vi.fn() }
-  const service = new DriveAnnotationService(prisma as never, drive as never, auditLog as never, collaborationBus as never)
+  const discussion = {
+    mutate: async (_id: string, work: (tx: unknown) => Promise<{ result: unknown }>) => (await prisma.$transaction(work) as { result: unknown }).result,
+    withItemLock: async (_id: string, work: (tx: unknown) => Promise<unknown>) => prisma.$transaction(work),
+  }
+  const service = new DriveAnnotationService(prisma as never, drive as never, discussion as never, auditLog as never, collaborationBus as never)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -531,7 +535,7 @@ describe("DriveAnnotationService", () => {
       commentRecord({ id: "comment-reply", parentCommentId: "comment-root", createdByUserId: "reader-2" }),
     ]
     prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[0])
-    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ comments }))
 
     await service.deleteOwnerComment("owner-1", "item-1", "comment-root")
 
@@ -554,7 +558,7 @@ describe("DriveAnnotationService", () => {
       commentRecord({ id: "comment-sibling", parentCommentId: "comment-root", createdByUserId: "reader-3" }),
     ]
     prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[1])
-    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ comments }))
 
     await service.deleteOwnerComment("owner-1", "item-1", "comment-target")
 
@@ -937,7 +941,7 @@ describe("DriveAnnotationService", () => {
       commentRecord({ id: "comment-sibling", parentCommentId: "comment-root", createdByUserId: "reader-3" }),
     ]
     prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[1])
-    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ comments }))
 
     await service.deleteShareComment({
       actorUserId: "reader-1",
@@ -959,7 +963,7 @@ describe("DriveAnnotationService", () => {
       commentRecord({ id: "comment-reply", parentCommentId: "comment-root", createdByUserId: "reader-2" }),
     ]
     prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[0])
-    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ comments }))
 
     await service.deleteShareComment({
       actorUserId: "reader-1",
@@ -986,7 +990,7 @@ describe("DriveAnnotationService", () => {
       commentRecord({ id: "comment-child", parentCommentId: "comment-target", createdByUserId: "reader-3" }),
     ]
     prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[1])
-    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValue(threadRecord({ comments }))
 
     await service.deleteShareComment({
       actorUserId: "owner-1",
@@ -1091,8 +1095,8 @@ function commentRecord(input: {
 }
 
 function createPrismaMock() {
-  return {
-    $transaction: vi.fn(async (operations: readonly Promise<unknown>[]) => Promise.all(operations)),
+  const prisma = {
+    $transaction: vi.fn(async (operations: unknown): Promise<unknown> => Array.isArray(operations) ? Promise.all(operations) : (operations as (tx: unknown) => Promise<unknown>)(prisma)),
     user: { findUnique: vi.fn() },
     driveItem: { findFirst: vi.fn() },
     driveShare: { findFirst: vi.fn() },
@@ -1112,6 +1116,7 @@ function createPrismaMock() {
     },
     driveAnnotationAnchor: { upsert: vi.fn() },
   }
+  return prisma
 }
 
 function createDriveServiceMock() {

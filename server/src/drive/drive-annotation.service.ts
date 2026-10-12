@@ -1,3 +1,5 @@
+import { DriveDiscussionNotificationService } from "./drive-discussion-notification.service"
+import { makeDriveDiscussionEvent } from "./drive-discussion-notification.types"
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import type {
@@ -30,11 +32,13 @@ type DriveAnnotationItem = {
   readonly type: string
   readonly mimeType: string | null
   readonly storageKey: string | null
+  readonly sourceShareId?: string | null
 }
 
 type ShareAnnotationAccess = {
   readonly item: DriveAnnotationItem
   readonly canComment: boolean
+  readonly sourceShareId: string
 }
 
 type DriveAuditContext = {
@@ -106,6 +110,7 @@ export class DriveAnnotationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
+    private readonly discussion: DriveDiscussionNotificationService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly collaborationBus?: LocalDriveCollaborationBus,
   ) {}
@@ -129,18 +134,22 @@ export class DriveAnnotationService {
       ? await this.findThreadByIdempotencyKey(item.id, input.idempotencyKey)
       : null
     if (existing) return toThreadDto(existing, userId, item.userId)
-    const thread = await this.prisma.driveAnnotationThread.create({
-      data: {
-        itemId,
-        baseVersionId,
-        targetKind: input.targetKind,
-        target: input.target as unknown as Prisma.InputJsonValue,
-        anchorStatus: "attached",
-        createdByUserId: userId,
-        anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.idempotencyKey) },
-        comments: { create: { body: input.body, createdByUserId: userId } },
-      },
-      include: annotationInclude,
+    const thread = await this.discussion.mutate(item.id, async (tx) => {
+      const thread = await tx.driveAnnotationThread.create({
+        data: {
+          itemId,
+          baseVersionId,
+          targetKind: input.targetKind,
+          target: input.target as unknown as Prisma.InputJsonValue,
+          anchorStatus: "attached",
+          createdByUserId: userId,
+          sourceShareId: item.sourceShareId ?? null,
+          anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.idempotencyKey) },
+          comments: { create: { body: input.body, createdByUserId: userId, sourceShareId: item.sourceShareId ?? null } },
+        },
+        include: annotationInclude,
+      })
+      return { result: thread, event: makeDriveDiscussionEvent("annotation", "created", item, thread, thread.comments[0] ?? null, input.body) }
     })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -163,16 +172,22 @@ export class DriveAnnotationService {
 
   async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireOwnerItem(userId, itemId)
-    const thread = await this.requireThread(item.id, threadId)
-    await this.requireParentComment(threadId, input.parentCommentId ?? null)
-    const comment = await this.prisma.driveAnnotationComment.create({
-      data: {
-        threadId,
-        parentCommentId: input.parentCommentId ?? null,
-        body: input.body,
-        createdByUserId: userId,
-      },
-      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+    const { thread, comment } = await this.discussion.mutate(item.id, async (tx) => {
+      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: threadId, itemId: item.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
+      if (!thread) throw new NotFoundException("评论不存在。")
+      const parent = input.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.parentCommentId, threadId: thread.id, deletedAt: null } }) : null
+      if (input.parentCommentId && !parent) throw new NotFoundException("回复目标不存在。")
+      const comment = await tx.driveAnnotationComment.create({
+        data: {
+          threadId,
+          parentCommentId: input.parentCommentId ?? null,
+          body: input.body,
+          createdByUserId: userId,
+          sourceShareId: item.sourceShareId ?? null,
+        },
+        include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+      })
+      return { result: { thread, comment }, event: makeDriveDiscussionEvent("annotation", "replied", item, thread, comment, input.body, parent) }
     })
     await this.recordAnnotationAudit({
       actorUserId: userId,
@@ -252,7 +267,9 @@ export class DriveAnnotationService {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
     const thread = await this.requireThread(item.id, threadId)
-    await this.prisma.driveAnnotationThread.update({ where: { id: threadId }, data: { deletedAt: new Date() } })
+    await this.discussion.withItemLock(item.id, async (tx) => {
+      await tx.driveAnnotationThread.update({ where: { id: threadId }, data: { deletedAt: new Date() } })
+    })
     await this.recordAnnotationAudit({
       actorUserId: userId,
       action: "drive.annotation.thread.delete",
@@ -318,18 +335,22 @@ export class DriveAnnotationService {
       ? await this.findThreadByIdempotencyKey(item.id, input.body.idempotencyKey)
       : null
     if (existing) return toThreadDto(existing, input.actorUserId, item.userId, true, true)
-    const thread = await this.prisma.driveAnnotationThread.create({
-      data: {
-        itemId: item.id,
-        baseVersionId,
-        targetKind: input.body.targetKind,
-        target: input.body.target as unknown as Prisma.InputJsonValue,
-        anchorStatus: "attached",
-        createdByUserId: input.actorUserId,
-        anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.body.idempotencyKey) },
-        comments: { create: { body: input.body.body, createdByUserId: input.actorUserId } },
-      },
-      include: annotationInclude,
+    const thread = await this.discussion.mutate(item.id, async (tx) => {
+      const thread = await tx.driveAnnotationThread.create({
+        data: {
+          itemId: item.id,
+          baseVersionId,
+          targetKind: input.body.targetKind,
+          target: input.body.target as unknown as Prisma.InputJsonValue,
+          anchorStatus: "attached",
+          createdByUserId: input.actorUserId,
+          sourceShareId: item.sourceShareId ?? null,
+          anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.body.idempotencyKey) },
+          comments: { create: { body: input.body.body, createdByUserId: input.actorUserId, sourceShareId: item.sourceShareId ?? null } },
+        },
+        include: annotationInclude,
+      })
+      return { result: thread, event: makeDriveDiscussionEvent("annotation", "created", item, thread, thread.comments[0] ?? null, input.body.body) }
     })
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
@@ -385,16 +406,22 @@ export class DriveAnnotationService {
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationCommentDto> {
     const item = await this.requireCommentableShareItem(input)
-    const thread = await this.requireThread(item.id, input.threadId)
-    await this.requireParentComment(input.threadId, input.body.parentCommentId ?? null)
-    const comment = await this.prisma.driveAnnotationComment.create({
-      data: {
-        threadId: input.threadId,
-        parentCommentId: input.body.parentCommentId ?? null,
-        body: input.body.body,
-        createdByUserId: input.actorUserId,
-      },
-      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+    const { thread, comment } = await this.discussion.mutate(item.id, async (tx) => {
+      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: input.threadId, itemId: item.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
+      if (!thread) throw new NotFoundException("评论不存在。")
+      const parent = input.body.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.body.parentCommentId, threadId: thread.id, deletedAt: null } }) : null
+      if (input.body.parentCommentId && !parent) throw new NotFoundException("回复目标不存在。")
+      const comment = await tx.driveAnnotationComment.create({
+        data: {
+          threadId: input.threadId,
+          parentCommentId: input.body.parentCommentId ?? null,
+          body: input.body.body,
+          createdByUserId: input.actorUserId,
+          sourceShareId: item.sourceShareId ?? null,
+        },
+        include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+      })
+      return { result: { thread, comment }, event: makeDriveDiscussionEvent("annotation", "replied", item, thread, comment, input.body.body, parent) }
     })
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
@@ -501,7 +528,12 @@ export class DriveAnnotationService {
     if (!canDeleteThread(thread, visibleComments(thread.comments), input.actorUserId, item.userId)) {
       throw new ForbiddenException("不能删除该评论。")
     }
-    await this.prisma.driveAnnotationThread.update({ where: { id: input.threadId }, data: { deletedAt: new Date() } })
+    await this.discussion.withItemLock(item.id, async (tx) => {
+      const current = await tx.driveAnnotationThread.findFirst({ where: { id: input.threadId, itemId: item.id, deletedAt: null }, include: annotationInclude })
+      if (!current) throw new NotFoundException("评论不存在。")
+      if (!canDeleteThread(current, visibleComments(current.comments), input.actorUserId, item.userId)) throw new ForbiddenException("不能删除该评论。")
+      await tx.driveAnnotationThread.update({ where: { id: input.threadId }, data: { deletedAt: new Date() } })
+    })
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
       shareId: input.shareId,
@@ -596,7 +628,7 @@ export class DriveAnnotationService {
   }): Promise<DriveAnnotationItem> {
     const access = await this.resolveShareAnnotationAccess(input)
     if (!access.canComment) throw new ForbiddenException("没有评论权限。")
-    return access.item
+    return { ...access.item, sourceShareId: access.sourceShareId }
   }
 
   private async resolveShareAnnotationAccess(input: {
@@ -921,15 +953,6 @@ export class DriveAnnotationService {
     }))
   }
 
-  private async requireParentComment(threadId: string, parentCommentId: string | null): Promise<void> {
-    if (!parentCommentId) return
-    const comment = await this.prisma.driveAnnotationComment.findFirst({
-      where: { id: parentCommentId, threadId, deletedAt: null },
-      select: { id: true },
-    })
-    if (!comment) throw new BadRequestException("回复目标不存在。")
-  }
-
   private async requireComment(itemId: string, commentId: string) {
     const comment = await this.prisma.driveAnnotationComment.findFirst({
       where: { id: commentId, thread: { itemId, deletedAt: null }, deletedAt: null },
@@ -944,30 +967,19 @@ export class DriveAnnotationService {
     return { comment, thread }
   }
 
-  private async deleteCommentTree(comment: Pick<AnnotationCommentRecord, "id">, thread: AnnotationThreadRecord) {
-    const deletedAt = new Date()
-    const threadDeleted = thread.comments[0]?.id === comment.id
-    const commentIds = commentSubtreeIds(comment.id, thread.comments)
-    if (threadDeleted) {
-      await this.prisma.$transaction([
-        this.prisma.driveAnnotationComment.updateMany({
-          where: { threadId: thread.id, deletedAt: null },
-          data: { deletedAt },
-        }),
-        this.prisma.driveAnnotationThread.update({ where: { id: thread.id }, data: { deletedAt } }),
-      ])
-    } else {
-      await this.prisma.driveAnnotationComment.updateMany({
-        where: { id: { in: commentIds }, deletedAt: null },
-        data: { deletedAt },
+  private async deleteCommentTree(comment: Pick<AnnotationCommentRecord, "id">, previous: AnnotationThreadRecord) {
+    return this.discussion.withItemLock(previous.itemId, async (tx) => {
+      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: previous.id, itemId: previous.itemId, deletedAt: null }, include: annotationInclude })
+      if (!thread || !thread.comments.some((c) => c.id === comment.id && !c.deletedAt)) throw new NotFoundException("评论不存在。")
+      const deletedAt = new Date()
+      const threadDeleted = thread.comments[0]?.id === comment.id
+      const commentIds = commentSubtreeIds(comment.id, thread.comments)
+      await tx.driveAnnotationComment.updateMany({
+        where: threadDeleted ? { threadId: thread.id, deletedAt: null } : { id: { in: commentIds }, deletedAt: null }, data: { deletedAt },
       })
-    }
-    return {
-      deletedCommentCount: thread.comments.filter((item) => (
-        !item.deletedAt && (threadDeleted || commentIds.includes(item.id))
-      )).length,
-      threadDeleted,
-    }
+      if (threadDeleted) await tx.driveAnnotationThread.update({ where: { id: thread.id }, data: { deletedAt } })
+      return { deletedCommentCount: thread.comments.filter((c) => !c.deletedAt && (threadDeleted || commentIds.includes(c.id))).length, threadDeleted }
+    })
   }
 
   private async findCurrentVersionId(item: {
