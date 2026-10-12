@@ -58,3 +58,10 @@ export function isRootPublicDashboardRedirect(value: string | undefined) {
   const pathname = normalized.split(/[?#]/, 1)[0] || '/'
   return rootPublicRedirectPathPrefixes.some((prefix) => pathname.startsWith(prefix))
 }
+import { isDriveDiscussionNotificationOpenPath } from '@synapse/shared'
+
+export function isRootNotificationDashboardRedirect(value: string | undefined) {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return false
+  const normalized = normalizeDashboardRedirect(value)
+  return Boolean(normalized && isDriveDiscussionNotificationOpenPath(normalized.split(/[?#]/, 1)[0] ?? ''))
+}

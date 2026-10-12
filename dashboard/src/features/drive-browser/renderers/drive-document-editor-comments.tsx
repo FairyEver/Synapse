@@ -18,6 +18,7 @@ import {
   DriveDocumentOutlineTree,
 } from './drive-document-outline'
 import { useDriveAnnotations, type DriveAnnotationContext } from '../use-drive-annotations'
+import { usePendingDriveDiscussion } from '../use-drive-discussion-location'
 import {
   useDriveEditorCommentGeometry,
   type DriveEditorCommentGeometryInput,
@@ -94,6 +95,15 @@ export function useDriveDocumentEditorComments({
   const annotationsEnabled = isDriveCommentableMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
+  const pendingDiscussion = usePendingDriveDiscussion()
+  useEffect(() => {
+    const target = pendingDiscussion?.location
+    if (!pendingDiscussion || target?.kind !== 'annotation' || annotations.loading || annotations.refreshing || annotations.error) return
+    if (!annotations.threads.some((thread) => thread.id === target.threadId)) { pendingDiscussion.unavailable('该评论已删除'); return }
+    setActiveThreadId(target.threadId)
+    if (isCompact) setCompactCommentsOpen(true)
+    else setCommentsOpen(true)
+  }, [annotations.error, annotations.loading, annotations.refreshing, annotations.threads, isCompact, pendingDiscussion])
   const annotationThreads = useMemo(
     () => annotationsEnabled ? annotations.threads : [],
     [annotations.threads, annotationsEnabled]
@@ -250,7 +260,7 @@ export function useDriveDocumentEditorComments({
       activeThreadId,
       anchorLayerRef: setCommentAnchorLayerRef,
       canReply: canReplyToAnnotations,
-      loading: annotations.loading,
+      loading: annotations.loading || Boolean(pendingDiscussion?.location && annotations.refreshing),
       onAnchoredHeightChange: setCommentAnchoredDocumentHeight,
       onDeleteComment: annotations.deleteComment,
       onFocusThread: focusThreadFromRail,

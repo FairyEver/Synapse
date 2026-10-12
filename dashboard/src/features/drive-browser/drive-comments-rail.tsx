@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto, DriveAnnotationThreadStatus } from '@synapse/shared'
 import { ChevronDown, ChevronRight, ChevronUp, Loader2, MapPinOff, MoreHorizontal, Pencil, Quote, RefreshCw, Reply, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDiscussionTargetFocus, usePendingDriveDiscussion } from './use-drive-discussion-location'
 import { RelativeTime } from '@/components/relative-time'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -161,6 +162,17 @@ export function DriveCommentsRail({
 
   const compact = mode === 'list'
 
+  const pending = usePendingDriveDiscussion()
+  useEffect(() => {
+    const target = pending?.location
+    if (!pending || target?.kind !== 'annotation' || loading) return
+    const item = threads.find((item) => item.thread.id === target.threadId)
+    if (!item) { pending.unavailable('该评论已删除'); return }
+    const comment = item.thread.comments.find((comment) => comment.id === target.commentId && !comment.deleted)
+    if (!comment) { pending.unavailable('该回复已删除'); return }
+    if (unlocatedThreads.some((item) => item.thread.id === target.threadId)) setUnlocatedDialogOpen(true)
+  }, [loading, pending, threads, unlocatedThreads])
+
   useLayoutEffect(() => {
     if (compact) return
     const anchoredDocumentHeight = layout.anchored.length > 0
@@ -191,6 +203,7 @@ export function DriveCommentsRail({
   ) : null
   const unlocatedDialog = unlocatedThreads.length > 0 ? (
     <UnlocatedCommentsDialog
+      loading={loading}
       open={unlocatedDialogOpen}
       threads={unlocatedThreads}
       activeThreadId={activeThreadId}
@@ -231,6 +244,7 @@ export function DriveCommentsRail({
             {listThreads.map((item) => (
               <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                 <ThreadView
+                      notificationLoading={loading}
                   thread={item.thread}
                   positionUnavailable={item.placement.status === 'unavailable' && item.thread.anchorStatus !== 'orphaned'}
                   active={item.thread.id === activeThreadId}
@@ -292,6 +306,7 @@ export function DriveCommentsRail({
                 >
                   {item.kind === 'thread' ? (
                     <ThreadView
+                      notificationLoading={loading}
                       thread={item.item.thread}
                       positionUnavailable={false}
                       active={item.item.thread.id === activeThreadId}
@@ -357,6 +372,7 @@ function UnlocatedCommentsButton({
 }
 
 function UnlocatedCommentsDialog({
+  loading,
   open,
   threads,
   activeThreadId,
@@ -369,6 +385,7 @@ function UnlocatedCommentsDialog({
   onUpdateThreadStatus,
   onDeleteComment,
 }: {
+  readonly loading: boolean
   readonly open: boolean
   readonly threads: readonly DriveCommentsRailItem[]
   readonly activeThreadId: string | null
@@ -401,6 +418,7 @@ function UnlocatedCommentsDialog({
                 {threads.map((item) => (
                   <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                     <ThreadView
+                      notificationLoading={loading}
                       thread={item.thread}
                       positionUnavailable={item.placement.status === 'unavailable' && item.thread.anchorStatus !== 'orphaned'}
                       active={item.thread.id === activeThreadId}
@@ -516,6 +534,7 @@ function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentD
 }
 
 function ThreadView({
+  notificationLoading,
   thread,
   positionUnavailable,
   active,
@@ -527,6 +546,7 @@ function ThreadView({
   onUpdateThreadStatus,
   onDeleteComment,
 }: {
+  readonly notificationLoading: boolean
   readonly thread: DriveAnnotationThreadDto
   readonly positionUnavailable: boolean
   readonly active: boolean
@@ -538,7 +558,9 @@ function ThreadView({
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
-  const [composer, setComposer] = useState<ThreadComposerState>(() => active
+  const target = usePendingDriveDiscussion()?.location
+  const fromNotification = target?.kind === 'annotation' && target.threadId === thread.id
+  const [composer, setComposer] = useState<ThreadComposerState>(() => active && !fromNotification
     ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
     : { kind: 'closed' })
   const [statusSubmitting, setStatusSubmitting] = useState(false)
@@ -585,13 +607,13 @@ function ThreadView({
   }
 
   useEffect(() => {
-    if (active && !previousActiveRef.current) {
+    if (active && !previousActiveRef.current && !fromNotification) {
       setComposer((current) => current.kind === 'closed'
         ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
         : current)
     }
     previousActiveRef.current = active
-  }, [active])
+  }, [active, fromNotification])
 
   const openReplyComposer = (commentId: string | null) => {
     if (composerSubmitting) return
@@ -741,6 +763,7 @@ function ThreadView({
           <CommentView
             key={comment.id}
             comment={comment}
+            canFocusFromNotification={!notificationLoading}
             replyToName={comment.parentCommentId ? displayAuthor(authorByCommentId.get(comment.parentCommentId)) : null}
             canReply={canReply}
             compact={compact}
@@ -799,6 +822,7 @@ function annotationPositionLabel(thread: DriveAnnotationThreadDto): string {
 }
 
 function CommentView({
+  canFocusFromNotification,
   comment,
   replyToName,
   canReply,
@@ -814,6 +838,7 @@ function CommentView({
   onSubmitEdit,
   onDeleteComment,
 }: {
+  readonly canFocusFromNotification: boolean
   readonly comment: DriveAnnotationCommentDto
   readonly replyToName: string | null
   readonly canReply: boolean
@@ -830,9 +855,12 @@ function CommentView({
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
   const [deleteConfirming, setDeleteConfirming] = useState(false)
+  const elementRef = useRef<HTMLElement | null>(null)
+  const target = usePendingDriveDiscussion()?.location
+  useDiscussionTargetFocus(elementRef, canFocusFromNotification && !comment.deleted && target?.kind === 'annotation' && target.threadId === comment.threadId && target.commentId === comment.id)
   const authorName = displayAuthor(comment.author)
   return (
-    <article className='group/comment'>
+    <article ref={elementRef} tabIndex={-1} data-drive-annotation-comment-id={comment.id} className='group/comment'>
       <div className='flex items-start gap-3'>
         <Avatar className='size-8'>
           <AvatarFallback className='text-xs font-medium text-muted-foreground'>

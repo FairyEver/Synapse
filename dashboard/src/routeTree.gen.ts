@@ -23,6 +23,7 @@ import { Route as AuthenticatedSkillRepositoriesIndexRouteImport } from './route
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
 import { Route as AuthenticatedDriveIndexRouteImport } from './routes/_authenticated/drive/index'
+import { Route as NotificationsNotificationIdOpenRouteImport } from './routes/notifications/$notificationId/open'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
 import { Route as AuthenticatedSkillRepositoriesExploreRouteImport } from './routes/_authenticated/skill-repositories/explore'
 import { Route as AuthenticatedSkillRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/skill-repositories/$repositoryId'
@@ -108,6 +109,12 @@ const AuthenticatedDriveIndexRoute = AuthenticatedDriveIndexRouteImport.update({
   path: '/drive/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const NotificationsNotificationIdOpenRoute =
+  NotificationsNotificationIdOpenRouteImport.update({
+    id: '/notifications/$notificationId/open',
+    path: '/notifications/$notificationId/open',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedWebhooksWebhookIdRoute =
   AuthenticatedWebhooksWebhookIdRouteImport.update({
     id: '/webhooks/$webhookId',
@@ -175,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
+  '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/drive/': typeof AuthenticatedDriveIndexRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -198,6 +206,7 @@ export interface FileRoutesByTo {
   '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
+  '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/drive': typeof AuthenticatedDriveIndexRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
@@ -224,6 +233,7 @@ export interface FileRoutesById {
   '/_authenticated/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   '/_authenticated/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
+  '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/_authenticated/drive/': typeof AuthenticatedDriveIndexRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/skill-repositories/$repositoryId'
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
+    | '/notifications/$notificationId/open'
     | '/drive/'
     | '/my-devices/'
     | '/settings/'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/skill-repositories/$repositoryId'
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
+    | '/notifications/$notificationId/open'
     | '/drive'
     | '/my-devices'
     | '/settings'
@@ -298,6 +310,7 @@ export interface FileRouteTypes {
     | '/_authenticated/skill-repositories/$repositoryId'
     | '/_authenticated/skill-repositories/explore'
     | '/_authenticated/webhooks/$webhookId'
+    | '/notifications/$notificationId/open'
     | '/_authenticated/drive/'
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
@@ -318,6 +331,7 @@ export interface RootRouteChildren {
   authSignUpRoute: typeof authSignUpRoute
   ShareShareIdRoute: typeof ShareShareIdRoute
   authAuthDesktopRoute: typeof authAuthDesktopRoute
+  NotificationsNotificationIdOpenRoute: typeof NotificationsNotificationIdOpenRoute
   ShareShareIdItemsBrowserItemIdRoute: typeof ShareShareIdItemsBrowserItemIdRoute
 }
 
@@ -420,6 +434,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/drive/'
       preLoaderRoute: typeof AuthenticatedDriveIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/notifications/$notificationId/open': {
+      id: '/notifications/$notificationId/open'
+      path: '/notifications/$notificationId/open'
+      fullPath: '/notifications/$notificationId/open'
+      preLoaderRoute: typeof NotificationsNotificationIdOpenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/webhooks/$webhookId': {
       id: '/_authenticated/webhooks/$webhookId'
@@ -553,6 +574,7 @@ const rootRouteChildren: RootRouteChildren = {
   authSignUpRoute: authSignUpRoute,
   ShareShareIdRoute: ShareShareIdRoute,
   authAuthDesktopRoute: authAuthDesktopRoute,
+  NotificationsNotificationIdOpenRoute: NotificationsNotificationIdOpenRoute,
   ShareShareIdItemsBrowserItemIdRoute: ShareShareIdItemsBrowserItemIdRoute,
 }
 export const routeTree = rootRouteImport

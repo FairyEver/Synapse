@@ -92,6 +92,7 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
   return {
     threads: query.data ?? [] satisfies readonly DriveAnnotationThreadDto[],
     loading: query.isLoading,
+    refreshing: query.isFetching,
     error: query.error instanceof Error ? query.error.message : null,
     refresh: query.refetch,
     createThread: createMutation.mutateAsync,

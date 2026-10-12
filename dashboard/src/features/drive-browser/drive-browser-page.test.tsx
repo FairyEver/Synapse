@@ -35,6 +35,10 @@ vi.mock('./use-drive-annotations', () => ({
   useDriveAnnotations: () => driveAnnotationsMock.value,
 }))
 
+vi.mock('./use-drive-messages', () => ({
+  useDriveMessages: () => ({ messages: [], loading: false, error: null, canPost: false }),
+}))
+
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 

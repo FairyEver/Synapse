@@ -1,9 +1,10 @@
-import { useMemo, useState, type ReactNode, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import type { DriveMessageCommentDto, DriveMessageDto } from '@synapse/shared'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { startDriveOperation } from './shared/drive-telemetry'
 import type { useDriveMessages } from './use-drive-messages'
+import { useDiscussionTargetFocus, usePendingDriveDiscussion } from './use-drive-discussion-location'
 
 type Messages = ReturnType<typeof useDriveMessages>
 type Editor =
@@ -17,6 +18,14 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const pending = usePendingDriveDiscussion()
+  useEffect(() => {
+    const target = pending?.location
+    if (!pending || target?.kind !== 'message' || messages.loading || messages.refreshing || messages.error) return
+    const message = messages.messages.find((item) => item.id === target.messageId)
+    if (!message) pending.unavailable('该留言已删除')
+    else if (target.commentId && !message.comments.some((comment) => comment.id === target.commentId)) pending.unavailable('该回复已删除')
+  }, [messages.error, messages.loading, messages.refreshing, messages.messages, pending])
 
   const submit = async () => {
     const value = editor?.value ?? draft
@@ -95,6 +104,7 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
           <MessageItem
             key={message.id}
             message={message}
+            canFocus={!messages.loading && !messages.refreshing && !messages.error}
             canPost={messages.canPost}
             editor={editor}
             pendingDelete={pendingDelete}
@@ -115,8 +125,9 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
   )
 }
 
-function MessageItem({ message, canPost, editor, pendingDelete, busy, onEdit, onDelete, renderEditor }: {
+function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, onEdit, onDelete, renderEditor }: {
   readonly message: DriveMessageDto
+  readonly canFocus: boolean
   readonly canPost: boolean
   readonly editor: Editor | null
   readonly pendingDelete: string | null
@@ -125,11 +136,15 @@ function MessageItem({ message, canPost, editor, pendingDelete, busy, onEdit, on
   readonly onDelete: (kind: 'message' | 'comment', id: string) => Promise<void>
   readonly renderEditor: (value: string, setValue: (value: string) => void, label: string, cancel?: () => void) => ReactNode
 }) {
+  const elementRef = useRef<HTMLElement | null>(null)
+  const pending = usePendingDriveDiscussion()
+  const target = pending?.location
+  useDiscussionTargetFocus(elementRef, canFocus && target?.kind === 'message' && target.messageId === message.id && target.commentId === null)
   const rows = useMemo(() => flattenComments(message.comments), [message.comments])
   const editing = editor?.kind === 'message' && editor.id === message.id
   const reply = editor?.kind === 'reply' && editor.messageId === message.id
   return (
-    <article data-drive-message-id={message.id} className='border-b pb-6'>
+    <article ref={elementRef} tabIndex={-1} data-drive-message-id={message.id} className='border-b pb-6'>
       <div className='mb-2 flex items-center justify-between gap-2'>
         <span className='text-sm font-medium'>{displayAuthor(message.author)}</span>
         <time className='text-sm text-muted-foreground' dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
@@ -143,7 +158,7 @@ function MessageItem({ message, canPost, editor, pendingDelete, busy, onEdit, on
       <div className='mt-3 space-y-3'>
         {rows.map(({ comment, depth, replyTo }) => {
           const commentEditing = editor?.kind === 'comment' && editor.id === comment.id
-          return <div key={comment.id} className={depthClass(depth)} data-drive-message-comment-id={comment.id}>
+          return <MessageCommentRow key={comment.id} id={comment.id} messageId={message.id} canFocus={canFocus} className={depthClass(depth)}>
             <div className='flex items-center gap-2 text-sm'>
               <span className='font-medium'>{displayAuthor(comment.author)}</span>
               {replyTo ? <span className='text-muted-foreground'>回复 {replyTo}</span> : null}
@@ -156,12 +171,19 @@ function MessageItem({ message, canPost, editor, pendingDelete, busy, onEdit, on
               {comment.permissions.canDelete ? <DeleteButton pending={pendingDelete === `comment:${comment.id}`} busy={busy} onClick={() => { void onDelete('comment', comment.id) }} /> : null}
             </div> : null}
             {reply && editor.parentCommentId === comment.id ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
-          </div>
+          </MessageCommentRow>
         })}
       </div>
       {reply && editor.parentCommentId === null ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
     </article>
   )
+}
+
+function MessageCommentRow({ id, messageId, canFocus, className, children }: { id: string; messageId: string; canFocus: boolean; className: string; children: ReactNode }) {
+  const elementRef = useRef<HTMLDivElement | null>(null)
+  const target = usePendingDriveDiscussion()?.location
+  useDiscussionTargetFocus(elementRef, canFocus && target?.kind === 'message' && target.messageId === messageId && target.commentId === id)
+  return <div ref={elementRef} tabIndex={-1} className={className} data-drive-message-comment-id={id}>{children}</div>
 }
 
 function DeleteButton({ pending, busy, onClick }: { readonly pending: boolean; readonly busy: boolean; readonly onClick: () => void }) {

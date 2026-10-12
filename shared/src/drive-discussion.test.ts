@@ -27,5 +27,10 @@ describe("Drive discussion locations", () => {
     expect(discussion.isDriveDiscussionNotificationOpenPath("/notifications/n1/open")).toBe(true)
     expect(discussion.isDriveDiscussionNotificationOpenPath("/notifications/n1/open/other")).toBe(false)
     expect(discussion.isDriveDiscussionNotificationOpenPath("/notifications/n%2F1/open")).toBe(false)
+    expect(discussion.isDriveDiscussionNotificationOpenPath("a/notifications/n1/open")).toBe(false)
+  })
+  it("permits HTTP only on loopback for existing local development deployments", () => {
+    expect(discussion.buildDriveDiscussionNotificationOpenUrl("http://localhost:3000", "n1")).toBe("http://localhost:3000/notifications/n1/open")
+    expect(discussion.buildDriveDiscussionNotificationOpenUrl("http://127.0.0.1:3000", "n1")).toBe("http://127.0.0.1:3000/notifications/n1/open")
   })
 })

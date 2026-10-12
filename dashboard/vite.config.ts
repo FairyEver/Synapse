@@ -1,4 +1,5 @@
 import path from 'path'
+import { isDriveDiscussionNotificationOpenPath } from '@synapse/shared'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -43,7 +44,7 @@ export function resolveDashboardDevSpaFallback(pathname: string) {
     if (relativePath.startsWith('@') || relativePath.startsWith('src/') || leafName.includes('.')) return null
     return '/console/index.html'
   }
-  if (isDriveBrowserSpaPath(pathname)) return '/console/'
+  if (isDriveBrowserSpaPath(pathname) || isDriveDiscussionNotificationOpenPath(pathname)) return '/console/'
   return null
 }
 

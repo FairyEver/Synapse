@@ -29,6 +29,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { useDriveAnnotations } from '../use-drive-annotations'
 import { useDriveMessages } from '../use-drive-messages'
+import { usePendingDriveDiscussion } from '../use-drive-discussion-location'
 import { DriveMessagesSection } from '../drive-messages-section'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { DriveCodeRenderer } from './code-renderer'
@@ -159,6 +160,15 @@ function DriveMarkdownBody({
   const [compactPanel, setCompactPanel] = useState<'outline' | 'comments' | null>(null)
   const [widthMode, setWidthMode] = useState<MarkdownWidthMode>('reading')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const pendingDiscussion = usePendingDriveDiscussion()
+  useEffect(() => {
+    const target = pendingDiscussion?.location
+    if (!pendingDiscussion || target?.kind !== 'annotation' || annotations.loading || annotations.refreshing || annotations.error) return
+    if (!annotations.threads.some((thread) => thread.id === target.threadId)) { pendingDiscussion.unavailable('该评论已删除'); return }
+    setActiveThreadId(target.threadId)
+    if (isCompact) setCompactPanel('comments')
+    else setCommentsOpen(true)
+  }, [annotations.error, annotations.loading, annotations.refreshing, annotations.threads, isCompact, pendingDiscussion])
   const [pendingTarget, setPendingTarget] = useState<{
     readonly target: DriveAnnotationTargetDto
     readonly selectors: DriveAnnotationSelectorsV2
@@ -951,7 +961,7 @@ function DriveMarkdownBody({
       threads={railThreads}
       activeThreadId={activeThreadId}
       canReply={canCreateAnnotation}
-      loading={annotations.loading}
+      loading={annotations.loading || Boolean(pendingDiscussion?.location && annotations.refreshing)}
       anchorBaseOffset={commentAnchorBaseOffset}
       anchorLayerRef={mode === 'anchored' ? setCommentAnchorLayerRef : undefined}
       onAnchoredHeightChange={mode === 'anchored' ? setCommentAnchoredDocumentHeight : undefined}

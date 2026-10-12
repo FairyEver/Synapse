@@ -1,14 +1,8 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
-import { buildDashboardRedirectPath } from '@/lib/dashboard-redirect'
-import { useAuthStore } from '@/stores/auth-store'
+import { requireDashboardSession } from '@/lib/require-dashboard-session'
 
 export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: () => {
-    const { auth } = useAuthStore.getState()
-    if (!auth.isAuthenticated) {
-      throw redirect({ to: '/sign-in', search: { redirect: buildDashboardRedirectPath(location) } })
-    }
-  },
+  beforeLoad: () => requireDashboardSession(window.location),
   component: AuthenticatedLayout,
 })

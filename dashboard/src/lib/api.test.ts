@@ -1538,3 +1538,8 @@ describe('adminApi.drive', () => {
     )
   })
 })
+it('treats notification target and read authentication failures as expired sessions', () => {
+  expect(shouldNotifyAuthExpired('/api/notifications/n-1/drive-target', 401)).toBe(true)
+  expect(shouldNotifyAuthExpired('/api/notifications/n-1/read', 401)).toBe(true)
+  expect(shouldNotifyAuthExpired('/api/notifications/n-1/drive-target', 404)).toBe(false)
+})

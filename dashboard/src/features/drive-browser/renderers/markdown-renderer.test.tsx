@@ -928,7 +928,8 @@ describe('DriveMarkdownRenderer', () => {
     await act(async () => undefined)
     await setPreviewWidth(390)
     await click(buttonWithText('评论 1'))
-    await click(buttonWithText('编辑'))
+    await openDropdown(buttonByLabel('评论操作：user@example.com'))
+    await click(Array.from(document.querySelectorAll<HTMLElement>('[role=menuitem]')).find((item) => item.textContent === '编辑评论')!)
     await inputValue(textarea(), 'Updated comment')
     await keyDown(textarea(), { key: 'Escape' })
 
@@ -1760,7 +1761,7 @@ describe('DriveMarkdownRenderer', () => {
     await click(buttonByLabel('查看 1 条未定位评论'))
 
     expect(elementWithText('Lost comment').textContent).toContain('原文已修改或删除')
-    expect(elementWithText('Lost comment').textContent).toContain('“缺失”')
+    expect(elementWithText('Lost comment').textContent).toContain('缺失')
   })
 
 })

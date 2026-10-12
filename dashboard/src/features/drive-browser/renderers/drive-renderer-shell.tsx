@@ -14,6 +14,7 @@ import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { trackDriveEvent } from '../shared/drive-telemetry'
+import { DriveDiscussionLocationContext, useDriveDiscussionLocation, usePendingDriveDiscussion } from '../use-drive-discussion-location'
 import { DriveCodeRenderer } from './code-renderer'
 import { getDrivePreviewDriveBrowserUrl } from './drive-preview-actions'
 import { DrivePreviewFloatingMenu, clampDriveFloatingMenuPosition, shouldSuppressDriveFloatingMenuOpen } from './drive-preview-floating-menu'
@@ -89,6 +90,8 @@ export function DriveRendererShell({
   readonly annotationContext?: DriveAnnotationContext
 }) {
   const options = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
+  const discussion = useDriveDiscussionLocation(snapshot.current.id)
+  const appliedDiscussionRef = useRef<string | null>(null)
   const initialRenderer = findDriveRendererOption(snapshot, initialRendererId)
   const [internalRendererId, setInternalRendererId] = useState<DriveRendererId | null>(
     initialRenderer?.id ?? options[0]?.id ?? null
@@ -146,11 +149,17 @@ export function DriveRendererShell({
   useEffect(() => {
     setRendererChangeError(null)
   }, [selected?.id, snapshot.current.id])
+  useEffect(() => {
+    if (!discussion.location || appliedDiscussionRef.current === discussion.requestKey) return
+    appliedDiscussionRef.current = discussion.requestKey
+    if (selected?.id !== 'markdown' && selected?.id !== 'mdxeditor' && options.some((option) => option.id === 'markdown')) applyRenderer('markdown')
+  }, [discussion.location, discussion.requestKey, options, selected?.id])
 
   if (!selected) return null
 
   return (
-    <DriveRendererToolbarProvider key={`${snapshot.current.id}:${selected.id}`}>
+    <DriveDiscussionLocationContext value={discussion}>
+      <DriveRendererToolbarProvider key={`${snapshot.current.id}:${selected.id}`}>
       <DriveRendererShellChrome
         snapshot={snapshot}
         body={body}
@@ -163,7 +172,8 @@ export function DriveRendererShell({
         onRendererMountRefresh={refreshRendererMount}
         onRendererMountRefreshError={() => setRendererChangeError('无法加载最新版本。')}
       />
-    </DriveRendererToolbarProvider>
+      </DriveRendererToolbarProvider>
+    </DriveDiscussionLocationContext>
   )
 }
 
@@ -191,6 +201,7 @@ function DriveRendererShellChrome({
   readonly onRendererMountRefreshError: () => void
 }) {
   const { hasUnsavedChanges, items } = useDriveRendererToolbar()
+  const discussion = usePendingDriveDiscussion()
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [pendingRendererId, setPendingRendererId] = useState<DriveRendererId | null>(null)
   const versionItemId = getDriveFileVersionItemId(snapshot)
@@ -242,6 +253,7 @@ function DriveRendererShellChrome({
           <AlertDescription>{rendererChangeError}</AlertDescription>
         </Alert>
       ) : null}
+      {discussion?.error ? <Alert><AlertDescription>{discussion.error}</AlertDescription></Alert> : null}
       <div className='min-h-0 flex-1 overflow-hidden'>
         <DriveRendererMountGate
           snapshot={snapshot}

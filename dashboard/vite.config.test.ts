@@ -192,3 +192,7 @@ describe("dashboard Vite dev proxy", () => {
     }))
   })
 })
+it('serves strict root notification open routes from the console SPA', () => {
+  expect(resolveDashboardDevSpaFallback('/notifications/n-1/open')).toBe('/console/')
+  expect(resolveDashboardDevSpaFallback('/notifications/n-1/open/extra')).toBeNull()
+})

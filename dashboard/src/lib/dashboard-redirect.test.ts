@@ -4,6 +4,7 @@ import {
   buildDashboardRedirectPath,
   buildDashboardSignInUrl,
   isRootPublicDashboardRedirect,
+  isRootNotificationDashboardRedirect,
   normalizeDashboardRedirect,
 } from './dashboard-redirect'
 
@@ -84,4 +85,12 @@ describe('isRootPublicDashboardRedirect', () => {
     expect(isRootPublicDashboardRedirect('/settings')).toBe(false)
     expect(isRootPublicDashboardRedirect('/console/settings')).toBe(false)
   })
+})
+it('keeps notification login returns at the strict root route', () => {
+  expect(buildDashboardSignInUrl({ pathname: '/notifications/n-1/open', search: '', hash: '' })).toBe('/console/sign-in?redirect=%2Fnotifications%2Fn-1%2Fopen')
+  expect(isRootNotificationDashboardRedirect('/notifications/n-1/open')).toBe(true)
+  expect(isRootNotificationDashboardRedirect('/console/notifications/n-1/open')).toBe(true)
+  expect(isRootNotificationDashboardRedirect('//other.test/notifications/n-1/open')).toBe(false)
+  expect(isRootNotificationDashboardRedirect('https://other.test/notifications/n-1/open')).toBe(false)
+  expect(isRootNotificationDashboardRedirect('/notifications/n-1/open/extra')).toBe(false)
 })

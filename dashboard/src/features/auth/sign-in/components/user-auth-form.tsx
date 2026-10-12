@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardApi } from '@/lib/api'
-import { isRootPublicDashboardRedirect } from '@/lib/dashboard-redirect'
+import { isRootPublicDashboardRedirect, isRootNotificationDashboardRedirect } from '@/lib/dashboard-redirect'
 import { cn } from '@/lib/utils'
 import { PasswordInput } from '@/components/password-input'
 import { Button } from '@/components/ui/button'
@@ -51,7 +51,7 @@ export function UserAuthForm({
       auth.setUser(session)
       toast.success(`欢迎回来，${session.email}`)
       const nextPath = redirectTo || '/settings'
-      if (isRootPublicDashboardRedirect(nextPath)) {
+      if (isRootPublicDashboardRedirect(nextPath) || isRootNotificationDashboardRedirect(nextPath)) {
         window.location.assign(nextPath)
         return
       }

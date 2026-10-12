@@ -48,6 +48,7 @@ export function useDriveMessages(context: DriveMessageContext | undefined) {
     messages: query.data?.messages ?? [],
     canPost: query.data?.canPost ?? false,
     loading: query.isLoading,
+    refreshing: query.isFetching,
     error: query.error instanceof Error ? query.error.message : null,
     refresh: query.refetch,
     create: create.mutateAsync,

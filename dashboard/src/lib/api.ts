@@ -1,5 +1,7 @@
 import type {
   DashboardWebhookDto,
+  DriveDiscussionNotificationDto,
+  DriveDiscussionOpenResult,
   DashboardWebhookSecretResult,
   DriveAnnotationCommentDto,
   DriveAnnotationCommentUpdateInput,
@@ -612,6 +614,11 @@ const driveApiBasePath = '/api/drive'
 const driveBrowserApiBasePath = '/api/drive/browser'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const userAuthExpiredListeners = new Set<() => void>()
+export const discussionNotificationApi = {
+  get: (id: string) => request<DriveDiscussionNotificationDto>(`/api/notifications/${encodeURIComponent(id)}`),
+  markRead: (id: string) => request<{ ok: true }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH', body: JSON.stringify({ read: true }) }),
+  resolveTarget: (id: string) => request<DriveDiscussionOpenResult>(`/api/notifications/${encodeURIComponent(id)}/drive-target`),
+}
 const adminAuthExpiredListeners = new Set<() => void>()
 
 async function request<T>(path: string, options: RequestInit = {}) {
@@ -660,6 +667,7 @@ export function shouldNotifyAuthExpired(path: string, status: number, errorCode?
     !path.startsWith(consoleApiBasePath) &&
     !path.startsWith(legacyDashboardApiBasePath) &&
     !path.startsWith(skillRepositoryApiBasePath) &&
+    !path.startsWith('/api/notifications/') &&
     !isProtectedDriveApiPath(path)
   ) {
     return false

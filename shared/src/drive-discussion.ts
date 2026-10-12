@@ -16,11 +16,12 @@ export type DriveDiscussionOpenResult =
 const idPattern = /^[A-Za-z0-9_-]{1,120}$/u
 export function isDriveDiscussionNotificationOpenPath(pathname: string): boolean {
   const parts = pathname.split("/")
-  return parts.length === 4 && parts[1] === "notifications" && idPattern.test(parts[2] ?? "") && parts[3] === "open"
+  return parts.length === 4 && parts[0] === "" && parts[1] === "notifications" && idPattern.test(parts[2] ?? "") && parts[3] === "open"
 }
 export function buildDriveDiscussionNotificationOpenUrl(origin: string, notificationId: string): string {
   const url = new URL(origin)
-  if (url.protocol !== "https:" || url.username || url.password || !idPattern.test(notificationId)) throw new Error("Invalid discussion notification URL")
+  const loopbackHttp = url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+  if ((url.protocol !== "https:" && !loopbackHttp) || url.username || url.password || !idPattern.test(notificationId)) throw new Error("Invalid discussion notification URL")
   return new URL("/notifications/" + notificationId + "/open", url.origin).toString()
 }
 export function buildDriveDiscussionFragment(location: DriveDiscussionLocation): string {
