@@ -292,7 +292,7 @@ private struct NotificationRow: View {
                         .lineLimit(1)
                     // 外部接口发来的消息可以自带一个分组名，这是它和别的消息唯一的
                     // 区别，所以留着——但它比标题次要，标题先被截断。
-                    if let group = item.group {
+                    if let group = NotificationText.groupLabel(for: item) {
                         Text(group)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)

@@ -117,7 +117,7 @@ struct NotificationView: View {
     ///
     private func open(_ item: SynapseNotification) {
         notificationToRead = nil
-        if item.source == "todo-reminder" {
+        if NotificationDestination.requiresFreshRead(item) {
             NotificationRouter.shared.route(to: .message(id: item.id))
             return
         }

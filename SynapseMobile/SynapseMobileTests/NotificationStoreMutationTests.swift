@@ -4,6 +4,20 @@ import Testing
 
 @MainActor
 struct NotificationStoreMutationTests {
+    @Test func discussionOpeningUsesTheFreshRecordAndStopsAfterFailedRead() async {
+        let api = NotificationMutationReviewAPI(), store = NotificationStore()
+        await store.load(using: api)
+        let fresh = SynapseNotification(id: "mail", source: "drive-discussion", title: "新回复", body: "当前摘要", group: "drive",
+            url: "https://synapse.d2.pub/notifications/mail/open", level: "active", targetId: "current-target", deviceId: nil,
+            readAt: "2026-10-12T00:00:00Z", resolvedAt: nil, createdAt: "2026-10-12T00:00:00Z",
+            driveDiscussion: .init(kind: "annotation", action: "replied"))
+        api.detail = { _, _ in fresh }
+        let opened = await store.read("mail", using: api)
+        #expect(opened?.driveDiscussion?.action == "replied")
+        #expect(NotificationDestination.actionLabel(for: fresh) == "查看回复")
+        api.mutation = { _ in throw URLError(.notConnectedToInternet) }
+        #expect(await store.read("mail", using: api) == nil)
+    }
     @Test func openingRequiresTheFreshServerNotificationAndSuccessfulRead() async {
         let api = NotificationMutationReviewAPI(), store = NotificationStore()
         await store.load(using: api)

@@ -7,6 +7,31 @@ import Testing
 /// 站内信、终端和录音有确切去处；外部接口发来的普通消息没有 —— 它该留在原地
 /// 让人读，而不是把人送到一个不存在的地方去。
 struct NotificationDestinationTests {
+    @Test func discussionListAndPushUseTheSameNotificationIDEntry() {
+        let item = notification(source: "drive-discussion", targetId: "cached", deviceId: nil, url: "https://outside.example/forged")
+        #expect(NotificationDestination.requiresFreshRead(item))
+        #expect(NotificationDestination.resolve(item, origin: URL(string: "https://synapse.test")!) == .externalURL(URL(string: "https://synapse.test/notifications/n1/open")!))
+        #expect(NotificationDestination.actionLabel(for: item) == "查看文档")
+    }
+
+    @Test func optionalMetadataKeepsOldAndUnknownPayloadsReadable() throws {
+        let raw = #"{"id":"n1","source":"drive-discussion","title":"标题","body":"摘要","level":"active","createdAt":"2026-10-12T00:00:00Z"}"#
+        let old = try JSONDecoder().decode(SynapseNotification.self, from: Data(raw.utf8))
+        #expect(old.driveDiscussion == nil)
+        for field in ["null", #"{"kind":"unknown","action":"created"}"#, #"{"kind":"message","action":"unknown"}"#] {
+            let value = String(raw.dropLast()) + ",\"driveDiscussion\":\(field)}"
+            let item = try JSONDecoder().decode(SynapseNotification.self, from: Data(value.utf8))
+            #expect(NotificationDestination.actionLabel(for: item) == "查看文档")
+        }
+    }
+
+    @Test(arguments: [("annotation", "created", "查看评论"), ("message", "created", "查看留言"), ("annotation", "replied", "查看回复"), ("message", "replied", "查看回复")])
+    func discussionActionsDescribeTheExactTarget(values: (String, String, String)) throws {
+        let raw = "{\"id\":\"n1\",\"source\":\"drive-discussion\",\"title\":\"标题\",\"body\":\"摘要\",\"level\":\"active\",\"createdAt\":\"2026-10-12T00:00:00Z\",\"driveDiscussion\":{\"kind\":\"\(values.0)\",\"action\":\"\(values.1)\"}}"
+        let item = try JSONDecoder().decode(SynapseNotification.self, from: Data(raw.utf8))
+        #expect(NotificationDestination.actionLabel(for: item) == values.2)
+        #expect(NotificationText.groupLabel(for: item) == "云盘")
+    }
 
     /// 终端待处理和终端完成都指回那台电脑上的那个会话。`deviceId` 为空串是既有约定：
     /// 老桌面端发的通知不带电脑 id，而路由那边认空串为「没指名电脑」。

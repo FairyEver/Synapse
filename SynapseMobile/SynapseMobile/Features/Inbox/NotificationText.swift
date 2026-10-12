@@ -7,6 +7,9 @@ import Foundation
 ///
 /// 角标上那个数字也是同一类东西：写多长直接决定它会不会被底栏裁掉。
 enum NotificationText {
+    static func groupLabel(for item: SynapseNotification) -> String? {
+        item.source == "drive-discussion" ? "云盘" : item.group
+    }
     struct DayGroup: Identifiable {
         let id: Date?
         let title: String

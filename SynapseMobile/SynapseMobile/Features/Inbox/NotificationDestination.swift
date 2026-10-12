@@ -17,7 +17,21 @@ enum NotificationDestination {
         case none
     }
 
-    static func resolve(_ item: SynapseNotification) -> Outcome {
+    static func requiresFreshRead(_ item: SynapseNotification) -> Bool {
+        item.source == "todo-reminder" || item.source == "drive-discussion"
+    }
+
+    static func resolve(_ item: SynapseNotification, origin: URL = AppConfiguration.apiOrigin) -> Outcome {
+        if item.source == "drive-discussion" {
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
+            guard (1...120).contains(item.id.utf8.count), item.id.unicodeScalars.allSatisfy({ allowed.contains($0) }),
+                  origin.scheme == "https", origin.host != nil, origin.user == nil, origin.password == nil,
+                  var components = URLComponents(url: origin, resolvingAgainstBaseURL: false) else { return .none }
+            components.path = "/notifications/\(item.id)/open"
+            components.query = nil; components.fragment = nil
+            guard let url = components.url else { return .none }
+            return .externalURL(url)
+        }
         // 终端的两类来源指名同一个会话。`deviceId` 为空串是既有写法：老桌面端发的通知
         // 不带电脑 id，而路由那边把空串读成「没指名电脑」，会退回当前看着的那一台。
         if item.source == "terminal-attention" || item.source == "terminal-complete",
@@ -47,7 +61,13 @@ enum NotificationDestination {
     }
 
     static func actionLabel(for item: SynapseNotification) -> String {
-        switch resolve(item) {
+        if item.source == "drive-discussion" {
+            guard let meta = item.driveDiscussion, ["annotation", "message"].contains(meta.kind) else { return "查看文档" }
+            if meta.action == "replied" { return "查看回复" }
+            guard meta.action == "created" else { return "查看文档" }
+            return meta.kind == "annotation" ? "查看评论" : "查看留言"
+        }
+        return switch resolve(item) {
         case .route(.terminal): return "打开终端"
         case .route(.meeting): return "查看转写"
         case .route(.mail): return "查看站内信"

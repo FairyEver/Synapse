@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+struct DriveDiscussionNotificationMetadata: Decodable {
+    let kind: String
+    let action: String
+}
+
 struct SynapseNotification: Decodable, Identifiable {
     let id: String
     let source: String
@@ -14,6 +19,16 @@ struct SynapseNotification: Decodable, Identifiable {
     let readAt: String?
     let resolvedAt: String?
     let createdAt: String
+    let driveDiscussion: DriveDiscussionNotificationMetadata?
+
+    init(id: String, source: String, title: String, body: String, group: String?, url: String?, level: String,
+         targetId: String?, deviceId: String?, readAt: String?, resolvedAt: String?, createdAt: String,
+         driveDiscussion: DriveDiscussionNotificationMetadata? = nil) {
+        self.id = id; self.source = source; self.title = title; self.body = body
+        self.group = group; self.url = url; self.level = level; self.targetId = targetId
+        self.deviceId = deviceId; self.readAt = readAt; self.resolvedAt = resolvedAt
+        self.createdAt = createdAt; self.driveDiscussion = driveDiscussion
+    }
 }
 
 struct NotificationPage: Decodable {
