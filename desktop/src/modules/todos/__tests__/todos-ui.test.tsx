@@ -1,10 +1,58 @@
 /** @vitest-environment jsdom */
 import { act } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { mocks, mount, flush, item, deferred } from "./harness"
 import { TodosModule } from "../index"
 vi.mock("@/components/ui/scroll-area", () => ({ ScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
+afterEach(() => window.getSelection()?.removeAllRanges())
+
+function selectText(start: Node, end: Node = start) {
+  const range = document.createRange()
+  range.setStart(start, 0)
+  range.setEnd(end, end.textContent!.length)
+  window.getSelection()!.removeAllRanges()
+  window.getSelection()!.addRange(range)
+}
+
 describe("Todo visible actions", () => {
+  it("preserves selected title and note text without opening the editor, then allows a normal click", async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...item, note: "保留收据" }], nextOffset: null })
+    mount(<TodosModule />); await flush()
+    const body = document.querySelector<HTMLButtonElement>('[data-track="todos.open"]')!
+    selectText(body.children[0].firstChild!, body.children[1].firstChild!)
+    act(() => body.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })))
+    await flush()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(window.getSelection()?.toString()).toBe("报销保留收据")
+
+    window.getSelection()!.removeAllRanges()
+    act(() => body.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })))
+    await flush()
+    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe("报销")
+  })
+
+  it("preserves a selection across todo rows without opening the row where the drag ends", async () => {
+    mocks.list.mockResolvedValue({ items: [item, { ...item, id: "b", title: "合同" }], nextOffset: null })
+    mount(<TodosModule />); await flush()
+    const bodies = document.querySelectorAll<HTMLButtonElement>('[data-track="todos.open"]')
+    selectText(bodies[0].children[0].firstChild!, bodies[1].children[0].firstChild!)
+    act(() => bodies[1].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })))
+    await flush()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(window.getSelection()?.toString()).toContain("报销")
+    expect(window.getSelection()?.toString()).toContain("合同")
+  })
+
+  it.each([{ target: 0, detail: 0, title: "报销" }, { target: 1, detail: 1, title: "合同" }])("allows activation of $title while text is selected with click detail $detail", async ({ target, detail, title }) => {
+    mocks.list.mockResolvedValue({ items: [item, { ...item, id: "b", title: "合同" }], nextOffset: null })
+    mount(<TodosModule />); await flush()
+    const bodies = document.querySelectorAll<HTMLButtonElement>('[data-track="todos.open"]')
+    selectText(bodies[0].children[0].firstChild!)
+    act(() => bodies[target].dispatchEvent(new MouseEvent("click", { bubbles: true, detail })))
+    await flush()
+    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe(title)
+  })
+
   it("preserves an edited dialog when a new target arrives and opens it after cancellation", async () => {
     const consumed = vi.fn()
     mount(<TodosModule onOpenRequestConsumed={consumed} />); await flush()
