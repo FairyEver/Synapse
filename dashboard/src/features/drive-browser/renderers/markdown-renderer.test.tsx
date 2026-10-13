@@ -158,13 +158,13 @@ afterEach(() => {
 })
 
 describe('DriveMarkdownRenderer', () => {
-  it('keeps messages after the rendered article and jumps there from the toolbar', () => {
+  it('keeps messages after the rendered article and jumps there instantly from the toolbar', () => {
     renderMarkdown({ previewData: preview({ html: '<p>Article end</p>' }) })
     const section = document.querySelector('[data-drive-messages-section]')
     const article = document.querySelector('[data-testid="markdown-body"]')
     expect(article?.compareDocumentPosition(section as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     act(() => buttonWithText('留言 0').click())
-    expect(scrollIntoViewMock).toHaveBeenCalled()
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' })
   })
 
   it('does not parse plain markdown html through the relative image rewriter', () => {

@@ -333,7 +333,7 @@ afterEach(() => {
 })
 
 describe('DriveMDXeditorRenderer', () => {
-  it('places messages after the editor content and jumps there from the toolbar', () => {
+  it('places messages after the editor content and jumps there instantly from the toolbar', () => {
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
     renderRenderer()
@@ -341,7 +341,7 @@ describe('DriveMDXeditorRenderer', () => {
     const section = document.querySelector('[data-drive-messages-section]')
     expect(content?.compareDocumentPosition(section as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     act(() => buttonWithText('留言 0').click())
-    expect(scroll).toHaveBeenCalled()
+    expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' })
   })
 
   it('shows the live outline in the default left panel', async () => {

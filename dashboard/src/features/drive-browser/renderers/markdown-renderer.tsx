@@ -526,7 +526,7 @@ function DriveMarkdownBody({
         onClick: () => {
           const section = messagesSectionRef.current
           if (!section) return
-          section.scrollIntoView({ block: 'start', behavior: 'smooth' })
+          section.scrollIntoView({ block: 'start', behavior: 'instant' })
           section.focus({ preventScroll: true })
         },
       })
