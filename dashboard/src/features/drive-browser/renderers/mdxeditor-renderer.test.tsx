@@ -358,7 +358,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(outlineDividerClasses).toContain('bg-border')
     expect(outlineDividerClasses).not.toContain('bg-transparent')
     expect(document.querySelector('nav[aria-label="目录"]')?.textContent).toContain('Notes')
-    expect(document.querySelector('[data-markdown-outline-id="mdxeditor-heading-2"]')?.className).toContain('pl-3')
+    expect(document.querySelector('[data-markdown-outline-id="mdxeditor-heading-2"]')?.closest('[data-markdown-outline-row]')?.className).toContain('pl-3')
   })
 
   it('discovers headings when the MDXEditor content root mounts after the outer layout', async () => {
