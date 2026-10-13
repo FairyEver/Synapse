@@ -1192,6 +1192,15 @@ final class DriveStore {
         DriveSharePlan.existing(forItemId: itemId, in: shares)
     }
 
+    /// 网页顶栏明确执行分享时，空设置由服务端新建或复用，不能重置已有权限与密码。
+    func defaultShare(itemId: String, using client: APIClient) async throws -> DriveShare {
+        let account = accountGeneration
+        try Task.checkCancellation()
+        let share = try await client.driveCreateShare(itemId: itemId, settings: .init())
+        guard account == accountGeneration, !Task.isCancelled else { throw CancellationError() }
+        return share
+    }
+
     /// 分享一项。未更改设置时先只读确认已有链接仍有效，再复用它。
     func share(
         item: DriveBrowserItem,
