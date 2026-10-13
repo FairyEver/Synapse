@@ -105,10 +105,11 @@ describe("DataTableView row editor focus", () => {
     await act(async () => filterButton.click())
     await act(async () => {
       document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
-      await new Promise((resolve) => window.setTimeout(resolve, 100))
     })
 
-    expect(document.activeElement).toBe(filterButton)
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(filterButton)
+    })
     await act(async () => root.unmount())
   })
 
