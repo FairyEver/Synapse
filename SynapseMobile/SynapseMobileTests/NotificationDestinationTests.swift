@@ -7,6 +7,26 @@ import Testing
 /// 站内信、终端和录音有确切去处；外部接口发来的普通消息没有 —— 它该留在原地
 /// 让人读，而不是把人送到一个不存在的地方去。
 struct NotificationDestinationTests {
+    @Test func discussionSnapshotKeepsFullTitleAndLiteralContext() throws {
+        let raw = #"{"id":"n1","source":"drive-discussion","title":"短标题","body":"摘要","level":"active","createdAt":"2026-10-13T00:00:00Z","driveDiscussion":{"kind":"annotation","action":"replied","snapshot":{"detailTitle":"完整文档标题","content":"回复内容","original":{"kind":"text","text":"原文"},"replyTo":{"authorName":"李四","content":"原评论"}}}}"#
+        let item = try JSONDecoder().decode(SynapseNotification.self, from: Data(raw.utf8))
+        #expect(NotificationText.detailTitle(item) == "完整文档标题")
+        #expect(NotificationText.displayTitle(item) == "短标题")
+        #expect(item.driveDiscussion?.snapshot?.original?.text == "原文")
+        #expect(item.driveDiscussion?.snapshot?.replyTo?.authorName == "李四")
+        #expect(NotificationText.discussionContentLabel(item) == "回复")
+        #expect(NotificationDestination.requiresFreshRead(item))
+    }
+
+    @Test func malformedSnapshotDoesNotDiscardTheNotificationOrItsAction() throws {
+        let raw = #"{"id":"n1","source":"drive-discussion","title":"标题","body":"旧摘要","level":"active","createdAt":"2026-10-13T00:00:00Z","driveDiscussion":{"kind":"message","action":"created","snapshot":{"detailTitle":123,"content":null}}}"#
+        let item = try JSONDecoder().decode(SynapseNotification.self, from: Data(raw.utf8))
+        #expect(item.driveDiscussion?.snapshot == nil)
+        #expect(NotificationText.detailTitle(item) == "标题")
+        #expect(NotificationText.discussionContentLabel(item) == "文末留言")
+        #expect(NotificationDestination.actionLabel(for: item) == "查看留言")
+    }
+
     @Test func discussionListAndPushUseTheSameNotificationIDEntry() {
         let item = notification(source: "drive-discussion", targetId: "cached", deviceId: nil, url: "https://outside.example/forged")
         #expect(NotificationDestination.requiresFreshRead(item))

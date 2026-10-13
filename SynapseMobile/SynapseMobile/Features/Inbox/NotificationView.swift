@@ -13,6 +13,7 @@ struct NotificationView: View {
     @Binding private var filter: String
     private let refreshRequest: UUID
     private let onOpenExternal: ((URL) -> Void)?
+    private let onOpenDetail: ((SynapseNotification) -> Void)?
 
     private struct LoadRequest: Equatable {
         let filter: String
@@ -29,6 +30,7 @@ struct NotificationView: View {
     ) {
         self.onOpenTerminal = onOpenTerminal
         self.onOpenExternal = nil
+        self.onOpenDetail = nil
         self.refreshRequest = refreshRequest
         _notificationToRead = .constant(initialNotification)
         _filter = .constant("pending")
@@ -41,10 +43,12 @@ struct NotificationView: View {
         onOpenTerminal: @escaping (String) -> Void,
         onOpenExternal: @escaping (URL) -> Void,
         filter: Binding<String>,
+        onOpenDetail: ((SynapseNotification) -> Void)? = nil,
         refreshRequest: UUID = UUID()
     ) {
         self.onOpenTerminal = onOpenTerminal
         self.onOpenExternal = onOpenExternal
+        self.onOpenDetail = onOpenDetail
         self.refreshRequest = refreshRequest
         _notificationToRead = notificationToRead
         _filter = filter
@@ -57,6 +61,7 @@ struct NotificationView: View {
         onOpenTerminal: @escaping (String) -> Void,
         onOpenExternal: @escaping (URL) -> Void,
         filter: Binding<String>,
+        onOpenDetail: ((SynapseNotification) -> Void)? = nil,
         refreshRequest: UUID = UUID()
     ) {
         self.init(
@@ -64,6 +69,7 @@ struct NotificationView: View {
             onOpenTerminal: onOpenTerminal,
             onOpenExternal: onOpenExternal,
             filter: filter,
+            onOpenDetail: onOpenDetail,
             refreshRequest: refreshRequest
         )
     }
@@ -73,6 +79,7 @@ struct NotificationView: View {
             InboxView(
                 onOpenTerminal: openTerminal,
                 onOpen: open,
+                onOpenDetail: onOpenDetail,
                 filter: $filter
             )
             .navigationTitle("通知")
@@ -88,7 +95,7 @@ struct NotificationView: View {
                 }
             )) {
                 if let item = readingNotification {
-                    NotificationFullTextView(item: item)
+                    NotificationFullTextView(item: item, onOpen: open)
                 }
             }
         }
@@ -100,6 +107,10 @@ struct NotificationView: View {
                 readingNotification = nil
                 readingFromDeepLink = false
             }
+        }
+        .onChange(of: model.accountIdentityGeneration) { _, _ in
+            readingNotification = nil
+            readingFromDeepLink = false
         }
         .task(id: LoadRequest(filter: filter, refreshRequest: refreshRequest)) {
             guard filter != "pending" else { return }
@@ -116,6 +127,7 @@ struct NotificationView: View {
     /// 点一条通知：先标已读，再按它自己的去向往外走。
     ///
     private func open(_ item: SynapseNotification) {
+        readingNotification = nil
         notificationToRead = nil
         if NotificationDestination.requiresFreshRead(item) {
             NotificationRouter.shared.route(to: .message(id: item.id))
@@ -146,15 +158,28 @@ struct NotificationView: View {
 
 private struct NotificationFullTextView: View {
     let item: SynapseNotification
+    let onOpen: (SynapseNotification) -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(NotificationText.displayTitle(item)).font(.title2).fontWeight(.semibold)
+                Text(NotificationText.detailTitle(item)).font(.title2).fontWeight(.semibold)
                 Text(NotificationText.detailMeta(item))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if item.source == "drive-discussion" { Text(item.body) }
+                if item.source == "drive-discussion" {
+                    if let snapshot = item.driveDiscussion?.snapshot {
+                        if let original = snapshot.original {
+                            discussionSection(original.kind == "image" ? "评论图片" : "评论原文", content: original.text)
+                        }
+                        if let reply = snapshot.replyTo {
+                            discussionSection("回复对象 · \(reply.authorName)", content: reply.content)
+                        }
+                        discussionSection(NotificationText.discussionContentLabel(item), content: snapshot.content)
+                    } else { Text(item.body) }
+                    Button(NotificationDestination.actionLabel(for: item)) { onOpen(item) }
+                        .buttonStyle(.borderedProminent)
+                }
                 else { MarkdownContent(item.body) }
             }
             .padding()
@@ -163,5 +188,12 @@ private struct NotificationFullTextView: View {
         }
         .navigationTitle("通知")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func discussionSection(_ title: String, content: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+            Text(content.isEmpty ? "无文本内容" : content).textSelection(.enabled)
+        }
     }
 }

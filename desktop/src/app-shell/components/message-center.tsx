@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { getDriveDiscussionActionLabel, type NotificationSource } from "@synapse/shared"
+import { getDriveDiscussionActionLabel, type DriveDiscussionNotificationMetadata, type NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
 import { useMessageCenter, type MessageFilter, type MessageSourceFilter } from "@/app-shell/hooks/use-message-center"
@@ -43,6 +43,26 @@ function sourceName(item: SynapseNotification): string {
 
 function isPending(item: SynapseNotification): boolean {
   return item.source === "terminal-attention" && !item.resolvedAt
+}
+
+function discussionContentLabel(meta?: DriveDiscussionNotificationMetadata): string {
+  return meta?.action === "replied" ? "回复" : meta?.kind === "message" ? "文末留言" : "评论"
+}
+
+function DiscussionDetail({ item }: { item: SynapseNotification }) {
+  const snapshot = item.driveDiscussion?.snapshot
+  if (!snapshot) return <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
+  return <div className="flex flex-col gap-5 text-sm">
+    {snapshot.original && <section className="flex flex-col gap-2"><h4 className="font-medium">{snapshot.original.kind === "image" ? "评论图片" : "评论原文"}</h4><p className="whitespace-pre-wrap break-words text-muted-foreground">{snapshot.original.text}</p></section>}
+    {snapshot.replyTo && <section className="flex flex-col gap-2"><h4 className="font-medium">回复对象 · {snapshot.replyTo.authorName}</h4><p className="whitespace-pre-wrap break-words text-muted-foreground">{snapshot.replyTo.content || "无文本内容"}</p></section>}
+    <section className="flex flex-col gap-2"><h4 className="font-medium">{discussionContentLabel(item.driveDiscussion)}</h4><p className="whitespace-pre-wrap break-words">{snapshot.content || "无文本内容"}</p></section>
+  </div>
+}
+
+function DiscussionPreview({ body }: { body: string }) {
+  return <span className="flex min-w-0 flex-col text-sm text-muted-foreground">
+    {body.split("\n", 2).map((line, index) => <span key={index} className="truncate">{line}</span>)}
+  </span>
 }
 
 function dateLabel(value: string): string {
@@ -106,7 +126,7 @@ function MessageDetail({ center }: { center: Center }) {
       </DropdownMenu>
     </div>
     {isMail && center.mailLoading && !mail ? <div role="status" aria-label="加载站内信中" className="space-y-3"><Skeleton className="h-7 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-28 w-full" /></div> : <>
-      <h3 className="text-xl font-semibold leading-snug">{mail?.subject ?? item.title}</h3>
+      <h3 className="break-words text-xl font-semibold leading-snug">{item.source === "drive-discussion" ? item.driveDiscussion?.snapshot?.detailTitle ?? item.title : mail?.subject ?? item.title}</h3>
       {isMail && mail ? <dl className="mt-5 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1.5 text-sm">
         <dt className="text-muted-foreground">发件人</dt><dd>{personName(mail.sender)}</dd>
         <dt className="text-muted-foreground">收件人</dt><dd>{recipientNames(mail.toAddresses, mail.toRecipients)}</dd>
@@ -118,7 +138,7 @@ function MessageDetail({ center }: { center: Center }) {
       <div className="mt-7 border-t pt-6">
         {isMail && center.mailError && <div role="alert" className="mb-4 flex items-center gap-2 text-sm text-destructive">{center.mailError}<Button type="button" variant="outline" size="default" onClick={center.retryMail}>重试</Button></div>}
         {item.source === "drive-discussion"
-          ? <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
+          ? <DiscussionDetail item={item} />
           : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
@@ -169,7 +189,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                   {showDate && <h3 className="px-5 pb-2 pt-5 text-xs font-medium text-muted-foreground">{date}</h3>}
                   <ContextMenu><ContextMenuTrigger asChild><button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : ""}`} onClick={() => { void center.openItem(item) }}>
                     <span className={`mt-1.5 size-2 rounded-full ${item.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden="true" />
-                    <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="text-xs text-muted-foreground">{sourceName(item)}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span><span className="truncate text-sm text-muted-foreground">{item.body}</span></span>
+                    <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="text-xs text-muted-foreground">{sourceName(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
                   </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}

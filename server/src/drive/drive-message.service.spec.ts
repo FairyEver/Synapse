@@ -131,7 +131,7 @@ describe('DriveMessageService', () => {
     expect(edited.author.email).toBeNull()
     expect(prisma.driveMessage.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ body: 'changed' }) }))
     await service.createComment(access, 'reader', 'message', 'first', 'nested')
-    expect(prisma.driveMessageComment.findFirst).toHaveBeenCalledWith({ where: { id: 'first', messageId: 'message', deletedAt: null } })
+    expect(prisma.driveMessageComment.findFirst).toHaveBeenCalledWith({ where: { id: 'first', messageId: 'message', deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
     expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledWith(expect.objectContaining({ password: 'secret', actorUserId: 'reader' }))
   })
 

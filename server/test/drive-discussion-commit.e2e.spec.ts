@@ -55,6 +55,20 @@ describe("drive discussion PostgreSQL commit boundaries", () => {
       }
     } finally { release.release(); spy.mockRestore() }
   })
+  it("retains reply snapshots after edits, document rename and deletion", async () => {
+    const root = await f.messages.create(f.access, f.reader, "原留言")
+    const reply = await f.messages.createComment(f.access, f.third, root.id, null, "本次回复")
+    const record = await f.prisma.userNotification.findUniqueOrThrow({
+      where: { userId_sourceKey: { userId: f.owner, sourceKey: "drive:message-comment:" + reply.id } },
+    })
+    const before = await f.notifications.get(f.owner, record.id)
+    expect(before).toMatchObject({ driveDiscussion: { snapshot: { content: "本次回复", replyTo: { content: "原留言" } } } })
+    await f.messages.update(f.access, f.reader, root.id, "编辑后的留言")
+    await f.prisma.driveItem.update({ where: { id: f.item.id }, data: { name: "改名.md" } })
+    await f.messages.delete(f.access, f.owner, root.id)
+    expect(await f.notifications.get(f.owner, record.id)).toEqual(before)
+    expect(JSON.stringify(before)).not.toContain(f.share.id)
+  })
   it("revocation committed while creation waits rolls back the new content and notification", async () => {
     const held = discussionLatch(), release = discussionLatch(), entered = discussionLatch()
     const before = await f.prisma.driveMessage.count({ where: { itemId: f.item.id } })

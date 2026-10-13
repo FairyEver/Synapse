@@ -53,3 +53,53 @@ describe("Drive discussion recipients and copy", () => {
     expect(copy.collectDriveDiscussionRecipients({ ...event, action: "created", actor: { userId: "owner", handle: "owner" } })).toEqual([])
   })
 })
+
+describe("discussion context snapshots", () => {
+  it("keeps a full detail title and both the original and direct reply context", async () => {
+    const { buildDriveDiscussionNotificationCopy } = await import("./drive-discussion-notification-copy.js")
+    const result = buildDriveDiscussionNotificationCopy({ ...event,
+      item: { ...event.item, name: "很长的文档名称".repeat(20) },
+      original: { kind: "text", text: "原文 **字面符号**" },
+      replyTo: { authorName: "张三", content: "**原评论**\n建议" },
+    } as DriveDiscussionEvent, { userId: "parent", sourceShareId: null, role: "direct" })
+    expect(result.body).toBe("审核 步骤\n回复：原评论 建议")
+    expect(result.meta).toMatchObject({ snapshot: {
+      detailTitle: "王五回复了你在《" + "很长的文档名称".repeat(20) + "》中的评论",
+      content: "审核 步骤", original: { kind: "text", text: "原文 **字面符号**" },
+      replyTo: { authorName: "张三", content: "原评论 建议" },
+    } })
+  })
+  it("bounds independent excerpts without breaking Unicode or executing HTML", async () => {
+    const { buildDriveDiscussionNotificationCopy } = await import("./drive-discussion-notification-copy.js")
+    const result = buildDriveDiscussionNotificationCopy({ ...event, action: "created",
+      body: "<script>secret</script>\n\n" + "😀".repeat(600),
+      original: { kind: "text", text: "字".repeat(250) },
+    } as DriveDiscussionEvent, { userId: "owner", sourceShareId: null, role: "owner" })
+    const snapshot = result.meta.snapshot
+    expect(Array.from(snapshot.content)).toHaveLength(500)
+    expect(Array.from(snapshot.original!.text)).toHaveLength(200)
+    expect(result.body.split("\n").map((s) => Array.from(s).length)).toEqual([120, 63])
+    expect(result.body.length).toBeLessThanOrEqual(512)
+    expect(JSON.stringify(snapshot)).not.toContain("secret")
+  })
+  it("identifies image comments without copying the resource URL", async () => {
+    const { makeDriveDiscussionEvent } = await import("./drive-discussion-notification.types.js")
+    const root = { id: "t", createdByUserId: "starter", createdByUser: { handle: "张三" },
+      anchor: { selectors: { kind: "image" } }, target: { kind: "image", snapshot: { alt: "架构图", src: "https://private/image" } } }
+    const created = makeDriveDiscussionEvent("annotation", "created", event.item, root, null, "建议")
+    expect(created).toMatchObject({ original: { kind: "image", text: "架构图" } })
+    expect(JSON.stringify(created)).not.toContain("https://private")
+    expect(makeDriveDiscussionEvent("annotation", "created", event.item, { ...root, target: {} }, null, "建议"))
+      .toMatchObject({ original: { kind: "image", text: "文档中的图片" } })
+  })
+  it("takes the root content when there is no explicit reply parent", async () => {
+    const { makeDriveDiscussionEvent } = await import("./drive-discussion-notification.types.js")
+    const author = { id: "m", createdByUserId: "starter", createdByUser: { handle: "张三" }, body: "根留言" }
+    expect(makeDriveDiscussionEvent("message", "replied", event.item, author, { ...author, id: "c" }, "回复"))
+      .toMatchObject({ replyTo: { authorName: "张三", content: "根留言" } })
+    const root = { ...author, anchor: { selectors: { quote: { exact: "正文" } } },
+      comments: [{ ...author, body: "首评", parentCommentId: null, deletedAt: null }] }
+    expect(makeDriveDiscussionEvent("annotation", "replied", event.item, root, { ...author, id: "c" }, "回复"))
+      .toMatchObject({ original: { kind: "text", text: "正文" }, replyTo: { authorName: "张三", content: "首评" } })
+  })
+})

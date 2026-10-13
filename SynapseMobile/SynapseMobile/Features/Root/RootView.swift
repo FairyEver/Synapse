@@ -428,6 +428,7 @@ struct RootView: View {
                 onOpenTerminal: openWaitingSession,
                 onOpenExternal: openNotificationExternalURL,
                 filter: $notificationFilter,
+                onOpenDetail: openNotificationDetail,
                 refreshRequest: notificationRefreshRequest
             )
             .tabItem { Label("通知", systemImage: "bell") }
@@ -573,24 +574,37 @@ struct RootView: View {
     ///
     /// 刷新通知页后，按 ID 标记已读并重取本人可访问的记录。
     /// 只有本次返回的服务器记录可以决定目标，保留的缓存不能证明读取成功。
-    private func openNotification(_ id: String) {
+    private func openNotificationDetail(_ item: SynapseNotification) {
+        beginNavigationRequest()
+        openNotification(item.id, showDetail: true)
+    }
+
+    private func openNotification(_ id: String, showDetail: Bool = false) {
         let account = model.accountIdentityGeneration
         let request = UUID()
         notificationOpenRequest = request
-        notificationFilter = "all"
+        notificationToRead = nil
+        if !showDetail { notificationFilter = "all" }
         notificationRefreshRequest = UUID()
         selectedTab = .notifications
         Task {
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
-            await model.reloadNotifications()
+            await model.reloadNotifications(filter: notificationFilter)
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             // readNotification first ensures this exact id: the latest page can no
             // longer contain a notification that is still valid in an older page.
-            let item = await model.readNotification(id)
+            let item = await NotificationEntry.readVerified(
+                read: { await model.readNotification(id) },
+                isCurrent: { model.isCurrentAccount(account) && notificationOpenRequest == request }
+            )
             guard model.isCurrentAccount(account), notificationOpenRequest == request else { return }
             guard let item else {
                 // 已失效或读取失败时保留通知页，停止导航到缓存目标。
                 model.notice("无法打开这条通知", tone: .failure)
+                return
+            }
+            if showDetail {
+                notificationToRead = item
                 return
             }
             switch NotificationDestination.resolve(item) {

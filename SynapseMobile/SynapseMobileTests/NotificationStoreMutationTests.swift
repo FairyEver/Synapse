@@ -4,6 +4,27 @@ import Testing
 
 @MainActor
 struct NotificationStoreMutationTests {
+    @Test @MainActor func aLaterNotificationOpenCancelsTheEarlierDetailRead() async {
+        let api = NotificationMutationReviewAPI(), store = NotificationStore()
+        let gate = NotificationMutationReviewGate()
+        var generation = 0
+        api.mutation = { id in if id == "old" { await gate.hold() } }
+        api.detail = { id, _ in mutationNotification(id) }
+        let oldGeneration = generation
+        let old = Task {
+            await NotificationEntry.readVerified(read: { await store.read("old", using: api) },
+                isCurrent: { generation == oldGeneration })
+        }
+        await gate.waitUntilHeld()
+        generation += 1
+        let currentGeneration = generation
+        let current = await NotificationEntry.readVerified(read: { await store.read("new", using: api) },
+            isCurrent: { generation == currentGeneration })
+        await gate.release()
+        #expect(await old.value == nil)
+        #expect(current?.id == "new")
+    }
+
     @Test func discussionOpeningUsesTheFreshRecordAndStopsAfterFailedRead() async {
         let api = NotificationMutationReviewAPI(), store = NotificationStore()
         await store.load(using: api)

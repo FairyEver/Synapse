@@ -31,10 +31,10 @@ describe("Drive discussion notification persistence", () => {
       kind: "message", action: "replied", item: { id: "doc", userId: "owner", name: "文档" },
       actor: { userId: "actor", handle: "李四" }, body: "建议",
       root: { id: "m1", author: { userId: "starter", sourceShareId: "secret-reference" } },
-      targetCommentId: "c1", directlyRepliedTo: { userId: "disabled", sourceShareId: "old" },
+      replyTo: { authorName: "原作者", content: "原留言" }, targetCommentId: "c1", directlyRepliedTo: { userId: "disabled", sourceShareId: "old" },
     }
     await service.enqueue(tx as never, event)
-    await service.enqueue(tx as never, event)
+    await service.enqueue(tx as never, { ...event, body: "随后修改", replyTo: { authorName: "改名", content: "随后编辑" } })
     expect(records.size).toBe(2)
     expect(targets.size).toBe(2)
     expect(deliveries.size).toBe(2)
@@ -42,5 +42,6 @@ describe("Drive discussion notification persistence", () => {
     expect([...records.values()].every((r) => r.source === "drive-discussion" && String(r.url).startsWith("https://synapse.test/notifications/"))).toBe(true)
     expect([...targets.values()].find((r) => r.sourceShareId === "secret-reference")).toMatchObject({ itemId: "doc", messageId: "m1", commentId: "c1" })
     expect(JSON.stringify([...records.values()])).not.toContain("secret-reference")
+    for (const target of targets.values()) expect(target).toMatchObject({ snapshot: { content: "建议", replyTo: { content: "原留言" } } })
   })
 })

@@ -25,6 +25,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 云盘评论/留言通知由服务端拥有的 `drive-discussion` 来源自动产生，既有 Drive 创建工具负责业务操作，不增加通知发送参数或工具。网页 `/notifications/<notificationId>/open` 与 `GET /api/notifications/:id/drive-target` 是受保护的 UI 定位表面，不是 `synapse://` Deep Link；手机复用 `.message(id)` 和现有网页浏览入口。Drive 仍为 73 个 MCP 工具，账号通知仍为 7 个；下表各项数量及 System Notifier 公开契约不变。
 
+2026-10-13 文档互动通知增加可选只读 `driveDiscussion.snapshot`（完整标题、本次内容、原文及回复对象的当时摘录）。手机长按详情是既有通知读取的 UI 操作，点按继续直达；通知输入 schema、工具数量和 System Notifier 契约不变。
+
 桌面通知列表和详情复制 `synapse:notification:<id>` 作为带类型的 MCP 定位 ID；现有 `app_account_notification_get` 接收完整 `reference`，读取仍受当前账号权限限制。这不是桌面 Deep Link，不增加账号消息中心的 7 个 MCP 工具或路由。站内信复制现有 `synapse://mail/<id>` 路由，`app_mail_message_get` 也可接收完整 `reference`；Mail 的 16 个 MCP 工具与 `open` 路由数量不变。两类读取都不因 MCP 调用自动设已读。
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。

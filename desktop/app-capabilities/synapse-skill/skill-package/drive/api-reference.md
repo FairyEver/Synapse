@@ -713,3 +713,5 @@ Pass preview's `confirmationToken` unchanged to create after the user approves t
 ## Automatic discussion notifications
 
 The existing annotation-thread creation, annotation reply, message creation, and message reply tools automatically notify the owner and relevant participants after committing. There is no separate notification parameter or tool. Recipients are deduplicated, the actor is excluded, and existing access checks remain authoritative. Editing/deleting/resolving/reopening does not notify. Do not send a duplicate notification or expose another participant's share context.
+
+Discussion notifications may include an event-time plain-text snapshot of the full detail title, new content (500 code points), original quote and replied-to content (200 each), and replied-to author. Image comments include only a description, never an image resource URL. Short notification bodies contain 120 code points of new content and up to 60 of context. Missing snapshots on old notifications are expected; snapshots are not current document contents and must not be used to relocate anchors.

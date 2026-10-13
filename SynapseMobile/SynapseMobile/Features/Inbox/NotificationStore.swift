@@ -4,6 +4,42 @@ import Observation
 struct DriveDiscussionNotificationMetadata: Decodable {
     let kind: String
     let action: String
+    let snapshot: DriveDiscussionNotificationSnapshot?
+
+    init(kind: String, action: String, snapshot: DriveDiscussionNotificationSnapshot? = nil) {
+        self.kind = kind; self.action = action; self.snapshot = snapshot
+    }
+
+    private enum CodingKeys: String, CodingKey { case kind, action, snapshot }
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try values.decode(String.self, forKey: .kind)
+        action = try values.decode(String.self, forKey: .action)
+        snapshot = try? values.decode(DriveDiscussionNotificationSnapshot.self, forKey: .snapshot)
+    }
+}
+
+struct DriveDiscussionNotificationSnapshot: Decodable {
+    struct Original: Decodable { let kind: String; let text: String }
+    struct ReplyTo: Decodable { let authorName: String; let content: String }
+    let detailTitle: String
+    let content: String
+    let original: Original?
+    let replyTo: ReplyTo?
+
+    private enum CodingKeys: String, CodingKey { case detailTitle, content, original, replyTo }
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        detailTitle = try values.decode(String.self, forKey: .detailTitle)
+        content = try values.decode(String.self, forKey: .content)
+        guard !detailTitle.isEmpty, detailTitle.unicodeScalars.count <= 2048, content.unicodeScalars.count <= 500 else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Invalid discussion snapshot"))
+        }
+        let quote = try? values.decode(Original.self, forKey: .original)
+        original = quote.flatMap { ["text", "image"].contains($0.kind) && !$0.text.isEmpty && $0.text.unicodeScalars.count <= 200 ? $0 : nil }
+        let reply = try? values.decode(ReplyTo.self, forKey: .replyTo)
+        replyTo = reply.flatMap { $0.authorName.unicodeScalars.count <= 200 && $0.content.unicodeScalars.count <= 200 ? $0 : nil }
+    }
 }
 
 struct SynapseNotification: Decodable, Identifiable {

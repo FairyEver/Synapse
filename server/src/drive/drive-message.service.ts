@@ -154,7 +154,7 @@ export class DriveMessageService {
         : { kind: "share", itemId: item.id, actorUserId, shareId: access.shareId, sourceShareId: item.sourceShareId ?? null, password: access.password, cookie: access.cookie })
       const message = await tx.driveMessage.findFirst({ where: { id: messageId, itemId: item.id, deletedAt: null }, include: messageInclude })
       if (!message) throw new NotFoundException("留言不存在。")
-      const parent = parentCommentId ? await tx.driveMessageComment.findFirst({ where: { id: parentCommentId, messageId, deletedAt: null } }) : null
+      const parent = parentCommentId ? await tx.driveMessageComment.findFirst({ where: { id: parentCommentId, messageId, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } }) : null
       if (parentCommentId && !parent) throw new BadRequestException("回复目标不存在。")
       const comment = await tx.driveMessageComment.create({
         data: { messageId, parentCommentId, body: parseDriveMessageBody(body), createdByUserId: actorUserId, sourceShareId: item.sourceShareId ?? null },

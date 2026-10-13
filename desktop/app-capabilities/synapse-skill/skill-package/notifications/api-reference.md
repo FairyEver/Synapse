@@ -20,4 +20,6 @@
 
 ## 文档互动通知
 
-`app_account_notification_list` 的 `source` 接受 `drive-discussion`；工具数量和权限不变。返回的 `driveDiscussion?: {kind: annotation | message, action: created | replied}` 仅用于展示，旧通知不一定存在该字段。定位 `url` 按通知 ID 重新验证本人记录，不包含密码或凭据；`get` 不会自动标已读。历史摘要保留，点击目标已删除或权限失效时给出当前不可用状态。
+`app_account_notification_list` 的 `source` 接受 `drive-discussion`；工具数量和权限不变。返回的 `driveDiscussion?: {kind: annotation | message, action: created | replied, snapshot?: {detailTitle, content, original?: {kind: text | image, text}, replyTo?: {authorName, content}}}` 仅用于展示，旧通知不一定存在该字段。定位 `url` 按通知 ID 重新验证本人记录，不包含密码或凭据；`get` 不会自动标已读。历史摘要保留，点击目标已删除或权限失效时给出当前不可用状态。
+
+`body` 为本次内容的 120 字摘要及最多 60 字原文/回复摘要；`snapshot.content` 最多 500 字，原文与被回复内容各最多 200 字，均按 Unicode code point 计数，截断包含省略号。图片只含说明。快照不会因后续改名、编辑、删除或分享失效更新，不含分享来源、密码或图片资源 URL。

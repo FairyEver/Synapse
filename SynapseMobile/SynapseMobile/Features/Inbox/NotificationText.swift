@@ -77,6 +77,19 @@ enum NotificationText {
         return String(item.title.dropLast(" 需要你确认".count))
     }
 
+    static func detailTitle(_ item: SynapseNotification) -> String {
+        item.source == "drive-discussion" ? item.driveDiscussion?.snapshot?.detailTitle ?? displayTitle(item) : displayTitle(item)
+    }
+
+    static func discussionContentLabel(_ item: SynapseNotification) -> String {
+        if item.driveDiscussion?.action == "replied" { return "回复" }
+        return item.driveDiscussion?.kind == "message" ? "文末留言" : "评论"
+    }
+
+    static func discussionPreviewLines(_ item: SynapseNotification) -> [String] {
+        Array(item.body.components(separatedBy: "\n").prefix(2))
+    }
+
     static func detailMeta(_ item: SynapseNotification, calendar: Calendar = .current) -> String {
         [fullTimestamp(item.createdAt, calendar: calendar), status(item)]
             .compactMap { $0 }

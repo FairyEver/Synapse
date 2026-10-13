@@ -21,6 +21,7 @@ struct InboxView: View {
     let onOpenTerminal: (String) -> Void
     /// 一条通知被点了。去向由调用方决定 —— 列表自己不做路由。
     let onOpen: (SynapseNotification) -> Void
+    let onOpenDetail: ((SynapseNotification) -> Void)?
     @Binding var filter: String
     @State private var confirmingClear = false
 
@@ -197,6 +198,18 @@ struct InboxView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(NotificationDestination.actionLabel(for: item))
+        .contextMenu {
+            if item.source == "drive-discussion", let onOpenDetail {
+                Button { onOpenDetail(item) } label: {
+                    Label("查看通知详情", systemImage: "doc.text")
+                }
+            }
+        }
+        .accessibilityActions {
+            if item.source == "drive-discussion", let onOpenDetail {
+                Button("查看通知详情") { onOpenDetail(item) }
+            }
+        }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 Haptics.warning()
@@ -305,7 +318,13 @@ private struct NotificationRow: View {
                         .lineLimit(1)
                 }
                 Group {
-                    if item.source == "drive-discussion" { Text(item.body).lineLimit(2) }
+                    if item.source == "drive-discussion" {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(NotificationText.discussionPreviewLines(item).enumerated()), id: \.offset) { _, line in
+                                Text(line).lineLimit(1)
+                            }
+                        }
+                    }
                     else { MarkdownContent(item.body, mode: .preview(lines: 2)) }
                 }
                     .font(.subheadline)

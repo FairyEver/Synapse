@@ -1565,6 +1565,7 @@ model DriveDiscussionNotificationTarget {
   messageId String?
   commentId String?
   sourceShareId String?
+  snapshot Json?
   createdAt DateTime @default(now())
 }
 model DriveDiscussionNotificationDelivery {

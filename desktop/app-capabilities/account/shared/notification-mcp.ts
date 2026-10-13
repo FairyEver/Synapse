@@ -3,9 +3,9 @@ import type { CapabilityDefinition, McpToolDefinition } from "../../../synapse-c
 import type { CapabilityId } from "../../../synapse-capabilities/shared/naming"
 
 const entries = [
-  ["list", "List account notifications by all, unread, or pending filter and optional source (including drive-discussion for document comments, messages, and replies). Both filters apply together. Pagination: cursor-based. Continue with nextCursor and the same filters; restart without cursor when a filter changes."],
+  ["list", "List account notifications by all, unread, or pending filter and optional source (including drive-discussion for document comments, messages, and replies). Both filters apply together. Document interactions may include a read-only event-time snapshot of original/replied-to excerpts and new content; old records may lack it. Pagination: cursor-based. Continue with nextCursor and the same filters; restart without cursor when a filter changes."],
   ["count", "Get the exact unread notification count."],
-  ["get", "Read one notification without marking it read. Pass either id or the complete copied synapse:notification:<id> reference."],
+  ["get", "Read one notification without marking it read. Document interactions may include bounded plain-text event-time context in driveDiscussion.snapshot; it is not current document content. Pass either id or the complete copied synapse:notification:<id> reference."],
   ["read", "Mark one notification read."],
   ["read_all", "Mark every unread notification read."],
   ["delete", "Hide one notification for the current account."],

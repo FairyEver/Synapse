@@ -74,11 +74,15 @@
 
 操作人沿用现有分享作者的安全显示名称，不新增邮箱展示。标题保留动作和收件人关系，优先缩短过长的文档名、其次缩短作者名，最终遵守现有 64 字符存储上限。
 
-正文取本次新增内容的纯文本摘要，合并连续空白，最多 120 个 Unicode code point；截断时预留省略号，整体不超过现有正文上限。不复制整条讨论、被回复内容或 Markdown 正文。摘要作为纯文本展示，不执行 HTML，不将其中的任意 URL 变成业务直达目标。
+2026-10-13 用户确认的上下文增强替代原先“不复制被回复内容或 Markdown 正文摘录”的限制：通知目标保存可空 JSON 快照，包含完整详情标题、本次内容（最多 500 个 Unicode code point）、评论原文（最多 200）与被回复者名称及内容（最多 200）。截断包含省略号。原文取已验证锚点的 quote；图片只取 alt/title，无说明时显示“文档中的图片”，不复制图片或资源 URL。回复取真实父评论；无显式父评论时取评论首评或根留言。缺少可靠上下文时省略该段，不搜索文档猜测。
+
+正文用于列表与系统横幅：第一行取本次内容最多 120 字，第二行取上下文最多 60 字并加“原文：”或“回复：”；回复优先使用被回复内容。详情分段展示评论原文、回复对象和本次评论/文末留言/回复，全部按纯文本展示，不执行 HTML，不将内容中的 URL 变成业务直达目标。旧通知不补发或补填快照，继续展示原摘要。
 
 标题、文档名和摘要是事件发生时的快照。之后改名、编辑或删除内容不重写历史通知。正文和作者信息不得写入日志或审计；通知库中的内容继续遵循现有明文通知存储边界。
 
-桌面消息中心使用已有阅读区和标准操作按钮。拟增加来源 `drive-discussion`，显示为“文档互动”，归属显示为“云盘”；不进入终端待处理。手机沿用现有通知行及站内网页入口，不新增通知页面或文档原生编辑器。
+桌面消息中心使用已有阅读区和标准操作按钮。来源 `drive-discussion` 显示为“文档互动”，归属显示为“云盘”；不进入终端待处理。手机点按通知及 APNs 继续直达文档；长按菜单和 VoiceOver 操作增加“查看通知详情”，先设已读并重取本人通知，再用现有详情导航展示快照，详情按钮复用直达入口。新导航、取消或账号变化停止迟到读取，不新增顶层页面或文档原生编辑器。
+
+手机沿用系统字体和语义颜色，单层滚动展示长摘录；支持动态字体、VoiceOver 和 iPadOS 窗口缩放。界面依据为 Apple 的 [Notifications](https://developer.apple.com/design/human-interface-guidelines/notifications)、[Scroll views](https://developer.apple.com/design/human-interface-guidelines/scroll-views)、[Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) 与 [Menus](https://developer.apple.com/design/human-interface-guidelines/menus)：短摘要用于提醒，分段详情用于阅读，菜单承载行的次要操作。
 
 ## 4. 业务与通知的边界
 
@@ -122,7 +126,7 @@
 
 通知 URL 使用同源 HTTPS。拟增加受保护的 `/notifications/<notificationId>/open` 定位入口，路径只携带通知 ID，不携带评论正文、分享密码、Bearer、refresh token 或网页会话凭据。该入口是网页定位入口，不注册新的桌面 Deep Link。
 
-拟增加与通知一对一的 Drive 目标记录，保存目标类别、item ID、thread/message ID、具体 comment ID（根留言为空）、动作以及所需分享引用。`UserNotification.targetId` 指向该记录。通知响应可追加只读、可选的 `driveDiscussion` 描述，仅含类别和动作供客户端选择按钮文案；收件人和分享上下文由服务端决定，不允许调用者覆盖。
+与通知一对一的 Drive 目标记录保存目标类别、item ID、thread/message ID、具体 comment ID（根留言为空）、动作、所需分享引用与可空 JSON 快照。`UserNotification.targetId` 指向该记录。通知响应的只读、可选 `driveDiscussion` 包含类别、动作及可选 `snapshot: {detailTitle, content, original?: {kind: text | image, text}, replyTo?: {authorName, content}}`；仅投影展示字段，不暴露内部来源。收件人和分享上下文由服务端决定，不允许调用者覆盖。
 
 打开过程：读取当前账号本人可见的服务器通知，按现有流程标记已读，解析当前目标，再使用现有 owner 或 `/share/...` 文档入口。打开本人通知不意味着取得文档访问权限；阅读器仍执行原有 owner/share 校验。
 

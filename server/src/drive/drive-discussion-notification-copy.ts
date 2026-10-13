@@ -30,6 +30,11 @@ function clipUtf16(value: string, limit: number): string {
   for (const point of value) { if (result.length + point.length > limit) break; result += point }
   return result
 }
+function excerpt(value: string, limit: number): string {
+  const points = Array.from(value.replace(/\s+/gu, " ").trim())
+  return points.length > limit ? points.slice(0, limit - 1).join("") + "…" : points.join("")
+}
+function markdownText(value: string): string { return plainText(parser.parse(value) as TextNode) }
 export function buildDriveDiscussionNotificationCopy(event: DriveDiscussionEvent, recipient: DriveDiscussionRecipient) {
   const noun = event.kind === "annotation" ? "评论" : "留言"
   const titleFor = (actor: string, name: string): string => {
@@ -41,9 +46,16 @@ export function buildDriveDiscussionNotificationCopy(event: DriveDiscussionEvent
   let actor = event.actor.handle
   const name = clipUtf16(event.item.name, Math.max(1, 64 - titleFor(actor, "").length))
   actor = clipUtf16(actor, Math.max(1, 64 - titleFor("", name).length))
-  const points = Array.from(plainText(parser.parse(event.body) as TextNode).replace(/\s+/gu, " ").trim())
-  const body = points.length > 120 ? points.slice(0, 119).join("") + "…" : points.join("")
+  const content = markdownText(event.body)
+  const original = event.original ? { kind: event.original.kind, text: excerpt(event.original.text, 200) } : undefined
+  const replyTo = event.action === "replied" && event.replyTo ? {
+    authorName: excerpt(event.replyTo.authorName, 200), content: excerpt(markdownText(event.replyTo.content), 200),
+  } : undefined
+  const context = replyTo ? "回复：" + excerpt(replyTo.content, 60) : original ? "原文：" + excerpt(original.text, 60) : null
+  const body = excerpt(content, 120) + (context ? "\n" + context : "")
+  const snapshot = { detailTitle: titleFor(event.actor.handle, event.item.name), content: excerpt(content, 500),
+    ...(original ? { original } : {}), ...(replyTo ? { replyTo } : {}) }
   const sourceKey = event.kind === "annotation" ? "drive:annotation-comment:" + event.targetCommentId
     : event.action === "created" ? "drive:message:" + event.root.id : "drive:message-comment:" + event.targetCommentId
-  return { title: titleFor(actor, name), body, sourceKey, meta: { kind: event.kind, action: event.action } }
+  return { title: titleFor(actor, name), body, sourceKey, meta: { kind: event.kind, action: event.action, snapshot } }
 }

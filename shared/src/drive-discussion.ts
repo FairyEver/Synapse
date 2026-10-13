@@ -1,6 +1,35 @@
+export type DriveDiscussionNotificationSnapshot = {
+  readonly detailTitle: string
+  readonly content: string
+  readonly original?: { readonly kind: "text" | "image"; readonly text: string }
+  readonly replyTo?: { readonly authorName: string; readonly content: string }
+}
 export type DriveDiscussionNotificationMetadata = {
   readonly kind: "annotation" | "message"
   readonly action: "created" | "replied"
+  readonly snapshot?: DriveDiscussionNotificationSnapshot
+}
+
+/** Project only display fields; internal discussion/share context must never escape. */
+export function parseDriveDiscussionNotificationSnapshot(value: unknown): DriveDiscussionNotificationSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const input = value as Record<string, unknown>
+  const bounded = (text: unknown, limit: number): text is string => typeof text === "string" && Array.from(text).length <= limit
+  if (!bounded(input.detailTitle, 2048) || !input.detailTitle || !bounded(input.content, 500)) return undefined
+  const result: { detailTitle: string; content: string; original?: DriveDiscussionNotificationSnapshot["original"]; replyTo?: DriveDiscussionNotificationSnapshot["replyTo"] } = {
+    detailTitle: input.detailTitle, content: input.content,
+  }
+  if (input.original && typeof input.original === "object") {
+    const original = input.original as Record<string, unknown>
+    if ((original.kind === "text" || original.kind === "image") && bounded(original.text, 200) && original.text) {
+      result.original = { kind: original.kind, text: original.text }
+    }
+  }
+  if (input.replyTo && typeof input.replyTo === "object") {
+    const reply = input.replyTo as Record<string, unknown>
+    if (bounded(reply.authorName, 200) && bounded(reply.content, 200)) result.replyTo = { authorName: reply.authorName, content: reply.content }
+  }
+  return result
 }
 export type DriveDiscussionNotificationDto = {
   readonly id: string; readonly source: string; readonly url: string | null

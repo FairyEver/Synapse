@@ -34,3 +34,16 @@ describe("Drive discussion locations", () => {
     expect(discussion.buildDriveDiscussionNotificationOpenUrl("http://127.0.0.1:3000", "n1")).toBe("http://127.0.0.1:3000/notifications/n1/open")
   })
 })
+
+it("projects only safe snapshot fields and ignores malformed legacy metadata", () => {
+  const valid = { detailTitle: "张三评论了《文档》", content: "建议",
+    original: { kind: "text", text: "正文", sourceShareId: "secret" },
+    replyTo: { authorName: "李四", content: "原评论", email: "private@example.com" }, password: "secret" }
+  expect(discussion.parseDriveDiscussionNotificationSnapshot(valid)).toEqual({
+    detailTitle: "张三评论了《文档》", content: "建议", original: { kind: "text", text: "正文" },
+    replyTo: { authorName: "李四", content: "原评论" },
+  })
+  for (const value of [undefined, null, {}, { detailTitle: "t", content: "😀".repeat(501) }]) {
+    expect(discussion.parseDriveDiscussionNotificationSnapshot(value)).toBeUndefined()
+  }
+})

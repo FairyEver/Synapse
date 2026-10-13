@@ -103,6 +103,16 @@ const annotationInclude = {
   },
 } as const
 
+const annotationNotificationInclude = {
+  anchor: true,
+  createdByUser: { select: { handle: true } },
+  comments: {
+    where: { parentCommentId: null, deletedAt: null },
+    orderBy: { createdAt: "asc" as const }, take: 1,
+    include: { createdByUser: { select: { handle: true } } },
+  },
+} as const
+
 @Injectable()
 export class DriveAnnotationService {
   private readonly logger = new Logger(DriveAnnotationService.name)
@@ -175,9 +185,9 @@ export class DriveAnnotationService {
     const item = await this.requireOwnerItem(userId, itemId)
     const { thread, comment } = await this.discussion.mutate(item.id, async (tx) => {
       await this.drive.validateDiscussionWriteAccess(tx, { kind: "owned", itemId: item.id, actorUserId: userId })
-      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: threadId, itemId: item.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
+      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: threadId, itemId: item.id, deletedAt: null }, include: annotationNotificationInclude })
       if (!thread) throw new NotFoundException("评论不存在。")
-      const parent = input.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.parentCommentId, threadId: thread.id, deletedAt: null } }) : null
+      const parent = input.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.parentCommentId, threadId: thread.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } }) : null
       if (input.parentCommentId && !parent) throw new NotFoundException("回复目标不存在。")
       const comment = await tx.driveAnnotationComment.create({
         data: {
@@ -411,9 +421,9 @@ export class DriveAnnotationService {
     const item = await this.requireCommentableShareItem(input)
     const { thread, comment } = await this.discussion.mutate(item.id, async (tx) => {
       await this.drive.validateDiscussionWriteAccess(tx, { kind: "share", itemId: item.id, actorUserId: input.actorUserId, shareId: input.shareId, sourceShareId: item.sourceShareId ?? null, password: input.password, cookie: input.cookie })
-      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: input.threadId, itemId: item.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } })
+      const thread = await tx.driveAnnotationThread.findFirst({ where: { id: input.threadId, itemId: item.id, deletedAt: null }, include: annotationNotificationInclude })
       if (!thread) throw new NotFoundException("评论不存在。")
-      const parent = input.body.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.body.parentCommentId, threadId: thread.id, deletedAt: null } }) : null
+      const parent = input.body.parentCommentId ? await tx.driveAnnotationComment.findFirst({ where: { id: input.body.parentCommentId, threadId: thread.id, deletedAt: null }, include: { createdByUser: { select: { handle: true } } } }) : null
       if (input.body.parentCommentId && !parent) throw new NotFoundException("回复目标不存在。")
       const comment = await tx.driveAnnotationComment.create({
         data: {

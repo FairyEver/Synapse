@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { Injectable, Logger, type OnModuleInit } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma, type UserNotification } from "@prisma/client"
-import { LIVE_MESSAGE_TYPES, createLiveEnvelope, type NotificationSource, type DriveDiscussionNotificationMetadata } from "@synapse/shared"
+import { LIVE_MESSAGE_TYPES, createLiveEnvelope, type NotificationSource, type DriveDiscussionNotificationMetadata, parseDriveDiscussionNotificationSnapshot } from "@synapse/shared"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { MobileLiveGateway } from "../mobile-live/mobile-live.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
@@ -146,13 +146,13 @@ export class NotificationService implements OnModuleInit {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 51,
-      include: { driveDiscussionTarget: { select: { kind: true, action: true } } },
+      include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } },
     })
     return { items: rows.slice(0, 50).map(toNotificationProjection), nextCursor: rows.length > 50 ? rows[49]?.id ?? null : null }
   }
 
   async get(userId: string, id: string) {
-    const record = await this.prisma.userNotification.findFirst({ where: { id, userId, deletedAt: null }, include: { driveDiscussionTarget: { select: { kind: true, action: true } } } })
+    const record = await this.prisma.userNotification.findFirst({ where: { id, userId, deletedAt: null }, include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } } })
     return record ? toNotificationProjection(record) : null
   }
 
@@ -245,8 +245,9 @@ export class NotificationService implements OnModuleInit {
   }
 }
 
-function toNotificationProjection(record: UserNotification & { driveDiscussionTarget?: { kind: string; action: string } | null }) {
+function toNotificationProjection(record: UserNotification & { driveDiscussionTarget?: { kind: string; action: string; snapshot?: unknown } | null }) {
   const { driveDiscussionTarget: target, ...notification } = record
   if (record.source !== "drive-discussion" || !target || !["annotation", "message"].includes(target.kind) || !["created", "replied"].includes(target.action)) return notification
-  return { ...notification, driveDiscussion: { kind: target.kind, action: target.action } as DriveDiscussionNotificationMetadata }
+  const snapshot = parseDriveDiscussionNotificationSnapshot(target.snapshot)
+  return { ...notification, driveDiscussion: { kind: target.kind, action: target.action, ...(snapshot ? { snapshot } : {}) } as DriveDiscussionNotificationMetadata }
 }

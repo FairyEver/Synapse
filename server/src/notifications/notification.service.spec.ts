@@ -33,12 +33,14 @@ describe("NotificationService", () => {
     const { service, prisma } = harness()
     prisma.userNotification.findFirst.mockResolvedValueOnce({
       ...record, source: "drive-discussion",
-      driveDiscussionTarget: { kind: "annotation", action: "replied", sourceShareId: "private-share" },
+      driveDiscussionTarget: { kind: "annotation", action: "replied", sourceShareId: "private-share", snapshot: { detailTitle: "完整标题", content: "本次回复", original: { kind: "text", text: "原文", sourceShareId: "private-share" } } },
     } as UserNotification)
     const result = await service.get("user-1", "message-1")
     expect(result).toMatchObject({ driveDiscussion: { kind: "annotation", action: "replied" } })
     expect(result).not.toHaveProperty("driveDiscussionTarget")
     expect(result).not.toHaveProperty("sourceShareId")
+    expect(result).toMatchObject({ driveDiscussion: { snapshot: { detailTitle: "完整标题", content: "本次回复", original: { kind: "text", text: "原文" } } } })
+    expect(JSON.stringify(result)).not.toContain("private-share")
   })
   it("stops delivery when its lease is cancelled during the record read", async () => {
     const { service, prisma, desktops, mobiles, push } = harness()
@@ -84,7 +86,7 @@ describe("NotificationService", () => {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 51,
-      include: { driveDiscussionTarget: { select: { kind: true, action: true } } },
+      include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } },
     })
   })
 

@@ -44,6 +44,30 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear(); mockCenter.changeSource.mockClear() })
 
 describe("MessageCenter", () => {
+  it("shows the full discussion title, quoted original and reply target before the new content", async () => {
+    const previous = mockCenter.selected
+    mockCenter.selected = { ...previous, source: "drive-discussion", targetId: "discussion-target", title: "截短标题", body: "简短摘要", driveDiscussion: {
+      kind: "annotation", action: "replied", snapshot: {
+        detailTitle: "张三回复了《完整文档名称》中的评论", content: "本次回复的较长内容",
+        original: { kind: "text", text: "[原文](https://outside.example)" },
+        replyTo: { authorName: "李四", content: "被回复的评论" },
+      },
+    } } as never
+    mockCenter.items = [mockCenter.selected as SynapseNotification]
+    const host = document.createElement("div"); document.body.append(host); const root = createRoot(host)
+    try {
+      await act(async () => root.render(<MessageCenter />))
+      expect(document.querySelector('article h3')?.textContent).toBe("张三回复了《完整文档名称》中的评论")
+      const detail = document.querySelector('article')!.textContent!
+      expect(detail).toContain("评论原文")
+      expect(detail).toContain("回复对象")
+      expect(detail).toContain("李四")
+      expect(detail).toContain("被回复的评论")
+      expect(detail).toContain("本次回复的较长内容")
+      expect(detail).not.toContain("简短摘要")
+      expect(document.querySelector('a[href="https://outside.example"]')).toBeNull()
+    } finally { await act(async () => root.unmount()); mockCenter.selected = previous }
+  })
   it("renders a discussion excerpt as literal text rather than new Markdown links", async () => {
     const previous = mockCenter.selected
     mockCenter.selected = { ...previous, source: "drive-discussion", targetId: null, body: "[下载](https://outside.example)" } as never
