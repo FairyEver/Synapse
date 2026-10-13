@@ -353,7 +353,7 @@ describe('DriveMDXeditorRenderer', () => {
     const outlinePanel = document.querySelector('[data-mdxeditor-resizable-panel="outline"]')
     expect(outlinePanel?.getAttribute('data-panel-size')).toBe('16%')
     expect(outlinePanel?.getAttribute('data-panel-min-size')).toBe('12%')
-    expect(outlinePanel?.getAttribute('data-panel-max-size')).toBe('22%')
+    expect(outlinePanel?.getAttribute('data-panel-max-size')).toBe('32%')
     const outlineDividerClasses = outlinePanel?.nextElementSibling?.className.split(/\s+/u) ?? []
     expect(outlineDividerClasses).toContain('bg-border')
     expect(outlineDividerClasses).not.toContain('bg-transparent')

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 export const DRIVE_DOCUMENT_OUTLINE_PANEL_DEFAULT_SIZE = 16
 export const DRIVE_DOCUMENT_OUTLINE_PANEL_MIN_SIZE = 12
-export const DRIVE_DOCUMENT_OUTLINE_PANEL_MAX_SIZE = 22
+export const DRIVE_DOCUMENT_OUTLINE_PANEL_MAX_SIZE = 32
 
 type DriveDocumentOutlineTreeProps = {
   readonly items: readonly DriveMarkdownOutlineItemDto[]

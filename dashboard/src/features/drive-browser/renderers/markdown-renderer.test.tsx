@@ -524,7 +524,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(outlineRailContent?.className).toContain('min-h-0')
     expect(outlineRail?.getAttribute('data-panel-size')).toBe('16%')
     expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('12%')
-    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('22%')
+    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('32%')
     expect(outlineAside?.className).not.toContain('px-4')
     expect(outlineAside?.className).not.toContain('md:px-6')
     expect(outlineAside?.className).toContain('py-6')
