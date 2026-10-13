@@ -193,14 +193,6 @@ private struct SynapseSiteBrowser: View {
         let existingEmail: String?
     }
 
-    /// 顶上那枚分享键交出去的那一条。
-    ///
-    /// 包一层身份是 `sheet(item:)` 要的：同一页连着分享两次，也该各弹一次面板。
-    private struct Share: Identifiable {
-        let id = UUID()
-        let url: URL
-    }
-
     @State private var phase: Phase = .checking
     @State private var consent: Consent?
     @State private var consentAccepted = false
@@ -208,7 +200,7 @@ private struct SynapseSiteBrowser: View {
     /// 从一份分享里进一个目录不重新加载，那时屏幕上已经不是进来时那一页了。还没报回来
     /// 之前是 nil，分享退回进来时那一条。
     @State private var liveURL: URL?
-    @State private var sharing: Share?
+    @State private var shareState = DriveBrowserShareState()
     @State private var requestID = UUID()
     @State private var isActive = false
 
@@ -223,7 +215,7 @@ private struct SynapseSiteBrowser: View {
                     SynapseWebView(
                         url: url,
                         onLoginRequired: { Task { await prepare() } },
-                        onURLChange: { liveURL = $0 }
+                        onURLChange: updateLiveURL
                     )
                 case .failed(let message):
                     ContentUnavailableView {
@@ -239,28 +231,46 @@ private struct SynapseSiteBrowser: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onFinish) { Label("关闭", systemImage: "xmark") }
+                    Button(action: close) { Label("关闭", systemImage: "xmark") }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { sharing = Share(url: liveURL ?? url) } label: {
-                        Label("分享", systemImage: "square.and.arrow.up")
+                    Button(action: shareCurrentPage) {
+                        if shareState.isPreparing {
+                            ProgressView()
+                        } else {
+                            Label("分享", systemImage: "square.and.arrow.up")
+                        }
                     }
+                    .disabled(!isReady || shareState.isPreparing)
+                    .accessibilityLabel(shareState.isPreparing ? "正在生成分享链接" : "分享")
                 }
             }
             // 分享面板挂在栈里，登录那张挂在栈外：同一片视图上挂两片 sheet 只有一片会
             // 出来（云盘那一屏踩过，见 `DriveBrowserView`）。
-            .sheet(item: $sharing) { target in
+            .sheet(item: $shareState.target) { target in
                 SystemShareSheet(items: [target.url])
+            }
+            .alert("分享失败", isPresented: Binding(
+                get: { shareState.errorMessage != nil },
+                set: { if !$0 { shareState.dismissError() } }
+            )) {
+                Button("重试", action: shareCurrentPage)
+                Button("取消", role: .cancel) { shareState.dismissError() }
+            } message: {
+                Text(shareState.errorMessage ?? "请重试。")
             }
         }
         .task(id: url) {
             isActive = true
+            liveURL = nil
             await prepare()
         }
         .onDisappear {
             isActive = false
             requestID = UUID()
+            cancelShare()
         }
+        .onChange(of: model.accountIdentityGeneration) { _, _ in cancelShare() }
         .sheet(item: $consent, onDismiss: {
             if !consentAccepted { onFinish() }
         }) { request in
@@ -277,7 +287,49 @@ private struct SynapseSiteBrowser: View {
         }
     }
 
+    private var isReady: Bool {
+        if case .ready = phase { return true }
+        return false
+    }
+
+    private func shareCurrentPage() {
+        guard isReady, !shareState.isPreparing, shareState.target == nil else { return }
+        let currentURL = liveURL ?? url
+        let origin = AppConfiguration.apiOrigin
+        let account = model.accountIdentityGeneration
+        shareState.start(
+            url: currentURL, origin: origin,
+            isCurrent: { isCurrentShare(currentURL, account: account) },
+            createShare: { try await model.driveDefaultShare(itemId: $0) }
+        ) {
+            // 分享面板先出现，原生云盘在后台重取角标；公开网页不触发云盘读取。
+            guard shareState.target != nil, model.isCurrentAccount(account),
+                  isCurrentShare(currentURL, account: account), !Task.isCancelled,
+                  (try? DriveBrowserShareLink.ownerItemID(in: currentURL, origin: origin)) != nil else { return }
+            await model.driveReload()
+        }
+    }
+
+    private func isCurrentShare(_ currentURL: URL, account: Int) -> Bool {
+        isActive && model.accountIdentityGeneration == account && (liveURL ?? url) == currentURL
+    }
+
+    private func updateLiveURL(_ currentURL: URL) {
+        if (liveURL ?? url) != currentURL { cancelShare() }
+        liveURL = currentURL
+    }
+
+    private func cancelShare() {
+        shareState.cancel()
+    }
+
+    private func close() {
+        cancelShare()
+        onFinish()
+    }
+
     private func prepare() async {
+        cancelShare()
         let request = UUID()
         requestID = request
         let account = model.accountIdentityGeneration

@@ -910,6 +910,13 @@ final class SynapseAppModel {
         await drive.share(item: item, settings: settings, using: apiClient)
     }
 
+    func driveDefaultShare(itemId: String) async throws -> DriveShare {
+        guard authState == .signedIn else {
+            throw APIError(status: 401, code: "unauthenticated", message: "请登录后分享云盘文件。")
+        }
+        return try await drive.defaultShare(itemId: itemId, using: apiClient)
+    }
+
     /// 读这一项已有的那一条分享（`shareId` 或 `id` 都行）。
     ///
     /// 分享那一层打开时拿浏览行上那枚角标里的 `shareId` 来读一次，看这一项是不是已经有分享。
