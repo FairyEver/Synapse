@@ -90,14 +90,14 @@ function DriveDocumentOutlineNode({
       <li>
         <div
           data-markdown-outline-row
-          className={cn('flex items-center gap-1 rounded-sm', outlineDepthClassName(item.depth), active && 'bg-muted')}
+          className={cn('group/outline-row flex items-center rounded-sm', compact ? 'gap-1' : 'gap-0', outlineDepthClassName(item.depth), active && 'bg-muted')}
         >
           {hasChildren ? (
             <CollapsibleTrigger asChild>
               <Button
                 variant='ghost'
                 size='icon'
-                className={toggleSizeClassName}
+                className={cn(toggleSizeClassName, !compact && 'opacity-0 group-hover/outline-row:opacity-100 focus-visible:opacity-100')}
                 aria-label={`${open ? '折叠' : '展开'} ${item.text}`}
               >
                 {open ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
