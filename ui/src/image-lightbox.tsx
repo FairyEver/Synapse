@@ -10,7 +10,6 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type WheelEvent as ReactWheelEvent,
 } from "react"
 import { ChevronLeft, ChevronRight, Maximize2, X, ZoomIn, ZoomOut } from "lucide-react"
 
@@ -19,6 +18,7 @@ const MIN_SCALE = 0.1
 const MAX_SCALE = 5
 const SCALE_EPSILON = 0.001
 const BACKGROUND_CLICK_MOVEMENT_TOLERANCE = 4
+const WHEEL_LINE_STEP = 16
 
 type Point = {
   readonly x: number
@@ -220,9 +220,7 @@ export function createImageLightbox(
       })
     }, [onClose, preview.trigger])
 
-    if (!activeImage) return null
-
-    const updateScale = (scale: number, anchor: Point = { x: 0, y: 0 }) => {
+    const updateScale = useCallback((scale: number, anchor: Point = { x: 0, y: 0 }) => {
       if (!naturalSize || !viewportSize) return
       setTransform((current) => {
         const nextScale = clamp(scale, minScale, MAX_SCALE)
@@ -234,7 +232,31 @@ export function createImageLightbox(
         }, naturalSize, viewportSize)
       })
       fitLockedRef.current = false
-    }
+    }, [minScale, naturalSize, viewportSize])
+
+    useEffect(() => {
+      const viewport = viewportElement
+      if (!viewport) return
+      const handleWheel = (event: WheelEvent) => {
+        if (event.deltaY === 0) return
+        event.preventDefault()
+        if (controlsDisabled || !naturalSize || !viewportSize) return
+        if (event.ctrlKey) {
+          const anchor = pointFromClient(event.clientX, event.clientY, viewport)
+          updateScale(transform.scale * (event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), anchor)
+          return
+        }
+        const deltaMultiplier = event.deltaMode === 1
+          ? WHEEL_LINE_STEP
+          : event.deltaMode === 2 ? viewportSize.height : 1
+        setTransform((current) => clampTransform({
+          ...current,
+          y: current.y - event.deltaY * deltaMultiplier,
+        }, naturalSize, viewportSize))
+      }
+      viewport.addEventListener("wheel", handleWheel, { passive: false })
+      return () => viewport.removeEventListener("wheel", handleWheel)
+    }, [controlsDisabled, naturalSize, transform.scale, updateScale, viewportElement, viewportSize])
 
     const fitToViewport = () => {
       if (!naturalSize || !viewportSize) return
@@ -283,13 +305,6 @@ export function createImageLightbox(
         event.preventDefault()
         showOriginalSize()
       }
-    }
-
-    const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-      if (controlsDisabled || event.deltaY === 0) return
-      event.preventDefault()
-      const anchor = pointFromClient(event.clientX, event.clientY, event.currentTarget)
-      updateScale(transform.scale * (event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), anchor)
     }
 
     const handleDoubleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -381,6 +396,8 @@ export function createImageLightbox(
       setDragging(canPan || pointersRef.current.size > 1)
     }
 
+    if (!activeImage) return null
+
     return (
       <TooltipProvider>
         <Dialog open onOpenChange={(open: boolean) => {
@@ -458,7 +475,6 @@ export function createImageLightbox(
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishPointer}
-            onWheel={handleWheel}
           >
             {loadState === "loading" ? (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-white/70">正在加载图片</div>

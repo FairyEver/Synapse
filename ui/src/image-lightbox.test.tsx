@@ -171,6 +171,7 @@ describe("ImageLightbox", () => {
       clientX: 400,
       clientY: 300,
       deltaY: -100,
+      ctrlKey: true,
     }))
     expect(zoomText()).toBe("63%")
 
@@ -206,6 +207,72 @@ describe("ImageLightbox", () => {
     await dispatch(viewport, pointerEvent("pointerdown", 2, 500, 300))
     await dispatch(viewport, pointerEvent("pointermove", 2, 700, 300))
     expect(zoomText()).toBe("100%")
+  })
+
+  it.each([
+    { mode: "pixels", deltaMode: 0, deltaY: 100, expectedY: -100 },
+    { mode: "lines", deltaMode: 1, deltaY: 3, expectedY: -48 },
+    { mode: "pages", deltaMode: 2, deltaY: 1, expectedY: -600 },
+  ])("scrolls the image vertically with $mode wheel deltas without zooming", async ({ deltaMode, deltaY, expectedY }) => {
+    renderViewer()
+    loadActiveImage(800, 2400)
+    await click(buttonByLabel("按原始尺寸显示图片"))
+    const viewport = imageViewport()
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaMode, deltaY })
+
+    await dispatch(viewport, event)
+
+    expect(zoomText()).toBe("100%")
+    expect(transformStyle()).toContain(`calc(-50% + ${expectedY}px)`)
+    expect(event.defaultPrevented).toBe(true)
+
+    await dispatch(viewport, new WheelEvent("wheel", { bubbles: true, deltaMode, deltaY: -deltaY }))
+    expect(transformStyle()).toContain("calc(-50% + 0px), calc(-50% + 0px)")
+
+    await dispatch(viewport, new WheelEvent("wheel", { bubbles: true, deltaY: 100_000 }))
+    expect(transformStyle()).toContain("calc(-50% + -900px)")
+    await dispatch(viewport, new WheelEvent("wheel", { bubbles: true, deltaY: -100_000 }))
+    expect(transformStyle()).toContain("calc(-50% + 900px)")
+    expect(zoomText()).toBe("100%")
+  })
+
+  it("keeps a fitted image stationary when scrolling without Ctrl", async () => {
+    renderViewer()
+    loadActiveImage(1600, 800)
+    const initialTransform = transformStyle()
+
+    await dispatch(imageViewport(), new WheelEvent("wheel", { bubbles: true, deltaY: 100 }))
+
+    expect(transformStyle()).toBe(initialTransform)
+    expect(zoomText()).toBe("50%")
+  })
+
+  it("zooms with Ctrl and prevents browser zoom", async () => {
+    renderViewer()
+    loadActiveImage(1600, 800)
+    const viewport = imageViewport()
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      clientX: 400,
+      clientY: 300,
+      deltaY: -100,
+    })
+
+    await dispatch(viewport, event)
+
+    expect(zoomText()).toBe("63%")
+    expect(event.defaultPrevented).toBe(true)
+
+    await dispatch(viewport, new WheelEvent("wheel", {
+      bubbles: true,
+      ctrlKey: true,
+      clientX: 400,
+      clientY: 300,
+      deltaY: 100,
+    }))
+    expect(zoomText()).toBe("50%")
   })
 
   it("retries a failed image load", async () => {
