@@ -311,9 +311,16 @@ git commit -m "feat: 通知落库与推送带上点按复制开关
 在 `server/src/notifications/notification.controller.spec.ts` 的 `describe("OpenNotificationController", ...)` 里追加（构造方式与相邻用例一致：`controller()` 返回的 `{ controller, service, request }`）：
 
 ```ts
-  it("sends copyOnTap through the request-body shapes", async () => {
+  it("sends copyOnTap through both request-body shapes", async () => {
     const { controller, service, request } = controller()
-    await controller.createWithKeyInPath(request as never, { title: "标题", body: "正文", copyOnTap: true })
+    const message = { title: "标题", body: "正文", copyOnTap: true }
+
+    // 整体式：密钥与消息在同一个请求体里。
+    await controller.createWithKeyInBody(request as never, { ...message, key: exampleKey })
+    expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
+
+    // 表单式：密钥是 URL 段，消息来自请求体。
+    await controller.createWithKeyInPath(request as never, message)
     expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
   })
 
