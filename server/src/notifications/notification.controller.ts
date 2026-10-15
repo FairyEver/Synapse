@@ -10,6 +10,8 @@ import { UserAuthGuard } from "../auth/user-auth.guard"
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
   OPEN_API_NOTIFICATIONS_BASE_PATH,
+  notificationGroupSchema,
+  notificationUrlSchema,
   openApiNotificationKeyedMessageSchema,
   openApiNotificationMessageSchema,
   openApiNotificationPathSchema,
@@ -51,6 +53,9 @@ const desktopWriteSchema = z.object({
   sourceKey: z.string().min(8).max(160).optional(),
   title: z.string().trim().min(1).max(64),
   body: z.string().trim().min(1).max(512),
+  // 链接与分组复用开放 API 的同一份 schema：同一条消息不该因为传参形状不同被区别对待。
+  group: notificationGroupSchema.optional(),
+  url: notificationUrlSchema.optional(),
   targetId: z.string().min(1).max(120).optional(),
   deviceId: z.string().min(1).max(120).optional(),
 }).strict()

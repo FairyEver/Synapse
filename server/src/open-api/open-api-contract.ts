@@ -29,9 +29,9 @@ export const OPEN_API_CREATE_DOWNLOAD_PATHS = [
  */
 const notificationTitleSchema = z.string().trim().min(1).max(64)
 const notificationBodySchema = z.string().trim().min(1).max(512)
-const notificationGroupSchema = z.string().trim().min(1).max(64)
+export const notificationGroupSchema = z.string().trim().min(1).max(64)
 /** 契约文档沿用 `pattern: "^https:"` 表达协议限制，`.regex()` 才能在 JSON Schema 里体现出来。 */
-const notificationUrlSchema = z.url().max(2048).regex(/^https:/u)
+export const notificationUrlSchema = z.url().max(2048).regex(/^https:/u)
 const notificationLevelSchema = z.enum(["active", "passive", "timeSensitive"])
 const notificationKeySchema = z.string().regex(new RegExp(apiKeySecretPatternSource, "u"))
 

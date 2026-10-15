@@ -168,6 +168,44 @@ describe("NotificationController", () => {
     }
   })
 
+  it("carries an optional link and group without widening the desktop-owned sources", async () => {
+    const service = { create: vi.fn(async () => ({ id: "message-1" })) }
+    const endpoint = new NotificationController(service as never)
+    const request = { user: { id: "user-1" } }
+
+    await expect(endpoint.createFromDesktop(request as never, {
+      source: "system-notifier",
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })).resolves.toEqual({ id: "message-1" })
+    expect(service.create).toHaveBeenCalledWith({
+      source: "system-notifier",
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+      userId: "user-1",
+    })
+  })
+
+  it("refuses a link the desktop could not open on a phone", async () => {
+    const service = { create: vi.fn(async () => ({ id: "message-1" })) }
+    const endpoint = new NotificationController(service as never)
+    const request = { user: { id: "user-1" } }
+
+    for (const url of ["http://example.com/x", "ftp://example.com/x", "not a url"]) {
+      await expect(endpoint.createFromDesktop(request as never, {
+        source: "system-notifier", title: "标题", body: "正文", url,
+      })).rejects.toMatchObject({ status: 400 })
+    }
+    await expect(endpoint.createFromDesktop(request as never, {
+      source: "system-notifier", title: "标题", body: "正文", group: "云".repeat(65),
+    })).rejects.toMatchObject({ status: 400 })
+    expect(service.create).not.toHaveBeenCalled()
+  })
+
   it("refuses sources the desktop does not own", async () => {
     const service = { create: vi.fn(async () => ({ id: "message-1" })) }
     const endpoint = new NotificationController(service as never)
