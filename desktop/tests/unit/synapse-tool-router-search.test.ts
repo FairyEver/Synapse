@@ -74,6 +74,7 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "完事给我推送一下", expect: "app_system_notifier_notification_trigger" },
   { intent: "构建完叫我一声", expect: "app_system_notifier_notification_trigger" },
   { intent: "结果推到我手机上", expect: "app_system_notifier_notification_trigger" },
+  { intent: "把链接发我手机上", expect: "app_system_notifier_notification_trigger" },
 
   // ---- 其余 domain (13)：只证明没被完全挤出 ----
   { intent: "数据库里有哪些表", expect: "app_database_table_list" },

@@ -152,6 +152,15 @@ describe("API and MCP capability surface", () => {
     expect(ruleIdDescription).toContain("not modelpattern")
   })
 
+  it("lets the notifier carry a link without making it mandatory", () => {
+    const tool = buildAllMcpTools().find((entry) => entry.name === "app_system_notifier_notification_trigger")
+    expect(tool).toBeDefined()
+    expect(tool?.inputSchema.required).toEqual(["title", "body"])
+    expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(["title", "body", "url", "group"])
+    // 第三层也要真的约束，不是只在 description 里说一句。`stringField` 支持 pattern。
+    expect(tool?.inputSchema.properties?.url).toMatchObject({ pattern: "^https://", maxLength: 2048 })
+  })
+
   it("keeps the clean MCP name comparison synchronized with the registry", () => {
     const guide = readRepoFile("../docs/reference/mcp-tool-name-migration.md")
     const documentedPairs = [...guide.matchAll(/^\| `([^`]+)` \| `([^`]+)` \|$/gm)]

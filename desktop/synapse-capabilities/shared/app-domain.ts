@@ -30,7 +30,9 @@ import {
 } from "../../app-capabilities/system-notifier/shared/capability"
 import {
   SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
+  SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
   SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS,
+  SYSTEM_NOTIFICATION_URL_MAX_LENGTH,
 } from "../../app-capabilities/system-notifier/shared/schema"
 import {
   ACCOUNT_LOGIN_START_CAPABILITY_ID,
@@ -467,7 +469,7 @@ export function buildAppTools(): McpToolDefinition[] {
     ...buildTerminalMcpTools(),
     {
       name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
-      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上. title and body must be single-line text with no leading or trailing whitespace. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
+      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it also when the user wants a link handed to their phone: pass it as url, and the notification opens that address in one tap. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上, 把链接发我手机上. title and body must be single-line text with no leading or trailing whitespace. url must be an https address with no credentials or password in it; group is a short label shown beside the title. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
       inputSchema: {
         type: "object",
         properties: {
@@ -476,6 +478,13 @@ export function buildAppTools(): McpToolDefinition[] {
           }),
           body: stringField("Single-line notification body with no leading or trailing whitespace.", {
             maxLength: SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
+          }),
+          url: stringField("Optional single https address the user should open. It must carry no credentials or password; the address itself never reaches a lock screen.", {
+            maxLength: SYSTEM_NOTIFICATION_URL_MAX_LENGTH,
+            pattern: "^https://",
+          }),
+          group: stringField("Optional short label shown beside the title, such as the source of the link.", {
+            maxLength: SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
           }),
         },
         required: ["title", "body"],
