@@ -31,7 +31,7 @@ import {
 import {
   SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
   SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
-  SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS,
+  SYSTEM_NOTIFICATION_TITLE_MAX_LENGTH,
   SYSTEM_NOTIFICATION_URL_MAX_LENGTH,
 } from "../../app-capabilities/system-notifier/shared/schema"
 import {
@@ -473,8 +473,8 @@ export function buildAppTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          title: stringField("Single-line notification title with no leading or trailing whitespace.", {
-            maxLength: SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS,
+          title: stringField("Single-line notification title with no leading or trailing whitespace, at most 64 UTF-16 code units. An emoji or other astral character counts as two against the length limit.", {
+            maxLength: SYSTEM_NOTIFICATION_TITLE_MAX_LENGTH,
           }),
           body: stringField("Single-line notification body with no leading or trailing whitespace.", {
             maxLength: SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,

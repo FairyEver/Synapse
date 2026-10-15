@@ -1,10 +1,11 @@
 import { z } from "zod"
 
-export const SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS = 64
+/** 标题按 UTF-16 码元计数，与服务端的 64 码元上限一致。 */
+export const SYSTEM_NOTIFICATION_TITLE_MAX_LENGTH = 64
 export const SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS = 256
 /**
  * url 与 group 按 UTF-16 码元卡，与服务端 zod 的 `.max()` 同一把尺子，所以名字用 LENGTH
- * 而不是 CODE_POINTS。上面 title / body 两个常量保持码点语义，不受本次改动影响。
+ * 而不是 CODE_POINTS。只有 body 保持码点语义，256 码点最多占服务端允许的 512 码元。
  */
 export const SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH = 64
 export const SYSTEM_NOTIFICATION_URL_MAX_LENGTH = 2048
@@ -99,7 +100,7 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   const keys = Object.keys(request)
   if (keys.some((key) => !ACCEPTED_KEYS.has(key))) return invalid("request", "unknown_field")
 
-  const titleError = validateField(request, "title", SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS)
+  const titleError = validateField(request, "title", SYSTEM_NOTIFICATION_TITLE_MAX_LENGTH)
   if (titleError) return titleError
   const bodyError = validateField(request, "body", SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS)
   if (bodyError) return bodyError
@@ -124,14 +125,16 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
 function validateField(
   request: Record<string, unknown>,
   field: "title" | "body",
-  maxCodePoints: number,
+  maxLength: number,
 ): SystemNotificationInvalidInput | null {
   if (!(field in request)) return invalid(field, "required")
   const value = request[field]
   if (typeof value !== "string") return invalid(field, "type")
   const shapeError = validateSingleLineShape(value, field)
   if (shapeError) return shapeError
-  if ([...value].length > maxCodePoints) return invalid(field, "too_long")
+  // 标题与服务端同按码元计数；正文的 256 码点最多占 512 码元，保持既有范围。
+  const length = field === "title" ? value.length : [...value].length
+  if (length > maxLength) return invalid(field, "too_long")
   return null
 }
 
@@ -155,7 +158,7 @@ function validateSingleLineShape(
 
 /**
  * 可选字段的校验。与 `validateField` 的差别全在两头：字段缺省是合法的，
- * 长度按码元而不是码点算。
+ * 长度统一按码元算（必填字段中只有 body 按码点算）。
  */
 function validateOptionalField(
   request: Record<string, unknown>,

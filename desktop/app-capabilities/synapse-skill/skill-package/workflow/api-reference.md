@@ -176,7 +176,7 @@ Notifies the user with fire-and-forget semantics: it writes one message into the
 - `body` (string) — non-empty body template using the same variable bindings
 - `variables` (array) — explicit bindings shared by both templates
 
-After interpolation, the title and body must be single-line strings with no leading or trailing whitespace and are limited to 64 and 256 Unicode code points respectively. Binding, interpolation, or input validation failure occurs before notification acceptance and fails the node. Accepted execution returns primary output `{"success":true}` and structured outputs `{ success: true }`; this never proves delivery or display and must not be used to trigger retries.
+After interpolation, the title and body must be single-line strings with no leading or trailing whitespace. The title is limited to 64 UTF-16 code units (an emoji or other astral character counts as two); the body remains limited to 256 Unicode code points. Binding, interpolation, or input validation failure occurs before notification acceptance and fails the node. Accepted execution returns primary output `{"success":true}` and structured outputs `{ success: true }`; this never proves delivery or display and must not be used to trigger retries.
 
 ### clipboard_text_write
 

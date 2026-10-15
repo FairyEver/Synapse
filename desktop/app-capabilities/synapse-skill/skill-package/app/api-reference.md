@@ -258,7 +258,7 @@ Reach for it when the user asks to be notified or reminded — now or at a later
 
 Input:
 
-- `title` required: non-empty single-line string, exactly equal to its trimmed value, at most 64 Unicode code points.
+- `title` required: non-empty single-line string, exactly equal to its trimmed value, at most 64 UTF-16 code units, so an emoji or other astral character counts as two.
 - `body` required: non-empty single-line string, exactly equal to its trimmed value, at most 256 Unicode code points.
 - `url` optional: single `https://` address, exactly equal to its trimmed value, at most 2048 UTF-16 code units, so an emoji or other astral character counts as two. Opening the notification opens this address directly. It must carry no credentials anywhere in the address, including a user name before the `@` — no schema, validator, or server check rejects `https://user:pass@host/`.
 - `group` optional: single-line label shown beside the title, exactly equal to its trimmed value, at most 64 UTF-16 code units, so an emoji or other astral character counts as two.

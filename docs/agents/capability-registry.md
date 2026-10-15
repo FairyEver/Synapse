@@ -75,6 +75,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 
 - System Notifier 的触发工具 2026-10-15 起除通知本身外还可携带一条可选 `https` 链接与一个可选分组标签（`url` / `group`）：通知里点开直接打开该地址，标签显示在标题旁。二者与 `title` / `body` 同为单行文本，链接只接受 `https` 且不得携带凭据，长度上限分别按 2048 / 64 个 UTF-16 码元计算。**MCP 工具数不变（仍 1）**，Workflow 节点仍为 1，Automation Action 与 Deep Link 无新增，三张表的注册数量都不动。
 
+- System Notifier 的 `title` 上限同步按 64 个 UTF-16 码元执行，超限在桌面接受前明确拒绝，避免 emoji 标题被服务端拒收而调用方仍获成功。`body` 仍为 256 Unicode 码点（最多 512 码元，与服务端兼容）。直接 MCP 调用与 Workflow 插值后共用同一校验；上表仍为 1 个 MCP 工具、1 个 Workflow 节点，其余注册数量不变。
+
 - Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发、处理附件和批量整理信箱。桌面 IPC 按 `app.mail.<resource>.<action>` 分开并在 preload 中按资源嵌套；本机文件附件另有不注册 MCP 的 UI 专用操作。16 个 MCP 工具包含组织搜索及成员分页、当前账号可见往来、精确统计、全部已读和批量整理。Synapse Skill 引导 AI 搜索同团队个人或组织、分别确定收件人与抄送人、固定并检查完整预览；用户已授权发送且无疑惑、不确定或确需检查的内容时直接后台发送，仅有待解决问题或用户要求先审阅时取得明确答复。回复与转发遵循同一规则，组织成员在发送时按最新名单展开。当前 `confirmed: true` 是调用者已核对发送授权与预览、无待解决问题的声明，不构成服务端可验证的对话确认凭证。MCP 数量、参数字段和路由保持不变。附件不从云盘复制；转发原信附件由站内信存储自行复制，云盘文件仍以分享链接放入正文。信件查看与下载只允许发件人或该信收件人。唯一跨团队入口是管理员保护的全站平台公告 API，公告进入活跃用户收件箱且只读，不新增 Mail MCP 工具或普通用户发送权限。桌面 `synapse://mail/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。
 
 - Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。

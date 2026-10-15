@@ -11,12 +11,23 @@ function invalid(input: unknown): SystemNotificationInvalidInput {
 }
 
 describe("system notification input", () => {
-  it("accepts exact single-line Unicode and counts code points", () => {
-    const title = "😀".repeat(64)
+  it.each([
+    "文".repeat(64),
+    "😀".repeat(32),
+    `${"😀".repeat(31)}中文`,
+  ])("accepts exact single-line Unicode titles at 64 UTF-16 code units: %#", (title) => {
     const body = `组合e\u0301${"文".repeat(252)}`
     expect(validateSystemNotificationInput({ title, body })).toEqual({
       ok: true,
       data: { title, body },
+    })
+  })
+
+  it("keeps the body limit at 256 code points, including 512 UTF-16 code units", () => {
+    const body = "😀".repeat(256)
+    expect(validateSystemNotificationInput({ title: "标题", body })).toEqual({
+      ok: true,
+      data: { title: "标题", body },
     })
   })
 
@@ -32,7 +43,9 @@ describe("system notification input", () => {
     [{ title: "\ud800", body: "正文" }, "title", "invalid_unicode"],
     [{ title: "标题\n换行", body: "正文" }, "title", "forbidden_character"],
     [{ title: "标题", body: "正文\u2029分段" }, "body", "forbidden_character"],
-    [{ title: "😀".repeat(65), body: "正文" }, "title", "too_long"],
+    [{ title: "文".repeat(65), body: "正文" }, "title", "too_long"],
+    [{ title: `${"😀".repeat(32)}a`, body: "正文" }, "title", "too_long"],
+    [{ title: "😀".repeat(33), body: "正文" }, "title", "too_long"],
     [{ title: "标题", body: "文".repeat(257) }, "body", "too_long"],
   ])("returns one stable redacted error for %#", (input, field, reason) => {
     expect(invalid(input)).toEqual({

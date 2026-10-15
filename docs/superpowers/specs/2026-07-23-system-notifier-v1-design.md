@@ -44,7 +44,7 @@ The public trigger accepts exactly:
 { title: string; body: string }
 ```
 
-Both fields are required, non-empty, single-line strings equal to their own JavaScript `trim()` result. Title is limited to 64 Unicode code points and body to 256. CR, LF, Tab, NUL, other Unicode `Cc` characters, line and paragraph separators, and unpaired UTF-16 surrogates are rejected. Valid content is not normalized, trimmed, truncated, redacted, or otherwise modified.
+Both fields are required, non-empty, single-line strings equal to their own JavaScript `trim()` result. Title is limited to 64 UTF-16 code units, matching the server limit; body remains limited to 256 Unicode code points (at most the server's 512 UTF-16 code units). CR, LF, Tab, NUL, other Unicode `Cc` characters, line and paragraph separators, and unpaired UTF-16 surrogates are rejected. Valid content is not normalized, trimmed, truncated, redacted, or otherwise modified.
 
 Validation returns only the first stable error:
 
