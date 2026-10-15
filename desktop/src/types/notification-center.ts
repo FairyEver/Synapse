@@ -8,6 +8,7 @@ export type SynapseNotification = {
   readonly body: string
   readonly group: string | null
   readonly url: string | null
+  readonly copyOnTap: boolean
   readonly level: "active" | "passive" | "timeSensitive"
   readonly targetId: string | null
   readonly deviceId: string | null

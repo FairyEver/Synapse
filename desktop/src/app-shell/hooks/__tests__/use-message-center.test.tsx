@@ -34,7 +34,7 @@ import { useMessageCenter } from "../use-message-center"
 
 const notice: SynapseNotification = {
   id: "n1", source: "mail", title: "新站内信", body: "来自 Synapse。", group: "mail", url: null,
-  level: "active", targetId: "broadcast-1", deviceId: null, readAt: null, resolvedAt: null,
+  copyOnTap: false, level: "active", targetId: "broadcast-1", deviceId: null, readAt: null, resolvedAt: null,
   createdAt: "2026-09-29T10:00:00.000Z",
 }
 

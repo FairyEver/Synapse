@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { getDriveDiscussionActionLabel, type DriveDiscussionNotificationMetadata, type NotificationSource } from "@synapse/shared"
+import { getDriveDiscussionActionLabel, type NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
 import { useMessageCenter, type MessageFilter, type MessageSourceFilter } from "@/app-shell/hooks/use-message-center"
+import { discussionContentLabel, notificationDetailText } from "@/app-shell/notification-detail-text"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -43,10 +44,6 @@ function sourceName(item: SynapseNotification): string {
 
 function isPending(item: SynapseNotification): boolean {
   return item.source === "terminal-attention" && !item.resolvedAt
-}
-
-function discussionContentLabel(meta?: DriveDiscussionNotificationMetadata): string {
-  return meta?.action === "replied" ? "回复" : meta?.kind === "message" ? "文末留言" : "评论"
 }
 
 function DiscussionDetail({ item }: { item: SynapseNotification }) {
@@ -99,9 +96,17 @@ async function copyNotificationId(item: SynapseNotification) {
   } catch { toast.error("复制失败") }
 }
 
-function notificationActions(center: Center, item: SynapseNotification) {
+async function copyNotificationBody(item: SynapseNotification, mailBody: string | null) {
+  try {
+    await navigator.clipboard.writeText(notificationDetailText(item, mailBody))
+    toast("正文已复制")
+  } catch { toast.error("复制失败") }
+}
+
+function notificationActions(center: Center, item: SynapseNotification, mailBody: string | null) {
   return [
     { id: "read", label: item.readAt ? "标记为未读" : "标记为已读", run: () => { void center.setRead(item, !item.readAt) } },
+    { id: "copy-body", label: "复制正文", run: () => { void copyNotificationBody(item, mailBody) } },
     { id: "copy-id", label: "复制 ID", run: () => { void copyNotificationId(item) } },
     { id: "delete", label: "删除通知", destructive: true, run: () => center.remove(item) },
   ]
@@ -121,7 +126,7 @@ function MessageDetail({ center }: { center: Center }) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="通知操作"><MoreHorizontal /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {notificationActions(center, item).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}
+          {notificationActions(center, item, mail?.body ?? null).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -190,7 +195,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                   <ContextMenu><ContextMenuTrigger asChild><button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : ""}`} onClick={() => { void center.openItem(item) }}>
                     <span className={`mt-1.5 size-2 rounded-full ${item.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden="true" />
                     <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="text-xs text-muted-foreground">{sourceName(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
-                  </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
+                  </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item, null).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}
               {center.cursor && <Button type="button" variant="ghost" className="h-12 w-full rounded-none" onClick={() => { void center.loadMore() }}>加载更多</Button>}
