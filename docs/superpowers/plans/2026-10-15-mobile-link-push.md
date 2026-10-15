@@ -745,14 +745,15 @@ The same call hands a link to the user's phone. When the user wants an address t
 away from the computer — a share link, a page you published, a release or pull request — pass it
 as `url` and the notification opens it in one tap. Put a short label in `group` when the source
 is worth naming, such as 云盘分享. Never pass an address that carries a password, a token, or any
-other credential in its query string: the record is stored in plain text on the server.
+other credential anywhere in it — in the user name, the host, the path, or the query string. The
+record is stored in plain text on the server, and no other layer checks this for you.
 ```
 
 把既有的字段规则那一条改成同时覆盖新字段：
 
 ```markdown
 - Pass exactly one non-empty, single-line `title` and `body` with no leading or trailing whitespace. The title limit is 64 Unicode code points and the body limit is 256. `url` is optional, must be `https`, and is capped at 2048; `group` is optional and capped at 64. `url` and `group` are single-line too — no leading or trailing whitespace, no line breaks — and an emoji or other astral character counts as two against their limits.
-- `url` must carry no password, token, or other credential in its query string. The record is stored in plain text on the server, and this sentence is the only thing telling you so.
+- `url` must carry no password, token, or other credential anywhere in it — including a user name before the `@`, or a parameter in the query string. `https://user:pass@host/` is accepted by the tool schema and by the desktop validator alike, so nothing else will stop you. The record is stored in plain text on the server.
 ```
 
 把既有的禁令那条按 spec 收窄——它现在字面上会把新字段一起挡掉：
@@ -763,7 +764,17 @@ other credential in its query string: the record is stored in plain text on the 
 
 - [ ] **Step 2: 补 api-reference 参数表**
 
-`desktop/app-capabilities/synapse-skill/skill-package/app/api-reference.md` 的 `## \`app_system_notifier_notification_trigger\`` 一节（约 :253）：把参数表里 `title` / `body` 两行之后补上 `url` 与 `group` 两行，格式照抄表内既有行（参数名、必填否、说明）。`url` 的说明写：`可选，只接受 https，≤2048；点开通知直接打开这个地址。不得携带凭据。`；`group` 写：`可选，≤64；显示在标题旁的小字标签。`
+`desktop/app-capabilities/synapse-skill/skill-package/app/api-reference.md` 的 `## \`app_system_notifier_notification_trigger\`` 一节（约 :253）：把参数表里 `title` / `body` 两行之后补上 `url` 与 `group` 两行。
+
+**这两行用英文写** —— 那份文件整份是英文，塞中文会与全文语体断裂；而且「必填否」这件事既有行的格式本身就在渲染，不必再用「可选」二字说一遍。照抄相邻行的句式（`- \`X\` optional: …`），每行都要带全它该管的事：`url` 要写清单个 https 地址、长度上限、无首尾空白、增补平面字符按两个计、以及**地址里任何位置都不得携带凭据**（含 `@` 前的用户名）；`group` 要写短标签、长度上限、无首尾空白、增补平面字符按两个计。
+
+同一节里被新字段证伪的说明要同批改准，否则新加的两行会与它们直接矛盾：单行规则的作用面从 `Both fields` 改成四个字段，`INVALID_INPUT` 的 `data.field` / `data.reason` 枚举补上 `url`、`group`、`not_https`（枚举需与 `schema.ts` 的取值集合**及顺序**一致）。
+
+- [ ] **Step 2b: 三处措辞收尾**
+
+1. `app/index.md` 里「Keep Token values, passwords, … out of **both fields**」这句：契约现在是四个字段，「both」已无所指，而且与新规则并读会产生一种误读——工具里 `url` 的说明写了「地址本身不会上锁屏」，模型可能据此推断 `url` 里的凭据可以接受。改成写清是哪两个字段：「out of `title` and `body` — the fields that reach a lock screen」，让上面那条凭据规则明确压过它。
+2. `app/index.md` 那句中文口语列表（`提醒我 / 到点提醒我 / 完事提醒我一声 / 给我手机发消息 / 推到我手机上 / 构建完叫我一声 / 出错了告诉我`）末尾追加 `把链接发我手机上`。发布说明正是让用户这么说的，而工具描述里已经有这句 —— 判断层缺了它，两层的词表就不对称。**只能追加在末尾**：`api-mcp-capability-surface.test.ts` 把这份列表当作一整段连续子串断言。
+3. `docs/agents/capability-registry.md` 里新加的那段例外说明若没有 `- ` 列表标记，在 markdown 里会终止上面的列表、渲染成夹在两条 bullet 之间的一段正文；补上标记。
 
 - [ ] **Step 3: 改能力注册表的例外说明**
 
