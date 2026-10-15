@@ -11,7 +11,7 @@ import { LOCAL_CLAUDE_CODE_PROVIDER_ID } from "../provider/types"
 import { assertSafeWorkflowId } from "./workflow-id"
 import { validateWorkflowParamConfiguration } from "./workflow-param-validator"
 
-export const WORKFLOW_SCHEMA_VERSION = "2.9.0"
+export const WORKFLOW_SCHEMA_VERSION = "2.9.1"
 export const WORKFLOW_LEGACY_BASELINE_VERSION = "0.0.0"
 
 type VersionedWorkflowDefinition = WorkflowDefinition & VersionedData & Record<string, unknown>
@@ -47,6 +47,7 @@ const workflowMigrations: DataMigrationRegistry<VersionedWorkflowDefinition> = {
   "2.7.0": migrateWorkflowV2_6ToV2_7,
   "2.8.0": migrateWorkflowV2_7ToV2_8,
   "2.9.0": migrateWorkflowV2_8ToV2_9,
+  "2.9.1": migrateWorkflowV2_9ToV2_9_1,
 }
 
 export function migrateWorkflowDocument(source: unknown): WorkflowDocumentMigrationResult {
@@ -198,6 +199,15 @@ function migrateWorkflowV2_7ToV2_8(source: VersionedWorkflowDefinition): Version
 }
 
 function migrateWorkflowV2_8ToV2_9(source: VersionedWorkflowDefinition): VersionedWorkflowDefinition {
+  return source
+}
+
+/**
+ * 2.9.1 给发送通知节点加了可选的 copyOnTap（缺省 false），旧文档本就满足新 schema，
+ * 没有字段需要改写，所以是恒等迁移。bump 的意义在读取侧：旧构建拿到带新键的文档时
+ * 由版本号判定 unsupported_future，而不是让 2.9.0 这个标签涵盖它并不认识的配置。
+ */
+function migrateWorkflowV2_9ToV2_9_1(source: VersionedWorkflowDefinition): VersionedWorkflowDefinition {
   return source
 }
 

@@ -181,7 +181,7 @@ describe("workflow document migration", () => {
   })
 
   it("validates the current Clipboard fixture without rewriting its source", async () => {
-    const source = await fixture("2.9.0")
+    const source = await fixture("2.9.1")
     const original = structuredClone(source)
     const result = migrateWorkflowDocument(source)
     expect(result).toMatchObject({ kind: "current", migrated: false })
@@ -227,7 +227,7 @@ describe("workflow document migration", () => {
     expect(source).toEqual(original)
   })
 
-  it.each(["0.0.0", "1.0.0", "2.0.0", "2.1.0", "2.2.0", "2.3.0", "2.4.0", "2.5.0", "2.6.0", "2.7.0", "2.8.0", "2.9.0"])(
+  it.each(["0.0.0", "1.0.0", "2.0.0", "2.1.0", "2.2.0", "2.3.0", "2.4.0", "2.5.0", "2.6.0", "2.7.0", "2.8.0", "2.9.0", "2.9.1"])(
     "isolates %s documents whose node config violates the registered schema",
     async (version) => {
       const source = await fixture(version) as Record<string, unknown>

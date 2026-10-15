@@ -1,4 +1,6 @@
 import { Field, FieldLabel } from "@/components/ui/field"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { CollapsibleSection } from "../../../workflow-nodes/collapsible-section"
 import type { NodePanelProps } from "../../../workflow-nodes/panel-registry"
 import { PromptEditor } from "../../../workflow-nodes/prompt-editor"
@@ -40,6 +42,14 @@ export function SystemNotifierNodePanel({
               enableSkillShortcuts={false}
             />
           </Field>
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="system-notifier-node-copy-on-tap" className="text-xs font-normal">点按复制正文</Label>
+            <Switch
+              id="system-notifier-node-copy-on-tap"
+              checked={typedConfig.copyOnTap}
+              onCheckedChange={(checked) => commit({ copyOnTap: checked === true })}
+            />
+          </div>
         </div>
       </CollapsibleSection>
       <CollapsibleSection title="输入映射">
