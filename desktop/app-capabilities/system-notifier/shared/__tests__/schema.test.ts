@@ -56,7 +56,7 @@ describe("system notification input", () => {
     })
   })
 
-  it("uses request, title, body, url, group and field checks in the fixed first-error order", () => {
+  it("uses request, title, body, url, group and copyOnTap checks in the fixed first-error order", () => {
     expect(invalid({ title: 42, body: "\n", extra: true }).data).toEqual({
       field: "request",
       reason: "unknown_field",
@@ -68,6 +68,9 @@ describe("system notification input", () => {
     // url 排在 group 之前：先报链接再报标签，模型一次只会看到一条。
     expect(invalid({ title: "标题", body: "正文", url: "http://x/", group: "" }).data)
       .toEqual({ field: "url", reason: "not_https" })
+    // 开关排在 group 之后：它是个布尔，不是内容；坏掉的标签该先说话。
+    expect(invalid({ title: "标题", body: "正文", group: "", copyOnTap: "true" }).data)
+      .toEqual({ field: "group", reason: "required" })
   })
 
   it("carries an optional link and group, and omits them when absent", () => {
@@ -137,5 +140,25 @@ describe("system notification input", () => {
     const serialized = JSON.stringify(invalid({ title: secret.repeat(20), body: "正文" }))
     expect(serialized).not.toContain(secret)
     expect(serialized).not.toContain(String(secret.length * 20))
+  })
+
+  it("carries copyOnTap only when it is true", () => {
+    const base = { title: "标题", body: "正文" }
+    expect(validateSystemNotificationInput({ ...base, copyOnTap: true })).toEqual({
+      ok: true,
+      data: { title: "标题", body: "正文", copyOnTap: true },
+    })
+    // 关掉和没写是同一件事，留两种表示就多一个能互相矛盾的位。
+    expect(validateSystemNotificationInput({ ...base, copyOnTap: false })).toEqual({ ok: true, data: base })
+    expect(validateSystemNotificationInput(base)).toEqual({ ok: true, data: base })
+  })
+
+  it("rejects a non-boolean copyOnTap as the last field check", () => {
+    expect(invalid({ title: "标题", body: "正文", copyOnTap: "true" })).toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      error: "Invalid system notification input.",
+      data: { field: "copyOnTap", reason: "type" },
+    })
   })
 })

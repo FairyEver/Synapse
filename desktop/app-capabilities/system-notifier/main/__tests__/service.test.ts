@@ -427,4 +427,18 @@ describe("systemNotificationAccountWrite", () => {
       url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
     })
   })
+
+  it("passes copyOnTap through the account write", () => {
+    expect(systemNotificationAccountWrite({ title: "标题", body: "正文", copyOnTap: true })).toEqual({
+      source: "system-notifier",
+      title: "标题",
+      body: "正文",
+      copyOnTap: true,
+    })
+    expect(systemNotificationAccountWrite({ title: "标题", body: "正文" })).toEqual({
+      source: "system-notifier",
+      title: "标题",
+      body: "正文",
+    })
+  })
 })

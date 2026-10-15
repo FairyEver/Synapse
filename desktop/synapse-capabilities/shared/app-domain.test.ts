@@ -285,6 +285,7 @@ describe("App capability domain", () => {
         properties: {
           title: expect.objectContaining({ type: "string", maxLength: 64 }),
           body: expect.objectContaining({ type: "string", maxLength: 256 }),
+          copyOnTap: expect.objectContaining({ type: "boolean" }),
         },
       },
     })
@@ -296,6 +297,9 @@ describe("App capability domain", () => {
     expect(tool?.description).toContain("notified or reminded now or at a later point")
     expect(tool?.description)
       .toContain("Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上")
+    // 同一条规则：把「要的是那段文字本身」这一层也写进检索面，说法才落得到这条能力上。
+    expect(tool?.description).toContain("one tap on the phone's notification puts the body in their clipboard")
+    expect(tool?.description).toContain("Chinese intent: 复制给我, 写一段发我手机上")
   })
 
   it("registers the high-risk problem feedback submission contract", () => {

@@ -544,6 +544,7 @@ export class AccountService {
     body: string
     group?: string
     url?: string
+    copyOnTap?: boolean
     targetId?: string
     deviceId?: string
   }): Promise<DesktopNotificationOutcome> {

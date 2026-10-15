@@ -10,7 +10,7 @@ export const SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS = 256
 export const SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH = 64
 export const SYSTEM_NOTIFICATION_URL_MAX_LENGTH = 2048
 
-export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body", "url", "group"] as const
+export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body", "url", "group", "copyOnTap"] as const
 export const SYSTEM_NOTIFICATION_INVALID_REASONS = [
   "required",
   "type",
@@ -31,6 +31,8 @@ export interface SystemNotificationInput {
   readonly body: string
   readonly group?: string
   readonly url?: string
+  /** 为真表示：用户点这条通知时把正文复制到剪贴板。缺省与 false 是同一件事。 */
+  readonly copyOnTap?: boolean
 }
 
 export interface SystemNotificationInvalidInput {
@@ -92,7 +94,7 @@ export type SystemNotificationResult = z.infer<typeof systemNotificationResultSc
 export type SystemNotifierSettings = z.infer<typeof systemNotifierSettingsSchema>
 export type SystemNotifierSettingsPatch = z.infer<typeof systemNotifierSettingsPatchSchema>
 
-const ACCEPTED_KEYS = new Set<string>(["title", "body", "url", "group"])
+const ACCEPTED_KEYS = new Set<string>(["title", "body", "url", "group", "copyOnTap"])
 
 export function validateSystemNotificationInput(request: unknown): SystemNotificationInputValidation {
   if (!isPlainObject(request)) return invalid("request", "type")
@@ -110,6 +112,10 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   if (typeof request.url === "string" && !isHttpsUrl(request.url)) return invalid("url", "not_https")
   const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH)
   if (groupError) return groupError
+  // 开关排在最后：它是一个布尔，不是内容，没有理由排在任何文本字段前面。
+  if (request.copyOnTap !== undefined && typeof request.copyOnTap !== "boolean") {
+    return invalid("copyOnTap", "type")
+  }
 
   return {
     ok: true,
@@ -118,6 +124,7 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
       body: request.body as string,
       ...(request.url !== undefined ? { url: request.url as string } : {}),
       ...(request.group !== undefined ? { group: request.group as string } : {}),
+      ...(request.copyOnTap === true ? { copyOnTap: true as const } : {}),
     },
   }
 }

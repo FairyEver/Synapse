@@ -469,7 +469,7 @@ export function buildAppTools(): McpToolDefinition[] {
     ...buildTerminalMcpTools(),
     {
       name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
-      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it also when the user wants a link handed to their phone: pass it as url, and the notification opens that address in one tap. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上, 把链接发我手机上. title, body, url and group must all be single-line text with no leading or trailing whitespace. url must be an https address with no credentials or password in it; group is a short label shown beside the title. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
+      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it also when the user wants a link handed to their phone: pass it as url, and the notification opens that address in one tap. Use it also when the text itself is what the user wants to take away — a passphrase, a command, a short piece to paste elsewhere: set copyOnTap and one tap on the phone's notification puts the body in their clipboard. Chinese intent: 复制给我, 写一段发我手机上. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上, 把链接发我手机上. title, body, url and group must all be single-line text with no leading or trailing whitespace. url must be an https address with no credentials or password in it; group is a short label shown beside the title. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
       inputSchema: {
         type: "object",
         properties: {
@@ -486,6 +486,10 @@ export function buildAppTools(): McpToolDefinition[] {
           group: stringField("Optional short label shown beside the title, such as the source of the link, with no leading or trailing whitespace. An emoji or other astral character counts as two against the length limit.", {
             maxLength: SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
           }),
+          copyOnTap: {
+            type: "boolean",
+            description: "Set true when the body itself is what the user wants to take away: one tap on the phone's notification copies the body to the clipboard. The title is never copied. Defaults to false.",
+          },
         },
         required: ["title", "body"],
         additionalProperties: false,

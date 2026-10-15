@@ -104,6 +104,7 @@ export function systemNotificationAccountWrite(input: SystemNotificationInput): 
   readonly body: string
   readonly group?: string
   readonly url?: string
+  readonly copyOnTap?: boolean
 } {
   return {
     source: "system-notifier",
@@ -111,6 +112,7 @@ export function systemNotificationAccountWrite(input: SystemNotificationInput): 
     body: input.body,
     ...(input.url !== undefined ? { url: input.url } : {}),
     ...(input.group !== undefined ? { group: input.group } : {}),
+    ...(input.copyOnTap === true ? { copyOnTap: true } : {}),
   }
 }
 
