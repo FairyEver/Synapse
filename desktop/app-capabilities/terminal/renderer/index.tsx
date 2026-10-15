@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, LoaderCircle, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, Code2, Copy, Folder, FolderOpen, LoaderCircle, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
 import { isTerminalThemeId, type TerminalThemeId } from "../shared/terminal-themes"
@@ -1601,9 +1601,7 @@ export function TerminalModule({
         closing={Boolean(workspace.closing)}
         lifecycleDisabled={closingWorkspaceId === workspace.id}
         pinned={workspace.pinned}
-        status={workspaceStatus(workspace, sessions)}
         title={workspace.title}
-        waiting={workspaceWaitingForInput(workspace, sessions)}
         workspaceId={workspace.id}
         onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
         onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
@@ -1714,7 +1712,6 @@ export function TerminalModule({
                 onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
                 onSelect={() => selectWorkspace(workspace.id)}
                 onTogglePin={() => { void toggleWorkspacePinned(workspace) }}
-                waiting={workspaceWaitingForInput(workspace, sessions)}
               />
             )
           })}
@@ -2435,7 +2432,6 @@ function TerminalHeaderSessionTab({
   onTogglePin,
   pinned,
   title,
-  waiting,
 }: {
   readonly active: boolean
   readonly closeDisabled: boolean
@@ -2446,7 +2442,6 @@ function TerminalHeaderSessionTab({
   readonly onTogglePin: () => void
   readonly pinned: boolean
   readonly title: string
-  readonly waiting: boolean
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   return (
@@ -2461,7 +2456,6 @@ function TerminalHeaderSessionTab({
           data-track="terminal-header-session-select"
           onClick={onSelect}
         >
-          {waiting ? <TerminalAttentionIndicator /> : null}
           {pinned ? <TerminalPinnedIndicator /> : null}
           <span className="max-w-32 truncate">{title}</span>
         </SystemAppTopBarActionButton>
@@ -2501,9 +2495,7 @@ function TerminalSidebarWorkspaceRow({
   onSelect,
   onTogglePin,
   pinned,
-  status,
   title,
-  waiting,
   workspaceId,
 }: {
   readonly active: boolean
@@ -2516,9 +2508,7 @@ function TerminalSidebarWorkspaceRow({
   readonly onSelect: () => void
   readonly onTogglePin: () => void
   readonly pinned: boolean
-  readonly status: SynapseTerminalSession["status"]
   readonly title: string
-  readonly waiting: boolean
   readonly workspaceId: string
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -2529,12 +2519,7 @@ function TerminalSidebarWorkspaceRow({
           <ModuleSidebarRow
             active={active}
             data-track="terminal-session-select"
-            icon={(
-              <>
-                {pinned ? <TerminalPinnedIndicator /> : null}
-                {waiting ? <TerminalAttentionIndicator /> : <TerminalSessionStatusIcon status={status} />}
-              </>
-            )}
+            icon={pinned ? <TerminalPinnedIndicator /> : undefined}
             rowRef={rowRef}
             trailing={(
               <>
@@ -2611,46 +2596,6 @@ function TerminalWorkspaceLifecycleButton({
   )
 }
 
-function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTerminalSession["status"] }) {
-  const running = status === "running"
-  const stopping = status === "stopping"
-  const Icon = running ? CircleDot : stopping ? Square : Link2Off
-  const label = status === "running"
-    ? "运行中"
-    : status === "stopping"
-      ? "正在停止"
-      : status === "ended"
-        ? "已结束"
-        : status === "failed"
-          ? "启动失败"
-          : "已失联"
-
-  return (
-    <span
-      title={label}
-      className={cn(
-        "inline-flex size-3.5 shrink-0 items-center justify-center",
-        running ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
-      )}
-    >
-      <Icon className="size-3.5" aria-hidden="true" />
-      <span className="sr-only">{label}</span>
-    </span>
-  )
-}
-
-function TerminalAttentionIndicator() {
-  return (
-    <span
-      title="等待输入"
-      className="inline-flex size-3.5 shrink-0 items-center justify-center text-amber-600 dark:text-amber-400"
-    >
-      <CircleHelp className="size-3.5" aria-hidden="true" />
-      <span className="sr-only">等待输入</span>
-    </span>
-  )
-}
-
 function TerminalPinnedIndicator() {
   return (
     <span
@@ -2703,21 +2648,6 @@ function pinFirst(workspaces: readonly SynapseTerminalWorkspace[]): SynapseTermi
   return [...workspaces].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)))
 }
 
-function workspaceStatus(
-  workspace: SynapseTerminalWorkspace,
-  sessions: readonly SynapseTerminalSession[],
-): SynapseTerminalSession["status"] {
-  const sessionById = new Map(sessions.map((session) => [session.id, session]))
-  const statuses = collectTerminalPaneLeaves(workspace.layout)
-    .map((pane) => sessionById.get(pane.sessionId)?.status)
-    .filter((status): status is SynapseTerminalSession["status"] => Boolean(status))
-  if (statuses.includes("running")) return "running"
-  if (statuses.includes("stopping")) return "stopping"
-  if (statuses.includes("failed")) return "failed"
-  if (statuses.includes("lost")) return "lost"
-  return "ended"
-}
-
 function workspaceActiveSession(
   workspace: SynapseTerminalWorkspace,
   activePaneIds: Readonly<Record<string, string>>,
@@ -2728,16 +2658,6 @@ function workspaceActiveSession(
   const pane = (activePaneId ? leaves.find((leaf) => leaf.paneId === activePaneId) : undefined) ?? leaves[0]
   if (!pane) return null
   return sessions.find((session) => session.id === pane.sessionId) ?? null
-}
-
-function workspaceWaitingForInput(
-  workspace: SynapseTerminalWorkspace,
-  sessions: readonly SynapseTerminalSession[],
-): boolean {
-  const sessionById = new Map(sessions.map((session) => [session.id, session]))
-  return collectTerminalPaneLeaves(workspace.layout).some(
-    (pane) => sessionById.get(pane.sessionId)?.attention.state === "waiting",
-  )
 }
 
 function mergeSession(

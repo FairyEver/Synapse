@@ -1519,7 +1519,7 @@ describe("TerminalModule", () => {
     expect(sidebarSessionRow("日志终端")?.textContent).not.toContain("有新消息")
   })
 
-  it("marks the waiting-for-input session", async () => {
+  it("does not mark the waiting-for-input session", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
     createSession({
@@ -1542,8 +1542,9 @@ describe("TerminalModule", () => {
     await renderEmbeddedModule()
 
     const row = sidebarSessionRow("Claude 会话")
-    expect(row?.querySelector('[title="等待输入"]')).not.toBeNull()
-    expect(row?.textContent).toContain("等待输入")
+    expect(row).toBeTruthy()
+    expect(row?.querySelector('[title="等待输入"]')).toBeNull()
+    expect(row?.textContent).not.toContain("等待输入")
   })
 
   it("renames a workspace from its sidebar session row context menu", async () => {
@@ -1642,9 +1643,9 @@ describe("TerminalModule", () => {
     ].join("\n"))
   })
 
-  it("marks a session that waits for user input in the sidebar and header", async () => {
+  it.each(["running", "stopping", "ended", "failed", "lost"] as const)("omits status indicators in the sidebar and header for a %s session", async (status) => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
-    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端", status })
     createSession({
       id: "session-2",
       groupId: "group-1",
@@ -1664,16 +1665,16 @@ describe("TerminalModule", () => {
 
     await renderEmbeddedModule()
 
-    const waitingRow = sidebarSessionRow("Claude 会话")
-    expect(waitingRow?.textContent).toContain("等待输入")
-    expect(waitingRow?.querySelector('[title="等待输入"]')).toBeTruthy()
-    // 等待输入的图标替换运行状态图标，同一行不同时出现两个图标
-    expect(waitingRow?.querySelector('[title="运行中"]')).toBeFalsy()
-    expect(sidebarSessionRow("开发终端")?.textContent).not.toContain("等待输入")
-    expect(sidebarSessionRow("开发终端")?.querySelector('[title="运行中"]')).toBeTruthy()
-
-    expect(headerSessionTab("Claude 会话")?.textContent).toContain("等待输入")
-    expect(headerSessionTab("开发终端")?.textContent).not.toContain("等待输入")
+    for (const title of ["Claude 会话", "开发终端"]) {
+      const row = sidebarSessionRow(title)
+      expect(row).toBeTruthy()
+      expect(row?.textContent).not.toContain("等待输入")
+      expect(row?.querySelector("svg:not(button svg)")).toBeNull()
+    }
+    const tab = headerSessionTab("Claude 会话")
+    expect(tab).toBeTruthy()
+    expect(tab?.textContent).not.toContain("等待输入")
+    expect(tab?.querySelector("svg")).toBeNull()
   })
 
   it("renames a workspace from its header session tab context menu", async () => {
@@ -2032,7 +2033,7 @@ describe("TerminalModule", () => {
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     const main = document.body.querySelector("main")
     expect(actions?.textContent).toContain("新建")
-    expect(document.body.textContent).toContain("已失联")
+    expect(document.body.textContent).not.toContain("已失联")
     expect(main?.textContent).not.toContain("同目录新开")
     expect(main?.textContent).not.toContain("终止进程")
     expect(XtermTerminal).toHaveBeenCalledWith(expect.objectContaining({
