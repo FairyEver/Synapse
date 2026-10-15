@@ -91,6 +91,29 @@ export class SystemNotifierSettingsUnavailableError extends Error {
   }
 }
 
+/**
+ * `sync` 端口的入参形状：把一条系统通知映射成一次账号写入。
+ *
+ * 单独提出来是因为这里是这条链路上唯一逐字段挑的地方 —— `trigger` 与 `sendToAccount`
+ * 都原样转发整个 input，只有它可能把新字段挑漏。挑漏一个，那个字段就永远到不了手机，
+ * 而且没有任何运行时症状可以追。提成纯函数，才有地方钉住它。
+ */
+export function systemNotificationAccountWrite(input: SystemNotificationInput): {
+  readonly source: "system-notifier"
+  readonly title: string
+  readonly body: string
+  readonly group?: string
+  readonly url?: string
+} {
+  return {
+    source: "system-notifier",
+    title: input.title,
+    body: input.body,
+    ...(input.url !== undefined ? { url: input.url } : {}),
+    ...(input.group !== undefined ? { group: input.group } : {}),
+  }
+}
+
 export class SystemNotifierService {
   private settingsPort?: DataNamespace<SystemNotifierSettingsEntryV3>
   private auditSink?: AuditSink

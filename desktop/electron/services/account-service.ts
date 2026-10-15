@@ -542,6 +542,8 @@ export class AccountService {
     sourceKey?: string
     title: string
     body: string
+    group?: string
+    url?: string
     targetId?: string
     deviceId?: string
   }): Promise<DesktopNotificationOutcome> {

@@ -3,6 +3,7 @@ import type { DataNamespace } from "../../../../electron/runtime/data-repo"
 import type { SystemNotifierSettingsEntryV3 } from "../../../../electron/runtime/data-repo/schemas/system-notifier"
 import {
   SystemNotifierService,
+  systemNotificationAccountWrite,
   type SystemNotifierDegradedReason,
 } from "../service"
 
@@ -401,5 +402,29 @@ describe("SystemNotifierService", () => {
     await expect(service.getSettings()).rejects.toThrow()
     service.presentAccountNotification(input)
     expect(show).toHaveBeenCalledWith({ ...input, silent: true })
+  })
+})
+
+describe("systemNotificationAccountWrite", () => {
+  it("carries the link and the group into the account write, and omits them when absent", () => {
+    // `toStrictEqual` 而不是 `toEqual`：后者忽略值为 undefined 的键，所以一个
+    // 「永远写出 url/group」的实现照样绿。
+    expect(systemNotificationAccountWrite({ title: "标题", body: "正文" })).toStrictEqual({
+      source: "system-notifier",
+      title: "标题",
+      body: "正文",
+    })
+    expect(systemNotificationAccountWrite({
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })).toStrictEqual({
+      source: "system-notifier",
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })
   })
 })

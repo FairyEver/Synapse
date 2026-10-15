@@ -245,6 +245,65 @@ describe("AccountService", () => {
       .toBe(true)
   })
 
+  it("carries a link and a group into the desktop write body", async () => {
+    // `init` 必须显式声明：下面要读 `write?.[1]`，而只写 `(url)` 的 mock 推断出的是单元组。
+    const fetch = vi.fn(async (url: unknown, _init?: RequestInit) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
+      }
+      if (String(url).includes("/notifications/")) return jsonResponse({ id: "message-1" })
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as unknown as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await service.refreshFromStorage()
+
+    await expect(service.createInternalNotification({
+      source: "system-notifier",
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })).resolves.toBe("sent")
+
+    const write = fetch.mock.calls.find(([url]) => String(url).endsWith("/notifications/desktop"))
+    expect(write).toBeDefined()
+    expect(JSON.parse(String((write?.[1] as RequestInit).body))).toMatchObject({
+      source: "system-notifier",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })
+  })
+
+  it("leaves the optional fields out of the body when the caller did not ask for them", async () => {
+    // 守的是「默认值」而不是 `undefined`：请求体经 JSON.stringify，值为 undefined 的键本来就
+    // 会被丢掉，所以接线处写成 `url: input.url` 也算不出差别。真正会漏到服务端的是
+    // `group: input.group ?? ""` 这类兜底 —— 它序列化后还在，而服务端 schema 是 .strict()。
+    const fetch = vi.fn(async (url: unknown, _init?: RequestInit) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
+      }
+      if (String(url).includes("/notifications/")) return jsonResponse({ id: "message-1" })
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as unknown as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await service.refreshFromStorage()
+
+    await service.createInternalNotification({ source: "system-notifier", title: "标题", body: "正文" })
+
+    const write = fetch.mock.calls.find(([url]) => String(url).endsWith("/notifications/desktop"))
+    const body = JSON.parse(String((write?.[1] as RequestInit).body))
+    expect(body).not.toHaveProperty("url")
+    expect(body).not.toHaveProperty("group")
+  })
+
   it("starts login by persisting an attempt and opening the browser", async () => {
     const { namespace, openExternal, service } = await createTestAccountService()
     const result = await service.startLogin()

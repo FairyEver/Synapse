@@ -73,7 +73,10 @@ import {
 } from "../../app-capabilities/text-extractor/main/service"
 import { createElectronSystemNotificationAdapter } from "../../app-capabilities/system-notifier/main/adapter"
 import { createSystemNotifierCapabilityDispatcher } from "../../app-capabilities/system-notifier/main/dispatcher"
-import { SystemNotifierService } from "../../app-capabilities/system-notifier/main/service"
+import {
+  SystemNotifierService,
+  systemNotificationAccountWrite,
+} from "../../app-capabilities/system-notifier/main/service"
 import {
   SYSTEM_NOTIFIER_SERVICE_ID,
   SYSTEM_NOTIFIER_SETTINGS_NAMESPACE,
@@ -862,11 +865,7 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
       // 不带 `deviceId`：这条消息不属于「某台机器的本机通知」，它属于账号。带上它反而会让
       // 发起的那台电脑在回显时把自己挡掉（`live-connection-service` 用它做本机去重），
       // 于是不得不在触发路径上再弹一次 —— 触发路径只负责发，本机弹窗由收到消息产生。
-      sync: (input) => accountService.createInternalNotification({
-        source: "system-notifier",
-        title: input.title,
-        body: input.body,
-      }),
+      sync: (input) => accountService.createInternalNotification(systemNotificationAccountWrite(input)),
       auditSink: optionalSystemNotifierPort(
         () => ctx.registry.get<AuditSink>("core.audit-sink"),
       ),
