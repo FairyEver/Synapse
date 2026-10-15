@@ -1398,17 +1398,20 @@ Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`
 - System Notifier 的触发工具 2026-10-15 起增加可选 `copyOnTap`（布尔，缺省 false）：为真时用户在手机上点这条通知即把正文复制到剪贴板。桌面端另在消息中心详情提供「复制正文」，iOS 端在通知详情提供同一入口，两者对任何通知都可用、不读这个开关。开放 API 的两个请求体形状接受同名布尔，路径式用 `?copyOnTap=1`（只认字面量 `1`）。**MCP 工具数不变（仍 1）**，Workflow 节点仍为 1，Automation Action 与 Deep Link 无新增，三张表的注册数量都不动；能力版本仍为 `1.0.0`。
 ```
 
-`docs/agents/module-boundaries.md` 的开放 API 段：把「不支持…复制动作…」改成只列仍然不支持的项，并写明现在支持的是哪一种复制。
+`docs/agents/module-boundaries.md` 的开放 API 段：把「不支持…复制动作…」改成只列仍然不支持的项，并写明现在支持的是哪一种复制。**同时写明这个开关是 JSON 请求体字段**：请求体两种形状走 `application/x-www-form-urlencoded` 时无法表达它——`express.urlencoded` 把值都给成字符串，`z.boolean()` 会 400 掉整条通知。这是本轮有意留下的边界（spec 写的是可选 `copyOnTap: boolean`，仓库既有姿态也是严格布尔），不修代码，但必须让读接口文档的人知道。
 
 `docs/superpowers/specs/2026-09-23-account-notification-center-design.md:35`：那句不支持清单里删掉「复制动作」，并加一条带日期的修订说明，指明只放开了「点按复制正文」一项，图片、铃声、重要警告、持续响铃、推送加密、自定义 TTL、多服务器与 Bark URL 兼容继续不支持；权威设计见 `2026-10-15-notification-tap-to-copy-design.md`。
 
 - [ ] **Step 5: 发布说明**
 
-`RELEASE_NOTES_PENDING.md` 追加一条面向用户的说明（说「得到什么」，不写路径与实现）：
+`RELEASE_NOTES_PENDING.md` 追加两条面向用户的说明（说「得到什么」与「什么变了」，不写路径与实现）：
 
 ```md
 - 通知现在可以点一下就复制正文。对方发来一段文字，你在手机上点一下通知就拿到了它，不用打开应用手动选中。
+- 工作流的发送通知节点新增「点按复制正文」开关。工作流文档格式随之升到 2.9.1：用这一版重存过的工作流，在更旧的桌面版本上会打不开（即使那条工作流没用过这个开关）。
 ```
+
+第二条不能省：它是本次改动里唯一用户看得见、且会让人觉得「东西坏了」的兼容性变化。
 
 - [ ] **Step 6: 提交**
 
