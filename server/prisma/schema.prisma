@@ -98,6 +98,7 @@ model UserNotification {
   body        String    @db.VarChar(512)
   group       String?   @db.VarChar(64)
   url         String?   @db.VarChar(2048)
+  copyOnTap   Boolean   @default(false)
   level       String    @db.VarChar(20)
   targetId    String?   @db.VarChar(120)
   deviceId    String?   @db.VarChar(120)

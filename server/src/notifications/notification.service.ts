@@ -20,6 +20,7 @@ export type CreateNotificationInput = {
   body: string
   group?: string
   url?: string
+  copyOnTap?: boolean
   level?: NotificationLevel
   targetId?: string
   deviceId?: string
@@ -49,8 +50,8 @@ export class NotificationService implements OnModuleInit {
       where: { userId_sourceKey: { userId: input.userId, sourceKey: input.sourceKey } },
       update: {},
       create: { userId: input.userId, source: input.source, sourceKey: input.sourceKey, title: input.title.slice(0, 64),
-        body: input.body.slice(0, 512), group: input.group, url: input.url, level: input.level ?? "active",
-        targetId: input.targetId, deviceId: input.deviceId },
+        body: input.body.slice(0, 512), group: input.group, url: input.url, copyOnTap: input.copyOnTap,
+        level: input.level ?? "active", targetId: input.targetId, deviceId: input.deviceId },
     })
   }
 
@@ -65,7 +66,7 @@ export class NotificationService implements OnModuleInit {
     this.mobiles.sendToMobileClients({ userId, message })
     if (result?.failedClientCount > 0) throw new Error("NOTIFICATION_LIVE_DELIVERY_FAILED")
     if (record.level === "passive") return
-    const outcome = await this.push.sendNotification(userId, { id: record.id, title: record.title, body: record.body, level: record.level as NotificationLevel, group: record.group }, signal)
+    const outcome = await this.push.sendNotification(userId, { id: record.id, title: record.title, body: record.body, level: record.level as NotificationLevel, group: record.group, copyOnTap: record.copyOnTap }, signal)
     if (outcome.failed > 0 || outcome.skipped) throw new Error("NOTIFICATION_PUSH_DELIVERY_FAILED")
   }
 
@@ -87,6 +88,7 @@ export class NotificationService implements OnModuleInit {
           body: input.body.slice(0, 512),
           group: input.group,
           url: input.url,
+          copyOnTap: input.copyOnTap,
           level: input.level ?? "active",
           targetId: input.targetId,
           deviceId: input.deviceId,
@@ -119,6 +121,7 @@ export class NotificationService implements OnModuleInit {
           body: record.body,
           level: record.level as NotificationLevel,
           group: record.group,
+          copyOnTap: record.copyOnTap,
         })
       void delivery.catch((error: unknown) => {
         this.logger.warn({ reason: error instanceof Error ? error.name : typeof error }, "Notification APNs delivery failed")

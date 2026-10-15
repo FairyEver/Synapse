@@ -6,7 +6,7 @@ import { NotificationService } from "./notification.service"
 const createdAt = new Date("2026-09-23T08:00:00.000Z")
 const record: UserNotification = {
   id: "message-1", userId: "user-1", source: "external", sourceKey: "external:key:request",
-  title: "部署完成", body: "已更新", group: null, url: null, level: "active",
+  title: "部署完成", body: "已更新", group: null, url: null, copyOnTap: false, level: "active",
   targetId: null, deviceId: null, readAt: null, resolvedAt: null, deletedAt: null, createdAt,
 }
 
@@ -212,5 +212,48 @@ describe("NotificationService", () => {
       data: { deletedAt: expect.any(Date) },
     })
     expect(desktops.broadcastToUser).toHaveBeenCalledTimes(2)
+  })
+
+  it("writes copyOnTap through to storage", async () => {
+    const { service, prisma } = harness()
+    await service.create({ userId: "user-1", source: "system-notifier", title: "绕口令", body: "四是四", copyOnTap: true })
+    expect(prisma.userNotification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ copyOnTap: true }),
+    })
+  })
+
+  it("carries the stored flag into the phone push", async () => {
+    const { service, prisma, push } = harness()
+    prisma.userNotification.create.mockResolvedValueOnce({ ...record, source: "system-notifier", copyOnTap: true })
+    await service.create({ userId: "user-1", source: "system-notifier", title: "绕口令", body: "四是四", copyOnTap: true })
+    // 首次投递这条调用不带 signal，所以断言只有两个参数。
+    expect(push.sendNotification).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ copyOnTap: true }),
+    )
+  })
+
+  it("keeps a passive copyable message in the account without pushing it", async () => {
+    const { service, prisma, push } = harness()
+    prisma.userNotification.create.mockResolvedValueOnce({ ...record, source: "system-notifier", level: "passive", copyOnTap: true })
+    await service.create({ userId: "user-1", source: "system-notifier", title: "绕口令", body: "四是四", copyOnTap: true })
+    expect(prisma.userNotification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ copyOnTap: true }),
+    })
+    expect(push.sendNotification).not.toHaveBeenCalled()
+  })
+
+  it("forwards the stored flag when a retry redelivers the message", async () => {
+    const { service, prisma, push } = harness()
+    // 夹具里推送默认是抛异常的；这一条要走到断言，先让这一次投递成功。
+    push.sendNotification.mockImplementationOnce(async () => ({ sent: 1, failed: 0, skipped: false }) as never)
+    prisma.userNotification.findFirst.mockResolvedValueOnce({ ...record, source: "system-notifier", copyOnTap: true })
+    await service.deliverCommitted("user-1", "message-1")
+    // 重投这条走 record 而不是入参；补投递会把 signal 一起传下去，所以这里是三个参数。
+    expect(push.sendNotification).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ copyOnTap: true }),
+      undefined,
+    )
   })
 })

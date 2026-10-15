@@ -34,6 +34,12 @@ function stubApns(response: { status: number; body?: string }) {
   return { client, request }
 }
 
+/** 取最后一次发给 APNs 的 payload。`request.end` 是 `vi.fn`，参数就是 JSON 字符串。 */
+function lastPayload(request: EventEmitter & Record<string, unknown>): Record<string, unknown> {
+  const calls = (request.end as { mock: { calls: unknown[][] } }).mock.calls
+  return JSON.parse(String(calls.at(-1)?.[0])) as Record<string, unknown>
+}
+
 function makeService(targets: Array<{ token: string }> = [{ token: "device-token-one" }]) {
   const devices = {
     listPushTargets: vi.fn(async () => targets.map((target) => ({ clientInstanceId: "instance-1", ...target }))),
@@ -43,7 +49,7 @@ function makeService(targets: Array<{ token: string }> = [{ token: "device-token
   return { service: new MobilePushService(devices as never), devices }
 }
 
-const push = { title: "标题", body: "正文", level: "active" as const, group: null, id: "n1" }
+const push = { title: "标题", body: "正文", level: "active" as const, group: null, id: "n1", copyOnTap: false }
 
 beforeEach(() => {
   const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" })
@@ -171,5 +177,17 @@ describe("MobilePushService", () => {
     expect(connectMock).toHaveBeenCalledOnce()
     expect(devices.dropPushToken).not.toHaveBeenCalled()
     await delivery
+  })
+
+  it("puts copyOnTap in the payload root so the phone can read it back", async () => {
+    const { service } = makeService()
+    const { request } = stubApns({ status: 200 })
+
+    await service.sendNotification("user-1", { ...push, copyOnTap: true })
+
+    const payload = lastPayload(request)
+    expect(payload.copyOnTap).toBe(true)
+    // 复制发生在 App 里，投递途中不改写内容，所以不需要 service extension。
+    expect(payload.aps).not.toHaveProperty("mutable-content")
   })
 })

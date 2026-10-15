@@ -1,0 +1,1 @@
+ALTER TABLE "UserNotification" ADD COLUMN "copyOnTap" BOOLEAN NOT NULL DEFAULT false;

@@ -39,6 +39,21 @@ describe("NotificationController", () => {
     expect(service.markRead).toHaveBeenNthCalledWith(2, "reader", "n1", false)
     await expect(endpoint.markRead(request as never, "n1", { read: "false" })).rejects.toMatchObject({ status: 400 })
   })
+
+  it("rejects a non-boolean copyOnTap on the desktop write path", async () => {
+    const service = { create: vi.fn(async () => ({ id: "n1", createdAt: new Date("2026-10-15T08:00:00Z") })) }
+    const endpoint = new NotificationController(service as never)
+    const request = { user: { id: "writer" } }
+
+    await endpoint.createFromDesktop(request as never, {
+      source: "system-notifier", title: "标题", body: "正文", copyOnTap: true,
+    })
+    expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
+
+    await expect(endpoint.createFromDesktop(request as never, {
+      source: "system-notifier", title: "标题", body: "正文", copyOnTap: "true",
+    })).rejects.toMatchObject({ status: 400 })
+  })
 })
 
 describe("OpenNotificationController", () => {

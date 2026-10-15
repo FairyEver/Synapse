@@ -56,6 +56,7 @@ const desktopWriteSchema = z.object({
   // 链接与分组复用开放 API 的同一份 schema：同一条消息不该因为传参形状不同被区别对待。
   group: notificationGroupSchema.optional(),
   url: notificationUrlSchema.optional(),
+  copyOnTap: z.boolean().optional(),
   targetId: z.string().min(1).max(120).optional(),
   deviceId: z.string().min(1).max(120).optional(),
 }).strict()

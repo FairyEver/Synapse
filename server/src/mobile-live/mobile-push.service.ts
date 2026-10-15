@@ -140,13 +140,15 @@ export class MobilePushService {
     body: string
     level: "active" | "passive" | "timeSensitive"
     group: string | null
+    /** 用户在手机上点这条通知时，App 会把正文复制到剪贴板。 */
+    copyOnTap: boolean
   }, signal?: AbortSignal): Promise<PushOutcome> {
     return this.sendToAllDevices(userId, {
       title: push.title,
       body: push.body,
       category: "SYNAPSE_NOTIFICATION",
       threadId: push.group ?? push.id,
-      data: { notificationId: push.id, notificationLevel: push.level },
+      data: { notificationId: push.id, notificationLevel: push.level, copyOnTap: push.copyOnTap },
       level: push.level,
     }, signal)
   }
