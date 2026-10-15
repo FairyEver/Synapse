@@ -12,8 +12,9 @@
 
 ## Global Constraints
 
-- `url` 只允许 **https**，长度 **≤2048**；`group` 长度 **≤64 码点**，且不得带首尾空白、控制字符、孤立代理项。
-- 这三个限制必须在**三处**同时成立：MCP 工具 `inputSchema`、桌面 `validateSystemNotificationInput`、服务端 `desktopWriteSchema`。只收紧一层等于没收紧。
+- `url` 只允许 **https**，长度 **≤2048**；`group` 长度 **≤64**，且不得带首尾空白、控制字符、孤立代理项。
+- **长度按 UTF-16 码元计**，与服务端 zod 的 `.max()` 一致。桌面侧原本的 `validateField` 按码点数，两者对增补平面字符（emoji 等）会差一倍——所以桌面在码点检查之外**还要**卡一次码元数，保证「桌面放行 ⇒ 服务端放行」。
+- 这三个限制必须在**三处**同时成立：MCP 工具 `inputSchema`、桌面 `validateSystemNotificationInput`、服务端 `desktopWriteSchema`。只收紧一层等于没收紧；反过来，客户端比服务端**宽**同样是漏洞。
 - `url` 与 `group` **都可选**。不传时输出里不出现该键（不要写 `undefined`）。
 - **不新增** `source`；**不暴露** `level`；**不暴露** `sourceKey`。
 - `desktopWriteSchema` 的 `.strict()` 与 `DESKTOP_NOTIFICATION_SOURCES` 白名单**必须保留**——那是授权边界。
@@ -28,7 +29,7 @@
 |---|---|---|
 | 1 | AI 把带 `?password=` / `token=` 的分享地址当 `url` 传进来 | Skill 明确禁止（Task 5）。服务端明文留存与今天开放 API 同级，**锁屏不受影响**（APNs payload 不含 url）。这是**接受项，没有测试**——不假装有一条守得住它的断言。 |
 | 2 | `url` 传 `http://` / `ftp://` / 根本不是 URL | 三处都拒。Task 1 覆盖服务端，Task 2 覆盖桌面（报 `not_https`）。**不能**只在服务端拒。 |
-| 3 | `url` 超 2048、`group` 超 64 码点 | 报 `too_long`，且**没有半条进任何存储**。Task 1 覆盖 `group` 65 字，Task 2 两者都覆盖。 |
+| 3 | `url` 超 2048、`group` 超 64；以及**用 emoji 之类增补平面字符把码元数顶过 64 而码点数没超** | 都报 `too_long`，且**没有半条进任何存储**。Task 1 覆盖 `group` 65 字；Task 2 覆盖 `group` 65 字与 33 个 emoji（33 码点 / 66 码元）。 |
 | 4 | `group` 里带换行或控制字符 | 桌面侧报 `forbidden_character`（Task 2）。⚠️ 服务端 `notificationGroupSchema` 只有 trim + 长度，**不带控制字符检查**——这是开放 API 今天就有的状态，本次不扩大也不顺手补：`group` 的唯一写入方是桌面路径，而桌面已经拦下。若将来有第二个写入方，这里要一起补。 |
 | 5 | 版本错配：新桌面 + 旧手机（或反之） | 不崩。Task 7 有回归位断言 `toLineWire` 不再产出第三项；手机端解码顺序保持「text → runs」，多余的第三项被自然忽略。 |
 
@@ -205,6 +206,9 @@ cd /Users/liyang/Documents/code/github/Synapse && git add server/src/open-api/op
     [{ title: "标题", body: "正文", group: " 云盘分享" }, "group", "leading_or_trailing_whitespace"],
     [{ title: "标题", body: "正文", group: "" }, "group", "required"],
     [{ title: "标题", body: "正文", group: "云".repeat(65) }, "group", "too_long"],
+    // 33 个 emoji 是 33 个码点、66 个 UTF-16 码元：码点检查放过它，码元检查必须拦下。
+    // 服务端 zod 的 `.max(64)` 数的是码元，桌面只数码点就会比服务端宽。
+    [{ title: "标题", body: "正文", group: "😀".repeat(33) }, "group", "too_long"],
     [{ title: "标题", body: "正文", group: null }, "group", "type"],
     [{ title: "标题", body: "正文", level: "passive" }, "request", "unknown_field"],
   ])("rejects an unusable link or group at %#", (input, field, reason) => {
@@ -321,6 +325,10 @@ function validateOptionalField(
   if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
   if (/[\p{Cc}  ]/u.test(value)) return invalid(field, "forbidden_character")
   if ([...value].length > maxCodePoints) return invalid(field, "too_long")
+  // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点。33 个 emoji 是 33 码点、66 码元：
+  // 只数码点就会放行，然后在服务端被打回来，而调用方早已被告知成功。两道都卡，
+  // 「桌面放行 ⇒ 服务端放行」才成立。
+  if (value.length > maxCodePoints) return invalid(field, "too_long")
   return null
 }
 
