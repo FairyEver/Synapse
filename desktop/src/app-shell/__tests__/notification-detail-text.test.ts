@@ -44,6 +44,23 @@ describe("notificationDetailText", () => {
     expect(notificationDetailText(item, null)).toBe("评论原文\n原文\n\n回复对象 · 某人\n被回复的内容\n\n回复\n本次回复")
   })
 
+  it("labels an image original as 评论图片", () => {
+    const item = notification({
+      source: "drive-discussion",
+      driveDiscussion: {
+        kind: "annotation",
+        action: "replied",
+        snapshot: {
+          detailTitle: "文档标题",
+          content: "本次回复",
+          original: { kind: "image", text: "图片说明" },
+          replyTo: { authorName: "某人", content: "被回复的内容" },
+        },
+      },
+    })
+    expect(notificationDetailText(item, null)).toBe("评论图片\n图片说明\n\n回复对象 · 某人\n被回复的内容\n\n回复\n本次回复")
+  })
+
   it("falls back to the body when the snapshot is missing", () => {
     const item = notification({ source: "drive-discussion", driveDiscussion: { kind: "annotation", action: "created" } })
     expect(notificationDetailText(item, null)).toBe("正文")

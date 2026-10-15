@@ -14,7 +14,7 @@
 
 - **上线顺序：服务端 → 桌面端 → iOS，不能乱。** 服务端 `desktopWriteSchema` 是 `.strict()`，旧服务端收到带 `copyOnTap` 的桌面请求会直接 400；反方向（旧 iOS 读新 payload）只多一个被忽略的键，安全。
 - **能力版本不 bump。** 仍是 `app.system_notifier.notification.trigger@1.0.0`（`desktop/app-capabilities/system-notifier/shared/capability.ts:13`）。MCP 工具数仍为 1，Workflow 节点数仍为 1，Deep Link 与 Automation Action 无新增。
-- **`copyOnTap` 只带 `true`。** `false` 与字段缺省在每个层面都是同一件事；任何一层写 `copyOnTap: false` 都是错的。
+- **任何一层都不得因 `copyOnTap` 是 `false` 还是字段缺省而分支。** 两者在每个层面都是同一件事：缺省就是关。写入侧（MCP / Workflow / 开放 API）只在为真时才带这个键，从不写 `copyOnTap: false`；而一旦落成库里的那一行，APNs payload 就**如实镜像**它 —— 非复制通知带的就是 `false`。那是如实镜像，不是「多写的错值」：删掉它没有任何收益，只会引入一条没被测过的路径。读这个键的客户端（iOS）把 `false` 与键缺席当同一件事处理。
 - **复制只含 `body`，不含 `title`。**
 - **只接受布尔真值。** iOS 端 `userInfo["copyOnTap"]` 必须 `as? Bool == true` 才算数，字符串一律按假（避免 `"false"` 被当成真）。
 - **开放 API 的 query 只认字面量 `1`。** 其余任何值一律按关处理，不报错——那条形状的全部价值就是「粘上去就能用」。

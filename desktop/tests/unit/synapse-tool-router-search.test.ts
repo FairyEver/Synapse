@@ -75,6 +75,10 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "构建完叫我一声", expect: "app_system_notifier_notification_trigger" },
   { intent: "结果推到我手机上", expect: "app_system_notifier_notification_trigger" },
   { intent: "把链接发我手机上", expect: "app_system_notifier_notification_trigger" },
+  // 「复制正文」那一层的口语说法。词表里没有「复制」，它只有描述里那句原话一条腿
+  // （`Chinese intent: 复制给我, 写一段发我手机上`），所以这条钉住的是那句话本身还在不在：
+  // 描述里删掉它，这里就红。
+  { intent: "复制给我", expect: "app_system_notifier_notification_trigger" },
 
   // ---- 其余 domain (13)：只证明没被完全挤出 ----
   { intent: "数据库里有哪些表", expect: "app_database_table_list" },

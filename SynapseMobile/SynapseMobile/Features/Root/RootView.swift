@@ -502,6 +502,15 @@ struct RootView: View {
     private func handleRoute(_ destination: NotificationRouter.Destination?) {
         // 复制在 AppDelegate 里已经发生，这里只负责把提示说出来。用 defer 是因为它同时
         // 覆盖「有目标可去」和「没什么可去」两条路 —— 没有目标不等于没复制过。
+        //
+        // 这个值**必须先取到局部常量**，不能等 defer 里现读 `consumeCopiedBody()`：下面
+        // 那条有目标的路会走 `beginNavigationRequest()`，而它调的
+        // `NotificationRouter.discard()` 会把这个一次性标记一并清掉。改成现读，代码读起来
+        // 等价，却会在每条有目标的路上静默吞掉提示，而没有任何测试会红。
+        //
+        // 这个一次性标记由**每一处** `handleRoute` 调用消费，不只来自通知点按的那两处。
+        // 于是它还有一种走法：标记在未登录状态下被设上、而当时没走到这里（那两处都先判
+        // 登录态），它会留到下一次路由才冒出来一次。
         let copiedBody = NotificationRouter.shared.consumeCopiedBody()
         defer { if copiedBody { model.notice("已复制正文", tone: .success) } }
 

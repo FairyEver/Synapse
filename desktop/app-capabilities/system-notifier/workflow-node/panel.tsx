@@ -46,7 +46,7 @@ export function SystemNotifierNodePanel({
             <Label htmlFor="system-notifier-node-copy-on-tap" className="text-xs font-normal">点按复制正文</Label>
             <Switch
               id="system-notifier-node-copy-on-tap"
-              checked={typedConfig.copyOnTap}
+              checked={typedConfig.copyOnTap ?? false}
               onCheckedChange={(checked) => commit({ copyOnTap: checked === true })}
             />
           </div>

@@ -97,8 +97,11 @@ async function copyNotificationId(item: SynapseNotification) {
 }
 
 async function copyNotificationBody(item: SynapseNotification, mailBody: string | null) {
+  const text = notificationDetailText(item, mailBody)
+  // 空正文不能写进剪贴板：那一下会把用户原有的内容清掉，却照样弹「正文已复制」。
+  if (!text) { toast.error("没有可复制的正文"); return }
   try {
-    await navigator.clipboard.writeText(notificationDetailText(item, mailBody))
+    await navigator.clipboard.writeText(text)
     toast("正文已复制")
   } catch { toast.error("复制失败") }
 }

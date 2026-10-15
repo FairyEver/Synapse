@@ -37,6 +37,18 @@ struct NotificationDetailTextTests {
         #expect(NotificationDetailText.value(for: item) == "评论原文\n原文\n\n回复对象 · 某人\n被回复的内容\n\n回复\n本次回复")
     }
 
+    @Test func labelsAnImageOriginalAsCommentImage() {
+        let item = notification(
+            source: "drive-discussion",
+            driveDiscussion: DriveDiscussionNotificationMetadata(
+                kind: "annotation",
+                action: "replied",
+                snapshot: .init(detailTitle: "文档标题", content: "本次回复", original: .init(kind: "image", text: "图片说明"), replyTo: .init(authorName: "某人", content: "被回复的内容"))
+            )
+        )
+        #expect(NotificationDetailText.value(for: item) == "评论图片\n图片说明\n\n回复对象 · 某人\n被回复的内容\n\n回复\n本次回复")
+    }
+
     @Test func fallsBackToTheBodyWhenTheSnapshotIsMissing() {
         let item = notification(source: "drive-discussion", driveDiscussion: DriveDiscussionNotificationMetadata(kind: "annotation", action: "created"))
         #expect(NotificationDetailText.value(for: item) == "正文")
