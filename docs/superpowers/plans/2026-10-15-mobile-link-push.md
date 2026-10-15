@@ -513,7 +513,7 @@ createInternalNotification 的入参扩两个可选字段，接线处按既有�
 - Test: `desktop/tests/unit/synapse-tool-router-search.test.ts`、`desktop/tests/unit/api-mcp-capability-surface.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2 的 `SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS`、`SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS`
+- Consumes: Task 2 的 `SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH`、`SYSTEM_NOTIFICATION_URL_MAX_LENGTH`（按 UTF-16 码元；`..._TITLE_MAX_CODE_POINTS` 与 `..._BODY_MAX_CODE_POINTS` 保持原名与码点语义）
 - Produces: `app_system_notifier_notification_trigger` 的 `inputSchema` 多两个可选属性，`required` 仍是 `["title", "body"]`
 
 - [ ] **Step 1: 写失败测试（schema 形状 + 检索语料）**
