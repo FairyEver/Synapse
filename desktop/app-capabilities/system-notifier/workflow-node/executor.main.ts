@@ -18,6 +18,8 @@ export const systemNotifierNodeExecutor: NodeExecutor<SystemNotifierNodeConfig> 
       const interpolated = {
         title: interpolatePromptSafely(input.config.title, input.resolvedVariables),
         body: interpolatePromptSafely(input.config.body, input.resolvedVariables),
+        // 它不是文本，没有插值可言，照 config 原样带过去。
+        ...(input.config.copyOnTap ? { copyOnTap: true } : {}),
       }
       const validation = validateSystemNotificationInput(interpolated)
       if (!validation.ok) {

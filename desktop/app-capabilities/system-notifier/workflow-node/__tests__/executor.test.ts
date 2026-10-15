@@ -134,4 +134,32 @@ describe("system notifier workflow executor", () => {
       outputs: { success: true },
     })
   })
+
+  it("asks for copy-on-tap only when the node config says so", async () => {
+    const trigger = vi.fn().mockReturnValue({ success: true })
+    const input = executionInput({
+      config: { title: "标题", body: "正文", variables: [], copyOnTap: true },
+      runtimeDeps: { resolveService: () => ({ trigger }) } as never,
+    })
+
+    await expect(systemNotifierNodeExecutor.execute(input)).resolves.toMatchObject({ status: "success" })
+
+    expect(trigger).toHaveBeenCalledWith(
+      expect.objectContaining({ copyOnTap: true }),
+      expect.anything(),
+    )
+  })
+
+  it("leaves copy-on-tap out entirely when the node config is off or absent", async () => {
+    const trigger = vi.fn().mockReturnValue({ success: true })
+    const input = executionInput({
+      config: { title: "标题", body: "正文", variables: [], copyOnTap: false },
+      runtimeDeps: { resolveService: () => ({ trigger }) } as never,
+    })
+
+    await expect(systemNotifierNodeExecutor.execute(input)).resolves.toMatchObject({ status: "success" })
+
+    const [firstCall] = trigger.mock.calls
+    expect(firstCall?.[0]).toEqual({ title: "标题", body: "正文" })
+  })
 })

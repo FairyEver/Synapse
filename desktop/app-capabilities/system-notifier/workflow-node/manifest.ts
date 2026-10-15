@@ -19,6 +19,7 @@ export const systemNotifierNodeManifest: NodeManifest<SystemNotifierNodeConfig> 
     title: "",
     body: "",
     variables: [],
+    copyOnTap: false,
   },
   ports: {
     inputs: [{ id: "in", label: "输入" }],
@@ -31,6 +32,7 @@ export const systemNotifierNodeManifest: NodeManifest<SystemNotifierNodeConfig> 
   configFields: [
     { name: "title", kind: "text", label: "标题" },
     { name: "body", kind: "text", label: "正文" },
+    { name: "copyOnTap", kind: "boolean", label: "点按复制正文" },
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
   ],
   configSchema: systemNotifierNodeConfigSchema,
