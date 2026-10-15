@@ -157,8 +157,11 @@ describe("API and MCP capability surface", () => {
     expect(tool).toBeDefined()
     expect(tool?.inputSchema.required).toEqual(["title", "body"])
     expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(["title", "body", "url", "group"])
-    // 第三层也要真的约束，不是只在 description 里说一句。`stringField` 支持 pattern。
+    // 这一层只能「声明」，不能「约束」：JSON Schema 的 maxLength 数码点，pattern 对多数
+    // 客户端也只是提示，而且本仓库没有任何一步拿 inputSchema 去校验 invoke 参数。
+    // 真正的闸门是桌面校验器与服务端 schema —— 所以这里断言的是「声明到位」，不是「守住了」。
     expect(tool?.inputSchema.properties?.url).toMatchObject({ pattern: "^https://", maxLength: 2048 })
+    expect(tool?.inputSchema.properties?.group).toMatchObject({ maxLength: 64 })
   })
 
   it("keeps the clean MCP name comparison synchronized with the registry", () => {
