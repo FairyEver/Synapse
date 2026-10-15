@@ -34,3 +34,6 @@ SynapseMobile/build/
 # Vitest 浏览器模式 —— 用例失败时落盘的截图与附件，本地产物，不应共享
 __screenshots__/
 .vitest-attachments/
+
+# 工作区草稿 —— 本地任务的分析产物与中间材料，机器本地，不应共享
+work/
