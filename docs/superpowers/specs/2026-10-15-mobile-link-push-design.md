@@ -141,7 +141,7 @@ Skill 现在有一条规则：title/body 不得出现 Token、密码、验证码
 | 桌面 | `desktop/electron/services/mobile-gateway/frame-builder.ts:176-180` | 位打包，`toLineWire` 回到 `[text, runs]` |
 | 桌面 | `desktop/app-capabilities/terminal/main/emulator.ts:40,42,379-385` | `TerminalStyledLine` 的两个可选字段与产者逻辑 |
 
-`desktop/electron/services/mobile-gateway/line-window-tracker.ts` 的 `lineEquals` 参与这一改动，随字段调整。
+`desktop/electron/services/mobile-gateway/line-window-tracker.ts` 的 `lineEquals` **不需要动**。设计时以为它会随字段调整，实作后核对：它逐项比较 `text` 与九个 run 字段，从不读这两个折行标记，删掉字段后它的比较语义逐位不变。（这条更正来自 Task 7 的审查。）
 
 ### 测试
 
