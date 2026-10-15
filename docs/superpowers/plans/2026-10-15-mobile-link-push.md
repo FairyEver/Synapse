@@ -1110,7 +1110,7 @@ cd desktop && ./node_modules/.bin/vitest run
 cd /Users/liyang/Documents/code/github/Synapse && pnpm --filter @synapse/desktop run check:hard-constraints
 ```
 
-外加 Task 6 遗留的一条：那条被裁剪的 UI 用例 `testWideTerminalKeepsItsOwnTitleAndStatusInSplitView` 只在编译层验过，需要 iPad 分屏才会真跑（`XCTSkipIf` 要求 ≥600pt）。它是「裁掉一句断言后仍然绿」的唯一证据，放在这里跑：
+外加 Task 6 遗留的一条：那条被裁剪的 UI 用例 `testWideTerminalKeepsItsOwnTitleAndStatusInSplitView` 需要 iPad 宽布局才会真跑（`XCTSkipIf` 要求 ≥600pt）。2026-10-15 已在同一台 iPadOS 18.6 上完成改动前基线与当前版对照，两侧均实际执行 1 条、通过 1 条、0 失败、0 跳过；详见 [验收记录及 26.5 失败边界](2026-10-15-mobile-link-push-ipad-acceptance.md)。运行方式：
 
 ```bash
 xcodebuild build-for-testing -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
