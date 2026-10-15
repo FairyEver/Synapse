@@ -81,6 +81,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
+
+        // 复制要排在路由前面，而且只读推送里那一段正文：用户点的是锁屏上的横幅，
+        // 那一刻可能完全没有网络、App 也可能刚被系统杀掉，回查正文的成败不该决定
+        // 这段文字到不到得了他的剪贴板。
+        if let copied = NotificationTapCopy.body(
+            from: info,
+            contentBody: response.notification.request.content.body,
+            actionIdentifier: response.actionIdentifier
+        ) {
+            Clipboard.copy(copied)
+            NotificationRouter.shared.noteCopiedBody()
+        }
+
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
            let notificationId = info["notificationId"] as? String {
             NotificationRouter.shared.route(to: .message(id: notificationId))

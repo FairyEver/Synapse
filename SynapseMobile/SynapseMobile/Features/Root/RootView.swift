@@ -500,6 +500,11 @@ struct RootView: View {
 
     /// Sends a notification tap straight to the terminal that needs attention.
     private func handleRoute(_ destination: NotificationRouter.Destination?) {
+        // 复制在 AppDelegate 里已经发生，这里只负责把提示说出来。用 defer 是因为它同时
+        // 覆盖「有目标可去」和「没什么可去」两条路 —— 没有目标不等于没复制过。
+        let copiedBody = NotificationRouter.shared.consumeCopiedBody()
+        defer { if copiedBody { model.notice("已复制正文", tone: .success) } }
+
         guard let destination else { return }
         beginNavigationRequest()
         switch destination {

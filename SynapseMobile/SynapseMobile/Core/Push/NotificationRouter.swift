@@ -36,6 +36,11 @@ final class NotificationRouter {
     /// Non-nil until the UI consumes it.
     var pending: Destination?
 
+    /// 这条通知被点开时已经把正文复制进剪贴板了，等界面有能力说话时补一句提示。
+    ///
+    /// 与 `pending` 同一个道理：复制那一刻可能还没有 scene，而提示只能由界面来说。
+    private var copiedBody = false
+
     private init() {}
 
     func route(to destination: Destination) {
@@ -47,6 +52,15 @@ final class NotificationRouter {
         return pending
     }
 
+    func noteCopiedBody() {
+        copiedBody = true
+    }
+
+    func consumeCopiedBody() -> Bool {
+        defer { copiedBody = false }
+        return copiedBody
+    }
+
     /// 丢掉一条还没被消费的去向。
     ///
     /// 退出登录要用：这条通知可能是上一个账号还在时收到、点开、停在那里的，它指的
@@ -54,6 +68,7 @@ final class NotificationRouter {
     /// 而那里只会说「这个终端打不开」——一句话都说明不了。
     func discard() {
         pending = nil
+        copiedBody = false
     }
 }
 
