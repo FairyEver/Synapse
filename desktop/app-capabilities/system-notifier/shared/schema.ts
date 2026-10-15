@@ -2,8 +2,12 @@ import { z } from "zod"
 
 export const SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS = 64
 export const SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS = 256
-export const SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS = 64
-export const SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS = 2048
+/**
+ * url 与 group 按 UTF-16 码元卡，与服务端 zod 的 `.max()` 同一把尺子，所以名字用 LENGTH
+ * 而不是 CODE_POINTS。上面 title / body 两个常量保持码点语义，不受本次改动影响。
+ */
+export const SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH = 64
+export const SYSTEM_NOTIFICATION_URL_MAX_LENGTH = 2048
 
 export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body", "url", "group"] as const
 export const SYSTEM_NOTIFICATION_INVALID_REASONS = [
@@ -100,10 +104,10 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   const bodyError = validateField(request, "body", SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS)
   if (bodyError) return bodyError
   // url 先于 group：链接是这条消息的目的，标签只是装饰，先报前者。
-  const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS)
+  const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_LENGTH)
   if (urlError) return urlError
   if (request.url !== undefined && !isHttpsUrl(request.url as string)) return invalid("url", "not_https")
-  const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS)
+  const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH)
   if (groupError) return groupError
 
   return {
@@ -141,7 +145,7 @@ function validateField(
 function validateOptionalField(
   request: Record<string, unknown>,
   field: "url" | "group",
-  maxCodePoints: number,
+  maxLength: number,
 ): SystemNotificationInvalidInput | null {
   if (!(field in request) || request[field] === undefined) return null
   const value = request[field]
@@ -150,11 +154,11 @@ function validateOptionalField(
   if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
   if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
   if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
-  if ([...value].length > maxCodePoints) return invalid(field, "too_long")
-  // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点。33 个 emoji 是 33 码点、66 码元：
-  // 只数码点就会放行，然后在服务端被打回来，而调用方早已被告知成功。两道都卡，
-  // 「桌面放行 ⇒ 服务端放行」才成立。
-  if (value.length > maxCodePoints) return invalid(field, "too_long")
+  // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点，所以这里也按码元卡：
+  // 33 个 emoji 是 33 码点、66 码元，只数码点就会放行，然后在服务端被打回来，
+  // 而调用方早已被告知成功。码元数天然是码点数的上界，这一条同时覆盖两者，
+  // 不需要再来一遍码点检查（那会是一行永远走不到的代码）。
+  if (value.length > maxLength) return invalid(field, "too_long")
   return null
 }
 

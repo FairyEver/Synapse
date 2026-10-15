@@ -73,8 +73,10 @@ describe("system notification input", () => {
       },
     })
 
-    // 没传就不出现该键：服务端 schema 是 .strict()，写 `undefined` 只会多一种漂移。
-    expect(validateSystemNotificationInput({ title: "标题", body: "正文" })).toEqual({
+    // 没传就不出现该键。这里必须是 `toStrictEqual` 而不是 `toEqual`：vitest 的 `toEqual`
+    // 忽略值为 `undefined` 的键，一个「永远写出 url/group、但值可能是 undefined」的实现
+    // 拿它跑照样绿 —— 那这条断言就没守它声称要守的东西。
+    expect(validateSystemNotificationInput({ title: "标题", body: "正文" })).toStrictEqual({
       ok: true,
       data: { title: "标题", body: "正文" },
     })
