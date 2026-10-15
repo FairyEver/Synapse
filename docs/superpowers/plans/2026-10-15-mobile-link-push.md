@@ -14,7 +14,10 @@
 
 - `url` 只允许 **https**，长度 **≤2048**；`group` 长度 **≤64**，且不得带首尾空白、控制字符、孤立代理项。
 - **`url` 与 `group` 的长度按 UTF-16 码元计**，与服务端 zod 的 `.max()` 一致。桌面既有的 `validateField` 按码点数，两者对增补平面字符（emoji 等）会差一倍——所以新字段只走码元这一道：码元数是码点数的上界，一道就同时覆盖两者（再加一道码点检查会是一行永远走不到的代码）。
-- 这三个限制必须在**三处**同时成立：MCP 工具 `inputSchema`、桌面 `validateSystemNotificationInput`、服务端 `desktopWriteSchema`。只收紧一层等于没收紧；反过来，客户端比服务端**宽**同样是漏洞。
+- 这三个限制必须在**三处**都处理到，但三处的**能力不同**，不要把它们说成一回事：
+  - **执行**在桌面 `validateSystemNotificationInput` 与服务端 `desktopWriteSchema` 两处，两层都必须真的拒。
+  - **MCP 工具 `inputSchema` 只能声明，不能约束**：JSON Schema 的 `maxLength` 数**码点**（不是码元），`pattern` 对多数客户端也只是提示，而且这个仓库里没有任何一步拿 `inputSchema` 去校验 invoke 参数——它只喂检索索引与 `tools/list`。所以这一层对增补平面字符客观上比服务端**宽**，这是做不到，不是没做；不要在注释或描述里声称它守住了。
+  - 正因为模型从这一层学不到形状规则，`description` 必须把单行要求**写给模型看**：title / body / url / group 都是单行、无首尾空白，且增补平面字符按两个计。写在描述里它才可能不撞墙。
 - `url` 与 `group` **都可选**。不传时输出里不出现该键（不要写 `undefined`）。
 - **不新增** `source`；**不暴露** `level`；**不暴露** `sourceKey`。
 - `desktopWriteSchema` 的 `.strict()` 与 `DESKTOP_NOTIFICATION_SOURCES` 白名单**必须保留**——那是授权边界。
@@ -636,8 +639,11 @@ createInternalNotification 的入参扩两个可选字段，接线处按既有�
     expect(tool).toBeDefined()
     expect(tool?.inputSchema.required).toEqual(["title", "body"])
     expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(["title", "body", "url", "group"])
-    // 第三层也要真的约束，不是只在 description 里说一句。`stringField` 支持 pattern。
+    // 这一层只能「声明」，不能「约束」：JSON Schema 的 maxLength 数码点，pattern 对多数
+    // 客户端也只是提示，而且本仓库没有任何一步拿 inputSchema 去校验 invoke 参数。
+    // 真正的闸门是桌面校验器与服务端 schema —— 所以这里断言的是「声明到位」，不是「守住了」。
     expect(tool?.inputSchema.properties?.url).toMatchObject({ pattern: "^https://", maxLength: 2048 })
+    expect(tool?.inputSchema.properties?.group).toMatchObject({ maxLength: 64 })
   })
 ```
 
@@ -671,7 +677,7 @@ Expected: 新语料条 FAIL 或 PASS 都记录下来。`手机` 已经在 `synap
 ```ts
     {
       name: SYSTEM_NOTIFIER_TRIGGER_MCP_TOOL_NAME,
-      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it also when the user wants a link handed to their phone: pass it as url, and the notification opens that address in one tap. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上, 把链接发我手机上. title and body must be single-line text with no leading or trailing whitespace. url must be an https address with no credentials or password in it; group is a short label shown beside the title. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
+      description: "Notify the user. This computer shows a native notification, and when the desktop app is signed in and online the same message also reaches the account message center and the user's registered phones without any API key. Use it when the user asks to be notified or reminded now or at a later point, when something finishes, or on their phone or another device; these asks count even when the user never names this tool, and an active standing notification instruction covers them too. Use it also when the user wants a link handed to their phone: pass it as url, and the notification opens that address in one tap. Use it only for a request of that kind, not to volunteer progress updates. Chinese intent: 提醒我, 到点提醒我, 干完通知我, 给我手机发消息, 推到我手机上, 把链接发我手机上. title, body, url and group must all be single-line text with no leading or trailing whitespace. url must be an https address with no credentials or password in it; group is a short label shown beside the title. A successful result means Synapse accepted the fire-and-forget request; it does not mean the notification was delivered or displayed.",
       inputSchema: {
         type: "object",
         properties: {
@@ -681,11 +687,11 @@ Expected: 新语料条 FAIL 或 PASS 都记录下来。`手机` 已经在 `synap
           body: stringField("Single-line notification body with no leading or trailing whitespace.", {
             maxLength: SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
           }),
-          url: stringField("Optional single https address the user should open. It must carry no credentials or password; the address itself never reaches a lock screen.", {
+          url: stringField("Optional single https address the user should open, with no leading or trailing whitespace. An emoji or other astral character counts as two against the length limit. It must carry no credentials or password; the address itself never reaches a lock screen.", {
             maxLength: SYSTEM_NOTIFICATION_URL_MAX_LENGTH,
             pattern: "^https://",
           }),
-          group: stringField("Optional short label shown beside the title, such as the source of the link.", {
+          group: stringField("Optional short label shown beside the title, such as the source of the link, with no leading or trailing whitespace. An emoji or other astral character counts as two against the length limit.", {
             maxLength: SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
           }),
         },
@@ -745,7 +751,8 @@ other credential in its query string: the record is stored in plain text on the 
 把既有的字段规则那一条改成同时覆盖新字段：
 
 ```markdown
-- Pass exactly one non-empty, single-line `title` and `body` with no leading or trailing whitespace. The title limit is 64 Unicode code points and the body limit is 256. `url` is optional, must be `https`, and is capped at 2048; `group` is optional and capped at 64.
+- Pass exactly one non-empty, single-line `title` and `body` with no leading or trailing whitespace. The title limit is 64 Unicode code points and the body limit is 256. `url` is optional, must be `https`, and is capped at 2048; `group` is optional and capped at 64. `url` and `group` are single-line too — no leading or trailing whitespace, no line breaks — and an emoji or other astral character counts as two against their limits.
+- `url` must carry no password, token, or other credential in its query string. The record is stored in plain text on the server, and this sentence is the only thing telling you so.
 ```
 
 把既有的禁令那条按 spec 收窄——它现在字面上会把新字段一起挡掉：
