@@ -360,6 +360,9 @@ struct TerminalLine: Decodable {
     init(from decoder: Decoder) throws {
         var container = try decoder.unkeyedContainer()
         text = (try? container.decode(String.self)) ?? ""
+        // 行元组的第三位过去装折行标记，旧桌面端仍然会带上它。两端分开升级、协议版本
+        // 也没跟着动，所以解码到 `runs` 就结束、不排空容器：多出来的一位被丢掉，而不是
+        // 当成错误。
         if container.isAtEnd {
             runs = []
             return

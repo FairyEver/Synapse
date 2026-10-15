@@ -94,6 +94,51 @@ struct TerminalFrameDecodingTests {
         ])
     }
 
+    /// 旧桌面端在行元组尾部多带一位折行标记：`[文本, 样式, 折行位]`。
+    private let legacyFrameJSON = """
+    {
+      "type": "mobile.frame",
+      "id": "ad0cdaa1-0000-4000-8000-000000000002",
+      "sentAt": "2026-09-19T05:17:00.123Z",
+      "payload": {
+        "desktopClientInstanceId": "d-1",
+        "mobileClientInstanceId": "m-1",
+        "frame": {
+          "sessionId": "s-1",
+          "kind": "suffix",
+          "from": 0,
+          "total": 2,
+          "seq": 8,
+          "alt": false,
+          "truncated": false,
+          "sizeRevision": 3,
+          "cursor": { "row": 1, "col": 0, "visible": true },
+          "lines": [
+            ["hello", [], 2],
+            ["styled", [[0, 6, 2, -1, 1]], 3]
+          ]
+        }
+      }
+    }
+    """
+
+    /// 旧桌面端发来的帧必须照解不误。
+    ///
+    /// 折行标记是从行元组第三位删掉的，协议版本号没有跟着动 —— 于是必然存在「一端装了
+    /// 新包、另一端还是旧包」的窗口。这条钉住那个窗口，别让将来一次「顺手清理解码器」
+    /// 把「旧桌面端发来的帧」变成「一律解码失败」。
+    @Test func dropsASurplusThirdElementFromAnOlderDesktop() throws {
+        let payload = try decodeFrame(legacyFrameJSON)
+        let frame = payload.frame
+        #expect(frame.lines.count == 2)
+        #expect(frame.lines[0].text == "hello")
+        #expect(frame.lines[0].runs.isEmpty)
+        #expect(frame.lines[1].text == "styled")
+        #expect(frame.lines[1].runs == [
+            StyleRun(start: 0, length: 6, foreground: 2, background: -1, flags: 1)
+        ])
+    }
+
     /// 载荷类型是跟着信封上的 `type` 走的。
     ///
     /// 拿同一个信封去解成另一种载荷必须失败 —— 这条正是「先读 `type`、再解具体类型」
