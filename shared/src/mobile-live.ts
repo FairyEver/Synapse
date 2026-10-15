@@ -395,13 +395,10 @@ export const MOBILE_MESSAGE_TYPES = {
 /**
  * Compact line encoding. `runs` is omitted entirely for unstyled lines, which is
  * the overwhelming majority of log output and roughly halves the payload.
- * Optional `wrapFlags`: bit 0 continues the previous physical row, bit 1
- * continues into the next row. A wrapped unstyled row carries empty runs.
  */
 export type MobileLineWire =
   | readonly [text: string]
   | readonly [text: string, runs: readonly MobileRunWire[]]
-  | readonly [text: string, runs: readonly MobileRunWire[], wrapFlags: number]
 
 /**
  * `[startOffset, length, foreground, background, flags]`.

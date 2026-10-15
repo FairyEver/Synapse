@@ -35,6 +35,19 @@ function styled(text: string, overrides: Partial<TerminalStyledLine["runs"] exte
   } as TerminalStyledLine
 }
 
+/**
+ * A line as the wire used to describe it, wrap flags and all. `TerminalStyledLine`
+ * no longer carries those two fields, so the literal is asserted rather than
+ * annotated — which is what makes a producer that goes back to reading them fail
+ * here instead of slipping past the type checker.
+ */
+function legacyWrapped(
+  text: string,
+  wrap: { wrappedFromPrevious?: true; wrappedToNext?: true },
+): TerminalStyledLine {
+  return { text, ...wrap } as TerminalStyledLine
+}
+
 const base = {
   sessionId: "sess-1",
   kind: "suffix" as const,
@@ -59,16 +72,21 @@ describe("terminal frame builder", () => {
     ])
   })
 
-  it("carries soft-wrap direction without changing plain line tuples", () => {
-    expect(toLineWire({ text: "https://example.com/", wrappedToNext: true })).toEqual([
-      "https://example.com/", [], 2,
-    ])
-    expect(toLineWire({ text: "path", wrappedFromPrevious: true })).toEqual(["path", [], 1])
+  it("carries no soft-wrap metadata on the wire", () => {
+    expect(toLineWire(legacyWrapped("https://example.com/", { wrappedToNext: true })))
+      .toEqual(["https://example.com/"])
+    expect(toLineWire(legacyWrapped("path", { wrappedFromPrevious: true }))).toEqual(["path"])
     expect(isMobileTerminalFrame(buildTerminalFrames({
       ...base,
-      lines: [{ text: "a", wrappedToNext: true }, { text: "b", wrappedFromPrevious: true }],
+      lines: [legacyWrapped("a", { wrappedToNext: true }), legacyWrapped("b", { wrappedFromPrevious: true })],
       total: 2,
     })[0])).toBe(true)
+  })
+
+  it("never emits a third element now that no client reads wrap metadata", () => {
+    for (const line of [plain("https://example.com/"), plain("path"), plain("abcdefghij"), styled("styled")]) {
+      expect(toLineWire(line).length).toBeLessThanOrEqual(2)
+    }
   })
 
   it("packs attributes into the flag bitfield", () => {

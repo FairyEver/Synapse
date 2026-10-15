@@ -209,13 +209,13 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
 })
 
 describe("TerminalCoreEmulator styled line windows", () => {
-  it("marks both sides of a physical soft wrap", async () => {
+  it("splits a soft-wrapped row at the column boundary", async () => {
     const emulator = createTerminalCoreEmulator({ cols: 10, rows: 4, sizeRevision: 1 })
     try {
       await emulator.accept("abcdefghijklmnop", 1)
       const lines = emulator.readLineWindow({ maxLines: 4 }).lines
-      expect(lines[0]).toEqual({ text: "abcdefghij", wrappedToNext: true })
-      expect(lines[1]).toEqual({ text: "klmnop", wrappedFromPrevious: true })
+      expect(lines[0]).toEqual({ text: "abcdefghij" })
+      expect(lines[1]).toEqual({ text: "klmnop" })
     } finally {
       emulator.dispose()
     }
@@ -412,14 +412,10 @@ function referenceTrimmedCellCount(line: RawLine, scratch: RawCell): number {
   return end
 }
 
-function referenceReadStyledLine(line: RawLine | undefined, scratch: RawCell, wrappedToNext = false): TerminalStyledLine {
+function referenceReadStyledLine(line: RawLine | undefined, scratch: RawCell): TerminalStyledLine {
   if (!line) return { text: "" }
-  const wrap = {
-    ...(line.isWrapped && { wrappedFromPrevious: true as const }),
-    ...(wrappedToNext && { wrappedToNext: true as const }),
-  }
   const end = referenceTrimmedCellCount(line, scratch)
-  if (end === 0) return { text: "", ...wrap }
+  if (end === 0) return { text: "" }
 
   let text = ""
   const runs: TerminalStyledRun[] = []
@@ -495,7 +491,7 @@ function referenceReadStyledLine(line: RawLine | undefined, scratch: RawCell, wr
     text += chars
   }
   closeRun(text.length)
-  return runs.length > 0 ? { text, runs, ...wrap } : { text, ...wrap }
+  return runs.length > 0 ? { text, runs } : { text }
 }
 
 /**
@@ -521,7 +517,7 @@ function createStyledLineDiff(cols = 40, rows = 6) {
       const scratch = buffer.getNullCell()
       const expected: TerminalStyledLine[] = []
       for (let index = 0; index < buffer.length; index += 1) {
-        expected.push(referenceReadStyledLine(buffer.getLine(index), scratch, buffer.getLine(index + 1)?.isWrapped === true))
+        expected.push(referenceReadStyledLine(buffer.getLine(index), scratch))
       }
       const actual = emulator.readLineWindow({ maxLines: 10_000 }).lines
       expect(actual.length).toBe(expected.length)
