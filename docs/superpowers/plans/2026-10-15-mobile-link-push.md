@@ -1110,6 +1110,20 @@ cd desktop && ./node_modules/.bin/vitest run
 cd /Users/liyang/Documents/code/github/Synapse && pnpm --filter @synapse/desktop run check:hard-constraints
 ```
 
+外加 Task 6 遗留的一条：那条被裁剪的 UI 用例 `testWideTerminalKeepsItsOwnTitleAndStatusInSplitView` 只在编译层验过，需要 iPad 分屏才会真跑（`XCTSkipIf` 要求 ≥600pt）。它是「裁掉一句断言后仍然绿」的唯一证据，放在这里跑：
+
+```bash
+xcodebuild build-for-testing -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
+  -configuration Debug -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath SynapseMobile/build/sniffing-removal CODE_SIGNING_ALLOWED=NO
+xcodebuild test-without-building -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
+  -destination "platform=iOS Simulator,id=$IPAD_SIMULATOR_UDID" \
+  -derivedDataPath SynapseMobile/build/sniffing-removal \
+  -only-testing:SynapseMobileUITests/WorkspaceFilesUITests/testWideTerminalKeepsItsOwnTitleAndStatusInSplitView
+```
+
+⚠️ 这个套件在 iPad 上本来就有与产品无关的既有红（无障碍对比度审计与超时），所以判据是**这条用例自己的结果**，不是整轮退出码。跑之前先用同一台模拟器在本次改动**之前**的提交上取一次基线，否则分不清哪条红是既有、哪条是本次引入。
+
 Expected: 全绿。
 
 ---
