@@ -727,6 +727,8 @@ configFields 声明式渲染一个开关，执行器把它原样带进既有的�
 
 - [ ] **Step 1: 先写失败测试**
 
+**先把下面 Step 6 那一行类型补上再动手。** 本步的夹具构造的是完整的 `SynapseNotification`，而 `copyOnTap` 是必填列，所以不先加类型的话，下一步的「失败」会是一个 TS2741 类型错误，而不是我们要看的「模块不存在」。
+
 `desktop/src/app-shell/__tests__/notification-detail-text.test.ts`：
 
 ```ts
