@@ -42,6 +42,7 @@ export const openApiNotificationMessageSchema = z.object({
   group: notificationGroupSchema.optional(),
   url: notificationUrlSchema.optional(),
   level: notificationLevelSchema.default("active"),
+  copyOnTap: z.boolean().optional(),
 }).strict()
 
 /** 整体式：密钥和消息放在同一个请求体里。 */
@@ -56,11 +57,27 @@ export const openApiNotificationPathSchema = z.object({
   body: notificationBodySchema,
 })
 
-/** 路径式只允许从 query 补充这三个字段；query 沿用项目里其余查询校验的宽松做法。 */
+/**
+ * 路径式放不下 JSON 体，开关只能走 query。
+ *
+ * 只认字面量 `1`：其余任何值（`0`、空串、拼错、重复出现变成数组）一律按关处理，**不报错**
+ * —— 这条形状的全部价值就是「粘上去就能用」，不该为了一个开关把整条链接判成无效。
+ * 所以用 `z.unknown()` 接住任何形状再自己比，而不是让类型校验在那里把请求打回。
+ *
+ * 转出来的是 `true | undefined` 而不是 `true | false`：全局约定是「任何一层都不写 `false`」，
+ * 关掉与没写只能有一个表示，否则就多出一个能和数据默认值互相矛盾的位。
+ */
+const notificationCopyOnTapQuerySchema = z
+  .unknown()
+  .optional()
+  .transform((value) => (value === "1" ? true : undefined))
+
+/** 路径式只允许从 query 补充这四个字段；query 沿用项目里其余查询校验的宽松做法。 */
 export const openApiNotificationQuerySchema = z.object({
   group: notificationGroupSchema.optional(),
   url: notificationUrlSchema.optional(),
   level: notificationLevelSchema.default("active"),
+  copyOnTap: notificationCopyOnTapQuerySchema,
 })
 
 export type OpenApiNotificationMessage = z.infer<typeof openApiNotificationMessageSchema>
@@ -306,6 +323,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
           { name: "group", in: "query", required: false, schema: { type: "string", minLength: 1, maxLength: 64 } },
           { name: "url", in: "query", required: false, schema: { type: "string", format: "uri", maxLength: 2048, pattern: "^https:" } },
           { name: "level", in: "query", required: false, schema: { type: "string", enum: ["active", "passive", "timeSensitive"], default: "active" } },
+          { name: "copyOnTap", in: "query", required: false, description: "传 `1` 时，用户在手机上点这条通知即把正文复制到剪贴板。", schema: { type: "string", enum: ["1"] } },
           idempotencyKeyParameter,
         ],
         responses: notificationPathResponses,

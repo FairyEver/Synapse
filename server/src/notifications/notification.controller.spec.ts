@@ -132,6 +132,36 @@ describe("OpenNotificationController", () => {
       .rejects.toMatchObject({ statusCode: 405, code: "METHOD_NOT_ALLOWED" })
     expect(service.create).not.toHaveBeenCalled()
   })
+
+  it("sends copyOnTap through both request-body shapes", async () => {
+    const { controller: endpoint, service, request } = controller()
+    const message = { title: "标题", body: "正文", copyOnTap: true }
+
+    // 整体式：密钥与消息在同一个请求体里。
+    await endpoint.createWithKeyInBody(request as never, { ...message, key: exampleKey })
+    expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
+
+    // 表单式：密钥是 URL 段，消息来自请求体。
+    await endpoint.createWithKeyInPath(request as never, message)
+    expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
+  })
+
+  it("treats only a literal 1 in the path shape's query as copy-on-tap", async () => {
+    const { controller: endpoint, service, request } = controller()
+    const path = { key: exampleKey, title: "标题", body: "正文" }
+
+    await endpoint.createFromPath(request as never, path, { copyOnTap: "1" })
+    expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
+
+    // 拼错、留空、重复成数组都按缺省处理：这条形状的价值是粘上去就能用，
+    // 不该因为一个开关把整条链接判成无效。断言的是「没有 true」，不是「等于 false」——
+    // 关掉与没写只有一个表示。
+    for (const wrong of ["yes", "", "0", ["1", "0"]]) {
+      await endpoint.createFromPath(request as never, path, { copyOnTap: wrong })
+      const lastInput = service.create.mock.calls.at(-1)?.[0] as Record<string, unknown>
+      expect(lastInput.copyOnTap).toBeUndefined()
+    }
+  })
 })
 
 describe("notification throttle key", () => {

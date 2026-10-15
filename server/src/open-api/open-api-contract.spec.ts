@@ -129,9 +129,9 @@ describe("Open API machine-readable contract", () => {
       expect(operation.security).toEqual([])
       expect(operation["x-required-scope"]).toBe("notification.send")
     }
-    // 路径式必须能从 query 补充分组、链接和级别。
+    // 路径式必须能从 query 补充分组、链接、级别和点按复制开关。
     expect(paths[OPEN_API_NOTIFICATION_PATH_SEND_PATH].get.parameters.map((parameter) => parameter.name))
-      .toEqual(["key", "title", "body", "group", "url", "level", "Idempotency-Key"])
+      .toEqual(["key", "title", "body", "group", "url", "level", "copyOnTap", "Idempotency-Key"])
     // HEAD 探测不该触发推送，所以这条形状额外声明 405。
     expect(Object.keys(paths[OPEN_API_NOTIFICATION_PATH_SEND_PATH].get.responses)).toContain("405")
     expect(contractDocument.components.schemas.ErrorResponse).toMatchObject({
