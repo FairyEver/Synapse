@@ -43,7 +43,7 @@ describe("system notification input", () => {
     })
   })
 
-  it("uses request, title, body and field checks in the fixed first-error order", () => {
+  it("uses request, title, body, url, group and field checks in the fixed first-error order", () => {
     expect(invalid({ title: 42, body: "\n", extra: true }).data).toEqual({
       field: "request",
       reason: "unknown_field",
@@ -52,6 +52,53 @@ describe("system notification input", () => {
       field: "title",
       reason: "type",
     })
+    // url 排在 group 之前：先报链接再报标签，模型一次只会看到一条。
+    expect(invalid({ title: "标题", body: "正文", url: "http://x/", group: "" }).data)
+      .toEqual({ field: "url", reason: "not_https" })
+  })
+
+  it("carries an optional link and group, and omits them when absent", () => {
+    expect(validateSystemNotificationInput({
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })).toEqual({
+      ok: true,
+      data: {
+        title: "周报已生成",
+        body: "点开查看完整报告",
+        group: "云盘分享",
+        url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+      },
+    })
+
+    // 没传就不出现该键：服务端 schema 是 .strict()，写 `undefined` 只会多一种漂移。
+    expect(validateSystemNotificationInput({ title: "标题", body: "正文" })).toEqual({
+      ok: true,
+      data: { title: "标题", body: "正文" },
+    })
+  })
+
+  it.each([
+    [{ title: "标题", body: "正文", url: "http://example.com/x" }, "url", "not_https"],
+    [{ title: "标题", body: "正文", url: "ftp://example.com/x" }, "url", "not_https"],
+    [{ title: "标题", body: "正文", url: "not a url" }, "url", "not_https"],
+    [{ title: "标题", body: "正文", url: "" }, "url", "required"],
+    [{ title: "标题", body: "正文", url: 42 }, "url", "type"],
+    [{ title: "标题", body: "正文", url: " https://example.com/" }, "url", "leading_or_trailing_whitespace"],
+    [{ title: "标题", body: "正文", url: `https://example.com/${"a".repeat(2048)}` }, "url", "too_long"],
+    [{ title: "标题", body: "正文", group: "云盘\n分享" }, "group", "forbidden_character"],
+    [{ title: "标题", body: "正文", group: " 云盘分享" }, "group", "leading_or_trailing_whitespace"],
+    [{ title: "标题", body: "正文", group: "" }, "group", "required"],
+    [{ title: "标题", body: "正文", group: "云".repeat(65) }, "group", "too_long"],
+    // 33 个 emoji 是 33 个码点、66 个 UTF-16 码元：码点检查放过它，码元检查必须拦下。
+    // 服务端 zod 的 `.max(64)` 数的是码元，桌面只数码点就会比服务端宽。
+    [{ title: "标题", body: "正文", group: "😀".repeat(33) }, "group", "too_long"],
+    [{ title: "标题", body: "正文", group: null }, "group", "type"],
+    [{ title: "标题", body: "正文", level: "passive" }, "request", "unknown_field"],
+  ])("rejects an unusable link or group at %#", (input, field, reason) => {
+    expect(invalid(input).data).toEqual({ field, reason })
   })
 
   it("never serializes rejected content or actual lengths", () => {

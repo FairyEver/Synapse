@@ -2,8 +2,10 @@ import { z } from "zod"
 
 export const SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS = 64
 export const SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS = 256
+export const SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS = 64
+export const SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS = 2048
 
-export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body"] as const
+export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body", "url", "group"] as const
 export const SYSTEM_NOTIFICATION_INVALID_REASONS = [
   "required",
   "type",
@@ -11,6 +13,8 @@ export const SYSTEM_NOTIFICATION_INVALID_REASONS = [
   "forbidden_character",
   "invalid_unicode",
   "too_long",
+  // 链接只允许 https：一个 http 地址到了手机上打不开或降级，不如在门口拦下。
+  "not_https",
   "unknown_field",
 ] as const
 
@@ -20,6 +24,8 @@ export type SystemNotificationInvalidReason = (typeof SYSTEM_NOTIFICATION_INVALI
 export interface SystemNotificationInput {
   readonly title: string
   readonly body: string
+  readonly group?: string
+  readonly url?: string
 }
 
 export interface SystemNotificationInvalidInput {
@@ -81,24 +87,32 @@ export type SystemNotificationResult = z.infer<typeof systemNotificationResultSc
 export type SystemNotifierSettings = z.infer<typeof systemNotifierSettingsSchema>
 export type SystemNotifierSettingsPatch = z.infer<typeof systemNotifierSettingsPatchSchema>
 
+const ACCEPTED_KEYS = new Set<string>(["title", "body", "url", "group"])
+
 export function validateSystemNotificationInput(request: unknown): SystemNotificationInputValidation {
   if (!isPlainObject(request)) return invalid("request", "type")
 
   const keys = Object.keys(request)
-  if (keys.some((key) => key !== "title" && key !== "body")) {
-    return invalid("request", "unknown_field")
-  }
+  if (keys.some((key) => !ACCEPTED_KEYS.has(key))) return invalid("request", "unknown_field")
 
   const titleError = validateField(request, "title", SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS)
   if (titleError) return titleError
   const bodyError = validateField(request, "body", SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS)
   if (bodyError) return bodyError
+  // url 先于 group：链接是这条消息的目的，标签只是装饰，先报前者。
+  const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS)
+  if (urlError) return urlError
+  if (request.url !== undefined && !isHttpsUrl(request.url as string)) return invalid("url", "not_https")
+  const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS)
+  if (groupError) return groupError
 
   return {
     ok: true,
     data: {
       title: request.title as string,
       body: request.body as string,
+      ...(request.url !== undefined ? { url: request.url as string } : {}),
+      ...(request.group !== undefined ? { group: request.group as string } : {}),
     },
   }
 }
@@ -116,6 +130,46 @@ function validateField(
   if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
   if ([...value].length > maxCodePoints) return invalid(field, "too_long")
   return null
+}
+
+/**
+ * 可选字段的校验。与 `validateField` 的差别只有一处：字段缺省是合法的。
+ *
+ * 传了空串仍然按 `required` 报 —— 字段出现了却没有值，和没传是两件事，
+ * 静默丢掉会让调用方以为自己发出了一条带标签的消息。
+ */
+function validateOptionalField(
+  request: Record<string, unknown>,
+  field: "url" | "group",
+  maxCodePoints: number,
+): SystemNotificationInvalidInput | null {
+  if (!(field in request) || request[field] === undefined) return null
+  const value = request[field]
+  if (value === "") return invalid(field, "required")
+  if (typeof value !== "string") return invalid(field, "type")
+  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
+  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
+  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  if ([...value].length > maxCodePoints) return invalid(field, "too_long")
+  // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点。33 个 emoji 是 33 码点、66 码元：
+  // 只数码点就会放行，然后在服务端被打回来，而调用方早已被告知成功。两道都卡，
+  // 「桌面放行 ⇒ 服务端放行」才成立。
+  if (value.length > maxCodePoints) return invalid(field, "too_long")
+  return null
+}
+
+/**
+ * 比服务端那一条更窄一点：服务端是 `z.url()` 加 `/^https:/`，这里要求字面量
+ * `https://` 前缀。窄的一侧在客户端，两边就不会出现「桌面放行、服务端 400」
+ * 这种只在联调时才发现的错位。
+ */
+function isHttpsUrl(value: string): boolean {
+  if (!value.startsWith("https://")) return false
+  try {
+    return new URL(value).protocol === "https:"
+  } catch {
+    return false
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
