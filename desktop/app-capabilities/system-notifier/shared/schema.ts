@@ -126,21 +126,36 @@ function validateField(
   field: "title" | "body",
   maxCodePoints: number,
 ): SystemNotificationInvalidInput | null {
-  if (!(field in request) || request[field] === "") return invalid(field, "required")
+  if (!(field in request)) return invalid(field, "required")
   const value = request[field]
   if (typeof value !== "string") return invalid(field, "type")
-  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
-  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
-  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  const shapeError = validateSingleLineShape(value, field)
+  if (shapeError) return shapeError
   if ([...value].length > maxCodePoints) return invalid(field, "too_long")
   return null
 }
 
 /**
- * 可选字段的校验。与 `validateField` 的差别只有一处：字段缺省是合法的。
+ * 单行文本的共同形状：非空、无首尾空白、无孤立代理项、无控制字符。
  *
- * 传了空串仍然按 `required` 报 —— 字段出现了却没有值，和没传是两件事，
- * 静默丢掉会让调用方以为自己发出了一条带标签的消息。
+ * 提出来是因为 `validateField`（title/body）与 `validateOptionalField`（url/group）
+ * 必须对「什么算单行文本」给出同一个答案 —— 两份各写一遍，往其中一份加一个禁用字符，
+ * 另一份就会静默地更松。
+ */
+function validateSingleLineShape(
+  value: string,
+  field: SystemNotificationInvalidField,
+): SystemNotificationInvalidInput | null {
+  if (value === "") return invalid(field, "required")
+  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
+  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
+  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  return null
+}
+
+/**
+ * 可选字段的校验。与 `validateField` 的差别全在两头：字段缺省是合法的，
+ * 长度按码元而不是码点算。
  */
 function validateOptionalField(
   request: Record<string, unknown>,
@@ -149,11 +164,9 @@ function validateOptionalField(
 ): SystemNotificationInvalidInput | null {
   if (!(field in request) || request[field] === undefined) return null
   const value = request[field]
-  if (value === "") return invalid(field, "required")
   if (typeof value !== "string") return invalid(field, "type")
-  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
-  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
-  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  const shapeError = validateSingleLineShape(value, field)
+  if (shapeError) return shapeError
   // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点，所以这里也按码元卡：
   // 33 个 emoji 是 33 码点、66 码元，只数码点就会放行，然后在服务端被打回来，
   // 而调用方早已被告知成功。码元数天然是码点数的上界，这一条同时覆盖两者，

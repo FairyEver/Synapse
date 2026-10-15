@@ -99,8 +99,24 @@ describe("system notification input", () => {
     [{ title: "标题", body: "正文", group: "😀".repeat(33) }, "group", "too_long"],
     [{ title: "标题", body: "正文", group: null }, "group", "type"],
     [{ title: "标题", body: "正文", level: "passive" }, "request", "unknown_field"],
+    // body 排在 url 前面：两个都坏时先报 body。没有这一行，一个先校验 url 的实现
+    // 能把上面所有行都跑绿。
+    [{ title: "标题", body: " 正文", url: "http://x/" }, "body", "leading_or_trailing_whitespace"],
   ])("rejects an unusable link or group at %#", (input, field, reason) => {
     expect(invalid(input).data).toEqual({ field, reason })
+  })
+
+  it("accepts values exactly at the limit and rejects the next character", () => {
+    // 界内必须放行：把 `>` 写成 `>=` 会让服务端接受的值在这里被拒，
+    // 而上面那些用例全都在界限之外，没有一个会因此变红。
+    expect(validateSystemNotificationInput({
+      title: "标题",
+      body: "正文",
+      group: "云".repeat(64),
+      url: `https://example.com/${"a".repeat(2028)}`,
+    })).toMatchObject({ ok: true })
+    expect(invalid({ title: "标题", body: "正文", group: "云".repeat(65) }).data)
+      .toEqual({ field: "group", reason: "too_long" })
   })
 
   it("never serializes rejected content or actual lengths", () => {
