@@ -300,7 +300,7 @@ git commit -m "feat: 通知落库与推送带上点按复制开关
 
 **Files:**
 - Modify: `server/src/open-api/open-api-contract.ts:38-64`、`:294-313`
-- Test: `server/src/notifications/notification.controller.spec.ts`
+- Test: `server/src/notifications/notification.controller.spec.ts`、`server/src/open-api/open-api-contract.spec.ts`
 
 **Interfaces:**
 - Consumes: Task 1 的 `NotificationService.create` 接受 `copyOnTap?: boolean`。
@@ -308,34 +308,36 @@ git commit -m "feat: 通知落库与推送带上点按复制开关
 
 - [ ] **Step 1: 先写失败测试**
 
-在 `server/src/notifications/notification.controller.spec.ts` 的 `describe("OpenNotificationController", ...)` 里追加（构造方式与相邻用例一致：`controller()` 返回的 `{ controller, service, request }`）：
+在 `server/src/notifications/notification.controller.spec.ts` 的 `describe("OpenNotificationController", ...)` 里追加。
+
+注意解构名：本文件的辅助函数就叫 `controller()`，所以**不能**写成 `const { controller } = controller()` —— 那个绑定在自身初始化式里处于 TDZ，一律抛 `ReferenceError`，与实现无关。照该文件既有写法把它重命名为 `endpoint`：
 
 ```ts
   it("sends copyOnTap through both request-body shapes", async () => {
-    const { controller, service, request } = controller()
+    const { controller: endpoint, service, request } = controller()
     const message = { title: "标题", body: "正文", copyOnTap: true }
 
     // 整体式：密钥与消息在同一个请求体里。
-    await controller.createWithKeyInBody(request as never, { ...message, key: exampleKey })
+    await endpoint.createWithKeyInBody(request as never, { ...message, key: exampleKey })
     expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
 
     // 表单式：密钥是 URL 段，消息来自请求体。
-    await controller.createWithKeyInPath(request as never, message)
+    await endpoint.createWithKeyInPath(request as never, message)
     expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
   })
 
   it("treats only a literal 1 in the path shape's query as copy-on-tap", async () => {
-    const { controller, service, request } = controller()
+    const { controller: endpoint, service, request } = controller()
     const path = { key: exampleKey, title: "标题", body: "正文" }
 
-    await controller.createFromPath(request as never, path, { copyOnTap: "1" })
+    await endpoint.createFromPath(request as never, path, { copyOnTap: "1" })
     expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
 
     // 拼错、留空、重复成数组都按缺省处理：这条形状的价值是粘上去就能用，
     // 不该因为一个开关把整条链接判成无效。断言的是「没有 true」，不是「等于 false」——
     // 关掉与没写只有一个表示。
     for (const wrong of ["yes", "", "0", ["1", "0"]]) {
-      await controller.createFromPath(request as never, path, { copyOnTap: wrong })
+      await endpoint.createFromPath(request as never, path, { copyOnTap: wrong })
       const lastInput = service.create.mock.calls.at(-1)?.[0] as Record<string, unknown>
       expect(lastInput.copyOnTap).toBeUndefined()
     }
