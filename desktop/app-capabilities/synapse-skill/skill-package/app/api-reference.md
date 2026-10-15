@@ -260,8 +260,8 @@ Input:
 
 - `title` required: non-empty single-line string, exactly equal to its trimmed value, at most 64 Unicode code points.
 - `body` required: non-empty single-line string, exactly equal to its trimmed value, at most 256 Unicode code points.
-- `url` optional: single `https://` address, exactly equal to its trimmed value, at most 2048 UTF-16 code units. Opening the notification opens this address directly. It must carry no credentials.
-- `group` optional: single-line label shown beside the title, exactly equal to its trimmed value, at most 64 UTF-16 code units.
+- `url` optional: single `https://` address, exactly equal to its trimmed value, at most 2048 UTF-16 code units, so an emoji or other astral character counts as two. Opening the notification opens this address directly. It must carry no credentials anywhere in the address, including a user name before the `@` — no schema, validator, or server check rejects `https://user:pass@host/`.
+- `group` optional: single-line label shown beside the title, exactly equal to its trimmed value, at most 64 UTF-16 code units, so an emoji or other astral character counts as two.
 
 All four fields reject CR, LF, Tab, NUL, other Unicode control characters, Unicode line and paragraph separators, and unpaired UTF-16 surrogates. Valid Unicode is preserved without NFC/NFKC normalization or automatic truncation. No other input fields are accepted.
 
