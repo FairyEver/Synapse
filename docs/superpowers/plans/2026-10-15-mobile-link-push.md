@@ -408,13 +408,15 @@ cd /Users/liyang/Documents/code/github/Synapse && git add desktop/app-capabiliti
 ## Task 3: 把 url 与 group 透传到账号写入
 
 **Files:**
-- Modify: `desktop/electron/services/account-service.ts:540-552`
-- Modify: `desktop/electron/bootstrap/descriptors.ts:865-869`
+- Modify: `desktop/electron/services/account-service.ts:540-552`（只扩类型）
+- Modify: `desktop/app-capabilities/system-notifier/main/service.ts`（新增一个纯映射函数）
+- Modify: `desktop/electron/bootstrap/descriptors.ts:865-869`（接线改调那个函数）
 - Test: `desktop/electron/services/__tests__/account-service.test.ts`
+- Test: `desktop/app-capabilities/system-notifier/main/__tests__/service.test.ts`
 
 **Interfaces:**
 - Consumes: Task 2 的 `SystemNotificationInput`
-- Produces: `AccountService.createInternalNotification` 的入参类型接受可选 `group`、`url`，并原样进 `POST /notifications/desktop` 请求体
+- Produces: `systemNotificationAccountWrite(input: SystemNotificationInput): { source: "system-notifier"; title: string; body: string; group?: string; url?: string }`（从 `system-notifier/main/service.ts` 导出），以及 `AccountService.createInternalNotification` 的入参类型接受可选 `group`、`url`
 
 > `SystemNotifierService` **不需要改**：`trigger` 收下整个 `input` 后原样交给 `sendToAccount` → `sync(input)`，字段自动流过。
 
@@ -485,7 +487,12 @@ cd /Users/liyang/Documents/code/github/Synapse && git add desktop/app-capabiliti
 cd desktop && ./node_modules/.bin/vitest run electron/services/__tests__/account-service.test.ts
 ```
 
-Expected: 第一条新用例 FAIL（body 里没有 `url`/`group`）；第二条应当已经通过——它是回归位，锁住「不传就别写进去」，防止实现时顺手填 `undefined`。
+Expected: **这里没有运行时 RED，这是实测结论，不要伪造成有。** `createInternalNotification` 把 `input` 整个交给 `requestAuthenticatedJson`，`JSON.stringify` 照样写出 `group`/`url` —— 运行时本来就在转发，被挡住的只是**类型**。所以：
+
+- 第一条新用例在改之前就是绿的，它守的是「将来有人把那个方法改成逐字段挑」这个方向，不是现在的行为。
+- 第二条同理是回归位。注意它真正守的是**默认值**（`?? ""`、`?? null` 这类会活过 `JSON.stringify` 的东西），不是 `undefined` —— `JSON.stringify` 本来就会丢掉 `undefined`。
+- 真正的 RED 在类型层：`descriptors.ts` 传那两个字段时会得到 `TS2353: 'group' does not exist in type …`。把这条原始诊断记进报告的 RED 证据里。
+- 唯一的运行时 RED 在下面 Step 4 新增的那个映射函数上。
 
 - [ ] **Step 3: 扩入参类型**
 
@@ -506,32 +513,95 @@ Expected: 第一条新用例 FAIL（body 里没有 `url`/`group`）；第二条�
 
 方法体不动——它把 `input` 整个交给 `requestAuthenticatedJson`。
 
-- [ ] **Step 4: 接线**
+- [ ] **Step 4: 把映射提成纯函数**
 
-`desktop/electron/bootstrap/descriptors.ts` 的 `sync:` 端口（约 :865）：
+这是本任务唯一有运行时行为的改动，也是整条链路上唯一**逐字段挑**的地方：`trigger` 与 `sendToAccount` 都原样转发整个 input，只有接线这里可能把新字段挑漏。挑漏一个，那个字段就永远到不了手机，而且没有任何运行时症状可追 —— 所以它不能留在一行没人测的接线里。
+
+先在 `desktop/app-capabilities/system-notifier/main/__tests__/service.test.ts` 里写失败测试（把 `systemNotificationAccountWrite` 加进该文件顶部从 `../service` 的 import 里）：
 
 ```ts
-      sync: (input) => accountService.createInternalNotification({
-        source: "system-notifier",
-        title: input.title,
-        body: input.body,
-        ...(input.url !== undefined ? { url: input.url } : {}),
-        ...(input.group !== undefined ? { group: input.group } : {}),
-      }),
+  it("carries the link and the group into the account write, and omits them when absent", () => {
+    // `toStrictEqual` 而不是 `toEqual`：后者忽略值为 undefined 的键，所以一个
+    // 「永远写出 url/group」的实现照样绿。
+    expect(systemNotificationAccountWrite({ title: "标题", body: "正文" })).toStrictEqual({
+      source: "system-notifier",
+      title: "标题",
+      body: "正文",
+    })
+    expect(systemNotificationAccountWrite({
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })).toStrictEqual({
+      source: "system-notifier",
+      title: "周报已生成",
+      body: "点开查看完整报告",
+      group: "云盘分享",
+      url: "https://synapse.d2.pub/share/shr_9Kx2M4Qr7Tv1Bw8Zc3Nd6Fh5Jp0Ls",
+    })
+  })
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+跑它，确认 FAIL（函数还不存在）。然后在 `desktop/app-capabilities/system-notifier/main/service.ts` 里加上它：
+
+```ts
+/**
+ * `sync` 端口的入参形状：把一条系统通知映射成一次账号写入。
+ *
+ * 单独提出来是因为这里是这条链路上唯一逐字段挑的地方 —— `trigger` 与 `sendToAccount`
+ * 都原样转发整个 input，只有它可能把新字段挑漏。挑漏一个，那个字段就永远到不了手机，
+ * 而且没有任何运行时症状可以追。提成纯函数，才有地方钉住它。
+ */
+export function systemNotificationAccountWrite(input: SystemNotificationInput): {
+  readonly source: "system-notifier"
+  readonly title: string
+  readonly body: string
+  readonly group?: string
+  readonly url?: string
+} {
+  return {
+    source: "system-notifier",
+    title: input.title,
+    body: input.body,
+    ...(input.url !== undefined ? { url: input.url } : {}),
+    ...(input.group !== undefined ? { group: input.group } : {}),
+  }
+}
+```
+
+- [ ] **Step 5: 接线**
+
+`desktop/electron/bootstrap/descriptors.ts` 的 `sync:` 端口（约 :865）改成调用它。该文件已经从同一个模块 import 了 `SystemNotifierService`，把那行 import 扩成同时引入 `systemNotificationAccountWrite`，不要新起一行：
+
+```ts
+      sync: (input) => accountService.createInternalNotification(systemNotificationAccountWrite(input)),
+```
+
+- [ ] **Step 6: 跑测试确认通过，并做两次变异验证**
 
 ```bash
 cd desktop && ./node_modules/.bin/vitest run electron/services/__tests__/account-service.test.ts app-capabilities/system-notifier/main/__tests__/service.test.ts
 ```
 
-Expected: 全绿。`service.test.ts` 是回归位——`SystemNotifierService` 不该因为这次改动而变。
+Expected: 全绿。`service.test.ts` 里既有的 `SystemNotifierService` 用例是回归位——它不该因为这次改动而变。
 
-- [ ] **Step 6: 提交**
+两次变异验证，证明新用例真的在守那条映射：
+
+1. 从 `systemNotificationAccountWrite` 里删掉 `url` 与 `group` 两个展开 → 新用例必须变红。
+2. 只删掉其中一个（留另一个）→ 新用例仍必须变红。一个只转发一个字段的映射不能蒙混过关。
+
+两次都 revert，逐字节核对。
+
+- [ ] **Step 7: 提交**
 
 ```bash
-cd /Users/liyang/Documents/code/github/Synapse && git add desktop/electron/services/account-service.ts desktop/electron/bootstrap/descriptors.ts desktop/electron/services/__tests__/account-service.test.ts && git commit -m "feat: 账号通知写入带上链接与分组
+cd /Users/liyang/Documents/code/github/Synapse && git add \
+  desktop/electron/services/account-service.ts \
+  desktop/app-capabilities/system-notifier/main/service.ts \
+  desktop/electron/bootstrap/descriptors.ts \
+  desktop/electron/services/__tests__/account-service.test.ts \
+  desktop/app-capabilities/system-notifier/main/__tests__/service.test.ts && git commit -m "feat: 账号通知写入带上链接与分组
 
 createInternalNotification 的入参扩两个可选字段，接线处按既有写法做条件展开，
 不传就不出现在请求体里 —— 服务端 schema 是 .strict()，写 undefined 只会多一种
