@@ -95,7 +95,7 @@ struct NotificationView: View {
                 }
             )) {
                 if let item = readingNotification {
-                    NotificationFullTextView(item: item, onOpen: open)
+                    NotificationFullTextView(item: item, onOpen: open, model: model)
                 }
             }
         }
@@ -159,6 +159,7 @@ struct NotificationView: View {
 private struct NotificationFullTextView: View {
     let item: SynapseNotification
     let onOpen: (SynapseNotification) -> Void
+    let model: SynapseAppModel
 
     var body: some View {
         ScrollView {
@@ -188,6 +189,18 @@ private struct NotificationFullTextView: View {
         }
         .navigationTitle("通知")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // 放工具栏末尾，不放页脚：这条通知多半是一屏就读完的短文，不像会议转写那样要
+            // 跟着滚很久，所以不需要 `MeetingDetailView` 那种悬浮胶囊。写文字而不只用
+            // `doc.on.doc` 是因为这里要说的不只是「复制」，还有「复制的是正文」—— 详情页
+            // 上标题、时间、正文同屏，一个通用拷贝图标说不清拿走的是哪一段。
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("复制正文") {
+                    Clipboard.copy(NotificationDetailText.value(for: item), saying: "已复制正文", on: model)
+                }
+                .accessibilityIdentifier("copy-notification-body")
+            }
+        }
     }
 
     private func discussionSection(_ title: String, content: String) -> some View {

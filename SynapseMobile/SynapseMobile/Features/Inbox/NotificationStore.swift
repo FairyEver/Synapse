@@ -27,6 +27,11 @@ struct DriveDiscussionNotificationSnapshot: Decodable {
     let original: Original?
     let replyTo: ReplyTo?
 
+    init(detailTitle: String, content: String, original: Original? = nil, replyTo: ReplyTo? = nil) {
+        self.detailTitle = detailTitle; self.content = content
+        self.original = original; self.replyTo = replyTo
+    }
+
     private enum CodingKeys: String, CodingKey { case detailTitle, content, original, replyTo }
     init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -49,6 +54,7 @@ struct SynapseNotification: Decodable, Identifiable {
     let body: String
     let group: String?
     let url: String?
+    let copyOnTap: Bool?
     let level: String
     let targetId: String?
     let deviceId: String?
@@ -57,13 +63,13 @@ struct SynapseNotification: Decodable, Identifiable {
     let createdAt: String
     let driveDiscussion: DriveDiscussionNotificationMetadata?
 
-    init(id: String, source: String, title: String, body: String, group: String?, url: String?, level: String,
-         targetId: String?, deviceId: String?, readAt: String?, resolvedAt: String?, createdAt: String,
+    init(id: String, source: String, title: String, body: String, group: String?, url: String?, copyOnTap: Bool? = nil,
+         level: String, targetId: String?, deviceId: String?, readAt: String?, resolvedAt: String?, createdAt: String,
          driveDiscussion: DriveDiscussionNotificationMetadata? = nil) {
         self.id = id; self.source = source; self.title = title; self.body = body
-        self.group = group; self.url = url; self.level = level; self.targetId = targetId
-        self.deviceId = deviceId; self.readAt = readAt; self.resolvedAt = resolvedAt
-        self.createdAt = createdAt; self.driveDiscussion = driveDiscussion
+        self.group = group; self.url = url; self.copyOnTap = copyOnTap; self.level = level
+        self.targetId = targetId; self.deviceId = deviceId; self.readAt = readAt
+        self.resolvedAt = resolvedAt; self.createdAt = createdAt; self.driveDiscussion = driveDiscussion
     }
 }
 
