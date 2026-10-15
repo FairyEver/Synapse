@@ -975,13 +975,14 @@ export function createTerminalService(deps: {
     leases.delete(sessionId)
     const revision = (leaseRevisions.get(sessionId) ?? 0) + 1
     leaseRevisions.set(sessionId, revision)
-    updateSessionState(sessionId, (session) => ({ ...session }), `lease.${reason}`)
+    updateSessionState(sessionId, (session) => ({ ...session }), `lease.${reason}`, "runtime")
   }
 
   function updateSessionState(
     sessionId: string,
     transform: (session: TerminalSession) => TerminalSession,
     changeType: string,
+    persistence: "full" | "runtime" = "full",
   ): TerminalSession {
     const current = getSessionOrThrow(sessionId)
     const updated = transform({
@@ -997,7 +998,9 @@ export function createTerminalService(deps: {
       throughOutputSeq: updated.lastOutputSeq,
       changeTypes: [changeType],
     })
-    schedulePersist()
+    // Input and its attention/lease changes must not snapshot every terminal's history.
+    if (persistence === "runtime") scheduleRuntimePersist(sessionId)
+    else schedulePersist()
     return updated
   }
 
@@ -1026,7 +1029,7 @@ export function createTerminalService(deps: {
         detectorId: TERMINAL_AGENT_ATTENTION_DETECTOR_ID,
         detectorVersion: TERMINAL_AGENT_ATTENTION_DETECTOR_VERSION,
       },
-    }), input.state === "waiting" ? "attention.waiting" : "attention.cleared")
+    }), input.state === "waiting" ? "attention.waiting" : "attention.cleared", "runtime")
   }
 
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer): void {
@@ -3376,7 +3379,7 @@ export function createTerminalService(deps: {
       ...session,
       inputRevision: session.inputRevision + 1,
       attention: passiveAttention(session, reason),
-    }), "input")
+    }), "input", "runtime")
   }
 
   function idempotent<T>(

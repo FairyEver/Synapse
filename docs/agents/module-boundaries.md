@@ -74,6 +74,7 @@
 - 分屏顶栏与底部命令条的背景以当前终端主题的 background 为基底叠加 5% 黑色，普通文字和图标复用 foreground；语音与待执行条共享相同局部 token，随主题草稿预览、保存、取消和跨窗口同步更新，不改变应用侧栏、Dock 或弹层的主题。
 - 分层叫法固定为：应用是「终端」，文件夹是「终端分组」，文件夹下那一行是「终端标签」（代码里的 workspace），标签内部可分成最多 8 个「分屏」，每个分屏里的那一个才叫「终端会话」（代码里的 session，也就是 `sessionId` 寻址的对象）。界面文案与文档一律按这套叫法，不得再把标签叫成「终端」或把会话叫成「对话」。代码标识符（`TerminalGroup` / `TerminalWorkspace` / `TerminalPaneLeaf` / `TerminalSession`）保持不变。
 - UI、IPC、MCP 复用 `desktop/app-capabilities/terminal/main/service.ts` 的分组、活动会话、命令、有界输出和不可变 `sessionId`。
+- 终端输入及其注意状态、租约失效只通过已有 runtime 增量队列合并保存对应会话，不得在逐键路径触发全会话画面序列化或历史输出全量扫描；输入 revision、租约接管与状态事件仍同步生效，操作收据、幂等结果和结构变更保持完整持久化。
 - UI 中一个侧边栏标签对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行；拖动 pane 顶栏只能投放到另一 pane 的四个边缘并重组布局树，不合并 session、也不在 pane 内新增标签层。关闭侧边栏标签必须删除整个 workspace、全部叶子 session 及其数据；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
 - session 进入 `ended`、`failed` 或 `lost` 后必须立即移除对应 pane，并删除会话标识、输出、检查点、操作和短期幂等数据；最后一个 pane 移除后 workspace 不得继续出现在侧边栏。终止态仅可用于唤醒已在等待的观察请求，之后按原 `sessionId` 查询必须返回 `not_found`。
 - Synapse 退出时必须终止并销毁所有 Terminal session，只保留全局设置、分组、快捷命令和工具栏操作。启动时必须清理任何旧版或异常遗留的 session/workspace 及关联数据，不恢复 PTY，不将旧记录转成 `lost`，不重放生命周期操作。

@@ -4,7 +4,7 @@ import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import { createTerminalService, ensureExecutableIfPresent, type PtyLike } from "../service"
-import type { TerminalStore, TerminalStoreState } from "../store"
+import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState } from "../store"
 import { collectTerminalPaneLeaves } from "../../shared/workspace"
 
 const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", actorKind: "connector" as const }
@@ -302,6 +302,64 @@ describe("TerminalService core", () => {
       expect(runtimeSave).toHaveBeenCalledTimes(2)
       expect(runtimeSave.mock.calls[1]?.[0].sessions[0]?.output).toHaveLength(1)
       expect(runtimeSave.mock.calls[1]?.[0].sessions[0]?.checkpoint).toMatchObject({ throughOutputSeq: 101 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(["plain", "agent attention", "automation lease"] as const)("batches desktop keystrokes without taking full terminal snapshots (%s)", async (scenario) => {
+    vi.useFakeTimers()
+    try {
+      const store = memoryStore()
+      const fullSave = vi.spyOn(store, "saveState")
+      const runtimeSave = vi.fn(async (_update: TerminalRuntimeStoreUpdate) => undefined)
+      store.saveRuntimeState = runtimeSave
+      const activePty = fakePty()
+      const backgroundPty = fakePty()
+      const ptys = [activePty, backgroundPty]
+      const service = createTerminalService({
+        store,
+        spawnPty: () => ptys.shift()!,
+        resolveDefaultShell: () => "/bin/zsh",
+        resolveDefaultCwd: () => os.tmpdir(),
+      })
+      await service.start()
+      const session = await service.createSession({})
+      await service.createSession({})
+      if (scenario === "agent attention") {
+        service.applyAgentAttention({ sessionId: session.id, state: "waiting", kind: "approval", reason: "agent_permission_request" })
+      } else if (scenario === "automation lease") {
+        service.acquireControl({
+          sessionId: session.id, requestedLeaseMs: 10_000,
+          idempotencyKey: "019f8a39-0000-7000-8000-000000000051",
+        }, controllerA)
+      }
+      backgroundPty.emitData("background history\r\n".repeat(5_000))
+      await vi.advanceTimersByTimeAsync(250)
+      await service.flushPersistQueue()
+      fullSave.mockClear()
+      runtimeSave.mockClear()
+
+      if (scenario === "agent attention") {
+        service.applyAgentAttention({ sessionId: session.id, state: "not_waiting", kind: "unknown", reason: "user_input" })
+      }
+      for (const data of "hello") service.writeSession({ sessionId: session.id, data })
+
+      expect(activePty.write.mock.calls.map(([data]) => data)).toEqual(["h", "e", "l", "l", "o"])
+      expect(service.getSession({ sessionId: session.id }).inputRevision).toBe(5)
+      expect(service.getSessionState(session.id, controllerA).lease).toMatchObject({ occupied: false })
+      expect(fullSave).not.toHaveBeenCalled()
+      expect(runtimeSave).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(250)
+      await service.flushPersistQueue()
+
+      expect(fullSave).not.toHaveBeenCalled()
+      expect(runtimeSave).toHaveBeenCalledTimes(1)
+      expect(runtimeSave.mock.calls[0]?.[0].sessions).toEqual([
+        expect.objectContaining({ session: expect.objectContaining({ id: session.id, inputRevision: 5 }), output: [] }),
+      ])
+      await service.stop()
     } finally {
       vi.useRealTimers()
     }
@@ -1101,7 +1159,8 @@ describe("TerminalService core", () => {
   })
 
   it("UI input explicitly takes over and invalidates the automation lease", async () => {
-    const { service } = await startedHarness()
+    const store = memoryStore()
+    const { service } = await startedHarness(store)
     const session = await service.createSession({})
     const lease = service.acquireControl({
       sessionId: session.id, requestedLeaseMs: 10_000,
@@ -1111,6 +1170,8 @@ describe("TerminalService core", () => {
     expect(service.getSessionState(session.id, controllerA).lease).toMatchObject({ occupied: false })
     expect(service.releaseControl({ sessionId: session.id, leaseId: lease.leaseId }, controllerA))
       .toMatchObject({ released: false, noOp: true })
+    await service.flushPersistQueue()
+    expect(store.state.sessions.find((item) => item.id === session.id)?.inputRevision).toBe(1)
   })
 
   it("coordinates resize with lease and sizeRevision without advancing inputRevision", async () => {
