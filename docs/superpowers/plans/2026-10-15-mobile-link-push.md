@@ -520,6 +520,8 @@ createInternalNotification 的入参扩两个可选字段，接线处按既有�
     expect(tool).toBeDefined()
     expect(tool?.inputSchema.required).toEqual(["title", "body"])
     expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual(["title", "body", "url", "group"])
+    // 第三层也要真的约束，不是只在 description 里说一句。`stringField` 支持 pattern。
+    expect(tool?.inputSchema.properties?.url).toMatchObject({ pattern: "^https://", maxLength: 2048 })
   })
 ```
 
@@ -565,6 +567,7 @@ Expected: 新语料条 FAIL 或 PASS 都记录下来。`手机` 已经在 `synap
           }),
           url: stringField("Optional single https address the user should open. It must carry no credentials or password; the address itself never reaches a lock screen.", {
             maxLength: SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS,
+            pattern: "^https://",
           }),
           group: stringField("Optional short label shown beside the title, such as the source of the link.", {
             maxLength: SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS,
@@ -787,7 +790,15 @@ Expected: PASS，与 Step 1 一致。若 SourceKit 在编辑器里报 `Cannot fi
 - [ ] **Step 7: 提交**
 
 ```bash
-cd /Users/liyang/Documents/code/github/Synapse && git add -A SynapseMobile/SynapseMobile/Features/Terminal SynapseMobile/SynapseMobileTests SynapseMobile/SynapseMobileUITests && git commit -m "refactor: 手机端不再从终端画面嗅探链接
+cd /Users/liyang/Documents/code/github/Synapse && git add \
+  SynapseMobile/SynapseMobile/Features/Terminal/TerminalResources.swift \
+  SynapseMobile/SynapseMobile/Features/Terminal/TerminalResourcesSheet.swift \
+  SynapseMobile/SynapseMobile/Features/Terminal/TerminalResourceReachability.swift \
+  SynapseMobile/SynapseMobileTests/TerminalResourcesTests.swift \
+  SynapseMobile/SynapseMobileTests/TerminalResourceReachabilityTests.swift \
+  SynapseMobile/SynapseMobile/Features/Terminal/TerminalStore.swift \
+  SynapseMobile/SynapseMobile/Features/Terminal/TerminalScreen.swift \
+  SynapseMobile/SynapseMobileUITests/WorkspaceFilesUITests.swift && git commit -m "refactor: 手机端不再从终端画面嗅探链接
 
 删掉采集器、资源面板与有效性校验三个实现文件和它们的两个测试文件，以及终端页上
 那条资源栏。跨物理行拼 URL 的那套形状推断的不确定性来自渲染层，改不掉，所以连
@@ -796,7 +807,7 @@ cd /Users/liyang/Documents/code/github/Synapse && git add -A SynapseMobile/Synap
 LinkBrowser 保留：它是全 App 共用的打开器，也是新的链接推送的落点。"
 ```
 
-> 这一步的 `git add` 用了目录范围，只覆盖 `SynapseMobile/` 下这三处，不会带入其它改动；提交前仍要 `git status` 核对一遍暂存区。
+> 用显式文件列表，不用 `git add -A <目录>`：这是一个与其它会话共享的工作区，目录范围会把别人正在改的文件一起卷进来。提交前仍要 `git status` 核对暂存区。
 
 ---
 
