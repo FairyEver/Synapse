@@ -645,7 +645,7 @@ final class WorkspaceFilesUITests: XCTestCase {
         capture(app, name: "files-new-selection-back-position")
     }
 
-    func testWideTerminalKeepsItsOwnTitleAndStatusBeforeAnyResourcePresentation() throws {
+    func testWideTerminalKeepsItsOwnTitleAndStatusInSplitView() throws {
         let previousOrientation = XCUIDevice.shared.orientation
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = previousOrientation }
@@ -654,12 +654,11 @@ final class WorkspaceFilesUITests: XCTestCase {
 
         let title = app.navigationBars.staticTexts[sessionTitle].firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: 10) && title.isHittable,
-            "A hidden resource inspector must not replace the selected terminal's navigation title")
+            "The system navigation bar must retain the selected terminal's navigation title")
         let status = app.navigationBars.staticTexts["terminal-second-line"].firstMatch
         XCTAssertTrue(status.exists && status.isHittable,
             "The regular-width system navigation bar must retain the session status or Git summary")
-        XCTAssertFalse(app.navigationBars.staticTexts["会话资源"].exists)
-        capture(app, name: "terminal-ipad-main-navigation")
+        capture(app, name: "terminal-ipad-split-view-navigation")
 
         app.descendants(matching: .any)["attach"].firstMatch.tap()
         let files = app.buttons["terminal-attach-workspace-files"].firstMatch

@@ -54,9 +54,6 @@ struct TerminalScreen: View {
     /// panel that reads it is presented as a sheet at the end of the screen.
     @State private var shortcutPanelPresented = false
     @State private var expandedInputPresented = false
-    @State private var resourcesPresented = false
-    @State private var pendingResourceURL: URL?
-    @State private var openedResource: WebLink?
     /// 这一页的 Git 面板。非空＝面板开着，它同时是这一个弹窗的状态机（见 `TerminalGitFlow`）。
     ///
     /// 由 `⋯` 菜单里那一行建起来，带上发 intent 与说话两件事 —— `model` 只在那一刻
@@ -327,7 +324,7 @@ struct TerminalScreen: View {
             isVoiceBusy: holdLatched || voice.phase != .idle || voiceGrid.isLocked,
             isOverlayUp: showingRename || showingStopConfirm || showingBusyConfirm
                 || showingPhotoPicker || showingDocumentPicker || showingCamera
-                || shortcutPanelPresented || expandedInputPresented || resourcesPresented || gitFlow != nil
+                || shortcutPanelPresented || expandedInputPresented || gitFlow != nil
                 || filesFlow != nil || pendingFilesMode != nil || filesDismissSettling,
             isPhotoBubbleUp: recentPhoto != nil,
             isPortrait: !isCompactHeight,
@@ -834,22 +831,6 @@ struct TerminalScreen: View {
         .sheet(isPresented: $expandedInputPresented) {
             TerminalExpandedInputSheet(draft: $draft, selection: draftSelectionBinding, sessionId: sessionId)
         }
-        .inspector(isPresented: $resourcesPresented) {
-            TerminalResourcesSheet(store: store, usesNavigationStack: !usesSystemNavigationBar,
-                onClose: { resourcesPresented = false }) { url in
-                pendingResourceURL = url
-                resourcesPresented = false
-            }
-                .inspectorColumnWidth(min: 280, ideal: 360, max: 440)
-                .onDisappear {
-                    // On iPhone the inspector is a sheet. Open the browser only after
-                    // that sheet has gone, so two presentations never overlap.
-                    guard let url = pendingResourceURL else { return }
-                    pendingResourceURL = nil
-                    openedResource = WebLink(url: url)
-                }
-        }
-        .linkBrowser($openedResource)
         .modifier(TerminalGitFilesPresentation(flow: $gitFlow, sessionId: sessionId,
             onDismiss: openPendingFiles, onReview: openFilesFromGit))
         .modifier(TerminalFilesPresentation(flow: $filesFlow, draft: $draft, sessionId: sessionId,
@@ -962,7 +943,6 @@ struct TerminalScreen: View {
             // 可用 —— 浮层压住那一排按钮，正是产品负责人指出过的问题。
             if !chromeHidden && !barsStandDown {
                 VStack(spacing: 0) {
-                    if !toolbarStandDown && !store.resources.isEmpty { resourceBar }
                     // 横屏时工具栏已经并进上面那一行了，这里只剩输入栏。
                     if !isCompactHeight && !toolbarStandDown { accessoryBar }
                     inputBar
@@ -1348,27 +1328,6 @@ struct TerminalScreen: View {
         accessoryKeys
             .padding(.horizontal, 12)
             .background(Color(uiColor: .systemBackground))
-    }
-
-    private var resourceBar: some View {
-        Button {
-            noteChromeActivity()
-            resourcesPresented = true
-        } label: {
-            HStack {
-                Text("会话资源 ×\(store.resources.count)")
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
-            }
-            .frame(minHeight: Metrics.minimumTapTarget)
-            .padding(.horizontal, 16)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(Color(uiColor: .systemBackground))
-        .overlay(alignment: .bottom) { Divider() }
-        .accessibilityLabel("查看 \(store.resources.count) 个会话资源")
     }
 
     /// 工具栏的零件，三种排布共用：竖屏的工具栏、横屏的合并栏。
