@@ -324,11 +324,13 @@ git commit -m "feat: 通知落库与推送带上点按复制开关
     await controller.createFromPath(request as never, path, { copyOnTap: "1" })
     expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: true }))
 
-    // 拼错、留空、重复成数组都按关处理：这条形状的价值是粘上去就能用，
-    // 不该因为一个开关把整条链接判成无效。
+    // 拼错、留空、重复成数组都按缺省处理：这条形状的价值是粘上去就能用，
+    // 不该因为一个开关把整条链接判成无效。断言的是「没有 true」，不是「等于 false」——
+    // 关掉与没写只有一个表示。
     for (const wrong of ["yes", "", "0", ["1", "0"]]) {
       await controller.createFromPath(request as never, path, { copyOnTap: wrong })
-      expect(service.create).toHaveBeenLastCalledWith(expect.objectContaining({ copyOnTap: false }))
+      const lastInput = service.create.mock.calls.at(-1)?.[0] as Record<string, unknown>
+      expect(lastInput.copyOnTap).toBeUndefined()
     }
   })
 ```
@@ -360,11 +362,14 @@ export const openApiNotificationMessageSchema = z.object({
  * 只认字面量 `1`：其余任何值（`0`、空串、拼错、重复出现变成数组）一律按关处理，**不报错**
  * —— 这条形状的全部价值就是「粘上去就能用」，不该为了一个开关把整条链接判成无效。
  * 所以用 `z.unknown()` 接住任何形状再自己比，而不是让类型校验在那里把请求打回。
+ *
+ * 转出来的是 `true | undefined` 而不是 `true | false`：全局约定是「任何一层都不写 `false`」，
+ * 关掉与没写只能有一个表示，否则就多出一个能和数据默认值互相矛盾的位。
  */
 const notificationCopyOnTapQuerySchema = z
   .unknown()
   .optional()
-  .transform((value) => value === "1")
+  .transform((value) => (value === "1" ? true : undefined))
 
 export const openApiNotificationQuerySchema = z.object({
   group: notificationGroupSchema.optional(),
