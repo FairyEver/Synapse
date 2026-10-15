@@ -221,6 +221,8 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 
 不需要 provider 或项目。`title` 与 `body` 都是非空单行模板，共用 `variables`；插值后不得有首尾空白，分别最多 64 和 256 个 Unicode code point。通知发给用户：运行 Synapse 的这台电脑弹原生通知，桌面端已登录且在线时同一条消息还会进账号消息中心并推到用户手机，不需要 API 密钥。接受后主输出为 `{"success":true}`，结构化输出为 `{ success: true }`，只表示通知请求已被系统接受，不保证实际显示或送达，也不得据此自动重试。
 
+配置还可带一个可选布尔 `copyOnTap`（缺省 `false`，与直接 MCP 入参同义）：为真时用户在手机上点这条通知即把正文复制到剪贴板，`title` 只作标签不会被复制。它是开关而不是内容，不参与插值与上面那套文本校验；节点编辑器里对应的开关叫「点按复制正文」。
+
 ### clipboard_text_write — 剪贴板写入节点
 
 仅当用户当前明确要求 Clipboard 工作流时配置或执行。`text` 是非空模板，支持显式 `variables`；输入边只控制顺序，不会隐式提供正文。插值结果允许纯空白，但必须是有效 Unicode、无 NUL 且不超过 1 MiB。节点需要 `clipboard.write` 权限，成功输出 `{"success":true}`，不会回显写入正文。

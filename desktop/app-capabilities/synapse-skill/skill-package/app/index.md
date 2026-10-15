@@ -166,6 +166,8 @@ Use it when the user explicitly asks to be notified at some point, or when an ex
 
 The same call hands a link to the user's phone. When the user wants an address they can open away from the computer — a share link, a page you published, a release or pull request — pass it as `url` and the notification opens it in one tap. Put a short label in `group` when the source is worth naming, such as 云盘分享. Never pass an address that carries a password, a token, or any other credential anywhere in it — in the user name, the host, the path, or the query string. The record is stored in plain text on the server, and no other layer checks this for you.
 
+The same call also hands a piece of text to the user's phone. When the text itself is what the user wants to take away — a tongue twister, a passphrase, a command to paste elsewhere — put that text in `body` and set `copyOnTap: true`. One tap on the phone's notification then puts `body` into the clipboard, so the user does not have to open the app and select it by hand. `title` is only a label and is never copied. `copyOnTap` carries only the boolean `true`: an explicit `false` and an omitted key are the same thing at every layer, so there is nothing to say with `false`. The body limit stays 256 Unicode code points, so something longer needs a `url` instead.
+
 Pick the channel by what the user said, not by what is easiest to call:
 
 - 提醒 / 发送通知 / 推送 / 手机 / 别的设备 -> this tool. It is the only tool that sends a new account notification to the user's devices; there is no separate local-only sound tool. Reading or clearing existing notifications uses `notifications/index.md`.
@@ -183,7 +185,7 @@ Rules:
 - Keep Token values, passwords, verification codes, private keys, complete local paths, and other lock-screen-sensitive content out of `title` and `body` — the fields that reach a lock screen.
 - `{ success: true }` means Synapse accepted the fire-and-forget request. It does not mean the message was created, delivered, displayed, clicked, or read.
 - User settings are invisible to you. The send switch can be off, in which case nothing happens anywhere. Sending needs a signed-in, online desktop; when it cannot happen, nothing happens at all and nothing is backfilled later. Each machine also decides for itself whether to show account messages as native notifications. A call that sent nothing is indistinguishable from a successful one on your side: Synapse records why in its local diagnostics, so never assert that the user received anything.
-- Do not add any field beyond `title`, `body`, `url`, and `group`. Do not add caller identity, a notification id, an idempotency key, or a retry loop.
+- Do not add any field beyond `title`, `body`, `url`, `group`, and `copyOnTap`. Do not add caller identity, a notification id, an idempotency key, or a retry loop.
 - These proactive-call rules apply to direct Agent tool use. A Workflow author who explicitly places a System Notifier node has already chosen that node's notification behavior.
 
 ## 问题反馈

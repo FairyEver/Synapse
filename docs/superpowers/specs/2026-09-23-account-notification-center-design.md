@@ -32,9 +32,11 @@
 
 来源筛选补充「待办提醒」（`todo-reminder`），属于账号通知的普通来源，不计入终端待处理。此分类不扩展桌面通知创建白名单，也不增加通知 MCP 工具。iOS 普通通知点按在重取与已读后可进入待办，与会话、录音和站内信遵循同一后续操作规则。
 
-`notification.send` 是独立 API 密钥权限。`POST /api/open/v1/notifications` 接收标题、正文、可选分组、HTTPS 链接和提醒级别，返回消息 ID。长度校验、每分钟 60 次限流和密钥范围内的 `Idempotency-Key` 去重在服务端执行。接口不兼容 Bark URL，也不支持图片、铃声、重要警告、持续响铃、复制动作、推送加密或多服务器。
+`notification.send` 是独立 API 密钥权限。`POST /api/open/v1/notifications` 接收标题、正文、可选分组、HTTPS 链接和提醒级别，返回消息 ID。长度校验、每分钟 60 次限流和密钥范围内的 `Idempotency-Key` 去重在服务端执行。接口不兼容 Bark URL，也不支持图片、铃声、重要警告、持续响铃、推送加密或多服务器。
 
 > **2026-09-24 修订：通知接口改用三种传参形状。** 下面这段是本节的原始设计，其中「只允许 `POST /api/open/v1/notifications`、不接受 `Authorization` 之外的凭证位置」已被取代；其余边界（不支持图片、铃声、重要警告、持续响铃、复制动作、推送加密、自定义 TTL、多服务器）继续有效。当前实现是 `POST /notifications`（密钥在请求体 `key`）、`POST /notifications/{key}`（密钥在路径段）和 `GET /notifications/{key}/{title}/{body}`（密钥与标题正文都在路径段），密钥随请求携带，三种形状都不接受 `Authorization` 头。长度校验、限流、`Idempotency-Key` 去重和返回结构不变。权威约束见 `docs/agents/module-boundaries.md` 的「Console 用户 API 秘钥」一节，机器契约见 `/api/open/openapi.json`。
+
+> **2026-10-15 修订：放开「点按复制正文」一项。** 本节上面两处不支持清单里的「复制动作」都已被取代：接口现在接受可选 `copyOnTap: boolean`（路径式用 `?copyOnTap=1`，只认字面量 `1`），用户在手机上点这条通知即把正文复制到剪贴板。只放开这一项——图片、铃声、重要警告、持续响铃、自动复制、复制标题、复制到指定位置、推送加密、自定义 TTL、多服务器与 Bark URL 兼容继续不支持。开关只在 JSON 请求体里能表达，表单编码下发不出来。权威设计见 [通知点按复制设计](2026-10-15-notification-tap-to-copy-design.md)，边界约束见 `docs/agents/module-boundaries.md` 的「Console 用户 API 秘钥」一节。
 
 消息标题和正文以明文存于 Synapse 服务端，并可能出现在系统锁屏预览中。API 密钥与通知正文不得进入日志。System Notifier 的正式触发就是**创建一条消息**：账号未登录或离线时它发不出去，那就什么都不发生（不发、不补、本机也不另弹一条）；「发送通知」开关关掉同样完全不发，它与本机呈现的两颗开关互不门控；测试通知永远只显示在本机。其 MCP 与 Workflow 的成功返回语义不受发送结果影响。
 ## 2026-10-12：云盘文档互动来源

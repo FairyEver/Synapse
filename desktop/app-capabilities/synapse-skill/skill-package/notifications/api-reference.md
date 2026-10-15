@@ -18,6 +18,8 @@
 
 `terminal-attention` 包含已经处理的历史通知；`pending` 只包含 `resolvedAt` 为空的终端待处理通知，搭配其他 `source` 返回空列表。删除它不改变终端会话状态。精确未读数、全部已读与批量删除仍按当前账号范围执行，不受列表来源筛选影响。发送通知另见 `app/index.md`。
 
+通知详情里可以「复制正文」，拿到的是页面上显示的那一段文字（不是原始 `body`）；这与复制 `synapse:notification:<id>` 引用是两件事 —— 引用是给 Agent 用来定位这条通知的，正文是给用户拿去用的。这个入口对任何通知都可用，与发送方有没有声明「点按复制」无关，也不经过任何 MCP 工具。
+
 ## 文档互动通知
 
 `app_account_notification_list` 的 `source` 接受 `drive-discussion`；工具数量和权限不变。返回的 `driveDiscussion?: {kind: annotation | message, action: created | replied, snapshot?: {detailTitle, content, original?: {kind: text | image, text}, replyTo?: {authorName, content}}}` 仅用于展示，旧通知不一定存在该字段。定位 `url` 按通知 ID 重新验证本人记录，不包含密码或凭据；`get` 不会自动标已读。历史摘要保留，点击目标已删除或权限失效时给出当前不可用状态。

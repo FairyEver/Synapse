@@ -277,9 +277,10 @@ Use **json_repair_text_repair** when the Workflow author explicitly wants repair
 
 Use **system_notifier_notification_trigger** when the Workflow author explicitly wants to notify the user: the node writes one message into the user's account, and Synapse delivers it to every signed-in desktop and to the user's phones.
 
-- Config is exactly `title`, `body`, and shared `variables`. Both templates support `{{name}}` and `{{$name}}`.
+- Config is exactly `title`, `body`, `copyOnTap`, and shared `variables`. Both templates support `{{name}}` and `{{$name}}`.
 - Bind every referenced variable explicitly. Binding or interpolation failure happens before notification acceptance and fails the node without notifying.
 - After interpolation, title and body use the same strict single-line, no-edge-whitespace contract as the direct App tool: at most 64 UTF-16 code units for the title (an emoji or other astral character counts as two), and 256 Unicode code points for the body.
+- `copyOnTap` is an optional boolean with the same meaning as the direct App tool's input, defaulting to `false`. Set it when the body itself is what the user wants to take away: one tap on the phone's notification then copies the body to the clipboard. The title is never copied, and no action button on the notification copies anything. It is a switch rather than content, so it is not interpolated and takes no part in the text contract above; leaving it out is the same as `false`.
 - Success returns primary output `{"success":true}` and structured output `{ success: true }`. This means the valid request was accepted; it does not prove delivery or display.
 - The node carries no API key: the message travels on the desktop login. Sending needs a signed-in, online desktop, and the user's send switch can be off; when the message cannot be created, nothing happens and nothing is backfilled.
 - Do not add platform options, retries, notification ids, idempotency keys, or delivery checks. Each accepted run is an independent event.

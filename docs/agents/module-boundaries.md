@@ -139,12 +139,13 @@
 
 - 用户 API 秘钥只通过受登录保护的 `/api/console/api-keys` 管理；创建响应只展示一次完整秘钥，数据库只保存 SHA-256 摘要和可识别前缀，列表不得返回摘要或明文。
 - `notification.send` 是独立于 Drive 下载的权限，只允许通过 `/api/open/v1/notifications` 的三种请求形状向密钥所属账号发消息：`POST /notifications`（密钥在请求体 `key`）、`POST /notifications/{key}`（密钥在路径段，消息在 JSON 或表单请求体）、`GET /notifications/{key}/{title}/{body}`（密钥和标题正文都在路径段）。密钥随请求携带，三种形状都不接受 `Authorization` 头，也不读取 cookie。
-- 三种形状共用同一份消息校验：标题 1–64 字符、正文 1–512 字符、分组 1–64 字符、`url` 仅 HTTPS 且不超过 2048 字符、`level` 只认 `active`/`passive`/`timeSensitive`。请求体 `.strict()`，出现未列出的字段返回 400；密钥格式与权限校验在 guard 里完成，401 与 403 先于 400 返回。
+- 三种形状共用同一份消息校验：标题 1–64 字符、正文 1–512 字符、分组 1–64 字符、`url` 仅 HTTPS 且不超过 2048 字符、`level` 只认 `active`/`passive`/`timeSensitive`，以及可选的 `copyOnTap`（传法与例外见下）。请求体 `.strict()`，出现未列出的字段返回 400；密钥格式与权限校验在 guard 里完成，401 与 403 先于 400 返回。
 - 三种形状共用一个限流桶，每分钟 60 次。`ThrottlerGuard` 默认把 handler 名算进键里，会让三个路由各占一份额度，因此这三个路由显式传入去掉 handler 名的 `generateKey`；新增第四种形状时必须沿用同一个 `notificationThrottle`。
 - 路径式只接受 `GET`。`@Get` 注册的路由会被 Express 用来处理 `HEAD`，而链接预览、爬虫和邮件安全网关正是用 `HEAD` 探测地址，所以这条形状显式拒绝 `HEAD` 并返回 405，避免探测动作真的发出一条推送。`server/nginx.conf` 的对应 location 保持原样放行，方法判断只在应用层做一处。
 - 密钥和消息内容都不得进入访问日志，这需要两处同时生效：应用侧 `app.module.ts` 的 `autoLogging` 跳过该前缀，`server/nginx.conf` 对应 location 设置 `access_log off`。只改一处等于把密钥和正文写进磁盘。`deploy-config.spec.ts` 会锁住这两处。
 - 访问日志之外还有兜底：`common/audit-error.ts` 的脱敏必须认得出 Synapse 密钥本身，因为路径式把密钥放进 URL 段，它会出现在 `req.url`、堆栈和错误消息里，且那个位置不符合 `Bearer …`、`key=…` 或带 scheme 的 URL 任何一种既有模式。密钥字符集复用 `api-key-token.ts` 的同一定义（`apiKeySecretInlinePatternSource`），`audit-error.spec.ts` 用真实生成的密钥做回归，格式一变就会失败。
-- 该接口不支持图片、铃声、重要警告、持续响铃、复制动作、推送加密、自定义 TTL、多服务器、逗号分隔的多密钥和通知更新。
+- 该接口 2026-10-15 起支持「点按复制正文」这一项复制能力：两个请求体形状接受可选 `copyOnTap: boolean`，路径式用 `?copyOnTap=1`（只认字面量 `1`，缺省或任何其它值按关处理且不报错）。**这个开关只在 JSON 请求体里能表达**：表单编码下所有值都是字符串（`express.urlencoded` 在 `registerHttpBodyParsers` 里全局注册，两条 POST 都经它解析），`z.boolean()` 会因此 400 掉整条通知，所以 `application/x-www-form-urlencoded` 发不出这个开关——这是本轮有意留下的边界，仓库既有姿态就是严格布尔，不为它放宽类型校验。
+- 除上面这一项外，该接口仍不支持图片、铃声、重要警告、持续响铃、自动复制、复制标题、复制到指定位置、推送加密、自定义 TTL、多服务器、逗号分隔的多密钥和通知更新。
 - 查询、创建、重命名、权限更新和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，审计不得包含完整秘钥、摘要或可还原材料。
 - 密钥创建时必须显式选择非空开放 API scopes；已有未撤销密钥可以原地重命名、增删或清空 scopes，但不得通过该接口轮换密钥。首个 canonical scope `drive.public_link.download` 仅授权 `/api/open/v1/drive/public-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。旧 `drive.share_link.download` 与 `/api/open/v1/drive/share-links/downloads` 只作为已发布集成的兼容入口，不再用于新密钥或新文档。
 - `drive.public_link.message.create` 只授权 `POST /api/open/v1/drive/public-links/messages` 新建 Markdown 文末留言，密钥所属用户是作者，不附带读取、下载、编辑或删除权限。`url` 与公开 `shareId` 至少传一个；都传时分别解析并核对分享与最终文件，不得忽略冲突字段。`shareId` 单独定位分享根目标，文件夹分享中的文章须使用具体文件链接。复用 Drive 分享访问和留言服务，不允许密钥进入内部 Drive 或 Console 接口。

@@ -174,6 +174,7 @@ Notifies the user with fire-and-forget semantics: it writes one message into the
 
 - `title` (string) — non-empty title template with optional `{{variable}}` or `{{$variable}}` placeholders
 - `body` (string) — non-empty body template using the same variable bindings
+- `copyOnTap` (boolean) — optional and defaults to `false`; leaving it out is the same thing. When `true`, one tap on the phone's notification copies `body` to the clipboard. The title is never copied. It is a switch rather than content, so it is not interpolated and takes no part in the text contract below.
 - `variables` (array) — explicit bindings shared by both templates
 
 After interpolation, the title and body must be single-line strings with no leading or trailing whitespace. The title is limited to 64 UTF-16 code units (an emoji or other astral character counts as two); the body remains limited to 256 Unicode code points. Binding, interpolation, or input validation failure occurs before notification acceptance and fails the node. Accepted execution returns primary output `{"success":true}` and structured outputs `{ success: true }`; this never proves delivery or display and must not be used to trigger retries.
