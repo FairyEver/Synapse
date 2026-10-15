@@ -840,7 +840,9 @@ xcodebuild test-without-building -project SynapseMobile/SynapseMobile.xcodeproj 
   -only-testing:SynapseMobileTests/TerminalFrameDecodingTests
 ```
 
-⚠️ 本仓库的 swift-testing 套件（`struct` + `@Test`）在 `-only-testing` 里**必须带括号**，写成 `-only-testing:SynapseMobileTests/TerminalFrameDecodingTests()`；不带括号会静默跑 0 个用例而结果仍然是绿的。
+⚠️ 本仓库里 swift-testing 套件（`struct` + `@Test`）的 `-only-testing` 选择器**不要带括号**。Task 6 实测：`-only-testing:SynapseMobileTests/TerminalFrameDecodingTests()` 跑 **0 个用例**并且退出码为 0、连 swift-testing 的输出都没有 —— 正是「静默全绿」那个坑，只是由**加上括号**触发；写成不带括号反而是好的（输出 `✔ Test run with 2 tests in 1 suite passed`）。
+
+**判据永远是用例数，不是退出码**：任何一次 iOS 测试运行，若看不到真实用例数，就当它没跑，改选择器重跑。
 
 ## Task 6: 手机端摘掉资源采集与面板
 
@@ -925,11 +927,6 @@ Expected: PASS，与 Step 1 一致。若 SourceKit 在编辑器里报 `Cannot fi
 
 ```bash
 cd /Users/liyang/Documents/code/github/Synapse && git add \
-  SynapseMobile/SynapseMobile/Features/Terminal/TerminalResources.swift \
-  SynapseMobile/SynapseMobile/Features/Terminal/TerminalResourcesSheet.swift \
-  SynapseMobile/SynapseMobile/Features/Terminal/TerminalResourceReachability.swift \
-  SynapseMobile/SynapseMobileTests/TerminalResourcesTests.swift \
-  SynapseMobile/SynapseMobileTests/TerminalResourceReachabilityTests.swift \
   SynapseMobile/SynapseMobile/Features/Terminal/TerminalStore.swift \
   SynapseMobile/SynapseMobile/Features/Terminal/TerminalScreen.swift \
   SynapseMobile/SynapseMobileUITests/WorkspaceFilesUITests.swift && git commit -m "refactor: 手机端不再从终端画面嗅探链接
@@ -942,6 +939,8 @@ LinkBrowser 保留：它是全 App 共用的打开器，也是新的链接推送
 ```
 
 > 用显式文件列表，不用 `git add -A <目录>`：这是一个与其它会话共享的工作区，目录范围会把别人正在改的文件一起卷进来。提交前仍要 `git status` 核对暂存区。
+>
+> 列表里**只有被编辑的三个文件**，没有那五个被删的：Step 2 的 `git rm` 已经把删除动作放进暂存区了，再对已删路径跑 `git add` 会直接 `fatal: pathspec … did not match any files` 并**中止整条命令**（用 `&&` 连接时后面三个编辑就永远staged 不上，而失败的是一条「看起来只是多写了几个路径」的命令）。
 
 ---
 
