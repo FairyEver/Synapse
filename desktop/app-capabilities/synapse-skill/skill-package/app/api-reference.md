@@ -260,8 +260,10 @@ Input:
 
 - `title` required: non-empty single-line string, exactly equal to its trimmed value, at most 64 Unicode code points.
 - `body` required: non-empty single-line string, exactly equal to its trimmed value, at most 256 Unicode code points.
+- `url` optional: single `https://` address, exactly equal to its trimmed value, at most 2048 UTF-16 code units. Opening the notification opens this address directly. It must carry no credentials.
+- `group` optional: single-line label shown beside the title, exactly equal to its trimmed value, at most 64 UTF-16 code units.
 
-Both fields reject CR, LF, Tab, NUL, other Unicode control characters, Unicode line and paragraph separators, and unpaired UTF-16 surrogates. Valid Unicode is preserved without NFC/NFKC normalization or automatic truncation. No other input fields are accepted.
+All four fields reject CR, LF, Tab, NUL, other Unicode control characters, Unicode line and paragraph separators, and unpaired UTF-16 surrogates. Valid Unicode is preserved without NFC/NFKC normalization or automatic truncation. No other input fields are accepted.
 
 Output:
 
@@ -269,7 +271,7 @@ Output:
 
 The fixed success result means only that a valid call crossed the System Notifier acceptance point. The message is not created when the user turned sending off, when the desktop is signed out or offline, when the process-local rate limit is reached, or when the request failed. Those cases return the same fixed success and produce nothing anywhere; Synapse records which one happened in its own local diagnostics (`notification_sync` with a fixed reason), and the caller cannot see it. Nothing that was not sent is backfilled later. The caller's own path never shows a local notification: each machine shows the message when the delivery reaches it, subject to its own local settings, which can suppress it entirely (notifications off, settings unreadable, Electron notifications unsupported, system permission off, or construction or `show()` failed synchronously). Success never proves delivery or display.
 
-Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, or `body`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, or `unknown_field`). The error never returns the rejected value, a snippet, or its actual length.
+Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, `body`, `url`, or `group`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, `not_https`, or `unknown_field`). The error never returns the rejected value, a snippet, or its actual length.
 
 ## `app_problem_feedback_report_submit`
 
