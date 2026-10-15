@@ -213,8 +213,24 @@ cd /Users/liyang/Documents/code/github/Synapse && git add server/src/open-api/op
     [{ title: "标题", body: "正文", group: "😀".repeat(33) }, "group", "too_long"],
     [{ title: "标题", body: "正文", group: null }, "group", "type"],
     [{ title: "标题", body: "正文", level: "passive" }, "request", "unknown_field"],
+    // body 排在 url 前面：两个都坏时先报 body。没有这一行，一个先校验 url 的实现
+    // 能把上面所有行都跑绿。
+    [{ title: "标题", body: " 正文", url: "http://x/" }, "body", "leading_or_trailing_whitespace"],
   ])("rejects an unusable link or group at %#", (input, field, reason) => {
     expect(invalid(input).data).toEqual({ field, reason })
+  })
+
+  it("accepts values exactly at the limit and rejects the next character", () => {
+    // 界内必须放行：把 `>` 写成 `>=` 会让服务端接受的值在这里被拒，
+    // 而上面那些用例全都在界限之外，没有一个会因此变红。
+    expect(validateSystemNotificationInput({
+      title: "标题",
+      body: "正文",
+      group: "云".repeat(64),
+      url: `https://example.com/${"a".repeat(2028)}`,
+    })).toMatchObject({ ok: true })
+    expect(invalid({ title: "标题", body: "正文", group: "云".repeat(65) }).data)
+      .toEqual({ field: "group", reason: "too_long" })
   })
 ```
 
@@ -307,14 +323,34 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
 }
 ```
 
-在 `validateField` 之后加两个私有函数：
+先把「什么算单行文本」那一段从 `validateField` 里提出来，做成两个校验器共用的一个函数。提出来是必需的，不是顺手重构：`validateField`（title/body）与新的 `validateOptionalField`（url/group）必须对「单行文本」给出同一个答案，两份各写一遍，往其中一份加一个禁用字符，另一份就会静默地更松 —— 而这两个字段将来会各自被不同的上游喂。
+
+`validateField` 因此会改动，但**行为一字不变**：它原有的 13 行 `it.each` 与「接受精确单行 Unicode」用例钉着这一点，改完必须全绿。唯一被放宽的是本计划先前的「`validateField` 一字未动」——那条是为了保住行为，不是禁止一次保行为的提取。
+
+加这三个私有函数：
 
 ```ts
 /**
- * 可选字段的校验。与 `validateField` 的差别只有一处：字段缺省是合法的。
+ * 单行文本的共同形状：非空、无首尾空白、无孤立代理项、无控制字符。
  *
- * 传了空串仍然按 `required` 报 —— 字段出现了却没有值，和没传是两件事，
- * 静默丢掉会让调用方以为自己发出了一条带标签的消息。
+ * 提出来是因为 `validateField`（title/body）与 `validateOptionalField`（url/group）
+ * 必须对「什么算单行文本」给出同一个答案 —— 两份各写一遍，往其中一份加一个禁用字符，
+ * 另一份就会静默地更松。
+ */
+function validateSingleLineShape(
+  value: string,
+  field: SystemNotificationInvalidField,
+): SystemNotificationInvalidInput | null {
+  if (value === "") return invalid(field, "required")
+  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
+  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
+  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  return null
+}
+
+/**
+ * 可选字段的校验。与 `validateField` 的差别全在两头：字段缺省是合法的，
+ * 长度按码元而不是码点算。
  */
 function validateOptionalField(
   request: Record<string, unknown>,
@@ -323,11 +359,9 @@ function validateOptionalField(
 ): SystemNotificationInvalidInput | null {
   if (!(field in request) || request[field] === undefined) return null
   const value = request[field]
-  if (value === "") return invalid(field, "required")
   if (typeof value !== "string") return invalid(field, "type")
-  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
-  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
-  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  const shapeError = validateSingleLineShape(value, field)
+  if (shapeError) return shapeError
   // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点，所以这里也按码元卡：
   // 33 个 emoji 是 33 码点、66 码元，只数码点就会放行，然后在服务端被打回来，
   // 而调用方早已被告知成功。码元数天然是码点数的上界，这一条同时覆盖两者，
