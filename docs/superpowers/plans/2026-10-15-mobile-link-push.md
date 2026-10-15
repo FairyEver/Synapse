@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - `url` 只允许 **https**，长度 **≤2048**；`group` 长度 **≤64**，且不得带首尾空白、控制字符、孤立代理项。
-- **长度按 UTF-16 码元计**，与服务端 zod 的 `.max()` 一致。桌面侧原本的 `validateField` 按码点数，两者对增补平面字符（emoji 等）会差一倍——所以桌面在码点检查之外**还要**卡一次码元数，保证「桌面放行 ⇒ 服务端放行」。
+- **`url` 与 `group` 的长度按 UTF-16 码元计**，与服务端 zod 的 `.max()` 一致。桌面既有的 `validateField` 按码点数，两者对增补平面字符（emoji 等）会差一倍——所以新字段只走码元这一道：码元数是码点数的上界，一道就同时覆盖两者（再加一道码点检查会是一行永远走不到的代码）。
 - 这三个限制必须在**三处**同时成立：MCP 工具 `inputSchema`、桌面 `validateSystemNotificationInput`、服务端 `desktopWriteSchema`。只收紧一层等于没收紧；反过来，客户端比服务端**宽**同样是漏洞。
 - `url` 与 `group` **都可选**。不传时输出里不出现该键（不要写 `undefined`）。
 - **不新增** `source`；**不暴露** `level`；**不暴露** `sourceKey`。
@@ -164,7 +164,7 @@ cd /Users/liyang/Documents/code/github/Synapse && git add server/src/open-api/op
 
 **Interfaces:**
 - Consumes: 无
-- Produces: `SystemNotificationInput` 变成 `{ title: string; body: string; group?: string; url?: string }`；`SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS = 64`、`SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS = 2048`；新增拒绝原因 `"not_https"`
+- Produces: `SystemNotificationInput` 变成 `{ title: string; body: string; group?: string; url?: string }`；`SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH = 64`、`SYSTEM_NOTIFICATION_URL_MAX_LENGTH = 2048`（按 UTF-16 码元）；新增拒绝原因 `"not_https"`
 
 - [ ] **Step 1: 写失败测试**
 
@@ -187,8 +187,10 @@ cd /Users/liyang/Documents/code/github/Synapse && git add server/src/open-api/op
       },
     })
 
-    // 没传就不出现该键：服务端 schema 是 .strict()，写 `undefined` 只会多一种漂移。
-    expect(validateSystemNotificationInput({ title: "标题", body: "正文" })).toEqual({
+    // 没传就不出现该键。这里必须是 `toStrictEqual` 而不是 `toEqual`：vitest 的 `toEqual`
+    // 忽略值为 `undefined` 的键，一个「永远写出 url/group、但值可能是 undefined」的实现
+    // 拿它跑照样绿 —— 那这条断言就没守它声称要守的东西。
+    expect(validateSystemNotificationInput({ title: "标题", body: "正文" })).toStrictEqual({
       ok: true,
       data: { title: "标题", body: "正文" },
     })
@@ -239,8 +241,10 @@ Expected: 新用例 FAIL（`unknown_field`），既有 13 条 `it.each` 仍绿�
 ```ts
 export const SYSTEM_NOTIFICATION_TITLE_MAX_CODE_POINTS = 64
 export const SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS = 256
-export const SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS = 64
-export const SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS = 2048
+// 名字说码元不说码点：这两个字段按 UTF-16 码元卡，与服务端 zod 的 `.max()` 同宽
+// （上面 title/body 那两个常量按码点算，那是它们各自的既有语义，互不影响）。
+export const SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH = 64
+export const SYSTEM_NOTIFICATION_URL_MAX_LENGTH = 2048
 ```
 
 ```ts
@@ -285,10 +289,10 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   const bodyError = validateField(request, "body", SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS)
   if (bodyError) return bodyError
   // url 先于 group：链接是这条消息的目的，标签只是装饰，先报前者。
-  const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS)
+  const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_LENGTH)
   if (urlError) return urlError
   if (request.url !== undefined && !isHttpsUrl(request.url as string)) return invalid("url", "not_https")
-  const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS)
+  const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH)
   if (groupError) return groupError
 
   return {
@@ -315,7 +319,7 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
 function validateOptionalField(
   request: Record<string, unknown>,
   field: "url" | "group",
-  maxCodePoints: number,
+  maxLength: number,
 ): SystemNotificationInvalidInput | null {
   if (!(field in request) || request[field] === undefined) return null
   const value = request[field]
@@ -323,12 +327,12 @@ function validateOptionalField(
   if (typeof value !== "string") return invalid(field, "type")
   if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
   if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
-  if (/[\p{Cc}  ]/u.test(value)) return invalid(field, "forbidden_character")
-  if ([...value].length > maxCodePoints) return invalid(field, "too_long")
-  // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点。33 个 emoji 是 33 码点、66 码元：
-  // 只数码点就会放行，然后在服务端被打回来，而调用方早已被告知成功。两道都卡，
-  // 「桌面放行 ⇒ 服务端放行」才成立。
-  if (value.length > maxCodePoints) return invalid(field, "too_long")
+  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点，所以这里也按码元卡：
+  // 33 个 emoji 是 33 码点、66 码元，只数码点就会放行，然后在服务端被打回来，
+  // 而调用方早已被告知成功。码元数天然是码点数的上界，这一条同时覆盖两者，
+  // 不需要再来一遍码点检查（那会是一行永远走不到的代码）。
+  if (value.length > maxLength) return invalid(field, "too_long")
   return null
 }
 
@@ -554,8 +558,8 @@ Expected: 新语料条 FAIL 或 PASS 都记录下来。`手机` 已经在 `synap
 `desktop/synapse-capabilities/shared/app-domain.ts`，import 块补两个常量：
 
 ```ts
-  SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS,
-  SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS,
+  SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
+  SYSTEM_NOTIFICATION_URL_MAX_LENGTH,
 ```
 
 工具条目改成：
@@ -574,11 +578,11 @@ Expected: 新语料条 FAIL 或 PASS 都记录下来。`手机` 已经在 `synap
             maxLength: SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS,
           }),
           url: stringField("Optional single https address the user should open. It must carry no credentials or password; the address itself never reaches a lock screen.", {
-            maxLength: SYSTEM_NOTIFICATION_URL_MAX_CODE_POINTS,
+            maxLength: SYSTEM_NOTIFICATION_URL_MAX_LENGTH,
             pattern: "^https://",
           }),
           group: stringField("Optional short label shown beside the title, such as the source of the link.", {
-            maxLength: SYSTEM_NOTIFICATION_GROUP_MAX_CODE_POINTS,
+            maxLength: SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH,
           }),
         },
         required: ["title", "body"],
