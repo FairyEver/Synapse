@@ -52,7 +52,7 @@ AI（Claude Code / Codex）
 | `url` | `z.url().max(2048).regex(/^https:/u)` —— 只允许 https | `open-api-contract.ts:34` |
 | `group` | `z.string().trim().min(1).max(64)` | `open-api-contract.ts:31` |
 
-两个字段都可选。桌面侧按既有风格另写等价的 code-point 校验——两侧本来就各有一份 zod schema，不强行合并。
+两个字段都可选。桌面侧按既有风格另写等价的校验，但**不是** code-point，而是 **UTF-16 码元**——与服务端 zod 的 `.max()` 同一把尺子。桌面因此不是更宽的那一侧：码元数是码点数的上界，按码点校验会放行服务端必拒的值（33 个 emoji 是 33 码点、66 码元），而调用方早已被告知成功，整条通知却在服务端丢掉。两侧本来就各有一份 zod schema，不强行合并。
 
 ## 改动清单
 
@@ -163,7 +163,7 @@ Skill 现在有一条规则：title/body 不得出现 Token、密码、验证码
 ## 测试计划
 
 **A**
-- 桌面校验：`url` 非 https 被拒；>2048 被拒；`group` 超 64 code point 被拒；未知字段仍被拒（回归）。
+- 桌面校验：`url` 非 https 被拒；>2048 被拒；`group` 65 码元被拒；`group` 为 33 个 emoji（33 码点 / 66 码元）同样被拒——后一条才区分得开两种尺子；未知字段仍被拒（回归）。
 - 服务端 controller：`/api/notifications/desktop` 接受带 `url`、`group` 的请求体；`http://` 的 `url` 返回 400；越权 `source` 仍返回 400（回归）。
 - 检索：若给 `LEXICON` 加了词条，`INTENT_CORPUS` 必须仍全绿（`desktop/tests/unit/synapse-tool-router-search.test.ts`）。
 
@@ -186,5 +186,7 @@ Skill 现在有一条规则：title/body 不得出现 Token、密码、验证码
 
 1. **B**（纯删除）—— 独立、风险集中在手机端与协议，先落可以先把死代码清掉。
 2. **A**（新增）—— 服务端 → 主进程能力 → MCP 定义 → Skill 文档 → 文档与发布说明。
+
+**A 内部必须服务端先落。** 新桌面 + 旧服务端的窗口里，带 `url`/`group` 的调用会撞上 `desktopWriteSchema` 的 `.strict()` 拿到 400：`createInternalNotification` 抛错，`sendToAccount` 把它吞成一条本地诊断，工具照样返回 `{success: true}`——用户要一条链接到手机，结果哪一端都没有，任何界面都不报错，是**静默失败**。不带 `url`/`group` 的调用不受影响。
 
 顺序也可对调；两者没有共享改动。若 B 后发，注意 A 上线时用户会短暂看到「通知里有链接、终端页资源栏也有一条」的并存状态。

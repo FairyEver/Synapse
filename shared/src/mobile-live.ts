@@ -1760,7 +1760,19 @@ function isCursor(value: unknown): value is MobileTerminalCursor {
     typeof value.visible === "boolean"
 }
 
-function isLineWire(value: unknown): value is MobileLineWire {
+/** 遗留形状：多出来的第三项是折行标记（`wrap`，取值 `1..3`），现行 `MobileLineWire` 已无此变体。 */
+type LegacyLineWire = readonly [text: string, runs: readonly MobileRunWire[], wrap: number]
+
+/**
+ * 行元组的第三位过去装折行标记，现在 `MobileLineWire` 已经没有这个变体了——这里仍然收，
+ * 只为两端分开升级的窗口：旧桌面还在发这种帧，而这一份是**服务端**转发它们时用的，
+ * 转发不过去链路就断了；反过来，旧手机解到的也还是这种帧，它同样得接着认
+ * （`LiveProtocol.swift` 的解码器就是按这个口径写的）。窗口关上后这一支就可以删。
+ *
+ * 返回值因此是两者的并集，而不是 `MobileLineWire`：这个谓词接受的输入本来就有它装不下
+ * 的那一种，谓词写窄了就等于把类型系统当成注释。
+ */
+function isLineWire(value: unknown): value is MobileLineWire | LegacyLineWire {
   if (!Array.isArray(value) || value.length === 0 || value.length > 3) return false
   if (typeof value[0] !== "string" || value[0].length > MOBILE_FRAME_LIMITS.maxLineLength) return false
   if (value.length === 1) return true

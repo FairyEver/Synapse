@@ -106,7 +106,7 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   // url 先于 group：链接是这条消息的目的，标签只是装饰，先报前者。
   const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_LENGTH)
   if (urlError) return urlError
-  if (request.url !== undefined && !isHttpsUrl(request.url as string)) return invalid("url", "not_https")
+  if (typeof request.url === "string" && !isHttpsUrl(request.url)) return invalid("url", "not_https")
   const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH)
   if (groupError) return groupError
 
