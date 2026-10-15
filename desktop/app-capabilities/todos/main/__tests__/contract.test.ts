@@ -21,8 +21,12 @@ describe("Todo cross-layer contract", () => {
   })
   it("does not widen the public System Notifier request to allow Todo-owned metadata", () => {
     expect(validateSystemNotificationInput({ title: "待办提醒", body: "事项" }).ok).toBe(true)
-    for (const metadata of [{ source: "todo-reminder" }, { sourceKey: "todo:id:1" }, { target: { id: "todo" } }, { url: "synapse://todos/todo" }]) {
+    for (const metadata of [{ source: "todo-reminder" }, { sourceKey: "todo:id:1" }, { target: { id: "todo" } }]) {
       expect(validateSystemNotificationInput({ title: "待办提醒", body: "事项", ...metadata })).toMatchObject({ ok: false, data: { field: "request", reason: "unknown_field" } })
     }
+    // `url` 不再是这一类：它已经成了通知的合法字段（只收 https）。但 Todo 的深链照样进不去，
+    // 只是理由换成了它自己的那一个 —— 这条断言守的是同一件事。
+    expect(validateSystemNotificationInput({ title: "待办提醒", body: "事项", url: "synapse://todos/todo" }))
+      .toMatchObject({ ok: false, data: { field: "url", reason: "not_https" } })
   })
 })
