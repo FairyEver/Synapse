@@ -990,7 +990,7 @@ Run:
 
 ```bash
 xcodebuild test -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
-  -destination 'platform=iOS Simulator,name=iPhone 15 (18.6)' \
+  -destination 'platform=iOS Simulator,name=iPhone 15,OS=18.6' \
   -only-testing:SynapseMobileTests/NotificationTapCopyTests
 ```
 
@@ -1195,7 +1195,7 @@ Run:
 
 ```bash
 xcodebuild test -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
-  -destination 'platform=iOS Simulator,name=iPhone 15 (18.6)' \
+  -destination 'platform=iOS Simulator,name=iPhone 15,OS=18.6' \
   -only-testing:SynapseMobileTests/NotificationDetailTextTests
 ```
 
@@ -1315,7 +1315,7 @@ Run:
 
 ```bash
 xcodebuild build -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
-  -destination 'platform=iOS Simulator,name=iPhone 15 (18.6)'
+  -destination 'platform=iOS Simulator,name=iPhone 15,OS=18.6'
 ```
 
 Expected: BUILD SUCCEEDED
