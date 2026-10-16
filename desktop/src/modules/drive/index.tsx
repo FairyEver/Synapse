@@ -2077,6 +2077,7 @@ function DriveFileListRow({
   readonly statusTags: Omit<DriveItemStatusTagsProps, "item">
 }) {
   const relation = statusTags.relation
+  const syncMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const hasSyncBinding = relation !== null
   const openSync = () => {
     if (relation?.kind === "bound") statusTags.onManageSync(relation.binding.id)
@@ -2185,7 +2186,7 @@ function DriveFileListRow({
               </DriveItemNameContextMenu>
               <DriveInlineBadges badges={statusBadges} />
             </div>
-            <DriveItemStatusTags item={item} {...statusTags} />
+            <DriveItemStatusTags item={item} {...statusTags} onRestoreSyncFocus={() => syncMenuTriggerRef.current?.focus()} />
           </div>
         </div>
       </TableCell>
@@ -2215,6 +2216,7 @@ function DriveFileListRow({
             删除
           </Button>
           <DriveItemMenu
+            triggerRef={syncMenuTriggerRef}
             drivePath={drivePath}
             item={item}
             hasSyncBinding={hasSyncBinding}
@@ -2306,6 +2308,7 @@ function DriveItemNameContextMenu({
 }
 
 function DriveItemMenu({
+  triggerRef,
   drivePath,
   hasSyncBinding,
   item,
@@ -2317,6 +2320,7 @@ function DriveItemMenu({
   onCloseAutoFocus,
   onOpenInfo,
 }: {
+  readonly triggerRef: React.Ref<HTMLButtonElement>
   readonly drivePath: string
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
@@ -2331,7 +2335,7 @@ function DriveItemMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="xs" aria-label={`更多 ${item.name}`}>
+        <Button ref={triggerRef} variant="ghost" size="xs" aria-label={`更多 ${item.name}`}>
           更多
         </Button>
       </DropdownMenuTrigger>

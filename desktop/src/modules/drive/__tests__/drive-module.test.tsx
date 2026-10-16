@@ -2030,12 +2030,69 @@ describe("DriveModule", () => {
     mocks.getDriveSyncSnapshot.mockRejectedValue(new Error("snapshot unavailable"))
     await render(<DriveModule />)
     await flushAct()
-    await clickRowButtonText("notes.md", "同步")
+    expect(getTableRow("notes.md").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
+    await openRowMenu("notes.md")
+    await clickMenuItemText("同步详情")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("同步状态加载失败")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("重试")
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
     await clickButtonText("重试")
     expect(rowButton("notes.md", "同步")).toBeUndefined()
+  })
+
+  it("does not flash sync tags while folder ancestry is being checked", async () => {
+    const remote = createDeferred<DriveItemDto>()
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "unrelated", name: "Temporary", type: "folder" }),
+      createDriveItem({ id: "parent", name: "Projects", type: "folder" }),
+    ])
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
+    mocks.getDriveItem.mockReturnValue(remote.promise)
+    await render(<DriveModule />)
+    await flushAct()
+    expect(document.querySelectorAll('[data-drive-status-tag="sync"]')).toHaveLength(0)
+
+    remote.resolve(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))
+    await flushAct()
+    expect(getTableRow("Temporary").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
+    expect(rowButton("Projects", "同步")).toBeTruthy()
+  })
+
+  it("does not mark unrelated folders as sync errors when one ancestry lookup fails", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "unrelated", name: "Temporary", type: "folder" }),
+      createDriveItem({ id: "parent", name: "Projects", type: "folder" }),
+    ])
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [
+      createDriveSyncBinding(),
+      createDriveSyncBinding({ id: "unavailable-binding", driveItemId: "unavailable-root" }),
+    ] }))
+    mocks.getDriveItem.mockImplementation(({ itemId }) => itemId === "drive-root"
+      ? Promise.resolve(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))
+      : Promise.reject(new Error("folder unavailable")))
+    await render(<DriveModule />)
+    await flushAct()
+    expect(getTableRow("Temporary").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
+    expect(rowButton("Projects", "同步")).toBeTruthy()
+    await openRowMenu("Temporary")
+    await clickMenuItemText("同步详情")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("同步状态加载失败")
+    expect(document.body.textContent).not.toContain("从哪边开始")
+    await clickButtonText("关闭详情")
+    await flushAct()
+    expect(document.activeElement).toBe(getButtonByLabel("更多 Temporary"))
+  })
+
+  it("keeps actual errors visible on confirmed sync bindings", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "drive-root", name: "Docs", type: "folder" })])
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [
+      createDriveSyncBinding({ status: "error", lastError: "本机文件夹不可访问" }),
+    ] }))
+    await render(<DriveModule />)
+    await flushAct()
+    expect(rowButton("Docs", "同步")?.dataset.variant).toBe("destructive")
+    await clickRowButtonText("Docs", "同步")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("本机文件夹不可访问")
   })
 
   it("switches sharing and sync popovers without navigation and restores focus on Escape", async () => {

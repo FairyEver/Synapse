@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import type { DriveItemDto, DriveShareListItemDto } from "@synapse/shared"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { RelativeTime } from "@/components/relative-time"
 import { driveErrorMessage } from "@/lib/drive-format"
 import { getDriveItemSyncStatus, type DriveItemSyncRelation } from "./drive-item-sync"
@@ -40,6 +40,7 @@ export interface DriveItemStatusTagsProps {
   readonly onCopyShare: (item: DriveItemDto, share: DriveShareListItemDto) => Promise<void>
   readonly onManageSync: (bindingId: string) => void
   readonly onRetrySync: () => Promise<void>
+  readonly onRestoreSyncFocus?: () => void
 }
 
 export function DriveItemStatusTags(props: DriveItemStatusTagsProps) {
@@ -53,22 +54,26 @@ export function DriveItemStatusTags(props: DriveItemStatusTagsProps) {
   )
 }
 
-function StatusTagPopover({ tagKey, label, title, variant, popover, children, sync = false }: {
+function StatusTagPopover({ tagKey, label, title, variant, popover, children, sync = false, showTag = true, onRestoreFocus }: {
   readonly tagKey: string; readonly label: string; readonly title: string
   readonly variant: "outline" | "secondary" | "destructive"
   readonly popover: StatusPopoverState; readonly children: ReactNode; readonly sync?: boolean
+  readonly showTag?: boolean; readonly onRestoreFocus?: () => void
 }) {
   return (
     <Popover open={popover.activeKey === tagKey} onOpenChange={(open) => popover.setOpen(tagKey, open)} data-track={sync ? "drive.file.sync.tag" : "drive.file.share.tag"}>
-      <PopoverTrigger asChild>
+      {showTag ? <PopoverTrigger asChild>
         <Badge variant={variant} asChild>
           <button type="button" data-slot="badge" data-drive-status-tag={sync ? "sync" : "share"} data-drive-sync-mark={sync || undefined} title={title}>
             {label}
           </button>
         </Badge>
-      </PopoverTrigger>
+      </PopoverTrigger> : <PopoverAnchor aria-hidden="true" />}
       <PopoverContent align="start" className="w-96 max-w-[calc(100vw-2rem)] max-h-(--radix-popover-content-available-height) overflow-y-auto p-4" aria-label={title}
-        onCloseAutoFocus={(event) => { if (!popover.shouldRestoreFocus()) event.preventDefault() }}>
+        onCloseAutoFocus={(event) => {
+          if (!popover.shouldRestoreFocus()) event.preventDefault()
+          else if (!showTag) { event.preventDefault(); onRestoreFocus?.() }
+        }}>
         <div className="flex items-center justify-between gap-2">
           <PopoverTitle>{title}</PopoverTitle>
           <Button variant="ghost" size="icon-sm" onClick={() => popover.setOpen(tagKey, false)} aria-label="关闭详情"><X /><span className="sr-only">关闭详情</span></Button>
@@ -113,7 +118,7 @@ function DriveShareTag({ item, popover, onManageShare, onCopyShare, controller }
   )
 }
 
-function DriveSyncTag({ item, relation, controller, popover, onManageSync, onRetrySync }: DriveItemStatusTagsProps & { readonly relation: DriveItemSyncRelation }) {
+function DriveSyncTag({ item, relation, controller, popover, onManageSync, onRetrySync, onRestoreSyncFocus }: DriveItemStatusTagsProps & { readonly relation: DriveItemSyncRelation }) {
   const key = `${item.id}:sync`
   const status = getDriveItemSyncStatus(relation, controller.snapshot)
   const [retrying, setRetrying] = useState(false)
@@ -129,7 +134,7 @@ function DriveSyncTag({ item, relation, controller, popover, onManageSync, onRet
   const bound = relation.kind === "bound" ? relation : null
   const variant = status.attention ? "destructive" : bound && !bound.excluded ? "secondary" : "outline"
   return (
-    <StatusTagPopover tagKey={key} popover={popover} label="同步" title="本机同步" variant={variant} sync>
+    <StatusTagPopover tagKey={key} popover={popover} label="同步" title="本机同步" variant={variant} sync showTag={relation.kind !== "unknown"} onRestoreFocus={onRestoreSyncFocus}>
       <p className="break-all font-medium">{item.name}</p>
       {bound ? <DetailFacts entries={[
         ["同步来源", bound.inherited ? `随文件夹 ${bound.binding.driveItemName}` : "独立同步"],
