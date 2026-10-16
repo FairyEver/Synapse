@@ -184,15 +184,6 @@ describe("SettingsModule layout", () => {
 
     expect(container.textContent).toContain("MCP 注册面板")
   })
-
-  it("keeps the experimental category ready for future settings", async () => {
-    requestedSettingsCategory.current = "experimental"
-    const container = await renderSettingsModule()
-
-    expect(container.textContent).toContain("暂无实验功能")
-    expect(container.textContent).not.toContain("Synapse MCP 工具按需加载")
-    expect(container.querySelector("button[role='switch']")).toBeNull()
-  })
 })
 
 async function renderSettingsModule() {

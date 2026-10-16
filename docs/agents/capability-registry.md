@@ -146,6 +146,8 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
 
+Settings 已移除空置的“实验功能”分类及占位内容。此调整仅涉及设置导航，System App、Dock、Workflow、Automation、MCP 与 Deep Link 注册数量和接口均不变，MCP schema 与系统 Skill 指南无需变更。
+
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
 Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。首条迁移把 `launcher`（「应用」）移到末尾，把 `mail` 放到其左侧；其它应用的相对顺序保持不变，已有 Mail 只移动且不重复。新安装预先记录当前迁移，不改变默认 Dock；用户之后移除 Mail、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。

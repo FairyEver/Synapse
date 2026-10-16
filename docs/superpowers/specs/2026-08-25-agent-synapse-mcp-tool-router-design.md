@@ -10,7 +10,7 @@
 
 ## 产品边界
 
-- 系统设置保留“实验功能”分类，但不再提供 Synapse MCP 工具开关。
+- 系统设置不再提供 Synapse MCP 工具开关；2026-10-16 移除空置的“实验功能”分类。
 - 新对话不再写入 router 开关快照；已有快照不影响实际模式。
 - 实际模式由 Provider 端点决定。Anthropic 官方端点不启用；第三方端点启用。对话内切换 Provider 时重新创建 live session 并重新计算。
 - `/mcp`、Claude Code 注册、公开工具名、schema 与 225/223 能力数量不变。两个 router 工具只存在于 Agent SDK 进程内会话。

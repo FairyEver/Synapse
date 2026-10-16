@@ -5,7 +5,6 @@ import {
   FolderOpen,
   Info,
   CircleUserRound,
-  FlaskConical,
   Network,
   PanelBottom,
   Settings2,
@@ -57,12 +56,6 @@ const settingsCategories: SettingsCategory[] = [
     icon: Bot,
     label: "模型与供应商",
     description: "模型供应商和默认模型。",
-  },
-  {
-    id: "experimental",
-    icon: FlaskConical,
-    label: "实验功能",
-    description: "尚在验证的功能。",
   },
   {
     id: "troubleshooting",

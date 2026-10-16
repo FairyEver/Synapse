@@ -93,10 +93,10 @@ function renderSettingItemRow(props: {
 
 function createToggleSettingItem(): SettingItem {
   return {
-    key: "experimental.sample",
+    key: "general.sample",
     label: "测试开关",
     description: "测试说明。",
-    category: "experimental",
+    category: "general",
     type: "toggle",
     defaultValue: false,
     scope: "global",
