@@ -117,6 +117,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["组织", "organization"],
   ["成员", "members"],
   ["往来", "context"],
+  ["联系人", "contact"],
 
   // ---------------- 名词：terminal ----------------
   ["会话", "session"],
@@ -237,6 +238,8 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["清空已发送", "delete"],
   ["清空已发送", "all"],
   ["移除", "remove"],
+  ["解除", "removal"],
+  ["替换", "replace"],
   ["改名", "rename"],
   ["重命名", "rename"],
   ["移动", "move"],

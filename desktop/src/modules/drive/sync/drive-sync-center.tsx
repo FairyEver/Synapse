@@ -95,9 +95,10 @@ export function DriveSyncCenter({
       ),
   )
   const retry = (remote: boolean) => {
+    const eventKey = remote ? "drive.sync.global.retry" : "drive.sync.snapshot.retry"
     const finish = startTrackedOperation({
       component: "drive",
-      eventKey: remote ? "drive.sync.global.retry" : "drive.sync.snapshot.retry",
+      eventKey,
     })
     setRetrying(true)
     void (remote ? controller.pollRemoteChanges().then(() => controller.refresh()) : controller.refresh())
