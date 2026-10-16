@@ -835,7 +835,9 @@ describe("DriveModule", () => {
     expect(button.textContent).toContain("1")
 
     await clickSyncToolbarButton()
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("network unavailable")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("暂时无法连接云盘。")
+    await clickButtonText("技术详情")
+    expect(document.body.textContent).toContain("network unavailable")
   })
 
   it("shows sync snapshot load failures instead of an empty binding state", async () => {
@@ -909,25 +911,23 @@ describe("DriveModule", () => {
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync dialog not found")
-    const dialogContent = document.querySelector('[data-slot="dialog-content"]')
-    expect(dialogContent?.className).toContain("sm:max-w-4xl")
-    expect(dialogContent?.className).toContain("h-[36rem]")
     expect(dialog.textContent).toContain("云盘同步")
     const dialogHeader = dialog.querySelector('[data-slot="dialog-frame-header"]')
     if (!dialogHeader) throw new Error("Drive sync dialog header not found")
-    expect(Array.from(dialogHeader.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent?.replace(/[0-9]+$/u, ""))).toEqual([
+    expect(Array.from(dialog.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent?.replace(/[0-9]+$/u, ""))).toEqual([
       "全部",
       "进行中",
+      "等待重试",
       "需要处理",
       "已暂停",
     ])
     expect(dialog.textContent).toContain("Docs")
-    expect(dialog.textContent).not.toContain("/Users/me/Docs")
+    expect(dialog.textContent).toContain("/Users/me/Docs")
     expect(dialog.textContent).toContain("需要处理")
     await clickSyncInfo("Docs")
     expect(document.body.textContent).toContain("/Users/me/Docs")
     expect(dialog.textContent).not.toContain("排除规则")
-    expect(dialog.textContent).not.toContain("spec.md")
+    expect(dialog.textContent).toContain("spec.md")
   })
 
   it("updates sync state in place without reordering and searches by path", async () => {
@@ -941,7 +941,7 @@ describe("DriveModule", () => {
     await act(async () => { driveSyncChangedListener?.(changed); await flushPromises() })
     expect([...document.querySelectorAll("[data-drive-sync-row]")].map((row) => row.getAttribute("data-drive-sync-row"))).toEqual(["binding-1", "binding-2"])
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Updated")
-    expect(getButtonByLabel("同步信息 Updated").textContent).toContain("已暂停")
+    expect(getSyncCard("Updated").textContent).toContain("已暂停")
     async function search(value: string) {
       const input = document.querySelector('[role="dialog"] input[aria-label="搜索同步"]') as HTMLInputElement
       await act(async () => {
@@ -1144,10 +1144,10 @@ describe("DriveModule", () => {
     await clickSyncToolbarButton()
 
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("当前离线，同步已暂停。联网后会自动继续。")
-    expect(getButtonByLabel("同步信息 Docs").disabled).toBe(false)
+    expect(getButtonByLabel("同步详情 Docs").disabled).toBe(false)
     await clickButtonByLabel("更多同步操作 Docs")
     const fullCheck = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-      .find((item) => item.textContent?.trim() === "重新核对两边内容")
+      .find((item) => item.textContent?.trim() === "暂停同步")
     expect(fullCheck?.getAttribute("aria-disabled")).toBe("true")
   })
 
@@ -1165,7 +1165,7 @@ describe("DriveModule", () => {
     await flushAct()
     await clickSyncToolbarButton()
     await clickSyncCard("Docs")
-    await clickButtonText("打开云盘位置")
+    await clickButtonByLabel("打开云盘位置")
     await flushAct()
 
     expect(mocks.getDriveItem).toHaveBeenCalledWith({ itemId: "drive-root" })
@@ -1183,19 +1183,17 @@ describe("DriveModule", () => {
     await flushAct()
     await clickSyncToolbarButton()
 
-    expect(getButtonByLabel("同步信息 Docs")).toBeTruthy()
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("/Projects/Docs")
-    await clickSyncInfo("Docs")
+    expect(getButtonByLabel("同步详情 Docs")).toBeTruthy()
+    await clickButtonByLabel("更多同步操作 Docs")
+    expect(menuItemTexts()).not.toContain("重新核对全部文件…")
+    expect(menuItemTexts()).not.toContain("更换本地位置…")
+    expect(menuItemTexts()).toContain("立即同步")
+    expect(menuItemTexts()).toContain("暂停同步")
+    await clickMenuItemText("同步详情")
     expect(document.body.textContent).toContain("/Projects/Docs")
     expect(document.body.textContent).toContain("/Users/me/Docs")
-    await clickSyncInfo("Docs")
-    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("重新核对两边内容")
-
-    await clickButtonByLabel("更多同步操作 Docs")
-    expect(document.body.textContent).toContain("重新核对两边内容")
-    expect(document.body.textContent).toContain("立即同步一次")
-    expect(document.body.textContent).toContain("暂停同步")
-    expect(document.body.textContent).toContain("解除同步…")
+    await clickButtonByLabel("修改同步")
+    expect(menuItemTexts()).toContain("重新核对全部文件…")
 
     await clickMenuItemText("解除同步…")
     expect(document.body.textContent).toContain("解除同步 Docs")
@@ -1218,7 +1216,7 @@ describe("DriveModule", () => {
     await flushAct()
     await clickSyncToolbarButton()
     await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("立即同步一次")
+    await clickMenuItemText("立即同步")
     await act(async () => { driveSyncChangedListener?.(running); await flushPromises() })
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步出错")
 
@@ -1242,11 +1240,12 @@ describe("DriveModule", () => {
     await clickButtonByLabel("更多同步操作 Docs")
 
     const menuItems = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
-    const localSync = menuItems.find((item) => item.textContent?.trim() === "重新核对两边内容")
-    const remoteSync = menuItems.find((item) => item.textContent?.trim() === "立即同步一次")
+    const remoteSync = menuItems.find((item) => item.textContent?.trim() === "立即同步")
 
-    expect(localSync?.getAttribute("aria-disabled")).toBe("true")
     expect(remoteSync?.getAttribute("aria-disabled")).toBe("true")
+    await clickMenuItemText("同步详情")
+    await clickButtonByLabel("修改同步")
+    expect(getMenuItem("重新核对全部文件…").getAttribute("aria-disabled")).toBe("true")
     expect(mocks.rescanDriveSyncBinding).not.toHaveBeenCalled()
     expect(mocks.pollDriveSyncRemoteChanges).not.toHaveBeenCalled()
   })
@@ -1267,13 +1266,13 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
     await clickSyncToolbarButton()
-    await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("重新核对两边内容")
+    await clickSyncCard("Docs")
+    await clickButtonByLabel("修改同步")
+    await clickMenuItemText("重新核对全部文件…")
     await clickButtonText("开始核对")
 
     expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledTimes(1)
-    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(true)
-    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(true)
+    expect(getButtonByLabel("修改同步").disabled).toBe(true)
 
     await act(async () => {
       rescan.resolve(undefined)
@@ -1282,8 +1281,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
-    expect(getButtonByLabel("同步信息 Docs").disabled).toBe(false)
-    expect(getButtonByLabel("更多同步操作 Docs").disabled).toBe(false)
+    expect(getButtonByLabel("修改同步").disabled).toBe(false)
   })
 
   it("refreshes the sync snapshot after failed secondary sync actions", async () => {
@@ -1301,14 +1299,14 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
     await clickSyncToolbarButton()
-    await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("重新核对两边内容")
+    await clickSyncCard("Docs")
+    await clickButtonByLabel("修改同步")
+    await clickMenuItemText("重新核对全部文件…")
     await clickButtonText("开始核对")
 
     expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
     expect(mocks.toast).toHaveBeenCalledWith("本地路径不存在。")
-    if (!document.querySelector('[aria-label="同步简要信息 Docs"]')) await clickSyncInfo("Docs")
     expect(document.body.textContent).toContain("本地路径不存在。")
     expect(getButtonByLabel("重试 Docs").textContent).toContain("重试")
   })
@@ -1328,15 +1326,15 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
     await clickSyncToolbarButton()
-    await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("重新核对两边内容")
+    await clickSyncCard("Docs")
+    await clickButtonByLabel("修改同步")
+    await clickMenuItemText("重新核对全部文件…")
     await clickButtonText("开始核对")
 
     expect(mocks.rescanDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
     expect(mocks.toast).toHaveBeenCalledWith("上传失败。")
     expect(mocks.toast).not.toHaveBeenCalledWith("重新核对两边内容已完成")
-    await clickSyncInfo("Docs")
     expect(getButtonByLabel("重试 Docs").textContent).toContain("重试")
   })
 
@@ -1365,12 +1363,12 @@ describe("DriveModule", () => {
     await flushAct()
     await clickSyncToolbarButton()
     await clickButtonByLabel("更多同步操作 Docs")
-    await clickMenuItemText("立即同步一次")
+    await clickMenuItemText("立即同步")
 
     expect(mocks.pollDriveSyncRemoteChanges).toHaveBeenCalledWith({ id: "binding-1" })
     expect(mocks.toast).toHaveBeenCalledWith("同步产生冲突，请处理冲突")
-    expect(mocks.toast).not.toHaveBeenCalledWith("已立即同步一次")
-    expect(getButtonByLabel("同步信息 Docs").textContent).toContain("需要处理")
+    expect(mocks.toast).not.toHaveBeenCalledWith("已立即同步")
+    expect(getSyncCard("Docs").textContent).toContain("需要处理")
   })
 
   it("uses the unified catch-up flow when retrying an error binding", async () => {
@@ -1418,7 +1416,6 @@ describe("DriveModule", () => {
     expect(mocks.resumeDriveSyncBinding).toHaveBeenCalledWith({ id: "binding-1" })
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(2)
     expect(mocks.toast).toHaveBeenCalledWith("本地路径不存在。")
-    if (!document.querySelector('[aria-label="同步简要信息 Docs"]')) await clickSyncInfo("Docs")
     expect(document.body.textContent).toContain("本地路径不存在。")
   })
 
@@ -1448,10 +1445,10 @@ describe("DriveModule", () => {
     await flushAct()
     await clickSyncToolbarButton()
 
-    expect(getButtonByLabel("同步信息 Active").textContent).toContain("已同步")
-    expect(getButtonByLabel("同步信息 Conflict").textContent).toContain("需要处理")
-    expect(getButtonByLabel("同步信息 Paused").textContent).toContain("已暂停")
-    expect(getButtonByLabel("同步信息 Error").textContent).toContain("同步出错")
+    expect(getSyncCard("Active").textContent).toContain("尚未同步")
+    expect(getSyncCard("Conflict").textContent).toContain("需要处理")
+    expect(getSyncCard("Paused").textContent).toContain("已暂停")
+    expect(getSyncCard("Error").textContent).toContain("同步出错")
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("同步已停止，需要处理后才能继续。")
     await clickSyncCard("Conflict")
 
@@ -1543,7 +1540,7 @@ describe("DriveModule", () => {
     await clickMenuItemText("同步详情")
 
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/Users/me/report.txt")
-    await clickButtonText("打开本地位置")
+    await clickButtonByLabel("打开本地位置")
     expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Users/me/report.txt")
   })
 
@@ -1560,7 +1557,7 @@ describe("DriveModule", () => {
       { activeBindingCount: 1, retryWaitingOperationCount: 1 },
       { bindings: [createDriveSyncBinding()], health: { status: "retrying", connectivity: "online", readOnly: false, lastError: "network", updatedAt: "2026-06-28T00:00:00.000Z" } },
     ))
-    driveSyncChangedListener?.(await mocks.getDriveSyncSnapshot())
+    await act(async () => { driveSyncChangedListener?.(await mocks.getDriveSyncSnapshot()); await flushPromises() })
     await flushAct()
     expect(getSyncToolbarButton()).toBeTruthy()
   })
@@ -1805,7 +1802,7 @@ describe("DriveModule", () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/NewDocs")
     mocks.previewDriveSyncBinding.mockResolvedValue({ status: "ready", direction: "bind_existing", confirmationToken: "mapping-token", forcedExcludeRules: [], defaultExcludeRules: [], importedGitignoreRules: [], alignment: { unchanged: 1, changes: [{ relativePath: "spec.md", action: "download", kind: "file" }] } })
     await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton()
-    await clickButtonByLabel("更多同步操作 Docs"); await clickMenuItemText("更换本地位置…")
+    await clickSyncCard("Docs"); await clickButtonByLabel("修改同步"); await clickMenuItemText("更换本地位置…")
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("修改什么？")
     await clickButtonText("选择文件夹"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
@@ -1821,7 +1818,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton()
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("文件处理未完成")
     await clickButtonByLabel("更多同步操作 Docs")
-    expect(getMenuItem("更换本地位置…").getAttribute("aria-disabled")).toBe("true")
+    expect(menuItemTexts()).not.toContain("更换本地位置…")
     expect(menuItemTexts()).not.toContain("继续同步")
     await clickMenuItemText("重试文件处理…")
     expect(mocks.previewDriveSyncRemoval).toHaveBeenLastCalledWith({ id: "binding-1", disposition: "keep_local" })
@@ -4508,19 +4505,18 @@ function rowButton(rowText: string, buttonText: string): HTMLButtonElement | und
     .find((button) => button.textContent?.trim() === buttonText)
 }
 
-/** 同步列表里的状态卡。 */
+/** 同步列表中的项目行。 */
 function getSyncCard(name: string): HTMLElement {
-  const card = Array.from(document.body.querySelectorAll<HTMLElement>('[data-track="drive.sync.card.open"]'))
+  const card = Array.from(document.body.querySelectorAll<HTMLElement>('[data-drive-sync-row]'))
     .find((candidate) => candidate.textContent?.includes(name))
   if (!card) throw new Error(`Sync card not found: ${name}`)
-  return card
+  return card.closest("tr") ?? card
 }
 
-async function clickSyncInfo(name: string): Promise<void> { await clickButtonByLabel(`同步信息 ${name}`) }
+async function clickSyncInfo(name: string): Promise<void> { await clickButtonByLabel(`同步详情 ${name}`) }
 
 async function clickSyncCard(name: string): Promise<void> {
   await clickSyncInfo(name)
-  await clickButtonText("管理同步")
 }
 
 /** 同步列表的筛选项：按钮文本带计数，按前缀匹配。 */

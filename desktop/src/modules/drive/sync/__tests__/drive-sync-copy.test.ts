@@ -18,7 +18,9 @@ import {
   formatRelativeTime,
   isBindingInFilter,
   operationKindText,
+  operationActivityText,
   retryOperationOf,
+  syncErrorSummary,
 } from "../drive-sync-copy"
 
 const NOW = new Date("2026-09-30T15:00:00.000Z")
@@ -93,21 +95,21 @@ describe("同步状态文案", () => {
     expect(downloading.text).toBe("正在下载 1 个文件")
   })
 
-  it("等待重试：说明是第几次，且不需要用户介入", () => {
+  it("等待重试保持短状态，次数不挤入状态标签", () => {
     const state = bindingStateText(
       binding(),
       [operation({ status: "retry_wait", attemptCount: 3 })],
       [],
     )
-    expect(state).toEqual({ text: "同步暂未完成，等待重试（第 3 次）", tone: "normal" })
+    expect(state).toEqual({ text: "等待重试", tone: "normal" })
     expect(bindingStateDetail(binding(), [operation({ status: "retry_wait", relativePath: "课件/第 3 讲.pdf" })], []))
-      .toBe("课件/第 3 讲.pdf · 稍后自动继续。")
+      .toBe("将自动重试。")
   })
 
-  it("等待重试时保留服务端失败原因", () => {
+  it("等待重试先解释限流原因，不将 HTTP 错误当正文", () => {
     expect(bindingStateDetail(binding(), [operation({
       status: "retry_wait", message: "云盘条目加载失败。 HTTP 429", relativePath: "",
-    })], [])).toBe("云盘条目加载失败。 HTTP 429")
+    })], [])).toBe("云盘请求过于频繁。")
   })
 
   it("已同步：带相对时间", () => {
@@ -115,6 +117,7 @@ describe("同步状态文案", () => {
     const state = bindingStateText(binding(), [], [])
     expect(state.tone).toBe("normal")
     expect(state.text).toMatch(/^已同步 · \S/)
+    expect(bindingStateText(binding({ lastSyncedAt: null }), [], []).text).toBe("尚未同步")
   })
 
   it("已暂停：说明不会自动同步", () => {
@@ -212,15 +215,19 @@ describe("筛选", () => {
 
   it("四类计数", () => {
     expect(filterCounts(bindings, operations, conflicts))
-      .toEqual({ all: 6, active: 2, attention: 2, paused: 1 })
+      .toEqual({ all: 6, active: 2, waiting: 0, attention: 2, paused: 1 })
   })
 
-  it("进行中只含初始化中和真的在传输或重试的", () => {
+  it("退避等待独立于实际执行中的工作，且不要求人工处理", () => {
     const idle = binding({ id: "b9", status: "active" })
     expect(isBindingInFilter(idle, [], [], "active")).toBe(false)
     expect(isBindingInFilter(binding({ id: "b5", status: "initializing" }), [], [], "active")).toBe(true)
     expect(isBindingInFilter(idle, [operation({ bindingId: "b9", status: "running" })], [], "active")).toBe(true)
-    expect(isBindingInFilter(idle, [operation({ bindingId: "b9", status: "retry_wait" })], [], "active")).toBe(true)
+    const retry = operation({ bindingId: "b9", status: "retry_wait" })
+    expect(isBindingInFilter(idle, [retry], [], "active")).toBe(false)
+    expect(isBindingInFilter(idle, [retry], [], "waiting")).toBe(true)
+    expect(isBindingInFilter(idle, [retry], [], "attention")).toBe(false)
+    expect(isBindingInFilter(binding({ status: "paused" }), [retry], [], "waiting")).toBe(false)
   })
 
   it("需要处理不含已暂停", () => {
@@ -315,6 +322,27 @@ describe("时间与体积", () => {
 
 
 describe("同步列表密度与清理恢复", () => {
+  it("将技术错误映射为原因，同时保留普通用户可读的错误", () => {
+    expect(syncErrorSummary('GET [path] HTTP 429: {"error":"TOO_MANY_REQUESTS"}')).toBe("云盘请求过于频繁。")
+    expect(syncErrorSummary("GET [path] HTTP 503: unavailable")).toBe("云盘服务暂时不可用。")
+    expect(syncErrorSummary("TypeError: Failed to fetch")).toBe("暂时无法连接云盘。")
+    expect(syncErrorSummary('GET [path] HTTP 418: {"error":"unknown"}')).toBe("同步未完成，可展开技术详情查看原因。")
+    expect(syncErrorSummary("本地路径不存在。")).toBe("本地路径不存在。")
+  })
+  it("选择最早的有效重试计划，忽略缺失或无效的计划时间", () => {
+    const earliest = operation({ id: "early", status: "retry_wait", nextRetryAt: "2026-10-16T01:00:00Z" })
+    expect(retryOperationOf([
+      operation({ status: "retry_wait", nextRetryAt: "invalid" }),
+      operation({ status: "retry_wait", nextRetryAt: "2026-10-16T02:00:00Z" }),
+      earliest,
+    ])?.id).toBe("early")
+  })
+  it("活动摘要区分等待、失败和成功，不重复原始接口错误", () => {
+    expect(operationActivityText(operation({ status: "retry_wait", message: "HTTP 429" }))).toBe("上传 docs/需求.md · 等待重试")
+    expect(operationActivityText(operation({ status: "error", message: "HTTP 503" }))).toBe("上传 docs/需求.md · 失败")
+    expect(operationActivityText(operation({ status: "pending" }))).toBe("上传 docs/需求.md · 等待执行")
+    expect(operationActivityText(operation({ status: "succeeded", message: "HTTP diagnostic" }))).toBe("已上传 docs/需求.md")
+  })
   it("uses one compact state without counts, dates or paths", () => {
     expect(bindingListStateText(binding(), [], []).text).toBe("已同步")
     expect(bindingListStateText(binding(), [operation()], []).text).toBe("正在上传")

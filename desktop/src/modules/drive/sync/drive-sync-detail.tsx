@@ -1,18 +1,16 @@
 import { useState } from "react"
 import { toast } from "sonner"
+import { Cloud, Monitor } from "lucide-react"
 import type { DriveSyncBindingDto, DriveSyncConflictDto } from "@synapse/shared"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DialogFrameFooter } from "@/components/ui/dialog"
-import { Progress } from "@/components/ui/progress"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { DriveSyncCopyButton } from "./drive-sync-diagnostics"
+import { DriveSyncStatus } from "./drive-sync-status"
 import {
-  activeWorkOf,
-  bindingPrimaryAction,
-  bindingStateDetail,
-  bindingStateText,
   conflictResolutionToast,
-  formatBytes,
   formatRelativeTime,
+  formatSyncTimestamp,
   operationActivityText,
 } from "./drive-sync-copy"
 import { DriveSyncConflictCard } from "./drive-sync-conflict-card"
@@ -26,22 +24,16 @@ export function DriveSyncDetail({
   conflicts,
   controller,
   onOpenDriveItem,
-  onRequestRemove,
 }: {
   readonly binding: DriveSyncBindingDto
   readonly conflicts: readonly DriveSyncConflictDto[]
   readonly controller: DriveSyncController
   readonly onOpenDriveItem?: (binding: DriveSyncBindingDto) => void | Promise<void>
-  readonly onRequestRemove: () => void
 }) {
   const [editingExcludes, setEditingExcludes] = useState(false)
   const [excludeCandidates, setExcludeCandidates] = useState<readonly string[] | null>(null)
 
   const operations = (controller.snapshot?.operations ?? []).filter((operation) => operation.bindingId === binding.id)
-  const state = bindingStateText(binding, operations, conflicts)
-  const detail = bindingStateDetail(binding, operations, conflicts)
-  const action = bindingPrimaryAction(binding, operations, conflicts, controller.readOnly)
-  const work = activeWorkOf(operations)
   const pending = controller.isPending(binding.id)
   const readOnly = controller.readOnly
   // 同一条规则可能同时出现在多个规则组里，展示时按规则去重，避免重复的 React key。
@@ -70,111 +62,22 @@ export function DriveSyncDetail({
       .catch(() => setExcludeCandidates([]))
   }
 
-  const runStatusAction = () => {
-    if (action.kind === "view") return
-    if (action.kind === "retry") {
-      void controller.runBindingAction("drive.sync.binding.retry", binding.id, () => controller.resume(binding.id), "已重试同步")
-      return
-    }
-    if (action.kind === "resume") {
-      void controller.runBindingAction("drive.sync.binding.resume", binding.id, () => controller.resume(binding.id), "已继续同步")
-      return
-    }
-    if (action.kind === "open") {
-      void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置"))
-      return
-    }
-    if (action.kind === "conflicts") return
-    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
-  }
-
   return (
-    <>
-      <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
-        <section aria-label="同步状态" className="grid gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={state.tone === "attention" ? "destructive" : "secondary"}>{state.text}</Badge>
-            <div className="ml-auto">
-              {readOnly ? (
-                <Button
-                  type="button"
-                  variant={action.variant}
-                  aria-label={`${action.label} ${binding.driveItemName}`}
-                  onClick={runStatusAction}
-                >
-                  {action.label}
-                </Button>
-              ) : binding.status === "paused" || binding.status === "error" ? (
-                <Button
-                  type="button"
-                  variant={action.variant}
-                  aria-label={`${action.label} ${binding.driveItemName}`}
-                  disabled={pending}
-                  onClick={runStatusAction}
-                >
-                  {action.label}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={pending || binding.status === "initializing"}
-                  onClick={() => {
-                    void controller.runBindingAction("drive.sync.binding.pause", binding.id, () => controller.pause(binding.id), "已暂停同步", false)
-                  }}
-                >
-                  暂停同步
-                </Button>
-              )}
-            </div>
-          </div>
-          {detail ? <div className="max-w-prose break-words text-sm leading-relaxed">{detail}</div> : null}
-          {work?.kind === "transfer" && work.percent !== null ? (
-            <div className="mt-3 grid gap-1">
-              <Progress value={work.percent} aria-label={`${binding.driveItemName} 同步进度`} />
-              <div className="text-xs tabular-nums text-muted-foreground">
-                {formatBytes(work.completedBytes)} / {formatBytes(work.totalBytes ?? 0)}
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section aria-labelledby="sync-locations-heading" className="mt-6">
-          <h3 id="sync-locations-heading" className="font-medium">同步位置</h3>
-          <dl className="mt-3 grid gap-4 text-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 basis-48">
-                <dt className="text-muted-foreground">云盘</dt>
-                <dd className="mt-1 break-all leading-relaxed">{driveSyncRemotePath(binding)}</dd>
-              </div>
-              {onOpenDriveItem ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { void Promise.resolve(onOpenDriveItem(binding)).catch(() => toast("无法打开云端位置")) }}
-                >
-                  打开云盘位置
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1 basis-48">
-                <dt className="text-muted-foreground">电脑</dt>
-                <dd className="mt-1 break-all leading-relaxed">{binding.localPath}</dd>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => { void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置")) }}
-              >
-                打开本地位置
-              </Button>
-            </div>
+    <ScrollArea className="min-h-0 flex-1" data-track="drive.sync.detail.scroll">
+      <div className="grid gap-6 px-5 py-4">
+        <DriveSyncStatus binding={binding} operations={operations} conflicts={conflicts} controller={controller} />
+        <section aria-labelledby="sync-locations-heading">
+          <h3 id="sync-locations-heading" className="mb-3 font-medium">同步位置</h3>
+          <dl className="grid gap-4">
+            <DriveSyncLocation label={binding.drivePathHint ? "云盘" : "云盘（目录未记录）"} icon={<Cloud className="size-4" />} path={driveSyncRemotePath(binding)} copyLabel="复制云盘路径" openLabel="打开云盘位置"
+              onOpen={onOpenDriveItem ? () => { void Promise.resolve(onOpenDriveItem(binding)).catch(() => toast("无法打开云端位置")) } : undefined} />
+            <DriveSyncLocation label="本地" icon={<Monitor className="size-4" />} path={binding.localPath} copyLabel="复制本地路径" openLabel="打开本地位置"
+              onOpen={() => { void controller.revealLocalPath(binding.localPath).catch(() => toast("无法打开本地位置")) }} />
           </dl>
         </section>
 
         {conflicts.length > 0 ? (
-          <section className="mt-5">
+          <section>
             <div className="flex items-center gap-2">
               <h3 className="font-medium">需要处理</h3>
               <Badge variant="destructive">{conflicts.length}</Badge>
@@ -202,7 +105,7 @@ export function DriveSyncDetail({
         ) : null}
 
         {binding.kind === "folder" ? (
-          <section className="mt-5">
+          <section>
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-medium">同步范围</h3>
               {editingExcludes ? null : (
@@ -245,7 +148,7 @@ export function DriveSyncDetail({
           </section>
         ) : null}
 
-        <section className="mt-5">
+        <section>
           <h3 className="font-medium">最近活动</h3>
           {activity.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">还没有同步记录。</p>
@@ -253,7 +156,7 @@ export function DriveSyncDetail({
             <ul className="mt-3 grid gap-3">
               {activity.map((operation) => (
                 <li key={operation.id} className="grid gap-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-3">
-                  <time dateTime={operation.updatedAt} className="tabular-nums text-muted-foreground">
+                  <time dateTime={operation.updatedAt} title={formatSyncTimestamp(operation.updatedAt) ?? undefined} className="tabular-nums text-muted-foreground">
                     {formatRelativeTime(operation.updatedAt)}
                   </time>
                   <span className="min-w-0 break-words leading-relaxed">{operationActivityText(operation)}</span>
@@ -263,12 +166,26 @@ export function DriveSyncDetail({
           )}
         </section>
       </div>
-      <DialogFrameFooter className="sm:justify-between">
-        <p className="text-sm text-muted-foreground">解除同步后，两端文件均保留。</p>
-        <Button type="button" variant="destructive" disabled={readOnly || pending} onClick={onRequestRemove}>
-          解除同步
-        </Button>
-      </DialogFrameFooter>
-    </>
+    </ScrollArea>
   )
+}
+
+function DriveSyncLocation({ label, icon, path, copyLabel, openLabel, onOpen }: {
+  readonly label: string
+  readonly icon: React.ReactNode
+  readonly path: string
+  readonly copyLabel: string
+  readonly openLabel: string
+  readonly onOpen?: () => void
+}) {
+  return <div className="flex min-w-0 items-center gap-3">
+    <div className="min-w-0 flex-1">
+      <dt className="mb-1 flex items-center gap-2 text-sm text-muted-foreground">{icon}{label}</dt>
+      <dd data-allow-select="true" className="truncate text-sm" title={path}>{path}</dd>
+    </div>
+    <div className="flex shrink-0 items-center gap-1">
+      <DriveSyncCopyButton value={path} label={copyLabel} />
+      {onOpen ? <Button type="button" variant="ghost" onClick={onOpen} aria-label={openLabel}>打开</Button> : null}
+    </div>
+  </div>
 }

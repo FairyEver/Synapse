@@ -5,6 +5,7 @@ import type {
   DriveSyncOperationDto,
   DriveSyncOperationKind,
 } from "@synapse/shared"
+import { formatDateTime } from "@/lib/date-time"
 
 /**
  * 同步功能全部用户可见文案的唯一来源。
@@ -56,11 +57,12 @@ function actingLabelOf(kind: DriveSyncOperationKind): string {
   }
 }
 
-export type DriveSyncFilter = "all" | "active" | "attention" | "paused"
+export type DriveSyncFilter = "all" | "active" | "waiting" | "attention" | "paused"
 
 export const DRIVE_SYNC_FILTERS: ReadonlyArray<{ readonly value: DriveSyncFilter; readonly label: string }> = [
   { value: "all", label: "全部" },
   { value: "active", label: "进行中" },
+  { value: "waiting", label: "等待重试" },
   { value: "attention", label: "需要处理" },
   { value: "paused", label: "已暂停" },
 ]
@@ -102,7 +104,13 @@ export function activeWorkOf(
 export function retryOperationOf(
   operations: readonly DriveSyncOperationDto[],
 ): DriveSyncOperationDto | null {
-  return operations.find((operation) => operation.status === "retry_wait") ?? null
+  const waiting = operations.filter((operation) => operation.status === "retry_wait")
+  return waiting.reduce<DriveSyncOperationDto | null>((earliest, operation) => {
+    if (!earliest) return operation
+    const at = Date.parse(operation.nextRetryAt ?? "")
+    const previous = Date.parse(earliest.nextRetryAt ?? "")
+    return Number.isFinite(at) && (!Number.isFinite(previous) || at < previous) ? operation : earliest
+  }, null)
 }
 
 export function bindingStateText(
@@ -134,11 +142,11 @@ export function bindingStateText(
     }
   }
   const retry = retryOperationOf(operations)
-  if (retry) return { text: `同步暂未完成，等待重试（第 ${retry.attemptCount} 次）`, tone: "normal" }
-  return { text: `已同步 · ${formatRelativeTime(binding.lastSyncedAt ?? binding.updatedAt)}`, tone: "normal" }
+  if (retry) return { text: "等待重试", tone: "normal" }
+  return { text: binding.lastSyncedAt ? `已同步 · ${formatRelativeTime(binding.lastSyncedAt)}` : "尚未同步", tone: "normal" }
 }
 
-/** The management list keeps exactly one state; paths, counts and timing live in details. */
+/** 状态列只保留短状态；路径和最近成功时间由独立列呈现。 */
 export function bindingListStateText(binding: DriveSyncBindingDto, operations: readonly DriveSyncOperationDto[], conflicts: readonly DriveSyncConflictDto[]): DriveSyncStateText {
   const state = bindingStateText(binding, operations, conflicts)
   if (binding.status === "active" && state.tone !== "attention") {
@@ -154,11 +162,11 @@ export function bindingStateDetail(
   operations: readonly DriveSyncOperationDto[],
   conflicts: readonly DriveSyncConflictDto[],
 ): string {
-  if (binding.status === "removed") return binding.lastError || "同步关系已解除"
+  if (binding.status === "removed") return binding.lastError ? syncErrorSummary(binding.lastError) : "同步关系已解除"
   if (binding.status === "error") {
-    return binding.lastError?.trim()
+    const message = binding.lastError?.trim()
       || operations.find((operation) => operation.status === "error" && operation.message)?.message
-      || "同步已停止，需要处理后才能继续。"
+    return message ? syncErrorSummary(message) : "同步已停止，需要处理后才能继续。"
   }
   if (binding.status === "conflict" || conflicts.length > 0) return "选一个版本后继续。"
   if (binding.status === "paused") return `最近同步 ${formatRelativeTime(binding.lastSyncedAt ?? binding.updatedAt)}`
@@ -172,8 +180,24 @@ export function bindingStateDetail(
     return work.currentPath ? `${size} · ${work.currentPath}` : size
   }
   const retry = retryOperationOf(operations)
-  if (retry) return [retry.relativePath, retry.message || "稍后自动继续。"].filter(Boolean).join(" · ")
+  if (retry) return retry.message ? syncErrorSummary(retry.message) : "将自动重试。"
   return ""
+}
+
+/** 原始诊断仅按需展开，正文保留能指导用户理解状态的原因。 */
+export function syncErrorSummary(message: string): string {
+  if (/HTTP\s*429\b|TOO_MANY_REQUESTS|ThrottleException/i.test(message)) return "云盘请求过于频繁。"
+  if (/HTTP\s*5\d\d\b/i.test(message)) return "云盘服务暂时不可用。"
+  if (/HTTP\s*401\b/i.test(message)) return "登录已失效，请重新登录。"
+  if (/HTTP\s*403\b/i.test(message)) return "没有权限访问该云盘项目。"
+  if (/Failed to fetch|network|ECONN|ETIMEDOUT|timeout/i.test(message)) return "暂时无法连接云盘。"
+  if (/HTTP\s*\d{3}\b|\{\s*"|\b\w*(?:Error|Exception)\b/.test(message)) return "同步未完成，可展开技术详情查看原因。"
+  return message.trim()
+}
+
+export function formatSyncTimestamp(value: string | null | undefined): string | null {
+  if (!value || !Number.isFinite(Date.parse(value))) return null
+  return formatDateTime(value)
 }
 
 /**
@@ -273,7 +297,14 @@ export function operationKindText(kind: DriveSyncOperationKind): string {
 /** 一条已完成的操作描述成一句人话，用于详情里的「最近活动」。 */
 export function operationActivityText(operation: DriveSyncOperationDto): string {
   const path = operation.relativePath || "内容"
-  if (operation.message?.trim()) return operation.message.trim()
+  const label = `${operationKindText(operation.kind)} ${path}`
+  switch (operation.status) {
+    case "retry_wait": return `${label} · 等待重试`
+    case "error": return `${label} · 失败`
+    case "pending": return `${label} · 等待执行`
+    case "running": return `${label} · 进行中`
+    case "conflict": return `${label} · 需要处理`
+  }
   switch (operation.kind) {
     case "download": return `已下载 ${path}`
     case "upload": return `已上传 ${path}`
@@ -297,13 +328,16 @@ export function isBindingInFilter(
     case "paused": return binding.status === "paused"
     case "attention": return binding.status === "conflict" || binding.status === "error" || (binding.status === "removed" && Boolean(binding.lastError)) || conflicts.length > 0
     case "active": return binding.status === "initializing"
-      || (binding.status === "active" && (activeWorkOf(operations) !== null || retryOperationOf(operations) !== null))
+      || (binding.status === "active" && activeWorkOf(operations) !== null)
+    case "waiting": return binding.status === "active" && conflicts.length === 0
+      && activeWorkOf(operations) === null && retryOperationOf(operations) !== null
   }
 }
 
 export interface DriveSyncFilterCounts {
   readonly all: number
   readonly active: number
+  readonly waiting: number
   readonly attention: number
   readonly paused: number
 }
@@ -319,7 +353,7 @@ export function filterCounts(
     conflicts.filter((conflict) => conflict.bindingId === binding.id),
     filter,
   )).length
-  return { all: bindings.length, active: count("active"), attention: count("attention"), paused: count("paused") }
+  return { all: bindings.length, active: count("active"), waiting: count("waiting"), attention: count("attention"), paused: count("paused") }
 }
 
 /** 异步任务的状态词。用于顶栏按钮的无障碍标签，不进正文。 */

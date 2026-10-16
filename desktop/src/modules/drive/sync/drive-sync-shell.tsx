@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import type { DriveItemDto, DriveSyncBindingDto } from "@synapse/shared"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import { DriveSyncCenter, DriveSyncFilterBar } from "./drive-sync-center"
 import { DriveSyncRemovalDialog } from "./drive-sync-removal-dialog"
 import { DriveSyncEditMenu } from "./drive-sync-edit-menu"
 import { DriveSyncDetail } from "./drive-sync-detail"
-import type { DriveSyncFilter } from "./drive-sync-copy"
+import { retryOperationOf, syncErrorSummary, type DriveSyncFilter } from "./drive-sync-copy"
 import { DriveSyncWizard, type DriveSyncWizardEntry } from "./drive-sync-wizard"
 import type { DriveSyncController } from "./use-drive-sync"
 
@@ -48,6 +49,8 @@ export function DriveSyncDialog({
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<DriveSyncFilter>("all")
   const [removeTarget, setRemoveTarget] = useState<DriveSyncBindingDto | null>(null)
+  const [rescanTarget, setRescanTarget] = useState<DriveSyncBindingDto | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (!open || !state) return
@@ -72,6 +75,7 @@ export function DriveSyncDialog({
     setQuery("")
     setFilter("all")
     setRemoveTarget(null)
+    setRescanTarget(null)
     setView({ kind: "center", selectedBindingId: null })
   }, [open])
 
@@ -88,6 +92,15 @@ export function DriveSyncDialog({
   }, [detailBinding])
 
   const requestRemove = (binding: DriveSyncBindingDto) => setRemoveTarget(binding)
+  const refreshSyncState = () => {
+    if (refreshing) return
+    setRefreshing(true)
+    void controller.refresh()
+      .catch((cause: unknown) => {
+        toast(cause instanceof Error ? syncErrorSummary(cause.message) : "加载同步状态失败")
+      })
+      .finally(() => setRefreshing(false))
+  }
   const openWizard = () => {
     // 只读时不让用户把三步走完再吃一个主进程报错，入口直接拦住。
     if (controller.readOnly) {
@@ -107,11 +120,11 @@ export function DriveSyncDialog({
         <DialogContent
           className={view.kind === "wizard"
             ? "max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-2xl"
-            : "h-[36rem] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"}
+            : view.kind === "center" ? "h-[42rem] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-3xl"
+              : "h-[34rem] max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-2xl"}
           showCloseButton={false}
-          // 详情视图渲染了 DialogDescription，交给 Radix 自动关联；其余视图没有描述，
-          // 显式传 undefined 是为了不触发「缺少描述」的无障碍告警。
-          {...(view.kind === "detail" && detailBinding ? {} : { "aria-describedby": undefined })}
+          // 状态和恢复信息在正文呈现，不再重复为标题栏描述。
+          aria-describedby={undefined}
         >
           <DialogFrame className={view.kind === "wizard" ? "max-h-[calc(100vh-2rem)]" : "h-full"}>
             {view.kind === "center" ? (
@@ -119,30 +132,28 @@ export function DriveSyncDialog({
                 <DialogFrameHeader
                   bordered
                   title="云盘同步"
-                  center={<DriveSyncFilterBar controller={controller} filter={filter} onFilterChange={setFilter} />}
                   actions={(
                     <>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon-sm"
+                        size="icon"
                         aria-label="刷新同步状态"
-                        disabled={controller.loading}
-                        onClick={() => {
-                          void controller.refresh().catch((cause: unknown) => {
-                            toast(cause instanceof Error ? cause.message : "加载同步状态失败")
-                          })
-                        }}
+                        title="刷新同步状态"
+                        disabled={controller.loading || refreshing}
+                        aria-busy={refreshing}
+                        onClick={refreshSyncState}
                       >
-                        <RefreshCw />
+                        <RefreshCw className={controller.loading || refreshing ? "animate-spin motion-reduce:animate-none" : undefined} />
                       </Button>
                       <Button type="button" disabled={controller.readOnly} onClick={openWizard}>新建同步</Button>
                     </>
                   )}
                 />
                 <DialogFrameBody className="flex flex-col">
-                  <div className="px-5 pt-4">
-                    <Input type="search" aria-label="搜索同步" placeholder="搜索名称或路径" value={query} onChange={(event) => setQuery(event.target.value)} />
+                  <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+                    <Input className="min-w-48 flex-1" type="search" aria-label="搜索同步" placeholder="搜索名称或路径" value={query} onChange={(event) => setQuery(event.target.value)} />
+                    <div className="max-w-full overflow-x-auto"><DriveSyncFilterBar controller={controller} filter={filter} query={query} onFilterChange={setFilter} /></div>
                   </div>
                   <DriveSyncCenter
                     controller={controller}
@@ -152,7 +163,6 @@ export function DriveSyncDialog({
                     onOpenDriveItem={onOpenDriveItem}
                     onRequestRemove={requestRemove}
                     onSelectBinding={(bindingId) => setView({ kind: "detail", bindingId })}
-                    onEditBinding={(binding, edit) => setView({ kind: "wizard", returnTo: "center", entry: { mode: "edit", binding, edit } })}
                   />
                 </DialogFrameBody>
               </>
@@ -164,16 +174,18 @@ export function DriveSyncDialog({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-sm"
+                      size="icon"
                       aria-label="返回同步列表"
                       onClick={() => setView({ kind: "center", selectedBindingId: null })}
                     >
                       <ArrowLeft />
                     </Button>
                   )}
-                  actions={<DriveSyncEditMenu binding={detailBinding} disabled={controller.readOnly || controller.isPending(detailBinding.id) || detailBinding.status === "removed"} onEdit={(edit) => setView({ kind: "wizard", returnTo: "detail", entry: { mode: "edit", binding: detailBinding, edit } })} /> }
+                  actions={<DriveSyncEditMenu binding={detailBinding} disabled={controller.readOnly || controller.isPending(detailBinding.id) || detailBinding.status === "removed"}
+                    onEdit={(edit) => setView({ kind: "wizard", returnTo: "detail", entry: { mode: "edit", binding: detailBinding, edit } })}
+                    onRequestRemove={() => requestRemove(detailBinding)} onRequestRescan={() => setRescanTarget(detailBinding)}
+                    rescanDisabled={controller.readOnly || controller.isPending(detailBinding.id) || !["active", "conflict"].includes(detailBinding.status) || retryOperationOf(controller.snapshot?.operations.filter((op) => op.bindingId === detailBinding.id) ?? []) !== null} /> }
                   title={detailBinding.driveItemName}
-                  description={detailBinding.kind === "folder" ? "文件夹同步" : "文件同步"}
                 />
                 <DialogFrameBody className="flex flex-col">
                   <DriveSyncDetail
@@ -181,7 +193,6 @@ export function DriveSyncDialog({
                     conflicts={conflicts.filter((conflict) => conflict.bindingId === detailBinding.id)}
                     controller={controller}
                     onOpenDriveItem={onOpenDriveItem}
-                    onRequestRemove={() => requestRemove(detailBinding)}
                   />
                 </DialogFrameBody>
               </>
@@ -194,7 +205,7 @@ export function DriveSyncDialog({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-sm"
+                      size="icon"
                       aria-label="返回同步列表"
                       onClick={() => setView({ kind: "center", selectedBindingId: null })}
                     >
@@ -223,6 +234,21 @@ export function DriveSyncDialog({
           </DialogFrame>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={rescanTarget !== null} onOpenChange={(next) => { if (!next) setRescanTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>重新核对 {rescanTarget?.driveItemName}</AlertDialogTitle>
+            <AlertDialogDescription>会读取全部本地文件并下载云端文件做比对，内容多时需要较长时间。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction disabled={rescanTarget ? controller.isPending(rescanTarget.id) : false} onClick={() => {
+              if (!rescanTarget) return
+              const target = rescanTarget
+              void controller.runBindingAction("drive.sync.binding.rescan", target.id, () => controller.rescan(target.id), "重新核对完成").finally(() => setRescanTarget(null))
+            }}>开始核对</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {removeTarget && <DriveSyncRemovalDialog key={removeTarget.id} controller={controller} binding={removeTarget}
         onClose={() => setRemoveTarget(null)}
