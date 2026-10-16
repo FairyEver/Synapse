@@ -44,6 +44,7 @@ const voiceSession = vi.hoisted(() => ({
   },
   startError: null as Error | null,
   confirmResult: "",
+  finish: vi.fn<() => Promise<string>>(),
 }))
 
 vi.mock("@/modules/voice/voice-session", () => ({
@@ -53,7 +54,7 @@ vi.mock("@/modules/voice/voice-session", () => ({
       voiceSession.events = events
       return {
         cancel: () => {},
-        finish: async () => voiceSession.confirmResult,
+        finish: () => voiceSession.finish(),
       }
     }),
   },
@@ -75,6 +76,7 @@ beforeEach(() => {
   voiceSession.events = null
   voiceSession.startError = null
   voiceSession.confirmResult = ""
+  voiceSession.finish.mockReset().mockImplementation(async () => voiceSession.confirmResult)
 })
 
 vi.mock("@/lib/ui-tracking", () => ({
@@ -115,7 +117,7 @@ describe("AgentComposer 语音输入", () => {
     readonly voiceAvailable?: boolean
     readonly draft?: string
     readonly onDraftChange?: (value: string) => void
-    readonly onSubmit?: (event: FormEvent) => void
+    readonly onSubmit?: ComponentProps<typeof AgentComposerImpl>["onSubmit"]
   }) {
     installShellBridge(undefined, options)
     const container = document.createElement("div")
@@ -267,15 +269,11 @@ describe("AgentComposer 语音输入", () => {
     expect(container.querySelector("[data-voice-live]")).toBeNull()
   })
 
-  /**
-   * 录音时输入框整个让位，焦点不在任何可编辑节点上，回车只能靠全局那一层接住。
-   * 按回车和点对号是同一条路：转写落进草稿，发不发仍由用户决定。
-   */
-  it("录音中按回车等价于点对号：转写落进草稿，不发送", async () => {
+  it("录音中按回车收尾后提交完整草稿，并恢复输入焦点", async () => {
     voiceSession.confirmResult = "把日志拉出来"
     const onDraftChange = vi.fn()
-    const onSubmit = vi.fn()
-    const container = await renderVoiceComposer({ onDraftChange, onSubmit })
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
+    const container = await renderVoiceComposer({ draft: "先看代码", onDraftChange, onSubmit })
     await startVoice(container)
     emitTranscript("把日志拉出来", "")
 
@@ -284,7 +282,62 @@ describe("AgentComposer 语音输入", () => {
       await Promise.resolve()
     })
 
-    expect(onDraftChange).toHaveBeenCalledWith("把日志拉出来")
+    expect(onDraftChange).toHaveBeenCalledWith("先看代码 把日志拉出来")
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0]).toEqual([expect.anything(), [], expect.any(Function), "先看代码 把日志拉出来"])
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+    expect(document.activeElement).toBe(container.querySelector("textarea"))
+  })
+
+  it("收尾期间多次回车和点击完成只发送最终识别结果一次", async () => {
+    let finish!: (text: string) => void
+    voiceSession.finish.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
+    const container = await renderVoiceComposer({ onSubmit })
+    await startVoice(container)
+    emitTranscript("", "草稿")
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      window.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }))
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    await clickButton(buttonByAriaLabel(container, "完成语音输入"))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(voiceSession.finish).toHaveBeenCalledTimes(1)
+    await act(async () => { finish("最终结果") })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0]?.[3]).toBe("最终结果")
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+    expect(document.activeElement).toBe(container.querySelector("textarea"))
+  })
+
+  it("尚未出字也能按回车结束，空识别不发送已有草稿", async () => {
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
+    const onDraftChange = vi.fn()
+    const container = await renderVoiceComposer({ draft: "原草稿", onSubmit, onDraftChange })
+    await startVoice(container)
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    expect(voiceSession.finish).toHaveBeenCalledTimes(1)
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+    expect(document.activeElement).toBe(container.querySelector("textarea"))
+  })
+
+  it("收尾期间取消后不发送迟到的识别结果", async () => {
+    let finish!: (text: string) => void
+    voiceSession.finish.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
+    const container = await renderVoiceComposer({ onSubmit })
+    await startVoice(container)
+    emitTranscript("文本", "")
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    await clickButton(buttonByAriaLabel(container, "取消语音输入"))
+    await act(async () => { finish("迟到的结果") })
     expect(onSubmit).not.toHaveBeenCalled()
     expect(container.querySelector("[data-voice-live]")).toBeNull()
   })
@@ -2068,7 +2121,7 @@ describe("AgentComposer", () => {
   })
 
   it("keeps attachment rows when submit is not accepted", async () => {
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -2897,7 +2950,7 @@ describe("AgentComposer", () => {
   })
 
   it("tracks composer submits without recording message content", async () => {
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -2959,7 +3012,7 @@ describe("AgentComposer", () => {
 
   it("opens the slash menu and inserts the highlighted item with Enter", async () => {
     const onDraftChange = vi.fn()
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
     const onInputKeyDown = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -3283,7 +3336,7 @@ describe("AgentComposer", () => {
 
   it("appends a quick input to the draft without sending", async () => {
     const onDraftChange = vi.fn()
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const onSubmit = vi.fn<ComponentProps<typeof AgentComposerImpl>["onSubmit"]>((event) => event.preventDefault())
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)

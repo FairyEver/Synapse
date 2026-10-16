@@ -28,8 +28,15 @@
 ## 终端主题数据例外
 
 - 用户已明确允许社区调色板作为终端专用主题数据。默认、Nord、Gruvbox Dark、Catppuccin Mocha 与 Latte，以及 Rosé Pine Dawn、Ayu Light、Solarized Light、Tokyo Night Day 的目录集中在 `desktop/app-capabilities/terminal/shared/terminal-themes.ts`；颜色字面值只限该数据目录，不散落到 JSX 或普通 UI。
-- 终端画布消费解析后的 xterm theme 与运行时 `--terminal-background` token。终端顶栏、底栏及语音／待执行条以当前终端主题的 `background` 和 `foreground` 覆盖局部 shadcn token，栏背景在该 background 上叠加 5% 黑色（使用 Tailwind `--color-black` token），普通文字与图标不额外淡化；悬停与展开状态成对使用主题的 selection 配色。默认主题复用现有深色 background／foreground token，并使用相同的背景叠加。设置、侧栏、Dock、文件树和挂到 body 的弹层不继承这些局部覆盖，其它界面继续遵守应用主题 token。
+- 终端画布消费解析后的 xterm theme 与运行时 `--terminal-background` token。终端顶栏、底栏及语音条以当前终端主题的 `background` 和 `foreground` 覆盖局部 shadcn token，栏背景在该 background 上叠加 5% 黑色（使用 Tailwind `--color-black` token），普通文字与图标不额外淡化；悬停与展开状态成对使用主题的 selection 配色。默认主题复用现有深色 background／foreground token，并使用相同的背景叠加。设置、侧栏、Dock、文件树和挂到 body 的弹层不继承这些局部覆盖，其它界面继续遵守应用主题 token。
 - 调色板来源与许可保存在终端能力包的 `THIRD_PARTY_NOTICES.md`。主题只改变桌面绘制，不改变 PTY、网格、手机端固定配色或程序显式输出的真彩色。
+
+## 桌面语音输入
+
+- Terminal 与 Agent 对话录音期间，普通 Enter 表示结束录音并提交：等待识别收尾，终端写入完整文字后补一次回车，Agent 将转写追加到原草稿后走既有发送与排队流程。尚未出字也可以结束；最终为空时不执行、不发送已有草稿。
+- Enter 必须先于当前终端或输入控件处理；Shift / Ctrl / Alt / Meta + Enter、输入法确认和其它弹窗或输入区不受影响。收尾与写入共用互斥状态，连按和按住产生的重复回车不能重复提交，松键后恢复普通输入。
+- 点击对勾仍只填入文字，允许先编辑；完成或取消后恢复输入焦点。终端不重复显示「待执行」横条。取消、切换会话或组件卸载后，迟到的转写不得继续提交；终端文字写入失败不得再补回车。
+- 该约定更新于 2026-10-16，覆盖旧规格中的「录音时 Enter 等价于点对勾，只填入不发送」。不改变 iOS 语音行为或 MCP 操作契约。
 
 ## 按钮尺寸
 

@@ -144,8 +144,9 @@ export function TerminalModule({
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
   const [customToolbarActions, setCustomToolbarActions] = useState<SynapseTerminalCustomToolbarAction[]>([])
   const [toolbarManagerOpen, setToolbarManagerOpen] = useState(false)
-  /** 已填入命令行、还没按 Enter 的文本：语音转写和快捷输入共用这一条提示。 */
-  const [pendingInputText, setPendingInputText] = useState<string | null>(null)
+  const voiceScopeRef = useRef<HTMLElement | null>(null)
+  const restoreVoiceFocusRef = useRef(false)
+  const previousVoiceSessionIdRef = useRef<string | null>(null)
   const voice = useVoiceInput()
   const voicePresentation = describeVoiceInput(voice.state)
   // 右槽一个位置两件事:能重试就给旋转箭头,否则给对勾。置灰的那两种点不动。
@@ -1338,25 +1339,38 @@ export function TerminalModule({
     }
   }, [activeSession, terminalBridge])
 
-  /**
-   * 确认语音输入后写进 PTY，**不补 "\r"**。
-   *
-   * 这里不能走 buildTerminalCommandWrites —— 那个 helper 会给每一行补 `\r`，是
-   * 「执行」语义。终端命令错一个字符就可能是破坏性操作，执行与否必须留给用户按
-   * Enter 决定。
-   */
-  const commitVoiceInput = useCallback(async () => {
-    const text = await voice.confirm()
-    if (!text.trim()) return
-    if (!activeSession || activeSession.status !== "running") return
+  const startVoiceInput = useCallback(() => {
+    restoreVoiceFocusRef.current = true
+    voice.start()
+  }, [voice.start])
+
+  /** 对勾只填入；Enter 在完整转写写入后补一次回车。 */
+  const commitVoiceInput = useCallback(async (submit = false) => {
+    restoreVoiceFocusRef.current = true
     try {
-      await terminalBridge.session.write({ sessionId: activeSession.id, data: text })
-      setPendingInputText(text)
+      await voice.confirm(async (text, signal) => {
+        if (!text.trim() || !activeSession || activeSession.status !== "running" || sessionLockedByMobile) return
+        const enabled = activeWorkspace
+          ? workspaceViewRefs.current.get(activeWorkspace.id)?.isBracketedPasteMode() ?? false
+          : false
+        await terminalBridge.session.write({ sessionId: activeSession.id, data: wrapBracketedPaste(text, enabled) })
+        if (signal.aborted || !submit) return
+        await new Promise<void>((resolve) => setTimeout(resolve, TERMINAL_COMMAND_ENTER_DELAY_MS))
+        if (signal.aborted) return
+        await terminalBridge.session.write({ sessionId: activeSession.id, data: "\r" })
+      })
     } catch (error) {
       logger.error("Failed to write voice input to the terminal.", error)
       toast.error("写入终端失败")
     }
-  }, [activeSession, terminalBridge, voice.confirm])
+  }, [activeSession, activeWorkspace, sessionLockedByMobile, terminalBridge, voice.confirm])
+
+  useEffect(() => {
+    if (!voicePresentation.active && restoreVoiceFocusRef.current) {
+      restoreVoiceFocusRef.current = false
+      if (activeWorkspace) workspaceViewRefs.current.get(activeWorkspace.id)?.focusActivePane()
+    }
+  }, [voicePresentation.active, activeWorkspace])
 
   /**
    * 快捷输入点一条：把句子原文写进 PTY，**同样不补 "\r"**。
@@ -1373,32 +1387,28 @@ export function TerminalModule({
         sessionId: activeSession.id,
         data: wrapBracketedPaste(content, enabled),
       })
-      setPendingInputText(null)
     } catch (error) {
       logger.error("Failed to write quick input to the terminal.", error)
       toast.error("写入终端失败")
     }
   }, [activeSession, activeWorkspace, terminalBridge])
 
-  /**
-   * 录音时命令条整条让位，焦点不在 xterm 上，Enter 只能靠这一层接住。按 Enter 和点
-   * 对号是同一条路：文字进命令行但不补回车，执行与否仍由用户决定；焦点如果回到
-   * xterm，那个回车归终端，这里不抢。
-   */
   useVoiceActionKey({
-    action: voicePresentation.action,
-    onConfirm: () => { void commitVoiceInput() },
-    onRetry: voice.retry,
+    active: voice.state.phase !== "idle",
+    pending: voice.state.phase === "finishing",
+    scopeRef: voiceScopeRef,
+    onSubmit: () => { void commitVoiceInput(true) },
   })
 
-  // 会话一换，之前那条待执行提示就不再成立。
+  // 切换会话后不再提交旧录音的迟到结果。
   useEffect(() => {
-    setPendingInputText(null)
-  }, [activeSession?.id])
-
-  useEffect(() => {
-    if (voice.state.phase === "recording") setPendingInputText(null)
-  }, [voice.state.phase])
+    const sessionId = activeSession?.id ?? null
+    if (previousVoiceSessionIdRef.current !== null && previousVoiceSessionIdRef.current !== sessionId) {
+      restoreVoiceFocusRef.current = false
+      voice.cancel()
+    }
+    previousVoiceSessionIdRef.current = sessionId
+  }, [activeSession?.id, voice.cancel])
 
   const createCustomToolbarAction = useCallback(async (
     input: SynapseTerminalCreateCustomToolbarActionInput,
@@ -1744,7 +1754,7 @@ export function TerminalModule({
         sidebarResizable
         sidebarPersistenceId={TERMINAL_SIDEBAR_PERSISTENCE_ID}
       >
-        <main className="flex h-full min-h-0 min-w-0 flex-col">
+        <main ref={voiceScopeRef} className="flex h-full min-h-0 min-w-0 flex-col">
           {activeWorkspace && activePaneId ? (
             <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
               <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -1844,30 +1854,6 @@ export function TerminalModule({
                   </Button>
                 </div>
               ) : null}
-              {pendingInputText && !voicePresentation.active ? (
-                /* 语音转写填进命令行了但还没执行 —— 提示挂在转写条
-                   自己身上，不去动 pane 头，改动半径最小。 */
-                <div
-                  style={terminalChromeStyle}
-                  className="flex shrink-0 items-center gap-2 border-t border-border bg-background px-2.5 py-1.5 text-foreground"
-                  data-terminal-pending-input
-                >
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
-                    {pendingInputText}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">待执行 · Enter 执行</span>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className={cn("shrink-0", TERMINAL_CHROME_BUTTON_CLASS_NAME)}
-                    aria-label="忽略待执行提示"
-                    onClick={() => setPendingInputText(null)}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ) : null}
               {toolbarActions.length && !voicePresentation.active ? (
                 // 包一层相对定位，好让锁的蒙层只盖命令条 —— 蒙层放进去会跟着内容一起滚。
                 <div className="relative shrink-0">
@@ -1936,7 +1922,7 @@ export function TerminalModule({
                           className={TERMINAL_CHROME_BUTTON_CLASS_NAME}
                           aria-label="语音输入"
                           disabled={terminalSessionStatus !== "running" || voice.state.phase === "recording" || sessionLockedByMobile}
-                          onClick={() => { void voice.start() }}
+                          onClick={startVoiceInput}
                         >
                           <Mic />
                         </Button>

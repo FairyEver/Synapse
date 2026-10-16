@@ -8,7 +8,7 @@ import { VoiceSession, type VoiceFailure } from "./voice-session"
 
 const logger = createRendererLogger("voice")
 
-export type VoicePhase = "idle" | "recording"
+export type VoicePhase = "idle" | "recording" | "finishing"
 
 export type VoiceInputState = {
   readonly phase: VoicePhase
@@ -28,8 +28,8 @@ export type VoiceInputController = {
   readonly available: boolean
   readonly start: () => void
   readonly cancel: () => void
-  /** 结束录音并返回要落到输入框的文本；没识别到内容时返回空串。 */
-  readonly confirm: () => Promise<string>
+  /** 收尾与文字提交共用互斥状态；取消或离开会话时 signal 失效。 */
+  readonly confirm: (consume: (text: string, signal: AbortSignal) => void | Promise<void>) => Promise<void>
   /** 断网 / 没听到声音后用一条新签名重来。 */
   readonly retry: () => void
 }
@@ -38,6 +38,9 @@ export function useVoiceInput(): VoiceInputController {
   const [state, setState] = useState<VoiceInputState>(IDLE_STATE)
   const [available, setAvailable] = useState(false)
   const sessionRef = useRef<VoiceSession | null>(null)
+  const startingRef = useRef<Promise<VoiceSession | null> | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const finishingRef = useRef(false)
   const disposedRef = useRef(false)
 
   useEffect(() => {
@@ -53,24 +56,33 @@ export function useVoiceInput(): VoiceInputController {
     return () => {
       cancelled = true
       disposedRef.current = true
+      abortRef.current?.abort()
       sessionRef.current?.cancel()
       sessionRef.current = null
     }
   }, [])
 
   const start = useCallback(() => {
-    if (sessionRef.current) return
+    if (sessionRef.current || startingRef.current || finishingRef.current) return
+    const controller = new AbortController()
+    abortRef.current = controller
+    const { signal } = controller
     setState({ phase: "recording", transcript: EMPTY_TRANSCRIPT, failure: null })
-    void VoiceSession.begin({
+    const starting = VoiceSession.begin({
       onTranscript: (transcript) => {
+        if (signal.aborted) return
         // 出字了就把静音提示撤掉。
         setState((current) => ({ ...current, transcript, failure: current.failure === "silence" ? null : current.failure }))
       },
-      onFailure: (failure) => { setState((current) => ({ ...current, failure })) },
+      onFailure: (failure) => {
+        if (!signal.aborted) setState((current) => ({ ...current, failure }))
+      },
     }).then((session) => {
-      if (disposedRef.current) { session.cancel(); return }
+      if (disposedRef.current || signal.aborted) { session.cancel(); return null }
       sessionRef.current = session
+      return session
     }).catch((error: unknown) => {
+      if (signal.aborted) return null
       sessionRef.current = null
       logger.warn("Voice session failed to start.", {
         errorName: error instanceof Error ? error.name : typeof error,
@@ -80,32 +92,48 @@ export function useVoiceInput(): VoiceInputController {
         // 权限被拒时**不进入录音态**，直接提示去设置。
         failure: error instanceof MicrophonePermissionError ? "permission" : "unavailable",
       })
+      return null
+    }).finally(() => {
+      if (startingRef.current === starting) startingRef.current = null
     })
+    startingRef.current = starting
   }, [])
 
   const cancel = useCallback(() => {
+    abortRef.current?.abort()
+    startingRef.current = null
+    finishingRef.current = false
     sessionRef.current?.cancel()
     sessionRef.current = null
     setState(IDLE_STATE)
   }, [])
 
-  const confirm = useCallback(async (): Promise<string> => {
-    const session = sessionRef.current
-    sessionRef.current = null
-    if (!session) {
-      setState(IDLE_STATE)
-      return ""
+  const confirm = useCallback(async (consume: (text: string, signal: AbortSignal) => void | Promise<void>): Promise<void> => {
+    const signal = abortRef.current?.signal
+    if (!signal || signal.aborted || finishingRef.current) return
+    finishingRef.current = true
+    setState((current) => ({ ...current, phase: "finishing" }))
+    let session: VoiceSession | null = null
+    try {
+      session = sessionRef.current ?? await startingRef.current
+      if (!session || signal.aborted) return
+      const text = await session.finish()
+      if (!signal.aborted) await consume(text, signal)
+    } finally {
+      session?.cancel()
+      if (!signal.aborted) {
+        sessionRef.current = null
+        finishingRef.current = false
+        abortRef.current?.abort()
+        setState((current) => current.phase === "idle" && current.failure ? current : IDLE_STATE)
+      }
     }
-    const text = await session.finish()
-    setState(IDLE_STATE)
-    return text
   }, [])
 
   const retry = useCallback(() => {
-    sessionRef.current?.cancel()
-    sessionRef.current = null
+    cancel()
     start()
-  }, [start])
+  }, [cancel, start])
 
   return { state, available, start, cancel, confirm, retry }
 }

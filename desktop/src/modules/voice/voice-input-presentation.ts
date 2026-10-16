@@ -51,11 +51,15 @@ function isRetryable(failure: VoiceFailure): boolean {
  */
 export function describeVoiceInput(input: {
   // 用字面量而不是 import VoicePhase，免得为了一个类型把 hook 依赖引进来。
-  phase: "idle" | "recording"
+  phase: "idle" | "recording" | "finishing"
   transcript: AsrTranscript
   failure: VoiceFailure | null
 }): VoiceInputPresentation {
   const { phase, transcript, failure } = input
+
+  if (phase === "finishing") {
+    return { active: true, placeholder: "转文字中", caretVisible: false, action: "confirm-disabled" }
+  }
 
   // 只有定稿的句子才写进输入框，未定稿的部分还会变；有没有字按能提交的文本算。
   const hasText = transcript.combined.trim() !== ""

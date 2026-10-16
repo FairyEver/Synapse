@@ -169,8 +169,20 @@ function AgentComposer({
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const voiceSubmitContentRef = useRef<string | null>(null)
+  const restoreVoiceFocusRef = useRef(false)
   const voice = useVoiceInput()
   const voicePresentation = describeVoiceInput(voice.state)
+  useEffect(() => {
+    if (!voicePresentation.active && restoreVoiceFocusRef.current) {
+      restoreVoiceFocusRef.current = false
+      textareaRef.current?.focus()
+    }
+  }, [voicePresentation.active])
+  useEffect(() => {
+    restoreVoiceFocusRef.current = false
+    voice.cancel()
+  }, [focusInputKey, voice.cancel])
   // 右槽一个位置两件事:能重试就给旋转箭头,否则给对勾。置灰的那两种点不动。
   const isVoiceRetry = voicePresentation.action === "retry" || voicePresentation.action === "retry-disabled"
   const isVoiceActionDisabled = voicePresentation.action === "confirm-disabled" || voicePresentation.action === "retry-disabled"
@@ -474,33 +486,49 @@ function AgentComposer({
   const startVoiceInput = () => {
     // 录音态绝不能弹键盘：先把焦点从输入框摘掉，再让输入框整个让位给展示节点。
     textareaRef.current?.blur()
+    restoreVoiceFocusRef.current = true
     voice.start()
   }
 
-  const commitVoiceInput = async () => {
-    const text = await voice.confirm()
-    onDraftChange(appendVoiceTranscript(text))
+  const commitVoiceInput = async (submit = false) => {
+    restoreVoiceFocusRef.current = true
+    try {
+      await voice.confirm((text) => {
+        if (!text.trim()) return
+        const content = appendVoiceTranscript(text)
+        onDraftChange(content)
+        if (!submit) return
+        // 通过真实表单提交复用附件、排队和失败回退；覆盖值避开草稿更新的渲染时差。
+        voiceSubmitContentRef.current = content
+        try {
+          formRef.current?.requestSubmit()
+        } finally {
+          voiceSubmitContentRef.current = null
+        }
+      })
+    } catch (error) {
+      logger.warn("Failed to complete agent voice input.", errorDiagnostic(error))
+      toast("语音输入提交失败")
+    }
   }
 
-  /**
-   * 录音时输入框整个让位，焦点不在任何可编辑节点上，Enter 只能靠这一层接住。
-   * 按 Enter 和点对号是同一条路：转写落进草稿，发不发仍由用户决定。
-   */
   useVoiceActionKey({
-    action: voicePresentation.action,
-    onConfirm: () => { void commitVoiceInput() },
-    onRetry: voice.retry,
+    active: voice.state.phase !== "idle",
+    pending: voice.state.phase === "finishing",
+    scopeRef: formRef,
+    onSubmit: () => { void commitVoiceInput(true) },
   })
 
   const handleSubmit = (event: FormEvent) => {
-    if (voice.state.phase === "recording") {
-      // 录音中点了发送：先把语音落成文字，再走原来的提交路径。
+    const voiceContent = voiceSubmitContentRef.current
+    if (voiceContent !== null) {
       event.preventDefault()
-      void voice.confirm().then((text) => {
-        const content = appendVoiceTranscript(text)
-        onDraftChange(content)
-        if (content.trim()) onSubmit(event, attachments, () => acceptSubmittedAttachments(attachments), content)
-      })
+      onSubmit(event, attachments, () => acceptSubmittedAttachments(attachments), voiceContent)
+      return
+    }
+    if (voicePresentation.active) {
+      event.preventDefault()
+      if (voice.state.phase !== "finishing") void commitVoiceInput(true)
       return
     }
     track({

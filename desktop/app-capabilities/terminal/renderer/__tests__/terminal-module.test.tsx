@@ -106,33 +106,51 @@ const bridgeState = vi.hoisted(() => ({
  */
 const voiceState = vi.hoisted(() => ({
   available: false,
-  phase: "idle" as "idle" | "recording",
+  phase: "idle" as "idle" | "recording" | "finishing",
   transcript: { stable: "", unstable: "", combined: "" },
   failure: null as null | "network" | "silence" | "permission" | "unavailable",
   confirmResult: "",
   start: vi.fn(),
-  cancel: vi.fn(),
-  // 真实实现里 confirm 会把状态机推回 idle，转写条随之让位给「待执行」提示。
-  confirm: vi.fn(async () => {
+  controller: null as AbortController | null,
+  cancel: vi.fn(() => {
+    voiceState.controller?.abort()
     voiceState.phase = "idle"
-    return voiceState.confirmResult
+    voiceState.notify?.()
+  }),
+  notify: null as null | (() => void),
+  confirm: vi.fn(async (consume: (text: string, signal: AbortSignal) => void | Promise<void>) => {
+    if (voiceState.phase === "finishing") return
+    voiceState.phase = "finishing"
+    const controller = new AbortController()
+    voiceState.controller = controller
+    voiceState.notify?.()
+    try {
+      await consume(voiceState.confirmResult, controller.signal)
+    } finally {
+      voiceState.phase = "idle"
+      voiceState.notify?.()
+    }
   }),
   retry: vi.fn(),
 }))
 
 vi.mock("../../../../src/modules/voice/use-voice-input", () => ({
-  useVoiceInput: () => ({
-    state: {
-      phase: voiceState.phase,
-      transcript: voiceState.transcript,
-      failure: voiceState.failure,
-    },
-    available: voiceState.available,
-    start: voiceState.start,
-    cancel: voiceState.cancel,
-    confirm: voiceState.confirm,
-    retry: voiceState.retry,
-  }),
+  useVoiceInput: () => {
+    const [, render] = useState(0)
+    voiceState.notify = () => render((value) => value + 1)
+    return {
+      state: {
+        phase: voiceState.phase,
+        transcript: voiceState.transcript,
+        failure: voiceState.failure,
+      },
+      available: voiceState.available,
+      start: voiceState.start,
+      cancel: voiceState.cancel,
+      confirm: voiceState.confirm,
+      retry: voiceState.retry,
+    }
+  },
 }))
 
 const terminalBridge = vi.hoisted(() => ({
@@ -970,6 +988,7 @@ beforeEach(() => {
   voiceState.transcript = { stable: "", unstable: "", combined: "" }
   voiceState.failure = null
   voiceState.confirmResult = ""
+  voiceState.controller = null
   voiceState.start.mockClear()
   voiceState.cancel.mockClear()
   voiceState.confirm.mockClear()
@@ -2136,11 +2155,7 @@ describe("TerminalModule", () => {
     expect(manage.compareDocumentPosition(mic)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
-  /**
-   * 这是这个功能最关键的一条：终端命令错一个字符就可能是破坏性操作，语音只能把
-   * 文字填进命令行，绝不能替用户按下回车。断言的是"写进去的字节里没有 \r"。
-   */
-  it("确认语音后只填入命令行，不补回车", async () => {
+  it("点击对勾只填入命令行，不补回车，也不重复显示待执行横条", async () => {
     voiceState.available = true
     voiceState.phase = "recording"
     voiceState.transcript = { stable: "git status --short", unstable: "", combined: "git status --short" }
@@ -2160,17 +2175,11 @@ describe("TerminalModule", () => {
     const written = terminalBridge.writeSession.mock.calls.map(([input]) => input.data as string)
     expect(written.some((data) => data.includes("\r"))).toBe(false)
 
-    // 写完之后给出「待执行」提示，而不是当作已执行。
-    const pending = document.body.querySelector("[data-terminal-pending-input]")
-    expect(pending?.textContent).toContain("待执行 · Enter 执行")
-    expect(pending?.textContent).toContain("git status --short")
+    expect(document.body.querySelector("[data-terminal-pending-input]")).toBeNull()
+    expect(document.body.querySelector("[data-voice-toolbar]")).toBeNull()
   })
 
-  /**
-   * 录音时命令条整条让位，焦点不在 xterm 上，回车只能靠全局那一层接住。它和对号
-   * 是同一条路，所以「不补回车」这条底线在这里同样成立。
-   */
-  it("录音中按回车等价于点对号：文字进命令行，不补回车", async () => {
+  it("录音中终端获得焦点时按回车，识别后执行一次并收起横条恢复焦点", async () => {
     voiceState.available = true
     voiceState.phase = "recording"
     voiceState.transcript = { stable: "git status", unstable: "", combined: "git status" }
@@ -2180,18 +2189,95 @@ describe("TerminalModule", () => {
     terminalBridge.writeSession.mockClear()
 
     await renderModule()
+    const terminal = xtermState.instances[0]!
+    terminal.focus.mockClear()
+    const input = document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!
+    const inputHandler = vi.fn()
+    input.addEventListener("keydown", inputHandler)
+    act(() => input.focus())
 
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
-      await Promise.resolve()
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     })
 
-    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      data: "git status",
+    expect(inputHandler).not.toHaveBeenCalled()
+    expect(terminalBridge.writeSession.mock.calls).toEqual([
+      [{ sessionId: "session-1", data: "git status" }],
+      [{ sessionId: "session-1", data: "\r" }],
+    ])
+    expect(document.querySelector("[data-terminal-pending-input]")).toBeNull()
+    expect(document.querySelector("[data-voice-toolbar]")).toBeNull()
+    expect(terminal.focus).toHaveBeenCalledTimes(1)
+  })
+
+  it("语音文字写入尚未完成时连续回车，不提前执行也不重复写入", async () => {
+    voiceState.phase = "recording"
+    voiceState.confirmResult = "第一行\n第二行"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1" })]
+    let finishWrite!: () => void
+    terminalBridge.writeSession.mockImplementationOnce(() => new Promise<undefined>((resolve) => { finishWrite = () => resolve(undefined) }))
+    await renderModule()
+    xtermState.instances[0]!.modes.bracketedPasteMode = true
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
     })
-    const written = terminalBridge.writeSession.mock.calls.map(([input]) => input.data as string)
-    expect(written.some((data) => data.includes("\r"))).toBe(false)
+    expect(terminalBridge.writeSession.mock.calls).toEqual([
+      [{ sessionId: "session-1", data: "\x1b[200~第一行\n第二行\x1b[201~" }],
+    ])
+    const input = document.querySelector(".xterm-helper-textarea")!
+    const ordinaryInput = vi.fn()
+    input.addEventListener("keydown", ordinaryInput)
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+    })
+    expect(ordinaryInput).not.toHaveBeenCalled()
+    expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      finishWrite()
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    })
+    expect(terminalBridge.writeSession.mock.calls).toEqual([
+      [{ sessionId: "session-1", data: "\x1b[200~第一行\n第二行\x1b[201~" }],
+      [{ sessionId: "session-1", data: "\r" }],
+    ])
+    expect(document.querySelector("[data-voice-toolbar]")).toBeNull()
+  })
+
+  it("语音文字写入失败时不补执行回车", async () => {
+    voiceState.phase = "recording"
+    voiceState.confirmResult = "git status"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1" })]
+    terminalBridge.writeSession.mockRejectedValueOnce(new Error("write failed"))
+    await renderModule()
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    expect(terminalBridge.writeSession.mock.calls).toEqual([[{ sessionId: "session-1", data: "git status" }]])
+    expect(document.querySelector("[data-voice-toolbar]")).toBeNull()
+  })
+
+  it("语音提交中取消，不在迟到的文字写入完成后补回车", async () => {
+    voiceState.phase = "recording"
+    voiceState.confirmResult = "git status"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1" })]
+    let finishWrite!: () => void
+    terminalBridge.writeSession.mockImplementationOnce(() => new Promise<undefined>((resolve) => { finishWrite = () => resolve(undefined) }))
+    await renderModule()
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    await clickButtonByAriaLabel("取消语音输入")
+    await act(async () => {
+      finishWrite()
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
+    expect(document.querySelector("[data-voice-toolbar]")).toBeNull()
   })
 
   /**

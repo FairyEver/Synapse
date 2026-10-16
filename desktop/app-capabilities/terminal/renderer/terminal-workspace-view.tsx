@@ -123,6 +123,7 @@ const logger = createRendererLogger("terminal.workspace")
 
 export type TerminalWorkspaceViewHandle = {
   clearActivePane(): void
+  focusActivePane(): void
   /**
    * 当前 pane 的前台应用有没有打开 bracketed paste（DECSET 2004）。
    *
@@ -376,6 +377,9 @@ export function TerminalWorkspaceView({
   useImperativeHandle(ref, () => ({
     clearActivePane() {
       paneControlsRef.current.get(activePaneId)?.clear()
+    },
+    focusActivePane() {
+      paneControlsRef.current.get(activePaneId)?.focus()
     },
     isBracketedPasteMode() {
       return paneControlsRef.current.get(activePaneId)?.isBracketedPasteMode() ?? false

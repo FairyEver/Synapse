@@ -1,46 +1,51 @@
-import { useEffect } from "react"
-
-import type { VoiceUiAction } from "./voice-input-presentation"
+import { useEffect, useRef, type RefObject } from "react"
 
 /**
- * 焦点落在这些节点上时 Enter 归它们自己：终端里点回 xterm 再回车是「执行这条命令」，
- * 底栏按钮上的回车是「点这个按钮」，两者都不该顺带把录音也收掉。xterm 的键盘输入
- * 挂在它内部那个 textarea 上，这条规则因此天然把终端排除在外。
- */
-const INTERACTIVE_TARGET_SELECTOR =
-  "input, textarea, select, button, [contenteditable]:not([contenteditable='false'])"
-
-function ownsEnterKey(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(INTERACTIVE_TARGET_SELECTOR) !== null
-}
-
-/**
- * 录音期间按 Enter 等价于点右槽那个键，说完最后一句不用再回鼠标上找对号。
- *
- * 右槽是什么由 `describeVoiceInput` 定，这里只做映射 —— Agent 对话和终端共用同一份
- * `action`，两个面的键位行为不会各自跑偏。置灰的两个状态不响应，理由和按钮置灰一样：
- * 提交空文本没有意义，解决不了的失败原地再试也不会变。
+ * 录音时 Enter 是提交意图，在捕获阶段拦截，避免 xterm 先执行旧输入。
+ * 收尾后仍吃掉同一次按住产生的重复事件，直到松键才恢复普通输入。
  */
 export function useVoiceActionKey(input: {
-  readonly action: VoiceUiAction
-  readonly onConfirm: () => void
-  readonly onRetry: () => void
+  readonly active: boolean
+  readonly pending: boolean
+  readonly scopeRef: RefObject<HTMLElement | null>
+  readonly onSubmit: () => void
 }): void {
-  const { action, onConfirm, onRetry } = input
+  const latest = useRef(input)
+  latest.current = input
+  const held = useRef(false)
 
   useEffect(() => {
-    if (action !== "confirm" && action !== "retry") return undefined
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // 按住不放不该连着确认，更不该连着重开录音。
-      if (event.key !== "Enter" || event.repeat) return
-      if (ownsEnterKey(event.target)) return
+    const stop = (event: KeyboardEvent) => {
       event.preventDefault()
-      if (action === "retry") onRetry()
-      else onConfirm()
+      event.stopImmediatePropagation()
     }
-
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [action, onConfirm, onRetry])
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+      const { active, pending, scopeRef, onSubmit } = latest.current
+      if (!active && !held.current) return
+      const target = event.target
+      // 按钮卸载后焦点会回到 body；其它输入区和弹窗的回车不属于这次语音。
+      if (target instanceof Node && target !== document && target !== document.body
+        && !scopeRef.current?.contains(target)) return
+      stop(event)
+      if (event.repeat || held.current) return
+      held.current = true
+      if (!pending && active) onSubmit()
+    }
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || !held.current) return
+      held.current = false
+      stop(event)
+    }
+    const release = () => { held.current = false }
+    window.addEventListener("keydown", handleKeyDown, true)
+    window.addEventListener("keyup", handleKeyUp, true)
+    window.addEventListener("blur", release)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true)
+      window.removeEventListener("keyup", handleKeyUp, true)
+      window.removeEventListener("blur", release)
+    }
+  }, [])
 }
