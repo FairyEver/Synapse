@@ -23,7 +23,9 @@
 
 ## 读信
 
-用户从站内信列表或正文菜单复制的 `synapse://mail/<id>` 可直接定位原信。使用 `app_mail_message_get` 的 `reference` 参数传入完整原文，不自行拆出 ID；该链接也可在桌面和 iOS 定位信件，但不是授权凭证。即使用户只说“看这个”，也由 `mail` 前缀选择站内信工具。读取仍受当前登录账号权限控制，`get` 不会自动设为已读。
+用户通过站内信列表或正文菜单的“复制 ID”取得的 `synapse://mail/<id>` 可直接定位原信。使用 `app_mail_message_get` 的 `reference` 参数传入完整原文，不自行拆出 ID；该链接也可在桌面和 iOS 定位信件，但不是授权凭证。即使用户只说“看这个”，也由 `mail` 前缀选择站内信工具。读取仍受当前登录账号权限控制，`get` 不会自动设为已读。
+
+桌面菜单的“复制全文”仅复制标题和完整正文，不包含附件或信件定位 ID；这是桌面剪贴板操作，不新增 MCP 工具。
 
 用 `app_mail_message_count` 取得收件箱、已发送箱和未读数的精确统计。`app_mail_message_list` 按发送时间倒序分页，收件箱可设 `unreadOnly: true`；持续使用 `nextCursor` 才能查全。列表包含发件人与摘要，需要判断正文时用 `app_mail_message_get` 读取完整信件；`app_mail_context_list` 查看当前账号可见的关联往来。AI 根据用户要求和这些内容自行选择需处理的信件，不能由 MCP 代它定义“没用”。
 

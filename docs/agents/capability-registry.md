@@ -46,7 +46,7 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail | 是 | 否（旧配置升级时一次性加入） | — | — | 17 | `open` |
+| Mail | 是（含复制全文） | 否（旧配置升级时一次性加入） | — | — | 17 | `open` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
@@ -64,6 +64,8 @@ Portal Headless Test 与 Portal Headless 分别通过 Connectors 应用连接测
 | Screenshot | 否 | 否 | — | — | — | — |
 
 固定例外：
+
+- Mail 的桌面详情与列表右键菜单提供“复制全文”：以标题、空行、完整 Markdown 正文写入剪贴板，不包含附件；列表摘要不足时复用既有信件读取接口，复制不改变已读状态。此操作仅为桌面 UI 交互，Mail 仍为 17 个 MCP 工具，System App、Dock、Workflow、Automation 和 Deep Link 注册数量不变。
 
 - Todos 的中文 MCP 检索覆盖「待办」「事项」「完成」及六类常用操作；仅补齐既有检索词表，仍为 6 个 capability / MCP 索引，公开工具保持 `search` 与 `invoke`，参数、系统 Skill 指南和其它注册表面不变。
 

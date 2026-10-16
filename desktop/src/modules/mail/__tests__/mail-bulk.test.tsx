@@ -2,6 +2,7 @@
 import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { toast } from "sonner"
 import type { MailContact, MailMessage, MailSummary } from "@/types/mail"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), useMailArgs: vi.fn(), contacts: [] as MailContact[], messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
@@ -177,6 +178,56 @@ describe("mail bulk controls", () => {
     act(() => document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
     expect(writeText).toHaveBeenCalledWith("synapse://mail/first")
+  })
+
+  it("copies the full title and Markdown body from detail without attachments or mail metadata", async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    mocks.messages = [message("mail-1")]
+    mocks.selectedId = "mail-1"
+    mocks.detail = {
+      ...mocks.messages[0], subject: "完整标题", viewerId: "reader", body: "## 正文\n\n第一段\n\n- 第二段\n- [链接](https://example.com)",
+      team: null, conversationId: "mail-1", replyToId: null, relation: null, quote: null,
+      attachmentCount: 1, attachments: [{ attachmentId: "attachment-1", fileName: "附件.pdf", size: 1024 }],
+    }
+    render()
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制全文")?.click() })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("完整标题\n\n## 正文\n\n第一段\n\n- 第二段\n- [链接](https://example.com)")
+    expect(mocks.request).not.toHaveBeenCalled()
+  })
+
+  it("loads the right-clicked message's full body instead of copying its snippet or the open message", async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    mocks.messages = [message("first"), message("second")]
+    mocks.selectedId = "first"
+    mocks.detail = { ...mocks.messages[0], viewerId: "reader", body: "当前打开的正文", team: null, conversationId: "first", replyToId: null, relation: null, quote: null, attachments: [] }
+    mocks.request.mockResolvedValue({ ...mocks.detail, ...mocks.messages[1], subject: "另一封信", body: "摘要之后的完整正文\n\n最后一段", attachments: [{ attachmentId: "attachment-2", fileName: "不复制.txt", size: 10 }] })
+    render()
+    const second = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("second"))!
+    act(() => second.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制全文")?.click() })
+    expect(mocks.request).toHaveBeenCalledExactlyOnceWith({ kind: "messageGet", messageId: "second" })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith("另一封信\n\n摘要之后的完整正文\n\n最后一段")
+    expect(mocks.setSelectedId).not.toHaveBeenCalled()
+  })
+
+  it.each(["read", "clipboard"])("reports a copy failure when %s fails", async (failure) => {
+    const errorToast = vi.spyOn(toast, "error")
+    const writeText = vi.fn(async () => { if (failure === "clipboard") throw new Error("Clipboard unavailable") })
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    mocks.messages = [message("mail-1")]
+    if (failure === "read") mocks.request.mockRejectedValue(new Error("Read failed"))
+    else mocks.request.mockResolvedValue({ ...mocks.messages[0], body: "正文", attachments: [] })
+    try {
+      render()
+      const row = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("mail-1"))!
+      act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+      await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制全文")?.click() })
+      expect(errorToast).toHaveBeenCalledExactlyOnceWith("复制失败")
+      if (failure === "read") expect(writeText).not.toHaveBeenCalled()
+    } finally { errorToast.mockRestore() }
   })
 
   it("keeps selection across loaded pages and sends only selected IDs", async () => {

@@ -145,6 +145,14 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
     } catch { toast.error("复制失败") }
   }
 
+  async function copyFullText(message: MailSummary) {
+    try {
+      const source = mail.detail?.messageId === message.messageId ? mail.detail : await mailRequest({ kind: "messageGet", messageId: message.messageId })
+      await navigator.clipboard.writeText(`${source.subject}\n\n${source.body}`)
+      toast("全文已复制")
+    } catch { toast.error("复制失败") }
+  }
+
   async function composeFrom(message: MailSummary, kind: "reply" | "forward") {
     try {
       const source = mail.detail?.messageId === message.messageId ? mail.detail : await mailRequest({ kind: "messageGet", messageId: message.messageId })
@@ -167,6 +175,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
         { id: "forward", label: "转发", run: () => { void composeFrom(message, "forward") } },
       ]),
       ...(box === "inbox" ? [{ id: "read", label: message.readAt ? "设为未读" : "设为已读", run: () => { void setRead(message) } }] : []),
+      { id: "copy-full-text", label: "复制全文", run: () => { void copyFullText(message) } },
       { id: "copy-id", label: "复制 ID", run: () => { void copyId(message) } },
       { id: "delete", label: "删除", destructive: true, run: () => { void remove(message) } },
     ]
