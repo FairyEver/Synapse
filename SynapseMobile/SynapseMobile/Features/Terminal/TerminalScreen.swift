@@ -1715,15 +1715,7 @@ struct TerminalScreen: View {
     }
 
     private var draftSelectionBinding: Binding<TextSelection?> {
-        Binding(get: { draftSelection }, set: { selection in
-            // System focus loss sets nil; retain the last actual selection.
-            guard let selection else { draftSelection = nil; return }
-            if case .selection(let range) = selection.indices,
-               let offsets = TerminalDraftInsertion.utf16Selection(range, in: draft) {
-                draftSelection = selection
-                draftInsertion.update(text: draft, selection: offsets)
-            }
-        })
+        TerminalDraftSelection.binding(selection: $draftSelection, text: $draft, insertion: $draftInsertion)
     }
 
     private func openWorkspaceFiles(_ mode: WorkspaceFilesScopeMode) {
