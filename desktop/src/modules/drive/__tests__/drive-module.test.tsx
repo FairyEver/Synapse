@@ -1925,7 +1925,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("上传中")
     expect(document.body.textContent).toContain("上传失败")
     expect(document.body.textContent).toContain("删除中")
-    expect(document.body.textContent).toContain("已分享")
+    expect(document.body.textContent).toContain("分享")
     expect(document.body.textContent).not.toContain("3天 · 密码 · 登录可编辑")
     expect(tableHeaderTexts()).toEqual(["名称", "更新时间", ""])
     expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
@@ -1933,7 +1933,7 @@ describe("DriveModule", () => {
     expect(getTableRow("failed.txt").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("failed-folder").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("deleting.txt").querySelector("td")?.textContent).toContain("删除中")
-    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("已分享")
+    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("分享")
     const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
       .find((element) => element.textContent === "上传失败")
     expect(failedBadge?.dataset.variant).toBe("destructive")
@@ -1947,7 +1947,7 @@ describe("DriveModule", () => {
     getTableRow("failed-folder").click()
     await flushAct()
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
-    expect(rowButton("shared.txt", "分享")).toBeUndefined()
+    expect(rowButtonTexts("shared.txt")).not.toContain("分享")
     expect(rowButton("shared.txt", "取消分享")?.disabled).toBe(false)
   })
 
@@ -1977,12 +1977,13 @@ describe("DriveModule", () => {
     const nameCell = reportRow.querySelector("td")
     const reportBadges = Array.from(nameCell?.querySelectorAll<HTMLElement>("[data-slot='badge']") ?? [])
       .map((element) => element.textContent)
-    expect(reportBadges).toEqual(["已分享"])
-    expect(nameCell?.textContent).toContain("已分享")
+    expect(reportBadges).toEqual(["分享"])
+    expect(nameCell?.textContent).toContain("分享")
     expect(nameCell?.textContent).not.toContain("7天 · 密码 · 2人可编辑")
 
-    const shareSummary = rowButton("report.html", "已分享")
+    const shareSummary = rowButton("report.html", "分享")
     if (!shareSummary) throw new Error("Share summary not found")
+    expect(shareSummary.querySelector("svg")).toBeNull()
     await clickInlineShareSummary("report.html")
     const popup = document.querySelector('[data-slot="popover-content"]')
     expect(popup?.textContent).toContain("分享详情")
@@ -2006,6 +2007,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
     await clickRowButtonText("Docs", "同步")
+    expect(rowButton("Docs", "同步")?.querySelector("svg")).toBeNull()
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("本机同步")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("/Users/me/Docs")
     expect(document.querySelector('[data-drive-sync-view]')).toBeNull()
@@ -2016,7 +2018,7 @@ describe("DriveModule", () => {
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("随文件夹")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("/Users/me/Docs/notes.md")
     await clickButtonText("关闭详情")
-    await clickRowButtonText("node_modules", "已排除同步")
+    await clickRowButtonText("node_modules", "同步")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("不会同步")
     await clickButtonText("管理文件夹同步")
     expect(document.body.textContent).toContain("同步位置")
@@ -2028,12 +2030,12 @@ describe("DriveModule", () => {
     mocks.getDriveSyncSnapshot.mockRejectedValue(new Error("snapshot unavailable"))
     await render(<DriveModule />)
     await flushAct()
-    await clickRowButtonText("notes.md", "同步状态未知")
+    await clickRowButtonText("notes.md", "同步")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("同步状态加载失败")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("重试")
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
     await clickButtonText("重试")
-    expect(rowButton("notes.md", "同步状态未知")).toBeUndefined()
+    expect(rowButton("notes.md", "同步")).toBeUndefined()
   })
 
   it("switches sharing and sync popovers without navigation and restores focus on Escape", async () => {
@@ -2044,7 +2046,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await clickRowButtonText("Docs", "已分享")
+      await clickRowButtonText("Docs", "分享")
       expect(document.querySelectorAll('[data-slot="popover-content"]')).toHaveLength(1)
       expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("分享详情")
       await clickRowButtonText("Docs", "同步")
@@ -2065,13 +2067,13 @@ describe("DriveModule", () => {
       driveSyncChangedListener?.(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ status: "paused" })] }))
       await flushPromises()
     })
-    expect(rowButton("Docs", "同步已暂停")).toBeTruthy()
+    expect(rowButton("Docs", "同步")).toBeTruthy()
     await act(async () => {
       driveSyncChangedListener?.(createDriveSyncSnapshot())
       await flushPromises()
     })
     expect(getTableRow("Docs").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
-    expect(rowButton("Docs", "已分享")).toBeTruthy()
+    expect(rowButton("Docs", "分享")).toBeTruthy()
   })
 
   it("retries sharing reads and prevents copying expired shares", async () => {
@@ -2084,7 +2086,7 @@ describe("DriveModule", () => {
     expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "复制链接")).toBe(false)
     mocks.getDriveShare.mockResolvedValue(createDriveShare({ itemId: "file-1", expiresAt: "2020-01-01T00:00:00Z" }))
     await clickButtonText("重试")
-    expect(rowButton("expired.md", "分享已过期")).toBeTruthy()
+    expect(rowButton("expired.md", "分享")).toBeTruthy()
     const copy = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "复制链接")
     expect(copy?.disabled).toBe(true)
     expect(document.body.textContent).toContain("分享已过期，链接无法访问")
@@ -2115,7 +2117,7 @@ describe("DriveModule", () => {
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
     await render(<DriveModule />)
     await flushAct()
-    await clickRowButtonText("Projects", "含同步项")
+    await clickRowButtonText("Projects", "同步")
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("其他内容不会同步")
     await clickButtonText("关闭详情")
     await openRowMenu("Projects")
@@ -3127,7 +3129,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(rowButton("shared.txt", "分享")).toBeUndefined()
+    expect(rowButtonTexts("shared.txt")).not.toContain("分享")
     expect(rowButton("shared.txt", "取消分享")).not.toBeUndefined()
 
     await clickRowButtonText("shared.txt", "取消分享")
@@ -3975,7 +3977,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    const shareSummary = rowButton("report.txt", "已分享")
+    const shareSummary = rowButton("report.txt", "分享")
     if (!shareSummary) throw new Error("Share summary not found")
     expect(getTableRow("report.txt").textContent).not.toContain("3天 · 密码 · 可阅读")
 
@@ -3988,7 +3990,7 @@ describe("DriveModule", () => {
     await clickButtonByLabel("取消分享 report.txt")
     await clickButtonText("关闭")
 
-    expect(getTableRow("report.txt").textContent).not.toContain("已分享")
+    expect(getTableRow("report.txt").querySelector('[data-drive-status-tag="share"]')).toBeNull()
   })
 
   it("shows share loading, empty, and retry states in the public links dialog", async () => {
@@ -4552,7 +4554,7 @@ async function clickRowButtonText(rowText: string, buttonText: string, eventInit
 
 async function clickInlineShareSummary(rowText: string): Promise<void> {
   const element = Array.from(getTableRow(rowText).querySelectorAll<HTMLButtonElement>("td:first-child button"))
-    .find((button) => button.textContent?.trim() === "已分享")
+    .find((button) => button.dataset.driveStatusTag === "share")
   if (!element) throw new Error(`Share summary not found in row ${rowText}`)
   await act(async () => {
     element.click()

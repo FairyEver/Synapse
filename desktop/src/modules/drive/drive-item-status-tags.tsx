@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react"
-import { ArrowLeftRight, Link2, LoaderCircle, X } from "lucide-react"
+import { LoaderCircle, X } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveItemDto, DriveShareListItemDto } from "@synapse/shared"
 import { Badge } from "@/components/ui/badge"
@@ -53,9 +53,9 @@ export function DriveItemStatusTags(props: DriveItemStatusTagsProps) {
   )
 }
 
-function StatusTagPopover({ tagKey, label, title, variant, icon, popover, children, sync = false }: {
+function StatusTagPopover({ tagKey, label, title, variant, popover, children, sync = false }: {
   readonly tagKey: string; readonly label: string; readonly title: string
-  readonly variant: "outline" | "secondary" | "destructive"; readonly icon: ReactNode
+  readonly variant: "outline" | "secondary" | "destructive"
   readonly popover: StatusPopoverState; readonly children: ReactNode; readonly sync?: boolean
 }) {
   return (
@@ -63,7 +63,7 @@ function StatusTagPopover({ tagKey, label, title, variant, icon, popover, childr
       <PopoverTrigger asChild>
         <Badge variant={variant} asChild>
           <button type="button" data-slot="badge" data-drive-status-tag={sync ? "sync" : "share"} data-drive-sync-mark={sync || undefined} title={title}>
-            {icon}{label}
+            {label}
           </button>
         </Badge>
       </PopoverTrigger>
@@ -94,7 +94,7 @@ function DriveShareTag({ item, popover, onManageShare, onCopyShare, controller }
     onManageShare(share.data)
   }
   return (
-    <StatusTagPopover tagKey={key} popover={popover} label={expired ? "分享已过期" : "已分享"} title="分享详情" variant="outline" icon={<Link2 aria-hidden="true" />}>
+    <StatusTagPopover tagKey={key} popover={popover} label="分享" title="分享详情" variant="outline">
       <p className="break-all font-medium">{item.name}</p>
       {share.loading ? <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />加载中</p> : share.error ? <><p role="alert" className="text-destructive">{share.error}</p>{share.canRetry ? <Button variant="outline" onClick={share.retry}>重试</Button> : null}</> : share.data ? <>
         <DetailFacts entries={[
@@ -129,7 +129,7 @@ function DriveSyncTag({ item, relation, controller, popover, onManageSync, onRet
   const bound = relation.kind === "bound" ? relation : null
   const variant = status.attention ? "destructive" : bound && !bound.excluded ? "secondary" : "outline"
   return (
-    <StatusTagPopover tagKey={key} popover={popover} label={status.label} title="本机同步" variant={variant} icon={<ArrowLeftRight aria-hidden="true" />} sync>
+    <StatusTagPopover tagKey={key} popover={popover} label="同步" title="本机同步" variant={variant} sync>
       <p className="break-all font-medium">{item.name}</p>
       {bound ? <DetailFacts entries={[
         ["同步来源", bound.inherited ? `随文件夹 ${bound.binding.driveItemName}` : "独立同步"],
