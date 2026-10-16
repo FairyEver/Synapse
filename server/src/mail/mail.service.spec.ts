@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { MailService } from "./mail.service"
 import { recipientMatch } from "./mail-recipient-match"
+import { Prisma } from "@prisma/client"
 
 function harness() {
   const sender = { id: "sender", nickname: "李杨", handle: "liyang", teamMemberships: [{ teamId: "team-1" }] }
@@ -47,6 +48,51 @@ function harness() {
 }
 
 describe("MailService", () => {
+  it("combines sender filtering with inbox visibility, unread state and search before pagination", async () => {
+    const { service, prisma } = harness()
+    await service.listMessages("reader", "inbox", "报告", undefined, true, "user:writer")
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        senderId: "writer", recipients: { some: { userId: "reader", deletedAt: null, readAt: null } },
+        OR: [{ subject: { contains: "报告", mode: "insensitive" } }, { body: { contains: "报告", mode: "insensitive" } }],
+      }), take: 51,
+    }))
+    await service.listMessages("reader", "inbox", "", undefined, false, "platform")
+    expect(prisma.mailMessage.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ kind: "platform_broadcast" }) }))
+  })
+
+  it("matches sent To/Cc address snapshots without expanding organizations into members", async () => {
+    const { service, prisma } = harness()
+    await service.listMessages("writer", "sent", "", undefined, false, "organization:engineering")
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      senderId: "writer", senderDeletedAt: null,
+      AND: expect.arrayContaining([{ OR: [
+        { addressSnapshot: { path: ["to"], array_contains: [{ kind: "organization", organizationId: "engineering" }] } },
+        { addressSnapshot: { path: ["cc"], array_contains: [{ kind: "organization", organizationId: "engineering" }] } },
+      ] }]),
+    }) }))
+    await expect(service.listMessages("writer", "sent", "", undefined, false, "platform")).rejects.toThrow("筛选")
+    await expect(service.listMessages("reader", "inbox", "", undefined, false, "organization:engineering")).rejects.toThrow("筛选")
+    await expect(service.listMessages("reader", "inbox", "", undefined, false, "user:")).rejects.toThrow("筛选")
+  })
+
+  it("preserves recipient and visibility filters when validating and applying a page cursor", async () => {
+    const { service, prisma } = harness()
+    const sentAt = new Date("2026-10-15T12:00:00Z")
+    prisma.mailMessage.findFirst.mockResolvedValueOnce({ id: "cursor", sentAt } as never)
+    const result = await service.listMessages("writer", "sent", "报告", "cursor", false, "user:reader")
+    const addresses = { OR: [
+      { addressSnapshot: { path: ["to"], array_contains: [{ kind: "user", userId: "reader" }] } },
+      { addressSnapshot: { path: ["cc"], array_contains: [{ kind: "user", userId: "reader" }] } },
+      { addressSnapshot: { equals: Prisma.DbNull }, recipients: { some: { userId: "reader" } } },
+    ] }
+    expect(prisma.mailMessage.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "cursor", senderId: "writer", senderDeletedAt: null, AND: [addresses] }) }))
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ AND: expect.arrayContaining([addresses, { OR: [{ sentAt: { lt: sentAt } }, { sentAt, id: { lt: "cursor" } }] }]) }) }))
+    expect(result).toMatchObject({ contactKey: "user:reader" })
+    await expect(service.listMessages("writer", "sent", "", "outside-filter", false, "user:reader")).rejects.toThrow()
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledTimes(1)
+  })
+
   it("shows platform mail without exposing the recipient roster and rejects replies", async () => {
     const { service, prisma } = harness()
     prisma.mailMessage.findFirst.mockResolvedValueOnce({

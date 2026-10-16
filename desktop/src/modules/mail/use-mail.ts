@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { mailRequest } from "@/lib/mail-api"
 import type { MailMessage, MailSummary } from "@/types/mail"
+import { useMailContacts } from "./use-mail-contacts"
 
 export type MailBox = "inbox" | "sent"
 
-export function useMail(box: MailBox, query: string, unreadOnly = false) {
+export function useMail(box: MailBox, query: string, unreadOnly = false, contactKey?: string) {
   const [messages, setMessages] = useState<MailSummary[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MailMessage | null>(null)
@@ -14,7 +15,8 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
   const [counts, setCounts] = useState<{ inboxTotal: number; sentTotal: number; unread: number } | null>(null)
   const [revision, setRevision] = useState(0)
   const [loadedKey, setLoadedKey] = useState("")
-  const listKey = `${box}:${query}:${unreadOnly}`
+  const listKey = JSON.stringify([box, query, unreadOnly, contactKey])
+  const contacts = useMailContacts(box, revision)
   const currentListKey = useRef(listKey)
   const handledSelectedRead = useRef(false)
   currentListKey.current = listKey
@@ -36,10 +38,10 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
     let active = true
     setLoading(true)
     setError(null)
-    const run = mailRequest({ kind: "messageList", box, query, unreadOnly }).then((result) => { if (active) { setMessages(result.items); setNextCursor(result.nextCursor); setLoadedKey(listKey) } })
+    const run = mailRequest({ kind: "messageList", box, query, unreadOnly, ...(contactKey ? { contactKey } : {}) }).then((result) => { if (active) { setMessages(result.items); setNextCursor(result.nextCursor); setLoadedKey(listKey) } })
     void run.catch((cause: unknown) => { if (active) { setLoadedKey(""); setError(cause instanceof Error ? cause.message : "加载失败。") } }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [box, query, unreadOnly, revision, listKey])
+  }, [box, query, unreadOnly, contactKey, revision, listKey])
 
   useEffect(() => { handledSelectedRead.current = false }, [box, selectedId])
 
@@ -73,11 +75,11 @@ export function useMail(box: MailBox, query: string, unreadOnly = false) {
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || loadedKey !== listKey) return
-    const result = await mailRequest({ kind: "messageList", box, query, cursor: nextCursor, unreadOnly })
+    const result = await mailRequest({ kind: "messageList", box, query, cursor: nextCursor, unreadOnly, ...(contactKey ? { contactKey } : {}) })
     if (currentListKey.current !== listKey) return
     setMessages((current) => [...current, ...result.items])
     setNextCursor(result.nextCursor)
-  }, [box, loadedKey, listKey, nextCursor, query, unreadOnly])
+  }, [box, loadedKey, listKey, nextCursor, query, unreadOnly, contactKey])
 
-  return { messages: loadedKey === listKey ? messages : [], ready: loadedKey === listKey, selectedId, setSelectedId, detail: detail?.messageId === selectedId ? detail : null, loading, error, nextCursor: loadedKey === listKey ? nextCursor : null, counts, loadMore, refresh }
+  return { messages: loadedKey === listKey ? messages : [], ready: loadedKey === listKey, selectedId, setSelectedId, detail: detail?.messageId === selectedId ? detail : null, loading, error, nextCursor: loadedKey === listKey ? nextCursor : null, counts, loadMore, refresh, ...contacts }
 }

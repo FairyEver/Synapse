@@ -6,6 +6,7 @@ import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard
 import { attachmentContentDisposition } from "../common/content-disposition"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { MAIL_MAX_ATTACHMENT_BYTES, MailService } from "./mail.service"
+import { mailContactFilter } from "./mail-contacts"
 
 const content = z.object({ formatVersion: z.union([z.literal(2), z.literal(3)]), toIds: z.array(z.string().min(1)), ccIds: z.array(z.string().min(1)), toOrganizationIds: z.array(z.string().min(1)).optional(), ccOrganizationIds: z.array(z.string().min(1)).optional(), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(z.string().min(1)).max(10), forwardAttachmentIds: z.array(z.string().min(1)).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: z.string().min(1) }).strict().optional() }).strict()
 
@@ -40,11 +41,18 @@ export class MailController {
   }
 
   @Get("messages")
-  listMessages(@Req() request: AuthenticatedUserRequest, @Query("box") box?: string, @Query("query") query?: string, @Query("cursor") cursor?: string, @Query("unreadOnly") unreadOnly?: string) {
+  listMessages(@Req() request: AuthenticatedUserRequest, @Query("box") box?: string, @Query("query") query?: string, @Query("cursor") cursor?: string, @Query("unreadOnly") unreadOnly?: string, @Query("contactKey") contactKey?: string) {
     if (box !== "inbox" && box !== "sent") throw new BadRequestException("无效的信箱。")
     if (unreadOnly !== undefined && unreadOnly !== "true" && unreadOnly !== "false") throw new BadRequestException("无效的未读筛选。")
     if (box === "sent" && unreadOnly === "true") throw new BadRequestException("已发送信箱不能筛选未读。")
-    return this.mail.listMessages(userId(request), box, query, cursor, unreadOnly === "true")
+    mailContactFilter(box, contactKey)
+    return this.mail.listMessages(userId(request), box, query, cursor, unreadOnly === "true", contactKey)
+  }
+
+  @Get("contacts")
+  listContacts(@Req() request: AuthenticatedUserRequest, @Query("box") box?: string) {
+    if (box !== "inbox" && box !== "sent") throw new BadRequestException("无效的信箱。")
+    return this.mail.listContacts(userId(request), box)
   }
 
   @Get("messages/count")

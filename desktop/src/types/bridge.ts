@@ -1414,13 +1414,14 @@ export type SynapseBridge = {
     }
   }
   mail: {
+    contact: { list: (input: { box: "inbox" | "sent" }) => Promise<import("./mail").MailOperationResult["contactList"]> }
     recipient: { list: (input: { query: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["recipientSearch"]> }
     organization: {
       list: (input: { query: string }) => Promise<import("./mail").MailOperationResult["organizationSearch"]>
       members: (input: { organizationId: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["organizationMembers"]>
     }
     message: {
-      list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean }) => Promise<import("./mail").MailOperationResult["messageList"]>
+      list: (input: { box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean; contactKey?: string }) => Promise<import("./mail").MailOperationResult["messageList"]>
       count: () => Promise<import("./mail").MailOperationResult["messageCount"]>
       readAll: () => Promise<import("./mail").MailOperationResult["messageReadAll"]>
       deleteBatch: (input: { messageIds: string[]; box?: "inbox" | "sent" }) => Promise<import("./mail").MailOperationResult["messageDeleteBatch"]>

@@ -2,6 +2,7 @@ import path from "node:path"
 import { z } from "zod"
 import type { MailOperation } from "../../src/types/mail"
 import { parseMailMessageReference } from "../../synapse-capabilities/shared/message-reference"
+import { mailBoxInputSchema, mailMessageListInputSchema } from "../../synapse-capabilities/shared/mail-input"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
@@ -20,10 +21,10 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
     case "app.mail.organization.list": return { kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(params) }
     case "app.mail.organization_members.list": return { kind: "organizationMembers", ...z.object({ organizationId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail.message.list": {
-      const parsed = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: id.optional(), unreadOnly: z.boolean().optional() }).strict().parse(params)
-      if (parsed.box === "sent" && parsed.unreadOnly) throw new Error("Unread filter is only available for inbox.")
+      const parsed = mailMessageListInputSchema.parse(params)
       return { kind: "messageList", ...parsed }
     }
+    case "app.mail.contact.list": return { kind: "contactList", ...mailBoxInputSchema.parse(params) }
     case "app.mail.message.count": z.object({}).strict().parse(params); return { kind: "messageCount" }
     case "app.mail.message.read_all": z.object({}).strict().parse(params); return { kind: "messageReadAll" }
     case "app.mail.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length), box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }

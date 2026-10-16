@@ -1,4 +1,5 @@
 export type MailPerson = { userId: string; nickname: string | null; handle: string | null }
+export type MailContact = { key: string; kind: "user" | "organization" | "platform"; name: string; handle: string | null; teamName: string | null; unread: number; lastSentAt: string }
 export type MailAddress = { kind: "user"; userId: string; name: string } | { kind: "organization"; organizationId: string; name: string } | { kind: "audience"; name: string }
 export type MailOrganization = { organizationId: string; teamId: string; teamName: string; parentId: string | null; name: string; memberCount: number }
 export type MailAttachment = { attachmentId: string; fileName: string; mimeType?: string | null; size: number }
@@ -26,7 +27,8 @@ export type MailOperation =
   | { kind: "recipientSearch"; query: string; cursor?: string }
   | { kind: "organizationSearch"; query: string }
   | { kind: "organizationMembers"; organizationId: string; cursor?: string }
-  | { kind: "messageList"; box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean }
+  | { kind: "messageList"; box: "inbox" | "sent"; query?: string; cursor?: string; unreadOnly?: boolean; contactKey?: string }
+  | { kind: "contactList"; box: "inbox" | "sent" }
   | { kind: "messageCount" }
   | { kind: "messageReadAll" }
   | { kind: "messageDeleteBatch"; messageIds: string[]; box?: "inbox" | "sent" }
@@ -44,7 +46,8 @@ export type MailOperationResult = {
   recipientSearch: { items: (MailPerson & { matchKind: "exact" | "prefix" | "partial" | "fuzzy" | "browse"; similarity: number; sharedTeamIds: string[] })[]; nextCursor: string | null }
   organizationSearch: { items: MailOrganization[] }
   organizationMembers: { items: MailPerson[]; nextCursor: string | null }
-  messageList: { items: MailSummary[]; nextCursor: string | null }
+  messageList: { items: MailSummary[]; nextCursor: string | null; contactKey?: string }
+  contactList: { items: MailContact[] }
   messageCount: { inboxTotal: number; sentTotal: number; unread: number }
   messageReadAll: { updated: number }
   messageDeleteBatch: { deleted: number; skippedIds: string[] }

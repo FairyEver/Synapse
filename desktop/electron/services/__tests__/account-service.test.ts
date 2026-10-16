@@ -193,6 +193,16 @@ describe("AccountService", () => {
     expect(request).toHaveBeenCalledTimes(2)
   })
 
+  it("rejects a mail page when an older server silently ignores its contact filter", async () => {
+    const { service } = await createTestAccountService()
+    const request = vi.spyOn(service as unknown as { requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown> }, "requestAuthenticatedJson")
+      .mockResolvedValueOnce({ items: [], nextCursor: null })
+      .mockResolvedValueOnce({ items: [], nextCursor: null, contactKey: "user:writer" })
+    await expect(service.executeMailOperation({ kind: "messageList", box: "inbox", contactKey: "user:writer" })).rejects.toThrow("人员筛选")
+    await expect(service.executeMailOperation({ kind: "messageList", box: "inbox", contactKey: "user:writer" })).resolves.toMatchObject({ contactKey: "user:writer" })
+    expect(String(request.mock.calls[0]?.[1])).toContain("contactKey=user%3Awriter")
+  })
+
   it("reports why a desktop notification was not written", async () => {
     const signedOut = await createTestAccountService()
     await expect(signedOut.service.createInternalNotification({

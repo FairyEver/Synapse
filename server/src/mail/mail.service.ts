@@ -8,6 +8,7 @@ import { MailStorageService } from "./mail-storage.service"
 import { recipientMatch } from "./mail-recipient-match"
 import { resolveMailAddresses, type MailAddressSnapshot } from "./mail-addresses"
 import { descendantIds } from "../team/organization-tree"
+import { mailContactFilter, mailContactsQuery, type MailContactRow } from "./mail-contacts"
 
 export const MAIL_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
@@ -296,21 +297,28 @@ export class MailService {
     } while (true)
   }
 
-  async listMessages(userId: string, box: "inbox" | "sent", query = "", cursor?: string, unreadOnly = false) {
+  async listContacts(userId: string, box: "inbox" | "sent") {
+    const items = await this.prisma.$queryRaw<MailContactRow[]>(mailContactsQuery(userId, box))
+    return { items }
+  }
+
+  async listMessages(userId: string, box: "inbox" | "sent", query = "", cursor?: string, unreadOnly = false, contactKey?: string) {
     const search = query.trim()
     if (search.length > 120) throw new BadRequestException("搜索词过长。")
-    const cursorRow = cursor ? await this.prisma.mailMessage.findFirst({ where: { id: cursor, ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null } } }) }, select: { id: true, sentAt: true } }) : null
+    const contact = mailContactFilter(box, contactKey)
+    const cursorRow = cursor ? await this.prisma.mailMessage.findFirst({ where: { ...contact, id: cursor, ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null } } }) }, select: { id: true, sentAt: true } }) : null
     if (cursor && !cursorRow) throw new BadRequestException("无效的分页位置。")
     const rows = await this.prisma.mailMessage.findMany({
       where: {
+        ...contact,
         ...(box === "sent" ? { senderId: userId, senderDeletedAt: null } : { recipients: { some: { userId, deletedAt: null, ...(unreadOnly ? { readAt: null } : {}) } } }),
         ...(search ? { OR: [{ subject: { contains: search, mode: "insensitive" } }, { body: { contains: search, mode: "insensitive" } }] } : {}),
-        ...(cursorRow ? { AND: [{ OR: [{ sentAt: { lt: cursorRow.sentAt } }, { sentAt: cursorRow.sentAt, id: { lt: cursorRow.id } }] }] } : {}),
+        ...(cursorRow ? { AND: [...(Array.isArray(contact.AND) ? contact.AND : []), { OR: [{ sentAt: { lt: cursorRow.sentAt } }, { sentAt: cursorRow.sentAt, id: { lt: cursorRow.id } }] }] } : {}),
       },
       include: { sender: { select: { id: true, nickname: true, handle: true } }, recipients: { where: { OR: [{ userId }, { message: { addressSnapshot: { equals: Prisma.DbNull } } }] }, include: { user: { select: { id: true, nickname: true, handle: true } } } }, attachments: { select: { id: true } } },
       orderBy: [{ sentAt: "desc" }, { id: "desc" }], take: 51,
     })
-    return { items: rows.slice(0, 50).map((row) => this.summary(row, userId, box)), nextCursor: rows.length > 50 ? rows[49]!.id : null }
+    return { items: rows.slice(0, 50).map((row) => this.summary(row, userId, box)), nextCursor: rows.length > 50 ? rows[49]!.id : null, ...(contactKey ? { contactKey } : {}) }
   }
 
   async countMessages(userId: string) {

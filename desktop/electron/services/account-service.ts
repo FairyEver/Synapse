@@ -504,8 +504,12 @@ export class AccountService {
         if (operation.query) query.set("query", operation.query)
         if (operation.cursor) query.set("cursor", operation.cursor)
         if (operation.unreadOnly) query.set("unreadOnly", "true")
-        return normalizeMailPage(await json("GET", `/messages?${query}`))
+        if (operation.contactKey) query.set("contactKey", operation.contactKey)
+        const page = normalizeMailPage(await json("GET", `/messages?${query}`))
+        if (operation.contactKey && page.contactKey !== operation.contactKey) throw new Error("服务端尚未支持人员筛选，请更新服务端。")
+        return page
       }
+      case "contactList": return await json("GET", `/contacts?box=${operation.box}`)
       case "messageCount": return await json("GET", "/messages/count")
       case "messageReadAll": return await json("PATCH", "/messages/read-all")
       case "messageDeleteBatch": return await json("POST", "/messages/delete-batch", { messageIds: operation.messageIds, box: operation.box })

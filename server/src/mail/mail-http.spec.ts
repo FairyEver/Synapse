@@ -22,6 +22,7 @@ async function fixture() {
     createPreview: vi.fn(async () => ({ previewId: "preview-1", recipients: [], subject: "报告", body: "完整正文", attachments: [] })),
     listContext: vi.fn(async () => ({ items: [], nextCursor: null })),
     listMessages: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listContacts: vi.fn(async () => ({ items: [] })),
     countMessages: vi.fn(async () => ({ inboxTotal: 0, sentTotal: 0, unread: 0 })),
     readAllMessages: vi.fn(async () => ({ updated: 0 })),
     deleteMessages: vi.fn(async () => ({ deleted: 0, skippedIds: [] })),
@@ -40,11 +41,23 @@ async function fixture() {
 }
 
 describe("internal mail HTTP routes", () => {
+  it("validates historical contact scope and forwards filters under the authenticated account", async () => {
+    const { app, mail } = await fixture()
+    try {
+      await request(app.getHttpServer()).get("/api/mail/contacts?box=inbox").expect(200)
+      expect(mail.listContacts).toHaveBeenCalledWith("sender", "inbox")
+      await request(app.getHttpServer()).get("/api/mail/contacts?box=other").expect(400)
+      await request(app.getHttpServer()).get("/api/mail/messages?box=sent&contactKey=organization%3Aengineering").expect(200)
+      expect(mail.listMessages).toHaveBeenLastCalledWith("sender", "sent", undefined, undefined, false, "organization:engineering")
+      await request(app.getHttpServer()).get("/api/mail/messages?box=inbox&contactKey=organization%3Aengineering").expect(400)
+      await request(app.getHttpServer()).get("/api/mail/messages?box=sent&contactKey=platform").expect(400)
+    } finally { await app.close() }
+  })
   it("routes counts, unread filtering and bulk changes through the authenticated user", async () => {
     const { app, mail } = await fixture()
     try {
       await request(app.getHttpServer()).get("/api/mail/messages?box=inbox&unreadOnly=true").expect(200)
-      expect(mail.listMessages).toHaveBeenCalledWith("sender", "inbox", undefined, undefined, true)
+      expect(mail.listMessages).toHaveBeenCalledWith("sender", "inbox", undefined, undefined, true, undefined)
       await request(app.getHttpServer()).get("/api/mail/messages?box=sent&unreadOnly=true").expect(400)
       await request(app.getHttpServer()).get("/api/mail/messages/count").expect(200)
       expect(mail.countMessages).toHaveBeenCalledWith("sender")

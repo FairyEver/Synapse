@@ -785,6 +785,7 @@ const synapseBridge: SynapseBridge = {
     },
   },
   mail: {
+    contact: { list: invoke(IPC_CHANNELS.account.mailContactList) },
     recipient: { list: invoke(IPC_CHANNELS.account.mailRecipientList) },
     organization: { list: invoke(IPC_CHANNELS.account.mailOrganizationList), members: invoke(IPC_CHANNELS.account.mailOrganizationMembers) },
     message: {

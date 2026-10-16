@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
     "mailRecipientList": "synapse:app:mail:recipient:list",
     "mailOrganizationList": "synapse:app:mail:organization:list",
     "mailOrganizationMembers": "synapse:app:mail:organization_members:list",
+    "mailContactList": "synapse:app:mail:contact:list",
     "mailMessageList": "synapse:app:mail:message:list",
     "mailMessageCount": "synapse:app:mail:message:count",
     "mailMessageReadAll": "synapse:app:mail:message:read_all",

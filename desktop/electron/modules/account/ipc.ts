@@ -14,6 +14,7 @@ import {
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
 } from "../../../src/lib/drive-local-upload-limits"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
+import { mailBoxInputSchema, mailMessageListInputSchema } from "../../../synapse-capabilities/shared/mail-input"
 
 const accountUserSchema = z.object({
   id: z.string(),
@@ -98,10 +99,8 @@ const mailIdInputSchema = z.object({ messageId: mailIdSchema }).strict()
 const mailContentInputSchema = z.object({ content: mailContentSchema }).strict()
 const mailDeletedSchema = z.object({ deleted: z.literal(true) })
 const mailRecipientListInputSchema = z.object({ query: z.string().max(100), cursor: mailIdSchema.optional() }).strict()
-const mailMessageListInputSchema = z.object({ box: z.enum(["inbox", "sent"]), query: z.string().optional(), cursor: mailIdSchema.optional(), unreadOnly: z.boolean().optional() }).strict()
 const mailMessageBatchInputSchema = z.object({ messageIds: z.array(mailIdSchema).min(1).max(100).refine((items) => new Set(items).size === items.length), box: z.enum(["inbox", "sent"]).optional() }).strict()
 const mailMessageDeleteInputSchema = mailIdInputSchema.extend({ box: z.enum(["inbox", "sent"]).optional() })
-const mailBoxInputSchema = z.object({ box: z.enum(["inbox", "sent"]) }).strict()
 const mailMessageContextInputSchema = mailIdInputSchema.extend({ cursor: mailIdSchema.optional() })
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
 const mailAttachmentCreateInputSchema = z.object({ filePath: z.string().min(1) }).strict()
@@ -1143,10 +1142,15 @@ export const accountIpcModule: IpcModule = {
       response: z.object({ items: z.array(mailPersonSchema), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "organizationMembers", ...z.object({ organizationId: mailIdSchema, cursor: mailIdSchema.optional() }).strict().parse(input) }),
     },
+    mailContactList: {
+      kind: "invoke", operationId: "app.mail.contact.list", request: mailBoxInputSchema,
+      response: z.object({ items: z.array(z.object({ key: z.string(), kind: z.enum(["user", "organization", "platform"]), name: z.string(), handle: z.string().nullable(), teamName: z.string().nullable(), unread: z.number().int().nonnegative(), lastSentAt: z.string() })) }),
+      handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "contactList", ...mailBoxInputSchema.parse(input) }),
+    },
     mailMessageList: {
       kind: "invoke", operationId: "app.mail.message.list",
       request: mailMessageListInputSchema,
-      response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable() }),
+      response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable(), contactKey: z.string().optional() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageList", ...mailMessageListInputSchema.parse(input) }),
     },
     mailMessageCount: {

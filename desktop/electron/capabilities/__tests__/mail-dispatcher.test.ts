@@ -3,6 +3,23 @@ import { buildMailTools } from "../../../synapse-capabilities/shared/mail-domain
 import { createMailCapabilityDispatcher } from "../mail-dispatcher"
 
 describe("mail capability dispatcher", () => {
+  it("exposes historical contacts and validates person filters for each mailbox", async () => {
+    const executeMailOperation = vi.fn(async () => ({ items: [], nextCursor: null }))
+    const dispatcher = createMailCapabilityDispatcher({ accountService: { executeMailOperation } })
+    const tools = buildMailTools()
+    expect(tools.find(tool => tool.name === "app_mail_contact_list")).toBeDefined()
+    expect(tools.find(tool => tool.name === "app_mail_message_list")?.inputSchema.properties).toHaveProperty("contactKey")
+    await dispatcher.dispatch("app.mail.contact.list", { box: "sent" }, {})
+    expect(executeMailOperation).toHaveBeenLastCalledWith({ kind: "contactList", box: "sent" })
+    await dispatcher.dispatch("app.mail.message.list", { box: "sent", contactKey: "organization:team", cursor: "older" }, {})
+    expect(executeMailOperation).toHaveBeenLastCalledWith({ kind: "messageList", box: "sent", contactKey: "organization:team", cursor: "older" })
+    for (const input of [{ box: "sent", contactKey: "platform" }, { box: "inbox", contactKey: "organization:team" }, { box: "inbox", contactKey: "user:" }]) {
+      await expect(dispatcher.dispatch("app.mail.message.list", input, {})).rejects.toThrow()
+    }
+    await expect(dispatcher.dispatch("app.mail.contact.list", { box: "inbox", query: "restricted" }, {})).rejects.toThrow()
+    expect(executeMailOperation).toHaveBeenCalledTimes(2)
+  })
+
   it("exposes counts and guarded bulk operations without embedding mail content in audit metadata", async () => {
     const executeMailOperation = vi.fn(async () => ({ deleted: 1, skippedIds: ["hidden"] }))
     const auditSink = { record: vi.fn() }

@@ -2,14 +2,14 @@
 import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import type { MailMessage, MailSummary } from "@/types/mail"
+import type { MailContact, MailMessage, MailSummary } from "@/types/mail"
 
-const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
+const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), useMailArgs: vi.fn(), contacts: [] as MailContact[], messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
 const openExternal = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
 vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
-vi.mock("../use-mail", () => ({ useMail: () => ({ messages: mocks.messages, ready: true, loading: false, error: null, selectedId: mocks.selectedId, detail: mocks.detail, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId }) }))
+vi.mock("../use-mail", () => ({ useMail: (...args: unknown[]) => { mocks.useMailArgs(...args); return { contacts: mocks.contacts, contactsReady: true, contactsError: null, messages: mocks.messages, ready: true, loading: false, error: null, selectedId: mocks.selectedId, detail: mocks.detail, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId } } }))
 vi.mock("../use-mail-context", () => ({ useMailContext: () => ({ items: [], nextCursor: null, error: null }) }))
 vi.mock("../compose", () => ({ MailCompose: () => null }))
 vi.mock("../layout", () => ({ MailLayout: ({ navigation, list, detail }: { navigation: ReactNode; list: ReactNode; detail: ReactNode }) => <div>{navigation}{list}{detail}</div> }))
@@ -37,9 +37,9 @@ function message(messageId: string): MailSummary {
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
-function render() {
+function render(openRequest?: { requestId: string; messageId: string }) {
   if (!root) { container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container) }
-  act(() => root?.render(<MailModule />))
+  act(() => root?.render(<MailModule openRequest={openRequest} />))
 }
 function click(label: string) {
   const buttons = [...document.querySelectorAll("button")]
@@ -49,9 +49,70 @@ function click(label: string) {
   act(() => button.click())
 }
 
-afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); openExternal.mockClear(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null })
+afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); mocks.useMailArgs.mockClear(); mocks.contacts = []; openExternal.mockClear(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null })
 
 describe("mail bulk controls", () => {
+  it("distinguishes a user named Synapse from the system sender without exposing a malformed identity", () => {
+    const common = { name: "Synapse", teamName: null, unread: 0, lastSentAt: "2026-10-16T00:00:00Z" }
+    mocks.contacts = [{ ...common, key: "platform", kind: "platform", handle: null }, { ...common, key: "user:writer", kind: "user", handle: "writer" }]
+    render()
+    expect(document.querySelector('button[aria-label="Synapse"]')?.textContent).toBe("Synapse系统")
+    expect(document.querySelector('button[aria-label="Synapse @writer"]')).not.toBeNull()
+  })
+
+  it("limits person views to scoped actions and resets filters when switching mailbox", () => {
+    mocks.contacts = [{ key: "user:writer", kind: "user", name: "乔娜", handle: "qiaona", teamName: null, unread: 2, lastSentAt: "2026-10-16T00:00:00Z" }]
+    mocks.messages = [message("first")]
+    render()
+    click("选择")
+    click("first")
+    click("乔娜")
+    expect(mocks.useMailArgs).toHaveBeenLastCalledWith("inbox", "", false, "user:writer")
+    expect(document.body.textContent).not.toContain("清空收件箱")
+    expect(document.body.textContent).not.toContain("全部设已读")
+    expect(document.body.textContent).not.toContain("删除选中（1）")
+    click("只看未读")
+    click("已发送")
+    expect(mocks.useMailArgs).toHaveBeenLastCalledWith("sent", "", false, undefined)
+    expect(document.body.textContent).toContain("全部收件人")
+    expect(document.body.textContent).toContain("清空已发送")
+  })
+  it("distinguishes organizations with the same name in the same team", () => {
+    const common = { kind: "organization" as const, name: "运营部", teamName: "公司", unread: 0, handle: null, lastSentAt: "2026-10-16T00:00:00Z" }
+    mocks.contacts = [{ ...common, key: "organization:east" }, { ...common, key: "organization:west" }]
+    render()
+    click("已发送")
+    expect(document.querySelector('button[aria-label="运营部 公司 · east"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="运营部 公司 · west"]')).not.toBeNull()
+  })
+  it("clears bulk selection when a notification opens another message in the same unfiltered mailbox", () => {
+    mocks.messages = [message("first")]
+    render()
+    click("选择")
+    click("first")
+    render({ requestId: "notification-1", messageId: "target" })
+    expect(mocks.setSelectedId).toHaveBeenLastCalledWith("target")
+    expect(document.body.textContent).not.toContain("删除选中（1）")
+    expect(document.body.textContent).not.toContain("取消选择")
+  })
+
+  it("keeps a selected person after deleting their last message and offers a return to all mail", async () => {
+    mocks.contacts = [{ key: "user:writer", kind: "user", name: "乔娜", handle: "qiaona", teamName: null, unread: 1, lastSentAt: "2026-10-16T00:00:00Z" }]
+    mocks.messages = [message("last")]
+    mocks.request.mockResolvedValue({ deleted: 1, skippedIds: [] })
+    render()
+    click("乔娜")
+    click("选择")
+    click("last")
+    click("删除选中")
+    await act(async () => { click("删除"); await Promise.resolve() })
+    mocks.messages = []; mocks.contacts = []
+    render()
+    expect(mocks.useMailArgs).toHaveBeenLastCalledWith("inbox", "", false, "user:writer")
+    expect(document.body.textContent).toContain("没有匹配的信件")
+    click("查看全部")
+    expect(mocks.useMailArgs).toHaveBeenLastCalledWith("inbox", "", false, undefined)
+  })
   it("opens Markdown links from a mail message with the system browser", async () => {
     mocks.messages = [message("mail-1")]
     mocks.selectedId = "mail-1"

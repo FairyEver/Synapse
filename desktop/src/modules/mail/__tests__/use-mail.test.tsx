@@ -22,18 +22,18 @@ function message(messageId: string): MailSummary {
 
 let root: Root | null = null
 let current: ReturnType<typeof useMail>
-function Harness({ box, query = "", unreadOnly = false }: { box: MailBox; query?: string; unreadOnly?: boolean }) {
-  current = useMail(box, query, unreadOnly)
+function Harness({ box, query = "", unreadOnly = false, contactKey }: { box: MailBox; query?: string; unreadOnly?: boolean; contactKey?: string }) {
+  current = useMail(box, query, unreadOnly, contactKey)
   return null
 }
 
-function render(box: MailBox, query = "", unreadOnly = false) {
+function render(box: MailBox, query = "", unreadOnly = false, contactKey?: string) {
   if (!root) {
     const container = document.createElement("div")
     document.body.appendChild(container)
     root = createRoot(container)
   }
-  act(() => root?.render(<Harness box={box} query={query} unreadOnly={unreadOnly} />))
+  act(() => root?.render(<Harness box={box} query={query} unreadOnly={unreadOnly} contactKey={contactKey} />))
 }
 
 afterEach(() => {
@@ -44,6 +44,43 @@ afterEach(() => {
 })
 
 describe("useMail", () => {
+  it("loads contacts independently of message searches and ignores a late result from another mailbox", async () => {
+    const inbox = deferred<{ items: { key: string }[] }>()
+    const sent = [{ key: "organization:team", kind: "organization", name: "研发部", handle: null, teamName: "团队", unread: 0, lastSentAt: "2026-10-16T00:00:00Z" }]
+    mocks.request.mockImplementation((operation: { kind: string; box?: string }) => {
+      if (operation.kind === "contactList") return operation.box === "inbox" ? inbox.promise : Promise.resolve({ items: sent })
+      if (operation.kind === "messageCount") return Promise.resolve({ inboxTotal: 3, sentTotal: 1, unread: 2 })
+      return Promise.resolve({ items: [], nextCursor: null })
+    })
+    render("inbox")
+    render("inbox", "报告", true, "user:writer")
+    expect(mocks.request.mock.calls.filter(([op]) => op.kind === "contactList")).toHaveLength(1)
+    render("sent")
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(current.contacts).toEqual(sent)
+    await act(async () => { inbox.resolve({ items: [{ key: "user:writer" }] }); await inbox.promise })
+    expect(current.contacts).toEqual(sent)
+  })
+
+  it("drops a late page for the previous person and preserves the current person's filter", async () => {
+    const oldPage = deferred<{ items: MailSummary[]; nextCursor: null }>()
+    mocks.request.mockImplementation(async (operation: { kind: string; contactKey?: string; cursor?: string }) => {
+      if (operation.kind === "messageCount") return { inboxTotal: 3, sentTotal: 0, unread: 2 }
+      if (operation.kind === "contactList") return { items: [] }
+      if (operation.cursor) return oldPage.promise
+      return { items: [message(operation.contactKey ?? "all")], nextCursor: "older" }
+    })
+    render("inbox", "", false, "user:first")
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    expect(current.messages[0]?.messageId).toBe("user:first")
+    let loading!: Promise<void>
+    act(() => { loading = current.loadMore() })
+    render("inbox", "", false, "user:second")
+    await act(async () => { await Promise.resolve(); await Promise.resolve() })
+    await act(async () => { oldPage.resolve({ items: [message("old-person-page")], nextCursor: null }); await loading })
+    expect(current.messages.map(item => item.messageId)).toEqual(["user:second"])
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageList", box: "inbox", query: "", unreadOnly: false, contactKey: "user:first", cursor: "older" })
+  })
   it("keeps unread and search filters through pagination, then starts a new list when search changes", async () => {
     mocks.request.mockImplementation(async (operation: { kind: string; query?: string; cursor?: string }) => {
       if (operation.kind === "messageCount") return { inboxTotal: 3, sentTotal: 1, unread: 2 }
