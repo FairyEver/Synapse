@@ -72,7 +72,7 @@ function fixture(options: { error?: unknown; userInfo?: unknown; permissionFailu
   return { service: new PortalHeadlessService(loader), calls, runtimes, factoryBaseUrls }
 }
 
-describe("Portal Headless backend extension", () => {
+describe("Portal Link backend extension", () => {
   const writeOperation = { op: 'invoke' as const, input: { capabilityId: 'hr-post-type-create', arguments: { name: '测试类别', sort: 1 } } }
   it('refreshes the whole user session and reloads changed permissions and dictionaries on demand', async () => {
     const options = { permissions: ['/dashboard/year-agreement/main', 'action'] }

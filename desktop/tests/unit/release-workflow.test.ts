@@ -19,7 +19,7 @@ describe("desktop release workflow", () => {
     expect(checks.some((step) => step.name === "Verify Phase 0 hard constraints")).toBe(true)
     expect(checks.some((step) => step.name === "Run tests")).toBe(false)
     expect(tests.some((step) => step.name === "Run tests")).toBe(true)
-    expect(tests.some((step) => step.name === "Run Portal Headless client contracts")).toBe(true)
+    expect(tests.some((step) => step.name === "Run Portal Link client contracts")).toBe(true)
     expect(tests.some((step) => step.name === "Run local service shutdown contracts")).toBe(true)
   })
 

@@ -450,7 +450,7 @@ Portal 网页 origin（`webtest01.wodecorp.cn`）与 API origin（`biz-api-test.
 | **敏感操作必须过 `PermissionGuard` + `AuditSink`** | Synapse `CLAUDE.md` Phase 0 第 10 条；实现是 `desktop/electron/runtime/security/permission-guard.ts:91,230`，接缝是 `desktop/electron/capabilities/permission-audit.ts` | Portal 凭据的读/写、对 Portal 的出网调用、以及"发起连接"这个动作，**全部**要过。现成范式：connectors 的 driver 注册时就注入了 `{permissionGuard, auditSink}`（`desktop/electron/bootstrap/descriptors.ts:640-652`） |
 | **新增硬编码枚举需要明确批准** | Synapse `CLAUDE.md` Phase 0 第 11 条 | 新增一个 MCP domain 要改 5 处硬编码（§4.3.1），而且 `ExtensionPoint` **没有** capability provider 这个点。【读码】`bootstrap/extensions.ts:37-41` 只定义了 3 个点 → **需要明确批准，且要发桌面端版本** |
 | **改注册表面必须同步 `docs/agents/capability-registry.md`** | Synapse 根 `CLAUDE.md`；该文档 `:140-145` 的同步硬规则 | 新增 `portal` domain / System App 要改表格、计数、例外说明与默认 Dock 顺序。**顺带修正该文档已过期的 `app` 行与合计行**（§3.2 的发现） |
-| **连接器 V1 的四条非目标** | `Synapse/docs/superpowers/specs/2026-09-03-builtin-mcp-skill-connectors-design.md`：「本阶段不建设云端 Connector Catalog，也不支持 OAuth、Token、多账号、多环境、远程 MCP」；「新增或修改连接器仍需发布 Synapse 客户端」；endpoint 只接受 `http://127.0.0.1:<port>/<path>` | **Portal Headless 四条全踩。** 而且方向相反：Connectors 是"Synapse 去消费别人的 MCP"（`connectors/main/driver-registry.ts` 的 `ConnectorDriver = { probe, createAgentContribution }`），Portal Headless 是"Synapse 把 Portal 能力提供给自己的模型"。【读码】`connectors/main/types.ts:4-8` 的 `McpStreamableHttpIntegration` 只有 `kind: "mcp-streamable-http"` 一种，且 `bootstrap/descriptors.ts:640-652` 只注册了一个 driver。→ **不该塞进 Connectors 概念**，应是「一个新的 MCP domain + 一个新的 System App」。【待决】第 2 条（H15/Q40/Q41 原本就是问这个） |
+| **连接器 V1 的四条非目标** | `Synapse/docs/superpowers/specs/2026-09-03-builtin-mcp-skill-connectors-design.md`：「本阶段不建设云端 Connector Catalog，也不支持 OAuth、Token、多账号、多环境、远程 MCP」；「新增或修改连接器仍需发布 Synapse 客户端」；endpoint 只接受 `http://127.0.0.1:<port>/<path>` | **Portal Link 四条全踩。** 而且方向相反：Connectors 是"Synapse 去消费别人的 MCP"（`connectors/main/driver-registry.ts` 的 `ConnectorDriver = { probe, createAgentContribution }`），Portal Link 是"Synapse 把 Portal 能力提供给自己的模型"。【读码】`connectors/main/types.ts:4-8` 的 `McpStreamableHttpIntegration` 只有 `kind: "mcp-streamable-http"` 一种，且 `bootstrap/descriptors.ts:640-652` 只注册了一个 driver。→ **不该塞进 Connectors 概念**，应是「一个新的 MCP domain + 一个新的 System App」。【待决】第 2 条（H15/Q40/Q41 原本就是问这个） |
 | **开放接口的契约同步** | `Synapse/docs/agents/module-boundaries.md:106`：「必须同批更新契约和契约回归测试，**不维护第二份静态 JSON**」；`:102` 的 scope 声明 | 前两条照做（新增 scope + 契约 + spec 同批）。**第三条冲突**：Portal 的逐能力契约有 1,019 条、只能由生成物提供（`generated/openapi.json`），不可能手写进 `open-api-contract.ts`。→ 设计成**第二个契约文档**：`/api/open/portal/openapi.json`（生成物），与手写的 `/api/open/openapi.json`（少数固定 operation）覆盖面**不相交**。这是对那条规则的**显式例外**，必须写进 `module-boundaries.md`。【待决】第 5 条 |
 | **开放接口不做限流** | `module-boundaries.md:106`：「POST/GET 显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制」；`open-api.controller.ts:27` 的 `@SkipThrottle()` | **冲突**。【实测 F4】SDK 一次会话要发十几到二十几个基础数据请求；【实测 F25】Portal 侧也没有业务接口的全局限流。→ 必须给 `portal.*` 单独加一层限流（这是对既有"不加限制"口径的**例外**，要拍板）。【待决】第 5 条 |
 
@@ -510,7 +510,7 @@ Portal 网页 origin（`webtest01.wodecorp.cn`）与 API origin（`biz-api-test.
 | # | 决定 | 为什么必须你定 |
 | --- | --- | --- |
 | 1 | **A7 的口径改写**：严格相等 → 「产品版本 + 契约版本」两分，不匹配时**降级只读**（写能力拒绝、读能力保留、`warnings` 告知） | 这是对已记录决策 A7 的字面推翻。H7 已经论证原口径三个问题，但"不匹配时降级而不是拒绝"是一个**产品取舍**（降级意味着用户在版本错配期仍能用 AI 读薪酬数据），不是工程判断 |
-| 2 | **连接器概念是否为 Portal Headless 重开四条非目标**（云端 Catalog / OAuth·Token / 多账号 / 远程 MCP） | 我在 §5.2 给了依据（Connectors 是"消费别人的 MCP"，方向相反）与建议（不塞进 Connectors，另起 MCP domain + System App），但 H15 的四个问题是产品边界问题；而且**四条的答案不必须一致**（例如可以只开"多账号"而不开"云端 Catalog"） |
+| 2 | **连接器概念是否为 Portal Link 重开四条非目标**（云端 Catalog / OAuth·Token / 多账号 / 远程 MCP） | 我在 §5.2 给了依据（Connectors 是"消费别人的 MCP"，方向相反）与建议（不塞进 Connectors，另起 MCP domain + System App），但 H15 的四个问题是产品边界问题；而且**四条的答案不必须一致**（例如可以只开"多账号"而不开"云端 Catalog"） |
 | 3 | **Portal 凭据能不能落在 SY 服务端**（= 要不要支持"没有桌面的调用方"，如手机端、外部编辑器） | 这是 A1（"不依赖任何数据库存储"）的红线判定。技术上都做得到，但你才能决定"让服务端持有全权限的 Portal 凭据"这件事的门槛。**注：本文已确认一期的实际调用方是桌面客户端，所以一期不需要它**；这条决定的是二期形态 |
 | 4 | **单实例锁死 vs 引入共享缓存**；若引入，**Redis 算不算 A1 说的"数据库"** | H16/Q43-44 原始问题。§4.2 已证明**当前部署是单实例**，所以这不是一期阻塞；定的是"扩副本时怎么办"的预案与红线 |
 | 5 | **两条对既有规则的例外**：① Portal 的目录契约走生成物（`/api/open/portal/openapi.json`，第二份契约文档）；② `portal.*` 要单独加限流（与开放接口"不加限制"的既有口径相反） | 两条都是 `module-boundaries.md` 里写死的规则，破例必须显式，不能由设计文档默默绕过 |
@@ -583,7 +583,7 @@ Portal 网页 origin（`webtest01.wodecorp.cn`）与 API origin（`biz-api-test.
 
 - 既有进程内的 WebSocket/presence Map 意味着"单实例"是一个**部署约束**而不只是当前状态。依据是 compose/nginx/deploy 的静态证据 + 这类 Map 的语义，我没有跑过任何部署。
 - 会话容量 64 在真实用户量下会成为问题：这是由"默认值 64"与"公司规模"推出的，**没有实测**（本包没有任何压测数据）。
-- 把 Portal 的能力做成"独立 MCP domain + System App"而不是塞进 Connectors，是基于 Connectors 的方向（消费别人的 MCP）与 Portal Headless 的方向（提供自己的能力）相反推出的；H15 的原始问题没有给出答案。
+- 把 Portal 的能力做成"独立 MCP domain + System App"而不是塞进 Connectors，是基于 Connectors 的方向（消费别人的 MCP）与 Portal Link 的方向（提供自己的能力）相反推出的；H15 的原始问题没有给出答案。
 - 桌面端用会话鉴权而不是 API key 调服务端：`account-service.ts` 的证据是"桌面确实用会话"；"Portal 的调用必须也走会话"是**我的设计决定**，不是读出来的事实。
 
 ### 9.5 明确没查的（本文不作断言）

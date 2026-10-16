@@ -1,6 +1,6 @@
-# Portal Headless
+# Portal Link
 
-`PH` is the user's shorthand for this extension's two-word name: it means Portal Headless and its SDK, not a literal two-letter token. Treat it that way unless the current project, repository, or folder defines `PH` as something else.
+`PH` remains the user's legacy shorthand for Portal Link and its SDK. Treat it that way unless the current project, repository, or folder defines `PH` as something else. Use Portal Link and Portal Link Test as the connector names in user-facing guidance; internal tool names, URLs and package paths remain unchanged.
 
 ## Reaching Synapse tools
 
@@ -10,8 +10,8 @@ Read [api-reference.md](api-reference.md) before issuing HTTP requests.
 
 ## Flow
 
-1. Use the local Synapse MCP `search` with `domain: "extend"` and `query: "Portal Headless 凭证"`; invoke the exact returned credential tool with its schema. Pass `environment: "prod"` for the production Portal, or `environment: "test"` for the test Portal. Omission preserves the existing test default. If the environment is unclear and the operation could change business data, clarify it before the write.
-2. If unavailable, have the user sign into Synapse and connect **Portal Headless** for production or **Portal Headless Test** for test in Connectors. The production authorization page may not yet be deployed; report that limitation if connection cannot complete. Do not read browser cookies, ask the user to paste a token, or invoke the private authorization callback.
+1. Use the local Synapse MCP `search` with `domain: "extend"` and `query: "Portal Link 凭证"`; invoke the exact returned credential tool with its schema. Pass `environment: "prod"` for the production Portal, or `environment: "test"` for the test Portal. Omission preserves the existing test default. If the environment is unclear and the operation could change business data, clarify it before the write.
+2. If unavailable, have the user sign into Synapse and connect **Portal Link** for production or **Portal Link Test** for test in Connectors. The production authorization page may not yet be deployed; report that limitation if connection cannot complete. Do not read browser cookies, ask the user to paste a token, or invoke the private authorization callback.
 3. The credential result contains a Portal token and a separate short-lived SY extension authorization. Run the bundled [scripts/client.mjs](scripts/client.mjs) with Node.js 22+ to call the returned fixed `apiBaseUrl` directly. Follow the stdin protocol in [api-reference.md](api-reference.md); do not generate curl loops or put credentials in command-line arguments. The desktop MCP does not proxy business calls. Do not send the credentials to other hosts, redirects, tools for sharing, or a URL query; never print them in logs or your final answer, or persist them to ordinary files. Only the credential result is an intended sensitive output.
 4. Use the client to call `context`, then `catalog` (`recommend` or `search`), then `describe`. Use returned `extensionInputSchema` and SDK `ai.inputs/output/consume/steps/completion/failures` to form the capability arguments. Do not guess identifiers, method signatures or schemas. `sdkPath` is descriptive, not an arbitrary execution path.
 5. Answer using the actual results and their scope. Continue pagination when completeness is necessary. A query about reservations must never turn into creating a reservation.

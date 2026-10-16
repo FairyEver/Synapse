@@ -15,7 +15,7 @@ export const figmaConnector = {
 
 export const portalTestConnector = {
   id: "portal-headless-test",
-  name: "Portal Headless Test",
+  name: "Portal Link Test",
   integration: {
     kind: "portal-session",
     environmentId: "test",
@@ -29,7 +29,7 @@ export const portalTestConnector = {
 
 export const portalConnector = {
   id: "portal-headless",
-  name: "Portal Headless",
+  name: "Portal Link",
   integration: {
     kind: "portal-session",
     environmentId: "prod",

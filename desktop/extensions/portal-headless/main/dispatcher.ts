@@ -79,7 +79,7 @@ export function createPortalHeadlessDispatcher(deps: {
         } }
       } catch {
         // Never send AccountService/SDK errors or request configuration across the credential boundary.
-        return { ok: false, code: "CREDENTIAL_UNAVAILABLE", error: `无法获取扩展凭证，请检查 Synapse 登录、${environment === "prod" ? "Portal Headless" : "Portal Headless Test"} 连接与网络后重试。` }
+        return { ok: false, code: "CREDENTIAL_UNAVAILABLE", error: `无法获取扩展凭证，请检查 Synapse 登录、${environment === "prod" ? "Portal Link" : "Portal Link Test"} 连接与网络后重试。` }
       }
     },
   }

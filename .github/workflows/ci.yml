@@ -155,7 +155,7 @@ jobs:
       # without competing with the rest of the desktop suite for filesystem workers.
       - name: Run mobile workspace real filesystem contracts
         run: pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/mobile-workspace-files-service.test.ts --maxWorkers=1
-      - name: Run Portal Headless client contracts
+      - name: Run Portal Link client contracts
         run: node --test desktop/tests/portal-headless-client.test.mjs
       - name: Run local service shutdown contracts
         run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs

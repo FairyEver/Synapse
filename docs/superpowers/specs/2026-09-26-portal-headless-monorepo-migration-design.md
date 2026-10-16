@@ -1,4 +1,4 @@
-# Portal Headless SDK 迁入 pnpm monorepo 设计
+# Portal Link SDK 迁入 pnpm monorepo 设计
 
 日期：2026-09-26  
 状态：待实施

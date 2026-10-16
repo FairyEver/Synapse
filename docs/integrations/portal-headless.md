@@ -1,6 +1,8 @@
-# Portal Headless 正式连接器
+# Portal Link 正式连接器
 
-Synapse 的 **Portal Headless**（`portal-headless`）连接正式环境；**Portal Headless Test**（`portal-headless-test`）继续连接测试环境。两者沿用相同的授权回调校验、远端身份与企业验证、加密凭据保存、账号/环境隔离、断开及重连机制，详见 [测试连接器契约](portal-headless-test.md)。
+Synapse 的 **Portal Link**（`portal-headless`）连接正式环境；**Portal Link Test**（`portal-headless-test`）继续连接测试环境。两者沿用相同的授权回调校验、远端身份与企业验证、加密凭据保存、账号/环境隔离、断开及重连机制，详见 [测试连接器契约](portal-headless-test.md)。
+
+显示名称与 Portal Web 授权页统一使用 Portal Link / Portal Link Test。内部连接器 ID、回调地址、凭据存储键、MCP 工具名、扩展 API 和 SDK 包名保持兼容；改名不迁移凭据，也不要求用户重新授权。
 
 | 项目 | 正式环境值 |
 |---|---|

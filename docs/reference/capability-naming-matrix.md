@@ -4,7 +4,7 @@ Built-in capability ids use `app.<namespace>.<resource>.<action>`. The local HTT
 
 Desktop control uses four canonical public MCP names: `app_update_state_get` for `app.update.state.get`, `app_update_check` for `app.update.check.execute`, `app_update_run` for `app.update.install.execute`, and `app_desktop_restart` for `app.desktop.restart.execute`. The last three are intentional short primary names, not aliases; the local HTTP action remains the full capability id.
 
-Portal Headless contributes `extend.portal-headless.credential.get` / `extend_portal_headless_credential_get` through the extension registry. It only accepts MCP sources and has no IPC, preload bridge or generic local HTTP credential endpoint. AI business requests go directly to `/api/extend/portal-headless/*` on the SY backend.
+Portal Link contributes `extend.portal-headless.credential.get` / `extend_portal_headless_credential_get` through the extension registry. It only accepts MCP sources and has no IPC, preload bridge or generic local HTTP credential endpoint. AI business requests go directly to `/api/extend/portal-headless/*` on the SY backend.
 
 | Retired MCP prefix | Current MCP prefix | Removed tools |
 | --- | --- | ---: |

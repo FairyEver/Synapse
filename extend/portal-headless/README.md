@@ -1,8 +1,8 @@
-# portal-headless
+# Portal Link SDK
 
 Portal 前端（`CodeReview_Projects_Js` 的 `app/portal`）的**服务端无头 SDK**：让 AI 能像用户本人在浏览器里一样驱动 Portal。
 
-设计文档：`~/Desktop/portal headless/portal-无头化-设计.md`（含全部决策记录与实测数据）。
+设计文档：[docs/design.md](docs/design.md)（含全部决策记录与实测数据）。
 
 ## 当前状态
 

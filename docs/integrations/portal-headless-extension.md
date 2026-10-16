@@ -1,8 +1,8 @@
-# Portal Headless 扩展直连
+# Portal Link 扩展直连
 
 ## 产品边界
 
-Skill 引导用户自己的 AI 从本机 MCP 获取凭证，AI 使用自己的 HTTP 执行工具直连 `/api/extend/portal-headless/*`，SY 后端收到凭证后调用 SDK。Portal Headless 与未来扩展平行，不是 System App，没有 Dock、独立应用页、Workflow、Automation 或业务转发 MCP。
+Skill 引导用户自己的 AI 从本机 MCP 获取凭证，AI 使用自己的 HTTP 执行工具直连 `/api/extend/portal-headless/*`，SY 后端收到凭证后调用 SDK。Portal Link 与未来扩展平行，不是 System App，没有 Dock、独立应用页、Workflow、Automation 或业务转发 MCP。
 
 本机 action 为 `extend.portal-headless.credential.get`，MCP 索引名为 `extend_portal_headless_credential_get`；它注册到 `extend.capabilities` ExtensionPoint 和 `extend` domain。公开 tools/list 仍只有 search/invoke，IPC 保持 app 命名边界。该凭证 action 拒绝非 MCP 来源。
 

@@ -61,7 +61,7 @@ type ConnectorStateStore = {
 ## Portal 授权连接扩展（2026-09-22）
 
 - 保留原 MCP probe/contribution 驱动，新增 `portal-session` lifecycle 驱动；`skillPackageId` 对仅连接型定义可省略，此类连接器不进入 Agent 快照。
-- 2026-09-28 已独立注册 Portal Headless Test 与正式 Portal Headless。测试连接器永久保留，两者各用固定可信环境定义，绝不通过回调覆盖环境地址。正式网页授权路由尚待部署。
+- 2026-09-28 已独立注册 Portal Link Test 与正式 Portal Link。测试连接器永久保留，两者各用固定可信环境定义，绝不通过回调覆盖环境地址。正式网页授权路由尚待部署。
 - 授权页由 Portal Web 另行实现。SY 一次性 state 与绑定代次只在内存保留五分钟，主进程真实读取用户/企业数据后才保存加密凭据；回调/网络失败不能模拟连接成功。
 - `app.connectors.state` 兼容保留原 singleton，新增同 namespace 的账号/环境独立记录；`app.connectors.credentials` 复用 encrypted-json，加可选 Portal 绑定元数据。普通状态不保存 token，恢复必须重新验证。
 - Deep Link 使用既有声明式路由的私有 `mainHandlerId`，不进入 ActionRouter/MCP/HTTP。Renderer 状态通过 EventBus `connector/item.changed` 发送，回调凭据不进入 IPC。
@@ -70,4 +70,4 @@ type ConnectorStateStore = {
 
 ## 2026-09-22：Portal 独立扩展补充
 
-用户确认 Portal Headless 作为 `extend` 扩展，不升级为内置 App。连接器只负责本机授权和安全凭据管理；专用 MCP `extend_portal_headless_credential_get` 向用户自己的 AI 交付 Portal 凭证与短期 SY 授权，系统 Skill 引导 AI 直连 `/api/extend/portal-headless/*`，后端验证两类身份后调用固定版本 SDK。测试扩展发布该固定 SDK 的完整读写目录，不设置 Synapse allowlist 或 Portal 页面权限目录过滤，PH 服务端先执行已审阅的页面链、动作链和可信上下文判断；缺失、过期、未接受策略返回 `PH_PERMISSION_DENIED`，不发送目标请求。`/invoke` 和兼容 `/read` 共用闸门；Portal 业务接口继续执行自身鉴权。此交付是原“凭据不进入模型结果”约束的专用例外，不开放通用 Secrets、Renderer、业务转发 MCP 或任意 HTTP 代理。实现和部署边界见 `docs/integrations/portal-headless-extension.md`。
+用户确认 Portal Link 作为 `extend` 扩展，不升级为内置 App。连接器只负责本机授权和安全凭据管理；专用 MCP `extend_portal_headless_credential_get` 向用户自己的 AI 交付 Portal 凭证与短期 SY 授权，系统 Skill 引导 AI 直连 `/api/extend/portal-headless/*`，后端验证两类身份后调用固定版本 SDK。测试扩展发布该固定 SDK 的完整读写目录，不设置 Synapse allowlist 或 Portal 页面权限目录过滤，PH 服务端先执行已审阅的页面链、动作链和可信上下文判断；缺失、过期、未接受策略返回 `PH_PERMISSION_DENIED`，不发送目标请求。`/invoke` 和兼容 `/read` 共用闸门；Portal 业务接口继续执行自身鉴权。此交付是原“凭据不进入模型结果”约束的专用例外，不开放通用 Secrets、Renderer、业务转发 MCP 或任意 HTTP 代理。实现和部署边界见 `docs/integrations/portal-headless-extension.md`。

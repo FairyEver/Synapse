@@ -1,4 +1,4 @@
-# Portal Headless HTTP API
+# Portal Link HTTP API
 
 ## Reaching Synapse tools
 

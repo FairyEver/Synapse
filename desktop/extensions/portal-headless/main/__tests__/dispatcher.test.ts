@@ -19,7 +19,7 @@ function setup() {
 }
 const context = { source: "mcp-http" as const, actor: { kind: "user" as const, id: "caller" } }
 
-describe("Portal Headless extension credentials", () => {
+describe("Portal Link extension credentials", () => {
   it("returns both credentials for direct HTTP calls and audits no values", async () => {
     const t = setup()
     const result = await t.dispatch(PORTAL_CREDENTIAL_ACTION, {}, context)

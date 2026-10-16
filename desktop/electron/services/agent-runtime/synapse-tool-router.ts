@@ -188,7 +188,7 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Example: search {\"query\":\"list drive files\"} returns app_drive_item_list with its",
   "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":20}}.",
   "",
-  "Extensions use `extend_*` names in the `extend` domain; Portal Headless credential tools",
+  "Extensions use `extend_*` names in the `extend` domain; Portal Link credential tools",
   "supply credentials for direct HTTPS calls to the extension backend. Never log credentials.",
   "",
   "Rules:",

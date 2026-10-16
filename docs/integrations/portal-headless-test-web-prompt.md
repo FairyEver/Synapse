@@ -19,11 +19,11 @@ https://webtest01.wodecorp.cn/portal.html#/connect/synapse
 这是待新增页面契约，不要假设已有 OAuth、一次性 code 兑换、版本握手接口。
 不得接受参数覆盖 API 地址。测试 API 固定来自 Web 的可信环境配置：
 https://biz-api-test.wodecorp.cn
-正式站不得受理测试授权请求；本次不实现正式连接器。未来正式连接器叫 Portal Headless；当前 Portal Headless Test 将永久保留，不能以后改名覆盖或复用其凭据。
+正式站不得受理测试授权请求；本次不实现正式连接器。未来正式连接器叫 Portal Link；当前 Portal Link Test 将永久保留，不能以后改名覆盖或复用其凭据。
 
 未登录时，通过当前项目登录机制登录，并在当前标签页的 sessionStorage 中暂存本次授权请求和接收时间，不保存 token 副本。登录完成后恢复授权页，不能直接返回首页丢失请求。授权请求最多保留 5 分钟；过期必须提示回到 SY 重新连接，SY 是有效期与 state 的最终裁决方。
 
-已登录也必须展示确认页，明确显示“Portal Headless Test”、真实当前账号和企业，由用户主动确认。
+已登录也必须展示确认页，明确显示“Portal Link Test”、真实当前账号和企业，由用户主动确认。
 企业必须来自该用户真实可访问企业列表，不能默认 tenantId=1。
 若用户更换账号或企业，必须完成现有登录／企业切换流程，重新读取身份并确认 token 与 tenantId 匹配，不能只改显示名称。
 不得把私人令牌、API Key 或内部系统 token 当作登录会话 token。

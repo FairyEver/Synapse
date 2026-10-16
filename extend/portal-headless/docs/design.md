@@ -101,7 +101,7 @@
 | --- | --- | --- | --- |
 | D9 | 流程表单怎么进目录 | **不预先平铺，而是"发起流程"页面本身提供一个能力**。用户说"发起什么什么流程"，路由先把他引到发起流程列表页，那个页面的能力返回"当前用户可以发起哪些流程、有哪些流程表单、有哪些审核表单、有哪些审批表单"，再逐级往下 | 能力目录是**分层下钻**的，不是一张平表。已实测到对应的后端接口：`GET /bpm/process-definition/create-list`，返回按用户过滤的分组流程定义，字段含 `name / key / formCustomCreatePath / formType / baseUrl / category`——正好是"表单/审核/审批"的区分依据。**我上一轮问的"112 个表单要不要平铺进目录"因此不成立，Q100 作废** |
 | D10 | 参数类型（枚举/搜索型/树型）谁来标 | 指向后端仓库 `/Users/liyang/Documents/code/wdbc/CodeReview_Mall_Platform_Java`（完整后端，固定分支 `test/test`；2026-09-22 前指向旧的 `Mall_Platform_Java_Dev@dev`） | 标注方由后端已有能力决定，正在调研，结果回填到 H35/Q95 |
-| D11 | 路由推荐的维护方 | **由 Portal Headless SDK 自己提供**，通过一个接口动态下发给本机 Skill | 不复用 Portal 的 `intent`（Q105 作废）；SDK 既然是"对 Portal 网页端做扫描抽象"的产物，它天然知道路由，推荐也由它算 |
+| D11 | 路由推荐的维护方 | **由 Portal Link SDK 自己提供**，通过一个接口动态下发给本机 Skill | 不复用 Portal 的 `intent`（Q105 作废）；SDK 既然是"对 Portal 网页端做扫描抽象"的产物，它天然知道路由，推荐也由它算 |
 | D12 | 幂等 | 写能力**必带 `requestId`**，SDK 在 TTL 窗口内去重 | 不依赖后端改造就能挡住大部分重试；真正的幂等仍建议后端做，作为长期项 |
 
 > **本轮新增的可信源**：后端仓库打开了。之前标 **[后端]** 的十几条（Q1、Q24、Q64–Q67、Q104…）现在可以直接查证，不再需要你去问人。三个方向的调研已在跑：① 私人令牌与开放接口的鉴权/scope 落实；② 登录态/菜单/权限/租户/模块类型；③ BPM 与发起流程、审批人、会议室冲突校验。
@@ -544,7 +544,7 @@ C 线查出来的：`createPortalHttp(config)` 的凭据与语言是**创建时�
 **F11｜另有一条完全独立的合作方通道，与无头无关，但值得知道它存在。**
 `erp-module-openapi` 的 `/open-api/**` 走 appKey + 时间戳 + nonce + HMAC-SHA256 签名，有 5 分钟时间窗、nonce 防重放、秒级与日级限流、调用日志（含 IP/UA/耗时/错误码）。它与私人令牌通道**零交集**（不同命名空间、不同凭据、不查 `system_open_api`、不产生 `LoginUser`），且只暴露 4 个诊断类接口。**[代码]**
 
-> 如果将来要给 SY 服务端一条"真正的机器对机器"通道，这是现成的模板——但对 Portal Headless 的 D1（用户身份代理）不适用，因为这条通道没有用户身份。
+> 如果将来要给 SY 服务端一条"真正的机器对机器"通道，这是现成的模板——但对 Portal Link 的 D1（用户身份代理）不适用，因为这条通道没有用户身份。
 
 **F12｜BPM 的"接口"就在 Portal 主后端里，在外部的是流程设计器 UI——这条纠正了我 H3 的判断。**
 - `platform.js` 会给任何不以 `/admin-api` 开头的路径补前缀，所以 `/bpm/process-definition/create-list` 实际打到 `https://biz-api.wodecorp.cn/admin-api/bpm/process-definition/create-list`——**和普通 Portal 接口同一个 host、同一个 token、同一个后端进程**。
@@ -931,11 +931,11 @@ C 线查出来的：`createPortalHttp(config)` 的凭据与语言是**创建时�
 
 **现象**：Synapse 现有的"连接器"是**纯客户端内置**的：`docs/superpowers/specs/2026-09-03-builtin-mcp-skill-connectors-design.md` 明确写了 V1 **不建设云端 Connector Catalog，也不支持 OAuth、Token、多账号、多环境、远程 MCP**，且"新增或修改连接器仍需发布 Synapse 客户端"，endpoint 只接受 `http://127.0.0.1:<port>`。**[代码]**
 
-**为什么重要**：Portal Headless 是这个产品里**第一个"远程 + 带凭据"的连接器**。按现有设计，它不该硬塞进 Connector 概念里 —— 那会一次性推翻 V1 的四条明确非目标。而且 A4 里"用户开启连接器开关时向服务端请求获取 SDK 版本"，本身就要求服务端知道这个连接器有哪些、什么版本，也就是需要一个**云端连接器目录**。
+**为什么重要**：Portal Link 是这个产品里**第一个"远程 + 带凭据"的连接器**。按现有设计，它不该硬塞进 Connector 概念里 —— 那会一次性推翻 V1 的四条明确非目标。而且 A4 里"用户开启连接器开关时向服务端请求获取 SDK 版本"，本身就要求服务端知道这个连接器有哪些、什么版本，也就是需要一个**云端连接器目录**。
 
 **要你定的问题**：
 40. 它走**现有 Connector 概念并扩展其边界**，还是走**一个新的概念**（例如"外部数据源/集成账号"）？
-41. 如果扩展 Connector：那四条非目标（云端 Catalog、OAuth/Token、多账号、远程）是**逐条重新决策**，还是只有 Portal Headless 特例？
+41. 如果扩展 Connector：那四条非目标（云端 Catalog、OAuth/Token、多账号、远程）是**逐条重新决策**，还是只有 Portal Link 特例？
 42. "服务端下发 SDK 版本"这个能力，是做成通用的云端连接器目录，还是先给 Portal 开一个专用配置项？
 
 ---
@@ -1010,7 +1010,7 @@ C 线查出来的：`createPortalHttp(config)` 的凭据与语言是**创建时�
 - **意图 → 提示词**：意图（中文名 / 英文名 / 含义）绑定一组 `isIntentRecognition=1` 的提示词。
 - **前端不做工具调用**：只执行服务端返回的 8 种 action（`pc-route / flow-detail / select-module / side-panel / send-message / tenant-select / tenant-switch / unsupported`）和渲染 `cardNo` 101–118 的输出卡片。**[代码]**
 
-**为什么重要**：SY 的 Portal Headless 与它构成**两条平行的"AI → Portal 操作"通道**：
+**为什么重要**：SY 的 Portal Link 与它构成**两条平行的"AI → Portal 操作"通道**：
 
 | | 通道甲（Portal 自己的） | 通道乙（你的设计） |
 | --- | --- | --- |

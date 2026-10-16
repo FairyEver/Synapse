@@ -66,7 +66,7 @@ afterEach(() => {
 describe("ConnectorsModule", () => {
 
   it("does not claim connection success when opening the browser and allows cancellation", async () => {
-    const item = { id: "portal-headless-test", name: "Portal Headless Test", enabled: false, probeStatus: "idle", connectionStatus: "disconnected" }
+    const item = { id: "portal-headless-test", name: "Portal Link Test", enabled: false, probeStatus: "idle", connectionStatus: "disconnected" }
     mocks.connectors.item.list.mockResolvedValue({ items: [item] })
     mocks.connectors.item.connect.mockImplementation(async () => {
       const pending = { ...item, enabled: true, probeStatus: "checking", connectionStatus: "connecting" }
@@ -86,7 +86,7 @@ describe("ConnectorsModule", () => {
   })
 
   it("shows only the verified summary and offers retry/reconnection", async () => {
-    const item = { id: "portal-headless-test", name: "Portal Headless Test", enabled: true, probeStatus: "ready", connectionStatus: "connected",
+    const item = { id: "portal-headless-test", name: "Portal Link Test", enabled: true, probeStatus: "ready", connectionStatus: "connected",
       account: { portalUserId: "42", tenantId: "2", displayName: "测试账号", tenantName: "测试企业", connectedAt: "now", lastValidatedAt: "now" } }
     mocks.connectors.item.list.mockResolvedValue({ items: [item] })
     renderModule()

@@ -108,6 +108,8 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "修改待办事项标题", expect: "app_todos_item_update" },
   { intent: "把这条待办事项标记完成", expect: "app_todos_item_set_completed" },
   { intent: "删除这条待办事项", expect: "app_todos_item_delete" },
+  { intent: "Portal Link 凭证", expect: "extend_portal_headless_credential_get" },
+  { intent: "Portal Link Test 凭证", expect: "extend_portal_headless_credential_get" },
 ]
 
 /**

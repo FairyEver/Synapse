@@ -1,12 +1,12 @@
-# Portal Headless Test 连接器
+# Portal Link Test 连接器
 
 ## 交付边界与使用
 
-Synapse 连接器中的 **Portal Headless Test** 永久用于测试环境。打开开关后进入连接中，浏览器打开 Portal 授权确认页；用户确认后，SY 校验 state、远端身份和企业成员关系，安全保存成功才显示已连接。可以关闭开关断开、重新连接；网络验证失败可以重试验证。未登录 SY 时要求先登录 SY。
+Synapse 连接器中的 **Portal Link Test** 永久用于测试环境。打开开关后进入连接中，浏览器打开 Portal 授权确认页；用户确认后，SY 校验 state、远端身份和企业成员关系，安全保存成功才显示已连接。可以关闭开关断开、重新连接；网络验证失败可以重试验证。未登录 SY 时要求先登录 SY。
 
 2026-09-22 已在本机开发环境验证：SY 登录回调成功，用户完成 Portal 授权后连接器显示已连接，AI 通过扩展查询到真实会议室数据。生产与其它平台尚未验收；下方保留授权页接入契约。 不提供手填 token、浏览器数据库读取、Cookie 抓取或模拟成功入口。
 
-正式环境另有独立的 **Portal Headless** 连接器（`portal-headless`），两者分别绑定环境并长期共存；正式配置见 [Portal Headless 正式连接器](portal-headless.md)。
+正式环境另有独立的 **Portal Link** 连接器（`portal-headless`），两者分别绑定环境并长期共存；正式配置见 [Portal Link 正式连接器](portal-headless.md)。
 
 ## 固定环境与 Web 契约
 
