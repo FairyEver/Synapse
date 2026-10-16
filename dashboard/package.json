@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Synapse admin dashboard",
   "scripts": {
-    "dev": "pnpm --filter @synapse/shared run build && vite --port 3000 --host 0.0.0.0 --open /console/",
+    "dev": "pnpm --filter @synapse/shared run build && vite --port 3000 --host 0.0.0.0 --open http://127.0.0.1:3000/console/",
     "prebuild": "pnpm run check:drive-telemetry",
     "build": "pnpm --filter @synapse/shared run build && tsc -b && vite build",
     "check:drive-telemetry": "node scripts/check-drive-telemetry-coverage.mjs",
