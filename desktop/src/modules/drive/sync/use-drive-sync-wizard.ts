@@ -7,13 +7,13 @@ import { localSyncBasename, syncRemotePath, syncWizardSteps, type SyncWizardEdit
 export type DriveSyncWizardEntry =
   | { readonly mode: "item"; readonly item: DriveItemDto; readonly drivePathHint: string | null }
   | { readonly mode: "local"; readonly targetParentId: string | null; readonly drivePathHint: string | null }
-  | { readonly mode: "edit"; readonly binding: DriveSyncBindingDto }
+  | { readonly mode: "edit"; readonly binding: DriveSyncBindingDto; readonly edit?: SyncWizardEdit }
 
 export function useDriveSyncWizard(controller: DriveSyncController, entry: DriveSyncWizardEntry, onBindingCreated?: (binding: DriveSyncBindingDto) => void | Promise<void>) {
   const operation: SyncWizardOperation = entry.mode === "edit" ? "edit" : "create"
-  const [step, setStep] = useState<SyncWizardStep>(entry.mode === "edit" ? "edit" : entry.mode === "item" ? "local" : "scenario")
+  const [step, setStep] = useState<SyncWizardStep>(entry.mode === "edit" ? entry.edit === "align" ? "authority" : entry.edit ?? "edit" : entry.mode === "item" ? "local" : "scenario")
   const binding = entry.mode === "edit" ? entry.binding : null
-  const [edit, setEdit] = useState<SyncWizardEdit | "">("")
+  const [edit, setEdit] = useState<SyncWizardEdit | "">(entry.mode === "edit" ? entry.edit ?? "" : "")
   const [kind, setKind] = useState<"file" | "folder" | "">(entry.mode === "edit" ? entry.binding.kind : entry.mode === "item" ? entry.item.type : "")
   const [scenario, setScenario] = useState<SyncWizardScenario | "">(entry.mode === "edit" ? "bind_existing" : "")
   const [localPath, setLocalPath] = useState(entry.mode === "edit" ? entry.binding.localPath : "")
@@ -32,7 +32,7 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
   const busyRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ binding?: DriveSyncBindingDto; title: string; detail?: string } | null>(null)
-  const steps = syncWizardSteps(operation, kind, scenario, edit, entry.mode === "item")
+  const steps = syncWizardSteps(operation, kind, scenario, edit, entry.mode === "item").filter((step) => entry.mode !== "edit" || !entry.edit || step.id !== "edit")
   const currentIndex = steps.findIndex((item) => item.id === step)
   const rules = rulesText.split("\n").filter((rule) => rule.trim().length > 0)
   const remotePath = scenario === "local_to_remote" ? syncRemotePath(parent.path, name) : remote?.path ?? ""
@@ -120,7 +120,7 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
       if (!preview || preview.status !== "ready" || (preview.alignment?.changes.length && !confirmed)) return
       const created = await controller.createBinding(input())
       const failed = created.status === "error" || created.status === "conflict" || Boolean(created.lastError)
-      setResult({ title: failed ? "同步需要处理" : created.status === "paused" ? "已保存，保持暂停" : "已开启同步", binding: created, detail: created.lastError ?? undefined })
+      setResult({ title: failed ? "同步需要处理" : created.status === "paused" ? "已保存，保持暂停" : "已开启同步", binding: created, detail: failed && operation === "edit" ? `${created.lastError ?? "重新映射未完成"}。原配置与新配置均保持暂停。请返回同步列表，保留所需配置并解除另一条关系后重新配置。` : created.lastError ?? undefined })
       await controller.refresh()
       await onBindingCreated?.(created)
       return

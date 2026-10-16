@@ -84,6 +84,8 @@ describe("createDriveCapabilityDispatcher", () => {
     const primaryToolNames = [
       "app_drive_item_list",
       "app_drive_item_get",
+      "app_drive_file_replace_preview",
+      "app_drive_file_replace_apply",
       "app_drive_file_upload",
       "app_drive_folder_upload",
       "app_drive_folder_create",
@@ -141,6 +143,7 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_sync_binding_create",
       "app_drive_sync_binding_pause",
       "app_drive_sync_binding_resume",
+      "app_drive_sync_binding_removal_preview",
       "app_drive_sync_binding_remove",
       "app_drive_sync_binding_exclude_rules_update",
       "app_drive_sync_binding_rescan",
@@ -373,6 +376,21 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(driveSyncService.createSafeBinding).not.toHaveBeenCalled()
   })
 
+  it("routes explicit file replacement and reviewed cleanup through the sync coordinator", async () => {
+    const preview = { itemId: "item-1", name: "cloud.md", localName: "finished.md", size: "8", previousSize: "6", versionId: "v1", confirmationToken: "review", syncImpacts: [], blockedReason: null }
+    const result = { item: driveItem({ id: "item-1", name: "cloud.md" }), versionId: "v2", syncPending: true }
+    const removal = { bindingId: "binding-1", disposition: "keep_local" as const, localPath: "/workspace/cloud.md", drivePathHint: "cloud.md", localPaths: [], remotePaths: ["cloud.md"], warnings: [], blockedReason: null, confirmationToken: "cleanup-review" }
+    const driveSyncService = createDriveSyncService({ previewFileReplacement: vi.fn(async () => preview), applyFileReplacement: vi.fn(async () => result), previewRemoval: vi.fn(async () => removal) })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService: createAccountService(), driveSyncService })
+    const context = { source: "mcp-stdio" as const }
+    await expect(dispatcher.dispatch("app.drive.file.replace.preview", { itemId: "item-1", filePath: "/workspace/finished.md" }, context)).resolves.toEqual({ ok: true, data: preview })
+    await expect(dispatcher.dispatch("app.drive.file.replace.apply", { itemId: "item-1", filePath: "/workspace/finished.md", confirmationToken: "review" }, context)).resolves.toEqual({ ok: true, data: result })
+    expect(driveSyncService.applyFileReplacement).toHaveBeenCalledWith({ itemId: "item-1", filePath: "/workspace/finished.md", confirmationToken: "review" })
+    await expect(dispatcher.dispatch("app.drive.sync.binding.removal.preview", { bindingId: "binding-1", disposition: "keep_local" }, context)).resolves.toEqual({ ok: true, data: removal })
+    await dispatcher.dispatch("app.drive.sync.binding.remove", { bindingId: "binding-1", disposition: "keep_local", confirmationToken: "cleanup-review" }, context)
+    expect(driveSyncService.removeBinding).toHaveBeenCalledWith("binding-1", { disposition: "keep_local", confirmationToken: "cleanup-review" })
+  })
+
   it("routes Drive sync lifecycle and conflict actions", async () => {
     const binding = driveSyncBinding()
     const snapshot = driveSyncSnapshot({ bindings: [binding] })
@@ -382,7 +400,7 @@ describe("createDriveCapabilityDispatcher", () => {
       resumeBinding: vi.fn(async () => binding),
       updateExcludeRules: vi.fn(async () => binding),
       rescanBinding: vi.fn(async () => undefined),
-      removeBinding: vi.fn(async () => undefined),
+      removeBinding: vi.fn(async () => ({ bindingId: "binding-1", local: "retained" as const, remote: "retained" as const, errors: [] })),
       resolveConflict: vi.fn(async () => undefined),
     })
     const dispatcher = createDriveCapabilityDispatcher({
@@ -406,7 +424,7 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("app.drive.sync.binding.rescan", { bindingId: "binding-1" }, context))
       .resolves.toEqual({ ok: true, data: binding })
     await expect(dispatcher.dispatch("app.drive.sync.binding.remove", { bindingId: "binding-1" }, context))
-      .resolves.toEqual({ ok: true, data: { removed: true } })
+      .resolves.toEqual({ ok: true, data: { bindingId: "binding-1", local: "retained", remote: "retained", errors: [] } })
     await expect(dispatcher.dispatch("app.drive.sync.conflict.resolve", {
       conflictId: "conflict-1",
       action: "keep_local",
@@ -2447,7 +2465,7 @@ function createDriveSyncService(overrides: Partial<DriveSyncServicePort> = {}): 
     createSafeBinding: vi.fn(async () => binding),
     pauseBinding: vi.fn(async () => ({ ...binding, status: "paused" })),
     resumeBinding: vi.fn(async () => binding),
-    removeBinding: vi.fn(async () => undefined),
+    removeBinding: vi.fn(async () => ({ bindingId: "binding-1", local: "retained" as const, remote: "retained" as const, errors: [] })),
     updateExcludeRules: vi.fn(async () => binding),
     rescanBinding: vi.fn(async () => undefined),
     resolveConflict: vi.fn(async () => undefined),

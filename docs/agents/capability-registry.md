@@ -23,7 +23,7 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 
 桌面通知来源下拉筛选复用既有 `app_account_notification_list` 的可选 `source`，与 `filter` 状态条件取交集并在分页前过滤；账号消息中心仍为 7 个 MCP 工具，各注册数量不变，不新增 capability 或路由。全部已读、清空全部与忽略全部待处理仍按当前账号范围执行，不受列表来源筛选影响。
 
-云盘评论/留言通知由服务端拥有的 `drive-discussion` 来源自动产生，既有 Drive 创建工具负责业务操作，不增加通知发送参数或工具。网页 `/notifications/<notificationId>/open` 与 `GET /api/notifications/:id/drive-target` 是受保护的 UI 定位表面，不是 `synapse://` Deep Link；手机复用 `.message(id)` 和现有网页浏览入口。Drive 仍为 73 个 MCP 工具，账号通知仍为 7 个；下表各项数量及 System Notifier 公开契约不变。
+云盘评论/留言通知由服务端拥有的 `drive-discussion` 来源自动产生，既有 Drive 创建工具负责业务操作，不增加通知发送参数或工具。网页 `/notifications/<notificationId>/open` 与 `GET /api/notifications/:id/drive-target` 是受保护的 UI 定位表面，不是 `synapse://` Deep Link；手机复用 `.message(id)` 和现有网页浏览入口。Drive 仍为 76 个 MCP 工具，账号通知仍为 7 个；下表各项数量及 System Notifier 公开契约不变。
 
 2026-10-13 文档互动通知增加可选只读 `driveDiscussion.snapshot`（完整标题、本次内容、原文及回复对象的当时摘录）。手机长按详情是既有通知读取的 UI 操作，点按继续直达；通知输入 schema、工具数量和 System Notifier 契约不变。
 
@@ -158,7 +158,7 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 
 Meeting 是普通 System App（界面上的名字是「录音」），不新增 MCP domain：录音与转写文字只通过桌面端与手机端的用户界面读写，没有注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link。它注册 12 个 UI 私有 IPC operation（`app.meeting.*`），用于录音起止、分片上报、录音读写与删除、转写重试、回放地址与波形，以及音频本机缓存；分片是裸字节，经主进程代理写入平台媒体对象存储，不进用户云盘。发言人与纪要在两端的界面上都已去掉，对应的写入 IPC 与 HTTP 接口一并下线；服务端 DTO 仍照常返回 `speakers` / `minutes` 等字段，手机端才不会因旧版本解码失败。异常退出留下的未完成录音由主进程在启动时静默收尾，不占用任何 IPC——但**只收本机录的那一条**（判据是本机暂存目录还在不在）：手机端上线后两端录的是同一批数据，无条件收尾会把对方正在录的那条强行结束掉。服务端的 `GET /meetings/recordings/pending` 因此多了可选参数 `?all=1`，无参数时的行为不变，旧版桌面端照常可用。转写完成后服务端经既有 `broadcastToUser` 通知桌面端，并经 `MobilePushService` 的 `MEETING_TRANSCRIPTION` category 通知手机——两者都不改变上表的 capability 或 MCP 数量。转写进度：详情 DTO 多返回一个可选的 `transcription`（阶段 / 服务端此刻的已用时长 / 按音频时长估的预期耗时），两端据此画一条会往前走的进度条（封顶 95%），秒表由客户端在两次刷新之间接着走；这只是既有 `app.meeting.entry.get` 的一个字段，没有新增 operation。转写失败的重试只覆盖**投递阶段**的抖动，识别引擎判定音频不可识别属终局、一次收尾不再重投。新增的第 12 个 operation 是 `app.meeting.audio.ensure`（`{ meetingId }` → `ready` / `downloading` / `unavailable`）：音频在本机留一份，听过的再听不走网络，没网也能听听过的那些。**缓存是纯客户端行为，服务端零改动**——失效判断用的 `recording.status` 与 `recording.size` 详情接口本来就在返回。缓存只有这一个 operation，没有配套的清理入口：清理是主进程自己的事。桌面端缓存目录是 `userData/meeting-audio-cache/`，手机端沿用录音落盘目录，两端都不进 `DataRepository`（派生产物，禁止把大文件字节写进去）；两端各自的命中判据、2 GB 上限与清理时机必须一致。界面上不出现缓存的任何痕迹——没有「已下载」「已缓存」「离线」「本地」任何一个词，列表行也不加标记。手机端的录音实时活动另有一条**只属于手机**的深链 `synapse://recording`：锁屏和灵动岛上那张卡片点一下落在录音界面，而不是把这一条结束掉——卡片是「带我去看」，那两个按钮才是「替我做」。它由 iOS App 自己注册与解析（`CFBundleURLTypes` + `onOpenURL`），不经桌面端协议路由：桌面端的 `synapse://` 路由对它照常按未知路由处理（一条 warn 日志加聚焦主窗口），不新增 System App、Dock、Workflow Node、Automation Action 或 MCP capability/tool。手机端因此成为第一个注册 Deep Link 的客户端；「卡片点开落在录音界面且不起新录音」与「按钮在 App 进程里执行」两条同时成立，见 `docs/superpowers/specs/2026-09-19-mobile-recording-design.md` 的补记。
 
-2026-10-16 站内信人员筛选新增 `app.mail.contact.list`（MCP `app_mail_contact_list`），并给 `app.mail.message.list` 增加可选 `contactKey`。名单仅从当前账号完整可见信箱聚合；收件箱是发件人，已发送是 To/Cc 地址快照中的个人与组织，不展开组织成员。该只读能力沿用 Mail 权限与审计；Mail 增至 17 项，全局 capability 290 项、MCP 索引 286 项。System App、Dock、Workflow、Automation 和 Deep Link 无增量，公开 MCP 仍为 `search`、`invoke` 两个。桌面新增侧栏和窄窗口选择器，iOS 入口不变。
+2026-10-16 站内信人员筛选新增 `app.mail.contact.list`（MCP `app_mail_contact_list`），并给 `app.mail.message.list` 增加可选 `contactKey`。名单仅从当前账号完整可见信箱聚合；收件箱是发件人，已发送是 To/Cc 地址快照中的个人与组织，不展开组织成员。该只读能力沿用 Mail 权限与审计；Mail 增至 17 项，当前全局 capability 293 项、MCP 索引 289 项。System App、Dock、Workflow、Automation 和 Deep Link 无增量，公开 MCP 仍为 `search`、`invoke` 两个。桌面新增侧栏和窄窗口选择器，iOS 入口不变。
 
 ## MCP capability domain
 
@@ -172,15 +172,15 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
-| `drive` | 73 | 73 |
+| `drive` | 76 | 76 |
 | `mail` | 17 | 17 |
 | `todos` | 6 | 6 |
 | `extend` | 1 | 1 |
-| 合计 | 290 | 286 |
+| 合计 | 293 | 289 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 286 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 289 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -191,7 +191,9 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问设置时均创建公开、永久的新分享；网页分享创建工具只要求来源文件夹与名称。该契约调整不改变 `drive` domain 的 capability 或 MCP tool 数量。
 
-Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`，用于用户明确选择一端为准的首次对齐与替换；仍为 9 个同步工具，Drive 总计 73 个 capability / MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量均不变。原生选择器和公共向导组件仍属 UI 私有表面。文件列表的分享／同步 Tag 和详情 Popover 复用现有分享读取、条目祖先查询及同步快照／管理能力；继承项指向实际绑定根，不新增 MCP 或注册表面。2026-10-16 桌面条目「与本机同步…」、通用「新建同步」和「同步管理」按上下文分流，复用上述预检／创建／管理操作；不增加 capability、MCP tool 或其它注册表面，表内数量不变。
+Drive 本地同步通过 10 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、解除预览、解除、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增同步引擎。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`。解除默认保留两端，删除选项必须先预览，执行时复验并持久解除关系，再按端可恢复清理；排除项与未管理内容保留，部分失败可按同一关系重试。桌面紧凑列表、详情 Popover、直接重新映射入口及选择器属 UI 私有表面，不增加 System App、Dock、Workflow、Automation 或 Deep Link。
+
+2026-10-16 新增 `app.drive.file.replace.preview/apply` 两个 capability / MCP 工具，支持将同扩展名本地成品上传为指定文件的新版本，保留身份、名称、分享与历史。它们复用 `core.drive-sync` 的版本化上传、同步基线检查、工作取消及权限审计；预览令牌绑定目标、版本、本地内容与本机同步配置。保留原文本编辑上传的版本依据保护。Drive 现在总计 76 个 capability / MCP 索引工具（原 73，加文件替换 2、解除预览 1）；公开 MCP 仍只有 search/invoke。网页端的上传版本预检与 Site 未发布变更标记是既有 HTTP/UI 行为，不新增 MCP。
 
 Drive 分享评论通过 7 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论、删除线程和讨论状态更新。仅讨论创建人可通过 `app.drive.link.annotation.thread.status.update` 设置 `open`（未解决）或 `resolved`（已解决）；列表与变更结果返回 `status` 和 `permissions.canChangeStatus`。状态独立于定位与删除，解决后保留原位及所有回复，回复不自动重新打开，同状态重试不产生额外变化。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
 

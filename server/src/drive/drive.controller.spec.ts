@@ -38,6 +38,7 @@ describe("DriveController", () => {
   const drive = {
     listItems: vi.fn(),
     listItemsPage: vi.fn(),
+    prepareUpload: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
     listTrash: vi.fn(),
@@ -69,6 +70,19 @@ describe("DriveController", () => {
     openAdminItemDownload: vi.fn(),
     restoreItemAsAdmin: vi.fn(),
   }
+  it("forwards the reviewed target identity and version to upload preparation", () => {
+    process.env.APP_PUBLIC_URL = "https://synapse.test"
+    const controller = new DriveUserController(drive as never, {} as never, {} as never, {} as never, {} as never)
+    controller.prepareUpload({ name: "spec.md", size: "4", expectedItemId: "item-1", expectedVersionId: "v1", createOnly: false }, { user: { id: "user-1" }, headers: {} } as never)
+    expect(drive.prepareUpload).toHaveBeenCalledWith("user-1", expect.objectContaining({ expectedItemId: "item-1", expectedVersionId: "v1", createOnly: false }))
+  })
+  it("forwards reviewed folder root and per-file version guards", () => {
+    process.env.APP_PUBLIC_URL = "https://synapse.test"
+    const controller = new DriveUserController(drive as never, {} as never, {} as never, {} as never, {} as never)
+    const files = [{ relativePath: "spec.md", size: "4", expectedItemId: "item-1", expectedVersionId: "v1", createOnly: false }]
+    controller.prepareFolderUpload({ folderName: "docs", expectedRootItemId: "root-1", createRootOnly: false, files }, { user: { id: "user-1" }, headers: {} } as never)
+    expect(drive.prepareFolderUpload).toHaveBeenCalledWith("user-1", expect.objectContaining({ expectedRootItemId: "root-1", createRootOnly: false, files: [expect.objectContaining(files[0])] }), expect.anything())
+  })
   const publicAssets = {
     listAdminAssets: vi.fn(),
     getAdminAsset: vi.fn(),

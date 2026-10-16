@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DriveAccessExpiresIn, DriveSiteDto } from '@synapse/shared'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -131,15 +132,19 @@ export function DriveWebSharesPanel({
         {sites.map((site) => (
           <div key={site.siteId} className='flex items-center justify-between gap-3 border-b py-2'>
             <div className='min-w-0 flex-1'>
-              <div className='truncate text-sm font-medium'>{site.name}</div>
+              <div className='flex items-center gap-2'>
+                <span className='truncate text-sm font-medium'>{site.name}</span>
+                {site.needsRepublish === true ? <Badge variant='secondary'>有未发布变更</Badge> : null}
+              </div>
+              {site.sourceAvailable === false ? <p className='text-sm text-muted-foreground'>源文件夹已删除</p> : null}
               <Input value={site.password ? site.urlWithPassword : site.url} readOnly className='mt-1 font-mono text-xs' />
             </div>
             <div className='flex shrink-0 flex-wrap items-center justify-end gap-1'>
               <Button data-drive-telemetry-event='web.drive.site.copy-url' type='button' variant='ghost' size='sm' onClick={() => { void onCopyUrl(site.name, site.password ? site.urlWithPassword : site.url) }}>
                 复制链接
               </Button>
-              <Button data-drive-telemetry-event='web.drive.site.republish' type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.republishSite(site.siteId, { entryPath: site.entryPath }), '更新网页失败') }}>
-                更新网页
+              <Button data-drive-telemetry-event='web.drive.site.republish' type='button' variant='ghost' size='sm' disabled={submitting || site.sourceAvailable === false} onClick={() => { void runSiteAction(() => driveApi.republishSite(site.siteId, { entryPath: site.entryPath }), '更新网页失败') }}>
+                发布更新
               </Button>
               <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => {
                 setAccessTarget(site)

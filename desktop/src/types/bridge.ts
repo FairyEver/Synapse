@@ -1,3 +1,4 @@
+import type { DriveFileReplaceInput, DriveFileReplaceApplyInput, DriveFileReplacePreviewDto, DriveFileReplaceResultDto, DriveSyncRemovalInput, DriveSyncRemovalPreviewDto, DriveSyncRemovalResultDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DatabaseChangeEvent,
   DatabaseFolder,
@@ -233,6 +234,7 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
 export type DriveLocalUploadFileItem = {
+  readonly replacementToken?: string
   readonly kind: "file"
   readonly path: string
   readonly name: string
@@ -241,6 +243,8 @@ export type DriveLocalUploadFileItem = {
 }
 
 export type DriveLocalUploadFolderItem = {
+  readonly expectedRootItemId?: string
+  readonly createRootOnly?: boolean
   readonly kind: "folder"
   readonly folderName: string
   readonly directories?: Array<{
@@ -250,6 +254,8 @@ export type DriveLocalUploadFolderItem = {
     readonly path: string
     readonly relativePath: string
     readonly mimeType?: string | null
+    readonly expectedItemId?: string
+    readonly replacementToken?: string
   }>
 }
 
@@ -1155,7 +1161,8 @@ export type SynapseBridge = {
       importGitignore?: boolean
     }) => Promise<DriveSyncBindingPreviewDto>
     createSafeBinding: (input: DriveSyncCreateSafeBindingInput) => Promise<DriveSyncBindingDto>
-    removeBinding: (input: { id: string }) => Promise<void>
+    previewRemoval: (input: DriveSyncRemovalInput) => Promise<DriveSyncRemovalPreviewDto>
+    removeBinding: (input: DriveSyncRemovalInput) => Promise<DriveSyncRemovalResultDto>
     pauseBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
     resumeBinding: (input: { id: string }) => Promise<DriveSyncBindingDto>
     updateExcludeRules: (input: DriveSyncUpdateExcludeRulesInput) => Promise<DriveSyncBindingDto>
@@ -1458,6 +1465,10 @@ export type SynapseBridge = {
       cancel: (input: { sessionId: string }) => Promise<{ ok: true }>
       onLocalProgress: (listener: (event: DriveLocalUploadProgressEvent) => void) => () => void
     }
+    file: { replace: {
+      preview: (input: DriveFileReplaceInput) => Promise<DriveFileReplacePreviewDto>
+      apply: (input: DriveFileReplaceApplyInput) => Promise<DriveFileReplaceResultDto>
+    } }
     localFile: { pathForDroppedFile: (file: File) => string | null }
     folder: { create: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto> }
     fileVersion: {

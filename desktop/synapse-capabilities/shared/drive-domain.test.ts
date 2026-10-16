@@ -15,6 +15,8 @@ describe("Drive capability domain", () => {
     expect(toolNames.filter((name) => name.startsWith("app_drive_"))).toEqual([
       "app_drive_item_list",
       "app_drive_item_get",
+      "app_drive_file_replace_preview",
+      "app_drive_file_replace_apply",
       "app_drive_file_upload",
       "app_drive_folder_upload",
       "app_drive_folder_create",
@@ -72,6 +74,7 @@ describe("Drive capability domain", () => {
       "app_drive_sync_binding_create",
       "app_drive_sync_binding_pause",
       "app_drive_sync_binding_resume",
+      "app_drive_sync_binding_removal_preview",
       "app_drive_sync_binding_remove",
       "app_drive_sync_binding_exclude_rules_update",
       "app_drive_sync_binding_rescan",

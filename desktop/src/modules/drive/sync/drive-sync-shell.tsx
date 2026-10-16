@@ -2,16 +2,6 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import type { DriveItemDto, DriveSyncBindingDto } from "@synapse/shared"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +12,8 @@ import {
   DialogFrameHeader,
 } from "@/components/ui/dialog"
 import { DriveSyncCenter, DriveSyncFilterBar } from "./drive-sync-center"
+import { DriveSyncRemovalDialog } from "./drive-sync-removal-dialog"
+import { DriveSyncEditMenu } from "./drive-sync-edit-menu"
 import { DriveSyncDetail } from "./drive-sync-detail"
 import type { DriveSyncFilter } from "./drive-sync-copy"
 import { DriveSyncWizard, type DriveSyncWizardEntry } from "./drive-sync-wizard"
@@ -89,6 +81,12 @@ export function DriveSyncDialog({
     ? bindings.find((binding) => binding.id === view.bindingId) ?? null
     : null
 
+  useEffect(() => {
+    if (!detailBinding || detailBinding.status !== "removed") return
+    setRemoveTarget(detailBinding)
+    setView({ kind: "center", selectedBindingId: null })
+  }, [detailBinding])
+
   const requestRemove = (binding: DriveSyncBindingDto) => setRemoveTarget(binding)
   const openWizard = () => {
     // 只读时不让用户把三步走完再吃一个主进程报错，入口直接拦住。
@@ -154,6 +152,7 @@ export function DriveSyncDialog({
                     onOpenDriveItem={onOpenDriveItem}
                     onRequestRemove={requestRemove}
                     onSelectBinding={(bindingId) => setView({ kind: "detail", bindingId })}
+                    onEditBinding={(binding, edit) => setView({ kind: "wizard", returnTo: "center", entry: { mode: "edit", binding, edit } })}
                   />
                 </DialogFrameBody>
               </>
@@ -172,7 +171,7 @@ export function DriveSyncDialog({
                       <ArrowLeft />
                     </Button>
                   )}
-                  actions={<Button disabled={controller.readOnly} onClick={() => setView({ kind: "wizard", returnTo: "detail", entry: { mode: "edit", binding: detailBinding } })}>修改同步</Button>}
+                  actions={<DriveSyncEditMenu binding={detailBinding} disabled={controller.readOnly || controller.isPending(detailBinding.id) || detailBinding.status === "removed"} onEdit={(edit) => setView({ kind: "wizard", returnTo: "detail", entry: { mode: "edit", binding: detailBinding, edit } })} /> }
                   title={detailBinding.driveItemName}
                   description={detailBinding.kind === "folder" ? "文件夹同步" : "文件同步"}
                 />
@@ -209,6 +208,7 @@ export function DriveSyncDialog({
               </>
             ) : (
               <DriveSyncWizard
+                key={view.entry.mode === "edit" ? `${view.entry.binding.id}:${view.entry.edit ?? "choose"}` : view.entry.mode}
                 controller={controller}
                 entry={view.entry}
                 onBindingCreated={onBindingCreated}
@@ -224,33 +224,10 @@ export function DriveSyncDialog({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={removeTarget !== null} onOpenChange={(next) => { if (!next) setRemoveTarget(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>移除同步 {removeTarget?.driveItemName}</AlertDialogTitle>
-            <AlertDialogDescription>
-              不再自动同步，云盘和电脑上的文件都会保留。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={removeTarget ? controller.isPending(removeTarget.id) : false}
-              onClick={() => {
-                if (!removeTarget) return
-                const target = removeTarget
-                void controller
-                  .runBindingAction("drive.sync.binding.remove", target.id, () => controller.remove(target.id), "已移除同步")
-                  .then((ok) => { if (ok) setView({ kind: "center", selectedBindingId: null }) })
-                  .finally(() => setRemoveTarget(null))
-              }}
-            >
-              移除同步
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {removeTarget && <DriveSyncRemovalDialog key={removeTarget.id} controller={controller} binding={removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onRemoved={() => { setRemoveTarget(null); setView({ kind: "center", selectedBindingId: null }) }}
+      />}
     </>
   )
 }

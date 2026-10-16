@@ -25,6 +25,8 @@ import type {
   DriveFileVersionDto,
   DriveFileVersionListPageDto,
   DriveItemDto,
+  DriveItemListInput,
+  DriveItemListPageDto,
   DriveItemLifecycleStatus,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
@@ -1215,7 +1217,7 @@ function driveSiteQuerySuffix(options: DriveSiteListInput = {}) {
 export const driveApi = {
   getUsage: () =>
     request<DriveUsageDto>(`${driveApiBasePath}/usage`),
-  prepareUpload: (input: { readonly parentId?: string | null; readonly name: string; readonly size: string; readonly mimeType?: string | null }) =>
+  prepareUpload: (input: { readonly parentId?: string | null; readonly name: string; readonly size: string; readonly mimeType?: string | null; readonly expectedItemId?: string; readonly expectedVersionId?: string; readonly createOnly?: boolean }) =>
     request<DriveUploadPrepareResult>(`${driveApiBasePath}/uploads/prepare`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1223,11 +1225,16 @@ export const driveApi = {
         name: input.name,
         size: input.size,
         mimeType: input.mimeType ?? null,
+        ...(input.expectedItemId ? { expectedItemId: input.expectedItemId } : {}),
+        ...(input.expectedVersionId ? { expectedVersionId: input.expectedVersionId } : {}),
+        ...(input.createOnly !== undefined ? { createOnly: input.createOnly } : {}),
       }),
     }),
   prepareFolderUpload: (input: {
     readonly parentId?: string | null
     readonly folderName: string
+    readonly expectedRootItemId?: string
+    readonly createRootOnly?: boolean
     readonly directories?: readonly DriveFolderUploadPrepareDirectoryInput[]
     readonly files: readonly DriveFolderUploadPrepareFileInput[]
   }) =>
@@ -1236,6 +1243,8 @@ export const driveApi = {
       body: JSON.stringify({
         parentId: input.parentId ?? null,
         folderName: input.folderName,
+        ...(input.expectedRootItemId ? { expectedRootItemId: input.expectedRootItemId } : {}),
+        ...(input.createRootOnly !== undefined ? { createRootOnly: input.createRootOnly } : {}),
         directories: input.directories ?? [],
         files: input.files,
       }),
@@ -1259,6 +1268,8 @@ export const driveApi = {
       method: 'PATCH',
       body: JSON.stringify({ parentId }),
     }),
+  listItems: (options: DriveItemListInput = {}) =>
+    request<DriveItemListPageDto>(`${driveApiBasePath}/items${driveTreeQuerySuffix({ ...options, offset: options.offset ?? 0 })}`),
   listTree: (options: DriveItemTreeListInput = {}) =>
     request<DriveItemTreeListPageDto>(`${driveApiBasePath}/items/tree${driveTreeQuerySuffix(options)}`),
   deleteItem: (itemId: string) =>

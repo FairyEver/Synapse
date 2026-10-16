@@ -248,6 +248,7 @@ export interface DriveChangeListPageDto {
 }
 
 export interface DriveSyncBindingDto {
+  readonly removalDisposition?: DriveSyncRemovalDisposition
   readonly id: string
   readonly driveItemId: string
   readonly driveItemName: string
@@ -436,6 +437,9 @@ export interface DriveHostedDocumentImageDto {
 }
 
 export interface DriveFolderUploadPrepareFileInput {
+  readonly expectedItemId?: string | null
+  readonly expectedVersionId?: string | null
+  readonly createOnly?: boolean
   readonly relativePath: string
   readonly size: string
   readonly mimeType?: string | null
@@ -537,6 +541,8 @@ export interface DriveSiteAccessUpdateInput {
 }
 
 export interface DriveSiteDto {
+  readonly needsRepublish?: boolean | null
+  readonly sourceAvailable?: boolean
   readonly id: string
   readonly siteId: string
   readonly name: string
@@ -1613,4 +1619,39 @@ function maskSensitiveDriveSearchParams(params: URLSearchParams): boolean {
 
 function isSensitiveDriveQueryKey(key: string): boolean {
   return /^(?:password|token|access_token|api_?key|signature|sig)$/iu.test(key)
+}
+
+/** Reviewed whole-file replacement; independent finished local bytes are allowed. */
+export interface DriveFileReplaceInput { readonly itemId: string; readonly filePath: string }
+export interface DriveFileReplaceApplyInput extends DriveFileReplaceInput { readonly confirmationToken: string }
+export interface DriveFileReplacePreviewDto {
+  readonly itemId: string
+  readonly name: string
+  readonly localName: string
+  readonly size: string
+  readonly previousSize: string
+  readonly versionId: string
+  readonly confirmationToken: string
+  readonly syncImpacts: readonly { readonly bindingId: string; readonly localPath: string; readonly status: DriveSyncBindingStatus }[]
+  readonly blockedReason: string | null
+}
+export interface DriveFileReplaceResultDto { readonly item: DriveItemDto; readonly versionId: string; readonly syncPending: boolean }
+export type DriveSyncRemovalDisposition = "keep_both" | "keep_local" | "keep_remote" | "delete_both"
+export interface DriveSyncRemovalInput { readonly id: string; readonly disposition?: DriveSyncRemovalDisposition; readonly confirmationToken?: string }
+export interface DriveSyncRemovalPreviewDto {
+  readonly bindingId: string
+  readonly disposition: DriveSyncRemovalDisposition
+  readonly localPath: string
+  readonly drivePathHint: string | null
+  readonly localPaths: readonly string[]
+  readonly remotePaths: readonly string[]
+  readonly warnings: readonly string[]
+  readonly blockedReason: string | null
+  readonly confirmationToken: string
+}
+export interface DriveSyncRemovalResultDto {
+  readonly bindingId: string
+  readonly local: "retained" | "trashed" | "failed"
+  readonly remote: "retained" | "trashed" | "failed"
+  readonly errors: readonly string[]
 }

@@ -17,6 +17,8 @@ import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererMou
   disconnect() {}
 }
 
+vi.mock('../drive-file-versions-dialog', () => ({ DriveFileVersionsDialog: ({ itemId }: { itemId: string }) => <div data-testid='versions-dialog'>{itemId}</div> }))
+
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
 
@@ -130,10 +132,49 @@ afterEach(() => {
   document.body.innerHTML = ''
   Reflect.deleteProperty(navigator, 'clipboard')
   Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: originalMatchMedia })
+  window.history.replaceState(null, '', '/')
   vi.clearAllMocks()
 })
 
 describe('DriveRendererShell', () => {
+  it('opens owner history from the new-version link and consumes only its query parameter', async () => {
+    window.history.replaceState(null, '', '/drive/items/file?versions=1&surface=standalone#keep')
+    renderShell({ snapshot: baseSnapshot(), rendererId: 'code' })
+    await act(async () => undefined)
+    expect(document.querySelector('[data-testid="versions-dialog"]')?.textContent).toBe(baseSnapshot().current.id)
+    expect(window.location.search).toBe('?surface=standalone')
+    expect(window.location.hash).toBe('#keep')
+  })
+
+  it('handles a history request while the same owner reader is already open', async () => {
+    window.history.replaceState(null, '', '/drive/items/file')
+    renderShell({ snapshot: baseSnapshot(), rendererId: 'code' })
+    await act(async () => {
+      window.history.pushState(null, '', '/drive/items/file?versions=1')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(document.querySelector('[data-testid="versions-dialog"]')).not.toBeNull()
+    expect(window.location.search).toBe('')
+  })
+
+  it('does not consume a history request while another file is still loading', async () => {
+    window.history.replaceState(null, '', '/drive/items/file')
+    renderShell({ snapshot: baseSnapshot(), rendererId: 'code' })
+    await act(async () => {
+      window.history.pushState(null, '', '/drive/items/other?versions=1')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(document.querySelector('[data-testid="versions-dialog"]')).toBeNull()
+    expect(window.location.search).toBe('?versions=1')
+  })
+
+  it('does not open owner history for a shared file', async () => {
+    window.history.replaceState(null, '', '/share/share-1?versions=1')
+    renderShell({ snapshot: baseSnapshot({ context: 'share' }), rendererId: 'code' })
+    await act(async () => undefined)
+    expect(document.querySelector('[data-testid="versions-dialog"]')).toBeNull()
+  })
+
   it('keeps the regular preview header compact and reveals file metadata from the file name', async () => {
     renderShell({
       snapshot: baseSnapshot({

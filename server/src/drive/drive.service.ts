@@ -1032,6 +1032,7 @@ export class DriveService implements OnApplicationBootstrap {
       mimeType: input.mimeType ?? null,
       expectedItemId: input.expectedItemId ?? null,
       expectedVersionId: input.expectedVersionId ?? null,
+      createOnly: input.createOnly,
     }))
 
     let upload: Awaited<ReturnType<DriveStoragePort["createUploadInstruction"]>>
@@ -1068,8 +1069,10 @@ export class DriveService implements OnApplicationBootstrap {
       readonly mimeType: string | null
       readonly expectedItemId: string | null
       readonly expectedVersionId: string | null
+      readonly createOnly?: boolean
     },
   ): Promise<PreparedUploadRecord> {
+    await lockActiveDriveParent(tx, userId, input.parentId)
     const existingFile = input.expectedItemId
       ? await tx.driveItem.findFirst({
           where: {
@@ -1099,6 +1102,8 @@ export class DriveService implements OnApplicationBootstrap {
           include: driveItemWithShares,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         })
+    if (input.createOnly && input.expectedItemId) throw new BadRequestException("新建上传不能同时指定覆盖目标。")
+    if (input.createOnly && existingFile) throw new ConflictException("目标已出现同名文件，请重新预览。")
     if (input.expectedItemId && !existingFile) throw new BadRequestException("上传目标文件已变更。")
     const reservedBytes = input.requestedSize
     if (existingFile) {
@@ -1201,6 +1206,11 @@ export class DriveService implements OnApplicationBootstrap {
       if (seenRelativePaths.has(planned.relativePath)) throw new BadRequestException("文件路径重复。")
       seenRelativePaths.add(planned.relativePath)
     }
+    if (input.expectedRootItemId) {
+      if (input.createRootOnly) throw new BadRequestException("新建上传不能同时指定文件夹覆盖目标。")
+      const expectedRoot = await this.requireOwnedFolder(userId, input.expectedRootItemId)
+      if (expectedRoot.parentId !== input.parentId || expectedRoot.name !== normalizeDriveName(input.folderName)) throw new ConflictException("上传目标文件夹已变更，请重新预览。")
+    }
     let root: DriveItemDto | null = null
     let preservedItemIds = new Set<string>()
     const createdFolders: DriveItemDto[] = []
@@ -1210,6 +1220,8 @@ export class DriveService implements OnApplicationBootstrap {
     try {
       const rootResult = await this.ensureFolderForUpload(userId, { parentId: input.parentId, name: input.folderName }, auditContext, true)
       const rootFolder = rootResult.folder
+      if (input.expectedRootItemId && rootFolder.id !== input.expectedRootItemId) throw new ConflictException("上传目标文件夹已变更，请重新预览。")
+      if (input.createRootOnly && !rootResult.created) throw new ConflictException("目标已出现同名文件夹，请重新预览。")
       root = rootFolder
       if (rootResult.created) createdFolders.push(rootFolder)
       preservedItemIds = rootResult.created
@@ -1248,6 +1260,7 @@ export class DriveService implements OnApplicationBootstrap {
         readonly mimeType: string | null
         readonly expectedItemId: string | null
         readonly expectedVersionId: string | null
+        readonly createOnly?: boolean
       }> = []
       for (const planned of plannedFiles) {
         const { file, parts, relativePath } = planned
@@ -1262,8 +1275,9 @@ export class DriveService implements OnApplicationBootstrap {
           name: fileName,
           requestedSize,
           mimeType: file.mimeType ?? null,
-          expectedItemId: null,
-          expectedVersionId: null,
+          expectedItemId: file.expectedItemId ?? null,
+          expectedVersionId: file.expectedVersionId ?? null,
+          createOnly: file.createOnly,
         })
       }
 
@@ -1518,6 +1532,7 @@ export class DriveService implements OnApplicationBootstrap {
     })
     if (existingFolder) throw new BadRequestException("同名文件夹已存在。")
     const folder = await this.prisma.$transaction(async (tx) => {
+      await lockActiveDriveParent(tx, userId, input.parentId)
       const created = await tx.driveItem.create({
         data: {
           userId,
@@ -1612,6 +1627,10 @@ export class DriveService implements OnApplicationBootstrap {
       ? `/${await this.resolveOwnedItemPath(userId, targetParent)}/${item.name}`
       : `/${item.name}`
     const updated = await this.prisma.$transaction(async (tx) => {
+      await lockActiveDriveParent(tx, userId, parentId)
+      await lockDriveItemMutation(tx, item.id)
+      const current = await tx.driveItem.findFirst({ where: { id: item.id, userId, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, deletedAt: null } })
+      if (!current || current.parentId !== item.parentId || current.name !== item.name) throw new ConflictException("文件位置已变化，请重新操作。")
       const next = await tx.driveItem.update({
         where: { id: item.id },
         data: { parentId },
@@ -1670,8 +1689,9 @@ export class DriveService implements OnApplicationBootstrap {
     itemId: string,
     _actorEmail = userId,
     ipAddress = "system",
+    preconditions: { readonly expectedVersionId?: string; readonly expectedUpdatedAt?: string; readonly expectedEmpty?: boolean } = {},
   ): Promise<{ readonly ok: true }> {
-    await this.getLifecycleService().trashItem({ userId, itemId, actorId: userId, ipAddress })
+    await this.getLifecycleService().trashItem({ userId, itemId, actorId: userId, ipAddress, ...preconditions })
     return { ok: true }
   }
 
@@ -5215,6 +5235,13 @@ async function readDriveExactText(storage: DriveStoragePort, key: string, expect
   } catch {
     throw new BadRequestException({ code: "DRIVE_FILE_TEXT_INVALID_UTF8", message: "文件不是有效的 UTF-8 文本。" })
   }
+}
+
+async function lockActiveDriveParent(client: Prisma.TransactionClient, userId: string, parentId: string | null): Promise<void> {
+  if (!parentId) return
+  if (typeof client.$queryRaw === "function") await client.$queryRaw`SELECT "id" FROM "DriveItem" WHERE "id" = ${parentId} FOR SHARE`
+  const parent = await client.driveItem.findFirst({ where: { id: parentId, userId, type: DRIVE_ITEM_TYPE.folder, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, deletedAt: null }, select: { id: true } })
+  if (!parent) throw new ConflictException("目标文件夹已变化，请重新预览。")
 }
 
 async function lockDriveItemMutation(client: Prisma.TransactionClient, itemId: string): Promise<void> {

@@ -30,6 +30,7 @@ const driveSyncExcludeRulesSchema = z.object({
 })
 
 const driveSyncBindingSchema = z.object({
+  removalDisposition: z.enum(["keep_both", "keep_local", "keep_remote", "delete_both"]).optional(),
   id: z.string().min(1),
   driveItemId: z.string().min(1),
   driveItemName: z.string().min(1),
@@ -162,6 +163,17 @@ const driveSyncCreateSafeBindingInputSchema = z.object({
 const driveSyncBindingIdInputSchema = z.object({
   id: z.string().min(1),
 })
+const driveSyncRemovalInputSchema = driveSyncBindingIdInputSchema.extend({
+  disposition: z.enum(["keep_both", "keep_local", "keep_remote", "delete_both"]).optional(),
+  confirmationToken: z.string().min(1).optional(),
+})
+const driveSyncRemovalPreviewSchema = z.object({
+  bindingId: z.string(), disposition: z.enum(["keep_both", "keep_local", "keep_remote", "delete_both"]),
+  localPath: z.string(), drivePathHint: z.string().nullable(), localPaths: z.array(z.string()), remotePaths: z.array(z.string()),
+  warnings: z.array(z.string()), blockedReason: z.string().nullable(), confirmationToken: z.string(),
+})
+const driveSyncRemovalResultSchema = z.object({ bindingId: z.string(),
+  local: z.enum(["retained", "trashed", "failed"]), remote: z.enum(["retained", "trashed", "failed"]), errors: z.array(z.string()) })
 const driveSyncOptionalBindingIdInputSchema = driveSyncBindingIdInputSchema.partial().optional()
 
 const driveSyncUpdateExcludeRulesInputSchema = z.object({
@@ -229,13 +241,20 @@ export const driveSyncIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof driveSyncCreateSafeBindingInputSchema>) =>
         resolveDriveSyncService(ctx).createSafeBinding(request),
     },
+    previewRemoval: {
+      operationId: "app.drive.sync.binding.removal.preview",
+      kind: "invoke",
+      request: driveSyncRemovalInputSchema,
+      response: driveSyncRemovalPreviewSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncRemovalInputSchema>) => resolveDriveSyncService(ctx).previewRemoval(request),
+    },
     removeBinding: {
       operationId: "app.drive_sync.bindings.remove",
       kind: "invoke",
-      request: driveSyncBindingIdInputSchema,
-      response: z.void(),
-      handler: (ctx, request: z.infer<typeof driveSyncBindingIdInputSchema>) =>
-        resolveDriveSyncService(ctx).removeBinding(request.id),
+      request: driveSyncRemovalInputSchema,
+      response: driveSyncRemovalResultSchema,
+      handler: (ctx, request: z.infer<typeof driveSyncRemovalInputSchema>) =>
+        resolveDriveSyncService(ctx).removeBinding(request.id, request),
     },
     pauseBinding: {
       operationId: "app.drive_sync.bindings.pause",

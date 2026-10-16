@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, driveApi } from '@/lib/api'
 import { pickDriveFolderForUpload, uploadDriveFiles } from './drive-upload'
+
+vi.mock('@/features/drive-browser/shared/drive-telemetry', () => ({ startDriveOperation: () => () => undefined }))
 
 vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {
@@ -11,7 +13,9 @@ vi.mock('@/lib/api', () => ({
       this.status = status
     }
   },
+  driveBrowserApi: {}, driveAnnotationApi: {}, driveMessageApi: {}, driveFileVersionsApi: { list: vi.fn() },
   driveApi: {
+    listItems: vi.fn(),
     prepareUpload: vi.fn(),
     prepareFolderUpload: vi.fn(),
     completeUpload: vi.fn(),
@@ -19,12 +23,34 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
+beforeEach(() => {
+  vi.mocked(driveApi.listItems).mockResolvedValue({ items: [], page: { hasMore: false, nextOffset: null } } as never)
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
 })
 
 describe('uploadDriveFiles', () => {
+  it('requires collision review before a same-name file can be uploaded', async () => {
+    vi.mocked(driveApi.listItems).mockResolvedValue({ items: [{ id: 'cloud', parentId: null, type: 'file', name: 'notes.md', size: '3' }], page: { hasMore: false, nextOffset: null } } as never)
+    const { driveFileVersionsApi } = await import('@/lib/api')
+    vi.mocked(driveFileVersionsApi.list).mockResolvedValue({ items: [{ id: 'v1', isCurrent: true }] } as never)
+    const result = await uploadDriveFiles({ parentId: null, files: [new File(['new'], 'notes.md')] })
+    expect(result).toMatchObject({ completed: 0, skipped: 1, message: '请确认覆盖文件后上传' })
+    expect(driveApi.prepareUpload).not.toHaveBeenCalled()
+  })
+
+  it('sends reviewed identity and version while preserving the destination name', async () => {
+    vi.mocked(driveApi.prepareUpload).mockResolvedValue({ sessionId: 'session-replace', item: {} as never, upload: { method: 'PUT', url: 'https://upload.example/replacement', expiresAt: '', headers: {} } })
+    vi.mocked(driveApi.completeUpload).mockResolvedValue({} as never)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+    const file = new File(['new'], 'local.md')
+    await uploadDriveFiles({ parentId: 'parent', files: [], review: { parentId: 'parent', files: [{ file, name: 'cloud.md', guard: { expectedItemId: 'cloud', expectedVersionId: 'v1' } }], folders: [], overwrites: [{ path: 'cloud.md', itemId: 'cloud', size: '3' }] } })
+    expect(driveApi.prepareUpload).toHaveBeenCalledWith(expect.objectContaining({ parentId: 'parent', name: 'cloud.md', expectedItemId: 'cloud', expectedVersionId: 'v1' }))
+  })
+
   it('uploads loose files through prepare, PUT, and complete', async () => {
     const file = new File(['hello'], 'notes.md', { type: 'text/markdown' })
     vi.mocked(driveApi.prepareUpload).mockResolvedValue({
@@ -48,6 +74,7 @@ describe('uploadDriveFiles', () => {
       name: 'notes.md',
       size: String(file.size),
       mimeType: 'text/markdown',
+      createOnly: true,
     })
     expect(fetchMock).toHaveBeenCalledWith('https://upload.example/one', {
       method: 'PUT',
@@ -85,11 +112,13 @@ describe('uploadDriveFiles', () => {
     expect(driveApi.prepareFolderUpload).toHaveBeenCalledWith({
       parentId: null,
       folderName: 'Project',
+      createRootOnly: true,
       directories: [{ relativePath: 'docs' }],
       files: [{
         relativePath: 'docs/nested.md',
         size: String(folderFile.size),
         mimeType: 'text/markdown',
+        createOnly: true,
       }],
     })
     expect(driveApi.prepareUpload).not.toHaveBeenCalled()
@@ -124,6 +153,7 @@ describe('uploadDriveFiles', () => {
     expect(driveApi.prepareFolderUpload).toHaveBeenCalledWith({
       parentId: null,
       folderName: 'Project',
+      createRootOnly: true,
       directories: [{ relativePath: 'docs/empty' }, { relativePath: 'assets/icons' }],
       files: [],
     })

@@ -505,6 +505,7 @@ const synapseBridge: SynapseBridge = {
     getSnapshot: () => invoke(IPC_CHANNELS.driveSync.getSnapshot)(),
     previewBinding: (input) => invoke(IPC_CHANNELS.driveSync.previewBinding)(input),
     createSafeBinding: (input) => invoke(IPC_CHANNELS.driveSync.createSafeBinding)(input),
+    previewRemoval: (input) => invoke(IPC_CHANNELS.driveSync.previewRemoval)(input),
     removeBinding: (input) => invoke(IPC_CHANNELS.driveSync.removeBinding)(input),
     pauseBinding: (input) => invoke(IPC_CHANNELS.driveSync.pauseBinding)(input),
     resumeBinding: (input) => invoke(IPC_CHANNELS.driveSync.resumeBinding)(input),
@@ -833,6 +834,10 @@ const synapseBridge: SynapseBridge = {
         "account.driveLocalUploadProgress",
       ),
     },
+    file: { replace: {
+      preview: invoke(IPC_CHANNELS.account.previewDriveFileReplacement),
+      apply: invoke(IPC_CHANNELS.account.applyDriveFileReplacement),
+    } },
     localFile: { pathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null },
     folder: { create: invoke(IPC_CHANNELS.account.createDriveFolder) },
     fileVersion: {

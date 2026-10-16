@@ -1173,6 +1173,18 @@ describe('driveApi', () => {
     )
   }
 
+  it('preserves file replacement identity and concurrent version guards', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+    await driveApi.prepareUpload({ parentId: 'parent', name: 'cloud.md', size: '4', expectedItemId: 'cloud', expectedVersionId: 'v1' })
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({ expectedItemId: 'cloud', expectedVersionId: 'v1' })
+  })
+
+  it('preserves folder merge target identity and per-file version guards', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+    await driveApi.prepareFolderUpload({ parentId: 'parent', folderName: 'Project', expectedRootItemId: 'root', files: [{ relativePath: 'docs/a.md', size: '4', expectedItemId: 'cloud', expectedVersionId: 'v1' }, { relativePath: 'new.md', size: '3', createOnly: true }] })
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({ expectedRootItemId: 'root', files: [{ expectedItemId: 'cloud', expectedVersionId: 'v1' }, { createOnly: true }] })
+  })
+
   it('uses user Drive management endpoints', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 

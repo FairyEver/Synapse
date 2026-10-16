@@ -13,7 +13,10 @@ import { DriveTrashView } from './drive-trash-view'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+vi.mock('@/features/drive-browser/shared/drive-telemetry', () => ({ startDriveOperation: () => () => undefined }))
+
 vi.mock('@/lib/api', () => ({
+  driveBrowserApi: {}, driveAnnotationApi: {}, driveMessageApi: {}, driveFileVersionsApi: {},
   driveApi: {
     listTrash: vi.fn(),
     restoreItem: vi.fn(),
@@ -142,6 +145,7 @@ describe('DrivePublicAssetsView', () => {
     renameButton.focus()
     await click(renameButton)
     await click(lastTextButton('取消'))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
 
     expect(document.activeElement).toBe(renameButton)
   })
@@ -291,6 +295,23 @@ describe('Drive webpage shares panel', () => {
     expect(driveApi.deleteSite).toHaveBeenCalledWith('site-1')
   })
 
+  it('shows unpublished source changes and republishes the same site', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue(sitePage([site({ needsRepublish: true, sourceAvailable: true })]))
+    render(<DriveWebSharesPanel active onCopyUrl={async () => undefined} onChanged={async () => undefined} />)
+    await flush()
+    expect(document.body.textContent).toContain('有未发布变更')
+    await click(textButton('发布更新'))
+    expect(driveApi.republishSite).toHaveBeenCalledWith('site-1', { entryPath: 'index.html' })
+  })
+
+  it('prevents republishing a site whose source folder no longer exists', async () => {
+    vi.mocked(driveApi.listSites).mockResolvedValue(sitePage([site({ sourceAvailable: false })]))
+    render(<DriveWebSharesPanel active onCopyUrl={async () => undefined} onChanged={async () => undefined} />)
+    await flush()
+    expect((textButton('发布更新') as HTMLButtonElement).disabled).toBe(true)
+    expect(document.body.textContent).toContain('源文件夹已删除')
+  })
+
   it('loads more webpage shares', async () => {
     vi.mocked(driveApi.listSites)
       .mockResolvedValueOnce(sitePage([site({ name: 'Docs 1' })], { hasMore: true, nextOffset: 50, total: 51 }))
@@ -312,7 +333,7 @@ describe('Drive webpage shares panel', () => {
     await flush()
 
     expect(() => textButton('恢复分享')).toThrow()
-    await click(textButton('更新网页'))
+    await click(textButton('发布更新'))
     expect(driveApi.enableSite).not.toHaveBeenCalled()
     expect(driveApi.republishSite).toHaveBeenCalledWith('site-1', { entryPath: null })
   })

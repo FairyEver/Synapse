@@ -18,6 +18,7 @@ import {
 
 vi.mock('@/lib/api', () => ({
   driveAnnotationApi: {},
+  driveMessageApi: {},
   driveApi: {
     createShare: vi.fn(),
     listShares: vi.fn(),
@@ -328,7 +329,7 @@ describe('DriveSharesDialog', () => {
 
     expect(driveApi.listSites).toHaveBeenCalledWith({ offset: 0, limit: 50 })
     expect(document.body.textContent).toContain('产品网页')
-    expect(document.body.textContent).toContain('更新网页')
+    expect(document.body.textContent).toContain('发布更新')
     expect(document.body.textContent).toContain('停止分享')
     await click(textButton('复制链接'))
     expect(writeText).toHaveBeenCalledWith('网页分享：产品网页\nhttp://localhost:3000/sites/site-1?password=abc')

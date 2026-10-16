@@ -70,6 +70,33 @@ describe("DriveLifecycleService", () => {
     }
   })
 
+  it("rejects guarded trash after the reviewed cloud file changed", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const file = await seedActiveDriveFile(prisma, { userId: "user-1", name: "reviewed.md", size: 10n })
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: file.id, actorId: "user-1", ipAddress: "system", expectedUpdatedAt: "2000-01-01T00:00:00.000Z" })).rejects.toThrow("云端内容已变化")
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({ lifecycleStatus: "active" })
+  })
+
+  it("atomically blocks a content change at the guarded trash mutation boundary", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const file = await seedActiveDriveFile(prisma, { userId: "user-1", name: "reviewed.md", size: 10n })
+    prisma.__beforeNextDriveItemUpdateMany(async () => { await prisma.driveItem.update({ where: { id: file.id }, data: { storageKey: "drive/new-version" } }) })
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: file.id, actorId: "user-1", ipAddress: "system", expectedUpdatedAt: file.updatedAt.toISOString() })).rejects.toThrow()
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({ lifecycleStatus: "active" })
+  })
+
+  it("never trashes children through a reviewed empty-folder request", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", name: "reviewed" })
+    const file = await seedActiveDriveFile(prisma, { userId: "user-1", parentId: folder.id, name: "new.md", size: 10n })
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "system", expectedEmpty: true })).rejects.toThrow("文件夹不再为空")
+    expect(await readDriveItem(prisma, folder.id)).toMatchObject({ lifecycleStatus: "active" })
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({ lifecycleStatus: "active" })
+  })
+
   it("stores trash metadata without setting deletedAt", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)

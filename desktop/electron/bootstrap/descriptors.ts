@@ -1038,6 +1038,7 @@ export const coreDriveSyncDescriptor: ServiceDescriptor<DriveSyncService> = {
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       stagingRootPath: path.join(app.getPath("userData"), "drive-sync-staging"),
+      trashLocalPath: (targetPath) => shell.trashItem(targetPath),
     })
   },
   async start(service) {

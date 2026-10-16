@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import type { DriveItemDto, DriveTrashItemDto, DriveTrashListPageDto } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
@@ -16,6 +16,9 @@ type DriveLifecycleInput = {
   readonly actorId: string
   readonly ipAddress: string
   readonly allowPublicAsset?: boolean
+  readonly expectedUpdatedAt?: string
+  readonly expectedVersionId?: string
+  readonly expectedEmpty?: boolean
 }
 
 type DriveTrashListInput = {
@@ -103,8 +106,24 @@ export class DriveLifecycleService {
     const restorePath = await this.buildRestorePath(root)
 
     await this.prisma.$transaction(async (tx) => {
+      const guarded = input.expectedUpdatedAt !== undefined || input.expectedVersionId !== undefined || input.expectedEmpty === true
+      if (guarded) {
+        if (typeof tx.$queryRaw === "function") {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${root.id}, 0))::text AS "lock"`
+          await tx.$queryRaw`SELECT "id" FROM "DriveItem" WHERE "id" = ${root.id} FOR UPDATE`
+        }
+        const current = await tx.driveItem.findFirst({ where: { id: root.id, userId: input.userId, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, deletedAt: null } })
+        if (!current || current.name !== root.name || current.parentId !== root.parentId || current.storageKey !== root.storageKey || (input.expectedUpdatedAt && current.updatedAt.toISOString() !== input.expectedUpdatedAt)) throw new ConflictException("云端内容已变化，已阻止删除，请重新预览。")
+        if (input.expectedVersionId) {
+          const version = await tx.driveFileVersion.findFirst({ where: { id: input.expectedVersionId, userId: input.userId, itemId: root.id, deletedAt: null }, select: { storageKey: true } })
+          if (!version || version.storageKey !== current.storageKey) throw new ConflictException("云端内容已变化，已阻止删除，请重新预览。")
+        }
+        if (input.expectedEmpty) {
+          if (current.type !== DRIVE_ITEM_TYPE.folder || itemIds.length !== 1 || await tx.driveItem.findFirst({ where: { userId: input.userId, parentId: root.id, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, deletedAt: null }, select: { id: true } })) throw new ConflictException("文件夹不再为空，已阻止删除。")
+        }
+      }
       const updatedItems = await tx.driveItem.updateMany({
-        where: { id: { in: itemIds }, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+        where: { id: { in: itemIds }, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, ...(guarded ? { storageKey: root.storageKey, name: root.name, parentId: root.parentId } : {}) },
         data: {
           lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
           trashedAt,

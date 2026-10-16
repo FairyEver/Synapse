@@ -136,6 +136,9 @@ import { DriveItemIcon } from "./drive-item-icon"
 import { DriveItemStatusTags, useDriveStatusPopover, type DriveItemStatusTagsProps } from "./drive-item-status-tags"
 import { useDriveItemSync } from "./use-drive-item-sync"
 import { DriveItemInfoDialog } from "./drive-item-info-dialog"
+import { DriveUploadReviewDialog } from "./drive-upload-review-dialog"
+import { useDriveUploadReview } from "./use-drive-upload-review"
+import { DriveFileReplaceDialog } from "./drive-file-replace-dialog"
 import { DriveUploadTaskPanel } from "./drive-upload-task-panel"
 import {
   applyDriveUploadProgressEvent,
@@ -351,8 +354,12 @@ function DriveModuleContent() {
   const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
   const [uploadRetrying, setUploadRetrying] = useState(false)
+  const [uploadPreparing, setUploadPreparing] = useState(false)
+  const uploadPreparingRef = useRef(false)
+  const [replaceTarget, setReplaceTarget] = useState<DriveItemDto | null>(null)
   const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
   const driveSync = useDriveSync(syncDialog === null)
+  const uploadReview = useDriveUploadReview()
   const syncSnapshot = driveSync.snapshot
 
   useEffect(() => {
@@ -486,7 +493,7 @@ function DriveModuleContent() {
 
   const actionsDisabled = activeView !== "files" || !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadRunning = uploadTask?.status === "running" || uploadRetrying
-  const uploadActionsDisabled = actionsDisabled || uploadRunning
+  const uploadActionsDisabled = actionsDisabled || uploadRunning || uploadReview.pending || uploadPreparing
 
   const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
@@ -602,7 +609,9 @@ function DriveModuleContent() {
     createRequest: () => Promise<DriveLocalUploadBuildResult>,
     options: { readonly destinationPath?: string; readonly retry?: boolean } = {},
   ) => {
-    if (uploadActionsDisabled && !options.retry) return
+    if (uploadPreparingRef.current || (uploadActionsDisabled && !options.retry)) return
+    uploadPreparingRef.current = true
+    setUploadPreparing(true)
     track({
       component: "drive",
       name: "drive.upload",
@@ -614,12 +623,14 @@ function DriveModuleContent() {
     let taskId: string | null = null
     if (options.retry) setUploadRetrying(true)
     try {
-      const { request, skipped } = await createRequest()
-      if (request.items.length === 0) {
+      const { request: originalRequest, skipped } = await createRequest()
+      if (originalRequest.items.length === 0) {
         finishTracking("cancelled")
         toast(skipped > 0 ? `已跳过 ${skipped} 个文件` : "没有可上传的文件")
         return
       }
+      const request = await uploadReview.reviewRequest(originalRequest)
+      if (!request) { finishTracking("cancelled"); return }
       taskId = createDriveUploadTaskId()
       const requestWithTaskId: DriveLocalUploadRequest = { ...request, taskId }
       const nextTask = createDriveUploadTask({
@@ -652,9 +663,11 @@ function DriveModuleContent() {
       }
       toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
     } finally {
+      uploadPreparingRef.current = false
+      setUploadPreparing(false)
       if (options.retry) setUploadRetrying(false)
     }
-  }, [path, refreshCurrentItemsAfterUpload, uploadActionsDisabled])
+  }, [path, refreshCurrentItemsAfterUpload, uploadActionsDisabled, uploadReview.reviewRequest])
 
   const handleFileSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
@@ -819,11 +832,13 @@ function DriveModuleContent() {
     setAccessSettingsTarget({ kind: "share", item })
   }, [])
 
-  const handlePreview = useCallback(async (item: DriveItemDto) => {
+  const handlePreview = useCallback(async (item: DriveItemDto, showHistory = false) => {
     const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.item.preview" })
     try {
       const { url } = await requireSynapseBridge().drive.item.previewUrl({ itemId: item.id })
-      await openDriveUrl(url)
+      const previewUrl = showHistory ? new URL(url) : null
+      previewUrl?.searchParams.set("versions", "1")
+      await openDriveUrl(previewUrl?.toString() ?? url)
       finishTracking("success")
     } catch {
       finishTracking("failure")
@@ -1073,6 +1088,7 @@ function DriveModuleContent() {
         onDelete={handleDelete}
         onDownload={handleDownload}
         onOpenItem={handlePreview}
+        onReplace={setReplaceTarget}
         onShare={handleShare}
         onOpenSyncBinding={(item, drivePathHint) => {
           const binding = syncSnapshot?.bindings.find((candidate) => candidate.driveItemId === item.id)
@@ -1111,6 +1127,7 @@ function DriveModuleContent() {
         actions={toolbarActions}
         afterContent={(
           <>
+            <DriveUploadReviewDialog controller={uploadReview} onManageSync={(bindingId) => setSyncDialog({ mode: "center", bindingId })} />
             <DriveUploadTaskPanel
               task={uploadTask}
               open={uploadPanelOpen}
@@ -1226,6 +1243,11 @@ function DriveModuleContent() {
               }}
               onCreated={() => undefined}
             />
+            {replaceTarget && <DriveFileReplaceDialog key={replaceTarget.id} item={replaceTarget}
+              onClose={() => setReplaceTarget(null)} onChanged={refreshDriveView}
+              onViewHistory={() => { void handlePreview(replaceTarget, true); setReplaceTarget(null) }}
+              onManageSync={(bindingId) => { setReplaceTarget(null); setSyncDialog({ mode: "center", bindingId }) }}
+            />}
             <DriveSyncDialog
               controller={driveSync}
               onBindingCreated={refreshDriveView}
@@ -1697,6 +1719,7 @@ function DriveFileList({
   onDelete,
   onDownload,
   onOpenItem,
+  onReplace,
   onShare,
   onOpenSyncBinding,
   onManageShare,
@@ -1724,6 +1747,7 @@ function DriveFileList({
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
   readonly onDownload: (item: DriveItemDto) => void
+  readonly onReplace: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
@@ -1817,6 +1841,7 @@ function DriveFileList({
                   onDelete={onDelete}
                   onDownload={onDownload}
                   onOpenItem={onOpenItem}
+                  onReplace={onReplace}
                   onShare={onShare}
                   onOpenSyncBinding={onOpenSyncBinding}
                   onOpenInfo={(selectedItem, selectedPath) => setInfoTarget({ item: selectedItem, path: selectedPath })}
@@ -2049,6 +2074,7 @@ function DriveFileListRow({
   onDelete,
   onDownload,
   onOpenItem,
+  onReplace,
   onShare,
   onOpenSyncBinding,
   onOpenInfo,
@@ -2066,6 +2092,7 @@ function DriveFileListRow({
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
   readonly onDownload: (item: DriveItemDto) => void
+  readonly onReplace: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
@@ -2142,6 +2169,7 @@ function DriveFileListRow({
                 hasSyncBinding={hasSyncBinding}
                 item={item}
                 onDownload={() => onDownload(item)}
+                onReplace={() => onReplace(item)}
                 onMove={() => onMove(item)}
                 onOpenInfo={() => onOpenInfo(item, drivePath)}
                 onOpenSyncBinding={openSync}
@@ -2222,6 +2250,7 @@ function DriveFileListRow({
             hasSyncBinding={hasSyncBinding}
             downloading={downloading}
             onDownload={() => onDownload(item)}
+            onReplace={() => onReplace(item)}
             onRename={onRename}
             onMove={onMove}
             onOpenSyncBinding={openSync}
@@ -2258,6 +2287,7 @@ function DriveItemNameContextMenu({
   hasSyncBinding,
   item,
   onDownload,
+  onReplace,
   onMove,
   onOpenInfo,
   onOpenSyncBinding,
@@ -2269,6 +2299,7 @@ function DriveItemNameContextMenu({
   readonly drivePath: string
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
+  readonly onReplace: () => void
   readonly onDownload: () => void
   readonly onMove: () => void
   readonly onOpenInfo: () => void
@@ -2292,6 +2323,7 @@ function DriveItemNameContextMenu({
           hasSyncBinding={hasSyncBinding}
           item={item}
           onDownload={onDownload}
+          onReplace={onReplace}
           onMove={onMove}
           onOpenInfo={onOpenInfo}
           onOpenSyncBinding={onOpenSyncBinding}
@@ -2314,6 +2346,7 @@ function DriveItemMenu({
   item,
   downloading,
   onDownload,
+  onReplace,
   onRename,
   onMove,
   onOpenSyncBinding,
@@ -2325,6 +2358,7 @@ function DriveItemMenu({
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
   readonly downloading: boolean
+  readonly onReplace: () => void
   readonly onDownload: () => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
@@ -2347,6 +2381,7 @@ function DriveItemMenu({
             hasSyncBinding={hasSyncBinding}
             item={item}
             onDownload={onDownload}
+            onReplace={onReplace}
             onMove={() => onMove(item)}
             onOpenInfo={onOpenInfo}
             onOpenSyncBinding={onOpenSyncBinding}
@@ -2376,6 +2411,7 @@ function DriveItemMenuItems({
   hasSyncBinding,
   item,
   onDownload,
+  onReplace,
   onMove,
   onOpenInfo,
   onOpenSyncBinding,
@@ -2386,6 +2422,7 @@ function DriveItemMenuItems({
   readonly drivePath: string
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
+  readonly onReplace: () => void
   readonly onDownload: () => void
   readonly onMove: () => void
   readonly onOpenInfo: () => void
@@ -2394,6 +2431,7 @@ function DriveItemMenuItems({
   readonly renderItem: (action: DriveItemMenuAction) => ReactNode
 }) {
   const actions: readonly DriveItemMenuAction[] = [
+    ...(item.type === "file" ? [{ id: "replace", label: "上传新版本…", disabled: item.storageStatus !== "active", onSelect: onReplace }] : []),
     {
       id: "download",
       label: "下载",

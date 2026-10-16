@@ -18,6 +18,318 @@ import { createDriveSyncService, type DriveSyncAccountService } from "../drive-s
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
+  it("reviews independent replacement bytes and rejects a changed local file", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-replace-"))
+    try {
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({ accountService: { getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }) } })
+      const service = createDriveSyncService(harness.deps)
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      expect(preview).toMatchObject({ name: "cloud.md", localName: "finished.md", blockedReason: null })
+      await writeFile(filePath, "changed after review")
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("重新")
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("replaces the reviewed item preserving its name and verifies cloud bytes", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-replace-"))
+    try {
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({ accountService: { getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }) } })
+      const service = createDriveSyncService(harness.deps)
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      const result = await service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })
+      expect(result).toMatchObject({ item: { id: "doc", name: "cloud.md" }, syncPending: false })
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ expectedItemId: "doc", expectedVersionId: "version:doc", name: "cloud.md" }))
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("requires a fresh review before destructive detachment and detaches before trash", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-remove-"))
+    try {
+      const localPath = path.join(dir, "spec.md")
+      await writeFile(localPath, "keep")
+      const harness = createHarness()
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath, deferWatcher: true })
+      await expect(service.removeBinding(binding.id, { disposition: "keep_local" })).rejects.toThrow("预览")
+      const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_local" })
+      harness.deps.accountService.deleteDriveItem.mockImplementation(async () => {
+        expect((await harness.bindings.get(binding.id))?.status).toBe("removed")
+        return { ok: true as const }
+      })
+      const result = await service.removeBinding(binding.id, { disposition: "keep_local", confirmationToken: preview.confirmationToken })
+      expect(result).toMatchObject({ local: "retained", remote: "trashed", errors: [] })
+      await expect(readFile(localPath, "utf8")).resolves.toBe("keep")
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("trashes an empty sync root while preserving excluded or unmanaged contents", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-empty-remove-"))
+    try {
+      const localPath = path.join(dir, "empty")
+      await mkdir(localPath)
+      const harness = createHarness()
+      const trashed: string[] = []
+      const service = createDriveSyncService({ ...harness.deps, trashLocalPath: async (target) => { trashed.push(target); await rename(target, `${target}.trash`) } })
+      const binding = await service.createBinding({ driveItemId: "folder", driveItemName: "empty", kind: "folder", localPath, deferWatcher: true })
+      const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_remote" })
+      expect(preview.localPaths).toContain(localPath)
+      await service.removeBinding(binding.id, { disposition: "keep_remote", confirmationToken: preview.confirmationToken })
+      expect(trashed).toEqual([localPath])
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("keeps failed cleanup visible across service restart and allows abandoning remaining deletion", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-retry-remove-"))
+    try {
+      const localPath = path.join(dir, "spec.md")
+      await writeFile(localPath, "keep")
+      const harness = createHarness({ accountService: { deleteDriveItem: vi.fn(async () => { throw new Error("offline") }) } })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath, deferWatcher: true })
+      const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_local" })
+      const result = await service.removeBinding(binding.id, { disposition: "keep_local", confirmationToken: preview.confirmationToken })
+      expect(result.remote).toBe("failed")
+      const restarted = createDriveSyncService(harness.deps)
+      expect((await restarted.getSnapshot()).bindings).toEqual([expect.objectContaining({ id: binding.id, status: "removed", removalDisposition: "keep_local" })])
+      await restarted.removeBinding(binding.id, { disposition: "keep_both" })
+      expect((await restarted.getSnapshot()).bindings).toEqual([])
+      await expect(readFile(localPath, "utf8")).resolves.toBe("keep")
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it.each(["active", "paused"] as const)("reports inherited folder sync and preserves %s state after replacement", async (status) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-inherited-replace-"))
+    try {
+      const localRoot = path.join(dir, "local")
+      const localPath = path.join(localRoot, "cloud.md")
+      const filePath = path.join(dir, "finished.md")
+      await mkdir(localRoot)
+      await writeFile(localPath, "remote")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({
+        watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+        accountService: { getDriveItem: async (id: string) => id === "folder" ? { ...mockDriveItem(id), name: "Docs" } : { ...mockDriveItem(id), parentId: "folder", name: "cloud.md" } },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({ driveItemId: "folder", driveItemName: "Docs", kind: "folder", localPath: localRoot, deferWatcher: true })
+      await harness.baseline.upsert({ id: "baseline", schemaVersion: 2, bindingId: binding.id, relativePath: "cloud.md", kind: "file", remoteItemId: "doc", remoteVersionId: "version:doc", remoteEtag: null,
+        localSize: 6, localMtimeMs: null, localHash: await hashDriveSyncFile(localPath), lastSyncedAt: "2026-06-28T00:00:00.000Z", deletedAt: null })
+      if (status === "paused") await service.pauseBinding(binding.id)
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      expect(preview).toMatchObject({ blockedReason: null, syncImpacts: [{ bindingId: binding.id, localPath, status }] })
+      const result = await service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })
+      expect(result.syncPending).toBe(true)
+      expect((await harness.bindings.get(binding.id))?.status).toBe(status)
+      // Cloud success must not be reported as a completed local transfer.
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("重新")
+      service.stopLocalWatcher()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("blocks replacement of a bound file with unuploaded local edits", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-dirty-replace-"))
+    try {
+      const localPath = path.join(dir, "cloud.md")
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(localPath, "remote")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({ accountService: { getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }) } })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "cloud.md", kind: "file", localPath, deferWatcher: true })
+      await harness.baseline.upsert({ id: "baseline", schemaVersion: 2, bindingId: binding.id, relativePath: "", kind: "file", remoteItemId: "doc", remoteVersionId: "version:doc", remoteEtag: null,
+        localSize: 6, localMtimeMs: null, localHash: await hashDriveSyncFile(localPath), lastSyncedAt: "2026-06-28T00:00:00.000Z", deletedAt: null })
+      await writeFile(localPath, "unuploaded local edits")
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      expect(preview.blockedReason).toContain("未完成修改")
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("未完成修改")
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("retains excluded and newly unmanaged files when removing a folder sync", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-protected-remove-"))
+    try {
+      const localPath = path.join(dir, "local")
+      await mkdir(path.join(localPath, ".git"), { recursive: true })
+      await writeFile(path.join(localPath, ".git", "config"), "git")
+      await writeFile(path.join(localPath, "tracked.md"), "tracked")
+      await writeFile(path.join(localPath, "unmanaged.md"), "new local work")
+      const harness = createHarness()
+      const service = createDriveSyncService({ ...harness.deps, trashLocalPath: async (target) => rename(target, path.join(dir, "saved.md")) })
+      const binding = await service.createBinding({ driveItemId: "folder", driveItemName: "Docs", kind: "folder", localPath, deferWatcher: true })
+      await harness.baseline.upsert({ id: "baseline", schemaVersion: 2, bindingId: binding.id, relativePath: "tracked.md", kind: "file", remoteItemId: "tracked", remoteVersionId: "v1", remoteEtag: null,
+        localSize: 7, localMtimeMs: null, localHash: await hashDriveSyncFile(path.join(localPath, "tracked.md")), lastSyncedAt: "2026-06-28T00:00:00.000Z", deletedAt: null })
+      const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_remote" })
+      expect(preview.localPaths).toEqual([path.join(localPath, "tracked.md")])
+      const result = await service.removeBinding(binding.id, { disposition: "keep_remote", confirmationToken: preview.confirmationToken })
+      expect(result.errors).toEqual([])
+      await expect(readFile(path.join(localPath, "unmanaged.md"), "utf8")).resolves.toBe("new local work")
+      await expect(readFile(path.join(localPath, ".git", "config"), "utf8")).resolves.toBe("git")
+      await expect(readFile(path.join(dir, "saved.md"), "utf8")).resolves.toBe("tracked")
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("shows interrupted detached cleanup even before an error was recorded", async () => {
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/spec.md", deferWatcher: true })
+    const entry = (await harness.bindings.get(binding.id))!
+    await harness.bindings.upsert({ ...entry, status: "removed", removalCleanup: { disposition: "keep_local", local: [], remote: [{ itemId: "doc", path: "spec.md", stamp: "reviewed", done: false }], errors: [] } })
+    expect((await createDriveSyncService(harness.deps).getSnapshot()).bindings).toEqual([expect.objectContaining({ id: binding.id, status: "removed", lastError: expect.stringContaining("未完成") })])
+  })
+
+  it("keeps sync paused and consumes review after cloud commit with failed readback", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-verify-replace-"))
+    try {
+      const localPath = path.join(dir, "cloud.md")
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(localPath, "remote")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({
+        watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+        accountService: {
+          getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }),
+          downloadDriveFile: async ({ outputPath }: { outputPath: string }) => { await writeFile(outputPath, "unexpected content"); return { ok: true, path: outputPath } },
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "cloud.md", kind: "file", localPath, deferWatcher: true })
+      await harness.baseline.upsert({ id: "baseline", schemaVersion: 2, bindingId: binding.id, relativePath: "", kind: "file", remoteItemId: "doc", remoteVersionId: "version:doc", remoteEtag: null,
+        localSize: 6, localMtimeMs: null, localHash: await hashDriveSyncFile(localPath), lastSyncedAt: "2026-06-28T00:00:00.000Z", deletedAt: null })
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("云端更新已提交")
+      expect(await harness.bindings.get(binding.id)).toMatchObject({ status: "paused", lastError: expect.stringContaining("校验未完成") })
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("重新")
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalledTimes(1)
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
+      service.stopLocalWatcher()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("allows keeping both sides and detaching while the authenticated account is offline", async () => {
+    let connectivity: "online" | "offline" = "online"
+    const harness = createHarness({ accountService: { getState: () => ({ status: "authenticated", connectivity, profile: { user: { id: "user-1" } } }) } })
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/spec.md", deferWatcher: true })
+    connectivity = "offline"
+    await expect(service.removeBinding(binding.id)).resolves.toMatchObject({ local: "retained", remote: "retained" })
+    expect(harness.deps.accountService.deleteDriveItem).not.toHaveBeenCalled()
+  })
+
+  it("blocks old cleanup when its files have been attached to a new sync binding", async () => {
+    const harness = createHarness({ accountService: { deleteDriveItem: vi.fn(async () => { throw new Error("offline") }) } })
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/spec.md", deferWatcher: true })
+    const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_local" })
+    await service.removeBinding(binding.id, { disposition: "keep_local", confirmationToken: preview.confirmationToken })
+    await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/new-spec.md", deferWatcher: true })
+    const retry = await service.previewRemoval({ id: binding.id, disposition: "keep_local" })
+    expect(retry.blockedReason).toContain("其他同步")
+  })
+
+  it("prevents a new mapping from attaching while detached cleanup is still running", async () => {
+    let releaseDelete!: () => void
+    let started!: () => void
+    const deleting = new Promise<void>((resolve) => { started = resolve })
+    const wait = new Promise<void>((resolve) => { releaseDelete = resolve })
+    const harness = createHarness({ accountService: { deleteDriveItem: async () => { started(); await wait; return { ok: true } } } })
+    const service = createDriveSyncService(harness.deps)
+    const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/spec.md", deferWatcher: true })
+    const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_local" })
+    const removal = service.removeBinding(binding.id, { disposition: "keep_local", confirmationToken: preview.confirmationToken })
+    await deleting
+    try {
+      await expect(service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/new-spec.md", deferWatcher: true })).rejects.toThrow("文件处理")
+    } finally { releaseDelete(); await removal }
+  })
+
+  it("uses reviewed remote metadata when cloud rename races the final trash check", async () => {
+    let bindingId = ""
+    let changed = false
+    const original = { ...mockDriveItem("doc"), updatedAt: "2026-10-16T00:00:00.000Z" }
+    const harness = createHarness()
+    harness.deps.accountService.getDriveItem.mockImplementation(async () => {
+      if ((await harness.bindings.get(bindingId))?.status === "removed") {
+        if (!changed) { changed = true; return original }
+        return { ...original, name: "renamed.md", updatedAt: "2026-10-16T00:00:01.000Z" }
+      }
+      return original
+    })
+    const calls: unknown[] = []
+    const accountService = { ...harness.deps.accountService, deleteDriveItem: async (_id: string, options?: { expectedUpdatedAt?: string }) => {
+      calls.push(options)
+      if (options?.expectedUpdatedAt !== "2026-10-16T00:00:01.000Z") throw new Error("reviewed metadata changed")
+      return { ok: true as const }
+    } }
+    const service = createDriveSyncService({ ...harness.deps, accountService })
+    const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "spec.md", kind: "file", localPath: "/tmp/spec.md", deferWatcher: true })
+    bindingId = binding.id
+    const preview = await service.previewRemoval({ id: binding.id, disposition: "keep_local" })
+    const result = await service.removeBinding(binding.id, { disposition: "keep_local", confirmationToken: preview.confirmationToken })
+    expect(calls).toEqual([expect.objectContaining({ expectedUpdatedAt: original.updatedAt, expectedVersionId: "version:doc" })])
+    expect(result.remote).toBe("failed")
+  })
+
+  it("keeps early replacement reviews usable when a batch contains over one hundred files", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-batch-reviews-"))
+    try {
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({ accountService: { getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }) } })
+      const service = createDriveSyncService(harness.deps)
+      const first = await service.previewFileReplacement({ itemId: "doc", filePath })
+      for (let index = 0; index < 101; index += 1) await service.previewFileReplacement({ itemId: "doc", filePath })
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: first.confirmationToken })).resolves.toMatchObject({ item: { id: "doc" } })
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("rejects a replacement review when paused sync was resumed after preview", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-status-review-"))
+    try {
+      const localPath = path.join(dir, "cloud.md")
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(localPath, "remote")
+      await writeFile(filePath, "finished")
+      const harness = createHarness({ watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>, accountService: { getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }) } })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({ driveItemId: "doc", driveItemName: "cloud.md", kind: "file", localPath, deferWatcher: true })
+      await harness.baseline.upsert({ id: "baseline", schemaVersion: 2, bindingId: binding.id, relativePath: "", kind: "file", remoteItemId: "doc", remoteVersionId: "version:doc", remoteEtag: null,
+        localSize: 6, localMtimeMs: null, localHash: await hashDriveSyncFile(localPath), lastSyncedAt: "2026-06-28T00:00:00.000Z", deletedAt: null })
+      await service.pauseBinding(binding.id)
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      await service.updateBindingStatus(binding.id, "active")
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("重新预览")
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+      service.stopLocalWatcher()
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("does not report a concurrent cloud version as verified by an earlier readback", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-version-readback-"))
+    try {
+      const filePath = path.join(dir, "finished.md")
+      await writeFile(filePath, "finished")
+      let versionId = "v1"
+      const download = async ({ outputPath }: { outputPath: string }) => { await writeFile(outputPath, "finished"); versionId = "v3"; return { ok: true as const, path: outputPath } }
+      const harness = createHarness({ accountService: {
+        getDriveItem: async () => ({ ...mockDriveItem("doc"), name: "cloud.md" }),
+        listDriveFileVersions: async () => ({ items: [{ id: versionId, isCurrent: true }], page: { nextOffset: null } }),
+        uploadDriveSyncFile: async () => { versionId = "v2"; return { ...mockDriveItem("doc"), name: "cloud.md" } },
+        downloadDriveFile: download,
+        downloadDriveFileVersion: download,
+      } })
+      const service = createDriveSyncService(harness.deps)
+      const preview = await service.previewFileReplacement({ itemId: "doc", filePath })
+      await expect(service.applyFileReplacement({ itemId: "doc", filePath, confirmationToken: preview.confirmationToken })).rejects.toThrow("云端更新已提交")
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
   it("creates bindings and exposes a sync snapshot", async () => {
     const harness = createHarness({
       watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,

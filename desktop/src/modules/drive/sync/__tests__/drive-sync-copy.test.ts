@@ -7,6 +7,7 @@ import type {
 import {
   activeWorkOf,
   bindingMarkText,
+  bindingListStateText,
   bindingPrimaryAction,
   bindingStateDetail,
   bindingStateText,
@@ -309,5 +310,22 @@ describe("时间与体积", () => {
     expect(formatBytes(512)).toBe("512 B")
     expect(formatBytes(1024)).toBe("1.0 KB")
     expect(formatBytes(1024 * 1024 * 342)).toBe("342 MB")
+  })
+})
+
+
+describe("同步列表密度与清理恢复", () => {
+  it("uses one compact state without counts, dates or paths", () => {
+    expect(bindingListStateText(binding(), [], []).text).toBe("已同步")
+    expect(bindingListStateText(binding(), [operation()], []).text).toBe("正在上传")
+    expect(bindingListStateText(binding(), [operation({ status: "retry_wait" })], []).text).toBe("等待重试")
+    expect(bindingListStateText(binding(), [], [conflict()]).text).toBe("需要处理")
+  })
+  it("keeps detached cleanup failures actionable without offering resume", () => {
+    const failed = binding({ status: "removed", lastError: "云端删除失败", removalDisposition: "keep_local" })
+    expect(bindingStateText(failed, [], [])).toEqual({ text: "文件处理未完成", tone: "attention" })
+    expect(bindingStateDetail(failed, [], [])).toBe("云端删除失败")
+    expect(bindingPrimaryAction(failed, [], [], false).kind).toBe("view")
+    expect(isBindingInFilter(failed, [], [], "attention")).toBe(true)
   })
 })

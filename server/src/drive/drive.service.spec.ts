@@ -1353,6 +1353,66 @@ describe("DriveService", () => {
     expect(await service.listItems("user-1", null)).toHaveLength(2)
   })
 
+  it("rejects a reviewed create-only upload when another file now occupies its name", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "report.md", mimeType: "text/markdown" })
+    await expect(service.prepareUpload("user-1", { parentId: null, name: "report.md", size: "11", createOnly: true, publicAppUrl: "https://synapse.test" })).rejects.toThrow("目标已出现同名文件")
+    expect((await service.listItems("user-1", null))[0]).toMatchObject({ name: "report.md", size: "11" })
+  })
+
+  it("revalidates a move target inside the transaction after an empty folder was trashed", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const target = await service.createFolder("user-1", { parentId: null, name: "target" })
+    const source = await createCompletedUpload(service, "user-1", { parentId: null, name: "source.md", mimeType: "text/markdown" })
+    const originalTransaction = prisma.$transaction.bind(prisma)
+    vi.spyOn(prisma, "$transaction").mockImplementationOnce(async (callback: any) => {
+      await prisma.driveItem.update({ where: { id: target.id }, data: { lifecycleStatus: "trashed" } })
+      return originalTransaction(callback)
+    })
+    await expect(service.moveItem("user-1", source.id, target.id)).rejects.toThrow("目标文件夹已变化")
+    expect(await service.getItem("user-1", source.id)).toMatchObject({ parentId: null })
+  })
+
+  it("rejects stale reviewed file versions inside a folder upload", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "docs" })
+    const existing = await createCompletedUpload(service, "user-1", { parentId: root.id, name: "report.md", mimeType: "text/markdown" })
+    await expect(service.prepareFolderUpload("user-1", { parentId: null, folderName: "docs", expectedRootItemId: root.id, files: [{ relativePath: "report.md", size: "11", expectedItemId: existing.id, expectedVersionId: "old-version" }], publicAppUrl: "https://synapse.test" })).rejects.toThrow("文件已有新内容")
+    expect(await service.getItem("user-1", existing.id)).toMatchObject({ id: existing.id, size: "11" })
+  })
+
+  it("rejects newly appeared files inside a reviewed create-only folder manifest", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "docs" })
+    const existing = await createCompletedUpload(service, "user-1", { parentId: root.id, name: "report.md", mimeType: "text/markdown" })
+    await expect(service.prepareFolderUpload("user-1", { parentId: null, folderName: "docs", expectedRootItemId: root.id, files: [{ relativePath: "report.md", size: "11", createOnly: true }], publicAppUrl: "https://synapse.test" })).rejects.toThrow("目标已出现同名文件")
+    expect(await service.getItem("user-1", existing.id)).toMatchObject({ id: existing.id, size: "11" })
+  })
+
+  it("rejects a reviewed folder root that moved or was replaced before preparation", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await service.createFolder("user-1", { parentId: null, name: "docs" })
+    await expect(service.prepareFolderUpload("user-1", { parentId: null, folderName: "changed-docs", expectedRootItemId: "item-1", files: [], publicAppUrl: "https://synapse.test" })).rejects.toThrow("上传目标文件夹已变更")
+  })
+
+  it("rejects a reviewed create-only folder when the root now exists", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await service.createFolder("user-1", { parentId: null, name: "docs" })
+    await expect(service.prepareFolderUpload("user-1", { parentId: null, folderName: "docs", createRootOnly: true, files: [], publicAppUrl: "https://synapse.test" })).rejects.toThrow("目标已出现同名文件夹")
+  })
+
   it("overwrites the expected same-name file when an upload target item is supplied", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {

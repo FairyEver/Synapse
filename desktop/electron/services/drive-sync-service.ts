@@ -9,6 +9,13 @@ import { pipeline } from "node:stream/promises"
 import type { SynapseAccountState } from "../../src/types/account"
 import type { DriveLocalUploadProgressEvent } from "../../src/types/bridge"
 import type {
+  DriveFileReplaceInput,
+  DriveFileReplaceApplyInput,
+  DriveFileReplacePreviewDto,
+  DriveFileReplaceResultDto,
+  DriveSyncRemovalInput,
+  DriveSyncRemovalPreviewDto,
+  DriveSyncRemovalResultDto,
   DriveChangeDto,
   DriveItemDto,
   DriveItemTreeListPageDto,
@@ -102,6 +109,7 @@ type DriveSyncRemoteTreeEntry = {
 }
 
 export interface DriveSyncAccountService {
+  readonly downloadDriveFileVersion?: (input: { readonly itemId: string; readonly versionId: string; readonly outputPath: string }) => Promise<{ readonly ok: true; readonly path: string }>
   readonly listDriveFileVersions?: (itemId: string, input: { readonly offset: number; readonly limit: number }) => Promise<{ readonly items: readonly { readonly id: string; readonly isCurrent: boolean }[]; readonly page: { readonly nextOffset: number | null } }>
   readonly getState?: () => SynapseAccountState
   readonly onStateChanged?: (listener: (state: SynapseAccountState) => void) => () => void
@@ -148,7 +156,7 @@ export interface DriveSyncAccountService {
   readonly createDriveFolder: (input: { readonly parentId?: string | null; readonly name: string }) => Promise<{ readonly id: string; readonly name: string; readonly type: string }>
   readonly renameDriveItem: (itemId: string, name: string) => Promise<unknown>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<unknown>
-  readonly deleteDriveItem: (itemId: string) => Promise<{ readonly ok: true }>
+  readonly deleteDriveItem: (itemId: string, options?: { readonly expectedVersionId?: string; readonly expectedUpdatedAt?: string; readonly expectedEmpty?: boolean }) => Promise<{ readonly ok: true }>
   readonly listDriveChanges: (input: DriveChangeListInput) => Promise<DriveChangeListPageDto>
   readonly listDriveItemTree: (input: { readonly parentId?: string | null; readonly offset?: number; readonly limit?: number }) => Promise<{
     readonly items: ReadonlyArray<Partial<DriveItemTreeListPageDto["items"][number]> & { readonly id: string; readonly name: string; readonly type: string }>
@@ -184,6 +192,8 @@ type DriveSyncLocalPermissionSource =
   | "driveSync.createBinding"
   | "driveSync.createSafeBinding"
   | "driveSync.executeOperation"
+  | "drive.file.replace"
+  | "driveSync.removeBinding"
 
 export interface DriveSyncRecordOperationInput {
   readonly id?: string
@@ -285,6 +295,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   let remotePollingRequested = false
   let remotePollRunning = false
   let remotePollPromise: Promise<void> | null = null
+  const reviewedReplacements = new Map<string, { fingerprint: string; expiresAt: number }>()
+  const reviewedRemovals = new Map<string, { fingerprint: string; expiresAt: number }>()
+  const replacingBindings = new Set<string>()
+  const cleaningBindings = new Set<string>()
   const pendingRemoteEchoes = new Map<string, PendingRemoteEcho[]>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const fullRescanBindingIds = new Set<string>()
@@ -302,7 +316,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const currentOwner = currentOwnerUserId()
     const ownerUserId = currentOwner ?? (storedState?.schemaVersion === 2 ? storedState.ownerUserId ?? null : null)
     const bindingEntries = (await deps.bindings.list())
-      .filter((binding) => binding.status !== "removed" && binding.ownerUserId === ownerUserId)
+      .filter((binding) => (binding.status !== "removed" || hasUnfinishedRemoval(binding)) && binding.ownerUserId === ownerUserId)
       .sort(compareUpdatedDesc)
     const visibleBindingIds = new Set(bindingEntries.map((binding) => binding.id))
     const bindings = currentOwner
@@ -338,7 +352,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         runningOperationCount: operations.filter((operation) => isRunningOperationStatus(operation.status)).length,
         retryWaitingOperationCount: operations.filter((operation) => operation.status === "retry_wait").length,
         conflictCount: conflicts.length,
-        errorCount: bindings.filter((binding) => binding.status === "error").length,
+        errorCount: bindings.filter((binding) => binding.status === "error" || (binding.status === "removed" && binding.lastError !== null)).length,
       },
     }
   }
@@ -443,7 +457,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       })
     }
 
-    const activeBindings = (await listOwnerBindings()).filter((binding) => binding.status !== "removed" && binding.id !== input.replacingId)
+    const ownerBindings = await listOwnerBindings()
+    const cleaning = ownerBindings.filter((binding) => cleaningBindings.has(binding.id)).map((binding) => ({ ...binding, status: "active" as const }))
+    if (await hasOverlappingLocalBinding(cleaning, localPath) || await findRemoteBindingOverlapReason(driveItemId, cleaning)) throw new Error("同步文件处理中，请稍后重新建立同步。")
+    const activeBindings = ownerBindings.filter((binding) => binding.status !== "removed" && binding.id !== input.replacingId)
     if (activeBindings.some((binding) => binding.driveItemId === driveItemId)) {
       throw new Error("云盘上这个条目已经在同步了。")
     }
@@ -499,11 +516,297 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return toBindingDto(entry)
   }
 
-  async function removeBinding(id: string): Promise<void> {
+  function rememberReview(store: Map<string, { fingerprint: string; expiresAt: number }>, fingerprint: string): string {
+    for (const [token, review] of store) if (review.expiresAt < Date.now()) store.delete(token)
+    if (store.size >= 4096) throw new Error("待确认操作过多，请先完成已有操作或等待预览到期。")
+    const token = randomUUID()
+    store.set(token, { fingerprint, expiresAt: Date.now() + 15 * 60_000 })
+    return token
+  }
+
+  function requireReview(store: Map<string, { fingerprint: string; expiresAt: number }>, token: string | undefined, fingerprint: string): void {
+    const review = token ? store.get(token) : undefined
+    if (!review || review.expiresAt < Date.now() || review.fingerprint !== fingerprint) throw new Error("内容或同步状态已变化，请重新预览并确认。")
+  }
+
+  async function replacementCapture(input: DriveFileReplaceInput, statusOverrides?: ReadonlyMap<string, DriveSyncBindingStatus>) {
+    const ownerUserId = requireOnlineOwnerUserId()
+    if (!path.isAbsolute(input.filePath)) throw new Error("请选择绝对路径的本地文件。")
+    await authorizeLocalPath({ action: "fs.read.outside-userdata", localPath: input.filePath, source: "drive.file.replace", metadata: { itemId: input.itemId } })
+    await assertNoSymlinkPathComponents(path.dirname(path.resolve(input.filePath)), input.filePath)
+    const stat = await lstat(input.filePath)
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("请选择普通文件。")
+    const item = await getDriveItemFromAccountService(deps.accountService, input.itemId)
+    if (item.type !== "file" || item.storageStatus !== "active") throw new Error("只能替换可用的云盘文件。")
+    if (path.extname(item.name).toLowerCase() !== path.extname(input.filePath).toLowerCase()) throw new Error("请选择相同扩展名的文件。")
+    const versionId = await currentAlignmentVersion(item.id)
+    if (!versionId) throw new Error("无法确认云端当前版本，请重新检查。")
+    const localHash = await hashDriveSyncFile(input.filePath)
+    const afterRead = await lstat(input.filePath)
+    if (stat.dev !== afterRead.dev || stat.ino !== afterRead.ino || stat.size !== afterRead.size || stat.mtimeMs !== afterRead.mtimeMs) throw new Error("本地文件在检查期间变化，请重新预览。")
+    const ancestors = new Map<string, string>([[item.id, ""]])
+    let cursor = item
+    let relative = ""
+    const seen = new Set<string>([item.id])
+    while (cursor.parentId) {
+      if (seen.has(cursor.parentId)) throw new Error("云端目录结构无效。")
+      seen.add(cursor.parentId)
+      relative = relative ? path.posix.join(cursor.name, relative) : cursor.name
+      cursor = await getDriveItemFromAccountService(deps.accountService, cursor.parentId)
+      ancestors.set(cursor.id, relative)
+    }
+    const impacts: DriveFileReplacePreviewDto["syncImpacts"][number][] = []
+    const config: unknown[] = []
+    let blockedReason: string | null = null
+    for (const binding of (await listOwnerBindings()).filter((entry) => entry.status !== "removed")) {
+      const relativePath = ancestors.get(binding.driveItemId)
+      if (relativePath === undefined || (relativePath && isDriveSyncExcluded(relativePath, binding.excludeRules, "file"))) continue
+      const localPath = localPathForRelative(binding, relativePath)
+      impacts.push({ bindingId: binding.id, localPath, status: binding.status })
+      const baseline = (await baselineStore.listByBinding(binding.id)).find((entry) => entry.relativePath === relativePath && entry.deletedAt === null)
+      const pending = (await deps.operations.list({ bindingId: binding.id })).some((entry) => entry.status !== "succeeded")
+      const conflicts = (await deps.conflicts.list({ bindingId: binding.id })).some((entry) => entry.status === "open")
+      const local = await inspectDriveSyncLocalPath(localPath)
+      const hash = local.kind === "file" ? await hashDriveSyncFile(localPath) : null
+      if (!baseline || local.kind !== "file" || hash !== baseline.localHash || pending || conflicts || binding.initialPhase !== null || binding.status === "error" || binding.status === "conflict") {
+        blockedReason = "关联的本地同步有未完成修改或冲突，请先在同步管理中处理，或解除同步后再上传。"
+      }
+      config.push([binding.id, binding.driveItemId, binding.localPath, binding.excludeRules, baseline?.localHash, hash, statusOverrides?.get(binding.id) ?? binding.status])
+    }
+    const fingerprint = createHash("sha256").update(JSON.stringify({ ownerUserId, item, versionId, localHash, filePath: path.resolve(input.filePath), config })).digest("hex")
+    return { ownerUserId, item, versionId, localHash, impacts, blockedReason, fingerprint, size: String(stat.size) }
+  }
+
+  async function previewFileReplacement(input: DriveFileReplaceInput): Promise<DriveFileReplacePreviewDto> {
+    const captured = await replacementCapture(input)
+    return { itemId: captured.item.id, name: captured.item.name, localName: path.basename(input.filePath),
+      size: captured.size, previousSize: captured.item.size, versionId: captured.versionId,
+      confirmationToken: rememberReview(reviewedReplacements, captured.fingerprint), syncImpacts: captured.impacts, blockedReason: captured.blockedReason }
+  }
+
+  async function applyFileReplacement(input: DriveFileReplaceApplyInput): Promise<DriveFileReplaceResultDto> {
+    const captured = await replacementCapture(input)
+    requireReview(reviewedReplacements, input.confirmationToken, captured.fingerprint)
+    if (captured.blockedReason) throw new Error(captured.blockedReason)
+    if (captured.impacts.some((entry) => replacingBindings.has(entry.bindingId))) throw new Error("该文件正在更新，请稍后重新检查。")
+    const originalBindings = await Promise.all(captured.impacts.map((entry) => requireBinding(entry.bindingId)))
+    for (const binding of originalBindings) replacingBindings.add(binding.id)
+    let cloudWritten = false
+    let verified = false
+    try {
+      for (const binding of originalBindings) await workCoordinator.cancelAndRun(binding.id, () => updateBindingStatus(binding.id, "paused"))
+      const checked = await replacementCapture(input, new Map(originalBindings.map((binding) => [binding.id, binding.status])))
+      requireReview(reviewedReplacements, input.confirmationToken, checked.fingerprint)
+      if (checked.blockedReason) throw new Error(checked.blockedReason)
+      // Read immutable staged bytes: edits to the user's file after this point cannot alter the reviewed upload.
+      const directory = await createVerificationDirectory("file-replacement")
+      try {
+        const staged = path.join(directory, captured.item.name)
+        await copyFile(input.filePath, staged)
+        if (await hashDriveSyncFile(staged) !== captured.localHash) throw new Error("本地文件已变化，请重新预览。")
+        if (requireOnlineOwnerUserId() !== captured.ownerUserId) throw new Error("账号已变化，请重新预览。")
+        const item = await deps.accountService.uploadDriveSyncFile({ parentId: captured.item.parentId, path: staged,
+          name: captured.item.name, expectedItemId: captured.item.id, expectedVersionId: captured.versionId })
+        cloudWritten = true
+        reviewedReplacements.delete(input.confirmationToken)
+        if (item.id !== captured.item.id || item.name !== captured.item.name) throw new Error("云端已写入，但文件身份验证失败，请刷新云盘检查。")
+        const versionId = await currentAlignmentVersion(item.id)
+        if (!versionId) throw new Error("云端已写入，但无法确认新版本，请刷新云盘检查。")
+        const outputPath = path.join(directory, "verify-content")
+        if (deps.accountService.downloadDriveFileVersion) await deps.accountService.downloadDriveFileVersion({ itemId: item.id, versionId, outputPath })
+        else await deps.accountService.downloadDriveFile({ itemId: item.id, outputPath })
+        if (await hashDriveSyncFile(outputPath) !== captured.localHash) throw new Error("云端已写入，但内容校验失败，请刷新云盘检查。")
+        if (await currentAlignmentVersion(item.id) !== versionId) throw new Error("云端版本在校验期间变化，请刷新云盘检查。")
+        if (requireOnlineOwnerUserId() !== captured.ownerUserId) throw new Error("账号已变化，请检查云端内容。")
+        verified = true
+        return { item, versionId, syncPending: originalBindings.length > 0 }
+      } finally { await rm(directory, { recursive: true, force: true }) }
+    } catch (error) {
+      if (cloudWritten) throw new Error(`云端更新已提交；请检查云端与本机状态后再操作。${errorMessage(error)}`, { cause: error })
+      throw error
+    } finally {
+      for (const binding of originalBindings) {
+        replacingBindings.delete(binding.id)
+        const current = await deps.bindings.get(binding.id)
+        if (currentOwnerUserId() !== binding.ownerUserId) continue
+        if (current?.status === "paused" && binding.status === "active" && (!cloudWritten || verified)) await updateBindingStatus(binding.id, "active")
+        else if (current?.status === "paused" && cloudWritten && !verified) await updateBindingStatus(binding.id, "paused", "云端更新已提交，但校验未完成；请检查云端内容后继续同步。")
+      }
+    }
+  }
+
+  async function removalBinding(id: string, online = true): Promise<DriveSyncBindingEntryV1> {
+    await ensureStorageReady()
+    if (online) requireOnlineOwnerUserId()
+    else if (!currentOwnerUserId()) throw new Error("请先登录后再管理同步。")
+    const binding = await deps.bindings.get(id)
+    if (!binding || binding.ownerUserId !== currentOwnerUserId() || binding.schemaVersion !== 3 || (binding.status === "removed" && !binding.removalCleanup)) throw new Error("这条同步不存在。")
+    return binding
+  }
+
+  async function removalLocalStamp(localPath: string): Promise<string> {
+    await assertNoSymlinkPathComponents(path.dirname(path.resolve(localPath)), localPath)
+    const info = await inspectDriveSyncLocalPath(localPath)
+    if (info.kind === "missing") return "missing"
+    const before = await lstat(localPath)
+    if (info.kind === "file") {
+      const hash = await hashDriveSyncFile(localPath)
+      const after = await lstat(localPath)
+      if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error("本地文件在检查期间变化，请重新预览。")
+      return JSON.stringify([info.kind, hash, after.dev, after.ino, after.size, after.mtimeMs])
+    }
+    if (info.kind !== "folder") throw new Error("本地路径类型无效。")
+    // A folder is only removable while empty; never recursively trash excluded or newly added content.
+    return JSON.stringify([info.kind, (await readdir(localPath)).sort(), before.dev, before.ino])
+  }
+
+  async function removalRemoteStamp(item: DriveItemDto): Promise<string> {
+    const versionId = item.type === "file" ? await currentAlignmentVersion(item.id) : null
+    if (item.type === "file" && !versionId) throw new Error("无法确认云端版本，已阻止删除。")
+    return JSON.stringify([item, versionId])
+  }
+
+  async function removalCapture(input: DriveSyncRemovalInput) {
+    const disposition = input.disposition ?? "keep_both"
+    const binding = await removalBinding(input.id, disposition !== "keep_both")
+    if (!["keep_both", "keep_local", "keep_remote", "delete_both"].includes(disposition)) throw new Error("解除同步的文件处理方式无效。")
+    const deleteLocal = disposition === "keep_remote" || disposition === "delete_both"
+    const deleteRemote = disposition === "keep_local" || disposition === "delete_both"
+    const existing = binding.removalCleanup
+    if (existing && disposition !== "keep_both" && existing.disposition !== disposition) throw new Error("请先完成上次解除同步的文件处理。")
+    const cleanup: NonNullable<DriveSyncBindingEntryV1["removalCleanup"]> = existing && disposition !== "keep_both"
+      ? structuredClone(existing)
+      : { disposition, local: [], remote: [], errors: [] }
+    const warnings: string[] = []
+    if (deleteRemote) warnings.push("云端内容移入回收站后，相关分享及其他设备的同步也会受到影响。")
+    let blockedReason: string | null = null
+    if (deleteLocal || deleteRemote) {
+      const others = (await listOwnerBindings()).filter((entry) => entry.id !== binding.id && entry.status !== "removed")
+      if ((deleteLocal && await hasOverlappingLocalBinding(others, binding.localPath)) || (deleteRemote && await findRemoteBindingOverlapReason(binding.driveItemId, others))) {
+        blockedReason = "这些文件已用于其他同步关系，请保留剩余文件后在对应关系中处理。"
+      }
+    }
+    if (!existing && (deleteLocal || deleteRemote)) {
+      const baselines = (await baselineStore.listByBinding(binding.id)).filter((entry) => entry.deletedAt === null)
+      const managedPaths = new Set(baselines.map((entry) => entry.relativePath))
+      const baselineByPath = new Map(baselines.map((entry) => [entry.relativePath, entry]))
+      if (deleteLocal) {
+        await authorizeLocalPath({ action: "fs.read.outside-userdata", localPath: binding.localPath, source: "driveSync.removeBinding", metadata: { bindingId: binding.id } })
+        const local = await inspectDriveSyncLocalPath(binding.localPath)
+        if (local.kind !== "missing") {
+          const all = binding.kind === "file" ? [{ relativePath: "", kind: "file" as const }] :
+            [{ relativePath: "", kind: "folder" as const }, ...(await scanDriveSyncLocalTreeDetailed({ rootPath: binding.localPath, rules: { forced: [], defaults: [], importedGitignore: [], user: [] }, hashFiles: true })).entries]
+          const included = all.filter((entry) => (binding.kind === "file" || entry.relativePath === "" || managedPaths.has(entry.relativePath)) && (!entry.relativePath || !isDriveSyncExcluded(entry.relativePath, binding.excludeRules, entry.kind)))
+          const includedPaths = new Set(included.map((entry) => entry.relativePath))
+          const removable = included.filter((entry) => entry.kind === "file" || all.every((descendant) => !isPathInSubtreeForSync(descendant.relativePath, entry.relativePath) || includedPaths.has(descendant.relativePath)))
+            .sort((left, right) => pathDepth(right.relativePath) - pathDepth(left.relativePath))
+          for (const entry of removable) {
+            const target = localPathForRelative(binding, entry.relativePath)
+            cleanup.local.push({ path: target, stamp: await removalLocalStamp(target), done: false })
+          }
+          if (binding.kind === "folder" && removable.length !== all.length) warnings.push("排除项、未纳入同步的内容及其所在目录保留。")
+        }
+      }
+      if (deleteRemote) {
+        const entries = await remoteEntriesForFullRescan(binding)
+        const paths = new Map(relativePathByRemoteItemId(entries.filter((entry) => entry.id !== binding.driveItemId), binding.driveItemId))
+        paths.set(binding.driveItemId, "")
+        const included = entries.filter((entry) => {
+          const relativePath = paths.get(entry.id)
+          return relativePath !== undefined && (binding.kind === "file" || relativePath === "" || (baselineByPath.get(relativePath)?.remoteItemId === entry.id && baselineByPath.get(relativePath)?.kind === entry.type)) && (!relativePath || !isDriveSyncExcluded(relativePath, binding.excludeRules, entry.type))
+        })
+        const includedIds = new Set(included.map((entry) => entry.id))
+        const removable = included.filter((entry) => entry.type === "file" || entries.every((descendant) => !isPathInSubtreeForSync(paths.get(descendant.id)!, paths.get(entry.id)!) || includedIds.has(descendant.id)))
+          .sort((left, right) => pathDepth(paths.get(right.id)!) - pathDepth(paths.get(left.id)!))
+        for (const entry of removable) {
+          const item = await getDriveItemFromAccountService(deps.accountService, entry.id)
+          cleanup.remote.push({ path: paths.get(entry.id) || item.name, itemId: item.id, stamp: await removalRemoteStamp(item), done: false })
+        }
+        if (binding.kind === "folder" && removable.length !== entries.length) warnings.push("云端排除项、未纳入同步的内容及其所在目录保留。")
+      }
+    }
+    for (const entry of cleanup.local.filter((entry) => !entry.done)) {
+      if (await removalLocalStamp(entry.path) !== entry.stamp) blockedReason = "待处理的本地内容已经变化，已阻止删除，请保留文件后另行处理。"
+    }
+    for (const entry of cleanup.remote.filter((entry) => !entry.done)) {
+      if (await removalRemoteStamp(await getDriveItemFromAccountService(deps.accountService, entry.itemId)) !== entry.stamp) blockedReason = "待处理的云端内容已经变化，已阻止删除，请保留文件后另行处理。"
+    }
+    const fingerprint = createHash("sha256").update(JSON.stringify({ ownerUserId: binding.ownerUserId, id: binding.id, driveItemId: binding.driveItemId, localPath: binding.localPath, rules: binding.excludeRules, cleanup })).digest("hex")
+    return { binding, cleanup, warnings, blockedReason, fingerprint }
+  }
+
+  async function previewRemoval(input: DriveSyncRemovalInput): Promise<DriveSyncRemovalPreviewDto> {
+    const captured = await removalCapture(input)
+    return { bindingId: captured.binding.id, disposition: captured.cleanup.disposition, localPath: captured.binding.localPath,
+      drivePathHint: captured.binding.drivePathHint, localPaths: captured.cleanup.local.filter((entry) => !entry.done).map((entry) => entry.path),
+      remotePaths: captured.cleanup.remote.filter((entry) => !entry.done).map((entry) => entry.path), warnings: captured.warnings,
+      blockedReason: captured.blockedReason, confirmationToken: rememberReview(reviewedRemovals, captured.fingerprint) }
+  }
+
+  async function removeBinding(id: string, options: Omit<DriveSyncRemovalInput, "id"> = {}): Promise<DriveSyncRemovalResultDto> {
+    const disposition = options.disposition ?? "keep_both"
+    if (disposition !== "keep_both" && !options.confirmationToken) throw new Error("请先预览并确认解除同步后的文件处理。")
+    if (replacingBindings.has(id)) throw new Error("文件正在更新，请稍后解除同步。")
     verifiedRootHintChecks.delete(id)
-    await workCoordinator.cancelAndRun(id, async () => {
-      await clearBindingState(id)
-      await updateBindingStatus(id, "removed")
+    return workCoordinator.cancelAndRun(id, async () => {
+      if (disposition === "keep_both") {
+        const binding = await removalBinding(id, false)
+        await clearBindingState(id)
+        await deps.bindings.upsert({ ...binding, status: "removed", removalCleanup: undefined, lastError: null, updatedAt: timestamp() })
+        await reconcileLocalWatcher()
+        await emitChanged()
+        return { bindingId: binding.id, local: "retained", remote: "retained", errors: [] }
+      }
+      const captured = await removalCapture({ id, disposition })
+      requireReview(reviewedRemovals, options.confirmationToken, captured.fingerprint)
+      if (captured.blockedReason) throw new Error(captured.blockedReason)
+      cleaningBindings.add(id)
+      try {
+        const cleanup = captured.cleanup
+        cleanup.errors = []
+        const detached = { ...captured.binding, status: "removed" as const, removalCleanup: cleanup, lastError: null, updatedAt: timestamp() }
+        // Persist detachment and its cleanup journal before deleting either side.
+        await deps.bindings.upsert(detached)
+        await clearBindingState(id)
+        await reconcileLocalWatcher()
+        const persist = async () => deps.bindings.upsert({ ...detached, removalCleanup: structuredClone(cleanup), lastError: cleanup.errors.join("；") || null, updatedAt: timestamp() })
+        for (const entry of cleanup.local.filter((entry) => !entry.done)) {
+          try {
+            if (requireOnlineOwnerUserId() !== captured.binding.ownerUserId) throw new Error("账号已变化，已停止文件处理。")
+            if (await removalLocalStamp(entry.path) !== entry.stamp) throw new Error("文件已变化，已阻止删除。")
+            await authorizeLocalPath({ action: "fs.write.outside-userdata", localPath: entry.path, source: "driveSync.removeBinding", metadata: { bindingId: id, disposition } })
+            await assertNoSymlinkPathComponents(driveSyncLocalWriteRootPath(captured.binding), entry.path)
+            const kind = (JSON.parse(entry.stamp) as unknown[])[0]
+            if (kind === "folder" && (await readdir(entry.path)).length) throw new Error("目录内出现未处理内容，已保留目录。")
+            await (deps.trashLocalPath ?? moveLocalPathToRecoverableTrash)(entry.path)
+            entry.done = true
+            // Update only the reviewed parent inventory after a completed child removal.
+            const parent = cleanup.local.find((candidate) => !candidate.done && candidate.path === path.dirname(entry.path))
+            if (parent) {
+              const stamp = JSON.parse(parent.stamp) as [string, string[], ...unknown[]]
+              if (stamp[0] === "folder") parent.stamp = JSON.stringify(["folder", stamp[1].filter((name) => name !== path.basename(entry.path)), ...stamp.slice(2)])
+            }
+          } catch (error) { cleanup.errors.push(`本地 ${entry.path}：${errorMessage(error)}`) }
+          await persist()
+        }
+        for (const entry of cleanup.remote.filter((entry) => !entry.done)) {
+          try {
+            if (requireOnlineOwnerUserId() !== captured.binding.ownerUserId) throw new Error("账号已变化，已停止文件处理。")
+            const [reviewedItem, versionId] = JSON.parse(entry.stamp) as [DriveItemDto, string | null]
+            const item = await getDriveItemFromAccountService(deps.accountService, entry.itemId)
+            if (await removalRemoteStamp(item) !== entry.stamp) throw new Error("文件已变化，已阻止删除。")
+            if (item.type === "folder" && (await listAllRemoteTreeEntries(item.id)).length) throw new Error("目录内出现未处理内容，已保留目录。")
+            await deps.accountService.deleteDriveItem(entry.itemId, { expectedUpdatedAt: reviewedItem.updatedAt,
+              ...(reviewedItem.type === "folder" ? { expectedEmpty: true } : { expectedVersionId: versionId! }) })
+            entry.done = true
+          } catch (error) { cleanup.errors.push(`云端 ${entry.path}：${errorMessage(error)}`) }
+          await persist()
+        }
+        reviewedRemovals.delete(options.confirmationToken!)
+        await emitChanged()
+        return { bindingId: id, local: disposition === "keep_local" ? "retained" : cleanup.local.some((entry) => !entry.done) ? "failed" : "trashed",
+          remote: disposition === "keep_remote" ? "retained" : cleanup.remote.some((entry) => !entry.done) ? "failed" : "trashed", errors: cleanup.errors }
+      } finally { cleaningBindings.delete(id) }
     })
   }
 
@@ -536,11 +839,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function pauseBinding(id: string): Promise<DriveSyncBindingDto> {
+    if (replacingBindings.has(id)) throw new Error("文件正在更新，请稍后修改同步。")
     clearBindingRetry(id)
     return workCoordinator.cancelAndRun(id, () => updateBindingStatus(id, "paused"))
   }
 
   async function resumeBinding(id: string): Promise<DriveSyncBindingDto> {
+    if (replacingBindings.has(id)) throw new Error("文件正在更新，请稍后继续同步。")
     return runBindingActionSingleFlight(id, async () => {
       const binding = await requireBinding(id)
       const others = (await listOwnerBindings()).filter((entry) => entry.id !== id && entry.status !== "removed")
@@ -1294,6 +1599,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (input.direction !== "bind_existing" || !input.confirmationToken) throw new Error("请先预览并确认本次对齐。")
     if (input.authority === "remote") await authorizeLocalPath({ action: "fs.write.outside-userdata", localPath: input.localPath, source: "driveSync.createSafeBinding", metadata: { direction: input.direction } })
     const previous = input.replaceBindingId ? await requireBinding(input.replaceBindingId) : null
+    if (previous && replacingBindings.has(previous.id)) throw new Error("文件正在更新，请稍后修改同步。")
     if (previous && previous.kind !== input.kind) throw new Error("文件和文件夹不能互相转换，请新建同步。")
     if (previous) await pauseBinding(previous.id)
     const preview = await previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
@@ -4389,6 +4695,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     bindingId: string,
     action: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
+    if (replacingBindings.has(bindingId)) throw new Error("文件正在更新，请稍后修改同步。")
     return workCoordinator.run(bindingId, async (signal) => {
       activeWorkSignals.set(bindingId, signal)
       try {
@@ -4407,6 +4714,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     events,
     getSnapshot,
     createBinding,
+    previewFileReplacement,
+    applyFileReplacement,
+    previewRemoval,
     previewBinding,
     createSafeBinding,
     rescanBinding,
@@ -4460,12 +4770,17 @@ function isRemoteNotFoundError(error: unknown): boolean {
   return message.includes("NOT_FOUND") || message.includes("HTTP 404")
 }
 
+function hasUnfinishedRemoval(entry: DriveSyncBindingEntryV1): boolean {
+  return Boolean(entry.removalCleanup && (entry.removalCleanup.local.some((step) => !step.done) || entry.removalCleanup.remote.some((step) => !step.done)))
+}
+
 function toBindingDto(
   entry: DriveSyncBindingEntryV1,
   override?: { readonly status: DriveSyncBindingStatus; readonly lastError: string },
 ): DriveSyncBindingDto {
   return {
     id: entry.id,
+    ...(entry.removalCleanup ? { removalDisposition: entry.removalCleanup.disposition } : {}),
     driveItemId: entry.driveItemId,
     driveItemName: entry.driveItemName,
     drivePathHint: entry.drivePathHint,
@@ -4477,7 +4792,7 @@ function toBindingDto(
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     lastSyncedAt: entry.lastSyncedAt,
-    lastError: sanitizeNullableDriveSyncMessage(override?.lastError ?? entry.lastError),
+    lastError: sanitizeNullableDriveSyncMessage(override?.lastError ?? entry.lastError ?? (hasUnfinishedRemoval(entry) ? "解除同步后的文件处理未完成，请重试或保留剩余文件。" : null)),
   }
 }
 

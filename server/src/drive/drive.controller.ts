@@ -70,6 +70,7 @@ const DRIVE_SHARE_READER_CSP = "default-src 'none'; style-src 'unsafe-inline'; i
 type DriveAccessCookieKind = "share" | "site"
 
 const prepareUploadSchema = z.object({
+  createOnly: z.boolean().optional(),
   parentId: z.string().nullable().optional(),
   name: z.string().min(1).max(255),
   size: z.string().regex(/^\d+$/u),
@@ -79,12 +80,17 @@ const prepareUploadSchema = z.object({
 }).strict()
 
 const prepareFolderUploadSchema = z.object({
+  expectedRootItemId: z.string().min(1).optional(),
+  createRootOnly: z.boolean().optional(),
   parentId: z.string().nullable().optional(),
   folderName: z.string().min(1).max(255),
   directories: z.array(z.object({
     relativePath: z.string().min(1).max(1024),
   }).strict()).max(1000).optional(),
   files: z.array(z.object({
+    expectedItemId: z.string().min(1).nullable().optional(),
+    expectedVersionId: z.string().min(1).nullable().optional(),
+    createOnly: z.boolean().optional(),
     relativePath: z.string().min(1).max(1024),
     size: z.string().regex(/^\d+$/u),
     mimeType: z.string().trim().max(255).nullable().optional(),
@@ -595,7 +601,9 @@ export class DriveUserController {
       name: parsed.name,
       size: parsed.size,
       mimeType: parsed.mimeType ?? null,
+      expectedItemId: parsed.expectedItemId ?? null,
       expectedVersionId: parsed.expectedVersionId ?? null,
+      createOnly: parsed.createOnly,
       publicAppUrl: resolveRequestPublicAppUrl(request),
     })
   }
@@ -607,8 +615,13 @@ export class DriveUserController {
     return this.drive.prepareFolderUpload(request.user!.id, {
       parentId: parsed.parentId ?? null,
       folderName: parsed.folderName,
+      expectedRootItemId: parsed.expectedRootItemId,
+      createRootOnly: parsed.createRootOnly,
       directories: parsed.directories ?? [],
       files: parsed.files.map((file) => ({
+        expectedItemId: file.expectedItemId,
+        expectedVersionId: file.expectedVersionId,
+        createOnly: file.createOnly,
         relativePath: file.relativePath,
         size: file.size,
         mimeType: file.mimeType ?? null,
@@ -647,7 +660,10 @@ export class DriveUserController {
 
   @Delete("/items/:id")
   deleteItem(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
+    const guards = parseBody(z.object({ expectedVersionId: z.string().min(1).optional(), expectedUpdatedAt: z.string().datetime().optional(), expectedEmpty: z.boolean().optional() }).strict(), body ?? {}, "删除预览已失效。")
+    return Object.keys(guards).length
+      ? this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip, guards)
+      : this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
   }
 
   /**

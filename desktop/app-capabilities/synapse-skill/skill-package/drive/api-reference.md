@@ -46,6 +46,14 @@ Replacing an existing Markdown or plain-text file without `expectedVersionId` is
 
 For local changes to an existing document, use `app_drive_file_content_patch`. Use upload with `expectedVersionId` only for an intentional full-file reconstruction from a fixed version.
 
+### `app_drive_file_replace_preview`
+
+Preview an explicit finished-local-file replacement (including Markdown), distinct from a source edit. Input: `itemId` and absolute `filePath`. The extension must match; the basename may differ. Returns `name`, `localName`, `size`, `previousSize`, `versionId`, `syncImpacts` (`bindingId`, `localPath`, `status`), `blockedReason` and a 15-minute `confirmationToken`. Pending local changes/conflicts block replacement. Independent and inherited folder sync bindings are checked.
+
+### `app_drive_file_replace_apply`
+
+Input: the same `itemId`, `filePath` and reviewed `confirmationToken`. Revalidates account, target, version, local content and sync configuration, uploads a new version by stable item identity and verifies cloud content. Returns `{ item, versionId, syncPending }`; file id/name/share links are preserved. Paused sync stays paused. Cloud commit or verification errors must be inspected before retrying an upload; never claim all devices synced from this response.
+
 ### `app_drive_folder_upload`
 
 Upload a local folder to Drive once. This does not create persistent sync. Relative paths are preserved, including empty subdirectories. Same-name folders are merged and same-name files are overwritten.
@@ -208,9 +216,13 @@ Input: `bindingId` required. Returns the paused binding.
 
 Input: `bindingId` required. Resumes and catches up the binding, then returns its current state.
 
+### `app_drive_sync_binding_removal_preview`
+
+Input: `bindingId` required and optional `disposition`: `keep_both` (default), `keep_local` (trash cloud), `keep_remote` (trash local), `delete_both`. Returns `bindingId`, `disposition`, both root paths, planned `localPaths` and `remotePaths`, `warnings`, `blockedReason`, and `confirmationToken`. Only managed included contents are eligible for recoverable trash; exclusions and unmanaged contents remain protected. Cloud deletion affects shares and other devices. Changed content invalidates the review.
+
 ### `app_drive_sync_binding_remove`
 
-Input: `bindingId` required. Stops and removes the binding without deleting local or Drive content. Returns `{ removed: true }`.
+Input: `bindingId` required; optional `disposition` defaults to `keep_both`. Destructive dispositions require the unchanged `confirmationToken` from removal preview. Stops work and persists detachment before cleanup. Returns `{ bindingId, local, remote, errors }`; each side is `retained`, `trashed`, or `failed`. Inspect errors and never report both sides processed on partial failure. Preview and retry unfinished cleanup by the same binding id; completed paths never run again. Generic stop/unbind requests retain both sides.
 
 ### `app_drive_sync_binding_exclude_rules_update`
 

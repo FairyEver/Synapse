@@ -172,6 +172,7 @@ type AccountServiceDeps = {
 }
 
 type DriveLocalUploadProgressReporter = {
+  readonly replaceFile?: (input: { itemId: string; filePath: string; confirmationToken: string }) => Promise<unknown>
   readonly taskId?: string
   readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void
   readonly onFolderPrepared?: (input: { readonly id: string; readonly created: boolean }) => void
@@ -1110,6 +1111,7 @@ export class AccountService {
     mimeType?: string | null
     expectedItemId?: string | null
     expectedVersionId?: string | null
+    createOnly?: boolean
   }, options: { readonly signal?: AbortSignal } = {}): Promise<DriveUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/prepare`, {
       parentId: input.parentId ?? null,
@@ -1118,23 +1120,29 @@ export class AccountService {
       mimeType: input.mimeType ?? null,
       ...(input.expectedItemId ? { expectedItemId: input.expectedItemId } : {}),
       ...(input.expectedVersionId ? { expectedVersionId: input.expectedVersionId } : {}),
+      ...(input.createOnly !== undefined ? { createOnly: input.createOnly } : {}),
     }, "上传准备失败。", options)
   }
 
   async prepareDriveFolderUpload(input: {
     parentId?: string | null
     folderName: string
+    expectedRootItemId?: string
+    createRootOnly?: boolean
     directories?: Array<{ relativePath: string }>
-    files: Array<{ relativePath: string; size: string; mimeType?: string | null }>
+    files: Array<{ relativePath: string; size: string; mimeType?: string | null; createOnly?: boolean }>
   }, options: { readonly signal?: AbortSignal } = {}): Promise<DriveFolderUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveFolderUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/folder/prepare`, {
       parentId: input.parentId ?? null,
       folderName: input.folderName,
+      ...(input.expectedRootItemId ? { expectedRootItemId: input.expectedRootItemId } : {}),
+      ...(input.createRootOnly !== undefined ? { createRootOnly: input.createRootOnly } : {}),
       ...(input.directories ? { directories: input.directories.map((directory) => ({ relativePath: directory.relativePath })) } : {}),
       files: input.files.map((file) => ({
         relativePath: file.relativePath,
         size: file.size,
         mimeType: file.mimeType ?? null,
+        ...(file.createOnly !== undefined ? { createOnly: file.createOnly } : {}),
       })),
     }, "文件夹上传准备失败。", options)
   }
@@ -1156,6 +1164,7 @@ export class AccountService {
   async uploadDriveLocalItems(
     input: DriveLocalUploadRequest,
     options: {
+      readonly replaceFile?: (input: { itemId: string; filePath: string; confirmationToken: string }) => Promise<unknown>
       readonly onProgress?: (event: DriveLocalUploadProgressEvent) => void
       readonly onFolderPrepared?: (input: { readonly id: string; readonly created: boolean }) => void
       readonly signal?: AbortSignal
@@ -1168,6 +1177,7 @@ export class AccountService {
     let skipped = 0
     let firstError: string | undefined
     const progress = {
+      replaceFile: options.replaceFile,
       taskId: input.taskId,
       onProgress: options.onProgress,
       onFolderPrepared: options.onFolderPrepared,
@@ -1255,8 +1265,8 @@ export class AccountService {
     return this.requestAuthenticatedJson<DriveItemDto>("PATCH", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, { parentId }, "移动失败。")
   }
 
-  async deleteDriveItem(itemId: string): Promise<{ ok: true }> {
-    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, undefined, "删除失败。")
+  async deleteDriveItem(itemId: string, preconditions?: { readonly expectedVersionId?: string; readonly expectedUpdatedAt?: string; readonly expectedEmpty?: boolean }): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, preconditions, "删除失败。")
   }
 
   /**
@@ -1363,10 +1373,24 @@ export class AccountService {
       return { completed: 0, failed: 1, skipped: 0, message }
     }
 
+    if (item.replacementToken || item.expectedItemId) {
+      try {
+        if (!item.replacementToken || !item.expectedItemId || !progress.replaceFile) throw new Error("同名文件需要预览后上传新版本。")
+        emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
+        await progress.replaceFile({ itemId: item.expectedItemId, filePath: item.path, confirmationToken: item.replacementToken })
+        emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
+        return { completed: 1, failed: 0, skipped: 0 }
+      } catch (error) {
+        const message = localUploadErrorMessage(error)
+        emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+        return { completed: 0, failed: 1, skipped: 0, message }
+      }
+    }
     let prepared: DriveUploadPrepareResult
     try {
       const prepareInput = {
         parentId,
+        createOnly: true,
         name: item.name,
         size: String(fileStat.size),
         mimeType: item.mimeType ?? null,
@@ -1415,6 +1439,8 @@ export class AccountService {
       sizeBytes: number
       mimeType: string | null
       itemKey: string
+      expectedItemId?: string
+      replacementToken?: string
     }> = []
     const seenRelativePaths = new Set<string>()
     let skipped = 0
@@ -1476,6 +1502,8 @@ export class AccountService {
       files.push({
         path: file.path,
         relativePath: file.relativePath,
+        expectedItemId: file.expectedItemId,
+        replacementToken: file.replacementToken,
         size: String(fileStat.size),
         sizeBytes: fileStat.size,
         mimeType: file.mimeType ?? null,
@@ -1507,8 +1535,11 @@ export class AccountService {
       const prepareInput = {
         parentId,
         folderName: item.folderName,
+        ...(item.expectedRootItemId ? { expectedRootItemId: item.expectedRootItemId } : {}),
+        ...(item.createRootOnly !== undefined ? { createRootOnly: item.createRootOnly } : {}),
         ...(directories.length > 0 ? { directories } : {}),
-        files: files.map((file) => ({
+        files: files.filter((file) => !file.replacementToken).map((file) => ({
+          createOnly: true,
           relativePath: file.relativePath,
           size: file.size,
           mimeType: file.mimeType,
@@ -1546,6 +1577,21 @@ export class AccountService {
       for (const file of files) {
         progress.signal?.throwIfAborted()
         const itemKey = file.itemKey
+        if (file.replacementToken || file.expectedItemId) {
+          try {
+            if (!file.replacementToken || !file.expectedItemId || !progress.replaceFile) throw new Error("同名文件需要预览后上传新版本。")
+            emitDriveLocalUploadProgress(progress, { type: "item-started", itemKey })
+            await progress.replaceFile({ itemId: file.expectedItemId, filePath: file.path, confirmationToken: file.replacementToken })
+            emitDriveLocalUploadProgress(progress, { type: "item-completed", itemKey })
+            completed += 1
+          } catch (error) {
+            failed += 1
+            const message = localUploadErrorMessage(error)
+            firstError ??= message
+            emitDriveLocalUploadProgress(progress, { type: "item-failed", itemKey, message })
+          }
+          continue
+        }
         const preparedEntry = preparedByPath.get(file.relativePath)
         if (!preparedEntry) {
           failed += 1

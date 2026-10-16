@@ -377,6 +377,8 @@ function DriveSiteRow({
             <Badge variant="outline">网页</Badge>
             <Badge variant="outline">{site.accessMode === "password" ? "密码" : "公开"}</Badge>
             <DriveSiteStatusBadge status={site.status} />
+            {site.needsRepublish === true && <Badge variant="secondary">有未发布变更</Badge>}
+            {site.sourceAvailable === false && <Badge variant="outline">来源文件夹不可用</Badge>}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
             <span className="truncate">到期 <RelativeTime value={site.expiresAt} fallback="永久" /></span>
@@ -416,7 +418,7 @@ function DriveSiteRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onRepublish(site)}>更新网页</DropdownMenuItem>
+              <DropdownMenuItem disabled={site.sourceAvailable === false} onClick={() => onRepublish(site)}>更新网页</DropdownMenuItem>
               {site.status === "disabled" ? (
                 <DropdownMenuItem onClick={() => onEnable(site)}>恢复分享</DropdownMenuItem>
               ) : (

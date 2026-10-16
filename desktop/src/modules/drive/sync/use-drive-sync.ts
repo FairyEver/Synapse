@@ -3,6 +3,9 @@ import { toast } from "sonner"
 import type {
   DriveItemDto,
   DriveSyncBindingDto,
+  DriveSyncRemovalDisposition,
+  DriveSyncRemovalPreviewDto,
+  DriveSyncRemovalResultDto,
   DriveSyncBindingPreviewDto,
   DriveSyncConflictResolutionInput,
   DriveSyncCreateSafeBindingInput,
@@ -55,7 +58,8 @@ export interface DriveSyncController {
   readonly createBinding: (input: DriveSyncCreateSafeBindingInput) => Promise<DriveSyncBindingDto>
   readonly pause: (bindingId: string) => Promise<void>
   readonly resume: (bindingId: string) => Promise<void>
-  readonly remove: (bindingId: string) => Promise<void>
+  readonly previewRemoval: (bindingId: string, disposition: DriveSyncRemovalDisposition) => Promise<DriveSyncRemovalPreviewDto>
+  readonly remove: (bindingId: string, disposition?: DriveSyncRemovalDisposition, confirmationToken?: string) => Promise<DriveSyncRemovalResultDto>
   readonly rescan: (bindingId: string) => Promise<void>
   readonly updateExcludes: (input: DriveSyncUpdateExcludeRulesInput) => Promise<void>
   readonly pollRemoteChanges: (bindingId?: string) => Promise<void>
@@ -125,9 +129,16 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
       if (disposed) return
       latestSnapshotRef.current = next
       setHealth(next.health)
-      // 用户主动操作期间展示进度；普通后台通知仍保持阅读快照。
-      if (!autoRefreshRef.current && pendingIdsRef.current.size === 0) return
-      setSnapshot(next)
+      // Keep the reading order while updating status, paths and failures in place.
+      setSnapshot((previous) => {
+        if (autoRefreshRef.current || !previous) return next
+        const byId = new Map(next.bindings.map((binding) => [binding.id, binding]))
+        const previousIds = new Set(previous.bindings.map((binding) => binding.id))
+        return { ...next, bindings: [
+          ...previous.bindings.flatMap((binding) => byId.get(binding.id) ? [byId.get(binding.id)!] : []),
+          ...next.bindings.filter((binding) => !previousIds.has(binding.id)),
+        ] }
+      })
       setError(null)
       setLoading(false)
     })
@@ -219,7 +230,8 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
     createBinding: (input) => bridge.createSafeBinding(input),
     pause: (bindingId) => bridge.pauseBinding({ id: bindingId }).then(() => undefined),
     resume: (bindingId) => bridge.resumeBinding({ id: bindingId }).then(() => undefined),
-    remove: (bindingId) => bridge.removeBinding({ id: bindingId }),
+    previewRemoval: (bindingId, disposition) => bridge.previewRemoval({ id: bindingId, disposition }),
+    remove: (bindingId, disposition, confirmationToken) => bridge.removeBinding({ id: bindingId, ...(disposition ? { disposition, confirmationToken } : {}) }),
     rescan: (bindingId) => bridge.rescanBinding({ id: bindingId }),
     updateExcludes: (input) => bridge.updateExcludeRules(input).then(() => undefined),
     pollRemoteChanges: (bindingId) => bridge.pollRemoteChanges(bindingId ? { id: bindingId } : {}),

@@ -124,7 +124,7 @@ export function bindingStateText(
   }
   if (binding.status === "paused") return { text: "已暂停 · 不会自动同步", tone: "normal" }
   if (binding.status === "initializing") return { text: "正在准备", tone: "normal" }
-  if (binding.status === "removed") return { text: "已移除", tone: "normal" }
+  if (binding.status === "removed") return { text: binding.lastError ? "文件处理未完成" : "已解除", tone: binding.lastError ? "attention" : "normal" }
 
   const work = activeWorkOf(operations)
   if (work) {
@@ -138,11 +138,23 @@ export function bindingStateText(
   return { text: `已同步 · ${formatRelativeTime(binding.lastSyncedAt ?? binding.updatedAt)}`, tone: "normal" }
 }
 
+/** The management list keeps exactly one state; paths, counts and timing live in details. */
+export function bindingListStateText(binding: DriveSyncBindingDto, operations: readonly DriveSyncOperationDto[], conflicts: readonly DriveSyncConflictDto[]): DriveSyncStateText {
+  const state = bindingStateText(binding, operations, conflicts)
+  if (binding.status === "active" && state.tone !== "attention") {
+    const work = activeWorkOf(operations)
+    if (work) return { ...state, text: work.label }
+    if (retryOperationOf(operations)) return { ...state, text: "等待重试" }
+  }
+  return { ...state, text: state.text.split(" · ")[0] }
+}
+
 export function bindingStateDetail(
   binding: DriveSyncBindingDto,
   operations: readonly DriveSyncOperationDto[],
   conflicts: readonly DriveSyncConflictDto[],
 ): string {
+  if (binding.status === "removed") return binding.lastError || "同步关系已解除"
   if (binding.status === "error") {
     return binding.lastError?.trim()
       || operations.find((operation) => operation.status === "error" && operation.message)?.message
@@ -180,6 +192,7 @@ export function bindingPrimaryAction(
       return { kind: "view", label: "查看", variant: "outline" }
     }
   }
+  if (binding.status === "removed") return { kind: "view", label: "重试文件处理", variant: "outline" }
   if (binding.status === "error") return { kind: "retry", label: "重试", variant: "default" }
   if (binding.status === "conflict" || conflicts.length > 0) {
     return { kind: "conflicts", label: "处理冲突", variant: "default" }
@@ -282,7 +295,7 @@ export function isBindingInFilter(
   switch (filter) {
     case "all": return true
     case "paused": return binding.status === "paused"
-    case "attention": return binding.status === "conflict" || binding.status === "error" || conflicts.length > 0
+    case "attention": return binding.status === "conflict" || binding.status === "error" || (binding.status === "removed" && Boolean(binding.lastError)) || conflicts.length > 0
     case "active": return binding.status === "initializing"
       || (binding.status === "active" && (activeWorkOf(operations) !== null || retryOperationOf(operations) !== null))
   }

@@ -388,7 +388,7 @@ describe("AccountService", () => {
 
     await expect(service.uploadDriveLocalItems({
       parentId: "folder-1",
-      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain", expectedItemId: "file-1" }],
+      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain" }],
     })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
 
     expect(service.prepareDriveUpload).toHaveBeenCalledWith({
@@ -396,10 +396,39 @@ describe("AccountService", () => {
       name: "report.txt",
       size: "5",
       mimeType: "text/plain",
-      expectedItemId: "file-1",
+      expectedItemId: null,
+      createOnly: true,
     })
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-file-1")
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("uses reviewed replacement tokens for native uploads without a second plain overwrite", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-reviewed-upload-"))
+    const filePath = path.join(dir, "finished.md")
+    await writeFile(filePath, "new content")
+    const { service } = await createTestAccountService()
+    const prepare = vi.spyOn(service, "prepareDriveUpload")
+    const replaceFile = vi.fn(async () => undefined)
+    const onProgress = vi.fn()
+    await expect(service.uploadDriveLocalItems({ taskId: "task-review", items: [{ kind: "file", path: filePath, name: "cloud.md", expectedItemId: "existing", replacementToken: "review-token" }] }, { replaceFile, onProgress })).resolves.toMatchObject({ completed: 1, failed: 0 })
+    expect(replaceFile).toHaveBeenCalledWith({ itemId: "existing", filePath, confirmationToken: "review-token" })
+    expect(prepare).not.toHaveBeenCalled()
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ type: "item-completed", taskId: "task-review", itemKey: "item:0" }))
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it("keeps nested reviewed replacements out of the ordinary folder upload manifest", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-reviewed-folder-"))
+    const filePath = path.join(dir, "finished.md")
+    await writeFile(filePath, "new content")
+    const { service } = await createTestAccountService()
+    const prepare = vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({ root: driveItem({ id: "root-1", type: "folder", name: "docs" }), rootCreated: false, entries: [] })
+    const replaceFile = vi.fn(async () => undefined)
+    await expect(service.uploadDriveLocalItems({ items: [{ kind: "folder", folderName: "docs", expectedRootItemId: "root-1", files: [{ path: filePath, relativePath: "nested/cloud.md", expectedItemId: "existing", replacementToken: "review-token" }] }] }, { replaceFile })).resolves.toMatchObject({ completed: 1, failed: 0 })
+    expect(prepare).toHaveBeenCalledWith({ parentId: null, folderName: "docs", expectedRootItemId: "root-1", files: [] })
+    expect(replaceFile).toHaveBeenCalledWith({ itemId: "existing", filePath, confirmationToken: "review-token" })
+    await rm(dir, { recursive: true, force: true })
   })
 
   it("returns the completed Drive item for sync uploads", async () => {
@@ -1284,8 +1313,8 @@ describe("AccountService", () => {
       parentId: null,
       folderName: "项目A",
       files: [
-        { relativePath: "a.md", size: "5", mimeType: "text/markdown" },
-        { relativePath: "docs/b.md", size: "4", mimeType: null },
+        { relativePath: "a.md", size: "5", mimeType: "text/markdown", createOnly: true },
+        { relativePath: "docs/b.md", size: "4", mimeType: null, createOnly: true },
       ],
     })
   })
@@ -1475,7 +1504,7 @@ describe("AccountService", () => {
     expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,
       folderName: "项目A",
-      files: [{ relativePath: "docs/a.md", size: "5", mimeType: "text/markdown" }],
+      files: [{ relativePath: "docs/a.md", size: "5", mimeType: "text/markdown", createOnly: true }],
     })
     const prepareCalls = JSON.stringify(vi.mocked(service.prepareDriveFolderUpload).mock.calls)
     expect(prepareCalls).not.toContain("docs//b.md")
@@ -1523,7 +1552,7 @@ describe("AccountService", () => {
     expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
       parentId: null,
       folderName: "项目A",
-      files: [{ relativePath: "docs/a.md", size: "5", mimeType: "text/markdown" }],
+      files: [{ relativePath: "docs/a.md", size: "5", mimeType: "text/markdown", createOnly: true }],
     })
     const warnings = JSON.stringify(accountLogger.warn.mock.calls)
     expect(warnings).toContain("duplicate-relative-path")

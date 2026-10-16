@@ -25,6 +25,8 @@ Use these tools only for Synapse Drive:
 - `app_drive_item_list`
 - `app_drive_item_get`
 - `app_drive_file_upload`
+- `app_drive_file_replace_preview`
+- `app_drive_file_replace_apply`
 - `app_drive_folder_upload`
 - `app_drive_folder_create`
 - `app_drive_item_rename`
@@ -81,6 +83,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_sync_binding_create`
 - `app_drive_sync_binding_pause`
 - `app_drive_sync_binding_resume`
+- `app_drive_sync_binding_removal_preview`
 - `app_drive_sync_binding_remove`
 - `app_drive_sync_binding_exclude_rules_update`
 - `app_drive_sync_binding_rescan`
@@ -143,7 +146,9 @@ The desktop file list shows clickable sharing and local-sync Tags beside item na
 - Call `app_drive_sync_snapshot_get` for binding status, current operations, health, and conflicts. Resolve phrases such as “这个项目”, “刚才那个同步”, a local path, or a Drive item name against the snapshot's binding id, normalized `localPath`, and Drive item metadata. Act directly only on one unambiguous match; otherwise ask the user to choose from the matching local and Drive paths.
 - Pause with `app_drive_sync_binding_pause`; resume and catch up with `app_drive_sync_binding_resume`.
 - Use `app_drive_sync_binding_rescan` for “sync now”, “check again”, or a complete manual catch-up.
-- `app_drive_sync_binding_remove` stops the relationship without deleting either side.
+- `app_drive_sync_binding_remove` defaults to `keep_both`, detaching the relationship while retaining both sides. For `keep_local` (trash cloud), `keep_remote` (trash local), or `delete_both`, first call `app_drive_sync_binding_removal_preview`, explain the listed paths, protected contents and cross-device/share impact, then submit its unchanged `confirmationToken` and disposition. Never infer deletion from “stop sync” or “解除同步”.
+- Check separate `local`, `remote` and `errors` results. A partial failure is detached already: do not resume/recreate the relationship to retry cleanup. Preview and retry by the same binding id; completed paths are not processed again. Changed pending contents are protected.
+- To remap an existing relationship, preview/create with `replaceBindingId`, the new same-kind target and an explicit one-time authority; preserve old files. A failed remap can leave paused old/new records; report the actual states and review again rather than claim file rollback or repeat the old decision.
 - Replace editable folder rules with `app_drive_sync_binding_exclude_rules_update`; preserve any rule groups the user did not ask to change by copying them from the current binding snapshot.
 - Never guess a conflict resolution. Use `app_drive_sync_conflict_resolve` only after the user explicitly selects an available action:
   - `keep_local` overwrites the Drive side with the local state.
@@ -270,11 +275,11 @@ Identify the existing public identity before uploading. Resolve a provided `/sha
 
 1. Find the existing site with `app_drive_site_list` and keep its `siteId` and `sourceFolderItemId`. Update the remembered source folder rather than creating another folder or site.
 2. For a complete local build folder, call `app_drive_item_get` for the source folder, then call `app_drive_folder_upload` with the source folder's current parent and name so the upload merges into that folder. For individual files, upload them to their existing source paths and names.
-3. Folder upload overwrites and adds files but does not remove Drive files missing from the local build. If the user requests an exact mirror, list the differences and confirm deletions separately before deleting anything.
+3. Folder upload overwrites and adds files but does not remove Drive files missing from the local build. For a continuing exact mirror, use reviewed `bind_existing` authority alignment and its delete preview.  If the user requests an exact mirror, list the differences and confirm deletions separately before deleting anything.
 4. After the source update succeeds:
    - If the user explicitly asked to update the public site, publish the update, redeploy, or synchronize the live website, call `app_drive_site_republish` with the existing `siteId` without asking again.
    - If the user asked only to update or synchronize the Drive source files, finish the upload and ask whether to republish the public site.
-5. Never call `app_drive_site_create` for an ordinary update. Republishing preserves the `/sites/<siteId>/` URL and switches deployments only after the new copy succeeds.
+5. Site results include optional `needsRepublish` and `sourceAvailable`. `needsRepublish: true` means the source differs from the live deployment; null/missing is unknown, not proof the site is up to date. A missing source does not remove the current public deployment. Never call `app_drive_site_create` for an ordinary update. Republishing preserves the `/sites/<siteId>/` URL and switches deployments only after the new copy succeeds.
 6. If source upload fails, do not republish. If republishing fails, report that the Drive source was updated but the previous public deployment remains online.
 
 ### Visitor Refresh Behavior
@@ -288,9 +293,20 @@ Updating either route does not live-reload pages already open in a visitor's bro
 3. For a file over 64 KiB that needs full reading or a search for an unknown section, first check whether local processing and write permission are available. If they are, call `app_drive_file_version_download_create` with the inspected `versionId`, then search or process the fixed local copy by section. Do not stream the whole file through `read_chunk` merely to repeat the same search or transformation locally. The 64 KiB threshold selects the default reading path; it is not a server file-size limit.
 4. If the fixed-version download is unavailable or permission is denied, continue with `read_chunk` only within the actual tool and context budget. Report the byte range read unless it covers the entire file. Clean up task-only local copies when finished.
 
+## Uploading A New Version From A Finished Local File
+
+Use this flow when the user explicitly asks to replace an owned existing Drive file with a finished local file, including Markdown. This intent differs from editing several passages of the existing source. Do not manufacture a base-version claim for independent bytes.
+
+1. Resolve the exact owned `itemId`, using the supplied link or full path. Disambiguate multiple matches; do not replace by filename alone.
+2. Call `app_drive_file_replace_preview` with `itemId` and an absolute `filePath`. The extension must match (case insensitive); the local basename may differ. Review `name`, `localName`, `previousSize`, `size`, `versionId`, `syncImpacts` and `blockedReason`.
+3. The user's explicit replacement request authorizes the reviewed replacement when the target and effects are clear. Report any blocked reason; resolve pending local edits/conflicts through the existing sync tools, never detach or overwrite them silently.
+4. Call `app_drive_file_replace_apply` with the same `itemId`, `filePath` and `confirmationToken`. The token expires after 15 minutes and binds the account, cloud identity/version, local bytes and sync configuration. Changed inputs require a fresh preview. Do not automatically force through a cloud version change.
+5. The service creates and reads back a new version, preserving the Drive name/id, history and existing links. Report `versionId`; `syncPending` means local sync remains pending (including paused relationships), not that every computer is already updated.
+6. If an error says the cloud update was committed but verification failed, inspect the current file/version before trying another upload. Do not blindly create another version. Paused relationships stay paused; other devices keep their own conflict checks.
+
 ## Editing An Existing Document
 
-Use this flow whenever the user asks to change, fix, update, or append to a document that already exists in Drive.
+Use this flow for source edits, fixes and appends to a document already in Drive. For an explicit finished-local-file replacement, use **Uploading A New Version From A Finished Local File** instead.
 
 1. Resolve the item id. When the user gives a share or site URL, use the Drive Link tools to resolve it; when they name a file in their own Drive, resolve it with `app_drive_item_list` or `app_drive_item_tree_list`.
 2. Follow **Reading A Saved Document** to inspect the current version and read only the source needed for this edit.
@@ -390,6 +406,9 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "读取这个 Markdown": inspect, then follow `app_drive_file_content_read_chunk` cursors as needed.
 - "下载这个文件到本地": call `app_drive_file_download_create`.
 - "下载 v3 历史版本": call `app_drive_file_version_list`, then `app_drive_file_version_download_create` with the selected version id.
+- "把这个本地 Markdown 上传为云端文件的新版本": use **Uploading A New Version From A Finished Local File**.
+- "解除同步，只保留本地": preview removal with `keep_local`, then remove with the reviewed token.
+- "更换这个同步的本地位置": preview/create the replacement using `replaceBindingId` and explicit authority.
 - "恢复到上一个版本": call `app_drive_file_version_list`, then `app_drive_file_version_restore` with the selected version id.
 - "保留这个历史版本": call `app_drive_file_version_pin_update`.
 - "下载整个文件夹": call `app_drive_folder_zip_create`.

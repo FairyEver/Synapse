@@ -62,11 +62,13 @@ type DriveSiteSourceItem = {
   readonly storageKey: string | null
   readonly storageStatus: string
   readonly uploadStatus: string
+  readonly updatedAt?: Date
   readonly lifecycleStatus: string
   readonly deletedAt: Date | null
 }
 
 type DriveSiteSnapshotFile = {
+  readonly updatedAt?: Date
   readonly sourceItemId: string
   readonly relativePath: string
   readonly storageKey: string
@@ -80,6 +82,7 @@ type DriveSiteSnapshotFolder = {
 }
 
 type DriveSiteSnapshot = {
+  readonly capturedAt: Date
   readonly sourceFolderItemId: string
   readonly sourceFolderName: string
   readonly files: readonly DriveSiteSnapshotFile[]
@@ -116,6 +119,7 @@ type DriveSiteDeploymentRecord = {
   readonly fileCount: number
   readonly totalBytes: bigint
   readonly activatedAt: Date | null
+  readonly createdAt?: Date
 }
 
 type DriveSiteAssetRecord = {
@@ -270,8 +274,8 @@ export class DriveSiteService {
       this.prisma.driveSite.count({ where }),
     ])
     const deployments = await this.currentDeploymentsForSites(sites)
-    const items = sites.slice(0, page.limit)
-      .map((site) => this.toDto(site, publicAppUrl, deployments.get(site.currentDeploymentId ?? "")))
+    const items = await Promise.all(sites.slice(0, page.limit)
+      .map((site) => this.toDto(site, publicAppUrl, deployments.get(site.currentDeploymentId ?? ""))))
     return {
       items,
       total,
@@ -740,22 +744,55 @@ export class DriveSiteService {
     return new Map(deployments.map((deployment) => [deployment.id, deployment]))
   }
 
-  private toDto(
+  private async toDto(
     site: DriveSiteRecord,
     publicAppUrl: string,
     currentDeployment?: DriveSiteDeploymentRecord | null,
     passwordOverride?: string | null,
-  ): DriveSiteDto {
+  ): Promise<DriveSiteDto> {
     const password = passwordOverride ?? (site.accessMode === DRIVE_SITE_ACCESS_MODE.password
       ? this.decryptStoredPassword(site.passwordEncrypted)
       : null)
-    return toDriveSiteDto({ ...site, currentDeployment: currentDeployment ?? null, password }, publicAppUrl)
+    return {
+      ...toDriveSiteDto({ ...site, currentDeployment: currentDeployment ?? null, password }, publicAppUrl),
+      ...await this.sourcePublicationState(site, currentDeployment ?? null),
+    }
+  }
+
+  private async sourcePublicationState(site: DriveSiteRecord, deployment: DriveSiteDeploymentRecord | null): Promise<{ sourceAvailable: boolean; needsRepublish: boolean | null }> {
+    if (!site.sourceFolderItemId) return { sourceAvailable: false, needsRepublish: null }
+    let snapshot: DriveSiteSnapshot
+    try {
+      snapshot = await this.buildSnapshot(this.prisma, site.userId, site.sourceFolderItemId)
+    } catch (error) {
+      if (error instanceof NotFoundException) return { sourceAvailable: false, needsRepublish: null }
+      // Invalid/pending source content differs from the last valid deployment too.
+      if (error instanceof BadRequestException) return { sourceAvailable: true, needsRepublish: true }
+      throw error
+    }
+    if (!deployment) return { sourceAvailable: true, needsRepublish: true }
+    const [assets, folders] = await Promise.all([
+      this.prisma.driveSiteAsset.findMany({ where: { deploymentId: deployment.id }, select: { sourceItemId: true, relativePath: true, size: true, contentType: true } }),
+      driveSiteFolderDelegate(this.prisma).findMany({ where: { deploymentId: deployment.id }, orderBy: [{ relativePath: "asc" }, { id: "asc" }] }),
+    ])
+    const fileManifest = (files: readonly { sourceItemId?: string | null; relativePath: string; size: bigint; contentType: string | null }[]) => files.map((file) => JSON.stringify([file.sourceItemId, file.relativePath, file.size.toString(), file.contentType])).sort()
+    const folderManifest = (entries: readonly { sourceItemId?: string | null; relativePath: string }[]) => entries.map((folder) => JSON.stringify([folder.sourceItemId, folder.relativePath])).sort()
+    if (JSON.stringify(fileManifest(snapshot.files)) !== JSON.stringify(fileManifest(assets))
+      || JSON.stringify(folderManifest(snapshot.folders)) !== JSON.stringify(folderManifest(folders))) return { sourceAvailable: true, needsRepublish: true }
+    // New deployments timestamp the beginning of the snapshot, so edits made while
+    // objects are copied cannot be mistaken for already-published content.
+    const cutoff = deployment.createdAt ?? deployment.activatedAt
+    const changed = cutoff && snapshot.files.some((file) => file.updatedAt && file.updatedAt.getTime() > cutoff.getTime())
+    if (changed) return { sourceAvailable: true, needsRepublish: true }
+    const known = Boolean(cutoff) && snapshot.files.every((file) => file.updatedAt instanceof Date)
+    return { sourceAvailable: true, needsRepublish: known ? false : null }
   }
 
   private async publishDeployment(site: DriveSiteRecord, snapshot: DriveSiteSnapshot, entryPath: string): Promise<void> {
     const deployment = await this.prisma.driveSiteDeployment.create({
       data: {
         driveSiteId: site.id,
+        createdAt: snapshot.capturedAt,
         status: DRIVE_SITE_DEPLOYMENT_STATUS.pending,
         entryPath,
         fileCount: snapshot.files.length,
@@ -814,6 +851,7 @@ export class DriveSiteService {
   }
 
   private async buildSnapshot(db: DrivePrismaClient, userId: string, sourceFolderItemId: string): Promise<DriveSiteSnapshot> {
+    const capturedAt = new Date()
     const root = await db.driveItem.findFirst({
       where: {
         id: sourceFolderItemId,
@@ -873,6 +911,7 @@ export class DriveSiteService {
         files.push({
           sourceItemId: child.id,
           relativePath,
+          updatedAt: child.updatedAt,
           storageKey: child.storageKey,
           contentType: child.mimeType,
           size: child.size,
@@ -882,6 +921,7 @@ export class DriveSiteService {
     const defaultEntryPath = htmlFiles.find((path) => path.toLowerCase() === "index.html") ?? null
     if (htmlFiles.length === 0) throw new BadRequestException("未找到 HTML 文件。")
     return {
+      capturedAt,
       sourceFolderItemId: root.id,
       sourceFolderName: root.name,
       files,

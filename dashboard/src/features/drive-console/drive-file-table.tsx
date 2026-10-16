@@ -32,6 +32,7 @@ export function DriveFileTable({
   onMove,
   onRename,
   onShare,
+  onUploadNewVersion,
   onNavigate = navigateDriveBrowserUrl,
   onDropFiles,
   onLoadMoreChildren,
@@ -45,6 +46,7 @@ export function DriveFileTable({
   readonly onMove: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
+  readonly onUploadNewVersion?: (item: DriveBrowserItemDto) => void
   readonly onNavigate?: DriveBrowserNavigate
   readonly onDropFiles: (files: readonly File[]) => void
   readonly onLoadMoreChildren?: () => void
@@ -99,6 +101,7 @@ export function DriveFileTable({
               onMove={onMove}
               onRename={onRename}
               onShare={onShare}
+              onUploadNewVersion={onUploadNewVersion}
               onNavigate={onNavigate}
             />
           ))}
@@ -147,6 +150,7 @@ function DriveFileRow({
   onMove,
   onRename,
   onShare,
+  onUploadNewVersion,
   onNavigate,
 }: {
   readonly item: DriveBrowserItemDto
@@ -154,6 +158,7 @@ function DriveFileRow({
   readonly onMove: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
+  readonly onUploadNewVersion?: (item: DriveBrowserItemDto) => void
   readonly onNavigate: DriveBrowserNavigate
 }) {
   return (
@@ -211,6 +216,9 @@ function DriveFileRow({
             </DropdownMenuTrigger>
             <DropdownMenuContent data-drive-telemetry-scope='portal' align='end' onClick={(event) => event.stopPropagation()}>
               <DropdownMenuGroup>
+                {item.type === 'file' && onUploadNewVersion ? (
+                  <DropdownMenuItem data-drive-telemetry-event='web.drive.item.upload-version-open' onClick={() => onUploadNewVersion(item)}>上传新版本…</DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem data-drive-telemetry-event='web.drive.item.rename-open' onClick={() => onRename(item)}>
                   重命名
                 </DropdownMenuItem>

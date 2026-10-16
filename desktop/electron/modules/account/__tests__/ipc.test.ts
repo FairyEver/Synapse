@@ -578,7 +578,7 @@ describe("accountIpcModule", () => {
         parentId: null,
         items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: null }],
       },
-      { onProgress: expect.any(Function) },
+      { onProgress: expect.any(Function), replaceFile: expect.any(Function) },
     )
     expect(emitted).toContainEqual(expect.objectContaining({
       domain: "account",

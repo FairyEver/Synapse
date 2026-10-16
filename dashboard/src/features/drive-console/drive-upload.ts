@@ -1,12 +1,14 @@
 import type { DriveFolderUploadPrepareResult, DriveUploadPrepareResult } from '@synapse/shared'
 import { ApiError } from '@/lib/api'
 import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
+import { prepareDriveUploadReview, type DriveReviewedFile, type DriveReviewedFolder, type DriveWebUploadReview } from './drive-upload-review'
 import { startDriveOperation } from '@/features/drive-browser/shared/drive-telemetry'
 
 export type DriveWebUploadInput = {
   readonly parentId: string | null
   readonly files: readonly File[]
   readonly folders?: readonly DriveWebFolderUploadInput[]
+  readonly review?: DriveWebUploadReview
 }
 
 export type DriveWebFolderUploadFile = {
@@ -56,32 +58,13 @@ export async function uploadDriveFiles(input: DriveWebUploadInput): Promise<Driv
   let failed = 0
   let skipped = 0
   let firstMessage: string | undefined
-  const looseFiles: File[] = []
-  const folderGroups = new Map<string, {
-    readonly folderName: string
-    readonly directories: string[]
-    readonly files: DriveWebFolderUploadFile[]
-  }>()
-
-  for (const file of input.files) {
-    const folderFile = driveFolderUploadFile(file)
-    if (folderFile) {
-      const group = folderGroups.get(folderFile.folderName) ?? { folderName: folderFile.folderName, directories: [], files: [] }
-      group.files.push({ file, relativePath: folderFile.relativePath })
-      folderGroups.set(folderFile.folderName, group)
-      continue
-    }
-    looseFiles.push(file)
+  const review = input.review ?? await prepareDriveUploadReview(input)
+  if (input.review && input.review.parentId !== input.parentId) throw new Error('上传位置已变化，请重新选择文件')
+  if (!input.review && review.overwrites.length > 0) {
+    return { completed: 0, failed: 0, skipped: review.files.length + review.folders.reduce((sum, folder) => sum + folder.files.length, 0), message: '请确认覆盖文件后上传' }
   }
 
-  for (const folder of input.folders ?? []) {
-    const group = folderGroups.get(folder.folderName) ?? { folderName: folder.folderName, directories: [], files: [] }
-    group.directories.push(...folder.directories)
-    group.files.push(...folder.files)
-    folderGroups.set(folder.folderName, group)
-  }
-
-  for (const file of looseFiles) {
+  for (const file of review.files) {
     const result = await uploadOneDriveFile(input.parentId, file)
     completed += result.completed
     failed += result.failed
@@ -89,7 +72,7 @@ export async function uploadDriveFiles(input: DriveWebUploadInput): Promise<Driv
     firstMessage ??= result.message
   }
 
-  for (const folder of folderGroups.values()) {
+  for (const folder of review.folders) {
     const result = await uploadOneDriveFolder(input.parentId, folder)
     completed += result.completed
     failed += result.failed
@@ -133,22 +116,16 @@ export async function pickDriveFolderForUpload(): Promise<DriveFolderPickerResul
   }
 }
 
-function driveFolderUploadFile(file: File): { readonly folderName: string; readonly relativePath: string } | null {
-  const relativePath = (file as File & { readonly webkitRelativePath?: string }).webkitRelativePath
-  if (typeof relativePath !== 'string') return null
-  const segments = relativePath.split(/[\\/]+/u).filter(Boolean)
-  if (segments.length < 2) return null
-  return { folderName: segments[0], relativePath: segments.slice(1).join('/') }
-}
-
-async function uploadOneDriveFile(parentId: string | null, file: File): Promise<DriveWebUploadResult> {
+async function uploadOneDriveFile(parentId: string | null, entry: DriveReviewedFile): Promise<DriveWebUploadResult> {
+  const { file } = entry
   let prepared: DriveUploadPrepareResult
   try {
     prepared = await driveApi.prepareUpload({
       parentId,
-      name: file.name,
+      name: entry.name,
       size: String(file.size),
       mimeType: file.type || null,
+      ...entry.guard,
     })
   } catch (error) {
     return { completed: 0, failed: 1, skipped: 0, message: errorMessage(error, '上传准备失败') }
@@ -159,18 +136,20 @@ async function uploadOneDriveFile(parentId: string | null, file: File): Promise<
 
 async function uploadOneDriveFolder(
   parentId: string | null,
-  folder: DriveWebFolderUploadInput,
+  folder: DriveReviewedFolder,
 ): Promise<DriveWebUploadResult> {
   let prepared: DriveFolderUploadPrepareResult
   try {
     prepared = await driveApi.prepareFolderUpload({
       parentId,
       folderName: folder.folderName,
+      ...(folder.expectedRootItemId ? { expectedRootItemId: folder.expectedRootItemId } : { createRootOnly: true }),
       directories: folderDirectories(folder.files.map((file) => file.relativePath), folder.directories).map((relativePath) => ({ relativePath })),
-      files: folder.files.map(({ file, relativePath }) => ({
+      files: folder.files.map(({ file, relativePath, guard }) => ({
         relativePath,
         size: String(file.size),
         mimeType: file.type || null,
+        ...guard,
       })),
     })
   } catch (error) {

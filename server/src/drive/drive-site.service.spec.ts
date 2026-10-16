@@ -33,6 +33,38 @@ describe("DriveSiteService", () => {
     ])
   })
 
+  it("reports unpublished same-size source edits and clears the state after republishing", async () => {
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, createMemoryStorage() as never)
+    const site = await service.createSite("user-1", "https://synapse.test", { sourceFolderItemId: "folder-1", name: "原型", entryPath: null })
+    expect(site).toMatchObject({ needsRepublish: false, sourceAvailable: true })
+    const source = await prisma.driveItem.findFirst({ where: { id: "index", userId: "user-1" } })
+    Object.assign(source!, { storageKey: "drive/index-v2", updatedAt: new Date(Date.now() + 1000) })
+    expect((await service.listSites("user-1", "https://synapse.test")).items[0]).toMatchObject({ needsRepublish: true, sourceAvailable: true })
+    Object.assign(source!, { updatedAt: new Date("2026-01-01T00:00:00.000Z") })
+    const published = await service.republishSite("user-1", site.siteId, "https://synapse.test", {})
+    expect(published).toMatchObject({ siteId: site.siteId, url: site.url, needsRepublish: false })
+  })
+
+  it("reports unpublished added and removed source files without changing the live deployment", async () => {
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, createMemoryStorage() as never)
+    const site = await service.createSite("user-1", "https://synapse.test", { sourceFolderItemId: "folder-1", name: "原型", entryPath: null })
+    const source = await prisma.driveItem.findFirst({ where: { id: "logo", userId: "user-1" } })
+    Object.assign(source!, { parentId: "outside" })
+    const listed = (await service.listSites("user-1", "https://synapse.test")).items[0]
+    expect(listed).toMatchObject({ needsRepublish: true, fileCount: 3, url: site.url })
+  })
+
+  it("keeps the live site readable when the source folder is unavailable", async () => {
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, createMemoryStorage() as never)
+    const site = await service.createSite("user-1", "https://synapse.test", { sourceFolderItemId: "folder-1", name: "原型", entryPath: null })
+    const source = await prisma.driveItem.findFirst({ where: { id: "folder-1", userId: "user-1" } })
+    Object.assign(source!, { userId: "other-user" })
+    expect((await service.listSites("user-1", "https://synapse.test")).items[0]).toMatchObject({ sourceAvailable: false, needsRepublish: null, url: site.url })
+  })
+
   it("creates a public non-expiring site when access settings are omitted", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma()
@@ -842,7 +874,7 @@ function createMemoryPrisma(seed: {
         const deployment = createDeploymentRecord({
           ...args.data,
           id: `dep-${deploymentCounter}`,
-          createdAt: now,
+          createdAt: args.data.createdAt ?? now,
         })
         deployments.push(deployment)
         return deployment
@@ -1037,6 +1069,7 @@ function createItem(overrides: Record<string, unknown>) {
     storageKey: "drive/file",
     storageStatus: "active",
     uploadStatus: "completed",
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     lifecycleStatus: "active",
     deletedAt: null,
     ...overrides,

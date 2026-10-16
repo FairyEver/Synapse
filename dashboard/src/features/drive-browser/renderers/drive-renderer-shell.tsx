@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
+  buildOwnerDriveBrowserUrl,
   type DriveCollaborationJoinContext,
   type DriveBrowserEditUnavailableReason,
   type DriveBrowserSnapshotDto,
@@ -206,6 +207,21 @@ function DriveRendererShellChrome({
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [pendingRendererId, setPendingRendererId] = useState<DriveRendererId | null>(null)
   const versionItemId = getDriveFileVersionItemId(snapshot)
+  useEffect(() => {
+    if (!versionItemId) return
+    const openRequestedHistory = () => {
+      const url = new URL(window.location.href)
+      const currentPath = new URL(snapshot.current.browserUrl, window.location.origin).pathname
+      if (url.pathname !== currentPath && url.pathname !== buildOwnerDriveBrowserUrl(versionItemId)) return
+      if (url.searchParams.get('versions') !== '1') return
+      setVersionsOpen(true)
+      url.searchParams.delete('versions')
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+    openRequestedHistory()
+    window.addEventListener('popstate', openRequestedHistory)
+    return () => window.removeEventListener('popstate', openRequestedHistory)
+  }, [snapshot.current.browserUrl, versionItemId])
   const pdfExport = useDriveMarkdownPdfExport({ snapshot, context: annotationContext, hasUnsavedChanges })
   const useFloatingChrome = body && selected.id === 'iframe'
   const requestRendererChange = (id: DriveRendererId) => {

@@ -17,6 +17,7 @@ describe("driveSyncIpcModule", () => {
     expect(driveSyncIpcModule.methods).not.toHaveProperty("createBinding")
     expect(driveSyncIpcModule.methods.previewBinding.operationId).toBe("app.drive_sync.bindings.preview")
     expect(driveSyncIpcModule.methods.createSafeBinding.operationId).toBe("app.drive_sync.bindings.safe_create")
+    expect(driveSyncIpcModule.methods.previewRemoval.operationId).toBe("app.drive.sync.binding.removal.preview")
     expect(driveSyncIpcModule.methods.removeBinding.operationId).toBe("app.drive_sync.bindings.remove")
     expect(driveSyncIpcModule.methods.pauseBinding.operationId).toBe("app.drive_sync.bindings.pause")
     expect(driveSyncIpcModule.methods.resumeBinding.operationId).toBe("app.drive_sync.bindings.resume")

@@ -1,5 +1,6 @@
 import type {
   DriveSyncBindingStatus,
+  DriveSyncRemovalDisposition,
   DriveSyncConflictResolutionAction,
   DriveSyncExcludeRulesDto,
   DriveSyncInitialDirection,
@@ -21,6 +22,12 @@ export interface DriveSyncBindingEntryV1 extends Record<string, unknown> {
   drivePathHint: string | null
   localPath: string
   status: DriveSyncBindingStatus
+  removalCleanup?: {
+    disposition: DriveSyncRemovalDisposition
+    local: Array<{ path: string; stamp: string; done: boolean }>
+    remote: Array<{ path: string; itemId: string; stamp: string; done: boolean }>
+    errors: string[]
+  }
   remoteCursor: string | null
   lastSyncedAt: string | null
   lastError: string | null
@@ -240,6 +247,7 @@ function isDriveSyncBindingEntryV1(value: unknown): value is DriveSyncBindingEnt
   return versionValid
     && ownershipValid
     && initializationValid
+    && (value.removalCleanup === undefined || isDriveSyncRemovalCleanup(value.removalCleanup))
     && isNonEmptyString(value.id)
     && isNonEmptyString(value.driveItemId)
     && isNonEmptyString(value.driveItemName)
@@ -253,6 +261,14 @@ function isDriveSyncBindingEntryV1(value: unknown): value is DriveSyncBindingEnt
     && isDriveSyncExcludeRules(value.excludeRules)
     && isIsoDateString(value.createdAt)
     && isIsoDateString(value.updatedAt)
+}
+
+function isDriveSyncRemovalCleanup(value: unknown): boolean {
+  if (!isRecord(value) || !["keep_both", "keep_local", "keep_remote", "delete_both"].includes(String(value.disposition))) return false
+  const validStep = (step: unknown) => isRecord(step) && isNonEmptyString(step.path) && isNonEmptyString(step.stamp) && typeof step.done === "boolean"
+  return Array.isArray(value.local) && value.local.every(validStep)
+    && Array.isArray(value.remote) && value.remote.every((step) => validStep(step) && isRecord(step) && isNonEmptyString(step.itemId))
+    && isStringArray(value.errors)
 }
 
 function migrateBindingV2ToV3(value: unknown): unknown {

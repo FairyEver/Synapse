@@ -1,3 +1,4 @@
+import type { DriveSyncService } from "../../services/drive-sync-service"
 import path from "node:path"
 import { app, BrowserWindow, dialog } from "electron"
 import { z } from "zod"
@@ -129,6 +130,15 @@ const driveItemSchema = z.object({
   updatedAt: z.string(),
 })
 
+const driveFileReplaceInputSchema = z.object({ itemId: z.string().min(1), filePath: z.string().min(1) })
+const driveFileReplacePreviewSchema = z.object({
+  itemId: z.string(), name: z.string(), localName: z.string(), size: z.string(), previousSize: z.string(),
+  versionId: z.string(), confirmationToken: z.string(), blockedReason: z.string().nullable(),
+  syncImpacts: z.array(z.object({ bindingId: z.string(), localPath: z.string(), status: z.enum(["initializing", "active", "paused", "conflict", "error", "removed"]) })),
+})
+const driveFileReplaceApplySchema = driveFileReplaceInputSchema.extend({ confirmationToken: z.string().min(1) })
+const driveFileReplaceResultSchema = z.object({ item: driveItemSchema, versionId: z.string(), syncPending: z.boolean() })
+
 const driveFileVersionSchema = z.object({
   id: z.string(),
   itemId: z.string(),
@@ -236,6 +246,8 @@ const drivePublicAssetSchema = z.object({
 })
 
 const driveSiteSchema = z.object({
+  needsRepublish: z.boolean().nullable().optional(),
+  sourceAvailable: z.boolean().optional(),
   id: z.string(),
   siteId: z.string(),
   name: z.string(),
@@ -477,6 +489,7 @@ const driveLocalUploadRelativePathSchema = z.string().min(1).refine(
 )
 
 const driveLocalUploadFileItemSchema = z.object({
+  replacementToken: z.string().min(1).optional(),
   kind: z.literal("file"),
   path: z.string().min(1),
   name: z.string().min(1),
@@ -485,12 +498,16 @@ const driveLocalUploadFileItemSchema = z.object({
 })
 
 const driveLocalUploadFolderItemSchema = z.object({
+  expectedRootItemId: z.string().min(1).optional(),
+  createRootOnly: z.boolean().optional(),
   kind: z.literal("folder"),
   folderName: z.string().min(1),
   directories: z.array(z.object({
     relativePath: driveLocalUploadRelativePathSchema,
   })).max(DRIVE_LOCAL_UPLOAD_MAX_DIRECTORIES).optional(),
   files: z.array(z.object({
+    expectedItemId: z.string().min(1).optional(),
+    replacementToken: z.string().min(1).optional(),
     path: z.string().min(1),
     relativePath: driveLocalUploadRelativePathSchema,
     mimeType: z.string().nullable().optional(),
@@ -1272,6 +1289,20 @@ export const accountIpcModule: IpcModule = {
         })
       },
     },
+    previewDriveFileReplacement: {
+      kind: "invoke",
+      operationId: "app.drive.file.replace.preview",
+      request: driveFileReplaceInputSchema,
+      response: driveFileReplacePreviewSchema,
+      handler: (ctx, input) => ctx.resolve<DriveSyncService>("core.drive-sync").previewFileReplacement(driveFileReplaceInputSchema.parse(input)),
+    },
+    applyDriveFileReplacement: {
+      kind: "invoke",
+      operationId: "app.drive.file.replace.apply",
+      request: driveFileReplaceApplySchema,
+      response: driveFileReplaceResultSchema,
+      handler: (ctx, input) => ctx.resolve<DriveSyncService>("core.drive-sync").applyFileReplacement(driveFileReplaceApplySchema.parse(input)),
+    },
     prepareDriveUpload: {
       kind: "invoke",
       operationId: "app.drive.upload.prepare",
@@ -1318,7 +1349,7 @@ export const accountIpcModule: IpcModule = {
           return runGuardedDriveLocalUpload({
             ctx,
             request,
-            run: () => accountService.uploadDriveLocalItems(request),
+            run: () => accountService.uploadDriveLocalItems(request, { replaceFile: (replacement) => ctx.resolve<DriveSyncService>("core.drive-sync").applyFileReplacement(replacement) }),
           })
         }
         const taskId = request.taskId
@@ -1335,7 +1366,7 @@ export const accountIpcModule: IpcModule = {
           ctx,
           request,
           run: async () => {
-            const result = await accountService.uploadDriveLocalItems(request, { onProgress: emitProgress })
+            const result = await accountService.uploadDriveLocalItems(request, { onProgress: emitProgress, replaceFile: (replacement) => ctx.resolve<DriveSyncService>("core.drive-sync").applyFileReplacement(replacement) })
             emitProgress({ type: "task-finished", taskId, result })
             return result
           },

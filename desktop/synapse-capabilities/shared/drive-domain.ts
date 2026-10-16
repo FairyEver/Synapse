@@ -10,6 +10,8 @@ const PUBLIC_ASSET_SUPPORTED_FORMATS = "PNG, JPG, JPEG, GIF, WebP, AVIF, ICO, PD
 const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
   { id: "app.drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
+  { id: "app.drive.file.replace.preview" as CapabilityId, title: "Preview file replacement", description: "Review independent local finished bytes as a new version of one owned Drive file, including affected local sync bindings.", mutates: false },
+  { id: "app.drive.file.replace.apply" as CapabilityId, title: "Upload new file version", description: "Replace a reviewed same-extension Drive file by stable item identity, preserving name and links, with version preconditions and sync protection.", mutates: true, risk: "high" },
   { id: "app.drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive once, creating a new file or replacing the newest same-name one. Replacing an existing text-like file requires declaring the version it is based on. This does not create a persistent local sync binding.", mutates: true },
   { id: "app.drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive once, merging same-name folders and overwriting same-name files. This does not create a persistent local sync binding.", mutates: true },
   { id: "app.drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
@@ -67,7 +69,8 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.sync.binding.create" as CapabilityId, title: "Create sync binding", description: "Create a persistent local file or folder sync binding after repeating the safety preflight.", mutates: true, risk: "high" },
   { id: "app.drive.sync.binding.pause" as CapabilityId, title: "Pause sync binding", description: "Pause one persistent local Drive sync binding.", mutates: true },
   { id: "app.drive.sync.binding.resume" as CapabilityId, title: "Resume sync binding", description: "Resume and catch up one persistent local Drive sync binding.", mutates: true },
-  { id: "app.drive.sync.binding.remove" as CapabilityId, title: "Remove sync binding", description: "Stop and remove one sync binding without deleting the local or Drive content.", mutates: true },
+  { id: "app.drive.sync.binding.removal.preview" as CapabilityId, title: "Preview sync removal", description: "Review detachment and recoverable local or cloud cleanup, preserving excluded and unmanaged contents.", mutates: false },
+  { id: "app.drive.sync.binding.remove" as CapabilityId, title: "Remove sync binding", description: "Detach one sync binding, retaining both sides by default or applying a reviewed recoverable cleanup disposition.", mutates: true, risk: "high" },
   { id: "app.drive.sync.binding.exclude_rules.update" as CapabilityId, title: "Update sync exclude rules", description: "Replace editable exclude rules for one folder sync binding.", mutates: true },
   { id: "app.drive.sync.binding.rescan" as CapabilityId, title: "Rescan sync binding", description: "Run a complete catch-up scan for one sync binding.", mutates: true },
   { id: "app.drive.sync.conflict.resolve" as CapabilityId, title: "Resolve sync conflict", description: "Resolve one local Drive sync conflict using the user's explicit choice.", mutates: true, risk: "high" },
@@ -212,6 +215,16 @@ export function buildDriveTools(): McpToolDefinition[] {
         },
         required: ["itemId"],
       },
+    },
+    {
+      name: "drive_file_replace_preview",
+      description: "Preview uploading independent finished local bytes as a new version of a specific owned Drive file. Use this for explicit whole-file replacement, including Markdown, instead of claiming bytes derive from an existing version. Requires the same extension; the Drive name, id, share links, and sync bindings are retained. Review blockedReason and syncImpacts, then call drive_file_replace_apply with confirmationToken. Pending local edits/conflicts block replacement. Preview expires after 15 minutes.",
+      inputSchema: { type: "object", properties: { itemId: stringField("Exact owned Drive file id."), filePath: stringField("Absolute finished local file path; same extension as target.") }, required: ["itemId", "filePath"] },
+    },
+    {
+      name: "drive_file_replace_apply",
+      description: "Apply a reviewed independent whole-file replacement using the preview confirmationToken. Repeat preview if local bytes, cloud version, account or sync configuration changed. Returns verified cloud version and syncPending; cloud success does not mean every device has synchronized. Existing text edits still use content inspect/patch.",
+      inputSchema: { type: "object", properties: { itemId: stringField("Same file id reviewed."), filePath: stringField("Same absolute local path reviewed."), confirmationToken: stringField("Token returned by drive_file_replace_preview.") }, required: ["itemId", "filePath", "confirmationToken"] },
     },
     {
       name: "drive_file_upload",
@@ -850,13 +863,14 @@ export function buildDriveTools(): McpToolDefinition[] {
       },
     },
     {
+      name: "drive_sync_binding_removal_preview",
+      description: "Preview detaching a sync binding with keep_both (default), keep_local (trash cloud), keep_remote (trash local), or delete_both. Only tracked included contents are trashed; excluded and unmanaged contents remain. Cloud trash affects shares and other devices. Retry partial cleanup by the same bindingId with a fresh preview; completed paths never run again.",
+      inputSchema: { type: "object", properties: { bindingId: stringField("Sync binding id."), disposition: { type: "string", enum: ["keep_both", "keep_local", "keep_remote", "delete_both"] } }, required: ["bindingId"] },
+    },
+    {
       name: "drive_sync_binding_remove",
-      description: "Stop and remove one local Drive sync binding. Local and Drive content remain in place.",
-      inputSchema: {
-        type: "object",
-        properties: { bindingId: stringField("Sync binding id returned by create or snapshot."), },
-        required: ["bindingId"],
-      },
+      description: "Stop and detach one local Drive sync binding. keep_both retains both sides by default. Other dispositions require the fresh confirmationToken returned by drive_sync_binding_removal_preview; detach is persisted before recoverable trash. Returns separate per-side results and errors. Partial failures can be previewed and retried by the same bindingId.",
+      inputSchema: { type: "object", properties: { bindingId: stringField("Sync binding id."), disposition: { type: "string", enum: ["keep_both", "keep_local", "keep_remote", "delete_both"] }, confirmationToken: stringField("Reviewed token required for any cleanup.") }, required: ["bindingId"] },
     },
     {
       name: "drive_sync_binding_exclude_rules_update",

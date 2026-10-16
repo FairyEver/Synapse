@@ -14,6 +14,7 @@ import { useDriveBrowser } from '@/features/drive-browser/use-drive-browser'
 import { driveApi } from '@/lib/api'
 import { DriveConsoleItemPage, DriveConsolePage } from './drive-console-page'
 import { pickDriveFolderForUpload, uploadDriveFiles } from './drive-upload'
+import { prepareDriveUploadReview, reviewDriveFileReplacement } from './drive-upload-review'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -63,6 +64,11 @@ vi.mock('./drive-upload', () => ({
   uploadDriveFiles: vi.fn(),
 }))
 
+vi.mock('./drive-upload-review', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./drive-upload-review')>()
+  return { ...actual, prepareDriveUploadReview: vi.fn(), reviewDriveFileReplacement: vi.fn() }
+})
+
 vi.mock('sonner', () => ({
   toast: vi.fn(),
 }))
@@ -72,6 +78,7 @@ let host: HTMLDivElement | null = null
 let queryClient: QueryClient | null = null
 
 beforeEach(() => {
+  vi.mocked(prepareDriveUploadReview).mockImplementation(async (input) => ({ parentId: input.parentId, files: [], folders: [], overwrites: [] }))
   globalThis.ResizeObserver = class ResizeObserver {
     observe() {}
     unobserve() {}
@@ -312,6 +319,47 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).not.toContain('同步')
   })
 
+  it('reviews an explicit new version before uploading and distinguishes cloud completion', async () => {
+    const base = folderSnapshot()
+    const target = { ...base.children[0], id: 'cloud', name: 'cloud.md', type: 'file' as const }
+    mockReadySnapshot({ ...base, children: [target] })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    const file = new File(['new'], 'local.md')
+    const review = { parentId: null, files: [{ file, name: 'cloud.md', guard: { expectedItemId: 'cloud', expectedVersionId: 'v1' } }], folders: [], overwrites: [{ path: 'cloud.md', itemId: 'cloud', size: '3' }] }
+    vi.mocked(reviewDriveFileReplacement).mockResolvedValue(review)
+    vi.mocked(uploadDriveFiles).mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
+    await render(<DriveConsolePage />)
+    await openMoreActions()
+    await click(menuItem('上传新版本…'))
+    const picker = document.querySelector<HTMLInputElement>('input[data-drive-replacement-picker]')
+    if (!picker) throw new Error('missing replacement picker')
+    expect(picker.accept).toBe('.md')
+    Object.defineProperty(picker, 'files', { value: [file], configurable: true })
+    await act(async () => picker.dispatchEvent(new Event('change', { bubbles: true })))
+    expect(reviewDriveFileReplacement).toHaveBeenCalledWith(expect.objectContaining({ id: 'cloud', parentId: null }), file)
+    expect(uploadDriveFiles).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('其他设备')
+    await click(button('确认上传'))
+    expect(uploadDriveFiles).toHaveBeenCalledWith(expect.objectContaining({ review }))
+    expect(toast).toHaveBeenCalledWith('云端已更新；同步设备将按各自状态处理更新', expect.objectContaining({ action: { label: '查看历史版本', onClick: expect.any(Function) } }))
+  })
+
+  it('keeps collision uploads pending until confirmed and allows cancellation', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    const file = new File(['new'], 'notes.md')
+    vi.mocked(prepareDriveUploadReview).mockResolvedValue({ parentId: null, files: [{ file, name: 'notes.md', guard: { expectedItemId: 'cloud', expectedVersionId: 'v1' } }], folders: [], overwrites: [{ path: 'notes.md', itemId: 'cloud', size: '3' }] })
+    await render(<DriveConsolePage />)
+    const picker = document.querySelector<HTMLInputElement>('input[type="file"]')!
+    Object.defineProperty(picker, 'files', { value: [file], configurable: true })
+    await act(async () => picker.dispatchEvent(new Event('change', { bubbles: true })))
+    expect(uploadDriveFiles).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('确认覆盖文件')
+    await click(button('取消'))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(uploadDriveFiles).not.toHaveBeenCalled()
+  })
+
   it('uploads selected files to the current folder and refreshes', async () => {
     const snapshot = folderSnapshot()
     const reload = vi.fn(async () => snapshot)
@@ -337,7 +385,7 @@ describe('DriveConsolePage', () => {
       fileInput.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
-    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
+    expect(uploadDriveFiles).toHaveBeenCalledWith(expect.objectContaining({ parentId: null, files: [file], review: expect.any(Object) }))
     expect(reload).toHaveBeenCalled()
   })
 
@@ -369,7 +417,7 @@ describe('DriveConsolePage', () => {
       folderInput.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
-    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
+    expect(uploadDriveFiles).toHaveBeenCalledWith(expect.objectContaining({ parentId: null, files: [file], review: expect.any(Object) }))
     expect(reload).toHaveBeenCalled()
   })
 
@@ -400,7 +448,7 @@ describe('DriveConsolePage', () => {
 
     await click(button('上传文件夹'))
 
-    expect(uploadDriveFiles).toHaveBeenCalledWith({
+    expect(uploadDriveFiles).toHaveBeenCalledWith(expect.objectContaining({
       parentId: null,
       files: [],
       folders: [{
@@ -408,7 +456,7 @@ describe('DriveConsolePage', () => {
         directories: ['docs/empty'],
         files: [],
       }],
-    })
+    }))
     expect(reload).toHaveBeenCalled()
   })
 
@@ -429,7 +477,7 @@ describe('DriveConsolePage', () => {
       dropzone.dispatchEvent(event)
     })
 
-    expect(uploadDriveFiles).toHaveBeenCalledWith({ parentId: null, files: [file] })
+    expect(uploadDriveFiles).toHaveBeenCalledWith(expect.objectContaining({ parentId: null, files: [file], review: expect.any(Object) }))
   })
 
   it('shares a row with default web settings and refreshes', async () => {

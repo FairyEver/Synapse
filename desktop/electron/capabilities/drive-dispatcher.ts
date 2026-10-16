@@ -60,6 +60,7 @@ import type {
   DriveSyncConflictResolutionAction,
   DriveSyncCreateSafeBindingInput,
   DriveSyncInitialDirection,
+  DriveSyncRemovalDisposition,
   DriveTrashItemDto,
   DriveTrashListPageDto,
   DriveUploadOverwriteTargetDto,
@@ -274,6 +275,18 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             ok: true,
             data: await deps.accountService.getDriveItem(requireString(params, "itemId")),
           }))
+        case "app.drive.file.replace.preview":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const filePath = requireLocalPath(params, "filePath")
+            await authorizeFileRead(deps, filePath, context, action)
+            return { ok: true, data: await requireDriveSyncService(deps).previewFileReplacement({ itemId: requireString(params, "itemId"), filePath }) }
+          })
+        case "app.drive.file.replace.apply":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const filePath = requireLocalPath(params, "filePath")
+            await authorizeFileRead(deps, filePath, context, action)
+            return { ok: true, data: await requireDriveSyncService(deps).applyFileReplacement({ itemId: requireString(params, "itemId"), filePath, confirmationToken: requireString(params, "confirmationToken") }) }
+          })
         case "app.drive.file.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadFile(deps, fileSystem, fetchImpl, params, context))
@@ -666,11 +679,15 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             ok: true,
             data: await requireDriveSyncService(deps).resumeBinding(requireString(params, "bindingId")),
           }))
+        case "app.drive.sync.binding.removal.preview":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true, data: await requireDriveSyncService(deps).previewRemoval({ id: requireString(params, "bindingId"), disposition: parseRemovalDisposition(params.disposition) }),
+          }))
         case "app.drive.sync.binding.remove":
-          return dispatchDriveMutation(deps, action, params, context, async () => {
-            await requireDriveSyncService(deps).removeBinding(requireString(params, "bindingId"))
-            return { ok: true, data: { removed: true } }
-          })
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true, data: await requireDriveSyncService(deps).removeBinding(requireString(params, "bindingId"), {
+              disposition: parseRemovalDisposition(params.disposition), confirmationToken: optionalString(params.confirmationToken) }),
+          }))
         case "app.drive.sync.binding.exclude_rules.update":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
@@ -2095,4 +2112,10 @@ function requireStringArray(params: Record<string, unknown>, key: string): strin
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {
   if (Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) return headers
   return { ...headers, "Content-Length": String(sizeBytes) }
+}
+
+function parseRemovalDisposition(value: unknown): DriveSyncRemovalDisposition {
+  if (value === undefined) return "keep_both"
+  if (value === "keep_both" || value === "keep_local" || value === "keep_remote" || value === "delete_both") return value
+  throw new Error("Invalid sync removal disposition.")
 }

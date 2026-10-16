@@ -15,6 +15,7 @@ import {
 } from "@synapse/shared"
 
 export type DrivePrepareUploadInput = {
+  readonly createOnly?: boolean
   readonly parentId: string | null
   readonly name: string
   readonly size: string
@@ -52,6 +53,8 @@ export type DrivePublicAssetRecord = {
 }
 
 export type DrivePrepareFolderUploadInput = {
+  readonly expectedRootItemId?: string
+  readonly createRootOnly?: boolean
   readonly parentId: string | null
   readonly folderName: string
   readonly files: readonly DriveFolderUploadPrepareFileInput[]

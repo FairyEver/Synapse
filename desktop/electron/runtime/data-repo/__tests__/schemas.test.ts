@@ -47,6 +47,14 @@ import {
 } from "../index"
 
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
+  it("rejects malformed persisted sync cleanup before any file processing", () => {
+    const binding = { id: "binding", schemaVersion: 3, ownerUserId: "user", initialDirection: "bind_existing", initialPhase: null, initialCursor: null,
+      driveItemId: "item", driveItemName: "spec.md", remoteParentId: null, drivePathHint: null, localPath: "/tmp/spec.md", kind: "file", status: "removed", remoteCursor: null,
+      lastSyncedAt: null, lastError: null, excludeRules: { forced: [], defaults: [], importedGitignore: [], user: [] }, createdAt: "2026-10-16T00:00:00.000Z", updatedAt: "2026-10-16T00:00:00.000Z" }
+    expect(driveSyncBindingsSchema.validate({ ...binding, removalCleanup: { disposition: "delete_both", local: [{ path: "/tmp/spec.md", stamp: "reviewed", done: false }], remote: [], errors: [] } })).toBe(true)
+    expect(driveSyncBindingsSchema.validate({ ...binding, removalCleanup: { disposition: "delete_both", local: [{ path: "/tmp/spec.md", stamp: "reviewed", done: "false" }], remote: [], errors: [] } })).toBe(false)
+  })
+
   it("validates the versioned connector state envelope", () => {
     expect(connectorsStateSchema.validate({
       schemaVersion: 1,

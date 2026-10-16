@@ -264,9 +264,9 @@ export function DriveSyncDetail({
         </section>
       </div>
       <DialogFrameFooter className="sm:justify-between">
-        <p className="text-sm text-muted-foreground">移除同步后，两端文件均保留。</p>
+        <p className="text-sm text-muted-foreground">解除同步后，两端文件均保留。</p>
         <Button type="button" variant="destructive" disabled={readOnly || pending} onClick={onRequestRemove}>
-          移除同步
+          解除同步
         </Button>
       </DialogFrameFooter>
     </>

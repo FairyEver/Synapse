@@ -31,7 +31,10 @@ import { DriveMoveDialog } from './drive-move-dialog'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
 import { DriveSharesDialog, DriveShareSettingsDialog } from './drive-share-dialogs'
 import { DriveTrashView } from './drive-trash-view'
-import { pickDriveFolderForUpload, uploadDriveFiles, type DriveWebFolderUploadInput, type DriveWebUploadResult } from './drive-upload'
+import { pickDriveFolderForUpload, type DriveWebFolderUploadInput } from './drive-upload'
+import { driveFileExtension } from './drive-upload-review'
+import { DriveUploadReviewDialog } from './drive-upload-review-dialog'
+import { useDriveUpload } from './use-drive-upload'
 import { useDriveConsole, type DriveConsoleState } from './use-drive-console'
 
 type NameDialogState =
@@ -158,7 +161,8 @@ function DriveConsoleContent({
   const [shareTarget, setShareTarget] = useState<DriveBrowserItemDto | null>(null)
   const [sharesOpen, setSharesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const replacementTargetRef = useRef<DriveBrowserItemDto | null>(null)
+  const replacementInputRef = useRef<HTMLInputElement>(null)
   const deleteTriggerRef = useRef<HTMLElement | null>(null)
   const deleteFallbackItemIdRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -248,19 +252,15 @@ function DriveConsoleContent({
     }
   }
 
-  const runUpload = async (input: { readonly files: readonly File[]; readonly folders?: readonly DriveWebFolderUploadInput[] }) => {
-    const parentId = currentFolderId(state)
-    if (input.files.length === 0 && (input.folders?.length ?? 0) === 0) return
-    setUploading(true)
-    try {
-      const result = await uploadDriveFiles({ parentId, files: input.files, folders: input.folders })
-      toast(uploadResultMessage(result))
-      await refreshAfterMutation()
-    } catch (error) {
-      toast(error instanceof Error ? error.message : '上传失败')
-    } finally {
-      setUploading(false)
-    }
+  const upload = useDriveUpload(refreshAfterMutation, onNavigate)
+  const uploading = upload.blocked
+  const runUpload = (input: { readonly files: readonly File[]; readonly folders?: readonly DriveWebFolderUploadInput[] }) => upload.review({ parentId: currentFolderId(state), ...input })
+  const chooseNewVersion = (item: DriveBrowserItemDto) => {
+    if (upload.blocked) return
+    replacementTargetRef.current = item
+    if (!replacementInputRef.current) return
+    replacementInputRef.current.accept = driveFileExtension(item.name)
+    replacementInputRef.current.click()
   }
 
   const pickAndUploadFolder = async () => {
@@ -354,6 +354,7 @@ function DriveConsoleContent({
             onMove={setMoveTarget}
             onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
             onShare={setShareTarget}
+            onUploadNewVersion={chooseNewVersion}
             onNavigate={onNavigate}
             onDropFiles={(files) => { void runUpload({ files }) }}
             onLoadMoreChildren={state.browser.loadMoreChildren}
@@ -362,6 +363,27 @@ function DriveConsoleContent({
           />
         ) : null}
       </TabsContent>
+      <input
+        ref={replacementInputRef}
+        data-drive-replacement-picker
+        data-drive-telemetry-event='web.drive.upload.replacement-file-select'
+        type='file'
+        className='hidden'
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0]
+          const target = replacementTargetRef.current
+          event.currentTarget.value = ''
+          replacementTargetRef.current = null
+          if (file && target) void upload.review({ parentId: currentFolderId(state), files: [file] }, target)
+        }}
+      />
+      <DriveUploadReviewDialog
+        review={upload.pending?.review ?? null}
+        replacement={upload.pending?.replacement ?? false}
+        uploading={upload.uploading}
+        onCancel={upload.cancel}
+        onConfirm={() => { void upload.confirm() }}
+      />
       <Dialog open={nameDialog !== null} onOpenChange={(open) => {
         if (!open) setNameDialog(null)
       }}>
@@ -439,13 +461,6 @@ function currentFolderId(state: DriveConsoleState): string | null {
 
 function isConsoleRootSnapshot(snapshot: DriveBrowserSnapshotDto): boolean {
   return snapshot.breadcrumbs.length === 1 && snapshot.current.browserUrl === buildConsoleDriveRootUrl()
-}
-
-function uploadResultMessage(result: DriveWebUploadResult) {
-  if (result.completed > 0 && result.failed === 0 && result.skipped === 0) return `已上传 ${result.completed} 个文件`
-  if (result.completed > 0) return `已上传 ${result.completed} 个文件，失败 ${result.failed} 个，跳过 ${result.skipped} 个`
-  if (result.skipped > 0 && result.failed === 0) return result.message ?? `已跳过 ${result.skipped} 个文件`
-  return result.message ?? '上传失败'
 }
 
 function errorMessage(error: unknown, fallback: string): string {
