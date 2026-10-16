@@ -661,7 +661,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionLabels()).toEqual(["同步", "新建", "刷新", "更多"])
+    expect(driveToolbarActionLabels()).toEqual(["同步管理", "新建", "刷新", "更多"])
     expect(getButtonByLabel("刷新").querySelector(".lucide-refresh-cw")).not.toBeNull()
     expect(getButtonByLabel("更多").querySelector(".lucide-ellipsis")).not.toBeNull()
   })
@@ -716,7 +716,7 @@ describe("DriveModule", () => {
 
     expect(mocks.getDriveSyncSnapshot).toHaveBeenCalledTimes(1)
     const button = getSyncToolbarButton()
-    expect(button.getAttribute("aria-label")).toBe("同步：2 个同步项目需要处理")
+    expect(button.getAttribute("aria-label")).toBe("同步管理：2 个同步项目需要处理")
     expect(button.dataset.variant).toBe("ghost")
     expect(button.className).toContain("text-destructive")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("destructive")
@@ -744,7 +744,7 @@ describe("DriveModule", () => {
     const button = getSyncToolbarButton()
     expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")).toBeNull()
-    expect(button.getAttribute("aria-label")).toBe("同步")
+    expect(button.getAttribute("aria-label")).toBe("同步管理")
   })
 
   it("shows no top toolbar badge for paused-only bindings", async () => {
@@ -759,7 +759,7 @@ describe("DriveModule", () => {
     const button = getSyncToolbarButton()
     expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")).toBeNull()
-    expect(button.getAttribute("aria-label")).toBe("同步")
+    expect(button.getAttribute("aria-label")).toBe("同步管理")
   })
 
   it("shows drive sync errors as a recoverable badge", async () => {
@@ -772,7 +772,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const button = getSyncToolbarButton()
-    expect(button.getAttribute("aria-label")).toBe("同步：1 个同步项目需要处理")
+    expect(button.getAttribute("aria-label")).toBe("同步管理：1 个同步项目需要处理")
     expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("destructive")
     expect(button.querySelector("svg")).toBeNull()
@@ -805,7 +805,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     const button = getSyncToolbarButton()
-    expect(button.getAttribute("aria-label")).toBe("同步：1 个同步项目需要处理")
+    expect(button.getAttribute("aria-label")).toBe("同步管理：1 个同步项目需要处理")
     expect(button.dataset.variant).toBe("ghost")
     expect(button.querySelector<HTMLElement>("[data-slot='badge']")?.dataset.variant).toBe("destructive")
     expect(button.textContent).toContain("1")
@@ -904,7 +904,7 @@ describe("DriveModule", () => {
     expect(dialog.textContent).not.toContain("spec.md")
   })
 
-  it("keeps sync lists stable until manual refresh and searches both lists by path", async () => {
+  it("keeps the sync list stable until manual refresh and searches by path", async () => {
     const initial = createDriveSyncSnapshot({}, { bindings: [
       createDriveSyncBinding({ id: "binding-1", driveItemName: "Docs", localPath: "/Users/me/Docs" }),
       createDriveSyncBinding({ id: "binding-2", driveItemName: "Notes", localPath: "/Users/me/Notes", drivePathHint: "/Projects/Notes" }),
@@ -928,14 +928,11 @@ describe("DriveModule", () => {
     await search("missing")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("没有匹配的同步项目")
     await search("")
-    await clickButtonText("同步向导"); await chooseWizardOption("修改同步")
     await search("/users/me/notes")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Notes")
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Docs")
-    await act(async () => { driveSyncChangedListener?.(changed); await flushPromises() })
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Notes")
     mocks.getDriveSyncSnapshot.mockResolvedValue(changed)
-    await clickButtonText("刷新")
+    await clickButtonByLabel("刷新同步状态")
     await search("")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Updated")
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Notes")
@@ -1474,7 +1471,7 @@ describe("DriveModule", () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Active")
   })
 
-  it("opens the drive sync binding wizard from a row menu", async () => {
+  it("opens local setup for the selected Drive file without asking for its type again", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", type: "file", name: "report.txt" }),
     ])
@@ -1483,12 +1480,16 @@ describe("DriveModule", () => {
     await flushAct()
 
     await openRowMenu("report.txt")
-    await clickMenuItemText("同步")
+    await clickMenuItemText("与本机同步…")
 
     const dialog = document.querySelector('[role="dialog"]')
     if (!dialog) throw new Error("Drive sync binding dialog not found")
-    expect(dialog.textContent).toContain("同步向导")
-    expect(dialog.textContent).toContain("新建同步")
+    expect(dialog.textContent).toContain("与本机同步")
+    expect(dialog.textContent).toContain("report.txt")
+    expect(dialog.textContent).toContain("选择保存位置")
+    expect(dialog.textContent).toContain("关联已有文件…")
+    expect(dialog.textContent).not.toContain("同步什么？")
+    expect(dialog.textContent).not.toContain("要进行什么操作？")
     expect(mocks.chooseDriveSyncLocalPath).not.toHaveBeenCalled()
     expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
   })
@@ -1535,24 +1536,22 @@ describe("DriveModule", () => {
     const choices = document.querySelectorAll('[role="dialog"] button[aria-labelledby]')
     expect(choices).toHaveLength(3)
     choices.forEach((choice) => expect(choice.querySelector('svg[aria-hidden="true"]')).toBeTruthy())
-    await startSyncWizard("文件", "本地为基础，上传并同步")
-    await clickButtonText("上一步")
-    await chooseWizardOption("本地为基础，上传并同步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("修改同步")
+    await startSyncWizard("文件", "从本机上传并同步")
+    await clickButtonText("上一步"); await chooseWizardOption("文件")
     expect(document.querySelector("#sync-local")).toBeTruthy()
     await clickButtonText("上一步"); await clickButtonText("上一步")
-    await chooseWizardOption("文件")
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("从哪边开始？")
+    await chooseWizardOption("从本机上传并同步"); await chooseWizardOption("文件")
+    expect(document.querySelector("#sync-local")).toBeTruthy()
     expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
   })
 
-  it("requires explicit type and scenario before selecting a local destination", async () => {
+  it("downloads the selected file only after reviewing the local destination", async () => {
     mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
     await render(<DriveModule />); await flushAct()
-    await openRowMenu("report.txt"); await clickMenuItemText("同步")
-    await startSyncWizard("文件", "云端为基础，下载并同步")
+    await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
     expect(mocks.chooseDriveSyncLocalPath).not.toHaveBeenCalled()
-    await clickButtonText("下一步") // remote -> local
     await clickButtonText("选择保存位置")
     expect(mocks.chooseDriveSyncLocalPath).toHaveBeenCalledWith({ kind: "file", mode: "remote_to_local", defaultName: "report.txt" })
     expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
@@ -1566,9 +1565,8 @@ describe("DriveModule", () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
     mocks.previewDriveSyncBinding.mockResolvedValue({ status: "ready", direction: "bind_existing", confirmationToken: "reviewed-token", forcedExcludeRules: [], defaultExcludeRules: [], importedGitignoreRules: [], alignment: { unchanged: 0, changes: [{ relativePath: "", action: "upload", kind: "file" }] } })
     await render(<DriveModule />); await flushAct()
-    await openRowMenu("report.txt"); await clickMenuItemText("同步")
-    await startSyncWizard("文件", "本地和云端都存在")
-    await clickButtonText("选择文件"); await clickButtonText("下一步"); await clickButtonText("下一步")
+    await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("关联已有文件…"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
     await chooseWizardOption("以本地为准，更新云端")
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
@@ -1584,9 +1582,8 @@ describe("DriveModule", () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/folder")
     mocks.previewDriveSyncBinding.mockResolvedValue({ status: "blocked", direction: null, reason: "云盘上是文件，但这里选中的是文件夹。" })
     await render(<DriveModule />); await flushAct()
-    await openRowMenu("report.txt"); await clickMenuItemText("同步")
-    await startSyncWizard("文件", "云端为基础，下载并同步")
-    await clickButtonText("下一步"); await clickButtonText("选择保存位置"); await clickButtonText("下一步")
+    await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("选择保存位置"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("云盘上是文件，但这里选中的是文件夹。")
     await clickButtonText("下载并开始同步")
@@ -1598,17 +1595,110 @@ describe("DriveModule", () => {
       .mockResolvedValue([createDriveItem({ id: "docs", parentId: "projects", type: "folder", name: "Docs" })])
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/Docs")
     await render(<DriveModule />); await flushAct()
-    await clickDriveRow("Projects"); await openRowMenu("Docs"); await clickMenuItemText("同步")
-    await startSyncWizard("文件夹", "云端为基础，下载并同步")
-    await clickButtonText("下一步"); await clickButtonText("选择保存位置"); await clickButtonText("下一步"); await clickButtonText("下一步")
+    await clickDriveRow("Projects"); await openRowMenu("Docs"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("选择保存位置"); await clickButtonText("下一步"); await clickButtonText("下一步")
     expect(mocks.previewDriveSyncBinding).toHaveBeenCalledWith(expect.objectContaining({ driveItemId: "docs", drivePathHint: "/Projects/Docs", kind: "folder" }))
+  })
+
+  it("can associate an existing destination without losing either path or assuming authority", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
+    mocks.previewDriveSyncBinding.mockResolvedValueOnce({
+      status: "blocked", direction: null, reason: "本地目标已存在。", localPath: "/Users/me/report.txt", localKind: "file", localEmpty: false,
+      forcedExcludeRules: [], defaultExcludeRules: [], importedGitignoreRules: [], detectedGitignoreRules: [],
+    })
+    await render(<DriveModule />); await flushAct(); await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("选择保存位置"); await clickButtonText("下一步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本地目标已存在")
+    await clickButtonText("关联此文件")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本次以哪边为准？")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenCalledTimes(1)
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
+    await chooseWizardOption("以云端为准，更新本地")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({
+      driveItemId: "file-1", localPath: "/Users/me/report.txt", directionHint: "bind_existing", authority: "remote",
+    }))
+    await clickButtonText("上一步"); await clickButtonText("上一步")
+    expect((document.querySelector('#sync-local') as HTMLInputElement).value).toBe("/Users/me/report.txt")
+  })
+
+  it("returns to the file list when cancelling item setup and to management when cancelling there", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    await render(<DriveModule />); await flushAct(); await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("取消")
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    await clickSyncToolbarButton(); await clickButtonText("新建同步"); await clickButtonText("取消")
+    expect(document.querySelector('[role="dialog"] input[aria-label="搜索同步"]')).toBeTruthy()
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("从哪边开始？")
+  })
+
+  it("keeps the local draft when cancelling the system path picker", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValueOnce("/Users/me/report.txt").mockResolvedValueOnce(null)
+    await render(<DriveModule />); await flushAct(); await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("选择保存位置"); await clickButtonText("关联已有文件…")
+    expect((document.querySelector('#sync-local') as HTMLInputElement).value).toBe("/Users/me/report.txt")
+    await clickButtonText("下一步")
+    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({ directionHint: "remote_to_local" }))
+  })
+
+  it("opens the created binding details with its current status", async () => {
+    const binding = createDriveSyncBinding({ id: "new-sync", driveItemId: "file-1", driveItemName: "report.txt", kind: "file", localPath: "/Users/me/report.txt", status: "initializing" })
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
+    mocks.createDriveSyncSafeBinding.mockImplementation(async () => {
+      mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
+      return binding
+    })
+    await render(<DriveModule />); await flushAct(); await openRowMenu("report.txt"); await clickMenuItemText("与本机同步…")
+    await clickButtonText("选择保存位置"); await clickButtonText("下一步")
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
+    await clickButtonText("下载并开始同步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/Users/me/report.txt")
+    expect(document.querySelector('[role="dialog"] section[aria-label="同步状态"]')).toBeTruthy()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("修改同步")
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("这条同步已经不存在了")
+  })
+
+  it("returns to the originating detail when cancelling an edit", async () => {
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ driveItemName: "Docs" })] }))
+    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickSyncCard("Docs"); await clickButtonText("修改同步")
+    expect(queryButton("上一步")).toBeNull()
+    await clickButtonText("取消")
+    expect(document.querySelector('[role="dialog"] section[aria-label="同步状态"]')).toBeTruthy()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/Users/me/Docs")
+  })
+
+  it.each([
+    { scenario: "从云盘下载并同步", mode: "remote_to_local" },
+    { scenario: "关联两端已有内容", mode: "bind_existing" },
+  ])("selects the cloud file explicitly when creating $mode from the toolbar", async ({ scenario, mode }) => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", type: "file", name: "report.txt" })])
+    mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/report.txt")
+    await render(<DriveModule />); await flushAct(); await clickDriveToolbarMenuItem("更多", "新建同步")
+    await startSyncWizard("文件", scenario)
+    if (mode === "bind_existing") {
+      await clickButtonText("选择文件"); await clickButtonText("下一步")
+    }
+    const option = document.querySelector('[role="dialog"] [role="radio"]') as HTMLButtonElement
+    await act(async () => { option.click(); await flushPromises() })
+    await clickButtonText("下一步")
+    if (mode === "remote_to_local") {
+      await clickButtonText("选择保存位置"); await clickButtonText("下一步")
+    } else {
+      expect(mocks.previewDriveSyncBinding).not.toHaveBeenCalled()
+      await chooseWizardOption("以本地为准，更新云端")
+    }
+    expect(mocks.previewDriveSyncBinding).toHaveBeenLastCalledWith(expect.objectContaining({ driveItemId: "file-1", directionHint: mode, localPath: "/Users/me/report.txt" }))
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("双向同步")
+    expect(mocks.createDriveSyncSafeBinding).not.toHaveBeenCalled()
   })
 
   it("creates a folder upload only after choosing scope and reviewing", async () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/LocalDocs")
     await render(<DriveModule />); await flushAct()
-    await clickSyncToolbarButton(); await clickButtonText("同步向导")
-    await startSyncWizard("文件夹", "本地为基础，上传并同步")
+    await clickSyncToolbarButton(); await clickButtonText("新建同步")
+    await startSyncWizard("文件夹", "从本机上传并同步")
     await clickButtonText("选择文件夹"); await clickButtonText("下一步")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/LocalDocs")
     await clickButtonText("下一步"); await clickButtonText("下一步")
@@ -1623,7 +1713,7 @@ describe("DriveModule", () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/LocalDocs")
     await render(<DriveModule />); await flushAct(); await clickDriveRow("Projects")
     await clickDriveToolbarMenuItem("更多", "新建同步")
-    await startSyncWizard("文件夹", "本地为基础，上传并同步")
+    await startSyncWizard("文件夹", "从本机上传并同步")
     await clickButtonText("选择文件夹"); await clickButtonText("下一步")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("/Projects/LocalDocs")
     await clickButtonText("下一步"); await clickButtonText("下一步"); await clickButtonText("上传并开始同步")
@@ -1634,7 +1724,7 @@ describe("DriveModule", () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/LocalDocs")
     await render(<DriveModule />); await flushAct()
     await clickDriveToolbarMenuItem("更多", "新建同步")
-    await startSyncWizard("文件夹", "本地为基础，上传并同步")
+    await startSyncWizard("文件夹", "从本机上传并同步")
     await clickButtonText("选择文件夹"); await clickButtonText("下一步"); await clickButtonText("下一步")
     expect(document.querySelector('#sync-gitignore')?.getAttribute("aria-checked")).toBe("false")
     await textAreaInput("sync-rules", "*.tmp\n!important.tmp")
@@ -1648,7 +1738,7 @@ describe("DriveModule", () => {
     mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/file.txt")
     mocks.createDriveSyncSafeBinding.mockResolvedValue(createDriveSyncBinding({ status: "error", lastError: "网络中断" }))
     await render(<DriveModule />); await flushAct(); await clickDriveToolbarMenuItem("更多", "新建同步")
-    await startSyncWizard("文件", "本地为基础，上传并同步")
+    await startSyncWizard("文件", "从本机上传并同步")
     await clickButtonText("选择文件"); await clickButtonText("下一步"); await clickButtonText("下一步"); await clickButtonText("上传并开始同步")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步需要处理")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("网络中断")
@@ -1658,11 +1748,10 @@ describe("DriveModule", () => {
   it("deletes only the selected relationship after confirmation", async () => {
     const binding = createDriveSyncBinding({ id: "selected-sync", driveItemName: "Docs" })
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
-    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonText("同步向导")
-    await chooseWizardOption("删除同步"); await chooseWizardOption("Docs")
+    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonByLabel("更多同步操作 Docs"); await clickMenuItemText("移除同步")
     expect(mocks.removeDriveSyncBinding).not.toHaveBeenCalled()
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("两边文件都会保留")
-    await clickButtonText("删除同步")
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("云盘和电脑上的文件都会保留")
+    await clickAlertDialogButton("移除同步")
     expect(mocks.removeDriveSyncBinding).toHaveBeenCalledWith({ id: "selected-sync" })
     expect(mocks.deleteDriveItem).not.toHaveBeenCalled()
   })
@@ -1670,8 +1759,7 @@ describe("DriveModule", () => {
   it("edits scope while preserving existing imported rules", async () => {
     const binding = createDriveSyncBinding({ id: "selected-sync", driveItemName: "Docs", excludeRules: { forced: [".git/"], defaults: ["node_modules/"], importedGitignore: ["private/"], user: ["*.tmp"] } })
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [binding] }))
-    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickButtonText("同步向导")
-    await chooseWizardOption("修改同步"); await chooseWizardOption("Docs")
+    await render(<DriveModule />); await flushAct(); await clickSyncToolbarButton(); await clickSyncCard("Docs"); await clickButtonText("修改同步")
     await chooseWizardOption("同步范围"); await textAreaInput("sync-rules", "*.log")
     await clickButtonText("下一步"); await clickButtonText("保存同步范围")
     expect(mocks.updateDriveSyncExcludeRules).toHaveBeenCalledWith({ id: "selected-sync", defaults: ["node_modules/"], importedGitignore: ["private/"], user: ["*.log"] })
@@ -1730,7 +1818,7 @@ describe("DriveModule", () => {
     expect(getButtonByLabel("刷新").disabled).toBe(true)
     // 未登录时同步入口仍在，但只有一个健康的同步项目，不给角标。
     expect(getSyncToolbarButton().textContent).toContain("同步")
-    expect(queryButtonByLabel("同步：1 个同步项目需要处理")).toBeNull()
+    expect(queryButtonByLabel("同步管理：1 个同步项目需要处理")).toBeNull()
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
@@ -2087,7 +2175,7 @@ describe("DriveModule", () => {
 
     await openDriveNameContextMenu("作业范文")
 
-    expect(menuItemTexts()).toEqual(["下载", "同步", "复制名称", "复制路径", "重命名", "移动", "信息"])
+    expect(menuItemTexts()).toEqual(["下载", "与本机同步…", "复制名称", "复制路径", "重命名", "移动", "信息"])
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
   })
 
@@ -2212,7 +2300,7 @@ describe("DriveModule", () => {
 
     await openDriveNameContextMenu("cui.md")
 
-    expect(menuItemTexts()).toEqual(["下载", "同步", "复制名称", "复制路径", "重命名", "移动", "信息"])
+    expect(menuItemTexts()).toEqual(["下载", "与本机同步…", "复制名称", "复制路径", "重命名", "移动", "信息"])
 
     await clickText("复制名称")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("cui.md")
@@ -3323,7 +3411,7 @@ describe("DriveModule", () => {
     expect(menu?.querySelectorAll("[role='separator']")).toHaveLength(0)
     expect(menuItemTexts()).toEqual([
       "下载",
-      "同步",
+      "与本机同步…",
       "复制名称",
       "复制路径",
       "重命名",
@@ -3348,7 +3436,7 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["下载", "同步", "复制名称", "复制路径", "重命名", "移动", "信息"])
+    expect(menuItemTexts()).toEqual(["下载", "与本机同步…", "复制名称", "复制路径", "重命名", "移动", "信息"])
     expect(rowButton("shared.txt", "删除")).not.toBeUndefined()
   })
 
@@ -4704,11 +4792,10 @@ async function chooseWizardOption(title: string): Promise<void> {
 }
 async function startSyncWizard(kind: string, scenario: string): Promise<void> {
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("下一步")
-  await chooseWizardOption("新建同步")
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步什么？")
-  await chooseWizardOption(kind)
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("从哪边开始？")
   await chooseWizardOption(scenario)
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步什么？")
+  await chooseWizardOption(kind)
 }
 
 async function clickWizardCheckbox(id: string): Promise<void> {

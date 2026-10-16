@@ -2439,7 +2439,7 @@ function DriveItemMenuItems({
     },
     {
       id: "sync",
-      label: hasSyncBinding ? "同步详情" : "同步",
+      label: hasSyncBinding ? "同步详情" : "与本机同步…",
       onSelect: onOpenSyncBinding,
     },
     {

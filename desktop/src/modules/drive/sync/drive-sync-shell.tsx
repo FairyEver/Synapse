@@ -35,7 +35,7 @@ export type DriveSyncDialogState =
 type DriveSyncView =
   | { readonly kind: "center"; readonly selectedBindingId: string | null }
   | { readonly kind: "detail"; readonly bindingId: string }
-  | { readonly kind: "wizard"; readonly entry: DriveSyncWizardEntry }
+  | { readonly kind: "wizard"; readonly entry: DriveSyncWizardEntry; readonly returnTo: "drive" | "center" | "detail" }
 
 export function DriveSyncDialog({
   controller,
@@ -68,6 +68,7 @@ export function DriveSyncDialog({
     }
     setView({
       kind: "wizard",
+      returnTo: "drive",
       entry: state.mode === "wizard-item"
         ? { mode: "item", item: state.item, drivePathHint: state.drivePathHint }
         : { mode: "local", targetParentId: state.targetParentId, drivePathHint: state.drivePathHint },
@@ -97,6 +98,7 @@ export function DriveSyncDialog({
     }
     setView({
       kind: "wizard",
+      returnTo: "center",
       entry: { mode: "local", targetParentId: null, drivePathHint: null },
     })
   }
@@ -136,7 +138,7 @@ export function DriveSyncDialog({
                       >
                         <RefreshCw />
                       </Button>
-                      <Button type="button" disabled={controller.readOnly} onClick={openWizard}>同步向导</Button>
+                      <Button type="button" disabled={controller.readOnly} onClick={openWizard}>新建同步</Button>
                     </>
                   )}
                 />
@@ -170,7 +172,7 @@ export function DriveSyncDialog({
                       <ArrowLeft />
                     </Button>
                   )}
-                  actions={<Button disabled={controller.readOnly} onClick={() => setView({ kind: "wizard", entry: { mode: "edit", binding: detailBinding } })}>修改同步</Button>}
+                  actions={<Button disabled={controller.readOnly} onClick={() => setView({ kind: "wizard", returnTo: "detail", entry: { mode: "edit", binding: detailBinding } })}>修改同步</Button>}
                   title={detailBinding.driveItemName}
                   description={detailBinding.kind === "folder" ? "文件夹同步" : "文件同步"}
                 />
@@ -210,7 +212,11 @@ export function DriveSyncDialog({
                 controller={controller}
                 entry={view.entry}
                 onBindingCreated={onBindingCreated}
-                onClose={() => setView({ kind: "center", selectedBindingId: null })}
+                onClose={() => {
+                  if (view.returnTo === "drive") onOpenChange(false)
+                  else if (view.returnTo === "detail" && view.entry.mode === "edit") setView({ kind: "detail", bindingId: view.entry.binding.id })
+                  else setView({ kind: "center", selectedBindingId: null })
+                }}
                 onViewBinding={(bindingId) => setView({ kind: "detail", bindingId })}
               />
             )}

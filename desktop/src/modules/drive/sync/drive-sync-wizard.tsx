@@ -1,5 +1,4 @@
-import { useState } from "react"
-import { Plus, Pencil, Unlink, Folder, File, Upload, Download, Link, ListFilter, FolderInput, Cloud, RefreshCw } from "lucide-react"
+import { Folder, File, Upload, Download, Link, ListFilter, FolderInput, Cloud, RefreshCw } from "lucide-react"
 import type { DriveSyncBindingDto } from "@synapse/shared"
 import { GuidedChoices, GuidedFlow } from "@/components/guided-flow"
 import { formatDriveBytes } from "@/lib/drive-format"
@@ -12,8 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DriveSyncRemotePicker } from "./drive-sync-remote-picker"
-import { matchesDriveSyncSearch } from "./drive-sync-copy"
-import { alignmentActionLabels, type SyncWizardEdit, type SyncWizardOperation, type SyncWizardScenario } from "./drive-sync-flow"
+import { alignmentActionLabels, type SyncWizardEdit, type SyncWizardScenario } from "./drive-sync-flow"
 import { useDriveSyncWizard, type DriveSyncWizardEntry } from "./use-drive-sync-wizard"
 import type { DriveSyncController } from "./use-drive-sync"
 export type { DriveSyncWizardEntry } from "./use-drive-sync-wizard"
@@ -25,9 +23,12 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
   readonly onClose: () => void
   readonly onViewBinding: (bindingId: string) => void
 }) {
-  const [bindingQuery, setBindingQuery] = useState("")
-  const flow = useDriveSyncWizard(controller, entry, onBindingCreated)
-  const visibleBindings = flow.bindings.filter((binding) => matchesDriveSyncSearch(binding, bindingQuery))
+  const flow = useDriveSyncWizard(controller, entry, async (binding) => {
+    await onBindingCreated?.(binding)
+    if (binding.status !== "error" && binding.status !== "conflict" && !binding.lastError) onViewBinding(binding.id)
+  })
+  const localKindLabel = flow.kind === "folder" ? "文件夹" : "文件"
+  const title = entry.mode === "item" ? "与本机同步" : entry.mode === "edit" ? "修改同步" : "新建同步"
   if (flow.result) return <>
     <DialogFrameHeader bordered title={flow.result.title} />
     <DialogFrameBody className="overflow-auto px-5 py-5">
@@ -35,56 +36,53 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
       {flow.error && <FieldError>{flow.error}</FieldError>}
     </DialogFrameBody>
     <DialogFrameFooter>
-      <Button variant="outline" onClick={onClose}>返回同步列表</Button>
+      <Button variant="outline" onClick={onClose}>返回</Button>
       {flow.result.binding && <Button onClick={() => onViewBinding(flow.result!.binding!.id)}>查看同步</Button>}
     </DialogFrameFooter>
   </>
-  const finalLabel = flow.operation === "remove" ? "删除同步"
-    : flow.operation === "edit" && flow.edit === "range" ? "保存同步范围"
+  const finalLabel = flow.operation === "edit" && flow.edit === "range" ? "保存同步范围"
     : flow.scenario === "local_to_remote" ? "上传并开始同步"
     : flow.scenario === "remote_to_local" ? "下载并开始同步"
     : flow.authority === "local" ? "更新云端并同步" : "更新本地并同步"
   return (
-    <GuidedFlow title="同步向导" step={flow.step} steps={flow.steps} busy={flow.busy}
+    <GuidedFlow title={title} step={flow.step} steps={flow.steps} busy={flow.busy}
       hideNext={flow.choiceStep} canNext={flow.canNext} nextLabel={flow.step === "confirm" ? finalLabel : "下一步"}
-      destructive={flow.step === "confirm" && flow.operation === "remove"}
-      onBack={flow.step === "action" ? undefined : flow.back} onNext={flow.next} onCancel={onClose}>
+      onBack={flow.step === flow.steps[0].id ? undefined : flow.back} onNext={flow.next} onCancel={onClose}>
       <FieldSet disabled={flow.busy}><FieldGroup>
         {controller.readOnly && <Alert><AlertDescription>{controller.offline ? "联网后可管理同步" : "登录后可管理同步"}</AlertDescription></Alert>}
         {(flow.error || controller.error) && <FieldError>{flow.error || controller.error}</FieldError>}
-        {flow.step === "action" && <GuidedChoices disabled={!flow.canChoose} title="要进行什么操作？" value={flow.operation}
-          onSelect={(value) => flow.chooseOperation(value as SyncWizardOperation)} options={[
-            { value: "create", icon: <Plus aria-hidden="true" />, title: "新建同步", description: "连接一个本地对象与一个云端对象。" },
-            { value: "edit", icon: <Pencil aria-hidden="true" />, title: "修改同步", description: flow.bindings.length ? "调整位置、同步范围或重新对齐内容。" : "暂无同步", disabled: !flow.bindings.length },
-            { value: "remove", icon: <Unlink aria-hidden="true" />, title: "删除同步", description: flow.bindings.length ? "停止同步，保留本地和云端文件。" : "暂无同步", disabled: !flow.bindings.length },
-          ]} />}
         {flow.step === "kind" && <GuidedChoices disabled={!flow.canChoose} title="同步什么？" value={flow.kind} onSelect={(value) => flow.chooseKind(value as "file" | "folder")}
           options={[{ value: "folder", icon: <Folder aria-hidden="true" />, title: "文件夹", description: "同步文件夹及其中的内容，可设置排除项。" }, { value: "file", icon: <File aria-hidden="true" />, title: "文件", description: "只同步选中的一个文件。" }]} />}
         {flow.step === "scenario" && <GuidedChoices disabled={!flow.canChoose} title="从哪边开始？" value={flow.scenario} onSelect={(value) => flow.chooseScenario(value as SyncWizardScenario)} options={[
-          { value: "local_to_remote", icon: <Upload aria-hidden="true" />, title: "本地为基础，上传并同步", description: "选择本地内容，在云端新建对应对象。" },
-          { value: "remote_to_local", icon: <Download aria-hidden="true" />, title: "云端为基础，下载并同步", description: "选择云端内容，下载到新的本地位置。" },
-          { value: "bind_existing", icon: <Link aria-hidden="true" />, title: "本地和云端都存在", description: "选择两端已有对象，再选择一边更新另一边。" },
+          { value: "local_to_remote", icon: <Upload aria-hidden="true" />, title: "从本机上传并同步", description: "选择本地内容，在云端新建对应对象。" },
+          { value: "remote_to_local", icon: <Download aria-hidden="true" />, title: "从云盘下载并同步", description: "选择云端内容，下载到新的本地位置。" },
+          { value: "bind_existing", icon: <Link aria-hidden="true" />, title: "关联两端已有内容", description: "选择两端已有对象，再选择一边更新另一边。" },
         ]} />}
-        {flow.step === "binding" && <>
-          <div className="flex items-center gap-2">
-          <Input type="search" aria-label="搜索同步" placeholder="搜索名称或路径" value={bindingQuery} onChange={(event) => setBindingQuery(event.target.value)} />
-          <Button variant="outline" disabled={flow.busy} onClick={() => { void flow.refreshBindings() }}>刷新</Button>
-          </div>
-          {visibleBindings.length === 0 && <FieldDescription>没有匹配的同步项目</FieldDescription>}
-          <GuidedChoices disabled={!flow.canChoose} title="选择同步" value={flow.binding?.id ?? ""} onSelect={flow.chooseBinding}
-          options={visibleBindings.map((item) => ({ value: item.id, icon: item.kind === "folder" ? <Folder aria-hidden="true" /> : <File aria-hidden="true" />, title: item.driveItemName, description: `本地 ${item.localPath}；云端 ${item.drivePathHint ?? item.driveItemName}` }))} /></>}
         {flow.step === "edit" && <GuidedChoices disabled={!flow.canChoose} title="修改什么？" value={flow.edit} onSelect={(value) => flow.chooseEdit(value as SyncWizardEdit)} options={[
           { value: "range", icon: <ListFilter aria-hidden="true" />, title: "同步范围", description: "调整排除规则，已排除的文件保留原状。", disabled: flow.kind !== "folder" },
           { value: "local", icon: <FolderInput aria-hidden="true" />, title: "本地位置", description: "选择另一个已有对象，原位置文件保留。" },
           { value: "remote", icon: <Cloud aria-hidden="true" />, title: "云端对象", description: "选择另一个已有对象，原云端内容保留。" },
           { value: "align", icon: <RefreshCw aria-hidden="true" />, title: "重新对齐", description: "重新选择一边为准，更新另一边。" },
         ]} />}
-        {flow.step === "local" && <Field>
-          <FieldLabel htmlFor="sync-local">{flow.scenario === "remote_to_local" ? "本地保存位置" : `本地${flow.kind === "folder" ? "文件夹" : "文件"}`}</FieldLabel>
-          <Input id="sync-local" value={flow.localPath} onChange={(event) => flow.setLocalPath(event.target.value)} disabled={flow.busy} />
-          <Button variant="outline" disabled={flow.busy} onClick={() => { void flow.pickLocal() }}>选择{flow.scenario === "remote_to_local" ? "保存位置" : flow.kind === "folder" ? "文件夹" : "文件"}</Button>
-          {flow.scenario === "remote_to_local" && <FieldDescription>目标已存在时，请返回选择「本地和云端都存在」。</FieldDescription>}
-        </Field>}
+        {flow.step === "local" && <>
+          {entry.mode === "item" && <Field>
+            <FieldLabel>云端{localKindLabel}</FieldLabel>
+            <div className="break-all text-sm">{flow.remotePath}</div>
+          </Field>}
+          <Field>
+            <FieldLabel htmlFor="sync-local">{flow.scenario === "bind_existing" || flow.scenario === "local_to_remote" ? `本地${localKindLabel}` : "本地保存位置"}</FieldLabel>
+            <Input id="sync-local" value={flow.localPath} onChange={(event) => flow.setLocalPath(event.target.value)} disabled={flow.busy || !flow.scenario} />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={!flow.canChoose} onClick={() => { void flow.pickLocal() }}>
+                {flow.scenario === "bind_existing" || flow.scenario === "local_to_remote" ? `选择${localKindLabel}` : "选择保存位置"}
+              </Button>
+              {entry.mode === "item" && <Button variant="ghost" disabled={!flow.canChoose}
+                onClick={() => { void flow.pickLocal(flow.scenario === "bind_existing" ? "remote_to_local" : "bind_existing") }}>
+                {flow.scenario === "bind_existing" ? "下载到新位置…" : `关联已有${localKindLabel}…`}
+              </Button>}
+            </div>
+          </Field>
+        </>}
         {flow.step === "remote" && <>
           <DriveSyncRemotePicker controller={controller} kind={flow.kind || "folder"} chooseParent={flow.scenario === "local_to_remote"}
             initialParent={flow.parent} onSelect={flow.setRemote} onNavigate={flow.setParent} />
@@ -105,10 +103,9 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
           <Table><TableBody>
             <TableRow><TableCell>本地</TableCell><TableCell className="whitespace-normal break-all">{flow.localPath}</TableCell></TableRow>
             <TableRow><TableCell>云端</TableCell><TableCell className="whitespace-normal break-all">{flow.remotePath}</TableCell></TableRow>
-            {flow.operation !== "remove" && <TableRow><TableCell>后续同步</TableCell><TableCell>双向同步；两边同时修改时处理冲突</TableCell></TableRow>}
+            <TableRow><TableCell>后续同步</TableCell><TableCell>双向同步；两边同时修改时处理冲突</TableCell></TableRow>
           </TableBody></Table>
-          {flow.operation === "remove" ? <Alert><AlertTitle>删除此同步？</AlertTitle><AlertDescription>两边文件都会保留，尚未完成的同步和冲突处理将停止。</AlertDescription></Alert>
-            : flow.operation === "edit" && flow.edit === "range" ? <>
+          {flow.operation === "edit" && flow.edit === "range" ? <>
               <Alert><AlertTitle>保存同步范围</AlertTitle><AlertDescription>新排除的文件保留原状；重新纳入的内容会检查差异。</AlertDescription></Alert>
               <FieldDescription>排除：{[...(flow.binding?.excludeRules.forced ?? []), ...(flow.defaults ? flow.binding?.excludeRules.defaults ?? [] : []), ...(flow.binding?.excludeRules.importedGitignore ?? []), ...flow.rulesText.split("\n").filter(Boolean)].join("、") || "无"}</FieldDescription>
             </>
@@ -128,7 +125,11 @@ export function DriveSyncWizard({ controller, entry, onBindingCreated, onClose, 
                 {flow.preview.initialTransfer.truncated && <FieldDescription>共 {flow.preview.initialTransfer.totalEntries} 项，当前显示前 {flow.preview.initialTransfer.entries.length} 项。</FieldDescription>}
               </>}
               {flow.kind === "folder" && flow.preview && <FieldDescription>排除：{[...flow.preview.forcedExcludeRules, ...flow.preview.defaultExcludeRules, ...flow.preview.importedGitignoreRules, ...flow.rulesText.split("\n").filter(Boolean)].join("、")}</FieldDescription>}
-              <Button variant="outline" disabled={flow.busy} onClick={flow.recheck}>重新检查</Button>
+              {flow.canAssociateDestination && <div className="flex flex-wrap gap-2">
+                <Button variant="outline" disabled={!flow.canChoose} onClick={flow.associateDestination}>关联此{localKindLabel}</Button>
+                <Button variant="ghost" disabled={!flow.canChoose} onClick={flow.changeDestination}>更换位置</Button>
+              </div>}
+              <Button variant="outline" disabled={!flow.canChoose} onClick={flow.recheck}>重新检查</Button>
             </>}
         </>}
       </FieldGroup></FieldSet>

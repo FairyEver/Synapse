@@ -10,15 +10,16 @@ export type DriveSyncWizardEntry =
   | { readonly mode: "edit"; readonly binding: DriveSyncBindingDto }
 
 export function useDriveSyncWizard(controller: DriveSyncController, entry: DriveSyncWizardEntry, onBindingCreated?: (binding: DriveSyncBindingDto) => void | Promise<void>) {
-  const [operation, setOperation] = useState<SyncWizardOperation | "">(entry.mode === "edit" ? "edit" : "")
-  const [step, setStep] = useState<SyncWizardStep>(entry.mode === "edit" ? "edit" : "action")
-  const [binding, setBinding] = useState<DriveSyncBindingDto | null>(entry.mode === "edit" ? entry.binding : null)
+  const operation: SyncWizardOperation = entry.mode === "edit" ? "edit" : "create"
+  const [step, setStep] = useState<SyncWizardStep>(entry.mode === "edit" ? "edit" : entry.mode === "item" ? "local" : "scenario")
+  const binding = entry.mode === "edit" ? entry.binding : null
   const [edit, setEdit] = useState<SyncWizardEdit | "">("")
-  const [kind, setKind] = useState<"file" | "folder" | "">(entry.mode === "edit" ? entry.binding.kind : "")
+  const [kind, setKind] = useState<"file" | "folder" | "">(entry.mode === "edit" ? entry.binding.kind : entry.mode === "item" ? entry.item.type : "")
   const [scenario, setScenario] = useState<SyncWizardScenario | "">(entry.mode === "edit" ? "bind_existing" : "")
   const [localPath, setLocalPath] = useState(entry.mode === "edit" ? entry.binding.localPath : "")
   const [remote, setRemote] = useState<{ id: string; name: string; path: string } | null>(entry.mode === "edit"
-    ? { id: entry.binding.driveItemId, name: entry.binding.driveItemName, path: entry.binding.drivePathHint ?? entry.binding.driveItemName } : null)
+    ? { id: entry.binding.driveItemId, name: entry.binding.driveItemName, path: entry.binding.drivePathHint ?? entry.binding.driveItemName }
+    : entry.mode === "item" ? { id: entry.item.id, name: entry.item.name, path: entry.drivePathHint ?? entry.item.name } : null)
   const [parent, setParent] = useState<{ id: string | null; path: string }>({ id: null, path: "/" })
   const [name, setName] = useState("")
   const [authority, setAuthority] = useState<"local" | "remote" | "">("")
@@ -31,47 +32,24 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
   const busyRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ binding?: DriveSyncBindingDto; title: string; detail?: string } | null>(null)
-  const steps = syncWizardSteps(operation, kind, scenario, edit)
+  const steps = syncWizardSteps(operation, kind, scenario, edit, entry.mode === "item")
   const currentIndex = steps.findIndex((item) => item.id === step)
-  const bindings = (controller.snapshot?.bindings ?? []).filter((item) => item.status !== "removed")
   const rules = rulesText.split("\n").filter((rule) => rule.trim().length > 0)
   const remotePath = scenario === "local_to_remote" ? syncRemotePath(parent.path, name) : remote?.path ?? ""
-  async function refreshBindings() {
-    if (busyRef.current) return
-    busyRef.current = true; setBusy(true); setError(null)
-    try { await controller.refresh() }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "加载同步状态失败") }
-    finally { busyRef.current = false; setBusy(false) }
-  }
   function invalidate() { setPreview(null); setConfirmed(false); setError(null) }
-  function chooseOperation(value: SyncWizardOperation) {
-    if (!canChoose) return
-    setStep(value === "create" ? "kind" : "binding")
-    invalidate(); setOperation(value); setBinding(null); setKind(""); setScenario(""); setEdit(""); setLocalPath(""); setRemote(null)
-    setAuthority(""); setDefaults(true); setRulesText(""); setImportGitignore(false)
-  }
   function chooseKind(value: "file" | "folder") {
-    if (!canChoose) return
-    setStep("scenario")
+    if (!canChoose || entry.mode !== "local") return
+    setStep(scenario === "remote_to_local" ? "remote" : "local")
     if (value === kind) return
-    invalidate(); setKind(value); setScenario(""); setLocalPath(""); setRemote(null); setAuthority("")
+    invalidate(); setKind(value); setLocalPath(""); setRemote(null); setAuthority(""); setName("")
+    setDefaults(true); setRulesText(""); setImportGitignore(false)
   }
   function chooseScenario(value: SyncWizardScenario) {
-    if (!canChoose) return
-    setStep(value === "remote_to_local" ? "remote" : "local")
+    if (!canChoose || entry.mode !== "local") return
+    setStep("kind")
     if (value === scenario) return
-    invalidate(); setScenario(value); setLocalPath(""); setAuthority(""); setName("")
-    setRemote(entry.mode === "item" && entry.item.type === kind ? { id: entry.item.id, name: entry.item.name, path: entry.drivePathHint ?? entry.item.name } : null)
-    setParent(entry.mode === "local" ? { id: entry.targetParentId, path: entry.drivePathHint ?? "/" } : { id: null, path: "/" })
-  }
-  function chooseBinding(id: string) {
-    if (!canChoose) return
-    const selected = bindings.find((item) => item.id === id)
-    if (!selected) return
-    setStep(operation === "remove" ? "confirm" : "edit")
-    invalidate(); setBinding(selected); setKind(selected.kind); setScenario("bind_existing"); setEdit("")
-    setLocalPath(selected.localPath); setRemote({ id: selected.driveItemId, name: selected.driveItemName, path: selected.drivePathHint ?? selected.driveItemName })
-    setRulesText(selected.excludeRules.user.join("\n")); setDefaults(selected.excludeRules.defaults.length > 0); setImportGitignore(false); setAuthority("")
+    invalidate(); setScenario(value); setLocalPath(""); setAuthority(""); setName(""); setRemote(null)
+    setParent({ id: entry.targetParentId, path: entry.drivePathHint ?? "/" })
   }
   function chooseEdit(value: SyncWizardEdit) {
     if (!canChoose || (value === "range" && kind !== "folder")) return
@@ -105,18 +83,29 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
     try { await action() } catch (cause) { setError(cause instanceof Error ? cause.message : "操作失败，请重试") }
     finally { busyRef.current = false; setBusy(false) }
   }
-  async function pickLocal() {
+  async function pickLocal(mode = scenario || "remote_to_local") {
+    if (!canChoose) return
     await run(async () => {
-      if (!kind || !scenario) return
-      const chosen = await controller.chooseLocalPath({ kind, mode: scenario, defaultName: remote?.name })
+      if (!kind) return
+      const chosen = await controller.chooseLocalPath({ kind, mode, defaultName: remote?.name })
       if (!chosen) return
-      invalidate(); setLocalPath(chosen)
-      if (scenario === "local_to_remote") setName(localSyncBasename(chosen))
+      invalidate(); setLocalPath(chosen); setScenario(mode)
+      if (mode !== scenario || chosen !== localPath) setAuthority("")
+      if (mode === "local_to_remote") setName(localSyncBasename(chosen))
     })
+  }
+  const canAssociateDestination = scenario === "remote_to_local" && preview?.status === "blocked" && preview.localKind === kind
+  function associateDestination() {
+    if (!canChoose || !canAssociateDestination) return
+    invalidate(); setScenario("bind_existing"); setAuthority(""); setStep("authority")
+  }
+  function changeDestination() {
+    if (!canChoose) return
+    invalidate(); setStep("local")
   }
   async function check(selectedAuthority = authority) {
     invalidate()
-    if (operation === "remove" || (operation === "edit" && edit === "range")) return
+    if (operation === "edit" && edit === "range") return
     const data = input(selectedAuthority)
     const response = await controller.preview({ ...data, remoteExists: scenario !== "local_to_remote", directionHint: data.direction })
     setPreview(response)
@@ -124,25 +113,25 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
   }
   async function submit() {
     if (controller.readOnly) throw new Error(controller.offline ? "联网后可管理同步" : "登录后可管理同步")
-    if (operation === "remove" && binding) {
-      await controller.remove(binding.id)
-      setResult({ title: "已删除同步", detail: "本地和云端文件已保留。" })
-    } else if (operation === "edit" && edit === "range" && binding) {
+    if (operation === "edit" && edit === "range" && binding) {
       await controller.updateExcludes({ id: binding.id, defaults: defaults ? binding.excludeRules.defaults : [], importedGitignore: binding.excludeRules.importedGitignore, user: rules })
       setResult({ title: "已更新同步范围", binding })
     } else {
-      if (!preview || preview.status !== "ready") return
+      if (!preview || preview.status !== "ready" || (preview.alignment?.changes.length && !confirmed)) return
       const created = await controller.createBinding(input())
       const failed = created.status === "error" || created.status === "conflict" || Boolean(created.lastError)
       setResult({ title: failed ? "同步需要处理" : created.status === "paused" ? "已保存，保持暂停" : "已开启同步", binding: created, detail: created.lastError ?? undefined })
+      await controller.refresh()
       await onBindingCreated?.(created)
+      return
     }
     await controller.refresh()
   }
   function next() {
+    if (!canNext) return
     void run(async () => {
       if (step === "confirm") {
-        const eventKey = operation === "remove" ? "drive.sync.binding.remove" : operation === "edit" ? "drive.sync.binding.update" : "drive.sync.binding.create"
+        const eventKey = operation === "edit" ? "drive.sync.binding.update" : "drive.sync.binding.create"
         const finish = startTrackedOperation({ component: "drive", eventKey })
         try { await submit(); finish("success") } catch (cause) { finish("failure"); invalidate(); throw cause }
         return
@@ -162,19 +151,18 @@ export function useDriveSyncWizard(controller: DriveSyncController, entry: Drive
     setStep(nextStep)
     if (nextStep === "confirm") void run(() => check(value))
   }
-  const choiceStep = ["action", "kind", "scenario", "binding", "edit", "authority"].includes(step)
+  const choiceStep = ["kind", "scenario", "edit", "authority"].includes(step)
   const canNext = canChoose && ({
-    action: Boolean(operation), kind: Boolean(kind), scenario: Boolean(scenario),
-    binding: Boolean(binding && bindings.some((item) => item.id === binding.id)), edit: Boolean(edit),
-    local: Boolean(localPath.trim()), remote: scenario === "local_to_remote" ? Boolean(name.trim()) && !/[\\/]/.test(name) && name !== "." && name !== ".." : Boolean(remote),
+    kind: Boolean(kind), scenario: Boolean(scenario), edit: Boolean(edit),
+    local: Boolean(scenario && localPath.trim()), remote: scenario === "local_to_remote" ? Boolean(name.trim()) && !/[\\/]/.test(name) && name !== "." && name !== ".." : Boolean(remote),
     authority: Boolean(authority), range: true,
-    confirm: operation === "remove" || (operation === "edit" && edit === "range")
-      ? Boolean(binding && bindings.some((item) => item.id === binding.id))
+    confirm: operation === "edit" && edit === "range"
+      ? Boolean(binding && controller.snapshot?.bindings.some((item) => item.id === binding.id && item.status !== "removed"))
       : preview?.status === "ready" && (!preview.alignment?.changes.length || confirmed),
   }[step])
-  return { refreshBindings, operation, step, kind, scenario, binding, bindings, edit, localPath, remote, parent, name, authority, defaults, importGitignore, rulesText,
-    preview, confirmed, busy, error, result, steps, remotePath, canNext, canChoose, choiceStep, chooseAuthority, chooseOperation, chooseKind, chooseScenario, chooseBinding, chooseEdit,
-    next, pickLocal, recheck: () => { void run(() => check()) }, back: () => { invalidate(); setStep(steps[currentIndex - 1]?.id ?? "action") },
+  return { operation, step, kind, scenario, binding, edit, localPath, remote, parent, name, authority, defaults, importGitignore, rulesText,
+    preview, confirmed, busy, error, result, steps, remotePath, canNext, canChoose, choiceStep, chooseAuthority, chooseKind, chooseScenario, chooseEdit, canAssociateDestination, associateDestination, changeDestination,
+    next, pickLocal, recheck: () => { void run(() => check()) }, back: () => { invalidate(); setStep(steps[currentIndex - 1]?.id ?? steps[0].id) },
     setLocalPath: (value: string) => { invalidate(); setLocalPath(value) },
     setRemote: (item: DriveItemDto, itemPath: string) => { invalidate(); setRemote({ id: item.id, name: item.name, path: itemPath }); if (scenario === "remote_to_local") setLocalPath("") },
     setParent: (value: { id: string | null; path: string }) => { invalidate(); setParent(value) },

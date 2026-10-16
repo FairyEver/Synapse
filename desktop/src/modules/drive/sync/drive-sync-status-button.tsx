@@ -24,7 +24,7 @@ export function DriveSyncStatusButton({
       aria-label={statusLabel(attentionCount, transferring)}
       onClick={onOpen}
     >
-      同步
+      同步管理
       {attentionCount > 0 ? <Badge variant="destructive">{attentionCount}</Badge> : null}
       {attentionCount === 0 && transferring > 0
         ? <span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground" />
@@ -53,7 +53,7 @@ function countTransferring(snapshot: DriveSyncSnapshotDto | null): number {
 }
 
 function statusLabel(attentionCount: number, transferring: number): string {
-  if (attentionCount > 0) return `同步：${attentionCount} 个同步项目需要处理`
-  if (transferring > 0) return `同步：${transferring} 个同步项目正在工作`
-  return "同步"
+  if (attentionCount > 0) return `同步管理：${attentionCount} 个同步项目需要处理`
+  if (transferring > 0) return `同步管理：${transferring} 个同步项目正在工作`
+  return "同步管理"
 }
