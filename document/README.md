@@ -16,7 +16,7 @@ pnpm --filter @synapse/document run preview
 
 本地开发地址为 <http://localhost:19773/document/>。
 
-本地文档中的 Console、开放 API 和 OpenAPI 契约地址指向 <http://localhost:3000>。如需连接其它本地应用地址，设置 `SYNAPSE_DOCUMENT_APP_PUBLIC_URL` 后再启动文档站。
+本地文档中的 Console、开放 API 和 OpenAPI 契约地址指向 <http://localhost:19700>。如需连接其它本地应用地址，设置 `SYNAPSE_DOCUMENT_APP_PUBLIC_URL` 后再启动文档站。
 
 ## 目录结构
 

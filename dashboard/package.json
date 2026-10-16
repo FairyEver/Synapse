@@ -5,11 +5,11 @@
   "type": "module",
   "description": "Synapse admin dashboard",
   "scripts": {
-    "dev": "pnpm --filter @synapse/shared run build && vite --port 3000 --host 0.0.0.0 --open http://127.0.0.1:3000/console/",
+    "dev": "pnpm --filter @synapse/shared run build && vite --open http://localhost:19700/console/",
     "prebuild": "pnpm run check:drive-telemetry",
     "build": "pnpm --filter @synapse/shared run build && tsc -b && vite build",
     "check:drive-telemetry": "node scripts/check-drive-telemetry-coverage.mjs",
-    "preview": "vite preview --port 3000",
+    "preview": "vite preview --port 19700 --strictPort",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "tsc": "pnpm --filter @synapse/shared run build && tsc -b"
   },

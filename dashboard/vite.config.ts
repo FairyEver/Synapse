@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
+const localApiTarget = `http://localhost:${process.env.SYNAPSE_SERVER_API_PORT || '19701'}`
+
 export function isDriveBrowserSpaPath(pathname: string) {
   if (pathname === '/drive' || pathname === '/drive/') return true
   if (pathname === '/console/drive') return true
@@ -111,45 +113,45 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    port: 3000,
+    port: 19700,
     strictPort: true,
-    host: '0.0.0.0',
+    host: '::',
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
         ws: true,
       },
       '/webhooks': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '/files': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '/object': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '/sites': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '^/drive/items/[^/]+/(download|render)(?:\\?.*)?$': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '^/share/[^/]+/(download|render)(?:\\?.*)?$': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '^/share/[^/]+/items/[^/]+/(download|render)(?:\\?.*)?$': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
       '^/share/[^/]+(?:/items/[^/]+)?/reader(?:\\?.*)?$': {
-        target: 'http://localhost:3001',
+        target: localApiTarget,
         changeOrigin: true,
       },
     },

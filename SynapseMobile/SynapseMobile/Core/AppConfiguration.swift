@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The default is the hosted server so an installed build works with no setup.
 /// A self-hosted or local development server is selected in Settings, or by
-/// launching with `-SynapseAPIBaseURL http://localhost:3000/api` during
+/// launching with `-SynapseAPIBaseURL http://localhost:19700/api` during
 /// development, which `UserDefaults` picks up from the launch arguments.
 enum AppConfiguration {
     static let defaultAPIBaseURL = "https://synapse.d2.pub/api"

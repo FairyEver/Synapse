@@ -1,7 +1,7 @@
 services:
   pdf-renderer:
     ports:
-      - "127.0.0.1:${PDF_RENDERER_HOST_PORT:-3010}:3010"
+      - "127.0.0.1:${PDF_RENDERER_HOST_PORT:-19702}:3010"
     networks:
       - pdf-internal
       - pdf-dev

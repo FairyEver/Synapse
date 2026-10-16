@@ -175,7 +175,7 @@ describe("server deployment configuration", () => {
     expect(compose).toContain("pids_limit: 256")
     expect(compose).toContain("internal: true")
     expect(compose.match(/\n  pdf-renderer:([\s\S]*?)\nvolumes:/u)?.[1]).not.toContain("ports:")
-    expect(devCompose).toContain('127.0.0.1:${PDF_RENDERER_HOST_PORT:-3010}:3010')
+    expect(devCompose).toContain('127.0.0.1:${PDF_RENDERER_HOST_PORT:-19702}:3010')
     expect(deployScript).toContain("docker compose --env-file .env build server pdf-renderer")
     expect(deployScript).toContain('PDF_RENDERER_ROLLBACK_STATE_FILE="$BACKUP_DIR/pdf-renderer-rollback-${DEPLOY_ID}.state"')
     expect(deployScript).toContain('printf "absent\\n" > "$PDF_RENDERER_ROLLBACK_STATE_FILE"')

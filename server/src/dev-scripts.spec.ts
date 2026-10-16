@@ -16,7 +16,7 @@ describe("server dev scripts", () => {
     const scripts = serverPackage.scripts ?? {}
 
     expect(scripts.dev).toContain("dev:api")
-    expect(scripts.dev).toContain("APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000}")
+    expect(scripts.dev).toContain("APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:19700}")
     expect(scripts.dev).toContain("DOCUMENT_PUBLIC_URL=${DOCUMENT_PUBLIC_URL:-http://localhost:19773/document}")
     expect(scripts["dev:api"]).toContain("pnpm --filter @synapse/shared run build")
     expect(scripts["dev:api"]).toContain("nest start --watch")
@@ -33,7 +33,7 @@ describe("server dev scripts", () => {
       "--filter @synapse/server run dev",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
-      "node scripts/dev/wait-for-http.mjs http://127.0.0.1:${SYNAPSE_SERVER_API_PORT:-3001}/healthz",
+      "node scripts/dev/wait-for-http.mjs http://127.0.0.1:${SYNAPSE_SERVER_API_PORT:-19701}/healthz",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/dashboard run dev",

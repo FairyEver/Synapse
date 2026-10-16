@@ -18,7 +18,7 @@ final class TerminalGitUITests: XCTestCase {
     private var email: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_EMAIL"] ?? "" }
     private var password: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_PASSWORD"] ?? "" }
     private var baseURL: String {
-        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://localhost:3001/api"
+        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://localhost:19701/api"
     }
 
     /// 三条栏闲置三秒会自己收起来，而这里要按的键都在栏上（与 `TerminalFlowUITests`

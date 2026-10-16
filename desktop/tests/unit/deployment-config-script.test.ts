@@ -42,8 +42,8 @@ describe("generate-deployment-config", () => {
   it("uses localhost as the development default", async () => {
     const result = await runGenerator({})
 
-    expect(result.output).toContain('publicAppUrl: "http://localhost:3000"')
-    expect(result.output).toContain('apiBaseUrl: "http://localhost:3000/api"')
+    expect(result.output).toContain('publicAppUrl: "http://localhost:19700"')
+    expect(result.output).toContain('apiBaseUrl: "http://localhost:19700/api"')
   })
 
   it("uses the configured public app URL when provided", async () => {
@@ -84,7 +84,7 @@ describe("generate-deployment-config", () => {
   it("warns visibly when neither the variable nor an existing config is present", async () => {
     const result = await runGenerator({})
 
-    expect(result.output).toContain('publicAppUrl: "http://localhost:3000"')
+    expect(result.output).toContain('publicAppUrl: "http://localhost:19700"')
     expect(result.stderr).toContain("SYNAPSE_DESKTOP_PUBLIC_APP_URL is not set")
     expect(result.stderr).toContain("no deployment config exists yet")
   })

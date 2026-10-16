@@ -6,9 +6,9 @@ import { runPnpm } from "./process-utils.mjs"
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, "../..")
 const envPath = path.join(repoRoot, "server/.env.local")
-const localServerPublicAppUrl = "http://localhost:3000"
+const localServerPublicAppUrl = "http://localhost:19700"
 const localDocumentPublicUrl = "http://localhost:19773/document"
-const defaultLocalPdfRendererPort = "3010"
+const defaultLocalPdfRendererPort = "19702"
 const localPdfRendererSecret = "synapse-local-pdf-renderer-secret-not-for-production"
 
 function parseEnvFile(raw) {

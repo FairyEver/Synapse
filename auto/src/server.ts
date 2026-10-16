@@ -13,7 +13,7 @@ import { c } from './ui.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const WEB_DIR = resolve(__dirname, '../dist/web')
 const GUIDE_PATH = resolve(__dirname, '../GUIDE.md')
-const DEFAULT_PORT = 47831
+const DEFAULT_PORT = 19760
 const MAX_JSON_BODY_BYTES = 1024 * 1024
 const CSRF_HEADER = 'x-auto-csrf-token'
 
@@ -396,24 +396,16 @@ export async function startServer(options: { port?: number; open?: boolean } = {
 
   scheduler.subscribeOutput(line => outputBuffer.append(line))
 
-  let port = options.port ?? DEFAULT_PORT
+  const port = options.port ?? DEFAULT_PORT
   const handler = createHandler(scheduler, outputBuffer)
-
-  while (true) {
-    const server = createServer((req, res) => {
-      void handler(req, res)
-    })
-    try {
-      const actualPort = await listen(server, port)
-      const url = `http://127.0.0.1:${actualPort}`
-      console.log(`${c.boldCyan('◆')} ${c.bold('auto')} ${c.dim('listening at')} ${c.cyan(url)}`)
-      if (options.open !== false) openBrowser(url)
-      return { server, url }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw err
-      port++
-    }
-  }
+  const server = createServer((req, res) => {
+    void handler(req, res)
+  })
+  const actualPort = await listen(server, port)
+  const url = `http://127.0.0.1:${actualPort}`
+  console.log(`${c.boldCyan('◆')} ${c.bold('auto')} ${c.dim('listening at')} ${c.cyan(url)}`)
+  if (options.open !== false) openBrowser(url)
+  return { server, url }
 }
 
 export async function runSavedConfigOnce(): Promise<void> {

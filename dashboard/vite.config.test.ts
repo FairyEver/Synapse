@@ -14,6 +14,8 @@ describe("dashboard Vite dev proxy", () => {
 
   it("fails instead of opening another port when the dashboard port is occupied", () => {
     expect(config.server?.strictPort).toBe(true)
+    expect(config.server?.port).toBe(19700)
+    expect(config.server?.host).toBe("::")
   })
 
   it("proxies desktop live websocket upgrades through /api", () => {
@@ -21,7 +23,7 @@ describe("dashboard Vite dev proxy", () => {
     const apiProxy = proxy && !Array.isArray(proxy) ? proxy["/api"] : undefined
 
     expect(apiProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       ws: true,
     }))
   })
@@ -43,7 +45,7 @@ describe("dashboard Vite dev proxy", () => {
     const webhooksProxy = proxy && !Array.isArray(proxy) ? proxy["/webhooks"] : undefined
 
     expect(webhooksProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
   })
@@ -53,7 +55,7 @@ describe("dashboard Vite dev proxy", () => {
     const filesProxy = proxy && !Array.isArray(proxy) ? proxy["/files"] : undefined
 
     expect(filesProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
   })
@@ -63,7 +65,7 @@ describe("dashboard Vite dev proxy", () => {
     const objectProxy = proxy && !Array.isArray(proxy) ? proxy["/object"] : undefined
 
     expect(objectProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
   })
@@ -88,19 +90,19 @@ describe("dashboard Vite dev proxy", () => {
       : undefined
 
     expect(ownerDownloadProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
     expect(shareDownloadProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
     expect(shareChildDownloadProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
     expect(shareReaderProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
     expect(proxy && !Array.isArray(proxy) ? proxy["/share"] : undefined).toBeUndefined()
@@ -187,7 +189,7 @@ describe("dashboard Vite dev proxy", () => {
 
     expect(pagesProxy).toBeUndefined()
     expect(sitesProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
+      target: "http://localhost:19701",
       changeOrigin: true,
     }))
   })

@@ -8,7 +8,7 @@ import {
 } from "../../document/.vitepress/deployment-links.mjs"
 
 test("document dev always targets the local app service by default", () => {
-  assert.equal(resolveDocumentAppPublicUrl({ APP_PUBLIC_URL: "https://synapse.d2.pub" }, true), "http://localhost:3000")
+  assert.equal(resolveDocumentAppPublicUrl({ APP_PUBLIC_URL: "https://synapse.d2.pub" }, true), "http://localhost:19700")
 })
 
 test("document dev accepts an explicit document-build override", () => {

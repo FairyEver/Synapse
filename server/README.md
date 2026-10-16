@@ -37,7 +37,7 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 pnpm dev:server
 ```
 
-自动启动 Postgres 与 PDF 渲染器容器、运行迁移、启动 API 和网页端开发服务器。本地命令会叠加 `compose.dev.yml`，仅为宿主机 API 开放渲染器端口；生产部署仍只连接 internal network。
+自动启动 Postgres 与 PDF 渲染器容器、运行迁移、启动 API 和网页端开发服务器。控制台为 `http://localhost:19700/console/`，API 为 `http://localhost:19701`，PDF renderer 的宿主机映射为 `127.0.0.1:19702`；Postgres 保持 `5433`。生产端口与容器内部端口保持原样。本地命令会叠加 `compose.dev.yml`，仅为宿主机 API 开放渲染器端口；生产部署仍只连接 internal network。
 
 ---
 

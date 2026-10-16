@@ -16,7 +16,7 @@ final class TerminalFlowUITests: XCTestCase {
     private var email: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_EMAIL"] ?? "" }
     private var password: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_PASSWORD"] ?? "" }
     private var baseURL: String {
-        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://localhost:3001/api"
+        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://localhost:19701/api"
     }
 
     /// 每一次启动都从「输入栏还没被选过」开始，也就是键盘态。

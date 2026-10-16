@@ -122,7 +122,7 @@ for (const flag of [contendFlag, controlPortFlag, controlHostFlag, nameFlag, ins
   flagIndexes.add(flag + 1)
 }
 const positional = rawArgs.filter((_, index) => !flagIndexes.has(index))
-const [email, password, baseUrl = "http://127.0.0.1:3001"] = positional
+const [email, password, baseUrl = "http://127.0.0.1:19701"] = positional
 if (!email || !password) {
   console.error(
     "usage: node test/mock-desktop.mjs <email> <password> [baseUrl] [--contend <title>]"

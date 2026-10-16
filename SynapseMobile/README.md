@@ -91,7 +91,7 @@ xcodebuild -project SynapseMobile.xcodeproj -scheme SynapseMobile \
 
 xcrun simctl install booted <SynapseMobile.app 路径>
 xcrun simctl launch booted com.liy.SynapseMobile \
-  -SynapseAPIBaseURL http://localhost:3001/api
+  -SynapseAPIBaseURL http://localhost:19701/api
 ```
 
 服务器地址只能用 `-SynapseAPIBaseURL` 启动参数指定；默认指向 `https://synapse.d2.pub/api`。
@@ -105,12 +105,12 @@ xcrun simctl launch booted com.liy.SynapseMobile \
 
 ```bash
 # 一个测试账号
-node server/test/mock-desktop.mjs <email> <password> http://127.0.0.1:3001
+node server/test/mock-desktop.mjs <email> <password> http://127.0.0.1:19701
 
 # 验多台电脑的切换：再起一个。两个必须不同名，否则选择器里是两行一样的字。
 # 名字同时决定这个替身的 client id（`--instance-id` 可覆盖），所以它重启之后还是同一台
 # 电脑——手机记住的是这个 id，换一个就等于把手机丢在一台再也不会回来的电脑上。
-node server/test/mock-desktop.mjs <email> <password> http://127.0.0.1:3001 \
+node server/test/mock-desktop.mjs <email> <password> http://127.0.0.1:19701 \
   --name "Mock iMac" --control-port 3012
 
 # 另一个终端里（凭据通过 xctestrun 注入，见下）
@@ -172,11 +172,11 @@ node desktop/scripts/checks/mobile-workspace-files-acceptance.cjs
 node server/test/workspace-files-smoke.mjs
 ```
 
-端点只连接 `http://127.0.0.1:3001`，在 `/tmp/synapse-workspace-files-acceptance` 准备 Git 夹具（`review.txt` 的 HEAD、index、disk 分别是 BASE、STAGED、WORKTREE），并通过本地注册/登录 API 创建验收账号。凭据仅写入权限为 0600 的 `/tmp/synapse-workspace-files-acceptance-credentials.json`，不提交或打印。复用夹具不会重置仓库。
+端点只连接 `http://127.0.0.1:19701`，在 `/tmp/synapse-workspace-files-acceptance` 准备 Git 夹具（`review.txt` 的 HEAD、index、disk 分别是 BASE、STAGED、WORKTREE），并通过本地注册/登录 API 创建验收账号。凭据仅写入权限为 0600 的 `/tmp/synapse-workspace-files-acceptance-credentials.json`，不提交或打印。复用夹具不会重置仓库。
 
 夹具还含长中文文件名与 `nested/paging` 的205个文本文件，用于目录三页、大集合定位、搜索后续页目标及定位回树验收；仅在夹具的 Git exclude 中排除分页目录，保留分层差异用例。已有同名夹具内容不符时端点明确失败，不覆盖。
 
-UI 测试环境需设置 `SYNAPSE_FILES_ACCEPTANCE=1`、`SYNAPSE_TEST_EMAIL`、`SYNAPSE_TEST_PASSWORD`、`SYNAPSE_TEST_BASE_URL=http://127.0.0.1:3001/api`，可选桌面名 `SYNAPSE_TEST_DESKTOP_NAME=Files Acceptance Mac` 与会话名 `SYNAPSE_FILES_SESSION_TITLE=Files acceptance`。用私有生成的 xctestrun 环境传入凭据，避免在命令输出中展开。Simulator 包需 ad-hoc 签名以使用 Keychain，不能以关闭签名或绕过登录获取验收成功。
+UI 测试环境需设置 `SYNAPSE_FILES_ACCEPTANCE=1`、`SYNAPSE_TEST_EMAIL`、`SYNAPSE_TEST_PASSWORD`、`SYNAPSE_TEST_BASE_URL=http://127.0.0.1:19701/api`，可选桌面名 `SYNAPSE_TEST_DESKTOP_NAME=Files Acceptance Mac` 与会话名 `SYNAPSE_FILES_SESSION_TITLE=Files acceptance`。用私有生成的 xctestrun 环境传入凭据，避免在命令输出中展开。Simulator 包需 ad-hoc 签名以使用 Keychain，不能以关闭签名或绕过登录获取验收成功。
 
 端点的终端帧是展示夹具；所有 `workspaceFiles` 结果由编译后的生产服务、PermissionGuard、受控 Git 与真实磁盘产生。零 PTY/租约/网格副作用另由真实 gateway 回归验证；此端点不证明真实 PTY 进程或真机窗口转场。iPad 全屏和旋转可用模拟器验收，半窗/窄窗的运行时伸缩、真实指针和 VoiceOver 手工走查须独立记录，不能称为已自动覆盖。
 

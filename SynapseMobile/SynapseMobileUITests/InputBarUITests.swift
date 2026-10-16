@@ -15,7 +15,7 @@ final class InputBarUITests: XCTestCase {
     private var email: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_EMAIL"] ?? "" }
     private var password: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_PASSWORD"] ?? "" }
     private var baseURL: String {
-        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://127.0.0.1:3001/api"
+        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://127.0.0.1:19701/api"
     }
     private var sessionTitle: String {
         ProcessInfo.processInfo.environment["SYNAPSE_TEST_SESSION"] ?? "claude-code"

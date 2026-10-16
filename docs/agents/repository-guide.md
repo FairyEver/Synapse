@@ -34,9 +34,11 @@ extend/portal-headless/ # Portal 服务端无头 SDK，server 的运行时依赖
 - `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document；按 `q` 退出并停止本次启动的进程。
 - `pnpm dev:prod`：同一面板启动，桌面端使用生产站点 URL。
 - `pnpm dev:desktop`：仅桌面端。
-- `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台固定自动打开 `http://127.0.0.1:3000/console/`，避免 `localhost` 解析到其他 IPv6 本地服务。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
+- `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台自动打开 `http://localhost:19700/console/`，使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
 - `pnpm dev:document`：文档站。
 - 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`。
+
+本机 HTTP 开发端口保留 `19700–19799`，Brick Lab 使用 `19800–19899`。完整分配与生产边界见 `.claude/rules/workspace-dev-ports.md`；数据库和生产映射不随开发 HTTP 端口修改。
 
 只启动任务需要的最小范围。只改 `desktop/` 不要启动全栈；服务已经运行且热更新覆盖改动时不要重启。除非用户明确要求，不要为了验证主动启动 dev server、浏览器、应用窗口、DevTools、Playwright 或 MCP 页面检查。
 

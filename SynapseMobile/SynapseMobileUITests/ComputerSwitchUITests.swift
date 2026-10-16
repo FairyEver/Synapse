@@ -27,7 +27,7 @@ final class ComputerSwitchUITests: XCTestCase {
     private var email: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_EMAIL"] ?? "" }
     private var password: String { ProcessInfo.processInfo.environment["SYNAPSE_TEST_PASSWORD"] ?? "" }
     private var baseURL: String {
-        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://localhost:3001/api"
+        ProcessInfo.processInfo.environment["SYNAPSE_TEST_BASE_URL"] ?? "http://localhost:19701/api"
     }
     /// The control channel of the desktop this test switches away from and then takes
     /// down. The other one is the default port.

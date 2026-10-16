@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import WebSocket from 'ws'
 const credentials = JSON.parse(await readFile('/tmp/synapse-workspace-files-acceptance-credentials.json', 'utf8'))
-const base = 'http://127.0.0.1:3001'
+const base = 'http://127.0.0.1:19701'
 const desktopId = 'workspace-files-acceptance-desktop'
 const sessionId = 'f11e0000-0000-4000-8000-000000000001'
 const mobileId = `files-smoke-${randomUUID()}`

@@ -13,7 +13,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const desktopRoot = path.resolve(scriptDir, "../..")
 const defaultOutputPath = path.join(desktopRoot, "electron", "generated", "deployment-config.generated.ts")
 const defaultRendererOutputPath = path.join(desktopRoot, "src", "generated", "deployment-config.generated.ts")
-const developmentPublicAppUrl = "http://localhost:3000"
+const developmentPublicAppUrl = "http://localhost:19700"
 const ciPublicAppUrl = "https://synapse.invalid"
 
 function parseArgs(args) {

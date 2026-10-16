@@ -15,7 +15,7 @@ test("server shutdown passes defaults through env and preserves literal command 
   assert.equal(calls[1][0], "docker")
   assert.deepEqual(calls[1][1], ["compose", "--env-file", "server/.env.local", "-f", "server/compose.yml", "-f", "server/compose.dev.yml", "down"])
   assert.equal(calls[1][2].cwd, "C:\\Project Space & 中文")
-  assert.equal(calls[1][2].env.APP_PUBLIC_URL, "http://localhost:3000")
+  assert.equal(calls[1][2].env.APP_PUBLIC_URL, "http://localhost:19700")
   assert.ok(calls[1][2].env.PDF_RENDERER_INTERNAL_SECRET)
   assert.equal(env.APP_PUBLIC_URL, "")
 })

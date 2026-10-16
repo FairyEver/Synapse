@@ -5,8 +5,23 @@ import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { AutoScheduler } from './scheduler.js'
-import { createHandler, OutputBuffer } from './server.js'
+import { createHandler, OutputBuffer, startServer } from './server.js'
 import { MAX_CONCURRENCY } from './config.js'
+
+test('startServer rejects an occupied port instead of taking another subproject port', async () => {
+  const occupied = createServer()
+  await new Promise<void>(resolve => occupied.listen(0, '127.0.0.1', resolve))
+  try {
+    const address = occupied.address()
+    assert.ok(address && typeof address !== 'string')
+    await assert.rejects(async () => {
+      const started = await startServer({ port: address.port, open: false })
+      await new Promise<void>((resolve, reject) => started.server.close(error => error ? reject(error) : resolve()))
+    }, { code: 'EADDRINUSE' })
+  } finally {
+    await new Promise<void>(resolve => occupied.close(() => resolve()))
+  }
+})
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>(resolve => {

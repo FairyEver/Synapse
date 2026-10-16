@@ -25,9 +25,10 @@ test("resolveDevCommandEnv forces local public host for server dev by default", 
     { APP_PUBLIC_URL: "https://synapse.d2.pub", DATABASE_URL: "postgresql://localhost/dev" },
   )
 
-  assert.equal(env.APP_PUBLIC_URL, "http://localhost:3000")
+  assert.equal(env.APP_PUBLIC_URL, "http://localhost:19700")
   assert.equal(env.DOCUMENT_PUBLIC_URL, "http://localhost:19773/document")
   assert.equal(env.DATABASE_URL, "postgresql://localhost/dev")
+  assert.equal(env.PDF_RENDERER_URL, "http://127.0.0.1:19702")
 })
 
 test("resolveDevCommandEnv keeps explicit shell public host for server dev", () => {

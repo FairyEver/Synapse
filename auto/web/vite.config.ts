@@ -15,11 +15,12 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    port: 19761,
+    strictPort: true,
     proxy: {
-      '/api': 'http://127.0.0.1:47831',
+      '/api': 'http://127.0.0.1:19760',
       '/events': {
-        target: 'http://127.0.0.1:47831',
+        target: 'http://127.0.0.1:19760',
         ws: false,
       },
     },

@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto"
 import WebSocket from "ws"
 
-const baseUrl = process.argv[2] ?? "http://127.0.0.1:3001"
+const baseUrl = process.argv[2] ?? "http://127.0.0.1:19701"
 const wsUrl = baseUrl.replace(/^http/, "ws")
 
 const failures = []

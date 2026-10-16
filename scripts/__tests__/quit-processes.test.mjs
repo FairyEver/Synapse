@@ -97,14 +97,14 @@ test("matchesSynapseDevProcess filters by requested dev script", () => {
   assert.equal(matchesSynapseDevProcess({
     pid: 306,
     pgid: 306,
-    commandLine: `node ${workspaceRoot}/dashboard/node_modules/.bin/../vite/bin/vite.js --port 3000 --host 0.0.0.0 --open http://127.0.0.1:3000/console/`,
+    commandLine: `node ${workspaceRoot}/dashboard/node_modules/.bin/../vite/bin/vite.js --open http://localhost:19700/console/`,
     cwd: `${workspaceRoot}/dashboard`,
   }, { workspaceRoot, targetScripts: ["dev:server"] }), true)
 
   assert.equal(matchesSynapseDevProcess({
     pid: 307,
     pgid: 307,
-    commandLine: `node ${workspaceRoot}/dashboard/node_modules/.bin/../vite/bin/vite.js --port 3000 --host 0.0.0.0 --open http://127.0.0.1:3000/console/`,
+    commandLine: `node ${workspaceRoot}/dashboard/node_modules/.bin/../vite/bin/vite.js --open http://localhost:19700/console/`,
     cwd: `${workspaceRoot}/dashboard`,
   }, { workspaceRoot, targetScripts: ["dev:desktop"] }), false)
 })

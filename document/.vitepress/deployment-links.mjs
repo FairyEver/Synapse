@@ -1,5 +1,5 @@
 const APP_PUBLIC_URL_PLACEHOLDER = "{{APP_PUBLIC_URL}}"
-const DEVELOPMENT_APP_PUBLIC_URL = "http://localhost:3000"
+const DEVELOPMENT_APP_PUBLIC_URL = "http://localhost:19700"
 const PRODUCTION_APP_PUBLIC_URL = "https://synapse.d2.pub"
 
 function normalizeHttpUrl(value, name) {

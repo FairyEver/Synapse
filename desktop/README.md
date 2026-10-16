@@ -24,7 +24,7 @@ pnpm build
 pnpm package:mac
 ```
 
-桌面端登录、Webhook 和 Live 连接使用的服务地址会在构建前生成到桌面包内。默认开发地址是 `http://localhost:3000`；正式打包或发版前设置公开根地址，例如：
+桌面端登录、Webhook 和 Live 连接使用的服务地址会在构建前生成到桌面包内。Electron renderer 默认端口保留 `19731`；默认开发服务地址是 `http://localhost:19700`；正式打包或发版前设置公开根地址，例如：
 
 ```bash
 SYNAPSE_DESKTOP_PUBLIC_APP_URL=https://synapse.d2.pub pnpm --filter @synapse/desktop run package:mac
