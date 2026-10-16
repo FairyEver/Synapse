@@ -18,7 +18,7 @@
     "src/live.ts",
     "src/mobile-live.ts",
     "src/urls.ts",
-    "src/drive-sync-constants.cjs",
+    "src/drive-sync-constants.ts",
     "src/mobile-live-constants.cjs",
     "src/versioned-data-migrator.cts",
     "src/webhook.ts",

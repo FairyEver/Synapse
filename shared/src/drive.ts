@@ -247,7 +247,7 @@ export interface DriveChangeListPageDto {
   readonly resyncRequired: boolean
 }
 
-export { DRIVE_ITEM_BATCH_LIMIT, DRIVE_CHANGE_BATCH_LIMIT, DRIVE_CHANGE_BATCH_PAGE_LIMIT } from "./drive-sync-constants.cjs"
+export { DRIVE_ITEM_BATCH_LIMIT, DRIVE_CHANGE_BATCH_LIMIT, DRIVE_CHANGE_BATCH_PAGE_LIMIT } from "./drive-sync-constants.js"
 
 export interface DriveBatchReadError {
   readonly status: number

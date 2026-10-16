@@ -62,4 +62,26 @@ describe("package entrypoint", () => {
     expect(cjsSources).toEqual(rootSources)
     expect(desktopSources).toEqual(["system-notifier", "terminal-complete"])
   })
+
+  it("exposes matching Drive constants through browser ESM and Electron CommonJS entries", () => {
+    const result = execFileSync(process.execPath, ["--input-type=module", "--eval", `
+      import { createRequire } from "node:module"
+      import * as root from "@synapse/shared"
+      import * as esmValues from "@synapse/shared/drive-sync-constants"
+      const require = createRequire(import.meta.url)
+      const cjsValues = require("@synapse/shared/drive-sync-constants")
+      process.stdout.write(JSON.stringify({
+        esmPath: import.meta.resolve("@synapse/shared/drive-sync-constants"),
+        cjsPath: require.resolve("@synapse/shared/drive-sync-constants"),
+        esmValues, cjsValues,
+        rootValues: Object.fromEntries(Object.keys(cjsValues).map((name) => [name, root[name]])),
+      }))
+    `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
+    const { esmPath, cjsPath, esmValues, cjsValues, rootValues } = JSON.parse(result)
+    expect(esmPath).toMatch(/\.js$/)
+    expect(cjsPath).toMatch(/\.cjs$/)
+    expect(esmValues).toEqual(cjsValues)
+    expect(rootValues).toEqual(cjsValues)
+    expect(esmValues).toMatchObject({ DRIVE_ITEM_BATCH_LIMIT: 100, DRIVE_CHANGE_BATCH_LIMIT: 20, DRIVE_CHANGE_BATCH_PAGE_LIMIT: 100 })
+  })
 })
