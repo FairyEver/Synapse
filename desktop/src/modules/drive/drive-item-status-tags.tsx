@@ -61,7 +61,7 @@ function StatusTagPopover({ tagKey, label, title, variant, popover, children, sy
   readonly showTag?: boolean; readonly onRestoreFocus?: () => void
 }) {
   return (
-    <Popover open={popover.activeKey === tagKey} onOpenChange={(open) => popover.setOpen(tagKey, open)} data-track={sync ? "drive.file.sync.tag" : "drive.file.share.tag"}>
+    <Popover modal open={popover.activeKey === tagKey} onOpenChange={(open) => popover.setOpen(tagKey, open)} data-track={sync ? "drive.file.sync.tag" : "drive.file.share.tag"}>
       {showTag ? <PopoverTrigger asChild>
         <Badge variant={variant} asChild>
           <button type="button" data-slot="badge" data-drive-status-tag={sync ? "sync" : "share"} data-drive-sync-mark={sync || undefined} title={title}>

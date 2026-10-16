@@ -1998,6 +1998,47 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("保持当前有效期")
   })
 
+  it.each(["分享", "同步"])("blocks background interactions while the %s Tag details are open and dismisses on an outside click", async (tag) => {
+    const folder = createDriveItem({ id: "drive-root", name: "Docs", type: "folder", shared: true, activeShareId: "share-row-1" })
+    mocks.listDriveItems.mockResolvedValue([
+      folder,
+      createDriveItem({ id: "other-folder", name: "Other", type: "folder" }),
+      createDriveItem({ id: "other-file", name: "other.html", type: "file", mimeType: "text/html" }),
+    ])
+    mocks.getDriveShare.mockResolvedValue(createDriveShare({ itemId: folder.id, expiresAt: null }))
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
+    await render(<DriveModule />)
+    await flushAct()
+    await clickRowButtonText("Docs", tag)
+
+    const popup = document.querySelector<HTMLElement>('[data-slot="popover-content"]')
+    const preview = rowButton("other.html", "预览")
+    if (!popup || !preview) throw new Error("Details or background preview not found")
+    expect(window.getComputedStyle(popup).pointerEvents).toBe("auto")
+    expect(window.getComputedStyle(getTableRow("Other")).pointerEvents).toBe("none")
+    expect(window.getComputedStyle(preview).pointerEvents).toBe("none")
+
+    await clickButtonText(tag === "分享" ? "复制链接" : "打开本机位置")
+    expect(document.querySelector('[data-slot="popover-content"]')).toBe(popup)
+    await act(async () => {
+      // The modal disables background hit targets, so an outside pointer lands on the document.
+      document.documentElement.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      document.documentElement.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
+      document.documentElement.click()
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull()
+    expect(document.activeElement).toBe(rowButton("Docs", tag))
+    expect(window.getComputedStyle(preview).pointerEvents).not.toBe("none")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+    expect(mocks.getDriveItemPreviewUrl).not.toHaveBeenCalled()
+    await clickDriveRow("Other")
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith(expect.objectContaining({ parentId: "other-folder" }))
+  })
+
   it("opens sync Tag details and inherits folder bindings without starting another wizard", async () => {
     const folder = createDriveItem({ id: "drive-root", name: "Docs", type: "folder" })
     const child = createDriveItem({ id: "child", parentId: "drive-root", name: "notes.md", type: "file" })
