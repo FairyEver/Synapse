@@ -11,15 +11,21 @@ import type { DriveFileVersionDto } from '@synapse/shared'
 import { driveFileVersionsApi } from '@/lib/api'
 import { DriveFileVersionContent, DriveFileVersionsDialog } from './drive-file-versions-dialog'
 
-vi.mock('@/lib/api', () => ({
-  driveFileVersionsApi: {
-    list: vi.fn(),
-    restore: vi.fn(),
-    updatePin: vi.fn(),
-    delete: vi.fn(),
-    downloadUrl: vi.fn((itemId: string, versionId: string) => `/drive/items/${itemId}/versions/${versionId}/download`),
-  },
-}))
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return {
+    ...actual,
+    driveFileVersionsApi: {
+      list: vi.fn(),
+      restore: vi.fn(),
+      updatePin: vi.fn(),
+      delete: vi.fn(),
+      downloadUrl: vi.fn((itemId: string, versionId: string) => `/drive/items/${itemId}/versions/${versionId}/download`),
+    },
+  }
+})
 
 vi.mock('sonner', () => ({
   toast: {

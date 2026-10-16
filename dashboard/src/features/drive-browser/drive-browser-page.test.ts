@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createElement, type ComponentProps } from 'react'
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createElement, type ComponentProps, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -114,6 +116,10 @@ vi.mock('./use-drive-annotations', () => ({
 }))
 
 describe('drive browser view model', () => {
+  beforeEach(() => {
+    history.replaceState(null, '', '/')
+  })
+
   it('renders admin public asset controls without marketing copy', () => {
     const queryClient = new QueryClient()
     const assetsHtml = renderToStaticMarkup(
@@ -134,7 +140,7 @@ describe('drive browser view model', () => {
     expect(summaryHtml).toContain('公开素材')
     expect(summaryHtml).toContain('隐藏')
     const adminPublicAssetsSource = readFileSync(
-      new URL('./admin-public-assets.tsx', import.meta.url),
+      'src/features/drive-browser/admin-public-assets.tsx',
       'utf8'
     )
     expect(adminPublicAssetsSource).toContain('访问日志')
@@ -362,6 +368,7 @@ describe('drive browser view model', () => {
   })
 
   it('renders compact login status in shared preview headers', () => {
+    history.replaceState(null, '', '/share/share-1')
     const snapshot = createSnapshot({
       context: 'share',
       current: {
@@ -452,7 +459,7 @@ describe('drive browser view model', () => {
       children: [],
     })
 
-    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
+    const html = renderDriveView(createElement(DriveBrowserView, { snapshot }))
 
     expect(html).toContain('暂无文件')
     expect(html).not.toContain('暂无同级文件')
@@ -547,7 +554,7 @@ describe('drive browser view model', () => {
     expect(mdxeditor?.disabledReason).toBeUndefined()
     expect(findDriveRendererOption(snapshot, 'mdxeditor')?.id).toBe('mdxeditor')
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
+    const html = renderDriveView(createElement(DriveSingleFileReaderView, {
       snapshot,
       initialRendererId: 'mdxeditor',
     }))
@@ -622,7 +629,7 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'markdown', text: '# Notes', html: '<h1>Notes</h1>' },
     })
 
-    const html = renderToStaticMarkup(
+    const html = renderDriveView(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'code' })
     )
 
@@ -748,7 +755,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(
+    const html = renderDriveView(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
 
@@ -778,7 +785,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderDriveView(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('data-testid="markdown-body"')
     expect(html).toContain('<h1>Notes</h1>')
@@ -845,7 +852,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(
+    const html = renderDriveView(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
 
@@ -874,7 +881,7 @@ describe('drive browser view model', () => {
       preview: null,
     })
 
-    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'console' }))
+    const html = renderDriveView(createElement(DriveFinder, { snapshot, mode: 'console' }))
 
     expect(html).toContain('data-drive-finder="full"')
     expect(html).toContain('下载整个目录')
@@ -884,6 +891,7 @@ describe('drive browser view model', () => {
   })
 
   it('renders compact login status in shared finder toolbars', () => {
+    history.replaceState(null, '', '/share/share-1')
     const snapshot = createSnapshot({
       context: 'share',
       current: {
@@ -895,7 +903,7 @@ describe('drive browser view model', () => {
       preview: null,
     })
 
-    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'share' }))
+    const html = renderDriveView(createElement(DriveFinder, { snapshot, mode: 'share' }))
 
     expect(html).toContain('登录')
     expect(html).toContain('/console/sign-in?redirect=%2Fshare%2Fshare-1')
@@ -925,7 +933,7 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'console' }))
+    const html = renderDriveView(createElement(DriveFinder, { snapshot, mode: 'console' }))
 
     expect(html).toContain('data-drive-finder="file"')
     expect(html).toContain('data-drive-renderer-region="true"')
@@ -963,7 +971,7 @@ describe('drive browser view model', () => {
       children: [{ ...baseCurrent(), id: 'file', name: 'notes.md' }],
     })
 
-    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' }))
+    const html = renderDriveView(createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' }))
 
     expect(html).toContain('data-drive-finder="full"')
     expect(html).toContain('下载整个目录')
@@ -989,7 +997,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(
+    const html = renderDriveView(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
 
@@ -1016,7 +1024,7 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'html-source', visitUrl: '/share/shr_webpage/render' },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderDriveView(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('文件操作')
     expect(html).not.toContain('data-drive-preview-header="true"')
@@ -1094,7 +1102,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(
+    const html = renderDriveView(
       createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
     )
 
@@ -1124,7 +1132,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(
+    const html = renderDriveView(
       createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' })
     )
 
@@ -1174,7 +1182,7 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveBrowserView, {
+    const html = renderDriveView(createElement(DriveBrowserView, {
       snapshot,
       onLoadMoreChildren: () => undefined,
       loadingMoreChildren: false,
@@ -1186,12 +1194,19 @@ describe('drive browser view model', () => {
 })
 
 function renderDriveRendererContent(props: ComponentProps<typeof DriveRendererContent>): string {
-  return renderToStaticMarkup(
+  return renderDriveView(
     createElement(
       DriveRendererToolbarProvider,
       null,
       createElement(DriveRendererContent, props),
     ),
+  )
+}
+
+function renderDriveView(view: ReactNode): string {
+  const queryClient = new QueryClient()
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: queryClient }, view),
   )
 }
 

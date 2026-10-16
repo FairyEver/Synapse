@@ -48,7 +48,6 @@ import {
   AGENT_CONVERSATION_CONTROL_SERVICE_ID,
   AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
 } from "../../app-capabilities/agent/shared/capability"
-import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
 import { APP_DOMAIN } from "../../synapse-capabilities/shared/app-domain"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
 import { createDocumentTemplateService } from "../../app-capabilities/document-template/main/service"
@@ -191,8 +190,6 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
-import { DEFAULT_AGENT_WORKSPACE_PROJECT_ID } from "../../src/lib/default-agent-workspace"
-import { resolveDefaultAgentWorkspaceProject } from "../modules/agent/default-agent-workspace"
 import {
   AGENT_CONVERSATION_WINDOW_SERVICE_ID,
   createDefaultAgentConversationWindowService,

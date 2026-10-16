@@ -75,8 +75,20 @@
 - 确认令牌绑定逻辑同步状态；固定版本回读后复验当前云端版本，提交后验证失败保持关联暂停并报告已提交事实。
 - 桌面相关 29 个测试文件、866 项通过；最后新增桌面 Site 状态后重跑两个受影响文件，209 项通过（包括新增一项）。服务端 4 文件、305 项通过；dashboard 7 文件、147 项通过。
 - desktop 完整 typecheck、server TypeScript、dashboard TypeScript、hard constraints、桌面与网页交互日志覆盖检查通过。最后的桌面 Site 展示补充也已通过 Renderer 与测试类型检查。
-- dashboard 全量 Node 套件存在 5 个已有失败文件（Browser Mode 环境、旧 API mock、格式断言、删除路由断言、SSR 环境）；版本弹窗与 SSR 已以 HEAD 源码复测得到相同失败。相关新增/修改测试全部通过。
-- 改动文件的 lint 检查发现现有未修改代码的问题：bootstrap 的未使用 import、旧 IPC 错误缺 cause、旧下载函数未使用变量，以及 preload 未纳入 ESLint tsconfig。新增 Renderer 代码的针对性 lint 通过。不为此重构无关代码。
-- 未启动应用或浏览器；跨设备真实文件同步与视觉验收没有在本轮运行，源码、权限/异常路径、交互和类型以自动化测试覆盖。
+- 首次 dashboard 全量 Node 套件的 5 个失败文件已在后续排错中修复：浏览器 Hook 测试归入现有 Chromium 套件，渲染测试补齐 jsdom、QueryClientProvider 和分享路径，版本与遥测测试保留真实 API 导出，格式与路由断言对齐已生效的产品契约。
+- 首次 lint 的 6 处错误已修复：删除未使用 import，上传错误保留 cause 与脱敏边界，下载请求继续隔离本地路径，preload 使用自己的 TypeScript 项目进行 ESLint 检查。
+- 后续排错运行现有 Chromium 自动化套件；没有启动产品应用或人工操作浏览器，跨设备真实同步与视觉验收仍未执行。
 
 - 收尾时检测到并行任务的开发端口/构建脚本修改；保持原样，提交仅按本任务路径白名单选择。
+
+## 补充全量验收（2026-10-16）
+
+- 网页 Node 全量：`pnpm --dir dashboard exec vitest run --config vite.config.ts --maxWorkers=1`，108 文件、918 项通过。
+- 网页 Chromium 全量：`pnpm --dir dashboard run test:browser`，10 文件、42 项通过；包含原样迁移的 17 项表格 URL Hook 测试。
+- 桌面云盘主进程与界面分开运行：19 文件、620 项及 11 文件、253 项通过，合计 873 项；包含能力分发、共享 schema、IPC/preload、存储 schema、上传和同步异常路径。
+- 服务端云盘全量：`pnpm --filter @synapse/server exec vitest run src/drive --maxWorkers=1`，40 文件、751 项通过。
+- 桌面 Renderer、Electron、preload、测试四个 TypeScript 项目及服务端类型检查通过；网页生产构建（包含 shared 构建与 TypeScript）通过。
+- 云盘改动的 26 个桌面生产文件及本轮修改的 IPC 测试，ESLint 共 27 文件通过；hard constraints、桌面交互日志及网页 Drive 遥测覆盖检查通过。
+- 上传错误 cause 回归已验证旧实现失败、修复后通过；脱敏消息与 audit 保持原契约，下载请求不发送本地 outputPath。
+- 高并发验收曾使 300 行版本分页与 1000 文件上传边界超时，隔离复现及最终串行全量均通过；未缩小数据、放宽超时、删除断言或跳过测试。
+- 独立只读复查无阻断项。Chromium 仍有既有 MDXEditor 渲染期间状态更新警告，构建仍有大 chunk 提示；本轮没有改变编辑器或打包策略。未运行跨设备人工验收。

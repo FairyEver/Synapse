@@ -34,6 +34,15 @@ export default tseslint.config(
       },
     },
   },
+  // The preload bridge is checked in its own TypeScript project.
+  {
+    files: ["electron/preload.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./tsconfig.preload.json",
+      },
+    },
+  },
   // Global rules for all files
   {
     rules: {

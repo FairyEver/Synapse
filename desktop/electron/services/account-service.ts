@@ -1052,8 +1052,8 @@ export class AccountService {
   }
 
   async downloadDriveLinkFile(input: DriveLinkDownloadFileInput, options: { readonly maxBytes?: number } = {}): Promise<DriveLinkDownloadFileDto> {
-    const targetPath = input.outputPath ?? path.join((await createDriveLinkIntakeRunDirectory()).contentPath, "download")
-    const { outputPath: _outputPath, ...request } = input
+    const { outputPath, ...request } = input
+    const targetPath = outputPath ?? path.join((await createDriveLinkIntakeRunDirectory()).contentPath, "download")
     const response = await this.fetchAuthenticated(`${apiBaseUrl()}/drive/link-intake/download-file`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

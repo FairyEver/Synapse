@@ -667,9 +667,10 @@ describe("accountIpcModule", () => {
         throw new Error(`unexpected service ${id}`)
       }) as IpcHandlerContext["resolve"],
     }
+    const uploadError = new Error("upload failed token=sk-secret")
     const uploadDrivePreparedFile = vi.fn()
       .mockResolvedValueOnce({ ok: true })
-      .mockRejectedValueOnce(new Error("upload failed token=sk-secret"))
+      .mockRejectedValueOnce(uploadError)
     vi.mocked(accountService.uploadDrivePreparedFile).mockImplementation(uploadDrivePreparedFile)
 
     const request = {
@@ -679,7 +680,10 @@ describe("accountIpcModule", () => {
       url: "https://upload.example.test/object?token=sk-secret",
     }
     await expect(accountIpcModule.methods.uploadDrivePreparedFile.handler(ctx, request)).resolves.toEqual({ ok: true })
-    await expect(accountIpcModule.methods.uploadDrivePreparedFile.handler(ctx, request)).rejects.toThrow("upload failed")
+    await expect(accountIpcModule.methods.uploadDrivePreparedFile.handler(ctx, request)).rejects.toMatchObject({
+      message: "upload failed token=[redacted]",
+      cause: uploadError,
+    })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",

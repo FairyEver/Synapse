@@ -11,9 +11,14 @@ import {
   trackDriveEvent,
 } from './drive-telemetry'
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const sendClientTelemetryBatch = vi.hoisted(() => vi.fn())
 
-vi.mock('@/lib/api-client', () => ({ sendClientTelemetryBatch }))
+vi.mock('@/lib/api-client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/api-client')>(),
+  sendClientTelemetryBatch,
+}))
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null

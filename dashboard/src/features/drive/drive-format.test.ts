@@ -35,10 +35,14 @@ describe('drive admin format helpers', () => {
     }))).toBe('删除中')
   })
 
-  it('formats byte values', () => {
+  it('formats byte values with the shared size formatting contract', () => {
+    expect(formatDriveBytes('0')).toBe('0 B')
     expect(formatDriveBytes('512')).toBe('512 B')
-    expect(formatDriveBytes('2048')).toBe('2.0 KB')
+    expect(formatDriveBytes('1536')).toBe('1.5 KB')
+    expect(formatDriveBytes('2048')).toBe('2 KB')
+    expect(formatDriveBytes(String(1024 ** 4))).toBe('1 TB')
     expect(formatDriveBytes('bad')).toBe('-')
+    expect(formatDriveBytes('-1')).toBe('-')
   })
 
   it('only allows useful delete actions', () => {

@@ -791,7 +791,7 @@ async function runGuardedDrivePreparedUpload<T>(options: {
         errorLength: message.length,
       },
     })
-    throw new Error(safeMessage)
+    throw new Error(safeMessage, { cause: error })
   }
 }
 
