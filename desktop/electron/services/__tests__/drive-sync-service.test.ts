@@ -18,6 +18,55 @@ import { createDriveSyncService, type DriveSyncAccountService } from "../drive-s
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
+  it("does not reorder bindings or emit cursor changes when a poll returns the stored cursor", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-poll-cursor-"))
+    try {
+      const harness = createHarness()
+      let now = new Date("2026-10-16T00:00:00Z")
+      const service = createDriveSyncService({ ...harness.deps, now: () => now })
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", drivePathHint: "/Docs", kind: "folder", localPath: dir, deferWatcher: true })
+      now = new Date("2026-10-16T00:00:30Z")
+      await service.pollRemoteChanges()
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ updatedAt: binding.updatedAt })
+      harness.deps.accountService.listDriveChanges.mockResolvedValue({ items: [], nextCursor: "next", hasMore: false, resyncRequired: false })
+      await service.pollRemoteChanges()
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ remoteCursor: "next", updatedAt: now.toISOString() })
+    } finally { await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("keeps watcher catch-up and local edits behind the binding retry deadline", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-watcher-cooldown-"))
+    let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+    const harness = createHarness({ watch: (_root, _options, listener) => { rawEvent = listener; return { close: vi.fn(), on: vi.fn().mockReturnThis() } } })
+    let now = new Date("2026-10-16T00:00:00Z")
+    const service = createDriveSyncService({ ...harness.deps, now: () => now })
+    try {
+      await writeFile(path.join(dir, "spec.md"), "before")
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", drivePathHint: "/Docs", kind: "folder", localPath: dir, deferWatcher: true })
+      await seedFileBaseline(harness, binding.id, path.join(dir, "spec.md"), "remote-file")
+      const fileBaseline = (await harness.baseline.get(`${binding.id}:`))!
+      await harness.baseline.upsert({ ...fileBaseline, id: `${binding.id}:spec.md`, relativePath: "spec.md" })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      await service.startLocalWatcher()
+      await service.recordOperation({ bindingId: binding.id, kind: "resync", status: "retry_wait", relativePath: "", attemptCount: 1, nextRetryAt: "2026-10-16T00:10:00Z" })
+      harness.deps.accountService.getDriveItem.mockClear()
+      harness.deps.accountService.listDriveChanges.mockClear()
+      await writeFile(path.join(dir, "spec.md"), "after")
+      emitRawEvent(rawEvent, "change", null)
+      emitRawEvent(rawEvent, "change", "spec.md")
+      await new Promise((resolve) => setTimeout(resolve, 600))
+      expect(harness.deps.accountService.getDriveItem).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+      now = new Date("2026-10-16T00:10:01Z")
+      await service.pollRemoteChanges()
+      expect(harness.deps.accountService.uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({ name: "spec.md" }))
+    } finally {
+      await service.stopLocalWatcher()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("reviews independent replacement bytes and rejects a changed local file", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-replace-"))
     try {

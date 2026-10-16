@@ -178,6 +178,44 @@ describe("AccountService", () => {
     vi.useRealTimers()
   })
 
+  it.each([
+    { retryAfter: "120", delayMs: 120_000 },
+    { retryAfter: null, delayMs: 60_000 },
+  ])("shares drive item rate-limit cooldown across item IDs ($retryAfter)", async ({ retryAfter, delayMs }) => {
+    const fetch = vi.fn(async () => jsonResponse(driveItem({ id: "recovered" })))
+      .mockImplementationOnce(async () => new Response("Too Many Requests", {
+        status: 429,
+        headers: retryAfter ? { "Retry-After": retryAfter } : {},
+      }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    vi.useFakeTimers({ toFake: ["Date"] })
+    const startedAt = Date.now()
+
+    await expect(service.getDriveItem("first")).rejects.toMatchObject({ status: 429 })
+    vi.setSystemTime(startedAt + 2000)
+    for (const id of ["another", "parent", "first"]) {
+      await expect(service.getDriveItem(id)).rejects.toMatchObject({ status: 429, retryAfterMs: delayMs - 2000 })
+    }
+    expect(fetch).toHaveBeenCalledTimes(1)
+    vi.setSystemTime(startedAt + delayMs)
+    await expect(service.getDriveItem("recovered")).resolves.toMatchObject({ id: "recovered" })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it("reads fresh drive metadata after successful reads and non-rate-limit failures", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(driveItem({ id: "item", name: "before.md" })))
+      .mockResolvedValueOnce(jsonResponse({ message: "temporarily unavailable" }, 503))
+      .mockResolvedValueOnce(jsonResponse(driveItem({ id: "item", name: "after.md" })))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    await expect(service.getDriveItem("item")).resolves.toMatchObject({ name: "before.md" })
+    await expect(service.getDriveItem("item")).rejects.toMatchObject({ status: 503 })
+    await expect(service.getDriveItem("item")).resolves.toMatchObject({ name: "after.md" })
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
   it("reads a legacy mail page and detail from a server that has not upgraded", async () => {
     const { service } = await createTestAccountService()
     const person = { userId: "reader", nickname: "读者", handle: null }

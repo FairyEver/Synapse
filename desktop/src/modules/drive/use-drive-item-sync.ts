@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { DriveItemDto } from "@synapse/shared"
 import type { DriveSyncController } from "./sync"
 import { findContainedDriveBindings, getDriveItemSyncRelation, type ContainedDriveBindings, type DriveItemSyncRelation, type DriveSyncPathEntry } from "./drive-item-sync"
@@ -6,10 +6,13 @@ import { findContainedDriveBindings, getDriveItemSyncRelation, type ContainedDri
 export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly DriveSyncPathEntry[], controller: DriveSyncController) {
   const { snapshot, getRemote } = controller
   const [revision, setRevision] = useState(0)
-  // 传输进度不会改变祖先链，避免每次快照刷新重复查目录。
-  const query = JSON.stringify({ items: items.map(({ id, name, parentId, type }) => ({ id, name, parentId, type })), path, bindings: snapshot?.bindings.filter((binding) => binding.status !== "removed").map(({ id, driveItemId }) => ({ id, driveItemId })), revision })
+  // 更新时间会改变绑定的显示顺序，但不会改变祖先链。
+  const query = JSON.stringify({ items: items.map(({ id, name, parentId, type }) => ({ id, name, parentId, type })), path, bindings: snapshot?.bindings.filter((binding) => binding.status !== "removed").map(({ id, driveItemId, drivePathHint }) => ({ id, driveItemId, drivePathHint })).sort((left, right) => left.id.localeCompare(right.id)), revision })
+  const lookupInput = useRef({ items, path, snapshot })
+  lookupInput.current = { items, path, snapshot }
   const [contained, setContained] = useState<{ readonly query: string; readonly result: ContainedDriveBindings } | null>(null)
   useEffect(() => {
+    const { items, path, snapshot } = lookupInput.current
     if (!snapshot) return
     const abort = new AbortController()
     void findContainedDriveBindings(items, snapshot.bindings, path, getRemote, abort.signal).then((result) => {
@@ -17,7 +20,7 @@ export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly 
     })
     return () => abort.abort()
     // query 包含祖先查询所需的全部字段，operations / health 不触发目录查询。
-  }, [query, getRemote, items, path])
+  }, [query, getRemote])
   const retry = useCallback(async () => {
     await controller.refresh()
     setRevision((current) => current + 1)

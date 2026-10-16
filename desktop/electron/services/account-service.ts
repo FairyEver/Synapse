@@ -154,6 +154,8 @@ type AccountHttpError = Error & {
 }
 
 const DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS = 5000
+// 条目读取按接口共享限流；未返回 Retry-After 时等待完整的一分钟窗口。
+const DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS = 60_000
 
 type PaginatedAccountResponse<T> = {
   readonly data: readonly T[]
@@ -379,6 +381,7 @@ export class AccountService {
   private retryAttempt = 0
   private refreshInFlight: Promise<SynapseAccountState> | null = null
   private loginFallbackState: SynapseAccountState | null = null
+  private driveItemRateLimit: { readonly until: number } | null = null
 
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
@@ -646,7 +649,22 @@ export class AccountService {
   }
 
   async getDriveItem(itemId: string): Promise<DriveItemDto> {
-    return this.getAuthenticatedJson<DriveItemDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, "云盘条目加载失败。")
+    const remainingMs = (this.driveItemRateLimit?.until ?? 0) - Date.now()
+    if (remainingMs > 0) {
+      throw Object.assign(new Error("云盘请求过于频繁，等待后自动重试。"), { status: 429, retryAfterMs: remainingMs })
+    }
+    try {
+      return await this.getAuthenticatedJson<DriveItemDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, "云盘条目加载失败。")
+    } catch (error) {
+      if (error instanceof Error && (error as AccountHttpError).status === 429) {
+        const httpError = error as AccountHttpError
+        const delayMs = Math.max(1000, httpError.retryAfterMs ?? DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS)
+        const until = Math.max(this.driveItemRateLimit?.until ?? 0, Date.now() + delayMs)
+        this.driveItemRateLimit = { until }
+        httpError.retryAfterMs = until - Date.now()
+      }
+      throw error
+    }
   }
 
   async getDriveItemPreviewUrl(itemId: string): Promise<{ readonly url: string }> {

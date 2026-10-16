@@ -1101,6 +1101,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     void runBindingActionSingleFlight(bindingId, async () => {
       const binding = await requireBinding(bindingId)
       if (!isAutomaticallySyncableBinding(binding) || !isCurrentAccountOnline()) return
+      if (await isBindingWaitingForRetry(bindingId)) return
       await catchUpBinding(binding, false)
     }).catch(async (error) => {
       if (isRetryableSyncError(error)) {
@@ -3098,6 +3099,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   ): Promise<void> {
       let binding = await requireBinding(bindingId)
       if (!isAutomaticallySyncableBinding(binding) || !isCurrentAccountOnline()) return
+      if (await isBindingWaitingForRetry(bindingId)) return
       const rootReady = await ensureBindingRootReady(binding, { checkRemote: true, throwOnIssue: false })
       if (!rootReady) return
       let baseline = await baselineStore.listByBinding(bindingId)
@@ -3876,6 +3878,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function updateBindingCursor(bindingId: string, cursor: string | null): Promise<void> {
     const binding = await requireBinding(bindingId)
+    if (binding.remoteCursor === cursor) return
     await deps.bindings.upsert({
       ...binding,
       remoteCursor: cursor,
