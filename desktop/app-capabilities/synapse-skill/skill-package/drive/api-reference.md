@@ -169,6 +169,8 @@ These tools create and manage a persistent relationship between an owned Drive i
 
 ### `app_drive_sync_snapshot_get`
 
+Background metadata, ancestry and incremental reads are batched internally. Every binding retains its own cursor and error; incomplete reads never authorize deletion. HTTP 429 retry deadlines apply to all reads of that endpoint. Inspect existing retry/error state instead of repeatedly calling rescan or recreating a binding; no batch MCP command is required.
+
 Input: none.
 
 Returns all current-account `bindings`, visible `operations`, open `conflicts`, `health`, and summary counts. Offline or logged-out snapshots are read-only.

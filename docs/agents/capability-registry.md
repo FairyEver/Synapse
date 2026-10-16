@@ -65,6 +65,8 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 
 固定例外：
 
+- 云盘同步的 `app.drive_sync.remote_items.get` 是 UI 私有批量读取 IPC，返回自有条目、完整父链和当前版本；HTTP `/api/drive/items/batch`、`/api/drive/changes/batch` 只供既有账号客户端合并读取。同步根继续保留独立游标、分页及错误，不新增公开 MCP、System App、Dock、Workflow、Automation 或 Deep Link；Drive 仍为 76 个 MCP 工具。
+
 - Mail 的桌面详情与列表右键菜单提供“复制全文”：以标题、空行、完整 Markdown 正文写入剪贴板，不包含附件；列表摘要不足时复用既有信件读取接口，复制不改变已读状态。此操作仅为桌面 UI 交互，Mail 仍为 17 个 MCP 工具，System App、Dock、Workflow、Automation 和 Deep Link 注册数量不变。
 
 - Todos 的中文 MCP 检索覆盖「待办」「事项」「完成」及六类常用操作；仅补齐既有检索词表，仍为 6 个 capability / MCP 索引，公开工具保持 `search` 与 `invoke`，参数、系统 Skill 指南和其它注册表面不变。

@@ -421,6 +421,7 @@ export const IPC_CHANNELS = {
     "changed": "synapse:app:agent_personas:operation:changed",
   },
   "driveSync": {
+    "getRemoteItems": "synapse:app:drive_sync:remote_items:get",
     "getSnapshot": "synapse:app:drive_sync:snapshot:get",
     "previewBinding": "synapse:app:drive_sync:bindings:preview",
     "createSafeBinding": "synapse:app:drive_sync:bindings:safe_create",

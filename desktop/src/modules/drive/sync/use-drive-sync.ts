@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { DRIVE_ITEM_BATCH_LIMIT } from "@synapse/shared/drive-sync-constants"
 import type {
+  DriveItemBatchResponse,
   DriveItemDto,
   DriveSyncBindingDto,
   DriveSyncRemovalDisposition,
@@ -44,6 +46,7 @@ export interface DriveSyncChooseLocalPathInput {
 }
 
 export interface DriveSyncController {
+  readonly getRemoteBatch?: (itemIds: readonly string[]) => Promise<DriveItemBatchResponse>
   readonly listRemote: (parentId: string | null, offset?: number) => Promise<{ items: readonly DriveItemDto[]; nextOffset: number | null }>
   readonly getRemote: (itemId: string) => Promise<DriveItemDto>
   readonly snapshot: DriveSyncSnapshotDto | null
@@ -98,6 +101,15 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
   const pendingIdsRef = useRef<Set<string>>(new Set())
 
   const getRemote = useCallback((itemId: string) => requireSynapseBridge().drive.item.get({ itemId }), [])
+  const getRemoteBatch = useCallback(async (itemIds: readonly string[]): Promise<DriveItemBatchResponse> => {
+    const results: DriveItemBatchResponse["results"][number][] = []
+    const ids = [...new Set(itemIds)]
+    for (let offset = 0; offset < ids.length; offset += DRIVE_ITEM_BATCH_LIMIT) {
+      const page = await requireSynapseBridge().driveSync.getRemoteItems({ itemIds: ids.slice(offset, offset + DRIVE_ITEM_BATCH_LIMIT) })
+      results.push(...page.results)
+    }
+    return { results }
+  }, [])
 
   const refresh = useCallback(async (): Promise<DriveSyncSnapshotDto> => {
     const next = await requireSynapseBridge().driveSync.getSnapshot()
@@ -209,6 +221,7 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
       return Array.isArray(result) ? { items: result, nextOffset: null } : { items: result.items, nextOffset: result.page.nextOffset }
     },
     getRemote,
+    getRemoteBatch,
     snapshot,
     error,
     loading,

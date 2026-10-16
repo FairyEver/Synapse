@@ -109,6 +109,10 @@ import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
 import { normalizeMailMessage, normalizeMailPage } from "./mail-response"
+import { readDriveBatches } from "./drive-batch-client"
+import { assertDriveBatchKeys, driveItemBatchResponseSchema, driveChangeBatchResponseSchema } from "../../src/lib/drive-batch-schemas"
+import { DRIVE_ITEM_BATCH_LIMIT, DRIVE_CHANGE_BATCH_LIMIT } from "@synapse/shared/drive-sync-constants"
+import type { DriveItemBatchResponse, DriveChangeBatchRequest, DriveChangeBatchResponse } from "@synapse/shared" with { "resolution-mode": "import" }
 import { redactSensitiveText } from "../../src/lib/agent-redaction"
 
 const logger = createMainLogger("service.account")
@@ -381,7 +385,7 @@ export class AccountService {
   private retryAttempt = 0
   private refreshInFlight: Promise<SynapseAccountState> | null = null
   private loginFallbackState: SynapseAccountState | null = null
-  private driveItemRateLimit: { readonly until: number } | null = null
+  private readonly driveReadRetryAt = new Map<string, number>()
 
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
@@ -649,18 +653,56 @@ export class AccountService {
   }
 
   async getDriveItem(itemId: string): Promise<DriveItemDto> {
-    const remainingMs = (this.driveItemRateLimit?.until ?? 0) - Date.now()
+    return this.withDriveReadCooldown("items", () => this.getAuthenticatedJson<DriveItemDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, "云盘条目加载失败。"))
+  }
+
+  async getDriveItemsBatch(itemIds: readonly string[]): Promise<DriveItemBatchResponse> {
+    const ids = [...new Set(itemIds)]
+    return { results: await readDriveBatches(ids, DRIVE_ITEM_BATCH_LIMIT, async (batch) => {
+      const response = await this.withDriveReadCooldown("items", () => this.requestAuthenticatedJson<unknown>("POST", `${apiBaseUrl()}/drive/items/batch`, { itemIds: batch }, "云盘批量条目加载失败。"))
+      const parsed = driveItemBatchResponseSchema.parse(response)
+      assertDriveBatchKeys(parsed.results.map((r) => r.itemId), batch)
+      const byId = new Map(parsed.results.map((r) => [r.itemId, r]))
+      return batch.map((id) => byId.get(id)!)
+    }, (itemId, error) => ({ itemId, data: null, error })) }
+  }
+
+  async listDriveChangesBatch(requests: readonly DriveChangeBatchRequest[]): Promise<DriveChangeBatchResponse> {
+    if (new Set(requests.map((r) => r.requestId)).size !== requests.length) throw new Error("批量变更请求标识重复。")
+    return { results: await readDriveBatches(requests, DRIVE_CHANGE_BATCH_LIMIT, async (batch) => {
+      const response = await this.withDriveReadCooldown("changes", () => this.requestAuthenticatedJson<unknown>("POST", `${apiBaseUrl()}/drive/changes/batch`, { requests: batch }, "云盘批量变更加载失败。"))
+      const parsed = driveChangeBatchResponseSchema.parse(response)
+      assertDriveBatchKeys(parsed.results.map((r) => r.requestId), batch.map((r) => r.requestId))
+      for (const result of parsed.results) {
+        if (!result.data || result.data.resyncRequired) continue
+        const input = batch.find((r) => r.requestId === result.requestId)!
+        if (input.cursor === "latest") continue
+        let sequence = BigInt(input.cursor ?? "0")
+        for (const item of result.data.items) {
+          if (BigInt(item.sequence) <= sequence) throw Object.assign(new Error("云盘变更顺序无效。"), { status: 502 })
+          sequence = BigInt(item.sequence)
+        }
+        const expectedCursor = result.data.items.length ? sequence.toString() : input.cursor ?? null
+        if (result.data.nextCursor !== expectedCursor) throw Object.assign(new Error("云盘变更游标无效。"), { status: 502 })
+      }
+      const byId = new Map(parsed.results.map((r) => [r.requestId, r]))
+      return batch.map((r) => byId.get(r.requestId)!)
+    }, (request, error) => ({ requestId: request.requestId, data: null, error })) }
+  }
+
+  private async withDriveReadCooldown<T>(kind: "items" | "changes", read: () => Promise<T>): Promise<T> {
+    const remainingMs = (this.driveReadRetryAt.get(kind) ?? 0) - Date.now()
     if (remainingMs > 0) {
       throw Object.assign(new Error("云盘请求过于频繁，等待后自动重试。"), { status: 429, retryAfterMs: remainingMs })
     }
     try {
-      return await this.getAuthenticatedJson<DriveItemDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, "云盘条目加载失败。")
+      return await read()
     } catch (error) {
       if (error instanceof Error && (error as AccountHttpError).status === 429) {
         const httpError = error as AccountHttpError
         const delayMs = Math.max(1000, httpError.retryAfterMs ?? DRIVE_ITEM_RATE_LIMIT_RETRY_DELAY_MS)
-        const until = Math.max(this.driveItemRateLimit?.until ?? 0, Date.now() + delayMs)
-        this.driveItemRateLimit = { until }
+        const until = Math.max(this.driveReadRetryAt.get(kind) ?? 0, Date.now() + delayMs)
+        this.driveReadRetryAt.set(kind, until)
         httpError.retryAfterMs = until - Date.now()
       }
       throw error

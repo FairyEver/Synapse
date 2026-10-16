@@ -149,6 +149,92 @@ async function createTestAccountService(input: {
 }
 
 describe("AccountService", () => {
+  it("chunks batch item reads, preserves per-item failures and sends no single-item requests", async () => {
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const { itemIds } = JSON.parse(String(init?.body)) as { itemIds: string[] }
+      return jsonResponse({ results: itemIds.map((itemId) => itemId === "missing"
+        ? { itemId, data: null, error: { status: 404, code: "NOT_FOUND", message: "missing" } }
+        : { itemId, error: null, data: { item: driveItem({ id: itemId }), ancestors: [], currentVersionId: "current", etag: "etag" } }) })
+    })
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const ids = [...Array.from({ length: 100 }, (_, index) => `item-${index}`), "missing"]
+    const result = await service.getDriveItemsBatch(ids)
+    expect(result.results).toHaveLength(101)
+    expect(result.results[0]).toMatchObject({ data: { currentVersionId: "current" } })
+    expect(result.results[100]).toMatchObject({ data: null, error: { status: 404 } })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls.every(([url, init]) => String(url).endsWith("/drive/items/batch") && init?.method === "POST")).toBe(true)
+  })
+
+  it("rejects incomplete batch responses without treating missing results as deleted items", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ results: [] }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.getDriveItemsBatch(["unreturned"])
+    expect(result.results).toEqual([expect.objectContaining({ itemId: "unreturned", data: null, error: expect.objectContaining({ status: 502 }) })])
+  })
+
+  it("classifies invalid batch JSON as a protocol error", async () => {
+    const fetch = vi.fn(async () => new Response("{invalid", { status: 200 }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.getDriveItemsBatch(["a"])
+    expect(result.results[0]).toMatchObject({ data: null, error: { status: 502 } })
+  })
+
+  it("does not treat an unavailable batch endpoint as missing Drive items", async () => {
+    const fetch = vi.fn(async () => new Response("Cannot POST /api/drive/items/batch", { status: 404 }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.getDriveItemsBatch(["a"])
+    expect(result.results[0]).toMatchObject({ data: null, error: { status: 502 } })
+  })
+
+  it("batches root change queries with their independent cursors", async () => {
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const { requests } = JSON.parse(String(init?.body)) as { requests: { requestId: string; cursor: string }[] }
+      return jsonResponse({ results: requests.map(({ requestId, cursor }) => ({ requestId, error: null, data: { items: [], nextCursor: cursor, hasMore: false, resyncRequired: false } })) })
+    })
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.listDriveChangesBatch([{ requestId: "a", rootItemId: "a", cursor: "10" }, { requestId: "b", rootItemId: "b", cursor: "20" }])
+    expect(result.results.map((entry) => entry.data?.nextCursor)).toEqual(["10", "20"])
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0]?.[0]).toBe(expectedApiUrl("/drive/changes/batch"))
+  })
+
+  it("honors a batch 429 across chunks and single-item reads", async () => {
+    const fetch = vi.fn(async () => new Response("Too Many Requests", { status: 429, headers: { "Retry-After": "120" } }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.getDriveItemsBatch(Array.from({ length: 201 }, (_, i) => `item-${i}`))
+    expect(result.results.every((r) => r.error?.status === 429 && r.error.retryAfterMs! > 119000)).toBe(true)
+    await expect(service.getDriveItem("parent")).rejects.toMatchObject({ status: 429 })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it("retains successful chunks when another batch fails", async () => {
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const { itemIds } = JSON.parse(String(init?.body)) as { itemIds: string[] }
+      if (itemIds.includes("bad")) return new Response("unavailable", { status: 503 })
+      return jsonResponse({ results: itemIds.map((itemId) => ({ itemId, error: null, data: { item: driveItem({ id: itemId }), ancestors: [], currentVersionId: "v1", etag: null } })) })
+    })
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.getDriveItemsBatch([...Array.from({ length: 100 }, (_, i) => `item-${i}`), "bad"])
+    expect(result.results.filter((r) => r.data)).toHaveLength(100)
+    expect(result.results.at(-1)).toMatchObject({ itemId: "bad", error: { status: 503 } })
+  })
+
+  it.each(["invalid", "9223372036854775808", "11"])("blocks malformed or unearned change cursors %s", async (nextCursor) => {
+    const fetch = vi.fn(async () => jsonResponse({ results: [{ requestId: "a", error: null, data: { items: [], nextCursor, hasMore: false, resyncRequired: false } }] }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    const result = await service.listDriveChangesBatch([{ requestId: "a", rootItemId: "a", cursor: "10" }])
+    expect(result.results[0]).toMatchObject({ data: null, error: { status: 502 } })
+  })
+
   it("refreshes a Todo 401 with the original UUID and preserves its identity generation", async () => {
     const sentRequestIds: string[] = []
     const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {

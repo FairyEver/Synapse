@@ -75,6 +75,9 @@ import {
   type DriveSyncPlannedOperation,
 } from "./drive-sync-planner"
 import { pollDriveSyncRemoteChanges } from "./drive-sync-remote-poller"
+import { prepareDriveSyncBatchReads, driveSyncReadSignature, type DriveSyncBatchReads } from "./drive-sync-batch-reads"
+import { throwDriveBatchError } from "./drive-batch-client"
+import type { DriveItemBatchResult, DriveItemBatchResponse, DriveChangeBatchRequest, DriveChangeBatchResponse } from "@synapse/shared" with { "resolution-mode": "import" }
 import { createDriveSyncWatcher, type DriveSyncLocalChange, type DriveSyncWatchFactory } from "./drive-sync-watcher"
 import {
   createDriveSyncWorkCoordinator,
@@ -109,6 +112,8 @@ type DriveSyncRemoteTreeEntry = {
 }
 
 export interface DriveSyncAccountService {
+  readonly getDriveItemsBatch?: (ids: readonly string[]) => Promise<DriveItemBatchResponse>
+  readonly listDriveChangesBatch?: (requests: readonly DriveChangeBatchRequest[]) => Promise<DriveChangeBatchResponse>
   readonly downloadDriveFileVersion?: (input: { readonly itemId: string; readonly versionId: string; readonly outputPath: string }) => Promise<{ readonly ok: true; readonly path: string }>
   readonly listDriveFileVersions?: (itemId: string, input: { readonly offset: number; readonly limit: number }) => Promise<{ readonly items: readonly { readonly id: string; readonly isCurrent: boolean }[]; readonly page: { readonly nextOffset: number | null } }>
   readonly getState?: () => SynapseAccountState
@@ -946,6 +951,13 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
     if (!isCurrentAccountOnline()) return
     const bindings = (await listOwnerBindings()).filter(isAutomaticallySyncableBinding)
+    const owner = currentOwnerUserId()
+    const eligible = []
+    for (const binding of bindings) if (!await isBindingWaitingForRetry(binding.id)) eligible.push(binding)
+    const batchReads = eligible.length && deps.accountService.getDriveItemsBatch && deps.accountService.listDriveChangesBatch
+      ? await prepareDriveSyncBatchReads(eligible, { getDriveItemsBatch: deps.accountService.getDriveItemsBatch.bind(deps.accountService), listDriveChangesBatch: deps.accountService.listDriveChangesBatch.bind(deps.accountService) })
+      : new Map<string, DriveSyncBatchReads>()
+    if (!isCurrentAccountOnline() || currentOwnerUserId() !== owner) return
     let waitingForRetry = false
     const results = await Promise.allSettled(bindings.map((binding) =>
       runBindingActionSingleFlight(binding.id, async () => {
@@ -955,7 +967,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           waitingForRetry = true
           return
         }
-        await catchUpBinding(current, false)
+        const prepared = batchReads.get(binding.id)
+        await catchUpBinding(current, false, prepared?.signature === driveSyncReadSignature(current) ? prepared : undefined)
       }),
     ))
     const failures: unknown[] = []
@@ -1007,7 +1020,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
    * hint is the binding's entire notion of location, so once it is wrong every path decision taken
    * from it — and any backlog the feed would replay — is untrustworthy.
    */
-  async function refreshBindingRootPathHint(binding: DriveSyncBindingEntryV1): Promise<boolean> {
+  async function refreshBindingRootPathHint(binding: DriveSyncBindingEntryV1, remote?: DriveItemBatchResult): Promise<boolean> {
     if (binding.kind !== "folder") return false
     // A binding still initializing has just been reconciled against the live tree, so its hint is
     // already consistent and forcing another reconciliation would only duplicate that work.
@@ -1018,7 +1031,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (previous && previous.signature === signature && nowMs - previous.checkedAtMs < ROOT_HINT_RECHECK_INTERVAL_MS) {
       return false
     }
-    const livePath = await resolveRemoteItemAbsolutePath(binding.driveItemId)
+    if (remote?.error) throwDriveBatchError(remote.error)
+    const livePath = remote?.data
+      ? [...remote.data.ancestors.map((item) => item.name), remote.data.item.name].join("/")
+      : await resolveRemoteItemAbsolutePath(binding.driveItemId)
     if (!livePath) return false
     if (normalizeRemoteTreePathSegments(binding.drivePathHint ?? "") === livePath) {
       verifiedRootHintChecks.set(binding.id, { signature, checkedAtMs: nowMs })
@@ -1036,13 +1052,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return true
   }
 
-  async function pollActiveBindingRemoteChanges(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean): Promise<void> {
+  async function pollActiveBindingRemoteChanges(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean, prepared?: DriveSyncBatchReads): Promise<void> {
+    if (prepared?.changes.error) throwDriveBatchError(prepared.changes.error)
     const rootReady = await ensureBindingRootReady(binding, {
       checkRemote: true,
       throwOnIssue: throwOnRootIssue,
+      remote: prepared?.root,
     })
     if (!rootReady) return
-    if (await refreshBindingRootPathHint(binding)) {
+    if (await refreshBindingRootPathHint(binding, prepared?.root)) {
       // The bound folder is not where the binding thinks it is. Reconcile both sides first: the
       // change feed would otherwise replay whatever backlog accumulated while the hint was wrong
       // onto a local tree that has been drifting for exactly that long.
@@ -1069,11 +1087,15 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       ...localChanges.map((change) => change.relativePath),
       ...openConflictPaths,
     ])
-    if (await handleMissingFileBindingRoot({ binding, baseline, localChangedPaths })) return
+    if (await handleMissingFileBindingRoot({ binding, baseline, localChangedPaths, remote: prepared?.root })) return
+    let firstPage = prepared?.changes.data
     await pollDriveSyncRemoteChanges({
       binding,
       baseline,
-      accountService: deps.accountService,
+      accountService: prepared ? { listDriveChanges: async (input) => {
+        if (firstPage) { const page = firstPage; firstPage = null; return page }
+        return prepared.nextPage(input)
+      } } : deps.accountService,
       onOperations: (operations) => executePlannedOperations(operations, { throwOnError: true }),
       onConflicts: recordPlannedConflicts,
       updateBindingCursor,
@@ -1090,8 +1112,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     )
   }
 
-  async function catchUpBinding(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean): Promise<void> {
-    await pollActiveBindingRemoteChanges(binding, throwOnRootIssue)
+  async function catchUpBinding(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean, prepared?: DriveSyncBatchReads): Promise<void> {
+    await pollActiveBindingRemoteChanges(binding, throwOnRootIssue, prepared)
     const current = await requireBinding(binding.id)
     if (!isAutomaticallySyncableBinding(current)) return
     await scanBindingForLocalChanges(current, { throwOnScanError: throwOnRootIssue })
@@ -1527,6 +1549,24 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return null
   }
 
+  async function getRemoteItems(itemIds: readonly string[]): Promise<DriveItemBatchResponse> {
+    requireOnlineOwnerUserId()
+    if (!deps.accountService.getDriveItemsBatch) throw new Error("云盘批量读取不可用。")
+    return deps.accountService.getDriveItemsBatch(itemIds)
+  }
+
+  async function alignmentMetadata(itemIds: readonly string[]) {
+    if (!deps.accountService.getDriveItemsBatch) return null
+    const response = await getRemoteItems(itemIds)
+    const result = new Map(response.results.map((entry) => [entry.itemId, entry]))
+    for (const itemId of itemIds) {
+      const entry = result.get(itemId)
+      if (entry?.error) throwDriveBatchError(entry.error)
+      if (!entry?.data) throw new Error("云盘批量响应不完整，已阻止对齐。")
+    }
+    return result
+  }
+
   async function captureAlignment(input: DriveSyncCreateSafeBindingInput, rules: DriveSyncBindingEntryV1["excludeRules"]) {
     const ownerUserId = requireOnlineOwnerUserId()
     const root = await getDriveItemFromAccountService(deps.accountService, input.driveItemId)
@@ -1550,23 +1590,39 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const remote: AlignmentEntry[] = []
     const directory = await createVerificationDirectory("alignment-preview")
     try {
+      const included = remoteEntries.filter((item) => {
+        const relativePath = relativePaths.get(item.id)
+        return relativePath !== undefined && (!relativePath || !isDriveSyncExcluded(relativePath, rules, item.type))
+      })
+      const beforeBatch = await alignmentMetadata(included.map((item) => item.id))
       for (const item of remoteEntries) {
         const relativePath = relativePaths.get(item.id)
         if (relativePath === undefined) throw new Error("无法解析云端路径，请重新检查。")
         if (relativePath && isDriveSyncExcluded(relativePath, rules, item.type)) continue
-        const before = await getDriveItemFromAccountService(deps.accountService, item.id)
+        const beforeData = beforeBatch?.get(item.id)?.data
+        const before = beforeData?.item ?? await getDriveItemFromAccountService(deps.accountService, item.id)
         let hash: string | null = null
-        const remoteVersionId = item.type === "file" && input.authority === "local" ? await currentAlignmentVersion(item.id) : null
+        const remoteVersionId = item.type === "file" && input.authority === "local" ? beforeData ? beforeData.currentVersionId : await currentAlignmentVersion(item.id) : null
         if (item.type === "file") {
           const outputPath = path.join(directory, "content")
           await deps.accountService.downloadDriveFile({ itemId: item.id, outputPath })
           hash = await hashDriveSyncFile(outputPath)
           await rm(outputPath, { force: true })
         }
-        const after = await getDriveItemFromAccountService(deps.accountService, item.id)
-        if (item.type === "file" && input.authority === "local" && remoteVersionId !== await currentAlignmentVersion(item.id)) throw new Error("云端版本在检查期间变化，请重新检查。")
-        if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("云端内容在检查期间变化，请重新检查。")
-        remote.push({ relativePath, kind: item.type, hash, remoteId: item.id, remoteVersionId, stamp: JSON.stringify([after.parentId, after.name, after.updatedAt]) })
+        if (!beforeBatch) {
+          const after = await getDriveItemFromAccountService(deps.accountService, item.id)
+          if (item.type === "file" && input.authority === "local" && remoteVersionId !== await currentAlignmentVersion(item.id)) throw new Error("云端版本在检查期间变化，请重新检查。")
+          if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("云端内容在检查期间变化，请重新检查。")
+        }
+        remote.push({ relativePath, kind: item.type, hash, remoteId: item.id, remoteVersionId, stamp: JSON.stringify([before.parentId, before.name, before.updatedAt]) })
+      }
+      if (beforeBatch) {
+        const afterBatch = await alignmentMetadata(included.map((item) => item.id))
+        for (const item of included) {
+          const before = beforeBatch.get(item.id)!.data!
+          const after = afterBatch!.get(item.id)!.data!
+          if (JSON.stringify(before.item) !== JSON.stringify(after.item) || before.currentVersionId !== after.currentVersionId) throw new Error("云端版本或内容在检查期间变化，请重新检查。")
+        }
       }
     } finally {
       await rm(directory, { recursive: true, force: true })
@@ -3214,13 +3270,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     readonly binding: DriveSyncBindingEntryV1
     readonly baseline: readonly DriveSyncBaselineEntryV1[]
     readonly localChangedPaths: ReadonlySet<string>
+    readonly remote?: DriveItemBatchResult
   }): Promise<boolean> {
     if (input.binding.kind !== "file" || !deps.accountService.getDriveItem) return false
     const activeRootBaseline = input.baseline.find((entry) => entry.relativePath === "" && entry.deletedAt === null)
     if (!activeRootBaseline) return false
 
     try {
-      await deps.accountService.getDriveItem(input.binding.driveItemId)
+      if (input.remote) {
+        if (input.remote.error) throwDriveBatchError(input.remote.error)
+        if (!input.remote.data) throw new Error("云盘条目响应不完整。")
+      } else await deps.accountService.getDriveItem(input.binding.driveItemId)
       return false
     } catch (error) {
       if (!isRemoteNotFoundError(error)) throw error
@@ -3953,7 +4013,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (options.throwOnScanError) throw new Error(message, { cause: error })
       return
     }
-    await handleBindingLocalChanges(binding.id, changes)
+    if (changes.length > 0) await handleBindingLocalChanges(binding.id, changes)
   }
 
   async function assertBindingRootReady(
@@ -3969,7 +4029,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function ensureBindingRootReady(
     binding: DriveSyncBindingEntryV1,
-    input: { readonly checkRemote: boolean; readonly throwOnIssue: boolean },
+    input: { readonly checkRemote: boolean; readonly throwOnIssue: boolean; readonly remote?: DriveItemBatchResult },
   ): Promise<boolean> {
     const rootBaseline = await activeRootBaseline(binding.id)
     if (!rootBaseline) return true
@@ -3982,7 +4042,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     let remoteMissing = false
     if (input.checkRemote && deps.accountService.getDriveItem) {
       try {
-        await deps.accountService.getDriveItem(rootBaseline.remoteItemId)
+        if (input.remote?.itemId === rootBaseline.remoteItemId) {
+          if (input.remote.error) throwDriveBatchError(input.remote.error)
+          if (!input.remote.data) throw new Error("云盘条目响应不完整。")
+        } else await deps.accountService.getDriveItem(rootBaseline.remoteItemId)
       } catch (error) {
         if (!isRemoteNotFoundError(error)) throw error
         remoteMissing = true
@@ -4716,6 +4779,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   return {
     events,
     getSnapshot,
+    getRemoteItems,
     createBinding,
     previewFileReplacement,
     applyFileReplacement,

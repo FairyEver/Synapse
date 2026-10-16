@@ -18,6 +18,7 @@ import { DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PE
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_ANNOTATION_COMMENT_MAX_LENGTH,
+  DRIVE_ITEM_BATCH_LIMIT, DRIVE_CHANGE_BATCH_LIMIT,
   DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH,
   DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
@@ -486,6 +487,21 @@ export class DriveUserController {
       rootItemId: rootItemId ?? null,
       rootPathHint: rootPathHint ?? null,
     })
+  }
+
+  @Post("/items/batch")
+  getItemsBatch(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(z.object({ itemIds: z.array(z.string().min(1).max(128)).min(1).max(DRIVE_ITEM_BATCH_LIMIT) }).strict(), body, "批量条目请求无效。")
+    return this.drive.getItemsBatch(request.user!.id, input.itemIds)
+  }
+
+  @Post("/changes/batch")
+  listChangesBatch(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(z.object({ requests: z.array(z.object({
+      requestId: z.string().min(1).max(128), rootItemId: z.string().min(1).max(128),
+      cursor: z.string().max(128).nullable().optional(), rootPathHint: z.string().max(4096).nullable().optional(), limit: z.number().optional(),
+    }).strict()).min(1).max(DRIVE_CHANGE_BATCH_LIMIT) }).strict(), body, "批量变更请求无效。")
+    return requireDriveChangeLog(this.changes).listBatch(request.user!.id, input.requests)
   }
 
   @Get("/items")

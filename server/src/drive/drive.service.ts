@@ -80,6 +80,7 @@ import type { DriveMarkdownPdfImageReference } from "./drive-markdown-pdf-render
 import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
+import { readDriveItemsBatch } from "./drive-batch-items"
 import {
   extractDriveMarkdownRelativeImages,
   isSafeDriveMarkdownRasterName,
@@ -464,6 +465,10 @@ export class DriveService implements OnApplicationBootstrap {
 
   async getItem(userId: string, itemId: string): Promise<DriveItemDto> {
     return toDriveItemDto(await this.requireOwnedItem(userId, itemId))
+  }
+
+  getItemsBatch(userId: string, itemIds: readonly string[]) {
+    return readDriveItemsBatch(this.prisma, userId, itemIds, ordinaryDriveItemWhere({ userId }), driveItemWithShares)
   }
 
   async listFileVersions(userId: string, itemId: string, input: DriveFileVersionListInput = {}): Promise<DriveFileVersionListPageDto> {

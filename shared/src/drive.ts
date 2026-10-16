@@ -247,6 +247,41 @@ export interface DriveChangeListPageDto {
   readonly resyncRequired: boolean
 }
 
+export { DRIVE_ITEM_BATCH_LIMIT, DRIVE_CHANGE_BATCH_LIMIT, DRIVE_CHANGE_BATCH_PAGE_LIMIT } from "./drive-sync-constants.cjs"
+
+export interface DriveBatchReadError {
+  readonly status: number
+  readonly code: string
+  readonly message: string
+  readonly retryAfterMs?: number
+}
+
+export type DriveItemAncestorDto = Pick<DriveItemDto, "id" | "parentId" | "name" | "type">
+export interface DriveItemBatchData {
+  readonly item: DriveItemDto
+  /** Ordered from the Drive root to the immediate parent. */
+  readonly ancestors: readonly DriveItemAncestorDto[]
+  readonly currentVersionId: string | null
+  readonly etag: string | null
+}
+export interface DriveItemBatchResult {
+  readonly itemId: string
+  readonly data: DriveItemBatchData | null
+  readonly error: DriveBatchReadError | null
+}
+export interface DriveItemBatchResponse { readonly results: readonly DriveItemBatchResult[] }
+
+export interface DriveChangeBatchRequest extends DriveChangeListInput {
+  readonly requestId: string
+  readonly rootItemId: string
+}
+export interface DriveChangeBatchResult {
+  readonly requestId: string
+  readonly data: DriveChangeListPageDto | null
+  readonly error: DriveBatchReadError | null
+}
+export interface DriveChangeBatchResponse { readonly results: readonly DriveChangeBatchResult[] }
+
 export interface DriveSyncBindingDto {
   readonly removalDisposition?: DriveSyncRemovalDisposition
   readonly id: string

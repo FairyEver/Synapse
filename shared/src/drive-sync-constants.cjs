@@ -1,6 +1,11 @@
 /** @type {readonly ["initializing", "active", "paused", "conflict", "error", "removed"]} */
 exports.DRIVE_SYNC_BINDING_STATUSES = ["initializing", "active", "paused", "conflict", "error", "removed"]
 
+// Bounds for authenticated Drive sync batch reads (single authoring source).
+exports.DRIVE_ITEM_BATCH_LIMIT = 100
+exports.DRIVE_CHANGE_BATCH_LIMIT = 20
+exports.DRIVE_CHANGE_BATCH_PAGE_LIMIT = 100
+
 /** @type {readonly ["pending", "running", "succeeded", "retry_wait", "conflict", "error"]} */
 exports.DRIVE_SYNC_OPERATION_STATUSES = ["pending", "running", "succeeded", "retry_wait", "conflict", "error"]
 

@@ -12,6 +12,17 @@ const path = [{ id: null, name: "根目录" }, { id: "root", name: "Docs" }]
 const snapshot = (overrides: Partial<DriveSyncSnapshotDto> = {}) => ({ bindings: [binding], conflicts: [], operations: [], health: { connectivity: "online" }, ...overrides }) as DriveSyncSnapshotDto
 
 describe("Drive item sync relationships", () => {
+  it("resolves several roots and shared parents from one batch without single-item lookups", async () => {
+    const second = { ...binding, id: "second", driveItemId: "other" }
+    const getRemote = vi.fn(async (id: string) => item(id, "unexpected"))
+    const getBatch = vi.fn(async () => ({ results: [binding, second].map((root) => ({ itemId: root.driveItemId, error: null, data: { item: item(root.driveItemId, "Root", "middle", "folder"), ancestors: [item("container", "Parent", null, "folder"), item("middle", "Middle", "container", "folder")], currentVersionId: null, etag: null } })) }))
+    const result = await findContainedDriveBindings([item("container", "Parent", null, "folder")], [binding, second], [], getRemote, undefined, getBatch)
+    expect(result.bindings.get("container")).toEqual(["binding", "second"])
+    expect(result.failed).toBe(false)
+    expect(getBatch).toHaveBeenCalledTimes(1)
+    expect(getRemote).not.toHaveBeenCalled()
+  })
+
   it("uses breadcrumb IDs, inherits nested paths and shares the engine's exclusion semantics", () => {
     expect(getDriveItemSyncRelation(item("child", "notes.md"), path, [binding])).toMatchObject({ kind: "bound", inherited: true, excluded: false, localPath: "/Users/me/Docs/notes.md" })
     expect(getDriveItemSyncRelation(item("x", "node_modules", "root", "folder"), path, [binding])).toMatchObject({ excluded: true })
@@ -19,6 +30,18 @@ describe("Drive item sync relationships", () => {
     expect(getDriveItemSyncRelation(item("x", "a.log"), path, [binding])).toMatchObject({ excluded: true })
     expect(getDriveItemSyncRelation(item("x", "a"), [{ id: "different", name: "Docs" }], [binding])).toBeNull()
     expect(getDriveItemSyncRelation(item("x", "../escape"), path, [binding])).toMatchObject({ kind: "unknown" })
+  })
+
+  it("keeps successful ancestry when another batch root fails without individual retries", async () => {
+    const getRemote = vi.fn(async (id: string) => item(id, "unexpected"))
+    const getBatch = vi.fn(async () => ({ results: [
+      { itemId: "root", error: null, data: { item: item("root", "Root", "container", "folder"), ancestors: [item("container", "Parent", null, "folder")], currentVersionId: null, etag: null } },
+      { itemId: "failed", data: null, error: { status: 429, code: "THROTTLED", message: "wait" } },
+    ] }))
+    const result = await findContainedDriveBindings([item("container", "Parent", null, "folder")], [binding, { ...binding, id: "failed", driveItemId: "failed" }], [], getRemote, undefined, getBatch)
+    expect(result.bindings.get("container")).toEqual(["binding"])
+    expect(result.failed).toBe(true)
+    expect(getRemote).not.toHaveBeenCalled()
   })
 
   it("limits conflict and progress states to the item's actual subtree", () => {

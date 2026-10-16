@@ -14,6 +14,8 @@ import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import type { DriveSyncService } from "../../services/drive-sync-service"
+import { driveItemBatchResponseSchema } from "../../../src/lib/drive-batch-schemas"
+import { DRIVE_ITEM_BATCH_LIMIT } from "@synapse/shared/drive-sync-constants"
 
 const driveItemKindSchema = z.enum(["file", "folder"])
 const driveSyncInitialDirectionSchema = z.enum(DRIVE_SYNC_INITIAL_DIRECTIONS)
@@ -218,6 +220,13 @@ function wireDriveSyncEvents(
 export const driveSyncIpcModule: IpcModule = {
   id: "driveSync",
   methods: {
+    getRemoteItems: {
+      operationId: "app.drive_sync.remote_items.get",
+      kind: "invoke",
+      request: z.object({ itemIds: z.array(z.string().min(1).max(128)).min(1).max(DRIVE_ITEM_BATCH_LIMIT) }).strict(),
+      response: driveItemBatchResponseSchema,
+      handler: (ctx, request: { itemIds: string[] }) => resolveDriveSyncService(ctx).getRemoteItems(request.itemIds),
+    },
     getSnapshot: {
       operationId: "app.drive_sync.snapshot.get",
       kind: "invoke",

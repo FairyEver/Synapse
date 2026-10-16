@@ -502,6 +502,7 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   driveSync: {
+    getRemoteItems: (input) => invoke(IPC_CHANNELS.driveSync.getRemoteItems)(input),
     getSnapshot: () => invoke(IPC_CHANNELS.driveSync.getSnapshot)(),
     previewBinding: (input) => invoke(IPC_CHANNELS.driveSync.previewBinding)(input),
     createSafeBinding: (input) => invoke(IPC_CHANNELS.driveSync.createSafeBinding)(input),

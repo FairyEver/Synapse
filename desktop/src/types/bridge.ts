@@ -1147,6 +1147,7 @@ export type SynapseBridge = {
     onChanged: (listener: (event: SynapseAgentPersonaChangedEvent) => void) => () => void
   }
   driveSync: {
+    getRemoteItems: (input: { readonly itemIds: readonly string[] }) => Promise<import("@synapse/shared", { with: { "resolution-mode": "import" } }).DriveItemBatchResponse>
     getSnapshot: () => Promise<DriveSyncSnapshotDto>
     previewBinding: (input: {
       driveItemId: string

@@ -18,6 +18,88 @@ import { createDriveSyncService, type DriveSyncAccountService } from "../drive-s
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
+  it("polls sixteen idle file bindings with one item batch and one change batch", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-batch-sync-"))
+    const items = new Map<string, ReturnType<typeof mockDriveItem>>()
+    const getDriveItemsBatch = vi.fn(async (ids: readonly string[]) => ({ results: ids.map((itemId) => ({ itemId, error: null, data: { item: items.get(itemId)!, ancestors: [], currentVersionId: `version:${itemId}`, etag: null } })) }))
+    const listDriveChangesBatch = vi.fn(async (requests: readonly { requestId: string; cursor?: string | null }[]) => ({ results: requests.map((r) => ({ requestId: r.requestId, error: null, data: { items: [], nextCursor: r.cursor ?? null, hasMore: false, resyncRequired: false } })) }))
+    const harness = createHarness({ accountService: { getDriveItemsBatch, listDriveChangesBatch } })
+    const service = createDriveSyncService(harness.deps)
+    try {
+      for (let index = 0; index < 16; index += 1) {
+        const id = `file-${index}`
+        const file = path.join(dir, `${id}.md`)
+        await writeFile(file, "same")
+        items.set(id, { ...mockDriveItem(id), name: `${id}.md` })
+        const binding = await service.createBinding({ driveItemId: id, driveItemName: `${id}.md`, kind: "file", localPath: file, deferWatcher: true })
+        await seedFileBaseline(harness, binding.id, file, id)
+      }
+      await service.pollRemoteChanges()
+      expect(getDriveItemsBatch).toHaveBeenCalledTimes(1)
+      expect(getDriveItemsBatch.mock.calls[0]?.[0]).toHaveLength(16)
+      expect(listDriveChangesBatch).toHaveBeenCalledTimes(1)
+      expect(harness.deps.accountService.getDriveItem).not.toHaveBeenCalled()
+      expect(harness.deps.accountService.listDriveChanges).not.toHaveBeenCalled()
+    } finally { await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("advances successful batch roots while keeping a failed root cursor and files intact", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-batch-failure-"))
+    const getDriveItemsBatch = vi.fn(async (ids: readonly string[]) => ({ results: ids.map((itemId) => ({ itemId, error: null, data: { item: mockDriveItem(itemId), ancestors: [], currentVersionId: null, etag: null } })) }))
+    const listDriveChangesBatch = vi.fn(async (requests: readonly { requestId: string; rootItemId: string }[]) => ({ results: requests.map((r) => r.rootItemId === "bad-file"
+      ? { requestId: r.requestId, data: null, error: { status: 503, code: "FAILED", message: "try later" } }
+      : { requestId: r.requestId, error: null, data: { items: [{ id: "c20", sequence: "20", itemId: "good-file", parentId: null, type: "content_updated" as const, versionId: "v20", etag: null, name: "spec.md", pathHint: "/spec.md", occurredAt: "2026-06-28T00:00:00.000Z" }], nextCursor: "20", hasMore: false, resyncRequired: false } }) }))
+    const harness = createHarness({ accountService: { getDriveItemsBatch, listDriveChangesBatch } })
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const bindings = []
+      for (const id of ["good-file", "bad-file"]) {
+        const file = path.join(dir, `${id}.md`)
+        await writeFile(file, "same")
+        const binding = await service.createBinding({ driveItemId: id, driveItemName: `${id}.md`, kind: "file", localPath: file, remoteCursor: "10", deferWatcher: true })
+        await seedFileBaseline(harness, binding.id, file, id)
+        bindings.push(binding)
+      }
+      await expect(service.pollRemoteChanges()).rejects.toThrow("try later")
+      expect((await harness.bindings.get(bindings[0].id))?.remoteCursor).toBe("20")
+      expect((await harness.bindings.get(bindings[1].id))?.remoteCursor).toBe("10")
+      await expect(readFile(path.join(dir, "good-file.md"), "utf8")).resolves.toBe("remote")
+      await expect(readFile(path.join(dir, "bad-file.md"), "utf8")).resolves.toBe("same")
+    } finally { await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("discards prepared batch reads when the account changes in flight", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-batch-owner-"))
+    let ownerUserId = "user-1"
+    const started = createDeferred<void>()
+    const release = createDeferred<void>()
+    const harness = createHarness({ accountService: {
+      getState: () => ({ status: "authenticated", connectivity: "online", profile: { user: { id: ownerUserId } } }),
+      getDriveItemsBatch: vi.fn(async (ids: readonly string[]) => {
+        started.resolve(undefined)
+        await release.promise
+        return { results: ids.map((itemId) => ({ itemId, data: null, error: { status: 404, code: "NOT_FOUND", message: "missing" } })) }
+      }),
+      listDriveChangesBatch: vi.fn(async (requests: readonly { requestId: string }[]) => ({ results: requests.map((r) => ({ requestId: r.requestId, error: null, data: { items: [], nextCursor: "10", hasMore: false, resyncRequired: false } })) })),
+    } })
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const file = path.join(dir, "spec.md")
+      await writeFile(file, "same")
+      const binding = await service.createBinding({ driveItemId: "file", driveItemName: "spec.md", kind: "file", localPath: file, remoteCursor: "10", deferWatcher: true })
+      await seedFileBaseline(harness, binding.id, file, "file")
+      const poll = service.pollRemoteChanges()
+      await started.promise
+      ownerUserId = "user-2"
+      release.resolve(undefined)
+      await poll
+      expect((await harness.bindings.get(binding.id))?.status).toBe("active")
+      expect((await harness.bindings.get(binding.id))?.remoteCursor).toBe("10")
+      expect(await harness.conflicts.list()).toHaveLength(0)
+      await expect(readFile(file, "utf8")).resolves.toBe("same")
+    } finally { release.resolve(undefined); await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
   it("does not reorder bindings or emit cursor changes when a poll returns the stored cursor", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-poll-cursor-"))
     try {
@@ -6269,6 +6351,38 @@ describe("Drive sync authority confirmation", () => {
     const input = { driveItemId: "file-1", driveItemName: "spec.md", kind: "file" as const, localPath, direction: "bind_existing" as const, authority: "local" as const }
     return { directory, localPath, harness, service, input, trashLocalPath, remote: () => remoteContent }
   }
+  it("uses batch versions for alignment and still invalidates a reviewed version with identical bytes", async () => {
+    const f = await setup()
+    let version = "v1"
+    const getDriveItemsBatch = vi.fn(async (ids: readonly string[]) => ({ results: await Promise.all(ids.map(async (itemId) => ({ itemId, error: null, data: { item: await f.harness.deps.accountService.getDriveItem(itemId), ancestors: [], currentVersionId: version, etag: null } }))) }))
+    Object.assign(f.harness.deps.accountService, { getDriveItemsBatch })
+    try {
+      const preview = await f.service.previewBinding({ ...f.input, remoteExists: true, directionHint: "bind_existing" })
+      expect(preview.status).toBe("ready")
+      expect(getDriveItemsBatch).toHaveBeenCalledTimes(2)
+      expect(f.harness.deps.accountService.downloadDriveFile).toHaveBeenCalled()
+      expect(f.harness.deps.accountService.listDriveFileVersions).not.toHaveBeenCalled()
+      version = "v2"
+      await expect(f.service.createSafeBinding({ ...f.input, confirmationToken: preview.confirmationToken })).rejects.toThrow("变化")
+      expect(f.harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("blocks alignment if the batch version changes during content hashing", async () => {
+    const f = await setup()
+    let version = "v1"
+    Object.assign(f.harness.deps.accountService, { getDriveItemsBatch: vi.fn(async (ids: readonly string[]) => ({ results: await Promise.all(ids.map(async (itemId) => ({ itemId, error: null, data: { item: await f.harness.deps.accountService.getDriveItem(itemId), ancestors: [], currentVersionId: version, etag: null } }))) })) })
+    f.harness.deps.accountService.downloadDriveFile.mockImplementation(async ({ outputPath }: { outputPath: string }) => {
+      await writeFile(outputPath, "cloud")
+      version = "v2"
+      return { ok: true as const, path: outputPath }
+    })
+    try {
+      const preview = await f.service.previewBinding({ ...f.input, remoteExists: true, directionHint: "bind_existing" })
+      expect(preview).toMatchObject({ status: "blocked", reason: expect.stringContaining("变化") })
+      expect(f.harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+      expect(await f.harness.bindings.list()).toHaveLength(0)
+    } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
   it("requires the reviewed token before overwriting and establishes a verified baseline", async () => {
     const f = await setup()
     try {

@@ -12,6 +12,18 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import { driveSyncIpcModule } from "../ipc"
 
 describe("driveSyncIpcModule", () => {
+  it("bounds private metadata batches and forwards them through the sync service", async () => {
+    const result = { results: [{ itemId: "a", data: null, error: { status: 503, code: "FAILED", message: "retry" } }] }
+    const getRemoteItems = vi.fn(async () => result)
+    const method = driveSyncIpcModule.methods.getRemoteItems
+    const ctx = { resolve: (id: string) => id === "core.drive-sync" ? { getRemoteItems, events: { on: vi.fn() } } : { broadcast: vi.fn() } }
+    expect(method.request?.safeParse({ itemIds: [] }).success).toBe(false)
+    expect(method.request?.safeParse({ itemIds: Array.from({ length: 101 }, () => "a") }).success).toBe(false)
+    await expect(method.handler(ctx as never, { itemIds: ["a"] })).resolves.toEqual(result)
+    expect(getRemoteItems).toHaveBeenCalledWith(["a"])
+    expect(method.response?.parse(result)).toEqual(result)
+  })
+
   it("registers drive sync channels", () => {
     expect(driveSyncIpcModule.methods.getSnapshot.operationId).toBe("app.drive_sync.snapshot.get")
     expect(driveSyncIpcModule.methods).not.toHaveProperty("createBinding")

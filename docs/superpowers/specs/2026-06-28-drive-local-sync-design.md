@@ -202,6 +202,14 @@ The server records remote Drive changes as facts. The desktop sync engine decide
 
 ## Server Drive Change Log
 
+### Batched sync reads
+
+- `POST /api/drive/items/batch` accepts 1–100 item IDs and returns one result per distinct ID: ordinary owned item metadata, its complete root-to-parent chain, current file version ID and ETag, or a per-item error. Parent lookups are shared by depth and bounded to 256 levels / 4096 nodes. Missing, foreign, cyclic or incomplete ancestry never becomes an empty successful result; storage keys stay private.
+- `POST /api/drive/changes/batch` accepts 1–20 independently identified roots, each with its own cursor, path hint and 1–100 event page size. Owned roots, retention watermark and one combined change query replace per-root queries. Each result retains its cursor, `hasMore`, `resyncRequired` and error; move-out events match their previous parent. Invalid or out-of-range cursors fail only their root. Both endpoints retain ordinary account authentication and rate limiting.
+- An automatic polling round batches eligible roots and their first change pages, then uses the existing serialized per-binding work queue. Follow-up pages queued together share another batch. Retry deadlines still exclude waiting roots; account changes discard prepared results, and changes to root/cursor/path invalidate that binding's prepared snapshot. An item failure does not mean deletion, and one failed root cannot advance its cursor or block successful roots.
+- Renderer relationship discovery uses private `app.drive_sync.remote_items.get` IPC and the returned full ancestry; it does not request each parent. Responses must contain exactly the requested unique IDs and valid ancestry/pages. Missing or malformed responses become retryable protocol errors, without a per-item HTTP fallback. Public MCP tools and binding commands do not change.
+- Alignment captures metadata and current versions in batches before and after downloading and hashing each included file. Changed versions or metadata invalidate the preview. Hashing remains unchanged. Prepared reads have no persistent cache and cannot replace fresh checks before overwrite/delete or server version preconditions. Item batches share the single-item HTTP 429 cooldown; change batches share their own cooldown, honoring `Retry-After` or a one-minute default.
+
 Drive mutations should write ordered change records. The client stores a cursor and asks for changes after that cursor.
 
 Suggested `DriveChange` shape:
@@ -675,7 +683,7 @@ Phase 4: hardening
 - 分享 Popover 按需读取当前分享，显示访问权限、有效期和密码保护是否开启，不直接展示密码。复制复用现有带名称的分享文本及受保护链接；失效链接禁用复制。分享设置复用现有编辑表单，未改动时保留原密码和有效期；读取失败提供重试。
 - 同步 Tag 仅展示当前账号在本机已确认的同步关系；缺少 Tag 不证明其他电脑没有同步。同步快照或祖先链仍在查询、查询失败或路径无法确认时，不显示关系 Tag，也不把未知关系标成同步异常；已确认绑定的真实错误、冲突仍保留提醒。未知关系仍可通过条目菜单的「同步详情」查看加载状态并重试，关闭后焦点返回该条目的「更多」按钮；不能按没有绑定处理或新建重复关系。
 - 独立根按 item ID 关联，子项按面包屑中的祖先 ID 继承；相对路径仅在归属确定后生成。排除项复用主进程同一份 gitignore 匹配实现，Popover 显示「已排除同步」，不显示「已同步」。异常路径不映射到本机文件。
-- 未绑定的父文件夹只包含独立绑定子项时保留「同步」入口，Popover 说明仅列出的子项参与同步；通过绑定根的真实父链判断，不按名称或 drivePathHint 猜测，并列出真实绑定进入各自详情。祖先查询共用父节点请求、限制并发，失败与无关系分开处理，旧目录响应失效。
+- 未绑定的父文件夹只包含独立绑定子项时保留「同步」入口，Popover 说明仅列出的子项参与同步；通过绑定根的真实父链判断，不按名称或 drivePathHint 猜测，并列出真实绑定进入各自详情。祖先查询批量返回绑定根及完整父链，失败与无关系分开处理，旧目录响应失效。
 - 同步 Popover 呈现本机 ⇄ 云盘、对应本机路径、独立或随文件夹同步、当前状态和最近同步时间，并明确修改与删除会影响另一端。继承项的时间标为「关系最近同步」，不把绑定完成时间当成每个文件的完成时间。冲突和传输进度按相对路径范围过滤，不把其他文件的冲突显示到无关子项。
 - 「管理文件夹同步」始终进入实际绑定根。暂停、移除、排除规则与冲突处理继续通过既有同步详情执行，保持整条关系的动作范围与移除确认；不增加单个继承文件的暂停或移除能力。
-- 本次仅增加桌面列表呈现，沿用 drive.item.get、drive.share.get 与现有同步 controller；不新增 IPC、MCP、System App、权限或跨设备关系注册表。
+- 桌面列表沿用 drive.share.get 与现有同步 controller；同步关系查询使用 UI 私有批量条目 IPC，不新增 MCP、System App、权限或跨设备关系注册表。

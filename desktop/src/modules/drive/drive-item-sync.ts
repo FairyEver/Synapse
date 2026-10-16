@@ -1,4 +1,4 @@
-import type { DriveItemDto, DriveSyncBindingDto, DriveSyncSnapshotDto } from "@synapse/shared"
+import type { DriveItemDto, DriveItemBatchResponse, DriveItemAncestorDto, DriveSyncBindingDto, DriveSyncSnapshotDto } from "@synapse/shared"
 import { isDriveSyncExcluded } from "@/lib/drive-sync-excludes"
 import { activeWorkOf, retryOperationOf } from "./sync/drive-sync-copy"
 
@@ -33,19 +33,38 @@ export interface ContainedDriveBindings {
 export async function findContainedDriveBindings(
   items: readonly DriveItemDto[], bindings: readonly DriveSyncBindingDto[], path: readonly DriveSyncPathEntry[],
   getRemote: (id: string) => Promise<DriveItemDto>, signal?: AbortSignal,
+  getRemoteBatch?: (ids: readonly string[]) => Promise<DriveItemBatchResponse>,
 ): Promise<ContainedDriveBindings> {
   const folders = new Set(items.filter((item) => item.type === "folder").map((item) => item.id))
   const knownRoots = new Set([...path.map((entry) => entry.id), ...items.map((item) => item.id)])
   const contained = new Map<string, string[]>()
-  const requests = new Map<string, Promise<DriveItemDto>>()
+  const requests = new Map<string, Promise<DriveItemAncestorDto>>()
+  const batchedNodes = new Map<string, DriveItemAncestorDto>()
+  const batchedFailures = new Set<string>()
   let failed = false
   if (!folders.size) return { bindings: contained, failed }
   const get = (id: string) => {
+    if (getRemoteBatch) {
+      const node = batchedNodes.get(id)
+      if (batchedFailures.has(id) || !node) return Promise.reject(new Error("云盘同步关系查询失败。"))
+      return Promise.resolve(node)
+    }
     let request = requests.get(id)
     if (!request) { request = getRemote(id); requests.set(id, request) }
     return request
   }
   const candidates = bindings.filter((binding) => binding.status !== "removed" && !knownRoots.has(binding.driveItemId))
+  if (getRemoteBatch && candidates.length && !signal?.aborted) {
+    try {
+      const response = await getRemoteBatch(candidates.map((binding) => binding.driveItemId))
+      for (const result of response.results) {
+        if (result.error || !result.data) { batchedFailures.add(result.itemId); continue }
+        for (const node of [...result.data.ancestors, result.data.item]) batchedNodes.set(node.id, node)
+      }
+    } catch {
+      return { bindings: contained, failed: true }
+    }
+  }
   for (let offset = 0; offset < candidates.length && !signal?.aborted; offset += 4) {
     await Promise.all(candidates.slice(offset, offset + 4).map(async (binding) => {
       const visited = new Set<string>()

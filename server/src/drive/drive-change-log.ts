@@ -1,7 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common"
+import { BadRequestException, Injectable, Logger } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
+import { DRIVE_CHANGE_BATCH_LIMIT, DRIVE_CHANGE_BATCH_PAGE_LIMIT } from "@synapse/shared"
 import type {
+  DriveChangeBatchRequest, DriveChangeBatchResponse, DriveChangeBatchResult,
   DriveChangeDto,
   DriveChangeListInput,
   DriveChangeListPageDto,
@@ -93,6 +95,73 @@ export class DriveChangeLogService {
       hasMore: rows.length > limit,
       resyncRequired: false,
     }
+  }
+
+  async listBatch(userId: string, requests: readonly DriveChangeBatchRequest[]): Promise<DriveChangeBatchResponse> {
+    if (!requests.length || requests.length > DRIVE_CHANGE_BATCH_LIMIT
+      || requests.some((r) => !r.requestId || r.requestId.length > 128)
+      || new Set(requests.map((r) => r.requestId)).size !== requests.length) {
+      throw new BadRequestException("批量变更请求数量或标识无效。")
+    }
+    // Deleted owned roots remain eligible so their final tombstone can still be replayed.
+    const owned = await this.prisma.driveItem.findMany({ where: { userId, id: { in: [...new Set(requests.map((r) => r.rootItemId))] } }, select: { id: true } })
+    const ownedIds = new Set(owned.map((item) => item.id))
+    const watermark = await this.purgedThroughSequence()
+    const results = new Map<string, DriveChangeBatchResult>()
+    const active: Array<{ requestId: string; rootItemId: string; cursor: string; pathHint: string | null; limit: number }> = []
+    let latest: DriveChangeListPageDto | null = null
+    for (const request of requests) {
+      if (!ownedIds.has(request.rootItemId)) {
+        results.set(request.requestId, { requestId: request.requestId, data: null, error: { status: 404, code: "NOT_FOUND", message: "云盘条目不存在。" } })
+      } else if ((request.cursor != null && request.cursor !== "latest"
+        && (!/^\d{1,20}$/u.test(request.cursor) || BigInt(request.cursor) > 9223372036854775807n))
+        || (request.limit != null && (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > DRIVE_CHANGE_BATCH_PAGE_LIMIT))) {
+        results.set(request.requestId, { requestId: request.requestId, data: null, error: { status: 400, code: "INVALID_REQUEST", message: "变更游标或分页大小无效。" } })
+      } else if (request.cursor === "latest" || (hasExplicitCursor(request.cursor) && parseCursor(request.cursor) <= watermark)) {
+        latest ??= await this.currentCursor(userId)
+        results.set(request.requestId, { requestId: request.requestId, error: null, data: { ...latest, resyncRequired: request.cursor !== "latest" } })
+      } else {
+        active.push({ requestId: request.requestId, rootItemId: request.rootItemId, cursor: request.cursor ?? "0", pathHint: normalizeRootPathHint(request.rootPathHint), limit: request.limit ?? DRIVE_CHANGE_BATCH_PAGE_LIMIT })
+      }
+    }
+    if (active.length) {
+      type Row = Parameters<typeof toDriveChangeDto>[0] & { readonly requestId: string }
+      const rows = await this.prisma.$queryRaw<Row[]>`
+        WITH RECURSIVE requested AS (
+          SELECT * FROM jsonb_to_recordset(${JSON.stringify(active)}::jsonb)
+          AS r("requestId" text, "rootItemId" text, cursor bigint, "pathHint" text, "limit" int)
+        ), scope AS (
+          SELECT r."requestId", r."rootItemId" AS id, ARRAY[r."rootItemId"]::text[] AS visited FROM requested r
+          UNION ALL
+          SELECT s."requestId", child.id, s.visited || child.id FROM scope s
+          JOIN "DriveItem" child ON child."parentId" = s.id
+          WHERE child."userId" = ${userId} AND child.type = ${DRIVE_ITEM_TYPE.folder}
+            AND child."deletedAt" IS NULL AND child."lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active}
+            AND NOT child.id = ANY(s.visited)
+        )
+        SELECT r."requestId", changes.* FROM requested r
+        CROSS JOIN LATERAL (
+          SELECT c.* FROM "DriveChange" c
+          WHERE c."userId" = ${userId} AND c.sequence > r.cursor AND (
+            c."itemId" = r."rootItemId"
+            OR c."parentId" IN (SELECT s.id FROM scope s WHERE s."requestId" = r."requestId")
+            OR c."previousParentId" IN (SELECT s.id FROM scope s WHERE s."requestId" = r."requestId")
+            OR (r."pathHint" IS NOT NULL AND (c."pathHint" = r."pathHint" OR left(c."pathHint", length(r."pathHint") + 1) = r."pathHint" || '/'))
+          ) ORDER BY c.sequence ASC LIMIT r."limit" + 1
+        ) changes ORDER BY r."requestId", changes.sequence ASC
+      `
+      const metadata = await resolveItemMetadata(this.prisma, userId, [...new Set(rows.map((row) => row.itemId))])
+      for (const request of active) {
+        const matches = rows.filter((row) => row.requestId === request.requestId)
+        const page = matches.slice(0, request.limit)
+        results.set(request.requestId, { requestId: request.requestId, error: null, data: {
+          items: page.map((row) => toDriveChangeDto(row, metadata.get(row.itemId))),
+          nextCursor: page.at(-1)?.sequence.toString() ?? requests.find((r) => r.requestId === request.requestId)!.cursor ?? null,
+          hasMore: matches.length > request.limit, resyncRequired: false,
+        } })
+      }
+    }
+    return { results: requests.map((request) => results.get(request.requestId)!) }
   }
 
   @Cron("30 2 * * *")

@@ -36,6 +36,7 @@ describe("DriveController", () => {
   let app: INestApplication | null = null
   const originalAppPublicUrl = process.env.APP_PUBLIC_URL
   const drive = {
+    getItemsBatch: vi.fn(),
     listItems: vi.fn(),
     listItemsPage: vi.fn(),
     prepareUpload: vi.fn(),
@@ -154,6 +155,7 @@ describe("DriveController", () => {
   })
 
   beforeEach(async () => {
+    drive.getItemsBatch.mockReset()
     drive.listItems.mockReset()
     drive.listItemsPage.mockReset()
     drive.prepareFolderUpload.mockReset()
@@ -262,6 +264,25 @@ describe("DriveController", () => {
 
   it("requires user auth for /api/drive/items", async () => {
     await request(app!.getHttpServer()).get("/api/drive/items").expect(401)
+  })
+
+  it("requires user auth for both bounded batch endpoints", async () => {
+    await request(app!.getHttpServer()).post("/api/drive/items/batch").send({ itemIds: ["a"] }).expect(401)
+    await request(app!.getHttpServer()).post("/api/drive/changes/batch").send({ requests: [{ requestId: "a", rootItemId: "a" }] }).expect(401)
+    expect(drive.getItemsBatch).not.toHaveBeenCalled()
+  })
+
+  it("forwards only authenticated batch reads and validates envelope limits", () => {
+    const listBatch = vi.fn()
+    const controller = new DriveUserController(drive as never, {} as never, {} as never, {} as never, { listBatch } as never)
+    const req = { user: { id: "owner" }, headers: {} } as never
+    controller.getItemsBatch({ itemIds: ["a", "b"] }, req)
+    expect(drive.getItemsBatch).toHaveBeenCalledWith("owner", ["a", "b"])
+    const requests = [{ requestId: "a", rootItemId: "a", cursor: "10" }, { requestId: "b", rootItemId: "b", cursor: "20" }]
+    controller.listChangesBatch({ requests }, req)
+    expect(listBatch).toHaveBeenCalledWith("owner", requests)
+    expect(() => controller.getItemsBatch({ itemIds: Array.from({ length: 101 }, () => "a") }, req)).toThrow(BadRequestException)
+    expect(() => controller.listChangesBatch({ requests: Array.from({ length: 21 }, () => requests[0]) }, req)).toThrow(BadRequestException)
   })
 
   it("keeps browser whole-text PATCH routes alongside the Agent text routes", async () => {

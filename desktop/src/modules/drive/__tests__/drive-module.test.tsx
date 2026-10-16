@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveItemDto,
+  type DriveItemBatchResponse,
+  type DriveItemBatchResult,
   type DriveItemListPageDto,
   type DrivePublicAssetDto,
   type DrivePublicAssetListPageDto,
@@ -46,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   getDriveItemPreviewUrl: vi.fn(),
   getDriveShare: vi.fn(),
   getDriveSyncSnapshot: vi.fn(),
+  getDriveSyncRemoteItems: vi.fn(),
   getDriveUsage: vi.fn(),
   chooseDriveSyncLocalPath: vi.fn(),
   createDriveSyncSafeBinding: vi.fn(),
@@ -164,6 +167,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       trash: { list: mocks.listDriveTrash },
     },
     driveSync: {
+      getRemoteItems: mocks.getDriveSyncRemoteItems,
       chooseLocalPath: mocks.chooseDriveSyncLocalPath,
       createSafeBinding: mocks.createDriveSyncSafeBinding,
       getSnapshot: mocks.getDriveSyncSnapshot,
@@ -210,6 +214,7 @@ beforeEach(() => {
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveShare.mockResolvedValue(createDriveShare())
   mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
+  mocks.getDriveSyncRemoteItems.mockImplementation(async ({ itemIds }: { itemIds: string[] }) => ({ results: itemIds.map((id) => createDriveBatchResult(createDriveItem({ id }))) }))
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
   mocks.chooseDriveSyncLocalPath.mockResolvedValue("/Users/me/Docs")
   mocks.createDriveSyncSafeBinding.mockResolvedValue(createDriveSyncBinding())
@@ -2142,21 +2147,23 @@ describe("DriveModule", () => {
   })
 
   it("does not flash sync tags while folder ancestry is being checked", async () => {
-    const remote = createDeferred<DriveItemDto>()
+    const remote = createDeferred<DriveItemBatchResponse>()
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "unrelated", name: "Temporary", type: "folder" }),
       createDriveItem({ id: "parent", name: "Projects", type: "folder" }),
     ])
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
-    mocks.getDriveItem.mockReturnValue(remote.promise)
+    mocks.getDriveSyncRemoteItems.mockReturnValue(remote.promise)
     await render(<DriveModule />)
     await flushAct()
     expect(document.querySelectorAll('[data-drive-status-tag="sync"]')).toHaveLength(0)
 
-    remote.resolve(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))
+    remote.resolve({ results: [createDriveBatchResult(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))] })
     await flushAct()
     expect(getTableRow("Temporary").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
     expect(rowButton("Projects", "同步")).toBeTruthy()
+    expect(mocks.getDriveSyncRemoteItems).toHaveBeenCalledWith({ itemIds: ["drive-root"] })
+    expect(mocks.getDriveItem).not.toHaveBeenCalled()
   })
 
   it("does not mark unrelated folders as sync errors when one ancestry lookup fails", async () => {
@@ -2168,9 +2175,10 @@ describe("DriveModule", () => {
       createDriveSyncBinding(),
       createDriveSyncBinding({ id: "unavailable-binding", driveItemId: "unavailable-root" }),
     ] }))
-    mocks.getDriveItem.mockImplementation(({ itemId }) => itemId === "drive-root"
-      ? Promise.resolve(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))
-      : Promise.reject(new Error("folder unavailable")))
+    mocks.getDriveSyncRemoteItems.mockResolvedValue({ results: [
+      createDriveBatchResult(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" })),
+      { itemId: "unavailable-root", data: null, error: { status: 503, code: "FAILED", message: "folder unavailable" } },
+    ] })
     await render(<DriveModule />)
     await flushAct()
     expect(getTableRow("Temporary").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
@@ -2271,7 +2279,7 @@ describe("DriveModule", () => {
 
   it("shows contained bindings without claiming the whole parent folder is synchronized", async () => {
     mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "parent", name: "Projects", type: "folder" })])
-    mocks.getDriveItem.mockResolvedValue(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))
+    mocks.getDriveSyncRemoteItems.mockResolvedValue({ results: [createDriveBatchResult(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))] })
     mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
     await render(<DriveModule />)
     await flushAct()
@@ -4865,6 +4873,10 @@ function getDialogFooterButtonTexts(): string[] {
   if (!footer) throw new Error("Dialog footer not found")
   return Array.from(footer.querySelectorAll<HTMLButtonElement>("button"))
     .map((button) => button.textContent?.trim() ?? "")
+}
+
+function createDriveBatchResult(item: DriveItemDto): DriveItemBatchResult {
+  return { itemId: item.id, error: null, data: { item, ancestors: item.parentId ? [createDriveItem({ id: item.parentId })] : [], currentVersionId: null, etag: null } }
 }
 
 function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {

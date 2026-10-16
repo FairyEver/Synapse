@@ -4,7 +4,7 @@ import type { DriveSyncController } from "./sync"
 import { findContainedDriveBindings, getDriveItemSyncRelation, type ContainedDriveBindings, type DriveItemSyncRelation, type DriveSyncPathEntry } from "./drive-item-sync"
 
 export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly DriveSyncPathEntry[], controller: DriveSyncController) {
-  const { snapshot, getRemote } = controller
+  const { snapshot, getRemote, getRemoteBatch } = controller
   const [revision, setRevision] = useState(0)
   // 更新时间会改变绑定的显示顺序，但不会改变祖先链。
   const query = JSON.stringify({ items: items.map(({ id, name, parentId, type }) => ({ id, name, parentId, type })), path, bindings: snapshot?.bindings.filter((binding) => binding.status !== "removed").map(({ id, driveItemId, drivePathHint }) => ({ id, driveItemId, drivePathHint })).sort((left, right) => left.id.localeCompare(right.id)), revision })
@@ -15,12 +15,12 @@ export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly 
     const { items, path, snapshot } = lookupInput.current
     if (!snapshot) return
     const abort = new AbortController()
-    void findContainedDriveBindings(items, snapshot.bindings, path, getRemote, abort.signal).then((result) => {
+    void findContainedDriveBindings(items, snapshot.bindings, path, getRemote, abort.signal, getRemoteBatch).then((result) => {
       if (!abort.signal.aborted) setContained({ query, result })
     })
     return () => abort.abort()
     // query 包含祖先查询所需的全部字段，operations / health 不触发目录查询。
-  }, [query, getRemote])
+  }, [query, getRemote, getRemoteBatch])
   const retry = useCallback(async () => {
     await controller.refresh()
     setRevision((current) => current + 1)
