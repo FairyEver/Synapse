@@ -664,3 +664,15 @@ Phase 4: hardening
 - The final local trash implementation can use the operating system trash when available, with a Synapse local trash fallback for unsupported or failing cases.
 - Folder move detection should start conservative. If identity proof is weak, surface confirmation instead of guessing.
 - Shared-item sync should be treated as a later design because it changes ownership, delete propagation, permission expiry, and multi-user conflict behavior.
+
+
+## 文件列表关系 Tag（2026-10-16）
+
+- 文件名后固定按分享、同步排列可点击的 shadcn Badge；正常同步显示「同步」，暂停、冲突、传输、离线等状态保留关系标记。没有已知关系时不显示「未同步」。同一列表最多展开一个锚定 Popover；点击不触发行导航，Escape 收起并回到触发 Tag。
+- 分享 Popover 按需读取当前分享，显示访问权限、有效期和密码保护是否开启，不直接展示密码。复制复用现有带名称的分享文本及受保护链接；失效链接禁用复制。分享设置复用现有编辑表单，未改动时保留原密码和有效期；读取失败提供重试。
+- 同步 Tag 仅描述当前账号在本机的同步关系；缺少 Tag 不证明其他电脑没有同步。同步快照或祖先链读取失败显示「同步状态未知」，不能按没有绑定处理或新建重复关系。
+- 独立根按 item ID 关联，子项按面包屑中的祖先 ID 继承；相对路径仅在归属确定后生成。排除项复用主进程同一份 gitignore 匹配实现，显示「已排除同步」，不显示「已同步」。异常路径不映射到本机文件。
+- 未绑定的父文件夹只包含独立绑定子项时显示「含同步项」，通过绑定根的真实父链判断，不按名称或 drivePathHint 猜测；弹窗列出真实绑定并进入各自详情。祖先查询共用父节点请求、限制并发，失败与无关系分开处理，旧目录响应失效。
+- 同步 Popover 呈现本机 ⇄ 云盘、对应本机路径、独立或随文件夹同步、当前状态和最近同步时间，并明确修改与删除会影响另一端。继承项的时间标为「关系最近同步」，不把绑定完成时间当成每个文件的完成时间。冲突和传输进度按相对路径范围过滤，不把其他文件的冲突显示到无关子项。
+- 「管理文件夹同步」始终进入实际绑定根。暂停、移除、排除规则与冲突处理继续通过既有同步详情执行，保持整条关系的动作范围与移除确认；不增加单个继承文件的暂停或移除能力。
+- 本次仅增加桌面列表呈现，沿用 drive.item.get、drive.share.get 与现有同步 controller；不新增 IPC、MCP、System App、权限或跨设备关系注册表。

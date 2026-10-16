@@ -138,6 +138,8 @@ Use `remote_to_local` only when the user selects an existing owned Drive item an
 
 ## Sync Lifecycle And Conflicts
 
+The desktop file list shows clickable sharing and local-sync Tags beside item names. A child may inherit its folder's binding: “管理文件夹同步” refers to that entire binding, not a separate child binding. “已排除同步” means its relative path is excluded by that binding's rules; “含同步项” means only listed descendants are bound. These labels describe the current account on this computer, not all devices. Resolve relationships by item/ancestor IDs and the snapshot's exclude rules, never by matching names or treating a failed snapshot/ancestry read as no binding. Conflicts affect their paths and descendants; an aggregate binding conflict does not mean every child conflicts.
+
 - Call `app_drive_sync_snapshot_get` for binding status, current operations, health, and conflicts. Resolve phrases such as “这个项目”, “刚才那个同步”, a local path, or a Drive item name against the snapshot's binding id, normalized `localPath`, and Drive item metadata. Act directly only on one unambiguous match; otherwise ask the user to choose from the matching local and Drive paths.
 - Pause with `app_drive_sync_binding_pause`; resume and catch up with `app_drive_sync_binding_resume`.
 - Use `app_drive_sync_binding_rescan` for “sync now”, “check again”, or a complete manual catch-up.

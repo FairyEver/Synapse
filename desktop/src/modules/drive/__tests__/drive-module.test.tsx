@@ -1951,7 +1951,7 @@ describe("DriveModule", () => {
     expect(rowButton("shared.txt", "取消分享")?.disabled).toBe(false)
   })
 
-  it("shows shared state as lightweight inline metadata", async () => {
+  it("opens sharing metadata in a filename Tag popover without exposing the password", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({
         activeShare: createDriveActiveShare({
@@ -1968,6 +1968,7 @@ describe("DriveModule", () => {
         type: "file",
       }),
     ])
+    mocks.getDriveShare.mockResolvedValue(createDriveShare({ itemId: "html-1", accessMode: "specified_users_edit", editorEmails: ["a@example.com", "b@example.com"], passwordEnabled: true, password: "private-password", urlWithPassword: "https://synapse.test/share/shr_test?password=private-password", expiresAt: driveShareExpiresInDays(7) }))
 
     await render(<DriveModule />)
     await flushAct()
@@ -1976,15 +1977,153 @@ describe("DriveModule", () => {
     const nameCell = reportRow.querySelector("td")
     const reportBadges = Array.from(nameCell?.querySelectorAll<HTMLElement>("[data-slot='badge']") ?? [])
       .map((element) => element.textContent)
-    expect(reportBadges).toEqual([])
+    expect(reportBadges).toEqual(["已分享"])
     expect(nameCell?.textContent).toContain("已分享")
     expect(nameCell?.textContent).not.toContain("7天 · 密码 · 2人可编辑")
 
     const shareSummary = rowButton("report.html", "已分享")
     if (!shareSummary) throw new Error("Share summary not found")
-    await hoverElement(shareSummary)
+    await clickInlineShareSummary("report.html")
+    const popup = document.querySelector('[data-slot="popover-content"]')
+    expect(popup?.textContent).toContain("分享详情")
+    expect(popup?.textContent).toContain("2人可编辑")
+    expect(popup?.textContent).toContain("已开启")
+    expect(popup?.textContent).not.toContain("private-password")
+    expect(document.querySelector('#drive-share-success-url')).toBeNull()
+    await clickButtonText("复制链接")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("网页分享：report\nhttps://synapse.test/share/shr_test?password=private-password")
+    await clickButtonText("分享设置")
+    expect(document.body.textContent).toContain("访问设置")
+    expect(document.body.textContent).toContain("保持当前有效期")
+  })
 
-    expect(document.body.textContent).toContain("7天 · 密码 · 2人可编辑")
+  it("opens sync Tag details and inherits folder bindings without starting another wizard", async () => {
+    const folder = createDriveItem({ id: "drive-root", name: "Docs", type: "folder" })
+    const child = createDriveItem({ id: "child", parentId: "drive-root", name: "notes.md", type: "file" })
+    const excluded = createDriveItem({ id: "excluded", parentId: "drive-root", name: "node_modules", type: "folder" })
+    mocks.listDriveItems.mockImplementation(({ parentId }) => Promise.resolve(parentId ? [child, excluded] : [folder]))
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ excludeRules: { forced: [], defaults: ["node_modules/"], importedGitignore: [], user: [] } })] }))
+    await render(<DriveModule />)
+    await flushAct()
+    await clickRowButtonText("Docs", "同步")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("本机同步")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("/Users/me/Docs")
+    expect(document.querySelector('[data-drive-sync-view]')).toBeNull()
+    expect(getTableRow("Docs")).toBeTruthy()
+    await clickButtonText("关闭详情")
+    await clickDriveRow("Docs")
+    await clickRowButtonText("notes.md", "同步")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("随文件夹")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("/Users/me/Docs/notes.md")
+    await clickButtonText("关闭详情")
+    await clickRowButtonText("node_modules", "已排除同步")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("不会同步")
+    await clickButtonText("管理文件夹同步")
+    expect(document.body.textContent).toContain("同步位置")
+    expect(document.body.textContent).not.toContain("从哪边开始")
+  })
+
+  it("keeps sync read failures distinct from files without a binding", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", name: "notes.md", type: "file" })])
+    mocks.getDriveSyncSnapshot.mockRejectedValue(new Error("snapshot unavailable"))
+    await render(<DriveModule />)
+    await flushAct()
+    await clickRowButtonText("notes.md", "同步状态未知")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("同步状态加载失败")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("重试")
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot())
+    await clickButtonText("重试")
+    expect(rowButton("notes.md", "同步状态未知")).toBeUndefined()
+  })
+
+  it("switches sharing and sync popovers without navigation and restores focus on Escape", async () => {
+    const folder = createDriveItem({ id: "drive-root", name: "Docs", type: "folder", shared: true, activeShareId: "share-row-1" })
+    mocks.listDriveItems.mockResolvedValue([folder])
+    mocks.getDriveShare.mockResolvedValue(createDriveShare({ itemId: folder.id, expiresAt: null }))
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
+    await render(<DriveModule />)
+    await flushAct()
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await clickRowButtonText("Docs", "已分享")
+      expect(document.querySelectorAll('[data-slot="popover-content"]')).toHaveLength(1)
+      expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("分享详情")
+      await clickRowButtonText("Docs", "同步")
+      expect(document.querySelectorAll('[data-slot="popover-content"]')).toHaveLength(1)
+      expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("本机同步")
+    }
+    await clickButtonText("打开本机位置")
+    expect(mocks.showItemInFolder).toHaveBeenCalledWith("/Users/me/Docs")
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      await flushPromises()
+    })
+    await flushAct()
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull()
+    expect(document.activeElement).toBe(rowButton("Docs", "同步"))
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      driveSyncChangedListener?.(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding({ status: "paused" })] }))
+      await flushPromises()
+    })
+    expect(rowButton("Docs", "同步已暂停")).toBeTruthy()
+    await act(async () => {
+      driveSyncChangedListener?.(createDriveSyncSnapshot())
+      await flushPromises()
+    })
+    expect(getTableRow("Docs").querySelector('[data-drive-status-tag="sync"]')).toBeNull()
+    expect(rowButton("Docs", "已分享")).toBeTruthy()
+  })
+
+  it("retries sharing reads and prevents copying expired shares", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "file-1", name: "expired.md", type: "file", shared: true, activeShareId: "share-row-1" })])
+    mocks.getDriveShare.mockRejectedValueOnce(new Error("分享信息加载失败"))
+    await render(<DriveModule />)
+    await flushAct()
+    await clickInlineShareSummary("expired.md")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("分享信息加载失败")
+    expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "复制链接")).toBe(false)
+    mocks.getDriveShare.mockResolvedValue(createDriveShare({ itemId: "file-1", expiresAt: "2020-01-01T00:00:00Z" }))
+    await clickButtonText("重试")
+    expect(rowButton("expired.md", "分享已过期")).toBeTruthy()
+    const copy = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "复制链接")
+    expect(copy?.disabled).toBe(true)
+    expect(document.body.textContent).toContain("分享已过期，链接无法访问")
+  })
+
+  it("ignores a late sharing response after opening a different file's Tag", async () => {
+    const first = createDeferred<DriveShareListItemDto>()
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "first", name: "first.md", type: "file", shared: true, activeShareId: "share-first" }),
+      createDriveItem({ id: "second", name: "second.md", type: "file", shared: true, activeShareId: "share-second" }),
+    ])
+    mocks.getDriveShare.mockImplementation(({ shareId }) => shareId === "share-first" ? first.promise : Promise.resolve(createDriveShare({ itemId: "second", accessMode: "link_read", passwordEnabled: false })))
+    await render(<DriveModule />)
+    await flushAct()
+    await clickInlineShareSummary("first.md")
+    await clickInlineShareSummary("second.md")
+    first.resolve(createDriveShare({ itemId: "first", accessMode: "link_edit", passwordEnabled: true }))
+    await flushAct()
+    const popup = document.querySelector('[data-slot="popover-content"]')
+    expect(popup?.textContent).toContain("second.md")
+    expect(popup?.textContent).toContain("可阅读")
+    expect(popup?.textContent).not.toContain("登录可编辑")
+  })
+
+  it("shows contained bindings without claiming the whole parent folder is synchronized", async () => {
+    mocks.listDriveItems.mockResolvedValue([createDriveItem({ id: "parent", name: "Projects", type: "folder" })])
+    mocks.getDriveItem.mockResolvedValue(createDriveItem({ id: "drive-root", name: "Docs", parentId: "parent", type: "folder" }))
+    mocks.getDriveSyncSnapshot.mockResolvedValue(createDriveSyncSnapshot({}, { bindings: [createDriveSyncBinding()] }))
+    await render(<DriveModule />)
+    await flushAct()
+    await clickRowButtonText("Projects", "含同步项")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("其他内容不会同步")
+    await clickButtonText("关闭详情")
+    await openRowMenu("Projects")
+    await clickMenuItemText("同步详情")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("其他内容不会同步")
+    await clickButtonText("查看")
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("同步位置")
+    expect(document.body.textContent).not.toContain("从哪边开始")
   })
 
   it("renders the full current folder without a local search input", async () => {
@@ -3030,7 +3169,7 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
-  it("opens existing share details from the shared summary", async () => {
+  it("opens an existing folder share from the Tag and copies its protected link", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({
         id: "folder-1",
@@ -3053,7 +3192,7 @@ describe("DriveModule", () => {
       url: "https://synapse.test/share/shr_folder",
       urlWithPassword: "https://synapse.test/share/shr_folder?password=FolderPwd",
       password: "FolderPwd",
-      expiresAt: "2026-06-20T05:18:52.000Z",
+      expiresAt: driveShareExpiresInDays(3),
     }))
     await render(<DriveModule />)
     await flushAct()
@@ -3062,10 +3201,11 @@ describe("DriveModule", () => {
 
     expect(mocks.getDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
     expect(mocks.listDriveShares).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("文件夹已分享")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder?password=FolderPwd")
-    expect(document.body.textContent).toContain("FolderPwd")
-    expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("分享详情")
+    expect(document.body.textContent).not.toContain("FolderPwd")
+    await clickButtonText("复制链接")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("文件夹分享：文档\nhttps://synapse.test/share/shr_folder?password=FolderPwd")
+    expect(getTableRow("文档")).toBeTruthy()
   })
 
   it("shares a file from the row action and shows the share URL actions", async () => {
@@ -3839,9 +3979,9 @@ describe("DriveModule", () => {
     if (!shareSummary) throw new Error("Share summary not found")
     expect(getTableRow("report.txt").textContent).not.toContain("3天 · 密码 · 可阅读")
 
-    await hoverElement(shareSummary)
-
-    expect(document.body.textContent).toContain("3天 · 密码 · 可阅读")
+    await clickInlineShareSummary("report.txt")
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain("分享详情")
+    await clickButtonText("关闭详情")
 
     await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()

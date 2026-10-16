@@ -186,7 +186,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问设置时均创建公开、永久的新分享；网页分享创建工具只要求来源文件夹与名称。该契约调整不改变 `drive` domain 的 capability 或 MCP tool 数量。
 
-Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`，用于用户明确选择一端为准的首次对齐与替换；仍为 9 个同步工具，Drive 总计 73 个 capability / MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量均不变。原生选择器和公共向导组件仍属 UI 私有表面。2026-10-16 桌面条目「与本机同步…」、通用「新建同步」和「同步管理」按上下文分流，复用上述预检／创建／管理操作；不增加 capability、MCP tool 或其它注册表面，表内数量不变。
+Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`，用于用户明确选择一端为准的首次对齐与替换；仍为 9 个同步工具，Drive 总计 73 个 capability / MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量均不变。原生选择器和公共向导组件仍属 UI 私有表面。文件列表的分享／同步 Tag 和详情 Popover 复用现有分享读取、条目祖先查询及同步快照／管理能力；继承项指向实际绑定根，不新增 MCP 或注册表面。2026-10-16 桌面条目「与本机同步…」、通用「新建同步」和「同步管理」按上下文分流，复用上述预检／创建／管理操作；不增加 capability、MCP tool 或其它注册表面，表内数量不变。
 
 Drive 分享评论通过 7 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论、删除线程和讨论状态更新。仅讨论创建人可通过 `app.drive.link.annotation.thread.status.update` 设置 `open`（未解决）或 `resolved`（已解决）；列表与变更结果返回 `status` 和 `permissions.canChangeStatus`。状态独立于定位与删除，解决后保留原位及所有回复，回复不自动重新打开，同状态重试不产生额外变化。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
 

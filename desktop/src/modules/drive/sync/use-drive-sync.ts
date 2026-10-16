@@ -93,6 +93,8 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
 
   const pendingIdsRef = useRef<Set<string>>(new Set())
 
+  const getRemote = useCallback((itemId: string) => requireSynapseBridge().drive.item.get({ itemId }), [])
+
   const refresh = useCallback(async (): Promise<DriveSyncSnapshotDto> => {
     const next = await requireSynapseBridge().driveSync.getSnapshot()
     latestSnapshotRef.current = next
@@ -195,7 +197,7 @@ export function useDriveSync(autoRefresh = true): DriveSyncController {
       const result = await requireSynapseBridge().drive.item.list({ parentId, offset, limit: 100 })
       return Array.isArray(result) ? { items: result, nextOffset: null } : { items: result.items, nextOffset: result.page.nextOffset }
     },
-    getRemote: (itemId) => requireSynapseBridge().drive.item.get({ itemId }),
+    getRemote,
     snapshot,
     error,
     loading,
