@@ -72,9 +72,9 @@ export function MailNavigation(props: Props) {
   function select(contact: MailContact | null) { props.onSelect(contact); setOpen(false) }
   const content = <ContactList {...props} onSelect={select} query={query} onQueryChange={setQuery} />
   return <TooltipProvider delayDuration={400}><aside className="flex shrink-0 flex-col border-b bg-sidebar p-2 @3xl/mail:h-full @3xl/mail:min-h-0 @3xl/mail:border-b-0 @3xl/mail:p-3">
-    <nav aria-label="信箱" className="flex gap-1 @3xl/mail:flex-col">
-      <Button variant={props.box === "inbox" ? "secondary" : "ghost"} aria-current={props.box === "inbox" ? "page" : undefined} className="min-w-0 flex-1 justify-start" onClick={() => props.onBoxChange("inbox")}><Inbox />收件箱{props.unread > 0 && <span className="ml-auto text-xs tabular-nums" aria-label={`${props.unread} 封未读`}>{countLabel(props.unread)}</span>}</Button>
-      <Button variant={props.box === "sent" ? "secondary" : "ghost"} aria-current={props.box === "sent" ? "page" : undefined} className="min-w-0 flex-1 justify-start" onClick={() => props.onBoxChange("sent")}><Send />已发送</Button>
+    <nav aria-label="信箱" className="flex shrink-0 gap-1 @3xl/mail:flex-col">
+      <Button variant="ghost" aria-current={props.box === "inbox" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start @3xl/mail:flex-none", props.box === "inbox" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("inbox")}><Inbox />收件箱{props.unread > 0 && <span className="ml-auto text-xs tabular-nums" aria-label={`${props.unread} 封未读`}>{countLabel(props.unread)}</span>}</Button>
+      <Button variant="ghost" aria-current={props.box === "sent" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start @3xl/mail:flex-none", props.box === "sent" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("sent")}><Send />已发送</Button>
     </nav>
     <section aria-label={label} className="mt-7 hidden min-h-0 flex-1 flex-col gap-3 @3xl/mail:flex"><h2 className="px-2.5 text-xs font-medium text-muted-foreground">{label}</h2>{content}</section>
     <div className="mt-3 @3xl/mail:hidden"><Popover open={open} onOpenChange={setOpen}>
