@@ -1117,6 +1117,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const current = await requireBinding(binding.id)
     if (!isAutomaticallySyncableBinding(current)) return
     await scanBindingForLocalChanges(current, { throwOnScanError: throwOnRootIssue })
+    if ((await requireBinding(binding.id)).status !== "active") return
+    // A recovered poll may have no file changes, so no transfer will finish its old retry record.
+    // Only complete the remote catch-up marker; transfers and full rescans still need their work.
+    const retries = (await deps.operations.list({ bindingId: binding.id })).filter((operation) =>
+      operation.status === "retry_wait" && operation.kind === "resync"
+      && operation.source === "remote" && operation.relativePath === "",
+    )
+    for (const operation of retries) {
+      await recordOperation({ ...operation, status: "succeeded", message: null, nextRetryAt: null })
+    }
   }
 
   function queueBindingCatchUp(bindingId: string): void {

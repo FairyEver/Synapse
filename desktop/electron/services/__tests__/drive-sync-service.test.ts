@@ -18,6 +18,103 @@ import { createDriveSyncService, type DriveSyncAccountService } from "../drive-s
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
+  it("completes an expired remote catch-up retry after a successful poll", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-retry-recovery-"))
+    const harness = createHarness()
+    let now = new Date("2026-10-16T14:16:00Z")
+    const service = createDriveSyncService({ ...harness.deps, now: () => now })
+    try {
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", drivePathHint: "/Docs", kind: "folder", localPath: dir, deferWatcher: true })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      harness.deps.accountService.getDriveItem.mockRejectedValueOnce(Object.assign(new Error("GET [path] HTTP 502"), { status: 502 }))
+
+      await expect(service.pollRemoteChanges()).rejects.toThrow("HTTP 502")
+      const retry = (await harness.operations.list())[0]
+      expect(retry).toMatchObject({ kind: "resync", status: "retry_wait", source: "remote" })
+
+      // The cooldown still applies while the service has not actually recovered.
+      await service.pollRemoteChanges()
+      await expect(service.getSnapshot()).resolves.toMatchObject({ summary: { retryWaitingOperationCount: 1 } })
+
+      now = new Date("2026-10-16T14:22:00Z")
+      await service.pollRemoteChanges()
+
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        health: { status: "idle", lastError: null },
+        summary: { retryWaitingOperationCount: 0 },
+      })
+      await expect(harness.operations.get(retry.id)).resolves.toMatchObject({
+        status: "succeeded", message: null, nextRetryAt: null, completedAt: now.toISOString(),
+      })
+    } finally { await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("keeps a remote catch-up retry when the next poll still fails", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-retry-failure-"))
+    const harness = createHarness()
+    let now = new Date("2026-10-16T14:16:00Z")
+    const service = createDriveSyncService({ ...harness.deps, now: () => now })
+    try {
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", drivePathHint: "/Docs", kind: "folder", localPath: dir, deferWatcher: true })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      harness.deps.accountService.getDriveItem.mockRejectedValue(Object.assign(new Error("GET [path] HTTP 502"), { status: 502 }))
+
+      await expect(service.pollRemoteChanges()).rejects.toThrow("HTTP 502")
+      now = new Date("2026-10-16T14:22:00Z")
+      await expect(service.pollRemoteChanges()).rejects.toThrow("HTTP 502")
+
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        health: { status: "retrying", lastError: "GET [path] HTTP 502" },
+        summary: { retryWaitingOperationCount: 1 },
+      })
+      expect((await harness.operations.list())[0]).toMatchObject({ status: "retry_wait", completedAt: null })
+    } finally { await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("keeps a remote catch-up retry when the root needs conflict resolution", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-retry-conflict-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", drivePathHint: "/Docs", kind: "folder", localPath: dir, deferWatcher: true })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      const retry = await service.recordOperation({ bindingId: binding.id, kind: "resync", source: "remote", status: "retry_wait", relativePath: "", nextRetryAt: "2026-06-27T00:00:00Z" })
+      harness.deps.accountService.getDriveItem.mockRejectedValue(Object.assign(new Error("HTTP 404"), { status: 404 }))
+
+      await service.pollRemoteChanges()
+
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        bindings: [expect.objectContaining({ status: "conflict", lastSyncedAt: null })],
+        summary: { retryWaitingOperationCount: 1, conflictCount: 1 },
+      })
+      await expect(harness.operations.get(retry.id)).resolves.toMatchObject({ status: "retry_wait", completedAt: null })
+    } finally { await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
+  it("keeps transfer and manual rescan retries after a healthy catch-up", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-retry-pending-work-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", drivePathHint: "/Docs", kind: "folder", localPath: dir, deferWatcher: true })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      for (const input of [
+        { id: "catch-up", kind: "resync", source: "remote", relativePath: "" },
+        { id: "full-rescan", kind: "resync", source: "manual", relativePath: "" },
+        { id: "download", kind: "download", source: "remote", relativePath: "spec.md" },
+      ] as const) {
+        await service.recordOperation({ ...input, bindingId: binding.id, status: "retry_wait", nextRetryAt: "2026-06-27T00:00:00Z" })
+      }
+
+      await service.pollRemoteChanges()
+
+      await expect(service.getSnapshot()).resolves.toMatchObject({ summary: { retryWaitingOperationCount: 2 } })
+      await expect(harness.operations.get("catch-up")).resolves.toMatchObject({ status: "succeeded" })
+      await expect(harness.operations.get("full-rescan")).resolves.toMatchObject({ status: "retry_wait", completedAt: null })
+      await expect(harness.operations.get("download")).resolves.toMatchObject({ status: "retry_wait", completedAt: null })
+    } finally { await service.stopLocalWatcher(); await rm(dir, { recursive: true, force: true }) }
+  })
+
   it("polls sixteen idle file bindings with one item batch and one change batch", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-batch-sync-"))
     const items = new Map<string, ReturnType<typeof mockDriveItem>>()
