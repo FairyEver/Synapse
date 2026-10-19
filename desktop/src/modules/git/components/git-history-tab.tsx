@@ -73,7 +73,7 @@ export function GitHistoryTab({
                   key={commit.hash}
                   type="button"
                   data-active={history.selectedCommit?.hash === commit.hash ? "true" : undefined}
-                  className="grid w-full gap-1.5 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                  className="grid w-full gap-1.5 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-selected data-[active=true]:hover:bg-selected"
                   onClick={() => void history.loadCommit(commit.hash)}
                 >
                   <span className="truncate text-sm font-medium">{commit.subject || "无提交说明"}</span>

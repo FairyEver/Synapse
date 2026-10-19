@@ -279,10 +279,10 @@ function ModuleSidebarRow({
         handleSelect(event)
       }}
       className={cn(
-        "group/item flex h-8 w-full min-w-0 items-center rounded-md px-2 text-sm font-medium text-foreground/80 transition-colors outline-none",
-        "hover:bg-muted/60 hover:text-foreground",
+        "group/item flex h-8 w-full min-w-0 shrink-0 items-center rounded-lg px-2 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50",
         "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
-        active && "bg-secondary text-secondary-foreground hover:bg-secondary",
+        active && "bg-selected text-foreground hover:bg-selected dark:hover:bg-selected",
         className,
       )}
     >
@@ -327,7 +327,7 @@ function ModuleSidebarItem({
       }}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex min-w-0 max-w-full flex-1 items-center gap-2 overflow-hidden text-left box-border",
+        "flex min-w-0 max-w-full flex-1 items-center gap-2 self-stretch overflow-hidden text-left box-border",
         !disabled && "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
       )}
     >
@@ -348,7 +348,7 @@ function ModuleSidebarItem({
       <div
         data-track={dataTrack}
         className={cn(
-          "flex w-full min-w-0 max-w-full box-border items-center justify-between overflow-hidden rounded-lg px-3 text-sm font-medium text-foreground/80",
+          "flex w-full min-w-0 max-w-full shrink-0 box-border items-center justify-between overflow-hidden rounded-lg px-3 text-sm font-medium text-foreground/80",
           description ? "min-h-11 py-1.5" : "h-8",
           "pointer-events-none opacity-50",
           className,
@@ -365,11 +365,11 @@ function ModuleSidebarItem({
       data-track={dataTrack}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group/item flex w-full min-w-0 max-w-full box-border items-center justify-between overflow-hidden rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
+        "group/item flex w-full min-w-0 max-w-full shrink-0 box-border items-center justify-between overflow-hidden rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
         description ? "min-h-11 py-1.5" : "h-8",
-        "hover:bg-muted/60 hover:text-foreground",
+        "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50",
         "focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50",
-        active && "bg-secondary text-secondary-foreground hover:bg-secondary",
+        active && "bg-selected text-foreground hover:bg-selected dark:hover:bg-selected",
         className,
       )}
     >

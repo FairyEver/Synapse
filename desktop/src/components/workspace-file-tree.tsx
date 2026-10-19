@@ -308,7 +308,7 @@ function WorkspaceFileTreeNode({
       style={style as CSSProperties}
       className={cn(
         "flex h-full w-full min-w-0 cursor-pointer items-center gap-1 overflow-hidden py-1 pr-2 text-sm outline-none",
-        node.isSelected ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent/50",
+        node.isSelected ? "bg-selected text-foreground" : "text-foreground hover:bg-muted dark:hover:bg-muted/50",
       )}
       title={node.data.name}
       onClick={handleClick}

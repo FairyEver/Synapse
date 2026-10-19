@@ -379,8 +379,9 @@ function SourceManagerSidebar({
         <div className="flex flex-col gap-1">
           <Button
             type="button"
-            variant={currentDirectory === "" ? "secondary" : "ghost"}
-            className="justify-start"
+            variant="ghost"
+            size="sm"
+            className={cn("justify-start", currentDirectory === "" && "bg-selected hover:bg-selected dark:hover:bg-selected")}
             onClick={onOpenRoot}
             aria-label="打开树文件夹 资料"
           >
@@ -1369,9 +1370,9 @@ function KnowledgeBaseSourceManagerWindow() {
                 <ContextMenuTrigger asChild>
                   <Button
                     type="button"
-                    variant={currentDirectory === entry.relativePath ? "secondary" : "ghost"}
+                    variant="ghost"
                     size="sm"
-                    className="h-7 min-w-0 flex-1 justify-start"
+                    className={cn("min-w-0 flex-1 justify-start", currentDirectory === entry.relativePath && "bg-selected hover:bg-selected dark:hover:bg-selected")}
                     data-raw-drop-target={entry.relativePath}
                     onClick={() => openTreeDirectory(entry.relativePath)}
                     onDragOver={(event) => {

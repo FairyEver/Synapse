@@ -79,7 +79,7 @@ export function AgentFileCheckpointPanel({
               variant="ghost"
               className={cn(
                 "flex h-8 w-full justify-start rounded-none px-3 font-normal",
-                file.id === selectedFileId && "bg-muted",
+                file.id === selectedFileId && "bg-selected hover:bg-selected dark:hover:bg-selected",
               )}
               onClick={() => setSelectedFileId(file.id)}
             >

@@ -203,7 +203,7 @@ export function GitChangesTab({
                     <div
                       key={`${change.path}:${change.originalPath ?? ""}`}
                       data-active={active ? "true" : undefined}
-                      className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center data-[active=true]:bg-muted"
+                      className="group/change grid w-full grid-cols-[auto_minmax(0,1fr)] items-center data-[active=true]:bg-selected"
                     >
                       <span className="flex items-center pl-3">
                         <Checkbox
@@ -214,7 +214,7 @@ export function GitChangesTab({
                       </span>
                       <button
                         type="button"
-                        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 py-1.5 pr-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 py-1.5 pr-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 group-data-[active=true]/change:hover:bg-selected"
                         onClick={() => void status.loadDiff(change)}
                       >
                         <Tooltip>

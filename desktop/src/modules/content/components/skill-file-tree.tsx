@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
 
 type SkillFileTreeAttachment = {
   originalName: string
@@ -138,14 +140,14 @@ function SkillFileTreeRow({
   const fileAction = renderFileAction?.(node.path)
 
   return (
-    <div className="group flex h-7 min-w-0 items-center gap-1">
-      <button
+    <div className="group flex h-7 min-w-0 shrink-0 items-center gap-1">
+      <Button
         data-track="content.skill-file.select"
-        data-track-native="true"
         type="button"
-        className={isActive
-          ? "flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-md bg-background px-2 text-left text-xs font-medium ring-1 ring-border"
-          : "flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-md px-2 text-left text-xs text-muted-foreground hover:bg-background hover:text-foreground"}
+        variant="ghost"
+        size="sm"
+        className={cn("min-w-0 flex-1 justify-start overflow-hidden text-left", isActive && "bg-selected hover:bg-selected dark:hover:bg-selected")}
+        aria-current={isActive ? "page" : undefined}
         style={{ paddingLeft }}
         title={node.path}
         onClick={() => onSelectPath(node.path)}
@@ -154,7 +156,7 @@ function SkillFileTreeRow({
         {fileMeta ? (
           <span className="ml-2 shrink-0 text-muted-foreground">{fileMeta}</span>
         ) : null}
-      </button>
+      </Button>
       {fileAction ? <div className="shrink-0">{fileAction}</div> : null}
     </div>
   )
