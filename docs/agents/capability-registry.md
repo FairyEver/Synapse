@@ -193,6 +193,8 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问设置时均创建公开、永久的新分享；网页分享创建工具只要求来源文件夹与名称。该契约调整不改变 `drive` domain 的 capability 或 MCP tool 数量。
 
+Drive 分享详情卡片的“打开”按钮复用已有分享 URL 和外链打开能力，优先使用含密码的链接；分享过期或源文件删除时禁用。这是 UI 私有操作，不新增 System App、Dock、Workflow、Automation、Deep Link、capability 或 MCP tool；Drive 仍为 76 项，MCP schema 与系统 Skill 契约不变。
+
 Drive 本地同步通过 10 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、解除预览、解除、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增同步引擎。预检/创建支持 `authority`、`confirmationToken` 和 `replaceBindingId`。解除默认保留两端，删除选项必须先预览，执行时复验并持久解除关系，再按端可恢复清理；排除项与未管理内容保留，部分失败可按同一关系重试。桌面紧凑列表、详情 Popover、直接重新映射入口及选择器属 UI 私有表面，不增加 System App、Dock、Workflow、Automation 或 Deep Link。
 
 2026-10-16 新增 `app.drive.file.replace.preview/apply` 两个 capability / MCP 工具，支持将同扩展名本地成品上传为指定文件的新版本，保留身份、名称、分享与历史。它们复用 `core.drive-sync` 的版本化上传、同步基线检查、工作取消及权限审计；预览令牌绑定目标、版本、本地内容与本机同步配置。保留原文本编辑上传的版本依据保护。Drive 现在总计 76 个 capability / MCP 索引工具（原 73，加文件替换 2、解除预览 1）；公开 MCP 仍只有 search/invoke。网页端的上传版本预检与 Site 未发布变更标记是既有 HTTP/UI 行为，不新增 MCP。

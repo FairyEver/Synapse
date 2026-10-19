@@ -1856,6 +1856,7 @@ function DriveFileList({
                     onManageShare,
                     onManageSync,
                     onCopyShare: (selectedItem, share) => copyDriveUrl(selectedItem.name, selectedItem.type, getDriveAccessUrl(share)),
+                    onOpenShare: (share) => openDriveUrl(getDriveAccessUrl(share)),
                     onRetrySync: sync.retry,
                   }}
                 />

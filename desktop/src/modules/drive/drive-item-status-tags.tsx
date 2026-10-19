@@ -38,6 +38,7 @@ export interface DriveItemStatusTagsProps {
   readonly popover: StatusPopoverState
   readonly onManageShare: (share: DriveShareListItemDto) => void
   readonly onCopyShare: (item: DriveItemDto, share: DriveShareListItemDto) => Promise<void>
+  readonly onOpenShare: (share: DriveShareListItemDto) => Promise<void>
   readonly onManageSync: (bindingId: string) => void
   readonly onRetrySync: () => Promise<void>
   readonly onRestoreSyncFocus?: () => void
@@ -88,7 +89,7 @@ function DetailFacts({ entries }: { readonly entries: readonly (readonly [string
   return <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-sm">{entries.map(([label, value]) => <div className="contents" key={label}><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 break-all">{value}</dd></div>)}</dl>
 }
 
-function DriveShareTag({ item, popover, onManageShare, onCopyShare, controller }: DriveItemStatusTagsProps) {
+function DriveShareTag({ item, popover, onManageShare, onCopyShare, onOpenShare, controller }: DriveItemStatusTagsProps) {
   const key = `${item.id}:share`
   const share = useDriveShareDetails(item, popover.activeKey === key)
   const expired = share.expired
@@ -110,6 +111,7 @@ function DriveShareTag({ item, popover, onManageShare, onCopyShare, controller }
         {expired || share.data.sourceDeleted ? <p className="text-destructive">{share.data.sourceDeleted ? "源文件已删除，链接无法访问。" : "分享已过期，链接无法访问。"}</p> : null}
         <div className="flex flex-wrap items-center gap-2 pt-2">
           <Button disabled={expired || share.data.sourceDeleted} onClick={() => { if (share.data) void onCopyShare(item, share.data) }}>复制链接</Button>
+          <Button variant="outline" disabled={expired || share.data.sourceDeleted} onClick={() => { if (share.data) void onOpenShare(share.data) }}>打开</Button>
           <Button variant="outline" disabled={share.data.sourceDeleted || controller.readOnly} onClick={manage}>分享设置</Button>
         </div>
         {controller.readOnly ? <p className="text-muted-foreground">{controller.offline ? "联网后可修改分享设置。" : "登录后可修改分享设置。"}</p> : null}
