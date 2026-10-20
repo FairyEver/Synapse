@@ -1147,6 +1147,7 @@ export interface DriveMessageCommentDto {
   readonly messageId: string
   readonly parentCommentId: string | null
   readonly body: string
+  readonly bodyHtml: string
   readonly author: DriveMessageAuthorDto
   readonly createdAt: string
   readonly updatedAt: string
@@ -1158,6 +1159,7 @@ export interface DriveMessageDto {
   readonly id: string
   readonly itemId: string
   readonly body: string
+  readonly bodyHtml: string
   readonly author: DriveMessageAuthorDto
   readonly createdAt: string
   readonly updatedAt: string

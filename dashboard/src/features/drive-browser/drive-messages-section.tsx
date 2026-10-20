@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import type { DriveMessageCommentDto, DriveMessageDto } from '@synapse/shared'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { DriveMessageComposer } from './drive-message-composer'
+import { DriveMessageBody } from './drive-message-body'
 import { startDriveOperation } from './shared/drive-telemetry'
 import type { useDriveMessages } from './use-drive-messages'
 import { useDiscussionTargetFocus, usePendingDriveDiscussion } from './use-drive-discussion-location'
@@ -84,13 +85,17 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
   }
 
   const renderEditor = (value: string, setValue: (value: string) => void, label: string, cancel?: () => void) => (
-    <div className='space-y-2'>
-      <Textarea aria-label={label} value={value} maxLength={4000} onChange={(event) => setValue(event.target.value)} />
-      <div className='flex items-center gap-2'>
-        <Button type='button' disabled={busy || !value.trim()} onClick={() => { void submit() }}>{editor?.kind === 'reply' ? '回复' : cancel ? '保存' : '发布留言'}</Button>
-        {cancel ? <Button type='button' variant='ghost' disabled={busy} onClick={cancel}>取消</Button> : null}
-      </div>
-    </div>
+    <DriveMessageComposer
+      key={editor ? editor.kind === 'reply' ? `reply:${editor.messageId}:${editor.parentCommentId}` : `${editor.kind}:${editor.id}` : 'new-message'}
+      value={value}
+      onChange={setValue}
+      label={label}
+      submitLabel={editor?.kind === 'reply' ? '回复' : cancel ? '保存' : '发布留言'}
+      busy={busy}
+      imageUploadContext={messages.imageUploadContext}
+      onSubmit={() => { void submit() }}
+      onCancel={cancel}
+    />
   )
 
   return (
@@ -149,7 +154,7 @@ function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, 
         <span className='text-sm font-medium'>{displayAuthor(message.author)}</span>
         <time className='text-sm text-muted-foreground' dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       </div>
-      {editing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑留言', () => onEdit(null)) : <p className='whitespace-pre-wrap break-words text-sm'>{message.body}</p>}
+      {editing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑留言', () => onEdit(null)) : <DriveMessageBody html={message.bodyHtml} />}
       {!editing ? <div className='mt-2 flex items-center gap-1'>
         {canPost ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'reply', messageId: message.id, parentCommentId: null, value: '' })}>回复</Button> : null}
         {message.permissions.canEdit ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'message', id: message.id, value: message.body })}>编辑</Button> : null}
@@ -164,7 +169,7 @@ function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, 
               {replyTo ? <span className='text-muted-foreground'>回复 {replyTo}</span> : null}
               <time className='text-muted-foreground' dateTime={comment.createdAt}>{formatTime(comment.createdAt)}</time>
             </div>
-            {commentEditing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑回复', () => onEdit(null)) : <p className='whitespace-pre-wrap break-words text-sm'>{comment.body}</p>}
+            {commentEditing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑回复', () => onEdit(null)) : <DriveMessageBody html={comment.bodyHtml} />}
             {!commentEditing ? <div className='flex items-center gap-1'>
               {canPost ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'reply', messageId: message.id, parentCommentId: comment.id, value: '' })}>回复</Button> : null}
               {comment.permissions.canEdit ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'comment', id: comment.id, value: comment.body })}>编辑</Button> : null}

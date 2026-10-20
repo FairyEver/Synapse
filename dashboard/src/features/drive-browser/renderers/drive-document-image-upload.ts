@@ -38,6 +38,7 @@ export function useDriveDocumentImageUpload({
       currentVersionId,
       imageUploadContext?.itemId,
       imageUploadContext?.kind,
+      imageUploadContext?.purpose,
       imageUploadContext?.kind === 'share' ? imageUploadContext.shareId : null,
       itemId,
     ],

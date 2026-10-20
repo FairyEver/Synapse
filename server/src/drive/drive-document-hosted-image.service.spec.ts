@@ -2,6 +2,17 @@ import { describe, expect, it, vi } from "vitest"
 import { DriveDocumentHostedImageService, DOCUMENT_IMAGE_STATUS } from "./drive-document-hosted-image.service"
 
 describe("DriveDocumentHostedImageService", () => {
+  it("cannot complete or cancel another actor or document's upload session", async () => {
+    const findFirst = vi.fn(async () => null)
+    const storage = { headObject: vi.fn(), deleteObject: vi.fn() }
+    const service = new DriveDocumentHostedImageService({ documentImageUploadSession: { findFirst } } as never, storage as never)
+    await expect(service.completeUpload({ actorUserId: 'other-user', sourceItemId: 'doc', sessionId: 'session' })).rejects.toMatchObject({ status: 404 })
+    expect(findFirst).toHaveBeenLastCalledWith({ where: { id: 'session', actorUserId: 'other-user', sourceItemId: 'doc', status: 'pending' } })
+    await expect(service.cancelUpload({ actorUserId: 'reader', sourceItemId: 'other-doc', sessionId: 'session' })).rejects.toMatchObject({ status: 404 })
+    expect(findFirst).toHaveBeenLastCalledWith({ where: { id: 'session', actorUserId: 'reader', sourceItemId: 'other-doc', status: 'pending' } })
+    expect(storage.headObject).not.toHaveBeenCalled()
+    expect(storage.deleteObject).not.toHaveBeenCalled()
+  })
   it("rejects images above 20 MB before creating a session", async () => {
     const prisma = createPrisma()
     const service = new DriveDocumentHostedImageService(prisma as never, createStorage() as never)

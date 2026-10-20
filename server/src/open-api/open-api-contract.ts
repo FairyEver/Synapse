@@ -93,7 +93,7 @@ export const createArticleMessageRequestSchema = z.object({
   url: z.url().max(2048).describe("当前 Synapse 的完整 /share 链接。").optional(),
   shareId: z.string().regex(/^shr_[A-Za-z0-9]+$/u).describe("分享链接中的公开 shareId。").optional(),
   password: z.string().min(1).max(1024).optional(),
-  body: z.string().trim().min(1).max(DRIVE_MESSAGE_BODY_MAX_LENGTH),
+  body: z.string().trim().min(1).max(DRIVE_MESSAGE_BODY_MAX_LENGTH).describe("Markdown 留言正文，最多 4000 字符。"),
 }).strict().refine((value) => Boolean(value.url || value.shareId), {
   message: "url 和 shareId 至少提供一个。",
 })

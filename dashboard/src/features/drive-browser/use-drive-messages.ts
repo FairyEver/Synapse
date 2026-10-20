@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DriveMessageApiContext } from '@/lib/api'
+import type { DriveDocumentImageUploadContext, DriveMessageApiContext } from '@/lib/api'
 import { trackedDriveMessageApi as api } from './shared/drive-telemetry-api'
 
 export type DriveMessageContext = DriveMessageApiContext
@@ -45,6 +45,7 @@ export function useDriveMessages(context: DriveMessageContext | undefined) {
     return api.deleteComment(context, commentId)
   }, onSuccess: invalidate })
   return {
+    imageUploadContext: context ? { ...context, kind: context.context, purpose: 'message' } as DriveDocumentImageUploadContext : undefined,
     messages: query.data?.messages ?? [],
     canPost: query.data?.canPost ?? false,
     loading: query.isLoading,

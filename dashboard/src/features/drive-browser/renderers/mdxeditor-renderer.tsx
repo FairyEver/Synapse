@@ -285,6 +285,7 @@ export function DriveMDXeditorRenderer({
     }
   }, [handleDocumentImageUpload, insertDocumentImageMarkdown])
   const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('[data-drive-message-editor]')) return
     if (!canEdit) return
     const items = Array.from(event.clipboardData.items)
     const imageItems = items.filter((item) => item.type.startsWith('image/'))
@@ -579,7 +580,7 @@ export function DriveMDXeditorRenderer({
         comments={comments}
         dataAttributes={MDXEDITOR_COMMENTS_DATA_ATTRIBUTES}
         editorView={editorView}
-        afterEditorView={comments.annotationsEnabled ? <DriveMessagesSection messages={messages} sectionRef={messagesSectionRef} /> : null}
+        afterEditorView={comments.annotationsEnabled ? <DriveMessagesSection key={current.id} messages={messages} sectionRef={messagesSectionRef} /> : null}
         onEditorContentHostChange={outline.handleContentHostChange}
         onEditorContainerChange={handleEditorContainerChange}
         outline={{ ...outline, setPanelOpen: setOutlinePanelOpen }}

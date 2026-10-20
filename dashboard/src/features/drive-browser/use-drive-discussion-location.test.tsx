@@ -19,8 +19,8 @@ async function render(children: ReactNode) {
 }
 const author = { id: 'author', handle: 'author', email: null }
 const permissions = { canEdit: false, canDelete: false }
-const comment = (id: string, parentCommentId: string | null) => ({ id, messageId: 'm99', parentCommentId, body: id, author, permissions, createdAt: '2026-10-12T00:00:00Z' })
-const messages = Array.from({ length: 100 }, (_, i) => ({ id: `m${i}`, body: `body ${i}`, author, permissions, createdAt: '2026-10-12T00:00:00Z', comments: i === 99 ? [comment('one', null), comment('two', 'one'), comment('three', 'two')] : [] }))
+const comment = (id: string, parentCommentId: string | null) => ({ id, messageId: 'm99', parentCommentId, body: id, bodyHtml: `<p>${id}</p>`, author, permissions, createdAt: '2026-10-12T00:00:00Z' })
+const messages = Array.from({ length: 100 }, (_, i) => ({ id: `m${i}`, body: `body ${i}`, bodyHtml: `<p>body ${i}</p>`, author, permissions, createdAt: '2026-10-12T00:00:00Z', comments: i === 99 ? [comment('one', null), comment('two', 'one'), comment('three', 'two')] : [] }))
 it('focuses a deep reply in the 100th message once and ignores refetch', async () => {
   history.replaceState(null, '', '/drive/items/file#discussion=message&messageId=m99&commentId=three')
   const scroll = vi.fn(); Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: scroll, configurable: true })
@@ -65,7 +65,7 @@ it('keeps an editing intent when an older notification target arrives after refr
   const data = { messages: messages.slice(0, 1), loading: false, refreshing: true, error: null, canPost: true }
   await render(<DriveMessagesSection messages={data as never} />)
   await act(async () => { [...document.querySelectorAll('button')].find((button) => button.textContent === '回复')!.click() })
-  const editor = document.querySelector('textarea') as HTMLTextAreaElement
+  const editor = document.querySelector('[data-drive-message-editor] [contenteditable="true"]') as HTMLElement
   editor.focus()
   await render(<DriveMessagesSection messages={{ ...data, messages, refreshing: false } as never} />)
   expect(document.activeElement).toBe(editor)

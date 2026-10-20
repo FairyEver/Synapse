@@ -141,7 +141,7 @@ const driveMessageTargetProperty = {
     { type: "object", properties: { kind: { type: "string", enum: ["share"] }, url: stringField("Current Synapse /share URL."), password: stringField("Optional share password."), itemId: stringField("Optional item id within a folder share; takes precedence over path."), path: stringField("Optional share-relative Markdown path.") }, required: ["kind", "url"], additionalProperties: false },
   ],
 }
-const driveMessageBodyProperty = { type: "string", minLength: 1, maxLength: 4000, description: "Plain-text body; line breaks are preserved." }
+const driveMessageBodyProperty = { type: "string", minLength: 1, maxLength: 4000, description: "Markdown body, including image URLs; at most 4000 characters." }
 const driveLinkAnnotationTargetProperty = {
   description: "Visible Markdown text or a whole Markdown image. Obtain imageId from drive_link_read_text immediately before creating an image thread.",
   oneOf: [
@@ -556,7 +556,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_message_create",
-      description: "Post a plain-text message below an owned or shared Markdown document. Chinese intent: 在文档下留言, 给文档留个言. Unlike an annotation, this message has no text or image anchor. The server automatically notifies related accounts; do not send a duplicate notification.",
+      description: "Post a Markdown message below an owned or shared Markdown document. Chinese intent: 在文档下留言, 给文档留个言. Unlike an annotation, this message has no text or image anchor. The server automatically notifies related accounts; do not send a duplicate notification.",
       inputSchema: { type: "object", properties: { target: driveMessageTargetProperty, body: driveMessageBodyProperty }, required: ["target", "body"] },
     },
     {

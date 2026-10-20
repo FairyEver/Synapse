@@ -291,6 +291,25 @@ export class DriveUserController {
     return requireDriveMessageService(this.messages).list({ kind: "owned", itemId }, request.user!.id)
   }
 
+  @Post("/browser/owner/items/:itemId/messages/images/uploads/prepare")
+  @Throttle(documentImageUploadThrottle)
+  prepareOwnerMessageImageUpload(@Param("itemId") itemId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).prepareImageUpload({ kind: "owned", itemId }, request.user!.id,
+      parseBody(documentImagePrepareUploadSchema, body, "图片上传请求无效。"))
+  }
+
+  @Post("/browser/owner/items/:itemId/messages/images/uploads/:sessionId/complete")
+  @Throttle(documentImageUploadThrottle)
+  completeOwnerMessageImageUpload(@Param("itemId") itemId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).completeImageUpload({ kind: "owned", itemId }, request.user!.id, sessionId)
+  }
+
+  @Post("/browser/owner/items/:itemId/messages/images/uploads/:sessionId/cancel")
+  @Throttle(documentImageUploadThrottle)
+  cancelOwnerMessageImageUpload(@Param("itemId") itemId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).cancelImageUpload({ kind: "owned", itemId }, request.user!.id, sessionId)
+  }
+
   @Post("/browser/owner/items/:itemId/messages")
   createOwnerMessage(@Param("itemId") itemId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     return requireDriveMessageService(this.messages).create({ kind: "owned", itemId }, request.user!.id, parseMessageBody(body), request.ip)
@@ -1388,6 +1407,28 @@ export class DrivePublicController {
   @Header("Cache-Control", "no-store")
   async listShareMessages(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Req() request: Request) {
     return requireDriveMessageService(this.messages).list(this.messageShareAccess(shareId, itemId, request), await this.resolveOptionalUserId(request))
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post(["/api/drive/browser/shares/:shareId/messages/images/uploads/prepare", "/api/drive/browser/shares/:shareId/items/:itemId/messages/images/uploads/prepare"])
+  @Throttle(documentImageUploadThrottle)
+  prepareShareMessageImageUpload(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).prepareImageUpload(this.messageShareAccess(shareId, itemId, request), request.user!.id,
+      parseBody(documentImagePrepareUploadSchema, body, "图片上传请求无效。"))
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post(["/api/drive/browser/shares/:shareId/messages/images/uploads/:sessionId/complete", "/api/drive/browser/shares/:shareId/items/:itemId/messages/images/uploads/:sessionId/complete"])
+  @Throttle(documentImageUploadThrottle)
+  completeShareMessageImageUpload(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).completeImageUpload(this.messageShareAccess(shareId, itemId, request), request.user!.id, sessionId)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post(["/api/drive/browser/shares/:shareId/messages/images/uploads/:sessionId/cancel", "/api/drive/browser/shares/:shareId/items/:itemId/messages/images/uploads/:sessionId/cancel"])
+  @Throttle(documentImageUploadThrottle)
+  cancelShareMessageImageUpload(@Param("shareId") shareId: string, @Param("itemId") itemId: string | undefined, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requireDriveMessageService(this.messages).cancelImageUpload(this.messageShareAccess(shareId, itemId, request), request.user!.id, sessionId)
   }
 
   @UseGuards(UserAuthGuard)

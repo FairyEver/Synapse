@@ -203,11 +203,11 @@ Drive 本地同步通过 10 个 `app.drive.sync.*` capability 暴露给 MCP：�
 
 Drive 分享评论通过 7 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论、删除线程和讨论状态更新。仅讨论创建人可通过 `app.drive.link.annotation.thread.status.update` 设置 `open`（未解决）或 `resolved`（已解决）；列表与变更结果返回 `status` 和 `permissions.canChangeStatus`。状态独立于定位与删除，解决后保留原位及所有回复，回复不自动重新打开，同状态重试不产生额外变化。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
 
-Drive 文末留言通过 7 个 `app.drive.message.*` capability 暴露给 MCP：列表、留言新建/编辑/删除、回复新建/编辑/删除。目标明确为自己的 Markdown 文件 `itemId` 或当前 Synapse `/share/...` URL；分享目标可提供密码、子文件 ID 或相对路径。留言不带正文锚点，不进入 Markdown 内容或版本历史。作者仅能编辑自己写的内容；作者与文档所有者可删除，删除时连带全部后代回复。分享返回的作者邮箱被隐藏。
+Drive 文末留言通过 7 个 `app.drive.message.*` capability 暴露给 MCP：列表、留言新建/编辑/删除、回复新建/编辑/删除。目标明确为自己的 Markdown 文件 `itemId` 或当前 Synapse `/share/...` URL；分享目标可提供密码、子文件 ID 或相对路径。留言不带正文锚点，不进入 Markdown 内容或版本历史。作者仅能编辑自己写的内容；作者与文档所有者可删除，删除时连带全部后代回复。分享返回的作者邮箱被隐藏。 留言和回复 `body` 支持 Markdown（上限 4000 字符），返回服务端安全渲染的 `bodyHtml`。浏览器专用图片上传复用平台托管对象，不新增 MCP 工具，以上 7 个 capability 的数量不变。
 
 Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本和字节数，通过 `app.drive.file_content.read_chunk` 有界读取源码，通过 `app.drive.file_content.patch` 在指定版本上做局部编辑。三个能力只处理 owner 自己云盘里已存在的 Markdown、纯文本和 HTML 源文件；补丁复用浏览器在线编辑器的并发校验、版本历史、配额与协同代际。旧 `app.drive.file_content.read/write` MCP 能力已删除；浏览器整篇编辑 HTTP 接口仍保留。对应的文本上传覆盖路径（`app.drive.file_upload`）仍要求基线版本。分享场景、文件夹上传与二进制文件不在补丁契约内。
 
-浏览器 Markdown/MDX 编辑器的平台托管图片属于现有 Drive Web UI 私有能力，使用 `/object/<objectId>`，不注册 System App、MCP capability/tool、Automation Action 或 Deep Link。`/object` 是平台托管对象的公共命名空间，不限定未来对象类型。Agent 处理本地 Markdown、HTML 与明确的图床/直链请求时仍使用既有 Drive 文件、Site 和 `app.drive.direct_link.*` 能力。
+浏览器 Markdown/MDX 正文编辑器及文末留言/回复编辑器的平台托管图片属于现有 Drive Web UI 私有能力，使用 `/object/<objectId>`，不注册 System App、MCP capability/tool、Automation Action 或 Deep Link。`/object` 是平台托管对象的公共命名空间，不限定未来对象类型。Agent 处理本地 Markdown、HTML 与明确的图床/直链请求时仍使用既有 Drive 文件、Site 和 `app.drive.direct_link.*` 能力。
 
 ## 同步硬规则
 

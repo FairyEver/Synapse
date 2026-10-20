@@ -9,6 +9,8 @@ import { PrismaService } from "../prisma/prisma.service"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.constants"
 import { DriveService } from "./drive.service"
 import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
+import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
+import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 export type DriveMessageAccess =
   | { readonly kind: "owned"; readonly itemId: string }
@@ -54,6 +56,7 @@ export class DriveMessageService {
     private readonly discussion: DriveDiscussionNotificationService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly collaborationBus?: LocalDriveCollaborationBus,
+    @Optional() private readonly hostedImages?: DriveDocumentHostedImageService,
   ) {}
 
   async list(access: DriveMessageAccess, actorUserId: string | null): Promise<DriveMessageListDto> {
@@ -66,7 +69,7 @@ export class DriveMessageService {
     return {
       itemId: item.id,
       canPost: Boolean(actorUserId),
-      messages: messages.map((message) => toMessageDto(message, actorUserId, item.userId, access.kind === "share")),
+      messages: await Promise.all(messages.map((message) => toMessageDto(message, actorUserId, item.userId, access.kind === "share"))),
     }
   }
 
@@ -101,6 +104,7 @@ export class DriveMessageService {
           },
           include: messageInclude,
         })
+        await this.hostedImages?.activateReferencedImages(tx, { sourceItemId: item.id, markdown: content })
         return { result: message, event: makeDriveDiscussionEvent("message", "created", item, message, null, content) }
       })
     } catch (error) {
@@ -116,17 +120,24 @@ export class DriveMessageService {
     return toMessageDto(message, actorUserId, item.userId, access.kind === "share")
   }
 
-  private replayedMessage(message: MessageRecord & { readonly openApiRequestHash: string | null }, requestHash: string, actorUserId: string, ownerId: string): DriveMessageDto {
+  private replayedMessage(message: MessageRecord & { readonly openApiRequestHash: string | null }, requestHash: string, actorUserId: string, ownerId: string): Promise<DriveMessageDto> {
     if (message.openApiRequestHash !== requestHash) throw new ConflictException("去重键对应不同请求。")
     return toMessageDto(message, actorUserId, ownerId, true)
   }
 
   async update(access: DriveMessageAccess, actorUserId: string, messageId: string, body: string, ipAddress?: string): Promise<DriveMessageDto> {
     const item = await this.resolveItem(access, actorUserId)
-    const message = await this.requireMessage(item.id, messageId)
-    if (message.createdByUserId !== actorUserId) throw new ForbiddenException("不能编辑他人的留言。")
-    const updated = await this.prisma.driveMessage.update({
-      where: { id: messageId }, data: { body: parseDriveMessageBody(body), editedAt: new Date() }, include: messageInclude,
+    const content = parseDriveMessageBody(body)
+    const updated = await this.discussion.withItemLock(item.id, async (tx) => {
+      await this.validateWriteAccess(tx, access, item, actorUserId)
+      const message = await tx.driveMessage.findFirst({ where: { id: messageId, itemId: item.id, deletedAt: null }, include: messageInclude })
+      if (!message) throw new NotFoundException("留言不存在。")
+      if (message.createdByUserId !== actorUserId) throw new ForbiddenException("不能编辑他人的留言。")
+      const updated = await tx.driveMessage.update({
+        where: { id: messageId }, data: { body: content, editedAt: new Date() }, include: messageInclude,
+      })
+      await this.hostedImages?.activateReferencedImages(tx, { sourceItemId: item.id, markdown: content })
+      return updated
     })
     await this.afterMutation(item.id, actorUserId, "drive.message.update", "drive.message", messageId, ipAddress)
     return toMessageDto(updated, actorUserId, item.userId, access.kind === "share")
@@ -160,6 +171,7 @@ export class DriveMessageService {
         data: { messageId, parentCommentId, body: parseDriveMessageBody(body), createdByUserId: actorUserId, sourceShareId: item.sourceShareId ?? null },
         include: { createdByUser: { select: { id: true, email: true, handle: true } } },
       })
+      await this.hostedImages?.activateReferencedImages(tx, { sourceItemId: item.id, markdown: comment.body })
       return { result: comment, event: makeDriveDiscussionEvent("message", "replied", item, message, comment, comment.body, parent) }
     })
     await this.afterMutation(item.id, actorUserId, "drive.message.comment.create", "drive.messageComment", comment.id, ipAddress)
@@ -168,11 +180,20 @@ export class DriveMessageService {
 
   async updateComment(access: DriveMessageAccess, actorUserId: string, commentId: string, body: string, ipAddress?: string): Promise<DriveMessageCommentDto> {
     const item = await this.resolveItem(access, actorUserId)
-    const comment = await this.requireComment(item.id, commentId)
-    if (comment.createdByUserId !== actorUserId) throw new ForbiddenException("不能编辑他人的回复。")
-    const updated = await this.prisma.driveMessageComment.update({
-      where: { id: commentId }, data: { body: parseDriveMessageBody(body), editedAt: new Date() },
-      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+    const content = parseDriveMessageBody(body)
+    const updated = await this.discussion.withItemLock(item.id, async (tx) => {
+      await this.validateWriteAccess(tx, access, item, actorUserId)
+      const comment = await tx.driveMessageComment.findFirst({
+        where: { id: commentId, deletedAt: null, message: { itemId: item.id, deletedAt: null } },
+      })
+      if (!comment) throw new NotFoundException("回复不存在。")
+      if (comment.createdByUserId !== actorUserId) throw new ForbiddenException("不能编辑他人的回复。")
+      const updated = await tx.driveMessageComment.update({
+        where: { id: commentId }, data: { body: content, editedAt: new Date() },
+        include: { createdByUser: { select: { id: true, email: true, handle: true } } },
+      })
+      await this.hostedImages?.activateReferencedImages(tx, { sourceItemId: item.id, markdown: content })
+      return updated
     })
     await this.afterMutation(item.id, actorUserId, "drive.message.comment.update", "drive.messageComment", commentId, ipAddress)
     return toCommentDto(updated, actorUserId, item.userId, access.kind === "share")
@@ -225,19 +246,37 @@ export class DriveMessageService {
     return item
   }
 
-  private async requireMessage(itemId: string, messageId: string) {
-    const message = await this.prisma.driveMessage.findFirst({ where: { id: messageId, itemId, deletedAt: null }, include: messageInclude })
-    if (!message) throw new NotFoundException("留言不存在。")
-    return message
+  private validateWriteAccess(tx: Prisma.TransactionClient, access: DriveMessageAccess, item: MessageItem, actorUserId: string) {
+    return this.drive.validateDiscussionWriteAccess(tx, access.kind === "owned"
+      ? { kind: "owned", itemId: item.id, actorUserId }
+      : { kind: "share", itemId: item.id, actorUserId, shareId: access.shareId, sourceShareId: item.sourceShareId ?? null, password: access.password, cookie: access.cookie })
   }
 
-  private async requireComment(itemId: string, commentId: string) {
-    const comment = await this.prisma.driveMessageComment.findFirst({
-      where: { id: commentId, deletedAt: null, message: { itemId, deletedAt: null } },
-      include: { createdByUser: { select: { id: true, email: true, handle: true } } },
-    })
-    if (!comment) throw new NotFoundException("回复不存在。")
-    return comment
+  private async imageUploadItem(access: DriveMessageAccess, actorUserId: string) {
+    if (!actorUserId) throw new ForbiddenException("请先登录。")
+    const item = await this.resolveItem(access, actorUserId)
+    await this.discussion.withItemLock(item.id, (tx) => this.validateWriteAccess(tx, access, item, actorUserId))
+    return item
+  }
+
+  async prepareImageUpload(access: DriveMessageAccess, actorUserId: string, input: { readonly name: string; readonly size: string; readonly mimeType: string }) {
+    const item = await this.imageUploadItem(access, actorUserId)
+    return this.requireImages().prepareUpload({ actorUserId, sourceItemId: item.id, ...input })
+  }
+
+  async completeImageUpload(access: DriveMessageAccess, actorUserId: string, sessionId: string) {
+    const item = await this.imageUploadItem(access, actorUserId)
+    return this.requireImages().completeUpload({ actorUserId, sourceItemId: item.id, sessionId })
+  }
+
+  async cancelImageUpload(access: DriveMessageAccess, actorUserId: string, sessionId: string) {
+    const item = await this.imageUploadItem(access, actorUserId)
+    return this.requireImages().cancelUpload({ actorUserId, sourceItemId: item.id, sessionId })
+  }
+
+  private requireImages() {
+    if (!this.hostedImages) throw new Error("文档图片服务不可用。")
+    return this.hostedImages
   }
 
   private async afterMutation(itemId: string, actorUserId: string, action: string, targetType: string, targetId: string, ipAddress?: string) {
@@ -259,19 +298,21 @@ function assertCanDelete(authorId: string, actorId: string, ownerId: string) {
   if (actorId !== authorId && actorId !== ownerId) throw new ForbiddenException("不能删除该留言或回复。")
 }
 
-function toMessageDto(record: MessageRecord, actorId: string | null, ownerId: string, redactEmail: boolean): DriveMessageDto {
+async function toMessageDto(record: MessageRecord, actorId: string | null, ownerId: string, redactEmail: boolean): Promise<DriveMessageDto> {
   return {
     id: record.id, itemId: record.itemId, body: record.body,
+    bodyHtml: (await renderDriveMarkdownFragment(record.body)).html,
     author: toAuthor(record.createdByUser, redactEmail),
     createdAt: record.createdAt.toISOString(), updatedAt: record.updatedAt.toISOString(), editedAt: record.editedAt?.toISOString() ?? null,
-    comments: record.comments.map((comment) => toCommentDto(comment, actorId, ownerId, redactEmail)),
+    comments: await Promise.all(record.comments.map((comment) => toCommentDto(comment, actorId, ownerId, redactEmail))),
     permissions: { canEdit: actorId === record.createdByUserId, canDelete: Boolean(actorId && (actorId === record.createdByUserId || actorId === ownerId)) },
   }
 }
 
-function toCommentDto(record: MessageCommentRecord, actorId: string | null, ownerId: string, redactEmail: boolean): DriveMessageCommentDto {
+async function toCommentDto(record: MessageCommentRecord, actorId: string | null, ownerId: string, redactEmail: boolean): Promise<DriveMessageCommentDto> {
   return {
     id: record.id, messageId: record.messageId, parentCommentId: record.parentCommentId, body: record.body,
+    bodyHtml: (await renderDriveMarkdownFragment(record.body)).html,
     author: toAuthor(record.createdByUser, redactEmail),
     createdAt: record.createdAt.toISOString(), updatedAt: record.updatedAt.toISOString(), editedAt: record.editedAt?.toISOString() ?? null,
     permissions: { canEdit: actorId === record.createdByUserId, canDelete: Boolean(actorId && (actorId === record.createdByUserId || actorId === ownerId)) },

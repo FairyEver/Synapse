@@ -1072,6 +1072,26 @@ describe('driveBrowserApi', () => {
     )
   })
 
+  it('uses discussion image endpoints and reports expired login for owner and read-only shares', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/prepare')) return new Response(JSON.stringify({ sessionId: 's/id', upload: { method: 'PUT', url: 'https://cos.example/image', headers: {} } }), { status: 200 })
+      if (url === 'https://cos.example/image') return new Response(null, { status: 200 })
+      return new Response(JSON.stringify({ url: '/object/img_saved' }), { status: 200 })
+    })
+    const file = new File(['image'], 'image.png', { type: 'image/png' })
+    for (const context of [
+      { kind: 'owner' as const, itemId: 'i/id', purpose: 'message' as const },
+      { kind: 'share' as const, shareId: 's/id', purpose: 'message' as const },
+      { kind: 'share' as const, shareId: 's/id', itemId: 'i/id', purpose: 'message' as const },
+    ]) await driveBrowserApi.uploadHostedDocumentImage(file, context, { name: file.name, mimeType: file.type })
+    const calls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(calls[0]).toBe('/api/drive/browser/owner/items/i%2Fid/messages/images/uploads/prepare')
+    expect(calls[3]).toBe('/api/drive/browser/shares/s%2Fid/messages/images/uploads/prepare')
+    expect(calls[8]).toBe('/api/drive/browser/shares/s%2Fid/items/i%2Fid/messages/images/uploads/s%2Fid/complete')
+    expect(shouldNotifyAuthExpired('/api/drive/browser/shares/s%2Fid/messages/images/uploads/prepare', 401)).toBe(true)
+  })
+
   it('notifies auth expiration for protected browser write requests only', async () => {
     const authExpired = vi.fn()
     const unsubscribe = subscribeAuthExpired(authExpired)

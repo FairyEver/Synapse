@@ -27,14 +27,16 @@ describe('DriveMessageService', () => {
   }
   const drive = { resolveShareAnnotationAccess: vi.fn(), validateDiscussionWriteAccess: vi.fn(async () => undefined) }
   const bus = { publish: vi.fn() }
+  const images = { activateReferencedImages: vi.fn(async () => undefined), prepareUpload: vi.fn(), completeUpload: vi.fn(), cancelUpload: vi.fn() }
   const discussion = {
     mutate: async (_id: string, work: (tx: unknown) => Promise<{ result: unknown }>) => (await prisma.$transaction(work) as { result: unknown }).result,
     withItemLock: async (_id: string, work: (tx: unknown) => Promise<unknown>) => prisma.$transaction(work),
   }
-  const service = new DriveMessageService(prisma as never, drive as never, discussion as never, undefined, bus as never)
+  const service = new DriveMessageService(prisma as never, drive as never, discussion as never, undefined, bus as never, images as never)
 
   beforeEach(() => {
     vi.clearAllMocks()
+    drive.validateDiscussionWriteAccess.mockReset().mockResolvedValue(undefined)
     prisma.driveItem.findFirst.mockResolvedValue(item)
     prisma.driveMessage.findMany.mockResolvedValue([message()])
     prisma.driveMessage.findFirst.mockResolvedValue(message())
@@ -68,6 +70,65 @@ describe('DriveMessageService', () => {
     expect(result.messages[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(result.messages[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(prisma.driveItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: 'owner', id: 'doc' }) }))
+  })
+
+  it('renders historical message and reply Markdown while escaping HTML and unsafe URLs', async () => {
+    prisma.driveMessage.findMany.mockResolvedValue([{ ...message(), body: '**重点**\n\n<script>alert(1)</script>\n\n[打开](javascript:alert(1))', comments: [{ ...reply('first'), body: '![截图](/object/img_example)' }] }])
+    const result = await service.list({ kind: 'owned', itemId: 'doc' }, 'owner')
+    expect(result.messages[0]?.bodyHtml).toContain('<strong>重点</strong>')
+    expect(result.messages[0]?.bodyHtml).not.toContain('<script>')
+    expect(result.messages[0]?.bodyHtml).not.toContain('href="javascript:')
+    expect(result.messages[0]?.comments[0]?.bodyHtml).toContain('src="/object/img_example"')
+  })
+
+  it('activates images in the same transaction as each message and reply write', async () => {
+    const access = { kind: 'share' as const, shareId: 'share', itemId: 'doc' }
+    const body = '![截图](/object/img_example)'
+    prisma.driveMessageComment.create.mockResolvedValueOnce({ ...reply('second'), body })
+    await service.create(access, 'reader', body)
+    await service.createComment(access, 'reader', 'message', null, body)
+    await service.update(access, 'reader', 'message', body)
+    await service.updateComment(access, 'reader', 'first', body)
+    expect(images.activateReferencedImages).toHaveBeenCalledTimes(4)
+    for (const [tx, input] of images.activateReferencedImages.mock.calls as unknown as [unknown, unknown][]) {
+      expect(tx).toBe(prisma)
+      expect(input).toEqual({ sourceItemId: 'doc', markdown: body })
+    }
+    expect(drive.validateDiscussionWriteAccess).toHaveBeenCalledTimes(4)
+  })
+
+  it('does not activate images when a write or access recheck fails', async () => {
+    prisma.driveMessage.create.mockRejectedValueOnce(new Error('write failed'))
+    await expect(service.create({ kind: 'owned', itemId: 'doc' }, 'owner', '![图](/object/img_example)')).rejects.toThrow('write failed')
+    expect(images.activateReferencedImages).not.toHaveBeenCalled()
+    drive.validateDiscussionWriteAccess.mockRejectedValueOnce(new NotFoundException('分享已停用'))
+    await expect(service.update({ kind: 'share', shareId: 'share', itemId: 'doc' }, 'reader', 'message', 'changed')).rejects.toMatchObject({ status: 404 })
+    expect(prisma.driveMessage.update).not.toHaveBeenCalled()
+  })
+
+  it('allows a logged-in read-only share reader to upload images using discussion access', async () => {
+    const access = { kind: 'share' as const, shareId: 'share', itemId: 'doc', cookie: 'access-cookie' }
+    images.prepareUpload.mockResolvedValue({ sessionId: 'session' })
+    images.completeUpload.mockResolvedValue({ url: '/object/img_example' })
+    expect(await service.prepareImageUpload(access, 'reader', { name: '截图.png', size: '12', mimeType: 'image/png' })).toEqual({ sessionId: 'session' })
+    expect(await service.completeImageUpload(access, 'reader', 'session')).toEqual({ url: '/object/img_example' })
+    expect(images.prepareUpload).toHaveBeenCalledWith({ actorUserId: 'reader', sourceItemId: 'doc', name: '截图.png', size: '12', mimeType: 'image/png' })
+    expect(images.completeUpload).toHaveBeenCalledWith({ actorUserId: 'reader', sourceItemId: 'doc', sessionId: 'session' })
+    expect(drive.validateDiscussionWriteAccess).toHaveBeenCalledWith(prisma, expect.objectContaining({ actorUserId: 'reader', shareId: 'share', cookie: 'access-cookie' }))
+  })
+
+  it('rejects upload preparation and completion after share access is withdrawn', async () => {
+    drive.validateDiscussionWriteAccess.mockRejectedValueOnce(new NotFoundException('分享已停用'))
+    await expect(service.prepareImageUpload({ kind: 'share', shareId: 'share' }, 'reader', { name: 'image.png', size: '12', mimeType: 'image/png' })).rejects.toMatchObject({ status: 404 })
+    expect(images.prepareUpload).not.toHaveBeenCalled()
+    drive.validateDiscussionWriteAccess.mockRejectedValueOnce(new NotFoundException('分享已停用'))
+    await expect(service.completeImageUpload({ kind: 'share', shareId: 'share' }, 'reader', 'session')).rejects.toMatchObject({ status: 404 })
+    expect(images.completeUpload).not.toHaveBeenCalled()
+  })
+
+  it('rejects anonymous image uploads before accessing storage', async () => {
+    await expect(service.prepareImageUpload({ kind: 'share', shareId: 'share' }, null as never, { name: 'image.png', size: '12', mimeType: 'image/png' })).rejects.toMatchObject({ status: 403 })
+    expect(images.prepareUpload).not.toHaveBeenCalled()
   })
 
   it('allows anonymous share readers to view redacted messages but not post', async () => {

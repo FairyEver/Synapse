@@ -699,6 +699,7 @@ function isProtectedDriveApiPath(path: string) {
 
 function isProtectedDriveShareBrowserPath(path: string) {
   return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
+    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/messages/images/uploads/[^?#]*(?:[?#].*)?$`, 'u').test(path)
     || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/document-images/uploads/[^?#]*(?:[?#].*)?$`, 'u').test(path)
     || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/collaboration/checkpoint(?:[?#].*)?$`, 'u').test(path)
     || isProtectedDriveShareAnnotationPath(path)
@@ -1480,16 +1481,17 @@ export const driveBrowserApi = {
 }
 
 export type DriveDocumentImageUploadContext =
-  | { readonly kind: 'owner'; readonly itemId: string }
-  | { readonly kind: 'share'; readonly shareId: string; readonly itemId?: string | null }
+  | { readonly kind: 'owner'; readonly itemId: string; readonly purpose?: 'message' }
+  | { readonly kind: 'share'; readonly shareId: string; readonly itemId?: string | null; readonly purpose?: 'message' }
 
 function documentImageUploadBasePath(context: DriveDocumentImageUploadContext): string {
+  const suffix = context.purpose === 'message' ? 'messages/images/uploads' : 'document-images/uploads'
   if (context.kind === 'owner') {
-    return `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(context.itemId)}/document-images/uploads`
+    return `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(context.itemId)}/${suffix}`
   }
   return context.itemId
-    ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/items/${encodeURIComponent(context.itemId)}/document-images/uploads`
-    : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/document-images/uploads`
+    ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/items/${encodeURIComponent(context.itemId)}/${suffix}`
+    : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/${suffix}`
 }
 
 function ownerAnnotationPath(itemId: string, suffix = '') {
