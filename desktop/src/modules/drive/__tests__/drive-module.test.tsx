@@ -54,6 +54,7 @@ const mocks = vi.hoisted(() => ({
   createDriveSyncSafeBinding: vi.fn(),
   listDrivePublicAssets: vi.fn(),
   listDriveItems: vi.fn(),
+  listDriveItemTree: vi.fn(),
   listDriveSites: vi.fn(),
   listDriveTrash: vi.fn(),
   listDriveShares: vi.fn(),
@@ -130,6 +131,7 @@ vi.mock("@/app-shell/account", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   requireSynapseBridge: () => ({
     drive: {
+      itemTree: { list: mocks.listDriveItemTree },
       file: { replace: { preview: mocks.previewDriveFileReplace, apply: mocks.applyDriveFileReplace } },
       item: {
         list: mocks.listDriveItems,
@@ -220,6 +222,7 @@ beforeEach(() => {
   mocks.createDriveSyncSafeBinding.mockResolvedValue(createDriveSyncBinding())
   mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
+  mocks.listDriveItemTree.mockResolvedValue({ items: [], total: 0, fileCount: 0, folderCount: 0, hasMore: false, nextOffset: null })
   mocks.listDriveSites.mockResolvedValue(createDriveSitePage([]))
   mocks.listDriveTrash.mockResolvedValue(createDriveTrashPage([]))
   mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([]))
@@ -314,6 +317,79 @@ afterEach(() => {
 })
 
 describe("DriveModule", () => {
+  it("opens filename search before sync management and preserves the existing three columns", async () => {
+    await render(<DriveModule />)
+    const toolbar = document.querySelector('[data-testid="drive-toolbar-actions"]')!
+    expect([...toolbar.querySelectorAll("button")].map(button => button.textContent?.trim()).slice(0, 2)).toEqual(["搜索", "同步管理"])
+    expect(document.querySelector('[role="searchbox"]')).toBeNull()
+    await clickButtonByLabel("搜索文件")
+    const input = document.querySelector('[role="searchbox"]') as HTMLInputElement
+    expect(input).not.toBeNull()
+    expect(document.activeElement).toBe(input)
+    expect([...document.querySelectorAll("thead th")].map(head => head.textContent)).toEqual(["名称", "更新时间", ""])
+    expect(mocks.listDriveItemTree).not.toHaveBeenCalled()
+  })
+
+  it("previews search results and returns from their actual location without losing loaded pages", async () => {
+    const parent = createDriveItem({ id: "docs", name: "资料" })
+    const file = createDriveItem({ id: "deep-file", name: "云盘设计.md", type: "file", parentId: parent.id })
+    const result = { ...file, path: "资料/云盘设计.md", depth: 1, ancestors: [{ id: parent.id, name: parent.name, parentId: null, type: "folder" }] }
+    mocks.listDriveItemTree.mockResolvedValueOnce({ items: [result, ...Array.from({ length: 99 }, (_, index) => ({ ...result, id: `extra-${index}`, name: `云盘-${index}.md`, path: `资料/云盘-${index}.md` }))], total: 101, fileCount: 101, folderCount: 0, hasMore: true, nextOffset: 100 })
+      .mockResolvedValueOnce({ items: [{ ...result, id: "second-file", name: "云盘设计2.md", path: "资料/云盘设计2.md" }], total: 101, fileCount: 101, folderCount: 0, hasMore: false, nextOffset: null })
+    mocks.getDriveItem.mockImplementation(async ({ itemId }: { itemId: string }) => itemId === file.id ? file : parent)
+    mocks.listDriveItems.mockImplementation(async ({ parentId }: { parentId?: string | null } = {}) => parentId === parent.id ? createDriveItemPage([file]) : createDriveItemPage([]))
+    await render(<DriveModule />)
+    await submitFileSearch("云盘")
+    expect(document.querySelector("mark")?.textContent).toBe("云盘")
+    expect(document.querySelector("tbody")?.textContent).toContain("资料")
+    expect([...document.querySelectorAll("thead th")].map(head => head.textContent)).toEqual(["名称", "更新时间", ""])
+    await clickRowButtonText(file.name, "预览")
+    expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: file.id })
+    expect((document.querySelector('[role="searchbox"]') as HTMLInputElement).value).toBe("云盘")
+    await clickButtonText("加载更多")
+    expect(document.querySelector("tbody")?.textContent).toContain("云盘设计2.md")
+    await clickRowButtonText(file.name, "资料")
+    expect(mocks.getDriveItem).toHaveBeenCalledWith({ itemId: file.id })
+    expect(document.querySelector('[role="searchbox"]')).toBeNull()
+    expect(document.querySelector('tr[data-drive-item-id="deep-file"]')?.getAttribute("aria-selected")).toBe("true")
+    await clickButtonText("返回搜索结果")
+    expect((document.querySelector('[role="searchbox"]') as HTMLInputElement).value).toBe("云盘")
+    expect(document.querySelector("tbody")?.textContent).toContain("云盘设计2.md")
+    expect(mocks.listDriveItemTree).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([false, true])("refreshes search after a mutation in the located folder even if directory loading fails (%s)", async (folderFails) => {
+    const file = createDriveItem({ id: "deleted-result", name: "待删除.md", type: "file", shared: true, activeShareId: "share-row-1", activeShare: createDriveActiveShare() })
+    let changed = false
+    mocks.listDriveItemTree.mockImplementation(async () => ({ items: changed ? [] : [{ ...file, path: file.name, depth: 0, ancestors: [] }], total: changed ? 0 : 1, fileCount: changed ? 0 : 1, folderCount: 0, hasMore: false, nextOffset: null }))
+    mocks.listDriveItems.mockImplementation(async () => {
+      if (changed && folderFails) throw new Error("目录暂时不可用")
+      return createDriveItemPage(changed ? [] : [file])
+    })
+    mocks.getDriveItem.mockResolvedValue(file)
+    mocks.deleteDriveItem.mockImplementation(async () => { changed = true; return { ok: true } })
+    await render(<DriveModule />); await submitFileSearch("待删除")
+    await clickRowButtonText(file.name, "根目录")
+    await clickRowButtonText(file.name, "删除", { altKey: true })
+    await clickButtonText("返回搜索结果")
+    expect(document.body.textContent).toContain("未找到匹配的文件")
+    await clickButtonText("退出搜索")
+    expect(document.querySelector("tbody")?.textContent ?? "").not.toContain(file.name)
+  })
+
+  it("refreshes the same filtered search after cancelling a result's share", async () => {
+    const file = createDriveItem({ id: "shared-result", name: "分享.md", type: "file", shared: true, activeShareId: "share-row-1", activeShare: createDriveActiveShare() })
+    mocks.listDriveItemTree.mockResolvedValueOnce({ items: [{ ...file, path: file.name, depth: 0, ancestors: [] }], total: 1, fileCount: 1, folderCount: 0, hasMore: false, nextOffset: null })
+      .mockResolvedValue({ items: [], total: 0, fileCount: 0, folderCount: 0, hasMore: false, nextOffset: null })
+    await render(<DriveModule />)
+    await submitFileSearch("分享")
+    await clickRowButtonText(file.name, "取消分享")
+    expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
+    expect(mocks.listDriveItemTree).toHaveBeenLastCalledWith(expect.objectContaining({ query: "分享", parentId: null, offset: 0 }))
+    expect(document.body.textContent).toContain("未找到匹配的文件")
+    expect((document.querySelector('[role="searchbox"]') as HTMLInputElement).value).toBe("分享")
+  })
+
   it("renders the cloud drive toolbar actions", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
@@ -689,7 +765,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionLabels()).toEqual(["同步管理", "新建", "刷新", "更多"])
+    expect(driveToolbarActionLabels()).toEqual(["搜索文件", "同步管理", "新建", "刷新", "更多"])
     expect(getButtonByLabel("刷新").querySelector(".lucide-refresh-cw")).not.toBeNull()
     expect(getButtonByLabel("更多").querySelector(".lucide-ellipsis")).not.toBeNull()
   })
@@ -5151,4 +5227,15 @@ async function clickWizardCheckbox(id: string): Promise<void> {
   const element = document.getElementById(id)
   if (!element) throw new Error(`Checkbox not found: ${id}`)
   await act(async () => { element.click(); await flushPromises() })
+}
+
+async function submitFileSearch(value: string) {
+  await clickButtonByLabel("搜索文件")
+  const input = document.querySelector('[role="searchbox"]') as HTMLInputElement
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    await flushPromises()
+  })
+  await act(async () => { input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await flushPromises() })
 }

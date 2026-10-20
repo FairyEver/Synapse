@@ -230,6 +230,15 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.readDriveFileContentChunk).not.toHaveBeenCalled()
   })
 
+  it("passes recursive filename search conditions through the existing tree capability", async () => {
+    const input = { parentId: "folder-1", query: "云盘 设计", fileType: "document" as const, shareStatus: "shared" as const, updatedAfter: "2026-10-01T00:00:00.000Z", sort: "modified" as const, offset: 100, limit: 100 }
+    const accountService = createAccountService({ listDriveItemTree: vi.fn(async () => ({ items: [], total: 0, fileCount: 0, folderCount: 0, hasMore: false, nextOffset: null })) })
+    await createDriveCapabilityDispatcher({ accountService }).dispatch("app.drive.item_tree.list", input, { source: "mcp-stdio" })
+    expect(accountService.listDriveItemTree).toHaveBeenCalledWith(input)
+    const tool = buildDriveTools().find(tool => tool.name === "app_drive_item_tree_list")!
+    expect(tool.inputSchema.properties).toMatchObject({ query: { type: "string", maxLength: 200 }, fileType: { enum: ["folder", "document", "image", "archive", "other"] }, sort: { enum: ["relevance", "modified", "name"] } })
+  })
+
   it("previews and applies Drive reorganizations only through a generated plan id", async () => {
     const preview = {
       planId: "drive-reorg-plan-1",

@@ -16,6 +16,14 @@ When the user says “云文档”, “在线文档”, “云盘”, “云存�
 
 These names alone do not authorize publishing a share or site, creating a public asset, or binding persistent local sync. If the user explicitly names another platform, do not route that request to Synapse Drive.
 
+## Finding Files
+
+Use `app_drive_item_tree_list` with `query` when the user searches owned file or folder names. Keywords are literal filename/extension matches, case-insensitive with NFKC normalization; whitespace-separated terms must all match. It does not search document contents or paths. Use `parentId` to limit the search to that folder's descendants, or omit it for the whole ordinary Drive. Trash, public assets and other users' items are excluded.
+
+Optional `fileType` (`folder`, `document`, `image`, `archive`, `other`), inclusive `updatedAfter` (ISO timestamp with timezone), `shareStatus` (`shared` / `private`) and `sort` (`relevance`, `modified`, `name`) combine before pagination. `shared` means an enabled, unexpired share; disabled or expired shares count as private. Continue with `nextOffset` while `hasMore`; restart at zero after changing conditions. Match counts describe the full filtered set. Without search fields the existing tree order is preserved.
+
+Use returned `path` and `ancestors` to distinguish same-name results. Resolve the chosen item by ID before navigation or mutation, because names and locations may have changed. If several items remain plausible, ask with their distinguishing paths. A requested path must be matched against returned paths or traversed with `app_drive_item_list`, not passed as filename keywords. Do not enumerate and download the whole Drive to search names.
+
 ## Scope
 
 New Markdown annotation threads, document messages, and their replies automatically notify related accounts on the server. Do not send a second System Notifier message for the same creation. Editing, deleting, resolving, and reopening do not notify; historical creations are not backfilled. Notifications contain plain-text excerpts, an optional event-time context snapshot, and an exact discussion link subject to the current document and original share access. The snapshot includes a full detail title, up to 500 code points of new content, and up to 200 each of the original quote and replied-to content, with the replied-to author. Image comments include only a description, never an image resource URL. Missing snapshots on old notifications are expected; snapshots are not current document contents and must not be used to relocate anchors. Legacy participation without a recorded share can still receive new-reply notifications, but its link can be unavailable; do not create or choose another share to work around this.
@@ -325,7 +333,7 @@ Rules:
 ## Default Flow
 
 1. Apply **Upload Destination Selection**. Only a single local file with no requested destination goes directly to the Drive root; a local folder or multiple selected files use one shared Drive folder.
-2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false. Prefer a small page (around 20) over a large one; a large page costs the user real time and context. To answer "what is in my Drive", use `app_drive_item_list` on the folder the user means and offer to expand — do not reach for `app_drive_item_tree_list`, which walks the entire subtree and is meant for organizing.
+2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false. Prefer a small page (around 20) over a large one; a large page costs the user real time and context. To answer "what is in my Drive", use `app_drive_item_list` on the folder the user means and offer to expand — do not reach for `app_drive_item_tree_list`, which walks the subtree and is meant for filtered name searches or organizing.
 3. For a single local file, call `app_drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
 4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve `uploadedFiles[].relativePath` and `createdDirectories[].relativePath` from the result.
    - Uploading a same-name file to the same Drive folder overwrites the existing newest active file while preserving its item id and share links.

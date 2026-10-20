@@ -34,9 +34,10 @@ export async function findContainedDriveBindings(
   items: readonly DriveItemDto[], bindings: readonly DriveSyncBindingDto[], path: readonly DriveSyncPathEntry[],
   getRemote: (id: string) => Promise<DriveItemDto>, signal?: AbortSignal,
   getRemoteBatch?: (ids: readonly string[]) => Promise<DriveItemBatchResponse>,
+  crossLevel = false,
 ): Promise<ContainedDriveBindings> {
   const folders = new Set(items.filter((item) => item.type === "folder").map((item) => item.id))
-  const knownRoots = new Set([...path.map((entry) => entry.id), ...items.map((item) => item.id)])
+  const knownRoots = new Set(crossLevel ? [] : [...path.map((entry) => entry.id), ...items.map((item) => item.id)])
   const contained = new Map<string, string[]>()
   const requests = new Map<string, Promise<DriveItemAncestorDto>>()
   const batchedNodes = new Map<string, DriveItemAncestorDto>()
@@ -78,7 +79,7 @@ export async function findContainedDriveBindings(
           const parentId: string | null = node.parentId
           if (parentId && folders.has(parentId)) {
             contained.set(parentId, [...(contained.get(parentId) ?? []), binding.id])
-            break
+            if (!crossLevel) break
           }
           if (knownRoots.has(parentId)) break
           id = parentId

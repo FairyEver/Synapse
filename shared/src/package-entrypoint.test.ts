@@ -63,6 +63,17 @@ describe("package entrypoint", () => {
     expect(desktopSources).toEqual(["system-notifier", "terminal-complete"])
   })
 
+  it("loads identical search rules in browser ESM and Electron CommonJS without importing the root", () => {
+    const result = execFileSync(process.execPath, ["--input-type=module", "--eval", `
+      import { createRequire } from "node:module"
+      import { parseDriveSearchFilters as esmParse } from "@synapse/shared/drive-search"
+      const require = createRequire(import.meta.url)
+      const { parseDriveSearchFilters: cjsParse } = require("@synapse/shared/drive-search")
+      process.stdout.write(JSON.stringify({ esm: esmParse({ query: " ＡＢＣ " }), cjs: cjsParse({ query: " ＡＢＣ " }), cjsPath: require.resolve("@synapse/shared/drive-search") }))
+    `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
+    expect(JSON.parse(result)).toEqual({ esm: { query: "abc" }, cjs: { query: "abc" }, cjsPath: expect.stringMatching(/\.cjs$/) })
+  })
+
   it("exposes matching Drive constants through browser ESM and Electron CommonJS entries", () => {
     const result = execFileSync(process.execPath, ["--input-type=module", "--eval", `
       import { createRequire } from "node:module"

@@ -5,6 +5,7 @@ import { Buffer } from "node:buffer"
 import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
+import { parseDriveSearchFilters } from "@synapse/shared/drive-search"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
@@ -524,15 +525,18 @@ export class DriveUserController {
 
   @Get("/items/tree")
   listItemTree(
-    @Query("parentId") parentId: string | undefined,
-    @Query("offset") offset: string | undefined,
-    @Query("limit") limit: string | undefined,
+    @Query() query: Record<string, unknown>,
     @Req() request: AuthenticatedUserRequest,
   ) {
+    let filters
+    try { filters = parseDriveSearchFilters(query) } catch (cause) { throw new BadRequestException(cause instanceof Error ? cause.message : "搜索条件无效。") }
+    if (query.parentId !== undefined && typeof query.parentId !== "string") throw new BadRequestException("目录无效。")
+    if (query.offset !== undefined && typeof query.offset !== "string" || query.limit !== undefined && typeof query.limit !== "string") throw new BadRequestException("分页参数无效。")
     return this.drive.listItemTree(request.user!.id, {
-      parentId: parentId ?? null,
-      offset: parseOptionalNonNegativeInteger(offset, "offset"),
-      limit: parseOptionalNonNegativeInteger(limit, "limit"),
+      ...filters,
+      parentId: (query.parentId as string | undefined) ?? null,
+      offset: parseOptionalNonNegativeInteger(query.offset as string | undefined, "offset"),
+      limit: parseOptionalNonNegativeInteger(query.limit as string | undefined, "limit"),
     })
   }
 

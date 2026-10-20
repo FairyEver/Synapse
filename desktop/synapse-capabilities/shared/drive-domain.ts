@@ -1,4 +1,5 @@
 import type { CapabilityId } from "./naming"
+import { DRIVE_SEARCH_FILE_TYPES, DRIVE_SEARCH_SORTS, DRIVE_SEARCH_SHARE_STATUSES } from "@synapse/shared/drive-search"
 import {
   buildPrimaryMcpToolActions,
   withPrimaryMcpTools,
@@ -60,7 +61,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.site.republish" as CapabilityId, title: "Update webpage share", description: "Copy the remembered source folder into a new webpage deployment and switch only after success.", mutates: true },
   { id: "app.drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
   { id: "app.drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
-  { id: "app.drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
+  { id: "app.drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List or search owned Synapse Drive file and folder metadata with filename, type, update time and active sharing filters, without reading file contents.", mutates: false },
   { id: "app.drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
   { id: "app.drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
   { id: "app.drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
@@ -759,13 +760,18 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_tree_list",
-      description: "Recursively list Synapse Drive file and folder metadata without reading file contents. Use this before organizing or reorganizing; to browse one folder, prefer the non-recursive listing tool. Output can be large, so paginate.",
+      description: "Recursively list or search owned Synapse Drive file and folder names without reading contents. Search filename or extension with query (case-insensitive NFKC, whitespace-separated terms all match); combine fileType, updatedAfter, shareStatus and sort before pagination. Paths distinguish same-name items. Excludes trash and public assets. Without search conditions, preserves recursive tree order. For organizing or filtered name searches, use this recursive tree; to browse one folder, prefer the non-recursive listing tool. Pagination: offset-based. Continue with nextOffset while hasMore is true; restart at offset 0 after changing any condition.",
       inputSchema: {
         type: "object",
         properties: {
           parentId: optionalParentId,
           offset: { type: "number", description: "Optional pagination offset across the flattened recursive tree. Defaults to 0." },
           limit: { type: "number", description: "Optional page size. Defaults to 500 and is capped by the server." },
+          query: { type: "string", maxLength: 200, description: "Filename or extension keywords; whitespace-separated terms all match. No full-text, regular expressions or path matching." },
+          fileType: { type: "string", enum: [...DRIVE_SEARCH_FILE_TYPES] },
+          shareStatus: { type: "string", enum: [...DRIVE_SEARCH_SHARE_STATUSES], description: "shared means an enabled, unexpired share; private includes disabled or expired shares." },
+          updatedAfter: { type: "string", format: "date-time", description: "Inclusive ISO timestamp with timezone for the last update." },
+          sort: { type: "string", enum: [...DRIVE_SEARCH_SORTS] },
         },
       },
     },

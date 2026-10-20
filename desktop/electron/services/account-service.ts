@@ -15,6 +15,7 @@ import type {
   SynapseAccountState,
 } from "../../src/types/account"
 import { isAccountOnline } from "../../src/types/account"
+import { parseDriveSearchFilters } from "@synapse/shared/drive-search"
 import type {
   DriveLocalUploadFileItem,
   DriveLocalUploadFolderItem,
@@ -1379,6 +1380,7 @@ export class AccountService {
     if (input.parentId) params.set("parentId", input.parentId)
     if (input.offset !== undefined) params.set("offset", String(input.offset))
     if (input.limit !== undefined) params.set("limit", String(input.limit))
+    for (const [key, value] of Object.entries(parseDriveSearchFilters(input))) params.set(key, value)
     const query = params.toString()
     return this.getAuthenticatedJson<DriveItemTreeListPageDto>(
       `${apiBaseUrl()}/drive/items/tree${query ? `?${query}` : ""}`,

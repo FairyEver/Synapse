@@ -39,6 +39,7 @@ describe("DriveController", () => {
     getItemsBatch: vi.fn(),
     listItems: vi.fn(),
     listItemsPage: vi.fn(),
+    listItemTree: vi.fn(),
     prepareUpload: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
@@ -71,6 +72,15 @@ describe("DriveController", () => {
     openAdminItemDownload: vi.fn(),
     restoreItemAsAdmin: vi.fn(),
   }
+  it("validates and forwards recursive search filters with the authenticated owner", () => {
+    const controller = new DriveUserController(drive as never, {} as never, {} as never, {} as never, {} as never)
+    controller.listItemTree({ parentId: "folder-1", query: " ＴＥＳＴ 设计 ", fileType: "document", shareStatus: "private", updatedAfter: "2026-10-01T08:00:00+08:00", sort: "name", offset: "100", limit: "100" }, { user: { id: "user-1" } } as never)
+    expect(drive.listItemTree).toHaveBeenCalledWith("user-1", { parentId: "folder-1", query: "test 设计", fileType: "document", shareStatus: "private", updatedAfter: "2026-10-01T00:00:00.000Z", sort: "name", offset: 100, limit: 100 })
+    for (const query of [{ query: ["x", "y"] }, { query: "x".repeat(201) }, { fileType: "audio" }, { updatedAfter: "2026-02-30T00:00:00Z" }, { offset: ["0"] }, { limit: "-1" }]) {
+      expect(() => controller.listItemTree(query, { user: { id: "user-1" } } as never)).toThrow(BadRequestException)
+    }
+  })
+
   it("forwards the reviewed target identity and version to upload preparation", () => {
     process.env.APP_PUBLIC_URL = "https://synapse.test"
     const controller = new DriveUserController(drive as never, {} as never, {} as never, {} as never, {} as never)

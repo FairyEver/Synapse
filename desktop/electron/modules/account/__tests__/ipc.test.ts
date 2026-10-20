@@ -61,6 +61,7 @@ vi.mock("../../../services/account-service", () => ({
     executeMailOperation: vi.fn(async () => ({ items: [], nextCursor: null })),
     listDriveItems: async () => [],
     listDriveItemsPage: vi.fn(async () => ({ items: [], page: { offset: 0, limit: 100, hasMore: false, nextOffset: null } })),
+    listDriveItemTree: vi.fn(async () => ({ items: [], total: 0, fileCount: 0, folderCount: 0, hasMore: false, nextOffset: null })),
     prepareDriveUpload: async () => ({}),
     prepareDriveFolderUpload: async () => ({}),
     completeDriveUpload: async () => ({}),
@@ -968,6 +969,20 @@ describe("accountIpcModule", () => {
       offset: 100,
       limit: 50,
     })
+  })
+
+  it("validates desktop recursive search input and keeps search paths and pagination", async () => {
+    const method = accountIpcModule.methods.listDriveItemTree
+    expect(method).toBeDefined()
+    if (!method) return
+    const input = { query: "云盘", fileType: "document", shareStatus: "private", sort: "name", limit: 100 }
+    await method.handler({} as IpcHandlerContext, input)
+    expect(accountService.listDriveItemTree).toHaveBeenCalledWith(input)
+    expect(() => method.request!.parse({ query: "x".repeat(201) })).toThrow()
+    expect(() => method.request!.parse({ fileType: "unknown" })).toThrow()
+    expect(() => method.request!.parse({ updatedAfter: "yesterday" })).toThrow()
+    expect(() => method.request!.parse({ query: "x", userId: "other" })).toThrow()
+    expect(method.response!.parse({ items: [], total: 42, fileCount: 40, folderCount: 2, hasMore: true, nextOffset: 100 })).toMatchObject({ total: 42, hasMore: true, nextOffset: 100 })
   })
 
   it("passes drive access settings through share handlers", async () => {

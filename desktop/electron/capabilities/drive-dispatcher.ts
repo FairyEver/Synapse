@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { parseDriveSearchFilters } from "@synapse/shared/drive-search"
 import path from "node:path"
 import { createReadStream } from "node:fs"
 import { lstat, readdir, stat } from "node:fs/promises"
@@ -1963,6 +1964,7 @@ function optionalDriveLinkMaterializeScope(value: unknown): DriveLinkMaterialize
 
 function parseDriveTreeListInput(params: Record<string, unknown>): DriveItemTreeListInput {
   return {
+    ...parseDriveSearchFilters(params),
     parentId: optionalNullableString(params.parentId),
     offset: optionalNumber(params.offset),
     limit: optionalNumber(params.limit),

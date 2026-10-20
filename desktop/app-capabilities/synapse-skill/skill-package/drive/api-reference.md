@@ -572,13 +572,20 @@ Input: none.
 
 ### `app_drive_item_tree_list`
 
-Recursively list Drive file and folder metadata without reading file contents.
+Recursively list or search owned Drive metadata without reading contents. Excludes trash, public assets and their pending uploads. No search fields preserves the existing tree order.
 
 Input:
 
-- `parentId` optional: folder item id. Omit or pass `null` for Drive root.
-- `offset` optional: pagination offset across the flattened tree.
+- `parentId` optional: folder item id. Search its descendants; omit or pass `null` for the whole ordinary Drive.
+- `query` optional: up to 200 characters. Literal filename/extension matching, NFKC and case normalization; all whitespace-separated terms must match. No content, regex or path search.
+- `fileType` optional: `folder`, `document`, `image`, `archive`, `other`.
+- `updatedAfter` optional: inclusive ISO timestamp with timezone.
+- `shareStatus` optional: `shared` (enabled, unexpired) or `private` (including disabled or expired shares).
+- `sort` optional: `relevance` (exact name, prefix, then other matches), `modified` (newest first), `name` (ascending). Stable item ID breaks ties.
+- `offset` optional: offset within the filtered results.
 - `limit` optional: page size.
+
+Filtering and sorting happen before counts and pagination. Results contain `items` (with `path`, `depth` and optional `ancestors`), `total`, `fileCount`, `folderCount`, `hasMore`, `nextOffset`. Continue while `hasMore`; restart at zero after changing any condition. Re-read by item ID before navigating or mutating a result.
 
 ### `app_drive_folder_path_ensure`
 

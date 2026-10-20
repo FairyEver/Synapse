@@ -3,19 +3,20 @@ import type { DriveItemDto } from "@synapse/shared"
 import type { DriveSyncController } from "./sync"
 import { findContainedDriveBindings, getDriveItemSyncRelation, type ContainedDriveBindings, type DriveItemSyncRelation, type DriveSyncPathEntry } from "./drive-item-sync"
 
-export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly DriveSyncPathEntry[], controller: DriveSyncController) {
+export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly DriveSyncPathEntry[], controller: DriveSyncController, pathsByItem?: ReadonlyMap<string, readonly DriveSyncPathEntry[]>) {
   const { snapshot, getRemote, getRemoteBatch } = controller
   const [revision, setRevision] = useState(0)
   // 更新时间会改变绑定的显示顺序，但不会改变祖先链。
-  const query = JSON.stringify({ items: items.map(({ id, name, parentId, type }) => ({ id, name, parentId, type })), path, bindings: snapshot?.bindings.filter((binding) => binding.status !== "removed").map(({ id, driveItemId, drivePathHint }) => ({ id, driveItemId, drivePathHint })).sort((left, right) => left.id.localeCompare(right.id)), revision })
-  const lookupInput = useRef({ items, path, snapshot })
-  lookupInput.current = { items, path, snapshot }
+  const lookupPath = pathsByItem ? [] : path
+  const query = JSON.stringify({ items: items.map(({ id, name, parentId, type }) => ({ id, name, parentId, type })), path: lookupPath, crossLevel: Boolean(pathsByItem), bindings: snapshot?.bindings.filter((binding) => binding.status !== "removed").map(({ id, driveItemId, drivePathHint }) => ({ id, driveItemId, drivePathHint })).sort((left, right) => left.id.localeCompare(right.id)), revision })
+  const lookupInput = useRef({ items, path: lookupPath, snapshot, crossLevel: Boolean(pathsByItem) })
+  lookupInput.current = { items, path: lookupPath, snapshot, crossLevel: Boolean(pathsByItem) }
   const [contained, setContained] = useState<{ readonly query: string; readonly result: ContainedDriveBindings } | null>(null)
   useEffect(() => {
-    const { items, path, snapshot } = lookupInput.current
+    const { items, path, snapshot, crossLevel } = lookupInput.current
     if (!snapshot) return
     const abort = new AbortController()
-    void findContainedDriveBindings(items, snapshot.bindings, path, getRemote, abort.signal, getRemoteBatch).then((result) => {
+    void findContainedDriveBindings(items, snapshot.bindings, path, getRemote, abort.signal, getRemoteBatch, crossLevel).then((result) => {
       if (!abort.signal.aborted) setContained({ query, result })
     })
     return () => abort.abort()
@@ -32,7 +33,7 @@ export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly 
         result.set(item.id, { kind: "unknown", loading: controller.loading && !controller.error })
         continue
       }
-      const direct = getDriveItemSyncRelation(item, path, snapshot.bindings)
+      const direct = getDriveItemSyncRelation(item, pathsByItem?.get(item.id) ?? path, snapshot.bindings)
       if (direct) { result.set(item.id, direct); continue }
       if (item.type !== "folder" || snapshot.bindings.length === 0) continue
       if (contained?.query !== query) { result.set(item.id, { kind: "unknown", loading: true }); continue }
@@ -41,6 +42,6 @@ export function useDriveItemSync(items: readonly DriveItemDto[], path: readonly 
       else if (contained.result.failed) result.set(item.id, { kind: "unknown", loading: false })
     }
     return result
-  }, [items, path, snapshot, controller.error, controller.loading, contained, query])
+  }, [items, path, pathsByItem, snapshot, controller.error, controller.loading, contained, query])
   return { relations, retry }
 }

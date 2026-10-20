@@ -801,6 +801,7 @@ describe("preload bridge", () => {
     const bridge = await loadPreloadBridge()
 
     await bridge.drive.item.list({ parentId: null })
+    await bridge.drive.itemTree.list({ query: "云盘", fileType: "document", offset: 100, limit: 100 })
     await bridge.drive.upload.prepare({ parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" })
     await bridge.drive.upload.complete({ sessionId: "session-1" })
     await bridge.drive.upload.put({
@@ -830,6 +831,10 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:app:drive:item:list",
       { parentId: null },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:app:drive:item_tree:list",
+      { query: "云盘", fileType: "document", offset: 100, limit: 100 },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:app:drive:upload:prepare",

@@ -2,6 +2,7 @@ import type { DriveSyncService } from "../../services/drive-sync-service"
 import path from "node:path"
 import { app, BrowserWindow, dialog } from "electron"
 import { z } from "zod"
+import { DRIVE_SEARCH_FILE_TYPES, DRIVE_SEARCH_SORTS, DRIVE_SEARCH_SHARE_STATUSES } from "@synapse/shared/drive-search"
 import { NOTIFICATION_SOURCES } from "@synapse/shared/notification-constants"
 
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
@@ -415,6 +416,13 @@ const driveItemListInputSchema = z.object({
   limit: z.number().int().positive().optional(),
 }).strict().optional()
 const driveSiteIdSchema = z.object({ siteId: z.string().min(1) })
+const driveItemTreeInputSchema = driveItemListInputSchema.unwrap().extend({
+  query: z.string().max(200).refine(value => !value.includes("\0")).optional(),
+  fileType: z.enum(DRIVE_SEARCH_FILE_TYPES).optional(),
+  shareStatus: z.enum(DRIVE_SEARCH_SHARE_STATUSES).optional(),
+  sort: z.enum(DRIVE_SEARCH_SORTS).optional(),
+  updatedAfter: z.iso.datetime({ offset: true }).optional(),
+}).strict().optional()
 const driveSitePreflightSchema = z.object({ sourceFolderItemId: z.string().min(1) })
 const driveSiteCreateSchema = z.object({
   sourceFolderItemId: z.string().min(1),
@@ -1260,6 +1268,17 @@ export const accountIpcModule: IpcModule = {
       request: driveItemListInputSchema,
       response: drivePublicLinksPageSchema(driveItemSchema),
       handler: async (_ctx, input) => accountService.listDriveItemsPage(driveItemListInputSchema.parse(input) ?? {}),
+    },
+    listDriveItemTree: {
+      kind: "invoke",
+      operationId: "app.drive.item_tree.list",
+      request: driveItemTreeInputSchema,
+      response: z.object({
+        items: z.array(driveItemSchema.extend({ path: z.string(), depth: z.number().int().nonnegative(), ancestors: z.array(driveItemSchema.pick({ id: true, parentId: true, name: true, type: true })).optional() })),
+        total: z.number().int().nonnegative(), fileCount: z.number().int().nonnegative(), folderCount: z.number().int().nonnegative(),
+        hasMore: z.boolean(), nextOffset: z.number().int().nonnegative().nullable(),
+      }),
+      handler: async (_ctx, input) => accountService.listDriveItemTree(driveItemTreeInputSchema.parse(input) ?? {}),
     },
     getDriveItem: {
       kind: "invoke",

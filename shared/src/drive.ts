@@ -1,3 +1,5 @@
+import type { DriveSearchFilters } from "./drive-search.js"
+
 export const DRIVE_PUBLIC_PATH_PREFIX = "/share"
 export const DRIVE_PUBLIC_ASSET_PATH_PREFIX = "/files"
 export const PLATFORM_OBJECT_PATH_PREFIX = "/object"
@@ -680,9 +682,10 @@ export interface DriveStatsDto extends DriveUsageDto {
 export interface DriveItemTreeEntryDto extends DriveItemDto {
   readonly path: string
   readonly depth: number
+  readonly ancestors?: readonly DriveItemAncestorDto[]
 }
 
-export interface DriveItemTreeListInput {
+export interface DriveItemTreeListInput extends DriveSearchFilters {
   readonly parentId?: string | null
   readonly offset?: number
   readonly limit?: number

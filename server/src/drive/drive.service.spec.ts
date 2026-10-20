@@ -4868,6 +4868,62 @@ describe("DriveService", () => {
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("searches names across the owned recursive tree before counting and paging", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await prisma.user.create({ data: { id: "user-2", email: "other@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "项目资料" })
+    const deep = await service.createFolder("user-1", { parentId: root.id, name: "设计素材" })
+    const first = await createCompletedUpload(service, "user-1", { parentId: root.id, name: "云盘搜索设计.md", mimeType: "text/markdown" })
+    const second = await createCompletedUpload(service, "user-1", { parentId: deep.id, name: "云盘搜索设计-新版.MD", mimeType: "text/markdown" })
+    await createCompletedUpload(service, "user-2", { parentId: null, name: "云盘搜索设计.md", mimeType: "text/markdown" })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: root.id, name: "云盘搜索设计-公开素材.md", mimeType: "text/markdown" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+    const trashed = await createCompletedUpload(service, "user-1", { parentId: root.id, name: "云盘搜索设计-已删除.md", mimeType: "text/markdown" })
+    await service.deleteItem("user-1", trashed.id)
+    const page = await service.listItemTree("user-1", { query: "云盘 设计", sort: "name", offset: 1, limit: 1 })
+    expect(page).toMatchObject({ total: 2, fileCount: 2, folderCount: 0, hasMore: false, nextOffset: null })
+    expect(page.items).toHaveLength(1)
+    expect([first.id, second.id]).toContain(page.items[0].id)
+    expect(page.items[0].path).toContain("项目资料/")
+    expect(page.items[0].ancestors?.[0]).toMatchObject({ id: root.id, name: "项目资料" })
+    expect((await service.listItemTree("user-1", { parentId: deep.id, query: ".md" })).items.map(item => item.id)).toEqual([second.id])
+    await expect(service.listItemTree("user-2", { parentId: root.id, query: "云盘" })).rejects.toThrow()
+  })
+
+  it("combines filename normalization, type, date and effective share filters", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const image = await createCompletedUpload(service, "user-1", { parentId: null, name: "ＴｅｓｔＫｉｔ.PNG", mimeType: "image/png" })
+    await createCompletedUpload(service, "user-1", { parentId: null, name: "TestKit.md", mimeType: "text/markdown" })
+    await service.createShare("user-1", image.id, "https://synapse.test")
+    expect((await service.listItemTree("user-1", { query: " testkit ", fileType: "image", shareStatus: "shared", updatedAfter: "2026-06-07T00:00:00.000Z" })).items.map(item => item.id)).toEqual([image.id])
+    expect((await service.listItemTree("user-1", { query: "testkit", fileType: "document", shareStatus: "private" })).total).toBe(1)
+    expect((await service.listItemTree("user-1", { query: "testkit", updatedAfter: "2026-06-08T00:00:00.000Z" })).total).toBe(0)
+    await expect(service.listItemTree("user-1", { query: "x".repeat(201) })).rejects.toThrow()
+  })
+
+  it("parameterizes literal search terms and filters the recursive set before counts and pagination", async () => {
+    const prisma = { $queryRaw: vi.fn(async () => []) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await service.listItemTree("user-1", { query: "云盘_% 'quoted'", fileType: "image", shareStatus: "shared", sort: "relevance", updatedAfter: "2026-10-01T00:00:00Z", offset: 100, limit: 100 })
+    const call = prisma.$queryRaw.mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]]
+    const sql = Prisma.sql(call[0], ...call.slice(1))
+    expect(sql.text).toContain("strpos(lower(normalize(tree.name, NFKC)),")
+    expect(sql.text).not.toContain("云盘_%")
+    expect(sql.values).toContain("云盘_%")
+    expect(sql.values).toContain("'quoted'")
+    expect(sql.text).toContain('ds."expiresAt" > NOW()')
+    const filtered = sql.text.indexOf("filtered AS")
+    expect(sql.text.indexOf("stats AS")).toBeGreaterThan(filtered)
+    expect(sql.text.indexOf("paged AS")).toBeGreaterThan(filtered)
+    expect(sql.text).toContain("FROM filtered tree")
+    expect(sql.text).toContain('tree.id ASC')
+    expect(sql.values).toContain("user-1")
+  })
+
   it("uses a bounded recursive query for Drive item tree pages when raw SQL is available", async () => {
     const createdAt = new Date("2026-06-07T12:00:00.000Z")
     const rows = [

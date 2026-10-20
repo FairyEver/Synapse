@@ -810,6 +810,7 @@ const synapseBridge: SynapseBridge = {
     send: { preview: invoke(IPC_CHANNELS.account.mailSendPreview) },
   },
   drive: {
+    itemTree: { list: invoke(IPC_CHANNELS.account.listDriveItemTree) },
     item: {
       list: invoke(IPC_CHANNELS.account.listDriveItems),
       get: invoke(IPC_CHANNELS.account.getDriveItem),

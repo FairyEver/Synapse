@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 import {
   ChevronRight,
+  ArrowLeft,
+  FolderOpen,
+  Search,
   CircleUserRound,
   Copy,
   ExternalLink,
@@ -21,6 +24,7 @@ import {
   type DriveBrowserChildrenPageDto,
   type DriveItemDto,
   type DriveItemListPageDto,
+  type DriveItemTreeEntryDto,
   type DriveShareAccessMode,
   type DriveShareDto,
   type DriveShareListItemDto,
@@ -28,6 +32,11 @@ import {
   type DriveUsageDto,
 } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
+import { useDriveSearch, type DriveSearchController } from "./use-drive-search"
+import { DriveSearchEmpty, DriveSearchFilters, DriveSearchInput } from "./drive-search-controls"
+import { DriveSearchHighlight } from "./drive-search-highlight"
+import { resolveDriveSearchLocation } from "./drive-search-location"
 import { ERROR_NOTIFICATION_DURATION_MS } from "@/app-shell/notification-durations"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { RelativeTime } from "@/components/relative-time"
@@ -384,6 +393,28 @@ function DriveModuleContent() {
 
   const accountAuthenticated = accountState.status === "authenticated"
   const parentId = path.at(-1)?.id ?? null
+  const search = useDriveSearch({ enabled: accountAuthenticated && activeView === "files", accountId: accountAuthenticated ? accountState.profile.user.id : null, parentId })
+  const searchRefreshRef = useRef(search.refresh)
+  searchRefreshRef.current = search.refresh
+  const searchReturnPath = useRef<readonly DrivePathEntry[] | null>(null)
+  const [locatedItemId, setLocatedItemId] = useState<string | null>(null)
+  const searchResults = useMemo(() => search.active ? new Map(search.items.map(item => [item.id, item])) : undefined, [search.active, search.items])
+  const searchLocationKey = useRef("")
+  searchLocationKey.current = JSON.stringify([accountAuthenticated ? accountState.profile.user.id : null, search.active, search.draft, search.filters])
+  useEffect(() => {
+    function handleSearchShortcut(event: globalThis.KeyboardEvent) {
+      if (!accountAuthenticated || activeView !== "files" || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f" || document.querySelector('[role="dialog"], [role="alertdialog"]')) return
+      event.preventDefault()
+      if (!search.expanded) search.start()
+      else { search.inputRef.current?.focus(); search.inputRef.current?.select() }
+    }
+    document.addEventListener("keydown", handleSearchShortcut)
+    return () => document.removeEventListener("keydown", handleSearchShortcut)
+  }, [accountAuthenticated, activeView, search.expanded, search.start, search.inputRef])
+  useEffect(() => {
+    searchReturnPath.current = null
+    setLocatedItemId(null)
+  }, [accountAuthenticated ? accountState.profile.user.id : null])
   useEffect(() => {
     currentParentIdRef.current = parentId
   }, [parentId])
@@ -392,14 +423,15 @@ function DriveModuleContent() {
     uploadTaskRef.current = uploadTask
   }, [uploadTask])
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (options?: { parentId: string | null; refreshSearch: boolean }) => {
     if (!accountAuthenticated) return
-    const requestParentId = parentId
+    const requestParentId = options ? options.parentId : parentId
     const requestId = ++driveItemsLoadRequestIdRef.current
     setLoading(true)
     setLoadingMoreItems(false)
     setLoadMoreItemsError(null)
     setError(null)
+    const refreshSearch = options?.refreshSearch === false ? Promise.resolve() : searchRefreshRef.current()
     try {
       const bridge = requireSynapseBridge()
       const nextPage = normalizeDriveItemsPage(await bridge.drive.item.list({ parentId: requestParentId }))
@@ -410,6 +442,7 @@ function DriveModuleContent() {
       if (driveItemsLoadRequestIdRef.current !== requestId || currentParentIdRef.current !== requestParentId) return
       setError(driveLoadError(rawError))
     } finally {
+      await refreshSearch
       if (driveItemsLoadRequestIdRef.current === requestId) {
         setLoading(false)
       }
@@ -524,7 +557,43 @@ function DriveModuleContent() {
     }
   }, [openingFolderId])
 
+  const openSearchLocation = async (item: DriveItemDto, enterFolder = false) => {
+    const requestId = ++driveItemsLoadRequestIdRef.current
+    const intent = searchLocationKey.current
+    setOpeningFolderId(item.id)
+    try {
+      const bridge = requireSynapseBridge()
+      const result = await resolveDriveSearchLocation(item.id, enterFolder, bridge.drive.item, () => driveItemsLoadRequestIdRef.current === requestId && searchLocationKey.current === intent)
+      if (!result) return
+      if (search.active) { searchReturnPath.current = [...path]; search.suspend() }
+      setActiveView("files"); setError(null); setLoading(false); setLoadingMoreItems(false); setLoadMoreItemsError(null)
+      currentParentIdRef.current = result.folderId; prefetchedParentIdRef.current = result.folderId
+      setItems(result.items); setItemsPage(result.page); setPath(result.path); setLocatedItemId(result.locatedItemId)
+    } catch (cause) {
+      if (driveItemsLoadRequestIdRef.current === requestId) toast(errorMessage(cause, "定位失败，请重试。"))
+    } finally {
+      if (driveItemsLoadRequestIdRef.current === requestId) setOpeningFolderId(null)
+    }
+  }
+  const openFileListFolder = (item: DriveItemDto) => {
+    if (search.active) void openSearchLocation(item, true)
+    else { setLocatedItemId(null); void openFolder(item) }
+  }
+  const restoreSearch = () => {
+    const previous = searchReturnPath.current
+    if (previous) {
+      const previousParentId = previous.at(-1)?.id ?? null
+      currentParentIdRef.current = previousParentId
+      prefetchedParentIdRef.current = previousParentId
+      setPath([...previous])
+      void loadItems({ parentId: previousParentId, refreshSearch: false })
+    }
+    setLocatedItemId(null); search.restore()
+  }
+
   const openSyncDriveItem = useCallback(async (binding: DriveSyncBindingDto) => {
+    search.close()
+    setLocatedItemId(null)
     const requestId = ++driveItemsLoadRequestIdRef.current
     setSyncDialog(null)
     setActiveView("files")
@@ -564,6 +633,7 @@ function DriveModuleContent() {
   }, [])
 
   const openSystemEntry = useCallback((entry: DriveSystemEntry) => {
+    search.close()
     if (entry.id === DRIVE_PUBLIC_ASSETS_ENTRY_ID) {
       setActiveView("public-assets")
       return
@@ -574,6 +644,8 @@ function DriveModuleContent() {
   }, [])
 
   const jumpToPath = useCallback((index: number) => {
+    if (search.expanded) search.close()
+    setLocatedItemId(null)
     if (activeView !== "files") {
       if (index === 0) setActiveView("files")
       return
@@ -584,7 +656,7 @@ function DriveModuleContent() {
       currentParentIdRef.current = nextPath.at(-1)?.id ?? null
       return nextPath
     })
-  }, [activeView])
+  }, [activeView, search.expanded, search.close])
 
   const refreshCurrentItemsAfterUpload = useCallback(async () => {
     if (!accountAuthenticated) return
@@ -603,6 +675,7 @@ function DriveModuleContent() {
       setError(driveLoadError(rawError))
     }
     await loadDriveUsage()
+    await searchRefreshRef.current()
   }, [accountAuthenticated, loadDriveUsage])
 
   const runLocalUpload = useCallback(async (
@@ -846,6 +919,11 @@ function DriveModuleContent() {
     }
   }, [])
 
+  const openFileListItem = (item: DriveItemDto) => {
+    if (search.active) search.remember()
+    void handlePreview(item)
+  }
+
   const handleDownload = useCallback(async (item: DriveItemDto) => {
     if (item.storageStatus !== "active" || downloadingItemIdsRef.current.has(item.id)) return
     const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.item.download" })
@@ -985,6 +1063,9 @@ function DriveModuleContent() {
         onOpenSyncStatus={() => setSyncDialog({ mode: "center" })}
         onRefresh={() => { void refreshDriveView() }}
       >
+        <SystemAppTopBarActionButton aria-label="搜索文件" aria-pressed={search.expanded} disabled={!accountAuthenticated} onClick={search.expanded ? search.close : search.start}>
+          <Search data-icon="inline-start" />搜索
+        </SystemAppTopBarActionButton>
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
         <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
       </DriveToolbarActions>
@@ -1018,7 +1099,7 @@ function DriveModuleContent() {
       )
     }
 
-    if (error) {
+    if (error && !search.active) {
       if (error.type === "auth") {
         return (
           <DriveStatusState
@@ -1070,24 +1151,30 @@ function DriveModuleContent() {
         />
       )
     }
+    if (search.active && search.error) return <DriveStatusState icon={<Search />} title="搜索失败" description={search.error} action={<Button variant="outline" onClick={() => { void search.refresh() }}>重新搜索</Button>} />
+    if (search.active && !search.loading && search.items.length === 0) return <DriveSearchEmpty search={search} />
     return (
       <DriveFileList
-        items={items}
-        itemsPage={itemsPage}
-        systemEntries={driveRootSystemEntries(parentId)}
-        loading={loading}
-        loadingMoreItems={loadingMoreItems}
-        loadMoreItemsError={loadMoreItemsError}
+        items={search.active ? search.items : items}
+        itemsPage={search.active ? { offset: 0, limit: 100, hasMore: search.hasMore, nextOffset: search.nextOffset } : itemsPage}
+        systemEntries={search.active ? [] : driveRootSystemEntries(parentId)}
+        loading={search.active ? search.loading : loading}
+        loadingMoreItems={search.active ? search.loadingMore : loadingMoreItems}
+        loadMoreItemsError={search.active ? search.moreError : loadMoreItemsError}
+        searchResults={searchResults}
+        searchQuery={search.active ? search.query : ""}
+        locatedItemId={locatedItemId}
+        onLocate={item => { void openSearchLocation(item) }}
         openingFolderId={openingFolderId}
         path={path}
-        onOpenFolder={openFolder}
+        onOpenFolder={openFileListFolder}
         onOpenSystemEntry={openSystemEntry}
-        onLoadMoreItems={loadMoreItems}
+        onLoadMoreItems={search.active ? search.loadMore : loadMoreItems}
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
         onDownload={handleDownload}
-        onOpenItem={handlePreview}
+        onOpenItem={openFileListItem}
         onReplace={setReplaceTarget}
         onShare={handleShare}
         onOpenSyncBinding={(item, drivePathHint) => {
@@ -1113,7 +1200,7 @@ function DriveModuleContent() {
         deletingItemIds={deletingItemIds}
         downloadingItemIds={downloadingItemIds}
         onUploadDroppedFiles={handleDroppedFiles}
-        uploadDisabled={uploadActionsDisabled}
+        uploadDisabled={uploadActionsDisabled || search.active}
         syncController={driveSync}
       />
     )
@@ -1288,12 +1375,15 @@ function DriveModuleContent() {
         {accountAuthenticated ? (
           <div className="flex min-h-full flex-col gap-2">
             <DriveViewNavigation
+              search={activeView === "files" ? search : undefined}
               path={activePath}
               statusBadge={activeStatusBadge}
               uploadStatusBadge={uploadStatusBadge}
               onUploadStatusClick={() => setUploadPanelOpen(true)}
               onJumpToPath={jumpToPath}
             />
+            {activeView === "files" && search.expanded ? <DriveSearchFilters search={search} inFolder={parentId !== null} /> : null}
+            {activeView === "files" && search.suspended ? <div className="px-1"><Button variant="outline" onClick={restoreSearch}><ArrowLeft />返回搜索结果</Button></div> : null}
             {content}
           </div>
         ) : content}
@@ -1731,6 +1821,10 @@ function DriveFileList({
   onUploadDroppedFiles,
   syncController,
   uploadDisabled,
+  searchResults,
+  searchQuery = "",
+  onLocate,
+  locatedItemId,
 }: {
   readonly items: readonly DriveItemDto[]
   readonly itemsPage: DriveBrowserChildrenPageDto
@@ -1760,12 +1854,22 @@ function DriveFileList({
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly syncController: DriveSyncController
   readonly uploadDisabled: boolean
+  readonly searchResults?: ReadonlyMap<string, DriveItemTreeEntryDto>
+  readonly searchQuery?: string
+  readonly onLocate?: (item: DriveItemDto) => void
+  readonly locatedItemId?: string | null
 }) {
   const [dragDepth, setDragDepth] = useState(0)
   const [infoTarget, setInfoTarget] = useState<{ readonly item: DriveItemDto; readonly path: string } | null>(null)
   const currentFolderName = path.at(-1)?.name ?? "根目录"
   const dragActive = dragDepth > 0 && !uploadDisabled
-  const sync = useDriveItemSync(items, path, syncController)
+  const searchPaths = useMemo(() => searchResults ? new Map([...searchResults].map(([id, item]) => [id, [{ id: null, name: "根目录" }, ...(item.ancestors ?? [])]])) : undefined, [searchResults])
+  const sync = useDriveItemSync(items, path, syncController, searchPaths)
+  useEffect(() => {
+    if (!locatedItemId) return
+    const row = [...document.querySelectorAll<HTMLTableRowElement>("tr[data-drive-item-id]")].find(element => element.dataset.driveItemId === locatedItemId)
+    row?.scrollIntoView?.({ block: "center" })
+  }, [locatedItemId, items])
   const popover = useDriveStatusPopover()
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -1801,6 +1905,7 @@ function DriveFileList({
       data-track-native="true"
       className="relative flex min-h-full flex-col gap-3"
       data-testid="drive-file-list-dropzone"
+      id="drive-file-results"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -1832,7 +1937,11 @@ function DriveFileList({
               {items.map((item) => (
                 <DriveFileListRow
                   key={item.id}
-                  drivePath={buildDriveItemPath(path, item.name)}
+                  drivePath={searchResults?.get(item.id)?.path ? `/${searchResults.get(item.id)!.path}` : buildDriveItemPath(path, item.name)}
+                  searchQuery={searchQuery}
+                  parentPath={searchResults?.get(item.id) ? searchResults.get(item.id)!.path.split("/").slice(0, -1).join(" / ") || "根目录" : undefined}
+                  onLocate={searchResults && onLocate ? () => onLocate(item) : undefined}
+                  located={locatedItemId === item.id}
                   item={item}
                   opening={openingFolderId === item.id}
                   onOpenFolder={onOpenFolder}
@@ -1948,16 +2057,20 @@ function DriveViewNavigation({
   statusBadge,
   uploadStatusBadge,
   onJumpToPath,
+  search,
 }: {
   readonly path: readonly DrivePathEntry[]
   readonly statusBadge: DriveStatusBadge | null
   readonly uploadStatusBadge: ReturnType<typeof getDriveUploadStatusBadge>
   readonly onUploadStatusClick: () => void
   readonly onJumpToPath: (index: number) => void
+  readonly search?: DriveSearchController
 }) {
   return (
-    <div className="flex min-h-8 items-center gap-2 px-1">
+    <div className="flex min-h-8 flex-wrap items-center gap-2 px-1">
       <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
+      {search?.active ? <span className="shrink-0 text-xs text-muted-foreground" role="status" aria-live="polite">{search.loading ? "搜索中…" : search.error ? "搜索失败" : `搜索结果 ${search.total} 项`}</span> : null}
+      {search?.expanded ? <DriveSearchInput search={search} /> : null}
       <div className="flex shrink-0 items-center justify-end gap-1">
         {uploadStatusBadge ? (
           <Button
@@ -2084,6 +2197,10 @@ function DriveFileListRow({
   deleting,
   downloading,
   statusTags,
+  searchQuery = "",
+  parentPath,
+  onLocate,
+  located = false,
 }: {
   readonly drivePath: string
   readonly item: DriveItemDto
@@ -2103,6 +2220,10 @@ function DriveFileListRow({
   readonly deleting: boolean
   readonly downloading: boolean
   readonly statusTags: Omit<DriveItemStatusTagsProps, "item">
+  readonly searchQuery?: string
+  readonly parentPath?: string
+  readonly onLocate?: () => void
+  readonly located?: boolean
 }) {
   const relation = statusTags.relation
   const syncMenuTriggerRef = useRef<HTMLButtonElement>(null)
@@ -2141,7 +2262,9 @@ function DriveFileListRow({
 
   return (
     <TableRow
-      className={cn(isFolder && canOpen && !opening ? "cursor-pointer" : undefined)}
+      className={cn(isFolder && canOpen && !opening ? "cursor-pointer" : undefined, located && "bg-selected hover:bg-selected")}
+      data-drive-item-id={item.id}
+      aria-selected={located || undefined}
       aria-busy={opening || undefined}
       onPointerDownCapture={(event) => {
         pointerDownStartedOnNameRef.current = isDriveItemNameTarget(event.target)
@@ -2162,7 +2285,8 @@ function DriveFileListRow({
           ) : (
             <DriveItemIcon kind="file" />
           )}
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <DriveItemNameContextMenu
                 downloading={downloading}
@@ -2188,7 +2312,7 @@ function DriveFileListRow({
                       event.stopPropagation()
                     }}
                   >
-                    {item.name}
+                    <DriveSearchHighlight text={item.name} query={searchQuery} />
                   </span>
                 ) : (
                   <span
@@ -2209,13 +2333,15 @@ function DriveFileListRow({
                     }}
                   >
                     <span className="sr-only">文件 </span>
-                    {item.name}
+                    <DriveSearchHighlight text={item.name} query={searchQuery} />
                   </span>
                 )}
               </DriveItemNameContextMenu>
               <DriveInlineBadges badges={statusBadges} />
             </div>
             <DriveItemStatusTags item={item} {...statusTags} onRestoreSyncFocus={() => syncMenuTriggerRef.current?.focus()} />
+          </div>
+          {parentPath !== undefined && onLocate ? <Button variant="link" size="xs" className="max-w-full justify-start self-start" title={parentPath} aria-label={`打开所在文件夹 ${item.name}`} onClick={event => { event.stopPropagation(); onLocate() }}><FolderOpen data-icon="inline-start" /><span className="truncate">{parentPath}</span></Button> : null}
           </div>
         </div>
       </TableCell>
@@ -2245,6 +2371,7 @@ function DriveFileListRow({
             删除
           </Button>
           <DriveItemMenu
+            onLocate={onLocate}
             triggerRef={syncMenuTriggerRef}
             drivePath={drivePath}
             item={item}
@@ -2353,6 +2480,7 @@ function DriveItemMenu({
   onOpenSyncBinding,
   onCloseAutoFocus,
   onOpenInfo,
+  onLocate,
 }: {
   readonly triggerRef: React.Ref<HTMLButtonElement>
   readonly drivePath: string
@@ -2366,6 +2494,7 @@ function DriveItemMenu({
   readonly onOpenSyncBinding: () => void
   readonly onCloseAutoFocus: (event: Event) => void
   readonly onOpenInfo: () => void
+  readonly onLocate?: () => void
 }) {
   return (
     <DropdownMenu>
@@ -2376,6 +2505,7 @@ function DriveItemMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
         <DropdownMenuGroup>
+          {onLocate ? <DropdownMenuItem onSelect={onLocate}>在文件夹中显示</DropdownMenuItem> : null}
           <DriveItemMenuItems
             downloading={downloading}
             drivePath={drivePath}

@@ -39,6 +39,7 @@ export const IPC_CHANNELS = {
     "mailSendPreview": "synapse:app:mail:send:preview",
     "mailMessageSend": "synapse:app:mail:message:send",
     "listDriveItems": "synapse:app:drive:item:list",
+    "listDriveItemTree": "synapse:app:drive:item_tree:list",
     "getDriveItem": "synapse:app:drive:item:get",
     "downloadDriveItem": "synapse:app:drive:item:download",
     "previewDriveFileReplacement": "synapse:app:drive:file:replace:preview",

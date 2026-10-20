@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional, PayloadTooLargeException, UnauthorizedException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
+import { parseDriveSearchFilters, filterDriveSearchItems } from "@synapse/shared"
+import { driveSearchQuery } from "./drive-search-query"
 import { createHash, randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import {
@@ -382,6 +384,7 @@ function isExpiredDriveShare(share: { readonly expiresAt: Date | null } | null, 
 }
 
 type DriveItemTreeQueryRow = {
+  readonly ancestors?: readonly import("@synapse/shared").DriveItemAncestorDto[]
   readonly id: string | null
   readonly parentId: string | null
   readonly type: string | null
@@ -1925,10 +1928,12 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   async listItemTree(userId: string, input: DriveItemTreeListInput = {}): Promise<DriveItemTreeListPageDto> {
+    let filters
+    try { filters = parseDriveSearchFilters(input) } catch (cause) { throw new BadRequestException(cause instanceof Error ? cause.message : "搜索条件无效。") }
     const parentId = input.parentId ?? null
     const page = normalizeDriveItemTreePage(input)
     if (typeof this.prisma.$queryRaw === "function") {
-      return this.listItemTreeWithRecursiveQuery(userId, parentId, page)
+      return this.listItemTreeWithRecursiveQuery(userId, parentId, page, filters)
     }
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const items = await this.prisma.driveItem.findMany({
@@ -1936,7 +1941,7 @@ export class DriveService implements OnApplicationBootstrap {
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
-    const entries = buildDriveItemTreeEntries(items.map(toDriveItemDto), parentId)
+    const entries = filterDriveSearchItems(buildDriveItemTreeEntries(items.map(toDriveItemDto), parentId), filters)
     const pageItems = entries.slice(page.offset, page.offset + page.limit)
     return {
       items: pageItems,
@@ -1952,8 +1957,13 @@ export class DriveService implements OnApplicationBootstrap {
     userId: string,
     parentId: string | null,
     page: { readonly offset: number; readonly limit: number },
+    filters: import("@synapse/shared").DriveSearchFilters,
   ): Promise<DriveItemTreeListPageDto> {
+    const search = driveSearchQuery(filters)
     const parentPath = parentId ? await this.resolveOwnedItemPath(userId, await this.requireOwnedFolder(userId, parentId)) : ""
+    const parentData = parentId ? (await this.getItemsBatch(userId, [parentId])).results[0] : null
+    if (parentData?.error) throw new NotFoundException("云盘目录不存在。")
+    const rootAncestors = parentData?.data ? [...parentData.data.ancestors, { id: parentData.data.item.id, parentId: parentData.data.item.parentId, name: parentData.data.item.name, type: parentData.data.item.type }] : []
     const rootPredicate = parentId
       ? Prisma.sql`di."parentId" = ${parentId}`
       : Prisma.sql`di."parentId" IS NULL`
@@ -1973,6 +1983,7 @@ export class DriveService implements OnApplicationBootstrap {
           di."updatedAt",
           concat(${rootPathPrefix}, di.name)::text AS path,
           ${rootDepth}::int AS depth,
+          ${JSON.stringify(rootAncestors)}::jsonb AS ancestors,
           ARRAY[
             concat(
               di.type,
@@ -2010,6 +2021,7 @@ export class DriveService implements OnApplicationBootstrap {
           child."updatedAt",
           concat(tree.path, '/', child.name)::text AS path,
           tree.depth + 1 AS depth,
+          tree.ancestors || jsonb_build_array(jsonb_build_object('id', tree.id, 'parentId', tree."parentId", 'name', tree.name, 'type', tree.type)) AS ancestors,
           tree.sort_path || concat(
             child.type,
             ':',
@@ -2031,17 +2043,20 @@ export class DriveService implements OnApplicationBootstrap {
               AND dus.status = ${DRIVE_UPLOAD_STATUS.pending}
           )
       ),
+      filtered AS (
+        SELECT * FROM tree WHERE ${search.where}
+      ),
       stats AS (
         SELECT
           count(*) AS total,
           count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.file}) AS "fileCount",
           count(*) FILTER (WHERE tree.type = ${DRIVE_ITEM_TYPE.folder}) AS "folderCount"
-        FROM tree
+        FROM filtered tree
       ),
       paged AS (
-        SELECT *
-        FROM tree
-        ORDER BY tree.sort_path
+        SELECT *, row_number() OVER (ORDER BY ${search.order}) AS search_order
+        FROM filtered tree
+        ORDER BY ${search.order}
         OFFSET ${page.offset}
         LIMIT ${page.limit + 1}
       )
@@ -2057,6 +2072,7 @@ export class DriveService implements OnApplicationBootstrap {
         paged."updatedAt",
         paged.path,
         paged.depth,
+        paged.ancestors,
         stats.total,
         stats."fileCount",
         stats."folderCount",
@@ -2072,7 +2088,7 @@ export class DriveService implements OnApplicationBootstrap {
         ORDER BY ds."createdAt" DESC
         LIMIT 1
       ) share ON true
-      ORDER BY paged.sort_path
+      ORDER BY paged.search_order
     `
     const entryRows = rows.filter(isDriveItemTreeEntryQueryRow)
     const pageRows = entryRows.slice(0, page.limit)
@@ -4789,18 +4805,21 @@ function buildDriveItemTreeEntries(items: readonly DriveItemDto[], parentId: str
     return chain.join("/")
   }
 
-  const walk = (currentParentId: string | null, prefix: string, depth: number) => {
+  const walk = (currentParentId: string | null, prefix: string, depth: number, ancestors: readonly import("@synapse/shared").DriveItemAncestorDto[]) => {
     for (const child of childrenByParent.get(currentParentId) ?? []) {
       const path = prefix ? `${prefix}/${child.name}` : child.name
-      entries.push({ ...child, path, depth })
-      if (child.type === "folder") walk(child.id, path, depth + 1)
+      entries.push({ ...child, path, depth, ancestors })
+      if (child.type === "folder") walk(child.id, path, depth + 1, [...ancestors, { id: child.id, parentId: child.parentId, name: child.name, type: child.type }])
     }
   }
 
   if (parentId) {
-    walk(parentId, findPath(parentId), 1)
+    const parents: import("@synapse/shared").DriveItemAncestorDto[] = []
+    let parent = itemById.get(parentId)
+    while (parent) { parents.unshift({ id: parent.id, parentId: parent.parentId, name: parent.name, type: parent.type }); parent = parent.parentId ? itemById.get(parent.parentId) : undefined }
+    walk(parentId, findPath(parentId), 1, parents)
   } else {
-    walk(null, "", 0)
+    walk(null, "", 0, [])
   }
   return entries
 }
@@ -4862,6 +4881,7 @@ function toDriveItemTreeEntryDto(row: DriveItemTreeEntryQueryRow): DriveItemTree
     }),
     path: row.path,
     depth: row.depth,
+    ...(row.ancestors ? { ancestors: row.ancestors } : {}),
   }
 }
 

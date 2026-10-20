@@ -3137,6 +3137,22 @@ describe("AccountService", () => {
     await expect(service.listDriveItemsPage({ parentId: "folder-1", offset: 20, limit: 10 })).resolves.toEqual(page)
   })
 
+  it("encodes recursive Drive search filters through the authenticated client", async () => {
+    const page = { items: [], total: 0, fileCount: 0, folderCount: 0, hasMore: false, nextOffset: null }
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/refresh")) return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      if (String(url).endsWith("/auth/me")) return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
+      const parsed = new URL(String(url))
+      expect(parsed.pathname).toBe("/api/drive/items/tree")
+      expect(Object.fromEntries(parsed.searchParams)).toEqual({ parentId: "folder/a b", query: "云盘 &_%", fileType: "document", shareStatus: "shared", updatedAfter: "2026-10-01T00:00:00.000Z", sort: "name", offset: "100", limit: "100" })
+      expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+      return jsonResponse(page)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await expect(service.listDriveItemTree({ parentId: "folder/a b", query: "云盘 &_%", fileType: "document", shareStatus: "shared", updatedAfter: "2026-10-01T00:00:00Z", sort: "name", offset: 100, limit: 100 })).resolves.toEqual(page)
+  })
+
   it("requests Drive changes with scoped binding parameters", async () => {
     const page = {
       items: [],

@@ -11,6 +11,17 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./drive-search": {
+      "import": {
+        "types": "./dist/drive-search.d.ts",
+        "default": "./dist/drive-search.js"
+      },
+      "require": {
+        "types": "./dist/drive-search.d.cts",
+        "default": "./dist/drive-search.cjs"
+      },
+      "default": "./dist/drive-search.js"
+    },
     "./drive-sync-constants": {
       "import": {
         "types": "./dist/drive-sync-constants.d.ts",
@@ -58,7 +69,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs",
+    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs",
     "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
