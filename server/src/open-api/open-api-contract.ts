@@ -90,7 +90,7 @@ export const createDownloadRequestSchema = z.object({
 }).strict()
 
 export const createArticleMessageRequestSchema = z.object({
-  url: z.url().max(2048).describe("当前 Synapse 的完整 /share 链接。").optional(),
+  url: z.url().max(2048).describe("与当前 Synapse 同源的完整 /share/<shareId> 或 /share/<shareId>/items/<itemId> 链接，可带 /reader、/render 或 /download 后缀；缺少 itemId 或带未知路径时返回 422 UNSUPPORTED_LINK。").optional(),
   shareId: z.string().regex(/^shr_[A-Za-z0-9]+$/u).describe("分享链接中的公开 shareId。").optional(),
   password: z.string().min(1).max(1024).optional(),
   body: z.string().trim().min(1).max(DRIVE_MESSAGE_BODY_MAX_LENGTH).describe("Markdown 留言正文，最多 4000 字符。"),
@@ -99,6 +99,8 @@ export const createArticleMessageRequestSchema = z.object({
 })
 
 export type CreateArticleMessageRequest = z.infer<typeof createArticleMessageRequestSchema>
+
+export const openApiIdempotencyKeySchema = z.string().min(8).max(120).regex(/^[A-Za-z0-9_-]+$/u)
 
 const notificationMessageJsonSchema = toContractJsonSchema(openApiNotificationMessageSchema, "input")
 const notificationKeyedMessageJsonSchema = toContractJsonSchema(openApiNotificationKeyedMessageSchema, "input")
@@ -183,8 +185,8 @@ const idempotencyKeyParameter = {
   name: "Idempotency-Key",
   in: "header",
   required: false,
-  description: "同一密钥内 8–120 位去重键；重复请求返回同一条消息。",
-  schema: { type: "string", minLength: 8, maxLength: 120 },
+  description: "同一 API 密钥内 8–120 位字母、数字、下划线或连字符；重复请求返回原记录。",
+  schema: toContractJsonSchema(openApiIdempotencyKeySchema, "input"),
 } as const
 
 /**
@@ -253,7 +255,7 @@ const OPEN_API_CONTRACT_DOCUMENT_BASE = {
         operationId: "createPublicLinkArticleMessage",
         security: [{ ApiKeyBearer: [] }],
         "x-required-scope": PUBLIC_LINK_MESSAGE_CREATE_SCOPE,
-        description: "url 与 shareId 至少提供一个；都提供时必须指向同一分享和同一文章。shareId 单独使用时只指向分享根文件。",
+        description: "url 与 shareId 至少提供一个；都提供时必须指向同一分享和同一文章。shareId 单独使用时只指向分享根文件。留言正文按 Markdown 渲染。同一 API 密钥使用相同去重键提交不同目标或正文时返回 409 IDEMPOTENCY_CONFLICT。",
         parameters: [idempotencyKeyParameter],
         requestBody: {
           required: true,

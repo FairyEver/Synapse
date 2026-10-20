@@ -50,4 +50,19 @@ describe("OpenApiMessageController", () => {
     } as never, response as never)).rejects.toMatchObject({ statusCode: 403, code: "INSUFFICIENT_SCOPE" })
     expect(messages.create).not.toHaveBeenCalled()
   })
+
+  it.each(["1234567", "retry:001", "retry 001", "重试请求0001", "a".repeat(121)])("rejects an invalid retry key before creating a message: %s", async (key) => {
+    const messages = { create: vi.fn() }
+    const controller = new OpenApiMessageController(messages as never)
+    await expect(controller.create({ shareId: "shr_example", body: "留言" }, request as never, response as never, key))
+      .rejects.toMatchObject({ statusCode: 400, code: "INVALID_IDEMPOTENCY_KEY" })
+    expect(messages.create).not.toHaveBeenCalled()
+  })
+
+  it.each(["retry_01", "retry-01", "a".repeat(120)])("accepts a supported retry key: %s", async (key) => {
+    const messages = { create: vi.fn().mockResolvedValue({ id: "message-1", createdAt: "2026-09-30T00:00:00.000Z" }) }
+    const controller = new OpenApiMessageController(messages as never)
+    await expect(controller.create({ shareId: "shr_example", body: "**留言**" }, request as never, response as never, key))
+      .resolves.toMatchObject({ data: { id: "message-1" } })
+  })
 })

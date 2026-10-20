@@ -680,7 +680,17 @@ function parseDriveLinkUrl(value: string, publicAppUrl: string): ParsedDriveLink
     }
   })
   if (segments[0] === DRIVE_PUBLIC_PATH_PREFIX.slice(1) && segments[1]) {
-    return { linkType: "share", shareId: segments[1], itemId: segments[2] === "items" ? segments[3] ?? null : null, password }
+    const targetSegmentCount = segments[2] === "items" ? 4 : 2
+    const suffix = segments[targetSegmentCount]
+    // URL 会先消除点路径和反斜杠，须检查未归一化且不含 query/fragment 的原始地址。
+    const rawLocation = value.split(/[?#]/u, 1)[0]
+    if (segments.length < targetSegmentCount || segments.length > targetSegmentCount + 1
+      || (suffix !== undefined && !/^(?:reader|render|download)$/u.test(suffix))
+      || url.pathname.includes("//") || segments.some((segment) => /[/\\]/u.test(segment))
+      || /[\\\u0000-\u0020]/u.test(rawLocation) || /\/(?:\.|%2e){1,2}(?:\/|$)/iu.test(rawLocation)) {
+      throw new BadRequestException("云盘分享链接路径无效。")
+    }
+    return { linkType: "share", shareId: segments[1], itemId: targetSegmentCount === 4 ? segments[3] : null, password }
   }
   if (segments[0] === DRIVE_SITE_PATH_PREFIX.slice(1) && segments[1]) {
     return { linkType: "site", siteId: segments[1], path: segments.slice(2).join("/"), password }

@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { DriveLinkIntakeService } from "../drive/drive-link-intake.service"
 import { OpenApiMessageService } from "./open-api-message.service"
 
 const principal = {
@@ -48,6 +49,26 @@ describe("OpenApiMessageService", () => {
     await service.create({ ...base, body: { url: "https://synapse.example/share/shr_same/items/item-1", body: "评论" } })
     expect(linkIntake.resolveSharedMessageTarget).toHaveBeenCalled()
     expect(drive.resolveShareAnnotationAccess).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "/share/shr_same/items",
+    "/share/shr_same/unknown",
+    "/share/shr_same/items/item-1/unknown",
+    "/share/shr_same/items/%2e%2e",
+    "/share/shr_same/unknown/..",
+  ])("returns UNSUPPORTED_LINK without falling back to a valid shareId: %s", async (path) => {
+    const intakeDrive = { ...drive, getShareBrowserSnapshot: vi.fn().mockResolvedValue({ current: article }) }
+    const intake = new DriveLinkIntakeService({ drive: intakeDrive, publicAppUrl: "https://synapse.example" } as never)
+    const integrated = new OpenApiMessageService(drive as never, intake, messages as never, usageLogs as never)
+    await expect(integrated.create({ ...base, body: {
+      url: "https://synapse.example" + path, shareId: "shr_same", body: "留言",
+    } })).rejects.toMatchObject({ statusCode: 422, code: "UNSUPPORTED_LINK" })
+    expect(messages.create).not.toHaveBeenCalled()
+    expect(drive.resolvePublicShareAccess).not.toHaveBeenCalled()
+    expect(usageLogs.finish).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed", httpStatus: 422, errorCode: "UNSUPPORTED_LINK",
+    }))
   })
 
   it("requires both target fields to resolve to the same share and file", async () => {

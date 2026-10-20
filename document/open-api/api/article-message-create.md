@@ -17,6 +17,16 @@ Content-Type: application/json
 }
 ```
 
+完整调用示例（将 `SYNAPSE_API_KEY` 环境变量设为 API 密钥，并替换示例分享 ID）：
+
+```bash
+curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/drive/public-links/messages' \
+  --header "Authorization: Bearer ${SYNAPSE_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: article-message-001' \
+  --data '{"url":"{{APP_PUBLIC_URL}}/share/shr_example","body":"**结论**很有帮助。"}'
+```
+
 | 请求头 | 必填 | 说明 |
 |---|---|---|
 | `Authorization` | 是 | `Bearer syn_sk_...`，使用具有 `drive.public_link.message.create` 权限的 API 密钥 |
@@ -27,14 +37,16 @@ Content-Type: application/json
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
-| `url` | 与 `shareId` 二选一 | 完整的当前 Synapse `/share/...` 链接，最长 2048 字符 |
-| `shareId` | 与 `url` 二选一 | 分享链接中的公开 ID，形如 `shr_...`；不接受分享记录 `id` 或文件 `itemId` |
-| `password` | 否 | 分享密码；如果链接也带 `password` query，以此字段为准 |
-| `body` | 是 | 纯文本留言，去除首尾空白后为 1–4000 字符 |
+| `url` | 与 `shareId` 至少提供一个 | 完整的当前 Synapse `/share/...` 链接，最长 2048 字符 |
+| `shareId` | 与 `url` 至少提供一个 | 分享链接中的公开 ID，形如 `shr_...`；不接受分享记录 `id` 或文件 `itemId` |
+| `password` | 否 | 1–1024 字符的分享密码；如果链接也带 `password` query，以此字段为准 |
+| `body` | 是 | Markdown 留言，去除首尾空白后为 1–4000 字符；支持粗体、列表、链接等格式，HTML 由服务端安全处理 |
 
 `url` 和 `shareId` 可同时提供。服务端分别解析两个目标，要求它们属于同一分享且最终指向同一文件；不一致返回 `409 TARGET_MISMATCH`。都不提供返回 `400 TARGET_REQUIRED`。任一字段无效时直接报错，不使用另一个字段兜底。
 
 `shareId` 单独使用时指向分享根目标。如果分享的是文件夹，应使用指向具体 Markdown 文件的 `/share/<shareId>/items/<itemId>` 链接，并且只传 `url`。同时传入文件夹的 `shareId` 和子文件链接会返回目标不一致。
+
+`url` 必须与当前 Synapse 应用地址同源，支持 `/share/<shareId>`、`/share/<shareId>/items/<itemId>`，以及它们的 `/reader`、`/render`、`/download` 后缀；可带末尾斜杠、query 和 fragment。缺少 `itemId`、多余路径、空路径段、`.` / `..` 点路径（含编码形式）或反斜杠路径返回 `422 UNSUPPORTED_LINK`，不会退回根文章。请求体出现未列出的字段返回 `400 INVALID_REQUEST`。
 
 成功返回 `201 Created`：
 
@@ -58,6 +70,19 @@ Content-Type: application/json
 | 404 | `LINK_NOT_FOUND` | 分享不存在、已失效或目标文件不可用 |
 | 409 | `TARGET_MISMATCH`、`IDEMPOTENCY_CONFLICT` | 双字段目标不一致或去重键冲突 |
 | 422 | `TARGET_NOT_ARTICLE`、`UNSUPPORTED_LINK` | 分享根目标或链接不是可留言的 Markdown 文件 |
+| 500 | `INTERNAL_ERROR` | 服务端内部错误 |
 | 503 | `USAGE_LOG_UNAVAILABLE` | 用量记录暂时无法写入 |
+
+错误响应示例：
+
+```json
+{
+  "requestId": "req_example",
+  "error": {
+    "code": "UNSUPPORTED_LINK",
+    "message": "链接不是可留言的 Markdown 文章。"
+  }
+}
+```
 
 响应包含 `X-Request-Id`，JSON 响应不缓存。调用方须保管 API 密钥和分享密码；留言内容会存入 Synapse 并显示给该文章的可读者。

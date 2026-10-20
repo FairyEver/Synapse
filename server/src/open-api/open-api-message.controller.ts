@@ -2,13 +2,11 @@ import { Body, Controller, Headers, HttpCode, Post, Req, Res, UseFilters, UseGua
 import { SkipThrottle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { PUBLIC_LINK_MESSAGE_CREATE_SCOPE } from "../api-keys/api-key-capabilities"
-import { OPEN_API_ARTICLE_MESSAGE_PATH, OPEN_API_V1_BASE_PATH, createArticleMessageRequestSchema } from "./open-api-contract"
+import { OPEN_API_ARTICLE_MESSAGE_PATH, OPEN_API_V1_BASE_PATH, createArticleMessageRequestSchema, openApiIdempotencyKeySchema } from "./open-api-contract"
 import { OpenApiMessageService } from "./open-api-message.service"
 import { OpenApiExceptionFilter } from "./open-api-exception.filter"
 import { OpenApiKeyGuard } from "./open-api-key.guard"
 import { OpenApiHttpError, openApiRequestId, requireOpenApiPrincipal, requireOpenApiScope, type OpenApiRequest } from "./open-api.types"
-
-const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
 
 @Controller(OPEN_API_V1_BASE_PATH)
 @UseFilters(OpenApiExceptionFilter)
@@ -27,7 +25,7 @@ export class OpenApiMessageController {
   ) {
     const principal = requireOpenApiPrincipal(request)
     requireOpenApiScope(principal, PUBLIC_LINK_MESSAGE_CREATE_SCOPE)
-    if (idempotencyKey !== undefined && !idempotencyKeyPattern.test(idempotencyKey)) {
+    if (idempotencyKey !== undefined && !openApiIdempotencyKeySchema.safeParse(idempotencyKey).success) {
       throw new OpenApiHttpError(400, "INVALID_IDEMPOTENCY_KEY", "去重键无效。")
     }
     const parsed = createArticleMessageRequestSchema.safeParse(body)

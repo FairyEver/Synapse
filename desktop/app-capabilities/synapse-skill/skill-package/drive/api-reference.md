@@ -254,6 +254,8 @@ Input:
 
 Use these tools for Synapse `/share/...`, `/sites/...`, and `/files/...` URLs sent by another person. They do not modify remote Drive content.
 
+Share URLs must target `/share/<shareId>` or `/share/<shareId>/items/<itemId>`, optionally followed by `/reader`, `/render`, or `/download`. A trailing slash, query, and fragment are allowed. Missing item ids, empty or dot path segments (including encoded forms), backslashes in paths, and unknown suffixes are rejected rather than falling back to the share root. Password query values and fragments are not path segments.
+
 ### `app_drive_link_resolve`
 
 Input:

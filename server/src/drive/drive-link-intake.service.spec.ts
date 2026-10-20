@@ -1,4 +1,5 @@
 import { Readable } from "node:stream"
+import { BadRequestException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
@@ -149,6 +150,61 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
 }
 
 describe("DriveLinkIntakeService", () => {
+  it.each([
+    "/share/shr_123/items",
+    "/share/shr_123/items/",
+    "/share/shr_123/unknown",
+    "/share/shr_123/items/item-1/unknown",
+    "/share/shr_123/items/item-1/reader/extra",
+    "/share/shr_123//items/item-1",
+    "/share/shr_123/items//reader",
+    "/share/shr_123/items%2Fitem-1",
+    "/share/shr_123/items/..",
+    "/share/shr_123/items/%2e%2e",
+    "/share/shr_123/items/.%2E",
+    "/share/shr_123/unknown/..",
+    "/share\\shr_123\\items\\..",
+    "/share/shr_123/items/.\n.",
+  ])("rejects malformed share target paths before accessing Drive: %s", async (path) => {
+    const { service, drive } = createService()
+    await expect(service.resolveSharedMessageTarget({ url: publicAppUrl + path }, "user-1"))
+      .rejects.toBeInstanceOf(BadRequestException)
+    expect(drive.resolvePublicShareAccess).not.toHaveBeenCalled()
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
+    await expect(service.prepareDownloadArtifact({ url: publicAppUrl + path }))
+      .rejects.toMatchObject({ reason: "unsupported_link" })
+    expect(drive.prepareOpenApiShareDownload).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["/share/shr_123", null],
+    ["/share/shr_123/", null],
+    ["/share/shr_123/reader", null],
+    ["/share/shr_123/render", null],
+    ["/share/shr_123/download", null],
+    ["/share/shr_123/items/item-1", "item-1"],
+    ["/share/shr_123/items/item-1/", "item-1"],
+    ["/share/shr_123/items/item-1/reader", "item-1"],
+    ["/share/shr_123/items/item-1/render", "item-1"],
+    ["/share/shr_123/items/item-1/download", "item-1"],
+  ])("keeps supported share URL targets and passwords: %s", async (path, itemId) => {
+    const { service, drive } = createService()
+    await expect(service.resolve({ url: `${publicAppUrl}${path}?password=query-secret#section` }))
+      .resolves.toMatchObject({ ref: { kind: "share", shareId: "shr_123", itemId } })
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_123", password: "query-secret", cookie: undefined,
+    })
+  })
+
+  it("does not treat password or fragment contents as share path segments", async () => {
+    const { service } = createService()
+    await expect(service.resolveSharedMessageTarget({
+      url: `${publicAppUrl}/share/shr_123?password=../query\\secret#../fragment\\value`,
+    }, "user-1")).resolves.toMatchObject({
+      shareId: "shr_123", itemId: "item-1", password: "../query\\secret",
+    })
+  })
+
   it("resolves a share markdown link", async () => {
     const { service } = createService()
 

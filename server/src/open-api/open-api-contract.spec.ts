@@ -106,6 +106,24 @@ describe("Open API machine-readable contract", () => {
     expect(createArticleMessageRequestSchema.safeParse({ ...sample, extra: true }).success).toBe(false)
   })
 
+  it.each([
+    ["retry_01", true],
+    ["retry-01", true],
+    ["a".repeat(120), true],
+    ["1234567", false],
+    ["a".repeat(121), false],
+    ["retry:001", false],
+    ["retry 001", false],
+    ["重试请求0001", false],
+  ])("describes whether a retry key is accepted: %s", (key, accepted) => {
+    const parameter = contractDocument.paths[OPEN_API_ARTICLE_MESSAGE_PATH].post.parameters[0]
+    const schema = parameter.schema as { minLength: number; maxLength: number; pattern?: string }
+    expect(schema.pattern).toEqual(expect.any(String))
+    const valid = key.length >= schema.minLength && key.length <= schema.maxLength
+      && new RegExp(schema.pattern!, "u").test(key)
+    expect(valid).toBe(accepted)
+  })
+
   it("describes the three notification send shapes without an Authorization header", () => {
     const paths = contractDocument.paths
     expect(OPEN_API_NOTIFICATIONS_BASE_PATH).toBe("/api/open/v1/notifications")
