@@ -176,8 +176,10 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
 
 function normalizeTableColumnCounts(node: MarkdownAstNode): void {
   if (node.type === "table" && node.align) {
-    // remark-rehype renders only the header's columns; hidden cells must not contribute anchors.
-    for (const row of node.children ?? []) row.children?.splice(node.align.length)
+    const align = node.align
+    const columnCount = (node.children ?? []).reduce((width, row) => Math.max(width, row.children?.length ?? 0), align.length)
+    // remark-rehype pads rows to this width, preserving overflow content and the authored alignment.
+    node.align = Array.from({ length: columnCount }, (_, index) => align[index] ?? null)
   }
   for (const child of node.children ?? []) normalizeTableColumnCounts(child)
 }

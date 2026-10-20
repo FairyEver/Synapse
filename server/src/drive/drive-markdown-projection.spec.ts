@@ -5,7 +5,7 @@ import { renderDriveMarkdownFragment } from './drive-markdown-renderer'
 import { buildDriveMarkdownProjection, driveMarkdownImageResourceKey, mapDriveMarkdownSourceRange, mapDriveMarkdownSourceRanges } from './drive-markdown-projection'
 
 describe('Drive Markdown projection', () => {
-  it('excludes table cells beyond the header width from text and image anchors', async () => {
+  it('preserves overflow table cells and their text and image anchors while padding missing cells', async () => {
     const source = [
       '| 事项 | 结果 |',
       '| --- | --- |',
@@ -17,36 +17,47 @@ describe('Drive Markdown projection', () => {
     const rendered = await renderDriveMarkdownFragment(source)
     const paragraph = rendered.projection.blocks.find((block) => block.type === 'paragraph')
 
-    expect(rendered.html).not.toContain('隐藏')
-    expect(rendered.renderedText).toBe('事项结果导入失败完成任务目标 16（蓝）')
-    expect(rendered.projection.images).toEqual([])
-    expect(paragraph).toMatchObject({ renderedStart: 10, renderedEnd: 20 })
+    expect(rendered.html).toContain('隐藏 <strong>说明</strong>')
+    expect(rendered.html).toContain('alt="隐藏图片"')
+    expect(rendered.html.match(/<th(?:\s|>)/gu)).toHaveLength(3)
+    expect(rendered.html).toContain('<td>完成</td>\n<td></td>\n<td></td>')
+    expect(rendered.renderedText).toBe('事项结果导入失败隐藏 说明 隐藏图片完成任务目标 16（蓝）')
+    expect(rendered.projection.images).toEqual([expect.objectContaining({ source: 'hidden.png', alt: '隐藏图片' })])
+    expect(paragraph).toMatchObject({ renderedStart: 20, renderedEnd: 30 })
     expect(rendered.projection.segments.at(-1)).toMatchObject({
       sourceStart: Array.from(source.slice(0, source.indexOf('任务目标'))).length,
-      renderedStart: 10,
-      renderedEnd: 20,
+      renderedStart: 20,
+      renderedEnd: 30,
       mapping: 'identity',
     })
   })
 
-  it('rebuilds an old projection containing hidden table cells while preserving block identity', async () => {
+  it.each([
+    'remark15-gfm4-img1-html2-lf1',
+    'remark15-gfm4-img1-html2-lf1-tbl1',
+  ])('rebuilds a %s projection while preserving block identity and overflow table content', async (parserVersion) => {
     const source = '| 列 |\n| --- |\n| 值 | 隐藏内容 |\n\n目标'
     const [{ unified }, { default: remarkParse }, { default: remarkGfm }] = await Promise.all([
       import('unified'), import('remark-parse'), import('remark-gfm'),
     ])
     const tree = unified().use(remarkParse).use(remarkGfm).parse(source)
+    const table = tree.children[0]
+    if (parserVersion.endsWith('-tbl1') && table.type === 'table') {
+      for (const row of table.children) row.children.splice(table.align?.length ?? 0)
+    }
     const legacyProjection = {
       ...buildDriveMarkdownProjection(source, tree),
-      parserVersion: 'remark15-gfm4-img1-html2-lf1',
+      parserVersion,
     }
     const paragraph = legacyProjection.blocks.find((block) => block.type === 'paragraph')!
     const rendered = await renderDriveMarkdownFragment(source, { projection: legacyProjection })
 
-    expect(rendered.renderedText).toBe('列值目标')
+    expect(rendered.renderedText).toBe('列值隐藏内容目标')
+    expect(rendered.html).toContain('隐藏内容')
     expect(rendered.projection.blocks.find((block) => block.type === 'paragraph')).toMatchObject({
       blockId: paragraph.blockId,
-      renderedStart: 2,
-      renderedEnd: 4,
+      renderedStart: 6,
+      renderedEnd: 8,
     })
   })
 

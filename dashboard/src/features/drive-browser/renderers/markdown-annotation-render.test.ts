@@ -10,7 +10,10 @@ import { createMarkdownRenderedDomRange, createMarkdownRenderedTextModel } from 
 describe('renderMarkdownAnnotationHtml', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('creates and highlights an exact comment after a table row with extra cells', async () => {
+  it.each([
+    { selector: 'p', start: 10, end: 21, exact: ' 任务目标 16（蓝）' },
+    { selector: 'td:nth-child(4)', start: 0, end: 10, exact: '弹窗内列出错误行清单' },
+  ])('creates and highlights an exact comment in $selector when a table row has extra cells', async ({ selector, start, end, exact }) => {
     const source = [
       '| 异常 | 条件 | 策略 |',
       '| --- | --- | --- |',
@@ -28,10 +31,12 @@ describe('renderMarkdownAnnotationHtml', () => {
     const rendered = await renderDriveMarkdownFragment(source)
     const root = document.body.appendChild(document.createElement('main'))
     root.innerHTML = rendered.html
-    const text = root.querySelector('p')!.firstChild!
+    const element = root.querySelector(selector)
+    expect(element).not.toBeNull()
+    const text = element!.firstChild!
     const range = document.createRange()
-    range.setStart(text, 10)
-    range.setEnd(text, 21)
+    range.setStart(text, start)
+    range.setEnd(text, end)
     const selection = window.getSelection()!
     selection.removeAllRanges()
     selection.addRange(range)
@@ -47,10 +52,11 @@ describe('renderMarkdownAnnotationHtml', () => {
       crdtSourceRange: selected.selectors.position,
     })
 
-    expect(selected.target.quote.exact).toBe(' 任务目标 16（蓝）')
+    expect(root.querySelectorAll('th')).toHaveLength(4)
+    expect(selected.target.quote.exact).toBe(exact)
     expect(selected.selectors.position).toEqual({
-      start: source.indexOf(' 任务目标 16（蓝）'),
-      end: source.indexOf(' 任务目标 16（蓝）') + 11,
+      start: source.indexOf(exact),
+      end: source.indexOf(exact) + exact.length,
     })
     expect(resolution).toMatchObject({ positionStatus: 'attached', quoteStatus: 'exact' })
     expect(createMarkdownRenderedTextModel(root, rendered.projection).text).toBe(rendered.renderedText)
@@ -69,7 +75,7 @@ describe('renderMarkdownAnnotationHtml', () => {
     const result = renderMarkdownAnnotationHtml(rendered.html, [annotation], 'version-1', null, rendered.projection)
     const located = result.resolved[0].range!
     const model = createMarkdownRenderedTextModel(root, rendered.projection)
-    expect(createMarkdownRenderedDomRange(root, model.segments, located.start, located.end)?.toString()).toBe(' 任务目标 16（蓝）')
+    expect(createMarkdownRenderedDomRange(root, model.segments, located.start, located.end)?.toString()).toBe(exact)
   })
 
   it('resolves attached annotation ranges without changing rendered markdown html', () => {

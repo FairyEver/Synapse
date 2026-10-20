@@ -11,7 +11,7 @@ import type { DriveAnnotationTextPositionSelector } from "@synapse/shared"
 import { parseDriveMarkdownRelativeImageSrc } from "./drive-markdown-relative-images"
 
 export const DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION = 1
-export const DRIVE_MARKDOWN_PARSER_VERSION = "remark15-gfm4-img1-html2-lf1-tbl1"
+export const DRIVE_MARKDOWN_PARSER_VERSION = "remark15-gfm4-img1-html2-lf1-tbl2"
 
 type MarkdownPosition = {
   readonly start: { readonly offset?: number }

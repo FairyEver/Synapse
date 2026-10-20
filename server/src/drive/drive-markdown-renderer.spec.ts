@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 describe("drive markdown renderer", () => {
+  it("preserves column alignment when expanding a table to fit overflow cells", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "| 左列 | 右列 |",
+      "| :--- | ---: |",
+      "| 甲 | 乙 | 丙 | 丁 |",
+    ].join("\n"))
+
+    expect(result.html).toContain('<th align="left">左列</th>')
+    expect(result.html).toContain('<th align="right">右列</th>')
+    expect(result.html).toContain('<td align="left">甲</td>')
+    expect(result.html).toContain('<td align="right">乙</td>')
+    expect(result.html).toContain('<td>丙</td>\n<td>丁</td>')
+    expect(result.renderedText).toBe("左列右列甲乙丙丁")
+  })
+
   it("replaces unresolved PDF images with a safe visible placeholder", async () => {
     const markdown = "before ![示意图](https://example.com/private.png) after"
     const first = await renderDriveMarkdownFragment(markdown)
