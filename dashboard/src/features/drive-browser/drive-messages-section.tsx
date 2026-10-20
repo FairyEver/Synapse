@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import type { DriveMessageCommentDto, DriveMessageDto } from '@synapse/shared'
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { DriveMessageComposer } from './drive-message-composer'
 import { DriveMessageBody } from './drive-message-body'
 import { startDriveOperation } from './shared/drive-telemetry'
@@ -15,6 +18,8 @@ type Editor =
 
 export function DriveMessagesSection({ messages, sectionRef }: { readonly messages: Messages; readonly sectionRef?: Ref<HTMLElement> }) {
   const [draft, setDraft] = useState('')
+  const [composerExpanded, setComposerExpanded] = useState(false)
+  const [composerVersion, setComposerVersion] = useState(0)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -44,6 +49,8 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
       if (!editor) {
         const created = await messages.create(value)
         setDraft('')
+        setComposerExpanded(false)
+        setComposerVersion((version) => version + 1)
         requestAnimationFrame(() => document.querySelector(`[data-drive-message-id="${created.id}"]`)?.scrollIntoView({ block: 'nearest' }))
       } else if (editor.kind === 'message') {
         await messages.update({ messageId: editor.id, body: value })
@@ -86,13 +93,15 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
 
   const renderEditor = (value: string, setValue: (value: string) => void, label: string, cancel?: () => void) => (
     <DriveMessageComposer
-      key={editor ? editor.kind === 'reply' ? `reply:${editor.messageId}:${editor.parentCommentId}` : `${editor.kind}:${editor.id}` : 'new-message'}
+      key={editor ? editor.kind === 'reply' ? `reply:${editor.messageId}:${editor.parentCommentId}` : `${editor.kind}:${editor.id}` : `new-message:${composerVersion}`}
       value={value}
       onChange={setValue}
       label={label}
       submitLabel={editor?.kind === 'reply' ? '回复' : cancel ? '保存' : '发布留言'}
       busy={busy}
       imageUploadContext={messages.imageUploadContext}
+      expanded={Boolean(editor) || composerExpanded}
+      onExpand={() => { pending?.cancel(); setComposerExpanded(true) }}
       onSubmit={() => { void submit() }}
       onCancel={cancel}
     />
@@ -116,6 +125,7 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
             busy={busy}
             onEdit={(next) => { pending?.cancel(); setEditor(next); setError(null) }}
             onDelete={remove}
+            onCancelDelete={() => setPendingDelete(null)}
             renderEditor={renderEditor}
           />
         ))}
@@ -130,7 +140,7 @@ export function DriveMessagesSection({ messages, sectionRef }: { readonly messag
   )
 }
 
-function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, onEdit, onDelete, renderEditor }: {
+function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, onEdit, onDelete, onCancelDelete, renderEditor }: {
   readonly message: DriveMessageDto
   readonly canFocus: boolean
   readonly canPost: boolean
@@ -139,6 +149,7 @@ function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, 
   readonly busy: boolean
   readonly onEdit: (editor: Editor | null) => void
   readonly onDelete: (kind: 'message' | 'comment', id: string) => Promise<void>
+  readonly onCancelDelete: () => void
   readonly renderEditor: (value: string, setValue: (value: string) => void, label: string, cancel?: () => void) => ReactNode
 }) {
   const elementRef = useRef<HTMLElement | null>(null)
@@ -150,36 +161,39 @@ function MessageItem({ message, canFocus, canPost, editor, pendingDelete, busy, 
   const reply = editor?.kind === 'reply' && editor.messageId === message.id
   return (
     <article ref={elementRef} tabIndex={-1} data-drive-message-id={message.id} className='border-b pb-6'>
-      <div className='mb-2 flex items-center justify-between gap-2'>
-        <span className='text-sm font-medium'>{displayAuthor(message.author)}</span>
-        <time className='text-sm text-muted-foreground' dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+      <MessageHeader author={message.author} createdAt={message.createdAt}>
+        {!editing ? <MessageActionsMenu authorName={displayAuthor(message.author)} kind='留言' permissions={message.permissions} busy={busy}
+          onEdit={() => onEdit({ kind: 'message', id: message.id, value: message.body })}
+          onDelete={() => { void onDelete('message', message.id) }} /> : null}
+      </MessageHeader>
+      <div className='mt-3 sm:pl-11'>
+        {editing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑留言', () => onEdit(null)) : <DriveMessageBody html={message.bodyHtml} />}
+        {!editing ? <div className='mt-2 flex items-center gap-1'>
+          {canPost ? <Button type='button' variant='ghost' onClick={() => onEdit({ kind: 'reply', messageId: message.id, parentCommentId: null, value: '' })}>回复</Button> : null}
+        </div> : null}
+        {pendingDelete === `message:${message.id}` ? <DeleteConfirmation busy={busy} onCancel={onCancelDelete} onConfirm={() => { void onDelete('message', message.id) }} /> : null}
+        <div className='mt-3 space-y-3'>
+          {rows.map(({ comment, depth, replyTo }) => {
+            const commentEditing = editor?.kind === 'comment' && editor.id === comment.id
+            return <MessageCommentRow key={comment.id} id={comment.id} messageId={message.id} canFocus={canFocus} className={depthClass(depth)}>
+              <MessageHeader author={comment.author} createdAt={comment.createdAt} replyTo={replyTo}>
+                {!commentEditing ? <MessageActionsMenu authorName={displayAuthor(comment.author)} kind='回复' permissions={comment.permissions} busy={busy}
+                  onEdit={() => onEdit({ kind: 'comment', id: comment.id, value: comment.body })}
+                  onDelete={() => { void onDelete('comment', comment.id) }} /> : null}
+              </MessageHeader>
+              <div className='mt-2 sm:pl-11'>
+                {commentEditing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑回复', () => onEdit(null)) : <DriveMessageBody html={comment.bodyHtml} />}
+                {!commentEditing ? <div className='flex items-center gap-1'>
+                  {canPost ? <Button type='button' variant='ghost' onClick={() => onEdit({ kind: 'reply', messageId: message.id, parentCommentId: comment.id, value: '' })}>回复</Button> : null}
+                </div> : null}
+                {pendingDelete === `comment:${comment.id}` ? <DeleteConfirmation busy={busy} onCancel={onCancelDelete} onConfirm={() => { void onDelete('comment', comment.id) }} /> : null}
+                {reply && editor.parentCommentId === comment.id ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
+              </div>
+            </MessageCommentRow>
+          })}
+        </div>
+        {reply && editor.parentCommentId === null ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
       </div>
-      {editing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑留言', () => onEdit(null)) : <DriveMessageBody html={message.bodyHtml} />}
-      {!editing ? <div className='mt-2 flex items-center gap-1'>
-        {canPost ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'reply', messageId: message.id, parentCommentId: null, value: '' })}>回复</Button> : null}
-        {message.permissions.canEdit ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'message', id: message.id, value: message.body })}>编辑</Button> : null}
-        {message.permissions.canDelete ? <DeleteButton pending={pendingDelete === `message:${message.id}`} busy={busy} onClick={() => { void onDelete('message', message.id) }} /> : null}
-      </div> : null}
-      <div className='mt-3 space-y-3'>
-        {rows.map(({ comment, depth, replyTo }) => {
-          const commentEditing = editor?.kind === 'comment' && editor.id === comment.id
-          return <MessageCommentRow key={comment.id} id={comment.id} messageId={message.id} canFocus={canFocus} className={depthClass(depth)}>
-            <div className='flex items-center gap-2 text-sm'>
-              <span className='font-medium'>{displayAuthor(comment.author)}</span>
-              {replyTo ? <span className='text-muted-foreground'>回复 {replyTo}</span> : null}
-              <time className='text-muted-foreground' dateTime={comment.createdAt}>{formatTime(comment.createdAt)}</time>
-            </div>
-            {commentEditing ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '编辑回复', () => onEdit(null)) : <DriveMessageBody html={comment.bodyHtml} />}
-            {!commentEditing ? <div className='flex items-center gap-1'>
-              {canPost ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'reply', messageId: message.id, parentCommentId: comment.id, value: '' })}>回复</Button> : null}
-              {comment.permissions.canEdit ? <Button type='button' size='sm' variant='ghost' onClick={() => onEdit({ kind: 'comment', id: comment.id, value: comment.body })}>编辑</Button> : null}
-              {comment.permissions.canDelete ? <DeleteButton pending={pendingDelete === `comment:${comment.id}`} busy={busy} onClick={() => { void onDelete('comment', comment.id) }} /> : null}
-            </div> : null}
-            {reply && editor.parentCommentId === comment.id ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
-          </MessageCommentRow>
-        })}
-      </div>
-      {reply && editor.parentCommentId === null ? renderEditor(editor.value, (value) => onEdit({ ...editor, value }), '回复留言', () => onEdit(null)) : null}
     </article>
   )
 }
@@ -191,8 +205,56 @@ function MessageCommentRow({ id, messageId, canFocus, className, children }: { i
   return <div ref={elementRef} tabIndex={-1} className={className} data-drive-message-comment-id={id}>{children}</div>
 }
 
-function DeleteButton({ pending, busy, onClick }: { readonly pending: boolean; readonly busy: boolean; readonly onClick: () => void }) {
-  return <Button type='button' size='sm' variant='ghost' disabled={busy} onClick={onClick}>{pending ? '确认删除（含下级回复）' : '删除'}</Button>
+function MessageHeader({ author, createdAt, replyTo, children }: {
+  readonly author: DriveMessageDto['author']
+  readonly createdAt: string
+  readonly replyTo?: string | null
+  readonly children: ReactNode
+}) {
+  const name = displayAuthor(author)
+  return <div className='flex items-center gap-3'>
+    <Avatar aria-hidden><AvatarFallback className='text-xs font-medium'>{Array.from(name)[0]?.toLocaleUpperCase()}</AvatarFallback></Avatar>
+    <div className='flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1 text-sm'>
+      <span className='min-w-0 truncate font-medium' title={name}>{name}</span>
+      {replyTo ? <span className='min-w-0 truncate text-xs text-muted-foreground' title={replyTo}>回复 {replyTo}</span> : null}
+      <time className='shrink-0 text-xs text-muted-foreground' dateTime={createdAt} title={new Date(createdAt).toLocaleString()}>{formatTime(createdAt)}</time>
+    </div>
+    {children}
+  </div>
+}
+
+function MessageActionsMenu({ authorName, kind, permissions, busy, onEdit, onDelete }: {
+  readonly authorName: string
+  readonly kind: '留言' | '回复'
+  readonly permissions: DriveMessageDto['permissions']
+  readonly busy: boolean
+  readonly onEdit: () => void
+  readonly onDelete: () => void
+}) {
+  const editingRef = useRef(false)
+  if (!permissions.canEdit && !permissions.canDelete) return null
+  return <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button type='button' variant='ghost' size='icon' className='size-10' disabled={busy} aria-label={`${kind}操作：${authorName}`}><MoreHorizontal aria-hidden /></Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent data-drive-telemetry-scope='portal' align='end' onCloseAutoFocus={(event) => {
+      if (editingRef.current) event.preventDefault()
+      editingRef.current = false
+    }}>
+      {permissions.canEdit ? <DropdownMenuItem disabled={busy} onSelect={() => { editingRef.current = true; onEdit() }}><Pencil aria-hidden />编辑</DropdownMenuItem> : null}
+      {permissions.canDelete ? <DropdownMenuItem variant='destructive' disabled={busy} onSelect={onDelete}><Trash2 aria-hidden />删除</DropdownMenuItem> : null}
+    </DropdownMenuContent>
+  </DropdownMenu>
+}
+
+function DeleteConfirmation({ busy, onCancel, onConfirm }: { readonly busy: boolean; readonly onCancel: () => void; readonly onConfirm: () => void }) {
+  return <div role='group' aria-label='删除留言确认' className='mt-3 space-y-2' onKeyDown={(event) => { if (event.key === 'Escape' && !busy) onCancel() }}>
+    <p className='text-sm'>删除后，下级回复也会删除。</p>
+    <div className='flex flex-wrap gap-2'>
+      <Button type='button' variant='ghost' disabled={busy} onClick={onCancel}>取消</Button>
+      <Button type='button' variant='destructive' disabled={busy} onClick={onConfirm}>{busy ? '删除中' : '确认删除（含下级回复）'}</Button>
+    </div>
+  </div>
 }
 
 function flattenComments(comments: readonly DriveMessageCommentDto[]) {
@@ -222,5 +284,10 @@ function displayAuthor(author: { readonly handle: string | null; readonly email:
 }
 
 function formatTime(value: string) {
-  return new Date(value).toLocaleString()
+  const date = new Date(value)
+  const today = new Date()
+  const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  if (date.toDateString() === today.toDateString()) return `今天 ${time}`
+  const day = date.toLocaleDateString('zh-CN', { ...(date.getFullYear() !== today.getFullYear() ? { year: 'numeric' as const } : {}), month: 'numeric', day: 'numeric' })
+  return `${day} ${time}`
 }
