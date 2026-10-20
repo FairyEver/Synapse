@@ -3,6 +3,7 @@ import {
   annotateMarkdownProjectionTree,
   buildDriveMarkdownProjection,
   extractDriveMarkdownRenderedText,
+  DRIVE_MARKDOWN_PARSER_VERSION,
   type MarkdownProjectionNode,
 } from "./drive-markdown-projection"
 import {
@@ -18,6 +19,7 @@ type MarkdownAstNode = {
   alt?: unknown
   title?: unknown
   depth?: unknown
+  align?: readonly (string | null)[]
   data?: {
     hName?: string
     hProperties?: Record<string, unknown>
@@ -143,13 +145,17 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     .use(openCompleteWebUrlsExternallyPlugin)
     .use(rehypeStringify)
   const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
+  normalizeTableColumnCounts(tree)
   normalizeDriveMarkdownLooseImageNodes(tree)
   if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
   normalizeSafeTableHtmlBreaks(tree)
   normalizeEscapedRawHtmlNodes(tree)
   normalizeEscapedAutolinkNodes(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
-  const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
+  const cachedProjection = options.projection?.parserVersion === DRIVE_MARKDOWN_PARSER_VERSION ? options.projection : null
+  const projection = cachedProjection ?? buildDriveMarkdownProjection(markdown, tree, {
+    previous: options.previousProjection ?? (options.projection ? { source: markdown, projection: options.projection } : null),
+  })
   if (options.pdfImageResourceKeys) {
     pdfImageResourceKeysById.current = new Map(
       (projection.images ?? []).map((image) => [
@@ -166,6 +172,14 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     projection,
     renderedText,
   }
+}
+
+function normalizeTableColumnCounts(node: MarkdownAstNode): void {
+  if (node.type === "table" && node.align) {
+    // remark-rehype renders only the header's columns; hidden cells must not contribute anchors.
+    for (const row of node.children ?? []) row.children?.splice(node.align.length)
+  }
+  for (const child of node.children ?? []) normalizeTableColumnCounts(child)
 }
 
 function normalizeSafeTableHtmlBreaks(node: MarkdownAstNode, insideTableCell = false): void {

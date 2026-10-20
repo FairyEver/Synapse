@@ -2,9 +2,54 @@ import { resolveDriveAnnotationAnchor, sliceByCodePoints } from '@synapse/shared
 import { performance } from 'node:perf_hooks'
 import { describe, expect, it } from 'vitest'
 import { renderDriveMarkdownFragment } from './drive-markdown-renderer'
-import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRange, mapDriveMarkdownSourceRanges } from './drive-markdown-projection'
+import { buildDriveMarkdownProjection, driveMarkdownImageResourceKey, mapDriveMarkdownSourceRange, mapDriveMarkdownSourceRanges } from './drive-markdown-projection'
 
 describe('Drive Markdown projection', () => {
+  it('excludes table cells beyond the header width from text and image anchors', async () => {
+    const source = [
+      '| 事项 | 结果 |',
+      '| --- | --- |',
+      '| 导入 | 失败 | 隐藏 **说明** ![隐藏图片](hidden.png) |',
+      '| 完成 |',
+      '',
+      '任务目标 16（蓝）',
+    ].join('\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const paragraph = rendered.projection.blocks.find((block) => block.type === 'paragraph')
+
+    expect(rendered.html).not.toContain('隐藏')
+    expect(rendered.renderedText).toBe('事项结果导入失败完成任务目标 16（蓝）')
+    expect(rendered.projection.images).toEqual([])
+    expect(paragraph).toMatchObject({ renderedStart: 10, renderedEnd: 20 })
+    expect(rendered.projection.segments.at(-1)).toMatchObject({
+      sourceStart: Array.from(source.slice(0, source.indexOf('任务目标'))).length,
+      renderedStart: 10,
+      renderedEnd: 20,
+      mapping: 'identity',
+    })
+  })
+
+  it('rebuilds an old projection containing hidden table cells while preserving block identity', async () => {
+    const source = '| 列 |\n| --- |\n| 值 | 隐藏内容 |\n\n目标'
+    const [{ unified }, { default: remarkParse }, { default: remarkGfm }] = await Promise.all([
+      import('unified'), import('remark-parse'), import('remark-gfm'),
+    ])
+    const tree = unified().use(remarkParse).use(remarkGfm).parse(source)
+    const legacyProjection = {
+      ...buildDriveMarkdownProjection(source, tree),
+      parserVersion: 'remark15-gfm4-img1-html2-lf1',
+    }
+    const paragraph = legacyProjection.blocks.find((block) => block.type === 'paragraph')!
+    const rendered = await renderDriveMarkdownFragment(source, { projection: legacyProjection })
+
+    expect(rendered.renderedText).toBe('列值目标')
+    expect(rendered.projection.blocks.find((block) => block.type === 'paragraph')).toMatchObject({
+      blockId: paragraph.blockId,
+      renderedStart: 2,
+      renderedEnd: 4,
+    })
+  })
+
   it('emits stable non-sensitive block and segment identifiers into sanitized HTML', async () => {
     const rendered = await renderDriveMarkdownFragment('# 标题\n\n正文 **重点** 🙂\n\n```ts\nconst value = 1\n```')
 

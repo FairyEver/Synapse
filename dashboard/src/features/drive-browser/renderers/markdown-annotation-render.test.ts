@@ -10,6 +10,68 @@ import { createMarkdownRenderedDomRange, createMarkdownRenderedTextModel } from 
 describe('renderMarkdownAnnotationHtml', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('creates and highlights an exact comment after a table row with extra cells', async () => {
+    const source = [
+      '| 异常 | 条件 | 策略 |',
+      '| --- | --- | --- |',
+      '| 导入格式错误 | 导入 | 金额非数字 | 弹窗内列出错误行清单并提供「下载错误清单」，**整批不写入**（回滚），Toast"导入失败，请修正后重试" |',
+      '',
+      '###### 1、页面布局',
+      '',
+      '- 面包屑：返回 / 项目详情 / 绩效管理。',
+      '- 双 Tab：绩效考核 / 项目绩效设置。',
+      '',
+      '###### 2、绩效考核 Tab',
+      '',
+      '研究目标 5（紫）/ 任务目标 16（蓝）/ 已完成 8（绿）',
+    ].join('\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const root = document.body.appendChild(document.createElement('main'))
+    root.innerHTML = rendered.html
+    const text = root.querySelector('p')!.firstChild!
+    const range = document.createRange()
+    range.setStart(text, 10)
+    range.setEnd(text, 21)
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    selection.addRange(range)
+    const selected = createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: rendered.projection })!
+    selection.removeAllRanges()
+    root.remove()
+    if (selected.selectors.kind === 'image') throw new Error('Expected text selectors')
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: selected.selectors,
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+      crdtSourceRange: selected.selectors.position,
+    })
+
+    expect(selected.target.quote.exact).toBe(' 任务目标 16（蓝）')
+    expect(selected.selectors.position).toEqual({
+      start: source.indexOf(' 任务目标 16（蓝）'),
+      end: source.indexOf(' 任务目标 16（蓝）') + 11,
+    })
+    expect(resolution).toMatchObject({ positionStatus: 'attached', quoteStatus: 'exact' })
+    expect(createMarkdownRenderedTextModel(root, rendered.projection).text).toBe(rendered.renderedText)
+    const annotation: DriveAnnotationThreadDto = {
+      ...anchoredThread(),
+      target: selected.target,
+      anchor: {
+        ...anchoredThread().anchor!,
+        selectors: selected.selectors,
+        positionStatus: resolution.positionStatus,
+        quoteStatus: resolution.quoteStatus,
+        resolvedSourceRange: resolution.sourceRange,
+        resolvedRenderedRange: resolution.renderedRange,
+      },
+    }
+    const result = renderMarkdownAnnotationHtml(rendered.html, [annotation], 'version-1', null, rendered.projection)
+    const located = result.resolved[0].range!
+    const model = createMarkdownRenderedTextModel(root, rendered.projection)
+    expect(createMarkdownRenderedDomRange(root, model.segments, located.start, located.end)?.toString()).toBe(' 任务目标 16（蓝）')
+  })
+
   it('resolves attached annotation ranges without changing rendered markdown html', () => {
     const html = '<p>这是 <strong>重点</strong> 内容</p>'
     const result = renderMarkdownAnnotationHtml(html, [thread()], 'version-1')
