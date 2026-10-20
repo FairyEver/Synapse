@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional, PayloadTooLargeException, UnauthorizedException } from "@nestjs/common"
+import { measureAnnotationStage, recordAnnotationMetrics } from "./drive-annotation-diagnostics"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { parseDriveSearchFilters, filterDriveSearchItems } from "@synapse/shared"
@@ -2618,14 +2619,15 @@ export class DriveService implements OnApplicationBootstrap {
       throw new BadRequestException("该文件暂不支持评论。")
     }
     const liveDocument = this.collaboration?.getLiveDocument(item.id) ?? null
-    const versionId = liveDocument?.checkpointVersionId ?? await this.findCurrentDriveFileVersionId(item)
+    const versionId = liveDocument?.checkpointVersionId ?? await measureAnnotationStage("version.read", () => this.findCurrentDriveFileVersionId(item))
     if (!versionId) throw new NotFoundException("文件版本不存在。")
-    const sourcePreview = liveDocument ? null : await this.readTextPreview(item.storageKey)
+    const sourcePreview = liveDocument ? null : await measureAnnotationStage("document.source", () => this.readTextPreview(item.storageKey!))
     if (sourcePreview?.truncated) throw new PayloadTooLargeException("文件内容过大。")
     const sourceText = liveDocument?.sourceText ?? sourcePreview?.text ?? ""
-    const storedProjection = await this.projections?.load(versionId) ?? null
+    const storedProjection = await measureAnnotationStage("document.projection", async () => this.projections?.load(versionId)) ?? null
     const storedProjectionHasImages = storedProjection?.imageAnchorsVersion === 1
-    const rendered = await renderDriveMarkdownFragment(sourceText, liveDocument
+    recordAnnotationMetrics({ sourceChars: sourceText.length, hasLiveDocument: Number(Boolean(liveDocument)), hasStoredProjection: Number(Boolean(storedProjection)) })
+    const rendered = await measureAnnotationStage("document.render", async () => renderDriveMarkdownFragment(sourceText, liveDocument
       ? {
           projection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1
             ? liveDocument.projection
@@ -2640,15 +2642,16 @@ export class DriveService implements OnApplicationBootstrap {
             ? { source: sourceText, projection: storedProjection }
             : !this.projections
               ? null
-            : await this.projections.loadPrevious({ itemId: item.id, versionId }),
-        })
+            : await measureAnnotationStage("document.previousProjection", () => this.projections!.loadPrevious({ itemId: item.id, versionId })),
+        }))
+    recordAnnotationMetrics({ renderedChars: rendered.renderedText.length })
     if (!storedProjectionHasImages) {
-      await this.projections?.persist({ itemId: item.id, versionId, projection: rendered.projection })
+      await measureAnnotationStage("document.projection", async () => this.projections?.persist({ itemId: item.id, versionId, projection: rendered.projection }))
     }
-    const collaboration = await this.prisma.driveCollaborationDocument.findUnique({
+    const collaboration = await measureAnnotationStage("document.epoch", () => this.prisma.driveCollaborationDocument.findUnique({
       where: { itemId: item.id },
       select: { epoch: true },
-    })
+    }))
     return {
       versionId,
       epoch: liveDocument?.epoch ?? collaboration?.epoch ?? null,

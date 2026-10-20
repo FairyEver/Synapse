@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common"
+import { ConflictException, ForbiddenException, Logger, NotFoundException } from "@nestjs/common"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DriveAnnotationService } from "./drive-annotation.service"
 
@@ -51,6 +51,23 @@ describe("DriveAnnotationService", () => {
     expect(result[0]?.comments[0]?.author.email).toBe("reader-1@example.com")
     expect(result[0]?.comments[0]?.permissions).toEqual({ canEdit: false, canDelete: true })
     expect(result[0]?.permissions.canDelete).toBe(true)
+  })
+
+  it("records share-list database and anchor stages without exposing share access or comment content", async () => {
+    const log = vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined)
+    try {
+      await service.listShareAnnotations({ shareId: "private-share", password: "private-password", cookie: "private-cookie" })
+      expect(log).toHaveBeenCalledWith(expect.objectContaining({
+        operation: "share.list", outcome: "success", metrics: expect.objectContaining({ threadCount: 1 }),
+        stages: expect.objectContaining({
+          access: expect.objectContaining({ calls: 1 }),
+          "threads.read": expect.objectContaining({ calls: 1 }),
+          "document.resolve": expect.objectContaining({ calls: 1 }),
+          "anchor.persist": expect.objectContaining({ calls: 1 }),
+        }),
+      }), expect.any(String))
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-share|private-password|private-cookie|reader-1@example/)
+    } finally { log.mockRestore() }
   })
 
   it("resolves, persists, and reopens a discussion without moving it or changing its comments", async () => {

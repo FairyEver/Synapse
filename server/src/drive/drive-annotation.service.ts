@@ -24,6 +24,7 @@ import { isCommentableMarkdownItem, toDriveAnnotationSelectorsV2 } from "./drive
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.constants"
 import { DriveService } from "./drive.service"
 import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
+import { measureAnnotationStage, measureAnnotationStageSync, recordAnnotationMetrics, traceAnnotationOperation } from "./drive-annotation-diagnostics"
 
 type DriveAnnotationItem = {
   readonly id: string
@@ -126,59 +127,64 @@ export class DriveAnnotationService {
   ) {}
 
   async listOwnerAnnotations(userId: string, itemId: string): Promise<DriveAnnotationThreadDto[]> {
-    const item = await this.requireOwnerItem(userId, itemId)
-    const threads = await this.prisma.driveAnnotationThread.findMany({
-      where: { itemId, deletedAt: null },
-      orderBy: { createdAt: "asc" },
-      include: annotationInclude,
+    return traceAnnotationOperation("owner.list", async () => {
+      const item = await measureAnnotationStage("access", () => this.requireOwnerItem(userId, itemId))
+      const threads = await measureAnnotationStage("threads.read", () => this.prisma.driveAnnotationThread.findMany({
+        where: { itemId, deletedAt: null },
+        orderBy: { createdAt: "asc" },
+        include: annotationInclude,
+      }))
+      recordAnnotationMetrics({ threadCount: threads.length, commentCount: threads.reduce((sum, thread) => sum + thread.comments.length, 0) })
+      return toVisibleThreadDtos(await measureAnnotationStage("anchors.refresh", () => this.refreshThreadAnchors(item, threads)), userId, item.userId)
     })
-    return toVisibleThreadDtos(await this.refreshThreadAnchors(item, threads), userId, item.userId)
   }
 
   async createOwnerAnnotation(userId: string, itemId: string, input: DriveAnnotationCreateInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationThreadDto> {
-    const item = await this.requireOwnerItem(userId, itemId)
-    assertCommentableItem(item)
-    const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.baseVersionId ?? null)
-    const anchor = await this.validateAnchorInput(item, input, baseVersionId)
-    const existing = input.idempotencyKey
-      ? await this.findThreadByIdempotencyKey(item.id, input.idempotencyKey)
-      : null
-    if (existing) return toThreadDto(existing, userId, item.userId)
-    const thread = await this.discussion.mutate(item.id, async (tx) => {
-      await this.drive.validateDiscussionWriteAccess(tx, { kind: "owned", itemId: item.id, actorUserId: userId })
-      const thread = await tx.driveAnnotationThread.create({
-        data: {
-          itemId,
-          baseVersionId,
-          targetKind: input.targetKind,
-          target: input.target as unknown as Prisma.InputJsonValue,
-          anchorStatus: "attached",
-          createdByUserId: userId,
-          sourceShareId: item.sourceShareId ?? null,
-          anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.idempotencyKey) },
-          comments: { create: { body: input.body, createdByUserId: userId, sourceShareId: item.sourceShareId ?? null } },
-        },
-        include: annotationInclude,
-      })
-      return { result: thread, event: makeDriveDiscussionEvent("annotation", "created", item, thread, thread.comments[0] ?? null, input.body) }
-    })
-    await this.recordAnnotationAudit({
-      actorUserId: userId,
-      action: "drive.annotation.create",
-      targetType: "drive.annotationThread",
-      targetId: thread.id,
-      detail: {
+    return traceAnnotationOperation("owner.create", async () => {
+      const item = await measureAnnotationStage("access", () => this.requireOwnerItem(userId, itemId))
+      assertCommentableItem(item)
+      const baseVersionId = await measureAnnotationStage("version.read", () => this.resolveAnnotationBaseVersionId(item, input.baseVersionId ?? null))
+      const anchor = await measureAnnotationStage("anchor.validate", () => this.validateAnchorInput(item, input, baseVersionId))
+      const existing = input.idempotencyKey
+        ? await measureAnnotationStage("idempotency.read", () => this.findThreadByIdempotencyKey(item.id, input.idempotencyKey!))
+        : null
+      if (existing) return toThreadDto(existing, userId, item.userId)
+      const thread = await measureAnnotationStage("write.transaction", () => this.discussion.mutate(item.id, async (tx) => {
+        await measureAnnotationStage("write.access", () => this.drive.validateDiscussionWriteAccess(tx, { kind: "owned", itemId: item.id, actorUserId: userId }))
+        const thread = await measureAnnotationStage("write.save", () => tx.driveAnnotationThread.create({
+          data: {
+            itemId,
+            baseVersionId,
+            targetKind: input.targetKind,
+            target: input.target as unknown as Prisma.InputJsonValue,
+            anchorStatus: "attached",
+            createdByUserId: userId,
+            sourceShareId: item.sourceShareId ?? null,
+            anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.idempotencyKey) },
+            comments: { create: { body: input.body, createdByUserId: userId, sourceShareId: item.sourceShareId ?? null } },
+          },
+          include: annotationInclude,
+        }))
+        return { result: thread, event: makeDriveDiscussionEvent("annotation", "created", item, thread, thread.comments[0] ?? null, input.body) }
+      }))
+      await measureAnnotationStage("audit", () => this.recordAnnotationAudit({
         actorUserId: userId,
-        ownerId: item.userId,
-        itemId: item.id,
-        threadId: thread.id,
-        commentId: thread.comments[0]?.id ?? null,
-        baseVersionId,
-      },
-      ipAddress: auditContext.ipAddress,
+        action: "drive.annotation.create",
+        targetType: "drive.annotationThread",
+        targetId: thread.id,
+        detail: {
+          actorUserId: userId,
+          ownerId: item.userId,
+          itemId: item.id,
+          threadId: thread.id,
+          commentId: thread.comments[0]?.id ?? null,
+          baseVersionId,
+        },
+        ipAddress: auditContext.ipAddress,
+      }))
+      this.notifyAnnotationChanged(item.id)
+      return toThreadDto(thread, userId, item.userId)
     })
-    this.notifyAnnotationChanged(item.id)
-    return toThreadDto(thread, userId, item.userId)
   }
 
   async replyOwnerAnnotation(userId: string, itemId: string, threadId: string, input: DriveAnnotationReplyInput, auditContext: DriveAuditContext = {}): Promise<DriveAnnotationCommentDto> {
@@ -250,29 +256,32 @@ export class DriveAnnotationService {
   }
 
   async deleteOwnerComment(userId: string, itemId: string, commentId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
-    const item = await this.requireOwnerItem(userId, itemId)
-    if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
-    const { comment, thread } = await this.requireCommentThread(item.id, commentId)
-    const deletion = await this.deleteCommentTree(comment, thread)
-    await this.recordAnnotationAudit({
-      actorUserId: userId,
-      action: "drive.annotation.comment.delete",
-      targetType: "drive.annotationComment",
-      targetId: commentId,
-      detail: {
+    return traceAnnotationOperation("owner.delete", async () => {
+      const item = await measureAnnotationStage("access", () => this.requireOwnerItem(userId, itemId))
+      if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
+      const { comment, thread } = await measureAnnotationStage("comment.read", () => this.requireCommentThread(item.id, commentId))
+      const deletion = await measureAnnotationStage("write.transaction", () => this.deleteCommentTree(comment, thread))
+      recordAnnotationMetrics({ deletedCommentCount: deletion.deletedCommentCount })
+      await measureAnnotationStage("audit", () => this.recordAnnotationAudit({
         actorUserId: userId,
-        ownerId: item.userId,
-        itemId: item.id,
-        threadId: comment.threadId,
-        commentId,
-        deletedCommentCount: deletion.deletedCommentCount,
-        threadDeleted: deletion.threadDeleted,
-        baseVersionId: thread.baseVersionId,
-      },
-      ipAddress: auditContext.ipAddress,
+        action: "drive.annotation.comment.delete",
+        targetType: "drive.annotationComment",
+        targetId: commentId,
+        detail: {
+          actorUserId: userId,
+          ownerId: item.userId,
+          itemId: item.id,
+          threadId: comment.threadId,
+          commentId,
+          deletedCommentCount: deletion.deletedCommentCount,
+          threadDeleted: deletion.threadDeleted,
+          baseVersionId: thread.baseVersionId,
+        },
+        ipAddress: auditContext.ipAddress,
+      }))
+      this.notifyAnnotationChanged(item.id)
+      return { ok: true }
     })
-    this.notifyAnnotationChanged(item.id)
-    return { ok: true }
   }
 
   async deleteOwnerThread(userId: string, itemId: string, threadId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
@@ -317,17 +326,20 @@ export class DriveAnnotationService {
     readonly password?: string
     readonly actorUserId?: string | null
   }): Promise<{ readonly itemId: string; readonly canComment: boolean; readonly threads: readonly DriveAnnotationThreadDto[] }> {
-    const { item, canComment } = await this.resolveShareAnnotationAccess(input)
-    const threads = await this.prisma.driveAnnotationThread.findMany({
-      where: { itemId: item.id, deletedAt: null },
-      orderBy: { createdAt: "asc" },
-      include: annotationInclude,
+    return traceAnnotationOperation("share.list", async () => {
+      const { item, canComment } = await measureAnnotationStage("access", () => this.resolveShareAnnotationAccess(input))
+      const threads = await measureAnnotationStage("threads.read", () => this.prisma.driveAnnotationThread.findMany({
+        where: { itemId: item.id, deletedAt: null },
+        orderBy: { createdAt: "asc" },
+        include: annotationInclude,
+      }))
+      recordAnnotationMetrics({ threadCount: threads.length, commentCount: threads.reduce((sum, thread) => sum + thread.comments.length, 0) })
+      return {
+        itemId: item.id,
+        canComment,
+        threads: toVisibleThreadDtos(await measureAnnotationStage("anchors.refresh", () => this.refreshThreadAnchors(item, threads)), input.actorUserId ?? null, item.userId, canComment, true),
+      }
     })
-    return {
-      itemId: item.id,
-      canComment,
-      threads: toVisibleThreadDtos(await this.refreshThreadAnchors(item, threads), input.actorUserId ?? null, item.userId, canComment, true),
-    }
   }
 
   async createShareAnnotation(input: {
@@ -339,49 +351,51 @@ export class DriveAnnotationService {
     readonly body: DriveAnnotationCreateInput
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveAnnotationThreadDto> {
-    const item = await this.requireCommentableShareItem(input)
-    assertCommentableItem(item)
-    const baseVersionId = await this.resolveAnnotationBaseVersionId(item, input.body.baseVersionId ?? null)
-    const anchor = await this.validateAnchorInput(item, input.body, baseVersionId)
-    const existing = input.body.idempotencyKey
-      ? await this.findThreadByIdempotencyKey(item.id, input.body.idempotencyKey)
-      : null
-    if (existing) return toThreadDto(existing, input.actorUserId, item.userId, true, true)
-    const thread = await this.discussion.mutate(item.id, async (tx) => {
-      await this.drive.validateDiscussionWriteAccess(tx, { kind: "share", itemId: item.id, actorUserId: input.actorUserId, shareId: input.shareId, sourceShareId: item.sourceShareId ?? null, password: input.password, cookie: input.cookie })
-      const thread = await tx.driveAnnotationThread.create({
-        data: {
+    return traceAnnotationOperation("share.create", async () => {
+      const item = await measureAnnotationStage("access", () => this.requireCommentableShareItem(input))
+      assertCommentableItem(item)
+      const baseVersionId = await measureAnnotationStage("version.read", () => this.resolveAnnotationBaseVersionId(item, input.body.baseVersionId ?? null))
+      const anchor = await measureAnnotationStage("anchor.validate", () => this.validateAnchorInput(item, input.body, baseVersionId))
+      const existing = input.body.idempotencyKey
+        ? await measureAnnotationStage("idempotency.read", () => this.findThreadByIdempotencyKey(item.id, input.body.idempotencyKey!))
+        : null
+      if (existing) return toThreadDto(existing, input.actorUserId, item.userId, true, true)
+      const thread = await measureAnnotationStage("write.transaction", () => this.discussion.mutate(item.id, async (tx) => {
+        await measureAnnotationStage("write.access", () => this.drive.validateDiscussionWriteAccess(tx, { kind: "share", itemId: item.id, actorUserId: input.actorUserId, shareId: input.shareId, sourceShareId: item.sourceShareId ?? null, password: input.password, cookie: input.cookie }))
+        const thread = await measureAnnotationStage("write.save", () => tx.driveAnnotationThread.create({
+          data: {
+            itemId: item.id,
+            baseVersionId,
+            targetKind: input.body.targetKind,
+            target: input.body.target as unknown as Prisma.InputJsonValue,
+            anchorStatus: "attached",
+            createdByUserId: input.actorUserId,
+            sourceShareId: item.sourceShareId ?? null,
+            anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.body.idempotencyKey) },
+            comments: { create: { body: input.body.body, createdByUserId: input.actorUserId, sourceShareId: item.sourceShareId ?? null } },
+          },
+          include: annotationInclude,
+        }))
+        return { result: thread, event: makeDriveDiscussionEvent("annotation", "created", item, thread, thread.comments[0] ?? null, input.body.body) }
+      }))
+      await measureAnnotationStage("audit", () => this.recordShareAnnotationAudit({
+        actorUserId: input.actorUserId,
+        shareId: input.shareId,
+        action: "drive.share_annotation.create",
+        targetType: "drive.annotationThread",
+        targetId: thread.id,
+        detail: {
+          ownerId: item.userId,
           itemId: item.id,
+          threadId: thread.id,
+          commentId: thread.comments[0]?.id ?? null,
           baseVersionId,
-          targetKind: input.body.targetKind,
-          target: input.body.target as unknown as Prisma.InputJsonValue,
-          anchorStatus: "attached",
-          createdByUserId: input.actorUserId,
-          sourceShareId: item.sourceShareId ?? null,
-          anchor: { create: buildAnchorCreateData(item.id, baseVersionId, anchor.selectors, anchor.resolution, input.body.idempotencyKey) },
-          comments: { create: { body: input.body.body, createdByUserId: input.actorUserId, sourceShareId: item.sourceShareId ?? null } },
         },
-        include: annotationInclude,
-      })
-      return { result: thread, event: makeDriveDiscussionEvent("annotation", "created", item, thread, thread.comments[0] ?? null, input.body.body) }
+        ipAddress: input.auditContext?.ipAddress,
+      }))
+      this.notifyAnnotationChanged(item.id)
+      return toThreadDto(thread, input.actorUserId, item.userId, true, true)
     })
-    await this.recordShareAnnotationAudit({
-      actorUserId: input.actorUserId,
-      shareId: input.shareId,
-      action: "drive.share_annotation.create",
-      targetType: "drive.annotationThread",
-      targetId: thread.id,
-      detail: {
-        ownerId: item.userId,
-        itemId: item.id,
-        threadId: thread.id,
-        commentId: thread.comments[0]?.id ?? null,
-        baseVersionId,
-      },
-      ipAddress: input.auditContext?.ipAddress,
-    })
-    this.notifyAnnotationChanged(item.id)
-    return toThreadDto(thread, input.actorUserId, item.userId, true, true)
   }
 
   async createShareAnnotationByQuote(input: {
@@ -503,29 +517,32 @@ export class DriveAnnotationService {
     readonly commentId: string
     readonly auditContext?: DriveAuditContext
   }): Promise<{ readonly ok: true }> {
-    const item = await this.requireCommentableShareItem(input)
-    const { comment, thread } = await this.requireCommentThread(item.id, input.commentId)
-    if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
-    const deletion = await this.deleteCommentTree(comment, thread)
-    await this.recordShareAnnotationAudit({
-      actorUserId: input.actorUserId,
-      shareId: input.shareId,
-      action: "drive.share_annotation.comment.delete",
-      targetType: "drive.annotationComment",
-      targetId: input.commentId,
-      detail: {
-        ownerId: item.userId,
-        itemId: item.id,
-        threadId: comment.threadId,
-        commentId: input.commentId,
-        deletedCommentCount: deletion.deletedCommentCount,
-        threadDeleted: deletion.threadDeleted,
-        baseVersionId: thread.baseVersionId,
-      },
-      ipAddress: input.auditContext?.ipAddress,
+    return traceAnnotationOperation("share.delete", async () => {
+      const item = await measureAnnotationStage("access", () => this.requireCommentableShareItem(input))
+      const { comment, thread } = await measureAnnotationStage("comment.read", () => this.requireCommentThread(item.id, input.commentId))
+      if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
+      const deletion = await measureAnnotationStage("write.transaction", () => this.deleteCommentTree(comment, thread))
+      recordAnnotationMetrics({ deletedCommentCount: deletion.deletedCommentCount })
+      await measureAnnotationStage("audit", () => this.recordShareAnnotationAudit({
+        actorUserId: input.actorUserId,
+        shareId: input.shareId,
+        action: "drive.share_annotation.comment.delete",
+        targetType: "drive.annotationComment",
+        targetId: input.commentId,
+        detail: {
+          ownerId: item.userId,
+          itemId: item.id,
+          threadId: comment.threadId,
+          commentId: input.commentId,
+          deletedCommentCount: deletion.deletedCommentCount,
+          threadDeleted: deletion.threadDeleted,
+          baseVersionId: thread.baseVersionId,
+        },
+        ipAddress: input.auditContext?.ipAddress,
+      }))
+      this.notifyAnnotationChanged(item.id)
+      return { ok: true }
     })
-    this.notifyAnnotationChanged(item.id)
-    return { ok: true }
   }
 
   async deleteShareThread(input: {
@@ -834,7 +851,7 @@ export class DriveAnnotationService {
         },
       }
     }
-    const document = await resolver.call(this.drive, item)
+    const document = await measureAnnotationStage("document.resolve", () => resolver.call(this.drive, item))
     if (document.versionId !== baseVersionId || (epoch && document.epoch && epoch !== document.epoch)) {
       this.logger.warn({
         currentEpoch: document.epoch,
@@ -889,7 +906,7 @@ export class DriveAnnotationService {
     if (typeof resolver !== "function" || threads.length === 0) return [...threads]
     let document: Awaited<ReturnType<DriveService["resolveAnnotationDocument"]>>
     try {
-      document = await resolver.call(this.drive, item)
+      document = await measureAnnotationStage("document.resolve", () => resolver.call(this.drive, item))
     } catch (error) {
       this.logger.warn({
         errorName: error instanceof Error ? error.name : typeof error,
@@ -914,22 +931,23 @@ export class DriveAnnotationService {
       diffGroups.set(entry.thread.baseVersionId, group)
     }
     await Promise.all([...diffGroups.entries()].map(async ([baseVersionId, entries]) => {
-      const ranges = await this.drive.resolveAnnotationDiffRanges(
+      const ranges = await measureAnnotationStage("diff.map", () => this.drive.resolveAnnotationDiffRanges(
         item.id,
         baseVersionId,
         document.sourceText,
         entries.map((entry) => entry.selectors.position),
-      )
+      ))
       entries.forEach((entry, index) => {
         diffSourceRangeByThreadId.set(entry.thread.id, ranges[index] ?? null)
       })
     }))
+    recordAnnotationMetrics({ diffVersionCount: diffGroups.size, anchorCount: prepared.length })
     return Promise.all(prepared.map(async ({ thread, selectors }) => {
       const diffSourceRange = diffSourceRangeByThreadId.get(thread.id) ?? null
       const crdtSourceRange = selectors.crdt
         ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
         : null
-      const resolution = selectors.kind === "image"
+      const resolution = measureAnnotationStageSync("anchor.resolve", () => selectors.kind === "image"
         ? resolveDriveImageAnnotationAnchor({
             selectors,
             projection: document.projection,
@@ -943,8 +961,8 @@ export class DriveAnnotationService {
             renderedText: document.renderedText,
             crdtSourceRange,
             diffSourceRange,
-          })
-      const anchor = await this.prisma.driveAnnotationAnchor.upsert({
+          }))
+      const anchor = await measureAnnotationStage("anchor.persist", () => this.prisma.driveAnnotationAnchor.upsert({
         where: { threadId: thread.id },
         create: { ...buildAnchorCreateData(thread.itemId, thread.baseVersionId, selectors, resolution), threadId: thread.id },
         update: {
@@ -958,10 +976,10 @@ export class DriveAnnotationService {
           resolvedRenderedEnd: resolution.renderedRange?.end ?? null,
           confidence: resolution.confidence,
         },
-      })
+      }))
       const legacyStatus = resolution.positionStatus === "attached" ? "attached" : "orphaned"
       if (thread.anchorStatus !== legacyStatus) {
-        await this.prisma.driveAnnotationThread.update({ where: { id: thread.id }, data: { anchorStatus: legacyStatus } })
+        await measureAnnotationStage("thread.persist", () => this.prisma.driveAnnotationThread.update({ where: { id: thread.id }, data: { anchorStatus: legacyStatus } }))
       }
       return { ...thread, anchorStatus: legacyStatus, anchor }
     }))

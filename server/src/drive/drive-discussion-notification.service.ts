@@ -6,6 +6,7 @@ import { NotificationService } from "../notifications/notification.service"
 import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.constants"
 import { buildDriveDiscussionNotificationCopy, collectDriveDiscussionRecipients } from "./drive-discussion-notification-copy"
 import type { DriveDiscussionDeliveryRef, DriveDiscussionEvent } from "./drive-discussion-notification.types"
+import { measureAnnotationStage } from "./drive-annotation-diagnostics"
 
 @Injectable()
 export class DriveDiscussionNotificationService {
@@ -18,9 +19,9 @@ export class DriveDiscussionNotificationService {
     for (let attempt = 0; ; attempt += 1) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT "id" FROM "DriveItem" WHERE "id" = ${itemId}
+          const rows = await measureAnnotationStage("transaction.lock", () => tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT "id" FROM "DriveItem" WHERE "id" = ${itemId}
             AND "deletedAt" IS NULL AND "storageStatus" = ${DRIVE_STORAGE_STATUS.active}
-            AND "lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active} FOR UPDATE`)
+            AND "lifecycleStatus" = ${DRIVE_ITEM_LIFECYCLE_STATUS.active} FOR UPDATE`))
           if (!rows.length) throw new NotFoundException("文档不存在。")
           return work(tx)
         })
@@ -34,7 +35,7 @@ export class DriveDiscussionNotificationService {
   async mutate<T>(itemId: string, work: (tx: Prisma.TransactionClient) => Promise<{ result: T; event: DriveDiscussionEvent }>): Promise<T> {
     const { result, refs } = await this.withItemLock(itemId, async (tx) => {
       const mutation = await work(tx)
-      return { result: mutation.result, refs: await this.enqueue(tx, mutation.event) }
+      return { result: mutation.result, refs: await measureAnnotationStage("notifications.enqueue", () => this.enqueue(tx, mutation.event)) }
     })
     if (refs.length && this.sink) {
       void this.sink(refs.map((r) => r.notificationId), new Date()).catch(() => {
