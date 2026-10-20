@@ -12,7 +12,7 @@ describe("AdminAuthGuard", () => {
   it("accepts only an active admin session cookie", async () => {
     const auth = { verifySession: vi.fn().mockResolvedValue({ status: "active", session: { sessionId: "session-1" } }) }
     const guard = new AdminAuthGuard(auth as never)
-    const request = { method: "GET", cookies: { synapse_admin_session: "token" }, ip: "127.0.0.1" }
+    const request = { method: "GET", cookies: { synapse_admin_session: "token" }, ip: "127.0.0.1", get: () => undefined }
 
     await expect(guard.canActivate(contextFor(request))).resolves.toBe(true)
     expect(request).toHaveProperty("admin.sessionId", "session-1")
@@ -21,7 +21,7 @@ describe("AdminAuthGuard", () => {
   it("rejects ordinary-user and legacy cookies", async () => {
     const auth = { recordRejectedSession: vi.fn() }
     const guard = new AdminAuthGuard(auth as never)
-    const request = { method: "GET", cookies: { synapse_user_session: "user", synapse_admin: "legacy" }, ip: "127.0.0.1" }
+    const request = { method: "GET", cookies: { synapse_user_session: "user", synapse_admin: "legacy" }, ip: "127.0.0.1", get: () => undefined }
 
     await expect(guard.canActivate(contextFor(request))).rejects.toBeInstanceOf(UnauthorizedException)
   })
