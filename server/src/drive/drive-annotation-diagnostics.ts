@@ -6,11 +6,12 @@ import { Logger } from "@nestjs/common"
 type AnnotationOperation = "owner.list" | "share.list" | "owner.create" | "share.create" | "owner.delete" | "share.delete"
 type AnnotationStage = "access" | "threads.read" | "version.read" | "anchor.validate" | "idempotency.read"
   | "write.transaction" | "audit" | "comment.read" | "anchors.refresh" | "document.resolve"
-  | "document.source" | "document.projection" | "document.previousProjection" | "document.render" | "document.epoch"
+  | "document.source" | "document.projection" | "document.projectionRevision" | "document.previousProjection" | "document.render" | "document.epoch"
   | "diff.map" | "anchor.resolve" | "anchor.persist" | "thread.persist"
   | "transaction.lock" | "notifications.enqueue" | "write.access" | "write.save"
 type AnnotationMetric = "threadCount" | "commentCount" | "sourceChars" | "renderedChars" | "diffVersionCount"
   | "hasLiveDocument" | "hasStoredProjection" | "anchorCount" | "deletedCommentCount"
+  | "documentCacheHit" | "documentComputationShared" | "anchorCacheHitCount" | "anchorComputationSharedCount" | "anchorWriteCount"
 type StageTiming = { calls: number; failures: number; totalWorkMs: number; maxMs: number }
 type AnnotationTrace = { stages: Partial<Record<AnnotationStage, StageTiming>>; metrics: Partial<Record<AnnotationMetric, number>> }
 

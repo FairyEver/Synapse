@@ -11,7 +11,7 @@ describe("DriveAnnotationService", () => {
     mutate: async (_id: string, work: (tx: unknown) => Promise<{ result: unknown }>) => (await prisma.$transaction(work) as { result: unknown }).result,
     withItemLock: async (_id: string, work: (tx: unknown) => Promise<unknown>) => prisma.$transaction(work),
   }
-  const service = new DriveAnnotationService(prisma as never, drive as never, discussion as never, auditLog as never, collaborationBus as never)
+  let service: DriveAnnotationService
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -31,6 +31,60 @@ describe("DriveAnnotationService", () => {
     auditLog.record.mockResolvedValue(undefined)
     drive.resolveShareAnnotationAccess.mockResolvedValue({ item: markdownItem(), canComment: true })
     drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note"))
+    service = new DriveAnnotationService(prisma as never, drive as never, discussion as never, auditLog as never, collaborationBus as never)
+  })
+
+  it("keeps unchanged anchors read-only and still returns fresh comments and caller permissions", async () => {
+    const stored = { ...threadRecord(), anchor: { ...anchorRecord(), confidence: 0.9 } }
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([stored])
+    await service.listShareAnnotations({ shareId: "share-1", actorUserId: "reader-1" })
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([{ ...stored, comments: [commentRecord({ body: "new body" })] }])
+    const second = await service.listShareAnnotations({ shareId: "share-1", actorUserId: "owner-1" })
+    expect(second[0]?.comments[0]?.body).toBe("new body")
+    expect(second[0]?.comments[0]?.permissions.canEdit).toBe(false)
+    expect(prisma.driveAnnotationAnchor.upsert).not.toHaveBeenCalled()
+    expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledTimes(2)
+    drive.resolveShareAnnotationAccess.mockRejectedValueOnce(new ForbiddenException("revoked"))
+    await expect(service.listShareAnnotations({ shareId: "share-1" })).rejects.toThrow("revoked")
+  })
+
+  it("invalidates anchor results on content changes within the same checkpoint version", async () => {
+    const first = await service.listOwnerAnnotations("owner-1", "item-1")
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Before Note"))
+    prisma.driveAnnotationAnchor.upsert.mockImplementation(async ({ create }) => create)
+    const second = await service.listOwnerAnnotations("owner-1", "item-1")
+    expect(first[0]?.anchor?.resolvedRenderedRange?.start).toBe(0)
+    expect(second[0]?.anchor?.resolvedRenderedRange?.start).toBe(7)
+  })
+
+  it("does not share diff evidence with quote-only anchors that have identical selectors", async () => {
+    const base = { ...threadRecord({ baseVersionId: "old-version" }), anchor: anchorRecord() }
+    const sourceAware = { ...base, id: "source-aware", target: { ...base.target, source: { startOffset: 0, endOffset: 4, lineStart: 1, lineEnd: 1 } } }
+    const quoteOnly = { ...base, id: "quote-only" }
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([sourceAware, quoteOnly])
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note Note"))
+    drive.resolveAnnotationDiffRanges.mockResolvedValue([{ start: 0, end: 4 }])
+    prisma.driveAnnotationAnchor.upsert.mockImplementation(async ({ create }) => create)
+
+    const mixed = await service.listOwnerAnnotations("owner-1", "item-1")
+    expect(mixed.find((thread) => thread.id === "source-aware")?.anchor?.positionStatus).toBe("attached")
+    expect(mixed.find((thread) => thread.id === "quote-only")?.anchor?.positionStatus).toBe("ambiguous")
+    const cached = await service.listOwnerAnnotations("owner-1", "item-1")
+    expect(cached.find((thread) => thread.id === "quote-only")?.anchor?.resolvedRenderedRange).toBeNull()
+  })
+
+  it("shares concurrent anchor persistence and retries failed writes", async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    prisma.driveAnnotationAnchor.upsert.mockImplementation(async () => { await gate; return anchorRecord() })
+    const first = service.listOwnerAnnotations("owner-1", "item-1")
+    const second = service.listOwnerAnnotations("owner-1", "item-1")
+    await vi.waitFor(() => expect(prisma.driveAnnotationAnchor.upsert).toHaveBeenCalledTimes(1))
+    release()
+    await Promise.all([first, second])
+    prisma.driveAnnotationAnchor.upsert.mockRejectedValueOnce(new Error("write failed"))
+    await expect(service.listOwnerAnnotations("owner-1", "item-1")).rejects.toThrow("write failed")
+    await expect(service.listOwnerAnnotations("owner-1", "item-1")).resolves.toHaveLength(1)
   })
 
   it("lists visible owner annotations with author metadata and permissions", async () => {

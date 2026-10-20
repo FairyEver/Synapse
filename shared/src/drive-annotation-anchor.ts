@@ -1,3 +1,4 @@
+import { getDriveAnnotationTextIndex } from "./drive-annotation-text-index.js"
 import type {
   DriveAnnotationImageSelectorsV2,
   DriveAnnotationPositionStatus,
@@ -54,11 +55,10 @@ export function resolveDriveAnnotationAnchor(input: {
     relationshipIndicatesDeletion = true
   }
 
-  const semanticCandidates = semanticCandidateRanges(input.selectors, projection)
+  const semanticCandidates = semanticCandidateRanges(input.selectors, projection, textIndex(input))
   if (semanticCandidates.requiresExactMatch) {
-    const matches = semanticCandidates.candidates.filter((candidate) => sliceByCodePoints(
-      input.renderedText, candidate.renderedRange.start, candidate.renderedRange.end,
-    ) === exact)
+    const matches = semanticCandidates.candidates.filter((candidate) =>
+      textIndex(input).slice(candidate.renderedRange.start, candidate.renderedRange.end) === exact)
     if (matches.length === 1) return classifyCandidate(input, matches[0], 0.97, false)!
     if (matches.length > 1) return {
       positionStatus: "ambiguous",
@@ -89,16 +89,12 @@ export function resolveDriveAnnotationAnchor(input: {
     relationshipIndicatesDeletion = true
   }
 
-  const exactMatches = findAllCodePointMatches(input.renderedText, exact)
+  const exactMatches = textIndex(input).matches(exact)
   if (exactMatches.length === 1) {
     return withSourceRange(projection, exactMatches[0], "attached", "exact", 0.9)
   }
   if (exactMatches.length > 1) {
-    const ranked = exactMatches
-      .map((range) => ({ range, score: scoreQuoteCandidate(input, range) }))
-      .sort((left, right) => right.score - left.score)
-    const best = ranked[0]
-    const second = ranked[1]
+    const [best, second] = bestQuoteCandidates(input, exactMatches)
     if (best && best.score >= 4 && (!second || best.score - second.score >= 2)) {
       return withSourceRange(projection, best.range, "attached", "exact", Math.min(0.89, 0.72 + best.score / 40))
     }
@@ -112,10 +108,7 @@ export function resolveDriveAnnotationAnchor(input: {
   }
 
   const contextualMatches = contextualCandidateRanges(input)
-    .map((range) => ({ range, score: scoreQuoteCandidate(input, range) }))
-    .sort((left, right) => right.score - left.score)
-  const contextualBest = contextualMatches[0]
-  const contextualSecond = contextualMatches[1]
+  const [contextualBest, contextualSecond] = bestQuoteCandidates(input, contextualMatches)
   if (contextualBest && contextualBest.score >= 10
     && (!contextualSecond || contextualBest.score - contextualSecond.score >= 2)) {
     const sourceRange = renderedToSourceRange(projection, contextualBest.range)
@@ -205,11 +198,11 @@ function contextualCandidateRanges(
 ): DriveAnnotationTextPositionSelector[] {
   const { prefix, suffix, exact } = input.selectors.quote
   if (!prefix && !suffix) return []
-  const text = Array.from(input.renderedText)
+  const text = textIndex(input)
   const exactLength = codePointCount(exact)
   const maximumCandidateLength = Math.max(exactLength * 4, exactLength + 256)
-  const prefixMatches = prefix ? findAllCodePointMatches(input.renderedText, prefix) : []
-  const suffixMatches = suffix ? findAllCodePointMatches(input.renderedText, suffix) : []
+  const prefixMatches = prefix ? textIndex(input).matches(prefix) : []
+  const suffixMatches = suffix ? textIndex(input).matches(suffix) : []
   const candidates: DriveAnnotationTextPositionSelector[] = []
 
   if (prefix && suffix) {
@@ -253,7 +246,7 @@ function classifyCandidate(
   allowRelationshipEvidence: boolean,
   minimumSimilarity = 0.35,
 ): DriveAnnotationAnchorResolution | null {
-  const selected = sliceByCodePoints(input.renderedText, candidate.renderedRange.start, candidate.renderedRange.end)
+  const selected = textIndex(input).slice(candidate.renderedRange.start, candidate.renderedRange.end)
   if (selected === input.selectors.quote.exact) {
     return { positionStatus: "attached", quoteStatus: "exact", ...candidate, confidence }
   }
@@ -279,11 +272,11 @@ function resolveNearbyModifiedCandidate(
 ): DriveAnnotationAnchorResolution | null {
   const exactLength = codePointCount(input.selectors.quote.exact)
   if (exactLength < 6 || exactLength > 128) return null
-  const renderedLength = codePointCount(input.renderedText)
+  const renderedLength = textIndex(input).length
   const windowStart = Math.max(0, origin.start - 96)
   const windowEnd = Math.min(renderedLength, origin.end + 96)
   const match = closestApproximateSubstring(
-    sliceByCodePoints(input.renderedText, windowStart, windowEnd),
+    textIndex(input).slice(windowStart, windowEnd),
     input.selectors.quote.exact,
     { start: origin.start - windowStart, end: origin.end - windowStart },
   )
@@ -291,7 +284,7 @@ function resolveNearbyModifiedCandidate(
   const renderedRange = { start: windowStart + match.start, end: windowStart + match.end }
   const sourceRange = renderedToSourceRange(input.projection!, renderedRange)
   if (!sourceRange) return null
-  const selected = sliceByCodePoints(input.renderedText, renderedRange.start, renderedRange.end)
+  const selected = textIndex(input).slice(renderedRange.start, renderedRange.end)
   return {
     positionStatus: "attached",
     quoteStatus: selected === input.selectors.quote.exact ? "exact" : "modified",
@@ -308,16 +301,8 @@ function preferNearbyResolution(
 ): DriveAnnotationAnchorResolution {
   if (direct?.positionStatus !== "attached" || !direct.renderedRange || !nearby.renderedRange) return nearby
   const exact = Array.from(input.selectors.quote.exact)
-  const directScore = editSimilarity(exact, Array.from(sliceByCodePoints(
-    input.renderedText,
-    direct.renderedRange.start,
-    direct.renderedRange.end,
-  )))
-  const nearbyScore = editSimilarity(exact, Array.from(sliceByCodePoints(
-    input.renderedText,
-    nearby.renderedRange.start,
-    nearby.renderedRange.end,
-  )))
+  const directScore = editSimilarity(exact, Array.from(textIndex(input).slice(direct.renderedRange.start, direct.renderedRange.end)))
+  const nearbyScore = editSimilarity(exact, Array.from(textIndex(input).slice(nearby.renderedRange.start, nearby.renderedRange.end)))
   return nearbyScore - directScore >= 0.08 ? nearby : direct
 }
 
@@ -424,21 +409,22 @@ function preservesQuoteContext(
 ): boolean {
   const { prefix, suffix } = input.selectors.quote
   if (!prefix && !suffix) return false
-  const prefixMatches = !prefix || sliceByCodePoints(input.renderedText, Math.max(0, range.start - codePointCount(prefix)), range.start) === prefix
-  const suffixMatches = !suffix || sliceByCodePoints(input.renderedText, range.end, range.end + codePointCount(suffix)) === suffix
+  const prefixMatches = !prefix || textIndex(input).slice(Math.max(0, range.start - codePointCount(prefix)), range.start) === prefix
+  const suffixMatches = !suffix || textIndex(input).slice(range.end, range.end + codePointCount(suffix)) === suffix
   return prefixMatches && suffixMatches
 }
 
 function semanticCandidateRanges(
   selectors: DriveAnnotationTextSelectorsV2,
   projection: DriveMarkdownProjectionDto,
+  index: ReturnType<typeof getDriveAnnotationTextIndex>,
 ): {
   readonly candidates: Array<{ readonly sourceRange: DriveAnnotationTextPositionSelector; readonly renderedRange: DriveAnnotationTextPositionSelector }>
   readonly requiresExactMatch: boolean
 } {
   const semantic = selectors.semantic
   if (!semantic) return { candidates: [], requiresExactMatch: false }
-  const block = projection.blocks.find((candidate) => candidate.blockId === semantic.blockId)
+  const block = index.blockById(semantic.blockId)
   if (!block) return { candidates: [], requiresExactMatch: false }
   const localRanges: DriveAnnotationTextPositionSelector[] = [semantic]
   const carriageReturns = selectors.renderedTextNormalized ? [] : block.authoredCarriageReturnOffsets ?? []
@@ -518,33 +504,40 @@ function scoreQuoteCandidate(
   const prefix = input.selectors.quote.prefix
   const suffix = input.selectors.quote.suffix
   if (prefix) {
-    const before = sliceByCodePoints(input.renderedText, Math.max(0, range.start - codePointCount(prefix)), range.start)
+    const before = textIndex(input).slice(Math.max(0, range.start - codePointCount(prefix)), range.start)
     if (before === prefix) score += 6
   }
   if (suffix) {
-    const after = sliceByCodePoints(input.renderedText, range.end, range.end + codePointCount(suffix))
+    const after = textIndex(input).slice(range.end, range.end + codePointCount(suffix))
     if (after === suffix) score += 6
   }
-  const block = input.projection?.blocks.find((candidate) => candidate.renderedStart <= range.start && candidate.renderedEnd >= range.end)
+  const block = textIndex(input).blockForRange(range)
   if (block && input.selectors.semantic?.blockType === block.type) score += 2
   if (block && sameTextArray(input.selectors.semantic?.headingPath ?? [], block.headingPath)) score += 3
   const origin = input.selectors.renderedPosition?.start ?? input.selectors.position.start
   const distance = Math.abs(range.start - origin)
-  score += Math.max(0, 2 - distance / Math.max(1, codePointCount(input.renderedText)))
+  score += Math.max(0, 2 - distance / Math.max(1, textIndex(input).length))
   return score
 }
 
-function findAllCodePointMatches(value: string, exact: string): DriveAnnotationTextPositionSelector[] {
-  if (!exact) return []
-  const valuePoints = Array.from(value)
-  const exactPoints = Array.from(exact)
-  const matches: DriveAnnotationTextPositionSelector[] = []
-  for (let start = 0; start <= valuePoints.length - exactPoints.length; start += 1) {
-    if (exactPoints.every((point, index) => valuePoints[start + index] === point)) {
-      matches.push({ start, end: start + exactPoints.length })
-    }
+function textIndex(input: Parameters<typeof resolveDriveAnnotationAnchor>[0]) {
+  return getDriveAnnotationTextIndex(input.renderedText, input.projection)
+}
+
+function bestQuoteCandidates(
+  input: Parameters<typeof resolveDriveAnnotationAnchor>[0],
+  ranges: readonly DriveAnnotationTextPositionSelector[],
+) {
+  type Candidate = { readonly range: DriveAnnotationTextPositionSelector; readonly score: number }
+  let best: Candidate | undefined
+  let second: Candidate | undefined
+  for (const range of ranges) {
+    const candidate = { range, score: scoreQuoteCandidate(input, range) }
+    // Strict comparison preserves the original stable-sort order for tied scores.
+    if (!best || candidate.score > best.score) { second = best; best = candidate }
+    else if (!second || candidate.score > second.score) second = candidate
   }
-  return matches
+  return [best, second] as const
 }
 
 function sameTextArray(left: readonly string[], right: readonly string[]): boolean {

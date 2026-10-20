@@ -946,7 +946,7 @@ model DriveMarkdownProjection {
   storageKey    String           @unique
   sha256        String           @db.VarChar(64)
   sourceSha256  String           @db.VarChar(64)
-  parserVersion String           @db.VarChar(32)
+  parserVersion String           @db.VarChar(128)
   schemaVersion Int              @default(1)
   status        String           @default("ready") @db.VarChar(16)
   createdAt     DateTime         @default(now())

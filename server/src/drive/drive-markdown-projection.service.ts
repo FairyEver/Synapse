@@ -16,6 +16,15 @@ export class DriveMarkdownProjectionService {
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
   ) {}
 
+  async getRevision(versionId: string): Promise<string | null> {
+    const record = await this.prisma.driveMarkdownProjection.findUnique({
+      where: { versionId },
+      select: { sha256: true, status: true, parserVersion: true, schemaVersion: true },
+    })
+    return record?.status === "ready" && record.parserVersion === DRIVE_MARKDOWN_PARSER_VERSION
+      && record.schemaVersion === DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION ? record.sha256 : null
+  }
+
   async load(versionId: string): Promise<DriveMarkdownProjectionDto | null> {
     const record = await this.prisma.driveMarkdownProjection.findUnique({ where: { versionId } })
     if (!record || record.status !== "ready") return null

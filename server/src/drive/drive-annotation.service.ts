@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { DriveDiscussionNotificationService } from "./drive-discussion-notification.service"
 import { makeDriveDiscussionEvent } from "./drive-discussion-notification.types"
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
@@ -16,7 +17,7 @@ import type {
   DriveAnnotationTextSelectorsV2,
   DriveLinkAnnotationTargetInput,
 } from "@synapse/shared"
-import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor } from "@synapse/shared"
+import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor, type DriveAnnotationAnchorResolution } from "@synapse/shared"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
@@ -25,6 +26,7 @@ import { DRIVE_ITEM_LIFECYCLE_STATUS, DRIVE_STORAGE_STATUS } from "./drive.const
 import { DriveService } from "./drive.service"
 import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
 import { measureAnnotationStage, measureAnnotationStageSync, recordAnnotationMetrics, traceAnnotationOperation } from "./drive-annotation-diagnostics"
+import { AnnotationComputationCache, shareAnnotationComputation } from "./drive-annotation-cache"
 
 type DriveAnnotationItem = {
   readonly id: string
@@ -117,6 +119,13 @@ const annotationNotificationInclude = {
 @Injectable()
 export class DriveAnnotationService {
   private readonly logger = new Logger(DriveAnnotationService.name)
+  private readonly anchorResolutions = new AnnotationComputationCache<DriveAnnotationAnchorResolution>({
+    maxEntries: 2048, maxBytes: 2 * 1024 * 1024, sizeOf: () => 512,
+  })
+  private readonly annotationDiffs = new AnnotationComputationCache<Array<DriveAnnotationTextPositionSelector | null>>({
+    maxEntries: 32, maxBytes: 2 * 1024 * 1024, sizeOf: (ranges) => ranges.length * 32,
+  })
+  private readonly anchorWrites = new Map<string, Promise<AnnotationAnchorRecord>>()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -914,16 +923,24 @@ export class DriveAnnotationService {
       }, "Drive annotation anchor document resolution failed")
       return threads.map((thread) => ({ ...thread, anchor: unavailableAnchorRecord(thread) }))
     }
+    // Content and projection identity include deletions within the same collaboration checkpoint.
+    const documentKey = createHash("sha256").update(document.sourceText).update("\0")
+      .update(document.renderedText).update(JSON.stringify(document.projection)).update("anchor-resolver-v1").digest("hex")
     const prepared = threads.map((thread) => {
       const selectors = parseAnchorSelectors(thread.anchor?.selectors) ?? toDriveAnnotationSelectorsV2(thread.target as DriveAnnotationTargetDto)
       const target = thread.target as DriveAnnotationTargetDto
       const hasReliableSourceRange = Boolean(selectors.crdt || selectors.semantic || target.source)
-      return { thread, selectors, hasReliableSourceRange }
+      const crdtSourceRange = selectors.crdt ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt) : null
+      const resolutionKey = createHash("sha256").update(JSON.stringify([
+        item.id, documentKey, document.versionId, document.epoch, thread.baseVersionId, selectors, crdtSourceRange, hasReliableSourceRange,
+      ])).digest("hex")
+      const cachedResolution = this.anchorResolutions.peek(resolutionKey)
+      return { thread, selectors, hasReliableSourceRange, crdtSourceRange, resolutionKey, cachedResolution }
     })
     const diffSourceRangeByThreadId = new Map<string, DriveAnnotationTextPositionSelector | null>()
     const diffGroups = new Map<string, typeof prepared>()
     for (const entry of prepared) {
-      if (!entry.thread.baseVersionId
+      if (entry.cachedResolution || !entry.thread.baseVersionId
         || entry.thread.baseVersionId === document.versionId
         || !entry.hasReliableSourceRange) continue
       const group = diffGroups.get(entry.thread.baseVersionId) ?? []
@@ -931,23 +948,23 @@ export class DriveAnnotationService {
       diffGroups.set(entry.thread.baseVersionId, group)
     }
     await Promise.all([...diffGroups.entries()].map(async ([baseVersionId, entries]) => {
-      const ranges = await measureAnnotationStage("diff.map", () => this.drive.resolveAnnotationDiffRanges(
-        item.id,
-        baseVersionId,
-        document.sourceText,
-        entries.map((entry) => entry.selectors.position),
-      ))
+      const positions = entries.map((entry) => entry.selectors.position)
+      const key = JSON.stringify([item.id, documentKey, baseVersionId, positions])
+      const { value: ranges } = await this.annotationDiffs.get(key, () => measureAnnotationStage("diff.map", () => this.drive.resolveAnnotationDiffRanges(
+        item.id, baseVersionId, document.sourceText, positions,
+      )))
       entries.forEach((entry, index) => {
         diffSourceRangeByThreadId.set(entry.thread.id, ranges[index] ?? null)
       })
     }))
     recordAnnotationMetrics({ diffVersionCount: diffGroups.size, anchorCount: prepared.length })
-    return Promise.all(prepared.map(async ({ thread, selectors }) => {
+    let cacheHits = 0
+    let sharedComputations = 0
+    let writes = 0
+    const refreshed = await Promise.all(prepared.map(async ({ thread, selectors, crdtSourceRange, resolutionKey, cachedResolution }) => {
       const diffSourceRange = diffSourceRangeByThreadId.get(thread.id) ?? null
-      const crdtSourceRange = selectors.crdt
-        ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
-        : null
-      const resolution = measureAnnotationStageSync("anchor.resolve", () => selectors.kind === "image"
+      const cached = cachedResolution ? { value: cachedResolution, status: "hit" as const }
+        : await this.anchorResolutions.get(resolutionKey, async () => measureAnnotationStageSync("anchor.resolve", () => selectors.kind === "image"
         ? resolveDriveImageAnnotationAnchor({
             selectors,
             projection: document.projection,
@@ -961,28 +978,31 @@ export class DriveAnnotationService {
             renderedText: document.renderedText,
             crdtSourceRange,
             diffSourceRange,
-          }))
-      const anchor = await measureAnnotationStage("anchor.persist", () => this.prisma.driveAnnotationAnchor.upsert({
-        where: { threadId: thread.id },
-        create: { ...buildAnchorCreateData(thread.itemId, thread.baseVersionId, selectors, resolution), threadId: thread.id },
-        update: {
-          selectors: selectors as unknown as Prisma.InputJsonValue,
-          positionStatus: resolution.positionStatus,
-          quoteStatus: resolution.quoteStatus,
-          lastResolvedVersionId: document.versionId,
-          resolvedSourceStart: resolution.sourceRange?.start ?? null,
-          resolvedSourceEnd: resolution.sourceRange?.end ?? null,
-          resolvedRenderedStart: resolution.renderedRange?.start ?? null,
-          resolvedRenderedEnd: resolution.renderedRange?.end ?? null,
-          confidence: resolution.confidence,
-        },
-      }))
+          })))
+      cacheHits += Number(cached.status === "hit")
+      sharedComputations += Number(cached.status === "shared")
+      const resolution = cached.value
+      const update = anchorRefreshData(selectors, document.versionId, resolution)
+      let anchor = thread.anchor
+      if (!anchor || !sameAnchorRefreshData(anchor, update)) {
+        const writeKey = createHash("sha256").update(JSON.stringify([thread.id, update])).digest("hex")
+        const persisted = await measureAnnotationStage("anchor.persist", () => shareAnnotationComputation(this.anchorWrites, writeKey,
+          () => this.prisma.driveAnnotationAnchor.upsert({
+            where: { threadId: thread.id },
+            create: { ...buildAnchorCreateData(thread.itemId, thread.baseVersionId, selectors, resolution), threadId: thread.id },
+            update,
+          }), 2048))
+        anchor = persisted.value
+        writes += Number(persisted.status === "computed")
+      }
       const legacyStatus = resolution.positionStatus === "attached" ? "attached" : "orphaned"
       if (thread.anchorStatus !== legacyStatus) {
         await measureAnnotationStage("thread.persist", () => this.prisma.driveAnnotationThread.update({ where: { id: thread.id }, data: { anchorStatus: legacyStatus } }))
       }
       return { ...thread, anchorStatus: legacyStatus, anchor }
     }))
+    recordAnnotationMetrics({ anchorCacheHitCount: cacheHits, anchorComputationSharedCount: sharedComputations, anchorWriteCount: writes })
+    return refreshed
   }
 
   private async requireComment(itemId: string, commentId: string) {
@@ -1186,6 +1206,26 @@ function toAnchorDto(record: AnnotationThreadRecord): DriveAnnotationAnchorDto |
     confidence: anchor.confidence,
     lastResolvedVersionId: anchor.lastResolvedVersionId,
   }
+}
+
+function anchorRefreshData(selectors: DriveAnnotationSelectorsV2, versionId: string, resolution: DriveAnnotationAnchorResolution) {
+  return {
+    selectors: selectors as unknown as Prisma.InputJsonValue,
+    positionStatus: resolution.positionStatus, quoteStatus: resolution.quoteStatus,
+    lastResolvedVersionId: versionId,
+    resolvedSourceStart: resolution.sourceRange?.start ?? null, resolvedSourceEnd: resolution.sourceRange?.end ?? null,
+    resolvedRenderedStart: resolution.renderedRange?.start ?? null, resolvedRenderedEnd: resolution.renderedRange?.end ?? null,
+    confidence: resolution.confidence,
+  }
+}
+
+function sameAnchorRefreshData(record: AnnotationAnchorRecord, update: ReturnType<typeof anchorRefreshData>): boolean {
+  return JSON.stringify(record.selectors) === JSON.stringify(update.selectors)
+    && record.positionStatus === update.positionStatus && record.quoteStatus === update.quoteStatus
+    && record.lastResolvedVersionId === update.lastResolvedVersionId
+    && record.resolvedSourceStart === update.resolvedSourceStart && record.resolvedSourceEnd === update.resolvedSourceEnd
+    && record.resolvedRenderedStart === update.resolvedRenderedStart && record.resolvedRenderedEnd === update.resolvedRenderedEnd
+    && record.confidence === update.confidence
 }
 
 function buildAnchorCreateData(

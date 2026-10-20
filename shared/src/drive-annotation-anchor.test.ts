@@ -1,8 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor, sliceByCodePoints } from './drive-annotation-anchor.js'
 import type { DriveAnnotationImageSelectorsV2, DriveAnnotationTextSelectorsV2, DriveMarkdownProjectionDto } from './drive.js'
 
 describe('resolveDriveAnnotationAnchor', () => {
+  it('scores hundreds of short-quote candidates without repeatedly copying the complete text', () => {
+    const text = `${'其他内容'.repeat(20)}—`.repeat(300) + '目标—结束'
+    const currentProjection = projection(text)
+    const start = Array.from(text).length - 3
+    const from = vi.spyOn(Array, 'from')
+    try {
+      const result = resolveDriveAnnotationAnchor({
+        selectors: { ...selectors('—', start, start + 1), quote: { exact: '—', prefix: '目标', suffix: '结束' } },
+        projection: currentProjection, sourceText: text, renderedText: text,
+      })
+      expect(result.renderedRange).toEqual({ start, end: start + 1 })
+      expect(from.mock.calls.filter(([value]) => value === text).length).toBeLessThanOrEqual(1)
+    } finally { from.mockRestore() }
+  })
+
   it('reattaches a unique quote after text is inserted before it', () => {
     const text = '前置内容目标文字后置内容'
     const result = resolveDriveAnnotationAnchor({

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional, PayloadTooLargeException, UnauthorizedException } from "@nestjs/common"
 import { measureAnnotationStage, recordAnnotationMetrics } from "./drive-annotation-diagnostics"
+import { AnnotationComputationCache } from "./drive-annotation-cache"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { parseDriveSearchFilters, filterDriveSearchItems } from "@synapse/shared"
@@ -80,7 +81,7 @@ import {
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 import type { DriveMarkdownPdfImageReference } from "./drive-markdown-pdf-render-task"
-import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
+import { DRIVE_MARKDOWN_PARSER_VERSION, driveMarkdownImageResourceKey, mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { readDriveItemsBatch } from "./drive-batch-items"
@@ -421,6 +422,12 @@ export class DriveService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DriveService.name)
   private readonly reorganizationPlans = new Map<string, DriveReorganizationPlan>()
   private readonly markdownShareImageIds = new Map<string, ReadonlySet<string>>()
+  private readonly annotationDocuments = new AnnotationComputationCache<Pick<DriveAnnotationDocumentValue, "sourceText" | "renderedText" | "projection">>({
+    maxEntries: 16,
+    maxBytes: 32 * 1024 * 1024,
+    sizeOf: (document) => 2 * (document.sourceText.length + document.renderedText.length + JSON.stringify(document.projection).length)
+      + 8 * document.renderedText.length,
+  })
 
   constructor(
     private readonly prisma: PrismaService,
@@ -2621,44 +2628,59 @@ export class DriveService implements OnApplicationBootstrap {
     const liveDocument = this.collaboration?.getLiveDocument(item.id) ?? null
     const versionId = liveDocument?.checkpointVersionId ?? await measureAnnotationStage("version.read", () => this.findCurrentDriveFileVersionId(item))
     if (!versionId) throw new NotFoundException("文件版本不存在。")
+    const projectionRevision = liveDocument ? null : await measureAnnotationStage("document.projectionRevision", async () => this.projections?.getRevision(versionId)) ?? null
+    const cacheKey = (revision: string | null) => JSON.stringify([item.id, versionId, item.storageKey, DRIVE_MARKDOWN_PARSER_VERSION,
+      liveDocument?.epoch ?? null,
+      liveDocument ? createHash("sha256").update(liveDocument.sourceText)
+        .update(liveDocument.projectionSource).update(JSON.stringify(liveDocument.projection)).digest("hex") : revision])
+    const cached = await this.annotationDocuments.get(cacheKey(projectionRevision),
+      () => this.loadAnnotationMarkdown(item, versionId, liveDocument),
+      (value) => cacheKey(liveDocument ? null : createHash("sha256").update(JSON.stringify(value.projection)).digest("hex")))
+    recordAnnotationMetrics({
+      documentCacheHit: Number(cached.status === "hit"), documentComputationShared: Number(cached.status === "shared"),
+      sourceChars: cached.value.sourceText.length, renderedChars: cached.value.renderedText.length,
+      hasLiveDocument: Number(Boolean(liveDocument)),
+    })
+    const epoch = liveDocument?.epoch ?? (await measureAnnotationStage("document.epoch", () => this.prisma.driveCollaborationDocument.findUnique({
+      where: { itemId: item.id }, select: { epoch: true },
+    })))?.epoch ?? null
+    return { versionId, epoch, ...cached.value }
+  }
+
+  private async loadAnnotationMarkdown(
+    item: Parameters<DriveService["resolveAnnotationDocument"]>[0],
+    versionId: string,
+    liveDocument: ReturnType<DriveCollaborationService["getLiveDocument"]>,
+  ): Promise<Pick<DriveAnnotationDocumentValue, "sourceText" | "renderedText" | "projection">> {
     const sourcePreview = liveDocument ? null : await measureAnnotationStage("document.source", () => this.readTextPreview(item.storageKey!))
     if (sourcePreview?.truncated) throw new PayloadTooLargeException("文件内容过大。")
     const sourceText = liveDocument?.sourceText ?? sourcePreview?.text ?? ""
-    const storedProjection = await measureAnnotationStage("document.projection", async () => this.projections?.load(versionId)) ?? null
-    const storedProjectionHasImages = storedProjection?.imageAnchorsVersion === 1
+    const storedProjection = liveDocument ? null : await measureAnnotationStage("document.projection", async () => this.projections?.load(versionId)) ?? null
+    const projectionMatchesSource = storedProjection?.sourceSha256 === createHash("sha256").update(sourceText).digest("hex")
+    const storedProjectionHasImages = projectionMatchesSource && storedProjection?.imageAnchorsVersion === 1
     recordAnnotationMetrics({ sourceChars: sourceText.length, hasLiveDocument: Number(Boolean(liveDocument)), hasStoredProjection: Number(Boolean(storedProjection)) })
     const rendered = await measureAnnotationStage("document.render", async () => renderDriveMarkdownFragment(sourceText, liveDocument
       ? {
-          projection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1
+          projection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1 && liveDocument.projection.parserVersion === DRIVE_MARKDOWN_PARSER_VERSION
             ? liveDocument.projection
             : null,
-          previousProjection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1
+          previousProjection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1 && liveDocument.projection.parserVersion === DRIVE_MARKDOWN_PARSER_VERSION
             ? null
             : { source: liveDocument.projectionSource, projection: liveDocument.projection },
         }
       : {
           projection: storedProjectionHasImages ? storedProjection : null,
-          previousProjection: storedProjection
+          previousProjection: storedProjection && projectionMatchesSource
             ? { source: sourceText, projection: storedProjection }
             : !this.projections
               ? null
             : await measureAnnotationStage("document.previousProjection", () => this.projections!.loadPrevious({ itemId: item.id, versionId })),
         }))
     recordAnnotationMetrics({ renderedChars: rendered.renderedText.length })
-    if (!storedProjectionHasImages) {
+    if (!liveDocument && !storedProjectionHasImages) {
       await measureAnnotationStage("document.projection", async () => this.projections?.persist({ itemId: item.id, versionId, projection: rendered.projection }))
     }
-    const collaboration = await measureAnnotationStage("document.epoch", () => this.prisma.driveCollaborationDocument.findUnique({
-      where: { itemId: item.id },
-      select: { epoch: true },
-    }))
-    return {
-      versionId,
-      epoch: liveDocument?.epoch ?? collaboration?.epoch ?? null,
-      sourceText,
-      renderedText: rendered.renderedText,
-      projection: rendered.projection,
-    }
+    return { sourceText, renderedText: rendered.renderedText, projection: rendered.projection }
   }
 
   resolveAnnotationCrdtRange(itemId: string, selector: import("@synapse/shared").DriveAnnotationCrdtRangeSelector) {
