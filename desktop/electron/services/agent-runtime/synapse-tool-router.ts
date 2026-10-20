@@ -13,7 +13,7 @@ import {
   getMcpToolDomainId,
 } from "../../../synapse-capabilities/shared/registry"
 import type { McpToolDefinition } from "../../../synapse-capabilities/shared/types"
-import { lexiconTokens } from "./synapse-tool-router-lexicon"
+import { excludedSearchDomains, lexiconTokens } from "./synapse-tool-router-lexicon"
 
 export const SYNAPSE_TOOL_ROUTER_SERVER_NAME = "synapse-tool-router"
 export const SYNAPSE_TOOL_ROUTER_SEARCH_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVER_NAME}__search`
@@ -311,9 +311,11 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
   if (!query) return toolIndex(domain, normalizeIndexLimit(input.limit))
   const limit = normalizeLimit(input.limit)
 
+  const excludedDomains = excludedSearchDomains(query)
+  const matchesScope = (entry: SynapseToolCatalogEntry) => (!domain || entry.domain === domain) && !excludedDomains.includes(entry.domain)
   const exact = catalogByName.get(query)
   const exactChinesePhrase = containsHan(query) && [...query].length >= 4
-    ? catalog.filter((entry) => (!domain || entry.domain === domain) && entry.description.includes(query))
+    ? catalog.filter((entry) => matchesScope(entry) && entry.description.includes(query))
     : []
   const aliasTokens = lexiconTokens(query)
   const queryTokens = [
@@ -328,7 +330,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
     index.search(query),
     ...aliasTokens.map((token) => index.search(token)),
   ])
-    .filter((result) => !domain || result.item.domain === domain)
+    .filter((result) => matchesScope(result.item))
     .map((result) => ({
       ...result,
       lexical: lexicalRelevance(result.item, queryTokens),
@@ -346,7 +348,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
     .map((result) => result.item)
 
   const entries = dedupeTools([
-    ...(exact && (!domain || exact.domain === domain) ? [exact] : []),
+    ...(exact && matchesScope(exact) ? [exact] : []),
     ...exactChinesePhrase,
     ...ranked,
   ]).slice(0, limit)

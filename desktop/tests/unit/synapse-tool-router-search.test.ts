@@ -160,6 +160,54 @@ async function topToolNames(intent: string): Promise<readonly string[]> {
 }
 
 describe("synapse tool router search", () => {
+  it("prioritizes filename search for Chinese and English file-finding requests", async () => {
+    const cases = [
+      "帮我在云盘里找一下云盘搜索设计文件", "搜索云盘里的合同", "帮我找云盘里的文件", "查找云空间里的 PDF",
+      "找找最近一周分享过的文档", "在项目资料文件夹里找设计方案", "在云盘中搜索文件名包含合同的文件",
+      "帮我找云盘同步重设计.html", "搜索云盘里的历史版本设计文档", "帮我找云盘分享链接设计文档", "搜索云盘里的文档历史版本设计.md", "找找我分享出去的文件",
+      "find a file in my drive", "search Drive filenames", "look up a document in my cloud drive",
+    ]
+    for (const query of cases) {
+      const result = await searchSynapseTools({ query, limit: 3 })
+      expect(result.tools[0]?.name, query).toBe("app_drive_item_tree_list")
+    }
+  })
+
+  it("keeps browsing and other Drive operations distinct from filename search", async () => {
+    const cases = [
+      ["查看云盘文件列表", "app_drive_item_list"], ["云盘里有哪些文件", "app_drive_item_list"],
+      ["查找云盘分享列表", "app_drive_share_list"], ["查找云盘文档分享列表", "app_drive_share_list"], ["查找云盘文档的分享链接", "app_drive_share_list"],
+      ["帮我找云盘的文档版本列表", "app_drive_file_version_list"],
+      ["把我分享出去的链接列出来", "app_drive_share_list"], ["搜索云盘分享链接", "app_drive_share_list"],
+      ["查找回收站里的文件", "app_drive_trash_list"], ["查找这个文件的历史版本", "app_drive_file_version_list"],
+    ] as const
+    for (const [query, expected] of cases) {
+      const result = await searchSynapseTools({ query, limit: 5 })
+      expect(result.tools.map(tool => tool.name), query).toContain(expected)
+      expect(result.tools[0]?.name, query).not.toBe("app_drive_item_tree_list")
+    }
+    for (const query of ["搜索数据库表", "查找本地文件", "在工作区里搜索文件"]) {
+      const other = await searchSynapseTools({ query, limit: 5 })
+      expect(other.tools.map(tool => tool.name), query).not.toContain("app_drive_item_tree_list")
+    }
+    const scoped = await searchSynapseTools({ query: "搜索云盘里的合同", domain: "database", limit: 3 })
+    expect(scoped.tools.every(tool => tool.domain === "database")).toBe(true)
+    const exact = await searchSynapseTools({ query: "app_drive_item_get", limit: 1 })
+    expect(exact.tools[0]?.name).toBe("app_drive_item_get")
+  })
+
+  it("excludes Synapse Drive when the user explicitly searches another platform or local files", async () => {
+    const queries = ["搜索 Google Drive 里的文件", "搜索飞书云盘里的合同文档", "搜索本地云盘同步重设计.html", "search local files", "find files in Dropbox", "find files in OneDrive"]
+    for (const query of queries) {
+      for (const domain of [undefined, "drive"]) {
+        const result = await searchSynapseTools({ query, domain, limit: 5 })
+        expect(result.tools.some(tool => tool.domain === "drive"), query).toBe(false)
+      }
+    }
+    const owned = await searchSynapseTools({ query: "在 Synapse 云盘里找 Google Drive迁移.md", limit: 3 })
+    expect(owned.tools[0]?.name).toBe("app_drive_item_tree_list")
+  })
+
   it("distinguishes document messages from anchored comment creation", async () => {
     const cases = [
       { query: "在这个文档下随便加一些留言", expected: "app_drive_message_create" },

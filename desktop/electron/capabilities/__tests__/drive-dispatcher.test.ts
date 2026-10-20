@@ -239,6 +239,46 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(tool.inputSchema.properties).toMatchObject({ query: { type: "string", maxLength: 200 }, fileType: { enum: ["folder", "document", "image", "archive", "other"] }, sort: { enum: ["relevance", "modified", "name"] } })
   })
 
+  it("returns grounded numbered search results and owner preview links without reading or sharing files", async () => {
+    const items = [driveTreeItem({ id: "file/1", name: "合同.pdf", path: "项目甲/合同.pdf" }), driveTreeItem({ id: "file-2", name: "合同.pdf", path: "项目乙/合同.pdf" })]
+    const accountService = createAccountService({
+      listDriveItemTree: vi.fn(async () => ({ items, total: 42, fileCount: 42, folderCount: 0, hasMore: true, nextOffset: 22 })),
+      getDriveItemPreviewUrl: vi.fn(async (itemId: string) => ({ url: `https://synapse.test/drive/items/${encodeURIComponent(itemId)}` })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+    const result = await dispatcher.dispatch("app.drive.item_tree.list", { query: " 合同 ", fileType: "document", shareStatus: "shared", offset: 20 }, { source: "mcp-stdio" })
+    expect(accountService.listDriveItemTree).toHaveBeenCalledWith({ parentId: null, query: "合同", fileType: "document", shareStatus: "shared", offset: 20, limit: 20 })
+    expect(result).toMatchObject({ ok: true, total: 42, data: {
+      search: { parentId: null, query: "合同", fileType: "document", shareStatus: "shared" }, total: 42, hasMore: true, nextOffset: 22,
+      items: [
+        { id: "file/1", resultNumber: 21, path: "项目甲/合同.pdf", previewUrl: "https://synapse.test/drive/items/file%2F1" },
+        { id: "file-2", resultNumber: 22, path: "项目乙/合同.pdf", previewUrl: "https://synapse.test/drive/items/file-2" },
+      ],
+    } })
+    expect(accountService.getDriveItemPreview).not.toHaveBeenCalled()
+    expect(accountService.readDriveFileContentChunk).not.toHaveBeenCalled()
+    expect(accountService.shareDriveItem).not.toHaveBeenCalled()
+  })
+
+  it("keeps explicit search constraints and empty-result counts without falling back to a different scope", async () => {
+    const input = { parentId: "project-folder", query: "合同", updatedAfter: "2026-10-13T00:00:00Z", shareStatus: "shared", fileType: "document", sort: "modified", limit: 5 }
+    const accountService = createAccountService({ listDriveItemTree: vi.fn(async () => ({ items: [], total: 0, fileCount: 0, folderCount: 0, hasMore: false, nextOffset: null })) })
+    const result = await createDriveCapabilityDispatcher({ accountService }).dispatch("app.drive.item_tree.list", input, { source: "mcp-http" })
+    expect(result).toMatchObject({ ok: true, data: { search: { parentId: "project-folder", query: "合同", fileType: "document", shareStatus: "shared", sort: "modified", updatedAfter: "2026-10-13T00:00:00.000Z" }, items: [], total: 0, hasMore: false, nextOffset: null } })
+    expect(accountService.listDriveItemTree).toHaveBeenCalledTimes(1)
+    expect(accountService.listDriveItemTree).toHaveBeenCalledWith({ ...input, updatedAfter: "2026-10-13T00:00:00.000Z", offset: undefined })
+    expect(accountService.getDriveItemPreview).not.toHaveBeenCalled()
+  })
+
+  it("rejects fractional or invalid search pagination before fetching results", async () => {
+    const accountService = createAccountService()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+    for (const input of [{ offset: 0.5 }, { offset: -1 }, { offset: Number.MAX_SAFE_INTEGER + 1 }, { limit: 0 }, { limit: 1.5 }]) {
+      await expect(dispatcher.dispatch("app.drive.item_tree.list", { query: "合同", ...input }, { source: "mcp-http" })).rejects.toThrow()
+    }
+    expect(accountService.listDriveItemTree).not.toHaveBeenCalled()
+  })
+
   it("previews and applies Drive reorganizations only through a generated plan id", async () => {
     const preview = {
       planId: "drive-reorg-plan-1",

@@ -1,9 +1,9 @@
 /**
- * MCP `search` 的中文词表。
+ * MCP `search` 的中文词表与文件查找意图。
  *
  * `search` 的索引是工具名与英文描述，中文查询与它没有词面交集，所以必须有一层
- * 「中文词 -> 工具名里真实出现的英文段」的桥。本模块只做这件事：把查询串里
- * 命中的中文词展开成英文 token，交给既有的 Fuse + lexicalRelevance 排序管线。
+ * 「中文词 -> 工具名里真实出现的英文段」的桥；文件查找还需区分查询范围和操作目标。
+ * 本模块把词语或明确的中英文查找意图展开成 token，交给既有的 Fuse + lexicalRelevance 排序管线。
  *
  * 两条硬约束（由 `tests/unit/synapse-tool-router-search.test.ts` 的门禁强制）：
  * 1. `term` 长度 >= 2 字。单字条目（如「表」）会命中「报表」这类复合词引入假阳性。
@@ -302,7 +302,44 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["修复", "repair"],
 ]
 
+const FILE_LOOKUP_ACTION = /找|搜|检索|\b(?:find|search|locate|lookup)\b|\blook\s+up\b/u
+
+/** 明确请求其它存储范围时，连原始 Fuse 候选也不能回退到本人 Synapse 云盘。 */
+export function excludedSearchDomains(query: string): readonly string[] {
+  const text = query.normalize("NFKC").toLowerCase()
+  if (!FILE_LOOKUP_ACTION.test(text)) return []
+  const synapseScope = /\bsynapse\s*(?:drive|云盘|云空间|云存储)|(?:在|从)\s*synapse\b|\b(?:in|from)\s+synapse\b|\bsynapse(?:里|中|内)/u.test(text)
+  if (synapseScope) return []
+  const otherCloud = /\b(?:google\s+drive|dropbox|onedrive)\b|飞书(?:云盘|云空间|文档|里|中)|\b(?:lark|feishu)\s+(?:cloud|drive)\b/u.test(text)
+  const localScope = /(?:找|搜|查找|搜索|在|从)(?:一下)?(?:我的)?(?:本地|工作区|仓库|数据库|终端)|\b(?:local\s+(?:cloud\s+)?(?:files?|documents?|folders?|drive)|(?:in|from)\s+(?:the\s+)?(?:workspace|repository|database|terminal))\b/u.test(text)
+  return otherCloud || localScope ? ["drive"] : []
+}
+
+// 复合查找意图先区分目标；“已分享”是文件条件，“分享链接”才是链接管理。
+// 只展开到真实工具名段，仍由通用检索器排序，不执行工具或解析业务参数。
+function driveLookupTokens(query: string): string[] | null {
+  const text = query.normalize("NFKC").toLowerCase()
+  if (!FILE_LOOKUP_ACTION.test(text) || excludedSearchDomains(text).includes("drive")) return null
+  if (/删除|清空|移动|重命名|改名|上传|下载|取消分享|\b(?:delete|remove|rename|move|upload|download|disable)\b/u.test(text)) return null
+  const drive = /云盘|网盘|云空间|云存储|云文档|\bdrive\b/u.test(text)
+  const file = /文件|文档|\b(?:files?|filenames?|documents?|folders?)\b/u.test(text)
+  if (!drive && (!file || /本地|工作区|仓库|数据库|终端|飞书|\b(?:local|workspace|repository|database|terminal|dropbox)\b/u.test(text))) return null
+  if (/回收站(?:里|中|内)|\b(?:in|from)\s+(?:the\s+)?trash\b/u.test(text)) return ["drive", "trash", "list"]
+  if (/(?:文件|文档|\.[a-z0-9]{1,10})(?:的)?(?:历史版本|版本历史|旧版本)(?:列表)?[\s?？!！。]*$|\bversions?\s+(?:of|for)\b/u.test(text)) return ["drive", "file", "version", "list"]
+  if (/(?:分享|共享|公开)(?:链接|列表|记录)[\s?？!！。]*$/u.test(text)) return ["drive", "share", "list"]
+  if (/(?:文件|文档|\.[a-z0-9]{1,10})(?:的)?版本(?:列表|历史)[\s?？!！。]*$/u.test(text)) return ["drive", "file", "version", "list"]
+  // 文件名里的“同步 / 分享链接 / 历史版本”不是操作目标。
+  if (/文档|文件名|\.[a-z0-9]{1,10}\b|\b(?:file|document)\s+(?:named|called)\b/u.test(text)) return ["drive", "item", "tree", "list"]
+  if (/回收站|\btrash\b/u.test(text)) return ["drive", "trash", "list"]
+  if (/历史版本|版本历史|旧版本|\bversions?\b/u.test(text)) return ["drive", "file", "version", "list"]
+  if (/分享链接|分享出去的链接|公开链接|\bshare\s+links?\b/u.test(text)) return ["drive", "share", "list"]
+  if (/公开素材|外链|直链|同步|站点|\b(?:assets?|sync|sites?)\b/u.test(text)) return null
+  return ["drive", "item", "tree", "list"]
+}
+
 export function lexiconTokens(query: string): string[] {
+  const lookup = driveLookupTokens(query)
+  if (lookup) return lookup
   const normalized = query.toLowerCase()
   const tokens: string[] = []
   for (const [term, token] of LEXICON) {

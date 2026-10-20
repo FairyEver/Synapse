@@ -2,12 +2,13 @@
 
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
 
-Use Synapse Drive MCP tools when the user wants to upload, keep a local file or folder synchronized, open, preview, download, share, manage comments on a shared Markdown document, publish a static site, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
+Use Synapse Drive MCP tools when the user wants to find files by name or extension, filter or refine file search results, upload, keep a local file or folder synchronized, open, preview, download, share, manage comments on a shared Markdown document, publish a static site, organize, delete, restore, or create Drive-backed public asset links in Synapse Drive.
 
 ## Cloud Document And Storage Terminology
 
 When the user says “云文档”, “在线文档”, “云盘”, “云存储”, “云空间”, “网盘”, or an equivalent generic cloud file storage term, treat it as Synapse Drive unless they explicitly name another cloud storage or document platform. This includes possessive forms such as “我的云空间”. Do not ask which platform they mean solely because they used these words. Follow the requested operation:
 
+- “帮我找 / 搜索云盘文件”: use `app_drive_item_tree_list` with filename keywords and the requested metadata filters; follow **Finding Files**.
 - “看看云文档 / 网盘上有什么文件”: list the relevant Drive folder with `app_drive_item_list`, using root when no folder is named and paginating as needed.
 - “把某个文件传到我的云存储 / 云空间里”: resolve the local file and upload it with `app_drive_file_upload`, following **Upload Destination Selection**.
 - “获取某一个云文档的分享链接”: resolve the owned Drive item, then use `app_drive_share_create` to create or reuse its share and return the URL. Write the URL itself out as SKILL.md's link rule requires — on its own line, never inside a table.
@@ -18,11 +19,31 @@ These names alone do not authorize publishing a share or site, creating a public
 
 ## Finding Files
 
-Use `app_drive_item_tree_list` with `query` when the user searches owned file or folder names. Keywords are literal filename/extension matches, case-insensitive with NFKC normalization; whitespace-separated terms must all match. It does not search document contents or paths. Use `parentId` to limit the search to that folder's descendants, or omit it for the whole ordinary Drive. Trash, public assets and other users' items are excluded.
+### Choose the operation
 
-Optional `fileType` (`folder`, `document`, `image`, `archive`, `other`), inclusive `updatedAfter` (ISO timestamp with timezone), `shareStatus` (`shared` / `private`) and `sort` (`relevance`, `modified`, `name`) combine before pagination. `shared` means an enabled, unexpired share; disabled or expired shares count as private. Continue with `nextOffset` while `hasMore`; restart at zero after changing conditions. Match counts describe the full filtered set. Without search fields the existing tree order is preserved.
+“帮我找、找一下、找找、搜索、查找” a file in Synapse Drive means `app_drive_item_tree_list`, not a root-only listing or a single-item get without an ID. Reach it through `search` with `domain: "drive"` and the user's file-finding intent, then `invoke` its returned schema. “云盘里有哪些文件” is browsing with `app_drive_item_list`. “分享链接有哪些” is `app_drive_share_list`; “已分享的文档” is a file search with `shareStatus: "shared"`. Trash, public assets and version history use their own existing tools. An explicitly named other cloud platform or local filesystem is not Synapse Drive.
 
-Use returned `path` and `ancestors` to distinguish same-name results. Resolve the chosen item by ID before navigation or mutation, because names and locations may have changed. If several items remain plausible, ask with their distinguishing paths. A requested path must be matched against returned paths or traversed with `app_drive_item_list`, not passed as filename keywords. Do not enumerate and download the whole Drive to search names.
+### Translate the request
+
+Extract only filename/extension terms into `query`; do not send the whole user sentence, folder names, dates or “已分享” as filename keywords. Matching is literal, case-insensitive NFKC normalization, with all whitespace-separated terms required. Preserve exact quoted filenames. Use the supplied schema; do not invent full-text, fuzzy, synonym, extension-array or date-end parameters.
+
+- Scope: omit `parentId` for the whole ordinary Drive. A named folder must first be resolved using `fileType: "folder"`, its full path or `app_drive_item_list`. Confirm ambiguous same-name folders by their paths, then pass the selected folder ID. `parentId` searches descendants. Do not put a path in `query` or silently substitute the current browsing folder for a requested Drive-wide search.
+- Type: map documents, images, archives and folders to `fileType`. A specific extension such as PDF also needs a filename term `.pdf`; combine with other terms, for example `query: "合同 .pdf", fileType: "document"`. Verify the final extension in returned names before describing them as PDFs: substring matching can also find `合同.pdf.md`. Do not present `total` as an exact extension count if some rows have not been checked.
+- Time: turn “今天 / 最近 7 天 / 最近 30 天” into inclusive `updatedAfter` using the trusted current date/time and user's timezone. Match the desktop convention: local midnight today minus N−1 days. Use `sort: "modified"` for “最近 / 最新”, otherwise relevance. This filters last modification time, not upload/creation/share time. A fixed interval such as “上周” requires an unsupported upper bound; explain that limitation rather than silently treating it as “since last Monday”.
+- Sharing: “已分享” means an enabled, unexpired share, using `shareStatus: "shared"`; “未分享” uses `private`. If the user explicitly means historically shared, including expired/disabled links, explain that this filter only describes current sharing and use the existing share listing if appropriate. Never create a share merely to search or deliver an owner preview.
+- Pagination: use `limit: 20` initially (the MCP search default), retain all conditions and continue with `nextOffset` while `hasMore`. Restart at zero after a condition changes. Counts describe the full filtered set, not just the returned page. Do not claim no match after inspecting only a root listing or an incomplete folder-resolution page.
+
+For “找最近一周已分享的文档”, omit `query` unless there is a filename clue, set `fileType: "document"`, `shareStatus: "shared"`, the local seven-day `updatedAfter`, `sort: "modified"`, and `limit: 20`. For “在项目资料文件夹里找设计方案”, resolve the folder identity first, then search its descendants with `query: "设计方案"`. Neither request authorizes reading file bodies.
+
+### Handle missing or ambiguous results
+
+Keep the user's explicit folder, type, time and sharing constraints throughout. If a non-exact name clue has no match, try at most two additional filename variants: split a phrase into terms (`设计方案` → `设计 方案`) or use a familiar abbreviation (`产品需求文档` → `PRD`). Explain which alternative terms were tried; literal matches do not prove semantic equivalence. Do not rewrite an exact quoted filename, silently relax filters, expand the folder, download every file or loop through the entire Drive. If still empty, state the searched scope/conditions and offer a specific change. A failed request is an error, not “no files”. Filename lookup does not provide full-text or semantic search; do not read bodies to simulate it.
+
+### Present and continue
+
+Search responses include normalized `search` conditions and, on each item, `resultNumber`, `id`, `name`, `path`, `updatedAt`, and an authenticated owner `previewUrl`. Show a small numbered list with the actual filename, full path and update time; write the returned preview URL itself on its own line, following the main Skill's link rule. Never invent a URL, convert it to a public share, call browser preview snapshots to obtain links or open every result automatically. Distinguish same-name results with their paths. Say how many matched and whether more pages remain without dumping all pages by default.
+
+For “打开第二个”, use the most recently displayed result-to-ID mapping, re-read the selected item with `app_drive_item_get` to check that it is still available, then reuse its owner preview link or existing open flow. Do not rerun search and reinterpret the same position after reordering. If the intended list is ambiguous or unavailable, ask which path. For “再找最近一个月的”, retain the previous filename, folder, type and sharing constraints, replace only the time condition, and restart at offset zero. Later mutations use the selected item ID after revalidation, never a same-name guess. Keep this context in the existing conversation; no hidden persistent search history or cross-account state.
 
 ## Scope
 

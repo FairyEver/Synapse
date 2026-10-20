@@ -111,6 +111,7 @@ type DriveAccountServicePort = {
   readonly getDriveUsage: () => Promise<DriveUsageDto>
   readonly getDriveStats: () => Promise<DriveStatsDto>
   readonly listDriveItemTree: (input: DriveItemTreeListInput) => Promise<DriveItemTreeListPageDto>
+  readonly getDriveItemPreviewUrl: (itemId: string) => Promise<{ readonly url: string }>
   readonly ensureDriveFolderPath: (input: DriveFolderPathEnsureInput) => Promise<DriveFolderPathEnsureResultDto>
   readonly previewDriveReorganization: (input: DriveReorganizationPreviewInput) => Promise<DriveReorganizationPreviewDto>
   readonly applyDriveReorganization: (input: DriveReorganizationApplyInput) => Promise<DriveReorganizationApplyResultDto>
@@ -617,8 +618,17 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           }))
         case "app.drive.item_tree.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
-            const tree = await deps.accountService.listDriveItemTree(parseDriveTreeListInput(params))
-            return { ok: true, data: toDriveEnumerationPage(tree), total: tree.total }
+            const input = parseDriveTreeListInput(params)
+            const filters = parseDriveSearchFilters(input)
+            const searching = Object.keys(filters).length > 0
+            const tree = await deps.accountService.listDriveItemTree(searching ? { ...input, limit: input.limit ?? 20 } : input)
+            if (!searching) return { ok: true, data: toDriveEnumerationPage(tree), total: tree.total }
+            const items = await Promise.all(tree.items.map(async (item, index) => ({
+              ...toDriveEnumerationItem(item) as Record<string, unknown>,
+              resultNumber: (input.offset ?? 0) + index + 1,
+              previewUrl: (await deps.accountService.getDriveItemPreviewUrl(item.id)).url,
+            })))
+            return { ok: true, data: { ...tree, items, search: { ...filters, parentId: input.parentId ?? null } }, total: tree.total }
           })
         case "app.drive.folder_path.ensure":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
@@ -1963,11 +1973,12 @@ function optionalDriveLinkMaterializeScope(value: unknown): DriveLinkMaterialize
 }
 
 function parseDriveTreeListInput(params: Record<string, unknown>): DriveItemTreeListInput {
+  const offset = optionalNumber(params.offset), limit = optionalNumber(params.limit)
+  if (offset !== undefined && !Number.isSafeInteger(offset)) throw new Error("Expected integer pagination offset.")
+  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) throw new Error("Expected positive integer page limit.")
   return {
     ...parseDriveSearchFilters(params),
-    parentId: optionalNullableString(params.parentId),
-    offset: optionalNumber(params.offset),
-    limit: optionalNumber(params.limit),
+    parentId: optionalNullableString(params.parentId), offset, limit,
   }
 }
 
