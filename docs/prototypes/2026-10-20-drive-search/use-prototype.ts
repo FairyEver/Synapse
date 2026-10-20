@@ -14,19 +14,18 @@ export function usePrototype() {
   const [returnTo, setReturnTo] = useState<SearchSnapshot | null>(null)
   const [located, setLocated] = useState<string | null>(null)
   const [error, setError] = useState(false)
-  const [dark, setDark] = useState(false)
   const [focused, setFocused] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [composing, setComposing] = useState(false)
   const [history, setHistory] = useState(["云盘", "设计", ".md"])
   const inputRef = useRef<HTMLInputElement>(null)
   const active = Boolean(query.trim()) || hasFilters(filters)
   const pending = !composing && draft !== query
   const matches = useMemo(() => matchingItems(query, filters, scope, folder, sort), [query, filters, scope, folder, sort])
-  const browse = ITEMS.filter(item => item.parent === folder).sort((a, b) => Number(b.type === "folder") - Number(a.type === "folder") || b.modified.localeCompare(a.modified))
+  const browse = ITEMS.filter(item => item.parent === folder)
   const total = active ? matches.length : browse.length
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const visible = (active ? matches : browse).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  useEffect(() => { document.documentElement.classList.toggle("dark", dark) }, [dark])
+  const visible = (active ? matches : browse).slice(0, page * PAGE_SIZE)
   useEffect(() => {
     if (composing) return
     const timer = window.setTimeout(() => { setQuery(draft); setPage(1) }, 250)
@@ -35,12 +34,28 @@ export function usePrototype() {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f" && !preview) {
-        event.preventDefault(); inputRef.current?.focus(); inputRef.current?.select()
+        event.preventDefault(); setSearchOpen(true)
+        if (inputRef.current) { inputRef.current.focus(); inputRef.current.select() }
       }
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
   }, [preview])
+  useEffect(() => {
+    if (searchOpen) inputRef.current?.focus()
+  }, [searchOpen])
+  useEffect(() => {
+    function applyScene() {
+      const scene = new URLSearchParams(window.location.hash.slice(1)).get("scene")
+      if (!scene) return
+      const value = scene === "folder" ? "设计" : scene === "empty" ? "年度预算" : scene === "reset" ? "" : "云盘"
+      setSearchOpen(scene !== "reset"); setDraft(value); setQuery(value); setPage(1); setFilters(EMPTY_FILTERS)
+      setFolder(scene === "folder" ? "projects" : null); setScope(scene === "folder" ? "folder" : "all")
+      setError(scene === "error"); setReturnTo(null); setLocated(null); setPreview(null); setSort("relevance")
+    }
+    applyScene(); window.addEventListener("hashchange", applyScene)
+    return () => window.removeEventListener("hashchange", applyScene)
+  }, [])
   useEffect(() => {
     if (located) document.querySelector(`[data-item="${located}"]`)?.scrollIntoView?.({ block: "center", behavior: "instant" })
   }, [located, page])
@@ -61,12 +76,14 @@ export function usePrototype() {
   function clearFilters() { setFilters(EMPTY_FILTERS); setPage(1); setError(false) }
   function exitSearch() {
     setDraft(""); setQuery(""); setFilters(EMPTY_FILTERS); setPage(1); setError(false); setReturnTo(null); setFocused(false)
+    setSearchOpen(false)
     inputRef.current?.blur()
   }
   function navigate(next: string | null, target?: string) {
     setFolder(next); setLocated(target ?? null); setPreview(null); setDraft(""); setQuery(""); setFilters(EMPTY_FILTERS); setError(false); setFocused(false)
+    setSearchOpen(false)
     if (!next) setScope("all")
-    const children = ITEMS.filter(item => item.parent === next).sort((a, b) => Number(b.type === "folder") - Number(a.type === "folder") || b.modified.localeCompare(a.modified))
+    const children = ITEMS.filter(item => item.parent === next)
     setPage(target ? Math.floor(children.findIndex(item => item.id === target) / PAGE_SIZE) + 1 : 1)
   }
   function keepSearch() {
@@ -81,18 +98,12 @@ export function usePrototype() {
     if (!returnTo) return
     setDraft(returnTo.query); setQuery(returnTo.query); setFilters(returnTo.filters); setScope(returnTo.scope)
     setFolder(returnTo.folder); setSort(returnTo.sort); setPage(returnTo.page); setReturnTo(null); setLocated(null)
-  }
-  function scenario(value: string) {
-    exitSearch(); setPreview(null); setFolder(null); setScope("all"); setSort("relevance"); setLocated(null)
-    if (value === "results") submit("云盘")
-    if (value === "folder") { setFolder("projects"); setScope("folder"); submit("设计") }
-    if (value === "empty") submit("年度预算")
-    if (value === "error") { submit("云盘"); setError(true) }
+    setSearchOpen(true)
   }
   function changeScope(value: Scope) { setScope(value); setPage(1); setError(false) }
   function changeSort(value: Sort) { setSort(value); setPage(1) }
   return { draft, query, filters, scope, folder, sort, page, pages, preview, setPreview, returnTo, located, error, setError,
-    dark, setDark, focused, setFocused, composing, setComposing, history, setHistory, inputRef, active, pending, visible, total,
-    setPage, search, submit, updateFilter, clearFilters, exitSearch, navigate, locate, open, restoreSearch, scenario, changeScope, changeSort }
+    focused, setFocused, searchOpen, setSearchOpen, composing, setComposing, history, setHistory, inputRef, active, pending, visible, total,
+    setPage, search, submit, updateFilter, clearFilters, exitSearch, navigate, locate, open, restoreSearch, changeScope, changeSort }
 }
 export type Prototype = ReturnType<typeof usePrototype>

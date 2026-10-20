@@ -12,12 +12,17 @@ const esbuild = desktop("esbuild")
 const result = await esbuild.build({
   absWorkingDir: repository, entryPoints: [join(directory, "prototype.tsx")],
   nodePaths: [join(repository, "desktop/node_modules")], alias: { "@": join(repository, "desktop/src") },
-  loader: { ".svg": "dataurl" }, jsx: "automatic", bundle: true, minify: true,
+  loader: { ".svg": "dataurl", ".png": "dataurl" }, jsx: "automatic", bundle: true, minify: true,
   write: false, metafile: true, platform: "browser", target: "es2022", format: "iife",
   define: { "process.env.NODE_ENV": JSON.stringify("production") },
   plugins: [{ name: "disable-prototype-telemetry", setup(build) {
+    // 顶栏只用同步按钮；直接解析到同一源码，避免装载无关同步运行时。
+    build.onResolve({ filter: /^\.\/sync$/ }, args => args.importer.endsWith("/drive-toolbar-actions.tsx")
+      ? { path: join(repository, "desktop/src/modules/drive/sync/drive-sync-status-button.tsx") } : undefined)
     build.onResolve({ filter: /^@\/lib\/ui-tracking$/ }, () => ({ path: "tracking", namespace: "demo" }))
-    build.onLoad({ filter: /.*/, namespace: "demo" }, () => ({ contents: `
+    build.onResolve({ filter: /^@\/modules\/apps\/dock$/ }, () => ({ path: "dock-constant", namespace: "demo" }))
+    build.onLoad({ filter: /^dock-constant$/, namespace: "demo" }, () => ({ contents: 'export const REQUIRED_DOCK_APP_ID = "launcher";' }))
+    build.onLoad({ filter: /^tracking$/, namespace: "demo" }, () => ({ contents: `
       export const track = () => undefined;
       export const extractLabel = element => element?.getAttribute?.("aria-label") ?? element?.textContent;
       export const mergeRefs = (...refs) => value => refs.forEach(ref => typeof ref === "function" ? ref(value) : ref && (ref.current = value));
@@ -28,7 +33,8 @@ const result = await esbuild.build({
 
 const globals = join(repository, "desktop/src/styles/globals.css")
 const { compile } = tailwind("@tailwindcss/node")
-const compiler = await compile((await readFile(globals, "utf8")).split("@layer base")[0], {
+// 同时继承应用的基础层，确保默认边框、字体渲染与选择行为和正式界面一致。
+const compiler = await compile(await readFile(globals, "utf8"), {
   base: dirname(globals), from: globals, shouldRewriteUrls: true, onDependency() {},
 })
 const { Scanner } = tailwind("@tailwindcss/oxide")
@@ -44,10 +50,10 @@ for (const [url, , font] of styles.matchAll(/url\((['"]?)([^)'"\s]+)\1\)/g)) {
 styles = (await esbuild.transform(styles, { loader: "css", minify: true })).code
 const script = result.outputFiles[0].text.replaceAll("</script", "<\\/script").replace(/[\t ]+$/gm, "")
 const html = `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <title>云盘文件搜索 · Synapse 交互原型</title><style>${styles}</style></head>
-<body class="bg-background text-foreground font-sans"><div id="drive-prototype"></div><noscript>请启用 JavaScript 查看交互原型。</noscript><script>${script}</script></body></html>
+<body><div id="root"></div><noscript>请启用 JavaScript 查看交互原型。</noscript><script>${script}</script></body></html>
 `
 await writeFile(join(directory, "index.html"), html)
 process.stdout.write(`已生成 ${join(directory, "index.html")}（${Buffer.byteLength(html)} 字节）\n`)

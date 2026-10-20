@@ -8,15 +8,12 @@ export type Item = {
 }
 // 固定演示日期，时间筛选不因原型打开日期而改变。
 export const TODAY = Date.parse("2026-10-20T16:00:00+08:00")
-export const PAGE_SIZE = 12
+export const PAGE_SIZE = 100
 export const EMPTY_FILTERS: Filters = { type: "all", days: "all", shared: "all" }
 export const TYPE_LABELS: Record<FileType, string> = {
   all: "全部类型", folder: "文件夹", document: "文档", image: "图片", archive: "压缩包", other: "其他文件",
 }
 export const ITEMS: Item[] = [
-  { id: "projects", parent: null, name: "项目资料", type: "folder", modified: "2026-10-20", size: "—" },
-  { id: "releases", parent: null, name: "发布归档", type: "folder", modified: "2026-10-19", size: "—" },
-  { id: "web", parent: null, name: "临时网页", type: "folder", modified: "2026-10-18", size: "—" },
   { id: "skill", parent: null, name: "技能列表技能模式字段接口改造交接.md", type: "document", modified: "2026-10-20", size: "18 KB", shared: true },
   { id: "message", parent: null, name: "消息失效处理配置-产品设计评估报告-2026-10-16.md", type: "document", modified: "2026-10-16", size: "32 KB", shared: true },
   { id: "ds", parent: null, name: "1 ds的设计.md", type: "document", modified: "2026-10-16", size: "12 KB", shared: true },
@@ -28,6 +25,9 @@ export const ITEMS: Item[] = [
   { id: "guide", parent: null, name: "gtr-AI使用指南.md", type: "document", modified: "2026-09-30", size: "16 KB" },
   { id: "contract", parent: null, name: "合同审批_App端无法提交_代码分析.md", type: "document", modified: "2026-09-30", size: "42 KB", shared: true },
   { id: "branch", parent: null, name: "branch-4.6.3.42-analysis.md", type: "document", modified: "2026-09-30", size: "15 KB" },
+  { id: "portal-execution", parent: null, name: "2026-09-28-portal-form-footer-unification-execution.md", type: "document", modified: "2026-09-28", size: "18 KB", shared: true },
+  { id: "trackpad", parent: null, name: "macOS触摸板双指横扫返回-测试结论与实施方案.md", type: "document", modified: "2026-09-28", size: "21 KB", shared: true },
+  { id: "portal-analysis", parent: null, name: "2026-09-28-portal-form-footer-unification-analysis.md", type: "document", modified: "2026-09-28", size: "16 KB", shared: true },
   { id: "mail", parent: null, name: "Synapse-站内信产品方案.html", type: "document", modified: "2026-09-27", size: "68 KB", shared: true },
   { id: "reminder", parent: null, name: "提醒触发清单.md", type: "document", modified: "2026-09-26", size: "8 KB" },
   { id: "synapse", parent: "projects", name: "Synapse", type: "folder", modified: "2026-10-20", size: "—" },
@@ -48,7 +48,16 @@ export const ITEMS: Item[] = [
   { id: "page", parent: "web", name: "云盘搜索原型.html", type: "document", modified: "2026-10-20", size: "96 KB", shared: true },
   { id: "report", parent: "web", name: "Gitee缺陷分析报告-2026Q2.html", type: "document", modified: "2026-07-01", size: "72 KB" },
   { id: "other", parent: "releases", name: "同步诊断.log", type: "other", modified: "2026-10-18", size: "102 KB" },
+  { id: "projects", parent: null, name: "项目资料", type: "folder", modified: "2026-10-20", size: "—" },
+  { id: "releases", parent: null, name: "发布归档", type: "folder", modified: "2026-10-19", size: "—" },
+  { id: "web", parent: null, name: "临时网页", type: "folder", modified: "2026-10-18", size: "—" },
 ]
+
+export function modifiedLabel(item: Item) {
+  if (item.id === "skill") return "46 分钟前"
+  const days = Math.floor((TODAY - Date.parse(`${item.modified}T16:00:00+08:00`)) / 86_400_000)
+  return days === 0 ? "今天" : `${days} 天前`
+}
 
 export function ancestors(parent: string | null): Item[] {
   if (!parent) return []
