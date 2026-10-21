@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GeneratedUiView } from "../generated-ui-view"
 import { GeneratedUiTheme } from "../generated-ui-theme"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@openuidev/react-ui"
+import { thirtyDayReportSource } from "@/lib/__tests__/fixtures/generated-ui-report"
 
 const bridge = vi.hoisted(() => ({
   getGeneratedUiState: vi.fn(), saveGeneratedUiState: vi.fn(), submitGeneratedUiAction: vi.fn(),
@@ -24,6 +25,18 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); document.documentElement.classList.remove("dark"); vi.clearAllMocks(); vi.restoreAllMocks() })
 
 describe("GeneratedUiView", () => {
+  it("renders the reported 30-day dashboard with shared data using official components", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 7 }) } as unknown as CanvasRenderingContext2D)
+    await act(async () => root.render(<GeneratedUiTheme><GeneratedUiView source={thirtyDayReportSource} streaming={false} block={block} projectId="p" conversationId="c" /></GeneratedUiTheme>))
+    expect(host.textContent).not.toMatch(/界面.*(?:无效|不支持|无法显示)/)
+    expect(host.textContent).toContain("435")
+    expect(host.querySelector("table")).not.toBeNull()
+    expect(host.querySelector('[class*="chart"]')).not.toBeNull()
+    expect(host.querySelector("[inert]")).toBeNull()
+    vi.unstubAllGlobals()
+  })
   it("renders the sales report and submits the filter despite the reported optional Stack parameter error", async () => {
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))

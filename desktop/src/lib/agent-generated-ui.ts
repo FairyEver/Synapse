@@ -59,23 +59,36 @@ function formatGeneratedUiError(error: { code: string; component?: string; path?
 /** Also runs on evaluated props, including restored bindings and later reactive updates. */
 export function hasUnsafeGeneratedUiResource(value: unknown): boolean {
   let nodes = 0
-  const inspect = (child: unknown, depth: number): boolean => {
-    if (depth > 32 || ++nodes > 10_000) return true
-    if (typeof child === "string") return /!\s*\[|<\s*(?:img|iframe|video|audio|object|embed|svg)\b/i.test(child)
-    if (Array.isArray(child)) return child.some((item) => inspect(item, depth + 1))
-    if (!child || typeof child !== "object") return false
+  const heights = new WeakMap<object, number>()
+  const active = new WeakSet<object>()
+  // References share AST objects. Cache inspected subtree heights so repeated
+  // datasets do not exhaust the budget, while deeper reuse still checks depth.
+  const inspect = (child: unknown, depth: number): number => {
+    if (depth > 32 || ++nodes > 10_000) return -1
+    if (typeof child === "string") return /!\s*\[|<\s*(?:img|iframe|video|audio|object|embed|svg)\b/i.test(child) ? -1 : 0
+    if (!child || typeof child !== "object") return 0
+    const cachedHeight = heights.get(child)
+    if (cachedHeight !== undefined) return depth + cachedHeight > 32 ? -1 : cachedHeight
+    if (active.has(child)) return -1
+    active.add(child)
     const item = child as Record<string, unknown>
-    if (typeof item.typeName === "string" && FORBIDDEN_COMPONENTS.has(item.typeName)) return true
+    if (typeof item.typeName === "string" && FORBIDDEN_COMPONENTS.has(item.typeName)) return -1
     if (item.typeName === "Image") {
       const props = item.props as Record<string, unknown> | undefined
-      if (!props || !Object.values(props).some((v) => typeof v === "string" && v.startsWith("synapse-agent-artifact://local/"))) return true
+      if (!props || !Object.values(props).some((v) => typeof v === "string" && v.startsWith("synapse-agent-artifact://local/"))) return -1
     }
-    return Object.entries(item).some(([key, entry]) => {
-      if (/^(src|imageUrl|image|avatar|favicon|backgroundImage)$/i.test(key) && typeof entry === "string" && entry && !entry.startsWith("synapse-agent-artifact://local/")) return true
-      return inspect(entry, depth + 1)
-    })
+    let height = 0
+    for (const [key, entry] of Object.entries(item)) {
+      if (/^(src|imageUrl|image|avatar|favicon|backgroundImage)$/i.test(key) && typeof entry === "string" && entry && !entry.startsWith("synapse-agent-artifact://local/")) return -1
+      const childHeight = inspect(entry, depth + 1)
+      if (childHeight < 0) return -1
+      height = Math.max(height, childHeight + 1)
+    }
+    active.delete(child)
+    heights.set(child, height)
+    return height
   }
-  return inspect(value, 0)
+  return inspect(value, 0) < 0
 }
 
 /** Mask literals before checking executable identifiers; preserve offsets/newlines. */

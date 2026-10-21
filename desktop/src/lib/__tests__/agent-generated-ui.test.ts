@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { splitGeneratedUiContent, validateGeneratedUiSource } from "../agent-generated-ui"
+import { hasUnsafeGeneratedUiResource, splitGeneratedUiContent, validateGeneratedUiSource } from "../agent-generated-ui"
+import { thirtyDayReportSource } from "./fixtures/generated-ui-report"
 
 const ui = 'root = Stack([TextContent("Hello")])'
 
@@ -41,6 +42,22 @@ describe("generated UI message protocol", () => {
 })
 
 describe("generated UI execution boundary", () => {
+  it("accepts a 30-day multi-chart report that reuses its dataset across summaries and tables", () => {
+    expect(validateGeneratedUiSource(thirtyDayReportSource)).toBeNull()
+  })
+
+  it("checks shared subtrees once without skipping deeper paths, cycles or unsafe resources", () => {
+    const shared = { rows: Array.from({ length: 1500 }, (_, n) => ({ n })) }
+    expect(hasUnsafeGeneratedUiResource({ a: shared, b: shared, c: shared, d: shared })).toBe(false)
+    const cycle: Record<string, unknown> = {}; cycle.self = cycle
+    expect(hasUnsafeGeneratedUiResource(cycle)).toBe(true)
+    const leaf = { text: "Safe" }
+    const nested = Array.from({ length: 32 }).reduce<unknown>((value) => ({ child: value }), leaf)
+    expect(hasUnsafeGeneratedUiResource({ first: leaf, later: nested })).toBe(true)
+    const bad = { text: "![image](https://example.com/track.png)" }
+    expect(hasUnsafeGeneratedUiResource({ a: bad, b: bad })).toBe(true)
+    expect(hasUnsafeGeneratedUiResource(Array.from({ length: 10_001 }, () => ({ text: "Safe" })))).toBe(true)
+  })
   it("renders the actual official component schema", () => {
     expect(validateGeneratedUiSource(ui)).toBeNull()
   })
