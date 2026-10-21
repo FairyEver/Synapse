@@ -166,13 +166,16 @@ function useChatConnection(
   ), [defaultProjectIdRef, projectIdsRef, selectedProjectIdRef])
 
   const setSelectedSession = useCallback((session: SynapseAgentSessionSummary | undefined) => {
+    if (selectedProjectIdRef.current !== session?.projectId || selectedConversationIdRef.current !== session?.id) {
+      clearTimeline()
+    }
     selectedProjectIdRef.current = session?.projectId
     selectedConversationIdRef.current = session?.id
     selectedSessionKeyRef.current = session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY
     dispatch({ type: "SET_SELECTED_PROJECT_ID", selectedProjectId: session?.projectId })
     dispatch({ type: "SET_SELECTED_CONVERSATION_ID", selectedConversationId: session?.id })
     dispatch({ type: "SET_SELECTED_SESSION_KEY", selectedSessionKey: session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY })
-  }, [dispatch, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef])
+  }, [clearTimeline, dispatch, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef])
 
   const loadTimeline = useCallback(async (
     target: TimelineTarget,

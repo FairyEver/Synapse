@@ -75,6 +75,49 @@ afterEach(() => {
 })
 
 describe("useChatEvents", () => {
+  it.each([
+    { type: "result", content: "done", done: true } as const,
+    { type: "error", message: "failed" } as const,
+  ])("clears a background conversation on $type without changing the selected conversation", async (event) => {
+    const dispatch = vi.fn<React.Dispatch<ChatAction>>()
+    const updateTimeline = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} updateTimeline={updateTimeline} />)
+    })
+    await act(async () => {
+      bridgeState.listener?.({
+        domain: "agent",
+        type: "phase.update",
+        timestamp: "2026-10-21T04:52:23.000Z",
+        payload: {
+          projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer",
+          runId: "turn-1", phase: "received", status: "in-progress",
+          startedAt: "2026-10-21T04:52:23.000Z",
+        },
+      } satisfies SynapseAgentDomainEvent)
+    })
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} selectedConversationId="conversation-2" updateTimeline={updateTimeline} />)
+    })
+    dispatch.mockClear()
+    updateTimeline.mockClear()
+    await act(async () => {
+      bridgeState.listener?.({
+        domain: "agent", type: event.type, timestamp: "2026-10-21T04:52:41.000Z",
+        scope: { sessionId: "conversation-1" },
+        payload: { projectId: "project-1", sessionKey: "local:renderer", platform: "local-renderer", sequence: 10, event },
+      } satisfies SynapseAgentDomainEvent)
+    })
+
+    expect(dispatch).toHaveBeenCalledWith({ type: "REMOVE_SENDING_CONVERSATION", conversationId: "conversation-1" })
+    expect(dispatch).toHaveBeenCalledWith({ type: "CLEAR_ACTIVE_TURN", conversationId: "conversation-1" })
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "CANCEL_RESET" })
+    expect(updateTimeline).not.toHaveBeenCalled()
+  })
+
   it("logs live timeline refresh failures with conversation context", async () => {
     const loadTimeline = vi.fn(async () => {
       throw new Error("secret IPC failure detail")

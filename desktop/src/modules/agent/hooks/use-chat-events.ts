@@ -320,32 +320,32 @@ function useChatEvents(
         })
         return
       }
-      if (!matchesSelectedEvent(domainEvent, {
+      const selectedEvent = matchesSelectedEvent(domainEvent, {
         projectId: selectedProjectIdRef.current,
         conversationId: selectedConversationIdRef.current,
         sessionKey: selectedSessionKeyRef.current,
-      })) {
-        return
-      }
+      })
       const activeConversationId = streamEventConversationId(domainEvent)
-      if (activeConversationId) {
-        if (isTerminalAgentEvent(domainEvent)) {
-          markConversationTerminal(terminalConversationTimestampsRef.current, activeConversationId, domainEvent.timestamp)
-          pendingConversationIdsRef.current.delete(activeConversationId)
-          dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: activeConversationId })
-          dispatch({ type: "CLEAR_ACTIVE_TURN", conversationId: activeConversationId })
-          dispatch({ type: "CANCEL_RESET" })
-        } else if (
-          domainEvent.payload.event.type !== "fileCheckpoint"
-          && isAfterLastTerminal(
-            terminalConversationTimestampsRef.current,
-            activeConversationId,
-            domainEvent.timestamp,
-          )
-        ) {
-          pendingConversationIdsRef.current.add(activeConversationId)
-          dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: activeConversationId })
-        }
+      // A form submission can finish after the user switches conversations.
+      // Clear its activity even when its content is not displayed here.
+      if (activeConversationId && isTerminalAgentEvent(domainEvent)) {
+        markConversationTerminal(terminalConversationTimestampsRef.current, activeConversationId, domainEvent.timestamp)
+        pendingConversationIdsRef.current.delete(activeConversationId)
+        dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: activeConversationId })
+        dispatch({ type: "CLEAR_ACTIVE_TURN", conversationId: activeConversationId })
+        if (selectedEvent) dispatch({ type: "CANCEL_RESET" })
+      }
+      if (!selectedEvent) return
+      if (activeConversationId && !isTerminalAgentEvent(domainEvent)
+        && domainEvent.payload.event.type !== "fileCheckpoint"
+        && isAfterLastTerminal(
+          terminalConversationTimestampsRef.current,
+          activeConversationId,
+          domainEvent.timestamp,
+        )
+      ) {
+        pendingConversationIdsRef.current.add(activeConversationId)
+        dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: activeConversationId })
       }
       const contextUsage = contextUsageFromEvent(domainEvent.payload.event)
       if (contextUsage || domainEvent.payload.event.type === "compactBoundary") {

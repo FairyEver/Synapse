@@ -461,6 +461,40 @@ describe("useAgentChat", () => {
     expect(chat?.timeline.some((item) => item.kind === "message" && item.content === "live answer")).toBe(true)
   })
 
+  it("does not expose the previous UI under a new conversation while its timeline loads", async () => {
+    const bridge = (window as unknown as { synapse: { agent: {
+      getTimeline: ReturnType<typeof vi.fn>
+      listSessions: ReturnType<typeof vi.fn>
+      switchSession: ReturnType<typeof vi.fn>
+    } } }).synapse.agent
+    const previousUi: SynapseAgentTimelineItem = {
+      ...timelineHistoryMessage(1),
+      content: "```openui\nroot = TextContent(\"Previous conversation\")\n```",
+      metadata: { generatedUi: { version: 1, libraryVersion: "openui@0.18.1/lang@1.0.1", turnId: "turn-1",
+        blocks: [{ id: "block-1", ordinal: 0, sourceHash: "a".repeat(64) }] } },
+    }
+    bridge.listSessions.mockResolvedValue([session, nextSession])
+    bridge.switchSession.mockResolvedValue({ ...nextSession, active: true })
+    bridge.getTimeline.mockResolvedValue(timelineResult([previousUi]))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+    await act(async () => { root.render(<HookProbe onChange={(next) => { chat = next }} />) })
+    await waitFor(() => chat?.timeline[0]?.id === previousUi.id)
+
+    let resolveTimeline!: (result: SynapseAgentTimelineResult) => void
+    bridge.getTimeline.mockImplementation(() => new Promise<SynapseAgentTimelineResult>((resolve) => { resolveTimeline = resolve }))
+    let selection: Promise<void> | undefined
+    await act(async () => { selection = chat?.selectSession(nextSession) })
+    expect(chat?.selectedConversationId).toBe(nextSession.id)
+    expect(chat?.timeline).toEqual([])
+
+    await act(async () => {
+      resolveTimeline({ ...timelineResult([]), conversationId: nextSession.id })
+      await selection
+    })
+  })
+
   it("replaces pagination state when switching conversations", async () => {
     const bridge = (window as unknown as {
       synapse: {
