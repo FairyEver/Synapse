@@ -44,6 +44,29 @@ beforeEach(() => {
 afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear(); mockCenter.changeSource.mockClear() })
 
 describe("MessageCenter", () => {
+  it("keeps the reading body mounted while the notification list refreshes", async () => {
+    const host = document.createElement("div")
+    document.body.append(host)
+    const root = createRoot(host)
+    try {
+      await act(async () => root.render(<MessageCenter />))
+      const body = document.querySelector('[aria-label="通知内容"] .markdown-viewer p')!
+      expect(body.textContent).toBe("管理员发送的完整正文")
+
+      mockCenter.loading = true
+      await act(async () => root.render(<MessageCenter />))
+      expect(document.querySelector('[aria-label="通知内容"] .markdown-viewer p')).toBe(body)
+
+      mockCenter.loading = false
+      mockCenter.items = [{ ...mockCenter.selected } as SynapseNotification]
+      await act(async () => root.render(<MessageCenter />))
+      expect(document.querySelector('[aria-label="通知内容"] .markdown-viewer p')).toBe(body)
+    } finally {
+      await act(async () => root.unmount())
+      mockCenter.loading = false
+    }
+  })
+
   it("shows the full discussion title, quoted original and reply target before the new content", async () => {
     const previous = mockCenter.selected
     mockCenter.selected = { ...previous, source: "drive-discussion", targetId: "discussion-target", title: "截短标题", body: "简短摘要", driveDiscussion: {

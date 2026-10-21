@@ -43,10 +43,12 @@ export function useMail(box: MailBox, query: string, unreadOnly = false, contact
     return () => { active = false }
   }, [box, query, unreadOnly, contactKey, revision, listKey])
 
-  useEffect(() => { handledSelectedRead.current = false }, [box, selectedId])
+  useEffect(() => {
+    handledSelectedRead.current = false
+    setDetail(null)
+  }, [box, selectedId])
 
   useEffect(() => {
-    setDetail(null)
     if (!selectedId) return
     let active = true
     void mailRequest({ kind: "messageGet", messageId: selectedId })

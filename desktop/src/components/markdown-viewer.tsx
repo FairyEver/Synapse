@@ -91,7 +91,8 @@ function MarkdownViewer({
   showTabs = true,
   surface = "default",
 }: MarkdownViewerProps) {
-  const renderedHtml = useMemo(() => renderMarkdown(content), [content])
+  // 保持 HTML 对象稳定，避免无关重绘替换正文节点并打断滚动或文本选择。
+  const renderedHtml = useMemo(() => ({ __html: renderMarkdown(content) }), [content])
   const surfaceClassName = surface === "plain"
     ? "border-0 rounded-none bg-transparent p-0"
     : "rounded-lg border border-border bg-muted/20 px-4 py-4"
@@ -143,7 +144,7 @@ function MarkdownViewer({
     >
       <div
         className={MARKDOWN_BODY_CLASSNAME}
-        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        dangerouslySetInnerHTML={renderedHtml}
       />
     </div>
   )

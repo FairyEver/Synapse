@@ -2,7 +2,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import type { MailSummary } from "@/types/mail"
+import type { MailMessage, MailSummary } from "@/types/mail"
 import { useMail, type MailBox } from "../use-mail"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }))
@@ -11,13 +11,18 @@ vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
-  return { promise, resolve }
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+  return { promise, resolve, reject }
 }
 
 function message(messageId: string): MailSummary {
   const person = { userId: "person", nickname: "成员", handle: "member" }
   return { messageId, sender: person, recipients: [person], toRecipients: [person], ccRecipients: [], relationKind: null, subject: messageId, snippet: "正文", sentAt: "2026-09-27T00:00:00.000Z", readAt: null, attachmentCount: 0 }
+}
+
+function detail(messageId: string): MailMessage {
+  return { ...message(messageId), viewerId: "reader", body: "正在阅读的正文", readAt: "2026-10-21T00:00:00.000Z", team: null, conversationId: "conversation", replyToId: null, relation: null, quote: null, attachments: [] }
 }
 
 let root: Root | null = null
@@ -41,9 +46,84 @@ afterEach(() => {
   root = null
   document.body.innerHTML = ""
   mocks.request.mockReset()
+  vi.useRealTimers()
 })
 
 describe("useMail", () => {
+  it.each(["timer", "manual"])("keeps the open body visible during a %s refresh and applies the response", async (trigger) => {
+    vi.useFakeTimers()
+    const reloaded = deferred<MailMessage>()
+    let reads = 0
+    mocks.request.mockImplementation(async (operation: { kind: string }) => {
+      if (operation.kind === "messageGet") return reads++ ? reloaded.promise : detail("opened")
+      if (operation.kind === "messageCount") return { inboxTotal: 1, sentTotal: 0, unread: 0 }
+      return { items: [], nextCursor: null }
+    })
+    render("inbox")
+    await act(async () => { current.setSelectedId("opened") })
+    expect(current.detail?.body).toBe("正在阅读的正文")
+
+    await act(async () => {
+      if (trigger === "timer") vi.advanceTimersByTime(30_000)
+      else current.refresh()
+    })
+    expect(reads).toBe(2)
+    expect(current.detail?.body).toBe("正在阅读的正文")
+
+    await act(async () => { reloaded.resolve({ ...detail("opened"), readAt: null }); await reloaded.promise })
+    expect(current.detail?.body).toBe("正在阅读的正文")
+    expect(current.detail?.readAt).toBeNull()
+  })
+
+  it("preserves the open body on refresh failure but clears it if the message was deleted", async () => {
+    const reloaded = deferred<MailMessage>()
+    let reads = 0
+    mocks.request.mockImplementation(async (operation: { kind: string }) => {
+      if (operation.kind === "messageGet") return reads++ ? reloaded.promise : detail("opened")
+      if (operation.kind === "messageCount") return { inboxTotal: 1, sentTotal: 0, unread: 0 }
+      return { items: [], nextCursor: null }
+    })
+    render("inbox")
+    await act(async () => { current.setSelectedId("opened") })
+    await act(async () => { current.refresh() })
+    await act(async () => { reloaded.reject(new Error("网络连接失败")) })
+    expect(current.error).toBe("网络连接失败")
+    expect(current.detail?.body).toBe("正在阅读的正文")
+
+    mocks.request.mockImplementation(async (operation: { kind: string }) => {
+      if (operation.kind === "messageGet") throw new Error("HTTP 404")
+      return { items: [], nextCursor: null }
+    })
+    await act(async () => { current.refresh() })
+    expect(current.selectedId).toBeNull()
+    expect(current.detail).toBeNull()
+  })
+
+  it("clears the previous body on selection changes and ignores a late refresh response", async () => {
+    const reloaded = deferred<MailMessage>()
+    const next = deferred<MailMessage>()
+    let reads = 0
+    mocks.request.mockImplementation(async (operation: { kind: string; messageId?: string }) => {
+      if (operation.kind === "messageGet") {
+        if (operation.messageId === "next") return next.promise
+        return reads++ ? reloaded.promise : detail("opened")
+      }
+      if (operation.kind === "messageCount") return { inboxTotal: 2, sentTotal: 0, unread: 0 }
+      return { items: [], nextCursor: null }
+    })
+    render("inbox")
+    await act(async () => { current.setSelectedId("opened") })
+    await act(async () => { current.refresh() })
+    await act(async () => { current.setSelectedId("next") })
+    expect(current.detail).toBeNull()
+    await act(async () => { reloaded.resolve(detail("opened")); await reloaded.promise })
+    expect(current.detail).toBeNull()
+    await act(async () => { next.resolve(detail("next")); await next.promise })
+    expect(current.detail?.messageId).toBe("next")
+    act(() => { current.setSelectedId(null) })
+    expect(current.detail).toBeNull()
+  })
+
   it("loads contacts independently of message searches and ignores a late result from another mailbox", async () => {
     const inbox = deferred<{ items: { key: string }[] }>()
     const sent = [{ key: "organization:team", kind: "organization", name: "研发部", handle: null, teamName: "团队", unread: 0, lastSentAt: "2026-10-16T00:00:00Z" }]
