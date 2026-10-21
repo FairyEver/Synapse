@@ -1,6 +1,6 @@
 import { Component, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Renderer } from "@openuidev/react-lang"
-import { validateGeneratedUiSource } from "@/lib/agent-generated-ui"
+import { isRecoverableGeneratedUiError, validateGeneratedUiSource } from "@/lib/agent-generated-ui"
 import { redactSensitiveText } from "@/lib/agent-redaction"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -47,7 +47,7 @@ export function GeneratedUiView({ source, streaming, block, projectId, conversat
         <GeneratedUiFailureContext.Provider value={onRenderFailure}>
           <Renderer response={safeSource} library={guardedOpenuiLibrary} isStreaming={streaming} publishObservability={false}
             initialState={controller?.snapshot.state} onStateUpdate={controller?.stateChanged} onAction={disabled ? undefined : controller?.action}
-            onError={(errors) => { if (!streaming && errors.some((error) => error.severity !== "warning")) { logger.warn("agent.generated-ui.parse.failed", { count: errors.length }); setRenderFailed(true) } }} />
+            onError={(errors) => { if (!streaming && errors.some((error) => error.severity !== "warning" && !isRecoverableGeneratedUiError(error))) { logger.warn("agent.generated-ui.parse.failed", { count: errors.length }); setRenderFailed(true) } }} />
         </GeneratedUiFailureContext.Provider>
       </div>
     </GeneratedUiBoundary>

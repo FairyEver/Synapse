@@ -24,6 +24,34 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); document.documentElement.classList.remove("dark"); vi.clearAllMocks(); vi.restoreAllMocks() })
 
 describe("GeneratedUiView", () => {
+  it("renders the sales report and submits the filter despite the reported optional Stack parameter error", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 7 }) } as unknown as CanvasRenderingContext2D)
+    const source = `root = Stack([filterForm, kpiRow, chart, table])
+filterForm = Form("filter", Buttons([Button("更新结果", @ToAssistant("更新结果"))]), [FormControl("展示范围", Select("range", [SelectItem("3", "最近3天"), SelectItem("7", "全部7天")], null, null, $range)), FormControl("备注", TextArea("remark"))])
+$range = "7"
+kpiRow = Stack([TextContent("" + @Sum(sales)), TextContent("" + @Round(@Avg(sales), 1))], "row", "m", "stretch", true)
+chart = LineChart(labels, [Series("销售额", sales)], "natural", "日期", "销售额", 260)
+table = Table([Col("日期", labels), Col("销售额", sales, "number")])
+labels = ["10月1日", "10月2日", "10月3日", "10月4日", "10月5日", "10月6日", "10月7日"]
+sales = [1200, 1800, 1500, 2300, 2100, 2800, 3200]`
+    await act(async () => root.render(<GeneratedUiTheme><GeneratedUiView source={source} streaming={false} block={block} projectId="p" conversationId="c" /></GeneratedUiTheme>))
+    expect(host.textContent).not.toMatch(/界面.*(?:无效|无法显示)/)
+    expect(host.textContent).toContain("14900")
+    expect(host.textContent).toContain("2128.6")
+    expect(host.querySelector("table")).not.toBeNull()
+    expect(host.querySelector('[class*="chart"]')).not.toBeNull()
+    const remark = host.querySelector("textarea")!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(remark, "说明峰值")
+      remark.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const submit = [...host.querySelectorAll("button")].find((button) => button.textContent === "更新结果")!
+    await act(async () => submit.click())
+    expect(bridge.submitGeneratedUiAction).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "c", formState: expect.objectContaining({ $range: "7", filter: expect.objectContaining({ remark: expect.objectContaining({ value: "说明峰值" }) }) }) }))
+    vi.unstubAllGlobals()
+  })
   it("restores under the application's StrictMode effect replay", async () => {
     await act(async () => root.render(<StrictMode><GeneratedUiView source={'root = Stack([TextContent("Hello")])'} streaming={false} block={block} projectId="p" conversationId="c" /></StrictMode>))
     expect(host.textContent).toContain("Hello")
@@ -139,7 +167,7 @@ describe("GeneratedUiView", () => {
     const source = 'root = Stack([Form("first", Buttons([Button("Continue", @ToAssistant("Continue"))]), [FormControl("Days", Input("days"))])])'
     await act(async () => root.render(<GeneratedUiView source={source} streaming={false} block={block} projectId="p" conversationId="c" />))
     await act(async () => host.querySelector("button")!.click())
-    expect(bridge.submitGeneratedUiAction).toHaveBeenCalledWith(expect.objectContaining({ formState: { first: state.first } }))
+    expect(bridge.submitGeneratedUiAction).toHaveBeenCalledWith(expect.objectContaining({ formState: { first: state.first, $period: "month" } }))
     for (const [input] of bridge.saveGeneratedUiState.mock.calls) expect(input.state).toEqual(state)
   })
   it("sends a real official button action back to its source conversation once", async () => {

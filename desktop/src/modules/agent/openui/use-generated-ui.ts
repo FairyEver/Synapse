@@ -75,7 +75,11 @@ class GeneratedUiController {
       if (this.disposed) return
       const result = await requireBridgeDomain("agent").submitGeneratedUiAction({
         ...this.target, submissionId: crypto.randomUUID(), expectedRevision: this.snapshot.revision,
-        message: event.humanFriendlyMessage, formState: event.formState ?? this.draft, context: event.params?.context,
+        message: event.humanFriendlyMessage,
+        // Named forms scope event.formState to their own fields, excluding bound
+        // selectors. Include reactive values so remarks never hide the chosen range.
+        formState: { ...Object.fromEntries(Object.entries(this.draft).filter(([key]) => key.startsWith("$"))), ...(event.formState ?? this.draft) },
+        context: event.params?.context,
       })
       if (result.status !== "accepted") throw new Error("提交状态待确认，请查看对话。")
       if (this.disposed) return

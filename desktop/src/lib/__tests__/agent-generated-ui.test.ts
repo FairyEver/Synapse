@@ -29,11 +29,30 @@ describe("generated UI message protocol", () => {
     }
     expect(splitGeneratedUiContent(source).find((part) => part.kind === "openui")?.content.trim()).toBe(ui)
   })
+
+  it("accepts the official openui-lang fence and holds every partial language tag", () => {
+    const fence = "```openui-lang"
+    for (let index = 1; index <= fence.length; index++) {
+      expect(splitGeneratedUiContent(`Before\n${fence.slice(0, index)}`, true)).toEqual([{ kind: "markdown", content: "Before\n" }])
+    }
+    expect(splitGeneratedUiContent(`${fence}\n${ui}\n\x60\x60\x60`)).toEqual([{ kind: "openui", content: `${ui}\n`, ordinal: 0, complete: true }])
+    expect(splitGeneratedUiContent(`\x60\x60\x60\x60md\n${fence}\n${ui}\n\x60\x60\x60\n\x60\x60\x60\x60`).every((part) => part.kind === "markdown")).toBe(true)
+  })
 })
 
 describe("generated UI execution boundary", () => {
   it("renders the actual official component schema", () => {
     expect(validateGeneratedUiSource(ui)).toBeNull()
+  })
+
+  it("keeps official parser defaults for invalid optional Stack layout without rejecting the whole report", () => {
+    expect(validateGeneratedUiSource('root = Stack([kpiRow])\nkpiRow = Stack([TextContent("14900")], "row", "m", "stretch", true)')).toBeNull()
+  })
+
+  it("still rejects invalid data and form parameters and identifies the failing component", () => {
+    expect(validateGeneratedUiSource('root = Stack([filter])\nfilter = Select(42, [])')).toContain("Select.name")
+    expect(validateGeneratedUiSource('root = Stack([LineChart(["Day"], [Series("Sales", ["bad"])])])')).toEqual(expect.any(String))
+    expect(validateGeneratedUiSource('root = Stack([UnknownWidget("x")])')).toEqual(expect.any(String))
   })
 
   it.each([

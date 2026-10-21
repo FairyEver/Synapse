@@ -13,10 +13,9 @@ function namespace<T extends { id: string }>() {
   } as unknown as DataNamespace<T>
 }
 
-async function fixture() {
+async function fixture(content = '```openui\nroot = Stack([TextContent("Hello")])\n```') {
   const conversations = namespace<ConversationEntryV1>()
   const states = namespace<GeneratedUiStateEntry>()
-  const content = '```openui\nroot = Stack([TextContent("Hello")])\n```'
   const metadata = createGeneratedUiMetadata(content, "turn-1")!
   const conversation = { id: "conversation-1", projectId: "project-1", platform: "local-renderer", sessionKey: "local", history: [{ role: "assistant", content, metadata: { generatedUi: metadata } }] } as unknown as ConversationEntryV1
   await conversations.upsert(conversation)
@@ -26,6 +25,12 @@ async function fixture() {
 }
 
 describe("GeneratedUiService", () => {
+  it("authenticates official fences and reports with a recoverable optional layout error", async () => {
+    const f = await fixture('```openui-lang\nroot = Stack([TextContent("14900")], "row", "m", "stretch", true)\n```')
+    expect(await f.service.get(f.target)).toMatchObject({ readOnly: false })
+    await f.service.save({ ...f.target, expectedRevision: 0, state: { days: "7" } })
+    expect((await f.service.get(f.target)).state).toEqual({ days: "7" })
+  })
   it("persists form values independently and rejects stale multi-window writes", async () => {
     const f = await fixture()
     expect(await f.service.get(f.target)).toMatchObject({ revision: 0, state: {} })

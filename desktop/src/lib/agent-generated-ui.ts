@@ -19,10 +19,10 @@ export function splitGeneratedUiContent(content: string, streaming = false): Gen
     const line = lines[index]
     const trimmed = line.replace(/\r?\n$/, "")
     if (!fence) {
-      if (streaming && index === lines.length - 1 && !line.endsWith("\n") && /^`{1,3}(?:o(?:p(?:e(?:n(?:u(?:i)?)?)?)?)?)?$/.test(trimmed)) break
+      if (streaming && index === lines.length - 1 && !line.endsWith("\n") && ["```openui", "```openui-lang", "~~~openui", "~~~openui-lang"].some((tag) => tag.startsWith(trimmed))) break
       const match = /^(\`{3,}|~{3,})([^\r\n]*)$/.exec(trimmed)
       if (match) {
-        const ui = match[2].trim() === "openui"
+        const ui = /^(?:openui|openui-lang)$/.test(match[2].trim())
         fence = { marker: match[1][0], length: match[1].length, ui }
         if (ui) { flush(); code = "" } else markdown += line
       } else markdown += line
@@ -41,6 +41,20 @@ export function splitGeneratedUiContent(content: string, streaming = false): Gen
 const parser = createParser(librarySpec.schema as unknown as LibraryJSONSchema, "Stack")
 const MAX_STATEMENTS = 500
 const FORBIDDEN_COMPONENTS = new Set(["Modal", "MarkDownRenderer", "InlineMarkdownRenderer", "ImageBlock", "ImageGallery", "ImageText", "ImageTextLarge", "VisualCardItem", "VisualCardBlock", "Sources", "SourceFaviconImage", "Citation"])
+
+/** The official parser drops invalid optional layout props and uses component defaults.
+ * Never extend this allowance to data, fields, resources or action parameters. */
+export function isRecoverableGeneratedUiError(error: { code: string; component?: string; path?: string }): boolean {
+  return error.code === "type-mismatch" && error.component === "Stack"
+    && ["/direction", "/gap", "/align", "/justify", "/wrap"].includes(error.path ?? "")
+}
+
+function formatGeneratedUiError(error: { code: string; component?: string; path?: string; statementId?: string }): string {
+  // Parser messages can echo user data. Only bounded identifiers belong in diagnostics.
+  const identifier = (value?: string) => value && /^[\w$./-]{1,80}$/.test(value) ? value : ""
+  const location = [identifier(error.statementId), [identifier(error.component), identifier(error.path)?.replace(/^\//, "")].filter(Boolean).join(".")].filter(Boolean).join(" · ")
+  return `界面格式无效${location ? `（${location}）` : ""}。`
+}
 
 /** Also runs on evaluated props, including restored bindings and later reactive updates. */
 export function hasUnsafeGeneratedUiResource(value: unknown): boolean {
@@ -107,7 +121,9 @@ export function validateGeneratedUiSource(source: string, streaming = false): st
     if (result.rootExpression) return "界面根节点必须使用 Stack。"
     if (result.queryStatements.length || result.mutationStatements.length) return "界面不能直接调用工具。"
     if (hasUnsafeGeneratedUiResource(result.root)) return "界面包含不支持的资源或层级。"
-    if (!streaming && (!result.root || result.meta.incomplete || result.meta.unresolved.length || result.meta.errors.some((error) => error.code !== "no-root"))) return "界面格式无效。"
+    const fatalError = result.meta.errors.find((error) => error.code !== "no-root" && !isRecoverableGeneratedUiError(error))
+    if (!streaming && fatalError) return formatGeneratedUiError(fatalError)
+    if (!streaming && (!result.root || result.meta.incomplete || result.meta.unresolved.length)) return "界面格式无效。"
     return null
   } catch {
     return streaming ? null : "界面格式无效。"
