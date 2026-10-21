@@ -8,7 +8,7 @@
 - 生成界面不得直接执行工具：不提供 toolProvider，拒绝 Query、Mutation、@Run、主动加载外部资源及覆盖宿主的弹窗。表单和按钮回到来源会话，继续经过既有权限；模型生成的内容不构成额外授权。
 - UI 状态通过 DataRepository 的 `agent.generated-ui-state` 保存。主进程校验项目/会话/块身份与内容摘要，revision 防止多窗口覆盖，submissionId 与持久化收据防重复接收；状态不明禁止自动重发。
 - UI 解析上限只限制展示，不能截断或改写 SDK 原始输出。流式、来源未确认、已转交 CLI 或状态未恢复时禁止交互；导出必须脱敏，日志不得记录表单内容。实现边界见 `docs/superpowers/specs/2026-10-21-agent-openui-design.md`。
-- 仅 `Stack` 可选布局参数的 `type-mismatch` 使用官方解析器丢弃参数后的默认布局；数据、字段、动作和资源错误不因此放行。表单提交包含当前响应式绑定值和操作表单字段，不包含其它表单草稿；不调用云端 Autofix 或创建隐藏修复 query。
+- `Stack` 可选布局参数的 `type-mismatch` 使用官方解析器丢弃参数后的默认布局；另仅在显示副本中兼容 `Text` 前两项不含转义的字符串字面量明确倒置（第一项不是合法 variant、第二项为 `text`/`number`），历史原文及摘要不变。绑定、表达式及其它数据、字段、动作和资源错误不因此放行。解析 AST 与计算后 props 分别限制 131,072 和 10,000 次访问，均检查 32 层深度及循环引用。表单提交包含当前响应式绑定值和操作表单字段，不包含其它表单草稿；不调用云端 Autofix 或创建隐藏修复 query。
 
 本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
 

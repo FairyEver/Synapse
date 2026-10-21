@@ -40,6 +40,8 @@ export function splitGeneratedUiContent(content: string, streaming = false): Gen
 
 const parser = createParser(librarySpec.schema as unknown as LibraryJSONSchema, "Stack")
 const MAX_STATEMENTS = 500
+// The parser expands reactive expressions into wrappers before runtime evaluation.
+const MAX_AST_VISITS = 128 * 1024
 const FORBIDDEN_COMPONENTS = new Set(["Modal", "MarkDownRenderer", "InlineMarkdownRenderer", "ImageBlock", "ImageGallery", "ImageText", "ImageTextLarge", "VisualCardItem", "VisualCardBlock", "Sources", "SourceFaviconImage", "Citation"])
 
 /** The official parser drops invalid optional layout props and uses component defaults.
@@ -58,13 +60,17 @@ function formatGeneratedUiError(error: { code: string; component?: string; path?
 
 /** Also runs on evaluated props, including restored bindings and later reactive updates. */
 export function hasUnsafeGeneratedUiResource(value: unknown): boolean {
+  return inspectGeneratedUiResource(value, 10_000)
+}
+
+function inspectGeneratedUiResource(value: unknown, maxVisits: number): boolean {
   let nodes = 0
   const heights = new WeakMap<object, number>()
   const active = new WeakSet<object>()
   // References share AST objects. Cache inspected subtree heights so repeated
   // datasets do not exhaust the budget, while deeper reuse still checks depth.
   const inspect = (child: unknown, depth: number): number => {
-    if (depth > 32 || ++nodes > 10_000) return -1
+    if (depth > 32 || ++nodes > maxVisits) return -1
     if (typeof child === "string") return /!\s*\[|<\s*(?:img|iframe|video|audio|object|embed|svg)\b/i.test(child) ? -1 : 0
     if (!child || typeof child !== "object") return 0
     const cachedHeight = heights.get(child)
@@ -96,6 +102,16 @@ function executableText(source: string): string {
   return source.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\/[^\n]*/g, (literal) => literal.replace(/[^\n]/g, " "))
 }
 
+/** Display-only compatibility for two unambiguous literal Text arguments.
+ * Keep history, block hashes and fallback source untouched. Never infer bindings. */
+export function normalizeGeneratedUiSource(source: string): string {
+  const executable = executableText(source)
+  return source.replace(/\bText\s*\(\s*("[^"\\]*"|'[^'\\]*')\s*,\s*(["'])(text|number)\2(?=\s*[,)])/g, (match, label: string, quote: string, variant: string, offset: number) => {
+    if (!executable.slice(offset).startsWith("Text") || ["text", "number"].includes(label.slice(1, -1))) return match
+    return `Text(${quote}${variant}${quote}, ${label}`
+  })
+}
+
 function hasReferenceCycle(source: string): boolean {
   const assignments = [...source.matchAll(/^\s*([\w$]+)\s*=([^]*?)(?=^\s*[\w$]+\s*=|$(?![^]))/gm)]
   const names = new Set(assignments.map((match) => match[1]))
@@ -115,6 +131,7 @@ function hasReferenceCycle(source: string): boolean {
 
 export function validateGeneratedUiSource(source: string, streaming = false): string | null {
   if (new TextEncoder().encode(source).byteLength > GENERATED_UI_MAX_SOURCE_BYTES) return "界面内容过大。"
+  source = normalizeGeneratedUiSource(source)
   const executable = executableText(source)
   // TextContent also renders Markdown internally; image syntax can otherwise bypass Image checks.
   if (/!\s*\[|<\s*(?:img|iframe|video|audio|object|embed|svg)\b/i.test(source)) return "界面不能自动加载外部资源。"
@@ -133,7 +150,9 @@ export function validateGeneratedUiSource(source: string, streaming = false): st
     const result = parser.parse(source)
     if (result.rootExpression) return "界面根节点必须使用 Stack。"
     if (result.queryStatements.length || result.mutationStatements.length) return "界面不能直接调用工具。"
-    if (hasUnsafeGeneratedUiResource(result.root)) return "界面包含不支持的资源或层级。"
+    // Reactive member/conditional expressions expand into parser wrapper objects.
+    // Bound that AST separately; evaluated component props retain the 10k limit.
+    if (inspectGeneratedUiResource(result.root, MAX_AST_VISITS)) return "界面包含不支持的资源或层级。"
     const fatalError = result.meta.errors.find((error) => error.code !== "no-root" && !isRecoverableGeneratedUiError(error))
     if (!streaming && fatalError) return formatGeneratedUiError(fatalError)
     if (!streaming && (!result.root || result.meta.incomplete || result.meta.unresolved.length)) return "界面格式无效。"

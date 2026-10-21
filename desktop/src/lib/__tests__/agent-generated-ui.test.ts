@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { hasUnsafeGeneratedUiResource, splitGeneratedUiContent, validateGeneratedUiSource } from "../agent-generated-ui"
+import { hasUnsafeGeneratedUiResource, normalizeGeneratedUiSource, splitGeneratedUiContent, validateGeneratedUiSource } from "../agent-generated-ui"
 import { thirtyDayReportSource } from "./fixtures/generated-ui-report"
+import { codeReportSource, reversedTextCodeReportSource } from "./fixtures/generated-ui-code-report"
 
 const ui = 'root = Stack([TextContent("Hello")])'
 
@@ -42,6 +43,33 @@ describe("generated UI message protocol", () => {
 })
 
 describe("generated UI execution boundary", () => {
+  it("accepts a report that selects between three datasets using reactive expressions", () => {
+    expect(validateGeneratedUiSource(codeReportSource)).toBeNull()
+  })
+
+  it("still bounds expanded AST work independently of the source byte limit", () => {
+    const rows = JSON.stringify(Array.from({ length: 300 }, (_, n) => ({ day: `Day ${n}`, c: 1, a: n, d: 0 })))
+    const expanded = codeReportSource.replace(/((?:allRows|srcRows|bizRows) = )\[[^\n]+/g, `$1${rows}`)
+    expect(new TextEncoder().encode(expanded).byteLength).toBeLessThan(128 * 1024)
+    expect(validateGeneratedUiSource(expanded)).toBe("界面包含不支持的资源或层级。")
+  })
+
+  it("accepts an unambiguous reversal of Text's literal variant and value", () => {
+    expect(validateGeneratedUiSource(reversedTextCodeReportSource)).toBeNull()
+  })
+
+  it("normalizes only literal Text calls without changing quoted examples, comments or bindings", () => {
+    expect(normalizeGeneratedUiSource('root = Stack([Text(\'Added\', \'number\', "lines")])')).toBe('root = Stack([Text(\'number\', \'Added\', "lines")])')
+    const unchanged = `root = Stack([TextContent("Text('Added', 'text')")])
+// Text("Added", "text")
+valid = Text("number", "text")
+binding = Text($label, "text")
+expression = Text("Added", "text" + $suffix)
+escaped = Text("Added\\u0020lines", "text")`
+    expect(normalizeGeneratedUiSource(unchanged)).toBe(unchanged)
+    expect(validateGeneratedUiSource('root = Stack([OverviewCardBlock([OverviewCardItem("id", Text("Added", "invalid"))])])')).toContain("Text.variant")
+  })
+
   it("accepts a 30-day multi-chart report that reuses its dataset across summaries and tables", () => {
     expect(validateGeneratedUiSource(thirtyDayReportSource)).toBeNull()
   })
@@ -57,6 +85,7 @@ describe("generated UI execution boundary", () => {
     const bad = { text: "![image](https://example.com/track.png)" }
     expect(hasUnsafeGeneratedUiResource({ a: bad, b: bad })).toBe(true)
     expect(hasUnsafeGeneratedUiResource(Array.from({ length: 10_001 }, () => ({ text: "Safe" })))).toBe(true)
+    expect(hasUnsafeGeneratedUiResource(Array.from({ length: 10_001 }, (_, n) => n))).toBe(true)
   })
   it("renders the actual official component schema", () => {
     expect(validateGeneratedUiSource(ui)).toBeNull()

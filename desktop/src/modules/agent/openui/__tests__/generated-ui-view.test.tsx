@@ -6,6 +6,7 @@ import { GeneratedUiView } from "../generated-ui-view"
 import { GeneratedUiTheme } from "../generated-ui-theme"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@openuidev/react-ui"
 import { thirtyDayReportSource } from "@/lib/__tests__/fixtures/generated-ui-report"
+import { reversedTextCodeReportSource } from "@/lib/__tests__/fixtures/generated-ui-code-report"
 
 const bridge = vi.hoisted(() => ({
   getGeneratedUiState: vi.fn(), saveGeneratedUiState: vi.fn(), submitGeneratedUiAction: vi.fn(),
@@ -25,6 +26,29 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); document.documentElement.classList.remove("dark"); vi.clearAllMocks(); vi.restoreAllMocks() })
 
 describe("GeneratedUiView", () => {
+  it("renders the reported reversed Text labels and updates KPIs and table when switching datasets", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ font: "", measureText: (text: string) => ({ width: text.length * 7 }) } as unknown as CanvasRenderingContext2D)
+    await act(async () => root.render(<GeneratedUiTheme><GeneratedUiView source={reversedTextCodeReportSource} streaming={false} block={block} projectId="p" conversationId="c" /></GeneratedUiTheme>))
+    expect(host.textContent).not.toMatch(/界面.*(?:无效|不支持|无法显示)/)
+    expect(host.textContent).toContain("Added")
+    expect(host.textContent).toContain("2310")
+    expect(host.querySelector("tbody tr")!.textContent).toContain("100")
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Source")!.click())
+    expect(host.textContent).toContain("1260")
+    expect(host.querySelector("tbody tr")!.textContent).toContain("50")
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Business")!.click())
+    expect(host.textContent).toContain("630")
+    expect(host.querySelector("tbody tr")!.textContent).toContain("20")
+    expect(host.querySelector('[class*="chart"]')).not.toBeNull()
+    ;(host.querySelector('[role="tablist"]') as HTMLElement).scrollTo = vi.fn()
+    await act(async () => ([...host.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === "Net") as HTMLElement).click())
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe("Net")
+    expect(host.textContent).not.toMatch(/界面.*(?:无效|不支持|无法显示)/)
+    expect(bridge.submitGeneratedUiAction).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
   it("renders the reported 30-day dashboard with shared data using official components", async () => {
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
@@ -86,6 +110,12 @@ sales = [1200, 1800, 1500, 2300, 2100, 2800, 3200]`
     await act(async () => root.render(<GeneratedUiView source={'root = Stack([])\nx = Query("secret", {})'} streaming={false} />))
     expect(host.textContent).toContain("界面不能直接调用工具")
     expect(host.textContent).toContain("Query")
+    expect(bridge.submitGeneratedUiAction).not.toHaveBeenCalled()
+  })
+  it("retains the original source when another error blocks a normalized Text call", async () => {
+    const source = 'root = Stack([Text("Added", "text")])\nx = Query("secret", {})'
+    await act(async () => root.render(<GeneratedUiView source={source} streaming={false} />))
+    expect(host.querySelector("code")!.textContent).toBe(source)
     expect(bridge.submitGeneratedUiAction).not.toHaveBeenCalled()
   })
   it("redacts sensitive display values after language string decoding", async () => {
