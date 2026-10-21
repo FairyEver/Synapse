@@ -3,6 +3,7 @@
 ## 本地 Agent 生成界面
 
 - 本地 Renderer 会话追加 OpenUI 官方组件协议；保留 Claude Code preset、Persona、项目规则和原有 SDK 会话。协议仅是系统提示，不显示为聊天消息，不注入非 Renderer 的 Agent 入口。
+- OpenUI 只用于聊天内展示，不得替代编写、修改、保存、构建或调试网页、应用、组件和代码文件的交付。提示词必须将完整官方参考置于聊天 UI 作用域内，组件、语法、资源、布局与最终校验规则不约束用户项目代码、文件或普通代码示例，现有工具权限与安全检查继续生效；未经明确要求不向用户项目添加 OpenUI 依赖。
 - 仅带宿主 `generatedUi` 元数据的主会话 Assistant 正文或本地受标记流式草稿可以渲染 `openui` / 官方 `openui-lang` 围栏。旧历史、工具结果、子 Agent 和普通代码示例保持原样。宿主负责完整程序的混合消息提示，不启用上游 inlineMode 的增量语句规则；每个块必须独立完整。
 - 生成界面不得直接执行工具：不提供 toolProvider，拒绝 Query、Mutation、@Run、主动加载外部资源及覆盖宿主的弹窗。表单和按钮回到来源会话，继续经过既有权限；模型生成的内容不构成额外授权。
 - UI 状态通过 DataRepository 的 `agent.generated-ui-state` 保存。主进程校验项目/会话/块身份与内容摘要，revision 防止多窗口覆盖，submissionId 与持久化收据防重复接收；状态不明禁止自动重发。

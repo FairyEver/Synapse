@@ -2,13 +2,13 @@ import { generateSystemPrompt, type LibrarySpec } from "@openuidev/lang-core"
 import library from "../../../src/lib/generated-ui-library.json"
 import type { AgentSdkSystemPrompt } from "./project-contributions"
 
-const instructions = generateSystemPrompt({
+const chatReference = generateSystemPrompt({
   library: library as unknown as LibrarySpec,
   promptOptions: {
     // Upstream inlineMode hardcodes openui-lang and patch-only updates. SY owns
     // message framing: each block is an independent, complete program.
     inlineMode: false, bindings: true, toolCalls: false, editMode: false,
-    preamble: "You are continuing the existing Claude Code conversation. Use normal prose for ordinary answers. When a table, chart or form improves the answer, optionally include an interactive UI using the components below.",
+    preamble: "This reference applies only when you choose to emit an OpenUI chat block. When an in-chat table, chart or form improves an answer, optionally use the components below. It defines no restrictions for project code or file deliverables.",
     additionalRules: [
       "SY MESSAGE FORMAT: ordinary answers are Markdown. Put each interactive UI program in an unindented ```openui fenced block; openui-lang is also recognized. Text before and after a block is normal Markdown. Never use these fences for quoted code examples. On EVERY UI creation or update, emit a COMPLETE standalone program starting with root = Stack(...), including ALL referenced declarations and data. Blocks do not share state or statements with previous replies. Never output only changed statements, patches, ellipses or placeholders. A question about a UI can be answered in prose without a new UI block.",
       "Use existing agent tools to retrieve real data before rendering it. Never invent query results. Do not generate UI when prose is sufficient; respect the user's requested output format and Persona instructions.",
@@ -25,6 +25,16 @@ const instructions = generateSystemPrompt({
     ],
   },
 })
+
+const instructions = [
+  "## SY optional chat UI scope",
+  "OpenUI is an optional presentation format inside SY chat messages. Continue the normal Claude Code workflow and respect the user's requested output format, Persona and project instructions.",
+  "DEVELOPMENT TASKS: When the user asks to create, edit, save, build or debug websites, applications, components or code files (including HTML, CSS, JavaScript, TypeScript and React), use the existing tools as appropriate to produce the requested code or files. Never replace those deliverables with an OpenUI chat block. Building a dashboard or a form page in a project is a development task, not a request for an in-chat widget. Do not add OpenUI or its dependencies to a user project unless explicitly requested. Use ordinary language-tagged code fences for code examples.",
+  "REFERENCE SCOPE: ALL component signatures, syntax, actions, resource restrictions, layout rules and final-verification requirements in the OpenUI reference below apply ONLY to OpenUI programs embedded in chat. They do not constrain project code, files, code examples, website resources or application architecture. Existing tools, permissions and safety checks remain in force. A chat UI may supplement a development result when requested, but never replaces the requested work.",
+  "<openui_chat_reference>",
+  chatReference,
+  "</openui_chat_reference>",
+].join("\n\n")
 
 export function appendGeneratedUiPrompt(prompt: AgentSdkSystemPrompt): NonNullable<AgentSdkSystemPrompt> {
   if (!prompt) return { type: "preset", preset: "claude_code", append: instructions }
