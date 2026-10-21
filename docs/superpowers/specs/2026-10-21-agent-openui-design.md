@@ -9,6 +9,7 @@
 - 流式事件复用现有 EventBus；预览不可交互。完整块由主进程生成 UUID、序号和 SHA-256 摘要，和轮次、协议及官方库版本一起保存到 `generatedUi` 元数据。
 - UI 描述保留在原历史正文；展示与交互状态存入 `agent.generated-ui-state`，不迁移 Agent 历史存储。长内容通过既有窄全文分块接口补齐，不解析截断预览。
 - 沿用完整官方组件、schema 和 CSS；ThemeProvider 和 openuiLibrary 统一从 `@openuidev/react-ui` 主入口导入，避免不同 bundle 各自创建主题 context。主题仅作用于生成界面区域和对应 portal，并跟随桌面已解析的浅深色外观。
+- 桌面入口在动态加载业务模块前设置 `react-lang@1.0.1` 的 `openui.devtools.autoMount` 标记，阻止开发环境自动挂载 OpenUI Inspect 悬浮按钮及加载调试脚本；升级该依赖时复核此标记，不影响生成界面渲染。
 
 ## 交互与持久化
 

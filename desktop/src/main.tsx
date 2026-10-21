@@ -7,6 +7,10 @@ import { installNativeDataTrackCapture, track, updateTrackingContext } from "@/l
 import { Spinner } from "@/components/ui/spinner"
 import "@/styles/globals.css"
 
+// react-lang@1.0.1 checks this latch before loading its development-only widget.
+// Set it before the dynamic app imports to prevent OpenUI Inspect from mounting.
+Reflect.set(globalThis, Symbol.for("openui.devtools.autoMount"), true)
+
 const recoveryMode = new URLSearchParams(window.location.search).get("rendererRecovery")
 
 if (recoveryMode) {
