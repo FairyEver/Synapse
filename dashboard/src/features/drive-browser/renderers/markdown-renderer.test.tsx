@@ -352,6 +352,40 @@ describe('DriveMarkdownRenderer', () => {
     }))
   })
 
+  it('remeasures image comment markers on width changes without a body resize', async () => {
+    mockImageCommentRects()
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1" alt="示意图"></p>',
+        markdownProjection: imageProjection(),
+      }),
+    })
+    await setPreviewWidth(1200)
+    triggerAllResizeObservers()
+    await flushAnimationFrames()
+    const image = document.querySelector<HTMLImageElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    if (!image) throw new Error('Missing projected image')
+    Object.defineProperty(image, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => domRect({
+        left: markdownBody().parentElement?.dataset.markdownWidthMode === 'wide' ? 280 : 100,
+        top: 120, width: 240, height: 180,
+      }),
+    })
+    await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
+    const target = () => document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')
+    expect(target()?.style.left).toBe('100px')
+
+    // Full-width body dimensions stay the same; switching the prose width alone moves the image.
+    await openDropdown(buttonWithText('宽度'))
+    await click(radioMenuItemWithText('宽屏'))
+    expect(target()?.style.left).toBe('280px')
+
+    await openDropdown(buttonWithText('宽度'))
+    await click(radioMenuItemWithText('阅读'))
+    expect(target()?.style.left).toBe('100px')
+  })
+
   it('keeps the lower image comment action available while the pointer crosses an adjacent image', async () => {
     mockAdjacentImageCommentRects()
     renderMarkdown({
@@ -541,7 +575,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentScroller?.firstElementChild?.className).toContain('py-6')
     expect(documentColumn?.className).toContain('mx-auto')
     expect(documentColumn?.className).not.toContain('ml-auto')
-    expect(documentColumn?.className).toContain('max-w-3xl')
+    expect(documentColumn?.className).toContain('w-full')
+    expect(documentColumn?.className).not.toContain('max-w-3xl')
     expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe('reading')
   })
 
@@ -642,10 +677,18 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('switches the markdown document between reading and wide width', async () => {
-    renderMarkdown()
+    renderMarkdown({ previewData: preview({ html: [
+      '<p>正文之前</p>',
+      '<div data-drive-markdown-table-scroll="true"><table><tbody><tr><td>宽表格</td></tr></tbody></table></div>',
+      '<pre><code class="language-mermaid">flowchart LR\nA --&gt; B</code></pre>',
+      '<p>正文之后</p>',
+    ].join('') }) })
 
     const documentColumn = () => document.querySelector('[data-testid="markdown-body"]')?.parentElement
-    expect(documentColumn()?.className).toContain('max-w-3xl')
+    const originalBody = markdownBody().innerHTML
+    expect(documentColumn()?.className).not.toContain('max-w-3xl')
+    expect(documentColumn()?.className).toContain('w-full')
+    expect(markdownBody().className).toContain('max-w-3xl')
     expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('reading')
     expect(buttonWithText('宽度')).not.toBeNull()
 
@@ -657,12 +700,17 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn()?.className).not.toContain('max-w-3xl')
     expect(documentColumn()?.className).toContain('max-w-none')
     expect(documentColumn()?.className).toContain('w-full')
+    expect(markdownBody().className).not.toContain('max-w-3xl')
+    expect(markdownBody().innerHTML).toBe(originalBody)
     expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('wide')
     expect(buttonWithText('宽度')).not.toBeNull()
 
     await openDropdown(buttonWithText('宽度'))
     expect(radioMenuItemWithText('阅读').getAttribute('data-state')).toBe('unchecked')
     expect(radioMenuItemWithText('宽屏').getAttribute('data-state')).toBe('checked')
+    await click(radioMenuItemWithText('阅读'))
+    expect(markdownBody().className).toContain('max-w-3xl')
+    expect(markdownBody().innerHTML).toBe(originalBody)
   })
 
   it('hides the width menu in compact preview layouts', async () => {
@@ -808,7 +856,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(body?.className).toContain('[&_th:not(:first-child)]:min-w-56')
     expect(body?.className).not.toContain('[&_td]:border')
     expect(body?.className).not.toContain('[&_td]:p-2')
-    expect(body?.parentElement?.className).toContain('max-w-3xl')
+    expect(body?.parentElement?.className).toContain('w-full')
+    expect(body?.parentElement?.className).not.toContain('max-w-3xl')
   })
 
   it('opens the comment rail by default when comments exist', async () => {

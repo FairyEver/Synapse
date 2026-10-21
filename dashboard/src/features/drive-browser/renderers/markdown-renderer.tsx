@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import 'github-markdown-css/github-markdown-light.css'
-import { MARKDOWN_BODY_CLASSNAME } from './markdown-body-presentation'
+import { MARKDOWN_BODY_CLASSNAME, MARKDOWN_READING_BODY_CLASSNAME } from './markdown-body-presentation'
 import {
   isDriveCommentableMarkdownItem,
   type DriveAnnotationSelectorsV2,
@@ -878,15 +878,12 @@ function DriveMarkdownBody({
         <div
           ref={documentContentRef}
           data-markdown-width-mode={widthMode}
-          className={cn(
-            'relative mx-auto',
-            widthMode === 'reading' ? 'max-w-3xl' : 'w-full max-w-none'
-          )}
+          className='relative mx-auto w-full max-w-none'
         >
           <div
             ref={bodyRef}
             data-testid='markdown-body'
-            className={MARKDOWN_BODY_CLASSNAME}
+            className={cn(MARKDOWN_BODY_CLASSNAME, widthMode === 'reading' && MARKDOWN_READING_BODY_CLASSNAME)}
             onClick={handleBodyClick}
             onKeyDown={handleBodyKeyDown}
             onPointerUp={syncSelectionActionFromCurrentSelection}
@@ -894,7 +891,7 @@ function DriveMarkdownBody({
           />
           <MarkdownImageFallbacks contentKey={annotated.html} rootRef={bodyRef} />
           <MarkdownImageCommentsOverlay
-            contentKey={`${annotated.html}\0${layoutMode}`}
+            contentKey={`${annotated.html}\0${layoutMode}\0${widthMode}`}
             rootRef={bodyRef}
             containerRef={documentContentRef}
             scrollRef={documentScrollRef}
@@ -936,7 +933,7 @@ function DriveMarkdownBody({
             </div>
           ) : null}
           {preview.truncated ? (
-            <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
+            <div className={cn('mx-auto mt-4 border-t pt-2 text-xs text-muted-foreground', widthMode === 'reading' && 'max-w-3xl')}>内容已截断</div>
           ) : null}
         </div>
         {annotationsEnabled ? <DriveMessagesSection key={current.id} messages={messages} sectionRef={messagesSectionRef} /> : null}

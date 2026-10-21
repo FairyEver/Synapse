@@ -202,6 +202,7 @@ Rendered image markers:
 
 ### Rendering Style And Positioning Invariants
 
+- Reading mode keeps ordinary top-level Markdown blocks centered at `max-w-3xl`, while table scrollers and rendered Mermaid figures use the available document width between the outline and comment rails. Wide mode leaves all blocks full-width. Preserve the existing block order and internal table/diagram scrolling; the Markdown body and annotation container share the full-width coordinate space. Width-mode changes explicitly invalidate image-overlay geometry even when body dimensions do not change.
 - Typography and spacing changes such as font size, font weight, line height, block spacing, reading width, and table-cell padding do not change annotation anchor semantics and must not introduce anchor-algorithm branches or duplicated positioning configuration.
 - Highlight rectangles and comment-rail positions are derived from the rendered DOM. Pure layout changes must keep the DOM measurement and `ResizeObserver` flow authoritative, with regression coverage for highlight alignment, rail alignment, and comment navigation after reflow.
 - Changes to visible text, DOM text order, Markdown parser or renderer semantics, image alt handling, line breaks, code blocks, tables, or ignored/generated nodes must update and test both the server Markdown projection and the Renderer rendered-text model when their shared text stream changes.
