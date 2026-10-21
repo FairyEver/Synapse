@@ -8,7 +8,7 @@ export const MARKDOWN_BODY_CLASSNAME = cn(
 
 export const MARKDOWN_READER_BODY_CLASSNAME = cn(
   MARKDOWN_BODY_CLASSNAME,
-  '[&_table]:min-w-0 [&_table]:mx-auto',
+  '[&_[data-drive-markdown-table-scroll="true"]]:my-6 [&_table]:my-0! [&_table]:min-w-0 [&_table]:mx-auto',
 )
 
 // Keep the body/annotation coordinate space full-width; only ordinary blocks use the reading measure.
